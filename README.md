@@ -14,9 +14,9 @@ sends, posts or can't be undone waits for your OK.
 |---|---|
 | ![Adding an MCP server: its tools listed, and access given to Mara only](docs/screenshots/connect.png) | ![Sancho reads the last five commits on GitHub and says what changed](docs/screenshots/github.png) |
 | Connect any MCP server by its address, and pick who gets it. | With GitHub connected, agents read repositories, issues and pull requests. |
-| ![Sancho asks before opening a GitHub issue, showing exactly what will be sent](docs/screenshots/approval.png) | ![Sancho asks to set up a routine that runs every weekday at 8:00](docs/screenshots/routine.png) |
-| Before it writes, it shows you the exact repository, title and text. | A routine wakes an agent on a schedule. |
-| ![Sancho's browser, live, reading Wikipedia's article on Porto](docs/screenshots/browser.png) | ![A printable comparison page Otto made from Mara's research](docs/screenshots/page.png) |
+| ![Sancho asks before opening a GitHub issue, showing exactly what will be sent](docs/screenshots/approval.png) | ![Sancho asks to set up a routine that summarises new GitHub issues every Monday at 9:00, Lisbon time](docs/screenshots/routine.png) |
+| Before it writes, it shows you the exact repository, title and text. | A routine wakes an agent on a schedule, in your time zone. |
+| ![Mara's browser, live, reading Wikipedia's article on the Dom Luís I Bridge](docs/screenshots/browser.png) | ![A printable comparison page Otto made from Mara's research](docs/screenshots/page.png) |
 | You can watch its browser, take over, or stop it. | It makes pages and documents you can print and keep. |
 
 > **Pre-release.** Expect rough edges and breaking changes, and run it on a machine you trust. The sandbox is not yet
