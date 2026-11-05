@@ -25,7 +25,13 @@ that computer. You work with them through one app (web, and installed on your ph
 > recovery work tracked in [docs/README.md](docs/README.md) is still open. Run it for yourself, on a machine you trust,
 > and expect stored shapes to change without migrations.
 
-## Run it
+## Install
+
+Pre-release builds are on the [releases page](https://github.com/purrgrammer/banda/releases): a desktop app for macOS,
+Windows and Linux, and a command-line archive that brings its own Node.js. They are unsigned, and they need Docker
+running. Each release's notes say how to open an unsigned app.
+
+## Run it from source
 
 banda runs on macOS and Linux; Windows is untested. You need [Node 26](https://nodejs.org) (`mise install` reads
 [mise.toml](mise.toml)) and Docker Engine 25 or later (Docker Desktop on macOS, Docker Engine on Linux): the agent's
@@ -53,6 +59,9 @@ containers, networks and volumes of homes that are gone. To start over, delete `
 ```sh
 npm run check && npm run typecheck && npm test
 ```
+
+`npm run desktop:dev` opens the desktop app on a throwaway home. `npm run cli:pack` and `npm run desktop:pack` build
+this computer's release files into `release/`. A `v*` tag makes the release workflow draft a pre-release.
 
 `npm run web:dev` serves the app with hot reload against a running daemon, and `#/specimen` shows every component. Read
 [DESIGN.md](DESIGN.md) for the ideas and the rules, [AGENTS.md](AGENTS.md) for how to work on it (by hand or with an

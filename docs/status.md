@@ -2,6 +2,11 @@
 
 ## Current work
 
+Pre-release binaries are on the `desktop-release` branch ([Operations](operations.md)): an Electron desktop app that
+starts or attaches to the daemon, a CLI archive that brings its own Node.js, and a release workflow that drafts an
+unsigned pre-release from a `v*` tag. Both were packaged and tried on macOS arm64 against throwaway homes. The
+workflow hasn't run on the other runners yet, and owner review is pending.
+
 Scoped memory is implemented; the owner requested integration on main. Global and agent facts have scoped tools,
 recall, model-boundary updates and app controls. Independent coding review, full/deep suites with Docker, build and
 palette checks pass; the running app was exercised at both widths, including draft recovery. Broader workspace

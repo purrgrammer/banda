@@ -29,7 +29,13 @@ Recheck these items against current code before implementation; an unchecked ite
 defect. Remove it only when its fix and acceptance evidence are recorded in a commit.
 
 - [ ] Rootless box, and a supervisor that alone holds the Docker socket
-- [ ] The box's runtime brought by banda: no Docker installed by hand
+- [ ] The box's runtime brought by banda: no Docker installed by hand. Pre-release binaries still require it
+- [ ] Sign and notarize the desktop app (Developer ID, Windows code signing), then add updates that back up first and
+  activate atomically. Pre-release binaries are unsigned and update by hand
+- [ ] Run the release workflow end to end and fix what each runner turns up (Windows fast tests, linux arm64 deb).
+  Then install each artifact on a clean machine: the desktop app and the CLI archive are tried only on macOS arm64
+- [ ] Windows: a graceful daemon stop (Quit ends the process outright), and a pass over atomic renames and paths
+- [ ] A smaller release: bundle the daemon so provider SDKs and web-only packages don't ship whole
 - [ ] Pairing the phone to the daemon, and reaching it off the home network
 - [ ] Push notifications that carry no content
 - [ ] Qualify recoverable updates, owner-controlled diagnostics and the exact packaged candidate (operations.md, verification.md)

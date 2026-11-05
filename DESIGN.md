@@ -86,8 +86,10 @@ The words the rules lean on:
 
 ## The app
 The app is the owner's only way to work with the band, and one codebase serves every place: the daemon serves it on
-loopback, it installs as a PWA on the phone and desktop, and a desktop shell may wrap it. It is built around what the
-agent does, not around what the model emits. It has three surfaces: the sidebar, the chat and the chat's panel.
+loopback, it installs as a PWA on the phone and desktop, and the desktop app is a shell around it: it starts the
+home's daemon or attaches to the one running, keeps it running when its window closes, and stops it on Quit. It is
+built around what the agent does, not around what the model emits. It has three surfaces: the sidebar, the chat and
+the chat's panel.
 Settings are sheets or plain pages reached from them. Nothing else. A feature joins only if it helps the owner delegate;
 one that gives them one more thing to manage stays out.
 
