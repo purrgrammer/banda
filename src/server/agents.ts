@@ -136,7 +136,8 @@ const view = (workspace: Workspace, name: string, file: AcceptedFile) => {
 
 /** Every agent, accepted or only in the box, with the change the box holds for it; the lead first, then by name. */
 export async function agents(harness: Harness, workspace: Workspace, ctx: Context = context): Promise<AgentView[]> {
-	const accepted = (await harness.snapshot(Accepted, ctx))?.files ?? {};
+	const doc = await harness.snapshot(Accepted, ctx);
+	const accepted = doc?.files ?? {};
 	const { files: boxed } = await boxFiles(workspace, ctx);
 	const names = new Set([
 		...Object.keys(accepted).flatMap((path) => /^agents\/(.+)\.md$/.exec(path)?.slice(1) ?? []),
@@ -147,7 +148,7 @@ export async function agents(harness: Harness, workspace: Workspace, ctx: Contex
 		const box = boxed.get(name);
 		const change =
 			box === undefined
-				? file === undefined
+				? file === undefined || doc?.seeded !== true
 					? undefined
 					: ({ kind: "removed" } as const)
 				: "unreadable" in box
@@ -192,6 +193,8 @@ export async function accept(
 		if (name === LEAD)
 			throw new BadRequest(`${LEAD} is the lead and cannot be removed: decline, and its file is written back`);
 		if (box !== undefined) throw new BadRequest(`agents/${name}.md is back in the box: look again`, 409);
+		if ((await harness.snapshot(Accepted, ctx))?.seeded !== true)
+			throw new BadRequest(`agents/${name}.md is not in the box yet: the daemon writes it there first`, 409);
 		await harness.commit(async (tx) => {
 			await keepOneActive(tx, name, undefined);
 			await unaccept(tx, agentPath(name), Date.now());
@@ -269,7 +272,10 @@ export async function save(
 }
 
 /**
- * On a box that has no agents folder yet, the accepted files are written into it: a new box starts with the lead.
+ * Write the accepted agent files into the box until the store records it done: a new box starts with the lead. Until
+ * then each accepted file the box lacks is written, whatever else made the folder first (an owner's save, the watcher, a
+ * cut seed); once done, a file missing there is the box's own removal. A box made anew, its agents folder gone, is
+ * seeded again. Idempotent; a failure is thrown, and the next call goes on.
  */
 export async function seed(harness: Harness, workspace: Workspace, ctx: Context = context): Promise<void> {
 	const env = workspace.env();
@@ -277,12 +283,41 @@ export async function seed(harness: Harness, workspace: Workspace, ctx: Context 
 	await harness.commit(async (tx) => {
 		await tx.doc(Accepted);
 	}, ctx);
-	const files = (await harness.snapshot(Accepted, ctx))?.files ?? {};
+	const doc = await harness.snapshot(Accepted, ctx);
 	const there = await env.exists(dirOf(workspace), ctx);
 	if (!there.ok) throw there.error;
-	if (there.value) return;
-	for (const [path, file] of Object.entries(files))
-		if (path.startsWith("agents/")) await write(env, workspace, `${workspace.root}/${path}`, file.text, ctx);
+	if (doc?.seeded === true && there.value) return;
+	const { files: boxed } = await boxFiles(workspace, ctx);
+	for (const [path, file] of Object.entries(doc?.files ?? {})) {
+		const name = /^agents\/(.+)\.md$/.exec(path)?.[1];
+		if (name !== undefined && !boxed.has(name))
+			await write(env, workspace, `${workspace.root}/${path}`, file.text, ctx);
+	}
+	if (doc?.seeded !== true)
+		await harness.commit(async (tx) => {
+			(await tx.doc(Accepted)).seeded = true;
+		}, ctx);
+}
+
+/** `seed`, tried again every `every` ms until it is done or `stopped`; each failure logged. */
+export async function seedUntilDone(
+	harness: Harness,
+	workspace: Workspace,
+	log: (line: string) => void,
+	stopped: () => boolean,
+	every = 15_000,
+	ctx: Context = context,
+): Promise<void> {
+	for (;;) {
+		try {
+			return await seed(harness, workspace, ctx);
+		} catch (error) {
+			log(`agents: ${(error as Error).message}`);
+		}
+		if (stopped()) return;
+		await new Promise((resolve) => setTimeout(resolve, every).unref());
+		if (stopped()) return;
+	}
 }
 
 /** Write a workspace file, its folder made first. */

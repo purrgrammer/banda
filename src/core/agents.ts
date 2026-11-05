@@ -96,6 +96,11 @@ export const Accepted = defineDoc<{
 	files: { [path: string]: AcceptedFile };
 	/** By path: when the owner last took an accepted file out of effect (a removal accepted). */
 	removed?: { [path: string]: number };
+	/**
+	 * Set once the daemon has written every accepted agent file into the box (`seed`): until then a file missing there
+	 * is one the daemon has yet to write, never a removal the box proposes.
+	 */
+	seeded?: true;
 }>({
 	kind: "banda.accepted",
 	version: 1,

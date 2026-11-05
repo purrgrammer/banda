@@ -65,7 +65,7 @@ import { CliGateway } from "./gateways/cli.ts";
 import { WebGateway } from "./gateways/web.ts";
 import { daemonFile, egressCredentials, keepEgressCredential, maxFileBytes, ownerToken, readConfig } from "./home.ts";
 
-import { accept, agents, decline, save, seed, type Workspace, watchAgents } from "./server/agents.ts";
+import { accept, agents, decline, save, seed, seedUntilDone, type Workspace, watchAgents } from "./server/agents.ts";
 import type { ComputerView, OwnerInput, Posted, PostMessage, ViewEvent } from "./server/api.ts";
 import { acceptedIconFace } from "./server/avatar-icon-face.ts";
 import { openCapabilities } from "./server/capabilities.ts";
@@ -545,8 +545,16 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		agentBox.warm();
 		// a connection whose credentials came in before a crash kept its tools from being listed is listed now
 		void capabilities.reconcile().catch((error: unknown) => log(`capabilities: ${(error as Error).message}`));
-		// a new box starts with the accepted agents, the lead among them; the agents are read once it has them
-		const seeded = seed(open, workspace).catch((error: unknown) => log(`agents: ${(error as Error).message}`));
+		// a new box starts with the accepted agents, the lead among them; the agents are read once the first try is over,
+		// and a box that was not up for it is seeded when it comes up (until then no missing file is offered as removed)
+		const seeded = seed(open, workspace).then(
+			() => true,
+			(error: unknown) => {
+				log(`agents: ${(error as Error).message}`);
+				return false;
+			},
+		);
+		void seeded.then((done) => (done ? undefined : seedUntilDone(open, workspace, log, () => stop !== undefined)));
 		const listAgents = () => seeded.then(() => agents(open, workspace));
 		// the owner reaches a chat's tab, in the browser of the agent it runs; or signs an agent the store knows out of a site
 		const tabOf = async (all: Browsers, chat: number) => {

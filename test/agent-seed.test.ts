@@ -1,0 +1,137 @@
+/** The accepted agent files reach a new box: nothing the daemon never wrote there is offered as the box's removal. */
+import { mkdir, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { createRegistry } from "@earendil-works/pi-durable";
+import { describe, expect, it } from "vitest";
+import { openBox } from "../src/box/box.ts";
+import { Accepted, agentPath, LEAD_TEXT } from "../src/core/agents.ts";
+import { context, openStore } from "../src/core/store.ts";
+import { defineCore } from "../src/core/turn.ts";
+import { accept, agents, save, seed, seedUntilDone, type Workspace } from "../src/server/agents.ts";
+import { hostBox } from "./fixtures/host-box.ts";
+import { blobStore, echoModels, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
+
+async function fresh() {
+	const home = await tempHome();
+	const box = openBox(hostBox(home), () => {});
+	const core = defineCore({ blobs: blobStore(), gateway: () => new FakeGateway(), model: () => FAUX_MODEL });
+	const registry = createRegistry();
+	registry.install(core.extension);
+	const harness = await openStore(home, { models: echoModels().models, registry });
+	const workspace: Workspace = { env: () => box.env(), root: box.workspace, tools: () => [], known: () => true };
+	const close = async () => {
+		await harness.close(context);
+		box.close();
+	};
+	return { box, harness, workspace, close };
+}
+
+const read = async (workspace: Workspace, path: string) => {
+	const got = await workspace.env().readTextFile(`${workspace.root}/${path}`, context);
+	return got.ok ? got.value : undefined;
+};
+
+describe("seeding a new box with the accepted agents", () => {
+	it("writes the lead into a fresh box whose agents folder something else made first, and offers no removal", async () => {
+		const { harness, workspace, close } = await fresh();
+		try {
+			// a first seed that failed while the box came up, then the watcher (or any writer) made the folder
+			await mkdir(join(workspace.root, "agents"), { recursive: true });
+			await harness.commit(async (tx) => {
+				await tx.doc(Accepted);
+			}, context);
+			expect((await agents(harness, workspace))[0]?.change).toBeUndefined();
+			await seed(harness, workspace);
+			expect(await read(workspace, agentPath("sancho"))).toBe(LEAD_TEXT);
+			expect((await agents(harness, workspace))[0]?.change).toBeUndefined();
+		} finally {
+			await close();
+		}
+	});
+
+	it("is not undone by an owner's save that reached the box first, and is idempotent", async () => {
+		const { harness, workspace, close } = await fresh();
+		try {
+			await save(
+				harness,
+				workspace,
+				"mira",
+				"---\ndescription: Plans trips\n---\nBe practical.\n",
+				null,
+				async () => {},
+			);
+			await seed(harness, workspace);
+			await seed(harness, workspace);
+			expect(await read(workspace, agentPath("sancho"))).toBe(LEAD_TEXT);
+			expect((await agents(harness, workspace)).map((row) => [row.name, row.change])).toEqual([
+				["sancho", undefined],
+				["mira", undefined],
+			]);
+		} finally {
+			await close();
+		}
+	});
+
+	it("once seeded, a file the box removes is the box's change; a box made anew is seeded again", async () => {
+		const { harness, workspace, close } = await fresh();
+		try {
+			await save(
+				harness,
+				workspace,
+				"mira",
+				"---\ndescription: Plans trips\n---\nBe practical.\n",
+				null,
+				async () => {},
+			);
+			await seed(harness, workspace);
+			await rm(join(workspace.root, agentPath("mira")));
+			await seed(harness, workspace);
+			expect((await agents(harness, workspace)).find((row) => row.name === "mira")?.change).toEqual({
+				kind: "removed",
+			});
+			await rm(join(workspace.root, "agents"), { recursive: true });
+			await seed(harness, workspace);
+			expect(await read(workspace, agentPath("sancho"))).toBe(LEAD_TEXT);
+			expect((await agents(harness, workspace)).every((row) => row.change === undefined)).toBe(true);
+		} finally {
+			await close();
+		}
+	});
+
+	it("an agent the daemon has yet to write is never removed; a seed that failed is tried again until done", async () => {
+		const { harness, workspace, close } = await fresh();
+		try {
+			await save(
+				harness,
+				workspace,
+				"mira",
+				"---\ndescription: Plans trips\n---\nBe practical.\n",
+				null,
+				async () => {},
+			);
+			await rm(join(workspace.root, agentPath("mira")));
+			await expect(accept(harness, workspace, "mira", null, async () => {})).rejects.toThrow(/not in the box yet/);
+			let down = 2;
+			const flaky: Workspace = {
+				...workspace,
+				env: () => {
+					if (down-- > 0) throw new Error("the box is not up");
+					return workspace.env();
+				},
+			};
+			const logged: string[] = [];
+			await seedUntilDone(
+				harness,
+				flaky,
+				(line) => logged.push(line),
+				() => false,
+				1,
+			);
+			expect(logged).toEqual(["agents: the box is not up", "agents: the box is not up"]);
+			expect(await read(workspace, agentPath("sancho"))).toBe(LEAD_TEXT);
+			expect(await read(workspace, agentPath("mira"))).toContain("Be practical.");
+		} finally {
+			await close();
+		}
+	});
+});
