@@ -107,6 +107,7 @@ import {
 	type WaitEnded,
 	waitByKey,
 } from "./wait.ts";
+import { defineWatches, WAKE as WATCH_WAKE, Watches, type WatchesOptions, type WatchWakeData } from "./watches.ts";
 
 /** A base every 64 changes, so loading an index replays a bounded number of them. */
 export const bounded = (_value: unknown, _ops: unknown, info: { deltasSinceBase: number }) =>
@@ -308,8 +309,14 @@ export type CoreOptions = {
 	) => Promise<void>;
 	/** What one file a message carries may weigh, in bytes; default 50 MB. */
 	readonly maxFileBytes?: number;
-	/** The workspace's root in the box, where the `schedule` tool writes routine files. */
+	/** The workspace's root in the box, where the `schedule` and `watch` tools write their files. */
 	readonly workspace?: () => string | undefined;
+	/** Read an object for the daemon's eyes, as its card is read: what a watch looks with; none, and no watch looks. */
+	readonly read?: WatchesOptions["read"];
+	/** The schema a connection's tool was listed with, for a watch's reads. */
+	readonly listedSchema?: WatchesOptions["listedSchema"];
+	/** A fault point a watch's look passes (`watch:read`), for the fault suites. */
+	readonly fault?: (point: string) => void;
 	/**
 	 * The home origin of agent `agent`'s one chat, where a routine of its starts it when the owner has not yet: default
 	 * the web's thread for that agent, where the app shows it.
@@ -1164,6 +1171,12 @@ export function defineCore(options: CoreOptions) {
 								why: result.failed,
 							});
 						}
+						// a watch whose run fails says so on its row
+						if (internal?.kind === WATCH_WAKE) {
+							const wake = internal.data as unknown as WatchWakeData;
+							const record = (await tx.doc(Watches)).watches[wake.watch];
+							if (record !== undefined) record.failed = { at: runtime.now(), why: `its run failed: ${result.failed}` };
+						}
 					}
 					return { status: "terminal", outcome: { status: "completed", result } };
 				}, ctx);
@@ -1449,6 +1462,14 @@ export function defineCore(options: CoreOptions) {
 
 		...(options.workspace === undefined ? {} : { workspace: options.workspace }),
 	});
+	const watches = defineWatches({
+		followUp,
+		agentChat,
+		...(options.workspace === undefined ? {} : { workspace: options.workspace }),
+		...(options.read === undefined ? {} : { read: options.read }),
+		...(options.listedSchema === undefined ? {} : { listedSchema: options.listedSchema }),
+		...(options.fault === undefined ? {} : { fault: options.fault }),
+	});
 
 	const RefreshAgent = defineTask<{ readonly chat: number; readonly agent: string }, { phase: "wait" }, null>({
 		name: "banda.agent-refresh",
@@ -1564,7 +1585,18 @@ export function defineCore(options: CoreOptions) {
 
 	const extension = defineExtension({
 		name: "banda.core",
-		tasks: [Admit, Turn, Message, Wait, Settle, RefreshAgent, RefreshTools, routines.Routine, groups.GroupTurn],
+		tasks: [
+			Admit,
+			Turn,
+			Message,
+			Wait,
+			Settle,
+			RefreshAgent,
+			RefreshTools,
+			routines.Routine,
+			watches.Watch,
+			groups.GroupTurn,
+		],
 		sections: [speaking, groupSection],
 		tools: [
 			messageTool(asking, sending, options.blobs, options.maxFileBytes ?? 50 * 1024 * 1024),
@@ -1573,6 +1605,7 @@ export function defineCore(options: CoreOptions) {
 			...proposalTools(makeProposal),
 
 			...routines.tools,
+			...watches.tools,
 		],
 	});
 	/**
@@ -1598,12 +1631,20 @@ export function defineCore(options: CoreOptions) {
 		reconcileTools: (harness: Harness, ctx: Context = context) => reconcileTools(harness, ctx),
 		/** Queue an input nobody wrote to a chat, after its other inputs, watched by a Turn: in the caller's commit. */
 		followUp,
-		/** Bring the routines' tasks in line with the accepted routine files. */
-		reconcile: (harness: Harness, ctx: Context = context) =>
-			routines.reconcile(harness, options.now?.() ?? Date.now(), ctx),
+		/** Bring the routines' and the watches' tasks in line with their accepted files. */
+		reconcile: async (harness: Harness, ctx: Context = context) => {
+			await routines.reconcile(harness, options.now?.() ?? Date.now(), ctx);
+			await watches.reconcile(harness, options.now?.() ?? Date.now(), ctx);
+		},
 		/** Run a routine once now, as the owner asked; once per `key` (the click's). */
 		runRoutine: (harness: Harness, name: string, key: string, ctx: Context = context) =>
 			routines.runNow(harness, name, key, () => options.now?.() ?? Date.now(), ctx),
+		/** Look now at a watch's object, as the owner asked; once per `key` (the click's). */
+		checkWatch: (harness: Harness, name: string, key: string, ctx: Context = context) =>
+			watches.checkNow(harness, name, key, () => options.now?.() ?? Date.now(), ctx),
+		/** One look at a watch's object now: the first, after the owner made it; what came of it. */
+		lookWatch: (harness: Harness, name: string, ctx: Context = context) =>
+			watches.look(name, options.now?.() ?? Date.now(), (fn) => harness.commit(fn, ctx), ctx),
 		/** The tool for an effect that leaves the box: it runs once the owner approves it. */
 		effect: <P extends TSchema>(tool: EffectTool<P>): ToolRegistration => effect(asking, tool),
 		/** Ask the owner from a tool, as Wait `name` of its task, and wait for the answer; undefined when cancelled. */

@@ -48,10 +48,16 @@ returned to and merged, at desktop and phone width.
 
 ## Open work
 
-- [ ] Slice 1, one pull request end to end: `follow` for GitHub's pull request kind; `watches/` accepted like
+- [x] Slice 1, one pull request end to end: `follow` for GitHub's pull request kind; `watches/` accepted like
   `routines/`; the task (first look, look, diff, wake, until); the `watch` tool's card and Follow on the card; the
-  event line with the card; the Watching list with Check now, Pause and Remove; the fault sweep at look, diff, wake
-  and end; a real pull request in a forked home at both widths
+  event line with the card; the Watching list with Check now, Pause and Stop; the fault sweep at look, diff, wake
+  and end; a real pull request in a forked home at desktop width
+- [ ] Slice 1 through the app at phone width (the desktop pass is done; the phone pass needs a resizable browser)
+- [ ] A real wake seen in the app: the followed pull request must change by another hand (a review, a failed check);
+  the fake GitHub's wakes are covered by the suites
+- [ ] Add in the panel takes a link (today Follow is on the object's card, and in the agent's words)
+- [ ] An editor for a watch's words (`until`, what matters); today the detail shows them and the file is edited in
+  the box
 - [ ] Slice 2, health and gaps: can't reach and behind in the row; the error line after an hour; resume reconciles
   into one marked wake; the account's switch, sign-out and removal end watches in the same commit; no wake after done
   or paused; scenarios: a revoked credential, days offline, a cancel while a wake is pending, duplicate and

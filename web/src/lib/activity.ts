@@ -1,5 +1,6 @@
 /** Activity is a view of recorded model boundaries, not a second log or a retrospective summary. */
 import type { Item, ToolCall } from "./api.ts";
+import { startsRun as starts } from "./feed.ts";
 
 export type ActivityWork = { id: number; items: Item[]; title: string; active?: boolean };
 export type ActivityAnchor = number;
@@ -18,7 +19,7 @@ export function activityWork(items: readonly Item[], activeInput?: number): Acti
 	};
 	const add = (work: ActivityWork, item: Item) => {
 		work.items.push(item);
-		if ((item.role === "user" || item.role === "wake") && work.title === "Activity") work.title = item.text;
+		if (starts(item) && work.title === "Activity") work.title = item.text;
 	};
 	for (const item of items) {
 		// The daemon admitted this complete tool round before the owner's input; it belongs to that input's work,
@@ -27,7 +28,7 @@ export function activityWork(items: readonly Item[], activeInput?: number): Acti
 			loads.push(item);
 			continue;
 		}
-		if (item.role === "user" || item.role === "wake") {
+		if (starts(item)) {
 			const ready = loads.filter(
 				(load) =>
 					load.role === "tool" &&

@@ -11,6 +11,7 @@ import { defineDoc, type Tx } from "@earendil-works/pi-durable";
 export type Activity = {
 	at: number;
 	routine?: string;
+	watch?: string;
 	what: string;
 	chat?: number;
 	outside?: "read" | "sent";

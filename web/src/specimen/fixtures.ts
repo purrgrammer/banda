@@ -4,7 +4,7 @@ import type { FileUIPart } from "@/components/ai-elements/types";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import type { Service } from "../chat/Catalogue.tsx";
 import type { CheckRun, Issue, PullRequest } from "../chat/Object.tsx";
-import type { RoutineRowView } from "../chat/Panel.tsx";
+import type { RoutineRowView, WatchRowView } from "../chat/Panel.tsx";
 import type { RowView, Who } from "../chat/Row.tsx";
 
 export function sampleFace(shape: string, color: string) {
@@ -156,6 +156,35 @@ export const ROUTINES: readonly RoutineRowView[] = [
 		last: "Last ran Fri 09:00",
 	},
 	{ id: "deps", name: "Stale dependencies", when: "On the 1st of each month", next: "1 Dec", paused: true },
+];
+
+/** What Mara watches: a pull request until it merges, one waiting for the owner, one it cannot look at, one done. */
+export const WATCHES: readonly WatchRowView[] = [
+	{
+		id: "banda-142",
+		name: "purrgrammer/banda #142",
+		service: "GitHub",
+		until: "until merged",
+		next: "today 09:40",
+		saw: "Saw today 09:10: ana approved, lint failed",
+	},
+	{ id: "banda-150", name: "purrgrammer/banda #150", service: "GitHub", until: "until closed", waiting: "set up" },
+	{
+		id: "banda-98",
+		name: "purrgrammer/banda #98",
+		service: "GitHub",
+		until: "until merged or closed",
+		saw: "Can't look: GitHub is not connected as @bandarra",
+		failing: true,
+	},
+	{
+		id: "banda-77",
+		name: "purrgrammer/banda #77",
+		service: "GitHub",
+		until: "until merged",
+		saw: "Done Fri 17:02: merged",
+		done: true,
+	},
 ];
 
 export const ACCOUNTS = [

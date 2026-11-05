@@ -1,0 +1,182 @@
+import fc from "fast-check";
+import { describe, expect, it } from "vitest";
+import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
+import {
+	BUSY_EVERY,
+	canonical,
+	EVERY,
+	endedBy,
+	type Follow,
+	holds,
+	type Json,
+	lookEvery,
+	observe,
+	parseFollow,
+	reading,
+	saysOf,
+	sort,
+} from "../src/core/follow.ts";
+import { parseObjects } from "../src/core/objects.ts";
+import { pbtRuns } from "./pbt.ts";
+
+/** How GitHub's pull request is followed, as the shipped file declares it. */
+const PR = (() => {
+	const parsed = parseObjects(GITHUB_OBJECTS, () => true);
+	if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
+	const follow = parsed.objects.pull_request?.follow;
+	if (follow === undefined) throw new Error("the pull request kind is not followed");
+	return follow;
+})();
+
+const open = (): Json => ({
+	pr: { number: 142, title: "Keep objects as data", state: "open", merged: false, draft: false, head: { sha: "a1" } },
+	checks: {
+		total_count: 2,
+		check_runs: [
+			{ id: 10, name: "unit", status: "completed", conclusion: "success" },
+			{ id: 11, name: "lint", status: "in_progress", conclusion: null },
+		],
+	},
+	reviews: [],
+	comments: [],
+});
+
+describe("following an object", () => {
+	it("the shipped pull request kind follows: comments are read only when followed, and it ends when merged or closed", () => {
+		expect(Object.keys(PR.ends)).toEqual(["merged", "closed"]);
+		const parsed = parseObjects(GITHUB_OBJECTS, () => true);
+		if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
+		expect(parsed.objects.pull_request?.reads.comments?.follow).toBe(true);
+		expect(parsed.objects.issue?.follow).toBeUndefined();
+	});
+
+	it("the changes between two readings are the differences, keyed lists by their key, and the same twice", () => {
+		const before = reading(PR, open() as { [key: string]: Json });
+		const after = open() as { [key: string]: Json };
+		(after.reviews as Json[]).push({ id: 1, user: { login: "ana" }, state: "APPROVED" });
+		((after.checks as { check_runs: Json[] }).check_runs[1] as { [key: string]: Json }).status = "completed";
+		((after.checks as { check_runs: Json[] }).check_runs[1] as { [key: string]: Json }).conclusion = "failure";
+		// a new id on the same check is noise: check runs are keyed by name
+		((after.checks as { check_runs: Json[] }).check_runs[1] as { [key: string]: Json }).id = 99;
+		const changes = observe(PR, before, reading(PR, after));
+		const paths = changes.map((change) => JSON.stringify(change.path));
+		expect(paths).toContain(JSON.stringify(["checks", "check_runs", { item: "lint" }, "conclusion"]));
+		expect(paths).toContain(JSON.stringify(["reviews", { item: "1" }]));
+		expect(paths).not.toContain(JSON.stringify(["checks", "check_runs", { item: "lint" }, "id"]));
+		expect(observe(PR, before, reading(PR, after))).toEqual(changes);
+		expect(observe(PR, before, before)).toEqual([]);
+	});
+
+	it("each change is sorted and said in the kind's words: a review wakes, finished checks tell, the account's own are nothing", () => {
+		const before = reading(PR, open() as { [key: string]: Json });
+		const after = open() as { [key: string]: Json };
+		(after.reviews as Json[]).push({ id: 1, user: { login: "ana" }, state: "APPROVED" });
+		(after.comments as Json[]).push({ id: 5, user: { login: "bandarra" }, body: "thanks" });
+		(after.comments as Json[]).push({ id: 6, user: { login: "dependabot[bot]" }, body: "bump" });
+		const lint = (after.checks as { check_runs: { [key: string]: Json }[] }).check_runs[1] as { [key: string]: Json };
+		lint.status = "completed";
+		lint.conclusion = "failure";
+		const sorted = sort(PR, "bandarra", before, reading(PR, after));
+		const said = Object.fromEntries(sorted.map((each) => [each.says, each.does]));
+		expect(said["ana approved"]).toBe("wake");
+		expect(said["lint failed"]).toBe("wake");
+		expect(said["checks finished"]).toBe("tell");
+		// a bot's comment only tells; the account's own comment is nothing
+		expect(said["dependabot[bot] commented"]).toBe("tell");
+		expect(sorted.find((each) => each.change.path.some((s) => typeof s === "object" && s.item === "5"))?.does).toBe(
+			"nothing",
+		);
+	});
+
+	it("a short page never says an item is gone", () => {
+		const before = open() as { [key: string]: Json };
+		const after = open() as { [key: string]: Json };
+		(after.checks as { check_runs: Json[]; total_count: number }).check_runs.pop();
+		expect(sort(PR, undefined, reading(PR, before), reading(PR, after)).map((each) => each.change.kind)).not.toContain(
+			"removed",
+		);
+		(after.checks as { total_count: number }).total_count = 1;
+		expect(sort(PR, undefined, reading(PR, before), reading(PR, after)).map((each) => each.change.kind)).toContain(
+			"removed",
+		);
+	});
+
+	it("what ends a watch: the end the watch names, or any; and how often to look, more while busy", () => {
+		const merged = open() as { [key: string]: Json };
+		(merged.pr as { [key: string]: Json }).merged = true;
+		(merged.pr as { [key: string]: Json }).state = "closed";
+		expect(endedBy(PR, undefined, open())).toBeUndefined();
+		expect(endedBy(PR, undefined, merged)).toBe("merged");
+		expect(endedBy(PR, "closed", merged)).toBe("closed");
+		expect(endedBy(PR, "merged", open())).toBeUndefined();
+		expect(lookEvery(PR, open())).toBe(BUSY_EVERY);
+		const quiet = open() as { [key: string]: Json };
+		((quiet.checks as { check_runs: { [key: string]: Json }[] }).check_runs[1] as { [key: string]: Json }).status =
+			"completed";
+		expect(lookEvery(PR, quiet)).toBe(EVERY);
+		expect(lookEvery({ every: "5m" }, {})).toBe(5 * 60_000);
+	});
+
+	it("a rule's words come from the item's fields, said as its words say", () => {
+		const rule = { says: "{user.login} {state}", words: { APPROVED: "approved" } };
+		const change = {
+			id: "x",
+			path: ["reviews", { item: "1" }] as const,
+			kind: "added" as const,
+			item: { user: { login: "ana" }, state: "APPROVED" },
+		};
+		expect(saysOf(rule, change)).toBe("ana approved");
+		expect(saysOf({ says: "retitled: {to}" }, { id: "y", path: ["pr", "title"], kind: "changed", to: "New" })).toBe(
+			"retitled: New",
+		);
+		expect(holds("pr.state = closed or pr.merged = true", { pr: { state: "open", merged: true } })).toBe(true);
+		expect(holds("all checks[*].ok = true", { checks: [] })).toBe(false);
+	});
+
+	it("a follow that is not one is refused, each problem named", () => {
+		const problems = (value: unknown) => {
+			const parsed = parseFollow(value, "objects.x");
+			return "errors" in parsed ? parsed.errors : [];
+		};
+		expect(problems({ rules: [], ends: {} })).toContainEqual(expect.stringContaining("ends"));
+		expect(problems({ rules: [{ on: "a", does: "ring", says: "x" }], ends: { a: "a = 1" } })).toContainEqual(
+			expect.stringContaining("a rule is"),
+		);
+		expect(problems({ rules: [], ends: { "Bad Word": "a = 1" } })).toContainEqual(expect.stringContaining("word"));
+		expect(problems({ rules: [], ends: { a: "nonsense" } })).toContainEqual(expect.stringContaining("condition"));
+		expect(problems({ rules: [], ends: { a: "a = 1" }, every: "soon" })).toContainEqual(
+			expect.stringContaining("period"),
+		);
+		expect(problems({ rules: [], ends: { a: "a = 1" }, extra: 1 })).toContainEqual(
+			expect.stringContaining("not a field"),
+		);
+		const ok = parseFollow({ rules: [], ends: { a: "a = 1" } }, "objects.x");
+		expect("follow" in ok ? ok.follow.ends : undefined).toEqual({ a: "a = 1" });
+	});
+
+	const anyJson: fc.Arbitrary<Json> = fc.letrec<{ json: Json }>((tie) => ({
+		json: fc.oneof(
+			{ maxDepth: 3 },
+			fc.constant(null),
+			fc.boolean(),
+			fc.integer(),
+			fc.string({ maxLength: 8 }),
+			fc.array(tie("json"), { maxLength: 4 }),
+			fc.dictionary(fc.string({ minLength: 1, maxLength: 6 }), tie("json"), { maxKeys: 4 }),
+		),
+	})).json;
+	const follow: Follow = { rules: [], ends: { done: "done = true" } };
+
+	it("property: a reading compared with itself changes nothing; each change has the same id however often it is read", () => {
+		fc.assert(
+			fc.property(anyJson, anyJson, (before, after) => {
+				expect(observe(follow, before, before)).toEqual([]);
+				const once = observe(follow, before, after);
+				const twice = observe(follow, before, structuredClone(after));
+				expect(twice.map((each) => each.id)).toEqual(once.map((each) => each.id));
+				if (canonical(before) !== canonical(after)) expect(once.length).toBeGreaterThan(0);
+			}),
+			{ numRuns: pbtRuns(200) },
+		);
+	});
+});

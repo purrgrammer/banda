@@ -8,6 +8,7 @@ export function useViewContext(chat: number): ViewContext {
 	const shell = useShell();
 	const { capabilities, agents, control, artifacts: library, memory } = shell;
 	const routines = control?.routines;
+	const watches = control?.watches;
 	const removed = control?.removed;
 	// this chat's own tab, while it runs
 	const view = browserOf(shell, chat);
@@ -16,12 +17,13 @@ export function useViewContext(chat: number): ViewContext {
 		(): ViewContext => ({
 			agents,
 			...(routines === undefined ? {} : { routines }),
+			...(watches === undefined ? {} : { watches }),
 			...(library === undefined ? {} : { artifacts: { chat, library } }),
 			...(browser === undefined ? {} : { browser }),
 			...(memory === undefined ? {} : { memory }),
 			...(removed === undefined ? {} : { removed }),
 			...(capabilities === undefined ? {} : { capabilities }),
 		}),
-		[chat, agents, routines, library, browser, memory, removed, capabilities],
+		[chat, agents, routines, watches, library, browser, memory, removed, capabilities],
 	);
 }

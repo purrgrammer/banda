@@ -27,6 +27,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/cn";
 import { AvatarChoices } from "../avatar/Choices.tsx";
+import type { WatchRowView } from "../lib/watches.ts";
 import { Confirm } from "./Confirm.tsx";
 import { Face, FaceStack, type FaceState } from "./Face.tsx";
 import type { Who } from "./Row.tsx";
@@ -272,6 +273,7 @@ export function Routines({
 	routines,
 	agent,
 	allPaused = false,
+	watching = false,
 	onRunNow,
 	onPause,
 	onAllPaused,
@@ -282,6 +284,8 @@ export function Routines({
 	agent: string;
 	/** All of the agent's routines are paused: each row says so, and the face dims. */
 	allPaused?: boolean;
+	/** The agent watches something: the switch shows even with no routine, since it holds watches too. */
+	watching?: boolean;
 	onRunNow?: (id: string) => void;
 	/** Pause one routine, or resume it. */
 	onPause?: (id: string, paused: boolean) => void;
@@ -295,11 +299,11 @@ export function Routines({
 	return (
 		<PanelSection>
 			<div className="flex items-center gap-2">
-				{routines.length === 0 ? null : (
+				{routines.length === 0 && !watching ? null : (
 					// biome-ignore lint/a11y/noLabelWithoutControl: the switch inside is the control
 					<label className="flex flex-1 items-center gap-2.5 text-ui text-ink">
 						<Switch checked={!allPaused} onCheckedChange={(on) => onAllPaused?.(!on)} />
-						Routines on
+						{routines.length === 0 ? "Watching on" : "Routines on"}
 					</label>
 				)}
 				{routines.length === 0 || onAdd === undefined ? null : (
@@ -409,6 +413,174 @@ function RoutineRow({
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
+		</li>
+	);
+}
+
+export type { WatchRowView };
+
+const WATCH_ALLOW = { "set up": "Follow it", change: "Change it", stop: "Stop it" } as const;
+
+/**
+ * What the agent is watching (DESIGN.md "Watches"), beneath its routines: rows, each with what it follows and what
+ * it last saw; Check now, Pause and Remove on the row; tapping opens the watch. Nothing when it watches nothing, since
+ * the chat and an object's card offer Follow where it is wanted.
+ */
+export function Watching({
+	watches,
+	agent,
+	allPaused = false,
+	inline,
+	onCheck,
+	onPause,
+	onRemove,
+	onOpen,
+}: {
+	watches: readonly WatchRowView[];
+	agent: string;
+	/** Everything of the agent's is paused: each row says so. */
+	allPaused?: boolean;
+	/** The object drawn inline, as the owner's references are (its mark, state and title), by its reference; else its name. */
+	inline?: ((ref: string, name: string) => ReactNode) | undefined;
+	onCheck?: (id: string) => void;
+	/** Pause one watch, or resume it. */
+	onPause?: (id: string, paused: boolean) => void;
+	/** Stop it: asked first, as every destructive action is. */
+	onRemove?: (id: string) => void;
+	/** Open a watch. */
+	onOpen?: (id: string) => void;
+}) {
+	if (watches.length === 0) return null;
+	return (
+		<PanelSection title="Watching">
+			<ul className="-mx-2 flex flex-col">
+				{watches.map((watch) => (
+					<WatchRow
+						key={watch.id}
+						watch={watch}
+						agent={agent}
+						{...(inline === undefined ? {} : { inline })}
+						paused={allPaused || watch.paused === true}
+						{...(onCheck === undefined ? {} : { onCheck: () => onCheck(watch.id) })}
+						{...(onOpen === undefined ? {} : { onOpen: () => onOpen(watch.id) })}
+						{...(onRemove === undefined ? {} : { onRemove: () => onRemove(watch.id) })}
+						{...(onPause === undefined || allPaused ? {} : { onPause: () => onPause(watch.id, watch.paused !== true) })}
+					/>
+				))}
+			</ul>
+		</PanelSection>
+	);
+}
+
+function WatchRow({
+	watch,
+	agent,
+	paused,
+	inline,
+	onCheck,
+	onPause,
+	onRemove,
+	onOpen,
+}: {
+	watch: WatchRowView;
+	agent: string;
+	paused: boolean;
+	inline?: ((ref: string, name: string) => ReactNode) | undefined;
+	onCheck?: () => void;
+	onPause?: () => void;
+	onRemove?: () => void;
+	onOpen?: () => void;
+}) {
+	// stopping is asked first: the menu item opens the confirm, which the closing menu cannot hold
+	const [stopping, setStopping] = useState(false);
+	const title = watch.object === undefined || inline === undefined ? watch.name : inline(watch.object.ref, watch.name);
+	if (watch.waiting !== undefined)
+		return (
+			<li className="flex flex-col gap-2 rounded-field px-2 py-2">
+				<span className="flex min-w-0 flex-col">
+					<span className="truncate text-ui font-medium text-ink">{watch.name}</span>
+					<span className="truncate text-meta text-ink-2">
+						{watch.until === undefined ? "" : `${watch.until} · `}Waiting for you to{" "}
+						{watch.waiting === "set up" ? "set it up" : `${watch.waiting} it`}
+					</span>
+				</span>
+				<span className="flex gap-1.5">
+					<Button size="xs" onClick={watch.onAllow}>
+						{WATCH_ALLOW[watch.waiting]}
+					</Button>
+					<Button variant="ghost" size="xs" onClick={watch.onDecline}>
+						Don't
+					</Button>
+				</span>
+			</li>
+		);
+	const quiet = paused || watch.done === true;
+	const state =
+		watch.done === true ? "Done" : paused ? "Paused" : watch.next === undefined ? null : `Next look ${watch.next}`;
+	return (
+		<li className="group/watch relative flex items-start gap-2 rounded-field px-2 py-2 hover:bg-paper-3">
+			<button
+				type="button"
+				onClick={onOpen}
+				disabled={onOpen === undefined}
+				aria-label={`${watch.name}: open`}
+				className="flex min-w-0 flex-1 flex-col text-left"
+			>
+				<span
+					className={cn("flex min-w-0 items-baseline gap-1 text-ui font-medium", quiet ? "text-ink-2" : "text-ink")}
+				>
+					<span className="min-w-0 truncate">{title}</span>
+					{watch.service === undefined || watch.object !== undefined ? null : (
+						<span className="shrink-0 font-normal text-ink-2"> · {watch.service}</span>
+					)}
+				</span>
+				<span className="truncate text-meta text-ink-2">
+					{[watch.until, state].filter((part) => part !== undefined && part !== null).join(" · ")}
+				</span>
+				{watch.saw === undefined ? null : (
+					<span className={cn("truncate text-meta", watch.failing === true ? "text-danger" : "text-ink-2")}>
+						{watch.saw}
+					</span>
+				)}
+			</button>
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button variant="ghost" size="icon-xs" className="text-ink-2" aria-label={`${watch.name}: more`}>
+						<MoreHorizontalIcon />
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end">
+					{watch.done === true ? null : (
+						<DropdownMenuItem onSelect={onCheck} disabled={onCheck === undefined}>
+							<PlayIcon />
+							Check now
+						</DropdownMenuItem>
+					)}
+					{watch.done === true ? null : (
+						<DropdownMenuItem onSelect={onPause} disabled={onPause === undefined}>
+							{paused ? <PlayIcon /> : <PauseIcon />}
+							{paused ? "Resume" : "Pause"}
+						</DropdownMenuItem>
+					)}
+					<DropdownMenuItem
+						variant="destructive"
+						onSelect={() => (watch.done === true ? onRemove?.() : setStopping(true))}
+						disabled={onRemove === undefined}
+					>
+						<XIcon />
+						{watch.done === true ? "Remove" : "Stop"}
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
+			<Confirm
+				open={stopping}
+				onOpenChange={setStopping}
+				title={`Stop following ${watch.name}?`}
+				body={`${agent} stops looking at it, and no longer wakes for what changes there. What it saw stays in the chat.`}
+				action="Stop"
+				keep="Keep following"
+				onConfirm={onRemove}
+			/>
 		</li>
 	);
 }

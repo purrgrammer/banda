@@ -137,6 +137,21 @@ type CoreSegment =
 			readonly owner?: true;
 			readonly at?: number;
 	  }
+	/**
+	 * A followed object changed (DESIGN.md "Watches"): the line's words, the watch, the object (its key draws its card
+	 * beneath), the changes; `tell` when the chat was only told and no run followed; `ended` on the watch's last wake.
+	 */
+	| {
+			readonly kind: "watch";
+			readonly key: string;
+			readonly text: string;
+			readonly watch: string;
+			readonly object: Extract<Item, { role: "watch" }>["object"];
+			readonly changes: readonly string[];
+			readonly tell?: true;
+			readonly ended?: string;
+			readonly at: number;
+	  }
 	| { readonly kind: "working"; readonly key: "working"; readonly text: string };
 
 /**
@@ -546,6 +561,18 @@ export function view(
 				...(item.owner === true ? { owner: true as const } : {}),
 				...(item.at === undefined ? {} : { at: item.at }),
 			});
+		else if (item.role === "watch")
+			segments.push({
+				kind: "watch",
+				key: `${item.id}`,
+				text: watchWords(item),
+				watch: item.watch,
+				object: item.object,
+				changes: item.changes,
+				...(item.tell === true ? { tell: true as const } : {}),
+				...(item.ended === undefined ? {} : { ended: item.ended }),
+				at: item.at,
+			});
 	}
 	// asks whose call is not in the items read so far: still answerable
 	for (const wait of waits)
@@ -584,7 +611,10 @@ export function quietRuns(segments: readonly Segment[]): Segment[] {
 			continue;
 		}
 		let end = i + 1;
-		while (end < segments.length && !["owner", "owner-message", "wake"].includes((segments[end] as Segment).kind))
+		while (
+			end < segments.length &&
+			!["owner", "owner-message", "wake", "watch"].includes((segments[end] as Segment).kind)
+		)
 			end++;
 		const run = segments.slice(i + 1, end);
 		const said = run.some((each) => !QUIET.has(each.kind));
@@ -595,6 +625,17 @@ export function quietRuns(segments: readonly Segment[]): Segment[] {
 		i = end;
 	}
 	return out;
+}
+
+/**
+ * A watch's line, in the owner's words: the object and what changed ("acme/banda #142 · ana approved, lint failed"),
+ * and what ended it ("… · done: merged").
+ */
+export function watchWords(item: Pick<Extract<Item, { role: "watch" }>, "object" | "changes" | "ended">): string {
+	const changes = item.changes.filter((change) => change !== item.ended);
+	const words = [item.object.name, ...(changes.length === 0 ? [] : [changes.join(", ")])];
+	if (item.ended !== undefined) words.push(`done: ${item.ended}`);
+	return words.join(" · ");
 }
 
 /** A routine in trouble, in the owner's words: which, and what went wrong. */
@@ -694,6 +735,8 @@ export function shown(segment: Segment): string[] {
 		case "wake":
 		case "working":
 			return [segment.text];
+		case "watch":
+			return [segment.text, segment.object.name, ...segment.changes];
 	}
 }
 
@@ -708,6 +751,7 @@ const CORE_KINDS: ReadonlySet<string> = new Set<CoreSegment["kind"]>([
 	"proposal",
 	"agentMessage",
 	"wake",
+	"watch",
 	"working",
 ]);
 

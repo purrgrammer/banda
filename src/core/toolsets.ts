@@ -11,6 +11,7 @@ export const TOOLSETS: { readonly [name: string]: readonly string[] } = {
 	avatar: ["read_avatar_instructions"],
 	requests: ["propose_send", "ask_hosts"],
 	routines: ["schedule"],
+	watches: ["watch"],
 	memory: ["remember", "recall", "forget"],
 	web: ["web_fetch"],
 	browser: [
@@ -34,8 +35,8 @@ export const TOOLSETS: { readonly [name: string]: readonly string[] } = {
  */
 export const EGRESS_TOOLS = ["propose_send", "ask_hosts"] as const;
 
-/** Every agent can keep a promise with routines and maintain its scoped memory, whatever its file lists. */
-export const ALWAYS_TOOLSETS = ["routines", "memory"] as const;
+/** Every agent can keep a promise with routines and watches and maintain its scoped memory, whatever its file lists. */
+export const ALWAYS_TOOLSETS = ["routines", "watches", "memory"] as const;
 
 /** How an agent speaks to the owner, in its own chats. */
 export const MESSAGE_USER = "message_user";

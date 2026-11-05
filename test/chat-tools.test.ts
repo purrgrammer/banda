@@ -98,7 +98,7 @@ describe("a chat's tools are what is in effect now", () => {
 		const after = await daemon(home, ["kept", "added"], sent);
 		await say(after.core, after.harness, "reader");
 		const tools = sent.at(-1) ?? [];
-		// every agent's tools that this daemon installs (the routines), and its file's: not the new one
+		// every agent's tools that this daemon installs (the routines, the watches), and its file's: not the new one
 		const installed = [
 			"message_user",
 			"message_agent",
@@ -107,6 +107,7 @@ describe("a chat's tools are what is in effect now", () => {
 			"propose_group",
 			"propose_agent_change",
 			"schedule",
+			"watch",
 			"kept",
 		];
 		expect(EVERY_AGENT).toEqual(expect.arrayContaining(installed.slice(0, 2)));

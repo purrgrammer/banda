@@ -531,11 +531,11 @@ function ActivityTranscript({
 	// One model request keeps its React identity from partial to committed, including open rows and focus.
 	let request = 0;
 	const rows = work.items.map((item) => {
-		if (item.role === "user" || item.role === "wake")
+		if (item.role === "user" || item.role === "wake" || (item.role === "watch" && item.tell === undefined))
 			return (
 				<RawRow
 					key={item.id}
-					title={item.role === "user" ? "Your message" : "Routine"}
+					title={item.role === "user" ? "Your message" : item.role === "wake" ? "Routine" : "Watch"}
 					icon={<MessageSquareIcon className="size-4" />}
 					defaultOpen
 				>

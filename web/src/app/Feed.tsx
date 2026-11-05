@@ -8,6 +8,8 @@ import {
 	CalendarClockIcon,
 	CalendarXIcon,
 	CircleAlertIcon,
+	EyeIcon,
+	EyeOffIcon,
 	FilePenIcon,
 	FileXIcon,
 	RotateCwIcon,
@@ -16,6 +18,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import { actOnRoutine } from "../areas/routines.ts";
+import { actOnWatch } from "../areas/watches.ts";
 import { AvatarCandidateMessage } from "../avatar/CandidateMessage.tsx";
 import { AgentMessage } from "../chat/AgentMessage.tsx";
 import { ApprovalCard, ChangeCard, Facts } from "../chat/Approval.tsx";
@@ -27,11 +30,13 @@ import { ProposalCard } from "../chat/Proposal.tsx";
 import { RoutineProposal } from "../chat/Routine.tsx";
 import type { Who } from "../chat/Row.tsx";
 import { SkillFeedItem } from "../chat/Skill.tsx";
+import { WatchProposal } from "../chat/Watch.tsx";
 import { Markdown } from "../components/Markdown.tsx";
 import { actOnCapability, actOnProposal, answerAgent, answerWait, dismissQuestion } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { type Segment, tryAgainAfter } from "../lib/chat.ts";
 import { changeNoun, changeWords } from "../lib/segments/changes.ts";
+import { watchCallWords, watchObject } from "../lib/segments/watches.ts";
 import { showAgents, showCapabilities, showControl, useShell } from "../lib/shell.ts";
 import { AgentPreview } from "./AgentPreview.tsx";
 import { kindWords } from "./ArtifactPage.tsx";
@@ -40,7 +45,7 @@ import { DraftApproval } from "./DraftApproval.tsx";
 import { FilePart } from "./FilePart.tsx";
 import { HarnessSessionPart } from "./HarnessSession.tsx";
 import { LiveView } from "./LiveBrowser.tsx";
-import { MessageObjects, OwnerMessage } from "./Objects.tsx";
+import { InlineObject, MessageObjects, ObjectPreviews, OwnerMessage } from "./Objects.tsx";
 import { AskRef, approvalKind, didNotWords, didWords, sawOpen, wasOpen } from "./Settled.tsx";
 import { routineTitle } from "./titles.ts";
 
@@ -278,6 +283,66 @@ function RoutineLine({
 	return (
 		<Line icon={CalendarClockIcon} tone={state === "refused" ? "danger" : "quiet"}>
 			{line}
+		</Line>
+	);
+}
+
+/** A `watch` call's line: the proposal card while the owner's answer waits, else one line saying how it stands. */
+function WatchLine({
+	chat,
+	who,
+	agent,
+	segment,
+}: {
+	chat: number;
+	who: Who;
+	agent: { readonly id: string; readonly name: string } | undefined;
+	segment: Extract<Segment, { kind: "watchCall" }>;
+}) {
+	const { watch, state, name } = segment;
+	const change = watch?.change;
+	// the object as the owner's references draw it: by its key once the daemon resolved it, else by the file's link
+	const what = watchObject(segment);
+	const inline = <InlineObject chat={chat} agent={agent} reference={watch?.object?.ref ?? what} fallback={what} />;
+	if (state === "pending" && watch !== undefined && name !== undefined && change !== undefined) {
+		const shown = change.kind === "removed" ? watch.accepted?.watch : change.watch;
+		return (
+			<WatchProposal
+				watch={{
+					agent: who.name,
+					title: what,
+					object: inline,
+					kind: change.kind === "added" ? "new" : change.kind,
+					until: shown?.until ?? "merged or closed",
+					...(shown?.account === undefined ? {} : { account: shown.account }),
+					ask: shown?.ask ?? "",
+				}}
+				onAllow={() =>
+					void actOnWatch(name, {
+						action: "accept",
+						sha: change.kind === "removed" ? null : (change.sha ?? null),
+					}).then(showControl)
+				}
+				onDecline={() => void actOnWatch(name, { action: "decline" }).then(showControl)}
+			/>
+		);
+	}
+	const words = watchCallWords(segment);
+	const at = what === "" ? -1 : words.indexOf(what);
+	return (
+		<Line
+			icon={state === "declined" || state === "removed" || watch?.state === "done" ? EyeOffIcon : EyeIcon}
+			tone={state === "refused" ? "danger" : "quiet"}
+		>
+			{at < 0 ? (
+				words
+			) : (
+				<>
+					{words.slice(0, at)}
+					{inline}
+					{words.slice(at + what.length)}
+				</>
+			)}
 		</Line>
 	);
 }
@@ -739,6 +804,31 @@ function partOf(
 					{segment.text}
 				</Line>
 			);
+		case "watch": {
+			// the change in the kind's words, the object named as the owner's references are, and its card beneath
+			const openWatch = onRoutine === undefined ? undefined : () => onRoutine(segment.watch);
+			const rest = segment.text.startsWith(segment.object.name)
+				? segment.text.slice(segment.object.name.length)
+				: ` · ${segment.text}`;
+			return (
+				<div className="flex w-full flex-col items-center gap-2">
+					<Line icon={segment.ended === undefined ? EyeIcon : EyeOffIcon} time={time(segment.at)} onClick={openWatch}>
+						<InlineObject
+							chat={chat}
+							agent={objectAgent}
+							reference={segment.object.ref}
+							fallback={segment.object.name}
+						/>
+						{rest}
+					</Line>
+					{objectAgent === undefined ? null : (
+						<ObjectPreviews chat={chat} asks={[{ ref: segment.object.ref }]} agent={objectAgent} />
+					)}
+				</div>
+			);
+		}
+		case "watchCall":
+			return <WatchLine chat={chat} who={who} agent={objectAgent} segment={segment} />;
 		case "change":
 			return <ChangeLine who={who} segment={segment} />;
 		case "browser":

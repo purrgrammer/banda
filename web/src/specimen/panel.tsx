@@ -29,6 +29,8 @@ import {
 	type PanelTab,
 	type RoutineRowView,
 	Routines,
+	Watching,
+	type WatchRowView,
 } from "../chat/Panel.tsx";
 import { RoutineEditor } from "../chat/RoutineEditor.tsx";
 import type { Who } from "../chat/Row.tsx";
@@ -70,6 +72,7 @@ import {
 	SERVICES,
 	SETTINGS,
 	SETTINGS_PROVIDERS,
+	WATCHES,
 } from "./fixtures.ts";
 import { MaraChat } from "./screens.tsx";
 import { SKILLS, skillHref } from "./skills.tsx";
@@ -115,6 +118,7 @@ function AgentPanelOf({
 	tab,
 	state,
 	routines = ROUTINES,
+	watches = WATCHES,
 	paused = false,
 	facts = FACTS,
 	permissions = PERMISSIONS,
@@ -125,6 +129,7 @@ function AgentPanelOf({
 	tab?: PanelTab;
 	state?: FaceState;
 	routines?: readonly RoutineRowView[];
+	watches?: readonly WatchRowView[];
 	paused?: boolean;
 	facts?: readonly { id: string; text: string }[];
 	permissions?: readonly { what: string; scope: string }[];
@@ -140,7 +145,12 @@ function AgentPanelOf({
 					tab ?? firstTab({ routines: routines.length, connected: connections.some((row) => row.accounts.length > 0) })
 				}
 				{...(state === undefined ? {} : { state })}
-				routines={<Routines agent={who.name} routines={routines} allPaused={paused} />}
+				routines={
+					<>
+						<Routines agent={who.name} routines={routines} allPaused={paused} />
+						<Watching agent={who.name} watches={watches} allPaused={paused} />
+					</>
+				}
 				access={
 					<>
 						<Connections agent={who.name} rows={connections} compact />

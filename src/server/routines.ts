@@ -41,6 +41,7 @@ import type {
 	RoutineView,
 } from "./api.ts";
 import { BadRequest } from "./http.ts";
+import { watches } from "./watches.ts";
 
 type Reconcile = (harness: Harness, ctx?: Context) => Promise<void>;
 
@@ -493,6 +494,7 @@ export async function control(
 	return {
 		...(paused === undefined ? {} : { paused }),
 		routines: await routines(harness, workspace, now, ctx),
+		watches: await watches(harness, workspace, ctx),
 		activity,
 		permissions,
 		removed: { ...((await harness.snapshot(Accepted, ctx))?.removed ?? {}) },

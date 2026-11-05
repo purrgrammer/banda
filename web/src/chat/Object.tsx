@@ -170,16 +170,26 @@ function Where({
 	);
 }
 
+/** How an object can be followed from its card (DESIGN.md "Watches"): the words for what ends a watch. */
+export type FollowOffer = {
+	readonly ends: readonly string[];
+	/** Follow it, until the end named, or any of them. */
+	readonly onFollow: (until?: string) => void;
+};
+
 /** Quiet manual actions and full reading details, reachable by touch or keyboard. */
 export function ObjectMenu({
 	name,
 	details,
 	onRefresh,
+	follow,
 	busy = false,
 }: {
 	name: string;
 	details: readonly (readonly [string, string])[];
 	onRefresh?: (() => void) | undefined;
+	/** Offered when the kind can be followed and no watch of this agent follows it yet. */
+	follow?: FollowOffer | undefined;
 	busy?: boolean | undefined;
 }) {
 	return (
@@ -190,12 +200,30 @@ export function ObjectMenu({
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="w-72 max-w-[calc(100vw-2rem)]">
-				{onRefresh === undefined ? null : (
+				{onRefresh === undefined && follow === undefined ? null : (
 					<>
 						<DropdownMenuGroup>
-							<DropdownMenuItem disabled={busy} onSelect={onRefresh}>
-								Refresh preview
-							</DropdownMenuItem>
+							{onRefresh === undefined ? null : (
+								<DropdownMenuItem disabled={busy} onSelect={onRefresh}>
+									Refresh preview
+								</DropdownMenuItem>
+							)}
+							{follow === undefined
+								? null
+								: [
+										...follow.ends.map((end) => (
+											<DropdownMenuItem key={end} disabled={busy} onSelect={() => follow.onFollow(end)}>
+												Follow until {end}
+											</DropdownMenuItem>
+										)),
+										...(follow.ends.length > 1
+											? [
+													<DropdownMenuItem key="any" disabled={busy} onSelect={() => follow.onFollow()}>
+														Follow until {follow.ends.join(" or ")}
+													</DropdownMenuItem>,
+												]
+											: []),
+									]}
 						</DropdownMenuGroup>
 						<DropdownMenuSeparator />
 					</>

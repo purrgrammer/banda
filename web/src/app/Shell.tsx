@@ -16,7 +16,7 @@ import { Band, BandNotice } from "../chat/Band.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
 import { Face, FaceStack } from "../chat/Face.tsx";
 import { MemorySettings, type NewFactSpec } from "../chat/MemorySettings.tsx";
-import { AgentPanel, firstTab, Panel, Routines } from "../chat/Panel.tsx";
+import { AgentPanel, firstTab, Panel, Routines, Watching } from "../chat/Panel.tsx";
 import { AppSettings, Archive, Personality, SettingsPage, ThinkingTiers } from "../chat/Settings.tsx";
 import { SkillCatalogue } from "../chat/Skill.tsx";
 import { actOnFact, setPaused, signOutAccount, signOutSite } from "../lib/api.ts";
@@ -38,6 +38,7 @@ import { BrowserDialog } from "./LiveBrowser.tsx";
 import { McpSetup } from "./McpSetup.tsx";
 import { NewSheet } from "./NewSheet.tsx";
 import { useAskNotifications, useNotify } from "./notify.ts";
+import { InlineObject } from "./Objects.tsx";
 import { Onboarding, SkillsOnboarding, useShippedSkills } from "./Onboarding.tsx";
 import { ownerEdits } from "./owner-edits.ts";
 import { EditRoutine, routineRows } from "./routines.tsx";
@@ -47,6 +48,7 @@ import { SettingsProviders } from "./SettingsProviders.tsx";
 import { ShortcutsDialog, typing as typingIn } from "./Shortcuts.tsx";
 import { SkillsPage, useSkills, waitsOnOwner } from "./Skills.tsx";
 import { routineTitle } from "./titles.ts";
+import { WatchDetail, watchActions, watchRows } from "./watches.tsx";
 import { hrefOf, lastOf, parse, type Where } from "./where.ts";
 
 const LAST = "banda.last";
@@ -165,7 +167,7 @@ function Main() {
 	const [shortcuts, setShortcuts] = useState(false);
 	const [making, setMaking] = useState(false);
 	// the routine open in the panel's editor (none: a new one), and a routine's line asking for the agent's routines
-	const [editing, setEditing] = useState<{ agent: string; routine?: string }>();
+	const [editing, setEditing] = useState<{ agent: string; routine?: string; watch?: string }>();
 	const [focus, setFocus] = useState<{ agent: string; n: number }>();
 	// when the daemon last pushed the routines: their next runs are read then, so they never tick on their own
 	// biome-ignore lint/correctness/useExhaustiveDependencies: a push is what moves it
@@ -396,10 +398,21 @@ function Main() {
 				/>
 			);
 			if (agent === undefined) return chat;
-			// an agent's routines wake in its chat; their times are read when the daemon last pushed them
+			// an agent's routines and watches wake in its chat; their times are read when the daemon last pushed them
 			const routines = routineRows(shell.control?.routines ?? [], where.id, pushedAt);
+			const watches = watchRows(shell.control?.watches ?? [], where.id, pushedAt);
+			const openWatch =
+				editing?.watch === undefined ? undefined : shell.control?.watches.find((each) => each.name === editing.watch);
 			const editor =
-				editing?.agent === where.id ? (
+				editing?.agent !== where.id ? undefined : openWatch !== undefined ? (
+					<WatchDetail
+						agent={{ id: where.id, name: who.name }}
+						chat={row?.chat}
+						watch={openWatch}
+						now={pushedAt}
+						onDone={() => setEditing(undefined)}
+					/>
+				) : editing.watch !== undefined ? undefined : (
 					<EditRoutine
 						agent={where.id}
 						name={who.name}
@@ -407,7 +420,7 @@ function Main() {
 						now={pushedAt}
 						onDone={() => setEditing(undefined)}
 					/>
-				) : undefined;
+				);
 			const agentFile = shell.agents.find((each) => each.accepted?.agent?.id === where.id)?.accepted;
 			const personality = where.id === "sancho" ? companion.personality : agentFile?.agent?.instructions;
 			const agentPanel = (
@@ -423,25 +436,45 @@ function Main() {
 							tab={(() => {
 								if (focus?.agent === where.id) return "routines";
 								const suggested = firstTab({
-									routines: routines.length,
+									routines: routines.length + watches.length,
 									connected: shell.capabilities === undefined || reachesSomething(shell.capabilities, where.id),
 								});
 								if (suggested === "access") onAccess.current.add(where.id);
 								return suggested === "about" && onAccess.current.has(where.id) ? "access" : suggested;
 							})()}
 							routines={
-								<Routines
-									agent={who.name}
-									routines={routines}
-									allPaused={shell.control?.paused !== undefined}
-									onAllPaused={(paused) => void setPaused(paused).then(showControl)}
-									onAdd={() => setEditing({ agent: where.id })}
-									onOpen={(id) => setEditing({ agent: where.id, routine: id })}
-									onRunNow={(id) => void actOnRoutine(id, { action: "run", key: clickKey() }).then(showControl)}
-									onPause={(id, paused) =>
-										void actOnRoutine(id, { action: paused ? "pause" : "resume" }).then(showControl)
-									}
-								/>
+								<>
+									<Routines
+										agent={who.name}
+										routines={routines}
+										allPaused={shell.control?.paused !== undefined}
+										watching={watches.length > 0}
+										onAllPaused={(paused) => void setPaused(paused).then(showControl)}
+										onAdd={() => setEditing({ agent: where.id })}
+										onOpen={(id) => setEditing({ agent: where.id, routine: id })}
+										onRunNow={(id) => void actOnRoutine(id, { action: "run", key: clickKey() }).then(showControl)}
+										onPause={(id, paused) =>
+											void actOnRoutine(id, { action: paused ? "pause" : "resume" }).then(showControl)
+										}
+									/>
+									<Watching
+										agent={who.name}
+										watches={watches}
+										allPaused={shell.control?.paused !== undefined}
+										inline={(key, name) => (
+											<InlineObject
+												chat={row?.chat}
+												agent={{ id: where.id, name: who.name }}
+												reference={key}
+												fallback={name}
+											/>
+										)}
+										onOpen={(id) => setEditing({ agent: where.id, watch: id })}
+										onCheck={(id) => void watchActions.check(id)}
+										onPause={(id, paused) => void watchActions.pause(id, paused)}
+										onRemove={(id) => void watchActions.remove(id)}
+									/>
+								</>
 							}
 							access={
 								<AccessTab

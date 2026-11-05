@@ -12,6 +12,7 @@
  * what keeps a chatty chat from making the daemon read a service again and again.
  */
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
+import { type Follow, parseFollow } from "./follow.ts";
 
 type JsonValue = JsonObject[string];
 
@@ -24,6 +25,8 @@ export type ObjectRead = {
 	readonly tool: string;
 	readonly args: { readonly [arg: string]: JsonValue };
 	readonly optional?: boolean;
+	/** Made only when the object is followed (its comments): the card does without it. */
+	readonly follow?: boolean;
 };
 
 /** A write that acts on an object: how its arguments name it, and the words its draft says. */
@@ -83,6 +86,8 @@ export type ObjectKind = {
 	readonly fields: { readonly [field: string]: string };
 	readonly writes?: readonly ObjectWrite[];
 	readonly creates?: readonly ObjectCreate[];
+	/** How a watch follows it (DESIGN.md "Watches"); a kind without it cannot be followed. */
+	readonly follow?: Follow;
 };
 
 export type ObjectKinds = { readonly [kind: string]: ObjectKind };
@@ -146,9 +151,9 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 		}
 		const given = raw as { [key: string]: unknown };
 		for (const key of Object.keys(given))
-			if (!["card", "name", "urls", "ids", "normalize", "reads", "fields", "writes", "creates"].includes(key))
+			if (!["card", "name", "urls", "ids", "normalize", "reads", "fields", "writes", "creates", "follow"].includes(key))
 				errors.push(
-					`${where}.${key} is not a field: use card, name, urls, ids, normalize, reads, fields, writes, creates`,
+					`${where}.${key} is not a field: use card, name, urls, ids, normalize, reads, fields, writes, creates, follow`,
 				);
 		const card = given.card;
 		if (typeof card !== "string" || !(CARDS as readonly string[]).includes(card))
@@ -225,8 +230,11 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 				const tool = (read as { tool?: unknown } | null)?.tool;
 				const args = (read as { args?: unknown } | null)?.args ?? {};
 				const optional = (read as { optional?: unknown } | null)?.optional;
+				const follow = (read as { follow?: unknown } | null)?.follow;
 				if (optional !== undefined && typeof optional !== "boolean")
 					errors.push(`${where}.reads.${as}.optional is a boolean`);
+				if (follow !== undefined && typeof follow !== "boolean")
+					errors.push(`${where}.reads.${as}.follow is a boolean`);
 				if (
 					!NAME.test(as) ||
 					reserved(as) ||
@@ -259,6 +267,7 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					tool,
 					args: args as { [arg: string]: JsonValue },
 					...(optional === true ? { optional: true } : {}),
+					...(follow === true ? { follow: true } : {}),
 				};
 			}
 		const fields: { [field: string]: string } = {};
@@ -387,6 +396,14 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					...(c.text === undefined ? {} : { text: c.text as string }),
 				});
 			}
+		let follow: Follow | undefined;
+		if (given.follow !== undefined) {
+			const parsed = parseFollow(given.follow, where);
+			if ("errors" in parsed) errors.push(...parsed.errors);
+			else follow = parsed.follow;
+		}
+		if (follow === undefined && Object.values(reads).some((read) => read.follow === true))
+			errors.push(`${where}: a read made only when followed needs a "follow"`);
 		objects[kind] = {
 			card: card as CardKind,
 			name: typeof name === "string" ? name : kind,
@@ -397,6 +414,7 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 			fields,
 			...(writes.length === 0 ? {} : { writes }),
 			...(creates.length === 0 ? {} : { creates }),
+			...(follow === undefined ? {} : { follow }),
 		};
 	}
 	return errors.length > 0 ? { errors } : { objects };

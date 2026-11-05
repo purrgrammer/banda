@@ -1,4 +1,5 @@
 /** Message refs are only names. Every displayed fact comes from the daemon's account-bound reading. */
+import { EyeIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { EmailCard as EmailObject } from "../../../src/core/objects.ts";
@@ -20,6 +21,50 @@ import { api, gmailAttachment, sizeOf } from "../lib/api.ts";
 import { githubKey, objectAsks } from "../lib/objects.ts";
 import { ConnectFlow } from "./ConnectFlow.tsx";
 import { FilePart } from "./FilePart.tsx";
+import { watchActions } from "./watches.tsx";
+
+/** The name of agent `id`, as the band shows it; the agent whose card it is by its given name. */
+function whoFollows(id: string, agent: { readonly id: string; readonly name: string } | undefined): string {
+	if (agent?.id === id) return agent.name;
+	return id;
+}
+
+/**
+ * An object named inline, as the owner's own references are drawn: the service's mark, its state and its linked
+ * title, from the daemon's reading, read once; `fallback` (its name) until then, or when it cannot be read.
+ */
+export function InlineObject({
+	chat,
+	agent,
+	reference,
+	fallback,
+}: {
+	chat: number | undefined;
+	agent?: { readonly id: string; readonly name: string } | undefined;
+	/** The object: a link, or its canonical key as a card names it. */
+	reference: string;
+	fallback: string;
+}) {
+	const [shown, setShown] = useState<ObjectShown>();
+	const agentId = agent?.id;
+	useEffect(() => {
+		if (chat === undefined) return;
+		let gone = false;
+		const asks: ObjectAsk[] = [{ ref: reference, ...(agentId === undefined ? {} : { agent: agentId }) }];
+		void api<ObjectShown[]>("/objects", { method: "POST", body: JSON.stringify({ chat, asks }) }).then(
+			(next) => {
+				if (!gone) setShown(next[0]);
+			},
+			() => {},
+		);
+		return () => {
+			gone = true;
+		};
+	}, [chat, reference, agentId]);
+	if (shown?.shown === "card" && shown.card.card !== "notification")
+		return <ObjectLink object={shown.card} href={shown.card.url ?? reference} />;
+	return <span data-object-inline="">{fallback}</span>;
+}
 
 export function MessageObjects({
 	chat,
@@ -425,18 +470,45 @@ function ReadingCard({
 }) {
 	const old = useOldReading(shown);
 	const { card } = shown;
+	// Follow, when the kind can be followed and this agent does not yet; who follows it, when someone does
+	const followedBy = shown.follow?.by ?? [];
+	const mine = agent !== undefined && followedBy.some((each) => each.agent === agent.id);
+	const follow =
+		shown.follow === undefined || agent === undefined || mine
+			? undefined
+			: {
+					ends: shown.follow.ends,
+					onFollow: (until?: string) =>
+						void watchActions.follow({ agent: agent.id, object: shown.key, ...(until === undefined ? {} : { until }) }),
+				};
 	const actions = hideActions ? null : (
-		<ObjectMenu name={shown.name} details={readingDetails(shown)} onRefresh={onRefresh} busy={busy} />
+		<ObjectMenu name={shown.name} details={readingDetails(shown)} onRefresh={onRefresh} follow={follow} busy={busy} />
 	);
+	const following =
+		followedBy.length === 0 ? null : (
+			<p className="flex items-center gap-1.5 px-1 text-meta text-ink-2" data-following="">
+				<EyeIcon aria-hidden="true" className="size-3.5 shrink-0" />
+				Following
+				{followedBy.map(
+					(each) => ` · ${whoFollows(each.agent, agent)}${each.until === undefined ? "" : ` until ${each.until}`}`,
+				)}
+			</p>
+		);
 	const asOf = old
 		? new Date(shown.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
 		: undefined;
 	return (
 		<>
 			{card.card === "pull-request" ? (
-				<PullRequestCard pr={{ ...card, asOf }} actions={actions} />
+				<>
+					<PullRequestCard pr={{ ...card, asOf }} actions={actions} />
+					{following}
+				</>
 			) : card.card === "issue" ? (
-				<IssueCard issue={{ ...card, asOf }} actions={actions} />
+				<>
+					<IssueCard issue={{ ...card, asOf }} actions={actions} />
+					{following}
+				</>
 			) : card.card === "check-run" ? (
 				<CheckRunCard run={{ ...card, asOf }} actions={actions} />
 			) : card.card === "email" ? (

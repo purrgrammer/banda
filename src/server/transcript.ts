@@ -54,6 +54,7 @@ import {
 	undeliveredText,
 } from "../core/turn.ts";
 import { type Ask, WAIT, type WaitEnded } from "../core/wait.ts";
+import { TELL as WATCH_TELL, WAKE as WATCH_WAKE, type WatchWakeData } from "../core/watches.ts";
 import type {
 	AgentView,
 	Block,
@@ -121,6 +122,7 @@ const RECEIPTS: { readonly [tool: string]: Receipt["kind"] } = {
 	remember: "fact",
 	forget: "fact",
 	schedule: "routine",
+	watch: "watch",
 	message_user: "avatar",
 	skill: "skill",
 };
@@ -176,7 +178,7 @@ export function receiptOf(tool: string, isError: boolean, details: unknown): Rec
 	if (kind === "fact" && typeof receipt.id === "string" && typeof receipt.text === "string")
 		return { kind, id: receipt.id, text: receipt.text };
 	if (
-		kind === "routine" &&
+		(kind === "routine" || kind === "watch") &&
 		typeof receipt.name === "string" &&
 		typeof receipt.sha === "string" &&
 		(receipt.change === "added" || receipt.change === "changed" || receipt.change === "same")
@@ -289,6 +291,20 @@ export function itemOf(entry: EntryRecord): Item | undefined {
 	if (entry.kind === TROUBLE) {
 		const data = entry.data as unknown as TroubleData;
 		return { id, role: "notice", text: troubleText(data), routine: data, at: data.at };
+	}
+	if (entry.kind === WATCH_WAKE || entry.kind === WATCH_TELL) {
+		const data = entry.data as unknown as WatchWakeData;
+		return {
+			id,
+			role: "watch",
+			watch: data.watch,
+			object: data.object,
+			changes: data.changes,
+			text: `${data.object.name}: ${data.changes.join(", ")}`,
+			...(entry.kind === WATCH_TELL ? { tell: true as const } : {}),
+			...(data.ended === undefined ? {} : { ended: data.ended }),
+			at: data.at,
+		};
 	}
 	if (message?.role === "user") {
 		const data = entry.data as { origin?: Origin; message?: string; files?: Attachment[]; said?: string } | undefined;
@@ -513,7 +529,8 @@ async function title(harness: Harness, id: number, ctx: Context): Promise<string
 	const page = await chat?.entries({ order: "ascending" }, 10, undefined, ctx);
 	for (const entry of page?.items ?? []) {
 		const item = itemOf(entry);
-		if (item?.role === "user" || item?.role === "wake") return plain(item.text).slice(0, 120);
+		if (item?.role === "user" || item?.role === "wake" || (item?.role === "watch" && item.tell === undefined))
+			return plain(item.text).slice(0, 120);
 	}
 	return `chat ${id}`;
 }

@@ -74,6 +74,13 @@ export type Receipt =
 			readonly name: string;
 			readonly sha: string;
 			readonly change: "added" | "changed" | "same";
+	  }
+	/** A `watch` call's file: the watch, its hash, and whether it made, changed or kept one. */
+	| {
+			readonly kind: "watch";
+			readonly name: string;
+			readonly sha: string;
+			readonly change: "added" | "changed" | "same";
 	  };
 
 /** A remark the harness or the tool made about a call: its exit code, what was truncated, where the full output is. */
@@ -242,6 +249,22 @@ export type Item =
 			readonly text: string;
 			readonly owner?: true;
 			readonly at?: number;
+	  }
+	/**
+	 * A followed object changed: the watch, the object (its key names its card) and the changes in the kind's words;
+	 * `tell` when the changes only told the chat and woke no run; `ended` with what ended the watch on its last wake.
+	 */
+	| {
+			readonly id: number;
+			readonly role: "watch";
+			readonly watch: string;
+			readonly object: import("../core/watches.ts").WatchWakeData["object"];
+			readonly changes: readonly string[];
+			/** The object and the changes in one line: "acme/banda #142: ana approved". */
+			readonly text: string;
+			readonly tell?: true;
+			readonly ended?: string;
+			readonly at: number;
 	  }
 	/** An ask that ended: what was asked, and how it ended; an approval with what it would run, in words. */
 	| ({ readonly id: number; readonly role: "wait"; readonly label?: string } & WaitEnded);
@@ -560,6 +583,7 @@ export type RoutineView = {
 export type ActivityView = {
 	readonly at: number;
 	readonly routine?: string;
+	readonly watch?: string;
 	readonly what: string;
 	readonly chat?: number;
 	/** It reached outside the companion's computer: something read, or a request sent for the owner. */
@@ -586,6 +610,66 @@ export type PermissionView = {
 	readonly serves?: Serves;
 };
 
+/** A watch's file as the owner reads it: what it follows, with which account, what ends it, and what matters. */
+export type WatchSummary = {
+	/** The object, as the file names it: a link, or an id. */
+	readonly object: string;
+	readonly account?: string;
+	readonly until?: string;
+	readonly ask: string;
+};
+
+/** A watch file's text as the store or the box holds it, and what it says, or why it says nothing. */
+export type WatchFileView = {
+	readonly sha: string;
+	readonly watch?: WatchSummary;
+	readonly errors?: readonly string[];
+};
+
+/**
+ * How a watch stands, in one word: waiting for the owner to allow a change the box made, looking, paused by the
+ * owner, unable to look (its row says why), or done (what ended it).
+ */
+export type WatchState = "allow" | "active" | "paused" | "failing" | "done";
+
+/**
+ * A watch (DESIGN.md "Watches"): the version in effect, the change the box holds (allowed with `POST
+ * /api/watches/:name/accept` and the `sha` shown, or null for a removal), what it follows as the store resolved it,
+ * and how it stands. `POST /api/watches/:name/check` looks now; `/pause`, `/resume` and `/remove` as routines.
+ */
+export type WatchView = {
+	readonly name: string;
+	readonly accepted?: WatchFileView;
+	readonly change?: ({ readonly kind: "added" | "changed" } & Partial<WatchFileView>) | { readonly kind: "removed" };
+	readonly state: WatchState;
+	/** The agent it belongs to, by id: its wakes happen in that agent's chat. */
+	readonly agent: string;
+	/** The object it follows, once the daemon resolved it: its reading's key, the reference its card is read by, its name, where and as whom. */
+	readonly object?: {
+		readonly key: string;
+		readonly ref: string;
+		readonly name: string;
+		readonly connection: string;
+		readonly service: string;
+		readonly account?: string;
+	};
+	/** When it last looked, and when it looks next. */
+	readonly looked?: number;
+	readonly next?: number;
+	/** The newest changes it saw, in the kind's words, and when. */
+	readonly saw?: readonly string[];
+	readonly sawAt?: number;
+	/** Why it cannot look, in the daemon's words, since when. */
+	readonly failed?: { readonly at: number; readonly why: string };
+	/** When it last woke its agent. */
+	readonly lastRun?: number;
+	readonly paused?: "owner";
+	/** Done: when, and what ended it. */
+	readonly done?: { readonly at: number; readonly why: string };
+	/** The hashes of the box's versions the owner allowed, newest last: a chat that wrote one of them says so. */
+	readonly allowed?: readonly string[];
+};
+
 /**
  * The control room (`GET /api/control`), from the store alone: whether everything is paused (since when), the routines,
  * the tasks in progress (working, waiting on the owner, or paused), newest first, and the activity, newest first.
@@ -594,6 +678,7 @@ export type PermissionView = {
 export type ControlView = {
 	readonly paused?: number;
 	readonly routines: readonly RoutineView[];
+	readonly watches: readonly WatchView[];
 	readonly activity: readonly ActivityView[];
 	/** The permissions open now, oldest first. */
 	readonly permissions: readonly PermissionView[];

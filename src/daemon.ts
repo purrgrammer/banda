@@ -72,7 +72,7 @@ import { accept, agents, decline, save, seed, seedUntilDone, type Workspace, wat
 import type { ComputerView, OwnerInput, Posted, PostMessage, ViewEvent } from "./server/api.ts";
 import { acceptedIconFace } from "./server/avatar-icon-face.ts";
 import { bringable, chooseBring } from "./server/bring.ts";
-import { openCapabilities } from "./server/capabilities.ts";
+import { type Capabilities, openCapabilities } from "./server/capabilities.ts";
 import { change, companion, validPicks } from "./server/companion.ts";
 import { openDevices } from "./server/devices.ts";
 import { BadRequest, handler } from "./server/http.ts";
@@ -258,9 +258,17 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		}
 		const registry = toolRegistry();
 		registry.install(toolDiscoveryExtension);
+		// what a watch looks with: the connections' reads, once they are open below
+		let reader: Pick<Capabilities, "readFor" | "listedSchema"> | undefined;
 		const core = defineCore({
 			blobs,
 			registry,
+			read: (connection, account, tool, args, authority, ctx) =>
+				reader === undefined
+					? Promise.resolve({ failed: "banda is still starting" })
+					: reader.readFor(connection, account, tool, args, authority, ctx),
+			listedSchema: (connection, tool, ctx) =>
+				reader === undefined ? Promise.resolve(undefined) : reader.listedSchema(connection, tool, ctx),
 			writeSkill: async (chat, requestId, entry, ctx) => {
 				const conversation = await harness?.conversation(chat as ConversationId, ctx);
 				if (conversation === undefined) throw new Error(`chat ${chat} is gone`);
@@ -523,6 +531,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			agentChanged: core.agentChanged,
 		});
 		await capabilities.install();
+		reader = capabilities;
 		const objects = openObjects({ harness: open, capabilities, blobs });
 		// the lead proposes a new agent by writing its before-file into the box; the owner reviews and accepts it in Agents
 

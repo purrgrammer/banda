@@ -127,3 +127,5 @@ in a throwaway home, at desktop and phone width.
 - [ ] Harnesses: their asks reach the owner only in the web app, not on other gateways; the agent still hears the end
 - [ ] Harnesses: a step may flicker between flushes (a note the harness has not taken yet); sessions are keyed by the model's call id, as artifacts and groups are
 - [ ] Harnesses: the adapters are not in a release (Claude Code's SDK is Anthropic's, all rights reserved); Connections says how to install them
+- [ ] A shipped file newer than the accepted one (GitHub's gained `follow`) is offered as an update, so a home that
+  connected before cannot follow until the owner re-accepts the file by hand; found driving watches in a forked home

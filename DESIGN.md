@@ -189,10 +189,12 @@ one that gives them one more thing to manage stays out.
   while it can reach nothing; else on About. **Routines**: Routines on (a switch) and Add, then rows (name, when in
   words, next run, last run and what it said, paused; run now and pause in now on the row; tapping opens its editor) or,
   with none, one example in muted text ("Every weekday at 8:00, …"); Add opens a short form the daemon writes as the
-  owner's own file. Beneath them, **Watching**: rows (the service's icon and the object's title, what ends it, when it
-  last looked and what it last saw, paused or done; Check now and Pause on the row; tapping opens the object's card and
-  the watch's editor); Follow takes a link, and an object's card in the chat offers it too. **Access**: the connections
-  first, one row per
+  owner's own file. Beneath them, **Watching**: rows (the object as the owner's references draw it: the service's mark,
+  its state and its title; what ends it, when it last looked and what it last saw, paused or done; Check now, Pause and
+  Stop on the row, Stop asking first; tapping opens the watch: the object's card, what matters, its actions); Follow
+  takes a link, and an object's card in the chat offers it too. Wherever a watch names its object (its row, its lines
+  in the chat, its card) it draws it as the owner's references are drawn, never as a bare link. **Access**: the
+  connections first, one row per
   connection with one switch per account and Connect when none is signed in, then what the agent may do without
   asking, each revokable. **Memory**: the facts, editable and deletable. The face and the name at the top are
   edited where they show: a tap on the face picks another, a tap on the name edits it in place. **About**: the
@@ -589,9 +591,9 @@ or not the model remembers it.
   time passes, come together as one wake carrying the newest reading, and its line names what came together. A
   watch looks often while its object is busy (checks running) and seldom when it is quiet, as the kind says; wakes a
   day are per watch, as runs a day are per routine.
-- **The wake in the chat** is an event line, the change in the kind's words with the service's icon ("banda#142 · Ana
-  approved · 2 checks failed"), the object's card beneath and then the agent's reply when it had one. Tapping the line
-  opens the watch in the panel.
+- **The wake in the chat** is an event line, the object drawn as the owner's references are (the service's mark, its
+  state, its title) and then the change in the kind's words ("· Ana approved · 2 checks failed"), the object's card
+  beneath and then the agent's reply when it had one. Tapping the line opens the watch in the panel.
 - **It ends itself.** When what ends it holds, the last wake says so and the watch is done, as a routine that ran
   once is; its row says what ended it until the owner removes it. Following the same object again starts a new
   watch from a fresh baseline.

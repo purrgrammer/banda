@@ -22,6 +22,8 @@ export function Confirm({
 	action,
 	keep = "Cancel",
 	onConfirm,
+	open,
+	onOpenChange,
 	children,
 }: {
 	title: string;
@@ -30,11 +32,14 @@ export function Confirm({
 	action: string;
 	keep?: string;
 	onConfirm?: (() => void) | undefined;
-	children: ReactNode;
+	/** Opened by something that cannot be its trigger (a menu item, which closes its menu): controlled from outside. */
+	open?: boolean | undefined;
+	onOpenChange?: ((open: boolean) => void) | undefined;
+	children?: ReactNode;
 }) {
 	return (
-		<AlertDialog>
-			<AlertDialogTrigger asChild>{children}</AlertDialogTrigger>
+		<AlertDialog {...(open === undefined ? {} : { open, onOpenChange })}>
+			{children === undefined ? null : <AlertDialogTrigger asChild>{children}</AlertDialogTrigger>}
 			<AlertDialogContent size="sm">
 				<AlertDialogHeader>
 					<AlertDialogTitle>{title}</AlertDialogTitle>

@@ -4,6 +4,8 @@ import {
 	CalendarClockIcon,
 	CalendarXIcon,
 	CircleAlertIcon,
+	EyeIcon,
+	EyeOffIcon,
 	FilePenIcon,
 	FileXIcon,
 	KeyRoundIcon,
@@ -31,6 +33,7 @@ import { Line } from "../chat/Line.tsx";
 import { PullRequestCard } from "../chat/Object.tsx";
 import { RoutineProposal } from "../chat/Routine.tsx";
 import { VoiceMessage } from "../chat/Voice.tsx";
+import { WatchProposal } from "../chat/Watch.tsx";
 import { Markdown } from "../components/Markdown.tsx";
 import { SourceLabels } from "../components/SourceLink.tsx";
 import { ATLAS, ATTACHED, MARA, OCTO, PAGE, PHOTO, POSTER, PR, REPLY_VOICE, SANCHO, VOICE } from "./fixtures.ts";
@@ -467,6 +470,36 @@ export function Parts() {
 					<Line icon={CalendarXIcon}>Portugal fun fact stopped</Line>
 					<Line icon={CalendarClockIcon} time="08:00">
 						Morning brief ran
+					</Line>
+				</div>
+			</Section>
+			<Section
+				id="watch-items"
+				title="Watches in the chat"
+				note="An agent's watch waits for you as its card; each change the kind's rules say matters is a line, the object's card beneath it as the daemon reads it now; the last one says what ended it."
+			>
+				<div className="flex max-w-2xl flex-col gap-3">
+					<WatchProposal
+						watch={{
+							agent: "Mara",
+							title: "purrgrammer/banda #142",
+							kind: "new",
+							until: "merged",
+							account: "@bandarra",
+							ask: "Tell me when it is approved or a check fails. If Ana asks for changes, summarise what she wants.",
+						}}
+					/>
+					<Line icon={EyeIcon}>Following purrgrammer/banda #142</Line>
+					<Line icon={EyeIcon} time="09:10">
+						purrgrammer/banda #142 · ana approved, lint failed
+					</Line>
+					<PullRequestCard pr={{ ...PR, checks: { passed: 2, failed: 1, running: 0 }, reviews: "Approved by ana" }} />
+					<Line icon={EyeOffIcon} time="17:02">
+						purrgrammer/banda #142 · merged · done: merged
+					</Line>
+					<Line icon={EyeOffIcon}>Not following purrgrammer/banda #150</Line>
+					<Line icon={EyeIcon} tone="danger">
+						No watch set up: no connection the owner has can follow that link
 					</Line>
 				</div>
 			</Section>
