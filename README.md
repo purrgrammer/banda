@@ -1,8 +1,8 @@
-<p align="center"><img src="web/public/icon.svg" width="96" alt="Sancho, banda's first agent"></p>
+<p align="center"><img src="docs/band.svg" width="464" alt="Mara, Octo, Sancho, Atlas and Otto: the band"></p>
 
 <h1 align="center">banda</h1>
 
-<p align="center">A band of AI agents that work for you.</p>
+<p align="center">A band of AI agents that work for you.<br><a href="https://banda.rocks">banda.rocks</a></p>
 
 Sancho is your first agent, and you can add more. Each one has a computer of its own to browse, write and run
 routines in. Connect GitHub or any MCP server and choose which agents may use it. Reading is free; anything that

@@ -12,6 +12,7 @@
 			"!!.worktrees",
 			"evals/**",
 			"scripts/**",
+			"site/**",
 			"desktop/**",
 			"!desktop/dist",
 			"!desktop/node_modules",

@@ -1,0 +1,28 @@
+<!doctype html>
+<!-- The share picture's source: `npm run site:og` renders it into site/public/og.png at 1200×630. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>banda share picture</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@500;700&display=block" rel="stylesheet">
+<style>
+html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+body {
+	background: oklch(0.165 0 0); color: oklch(0.955 0 0); font-family: "Geist", sans-serif;
+	display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+}
+img { width: 580px; height: auto; }
+h1 { font-size: 76px; line-height: 1.02; letter-spacing: -0.03em; font-weight: 700; margin: 0; text-align: center; }
+p { display: flex; align-items: center; gap: 14px; margin: 0; font-size: 28px; font-weight: 500; color: oklch(0.73 0 0); }
+span {
+	background: oklch(0.74 0.15 152); color: oklch(0.165 0 0); font-size: 18px; font-weight: 700; letter-spacing: 0.06em;
+	padding: 5px 14px; border-radius: 999px; text-transform: uppercase;
+}
+</style>
+</head>
+<body>
+	<img src="../docs/band.svg" alt="">
+	<h1>A band of AI agents<br>that work for you.</h1>
+	<p>banda.rocks <span>Alpha</span></p>
+</body>
+</html>
