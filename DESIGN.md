@@ -45,7 +45,7 @@ code holds the details. If a sentence here only restates code, delete it.
 
 ## Words
 agent, band, group, chat, turn, queue, message, part, tool, wait, draft, permission, routine, event, connection,
-account, object, artifact, memory, box, workspace, gateway, inference. One word per thing, in code, docs and the UI.
+account, object, harness, session, artifact, memory, box, workspace, gateway, inference. One word per thing, in code, docs and the UI.
 The words the rules lean on:
 - **band**: the owner's agents, as the sidebar lists them.
 - **origin**: where a message came from (gateway, peer, thread); **replyTo**: the origin a Turn's messages and asks go
@@ -58,6 +58,9 @@ The words the rules lean on:
 - **event**: a routine's wake as the chat shows it: what fired and when, before the agent's reply.
 - **connection**: a service the band can work with (GitHub, mail, a calendar); an **account** is one sign-in to it
   ("GitHub · @bandarra"), and a connection may have several.
+- **harness**: a coding agent on the owner's computer that the band hands work to over ACP (Claude Code, Codex); a
+  connection whose account is the folder it works in. A **session** is one piece of work a harness does, from the
+  agent's ask to its end.
 - **object**: a thing in a connection the owner recognises (a pull request, an issue, a check run), drawn as a card.
 - **artifact**: a work product the agent made (a document, a table, a page), shown beside the chat and versioned in
   the store.
@@ -81,6 +84,7 @@ The words the rules lean on:
 | **Permission** | a stored approval with a scope; an effect within an open permission runs without asking |
 | **Routine** | `routines/<name>.md` in the workspace: when it runs (a timer) and what it asks; its task submits those inputs to its agent's chat |
 | **Connection** | `connections/<name>.md`, shipped with the app: a service's tools, which only read, and its objects; its accounts' credentials stay with the daemon |
+| **Harness** | `shipped/harnesses/<name>.md`, or a command line the owner gave: an ACP agent on the owner's computer, connected in a folder, for the agents the owner turns it on for |
 | **Object** | the daemon's rendering of one thing in a connection, read with an account's credentials for the owner's eyes |
 | **Gateway** | where the owner reaches the band: the app and the CLI |
 
@@ -366,6 +370,28 @@ share a reading only under the connection's declared identity rules. A connectio
 never code: for each kind, the URL and id shapes that name it, the read that
 fetches it (a tool and how its arguments come from the match), the fields the card shows and the writes that act on it,
 by tool. Every object in every state is in the specimen, light and dark, both widths.
+
+**Harnesses.** A harness is a connection that does work rather than reads: a coding agent on the owner's computer,
+spoken to over ACP, with the daemon as its client. It sits on Connections and in each agent's Access beside the
+services, connected in one folder the owner picks (inside the home, never the home or `/`); the folder is its account,
+and the owner turns it on per agent.
+- **What runs is the owner's.** A harness is a file banda ships (a bundled adapter, or a command on the PATH, offered
+  only when installed) or a command line the owner typed. Never a file the box wrote: the daemon runs it on the
+  owner's computer, outside the box. It runs in its own process group, killed whole when its session ends or a later
+  daemon finds it left behind.
+- **The agent starts it; the harness asks.** One tool, `harness__work(harness, prompt)`, starts a session at once,
+  with no draft. What reaches the owner is the harness's own asks: its mode is set before anything is sent, where the
+  file names one, so it asks for what the owner would want asked (Claude Code: commands, and anything outside the
+  folder); otherwise its own settings decide, and the connect card says which. The connect card says the agent can
+  start it without asking. "Always allow" is never answered: it would write a rule into the owner's own settings.
+- **A session is live in the chat.** It is drawn in the call's place: one line for its current step, the owner's
+  notes, Stop and Open; every step in a sheet. An ask is a card under it, its command in a terminal, Run or Don't run;
+  it lives as long as the harness's process. The owner steers in their own words: a note is sent to the harness as a
+  prompt it takes after its current step. Stop cancels the turn.
+- **Once, and then the agent hears.** The ask is sent at most once: a restart after it was sent ends the session
+  interrupted, never sends it again, and a session whose task ended without ending it ends failed. Either way, and
+  when the harness finishes, its agent wakes once with what the harness said, as foreign data, and tells the owner in
+  its own words. Steps are kept in the store, bounded; a disconnect stops the sessions running there.
 
 ## Messages
 `message_user(parts)` is the only path from an agent to a person in its own chats, and does that one thing; a group

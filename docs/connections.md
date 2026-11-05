@@ -7,7 +7,9 @@ GitHub ships as a file with its reads, scopes and object definitions. DESIGN.md 
 connect flow and daemon-read objects. Agent-built connections and `propose_connection` are out of scope.
 
 Entry points: ../src/core/connections.ts, ../src/core/mcp.ts, ../src/core/mcp-remote.ts, ../src/core/oauth.ts,
-../src/server/capabilities.ts, ../shipped/connections/github.md and ../scripts/shipped-github.ts.
+../src/server/capabilities.ts, ../shipped/connections/github.md and ../scripts/shipped-github.ts. Harnesses:
+../src/core/acp.ts, ../src/core/harness.ts, ../src/core/harness-files.ts, ../src/server/routes/harnesses.ts,
+../shipped/harnesses/, ../web/src/chat/Harness.tsx and ../web/src/app/HarnessSession.tsx.
 
 ## Work and acceptance
 
@@ -35,6 +37,12 @@ account. The specimen includes long metadata, reading details and interrupted ap
 Bind remote descriptions and schemas to the accepted definition so a relisting cannot change prompt authority; verify
 effect authority at every call start and retry, idempotent replay after revocation included; verify OAuth refresh,
 interrupted sign-in, disconnect, tool switches and tools a server adds later.
+
+**Harnesses.** Any ACP agent, shipped as a file or added by its command line, connected in a folder per agent; one
+tool starts a session without a draft; the harness's asks, the owner's notes and Stop in the chat; the agent woken once
+at the end. A fake ACP harness (test/fixtures/fake-acp-agent.ts) stands in for the real ones in tests; the session
+runs under test/harness.faults.test.ts (a kill at every commit and harness boundary). Real runs use a scratch repository
+in a throwaway home, at desktop and phone width.
 
 ## Open work
 
@@ -64,3 +72,10 @@ interrupted sign-in, disconnect, tool switches and tools a server adds later.
 - [ ] Reads by argument are exact values only; a prefix waits for a spike of how a real server routes it
 - [ ] The shipped file's `events` and the watch intake are deleted with the routines slice; they return with the watch design (DESIGN.md "Open")
 - [ ] No built-in email or calendar yet: they follow GitHub as shipped connections
+- [x] Harnesses: ACP client, sessions, asks, notes, Stop, the wake; shipped files and the owner's own; the fault sweep
+- [x] Harnesses: Claude Code and Codex each fixed a scratch repository through the app
+- [ ] Harnesses: owner review of the slice, and the app's screens at phone width (only the specimen was seen at 390px)
+- [ ] Harnesses: a note or a wake does not carry "for this task" permissions (`errandOf` knows only owner inputs and wakes)
+- [ ] Harnesses: Gemini CLI, OpenCode, Cursor and Goose are offered when installed but never run here; their asks and modes need a spike each
+- [ ] Harnesses: Codex in workspace-write runs commands in its own sandbox without asking; whether that is the mode to set is the owner's call
+- [ ] Harnesses: a session's history is the harness's (session/load restores it); the store keeps the steps the owner saw, not the harness's context

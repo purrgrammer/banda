@@ -2,6 +2,11 @@
 
 ## Current work
 
+Harnesses are on the `feat/harness-acp` branch ([Connections](connections.md)): an agent hands coding work to any ACP
+agent on the owner's computer (Claude Code, Codex and others installed), connected in a folder; the session is live and
+steerable in the chat, and only the harness's own asks reach the owner. Claude Code and Codex each fixed a scratch
+repository through the app in a throwaway home; the harness fault sweep passes. Owner review is pending.
+
 Pre-release binaries are on the `desktop-release` branch ([Operations](operations.md)): an Electron desktop app that
 starts or attaches to the daemon, a CLI archive that brings its own Node.js, and a release workflow that drafts an
 unsigned pre-release from a `v*` tag. Both were packaged and tried on macOS arm64 against throwaway homes. The
