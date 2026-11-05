@@ -762,7 +762,13 @@ workspace lives in the box.
 - Tools and connections the agent builds itself, offered once the owner accepts their definition.
 - Packaging the box's runtime so no owner installs Docker: a bundled VM, Podman, or a managed host.
 - Push to the phone without a vendor seeing the content: a notification that only says to open the app.
-- Reaching the app from the phone off the home network, without exposing the daemon.
+- Pairing the phone to the daemon once, by a QR code the owner approves, each phone listed and revocable: Iroh
+  endpoint ids are the candidate identity.
+- Reaching the app from the phone off the home network, without exposing the daemon: the same HTTP API carried over
+  an Iroh stream (NAT traversal, relay fallback, no open port) is the candidate.
+- A guest in a group, through an invite scoped to that group.
+- Sending a copy of an agent's files to another banda.
+- The daemon on an always-on machine (a home server or a VPS), with the phone as its client.
 - Voice in the composer; the agent's voice.
 - Replying to or quoting a message, so "do this with that" can point at a card from last week; pinning rows; a
   proactivity dial per agent.

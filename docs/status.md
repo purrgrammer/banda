@@ -2,6 +2,8 @@
 
 ## Current work
 
+Remote access over Iroh is next, pending owner review: its spikes and slices are in [Operations](operations.md).
+
 Pre-release binaries are on the `desktop-release` branch ([Operations](operations.md)): an Electron desktop app that
 starts or attaches to the daemon, a CLI archive that brings its own Node.js, and a release workflow that drafts an
 unsigned pre-release from a `v*` tag. Both were packaged and tried on macOS arm64 against throwaway homes. The
