@@ -4,7 +4,9 @@
  * within a deadline, on a connection that lives a short while, and only so many of them at once. A paired device is
  * held to none of it.
  */
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { openRemote, type Remote, type Unpaired } from "../src/server/remote.ts";
 import { testDevice } from "./fixtures/iroh-client.ts";
@@ -83,15 +85,17 @@ describe("an endpoint that is not a paired device", () => {
 		const { remote, ticket, changes } = await rig(new Set([phone.id]));
 		const strangers = await Promise.all([testDevice(), testDevice(), testDevice()]);
 		try {
-			const [first, second] = await Promise.all(strangers.slice(0, 2).map((each) => each.dial(ticket)));
+			// one after the other: the first is the one held longest
+			const first = await strangers[0]!.dial(ticket);
+			const second = await strangers[1]!.dial(ticket);
 			// both held: each answers
-			expect((await exchange(first!, GET)).text).toMatch(/^HTTP\/1\.1 200 /);
-			expect((await exchange(second!, GET)).text).toMatch(/^HTTP\/1\.1 200 /);
+			expect((await exchange(first, GET)).text).toMatch(/^HTTP\/1\.1 200 /);
+			expect((await exchange(second, GET)).text).toMatch(/^HTTP\/1\.1 200 /);
 			expect(changes).toEqual([]);
 			// a third gets in, and the one held longest makes room: strangers that keep dialing race a phone, never shut it out
 			const third = await strangers[2]!.dial(ticket);
 			expect((await exchange(third, GET)).text).toMatch(/^HTTP\/1\.1 200 /);
-			expect(await first!.closed()).toMatch(/busy/);
+			expect(await first.closed()).toMatch(/busy/);
 			// a paired device still gets in, with streams at once
 			const mine = await phone.dial(ticket);
 			const [a, b] = await Promise.all([exchange(mine, GET), exchange(mine, GET)]);
@@ -101,7 +105,7 @@ describe("an endpoint that is not a paired device", () => {
 			]);
 			expect(changes.length).toBeGreaterThan(0);
 			// an unpaired connection is let go of once its time is up: the device dials again for its next look
-			expect(await second!.closed()).toMatch(/again/);
+			expect(await second.closed()).toMatch(/again/);
 			expect(remote.connected(phone.id)).toBe(true);
 		} finally {
 			for (const each of strangers) await each.close();
@@ -135,5 +139,22 @@ describe("an endpoint that is not a paired device", () => {
 		} finally {
 			await phone.close();
 		}
+	});
+
+	it("refuses an endpoint key that is not one, rather than making a new id every phone would lose", async () => {
+		const home = await tempHome();
+		await mkdir(join(home, "auth"), { recursive: true });
+		await writeFile(join(home, "auth", "iroh.key"), "short");
+		await expect(
+			openRemote({
+				home,
+				settings: { reach: "loopback" },
+				server: createServer(),
+				paired: async () => false,
+				changed: () => {},
+				log: () => {},
+			}),
+		).rejects.toThrow(/not an endpoint key/);
+		expect(await readFile(join(home, "auth", "iroh.key"), "utf8")).toBe("short");
 	});
 });

@@ -125,11 +125,16 @@ export type Remote = {
 /** The daemon's endpoint key, made on first use and kept, owner-only. */
 async function endpointKey(home: string, { SecretKey }: typeof import("@number0/iroh")): Promise<SecretKey> {
 	const path = join(home, "auth", "iroh.key");
+	let bytes: Buffer | undefined;
 	try {
-		const bytes = await readFile(path);
-		if (bytes.length === 32) return SecretKey.fromBytes(Array.from(bytes));
+		bytes = await readFile(path);
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+	}
+	if (bytes !== undefined) {
+		// never replaced: a new key is a new endpoint id, and every paired phone would lose this computer
+		if (bytes.length !== 32) throw new Error(`${path} is not an endpoint key (${bytes.length} bytes, not 32)`);
+		return SecretKey.fromBytes(Array.from(bytes));
 	}
 	await mkdir(join(home, "auth"), { recursive: true, mode: 0o700 });
 	const key = SecretKey.fromBytes(Array.from(randomBytes(32)));
@@ -212,6 +217,9 @@ export async function openRemote({
 	online.catch(() => undefined);
 	const live = new Map<string, Set<Connection>>();
 	let closing = false;
+	/** Connections that failed since the last one logged, and when that was. */
+	let failures = 0;
+	let logged = 0;
 	/** Connections held now by endpoints that are not paired devices, oldest first: each closes itself to make room. */
 	const held = new Set<() => void>();
 
@@ -297,7 +305,16 @@ export async function openRemote({
 					// only a device's connections are shown: an endpoint that is not one changes nothing
 					if (await paired(peer).catch(() => false)) changed();
 				}
-			})().catch((error: unknown) => log(`remote: ${error instanceof Error ? error.message : String(error)}`));
+			})().catch((error: unknown) => {
+				// any endpoint can fail a handshake at will: one line a minute, however many do
+				failures += 1;
+				if (Date.now() - logged < 60_000) return;
+				logged = Date.now();
+				log(
+					`remote: ${error instanceof Error ? error.message : String(error)}${failures > 1 ? ` (${failures} since the last line)` : ""}`,
+				);
+				failures = 0;
+			});
 		}
 	})();
 

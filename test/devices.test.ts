@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	answerRequest,
 	Devices,
+	deviceName,
 	hashOf,
 	INVITE_MS,
 	isPaired,
@@ -201,5 +202,12 @@ describe("pairing a device", () => {
 		// the invite expired: a stranger is not let in, the phone that asked with it still is, to learn where it stands
 		expect(await desk.admits(OTHER)).toBe(false);
 		expect(await desk.admits(PHONE)).toBe(true);
+	});
+
+	it("keeps no control characters or bidi overrides in a device's name, and keeps an emoji's joiners", () => {
+		expect(deviceName("Pixel\u0007 9\u001b[31m")).toBe("Pixel 9[31m");
+		expect(deviceName("\u202eenohp s'anA")).toBe("enohp s'anA");
+		expect(deviceName("👨\u200d👩\u200d👧 phone")).toBe("👨\u200d👩\u200d👧 phone");
+		expect(deviceName("\u0000\u0001")).toBeUndefined();
 	});
 });

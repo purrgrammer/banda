@@ -68,7 +68,11 @@ export const hashOf = (secret: string) => createHash("sha256").update(secret, "u
 /** A device's name as given, trimmed; undefined when it is not one. */
 export function deviceName(value: unknown): string | undefined {
 	if (typeof value !== "string") return undefined;
-	const name = value.replace(/\s+/g, " ").trim();
+	// no control characters, nor bidi overrides that reorder what follows: a name reaches the daemon's log and the owner's screen
+	const name = value
+		.replace(/\s+/g, " ")
+		.replace(/[\p{Cc}\u202a-\u202e\u2066-\u2069]/gu, "")
+		.trim();
 	return name.length > 0 && name.length <= NAME_MAX ? name : undefined;
 }
 
