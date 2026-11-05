@@ -1,7 +1,11 @@
 /** Shared skill catalogue: box files are proposals; accepted snapshots alone enter a prompt. */
+import { readdir, readFile } from "node:fs/promises";
+import { join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Context } from "@earendil-works/chord";
 import type { Harness } from "@earendil-works/pi-durable";
 import { Accepted, shaOf } from "../core/agents.ts";
+import { Companion } from "../core/companion.ts";
 import { acceptedSkills, MAX_SKILL_BYTES, parseSkill, SKILL_FILE, SKILL_NAME, type Skill } from "../core/skills.ts";
 import { context } from "../core/store.ts";
 import { readBytes, textOf, type Workspace, write } from "./agents.ts";
@@ -146,4 +150,109 @@ export async function saveSkill(
 		files[SKILL_FILE(name)] = { sha: shaOf(text), text, at: Date.now() };
 	}, ctx);
 	return skills(harness, workspace, ctx);
+}
+
+/** The skills banda ships; the same path from `src/server` and `dist/server`. */
+export const SHIPPED_SKILLS = fileURLToPath(new URL("../../shipped/skills/", import.meta.url));
+
+/**
+ * The skills banda offers at first run, in the order shown: what each is for in the owner's words (its description is
+ * the model's), whether it starts on, and what else the owner should know before taking it.
+ */
+export const OFFERED_SKILLS: readonly { name: string; about: string; byDefault: boolean; note?: string }[] = [
+	{ name: "bro", about: "Say that again, in plain words.", byDefault: true },
+	{ name: "in-your-own-words", about: "Check the agent understood what you're after.", byDefault: true },
+	{ name: "unslop", about: "Strip the tells of machine writing from a text.", byDefault: true },
+	{ name: "catch-me-up", about: "What happened since your last message, and what waits on you.", byDefault: true },
+	{ name: "frontend-design", about: "Pages and screens with a look of their own.", byDefault: true },
+	{
+		name: "diagram-design",
+		about: "Clear diagrams and charts, as pages.",
+		byDefault: false,
+		note: "Its pages load fonts from Google.",
+	},
+];
+
+export type ShippedSkillView = {
+	readonly name: string;
+	readonly about: string;
+	readonly byDefault: boolean;
+	readonly note?: string;
+	/** A skill of that name is in the workspace already (this one, or another): choosing it leaves that one as it is. */
+	readonly added: boolean;
+};
+
+export type ShippedSkillsView = {
+	/** The owner chose from these, or skipped them, at first run. */
+	readonly chosen: boolean;
+	readonly skills: readonly ShippedSkillView[];
+};
+
+/** A shipped skill's files, by path inside its folder, SKILL.md among them; hidden files are left out. */
+async function shippedFiles(dir: string, name: string): Promise<Map<string, string>> {
+	const folder = join(dir, name);
+	const paths = (await readdir(folder, { recursive: true, withFileTypes: true }))
+		.filter((entry) => entry.isFile())
+		.map((entry) => relative(folder, join(entry.parentPath, entry.name)).split(sep).join("/"))
+		.filter((path) => !path.split("/").some((part) => part.startsWith(".")))
+		.sort();
+	const files = new Map<string, string>();
+	for (const path of paths) files.set(path, await readFile(join(folder, path), "utf8"));
+	return files;
+}
+
+/** The skill names in the workspace: accepted, or a folder in the box. */
+async function presentSkills(harness: Harness, workspace: Workspace, ctx: Context): Promise<Set<string>> {
+	const names = new Set(acceptedSkills((await harness.snapshot(Accepted, ctx))?.files ?? {}).map(({ name }) => name));
+	const listed = await workspace.env().listDir(directory(workspace), ctx);
+	if (listed.ok) {
+		for (const entry of listed.value) if (entry.kind === "directory") names.add(entry.name);
+	} else if (listed.error.code !== "not_found") throw listed.error;
+	return names;
+}
+
+export async function shippedSkills(
+	harness: Harness,
+	workspace: Workspace,
+	ctx: Context = context,
+): Promise<ShippedSkillsView> {
+	const present = await presentSkills(harness, workspace, ctx);
+	return {
+		chosen: (await harness.snapshot(Companion, ctx))?.skillsChosen === true,
+		skills: OFFERED_SKILLS.map((offered) => ({ ...offered, added: present.has(offered.name) })),
+	};
+}
+
+/**
+ * The owner's choice at first run: each shipped skill picked is written into the workspace as banda ships it, and its
+ * SKILL.md accepted by the hash of the bytes shipped, since banda wrote it and the owner chose it. A skill of that name
+ * already there is left as it is. An empty pick skips; either way they are not offered again.
+ */
+export async function chooseShippedSkills(
+	harness: Harness,
+	workspace: Workspace,
+	names: readonly string[],
+	ctx: Context = context,
+	dir: string = SHIPPED_SKILLS,
+): Promise<ShippedSkillsView> {
+	if (new Set(names).size !== names.length) throw new BadRequest("a skill is listed twice");
+	for (const name of names)
+		if (!OFFERED_SKILLS.some((offered) => offered.name === name))
+			throw new BadRequest(`banda ships no skill named ${name}`, 404);
+	const present = await presentSkills(harness, workspace, ctx);
+	const wanted: { name: string; sha: string }[] = [];
+	for (const name of names.filter((each) => !present.has(each))) {
+		const files = await shippedFiles(dir, name);
+		const text = files.get("SKILL.md");
+		if (text === undefined) throw new Error(`shipped/skills/${name} has no SKILL.md`);
+		for (const [path, body] of files)
+			await write(workspace.env(), workspace, `${directory(workspace)}/${name}/${path}`, body, ctx);
+		wanted.push({ name, sha: shaOf(text) });
+	}
+	// accepted as a reviewed pack is: each by the hash of the bytes banda wrote, all or none
+	if (wanted.length > 0) await acceptSkills(harness, workspace, wanted, ctx);
+	await harness.commit(async (tx) => {
+		(await tx.doc(Companion)).skillsChosen = true;
+	}, ctx);
+	return shippedSkills(harness, workspace, ctx);
 }

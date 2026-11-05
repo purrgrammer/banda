@@ -10,7 +10,7 @@ import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { MemoryView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { tempHome } from "./helpers.ts";
+import { skipShippedSkills, tempHome } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const button = (text: string) =>
@@ -40,6 +40,7 @@ for (const width of [390, 1440])
 			const daemon = await startDaemon({ home, port: 0, models, box: hostBox(home), log: () => {} });
 			const base = `http://127.0.0.1:${daemon.port}`;
 			const token = (await readDaemonFile(home))!.token!;
+			await skipShippedSkills(daemon.port, token);
 			const api = async <T>(path: string, method = "GET", body?: object): Promise<T> => {
 				const response = await fetch(`${base}/api${path}`, {
 					method,

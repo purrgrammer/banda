@@ -126,6 +126,19 @@ export const PROVIDERS = [
 	{ id: "xai", name: "xAI", by: "key" },
 ] as const;
 
+/** The skills step of first run: one already in the workspace, one with a note, one off. */
+export const SKILL_OFFERS = [
+	{ name: "bro", about: "Say that again, in plain words.", added: false },
+	{ name: "in-your-own-words", about: "Check the agent understood what you're after.", added: true },
+	{ name: "catch-me-up", about: "What happened since your last message, and what waits on you.", added: false },
+	{
+		name: "diagram-design",
+		about: "Clear diagrams and charts, as pages.",
+		note: "Its pages load fonts from Google.",
+		added: false,
+	},
+] as const;
+
 export const ROUTINES: readonly RoutineRowView[] = [
 	{ id: "umbrella", name: "Umbrella check", when: "Weekdays at 9:00", waiting: "set up" },
 	{

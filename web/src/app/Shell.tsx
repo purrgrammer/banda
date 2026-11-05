@@ -33,7 +33,7 @@ import { BrowserDialog } from "./LiveBrowser.tsx";
 import { McpSetup } from "./McpSetup.tsx";
 import { NewSheet } from "./NewSheet.tsx";
 import { useAskNotifications, useNotify } from "./notify.ts";
-import { Onboarding } from "./Onboarding.tsx";
+import { Onboarding, SkillsOnboarding, useShippedSkills } from "./Onboarding.tsx";
 import { ownerEdits } from "./owner-edits.ts";
 import { EditRoutine, routineRows } from "./routines.tsx";
 import { SearchDialog } from "./SearchDialog.tsx";
@@ -83,10 +83,19 @@ const SERVICES = [
 
 export function Shell() {
 	const tiers = useTiers();
+	const [shipped, setShipped] = useShippedSkills();
 	if (tiers !== undefined && !tiers.providers.some((provider) => provider.id === tiers.provider.id))
 		return (
 			<div className="h-svh bg-paper">
 				<Onboarding />
+			</div>
+		);
+	// right after the provider, once: the skills banda ships
+	if (shipped === undefined) return <div className="h-svh bg-paper" />;
+	if (!shipped.chosen)
+		return (
+			<div className="h-svh bg-paper">
+				<SkillsOnboarding view={shipped} onChosen={setShipped} />
 			</div>
 		);
 	return <Main />;

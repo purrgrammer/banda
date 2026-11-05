@@ -19,6 +19,8 @@ export type CompanionDoc = {
 	provider?: string;
 	/** The owner's own model for a tier, by provider, over the preset. */
 	overrides?: { [provider: string]: { [T in Tier]?: string } };
+	/** The owner chose from the skills banda ships, or skipped them, at first run: they are not offered again. */
+	skillsChosen?: true;
 };
 
 export const Companion = defineDoc<CompanionDoc>({

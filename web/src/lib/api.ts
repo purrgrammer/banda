@@ -25,11 +25,11 @@ import type {
 	ViewEvent,
 } from "../../../src/server/api.ts";
 import type { DesignedFace } from "../../../src/server/routes/faces.ts";
-import type { SkillView } from "../../../src/server/skills.ts";
+import type { ShippedSkillsView, SkillView } from "../../../src/server/skills.ts";
 import { oneStream } from "./one-stream.ts";
 
 export type * from "../../../src/server/api.ts";
-export type { SkillView } from "../../../src/server/skills.ts";
+export type { ShippedSkillsView, ShippedSkillView, SkillView } from "../../../src/server/skills.ts";
 
 const KEY = "banda.token";
 
@@ -329,6 +329,11 @@ export const acceptSkill = (name: string, sha: string) =>
 	api<SkillView[]>(`/skills/${name}/accept`, { method: "POST", body: JSON.stringify({ sha }) });
 export const saveSkill = (name: string, text: string, base: string | null) =>
 	api<SkillView[]>(`/skills/${name}`, { method: "PUT", body: JSON.stringify({ text, base }) });
+/** The skills banda ships, offered once at first run. */
+export const shippedSkills = () => api<ShippedSkillsView>("/skills/shipped");
+/** Add the shipped skills picked, accepted; none skips. */
+export const chooseShippedSkills = (add: readonly string[]) =>
+	api<ShippedSkillsView>("/skills/shipped", { method: "POST", body: JSON.stringify({ add }) });
 
 /** What the owner does to a connection or a tool the companion made. */
 export type CapabilityAct =

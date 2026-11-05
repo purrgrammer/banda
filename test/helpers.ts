@@ -41,6 +41,16 @@ export async function until<T>(
 	}
 }
 
+/** Skip first run's skills step, as the owner's Skip does, for a browser test about something else. */
+export async function skipShippedSkills(port: number, token: string): Promise<void> {
+	const response = await fetch(`http://127.0.0.1:${port}/api/skills/shipped`, {
+		method: "POST",
+		headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+		body: JSON.stringify({ add: [] }),
+	});
+	if (!response.ok) throw new Error(`skipping the skills step: ${response.status} ${await response.text()}`);
+}
+
 export async function tempHome(): Promise<string> {
 	const home = await mkdtemp(join(tmpdir(), "banda-test-"));
 	homes.push(home);

@@ -10,6 +10,7 @@ import type { FaceState } from "../chat/Face.tsx";
 import { Bubble, DaySeparator, Mention, Run, UnreadDivider } from "../chat/Feed.tsx";
 import { ImageFile } from "../chat/Files.tsx";
 import { Starters } from "../chat/FirstRun.tsx";
+import { FirstSkills } from "../chat/FirstSkills.tsx";
 import { Header, workingWords } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { PullRequestCard } from "../chat/Object.tsx";
@@ -17,7 +18,7 @@ import { ProposalCard } from "../chat/Proposal.tsx";
 import type { Who } from "../chat/Row.tsx";
 import { VoiceMessage } from "../chat/Voice.tsx";
 import { Band, FirstRun } from "./brand.tsx";
-import { ATLAS, MARA, OCTO, PAGE, PHOTO, PR, PROVIDERS, ROWS, SANCHO, VOICE } from "./fixtures.ts";
+import { ATLAS, MARA, OCTO, PAGE, PHOTO, PR, PROVIDERS, ROWS, SANCHO, SKILL_OFFERS, VOICE } from "./fixtures.ts";
 import { Section, StageContext } from "./stage.tsx";
 
 /** A chat: its header, its timeline, its composer. */
@@ -289,6 +290,16 @@ export function Screens() {
 			>
 				<div className="flex-1">
 					<FirstRun providers={PROVIDERS} open="google" />
+				</div>
+			</Section>
+			<Section
+				id="first-skills"
+				title="First run: skills"
+				note="Right after the provider, once: the skills banda ships, each with a switch. One already there stays."
+				bleed
+			>
+				<div className="flex-1">
+					<FirstSkills skills={SKILL_OFFERS} picked={new Set(["bro", "catch-me-up"])} />
 				</div>
 			</Section>
 			<Section

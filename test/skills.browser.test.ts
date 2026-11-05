@@ -66,7 +66,15 @@ for (const width of [390, 1440])
 			const address = server.httpServer!.address();
 			if (!address || typeof address === "string") throw new Error("No app port");
 			await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
-				await page.until(`document.body.textContent.includes('Sancho')`, 12_000);
+				// first run offers the skills banda ships, once: the owner turns one off and adds the rest
+				await page.until(`document.body.textContent.includes('Skills to start with')`, 12_000);
+				await click(page, `document.querySelector('#first-skill-unslop')`);
+				await click(page, button("Add 4 skills"));
+				await page.until(`!document.body.textContent.includes('Skills to start with')`, 12_000);
+				await page.run(`location.hash='#/skills'`);
+				await click(page, `[...document.querySelectorAll('button')].find(el => el.textContent.includes('4 shared'))`);
+				await page.until(`document.body.textContent.includes('/catch-me-up')`);
+				expect(await page.run(`document.body.textContent.includes('/unslop')`)).toBe(false);
 				await page.run(`location.hash='#/a/sancho'`);
 				await page.until(`document.querySelector('textarea[placeholder^="Message "]')`);
 				await page.run(`location.hash='#/skills'`);
@@ -119,6 +127,11 @@ for (const width of [390, 1440])
 				).toBe(true);
 				await click(page, button("Accept this version"));
 				await page.until(`document.querySelector('[data-skill-detail]')?.textContent.includes('Check every source.')`);
+				// a shipped skill the owner chose at first run works like any other
+				await page.run(`location.hash='#/a/sancho'`);
+				await fill(page, `document.querySelector('textarea[placeholder^="Message "]')`, "/bro", "HTMLTextAreaElement");
+				await click(page, `document.querySelector('button[aria-label="Send"]')`);
+				await page.until(`document.body.textContent.includes('Loaded /bro')`, 30_000);
 			});
 		} finally {
 			await server.close();

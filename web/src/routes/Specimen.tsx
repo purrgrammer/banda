@@ -35,6 +35,7 @@ const CONTENTS = [
 	{ id: "agent-meta-tools", label: "Agent-to-agent tools in a chat" },
 	{ id: "working-chat", label: "A chat at work" },
 	{ id: "first-run", label: "First run" },
+	{ id: "first-skills", label: "First run: skills" },
 	{ id: "first-chat", label: "The first chat" },
 	{ id: "group", label: "A group" },
 	{ id: "panel-app", label: "A chat and its panel" },

@@ -42,7 +42,7 @@ import type {
 import type { ObjectAsk, ObjectShown } from "./objects.ts";
 import { FRAME_POLICY } from "./policy.ts";
 import type { Area } from "./routes/area.ts";
-import type { SkillView } from "./skills.ts";
+import type { ShippedSkillsView, SkillView } from "./skills.ts";
 import type { PageQuery } from "./transcript.ts";
 
 export type Routes = {
@@ -106,6 +106,10 @@ export type Routes = {
 	/** Accept every listed proposal by the hash the owner saw, all or none. */
 	readonly acceptSkills: (wanted: readonly { name: string; sha: string }[]) => Promise<SkillView[]>;
 	readonly saveSkill: (name: string, text: string, base: string | null) => Promise<SkillView[]>;
+	/** The skills banda ships, and whether the owner chose from them at first run. */
+	readonly shippedSkills: () => Promise<ShippedSkillsView>;
+	/** Add the shipped skills picked, accepted; none skips. Either way they are not offered again. */
+	readonly chooseShippedSkills: (names: readonly string[]) => Promise<ShippedSkillsView>;
 	/** Throws `BadRequest` when the file changed since `sha` was shown, or does not parse. */
 	readonly accept: (name: string, sha: string | null) => Promise<AgentView[]>;
 	readonly decline: (name: string) => Promise<AgentView[]>;
@@ -501,6 +505,13 @@ export function handler(
 				200,
 				await routes.acceptSkills(accept.map(({ name, sha }: { name: string; sha: string }) => ({ name, sha }))),
 			);
+		}
+		if (route === "GET /skills/shipped") return reply(res, 200, await routes.shippedSkills());
+		if (route === "POST /skills/shipped") {
+			const { add } = await json(req);
+			if (!Array.isArray(add) || !add.every((name) => typeof name === "string"))
+				return reply(res, 400, { error: "add is the names of the shipped skills picked; none skips" });
+			return reply(res, 200, await routes.chooseShippedSkills(add));
 		}
 		const skill = /^\/skills\/([a-z0-9-]+)(?:\/(accept))?$/.exec(path);
 		if (skill !== null) {

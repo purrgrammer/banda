@@ -82,7 +82,7 @@ import {
 	remove as removeRoutine,
 } from "./server/routines.ts";
 import { seenBy } from "./server/seen.ts";
-import { acceptSkill, acceptSkills, saveSkill, skills } from "./server/skills.ts";
+import { acceptSkill, acceptSkills, chooseShippedSkills, saveSkill, shippedSkills, skills } from "./server/skills.ts";
 import { chatContext, chatPrompt, chats, image, item, items, live, messageFile, shell } from "./server/transcript.ts";
 
 /** How often blobs no chat holds are swept. */
@@ -740,6 +740,8 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 					acceptSkill: (name, sha) => acceptSkill(open, workspace, name, sha),
 					acceptSkills: (wanted) => acceptSkills(open, workspace, wanted),
 					saveSkill: (name, text, base) => saveSkill(open, workspace, name, text, base),
+					shippedSkills: () => shippedSkills(open, workspace),
+					chooseShippedSkills: (names) => chooseShippedSkills(open, workspace, names),
 					accept: async (name, sha) => {
 						const views = await accept(open, workspace, name, sha, core.agentChanged);
 						await settleAgents();

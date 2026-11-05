@@ -624,7 +624,9 @@ A skill is one shared prompt file, not an agent's private copy. Agents may load 
 `/name` invokes a known skill. The accepted instructions are loaded before that message's first model request, as
 one recorded tool call and result; an earlier running request must not see the load without the owner's message. The
 chat names only what loaded; Activity holds the exact result. Other files in a skill's folder remain box data, never
-instructions the daemon loads from an unaccepted change.
+instructions the daemon loads from an unaccepted change. banda ships a few skills; first run offers them once, right
+after the provider, and the ones the owner keeps are written into the workspace and accepted in that step, since banda
+wrote them and the owner chose them. A skill of that name already there is never replaced.
 
 ## Trust
 Laws (property-tested):
