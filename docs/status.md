@@ -2,10 +2,11 @@
 
 ## Current work
 
-Remote access over Iroh is built on the `spike/iroh-remote-access` branch and awaits owner review: the daemon's Iroh
+Remote access over Iroh is built, and the owner reviewed the app and the specimen: the daemon's Iroh
 endpoint on n0's relays, devices paired by a QR code the owner approves in Settings → Devices (listed, renamed and
 revoked there, never from a device), and an Android shell (`mobile/`) that pairs and opens the app as a device. Its
-adversarial review's fix-now findings are fixed; the full suite passes. The phone's side was tried on the arm64
+adversarial review's fix-now findings are fixed; each request a device makes is logged by its name; the full suite
+passes. The phone's side was tried on the arm64
 emulator against a throwaway daemon on n0; a real phone on cellular, iOS and push remain
 ([Operations](operations.md)).
 

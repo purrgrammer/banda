@@ -37,7 +37,7 @@ docs/status.md (current work and acceptance) and the relevant section's open wor
 
 ## Words
 agent, band, group, chat, turn, queue, message, part, tool, wait, draft, permission, routine, watch, event, connection,
-account, object, artifact, memory, box, workspace, gateway, inference, as DESIGN.md defines them. One word per thing, in code, docs and the UI.
+account, object, artifact, memory, box, workspace, gateway, inference, device, as DESIGN.md defines them. One word per thing, in code, docs and the UI.
 
 ## Setup and checks
 - Node 26, as `mise.toml` says (`mise install` gets it). `npm ci`, then `npm run check` (Biome: format and lint;
