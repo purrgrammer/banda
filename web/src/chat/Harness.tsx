@@ -1,7 +1,7 @@
 /**
- * A harness session in the chat: an agent asked a coding harness (Claude Code) to work in a folder on the owner's
- * computer. The card follows it live, one line for its latest step; the owner can steer it in their own words or stop
- * it; the panel shows every step. The draft that starts it and the harness's own asks are ordinary approval cards.
+ * A harness session in the chat: an agent handed work to a coding harness (Claude Code, Codex, pi) in a project on the
+ * owner's computer, at once, with no draft. The card follows it live, one line for its latest step; the owner steers it
+ * in their own words or stops it; the sheet shows every step. The harness's own asks are ordinary approval cards.
  */
 import {
 	BrainIcon,

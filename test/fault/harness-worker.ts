@@ -65,10 +65,9 @@ const task = await harness.commit(async (tx) => {
 for (;;) {
 	const session = (await harness.snapshot(Harnesses, context))?.sessions[task];
 	if (session?.ended !== undefined) break;
-	if (session?.asking !== undefined && session.answer?.id !== session.asking.id) {
-		const id = session.asking.id;
-		await harness.commit((tx) => answerAsk(tx, task, id, true), context);
-	}
+	for (const ask of session?.asks ?? [])
+		if (session?.answers?.[ask.id] === undefined)
+			await harness.commit((tx) => answerAsk(tx, task, ask.id, true), context);
 	await new Promise((resolve) => setTimeout(resolve, 20));
 }
 const session = (await harness.snapshot(Harnesses, context))?.sessions[task];

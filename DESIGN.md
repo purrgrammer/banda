@@ -373,23 +373,27 @@ by tool. Every object in every state is in the specimen, light and dark, both wi
 
 **Harnesses.** A harness is a connection that does work rather than reads: a coding agent on the owner's computer,
 spoken to over ACP, with the daemon as its client. It sits on Connections and in each agent's Access beside the
-services, connected in the owner's code folder (any folder but `/`; where code usually lives is suggested); that folder
+services, connected in the owner's code folder (any folder but `/` or one above the home; where code usually lives is suggested); that folder
 is its account, and the owner turns it on per agent. Each session works in a project the agent names: a git repository
-inside that folder, by its path from there, or the folder itself. Never outside it (symlinks resolved), never through a
+inside that folder, by its path from there, or the folder itself when it is one (a folder of projects, the home among
+them, never is). Never outside it (symlinks resolved), never through a
 hidden folder, never a folder that is not a repository, so the home as the code folder never makes `~/.ssh` a project;
 naming one that is not there answers with those that are.
 - **What runs is the owner's.** A harness is a file banda ships (a bundled adapter, or a command on the PATH, offered
   only when installed) or a command line the owner typed. Never a file the box wrote: the daemon runs it on the
-  owner's computer, outside the box. It runs in its own process group, killed whole when its session ends or a later
-  daemon finds it left behind.
+  owner's computer, outside the box. It runs under banda's supervisor, which watches every process group below it
+  (a harness may run each command detached, in a group of its own) and kills them all when its session ends or the
+  daemon dies; a later daemon kills, from the groups the session recorded, only what started since the session did.
 - **The agent starts it; the harness asks.** One tool, `harness__work(harness, prompt)`, starts a session at once,
   with no draft. What reaches the owner is the harness's own asks: its mode is set before anything is sent, where the
   file names one, so it asks for what the owner would want asked (Claude Code: commands, and anything outside the
   folder); otherwise its own settings decide, and the connect card says which. The connect card says the agent can
   start it without asking. "Always allow" is never answered: it would write a rule into the owner's own settings.
 - **A session is live in the chat.** It is drawn in the call's place: one line for its current step, the owner's
-  notes, Stop and Open; every step in a sheet. An ask is a card under it, its command in a terminal, Run or Don't run;
-  it lives as long as the harness's process. The owner steers in their own words: a note is sent to the harness as a
+  notes, Stop and Open; every step in a sheet. Each ask is a card under it, said by what it does (run a command, change a file, open
+  a page) with all of it the owner must see (the command, the diff, the address, the choice Allow makes); several may be
+  open at once, and each lives as long as the harness's process. Stop answers them all, and before the ask was sent,
+  stops it from being sent. The owner steers in their own words: a note is sent to the harness as a
   prompt it takes after its current step. Stop cancels the turn.
 - **Once, and then the agent hears.** The ask is sent at most once: a restart after it was sent ends the session
   interrupted, never sends it again, and a session whose task ended without ending it ends failed. Either way, and

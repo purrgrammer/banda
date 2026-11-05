@@ -225,7 +225,7 @@ export const harnessesArea: AreaModule = {
 						...(session.outcome === undefined ? {} : { outcome: session.outcome }),
 						steps: relative(session.steps, session.folder),
 						dropped: session.dropped,
-						...(session.asking === undefined ? {} : { asking: session.asking }),
+						...(session.asks === undefined || session.asks.length === 0 ? {} : { asks: session.asks }),
 					}))
 					.sort((a, b) => b.at - a.at),
 			};

@@ -4,10 +4,11 @@
  *   read <path>            a read, completed at once
  *   edit <path> <+a> <-r>  an edit of a lines added, r removed
  *   ask <command>          a permission request; allowed it runs, else it fails
+ *   asks2 <a> <b>          two permission requests at once, as parallel subagents send them
  *   sleep <ms>             wait, cancellable
  *   say <text>             words, the turn's last message
  *   crash                  the process exits
- *   background <mark>      start a long command that outlives this process unless its group is killed
+ *   background <mark>      start a long command, detached in a group of its own, that outlives this process
  * Prompts run one at a time, in order: one sent mid-turn waits (as claude-agent-acp queues it). Every prompt received,
  * permission answered and turn ended is appended to $FAKE_ACP_LOG (jsonl), so it survives a kill.
  */
@@ -103,13 +104,34 @@ async function run(sessionId: string, script: string): Promise<string> {
 				rawOutput: allowed ? `ran ${command}` : "refused",
 			});
 			if (answer.outcome.outcome === "cancelled") return "cancelled";
+		} else if (verb === "asks2") {
+			const both = rest.slice(0, 2).map(
+				(command) =>
+					new Promise<{ outcome: { outcome: string; optionId?: string } }>((resolve) => {
+						const request = nextRequest++;
+						asked.set(request, resolve);
+						send({
+							id: request,
+							method: "session/request_permission",
+							params: {
+								sessionId,
+								toolCall: { toolCallId: `call-${++call}`, title: command, kind: "execute", rawInput: { command } },
+								options: [
+									{ optionId: "allow", name: "Allow", kind: "allow_once" },
+									{ optionId: "reject", name: "Reject", kind: "reject_once" },
+								],
+							},
+						});
+					}),
+			);
+			for (const answer of await Promise.all(both)) record({ permission: "parallel", answer: answer.outcome });
 		} else if (verb === "sleep") {
 			await sleep(Number(rest[0] ?? 0), sessionId);
 		} else if (verb === "say") {
 			update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: rest.join(" ") } });
 		} else if (verb === "background") {
-			// in this process's group, as a harness's shell is; it does not die with this process
-			spawn("sh", ["-c", `: ${rest[0]}; sleep 600`], { stdio: "ignore" }).unref();
+			// detached, in a group of its own, as Claude Code runs each command: killing the harness's group misses it
+			spawn("sh", ["-c", `: ${rest[0]}; sleep 600`], { stdio: "ignore", detached: true }).unref();
 		} else if (verb === "crash") {
 			process.exit(1);
 		} else if (line !== "") {

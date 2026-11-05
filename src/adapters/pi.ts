@@ -152,6 +152,10 @@ function start(sessionId: string, cwd: string): Session {
 						title: title || "pi asks",
 						kind: "other",
 						rawInput: { command: title || "pi asks" },
+						// what Allow picks, said: the owner never answers a choice they cannot see
+						...(method === "select" && options[0] !== undefined
+							? { content: [{ type: "content", content: { type: "text", text: `Allow chooses: ${options[0]}` } }] }
+							: {}),
 					},
 					options: [
 						{ optionId: "allow", name: method === "select" ? (options[0] ?? "Allow") : "Allow", kind: "allow_once" },
@@ -222,7 +226,8 @@ jsonLines(process.stdin, (line) => {
 		}
 		case "session/cancel": {
 			const session = sessions.get(String(params.sessionId));
-			if (session === undefined) return;
+			// a cancel while idle cancels nothing: the next run is not reported cancelled
+			if (session === undefined || !session.running) return;
 			session.cancelled = true;
 			session.pi.stdin?.write(`${JSON.stringify({ type: "abort" })}\n`);
 			return;

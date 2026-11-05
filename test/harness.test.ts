@@ -1,6 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createRegistry, defineExtension } from "@earendil-works/pi-durable";
 import { describe, expect, it, onTestFinished } from "vitest";
 import {
@@ -17,6 +17,7 @@ import {
 	projectOf,
 	shownPath,
 	steer,
+	stopSession,
 	switchHarness,
 } from "../src/core/harness.ts";
 import { OWN_ASKS, parseHarness, resolveHarness, shippedHarnesses, words } from "../src/core/harness-files.ts";
@@ -41,6 +42,7 @@ describe("folderPath", () => {
 	it("takes an absolute folder or one under the home, never / or a relative path", () => {
 		expect(folderPath("~/sancho")).toBe(join(homedir(), "sancho"));
 		expect(folderPath("~")).toBe(homedir());
+		expect(folderPath(dirname(homedir()))).toBeUndefined();
 		expect(folderPath("/")).toBeUndefined();
 		expect(folderPath("code/x")).toBeUndefined();
 	});
@@ -150,8 +152,8 @@ describe("a harness session", () => {
 				}),
 			context,
 		);
-		await until(async () => (await s.session())[task]?.asking);
-		const asking = (await s.session())[task]?.asking;
+		await until(async () => (await s.session())[task]?.asks?.[0]);
+		const asking = (await s.session())[task]?.asks?.[0];
 		expect(asking?.command).toBe("npm test");
 		await s.harness.commit(async (tx) => {
 			await steer(tx, task, "say also the changelog", Date.now());
@@ -193,6 +195,44 @@ describe("a harness session", () => {
 			});
 			expect(hangs.woke[0]?.text).toContain("could not start (it did not start a session in time)");
 			await hangs.harness.close(context);
+		} finally {
+			delete process.env.FAKE_ACP_HANG;
+		}
+	});
+
+	it("shows two asks at once and takes an answer to each", async () => {
+		const s = await setup();
+		const task = await s.harness.commit(
+			(tx) =>
+				s.made.begin(tx, { chat: s.chat, agent: "sancho", harness: "fake", folder: s.folder, ask: "asks2 lint test" }),
+			context,
+		);
+		await until(async () => ((await s.session())[task]?.asks?.length ?? 0) === 2);
+		const asks = (await s.session())[task]?.asks ?? [];
+		expect(asks.map((ask) => ask.command)).toEqual(["lint", "test"]);
+		await s.harness.commit(async (tx) => {
+			await answerAsk(tx, task, asks[1]?.id ?? "", false);
+			await answerAsk(tx, task, asks[0]?.id ?? "", true);
+		}, context);
+		await until(() => s.woke.length > 0);
+		expect((await s.session())[task]?.state).toBe("done");
+		await s.harness.close(context);
+	});
+
+	it("stops before its session opens: the ask is never sent", async () => {
+		process.env.FAKE_ACP_HANG = "1";
+		try {
+			const s = await setup();
+			const task = await s.harness.commit(
+				(tx) => s.made.begin(tx, { chat: s.chat, agent: "sancho", harness: "fake", folder: s.folder, ask: "say hi" }),
+				context,
+			);
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			await s.harness.commit((tx) => stopSession(tx, task), context);
+			await until(() => s.woke.length > 0);
+			expect((await s.session())[task]).toMatchObject({ state: "stopped" });
+			expect((await s.session())[task]?.prompted).toBeUndefined();
+			await s.harness.close(context);
 		} finally {
 			delete process.env.FAKE_ACP_HANG;
 		}
@@ -303,7 +343,9 @@ describe("a session's project", () => {
 		await mkdir(join(root, ".secret/.git"), { recursive: true });
 		await symlink(homedir(), join(root, "escape"));
 		const shown = shownPath(root);
-		expect(projectOf(shown, undefined)).toEqual({ folder: shown });
+		// a folder of projects is never one to work across
+		expect(projectOf(shown, undefined)).toMatchObject({ projects: ["app", "work/api"] });
+		expect(projectOf(`${shown}/app`, undefined)).toEqual({ folder: `${shown}/app` });
 		expect(projectOf(shown, "app")).toEqual({ folder: `${shown}/app` });
 		expect(projectOf(shown, "work/api/")).toEqual({ folder: `${shown}/work/api` });
 		for (const bad of ["../x", "/etc", "~/x", ".secret", "escape", "notes", "missing"])

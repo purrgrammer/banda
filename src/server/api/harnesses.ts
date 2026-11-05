@@ -21,7 +21,8 @@ export type HarnessSessionView = {
 	readonly outcome?: string;
 	readonly steps: readonly HarnessStep[];
 	readonly dropped: number;
-	readonly asking?: HarnessAsk;
+	/** The harness's asks open now, oldest first. */
+	readonly asks?: readonly HarnessAsk[];
 };
 
 export type HarnessesView = {
