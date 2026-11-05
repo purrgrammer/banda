@@ -84,7 +84,10 @@ const SERVICES = [
 export function Shell() {
 	const tiers = useTiers();
 	const [shipped, setShipped] = useShippedSkills();
-	if (tiers !== undefined && !tiers.providers.some((provider) => provider.id === tiers.provider.id))
+	// first run until the band can think: a provider with a credential, and not one from outside banda that the owner
+	// never picked (a stale ANTHROPIC_API_KEY would otherwise skip this screen and fail every answer)
+	const current = tiers?.providers.find((provider) => provider.id === tiers.provider.id);
+	if (tiers !== undefined && (current === undefined || (current.ambient === true && !tiers.chosen)))
 		return (
 			<div className="h-svh bg-paper">
 				<Onboarding />

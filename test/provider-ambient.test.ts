@@ -8,7 +8,8 @@ import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FileCredentialStore } from "../src/core/provider-credentials.ts";
 import type { Area, Deps } from "../src/server/routes/area.ts";
-import { providersArea } from "../src/server/routes/providers.ts";
+import { credentialOf, providersArea } from "../src/server/routes/providers.ts";
+import { offered } from "../src/server/routes/tiers.ts";
 import { tempHome } from "./helpers.ts";
 
 type Row = { id: string; connected: boolean; ambient?: boolean; source?: string };
@@ -121,5 +122,36 @@ describe("a provider configured from outside banda", () => {
 		} finally {
 			await area.stop?.();
 		}
+	});
+});
+
+describe("the tiers an owner picks from, with a key from outside banda", () => {
+	const deps = async () => {
+		const home = await tempHome();
+		const credentials = new FileCredentialStore(home);
+		const models = builtinModels({ credentials });
+		return { credentials, deps: { models, seen: () => undefined } as unknown as Deps };
+	};
+	const FALLBACK = { provider: "anthropic", modelId: "claude-sonnet-4-5" };
+
+	it("offers it marked ambient with its source, so first run can wait for the owner to pick it", async () => {
+		process.env.ANTHROPIC_API_KEY = "sk-ant-from-the-environment";
+		const { deps: d } = await deps();
+		const anthropic = (await offered(d, FALLBACK)).find((each) => each.id === "anthropic");
+		expect(anthropic).toMatchObject({ id: "anthropic", ambient: true, source: "ANTHROPIC_API_KEY" });
+		expect(await credentialOf(d.models, "anthropic")).toEqual({
+			connected: true,
+			ambient: true,
+			source: "ANTHROPIC_API_KEY",
+		});
+	});
+
+	it("offers one connected here plainly, beside a key in the environment", async () => {
+		process.env.ANTHROPIC_API_KEY = "sk-ant-from-the-environment";
+		const { credentials, deps: d } = await deps();
+		await credentials.modify("anthropic", async () => ({ type: "api_key", key: "sk-ant-connected-here" }));
+		const anthropic = (await offered(d, FALLBACK)).find((each) => each.id === "anthropic");
+		expect(anthropic?.ambient).toBeUndefined();
+		expect(anthropic?.source).toBeUndefined();
 	});
 });

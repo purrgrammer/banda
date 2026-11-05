@@ -43,6 +43,25 @@ const supported = [...new Set(PRESETS.map((preset) => preset.provider).filter((i
  */
 const CONNECTED_HERE = "stored credential";
 
+/**
+ * The credential provider `id` has, as the app tells it: none, one connected here, or an ambient one with the `source`
+ * that set it. pi-ai reports a credential it found, never one it tried: an ambient key (ANTHROPIC_API_KEY and its kind)
+ * is nobody's doing here, cannot be signed out of, and is as likely stale as good. Saying only "connected" leaves a
+ * dead key looking right and hides the sign-in that would replace it, so the app is told where it came from.
+ */
+export async function credentialOf(
+	models: Deps["models"],
+	id: string,
+): Promise<{ readonly connected: boolean; readonly ambient?: true; readonly source?: string }> {
+	const check = await models.checkAuth(id).then(
+		(result) => result,
+		() => undefined,
+	);
+	if (check === undefined) return { connected: false };
+	if (check.type === "oauth" || check.source === CONNECTED_HERE) return { connected: true };
+	return { connected: true, ambient: true, ...(check.source === undefined ? {} : { source: check.source }) };
+}
+
 async function view(deps: Deps, pending: ReadonlyMap<string, Attempt>, failures: ReadonlyMap<string, string>) {
 	return (
 		await Promise.all(
@@ -50,16 +69,7 @@ async function view(deps: Deps, pending: ReadonlyMap<string, Attempt>, failures:
 				const provider = deps.models.getProvider(id);
 				if (provider === undefined) return [];
 				const auth = provider.auth;
-				const check = await deps.models.checkAuth(id).then(
-					(result) => result,
-					() => undefined,
-				);
-				const connected = check !== undefined;
-				// pi-ai reports a credential it found, never one it tried: an ambient key (ANTHROPIC_API_KEY and its
-				// kind) is nobody's doing here, cannot be signed out of, and is as likely stale as good. Saying only
-				// "connected" leaves a dead key looking right and hides the sign-in that would replace it, so the app
-				// is told where this one came from and keeps offering to connect.
-				const ambient = connected && check?.type !== "oauth" && check?.source !== CONNECTED_HERE;
+				const { connected, ambient, source } = await credentialOf(deps.models, id);
 				const attempt = pending.get(id);
 				return [
 					{
@@ -68,8 +78,8 @@ async function view(deps: Deps, pending: ReadonlyMap<string, Attempt>, failures:
 						apiKey: auth.apiKey?.login !== undefined,
 						oauth: auth.oauth !== undefined,
 						connected,
-						...(ambient ? { ambient: true } : {}),
-						...(ambient && check?.source !== undefined ? { source: check.source } : {}),
+						...(ambient ? { ambient } : {}),
+						...(source === undefined ? {} : { source }),
 						connecting: attempt !== undefined,
 						...(attempt?.question === undefined ? {} : { question: attempt.question }),
 						...(attempt?.methods === undefined ? {} : { methods: attempt.methods }),

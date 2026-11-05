@@ -23,7 +23,7 @@ import { context, openStore } from "../src/core/store.ts";
 import { DEFAULT_TIER, modelFor, PRESETS, presetOf, TIERS, type Tier } from "../src/core/tiers.ts";
 import { defineCore, Routes, type TurnResult } from "../src/core/turn.ts";
 import { startDaemon } from "../src/daemon.ts";
-import { readDaemonFile } from "../src/home.ts";
+import { DEFAULT_MODEL, readDaemonFile } from "../src/home.ts";
 import type { ChatRow, CompanionView, TiersView } from "../src/server/api.ts";
 import { NAMES } from "../src/server/seen.ts";
 import { hostBox } from "./fixtures/host-box.ts";
@@ -404,9 +404,9 @@ describe("a chat's tier", () => {
 });
 
 describe("tiers in the app", () => {
-	async function start(withOpenai = false, openaiAuth?: "key" | "oauth") {
+	async function start(withOpenai = false, openaiAuth?: "key" | "oauth", configured: ModelRef = CONFIGURED) {
 		const home = await tempHome();
-		await writeFile(join(home, "config.json"), JSON.stringify({ model: CONFIGURED }));
+		await writeFile(join(home, "config.json"), JSON.stringify({ model: configured }));
 		const web = join(home, "web");
 		await mkdir(web, { recursive: true });
 		await writeFile(join(web, "index.html"), "<!doctype html><title>banda</title>");
@@ -426,6 +426,23 @@ describe("tiers in the app", () => {
 		};
 		return { home, daemon, api, send, ...llm };
 	}
+
+	it("the provider is the owner's pick once they choose one, or once config.json names a model; never by default", async () => {
+		const byDefault = await start(false, undefined, DEFAULT_MODEL);
+		try {
+			expect((await byDefault.api<TiersView>("/tiers")).chosen).toBe(false);
+			await byDefault.api("/tiers", { method: "PUT", body: JSON.stringify({ provider: "anthropic" }) });
+			expect((await byDefault.api<TiersView>("/tiers")).chosen).toBe(true);
+		} finally {
+			await byDefault.daemon.close();
+		}
+		const configured = await start(false, undefined, { provider: "anthropic", modelId: ANTHROPIC.models.quick });
+		try {
+			expect((await configured.api<TiersView>("/tiers")).chosen).toBe(true);
+		} finally {
+			await configured.daemon.close();
+		}
+	});
 
 	it("connecting a provider selects it even without a settings view, and an existing chat uses it", async () => {
 		const s = await start(true, "key");

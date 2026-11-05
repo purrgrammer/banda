@@ -95,7 +95,10 @@ one that gives them one more thing to manage stays out.
 
 - **First run meets an agent.** The first screen is the first agent's face, its name and one line, then the providers
   to pick from, each a row with its logo and name; the one picked signs the owner in, or takes a key where it has no
-  sign-in. One screen, no other step. Then the chat opens with the agent's first words (who it is and what to try) and
+  sign-in. One screen, no other step. A credential found outside banda (an ANTHROPIC_API_KEY around the daemon) is
+  named by where it came from wherever providers show, never passes for one connected here, and can be connected
+  over; first run stays until the owner picks it, so a key they never saw is never what the band silently thinks with.
+  Then the chat opens with the agent's first words (who it is and what to try) and
   complete, broadly useful requests a tap sends as written, none needing a connection; every new agent's chat starts
   so, and the first words stay at the chat's beginning (the starters go once the owner has written).
   Returning owners open straight into their last chat. While the box starts, the chat says so in a line ("Mara's

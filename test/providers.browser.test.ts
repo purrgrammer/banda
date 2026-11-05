@@ -43,7 +43,18 @@ function models() {
 	const registry = createModels();
 	const faux = (provider: string, preset: NonNullable<ReturnType<typeof presetOf>>) =>
 		fauxProvider({ provider, models: [...new Set(TIERS.map((tier) => preset.models[tier]))].map((id) => ({ id })) });
-	registry.setProvider({ ...faux("anthropic", ANTHROPIC).provider, name: "Anthropic" } as never);
+	// signed in here: its credential is the owner's (pi-ai's stored label), not one found around the daemon, which first
+	// run would wait for the owner to pick
+	registry.setProvider({
+		...faux("anthropic", ANTHROPIC).provider,
+		name: "Anthropic",
+		auth: {
+			apiKey: {
+				name: "Test key",
+				resolve: async () => ({ auth: { apiKey: "signed-in" }, source: "stored credential" }),
+			},
+		},
+	} as never);
 	const openai = faux("openai", OPENAI).provider;
 	registry.setProvider({
 		...openai,

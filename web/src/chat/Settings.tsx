@@ -1019,8 +1019,8 @@ export function ModelProviders({
 								? `Didn't connect: ${provider.error}`
 								: from !== undefined
 									? using
-										? `In use, with ${from} from outside banda`
-										: `Set by ${from} from outside banda`
+										? `In use · from ${from}, outside banda`
+										: `From ${from}, outside banda`
 									: using
 										? "In use"
 										: provider.connected
