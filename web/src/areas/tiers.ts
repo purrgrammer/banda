@@ -55,6 +55,10 @@ export type ProviderView = {
 	readonly apiKey: boolean;
 	readonly oauth: boolean;
 	readonly connected: boolean;
+	/** Connected by a credential from around the daemon, not one connected here: unverified, and not ours to forget. */
+	readonly ambient?: boolean;
+	/** What that credential came from ("ANTHROPIC_API_KEY"), as pi-ai names it. */
+	readonly source?: string;
 	readonly connecting: boolean;
 	/** While a sign-in takes a pasted code or address: what the provider asks. */
 	readonly question?: string;
@@ -149,7 +153,9 @@ export function useProviderConnect() {
 		const provider = providers.find((each) => each.id === id);
 		if (provider === undefined) return;
 		setError(undefined);
-		if (provider.connected) return use(id);
+		// an ambient credential is already usable, so Use still works; Connect means connect over it, and must not
+		// fall through to using the very credential the owner is trying to replace
+		if (provider.connected && provider.ambient !== true) return use(id);
 		if (!provider.oauth) {
 			setOpen((was) => (was === id ? undefined : id));
 			return;

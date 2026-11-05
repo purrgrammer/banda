@@ -1,6 +1,11 @@
 /**
  * Provider connections live in auth/, outside the store and the box. The app only sees status and OAuth links.
  *
+ * A provider can also be configured from outside banda, by an ambient credential: ANTHROPIC_API_KEY and its kind, an
+ * AWS profile, an ADC file. Those count as connected, since the band can think with them, but they are marked
+ * `ambient` with the `source` pi-ai names them by: the owner did not connect them here, signing out cannot remove
+ * them, and nothing has tried them, so the app offers to connect over them rather than calling them good.
+ *
  * A sign-in is one attempt per provider, held in memory and ended through pi-ai's own signal: the latest attempt
  * replaces an earlier one, the owner may cancel it, it times out, and the daemon stopping ends it. Ending it closes
  * what the provider's flow opened (a loopback callback server among them), so nothing outlives the attempt.
@@ -31,6 +36,13 @@ type Attempt = {
 };
 const supported = [...new Set(PRESETS.map((preset) => preset.provider).filter((id) => id !== "openai-codex"))];
 
+/**
+ * pi-ai's label for a key it holds for the owner; every other api-key source it reports names where it found one
+ * instead ("ANTHROPIC_API_KEY", "~/.aws/credentials"). A sign-in is told by its type, so this is the only label the
+ * app leans on; `test/provider-ambient.test.ts` fails loudly if a pi-ai upgrade renames it.
+ */
+const CONNECTED_HERE = "stored credential";
+
 async function view(deps: Deps, pending: ReadonlyMap<string, Attempt>, failures: ReadonlyMap<string, string>) {
 	return (
 		await Promise.all(
@@ -38,10 +50,16 @@ async function view(deps: Deps, pending: ReadonlyMap<string, Attempt>, failures:
 				const provider = deps.models.getProvider(id);
 				if (provider === undefined) return [];
 				const auth = provider.auth;
-				const connected = await deps.models.checkAuth(id).then(
-					(result) => result !== undefined,
-					() => false,
+				const check = await deps.models.checkAuth(id).then(
+					(result) => result,
+					() => undefined,
 				);
+				const connected = check !== undefined;
+				// pi-ai reports a credential it found, never one it tried: an ambient key (ANTHROPIC_API_KEY and its
+				// kind) is nobody's doing here, cannot be signed out of, and is as likely stale as good. Saying only
+				// "connected" leaves a dead key looking right and hides the sign-in that would replace it, so the app
+				// is told where this one came from and keeps offering to connect.
+				const ambient = connected && check?.type !== "oauth" && check?.source !== CONNECTED_HERE;
 				const attempt = pending.get(id);
 				return [
 					{
@@ -50,6 +68,8 @@ async function view(deps: Deps, pending: ReadonlyMap<string, Attempt>, failures:
 						apiKey: auth.apiKey?.login !== undefined,
 						oauth: auth.oauth !== undefined,
 						connected,
+						...(ambient ? { ambient: true } : {}),
+						...(ambient && check?.source !== undefined ? { source: check.source } : {}),
 						connecting: attempt !== undefined,
 						...(attempt?.question === undefined ? {} : { question: attempt.question }),
 						...(attempt?.methods === undefined ? {} : { methods: attempt.methods }),

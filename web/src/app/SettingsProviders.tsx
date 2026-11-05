@@ -15,6 +15,8 @@ export function SettingsProviders({ current }: { current: string }) {
 				name: provider.name,
 				by: provider.oauth ? ("sign-in" as const) : ("key" as const),
 				connected: provider.connected,
+				...(provider.ambient === true ? { ambient: true as const } : {}),
+				...(provider.source === undefined ? {} : { source: provider.source }),
 				connecting: provider.connecting,
 				asks: provider.question !== undefined,
 				ways: provider.methods?.map((way) => ({ id: way.id, label: wayLabel(way) })),
