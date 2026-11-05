@@ -5,7 +5,6 @@
  * are answered by the handlers; any other is refused, since the client offers no files or terminals of its own.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { createInterface } from "node:readline";
 
 /** What one message may weigh: a larger one is a broken harness, and the connection ends. */
 export const ACP_MAX_MESSAGE_BYTES = 4 * 1024 * 1024;
@@ -109,55 +108,59 @@ export function startAcp(start: AcpStart): AcpConnection {
 		});
 	});
 	child.stdin?.on("error", () => {});
-	if (child.stderr !== null) createInterface({ input: child.stderr }).on("line", (line) => start.log?.(line));
+	if (child.stderr !== null) jsonLines(child.stderr, (line) => start.log?.(line));
 	if (child.stdout !== null)
-		createInterface({ input: child.stdout, crlfDelay: Number.POSITIVE_INFINITY }).on("line", (line) => {
-			if (Buffer.byteLength(line) > ACP_MAX_MESSAGE_BYTES) {
-				start.log?.("acp: a message over the limit; ending the harness");
-				killGroup("SIGKILL");
-				return;
-			}
-			let message: {
-				id?: number | string;
-				method?: string;
-				params?: unknown;
-				result?: unknown;
-				error?: { code?: number; message?: string; data?: unknown };
-			};
-			try {
-				message = JSON.parse(line) as typeof message;
-			} catch {
-				start.log?.(`acp: not JSON: ${line.slice(0, 200)}`);
-				return;
-			}
-			if (message.method === undefined) {
-				const waiting = typeof message.id === "number" ? pending.get(message.id) : undefined;
-				if (waiting === undefined) return;
-				pending.delete(message.id as number);
-				if (message.error !== undefined)
-					waiting.reject(
-						new AcpError(message.error.message ?? "the harness refused", message.error.code, message.error.data),
+		jsonLines(
+			child.stdout,
+			(line) => {
+				let message: {
+					id?: number | string;
+					method?: string;
+					params?: unknown;
+					result?: unknown;
+					error?: { code?: number; message?: string; data?: unknown };
+				};
+				try {
+					message = JSON.parse(line) as typeof message;
+				} catch {
+					start.log?.(`acp: not JSON: ${line.slice(0, 200)}`);
+					return;
+				}
+				if (message.method === undefined) {
+					const waiting = typeof message.id === "number" ? pending.get(message.id) : undefined;
+					if (waiting === undefined) return;
+					pending.delete(message.id as number);
+					if (message.error !== undefined)
+						waiting.reject(
+							new AcpError(message.error.message ?? "the harness refused", message.error.code, message.error.data),
+						);
+					else waiting.resolve(message.result);
+					return;
+				}
+				if (message.method === "session/update") {
+					const params = message.params as { sessionId?: string; update?: AcpUpdate } | undefined;
+					if (typeof params?.sessionId === "string" && typeof params.update?.sessionUpdate === "string")
+						start.handlers.update(params.sessionId, params.update);
+					return;
+				}
+				if (message.id === undefined) return; // a notification the client has no use for
+				const id = message.id;
+				if (message.method === "session/request_permission") {
+					start.handlers.permission(message.params as AcpPermissionRequest).then(
+						(outcome) => write({ id, result: { outcome } }),
+						() => write({ id, result: { outcome: { outcome: "cancelled" } } }),
 					);
-				else waiting.resolve(message.result);
-				return;
-			}
-			if (message.method === "session/update") {
-				const params = message.params as { sessionId?: string; update?: AcpUpdate } | undefined;
-				if (typeof params?.sessionId === "string" && typeof params.update?.sessionUpdate === "string")
-					start.handlers.update(params.sessionId, params.update);
-				return;
-			}
-			if (message.id === undefined) return; // a notification the client has no use for
-			const id = message.id;
-			if (message.method === "session/request_permission") {
-				start.handlers.permission(message.params as AcpPermissionRequest).then(
-					(outcome) => write({ id, result: { outcome } }),
-					() => write({ id, result: { outcome: { outcome: "cancelled" } } }),
-				);
-				return;
-			}
-			write({ id, error: { code: -32601, message: `${message.method} is not offered` } });
-		});
+					return;
+				}
+				write({ id, error: { code: -32601, message: `${message.method} is not offered` } });
+			},
+			{
+				over: () => {
+					start.log?.("acp: a message over the limit; ending the harness");
+					killGroup("SIGKILL");
+				},
+			},
+		);
 	return {
 		pid: child.pid,
 		request: <T>(method: string, params: unknown) =>
@@ -178,6 +181,34 @@ export function startAcp(start: AcpStart): AcpConnection {
 		},
 		exited,
 	};
+}
+
+/**
+ * Each line of `stream`, split on LF alone (a trailing CR dropped): JSON strings may hold U+2028 and U+2029, which
+ * Node's readline would split on. A line over `max` bytes is passed to `over` and dropped.
+ */
+export function jsonLines(
+	stream: NodeJS.ReadableStream,
+	onLine: (line: string) => void,
+	{ max = ACP_MAX_MESSAGE_BYTES, over }: { max?: number; over?: () => void } = {},
+): void {
+	let buffer = "";
+	let dropping = false;
+	stream.setEncoding?.("utf8");
+	stream.on("data", (chunk: string | Buffer) => {
+		buffer += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+		for (let at = buffer.indexOf("\n"); at >= 0; at = buffer.indexOf("\n")) {
+			const line = buffer.slice(0, at).replace(/\r$/, "");
+			buffer = buffer.slice(at + 1);
+			if (dropping) dropping = false;
+			else if (line !== "") onLine(line);
+		}
+		if (Buffer.byteLength(buffer) > max) {
+			buffer = "";
+			dropping = true;
+			over?.();
+		}
+	});
 }
 
 /** The protocol version this client speaks. */

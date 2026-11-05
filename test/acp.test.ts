@@ -110,3 +110,19 @@ describe("acp", () => {
 		expect(alive(other.pid)).toBe(false);
 	});
 });
+
+describe("acp framing", () => {
+	it("keeps a line whole when its JSON holds U+2028 or U+2029, which readline would split", async () => {
+		const { connection, updates } = fake(() => ({ outcome: "cancelled" }));
+		try {
+			const { sessionId } = await openSession(connection, { cwd: tmpdir() });
+			await prompt(connection, sessionId, "say a b c");
+			const said = updates
+				.filter((u) => u.sessionUpdate === "agent_message_chunk")
+				.map((u) => (u.content as { text: string }).text);
+			expect(said).toEqual(["a b c"]);
+		} finally {
+			await connection.close();
+		}
+	});
+});

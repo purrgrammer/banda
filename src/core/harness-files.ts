@@ -14,7 +14,10 @@ import type { HarnessDefinition } from "./harness.ts";
 /** Where banda's own harness files are, in the checkout or the release. */
 export const SHIPPED_HARNESSES = fileURLToPath(new URL("../../shipped/harnesses/", import.meta.url));
 
-const FIELDS = ["service", "package", "bin", "command", "args", "mode", "asks"] as const;
+const FIELDS = ["service", "package", "bin", "command", "adapter", "args", "mode", "asks"] as const;
+/** banda's own ACP adapters, for harnesses that speak something else (src/adapters/). */
+export const ADAPTERS = ["pi"] as const as readonly string[];
+
 /** What a harness asks, when its file does not say: its own settings decide. */
 export const OWN_ASKS = "It asks you whatever its own settings on this computer ask.";
 
@@ -27,7 +30,8 @@ export type HarnessFile = {
 	readonly mode?: string;
 	readonly start:
 		| { readonly package: string; readonly bin: string }
-		| { readonly command: string; readonly args: readonly string[] };
+		/** A command on the PATH; with `adapter`, banda's own adapter (src/adapters/<adapter>) runs it and speaks ACP. */
+		| { readonly command: string; readonly args: readonly string[]; readonly adapter?: string };
 };
 
 /** Words split on spaces, a quoted run kept whole: `opencode acp`, `"my agent" --acp`. */
@@ -55,6 +59,9 @@ export function parseHarness(
 		errors.push(`give "package:" (with "bin:") for one banda bundles, or "command:" for one on the PATH, not both`);
 	if (pkg !== undefined && bin === undefined) errors.push(`a package names its "bin:", the script to run with node`);
 	const mode = read.one("mode");
+	const adapter = read.one("adapter");
+	if (adapter !== undefined && (command === undefined || !ADAPTERS.includes(adapter)))
+		errors.push(`"adapter" is one of banda's (${ADAPTERS.join(", ")}), around a "command:"`);
 	if (errors.length > 0) return { errors };
 	return {
 		harness: {
@@ -66,7 +73,11 @@ export function parseHarness(
 			start:
 				pkg !== undefined
 					? { package: pkg, bin: bin ?? "" }
-					: { command: command ?? "", args: words(read.one("args") ?? "") },
+					: {
+							command: command ?? "",
+							args: words(read.one("args") ?? ""),
+							...(adapter === undefined ? {} : { adapter }),
+						},
 		},
 	};
 }
@@ -108,7 +119,15 @@ export function resolveHarness(file: HarnessFile): HarnessDefinition | undefined
 		return existsSync(script) ? { ...base, command: process.execPath, args: [script] } : undefined;
 	}
 	const found = onPath(file.start.command);
-	return found === undefined ? undefined : { ...base, command: found, args: [...file.start.args] };
+	if (found === undefined) return undefined;
+	if (file.start.adapter === undefined) return { ...base, command: found, args: [...file.start.args] };
+	// banda's own adapter, beside this module: .ts from the checkout, .js from the build
+	const script = fileURLToPath(
+		new URL(`../adapters/${file.start.adapter}${import.meta.url.endsWith(".ts") ? ".ts" : ".js"}`, import.meta.url),
+	);
+	return existsSync(script)
+		? { ...base, command: process.execPath, args: [script, found, ...file.start.args] }
+		: undefined;
 }
 
 /** Every harness file in `dir` that parses, by name; one that does not is said to `log`. */

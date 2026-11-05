@@ -13,7 +13,7 @@
  */
 import { spawn } from "node:child_process";
 import { appendFileSync } from "node:fs";
-import { createInterface } from "node:readline";
+import { jsonLines } from "../../src/core/acp.ts";
 
 const LOG = process.env.FAKE_ACP_LOG;
 const record = (entry: object) => {
@@ -119,10 +119,9 @@ async function run(sessionId: string, script: string): Promise<string> {
 	return cancelled.has(sessionId) ? "cancelled" : "end_turn";
 }
 
-const input = createInterface({ input: process.stdin });
 // as claude-agent-acp: its client gone, it exits (what it started may not)
-input.on("close", () => process.exit(0));
-input.on("line", (line) => {
+process.stdin.on("end", () => process.exit(0));
+jsonLines(process.stdin, (line) => {
 	const message = JSON.parse(line) as {
 		id?: number;
 		method?: string;
