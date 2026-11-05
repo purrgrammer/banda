@@ -32,9 +32,10 @@ import {
 import { log } from "../core/activity.ts";
 import { AgentChats } from "../core/agents.ts";
 import type { EffectTool } from "../core/ask.ts";
-import { type EgressControl, intake, ownCredential, SECRET_HEADERS } from "../core/egress.ts";
+import { type EgressControl, intake, ownCredential } from "../core/egress.ts";
 import { OWNER } from "../core/gateway.ts";
 import { covering } from "../core/permissions.ts";
+import { addressWords, bodyFields, bodyWords, headersWords } from "../core/request-words.ts";
 import { context } from "../core/store.ts";
 import { type Ask, answer, liveWaits, type WaitResult } from "../core/wait.ts";
 import { type Action, type Browser, type PageWrite, Refused, Taken } from "./browser.ts";
@@ -221,16 +222,6 @@ const text = (value: string, isError = false): ToolExecutionResult => ({
 
 const REF = Type.String({ pattern: "^s[0-9]+e[0-9]+$", description: "A ref from your latest snapshot, like s3e12." });
 
-/** A body as a person reads it, cut. */
-function bodyWords(body: string): string {
-	const bytes = Buffer.from(body, "base64");
-	if (bytes.length === 0) return "(empty)";
-	const words = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
-	// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters mark a body as binary
-	if (words.includes("�") || /[\x00-\x08\x0e-\x1f]/.test(words)) return `(${bytes.length} bytes of binary data)`;
-	return words.length > 4000 ? `${words.slice(0, 4000)}\n… (${bytes.length} bytes in all)` : words;
-}
-
 export function browserTools(options: BrowserToolOptions): ToolRegistration[] {
 	const { browser, egress } = options;
 	const fault = options.fault ?? (() => {});
@@ -339,7 +330,7 @@ export function browserTools(options: BrowserToolOptions): ToolRegistration[] {
 					break;
 				}
 			if (free === undefined) break;
-			const what = `${free.method} ${free.url}`;
+			const what = `${free.method} ${addressWords(free.url)}`;
 			try {
 				page = await release(api, ctx, free.id, free.hash, what);
 			} catch (error) {
@@ -637,8 +628,10 @@ export function browserTools(options: BrowserToolOptions): ToolRegistration[] {
 		effect: "unsafe",
 		describe: (args) => {
 			const drafted = args as unknown as JsonObject;
-			return `send ${String(drafted.method)} ${String(drafted.address)} from the page`;
+			return `send a request from ${String(drafted.page)} to ${destination(String(drafted.address))}`;
 		},
+		// the request as it goes, under what it says it sends
+		details: ["page", "method", "address", "headers", "body"],
 		// sent with the owner's session, or a credential header of its own: the owner's credential
 		floor: "credentials",
 		expand: async (args, api, ctx) => {
@@ -681,7 +674,7 @@ export function browserTools(options: BrowserToolOptions): ToolRegistration[] {
 					ctx,
 				);
 				if (free === "" || write === undefined) return sendingDraft.execute(args, api, ctx);
-				return acting(api, ctx, () => release(api, ctx, write.id, free, `${write.method} ${write.url}`));
+				return acting(api, ctx, () => release(api, ctx, write.id, free, `${write.method} ${addressWords(write.url)}`));
 			},
 		}) as ToolRegistration,
 	);
@@ -920,26 +913,35 @@ function placeOf(args: {
  * The draft for a page's write: its method, address, headers and body as a person reads them, the site the owner signed
  * in to whose session goes with it, and its handles.
  */
-function draftOf(write: PageWrite, signedIn: string | undefined): JsonObject {
-	let site = write.page;
+/** Where a request goes, in words: its host and path, never its query. */
+function destination(address: string): string {
 	try {
-		site = new URL(write.page).host || write.page;
+		const url = new URL(address);
+		return `${url.host}${url.pathname === "/" ? "" : url.pathname}`;
+	} catch {
+		return address.split(/[?#]/)[0] ?? address;
+	}
+}
+
+function draftOf(write: PageWrite, signedIn: string | undefined): JsonObject {
+	let page = write.page;
+	try {
+		page = new URL(write.page).host || write.page;
 	} catch {
 		// the page as it is
 	}
+	const type = write.headers.find(([key]) => key.trim().toLowerCase() === "content-type")?.[1];
+	const sends = bodyFields(write.body, type);
+	// what it sends, in words from the request itself; then the request whole, every credential masked: the bytes
+	// approved are the ones hashed, so no credential is written into the draft
 	return {
-		page: site,
-		method: write.method,
-		address: write.url,
-		// a session's cookie is the owner's credential: named, never stored
-		headers: write.headers
-			.map(
-				([key, value]) =>
-					`${key}: ${SECRET_HEADERS.has(key.toLowerCase()) ? "(the browser's session, hidden)" : value}`,
-			)
-			.join("\n"),
-		body: bodyWords(write.body),
+		...(sends === undefined ? {} : { sends }),
 		...(signedIn === undefined ? {} : { "with your session at": signedIn }),
+		page,
+		method: write.method,
+		address: addressWords(write.url),
+		headers: headersWords(write.headers),
+		body: bodyWords(write.body),
 		_write: write.id,
 		_hash: write.hash,
 	};

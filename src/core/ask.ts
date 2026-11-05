@@ -451,6 +451,8 @@ export type EffectTool<P extends TSchema> = {
 	readonly effect: "idempotent" | "unsafe";
 	readonly describe?: (args: Static<P>) => string;
 	readonly editable?: readonly string[];
+	/** The arguments that are the effect in full (a request's headers, its raw body): shown behind a disclosure. */
+	readonly details?: readonly string[];
 	/** What the approval card draws beside its words: the object it acts on, the account it acts as, its verb. */
 	readonly drawn?: (args: Static<P>) => Pick<Draft, "on" | "as" | "verb">;
 	readonly floor?: Floor | ((args: Static<P>) => Floor | undefined);
@@ -547,6 +549,7 @@ export function draftOf<P extends TSchema>(tool: EffectTool<P>, args: JsonObject
 		args,
 		label,
 		...(editable.length === 0 ? {} : { editable }),
+		...(tool.details === undefined ? {} : { details: tool.details.filter((arg) => args[arg] !== undefined) }),
 		...(tool.drawn?.(typed) ?? {}),
 		...(floor === undefined
 			? {

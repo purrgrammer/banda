@@ -10,7 +10,7 @@ import {
 	ShieldCheckIcon,
 	SquareIcon,
 } from "lucide-react";
-import { ApprovalCard, ChangeCard, Facts, WaitingPill } from "../chat/Approval.tsx";
+import { ApprovalCard, ChangeCard, Details, Facts, WaitingPill } from "../chat/Approval.tsx";
 import { ArtifactCard, Browsed, QuestionCard, SignInCard, ViewCard } from "../chat/Cards.tsx";
 import { Composer } from "../chat/Composer.tsx";
 import { Bubble, DaySeparator, JumpToLatest, Mention, Run, UnreadDivider } from "../chat/Feed.tsx";
@@ -244,6 +244,44 @@ export function Parts() {
 							/>
 						}
 						state={{ kind: "declined" }}
+					/>
+					<ApprovalCard
+						agent="Mara"
+						what="send a request from www.cp.pt to api-gateway.cp.pt/cp/services/travel-api/journeys"
+						verb="Send"
+						object={
+							<>
+								<Facts
+									rows={[
+										["sends › departureStationCode", "94-31039"],
+										["sends › arrivalStationCode", "94-2006"],
+										["sends › travelDate", "2026-12-12"],
+										["sends › filters", "(3 fields)"],
+									]}
+								/>
+								<Details
+									rows={[
+										["page", "www.cp.pt"],
+										["method", "POST"],
+										["address", "https://api-gateway.cp.pt/cp/services/travel-api/journeys"],
+										[
+											"headers",
+											[
+												"Origin: https://www.cp.pt",
+												"Content-Type: application/json",
+												"x-api-key: ca39… (32 characters)",
+												"x-cp-connect-id: 5f0e… (36 characters)",
+												"x-cp-connect-secret: hidden (12 characters)",
+											].join("\n"),
+										],
+										[
+											"body",
+											'{"departureStationCode":"94-31039","arrivalStationCode":"94-2006","travelDate":"2026-12-12","filters":{"class":2,"adults":1,"children":0}}',
+										],
+									]}
+								/>
+							</>
+						}
 					/>
 					<ApprovalCard
 						agent="Octo"

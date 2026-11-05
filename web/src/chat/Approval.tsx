@@ -7,6 +7,7 @@ import { CheckIcon, ChevronRightIcon, XIcon } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
 import { Tile } from "./Cards.tsx";
 
@@ -166,6 +167,33 @@ export function ChangeCard({
 				</Button>
 			</span>
 		</Tile>
+	);
+}
+
+/**
+ * The effect in full, behind a disclosure under what the card leads with: a request's page, method, address, headers
+ * and raw body, each stacked so a long header wraps on a phone. Credentials in it come masked from the daemon.
+ */
+export function Details({ rows }: { rows: readonly (readonly [string, string])[] }) {
+	return (
+		<Collapsible>
+			<CollapsibleTrigger className="group flex cursor-pointer items-center gap-1 text-ui text-ink-2 hover:text-ink">
+				<ChevronRightIcon className="size-3.5 transition-transform group-data-[state=open]:rotate-90" />
+				Details
+			</CollapsibleTrigger>
+			<CollapsibleContent>
+				<dl className="mt-2 flex flex-col gap-2.5 rounded-field bg-paper-2 px-3.5 py-3 text-ui">
+					{rows.map(([term, value]) => (
+						<div key={term} className="flex min-w-0 flex-col gap-0.5">
+							<dt className="text-ink-2">{term}</dt>
+							<dd className="min-w-0 font-code text-meta whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
+								{value}
+							</dd>
+						</div>
+					))}
+				</dl>
+			</CollapsibleContent>
+		</Collapsible>
 	);
 }
 

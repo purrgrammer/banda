@@ -5,6 +5,8 @@
  * hash; on a site the owner signed in to (`SignedIn`), or with a credential header, each is a draft on the floor; a
  * write carrying a secret is never drafted. And how a host and its cookies are matched to a signed-in site.
  */
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { createRegistry, defineExtension, type Harness, type TaskId } from "@earendil-works/pi-durable";
 import fc from "fast-check";
@@ -18,7 +20,8 @@ import { OWNER } from "../src/core/gateway.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context, openStore } from "../src/core/store.ts";
 import type { TurnResult } from "../src/core/turn.ts";
-import { answer } from "../src/core/wait.ts";
+import { type Ask, answer } from "../src/core/wait.ts";
+import { argList, draftParts } from "../web/src/lib/chat.ts";
 import { openConnected } from "./fixtures/connected.ts";
 import { answerNudge } from "./fixtures/models.ts";
 import { tempHome, until } from "./helpers.ts";
@@ -514,6 +517,94 @@ describe("the browser, as the owner", () => {
 			expect((await s.nextAsk(secret.turn)).wait).toBeUndefined();
 			expect(s.passes).toEqual([]);
 			expect((await s.results(secret.chat)).some((said) => said.includes("never goes into a draft"))).toBe(true);
+		} finally {
+			await s.close();
+		}
+	});
+
+	it("a held request leads with what it sends; its credentials are masked in the draft, the store and the card", async () => {
+		const KEY = "ca3923e41d3c424fa3d09ce0ef8fd5c6";
+		const ID = "5f0e7c1a-9b2d-4e3f-8a6b-1c2d3e4f5a6b";
+		const SECRET = "Zm9vYmFy-s3cr3t";
+		const s = await setup();
+		try {
+			s.page.form({
+				url: "https://api-gateway.cp.pt/cp/services/travel-api/journeys",
+				headers: [
+					["Origin", "https://www.cp.pt"],
+					["Referer", "https://www.cp.pt/passageiros/pt/consultar-horarios"],
+					["User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"],
+					["sec-ch-ua", '"Chromium";v="139", "Not;A=Brand";v="99"'],
+					["Content-Type", "application/json"],
+					["x-api-key", KEY],
+					["x-cp-connect-id", ID],
+					["x-cp-connect-secret", SECRET],
+				],
+				body: JSON.stringify({
+					departureStationCode: "94-31039",
+					arrivalStationCode: "94-2006",
+					travelDate: "2026-12-12",
+					filters: { class: 2, adults: 1 },
+				}),
+			});
+			const run = await s.say([
+				["browser_navigate", { url: "https://www.cp.pt/passageiros/pt/consultar-horarios" }],
+				["browser_click", { ref: "s1e3" }],
+				["browser_send", { write: "w1" }],
+			]);
+			const { wait } = await s.nextAsk(run.turn);
+			const ask = wait!.ask as Extract<Ask, { type: "approval" }>;
+			expect(ask).toMatchObject({
+				tool: "browser_send",
+				floor: "credentials",
+				label: "send a request from www.cp.pt to api-gateway.cp.pt/cp/services/travel-api/journeys",
+				details: ["page", "method", "address", "headers", "body"],
+				args: {
+					sends: {
+						departureStationCode: "94-31039",
+						arrivalStationCode: "94-2006",
+						travelDate: "2026-12-12",
+						filters: "(2 fields)",
+					},
+					page: "www.cp.pt",
+					method: "POST",
+					address: "https://api-gateway.cp.pt/cp/services/travel-api/journeys",
+				},
+			});
+			expect(String(ask.args.headers).split("\n")).toEqual([
+				"Origin: https://www.cp.pt",
+				"Referer: https://www.cp.pt/passageiros/pt/consultar-horarios",
+				"User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+				'sec-ch-ua: "Chromium";v="139", "Not;A=Brand";v="99"',
+				"Content-Type: application/json",
+				"x-api-key: ca39… (32 characters)",
+				"x-cp-connect-id: 5f0e… (36 characters)",
+				"x-cp-connect-secret: hidden (15 characters)",
+			]);
+
+			// the card leads with what it is and what it sends; the request whole waits behind "Details"
+			const parts = draftParts(ask);
+			expect(argList(parts.rest)).toEqual([
+				["sends › departureStationCode", "94-31039"],
+				["sends › arrivalStationCode", "94-2006"],
+				["sends › travelDate", "2026-12-12"],
+				["sends › filters", "(2 fields)"],
+			]);
+			expect(parts.details.map(([term]) => term)).toEqual(["page", "method", "address", "headers", "body"]);
+			expect(JSON.stringify(parts.details)).not.toMatch(new RegExp(`${KEY}|${ID}|${SECRET}`));
+
+			// approved, the exact bytes the page wrote go: the hash binds them, not the words shown
+			await answer(s.harness, wait!.key, "approve", web, "bearer");
+			await until(() => s.done(run.turn));
+			expect(s.passes.map(([, hash]) => hash)).toEqual([s.page.released[0]!.hash]);
+			expect(s.page.released[0]!.headers).toContainEqual(["x-api-key", KEY]);
+			// no credential was written anywhere in the home: not the draft, the activity, nor the transcript
+			const files = (await readdir(s.home, { recursive: true, withFileTypes: true })).filter((f) => f.isFile());
+			expect(files.length).toBeGreaterThan(0);
+			for (const file of files) {
+				const bytes = await readFile(join(file.parentPath, file.name));
+				for (const secret of [KEY, ID, SECRET]) expect(bytes.includes(secret), `${secret} in ${file.name}`).toBe(false);
+			}
 		} finally {
 			await s.close();
 		}

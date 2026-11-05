@@ -2,11 +2,11 @@
 import { useId, useState } from "react";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
-import { ApprovalCard, type ApprovalState, Facts } from "../chat/Approval.tsx";
+import { ApprovalCard, type ApprovalState, Details, Facts } from "../chat/Approval.tsx";
 import { FileChanges } from "../chat/FileChanges.tsx";
 import { type Ask, answerWait } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
-import { argList } from "../lib/chat.ts";
+import { argList, draftParts } from "../lib/chat.ts";
 import { fileChanges } from "../lib/file-changes.ts";
 import { scopeOf, scopesOf } from "../lib/permissions.ts";
 import { ObjectPreviews } from "./Objects.tsx";
@@ -34,8 +34,8 @@ function Draft({ chat, agent, ask, label, wait, state }: Props) {
 	const [busy, setBusy] = useState(false);
 	const interrupted = ask.interrupted === true;
 	const readOnly = wait === undefined || interrupted;
-	const fields = (ask.editable ?? []).filter((name) => typeof ask.args[name] === "string");
-	const changes = fileChanges(Object.fromEntries(Object.entries(ask.args).filter(([name]) => !fields.includes(name))));
+	const { fields, rest, details } = draftParts(ask);
+	const changes = fileChanges(rest);
 	const facts = argList(changes.rest);
 	// the daemon's verb, where the effect has one of its own; never a word of the label, which may be a tool's name
 	const verb = interrupted ? "Retry" : (ask.verb ?? "Allow");
@@ -61,6 +61,7 @@ function Draft({ chat, agent, ask, label, wait, state }: Props) {
 					{ask.on === undefined ? null : <ObjectPreviews chat={chat} asks={[ask.on]} agent={asAgent} />}
 					{facts.length === 0 ? null : <Facts rows={facts} />}
 					{changes.files.length === 0 ? null : <FileChanges files={changes.files} />}
+					{details.length === 0 ? null : <Details rows={details} />}
 					{fields.length === 0 ? null : (
 						<FieldGroup>
 							{fields.map((name) => (

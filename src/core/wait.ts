@@ -75,6 +75,11 @@ export type Ask =
 			/** The arguments, by name, whose text the owner may edit before approving. */
 			readonly editable?: string[];
 			/**
+			 * The arguments, by name, that are the effect in full rather than in words (a request's headers and raw
+			 * body): the card keeps them behind a disclosure, under what it leads with.
+			 */
+			readonly details?: string[];
+			/**
 			 * The object it acts on, where it has one (DESIGN.md "Connections", objects): each kind it may be, by its ref
 			 * (the first that reads is it), and the account its card reads as.
 			 */

@@ -227,6 +227,26 @@ export function argList(args: { readonly [key: string]: unknown }): [string, str
 }
 
 /**
+ * How an approval's draft is laid out: the text arguments the owner may edit, the rest as facts it leads with, and the
+ * arguments that are the effect in full (a request's headers, its raw body) as rows behind a disclosure.
+ */
+export function draftParts(ask: Extract<Ask, { type: "approval" }>): {
+	readonly fields: string[];
+	readonly rest: { [key: string]: unknown };
+	readonly details: [string, string][];
+} {
+	const fields = (ask.editable ?? []).filter((name) => typeof ask.args[name] === "string");
+	const full = (ask.details ?? []).filter((name) => !fields.includes(name) && ask.args[name] !== undefined);
+	return {
+		fields,
+		rest: Object.fromEntries(
+			Object.entries(ask.args).filter(([name]) => !fields.includes(name) && !full.includes(name)),
+		),
+		details: argList(Object.fromEntries(full.map((name) => [name, ask.args[name]]))),
+	};
+}
+
+/**
  * A failed request in the owner's words: a connection that dropped says so, whatever the provider called it; a key the
  * provider refused or a limit it hit says what to do; any other failure is the provider's own message (a refused
  * model), taken out of the JSON a provider wraps it in, and cut to a sentence or two, never a raw body.
