@@ -11,21 +11,24 @@ import { fileChanges } from "../lib/file-changes.ts";
 import { scopeOf, scopesOf } from "../lib/permissions.ts";
 import { ObjectPreviews } from "./Objects.tsx";
 
-export function DraftApproval({
-	chat,
-	agent,
-	ask,
-	label,
-	wait,
-	state,
-}: {
+type Props = {
 	chat: number;
 	agent: { readonly id?: string | undefined; readonly name: string };
 	ask: Extract<Ask, { type: "approval" }>;
 	label: string;
 	wait?: string | undefined;
 	state?: ApprovalState | undefined;
-}) {
+};
+
+/**
+ * What the owner does on a card (the scope ticked, the text edited) is that ask's alone: a card is drawn afresh for
+ * each Wait, so another ask in the same place of the feed never starts with the last one's tick.
+ */
+export function DraftApproval(props: Props) {
+	return <Draft key={props.wait ?? "answered"} {...props} />;
+}
+
+function Draft({ chat, agent, ask, label, wait, state }: Props) {
 	const id = useId();
 	const [edits, setEdits] = useState<Record<string, string>>({});
 	const [busy, setBusy] = useState(false);
@@ -34,10 +37,8 @@ export function DraftApproval({
 	const fields = (ask.editable ?? []).filter((name) => typeof ask.args[name] === "string");
 	const changes = fileChanges(Object.fromEntries(Object.entries(ask.args).filter(([name]) => !fields.includes(name))));
 	const facts = argList(changes.rest);
-	const first = label.split(" ")[0] ?? "";
-	const verb = interrupted
-		? "Retry"
-		: (ask.verb ?? (first === "" || first.length > 12 ? "Allow" : first.charAt(0).toUpperCase() + first.slice(1)));
+	// the daemon's verb, where the effect has one of its own; never a word of the label, which may be a tool's name
+	const verb = interrupted ? "Retry" : (ask.verb ?? "Allow");
 	const scope = !interrupted && ask.floor === undefined ? scopesOf(ask)[0] : undefined;
 	const asAgent = agent.id === undefined ? undefined : { id: agent.id, name: agent.name };
 	return (
