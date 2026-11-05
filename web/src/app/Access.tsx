@@ -1,16 +1,16 @@
 /**
  * An agent's Access tab on the daemon's data (DESIGN.md "The app"): its connections first, one row per connection that
  * is signed in to, with one switch per account and Connect when none is; then what it may do without asking, each
- * revokable. A switch is in effect at once; Connect opens the connect card under the row, for this agent.
+ * revokable; then the harnesses it may hand work to. A switch is in effect at once; Connect opens the connect card under the row, for this agent.
  */
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { CapabilitiesView, ControlView, PermissionView } from "../../../src/server/api.ts";
-import { type ConnectionRow, Connections, Permissions } from "../chat/Settings.tsx";
+import { Block, type ConnectionRow, Connections, Permissions } from "../chat/Settings.tsx";
 import { revokePermission, switchAccount, switchPublicConnection } from "../lib/api.ts";
 import { showCapabilities, showControl, useShell } from "../lib/shell.ts";
 import { ConnectFlow } from "./ConnectFlow.tsx";
-import { HarnessAccessTile } from "./HarnessConnections.tsx";
+import { AddHarnessButton, HarnessAccessTile } from "./HarnessConnections.tsx";
 import { McpSetup } from "./McpSetup.tsx";
 
 /**
@@ -95,7 +95,6 @@ export function AccessTab({
 					)
 				}
 			/>
-			<HarnessAccess agent={agent} />
 			<Button
 				variant="outline"
 				size="sm"
@@ -107,6 +106,7 @@ export function AccessTab({
 				Add MCP server
 			</Button>
 			{error === undefined ? null : <p className="-mt-5 text-meta text-danger">{error}</p>}
+			<HarnessAccess agent={agent} />
 			<Permissions
 				agent={agent.name}
 				permissions={permissions}
@@ -120,15 +120,25 @@ export function AccessTab({
 	);
 }
 
-/** The harnesses banda can run on this computer: on for this agent or not, and Connect, in the dialog. */
+/** The harnesses banda can run on this computer, a section of their own: on for this agent or not, Connect, Add. */
 function HarnessAccess({ agent }: { agent: { readonly id: string; readonly name: string } }) {
 	const { harnesses } = useShell();
-	if (harnesses === undefined || harnesses.harnesses.length === 0) return null;
+	if (harnesses === undefined) return null;
 	return (
-		<div className="flex flex-col gap-3">
-			{harnesses.harnesses.map(({ name }) => (
-				<HarnessAccessTile key={name} name={name} agent={agent} />
-			))}
-		</div>
+		<Block
+			title="Harnesses"
+			note={`Coding agents on this computer ${agent.name} may hand work to, each in the folder you picked.`}
+		>
+			{harnesses.harnesses.length === 0 ? (
+				<p className="rounded-field bg-paper-2 px-3.5 py-3 text-ui text-ink-2">None installed yet.</p>
+			) : (
+				<div className="flex flex-col gap-3">
+					{harnesses.harnesses.map(({ name }) => (
+						<HarnessAccessTile key={name} name={name} agent={agent} />
+					))}
+				</div>
+			)}
+			<AddHarnessButton agent={agent} size="sm" />
+		</Block>
 	);
 }

@@ -11,15 +11,21 @@ import { chatAgents } from "../lib/navigation.ts";
 import { useShell } from "../lib/shell.ts";
 import { HarnessDialog } from "./HarnessDialog.tsx";
 
-/** Add a harness: the dialog from its first step. */
-export function AddHarnessButton() {
+/** Add a harness: the dialog from its first step; from an agent's Access, on for that agent. */
+export function AddHarnessButton({
+	agent,
+	size,
+}: {
+	agent?: { readonly id: string; readonly name: string } | undefined;
+	size?: "sm" | undefined;
+} = {}) {
 	const [open, setOpen] = useState(false);
 	return (
 		<>
-			<Button variant="outline" className="self-start" onClick={() => setOpen(true)}>
+			<Button variant="outline" size={size} className="self-start" onClick={() => setOpen(true)}>
 				Add a harness
 			</Button>
-			<HarnessDialog open={open} onOpenChange={setOpen} />
+			<HarnessDialog open={open} onOpenChange={setOpen} agent={agent} />
 		</>
 	);
 }
