@@ -1,8 +1,10 @@
 /**
- * An agent's Access tab on the daemon's data (DESIGN.md "The app"): its connections first, one row per connection that
- * is signed in to, with one switch per account and Connect when none is; then what it may do without asking, each
- * revokable; then the harnesses it may hand work to. A switch is in effect at once; Connect opens the connect card under the row, for this agent.
+ * An agent's Access tab on the daemon's data (DESIGN.md "The app"): what the agent has, and only that: the accounts and
+ * the harnesses on for it, then what it may do without asking, each revokable. "Show more" reveals the rest: every
+ * connection with its switches or Connect, the harnesses connected but off for it, and adding either. A switch is in
+ * effect at once; Connect opens the connect card under the row, for this agent.
  */
+import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { CapabilitiesView, ControlView, PermissionView } from "../../../src/server/api.ts";
@@ -67,6 +69,15 @@ export function AccessTab({
 	control: ControlView | undefined;
 }) {
 	const [error, setError] = useState<string | undefined>(undefined);
+	const [all, setAll] = useState(false);
+	const { harnesses } = useShell();
+	const rows = connectionRows(capabilities, agent.id);
+	const used = rows
+		.map((row) => ({ ...row, accounts: row.accounts.filter((account) => account.on) }))
+		.filter((row) => row.accounts.length > 0);
+	const connected = (harnesses?.harnesses ?? []).filter(({ name }) => harnesses?.accounts[name] !== undefined);
+	const on = connected.filter(({ name }) => harnesses?.accounts[name]?.agents.includes(agent.id) === true);
+	const more = rows.length - used.length + connected.length - on.length;
 	const permissions = (control?.permissions ?? [])
 		.filter((permission) => permission.agent === agent.id)
 		.map((permission) => ({ id: permission.id, what: permission.what, scope: scopeWords(permission) }));
@@ -74,7 +85,8 @@ export function AccessTab({
 		<>
 			<Connections
 				agent={agent.name}
-				rows={connectionRows(capabilities, agent.id)}
+				rows={all ? rows : used}
+				empty={`${agent.name} reaches nothing yet.`}
 				onSwitch={(row, account, on) => {
 					if (row.id === undefined) return;
 					setError(undefined);
@@ -95,18 +107,26 @@ export function AccessTab({
 					)
 				}
 			/>
-			<Button
-				variant="outline"
-				size="sm"
-				className="self-start"
-				onClick={() => {
-					location.hash = "#/connections?add=true";
-				}}
-			>
-				Add MCP server
-			</Button>
+			{all ? (
+				<Button
+					variant="outline"
+					size="sm"
+					className="-mt-5 self-start"
+					onClick={() => {
+						location.hash = "#/connections?add=true";
+					}}
+				>
+					Add MCP server
+				</Button>
+			) : null}
 			{error === undefined ? null : <p className="-mt-5 text-meta text-danger">{error}</p>}
-			<HarnessAccess agent={agent} />
+			{all || on.length > 0 ? (
+				<HarnessAccess agent={agent} names={(all ? connected : on).map(({ name }) => name)} all={all} />
+			) : null}
+			<Button variant="ghost" size="sm" className="-mt-5 self-start text-ink-2" onClick={() => setAll(!all)}>
+				{all ? <ChevronUpIcon /> : <ChevronDownIcon />}
+				{all ? "Show less" : more > 0 ? `Show ${more} more` : "Add more"}
+			</Button>
 			<Permissions
 				agent={agent.name}
 				permissions={permissions}
@@ -120,25 +140,28 @@ export function AccessTab({
 	);
 }
 
-/** The harnesses banda can run on this computer, a section of their own: on for this agent or not, Connect, Add. */
-function HarnessAccess({ agent }: { agent: { readonly id: string; readonly name: string } }) {
-	const { harnesses } = useShell();
-	if (harnesses === undefined) return null;
+/** The harnesses this agent may hand work to, a section of their own; with `all`, those off for it too, and Add. */
+function HarnessAccess({
+	agent,
+	names,
+	all,
+}: {
+	agent: { readonly id: string; readonly name: string };
+	names: readonly string[];
+	all: boolean;
+}) {
 	return (
-		<Block
-			title="Harnesses"
-			note={`Coding agents on this computer ${agent.name} may hand work to, each in the folder you picked.`}
-		>
-			{harnesses.harnesses.length === 0 ? (
-				<p className="rounded-field bg-paper-2 px-3.5 py-3 text-ui text-ink-2">None installed yet.</p>
+		<Block title="Harnesses" note={`Coding agents on this computer ${agent.name} may hand work to.`}>
+			{names.length === 0 ? (
+				<p className="rounded-field bg-paper-2 px-3.5 py-3 text-ui text-ink-2">None connected yet.</p>
 			) : (
 				<div className="flex flex-col gap-3">
-					{harnesses.harnesses.map(({ name }) => (
+					{names.map((name) => (
 						<HarnessAccessTile key={name} name={name} agent={agent} />
 					))}
 				</div>
 			)}
-			<AddHarnessButton agent={agent} size="sm" />
+			{all ? <AddHarnessButton agent={agent} size="sm" /> : null}
 		</Block>
 	);
 }

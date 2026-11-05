@@ -13,7 +13,6 @@ import { useTiers } from "../areas/tiers.ts";
 import { Band, BandNotice } from "../chat/Band.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
 import { Face } from "../chat/Face.tsx";
-import { HarnessMissingCard } from "../chat/Harness.tsx";
 import { MemorySettings } from "../chat/MemorySettings.tsx";
 import { AgentPanel, firstTab, Panel, Routines } from "../chat/Panel.tsx";
 import { AppSettings, Archive, Personality, SettingsPage, ThinkingTiers } from "../chat/Settings.tsx";
@@ -601,21 +600,8 @@ function Main() {
 					</span>
 					<Catalogue
 						extra={(shell.harnesses?.harnesses ?? [])
-							.map(({ name }) => ({ key: `harness:${name}`, card: <HarnessConnectionTile name={name} /> }))
-							.concat(
-								(shell.harnesses?.missing ?? []).map(({ name, service, about, install, provider, logo }) => ({
-									key: `harness-missing:${name}`,
-									card: (
-										<HarnessMissingCard
-											harness={service}
-											{...(provider === undefined ? {} : { provider })}
-											{...(logo === undefined ? {} : { logo })}
-											{...(about === undefined ? {} : { about })}
-											{...(install === undefined ? {} : { install })}
-										/>
-									),
-								})),
-							)}
+							.filter(({ name }) => shell.harnesses?.accounts[name] !== undefined)
+							.map(({ name }) => ({ key: `harness:${name}`, card: <HarnessConnectionTile name={name} /> }))}
 						onManage={(connection) => go({ name: "connections", connection })}
 						services={[
 							...(services.length === 0

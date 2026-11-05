@@ -8,7 +8,6 @@ import { Bubble, Run } from "../chat/Feed.tsx";
 import { FolderBrowser } from "../chat/FolderPicker.tsx";
 import {
 	HarnessCard,
-	HarnessMissingCard,
 	type HarnessSessionView,
 	type HarnessState,
 	type HarnessStep,
@@ -290,12 +289,6 @@ export function HarnessSection() {
 						on={false}
 						onSwitch={() => {}}
 						onEdit={() => {}}
-					/>
-					<HarnessMissingCard
-						harness="Codex"
-						provider="openai"
-						about="OpenAI's coding agent, with your sign-in on this computer."
-						install="npm install -g @agentclientprotocol/codex-acp@2.5.0"
 					/>
 					<p className="text-meta text-ink-2">The code folder, as the connect dialog browses it:</p>
 					<FolderBrowserSample />

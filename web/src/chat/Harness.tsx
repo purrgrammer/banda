@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ChainOfThought, ChainOfThoughtContent, ChainOfThoughtStep } from "@/components/ai-elements/chain-of-thought";
-import { CodeBlock, CodeBlockCopyButton } from "@/components/ai-elements/code-block";
+import { CodeBlock } from "@/components/ai-elements/code-block";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Terminal } from "@/components/ai-elements/terminal";
 import { Button } from "@/components/ui/button";
@@ -287,42 +287,6 @@ export function HarnessTile({
 					<span className="ml-auto text-meta text-ink-2">{on === true ? `On for ${agent}` : `Off for ${agent}`}</span>
 				) : null}
 			</span>
-		</Tile>
-	);
-}
-
-/** A harness banda knows but this computer has not installed: what it is, and the command that installs it. */
-export function HarnessMissingCard({
-	harness,
-	about,
-	install,
-	provider,
-	logo,
-}: {
-	harness: string;
-	logo?: string;
-	about?: string;
-	install?: string;
-	provider?: string;
-}) {
-	return (
-		<Tile className="flex flex-col gap-2.5 p-3">
-			<span className="flex items-center gap-3">
-				<span className="flex size-9 shrink-0 items-center justify-center rounded-field bg-paper-3">
-					<HarnessMark provider={provider} logo={logo} className="opacity-60" />
-				</span>
-				<span className="flex min-w-0 flex-1 flex-col">
-					<span className="text-ui font-semibold text-ink-2">{harness}</span>
-					<span className="min-w-0 truncate text-meta text-ink-2">{about ?? "Not on this computer"}</span>
-				</span>
-				<span className="shrink-0 text-meta text-ink-2">Not installed</span>
-			</span>
-			{install === undefined ? null : (
-				<span className="flex min-w-0 items-center gap-2 rounded-field bg-paper-2 px-3 py-2">
-					<code className="min-w-0 flex-1 font-code text-meta break-all text-ink">{install}</code>
-					<CodeBlockCopyButton text={install} label={`Copy how to install ${harness}`} />
-				</span>
-			)}
 		</Tile>
 	);
 }
