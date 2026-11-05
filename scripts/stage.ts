@@ -69,12 +69,16 @@ rem banda: the bundled Node.js runs the bundled CLI.\r
 "%~dp0..\\node\\node.exe" "%~dp0..\\app\\dist\\cli\\index.js" %*\r
 `;
 
-/** What of the checkout a release runs: the build, the box's and proxy's sources it builds images from, the licenses. */
-const SHIPPED = [
+/**
+ * What of the checkout a release runs: the build, the box's and proxy's sources it builds images from, what banda ships
+ * (connections, skills), the licenses.
+ */
+export const STAGED = [
 	"dist",
 	"web/dist",
 	"box",
 	"proxy",
+	"shipped",
 	"package.json",
 	"package-lock.json",
 	"LICENSE",
@@ -96,7 +100,7 @@ async function stageApp(root: string, out: string, target: Target): Promise<void
 		throw new Error("web/dist/ is missing: run `npm run build` first");
 	});
 	const app = join(out, "app");
-	for (const path of SHIPPED) await cp(join(root, path), join(app, path), { recursive: true });
+	for (const path of STAGED) await cp(join(root, path), join(app, path), { recursive: true });
 	run("npm", ["ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], app);
 	const bin = join(app, "node_modules", "@earendil-works", "pi-env", "bin");
 	for (const file of await readdir(bin))

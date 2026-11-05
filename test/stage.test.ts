@@ -1,3 +1,5 @@
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
 	expectedSum,
@@ -5,6 +7,7 @@ import {
 	NODE_VERSION,
 	nodeArchive,
 	POSIX_LAUNCHER,
+	STAGED,
 	targetName,
 	WINDOWS_LAUNCHER,
 } from "../scripts/stage.ts";
@@ -71,5 +74,21 @@ describe("staging a release", () => {
 		expect(POSIX_LAUNCHER).toContain('exec "$root/node/node" "$root/app/dist/cli/index.js" "$@"');
 		expect(WINDOWS_LAUNCHER).toContain('"%~dp0..\\node\\node.exe" "%~dp0..\\app\\dist\\cli\\index.js" %*');
 		expect(WINDOWS_LAUNCHER.split("\n").every((line) => line === "" || line.endsWith("\r"))).toBe(true);
+	});
+
+	it("stages every folder the runtime reads from its install", async () => {
+		const files = (await readdir("src", { recursive: true })).filter((file) => file.endsWith(".ts"));
+		const read = new Set<string>();
+		for (const file of files) {
+			const text = await readFile(join("src", file), "utf8");
+			for (const [, path] of text.matchAll(/new URL\("\.\.\/\.\.\/([^"]+)", import\.meta\.url\)/g))
+				read.add(path ?? "");
+		}
+		expect(read.size).toBeGreaterThan(0);
+		for (const path of read)
+			expect(
+				STAGED.some((staged) => path === staged || path.startsWith(`${staged}/`) || staged.startsWith(path)),
+				`${path} is read at run time but not staged`,
+			).toBe(true);
 	});
 });
