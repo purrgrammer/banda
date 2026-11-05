@@ -18,8 +18,11 @@ publish: null
 mac:
   category: public.app-category.productivity
   target: [dmg, zip]
-  # unsigned pre-release: no Developer ID yet
-  identity: null
+  # No Developer ID yet: sign ad hoc, so the bundle's seal is whole. Left unsigned, Electron's linker signature no longer
+  # matches the bundle, and Apple silicon calls a downloaded copy "damaged" with no Open Anyway. Ad-hoc signing has no
+  # Team ID, so library validation (hardened runtime) would refuse Electron's own frameworks.
+  identity: "-"
+  hardenedRuntime: false
 win:
   target: [nsis]
 nsis:
