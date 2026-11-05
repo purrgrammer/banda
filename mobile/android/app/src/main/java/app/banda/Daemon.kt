@@ -16,15 +16,21 @@ import kotlinx.coroutines.withTimeout
  * The daemon this phone is a device of, over Iroh. The shell's endpoint is bound once with the device's key, through
  * n0's relays and discovery; it dials the daemon by the ticket its pairing link carried, keeps the connection, and
  * opens one bi-stream a request on it. A connection that closed is dialed again on the next request.
+ *
+ * A new code's daemon is tried before it is kept: `use` points requests at it in memory, `keep` saves it once it
+ * approved this phone, and `revert` goes back to the saved one. A code never replaces the saved daemon on its own.
  */
 internal class Daemon(private val context: Context) {
     private val lock = Mutex()
     private var endpoint: Endpoint? = null
     private var connection: Connection? = null
 
-    /** The daemon's ticket, kept once the app chose it; null before pairing. */
+    /** The ticket of a daemon being tried, not saved. */
+    @Volatile private var trial: String? = null
+
+    /** The daemon's ticket: the one being tried, else the one saved once it approved this phone; null before pairing. */
     val ticket: String?
-        get() = Prefs.of(context).getString(TICKET, null)
+        get() = trial ?: Prefs.of(context).getString(TICKET, null)
 
     private fun keep(ticket: String?) {
         Prefs.of(context).edit().apply { if (ticket == null) remove(TICKET) else putString(TICKET, ticket) }.commit()
@@ -40,12 +46,29 @@ internal class Daemon(private val context: Context) {
     /** This device's endpoint id: its public key, what the daemon lists it by. */
     fun device(): String = SecretKey.fromBytes(DeviceKey.load(context)).use { key -> key.public().toString() }
 
-    /** Use the daemon `ticket` names from now on: it must parse, and the next request dials it. */
+    /** Try the daemon `ticket` names: it must parse, the next request dials it, and the saved one is kept aside. */
     suspend fun use(ticket: String) {
         EndpointTicket.fromString(ticket).close()
         lock.withLock {
             drop("another daemon")
-            keep(ticket)
+            trial = ticket
+        }
+    }
+
+    /** Save the daemon being tried: it approved this phone. */
+    suspend fun keep() {
+        lock.withLock {
+            trial?.let { keep(it) }
+            trial = null
+        }
+    }
+
+    /** Stop trying a daemon: requests go to the saved one again. */
+    suspend fun revert() {
+        lock.withLock {
+            if (trial == null) return@withLock
+            trial = null
+            drop("back to the saved daemon")
         }
     }
 
@@ -55,6 +78,7 @@ internal class Daemon(private val context: Context) {
             drop("forgotten")
             endpoint?.let { runCatching { it.shutdown() } }
             endpoint = null
+            trial = null
             keep(null)
             DeviceKey.forget(context)
         }

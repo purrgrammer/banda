@@ -8,7 +8,7 @@ import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import type { PairingStep } from "../lib/pairing.ts";
+import { fingerprint, type PairingStep } from "../lib/pairing.ts";
 
 export type PairPhoneActions = {
 	readonly onScan?: ((name: string) => void) | undefined;
@@ -22,6 +22,18 @@ function Frame({ children }: { children: ReactNode }) {
 		<main className="flex min-h-svh flex-col items-center justify-center bg-paper px-4 py-10 text-ink">
 			<div className="flex w-full max-w-sm flex-col gap-6">{children}</div>
 		</main>
+	);
+}
+
+/** A fingerprint, as both screens show it. */
+function Code({ label, id }: { label: string; id: string | undefined }) {
+	return (
+		<div className="flex flex-col gap-0.5">
+			<dt className="text-meta text-ink-2">{label}</dt>
+			<dd className="font-mono text-body font-medium tracking-wide text-ink">
+				{id === undefined ? "…" : fingerprint(id)}
+			</dd>
+		</div>
 	);
 }
 
@@ -70,11 +82,16 @@ export function PairPhone({ step, ...act }: { step: PairingStep } & PairPhoneAct
 					title={step.step === "asking" ? "Asking your computer…" : "Waiting for your computer"}
 					note={
 						<>
-							On your computer, approve <span className="font-medium text-ink">“{step.name}”</span> in Settings →
-							Devices. This phone opens banda as soon as you do.
+							On your computer, in Settings → Devices, check that the request for{" "}
+							<span className="font-medium text-ink">“{step.name}”</span> shows this phone’s code, then approve it. This
+							phone opens banda as soon as you do.
 						</>
 					}
 				/>
+				<dl className="flex flex-col gap-3 rounded-tile bg-paper-2 px-3.5 py-3" aria-label="Codes to compare">
+					<Code label="This phone’s code" id={step.device} />
+					<Code label="Your computer’s code" id={step.computer} />
+				</dl>
 				<p className="flex items-center gap-2 text-ui text-ink-2" aria-live="polite">
 					<Spinner /> {step.step === "asking" ? "Sending the request" : "Waiting for approval"}
 				</p>

@@ -88,6 +88,10 @@ for (const width of [390, 1280])
 					await page.until(labelled("Code to scan with banda on your phone"));
 					expect(await page.run<string>(text)).toMatch(/Works for 10:00|Works for 9:5\d/);
 					const endpoint = (await devices()).endpoint!.id;
+					// the code the phone shows for this computer while it asks
+					expect(await page.run<string>(text)).toContain(
+						`This computer’s code: ${(endpoint.slice(0, 16).match(/.{4}/g) ?? []).join(" ")}`,
+					);
 					// consumer words only, until Details is opened
 					const shown = await page.run<string>(text);
 					for (const word of [endpoint, "ticket", "relay", "endpoint", "banda://"])
@@ -111,7 +115,13 @@ for (const width of [390, 1280])
 					// the request arrives live, in place of the code
 					await page.until(`${text}.includes('“Pixel 9” asks to pair')`);
 					expect(await page.run(labelled("Code to scan with banda on your phone"))).toBeNull();
+					// Approve waits until the owner says the phone in their hand shows the code its request came with
+					const code = (id: string) => (id.slice(0, 16).match(/.{4}/g) ?? []).join(" ");
+					expect(await page.run<string>(text)).toContain(code(phone.id));
 					await fill(page, "Name it", "Ana's phone");
+					expect(await page.run<boolean>(`${button("Approve")}.disabled`)).toBe(true);
+					await click(page, `document.querySelector('button[role="checkbox"]')`);
+					await page.until(`!${button("Approve")}.disabled`);
 					await click(page, button("Approve"));
 					await page.until(`${text}.includes("Ana's phone") && ${text}.includes('Connected now')`);
 					expect((await devices()).devices).toEqual([

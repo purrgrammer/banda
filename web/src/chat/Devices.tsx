@@ -8,11 +8,13 @@
 import { ChevronDownIcon, PencilIcon, PlusIcon, SmartphoneIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import type { DevicesView, DeviceView, PairingRequestView } from "../../../src/server/api.ts";
 import { QrCode } from "../components/QrCode.tsx";
+import { fingerprint } from "../lib/pairing.ts";
 import { Confirm } from "./Confirm.tsx";
 import { Block, RowOf, Rows } from "./Settings.tsx";
 
@@ -93,7 +95,7 @@ export function DevicesSettings({
 						))}
 					</Rows>
 				) : here && invite !== undefined ? (
-					<Pairing invite={invite} expired={expired} now={now} act={act} />
+					<Pairing invite={invite} expired={expired} now={now} computer={devices?.endpoint?.id} act={act} />
 				) : null}
 				<Rows>
 					{list.map((device) => (
@@ -138,11 +140,14 @@ function Pairing({
 	invite,
 	expired,
 	now,
+	computer,
 	act,
 }: {
 	invite: ShownInvite;
 	expired: boolean;
 	now: number;
+	/** This computer's endpoint id, which the phone shows too while it asks. */
+	computer: string | undefined;
 	act: DevicesActions;
 }) {
 	return (
@@ -168,6 +173,12 @@ function Pairing({
 							: "Open banda on your phone and scan this code. It asks to pair here, and you approve it."}
 					</p>
 				</div>
+				{expired || computer === undefined ? null : (
+					<p className="text-meta text-ink-2">
+						This computer’s code:{" "}
+						<span className="font-mono font-medium tracking-wide text-ink">{fingerprint(computer)}</span>
+					</p>
+				)}
 				{expired ? null : (
 					<p className="text-meta text-ink-2" aria-live="off">
 						Works for <span className="font-medium text-ink tabular-nums">{countdown(invite.expires - now)}</span>, once
@@ -188,13 +199,18 @@ function Pairing({
 	);
 }
 
-/** A phone asking to pair: the name it asked for, the owner's to change, then Approve or Deny. */
+/**
+ * A phone asking to pair: the name it asked for, the owner's to change, then Approve or Deny. Anyone who saw the code
+ * can ask under any name, so Approve waits until the owner says the phone in their hand shows this request's code.
+ */
 function RequestRow({ request, now, act }: { request: PairingRequestView; now: number; act: DevicesActions }) {
 	const [name, setName] = useState(request.name);
+	const [matched, setMatched] = useState(false);
 	const trimmed = name.trim();
+	const matchId = `match-${request.id}`;
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
-		if (trimmed !== "") act.onApprove?.(request.id, trimmed);
+		if (trimmed !== "" && matched) act.onApprove?.(request.id, trimmed);
 	};
 	return (
 		<form onSubmit={submit} className="flex flex-col gap-3 p-3.5" aria-label={`${request.name} asks to pair`}>
@@ -207,6 +223,18 @@ function RequestRow({ request, now, act }: { request: PairingRequestView; now: n
 					</span>
 				</span>
 			</div>
+			<div className="flex flex-col gap-2 rounded-tile bg-paper-2 px-3.5 py-3">
+				<p className="text-meta text-ink-2">
+					Its code:{" "}
+					<span className="font-mono text-body font-medium tracking-wide text-ink">{fingerprint(request.id)}</span>
+				</p>
+				<div className="flex items-center gap-2">
+					<Checkbox id={matchId} checked={matched} onCheckedChange={(checked) => setMatched(checked === true)} />
+					<label htmlFor={matchId} className="text-ui text-ink">
+						My phone shows this code
+					</label>
+				</div>
+			</div>
 			<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
 				<Input
 					aria-label="Name it"
@@ -216,7 +244,7 @@ function RequestRow({ request, now, act }: { request: PairingRequestView; now: n
 					className="sm:flex-1"
 				/>
 				<div className="flex gap-2">
-					<Button type="submit" size="sm" disabled={trimmed === ""} className="flex-1 sm:flex-none">
+					<Button type="submit" size="sm" disabled={trimmed === "" || !matched} className="flex-1 sm:flex-none">
 						Approve
 					</Button>
 					<Button

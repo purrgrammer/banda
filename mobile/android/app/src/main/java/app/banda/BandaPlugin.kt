@@ -82,7 +82,7 @@ class BandaPlugin : Plugin() {
         }
     }
 
-    /** Use the daemon a pairing link's ticket names: requests go to it from now on. */
+    /** Try the daemon a pairing link's ticket names: requests go to it until it is kept or reverted. */
     @PluginMethod
     fun setDaemon(call: PluginCall) {
         val ticket = call.getString("ticket") ?: return call.reject("a ticket is needed")
@@ -94,6 +94,26 @@ class BandaPlugin : Plugin() {
             } catch (error: Exception) {
                 call.reject("that code is not a banda pairing code", "TICKET", error)
             }
+        }
+    }
+
+    /** Keep the daemon being tried: it approved this phone. */
+    @PluginMethod
+    fun keepDaemon(call: PluginCall) {
+        scope.launch {
+            daemon.keep()
+            call.resolve()
+        }
+    }
+
+    /** Stop trying a daemon: requests go to the saved one again. */
+    @PluginMethod
+    fun revertDaemon(call: PluginCall) {
+        scope.launch {
+            for (running in streams.values) running.job.cancel()
+            streams.clear()
+            daemon.revert()
+            call.resolve()
         }
     }
 

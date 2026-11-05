@@ -40,8 +40,15 @@ export interface BandaPlugin {
 	addListener(event: "link", listener: (link: { readonly url: string }) => void): Promise<{ remove(): Promise<void> }>;
 	/** Where the shell stands: the daemon it reaches, this device, and a pairing link it was opened with. */
 	state(): Promise<ShellState>;
-	/** Reach the daemon a pairing link's ticket names from now on. Rejects (`TICKET`) when it is not a ticket. */
+	/**
+	 * Try the daemon a pairing link's ticket names: requests go to it, and the daemon the shell had is kept aside until
+	 * `keepDaemon` or `revertDaemon`. Rejects (`TICKET`) when it is not a ticket.
+	 */
 	setDaemon(options: { readonly ticket: string }): Promise<void>;
+	/** Keep the daemon being tried: it approved this phone. */
+	keepDaemon(): Promise<void>;
+	/** Stop trying a daemon: requests go to the one the shell had before, if any. */
+	revertDaemon(): Promise<void>;
 	/** Forget the daemon and this device's key: the next pairing is a new device (a revoked one cannot pair again). */
 	forget(): Promise<void>;
 }

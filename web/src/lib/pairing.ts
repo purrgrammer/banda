@@ -4,9 +4,17 @@
  * device ask once. The phone asks under a name, then waits for the owner to approve it there; once approved it is a
  * device, and the app opens. A device the daemon says was revoked (`GET /api/devices/pair`) forgets its key and pairs
  * again as a new one; nothing else makes it forget, since a connection closed under it says nothing about this device.
+ *
+ * A code's daemon is only tried until it answers: the shell keeps it once it approved this phone, and goes back to the
+ * daemon it had for any other answer, so a code (or a `banda://pair` link) never takes a paired phone away from its
+ * computer. While it waits, both screens show the same fingerprints, this phone's and the computer's: the owner
+ * approves the phone whose fingerprint they read on it, not the name it asked under.
  */
 import type { PairingState } from "../../../src/server/api.ts";
 import type { BandaPlugin, ScannerPlugin } from "./transport.ts";
+
+/** An endpoint id as people compare it: its first 16 hex digits, in fours. */
+export const fingerprint = (id: string) => (id.slice(0, 16).match(/.{1,4}/g) ?? []).join(" ");
 
 /** What a pairing code carries. */
 export type PairingLink = { readonly ticket: string; readonly invite: string };
@@ -30,8 +38,9 @@ export type PairingStep =
 	| { readonly step: "checking" }
 	/** Not a device yet: scan the code (or pair with the link the shell was opened with). `note` says why, if it is new. */
 	| { readonly step: "scan"; readonly name: string; readonly link?: PairingLink; readonly note?: string }
-	| { readonly step: "asking"; readonly name: string }
-	| { readonly step: "waiting"; readonly name: string }
+	/** `device` is this phone's endpoint id, `computer` the daemon's, once the code's ticket was read. */
+	| { readonly step: "asking"; readonly name: string; readonly device: string; readonly computer?: string }
+	| { readonly step: "waiting"; readonly name: string; readonly device: string; readonly computer?: string }
 	/** Paired before, and the daemon cannot be reached now. */
 	| { readonly step: "unreachable" }
 	| { readonly step: "paired" };
@@ -66,6 +75,10 @@ const refusalOf = (error: unknown) =>
 export function pairing({ shell, scanner, ask, check, every = 2000 }: PairingDeps) {
 	let current: PairingStep = { step: "checking" };
 	let name = "";
+	let device = "";
+	let computer: string | undefined;
+	/** A code's daemon is being tried: the shell has not kept it. */
+	let trying = false;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let stopped = false;
 	const listeners = new Set<() => void>();
@@ -77,6 +90,16 @@ export function pairing({ shell, scanner, ask, check, every = 2000 }: PairingDep
 	const toScan = (note?: string, link?: PairingLink) =>
 		go({ step: "scan", name, ...(link === undefined ? {} : { link }), ...(note === undefined ? {} : { note }) });
 
+	const asking = (step: "asking" | "waiting") =>
+		go({ step, name, device, ...(computer === undefined ? {} : { computer }) });
+
+	/** Back to the daemon the shell had before the code: the one tried did not take this phone. */
+	const untry = async () => {
+		if (!trying) return;
+		trying = false;
+		await shell.revertDaemon().catch(() => undefined);
+	};
+
 	const forgotten = async () => {
 		await shell.forget().catch(() => undefined);
 		toScan(NOTES.revoked);
@@ -84,15 +107,24 @@ export function pairing({ shell, scanner, ask, check, every = 2000 }: PairingDep
 
 	/** Where this device stands now, as the daemon answered. */
 	const settle = async (state: PairingState, waited: boolean) => {
-		if (state === "paired") go({ step: "paired" });
-		else if (state === "pending") wait();
-		else if (state === "revoked") await forgotten();
-		else if (state === "denied") toScan(waited ? NOTES.denied : undefined);
-		else toScan(waited ? NOTES.expired : undefined);
+		if (state === "paired") {
+			if (trying) {
+				trying = false;
+				await shell.keepDaemon();
+			}
+			go({ step: "paired" });
+		} else if (state === "pending") wait();
+		else if (state === "revoked") {
+			trying = false;
+			await forgotten();
+		} else {
+			await untry();
+			toScan(waited ? (state === "denied" ? NOTES.denied : NOTES.expired) : undefined);
+		}
 	};
 
 	const wait = () => {
-		go({ step: "waiting", name });
+		asking("waiting");
 		clearTimeout(timer);
 		timer = setTimeout(async () => {
 			try {
@@ -106,15 +138,23 @@ export function pairing({ shell, scanner, ask, check, every = 2000 }: PairingDep
 
 	const pair = async (link: PairingLink, as: string) => {
 		name = as.trim();
-		go({ step: "asking", name });
+		computer = undefined;
+		asking("asking");
+		await untry();
 		try {
 			await shell.setDaemon({ ticket: link.ticket });
 		} catch {
 			return toScan(NOTES.notACode);
 		}
+		trying = true;
 		try {
+			const state = await shell.state();
+			device = state.device;
+			computer = state.daemon;
+			asking("asking");
 			await settle(await ask(link.invite, name), false);
 		} catch (error) {
+			await untry();
 			toScan(refusalOf(error) ?? NOTES.unreachable);
 		}
 	};
@@ -130,6 +170,7 @@ export function pairing({ shell, scanner, ask, check, every = 2000 }: PairingDep
 			go({ step: "checking" });
 			const state = await shell.state();
 			name = name === "" ? state.name : name;
+			device = state.device;
 			const link = state.link === undefined ? undefined : readPairingLink(state.link);
 			if (state.daemon === undefined) return toScan(undefined, link);
 			try {
@@ -173,6 +214,7 @@ export function pairing({ shell, scanner, ask, check, every = 2000 }: PairingDep
 		again: () => {
 			clearTimeout(timer);
 			toScan();
+			void untry();
 		},
 		stop() {
 			stopped = true;

@@ -4,7 +4,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import type { PairingState } from "../../../src/server/api.ts";
-import { NOTES, type PairingDeps, pairing, readPairingLink } from "./pairing.ts";
+import { fingerprint, NOTES, type PairingDeps, pairing, readPairingLink } from "./pairing.ts";
 import type { BandaPlugin, ShellState } from "./transport.ts";
 
 const LINK = `banda://pair?ticket=${encodeURIComponent("endpointabc+/=")}&invite=${encodeURIComponent("s3cr3t_-")}`;
@@ -26,14 +26,27 @@ function rig({
 	const asks: [string, string][] = [];
 	let forgot = 0;
 	let looks = 0;
+	// the shell's daemons: the one it keeps, and one a code's ticket is trying
+	let kept = state.daemon;
+	let trial: string | undefined;
 	const shell = {
-		state: async () => state,
+		state: async () => ({ ...state, ...((trial ?? kept) === undefined ? {} : { daemon: trial ?? kept }) }),
 		setDaemon: async ({ ticket }: { ticket: string }) => {
 			if (!ticket.startsWith("endpoint")) throw rejection("TICKET");
 			used.push(ticket);
+			trial = `c${"0".repeat(63)}`;
+		},
+		keepDaemon: async () => {
+			kept = trial ?? kept;
+			trial = undefined;
+		},
+		revertDaemon: async () => {
+			trial = undefined;
 		},
 		forget: async () => {
 			forgot++;
+			kept = undefined;
+			trial = undefined;
 		},
 	} as unknown as BandaPlugin;
 	const flow = pairing({
@@ -56,7 +69,7 @@ function rig({
 		},
 		every: 10,
 	});
-	return { flow, used, asks, forgot: () => forgot };
+	return { flow, used, asks, forgot: () => forgot, daemon: () => trial ?? kept, kept: () => kept };
 }
 
 const settled = async (flow: ReturnType<typeof pairing>, step: string) =>
@@ -86,8 +99,49 @@ describe("pairing a phone", () => {
 		await flow.scan(" Ana's phone ");
 		expect(used).toEqual(["endpointabc+/="]);
 		expect(asks).toEqual([["s3cr3t_-", "Ana's phone"]]);
-		expect(flow.get()).toEqual({ step: "waiting", name: "Ana's phone" });
+		expect(flow.get()).toEqual({
+			step: "waiting",
+			name: "Ana's phone",
+			device: "d".repeat(64),
+			computer: `c${"0".repeat(63)}`,
+		});
 		await settled(flow, "paired");
+	});
+
+	it("shows both fingerprints while it waits, as the owner's computer does", () => {
+		expect(fingerprint("a1b2c3d4e5f60718293a4b5c6d7e8f90")).toBe("a1b2 c3d4 e5f6 0718");
+	});
+
+	it("keeps a code's daemon only once it approved this phone", async () => {
+		const approved = rig({ checks: [async () => "paired"] });
+		await approved.flow.start();
+		await approved.flow.scan("P");
+		expect(approved.kept()).toBeUndefined();
+		await settled(approved.flow, "paired");
+		expect(approved.kept()).toBe(`c${"0".repeat(63)}`);
+	});
+
+	it("a code never takes a paired phone away from its computer: any answer but approval goes back to it", async () => {
+		const mine = "a".repeat(64);
+		const answers: [string, PairingDeps["ask"], (() => Promise<PairingState>)[]][] = [
+			["refused", () => Promise.reject(Object.assign(new Error("no"), { status: 403 })), []],
+			["unreachable", () => Promise.reject(rejection("UNREACHABLE")), []],
+			["denied", async () => "pending", [async () => "denied"]],
+			["expired", async () => "pending", [async () => "unpaired"]],
+		];
+		for (const [why, asked, checks] of answers) {
+			const phone = rig({ state: { daemon: mine, device: "d", name: "P" }, asked, checks });
+			await phone.flow.scan("P");
+			await settled(phone.flow, "scan");
+			expect(phone.daemon(), why).toBe(mine);
+			expect(phone.kept(), why).toBe(mine);
+		}
+		// and starting over while it waits goes back too
+		const waiting = rig({ state: { daemon: mine, device: "d", name: "P" }, checks: [async () => "pending"] });
+		await waiting.flow.scan("P");
+		await settled(waiting.flow, "waiting");
+		waiting.flow.again();
+		await vi.waitFor(() => expect(waiting.daemon()).toBe(mine));
 	});
 
 	it("opens at once on a phone already paired", async () => {
