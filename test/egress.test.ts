@@ -669,6 +669,23 @@ describe("routes", () => {
 			expect(floorOf(draftArgs(held(1, { path }))), path).toBe("credentials");
 		expect(floorOf(draftArgs(held(1, { path: "/v1/x?tokens=1&page=2" })))).toBeUndefined();
 	});
+
+	it("a draft masks the credentials it carries: the ticket binds the bytes, so none is written whole", () => {
+		const key = "glpat-9fA2kQ7xZ1mN4bV8cL3d";
+		const args = draftArgs(
+			held(1, {
+				path: `/v1/x?private_token=${key}&page=2`,
+				headers: [
+					["Content-Type", "application/json"],
+					["Private-Token", key],
+				],
+			}),
+		);
+		expect(args.headers).toBe("Content-Type: application/json\nPrivate-Token: glpa… (26 characters)");
+		expect(String(args.address)).toMatch(/private_token=glpa.*&page=2$/);
+		expect(JSON.stringify(args)).not.toContain(key);
+		expect((proposeSendTool(new FakeProxy()).floor as (args: unknown) => string | undefined)(args)).toBe("credentials");
+	});
 });
 
 const python = (() => {

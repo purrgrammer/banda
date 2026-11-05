@@ -23,6 +23,7 @@ import { log } from "./activity.ts";
 import { AgentChats } from "./agents.ts";
 import type { EffectTool } from "./ask.ts";
 import { Permissions } from "./permissions.ts";
+import { addressWords, bodyWords, headersWords } from "./request-words.ts";
 import { context } from "./store.ts";
 
 /** A request the proxy held: what the box sent, whole, and whose it is. */
@@ -271,16 +272,6 @@ export function ownCredential(headers: readonly (readonly [string, string])[], p
 	return [...new URLSearchParams(query).keys()].some((key) => SECRET_QUERY.has(key.trim().toLowerCase()));
 }
 
-/** The body as text a person reads, or what it is when it is not text. */
-function bodyWords(body: string): string {
-	const bytes = Buffer.from(body, "base64");
-	if (bytes.length === 0) return "(empty)";
-	const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
-	// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what marks a body as binary
-	if (text.includes("�") || /[\x00-\x08\x0e-\x1f]/.test(text)) return `(${bytes.length} bytes of binary data)`;
-	return text.length > 4000 ? `${text.slice(0, 4000)}\n… (${bytes.length} bytes in all)` : text;
-}
-
 /**
  * The draft for a stored request: its method, address, headers and body as a person reads them, and, for the daemon,
  * the ticket that names its exact bytes, the route a permission would bind, and the host a host permission would.
@@ -288,8 +279,9 @@ function bodyWords(body: string): string {
 export function draftArgs(request: HeldRequest): JsonObject {
 	return {
 		method: request.method,
-		address: addressOf(request),
-		headers: request.headers.map(([key, value]) => `${key}: ${value}`).join("\n"),
+		address: addressWords(addressOf(request)),
+		// credentials masked: the ticket names the exact bytes, so none is written into the draft
+		headers: headersWords(request.headers),
 		body: bodyWords(request.body),
 		_ticket: request.ticket,
 		_route: routeOf(request),
@@ -515,8 +507,8 @@ export function proposeSendTool(
 			const chat = Number(api.conversationId);
 			const said =
 				"status" in replayed
-					? `Sent ${held.method} ${addressOf(held)}: it answered ${replayed.status}`
-					: `Did not send ${held.method} ${addressOf(held)}: ${"refused" in replayed ? replayed.refused : replayed.failed}`;
+					? `Sent ${held.method} ${addressWords(addressOf(held))}: it answered ${replayed.status}`
+					: `Did not send ${held.method} ${addressWords(addressOf(held))}: ${"refused" in replayed ? replayed.refused : replayed.failed}`;
 			await api.commit(async (tx) => {
 				await log(tx, {
 					at: now,
