@@ -8,6 +8,7 @@ import { createRegistry, defineDoc } from "@earendil-works/pi-durable";
 import { expect, it } from "vitest";
 import { LEAD } from "../src/core/agents.ts";
 import { Connected } from "../src/core/connections.ts";
+import { Devices, INVITE_MS, pairingState } from "../src/core/devices.ts";
 import { keepReading, Readings } from "../src/core/objects.ts";
 import { Permissions } from "../src/core/permissions.ts";
 import { context, openStore } from "../src/core/store.ts";
@@ -135,6 +136,42 @@ it("reads connections stored before anonymous MCP access (Connected version 1) w
 		}, context);
 		const doc = await after.snapshot(Connected, context);
 		expect(doc).toMatchObject({ epoch: 4, off: { github__merge: true }, public: { "mcp-new": [LEAD] } });
+	} finally {
+		await after.close(context);
+	}
+});
+
+it("reopens devices, an invite claimed and a request waiting as they were stored", async () => {
+	const home = await tempHome();
+	const phone = "a".repeat(64);
+	const tablet = "b".repeat(64);
+	const before = await open(home);
+	await before.commit(async (tx) => {
+		const doc = await tx.doc(Devices);
+		doc.devices[phone] = { name: "Pixel", paired: 10, revoked: 20 };
+		doc.invites.h1 = { made: 30, expires: 30 + INVITE_MS, claimed: { by: tablet, at: 31 } };
+		doc.invites.h0 = {
+			made: 1,
+			expires: 1 + INVITE_MS,
+			claimed: { by: phone, at: 2 },
+			spent: { at: 10, approved: true },
+		};
+		doc.requests[tablet] = { name: "Tablet", at: 31, invite: "h1" };
+	}, context);
+	await before.close(context);
+	const after = await open(home);
+	try {
+		const doc = await after.snapshot(Devices, context);
+		expect(doc).toEqual({
+			devices: { [phone]: { name: "Pixel", paired: 10, revoked: 20 } },
+			invites: {
+				h1: { made: 30, expires: 30 + INVITE_MS, claimed: { by: tablet, at: 31 } },
+				h0: { made: 1, expires: 1 + INVITE_MS, claimed: { by: phone, at: 2 }, spent: { at: 10, approved: true } },
+			},
+			requests: { [tablet]: { name: "Tablet", at: 31, invite: "h1" } },
+		});
+		expect(pairingState(doc, tablet, 32)).toBe("pending");
+		expect(pairingState(doc, phone, 32)).toBe("revoked");
 	} finally {
 		await after.close(context);
 	}
