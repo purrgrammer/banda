@@ -32,14 +32,20 @@ import {
 	startAcp,
 } from "./acp.ts";
 
-/** A harness banda knows: how it starts, the mode it is always set to, and how the owner calls it. */
+/** A harness banda can run here: how it starts, the mode it is always set to (when it has one), and in words. */
 export type HarnessDefinition = {
 	readonly name: string;
 	readonly service: string;
 	readonly command: string;
 	readonly args?: readonly string[];
-	/** The mode the session is set to before anything is sent: edits run, commands ask (Claude Code's acceptEdits). */
-	readonly mode: string;
+	/** The mode the session is set to before anything is sent; absent, the harness's own default holds. */
+	readonly mode?: string;
+	/** What it is, in a line. */
+	readonly about?: string;
+	/** What it asks the owner, in words, as the connect card says it. */
+	readonly asks?: string;
+	/** The owner added it with a command line. */
+	readonly custom?: boolean;
 };
 
 /** One step of a session, as the owner reads it. */
@@ -107,6 +113,8 @@ export type HarnessAccount = { folder: string; agents: string[] };
 export const Harnesses = defineDoc<{
 	accounts: { [harness: string]: HarnessAccount };
 	sessions: { [task: string]: HarnessSession };
+	/** Harnesses the owner added, by name: what they call it and the command line that starts it. */
+	custom?: { [harness: string]: { service: string; command: string } };
 }>({
 	kind: "banda.harnesses",
 	version: 1,
@@ -137,8 +145,8 @@ export function folderPath(folder: string): string | undefined {
 	return full;
 }
 
-/** A tool's name for a harness: claude-code's is claude_code__work. */
-export const workToolName = (harness: string) => `${harness.replaceAll("-", "_")}__work`;
+/** The one tool an agent hands work to its harnesses with; which one is an argument. */
+export const HARNESS_TOOL = "harness__work";
 
 /** The index of the last element that matches, or -1. */
 const lastIndex = <T>(items: readonly T[], test: (item: T) => boolean) => {
@@ -231,9 +239,12 @@ export function applyUpdate(steps: HarnessStep[], update: AcpUpdate): void {
 		const added = diffs.length > 0 ? totals.added : (counted?.added ?? before?.added ?? 0);
 		const removed = diffs.length > 0 ? totals.removed : (counted?.removed ?? before?.removed ?? 0);
 		const diff = diffs.length > 0 ? totals.diff : before?.diff;
+		// a harness that names the file in its diff and not its title (Codex's "Editing files")
+		const edited =
+			located === undefined && typeof raw.file_path !== "string" && diffs[0]?.path !== undefined ? diffs[0].path : path;
 		step = {
 			kind: "edit",
-			path,
+			path: edited,
 			added,
 			removed,
 			...(diff === undefined || diff === "" ? {} : { diff: cut(diff) }),
@@ -718,10 +729,40 @@ export async function disconnectHarness(tx: Tx, harness: string): Promise<string
 	return [...agents];
 }
 
-/** The harness tools agent `agent` has: one per harness connected and on for it. */
+/** The harness tool, for an agent with any harness connected and on for it. */
 export async function harnessToolsOf(tx: Tx, agent: string): Promise<string[]> {
+	const doc = await tx.doc(Harnesses);
+	return Object.values(doc.accounts).some((account) => account.agents.includes(agent)) ? [HARNESS_TOOL] : [];
+}
+
+/** The harnesses `agent` may hand work to, by name. */
+export async function harnessesOf(tx: Tx, agent: string): Promise<string[]> {
 	const doc = await tx.doc(Harnesses);
 	return Object.entries(doc.accounts)
 		.filter(([, account]) => account.agents.includes(agent))
-		.map(([harness]) => workToolName(harness));
+		.map(([name]) => name);
+}
+
+/** Add a harness the owner names, started by `command`; false when a harness has that name already. */
+export async function addHarness(
+	tx: Tx,
+	name: string,
+	service: string,
+	command: string,
+	taken: ReadonlySet<string>,
+): Promise<boolean> {
+	const doc = await tx.doc(Harnesses);
+	if (taken.has(name) || doc.custom?.[name] !== undefined) return false;
+	doc.custom = { ...(doc.custom ?? {}), [name]: { service, command } };
+	return true;
+}
+
+/** Remove a harness the owner added, disconnecting it; the agents it was on for. */
+export async function removeHarness(tx: Tx, name: string): Promise<string[]> {
+	const doc = await tx.doc(Harnesses);
+	if (doc.custom?.[name] === undefined) return [];
+	const agents = await disconnectHarness(tx, name);
+	const { [name]: _gone, ...rest } = doc.custom;
+	doc.custom = rest;
+	return agents;
 }

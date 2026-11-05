@@ -158,6 +158,10 @@ export function HarnessConnectCard({
 	folder: given = "",
 	connected,
 	on,
+	asks,
+	about,
+	folded = false,
+	onRemove,
 	onConnect,
 	onSwitch,
 	onDisconnect,
@@ -172,6 +176,14 @@ export function HarnessConnectCard({
 	connected?: string | undefined;
 	/** Whether `agent` may use it. */
 	on?: boolean | undefined;
+	/** What it asks the owner, in its file's words. */
+	asks?: string | undefined;
+	/** What it is, in a line: the folded card's subtitle. */
+	about?: string | undefined;
+	/** Not connected, it shows as one row with Connect until that is tapped. */
+	folded?: boolean;
+	/** The owner added it: Remove forgets it. */
+	onRemove?: (() => void) | undefined;
 	/** Connect, or change the folder; a promise keeps the field open until it settles, and open when it fails. */
 	onConnect?: (folder: string) => unknown;
 	onSwitch?: ((on: boolean) => void) | undefined;
@@ -181,7 +193,28 @@ export function HarnessConnectCard({
 	const [folder, setFolder] = useState(connected ?? given);
 	const [changing, setChanging] = useState(false);
 	const id = `harness-folder-${harness.replace(/\W/g, "")}${agent === undefined ? "" : `-${agent.replace(/\W/g, "")}`}`;
+	const [opened, setOpened] = useState(false);
 	const asking = connected === undefined || changing;
+	if (connected === undefined && folded && !opened)
+		return (
+			<Tile className="flex items-center gap-3 p-3">
+				<span className="flex size-9 shrink-0 items-center justify-center rounded-field bg-paper-3">
+					<TerminalIcon aria-hidden="true" className="size-4.5 text-ink-2" />
+				</span>
+				<span className="flex min-w-0 flex-1 flex-col">
+					<span className="text-ui font-semibold text-ink">{harness}</span>
+					<span className="min-w-0 truncate text-meta text-ink-2">{about ?? "On this computer"}</span>
+				</span>
+				{onRemove === undefined ? null : (
+					<Button variant="ghost" size="sm" onClick={onRemove}>
+						Remove
+					</Button>
+				)}
+				<Button variant="outline" size="sm" onClick={() => setOpened(true)}>
+					Connect
+				</Button>
+			</Tile>
+		);
 	return (
 		<Tile className="flex flex-col gap-3 p-4">
 			<span className="flex items-center gap-3">
@@ -224,13 +257,11 @@ export function HarnessConnectCard({
 					</label>
 					{connected === undefined ? (
 						<ul className="flex flex-col gap-1 text-ui text-ink-2">
+							<li>{asks ?? "It asks you whatever its own settings on this computer ask."}</li>
 							<li>
-								<span className="text-ink">Edits</span> in this folder run without asking. You see every change.
+								{agent ?? "Your agents"} can start it without asking you. It uses your {harness} sign-in and settings on
+								this computer.
 							</li>
-							<li>
-								<span className="text-ink">Commands</span>, and anything outside the folder, ask you first.
-							</li>
-							<li>It uses your {harness} sign-in and settings on this computer, including what you allowed there.</li>
 						</ul>
 					) : null}
 					<span className="flex flex-wrap gap-2">
@@ -262,6 +293,11 @@ export function HarnessConnectCard({
 								Not now
 							</Button>
 						)}
+						{connected === undefined && onRemove !== undefined ? (
+							<Button variant="ghost" onClick={onRemove}>
+								Remove
+							</Button>
+						) : null}
 					</span>
 				</>
 			) : (
@@ -275,6 +311,11 @@ export function HarnessConnectCard({
 					{onDisconnect === undefined ? null : (
 						<Button variant="ghost" size="sm" onClick={onDisconnect}>
 							Disconnect
+						</Button>
+					)}
+					{onRemove === undefined ? null : (
+						<Button variant="ghost" size="sm" onClick={onRemove}>
+							Remove
 						</Button>
 					)}
 				</span>

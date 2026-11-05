@@ -205,6 +205,7 @@ const sideOf = (segment: Segment): "owner" | "agent" | "line" => {
 		segment.kind === "approval" ||
 		segment.kind === "browsed" ||
 		segment.kind === "connect" ||
+		segment.kind === "harness" ||
 		segment.kind === "avatar"
 	)
 		return "agent";
@@ -548,8 +549,7 @@ function partOf(
 		}
 		case "approval": {
 			const open = segment.open;
-			const call = segment.call;
-			const card = (
+			return (
 				<DraftApproval
 					chat={chat}
 					agent={{ id: agent, name: who.name }}
@@ -564,15 +564,6 @@ function partOf(
 								: { kind: "declined" }
 					}
 				/>
-			);
-			// a harness the owner let start: its session follows the card that asked
-			return call === undefined || !segment.ask.tool.endsWith("__work") ? (
-				card
-			) : (
-				<>
-					{card}
-					<HarnessSessionPart chat={chat} call={call} />
-				</>
 			);
 		}
 		case "skill":
@@ -629,6 +620,8 @@ function partOf(
 		}
 		case "avatar":
 			return agent === undefined ? null : <AvatarCandidateMessage agent={agent} definition={segment.definition} />;
+		case "harness":
+			return <HarnessSessionPart chat={chat} call={segment.call} />;
 		case "connect":
 			return agent === undefined ? null : (
 				<ConnectFlow connection={segment.connection} agent={{ id: agent, name: who.name }} />

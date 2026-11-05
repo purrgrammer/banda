@@ -31,6 +31,14 @@ export const switchHarness = (harness: string, agent: string, on: boolean) =>
 export const disconnectHarness = (harness: string) =>
 	api<HarnessesView>(`/harnesses/${harness}/disconnect`, { method: "POST", body: "{}" });
 
+/** Add a harness of the owner's: what they call it, and the command line that starts it speaking ACP. */
+export const addHarness = (service: string, command: string) =>
+	api<HarnessesView>("/harnesses", { method: "POST", body: JSON.stringify({ service, command }) });
+
+/** Forget a harness the owner added. */
+export const removeHarness = (harness: string) =>
+	api<HarnessesView>(`/harnesses/${harness}/remove`, { method: "POST", body: "{}" });
+
 const act = (task: number, action: string, body: object) =>
 	api<HarnessesView>(`/harnesses/sessions/${task}/${action}`, { method: "POST", body: JSON.stringify(body) });
 

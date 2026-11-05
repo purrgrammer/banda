@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FACE } from "../../../src/core/choices.ts";
 import type { CompanionView } from "../../../src/server/api.ts";
-import { connectHarness, disconnectHarness } from "../areas/harnesses.ts";
+import { connectHarness, disconnectHarness, removeHarness } from "../areas/harnesses.ts";
 import { actOnRoutine, clickKey } from "../areas/routines.ts";
 import { useTiers } from "../areas/tiers.ts";
 import { Band, BandNotice } from "../chat/Band.tsx";
@@ -26,6 +26,7 @@ import { type ArchivedAgent, archivedAgents, chatAgents } from "../lib/navigatio
 import { setTheme, useTheme } from "../lib/prefs.ts";
 import { showAgents, showCapabilities, showControl, showMemory, useShell } from "../lib/shell.ts";
 import { AccessTab, reachesSomething } from "./Access.tsx";
+import { AddHarness } from "./AddHarness.tsx";
 import { AgentChat } from "./AgentChat.tsx";
 import { ArtifactPage } from "./ArtifactPage.tsx";
 import { bandRows, titleOf, whoOf } from "./band.ts";
@@ -593,17 +594,26 @@ function Main() {
 			});
 			return (
 				<SettingsPage title="Connections" phone={phone} onBack={back}>
-					<Button className="self-start" onClick={() => go({ name: "connections", add: true })}>
-						Add MCP server
-					</Button>
+					<span className="flex flex-wrap gap-2">
+						<Button className="self-start" onClick={() => go({ name: "connections", add: true })}>
+							Add MCP server
+						</Button>
+						<AddHarness />
+					</span>
 					<Catalogue
-						extra={(shell.harnesses?.harnesses ?? []).map(({ name, service }) => {
+						extra={(shell.harnesses?.harnesses ?? []).map(({ name, service, asks, about, custom }) => {
 							const account = shell.harnesses?.accounts[name];
 							return {
 								key: `harness:${name}`,
 								card: (
 									<HarnessConnectCard
 										harness={service}
+										asks={asks}
+										about={about}
+										folded
+										{...(custom === true
+											? { onRemove: () => void attempt("remove it", () => removeHarness(name)) }
+											: {})}
 										connected={account?.folder}
 										onConnect={(folder) =>
 											// attempt says why in a toast and resolves nothing: the card keeps its field then

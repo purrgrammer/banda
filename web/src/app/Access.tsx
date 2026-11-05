@@ -135,13 +135,16 @@ function HarnessAccess({ agent }: { agent: { readonly id: string; readonly name:
 	};
 	return (
 		<div className="flex flex-col gap-3">
-			{harnesses.harnesses.map(({ name, service }) => {
+			{harnesses.harnesses.map(({ name, service, asks, about }) => {
 				const account = harnesses.accounts[name];
 				return (
 					<HarnessConnectCard
 						key={name}
 						agent={agent.name}
 						harness={service}
+						asks={asks}
+						about={about}
+						folded
 						connected={account?.folder}
 						on={account?.agents.includes(agent.id) === true}
 						onConnect={(folder) => doing(connectHarness(name, folder, agent.id))}

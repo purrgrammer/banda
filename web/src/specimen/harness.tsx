@@ -3,7 +3,7 @@ import { SquareIcon } from "lucide-react";
 import { useState } from "react";
 import { Terminal } from "@/components/ai-elements/terminal";
 import { Button } from "@/components/ui/button";
-import { ApprovalCard, Facts } from "../chat/Approval.tsx";
+import { ApprovalCard } from "../chat/Approval.tsx";
 import { Bubble, Run } from "../chat/Feed.tsx";
 import {
 	HarnessCard,
@@ -55,10 +55,9 @@ const AFTER_ASK: readonly HarnessStep[] = [
 ];
 const OUTCOME = "Fixed: refresh compared seconds with milliseconds";
 
-type Step = "connect" | "ask" | "working" | "waiting" | "done" | "stopped";
+type Step = "connect" | "working" | "waiting" | "done" | "stopped";
 const STEPS: readonly { id: Step; label: string }[] = [
 	{ id: "connect", label: "Connect" },
-	{ id: "ask", label: "The ask" },
 	{ id: "working", label: "Working" },
 	{ id: "waiting", label: "It asks you" },
 	{ id: "done", label: "Done" },
@@ -132,33 +131,11 @@ function Flow() {
 							folder={FOLDER}
 							connected={at > 0 ? FOLDER : undefined}
 							on={at > 0}
-							onConnect={() => setStep("ask")}
+							onConnect={() => setStep("working")}
 							onDismiss={() => {}}
 						/>
+						{at < 1 ? null : <Bubble>Connected. I've asked Claude Code to fix it; you'll see it work here.</Bubble>}
 						{at < 1 ? null : (
-							<>
-								<Bubble>Here's what I'd ask it. Your call before it runs.</Bubble>
-								<ApprovalCard
-									agent="Mara"
-									what={`Ask ${HARNESS} to work in ${FOLDER}`}
-									verb="Run"
-									as="you, on this computer"
-									text={PROMPT}
-									object={
-										<Facts
-											rows={[
-												["Edits", `run in ${FOLDER} without asking`],
-												["Commands", "ask you"],
-											]}
-										/>
-									}
-									state={at > 1 ? { kind: "done", words: "Running · you said yes at 10:42" } : { kind: "open" }}
-									onApprove={() => setStep("working")}
-									onDecline={() => setStep("connect")}
-								/>
-							</>
-						)}
-						{at < 2 ? null : (
 							<HarnessCard
 								session={session}
 								onStop={() => setStep("stopped")}
@@ -202,7 +179,7 @@ function Flow() {
 						</>
 					) : null}
 				</div>
-				{panel && at >= 2 ? (
+				{panel && at >= 1 ? (
 					<Panel name="Mara" onClose={() => setPanel(false)} className="hidden w-80 shrink-0 md:flex">
 						<PanelSection title={HARNESS}>
 							<HarnessTranscript session={session} onSteer={steer} />
@@ -229,7 +206,7 @@ export function HarnessSection() {
 			<Section
 				id="harness"
 				title="Claude Code in a chat"
-				note="An agent hands coding work to Claude Code on the owner's computer. Connecting picks the folder; the ask is a draft; the card follows the work in one line; the owner steers it in their own words, answers its asks, or stops it. Open shows every step."
+				note="An agent hands coding work to a harness (here Claude Code) on the owner's computer. Connecting picks the folder; the agent starts it without asking; the card follows the work in one line; what reaches the owner is the harness's own asks; the owner steers it in their own words or stops it. Open shows every step."
 				wide
 			>
 				<Flow />
@@ -265,6 +242,11 @@ export function HarnessSection() {
 						onDisconnect={() => {}}
 					/>
 					<HarnessConnectCard harness={HARNESS} />
+					<HarnessConnectCard
+						harness="Codex"
+						about="OpenAI's coding agent, with your sign-in on this computer."
+						folded
+					/>
 					<HarnessConnectCard harness={HARNESS} connected={FOLDER} onDisconnect={() => {}} />
 				</div>
 			</Section>

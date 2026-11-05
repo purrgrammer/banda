@@ -25,8 +25,15 @@ export type HarnessSessionView = {
 };
 
 export type HarnessesView = {
-	/** What banda can run, by name: "claude-code" is "Claude Code". */
-	readonly harnesses: readonly { readonly name: string; readonly service: string }[];
+	/** What banda can run on this computer, by name: "claude-code" is "Claude Code"; what it is and what it asks. */
+	readonly harnesses: readonly {
+		readonly name: string;
+		readonly service: string;
+		readonly about?: string;
+		readonly asks?: string;
+		/** The owner added it with a command line: they may remove it. */
+		readonly custom?: true;
+	}[];
 	/** The folder each is connected in, and the agents it is on for. */
 	readonly accounts: { readonly [harness: string]: { readonly folder: string; readonly agents: readonly string[] } };
 	/** Every session kept, newest first. */

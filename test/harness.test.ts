@@ -16,6 +16,7 @@ import {
 	steer,
 	switchHarness,
 } from "../src/core/harness.ts";
+import { OWN_ASKS, parseHarness, resolveHarness, shippedHarnesses, words } from "../src/core/harness-files.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { echoModels } from "./fixtures/models.ts";
 import { tempHome, until } from "./helpers.ts";
@@ -70,11 +71,21 @@ describe("applyUpdate", () => {
 			rawInput: { file_path: "/w/hello.txt" },
 			content: [{ type: "diff", path: "/w/hello.txt", oldText: null, newText: "banda" }],
 		});
+		// as codex-acp sends one: the file only in its diff
+		applyUpdate(steps, {
+			sessionUpdate: "tool_call",
+			toolCallId: "t3",
+			title: "Editing files",
+			kind: "edit",
+			status: "completed",
+			content: [{ type: "diff", path: "/w/auth.js", oldText: "a", newText: "b" }],
+		});
 		applyUpdate(steps, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "do" } });
 		applyUpdate(steps, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "ne" } });
 		expect(steps).toEqual([
 			{ kind: "run", command: "npm test", output: "6 passed", running: false, call: "t1" },
 			{ kind: "edit", path: "/w/hello.txt", added: 1, removed: 0, diff: "+banda", call: "t2" },
+			{ kind: "edit", path: "/w/auth.js", added: 1, removed: 1, diff: "-a\n+b", call: "t3" },
 			{ kind: "said", text: "done" },
 		]);
 	});
@@ -196,5 +207,44 @@ describe("a harness's account", () => {
 		expect((await doc()).accounts.fake).toBeUndefined();
 		expect((await doc()).sessions[7].stop).toBe(true);
 		await harness.close(context);
+	});
+});
+
+describe("harness files", () => {
+	it("parse a bundled package or a command, with its mode and what it asks", () => {
+		const claude = parseHarness(
+			"claude-code",
+			"---\nservice: Claude Code\npackage: @agentclientprotocol/claude-agent-acp\nbin: dist/index.js\nmode: acceptEdits\nasks: Edits run.\n---\nAnthropic's.",
+		);
+		expect(claude).toEqual({
+			harness: {
+				name: "claude-code",
+				service: "Claude Code",
+				about: "Anthropic's.",
+				asks: "Edits run.",
+				mode: "acceptEdits",
+				start: { package: "@agentclientprotocol/claude-agent-acp", bin: "dist/index.js" },
+			},
+		});
+		const goose = parseHarness("goose", "---\nservice: Goose\ncommand: goose\nargs: acp\n---\n");
+		expect(goose).toMatchObject({ harness: { start: { command: "goose", args: ["acp"] }, asks: OWN_ASKS } });
+		expect(parseHarness("both", "---\nservice: X\ncommand: x\npackage: y\nbin: z\n---\n")).toHaveProperty("errors");
+	});
+
+	it("offer only what is installed: the bundled Claude Code is, a made-up command is not", () => {
+		const shipped = shippedHarnesses(join(import.meta.dirname, "../shipped/harnesses"), () => {});
+		expect(shipped.map((file) => file.name)).toContain("claude-code");
+		const claude = shipped.find((file) => file.name === "claude-code");
+		expect(claude && resolveHarness(claude)?.command).toBe(process.execPath);
+		expect(
+			resolveHarness({
+				name: "x",
+				service: "X",
+				about: "",
+				asks: OWN_ASKS,
+				start: { command: "no-such-harness-cmd", args: [] },
+			}),
+		).toBeUndefined();
+		expect(words(`"my agent" --acp 'two words'`)).toEqual(["my agent", "--acp", "two words"]);
 	});
 });

@@ -4,6 +4,7 @@ import { avatar } from "./avatar.ts";
 import { browser } from "./browser.ts";
 import { changes } from "./changes.ts";
 import { connect } from "./connect.ts";
+import { harness } from "./harness.ts";
 import { memory } from "./memory.ts";
 import { reactions } from "./reactions.ts";
 import { refusals } from "./refusals.ts";
@@ -18,6 +19,7 @@ export const SEGMENTERS: readonly Segmenter[] = [
 	artifacts,
 	avatar,
 	connect,
+	harness,
 	browser,
 	web,
 	memory,
