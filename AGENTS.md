@@ -50,6 +50,9 @@ account, object, artifact, memory, box, workspace, gateway, inference, as DESIGN
 - The web UI is in `web/`: `npm run build:web` builds what the daemon serves, `npm run web:dev` serves it with hot
   reload against a daemon on `BANDA_PORT`, `npm run web:contrast` audits the palette, and `#/specimen` shows every
   component. A new component or variant joins the specimen.
+- Releases: `npm run desktop:dev` opens the desktop app on a throwaway home; `npm run cli:pack` and
+  `npm run desktop:pack` build this computer's release files into `release/`; a `v*` tag makes the release workflow
+  draft a pre-release.
 - Reach for a shadcn component (https://ui.shadcn.com/docs/components, added with `npx shadcn@latest add <name>` into
   `web/src/components/ui/`, on the Radix build `components.json` names, with any new dependency pinned exactly)
   before writing a primitive by hand: drawer and sheet for the phone, sonner for quiet confirmations, command for
