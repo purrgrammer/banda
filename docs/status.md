@@ -1,0 +1,91 @@
+# Work status
+
+## Current work
+
+Scoped memory is implemented; the owner requested integration on main. Global and agent facts have scoped tools,
+recall, model-boundary updates and app controls. Independent coding review, full/deep suites with Docker, build and
+palette checks pass; the running app was exercised at both widths, including draft recovery. Broader workspace
+concurrency and provenance work remains in [Memory](memory.md); this is not release qualification.
+The Library and panel redesign is a separate slice.
+
+Settings → Model lists every model provider to connect, use or sign out of, so the band can switch providers after
+first run ([Chat](chat.md)). Owner review is pending.
+
+Skills are wired in a separate worktree: accepted shared SKILL.md files, read-only agent loads, explicit owner /name
+loads at the pre-request boundary, linked chat lines and Activity results, and the shared catalogue and detail page.
+Throwaway-daemon browser runs at desktop and phone width and skill fault sweeps pass. Other files are listed as box
+data, not loaded instructions. Owner review remains open ([Chat](chat.md)).
+
+Activity disclosure is wired in direct and group chats ([Chat](chat.md)): status → activity → full transcript,
+scoped to the selected work. Desktop and phone fork walkthroughs and owner review are complete.
+
+Avatar identities are implemented, including accepted faces, generation previews and install icons. The owner has
+reviewed the avatar work; accepted-file publication still needs the concurrency and crash-safety work in
+[Agents and groups](agents.md).
+
+The 🏕️ banda identity, without a tagline, is staged in the specimen: branding, site header,
+sidebar and first run. Owner review is pending before applying them to the app and install assets.
+
+banda is a chat: a band of agents in a sidebar, one conversation each, groups, a panel, and no other screen, as
+DESIGN.md says. The specimen ([Chat](chat.md) steps 0 to 4) is built and the app runs on it: slice 5 is in progress.
+
+- 5a, the shell on the daemon's data, is in use: the band, routes, chats, groups, the panel's tabs, Settings,
+  Connections, search, artifacts in the main pane, one event stream a page. Homes made by an earlier build are refused.
+- 5b to 5h landed: the old pages, segment views and components are gone, and with them goals, hand-offs, side chats,
+  proposals, memory's accepted core, skills, speak-up, the face's colour, the inbox, watch and extensions.
+  `theme.css` stays until its tokens move to `tokens.css`.
+- 5i landed in code: taint is gone, and browsing never asks unless it acts as the owner. Its adversarial review's
+  findings are fixed (a signed-in site opens only as allowed for the task, its session never goes with another page's
+  requests); a review of the fixes and the owner's review are pending; then slices 6 to 10.
+- Slice 5's complete phone walkthrough remains open. A resizable browser is available; slice 9's chat/card flows
+  have their own desktop and phone checks, not acceptance of every slice 5 workflow.
+- Owner review of slice 5 is pending.
+- Slice 8 (accounts and the connect flow) landed in code: accounts, per-agent switches, the connect card in Access,
+  Settings, the Connections page and the chat. A real GitHub sign-in was approved and read as its account; an agent
+  has used a real account with a model in an isolated home. Owner review pending.
+- Slice 7, routines in the chat, landed in code ([Routines](routines.md)): wakes in the agent's chat, event and
+  trouble lines, `job` renamed `routine`, the panel's editor. Owner review pending.
+- Slice 9, connection objects ([Connections](connections.md)), is in owner review: account-bound cards in direct and
+  group chats, object-only messages, and editable object-bound approvals. Adversarial findings are repaired. Real
+  GitHub read-only PR/issue/Actions examples and isolated approval/failure flows have been tried at desktop and phone
+  widths. Owner-requested layout polish, full/deep tests, build and contrast checks pass. Owner acceptance and
+  real notification-card acceptance with the required scope remain open.
+
+The inspirations studied for the surface: Grok Bot (the bot, not the conversation, as the core object; a roster
+sidebar with a latest-message preview; one timeline where prose, events and cards share the transcript; the bot's
+computer as a status icon, a pinned preview and a take-over; routines in a bot-specific list with their runs in the
+transcript; groups of up to six; approvals as cards with Allow once, Deny and Always) and Meta's Muse (one long
+conversation like a text thread; the agent's current activity in one line under its avatar, the full log and the
+approved permissions a tap away; browsing allowed by default and irreversible actions checked in; artifacts in the
+chat; a name, an avatar and a style the owner chooses; notifications only when something is meaningfully new).
+
+## Existing implementation
+
+| Area | Implementation baseline | What the slices do with it |
+|---|---|---|
+| Chat, message parts, feed lines, cards | Present | Kept; re-specified in the specimen, pages around them deleted |
+| Agents, accepted files, tiers | Present; direct meta tools and owner-reviewed proposals restored in code | Proposals for agents, groups and limited existing-agent edits; legacy identity/preference proposals remain deleted |
+| Groups | Present on this line | Kept; rows in the band, members in the panel |
+| Agent meta tools | Direct agent messages, bounded direct-chat reads, agent-definition proposals and owner-reviewed group/existing-agent proposals are implemented in code; fault sweeps and responsive component checks pass | Throwaway-daemon walkthrough and owner acceptance remain open |
+| Hand-offs, helpers, side chats, errands and tasks areas | Removed | Agent-to-agent messages are a narrow direct-chat tool; groups keep their existing mention behavior |
+| Goals, Inbox, Library, Routines and Connections pages | Removed | Deleted; routines in the panel, connections in settings, artifacts in the chat |
+| Routines, schedule | Present | Wake in the agent's chat as events |
+| Watch, event sources, `watch.ts` | Removed | Deleted; returns with its own design (DESIGN.md "Open") |
+| Skills, `skill` | Wired in a separate worktree, owner review pending | Accepted shared prompt files, owner and agent loads; supporting files remain data |
+| Memory's accepted core, learned cards, `propose_preference`, `used` | Removed | Deleted; facts in effect at once |
+| Connections, OAuth, GitHub by code, shipped file | Present, per-account credentials and object readings | Accounts; one connect flow; objects |
+| Drafts, permissions, activity, floor | Present | Kept; bound to an account |
+| Taint | Removed | Deleted; browsing asks only as the owner (DESIGN.md "The browser", "Trust") |
+| Extensions, agent-built tools and connections, `propose_connection` | Removed | Deleted (DESIGN.md "Open") |
+| Avatar face and colour | Present | Accepted agent identity, generation preview and install icons; publication safety remains open |
+| Speak-up, companion summary | Removed | Deleted |
+| Box, proxy, browser per agent, artifacts, memory, compaction, provider setup | Present | Kept |
+
+These baselines describe code presence, not completed owner acceptance or production readiness.
+
+## Updating status
+
+Keep only current state here: the active slice, remaining gates, owner review and next action. Work descriptions
+and checkboxes live in their section files; update them there rather than adding another task list. Test evidence,
+findings triage, decisions and caveats belong in commit messages and executable tests. Mark a slice accepted only
+after the required checks and app use, followed by owner review. Detailed history remains in git.

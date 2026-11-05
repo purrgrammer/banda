@@ -1,0 +1,101 @@
+/**
+ * Connections: what the band can work with, one tile per service. Reached from the band's foot and from Settings, so
+ * the owner can connect before any agent needs it. A service shows its accounts once signed in; one not shipped yet
+ * says so, and is not a button.
+ */
+import {
+	CalendarIcon,
+	type LucideIcon,
+	MailIcon,
+	MessageSquareIcon,
+	NotebookIcon,
+	SquareKanbanIcon,
+} from "lucide-react";
+import { type ReactNode, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
+import { GitHubMark } from "./Object.tsx";
+
+export type Service = {
+	readonly id: string;
+	readonly name: string;
+	/** What it lets the band do, in a few words. */
+	readonly does: string;
+	/** Accounts signed in to it; undefined when the service is not shipped yet. */
+	readonly accounts?: readonly string[] | undefined;
+	readonly managed?: boolean;
+};
+
+const ICONS: Record<string, LucideIcon> = {
+	gmail: MailIcon,
+	calendar: CalendarIcon,
+	slack: MessageSquareIcon,
+	linear: SquareKanbanIcon,
+	notion: NotebookIcon,
+};
+
+export function Catalogue({
+	services,
+	connect,
+	onManage,
+}: {
+	services: readonly Service[];
+	onManage?: (id: string) => void;
+	/** The connect card for a service, opened in its tile by Connect or Add account. */
+	connect?: ((service: Service, close: () => void) => ReactNode) | undefined;
+}) {
+	const [open, setOpen] = useState<string | undefined>(undefined);
+	const toggle = (id: string) => setOpen(open === id ? undefined : id);
+	return (
+		<ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+			{services.map((service) => {
+				const soon = service.accounts === undefined;
+				const Icon = ICONS[service.id];
+				return (
+					<li
+						key={service.id}
+						className={cn("flex flex-col gap-3 rounded-tile border border-line-soft p-4", soon && "bg-paper-2")}
+					>
+						<span className="flex items-center gap-3">
+							<span className="flex size-10 shrink-0 items-center justify-center rounded-field bg-paper-3">
+								{service.id === "github" ? (
+									<GitHubMark className="size-5" />
+								) : Icon === undefined ? null : (
+									<Icon aria-hidden="true" className="size-5 text-ink-2" />
+								)}
+							</span>
+							<span className="flex min-w-0 flex-col">
+								<span className={cn("text-ui font-semibold", soon ? "text-ink-2" : "text-ink")}>{service.name}</span>
+								<span className="text-meta text-ink-2">{service.does}</span>
+							</span>
+						</span>
+						{soon ? (
+							<span className="text-meta text-ink-2">Coming soon</span>
+						) : service.managed ? (
+							<>
+								<span className="text-meta text-ink-2">{service.accounts.join(", ")}</span>
+								<Button variant="outline" size="sm" className="self-start" onClick={() => onManage?.(service.id)}>
+									Manage connection
+								</Button>
+							</>
+						) : service.accounts.length === 0 ? (
+							open === service.id && connect !== undefined ? null : (
+								<Button size="sm" className="self-start" onClick={() => toggle(service.id)}>
+									Connect
+								</Button>
+							)
+						) : (
+							<span className="flex flex-wrap items-center gap-2">
+								<span className="text-meta text-ink-2">{service.accounts.join(", ")}</span>
+								<Button variant="ghost" size="xs" className="ml-auto" onClick={() => toggle(service.id)}>
+									Add account
+								</Button>
+							</span>
+						)}
+						{open === service.id && connect !== undefined ? connect(service, () => setOpen(undefined)) : null}
+					</li>
+				);
+			})}
+		</ul>
+	);
+}

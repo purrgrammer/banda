@@ -1,0 +1,787 @@
+import type { Context } from "@earendil-works/chord";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, Type } from "@earendil-works/pi-ai";
+import {
+	type ConversationId,
+	createRegistry,
+	defineExtension,
+	type Harness,
+	type TaskId,
+} from "@earendil-works/pi-durable";
+import fc from "fast-check";
+import { describe, expect, it } from "vitest";
+import { ActivityLog } from "../src/core/activity.ts";
+import { AgentChats, LEAD } from "../src/core/agents.ts";
+import { EFFECT, type EffectRan } from "../src/core/ask.ts";
+
+import { OWNER, type Received } from "../src/core/gateway.ts";
+import {
+	covering,
+	FLOORS,
+	matches,
+	offeredScopes,
+	openPermissions,
+	type PermissionScope,
+	Permissions,
+	refusal,
+	revoke,
+	SCOPE_KINDS,
+	scopeWords,
+	shapeFor,
+} from "../src/core/permissions.ts";
+import { openWaits } from "../src/core/status.ts";
+import { context, openStore } from "../src/core/store.ts";
+import { defineCore } from "../src/core/turn.ts";
+import { type Approving, type Ask, answer, WAIT, type WaitEnded } from "../src/core/wait.ts";
+import { groupApprovals, scopeOf, servesGroups, sharedScopes } from "../web/src/lib/permissions.ts";
+import { blobStore, FAUX_MODEL, FakeGateway, tempHome, until } from "./helpers.ts";
+import { pbtRuns } from "./pbt.ts";
+
+const owner = { gateway: "fake", peer: OWNER };
+const web = { gateway: "web", peer: OWNER };
+const HOUR = 60 * 60_000;
+
+type Call = { readonly tool: "send" | "pay" | "deploy"; readonly to: string; readonly body?: string };
+
+/**
+ * A core with three test effects that record their runs: `send` (a message to someone: a permission binds the recipient,
+ * the owner may edit the body), `pay` (on the floor: money) and `deploy`. The model makes the calls each owner
+ * message names, in one round, and then says nothing more.
+ */
+function setup() {
+	const gateway = new FakeGateway();
+	const faux = fauxProvider();
+	const models = createModels();
+	models.setProvider(faux.provider);
+	const clock = { skew: 0 };
+	const now = () => Date.now() + clock.skew;
+	const core = defineCore({
+		blobs: blobStore(),
+		gateway: () => gateway,
+		model: () => FAUX_MODEL,
+		retryDelay: () => 5,
+		now,
+	});
+	const runs: Call[] = [];
+	let hold: (() => void) | undefined;
+	const record = async (call: Call, ctx: Context) => {
+		runs.push(call);
+		if (hold !== undefined) {
+			hold();
+			const signal = (ctx as { abortSignal?: AbortSignal }).abortSignal;
+			await new Promise((_, reject) => signal?.addEventListener("abort", () => reject(signal.reason), { once: true }));
+		}
+		return { output: [{ type: "text" as const, text: `${call.tool} done` }] };
+	};
+	const tools = [
+		core.effect({
+			name: "send",
+			description: "send a message",
+			parameters: Type.Object({ to: Type.String(), body: Type.String() }),
+			effect: "unsafe",
+			describe: (args) => `send a message to ${args.to}`,
+			editable: ["body"],
+			permission: { args: ["to"], what: (args) => `send messages to ${args.to}` },
+			run: (args, _effect, ctx) => record({ tool: "send", to: args.to, body: args.body }, ctx),
+		}),
+		core.effect({
+			name: "pay",
+			description: "pay someone",
+			parameters: Type.Object({ to: Type.String() }),
+			effect: "unsafe",
+			floor: "money",
+			describe: (args) => `pay ${args.to}`,
+			run: (args, _effect, ctx) => record({ tool: "pay", to: args.to }, ctx),
+		}),
+		core.effect({
+			name: "deploy",
+			description: "deploy a target",
+			parameters: Type.Object({ to: Type.String() }),
+			effect: "unsafe",
+			run: (args, _effect, ctx) => record({ tool: "deploy", to: args.to }, ctx),
+		}),
+	];
+	/** The calls the next owner message makes, by its text. */
+	const planned = new Map<string, readonly Call[]>();
+	faux.setResponses(
+		Array.from({ length: 1000 }, () => (ctx: { messages: readonly { role: string; content: unknown }[] }) => {
+			const last = ctx.messages.at(-1);
+			if (last?.role !== "user") return fauxAssistantMessage("ok");
+			const said = typeof last.content === "string" ? last.content : JSON.stringify(last.content);
+			const calls = planned.get(said) ?? [];
+			if (calls.length === 0) return fauxAssistantMessage("nothing to do");
+			return fauxAssistantMessage(
+				calls.map((call, i) =>
+					fauxToolCall(
+						call.tool,
+						(call.tool === "send" ? { to: call.to, body: call.body ?? "" } : { to: call.to }) as never,
+						{
+							id: `${said}-${i}`,
+						},
+					),
+				),
+				{ stopReason: "toolUse" },
+			);
+		}) as never,
+	);
+	const open = async (home: string) => {
+		const registry = createRegistry();
+		registry.install(core.extension);
+		registry.install(defineExtension({ name: "test", tools }));
+		const harness = await openStore(home, { models, registry, now });
+		harness.resume();
+		return harness;
+	};
+	let n = 0;
+	/** Send an owner message whose run makes `calls`. */
+	const say = async (harness: Harness, calls: readonly Call[], thread?: string) => {
+		const text = `m${++n}`;
+		planned.set(text, calls);
+		const origin = thread === undefined ? owner : { ...owner, thread };
+		const received: Received = await core.receive(harness, { id: text, origin, text });
+		if (!("turn" in received)) throw new Error(`no Turn: ${JSON.stringify(received)}`);
+		return received;
+	};
+	return {
+		core,
+		open,
+		say,
+		runs,
+		clock,
+		now,
+		holding: () => new Promise<void>((resolve) => (hold = resolve)),
+		release: () => (hold = undefined),
+	};
+}
+
+const done = async (harness: Harness, turn: number) =>
+	(await harness.getTask(turn as TaskId, context))?.state.status === "terminal";
+
+/** The next open ask, or undefined once the Turn is done. */
+const nextAsk = (harness: Harness, turn: number) =>
+	until(async () => {
+		const [wait] = await openWaits(harness);
+		if (wait !== undefined) return { wait };
+		return (await done(harness, turn)) ? { wait: undefined } : undefined;
+	});
+
+const approve = (harness: Harness, key: string, approving: Approving = {}, now = Date.now()) =>
+	answer(harness, key, "approve", web, "bearer", { now, approving });
+
+async function entries(harness: Harness, chat: number) {
+	const page = await (await harness.conversation(chat as ConversationId, context))!.entries(
+		{ order: "ascending" },
+		1000,
+		undefined,
+		context,
+	);
+	return page.items;
+}
+
+describe("permissions", () => {
+	it("a permission given before its tool was renamed still covers the tool by its new name", () => {
+		const given = {
+			tool: "request_egress",
+			match: { _host: "github.com" },
+			what: "",
+			scope: "host",
+			at: 1,
+			wait: 1,
+		} as const;
+		expect(matches(given, "propose_send", { _host: "github.com" })).toBe(true);
+		expect(matches(given, "propose_send", { _host: "gitlab.com" })).toBe(false);
+		expect(matches(given, "propose_key", { _host: "github.com" })).toBe(false);
+	});
+	it("a permission for always: the same recipient runs without asking, in the activity log; another asks", async () => {
+		const s = setup();
+		const harness = await s.open(await tempHome());
+		const first = await s.say(harness, [{ tool: "send", to: "ana", body: "hi" }]);
+		const { wait } = await nextAsk(harness, first.turn);
+		expect(wait?.ask).toMatchObject({
+			label: "send a message to ana",
+			editable: ["body"],
+			permission: { match: { to: "ana" }, what: "send messages to ana" },
+		});
+		expect(await approve(harness, wait!.key, { permission: { scope: "always" } })).toMatchObject({
+			answered: expect.any(Number),
+		});
+		await until(() => done(harness, first.turn));
+		const second = await s.say(harness, [{ tool: "send", to: "ana", body: "again" }]);
+		expect((await nextAsk(harness, second.turn)).wait).toBeUndefined();
+		expect(s.runs).toEqual([
+			{ tool: "send", to: "ana", body: "hi" },
+			{ tool: "send", to: "ana", body: "again" },
+		]);
+		const events = (await harness.snapshot(ActivityLog, context))!.events.map((event) => event.what);
+		expect(events).toEqual(["You allowed send messages to ana, always", "Ran without asking: send a message to ana"]);
+		const ran = (await entries(harness, second.chat)).filter((entry) => entry.kind === EFFECT);
+		expect(ran.map((entry) => entry.data as unknown as EffectRan)).toEqual([
+			{
+				tool: "send",
+				label: "send a message to ana",
+				permission: { what: "send messages to ana", scope: "always" },
+				at: expect.any(Number),
+			},
+		]);
+		const third = await s.say(harness, [{ tool: "send", to: "bob", body: "hello" }]);
+		expect((await nextAsk(harness, third.turn)).wait?.ask).toMatchObject({ args: { to: "bob" } });
+		await harness.close(context);
+	});
+
+	it("this once is no permission; a permission for the task covers the rest of that run and ends at the next message", async () => {
+		const s = setup();
+		const harness = await s.open(await tempHome());
+		const once = await s.say(harness, [{ tool: "send", to: "ana", body: "1" }]);
+		await approve(harness, (await nextAsk(harness, once.turn)).wait!.key);
+		await until(() => done(harness, once.turn));
+		const task = await s.say(harness, [
+			{ tool: "send", to: "ana", body: "2" },
+			{ tool: "send", to: "ana", body: "3" },
+		]);
+		const asked = (await nextAsk(harness, task.turn)).wait!;
+		expect(asked.ask).toMatchObject({ args: { body: "2" } });
+		await approve(harness, asked.key, { permission: { scope: "task" } });
+		// the second call of the same run is the same task
+		expect((await nextAsk(harness, task.turn)).wait).toBeUndefined();
+		expect((await openPermissions(harness, s.now())).map(({ permission }) => permission.scope)).toEqual(["task"]);
+		const next = await s.say(harness, [{ tool: "send", to: "ana", body: "4" }]);
+		expect((await nextAsk(harness, next.turn)).wait?.ask).toMatchObject({ args: { body: "4" } });
+		expect(await openPermissions(harness, s.now())).toEqual([]);
+		expect(s.runs.map((run) => run.body)).toEqual(["1", "2", "3"]);
+		await harness.close(context);
+	});
+
+	it("a permission for a while covers until its time, and lists in plain words while open", async () => {
+		const s = setup();
+		const harness = await s.open(await tempHome());
+		const first = await s.say(harness, [{ tool: "send", to: "ana", body: "1" }]);
+		const until1h = s.now() + HOUR;
+		await approve(
+			harness,
+			(await nextAsk(harness, first.turn)).wait!.key,
+			{ permission: { scope: "until", until: until1h } },
+			s.now(),
+		);
+		await until(() => done(harness, first.turn));
+		expect(
+			(await openPermissions(harness, s.now())).map(({ permission }) => [
+				permission.what,
+				permission.scope,
+				permission.until,
+			]),
+		).toEqual([["send messages to ana", "until", until1h]]);
+		const within = await s.say(harness, [{ tool: "send", to: "ana", body: "2" }]);
+		expect((await nextAsk(harness, within.turn)).wait).toBeUndefined();
+		s.clock.skew = 2 * HOUR;
+		expect(await openPermissions(harness, s.now())).toEqual([]);
+		const after = await s.say(harness, [{ tool: "send", to: "ana", body: "3" }]);
+		expect((await nextAsk(harness, after.turn)).wait).toBeDefined();
+		expect(s.runs.map((run) => run.body)).toEqual(["1", "2"]);
+		await harness.close(context);
+	});
+
+	it("the floor is never permitted: asked for, it is refused; planted in the store, it covers nothing", async () => {
+		const s = setup();
+		const harness = await s.open(await tempHome());
+		const paying = await s.say(harness, [{ tool: "pay", to: "ana" }]);
+		const { wait } = await nextAsk(harness, paying.turn);
+		expect(wait?.ask).toMatchObject({ floor: "money", label: "pay ana" });
+		expect(wait?.ask).not.toHaveProperty("permission");
+		for (const permission of [
+			{ scope: "always" },
+			{ scope: "task" },
+			{ scope: "until", until: s.now() + HOUR },
+		] as PermissionScope[])
+			expect(await approve(harness, wait!.key, { permission })).toEqual({
+				refused: "this is never allowed ahead: it asks every time, as it moves money",
+			});
+		await approve(harness, wait!.key);
+		await until(() => done(harness, paying.turn));
+		// a permission for it, however it got into the store, covers nothing
+		await harness.commit(async (tx) => {
+			const doc = await tx.doc(Permissions);
+			doc.permissions["99"] = { tool: "pay", match: {}, what: "pay anyone", scope: "always", at: 0, wait: 0 };
+		}, context);
+		const again = await s.say(harness, [{ tool: "pay", to: "ana" }]);
+		expect((await nextAsk(harness, again.turn)).wait?.ask).toMatchObject({ floor: "money" });
+		expect(s.runs).toEqual([{ tool: "pay", to: "ana" }]);
+		await harness.close(context);
+	});
+
+	it("a revoked permission stops covering at once, an effect already waiting its turn included", async () => {
+		const s = setup();
+		const harness = await s.open(await tempHome());
+		const first = await s.say(harness, [{ tool: "send", to: "ana", body: "1" }]);
+		await approve(harness, (await nextAsk(harness, first.turn)).wait!.key, { permission: { scope: "always" } });
+		await until(() => done(harness, first.turn));
+		// a deploy that asks, and behind it a send the permission would cover
+		const queued = await s.say(harness, [
+			{ tool: "deploy", to: "prod" },
+			{ tool: "send", to: "ana", body: "2" },
+		]);
+		const deploy = (await nextAsk(harness, queued.turn)).wait!;
+		const [{ id }] = await openPermissions(harness, s.now());
+		expect(await revoke(harness, id!, s.now())).toBe(true);
+		expect(await revoke(harness, id!, s.now())).toBe(false);
+		await approve(harness, deploy.key);
+		const send = (await nextAsk(harness, queued.turn)).wait;
+		expect(send?.ask).toMatchObject({ tool: "send", args: { body: "2" } });
+		expect(s.runs.map((run) => run.tool)).toEqual(["send", "deploy"]);
+		const events = (await harness.snapshot(ActivityLog, context))!.events.map((event) => event.what);
+		expect(events).toContain("You took back: send messages to ana");
+		await harness.close(context);
+	});
+
+	it("an edited draft binds the edited bytes: what runs, and runs again after a restart, is the edit", async () => {
+		const s = setup();
+		const home = await tempHome();
+		let harness = await s.open(home);
+		const turn = await s.say(harness, [{ tool: "send", to: "ana", body: "draft" }]);
+		const { wait } = await nextAsk(harness, turn.turn);
+		expect(await approve(harness, wait!.key, { edits: { to: "eve" } })).toEqual({ refused: "to cannot be edited" });
+		expect(await answer(harness, wait!.key, "deny", web, "bearer", { approving: { edits: { body: "x" } } })).toEqual({
+			refused: "only an approval, approved, carries edits or a permission",
+		});
+		const running = s.holding();
+		await approve(harness, wait!.key, { edits: { body: "edited by the owner" } });
+		await running;
+		await harness.close(context); // a crash while the effect runs
+		s.release();
+		harness = await s.open(home);
+		const again = await until(async () => (await openWaits(harness)).find((w) => w.ask.type === "approval"));
+		expect(again.ask).toMatchObject({ interrupted: true, args: { to: "ana", body: "edited by the owner" } });
+		expect(await approve(harness, again.key, { edits: { body: "other" } })).toEqual({
+			refused: "running it again is approved once, as it was",
+		});
+		await approve(harness, again.key);
+		await until(() => done(harness, turn.turn));
+		expect(s.runs.map((run) => run.body)).toEqual(["edited by the owner", "edited by the owner"]);
+		const ended = (await entries(harness, turn.chat))
+			.filter((entry) => entry.kind === WAIT)
+			.map((entry) => entry.data as unknown as WaitEnded);
+		expect(ended[0]?.edited).toEqual({ to: "ana", body: "edited by the owner" });
+		await harness.close(context);
+	});
+});
+
+describe("the scopes an ask offers", () => {
+	const shape = { match: { to: "ana" }, what: "send messages to ana" };
+
+	it("the task's first, each worded as its consequence; none on the floor or for a run again", () => {
+		expect(offeredScopes({ permission: shape })).toEqual([
+			{ scope: "task", words: "Send messages to ana without asking until this task is done" },
+			{ scope: "hour", words: "Send messages to ana without asking for the next hour" },
+			{ scope: "today", words: "Send messages to ana without asking until midnight" },
+			{ scope: "always", words: "Send messages to ana without asking until you take it back in Permissions" },
+		]);
+		for (const kind of SCOPE_KINDS)
+			expect(scopeWords(shape.what, kind)).toMatch(/^Send messages to ana without asking /);
+		expect(offeredScopes({ floor: "money" })).toEqual([]);
+		expect(offeredScopes({ floor: "private", permission: shape })).toEqual([]);
+		expect(offeredScopes({})).toEqual([]);
+		expect(offeredScopes({ permission: shape, interrupted: true })).toEqual([]);
+	});
+
+	it("a host shape adds the host's, last, and never on the floor or run again", () => {
+		const host = { match: { _host: "github.com" }, what: "send anything to github.com", host: "github.com" };
+		const words =
+			"Send anything to github.com without asking from any of its chats, until you take it back in Permissions; while your agents share one computer, any of them could use it";
+		expect(offeredScopes({ permission: shape, host }).map((one) => one.scope)).toEqual([
+			"task",
+			"hour",
+			"today",
+			"always",
+			"host",
+		]);
+		expect(offeredScopes({ permission: shape, host }).at(-1)).toEqual({ scope: "host", words, host: "github.com" });
+		expect(offeredScopes({ floor: "credentials", host })).toEqual([]);
+		expect(offeredScopes({ permission: shape, host, interrupted: true })).toEqual([]);
+		// the host's binds its own shape; without one there is nothing to give
+		expect(shapeFor({ scope: "host" }, { permission: shape, host })).toEqual({
+			match: { _host: "github.com" },
+			what: "send anything to github.com",
+		});
+		expect(shapeFor({ scope: "always" }, { permission: shape, host })).toEqual(shape);
+		expect(shapeFor({ scope: "host" }, { permission: shape })).toBeUndefined();
+		expect(refusal({ scope: "host" }, undefined, undefined, 0)).toBe("this cannot be allowed ahead");
+		const offered = offeredScopes({ permission: shape, host });
+		expect(refusal({ scope: "always" }, shape, undefined, 0, offered)).toBeUndefined();
+		expect(refusal({ scope: "host" }, shapeFor({ scope: "host" }, { host }), undefined, 0, offered)).toBeUndefined();
+		expect(refusal({ scope: "host" }, shape, undefined, 0, offeredScopes({ permission: shape }))).toBe(
+			"that was not offered",
+		);
+	});
+
+	it("covers a call by its route's permission, and by a host permission only in its agent's chats", async () => {
+		const harness = await openStore(await tempHome(), { models: createModels(), registry: createRegistry() });
+		try {
+			const at = 1_000;
+			const draft = { tool: "propose_send", args: { _route: "POST github.com/x", _host: "github.com" } };
+			await harness.commit(async (tx) => {
+				const doc = await tx.doc(Permissions);
+				const base = { tool: "propose_send", at, wait: 1 };
+				doc.permissions["1"] = { ...base, match: { _route: "POST github.com/x" }, what: "route", scope: "always" };
+				doc.permissions["2"] = { ...base, match: { _host: "github.com" }, what: "host", scope: "host", agent: LEAD };
+				doc.next = 3;
+				// chat 7 runs the lead, chat 8 another agent, chat 9 none the store knows of
+				(await tx.doc(AgentChats)).chats[7] = LEAD;
+				(await tx.doc(AgentChats)).chats[8] = "ledger";
+			}, context);
+			const found = () => harness.commit((tx) => covering(tx, draft, 7, at), context);
+			expect((await found())?.id).toBe("1");
+			// the route's covers every chat; the lead's host none of another agent's chats, nor one of no agent
+			const hostOnly = { ...draft, args: { ...draft.args, _route: "POST github.com/y" } };
+			expect((await harness.commit((tx) => covering(tx, hostOnly, 7, at), context))?.id).toBe("2");
+			for (const chat of [8, 9])
+				expect(await harness.commit((tx) => covering(tx, hostOnly, chat, at), context), `chat ${chat}`).toBeUndefined();
+			// a chat is covered by its own agent's permissions: one that runs another agent is not, one that runs the
+			// lead is
+			await harness.commit(async (tx) => {
+				const { chats } = await tx.doc(AgentChats);
+				chats[10] = "researcher";
+				chats[11] = LEAD;
+			}, context);
+			expect(await harness.commit((tx) => covering(tx, hostOnly, 10, at), context)).toBeUndefined();
+			expect((await harness.commit((tx) => covering(tx, hostOnly, 11, at), context))?.id).toBe("2");
+			expect(
+				await harness.commit(
+					(tx) => covering(tx, { ...hostOnly, args: { ...hostOnly.args, _host: "api.github.com" } }, 7, at),
+					context,
+				),
+			).toBeUndefined();
+			expect(
+				await harness.commit((tx) => covering(tx, { ...draft, floor: "credentials" }, 7, at), context),
+			).toBeUndefined();
+			// another tool with the same argument: never covered by a host permission
+			expect(await harness.commit((tx) => covering(tx, { ...draft, tool: "other" }, 7, at), context)).toBeUndefined();
+			expect(await revoke(harness, "2", at)).toBe(true);
+			expect(await harness.commit((tx) => covering(tx, hostOnly, 7, at), context)).toBeUndefined();
+			expect((await found())?.id).toBe("1");
+		} finally {
+			await harness.close(context);
+		}
+	});
+
+	it("as a property: never on the floor, the task always first, and words naming the effect", () => {
+		fc.assert(
+			fc.property(
+				fc.record(
+					{
+						floor: fc.constantFrom(...FLOORS),
+						what: fc.string({ minLength: 1, maxLength: 20 }),
+						interrupted: fc.boolean(),
+						host: fc.constantFrom("github.com", "api.example.com:8443"),
+					},
+					{ requiredKeys: ["what"] },
+				),
+				({ floor, what, interrupted, host }) => {
+					const offered = offeredScopes({
+						...(floor === undefined ? {} : { floor }),
+						permission: { match: {}, what },
+						...(host === undefined ? {} : { host: { match: { _host: host }, what: `send anything to ${host}`, host } }),
+						interrupted,
+					});
+					const hosts = offered.filter((one) => one.scope === "host");
+					expect(hosts.length).toBe(host !== undefined && floor === undefined && !interrupted ? 1 : 0);
+					if (floor !== undefined || interrupted) expect(offered).toEqual([]);
+					else {
+						expect(offered.filter((one) => one.scope !== "host").map((one) => one.scope)).toEqual([
+							"task",
+							"hour",
+							"today",
+							"always",
+						]);
+						for (const one of offered) if (one.scope !== "host") expect(one.words).toBe(scopeWords(what, one.scope));
+						expect(offered[0]?.words.toLowerCase()).toContain(what.slice(1).toLowerCase());
+					}
+				},
+			),
+			{ numRuns: pbtRuns(100) },
+		);
+	});
+
+	it("an ask carries its task and its scopes; an answer giving a scope not offered is refused", async () => {
+		const s = setup();
+		const harness = await s.open(await tempHome());
+		const first = await s.say(harness, [{ tool: "send", to: "ana", body: "1" }]);
+		const { wait } = await nextAsk(harness, first.turn);
+		expect(wait?.ask).toMatchObject({
+			errand: { chat: first.chat, input: expect.any(Number) },
+			scopes: offeredScopes({ permission: { match: { to: "ana" }, what: "send messages to ana" } }),
+		});
+		// a scope the ask did not offer is refused: a host's, for a draft with no host
+		expect(await approve(harness, wait!.key, { permission: { scope: "host" } })).toEqual({
+			refused: "this cannot be allowed ahead",
+		});
+		expect(await approve(harness, wait!.key)).toMatchObject({ answered: expect.any(Number) });
+		await until(() => done(harness, first.turn));
+		expect(await openPermissions(harness, s.now())).toEqual([]);
+		expect(s.runs.map((run) => run.body)).toEqual(["1"]);
+		await harness.close(context);
+	});
+
+	it("never asks twice: a permission answers the other open asks it covers, in the commit that gives it", async () => {
+		const s = setup();
+		const harness = await s.open(await tempHome());
+		const one = await s.say(harness, [{ tool: "send", to: "ana", body: "1" }], "a");
+		const two = await s.say(harness, [{ tool: "send", to: "ana", body: "2" }], "b");
+		const three = await s.say(harness, [{ tool: "send", to: "bob", body: "3" }], "c");
+		const open = await until(async () => {
+			const waits = await openWaits(harness);
+			return waits.length === 3 ? waits : undefined;
+		});
+		const first = open.find((wait) => wait.chat === one.chat)!;
+		expect(await approve(harness, first.key, { permission: { scope: "always" } })).toMatchObject({
+			answered: expect.any(Number),
+		});
+		await until(() => done(harness, one.turn));
+		await until(() => done(harness, two.turn));
+		// bob's is another permission's to give: still open
+		expect((await openWaits(harness)).map((wait) => wait.chat)).toEqual([three.chat]);
+		expect(s.runs.map((run) => run.body).sort()).toEqual(["1", "2"]);
+		const ended = (await entries(harness, two.chat))
+			.filter((entry) => entry.kind === WAIT)
+			.map((entry) => entry.data as unknown as WaitEnded);
+		expect(ended).toMatchObject([{ outcome: "answered", answer: "approve", permitted: { scope: "always" } }]);
+		const permissions = await openPermissions(harness, s.now());
+		expect(permissions).toHaveLength(1);
+		// what it serves: the task it was given in, titled by the owner's words
+		expect(permissions[0]?.serves).toEqual({ kind: "task", chat: one.chat, input: expect.any(Number), title: "m1" });
+		const events = (await harness.snapshot(ActivityLog, context))!.events.map((event) => event.what);
+		expect(events.filter((what) => what.startsWith("You allowed"))).toEqual([
+			"You allowed send messages to ana, always",
+		]);
+		await answer(harness, (await openWaits(harness))[0]!.key, "deny", web, "bearer");
+		await until(() => done(harness, three.turn));
+		await harness.close(context);
+	});
+});
+
+/** One thing that happens, in the property. */
+type Step =
+	| {
+			readonly kind: "message";
+			readonly calls: readonly Call[];
+			/** How the owner answers each ask the message raises, in order; past the end, deny. */
+			readonly answers: readonly Decision[];
+	  }
+	| { readonly kind: "revoke"; readonly pick: number }
+	| { readonly kind: "later" };
+
+type Decision = {
+	readonly approve: boolean;
+	readonly scope: "once" | "task" | "hour" | "always";
+	readonly edit?: string;
+};
+
+const callArb: fc.Arbitrary<Call> = fc.oneof(
+	{
+		weight: 4,
+		arbitrary: fc.record({
+			tool: fc.constant("send" as const),
+			to: fc.constantFrom("ana", "bob"),
+			body: fc.constantFrom("a", "b"),
+		}),
+	},
+	{ weight: 1, arbitrary: fc.record({ tool: fc.constant("pay" as const), to: fc.constantFrom("ana", "bob") }) },
+);
+const decisionArb: fc.Arbitrary<Decision> = fc.record(
+	{
+		approve: fc.boolean(),
+		scope: fc.constantFrom("once", "task", "hour", "always"),
+		edit: fc.constantFrom("edited", "other"),
+	},
+	{ requiredKeys: ["approve", "scope"] },
+);
+const stepArb: fc.Arbitrary<Step> = fc.oneof(
+	{
+		weight: 6,
+		arbitrary: fc.record({
+			kind: fc.constant("message" as const),
+			calls: fc.array(callArb, { minLength: 1, maxLength: 3 }),
+			answers: fc.array(decisionArb, { maxLength: 3 }),
+		}),
+	},
+	{ weight: 1, arbitrary: fc.record({ kind: fc.constant("revoke" as const), pick: fc.nat(5) }) },
+	{ weight: 1, arbitrary: fc.constant({ kind: "later" as const }) },
+);
+
+/** The reference: a permission as the owner gave it. */
+type Given = { id: string; to: string; scope: PermissionScope["scope"]; until?: number; message?: number };
+
+describe("permissions, as a property", () => {
+	it(
+		"an effect runs only drafted-and-approved or within an open permission, exactly as approved, never twice; the floor is never permitted",
+		async () => {
+			await fc.assert(
+				fc.asyncProperty(fc.array(stepArb, { minLength: 1, maxLength: 7 }), async (steps) => {
+					const s = setup();
+					const harness = await s.open(await tempHome());
+					const expected: Call[] = [];
+					let given: Given[] = [];
+					let next = 1;
+					let message = 0;
+					const open = (permission: Given) =>
+						permission.scope === "always" ||
+						(permission.scope === "until" && s.now() < (permission.until ?? 0)) ||
+						(permission.scope === "task" && permission.message === message);
+					try {
+						for (const step of steps) {
+							if (step.kind === "later") s.clock.skew += 2 * HOUR;
+							else if (step.kind === "revoke") {
+								const live = given.filter(open);
+								const target = live[step.pick % Math.max(live.length, 1)];
+								if (target === undefined) continue;
+								expect(await revoke(harness, target.id, s.now())).toBe(true);
+								given = given.filter((permission) => permission !== target);
+							} else {
+								message++;
+								const turn = await s.say(harness, step.calls);
+								const answers = [...step.answers];
+								for (const call of step.calls) {
+									const covered =
+										call.tool === "send" && given.some((permission) => permission.to === call.to && open(permission));
+									const before = expected.length;
+									// what the call did: ran, asked, or neither before its run ended
+									const did = await until(async () => {
+										if (s.runs.length > before) return { ran: true, wait: undefined };
+										const [wait] = await openWaits(harness);
+										if (wait !== undefined) return { ran: false, wait };
+										return (await done(harness, turn.turn)) ? { ran: false, wait: undefined } : undefined;
+									});
+									const { wait } = did;
+									if (covered) {
+										expect(did.ran, `${call.tool} to ${call.to} runs within a permission, unasked`).toBe(true);
+										expected.push(call);
+										continue;
+									}
+									expect(wait?.ask, `${call.tool} to ${call.to} asks`).toMatchObject({
+										tool: call.tool,
+										args: { to: call.to },
+									});
+									// the reference offers what the daemon offers: every scope, the task's first; none on the floor
+									expect((wait!.ask as { scopes?: { scope: string }[] }).scopes?.map((one) => one.scope)).toEqual(
+										call.tool === "pay" ? [] : ["task", "hour", "today", "always"],
+									);
+									const decision = answers.shift() ?? { approve: false, scope: "once" };
+									if (!decision.approve) {
+										await answer(harness, wait!.key, "deny", web, "bearer");
+										continue;
+									}
+									const scope: PermissionScope | undefined =
+										decision.scope === "once"
+											? undefined
+											: decision.scope === "hour"
+												? { scope: "until", until: s.now() + HOUR }
+												: { scope: decision.scope };
+									const edits =
+										call.tool === "send" && decision.edit !== undefined ? { body: decision.edit } : undefined;
+									const approving: Approving = {
+										...(scope === undefined ? {} : { permission: scope }),
+										...(edits === undefined ? {} : { edits }),
+									};
+									if (call.tool === "pay" && scope !== undefined) {
+										// the floor: a permission is refused, and the owner approves it once
+										expect(await approve(harness, wait!.key, approving, s.now())).toMatchObject({
+											refused: expect.any(String),
+										});
+										await approve(harness, wait!.key, {}, s.now());
+									} else {
+										expect(await approve(harness, wait!.key, approving, s.now())).toMatchObject({
+											answered: expect.any(Number),
+										});
+										if (scope !== undefined)
+											given.push({
+												id: String(next++),
+												to: call.to,
+												scope: scope.scope,
+												...(scope.scope === "until" ? { until: scope.until } : {}),
+												...(scope.scope === "task" ? { message } : {}),
+											});
+									}
+									expected.push(edits === undefined ? call : { ...call, body: edits.body });
+								}
+								expect((await nextAsk(harness, turn.turn)).wait).toBeUndefined();
+							}
+							expect(s.runs).toEqual(expected);
+							expect((await openPermissions(harness, s.now())).map(({ id }) => id)).toEqual(
+								given.filter(open).map((permission) => permission.id),
+							);
+						}
+					} finally {
+						await harness.close(context);
+					}
+				}),
+				{ numRuns: pbtRuns(15) },
+			);
+		},
+		pbtRuns(120) * 1000,
+	);
+});
+
+describe("the app's permission words and groups", () => {
+	const ask = (chat: number, input: number, to: string, extra: object = {}) =>
+		({
+			type: "approval" as const,
+			tool: "send",
+			args: { to, body: "hi" },
+			permission: { match: { to }, what: `send messages to ${to}` },
+			errand: { chat, input },
+			scopes: offeredScopes({ permission: { match: { to }, what: `send messages to ${to}` } }),
+			...extra,
+		}) as Extract<Ask, { type: "approval" }>;
+
+	it("groups the asks of one task and tool; the floor, an ask with no scope and a run again stand alone", () => {
+		const waits = [
+			{ key: "a", ask: ask(1, 10, "ana") },
+			{ key: "b", ask: ask(2, 20, "ana") },
+			{ key: "c", ask: ask(1, 10, "bob") },
+			{ key: "d", ask: ask(1, 10, "eve", { scopes: [] }) },
+			{ key: "e", ask: ask(1, 10, "kim", { interrupted: true }) },
+			{ key: "f", ask: ask(1, 10, "joe", { floor: "private", scopes: [] }) },
+			{ key: "g", ask: ask(1, 11, "ana") },
+		];
+		expect(groupApprovals(waits).map((group) => group.map((wait) => wait.key))).toEqual([
+			["a", "c"],
+			["b"],
+			["d"],
+			["e"],
+			["f"],
+			["g"],
+		]);
+		expect(sharedScopes([ask(1, 10, "ana"), ask(1, 10, "bob")]).map((one) => one.scope)).toEqual([
+			"task",
+			"hour",
+			"today",
+			"always",
+		]);
+	});
+
+	it("a scope picked becomes the permission the answer gives: a window timed from the answer", () => {
+		const now = new Date(2026, 10, 1, 10, 0).getTime();
+		expect(scopeOf("task", now)).toEqual({ scope: "task" });
+		expect(scopeOf("always", now)).toEqual({ scope: "always" });
+		expect(scopeOf("hour", now)).toEqual({ scope: "until", until: now + HOUR });
+		expect(scopeOf("today", now)).toEqual({ scope: "until", until: new Date(2026, 10, 1, 23, 59, 59, 999).getTime() });
+	});
+
+	it("groups standing permissions by what they serve: tasks, then routines, then the rest", () => {
+		const task = { kind: "task" as const, chat: 3, input: 41, title: "Book the train" };
+		const groups = servesGroups([
+			{ id: "1", what: "a", scope: "always", at: 0 },
+			{
+				id: "2",
+				what: "b",
+				scope: "always",
+				at: 0,
+				serves: { kind: "routine", routine: "news", title: "Morning news" },
+			},
+			{ id: "3", what: "c", scope: "task", at: 0, serves: task },
+			{ id: "4", what: "d", scope: "always", at: 0, serves: task },
+		]);
+		expect(groups.map((group) => [group.title, group.kind, group.permissions.map((one) => one.id)])).toEqual([
+			["For “Book the train”", "task", ["3", "4"]],
+			["For “Morning news”", "routine", ["2"]],
+			["Other", undefined, ["1"]],
+		]);
+	});
+});

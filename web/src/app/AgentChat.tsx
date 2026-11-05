@@ -1,0 +1,475 @@
+/**
+ * An agent's one chat: the header (its face, name and presence), the feed, the working line, the pill and the
+ * composer. Before its first message there is no chat yet: the first message starts it, on the agent's main thread.
+ * What was rendered is read once the window has focus, so a row's unread follows what the owner saw.
+ */
+import { SquareIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+	Conversation,
+	ConversationContent,
+	ConversationScrollButton,
+	useConversation,
+} from "@/components/ai-elements/conversation";
+import { agentMainThread } from "../../../src/core/gateway.ts";
+import { WaitingPill } from "../chat/Approval.tsx";
+import { Composer } from "../chat/Composer.tsx";
+import { Bubble, Run } from "../chat/Feed.tsx";
+import { Starters } from "../chat/FirstRun.tsx";
+import { Header } from "../chat/Header.tsx";
+import { Line } from "../chat/Line.tsx";
+import { ChatLoading } from "../chat/Loading.tsx";
+import type { Who } from "../chat/Row.tsx";
+import { type ChatRow, type Item, postMessage, readChat, stopChat, upload } from "../lib/api.ts";
+import { attempt } from "../lib/attempt.ts";
+import { view } from "../lib/chat.ts";
+import { linkMentions } from "../lib/mentions.ts";
+import { useShell } from "../lib/shell.ts";
+import { useTranscript } from "../lib/transcript.ts";
+import { ActivitySheet } from "./Activity.tsx";
+import { FeedView } from "./Feed.tsx";
+import { FIRST_STARTERS, firstWords } from "./first-words.ts";
+import { useSkills } from "./Skills.tsx";
+import { useViewContext } from "./view-context.ts";
+
+/**
+ * Whether the run was stopped mid-call: nothing runs now, and the transcript ends on a call the stop aborted, with no
+ * answer after it. (A run stopped between calls ends on an interrupted answer, which the feed says itself.)
+ */
+function stopped(items: readonly Item[], busy: boolean): boolean {
+	const last = items.at(-1);
+	return (
+		!busy &&
+		last?.role === "tool" &&
+		last.error &&
+		(last.notes ?? []).some((note) => (note as { code?: string }).code === "aborted")
+	);
+}
+
+/** Post the owner's words and files to the agent's one chat; a refusal rejects with why. */
+async function send(agent: string, text: string, files: readonly File[], id: string = crypto.randomUUID()) {
+	const uploaded = await Promise.all(files.map((file) => upload(file)));
+	const posted = await postMessage({
+		id,
+		text,
+		thread: agentMainThread(agent),
+		...(agent === "sancho" ? {} : { agent }),
+		...(uploaded.length === 0 ? {} : { files: uploaded.map(({ sha, name }) => ({ sha, name })) }),
+	});
+	if ("refused" in posted) throw new Error(posted.refused);
+}
+
+export function AgentChat({
+	agent,
+	who,
+	row,
+	phone,
+	panelOpen,
+	at,
+	onBack,
+	onPanel,
+	onRoutine,
+}: {
+	agent: string;
+	/** Open at this entry, as a search result does. */
+	at?: number | undefined;
+	who: Who;
+	/** Its chat, once its first message started it. */
+	row: ChatRow | undefined;
+	phone: boolean;
+	panelOpen: boolean;
+	onBack: () => void;
+	onPanel: () => void;
+	/** A routine's line was tapped: open the panel on the agent's routines. */
+	onRoutine?: ((name: string) => void) | undefined;
+}) {
+	const state = row?.state === "running" ? "working" : row?.state === "waiting" ? "waiting" : "idle";
+	const [doing, setDoing] = useState<string | undefined>(undefined);
+	const [activity, setActivity] = useState<{ anchor?: number }>();
+	const agents = useShell().agents;
+	const mentionables = agents.flatMap(({ accepted }) => {
+		const other = accepted?.agent;
+		return other !== undefined && other.state === "active" && other.id !== agent
+			? [{ id: other.id, name: other.name, face: other.face }]
+			: [];
+	});
+	return (
+		<div className="flex min-w-0 flex-1 flex-col bg-paper">
+			<Header
+				name={who.name}
+				faces={[who]}
+				state={state}
+				doing={state === "working" ? doing : undefined}
+				phone={phone}
+				panelOpen={panelOpen}
+				onBack={onBack}
+				onPanel={onPanel}
+				onActivity={row === undefined ? undefined : () => setActivity({})}
+			/>
+			{row === undefined ? (
+				<>
+					<div className="min-h-0 flex-1 overflow-y-auto">
+						<div className="mx-auto flex w-full max-w-[44rem] flex-col gap-3 px-4 py-5">
+							<Run who={who} compact={phone}>
+								<Bubble>{firstWords(who.name)}</Bubble>
+							</Run>
+							<Starters
+								starters={FIRST_STARTERS}
+								onPick={(starter) => void attempt("send it", () => send(agent, starter, []))}
+							/>
+						</div>
+					</div>
+					<Foot
+						agent={agent}
+						who={who}
+						mentionables={mentionables}
+						onSend={(text, files) => send(agent, text, files)}
+					/>
+				</>
+			) : (
+				<Timeline
+					chat={row.chat}
+					read={row.read}
+					who={who}
+					mentionables={mentionables}
+					phone={phone}
+					agent={agent}
+					at={at}
+					onDoing={setDoing}
+					onRoutine={onRoutine}
+					activity={activity}
+					onActivity={(entry) => setActivity({ anchor: entry })}
+					onCloseActivity={() => setActivity(undefined)}
+				/>
+			)}
+		</div>
+	);
+}
+
+type PendingMessage = { id: string; text: string; files: readonly File[]; state: "sending" | "failed" };
+
+function Timeline({
+	chat,
+	read,
+	who,
+	mentionables,
+	phone,
+	agent,
+	at,
+	onDoing,
+	onRoutine,
+	activity,
+	onActivity,
+	onCloseActivity,
+}: {
+	chat: number;
+	activity: { anchor?: number } | undefined;
+	onActivity: (entry: number) => void;
+	onCloseActivity: () => void;
+	mentionables: readonly Who[];
+	read: number;
+	onRoutine?: ((name: string) => void) | undefined;
+	/** What it does now, for the header: "Using its browser…". */
+	onDoing: (doing: string | undefined) => void;
+	who: Who;
+	phone: boolean;
+	agent: string;
+	at?: number | undefined;
+}) {
+	const transcript = useTranscript(chat);
+	const context = useViewContext(chat);
+	const [outgoing, setOutgoing] = useState<PendingMessage[]>([]);
+	const deliver = (pending: PendingMessage) => {
+		void send(agent, pending.text, pending.files, pending.id).catch(() =>
+			setOutgoing((items) => items.map((item) => (item.id === pending.id ? { ...item, state: "failed" } : item))),
+		);
+	};
+	useEffect(() => {
+		const delivered = new Set(
+			transcript.items.flatMap((item) => (item.role === "user" && item.message !== undefined ? [item.message] : [])),
+		);
+		if (delivered.size > 0) setOutgoing((items) => items.filter((item) => !delivered.has(item.id)));
+	}, [transcript.items]);
+	const linkedItems = useMemo(
+		() =>
+			transcript.items.map((item) =>
+				item.role === "user" && mentionables.length > 0
+					? {
+							...item,
+							text: linkMentions(
+								item.text,
+								mentionables.flatMap((agent) => (agent.id ? [agent.id] : [])),
+								mentionables.flatMap((agent) => (agent.id ? [{ ...agent, id: agent.id }] : [])),
+							),
+						}
+					: item,
+			),
+		[transcript.items, mentionables],
+	);
+	const deliveredMessages = new Set(
+		transcript.items.flatMap((item) => (item.role === "user" && item.message !== undefined ? [item.message] : [])),
+	);
+	const visibleOutgoing = outgoing.filter((item) => !deliveredMessages.has(item.id));
+	const segments = useMemo(
+		() =>
+			view(
+				linkedItems,
+				transcript.waits,
+				{ busy: transcript.busy, running: transcript.running, thinking: transcript.thinking },
+				context,
+			),
+		[linkedItems, transcript.waits, transcript.busy, transcript.running, transcript.thinking, context],
+	);
+	// the divider sits after the last segment from an entry the owner had read when the chat opened, and only when
+	// something unread was already there then: what arrives while the owner watches is not unread
+	const opened = useRef(read);
+	const shownAtOpen = useRef<number | undefined>(undefined);
+	if (shownAtOpen.current === undefined && transcript.loaded) shownAtOpen.current = transcript.items.at(-1)?.id ?? 0;
+	const unreadAfter = useMemo(() => {
+		const atOpen = shownAtOpen.current;
+		if (atOpen === undefined) return undefined;
+		// the owner's own entries (a message, an edit made elsewhere) are never unread
+		const unreadThen = transcript.items.some(
+			(item) => item.id > opened.current && item.id <= atOpen && item.role !== "user",
+		);
+		if (!unreadThen) return undefined;
+		const readItems = new Set(transcript.items.filter((item) => item.id <= opened.current).map((item) => item.id));
+		let last: string | undefined;
+		for (const segment of segments) {
+			const entry = Number(/\d+/.exec(segment.key)?.[0] ?? Number.NaN);
+			if (readItems.has(entry)) last = segment.key;
+		}
+		return last;
+	}, [segments, transcript.items]);
+
+	// what was rendered is read once the window has focus
+	const through = transcript.items.at(-1)?.id;
+	const sent = useRef(0);
+	useEffect(() => {
+		if (!transcript.loaded || through === undefined) return;
+		const visible = () => {
+			if (document.visibilityState !== "visible" || !document.hasFocus() || sent.current >= through) return;
+			sent.current = through;
+			void readChat(chat, through).catch(() => {
+				sent.current = 0;
+			});
+		};
+		window.addEventListener("focus", visible);
+		document.addEventListener("visibilitychange", visible);
+		visible();
+		return () => {
+			window.removeEventListener("focus", visible);
+			document.removeEventListener("visibilitychange", visible);
+		};
+	}, [chat, transcript.loaded, through]);
+
+	const working = segments.find((segment) => segment.kind === "working");
+	const doing = working?.kind === "working" ? working.text.replace(/^\p{Ll}/u, (c) => c.toUpperCase()) : undefined;
+	useEffect(() => {
+		onDoing(doing);
+	}, [doing, onDoing]);
+	const ask = segments.find(
+		(segment) => (segment.kind === "question" || segment.kind === "approval") && segment.open !== undefined,
+	);
+	return (
+		<Conversation className="flex flex-col">
+			<ConversationContent
+				scrollClassName="min-h-0 flex-1 overflow-y-auto"
+				className="mx-auto w-full max-w-[44rem] px-4 py-5"
+			>
+				{transcript.older ? (
+					<button
+						type="button"
+						className="self-center text-meta text-ink-2 underline decoration-line underline-offset-[3px] hover:text-ink"
+						onClick={() => void attempt("load earlier messages", transcript.loadOlder)}
+					>
+						Earlier messages
+					</button>
+				) : null}
+				{transcript.loaded ? null : <ChatLoading />}
+				{/* the chat's beginning, once reached: the agent's first words, as the empty chat showed them */}
+				{transcript.loaded && !transcript.older ? (
+					<Run who={who} compact={phone}>
+						<Bubble>{firstWords(who.name)}</Bubble>
+					</Run>
+				) : null}
+				<FeedView
+					chat={chat}
+					outgoing={visibleOutgoing}
+					onRetry={(pending) => {
+						const retrying = { ...pending, state: "sending" as const };
+						setOutgoing((items) => items.map((item) => (item.id === pending.id ? retrying : item)));
+						deliver(retrying);
+					}}
+					who={who}
+					agent={agent}
+					segments={segments}
+					unreadAfter={unreadAfter}
+					compact={phone}
+					{...(transcript.busy
+						? {}
+						: { onTryAgain: () => void attempt("ask again", () => send(agent, "Try again.", [])) })}
+					onOpenArtifact={(id, n) => {
+						location.hash = `#/artifact/${id}${n === undefined ? "" : `?v=${n}`}`;
+					}}
+					onRoutine={onRoutine}
+					onActivity={onActivity}
+				/>
+				{stopped(transcript.items, transcript.busy) ? (
+					<Line icon={SquareIcon}>Stopped. Send a message to go on.</Line>
+				) : null}
+			</ConversationContent>
+			<OpenAt
+				at={at}
+				loaded={transcript.loaded}
+				first={transcript.items[0]?.id}
+				older={transcript.older}
+				loadOlder={transcript.loadOlder}
+			/>
+			<div className="relative">
+				<ConversationScrollButton className="-top-11 bottom-auto" />
+			</div>
+			<FollowingFoot
+				agent={agent}
+				who={who}
+				mentionables={mentionables}
+				working={transcript.busy && ask === undefined}
+				{...(ask === undefined
+					? {}
+					: { ask: ask.kind === "question" ? ask.ask.question : ask.kind === "approval" ? ask.label : "" })}
+				onSend={async (text, files) => {
+					const id: string = crypto.randomUUID();
+					const pending = { id, text, files, state: "sending" as const };
+					setOutgoing((items) => [...items, pending]);
+					deliver(pending);
+				}}
+				onStop={() => void stopChat(chat)}
+			/>
+			{activity === undefined ? null : (
+				<ActivitySheet
+					targets={[{ chat, name: who.name, ...activity }]}
+					source={{ chat, transcript }}
+					onClose={onCloseActivity}
+				/>
+			)}
+		</Conversation>
+	);
+}
+
+/**
+ * Opened at an entry (a search result): page back until it is loaded, stop following the newest, and show it, marked
+ * for a moment.
+ */
+function OpenAt({
+	at,
+	loaded,
+	first,
+	older,
+	loadOlder,
+}: {
+	at: number | undefined;
+	loaded: boolean;
+	first: number | undefined;
+	older: boolean;
+	loadOlder: () => Promise<void>;
+}) {
+	const { stopScroll } = useConversation();
+	const found = useRef<number | undefined>(undefined);
+	useEffect(() => {
+		if (at === undefined || found.current === at || !loaded) return;
+		if (first !== undefined && first > at && older) {
+			void loadOlder();
+			return;
+		}
+		const entries = [...document.querySelectorAll<HTMLElement>("[data-entry]")];
+		const target = entries.find((each) => Number(each.dataset.entry) >= at) ?? entries.at(-1);
+		if (target === undefined) return;
+		found.current = at;
+		stopScroll();
+		target.scrollIntoView({ block: "center" });
+		target.setAttribute("data-found", "");
+		const timer = setTimeout(() => {
+			target.removeAttribute("data-found");
+		}, 1600);
+		return () => {
+			clearTimeout(timer);
+		};
+	}, [at, first, loaded, older, loadOlder, stopScroll]);
+	return null;
+}
+
+/** The composer inside the conversation: sending follows the newest again, whatever was being read. */
+function FollowingFoot(props: Parameters<typeof Foot>[0]) {
+	const { scrollToBottom } = useConversation();
+	return (
+		<Foot
+			{...props}
+			onSend={async (text, files) => {
+				await props.onSend(text, files);
+				void scrollToBottom("smooth");
+			}}
+		/>
+	);
+}
+
+/** The pill, only while the open ask is out of view; a tap shows it. */
+function AskPill({ ask }: { ask: string }) {
+	const [hidden, setHidden] = useState(false);
+	useEffect(() => {
+		const target = document.querySelector("[data-open-ask]");
+		if (target === null) {
+			setHidden(false);
+			return;
+		}
+		const watch = new IntersectionObserver(([entry]) => setHidden(entry !== undefined && !entry.isIntersecting));
+		watch.observe(target);
+		return () => {
+			watch.disconnect();
+		};
+	});
+	if (!hidden) return null;
+	return (
+		<WaitingPill
+			ask={ask}
+			onClick={() => document.querySelector("[data-open-ask]")?.scrollIntoView({ block: "center", behavior: "smooth" })}
+		/>
+	);
+}
+
+function Foot({
+	agent,
+	who,
+	mentionables,
+	working = false,
+	ask,
+	onSend,
+	onStop,
+}: {
+	agent: string;
+	who: Who;
+	mentionables: readonly Who[];
+	working?: boolean;
+	ask?: string;
+	onSend: (text: string, files: readonly File[]) => Promise<void>;
+	onStop?: () => void;
+}) {
+	const { list } = useSkills();
+	return (
+		<div className="mx-auto flex w-full max-w-[44rem] flex-col items-center gap-2 px-3 pb-3">
+			{ask === undefined ? null : <AskPill ask={ask} />}
+			<Composer
+				skills={list.flatMap(({ accepted }) =>
+					accepted === undefined ? [] : [{ name: accepted.name, description: accepted.description }],
+				)}
+				to={who.name}
+				mentionables={mentionables}
+				keep={`a:${agent}`}
+				focus
+				className="w-full"
+				state={working ? "working" : "ready"}
+				onSend={onSend}
+				{...(onStop === undefined ? {} : { onStop })}
+			/>
+		</div>
+	);
+}

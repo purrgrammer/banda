@@ -1,0 +1,11 @@
+language js
+
+`$hook($cb, $deps)` where {
+  $hook <: or { `useEffect`, `useLayoutEffect`, `useInsertionEffect` },
+  $cb <: JsArrowFunctionExpression(body = $body),
+  $body <: not JsFunctionBody(),
+  register_diagnostic(
+    span = $body,
+    message = "Write an effect's body as a block and return a cleanup explicitly: an expression body returns whatever the expression yields, and a browser API typed void may return a promise (scrollIntoView does), which React calls as the cleanup and crashes."
+  )
+}
