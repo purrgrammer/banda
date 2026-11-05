@@ -111,7 +111,16 @@ import {
 	startDevice,
 } from "../core/oauth.ts";
 import { objectAccess } from "../core/object-access.ts";
-import { draftedOn, editableOf, forgetReadings, nameOf, type ObjectRef, readArgs, refKey } from "../core/objects.ts";
+import {
+	draftedCreate,
+	draftedOn,
+	editableOf,
+	forgetReadings,
+	nameOf,
+	type ObjectRef,
+	readArgs,
+	refKey,
+} from "../core/objects.ts";
 import { agentOfChat, canonical, Permissions } from "../core/permissions.ts";
 import { publicFetch } from "../core/public-fetch.ts";
 import { context } from "../core/store.ts";
@@ -521,11 +530,11 @@ export function openCapabilities(options: CapabilityOptions) {
 	): Promise<ToolExecutionResult> {
 		const at = now();
 		const chat = Number(api.conversationId);
-		const words = `${toolWords(tool.tool)} (${tool.connection.service})`;
+		// the service's tool by its own name: split into words, it reads as a verb it is not ("issue write")
 		await api.commit(async (tx) => {
 			await log(tx, {
 				at,
-				what: sent ? `Sent to ${tool.connection.service}: ${toolWords(tool.tool)}` : `Read from ${words}`,
+				what: `${sent ? "Sent to" : "Read from"} ${tool.connection.service}: ${tool.tool}`,
 				chat,
 				outside: sent ? "sent" : "read",
 			});
@@ -668,6 +677,21 @@ export function openCapabilities(options: CapabilityOptions) {
 		/** The object the draft acts on, as the connection's objects declare its writes. */
 		const on = (args: JsonObject) =>
 			kinds === undefined ? undefined : draftedOn(tool.connection.name, tool.tool, args, kinds);
+		/** The words of a draft that makes an object, as the connection's objects declare it. */
+		const made = (args: JsonObject) => (kinds === undefined ? undefined : draftedCreate(tool.tool, args, kinds));
+		/**
+		 * What the draft does, in the owner's words: what the connection's objects say of it, or else the service's tool by
+		 * its own name; never words made by splitting that name, which read as a verb they are not ("issue write").
+		 */
+		const words = (args: JsonObject) => {
+			const created = made(args);
+			if (created !== undefined) return created.what;
+			const object = on(args);
+			const first = object?.refs[0];
+			return object === undefined || first === undefined || kinds === undefined
+				? `Use ${tool.connection.service}'s ${tool.tool}${as(args)}`
+				: `${object.what} ${nameOf(first, kinds)}`;
+		};
 		const editable = editableOf(tool.tool, kinds).filter((field) => !signed || field !== arg);
 		return options.effect({
 			name: tool.name,
@@ -678,19 +702,14 @@ export function openCapabilities(options: CapabilityOptions) {
 				notesFor(tool),
 			parameters: schemaOf(tool, accounts) as never,
 			effect: "unsafe",
-			describe: (args) => {
-				const object = on(args as JsonObject);
-				const first = object?.refs[0];
-				return object === undefined || first === undefined || kinds === undefined
-					? `${toolWords(tool.tool)} with ${tool.connection.service}${as(args as JsonObject)}`
-					: `${object.what} ${nameOf(first, kinds)}`;
-			},
+			describe: (args) => words(args as JsonObject),
 			...(editable.length === 0 ? {} : { editable }),
 			// the card draws the object it acts on, read as the account it acts as, and says that account
 			drawn: (args) => {
 				const given = args as JsonObject;
 				const account = signed && typeof given[arg] === "string" ? (given[arg] as string) : undefined;
 				const object = on(given);
+				const created = made(given);
 				return {
 					...(object === undefined || kinds === undefined
 						? {}
@@ -701,6 +720,7 @@ export function openCapabilities(options: CapabilityOptions) {
 								},
 								verb: object.verb,
 							}),
+					...(created === undefined ? {} : { verb: created.verb }),
 					...(account === undefined
 						? {}
 						: { as: `${labelOf(tool.connection.name, account)} on ${tool.connection.service}` }),
@@ -709,7 +729,13 @@ export function openCapabilities(options: CapabilityOptions) {
 			...(tool.floor === undefined ? {} : { floor: tool.floor }),
 			permission: {
 				...(signed ? { bind: [arg] } : {}),
-				what: (args) => `${toolWords(tool.tool)} with ${tool.connection.service}${as(args as JsonObject)}`,
+				what: (args) => {
+					const given = args as JsonObject;
+					const said = words(given);
+					// the neutral words say the account already
+					const own = made(given) !== undefined || on(given) !== undefined ? `${said}${as(given)}` : said;
+					return `${own.charAt(0).toLowerCase()}${own.slice(1)}`;
+				},
 			},
 			// the account it acts as, chosen once: a rerun drafts the same, whatever was switched since
 			expand: async (args, api, ctx) => {

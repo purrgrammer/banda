@@ -3,7 +3,8 @@
  * run), drawn as cards wherever they are named. A connection declares its objects as data, in its file's ```json block
  * (`"objects"`), never code: for each kind, the URL and id shapes that name it, the reads that fetch it (a tool its file
  * says only reads, and how its arguments come from the match), the fields the card shows (where each is in what the
- * reads answered) and the writes that act on it (a tool, how its arguments name the object, the verb the draft says).
+ * reads answered), the writes that act on it (a tool, how its arguments name the object, the verb the draft says) and
+ * the writes that make one (a tool, the arguments that say where, the verb and the words the draft says).
  *
  * The card itself is the daemon's: each kind names one of the cards it draws (`pull-request`, `issue`, `check-run`,
  * `notification`), and what a reading holds is turned into that card here, every string a plain line, bounded. A
@@ -44,6 +45,25 @@ export type ObjectWrite = {
 	}[];
 };
 
+/**
+ * A write that makes one, so it names none yet: the arguments that say where, and the words its draft says. `{"tool":
+ * "issue_write", "when": {"method": "create"}, "in": {"owner": "owner", "repo": "repo"}, "verb": "Create", "what":
+ * "Create an issue on {owner}/{repo}"}`.
+ */
+export type ObjectCreate = {
+	readonly tool: string;
+	/** The arguments' values that make it this write: a tool that also changes one says which. */
+	readonly when?: { readonly [arg: string]: string };
+	/** Each placeholder its words name, by the argument that gives it. */
+	readonly in: { readonly [placeholder: string]: string };
+	/** The draft's button: "Create". */
+	readonly verb: string;
+	/** What it does, with the placeholders `in` gives: "Create an issue on {owner}/{repo}". */
+	readonly what: string;
+	/** The argument the owner may edit before approving. */
+	readonly text?: string;
+};
+
 export type ObjectKind = {
 	readonly card: CardKind;
 	/** How the owner reads its name: "{owner}/{repo} #{number}". */
@@ -62,6 +82,7 @@ export type ObjectKind = {
 	/** The card's fields, each a dotted path into what the reads answered (`pr.user.login`). */
 	readonly fields: { readonly [field: string]: string };
 	readonly writes?: readonly ObjectWrite[];
+	readonly creates?: readonly ObjectCreate[];
 };
 
 export type ObjectKinds = { readonly [kind: string]: ObjectKind };
@@ -80,6 +101,10 @@ const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const TOOL = /^[A-Za-z0-9_.-]{1,64}$/;
 const PATH = /^[A-Za-z0-9_+-]{1,64}(?:\.[A-Za-z0-9_+-]{1,64}){0,7}$/;
 const WORDS = /^[A-Za-z][A-Za-z ]{0,39}$/;
+/** What a write that makes an object says, each placeholder read as one letter: "Create an issue on x/x". */
+const CREATED = /^[A-Za-z][A-Za-z0-9 /#.:-]{0,79}$/;
+const plain = (value: unknown): value is { [key: string]: unknown } =>
+	typeof value === "object" && value !== null && !Array.isArray(value);
 const reserved = (key: string) => ["__proto__", "prototype", "constructor"].includes(key);
 
 const placeholders = (template: string) => [...template.matchAll(PLACEHOLDER)].map((m) => m[1] as string);
@@ -121,8 +146,10 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 		}
 		const given = raw as { [key: string]: unknown };
 		for (const key of Object.keys(given))
-			if (!["card", "name", "urls", "ids", "normalize", "reads", "fields", "writes"].includes(key))
-				errors.push(`${where}.${key} is not a field: use card, name, urls, ids, normalize, reads, fields, writes`);
+			if (!["card", "name", "urls", "ids", "normalize", "reads", "fields", "writes", "creates"].includes(key))
+				errors.push(
+					`${where}.${key} is not a field: use card, name, urls, ids, normalize, reads, fields, writes, creates`,
+				);
 		const card = given.card;
 		if (typeof card !== "string" || !(CARDS as readonly string[]).includes(card))
 			errors.push(`${where}.card is one of ${CARDS.join(", ")}`);
@@ -316,6 +343,50 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					...(verbs.length === 0 ? {} : { verbs }),
 				});
 			}
+		const creates: ObjectCreate[] = [];
+		const rawCreates = given.creates ?? [];
+		if (!Array.isArray(rawCreates) || rawCreates.length > 12) errors.push(`${where}.creates is a list`);
+		else
+			for (const [n, create] of rawCreates.entries()) {
+				const at = `${where}.creates[${n}]`;
+				const c = plain(create) ? create : undefined;
+				const into = c?.in;
+				const when = c?.when;
+				if (
+					c === undefined ||
+					typeof c.tool !== "string" ||
+					!TOOL.test(c.tool) ||
+					typeof c.verb !== "string" ||
+					!WORDS.test(c.verb) ||
+					typeof c.what !== "string" ||
+					!CREATED.test(c.what.replace(PLACEHOLDER, "x")) ||
+					(c.text !== undefined && (typeof c.text !== "string" || !NAME.test(c.text))) ||
+					!plain(into) ||
+					(when !== undefined && (!plain(when) || Object.values(when).some((v) => typeof v !== "string")))
+				) {
+					errors.push(
+						`${at} is {"tool", "when"?: {"arg": "value"}, "in": {"placeholder": "arg"}, "verb", "what", "text"?}`,
+					);
+					continue;
+				}
+				if (
+					Object.entries(into).some(
+						([p, arg]) => !named.has(p) || typeof arg !== "string" || !/^[A-Za-z0-9_]{1,64}$/.test(arg),
+					) ||
+					placeholders(c.what).some((p) => !Object.hasOwn(into, p))
+				) {
+					errors.push(`${at}.in gives each placeholder its words name, of ${[...named].join(", ")}, from an argument`);
+					continue;
+				}
+				creates.push({
+					tool: c.tool,
+					...(when === undefined ? {} : { when: when as { [arg: string]: string } }),
+					in: into as { [placeholder: string]: string },
+					verb: c.verb,
+					what: c.what,
+					...(c.text === undefined ? {} : { text: c.text as string }),
+				});
+			}
 		objects[kind] = {
 			card: card as CardKind,
 			name: typeof name === "string" ? name : kind,
@@ -325,6 +396,7 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 			reads,
 			fields,
 			...(writes.length === 0 ? {} : { writes }),
+			...(creates.length === 0 ? {} : { creates }),
 		};
 	}
 	return errors.length > 0 ? { errors } : { objects };
@@ -477,11 +549,41 @@ export function draftedOn(
 	return words === undefined ? undefined : { refs, ...words };
 }
 
+/**
+ * The words of a write's draft that makes an object, from its arguments: the first of the connection's creates that
+ * matches, with every argument its words name; none otherwise.
+ */
+export function draftedCreate(
+	tool: string,
+	args: JsonObject,
+	kinds: ObjectKinds,
+): { readonly verb: string; readonly what: string; readonly text?: string } | undefined {
+	for (const shape of Object.values(kinds))
+		for (const create of shape.creates ?? []) {
+			if (create.tool !== tool) continue;
+			if (!Object.entries(create.when ?? {}).every(([arg, value]) => args[arg] === value)) continue;
+			const values: { [placeholder: string]: string } = {};
+			for (const [placeholder, arg] of Object.entries(create.in)) {
+				const value = args[arg];
+				if ((typeof value === "string" || typeof value === "number") && new RegExp(`^${VALUE}$`).test(String(value)))
+					values[placeholder] = String(value);
+			}
+			if (Object.keys(values).length !== Object.keys(create.in).length) continue;
+			return {
+				verb: create.verb,
+				what: fill(create.what, values),
+				...(create.text === undefined ? {} : { text: create.text }),
+			};
+		}
+	return undefined;
+}
+
 /** The text arguments a connection's write lets the owner edit, as its objects declare them. */
 export function editableOf(tool: string, kinds: ObjectKinds | undefined): string[] {
 	const found = new Set<string>();
 	for (const shape of Object.values(kinds ?? {}))
-		for (const write of shape.writes ?? []) if (write.tool === tool && write.text !== undefined) found.add(write.text);
+		for (const write of [...(shape.writes ?? []), ...(shape.creates ?? [])])
+			if (write.tool === tool && write.text !== undefined) found.add(write.text);
 	return [...found];
 }
 

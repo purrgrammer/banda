@@ -224,7 +224,7 @@ describe("a remote connection", () => {
 		expect(ran.chat).toBe(early.chat);
 		const wait = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
 		expect(fake.calls).toEqual([{ tool: "list_events", args: { day: "mon" } }]);
-		expect(wait.ask).toMatchObject({ label: "create event with Calendar" });
+		expect(wait.ask).toMatchObject({ label: "Use Calendar's create_event" });
 		await answer(s.harness, wait.key, "approve", web, "bearer");
 		await s.done(ran.turn);
 		expect(fake.calls).toEqual([
@@ -1428,7 +1428,7 @@ describe("accounts", () => {
 		s.model.plan([{ tool: "cal__create_event", args: { title: "Tea", day: "mon" } }]);
 		const write = await s.sayTo("mara", "tea on monday");
 		const wait = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
-		expect(wait.ask).toMatchObject({ label: "create event with Calendar as @owner", args: { account: "owner" } });
+		expect(wait.ask).toMatchObject({ label: "Use Calendar's create_event as @owner", args: { account: "owner" } });
 		await s.capabilities.switchAccount("mara", "cal", "owner", false);
 		await answer(s.harness, wait.key, "approve", web, "bearer");
 		await s.done(write.turn);
@@ -1477,7 +1477,7 @@ describe("accounts", () => {
 		s.model.plan([{ tool: "cal__create_event", args: { title: "Tea", day: "mon", account: "ana" } }]);
 		const first = await s.say("tea");
 		const asked = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
-		expect(asked.ask).toMatchObject({ label: "create event with Calendar as @ana" });
+		expect(asked.ask).toMatchObject({ label: "Use Calendar's create_event as @ana" });
 		await answer(s.harness, asked.key, "approve", web, "bearer", { approving: { permission: { scope: "always" } } });
 		await s.done(first.turn);
 		expect(fake.calls).toHaveLength(1);
@@ -1485,7 +1485,7 @@ describe("accounts", () => {
 		s.model.plan([{ tool: "cal__create_event", args: { title: "Tea", day: "mon", account: "bea" } }]);
 		const second = await s.say("tea again");
 		const again = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
-		expect(again.ask).toMatchObject({ label: "create event with Calendar as @bea" });
+		expect(again.ask).toMatchObject({ label: "Use Calendar's create_event as @bea" });
 		await answer(s.harness, again.key, "deny", web, "bearer");
 		await s.done(second.turn);
 		expect(fake.calls).toHaveLength(1);

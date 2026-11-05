@@ -522,6 +522,21 @@ draws as cards, from scripts/github-objects.ts.
 						}
 					]
 				}
+			],
+			"creates": [
+				{
+					"tool": "issue_write",
+					"when": {
+						"method": "create"
+					},
+					"in": {
+						"owner": "owner",
+						"repo": "repo"
+					},
+					"verb": "Create",
+					"what": "Create an issue on {owner}/{repo}",
+					"text": "body"
+				}
 			]
 		},
 		"check_run": {

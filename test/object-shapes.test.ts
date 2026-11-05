@@ -44,6 +44,7 @@ it("accepts curated data, rejects reads that can write and unbounded overlapping
 				normalize: {},
 				name: "Issue",
 				writes: [],
+				creates: [],
 				reads: { issue: { tool: "get", args: {} } },
 			},
 		},

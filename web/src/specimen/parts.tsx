@@ -203,7 +203,7 @@ export function Parts() {
 			<Section
 				id="approvals"
 				title="Approvals"
-				note="The daemon's card, the same for every agent: who it acts as, the verb is the button, the quiet one says what it won't do, at most one scope. Money gets its facts."
+				note="The daemon's card, the same for every agent: who it acts as, the verb is the button, the quiet one says what it won't do, at most one scope, never ticked until the owner ticks it. Money gets its facts. A service's tool with no words of its own is named as it is, with Allow."
 			>
 				<div className="flex max-w-2xl flex-col gap-3">
 					<ApprovalCard
@@ -271,6 +271,30 @@ export function Parts() {
 								/>
 							</>
 						}
+					/>
+					<ApprovalCard
+						agent="Sancho"
+						what="Create an issue on purrgrammer/banda"
+						verb="Create"
+						as="@purrgrammer on GitHub"
+						object={<Facts rows={[["title", "Approval cards say a tool's name as a verb"]]} />}
+						text={"The card for issue_write read “issue write” and its button said “Issue”."}
+						scope="Create an issue on purrgrammer/banda as @purrgrammer without asking until this task is done"
+					/>
+					<ApprovalCard
+						agent="Sancho"
+						what="Use GitHub's label_write as @purrgrammer"
+						verb="Allow"
+						as="@purrgrammer on GitHub"
+						object={
+							<Facts
+								rows={[
+									["method", "create"],
+									["name", "needs-review"],
+								]}
+							/>
+						}
+						scope="Use GitHub's label_write as @purrgrammer without asking until this task is done"
 					/>
 					<ChangeCard
 						agent="Mara"

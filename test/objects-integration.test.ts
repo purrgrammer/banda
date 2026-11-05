@@ -306,6 +306,48 @@ it("a real draft shows its bound account/object/verb and sends only the owner's 
 		{ tool: "add_issue_comment", args: { owner: "acme", repo: "banda", issue_number: 34, body: "owner edited" } },
 	]);
 });
+it("a draft that makes an object says it in the connection's words, never the tool's name split into a verb", async () => {
+	let called = false;
+	const s = await setup(() => {
+		if (called) return fauxAssistantMessage("done");
+		called = true;
+		return fauxAssistantMessage(
+			[
+				fauxToolCall("github__issue_write", {
+					method: "create",
+					owner: "acme",
+					repo: "banda",
+					title: "Cards say tool names",
+					body: "original",
+				}),
+			],
+			{ stopReason: "toolUse" },
+		);
+	});
+	const received = await s.core.receive(s.harness, {
+		id: crypto.randomUUID(),
+		origin: { gateway: "fake", peer: OWNER, thread: "reader" },
+		agent: "reader",
+		text: "File it",
+	});
+	if (!("turn" in received)) throw new Error("no turn");
+	const wait = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+	expect(wait.ask).toMatchObject({
+		label: "Create an issue on acme/banda",
+		verb: "Create",
+		as: "@alice on GitHub",
+		editable: ["body"],
+		permission: { what: "create an issue on acme/banda as @alice" },
+	});
+	if (wait.ask.type !== "approval") throw new Error("not an approval");
+	expect(wait.ask.scopes?.[0]?.words).toBe(
+		"Create an issue on acme/banda as @alice without asking until this task is done",
+	);
+	expect(JSON.stringify(wait.ask)).not.toMatch(/issue write/i);
+	await answer(s.harness, wait.key, "deny", { gateway: "web", peer: OWNER }, "bearer");
+	await s.harness.waitForTask(received.turn as TaskId, context);
+	expect(s.fake.calls).toHaveLength(0);
+});
 it("keeps useful primary PR data when optional reads fail", async () => {
 	const s = await setup();
 	const original = s.fake.onCall!;
