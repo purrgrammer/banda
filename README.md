@@ -5,12 +5,15 @@
 <p align="center">A band of AI agents that work for you.</p>
 
 Sancho is your first agent, and you can add more. Each one has a computer of its own to browse, write and run
-routines in. Reading is free; anything that sends, posts or can't be undone waits for your OK.
+routines in. Connect GitHub or any MCP server and choose which agents may use it. Reading is free; anything that
+sends, posts or can't be undone waits for your OK.
 
 ![A group chat: Mara finds the trains, Sancho plans the food, and Otto turns both into a printable itinerary](docs/screenshots/group.png)
 
 | | |
 |---|---|
+| ![Adding an MCP server: its tools listed, and access given to Mara only](docs/screenshots/connect.png) | ![Sancho reads the last five commits on GitHub and says what changed](docs/screenshots/github.png) |
+| Connect any MCP server by its address, and pick who gets it. | With GitHub connected, agents read repositories, issues and pull requests. |
 | ![Sancho asks before opening a GitHub issue, showing exactly what will be sent](docs/screenshots/approval.png) | ![Sancho asks to set up a routine that runs every weekday at 8:00](docs/screenshots/routine.png) |
 | Before it writes, it shows you the exact repository, title and text. | A routine wakes an agent on a schedule. |
 | ![Sancho's browser, live, reading Wikipedia's article on Porto](docs/screenshots/browser.png) | ![A printable comparison page Otto made from Mara's research](docs/screenshots/page.png) |
