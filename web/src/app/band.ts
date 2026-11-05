@@ -61,7 +61,7 @@ export function bandRows(
 			name: agent.name,
 			faces: [{ id: agent.id, face: agent.face, name: agent.name }],
 			// before anything was said, its first words, as its chat shows them
-			excerpt: main?.excerpt ?? firstWords(agent.name),
+			excerpt: main?.excerpt ?? firstWords(agent.name, agent.id === "sancho" ? undefined : (agent.tools ?? [])),
 			...(main?.by === "owner" ? { by: "You" } : {}),
 			time: rowTime(main?.said, now),
 			at,

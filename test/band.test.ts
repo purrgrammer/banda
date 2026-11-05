@@ -50,6 +50,20 @@ describe("band rows", () => {
 		expect(titleOf(rows)).toBe("(1 waiting, 2 unread) banda");
 	});
 
+	it("greets with what an agent's tools can do: the web only when it has the web or a browser", () => {
+		const made = [
+			{ id: "sancho", name: "Sancho", face: defaultAvatarFace() },
+			{ id: "otto", name: "Otto", face: defaultAvatarFace(), tools: ["bash"] },
+			{ id: "iris", name: "Iris", face: defaultAvatarFace(), tools: ["web_fetch"] },
+		];
+		const excerpts = Object.fromEntries(bandRows(made, [], [], false, NOW).map((row) => [row.name, row.excerpt]));
+		expect(excerpts.Sancho).toContain("I can read the web, write");
+		expect(excerpts.Iris).toContain("I can read the web, write");
+		expect(excerpts.Otto).toBe(
+			"Hi, I'm Otto. Ask me anything: I can write, plan and keep track of things for you, and wake up on a schedule to check on something.",
+		);
+	});
+
 	it("moves a row only when something reached the owner, never on a run's own steps", () => {
 		const rows = bandRows(
 			agents,

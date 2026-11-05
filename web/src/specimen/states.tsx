@@ -1,6 +1,6 @@
 /** Empty and loading: every place that waits on the daemon, and every place that can have nothing in it yet. */
 import { useContext } from "react";
-import { FIRST_STARTERS, firstWords } from "../app/first-words.ts";
+import { firstStarters, firstWords } from "../app/first-words.ts";
 import { Bubble, Run } from "../chat/Feed.tsx";
 import { Starters } from "../chat/FirstRun.tsx";
 import {
@@ -59,7 +59,7 @@ export function States() {
 					<Run who={OTTER}>
 						<Bubble>{firstWords("Otto")}</Bubble>
 					</Run>
-					<Starters starters={FIRST_STARTERS} />
+					<Starters starters={firstStarters()} />
 				</ChatScreen>
 			</Section>
 			<Section id="states" title="Empty and loading, part by part">
@@ -93,9 +93,23 @@ export function States() {
 								data={{
 									...SETTINGS,
 									accounts: [],
-									computer: { state: "offline", box: "container", network: "guarded" },
+									computer: {
+										state: "offline",
+										why: "Docker isn't running: start Docker Desktop (or the Docker service), and the computer starts by itself.",
+										box: "container",
+										network: "guarded",
+									},
 									signedIn: [],
 								}}
+							/>
+						</SettingsPage>
+					</div>
+				</Group>
+				<Group label="Settings while the computer is built (the first run)" className="items-start">
+					<div className="h-[520px] w-[30rem] max-w-full overflow-hidden rounded-tile border border-line-soft">
+						<SettingsPage title="Settings">
+							<AppSettings
+								data={{ ...SETTINGS, computer: { state: "building", box: "container", network: "guarded" } }}
 							/>
 						</SettingsPage>
 					</div>

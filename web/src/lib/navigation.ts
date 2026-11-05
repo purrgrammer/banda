@@ -3,7 +3,8 @@ import type { Agent, AgentView, ChatRow, CompanionView } from "../../../src/serv
 import { agentMainOf } from "./chats.ts";
 
 /** An agent as a chat names it; `since`, when its file was last accepted, orders it in the band before it has said anything. */
-export type ChatAgent = Pick<Agent, "id" | "name" | "face"> & { readonly since?: number };
+export type ChatAgent = Pick<Agent, "id" | "name" | "face"> &
+	Partial<Pick<Agent, "tools">> & { readonly since?: number };
 
 /** Whether the first agent's accepted file says it is archived; until the agents are read, it is not. */
 const leadArchived = (agents: readonly AgentView[]) =>

@@ -29,7 +29,7 @@ import { useShell } from "../lib/shell.ts";
 import { useTranscript } from "../lib/transcript.ts";
 import { ActivitySheet } from "./Activity.tsx";
 import { FeedView } from "./Feed.tsx";
-import { FACE_STARTER, FIRST_STARTERS, firstWords } from "./first-words.ts";
+import { FACE_STARTER, firstStarters, firstWords } from "./first-words.ts";
 import { type PendingMessage, settledByAnswer, shownMessages, stillPending } from "./outgoing.ts";
 import { useSkills } from "./Skills.tsx";
 import { useViewContext } from "./view-context.ts";
@@ -100,6 +100,11 @@ export function AgentChat({
 	const [doing, setDoing] = useState<string | undefined>(undefined);
 	const [activity, setActivity] = useState<{ anchor?: number }>();
 	const agents = useShell().agents;
+	// the lead gets every tool; another agent, what its accepted file names
+	const tools =
+		agent === "sancho"
+			? undefined
+			: (agents.find(({ accepted }) => accepted?.agent?.id === agent)?.accepted?.agent?.tools ?? []);
 	const mentionables = agents.flatMap(({ accepted }) => {
 		const other = accepted?.agent;
 		return other !== undefined && other.state === "active" && other.id !== agent
@@ -124,10 +129,10 @@ export function AgentChat({
 					<div className="min-h-0 flex-1 overflow-y-auto">
 						<div className="mx-auto flex w-full max-w-[44rem] flex-col gap-3 px-4 py-5">
 							<Run who={who} compact>
-								<Bubble>{firstWords(who.name)}</Bubble>
+								<Bubble>{firstWords(who.name, tools)}</Bubble>
 							</Run>
 							<Starters
-								starters={[...(defaultFace(who) ? [FACE_STARTER] : []), ...FIRST_STARTERS]}
+								starters={[...(defaultFace(who) ? [FACE_STARTER] : []), ...firstStarters(tools)]}
 								onPick={(starter) => void attempt("send it", () => send(agent, starter, []))}
 							/>
 						</div>
@@ -148,6 +153,7 @@ export function AgentChat({
 					who={who}
 					mentionables={mentionables}
 					agent={agent}
+					tools={tools}
 					at={at}
 					onDoing={setDoing}
 					onRoutine={onRoutine}
@@ -166,6 +172,7 @@ function Timeline({
 	who,
 	mentionables,
 	agent,
+	tools,
 	at,
 	onDoing,
 	onRoutine,
@@ -184,6 +191,8 @@ function Timeline({
 	onDoing: (doing: string | undefined) => void;
 	who: Who;
 	agent: string;
+	/** Its tools, for its first words; undefined for the lead. */
+	tools: readonly string[] | undefined;
 	at?: number | undefined;
 }) {
 	const transcript = useTranscript(chat);
@@ -302,7 +311,7 @@ function Timeline({
 				{/* the chat's beginning, once reached: the agent's first words, as the empty chat showed them */}
 				{transcript.loaded && !transcript.older ? (
 					<Run who={who} compact>
-						<Bubble>{firstWords(who.name)}</Bubble>
+						<Bubble>{firstWords(who.name, tools)}</Bubble>
 					</Run>
 				) : null}
 				<FeedView
