@@ -7,9 +7,11 @@
  *   sleep <ms>             wait, cancellable
  *   say <text>             words, the turn's last message
  *   crash                  the process exits
+ *   background <mark>      start a long command that outlives this process unless its group is killed
  * Prompts run one at a time, in order: one sent mid-turn waits (as claude-agent-acp queues it). Every prompt received,
  * permission answered and turn ended is appended to $FAKE_ACP_LOG (jsonl), so it survives a kill.
  */
+import { spawn } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
@@ -105,6 +107,9 @@ async function run(sessionId: string, script: string): Promise<string> {
 			await sleep(Number(rest[0] ?? 0), sessionId);
 		} else if (verb === "say") {
 			update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: rest.join(" ") } });
+		} else if (verb === "background") {
+			// in this process's group, as a harness's shell is; it does not die with this process
+			spawn("sh", ["-c", `: ${rest[0]}; sleep 600`], { stdio: "ignore" }).unref();
 		} else if (verb === "crash") {
 			process.exit(1);
 		} else if (line !== "") {
@@ -114,7 +119,10 @@ async function run(sessionId: string, script: string): Promise<string> {
 	return cancelled.has(sessionId) ? "cancelled" : "end_turn";
 }
 
-createInterface({ input: process.stdin }).on("line", (line) => {
+const input = createInterface({ input: process.stdin });
+// as claude-agent-acp: its client gone, it exits (what it started may not)
+input.on("close", () => process.exit(0));
+input.on("line", (line) => {
 	const message = JSON.parse(line) as {
 		id?: number;
 		method?: string;

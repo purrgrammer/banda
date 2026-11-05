@@ -8,9 +8,19 @@
  * The harness's asks live as long as its process: a restart ends both, so they are slots in the session's record, not
  * Waits. A restart after the ask was sent never sends it again: the session says it was interrupted.
  */
+import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { type ConversationId, defineDoc, defineTask, type JsonObject, type Tx } from "@earendil-works/pi-durable";
+import type { Context } from "@earendil-works/chord";
+import {
+	type ConversationId,
+	defineDoc,
+	defineTask,
+	type Harness,
+	type JsonObject,
+	type TaskId,
+	type Tx,
+} from "@earendil-works/pi-durable";
 import {
 	type AcpConnection,
 	type AcpPermissionOutcome,
@@ -85,6 +95,8 @@ export type HarnessSession = {
 	answer?: { id: string; allow: boolean };
 	/** The ask was sent: a restart past here reports it interrupted, never sends it again. */
 	prompted?: true;
+	/** The harness's process, its group's too, while it may run: a restart kills the group it left. */
+	pid?: number;
 	sessionId?: string;
 };
 
@@ -246,6 +258,27 @@ export function applyUpdate(steps: HarnessStep[], update: AcpUpdate): void {
 	else steps[index] = step;
 }
 
+/**
+ * Kill what a session's harness left running when its daemon died: its process group, but only while its leader still
+ * runs that harness's command, so a pid the system gave to something else since is never touched.
+ */
+export function killLeft(pid: number | undefined, definition: HarnessDefinition | undefined): void {
+	if (pid === undefined || definition === undefined) return;
+	let command = "";
+	try {
+		command = execFileSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" });
+	} catch {
+		// no such process; its group may still hold what it started
+	}
+	const ours = [definition.command, ...(definition.args ?? [])].some((part) => part !== "" && command.includes(part));
+	if (command.trim() !== "" && !ours) return;
+	try {
+		process.kill(-pid, "SIGKILL");
+	} catch {
+		// nothing left in it
+	}
+}
+
 /** Keep steps within the bound, the first (the ask) always. */
 function bounded(session: HarnessSession): void {
 	const over = session.steps.length - MAX_STEPS;
@@ -309,6 +342,7 @@ export function defineHarnesses(options: HarnessOptions) {
 		session.state = state;
 		session.ended = now();
 		delete session.asking;
+		delete session.pid;
 		const said = [...session.steps].reverse().find((step) => step.kind === "said");
 		if (said !== undefined) session.outcome = said.text.split("\n")[0]?.slice(0, 300) ?? "";
 		await options.followUp(tx, session.chat, {
@@ -340,6 +374,7 @@ export function defineHarnesses(options: HarnessOptions) {
 				await runtime.commit(async (tx) => {
 					const session = (await tx.doc(Harnesses)).sessions[id];
 					if (session === undefined || session.ended !== undefined) return terminal;
+					killLeft(session.pid, definition);
 					if (session.prompted === true) {
 						await ending(tx, id, "interrupted", service);
 						return terminal;
@@ -391,6 +426,7 @@ export function defineHarnesses(options: HarnessOptions) {
 					| { id: string; resolve: (outcome: AcpPermissionOutcome) => void; request: AcpPermissionRequest }
 					| undefined;
 				const asked = async (request: AcpPermissionRequest): Promise<AcpPermissionOutcome> => {
+					fault("harness:ask");
 					const raw = (request.toolCall.rawInput ?? {}) as { command?: unknown };
 					const command = typeof raw.command === "string" ? raw.command : (request.toolCall.title ?? "a command");
 					const ask: HarnessAsk = {
@@ -446,6 +482,7 @@ export function defineHarnesses(options: HarnessOptions) {
 						cwd,
 						handlers: {
 							update: (_session, update) => {
+								fault("harness:update");
 								if (update.sessionUpdate === "user_message_chunk") return;
 								applyUpdate(steps, update);
 								schedule();
@@ -455,6 +492,12 @@ export function defineHarnesses(options: HarnessOptions) {
 						log: (line) => options.log(`${definition.name}: ${line}`),
 					});
 					void connection.exited.then(() => finished(cancelled ? "stopped" : "failed"));
+					const pid = connection.pid;
+					await runtime.commit(async (tx) => {
+						const session = (await tx.doc(Harnesses)).sessions[id];
+						if (session !== undefined && pid !== undefined) session.pid = pid;
+						return undefined;
+					}, ctx);
 					fault("harness:spawn");
 					const opened = await openSession(connection, { cwd, mode: definition.mode });
 					sessionId = opened.sessionId;
@@ -529,6 +572,8 @@ export function defineHarnesses(options: HarnessOptions) {
 					await flushing;
 					dirty = true;
 					await flush();
+					// the harness is gone before the session ends: an ended session is never reconciled
+					await connection.close();
 					await runtime.commit(async (tx) => {
 						await ending(tx, id, state, service);
 						return terminal;
@@ -536,9 +581,9 @@ export function defineHarnesses(options: HarnessOptions) {
 				} catch (error) {
 					options.log(`harness: ${(error as Error).message}`);
 					if (runtime.signal.aborted) throw error;
+					await connection?.close();
 					await runtime.commit(async (tx) => {
-						const session = (await tx.doc(Harnesses)).sessions[id];
-						await ending(tx, id, session?.prompted === true ? "failed" : "failed", service);
+						await ending(tx, id, "failed", service);
 						return terminal;
 					}, ctx);
 				} finally {
@@ -591,7 +636,28 @@ export function defineHarnesses(options: HarnessOptions) {
 		return task;
 	}
 
-	return { Session, begin };
+	/**
+	 * End every session whose task is over without having ended it (it threw, or is gone): failed, its agent woken once,
+	 * and what its harness left running killed. Run when the daemon starts.
+	 */
+	async function reconcile(harness: { commit: Harness["commit"] }, ctx: Context): Promise<number> {
+		return harness.commit(async (tx) => {
+			const doc = await tx.doc(Harnesses);
+			let ended = 0;
+			for (const [task, session] of Object.entries(doc.sessions)) {
+				if (session.ended !== undefined) continue;
+				const found = await tx.task(Number(task) as TaskId);
+				if (found !== undefined && found.state.status !== "terminal") continue;
+				const definition = options.definitions().get(session.harness);
+				killLeft(session.pid, definition);
+				await ending(tx, Number(task), "failed", definition?.service ?? session.harness);
+				ended++;
+			}
+			return ended;
+		}, ctx);
+	}
+
+	return { Session, begin, reconcile };
 }
 
 /** The owner's note to a running session: taken after its current step. False when it is not running. */

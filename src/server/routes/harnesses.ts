@@ -110,10 +110,13 @@ export const harnessesArea: AreaModule = {
 	},
 	start: (deps) => {
 		const { harness } = deps;
-		// the doc the shell watches exists from the start
-		void harness.commit(async (tx) => {
-			await tx.doc(Harnesses);
-		}, context);
+		// the doc the shell watches exists from the start; sessions a dead daemon left end as failed
+		void harness
+			.commit(async (tx) => {
+				await tx.doc(Harnesses);
+			}, context)
+			.then(() => harnesses?.reconcile(harness, context))
+			.catch((error: unknown) => deps.log(`harnesses: ${(error as Error).message}`));
 
 		async function view(): Promise<HarnessesView> {
 			const doc = (await harness.snapshot(Harnesses, context)) ?? { accounts: {}, sessions: {} };
