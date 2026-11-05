@@ -97,6 +97,9 @@ describe("remote reach over Iroh", () => {
 			await shell.next<ShellEvent>((event) => event.type === "devices" && event.devices.devices[0]?.name === "Pixel 9");
 
 			const connection = await phone.dial(invite.ticket);
+			// answered on it: the daemon holds this connection now. A dial returns before the daemon has accepted it, and
+			// one it accepts after the revoke is held as any endpoint that is not a device, never closed as revoked
+			expect(await phone.request("GET", "/api/devices/pair")).toEqual({ status: 200, body: { state: "paired" } });
 			const revoked: DevicesView = await owner("POST", `/devices/${phone.id}/revoke`);
 			expect(revoked.devices).toEqual([expect.objectContaining({ id: phone.id, revoked: expect.any(Number) })]);
 			// its live connections are closed, and it is told so: the reason is the daemon's word for a revoke
