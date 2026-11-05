@@ -1,5 +1,6 @@
 ---
 service: Codex
+provider: openai
 package: @agentclientprotocol/codex-acp
 bin: dist/index.js
 command: codex-acp

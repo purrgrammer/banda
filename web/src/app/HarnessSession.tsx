@@ -31,6 +31,7 @@ function useNow(on: boolean): number {
 
 const viewOf = (session: HarnessSessionView, now: number): CardView => ({
 	harness: session.service,
+	...(session.provider === undefined ? {} : { provider: session.provider }),
 	folder: session.folder,
 	state:
 		session.state === "starting"

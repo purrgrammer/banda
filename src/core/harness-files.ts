@@ -14,7 +14,18 @@ import type { HarnessDefinition } from "./harness.ts";
 /** Where banda's own harness files are, in the checkout or the release. */
 export const SHIPPED_HARNESSES = fileURLToPath(new URL("../../shipped/harnesses/", import.meta.url));
 
-const FIELDS = ["service", "package", "bin", "command", "adapter", "args", "mode", "asks", "install"] as const;
+const FIELDS = [
+	"service",
+	"provider",
+	"package",
+	"bin",
+	"command",
+	"adapter",
+	"args",
+	"mode",
+	"asks",
+	"install",
+] as const;
 /** banda's own ACP adapters, for harnesses that speak something else (src/adapters/). */
 export const ADAPTERS = ["pi"] as const as readonly string[];
 
@@ -30,6 +41,8 @@ export type HarnessFile = {
 	readonly mode?: string;
 	/** How the owner installs it when it is not here, as a command line. */
 	readonly install?: string;
+	/** Whose it is, as the app's provider logos name them (anthropic, openai): its card shows that logo. */
+	readonly provider?: string;
 	readonly start: /** A package banda's checkout may have, run with node; else `command`, the same adapter installed on the PATH. */
 		| { readonly package: string; readonly bin: string; readonly command?: string }
 		/** A command on the PATH; with `adapter`, banda's own adapter (src/adapters/<adapter>) runs it and speaks ACP. */
@@ -62,6 +75,9 @@ export function parseHarness(
 	if (pkg !== undefined && bin === undefined) errors.push(`a package names its "bin:", the script to run with node`);
 	const mode = read.one("mode");
 	const install = read.one("install");
+	const provider = read.one("provider");
+	if (provider !== undefined && !/^[a-z0-9-]{1,40}$/.test(provider))
+		errors.push(`"provider: ${provider}" names a provider's logo, such as anthropic or openai`);
 	const adapter = read.one("adapter");
 	if (adapter !== undefined && (command === undefined || !ADAPTERS.includes(adapter)))
 		errors.push(`"adapter" is one of banda's (${ADAPTERS.join(", ")}), around a "command:"`);
@@ -74,6 +90,7 @@ export function parseHarness(
 			asks: read.one("asks") ?? OWN_ASKS,
 			...(mode === undefined ? {} : { mode }),
 			...(install === undefined ? {} : { install }),
+			...(provider === undefined ? {} : { provider }),
 			start:
 				pkg !== undefined
 					? { package: pkg, bin: bin ?? "", ...(command === undefined ? {} : { command }) }
@@ -111,6 +128,7 @@ export function resolveHarness(file: HarnessFile): HarnessDefinition | undefined
 		about: file.about,
 		asks: file.asks,
 		...(file.mode === undefined ? {} : { mode: file.mode }),
+		...(file.provider === undefined ? {} : { provider: file.provider }),
 	};
 	if ("package" in file.start) {
 		try {

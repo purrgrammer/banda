@@ -83,6 +83,7 @@ function sessionAt(step: Step, notes: readonly HarnessStep[]): HarnessSessionVie
 	);
 	return {
 		harness: HARNESS,
+		provider: "anthropic",
 		folder: FOLDER,
 		state,
 		steps: [...steps, ...taken],
@@ -129,6 +130,7 @@ function Flow() {
 						<HarnessConnectCard
 							agent="Mara"
 							harness={HARNESS}
+							provider="anthropic"
 							folder={FOLDER}
 							connected={at > 0 ? FOLDER : undefined}
 							on={at > 0}
@@ -245,6 +247,7 @@ export function HarnessSection() {
 					<HarnessConnectCard harness={HARNESS} />
 					<HarnessMissingCard
 						harness="Codex"
+						provider="openai"
 						about="OpenAI's coding agent, with your sign-in on this computer."
 						install="npm install -g @agentclientprotocol/codex-acp@2.5.0"
 					/>

@@ -195,16 +195,18 @@ export const harnessesArea: AreaModule = {
 			const doc = (await harness.snapshot(Harnesses, context)) ?? { accounts: {}, sessions: {} };
 			const known = definitions();
 			return {
-				harnesses: [...known.values()].map(({ name, service, about, asks, custom: owned }) => ({
+				harnesses: [...known.values()].map(({ name, service, about, asks, custom: owned, provider }) => ({
 					name,
 					service,
+					...(provider === undefined ? {} : { provider }),
 					...(about === undefined || about === "" ? {} : { about }),
 					...(asks === undefined ? {} : { asks }),
 					...(owned === true ? { custom: true } : {}),
 				})),
-				missing: missing.map(({ name, service, about, install }) => ({
+				missing: missing.map(({ name, service, about, install, provider }) => ({
 					name,
 					service,
+					...(provider === undefined ? {} : { provider }),
 					...(about === "" ? {} : { about }),
 					...(install === undefined ? {} : { install }),
 				})),
@@ -218,6 +220,9 @@ export const harnessesArea: AreaModule = {
 						agent: session.agent,
 						harness: session.harness,
 						service: known.get(session.harness)?.service ?? session.harness,
+						...(known.get(session.harness)?.provider === undefined
+							? {}
+							: { provider: known.get(session.harness)?.provider }),
 						folder: session.folder,
 						state: session.state,
 						at: session.at,

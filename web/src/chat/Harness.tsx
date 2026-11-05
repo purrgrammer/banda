@@ -49,6 +49,8 @@ export type HarnessState = "working" | "waiting" | "done" | "stopped" | "interru
 export type HarnessSessionView = {
 	/** The harness by name: "Claude Code". */
 	readonly harness: string;
+	/** Whose it is, by the app's provider logos: its mark beside its name. */
+	readonly provider?: string | undefined;
 	/** The folder it works in, as the owner knows it: "~/sancho". */
 	readonly folder: string;
 	readonly state: HarnessState;
@@ -58,6 +60,16 @@ export type HarnessSessionView = {
 	/** Its last words once it ended, first line only. */
 	readonly outcome?: string | undefined;
 };
+
+/** A harness's mark: its provider's logo (Claude Code: Anthropic's), the terminal for one with none (pi, the owner's). */
+export function HarnessMark({ provider, className }: { provider?: string | undefined; className?: string }) {
+	return provider === undefined ? (
+		<TerminalIcon aria-hidden="true" className={cn("size-4.5 text-ink-2", className)} />
+	) : (
+		// the logos are padded inside their box: a size up reads as large as GitHub's mark beside them
+		<img src={`/providers/${provider}.svg`} alt="" className={cn("size-6 dark:invert", className)} />
+	);
+}
 
 /** The one line the card shows for a step: a verb and what it acted on. */
 export function headlineOf(step: HarnessStep | undefined): { verb: string; object: string } {
@@ -172,6 +184,7 @@ export function HarnessConnectCard({
 	on,
 	asks,
 	about,
+	provider,
 	folded = false,
 	onRemove,
 	onConnect,
@@ -192,6 +205,8 @@ export function HarnessConnectCard({
 	asks?: string | undefined;
 	/** What it is, in a line: the folded card's subtitle. */
 	about?: string | undefined;
+	/** Whose it is: its card shows that provider's logo. */
+	provider?: string | undefined;
 	/** Not connected, it shows as one row with Connect until that is tapped. */
 	folded?: boolean;
 	/** The owner added it: Remove forgets it. */
@@ -211,7 +226,7 @@ export function HarnessConnectCard({
 		return (
 			<Tile className="flex items-center gap-3 p-3">
 				<span className="flex size-9 shrink-0 items-center justify-center rounded-field bg-paper-3">
-					<TerminalIcon aria-hidden="true" className="size-4.5 text-ink-2" />
+					<HarnessMark provider={provider} />
 				</span>
 				<span className="flex min-w-0 flex-1 flex-col">
 					<span className="text-ui font-semibold text-ink">{harness}</span>
@@ -231,7 +246,7 @@ export function HarnessConnectCard({
 		<Tile className="flex flex-col gap-3 p-4">
 			<span className="flex items-center gap-3">
 				<span className="flex size-9 shrink-0 items-center justify-center rounded-field bg-paper-3">
-					<TerminalIcon aria-hidden="true" className="size-4.5 text-ink-2" />
+					<HarnessMark provider={provider} />
 				</span>
 				<span className="flex min-w-0 flex-1 flex-col">
 					<span className="text-ui font-semibold text-ink">
@@ -338,12 +353,22 @@ export function HarnessConnectCard({
 }
 
 /** A harness banda knows but this computer has not installed: what it is, and the command that installs it. */
-export function HarnessMissingCard({ harness, about, install }: { harness: string; about?: string; install?: string }) {
+export function HarnessMissingCard({
+	harness,
+	about,
+	install,
+	provider,
+}: {
+	harness: string;
+	about?: string;
+	install?: string;
+	provider?: string;
+}) {
 	return (
 		<Tile className="flex flex-col gap-2.5 p-3">
 			<span className="flex items-center gap-3">
 				<span className="flex size-9 shrink-0 items-center justify-center rounded-field bg-paper-3">
-					<TerminalIcon aria-hidden="true" className="size-4.5 text-ink-3" />
+					<HarnessMark provider={provider} className="opacity-60" />
 				</span>
 				<span className="flex min-w-0 flex-1 flex-col">
 					<span className="text-ui font-semibold text-ink-2">{harness}</span>
@@ -389,6 +414,7 @@ export function HarnessCard({
 						live(state) ? "bg-alive motion-safe:animate-pulse" : state === "done" ? "bg-ink" : "bg-ink-3",
 					)}
 				/>
+				<HarnessMark provider={session.provider} className={session.provider === undefined ? "size-4" : "size-5"} />
 				<span className="font-medium text-ink">{harness}</span>
 				<span className="min-w-0 truncate font-code text-meta text-ink-2">{folder}</span>
 				{live(state) ? (
@@ -534,6 +560,7 @@ export function HarnessTranscript({
 	return (
 		<div className="flex min-w-0 flex-col gap-4">
 			<span className="flex items-center gap-2 text-ui">
+				<HarnessMark provider={session.provider} className={session.provider === undefined ? "size-4" : "size-5"} />
 				<span className="font-medium text-ink">{session.harness}</span>
 				<span className="min-w-0 truncate font-code text-meta text-ink-2">{session.folder}</span>
 				<span className="ml-auto shrink-0 text-meta text-ink-2 tabular-nums">{session.elapsed}</span>

@@ -40,6 +40,8 @@ export type HarnessDefinition = {
 	readonly asks?: string;
 	/** The owner added it with a command line. */
 	readonly custom?: boolean;
+	/** Whose it is, by the app's provider logos (anthropic, openai). */
+	readonly provider?: string;
 };
 
 /** One step of a session, as the owner reads it. */

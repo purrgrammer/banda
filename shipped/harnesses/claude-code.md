@@ -1,5 +1,6 @@
 ---
 service: Claude Code
+provider: anthropic
 package: @agentclientprotocol/claude-agent-acp
 bin: dist/index.js
 command: claude-agent-acp

@@ -14,6 +14,8 @@ export type HarnessSessionView = {
 	readonly agent: string;
 	readonly harness: string;
 	readonly service: string;
+	/** Whose harness it is, by the app's provider logos. */
+	readonly provider?: string;
 	readonly folder: string;
 	readonly state: HarnessState;
 	readonly at: number;
@@ -30,6 +32,7 @@ export type HarnessesView = {
 	readonly harnesses: readonly {
 		readonly name: string;
 		readonly service: string;
+		readonly provider?: string;
 		readonly about?: string;
 		readonly asks?: string;
 		/** The owner added it with a command line: they may remove it. */
@@ -39,6 +42,7 @@ export type HarnessesView = {
 	readonly missing: readonly {
 		readonly name: string;
 		readonly service: string;
+		readonly provider?: string;
 		readonly about?: string;
 		readonly install?: string;
 	}[];
