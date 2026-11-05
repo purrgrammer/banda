@@ -70,8 +70,70 @@ jobs:
             release/desktop/banda-*.AppImage
             release/desktop/banda-*.deb
 
+  # The phone's shell: one APK for arm64 Android phones, built on Linux (the runner's Android SDK; Gradle fetches the
+  # Java it needs). A tag's APK is signed with banda's key from the repository's secrets, so each release installs over
+  # the one before; a manual run without the key uploads an unsigned APK, to try the build and nothing more.
+  android:
+    name: build (android-arm64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
+      - name: The tag names the version being built
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+      - run: npm ci
+      - name: banda's signing key, from the secrets
+        env:
+          KEYSTORE: ${{ secrets.BANDA_ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE" ]; then
+            if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+              echo "::error::a release APK must be signed: set BANDA_ANDROID_KEYSTORE_BASE64 and its passwords"
+              exit 1
+            fi
+            echo "no signing key: this run's APK is unsigned"
+            exit 0
+          fi
+          printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/banda.jks"
+          echo "BANDA_ANDROID_KEYSTORE=$RUNNER_TEMP/banda.jks" >> "$GITHUB_ENV"
+      - run: npm run mobile:apk:release
+        env:
+          BANDA_VERSION_CODE: ${{ github.run_number }}
+          BANDA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.BANDA_ANDROID_KEYSTORE_PASSWORD }}
+          BANDA_ANDROID_KEY_ALIAS: ${{ secrets.BANDA_ANDROID_KEY_ALIAS }}
+          BANDA_ANDROID_KEY_PASSWORD: ${{ secrets.BANDA_ANDROID_KEY_PASSWORD }}
+      - name: Name the APK as the other downloads are named
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          out=mobile/android/app/build/outputs/apk/release
+          mkdir -p release
+          if [ -f "$out/app-release.apk" ]; then
+            cp "$out/app-release.apk" "release/banda-$version-android-arm64.apk"
+          else
+            cp "$out/app-release-unsigned.apk" "release/banda-$version-android-arm64-unsigned.apk"
+          fi
+          rm -f "$RUNNER_TEMP/banda.jks"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: banda-android-arm64
+          if-no-files-found: error
+          path: release/banda-*-android-arm64*.apk
+
   publish:
-    needs: build
+    needs: [build, android]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 15

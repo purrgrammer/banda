@@ -1,6 +1,16 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
+import groovy.json.JsonSlurper
+
+// One version for the daemon, the app and the phone's shell: banda's package.json says it. The release workflow gives
+// each build a growing code (BANDA_VERSION_CODE), so a newer APK installs over the one before.
+def bandaVersion = new JsonSlurper().parse(file('../../../package.json')).version
+def bandaVersionCode = (System.getenv('BANDA_VERSION_CODE') ?: '1') as Integer
+// A release APK is signed with banda's own key, from the environment and never from a file in the repo: an APK signed
+// with any other key cannot install over it. Without the key, a release build is unsigned.
+def signingKey = System.getenv('BANDA_ANDROID_KEYSTORE')
+
 android {
     namespace = "app.banda"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -8,8 +18,8 @@ android {
         applicationId "app.banda"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "0.1.0"
+        versionCode bandaVersionCode
+        versionName bandaVersion
         // Android only, arm64 only for now: phones, and the arm64 emulator
         ndk { abiFilters 'arm64-v8a' }
         aaptOptions {
@@ -18,8 +28,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (signingKey) {
+            banda {
+                storeFile file(signingKey)
+                storePassword System.getenv('BANDA_ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('BANDA_ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('BANDA_ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
+            if (signingKey) signingConfig signingConfigs.banda
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

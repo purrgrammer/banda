@@ -40,6 +40,10 @@ defect. Remove it only when its fix and acceptance evidence are recorded in a co
   n0's relays, pairs and chats, and survives sleep, backgrounding and a network change. The shell (`mobile/`) pairs,
   chats, keeps its key across a daemon restart and pairs again once revoked on the arm64 emulator over n0; no real
   phone has run it
+- [ ] A signed release APK: the release workflow builds `banda-<version>-android-arm64.apk` and refuses to tag one
+  without banda's key in the repository's secrets (BANDA_ANDROID_KEYSTORE_BASE64, _KEYSTORE_PASSWORD, _KEY_ALIAS,
+  _KEY_PASSWORD). The key is still to be made, kept safe and set; a tagged run then needs trying, and the APK
+  installing over the one before
 - [ ] The phone's shell on iOS: out of scope for now. It implements the same plugin contract as Android's
   (`BandaPlugin` in `web/src/lib/transport.ts`) with iroh-ffi's Swift bindings, and needs a real iPhone to try
 - [ ] The phone's shell, once paired: a device revoked while the app is open sees requests fail rather than the

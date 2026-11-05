@@ -10,6 +10,7 @@
 	"scripts": {
 		"sync": "cap sync android",
 		"apk": "cap sync android && android/gradlew -p android assembleDebug",
+		"apk:release": "cap sync android && android/gradlew -p android assembleRelease",
 		"install:debug": "\"${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb\" install -r android/app/build/outputs/apk/debug/app-debug.apk && \"${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb\" shell am start -n app.banda/.MainActivity",
 		"test": "android/gradlew -p android testDebugUnitTest"
 	},
