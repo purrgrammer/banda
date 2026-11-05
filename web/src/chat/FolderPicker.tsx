@@ -2,12 +2,14 @@
  * The code folder picker, inline in the connect dialog: a browser cannot hand an app a folder's path, so the daemon
  * lists the folders on the owner's computer and this steps through them. The folder shown is the one picked: a path
  * bar of its parents (each one a click away, or typed), the projects (git repositories) in it, which are what tasks
- * work in, and the folders in it, each a click into. Nothing is read but folder names.
+ * work in, and the folders in it, each a click into. Nothing is read but folder names. In the desktop app, "Choose…"
+ * opens the system's own folder dialog instead.
  */
 import {
 	ChevronRightIcon,
 	CornerDownLeftIcon,
 	FolderIcon,
+	FolderOpenIcon,
 	GitBranchIcon,
 	HomeIcon,
 	PencilIcon,
@@ -17,6 +19,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { FolderListing } from "../lib/api.ts";
+import { desktop, fileManager } from "../lib/desktop.ts";
 
 /** A count of projects in words: 1 project, 12 projects; none says nothing. */
 export const projectsWord = (count: number) => (count === 0 ? "" : count === 1 ? "1 project" : `${count} projects`);
@@ -118,6 +121,21 @@ export function FolderBrowser({
 								</Fragment>
 							))}
 						</nav>
+						{desktop === undefined ? null : (
+							<Button
+								variant="outline"
+								size="xs"
+								className="shrink-0"
+								onClick={() =>
+									void desktop
+										?.chooseFolder(listing?.path ?? at)
+										.then((picked) => (picked === undefined ? undefined : go(picked)), setErrorFrom(setError))
+								}
+							>
+								<FolderOpenIcon />
+								{fileManager === undefined ? "Choose…" : `Choose in ${fileManager}…`}
+							</Button>
+						)}
 						<Button
 							variant="ghost"
 							size="icon-xs"
@@ -240,3 +258,6 @@ export function FolderBrowser({
 		</div>
 	);
 }
+
+const setErrorFrom = (set: (message: string) => void) => (failed: unknown) =>
+	set(failed instanceof Error ? failed.message : String(failed));
