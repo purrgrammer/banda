@@ -33,4 +33,5 @@ by asking and from the panel, leave, return to its event and reply, inspect its 
   a run said anything
 - [ ] Tried through the app at phone width (the editor, pause and delete were tried at desktop width; the phone
   pass needs a resizable browser)
-- [ ] Watches (a connection's events, a webhook) and monitors (a command's output), designed before they return
+- [ ] Watches return on their design (DESIGN.md "Watches"); the object side is in [Connections](connections.md);
+  monitors wait for theirs (DESIGN.md "Open")

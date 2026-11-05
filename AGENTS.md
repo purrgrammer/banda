@@ -7,7 +7,7 @@ docs/status.md (current work and acceptance) and the relevant section's open wor
 1. **One store.** pi-durable holds all truth; bytes too big for it live beside it as blobs, by hash, and the store holds
    every fact about them. Anything else is derived and rebuildable; a mechanism that only syncs
    two stores means one of them should not exist.
-2. **Definitions are files.** Agents, connections, routines and memory are plain text files in the workspace, inspectable and
+2. **Definitions are files.** Agents, connections, routines, watches and memory are plain text files in the workspace, inspectable and
    editable by the owner or an agent; the store holds what runs and what was accepted, never a copy to sync.
 3. **Use the substrate first.** Before building, check whether pi-durable, pi-env, git or Docker already does it
    (exactly-once submits, durable sleeps, steering, child conversations).
@@ -36,7 +36,7 @@ docs/status.md (current work and acceptance) and the relevant section's open wor
 13. **Pin exact versions; prefer no new dependency.** pi-durable, pi-ai, pi-env and chord move in lockstep.
 
 ## Words
-agent, band, group, chat, turn, queue, message, part, tool, wait, draft, permission, routine, event, connection,
+agent, band, group, chat, turn, queue, message, part, tool, wait, draft, permission, routine, watch, event, connection,
 account, object, artifact, memory, box, workspace, gateway, inference, as DESIGN.md defines them. One word per thing, in code, docs and the UI.
 
 ## Setup and checks

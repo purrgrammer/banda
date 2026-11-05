@@ -13,6 +13,9 @@ palette checks pass; the running app was exercised at both widths, including dra
 concurrency and provenance work remains in [Memory](memory.md); this is not release qualification.
 The Library and panel redesign is a separate slice.
 
+Watches are designed: DESIGN.md "Watches", [Watches](watches.md) for the watch and [Connections](connections.md)
+for the object side. Owner review of the design is pending before slice 1 starts.
+
 Settings → Model lists every model provider to connect, use or sign out of, so the band can switch providers after
 first run ([Chat](chat.md)). Owner review is pending.
 
@@ -75,7 +78,7 @@ chat; a name, an avatar and a style the owner chooses; notifications only when s
 | Hand-offs, helpers, side chats, errands and tasks areas | Removed | Agent-to-agent messages are a narrow direct-chat tool; groups keep their existing mention behavior |
 | Goals, Inbox, Library, Routines and Connections pages | Removed | Deleted; routines in the panel, connections in settings, artifacts in the chat |
 | Routines, schedule | Present | Wake in the agent's chat as events |
-| Watch, event sources, `watch.ts` | Removed | Deleted; returns with its own design (DESIGN.md "Open") |
+| Watch, event sources, `watch.ts` | Removed; designed | Deleted; returns on its design ([Watches](watches.md)), slice 1 first |
 | Skills, `skill` | Wired in a separate worktree, owner review pending | Accepted shared prompt files, owner and agent loads; supporting files remain data |
 | Memory's accepted core, learned cards, `propose_preference`, `used` | Removed | Deleted; facts in effect at once |
 | Connections, OAuth, GitHub by code, shipped file | Present, per-account credentials and object readings | Accounts; one connect flow; objects |
