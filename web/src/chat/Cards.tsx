@@ -10,7 +10,9 @@ import { cn } from "@/lib/cn";
 /** The frame every card shares: a hairline, the tile radius, the measure. */
 export function Tile({ children, className }: { children: ReactNode; className?: string }) {
 	return (
-		<div className={cn("w-full max-w-[var(--measure)] rounded-tile border border-line-soft bg-paper", className)}>
+		// the measure, not the column's share: a chat column shrinks each entry to its content, so a card whose content got
+		// smaller (an approval once answered) would shrink with it
+		<div className={cn("w-[var(--measure)] max-w-full rounded-tile border border-line-soft bg-paper", className)}>
 			{children}
 		</div>
 	);

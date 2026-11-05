@@ -134,6 +134,9 @@ const lastIndex = <T>(items: readonly T[], test: (item: T) => boolean) => {
 	return -1;
 };
 
+/** A plain copy of a doc's value: docs are proxies the structured clone refuses. */
+const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
 const cut = (text: string, max = MAX_TEXT) => (text.length > max ? `${text.slice(0, max)}\n… (cut)` : text);
 
 /** Lines added and removed between two texts, past their common start and end, and the hunk as a diff. */
@@ -345,7 +348,7 @@ export function defineHarnesses(options: HarnessOptions) {
 						await ending(tx, id, definition === undefined ? "failed" : "stopped", service);
 						return terminal;
 					}
-					start = structuredClone(session);
+					start = copy(session);
 					return undefined;
 				}, ctx);
 				if (start === undefined || definition === undefined) return;
@@ -357,18 +360,18 @@ export function defineHarnesses(options: HarnessOptions) {
 					}, ctx);
 					return;
 				}
-				const steps: HarnessStep[] = structuredClone(start.steps);
+				const steps: HarnessStep[] = copy(start.steps);
 				let dirty = false;
 				let flushing: Promise<void> | undefined;
 				let timer: NodeJS.Timeout | undefined;
 				const flush = async () => {
 					if (!dirty) return;
 					dirty = false;
-					const copy = structuredClone(steps);
+					const kept = copy(steps);
 					await runtime.commit(async (tx) => {
 						const session = (await tx.doc(Harnesses)).sessions[id];
 						if (session === undefined || session.ended !== undefined) return undefined;
-						session.steps = copy;
+						session.steps = kept;
 						bounded(session);
 						return undefined;
 					}, ctx);
@@ -416,6 +419,7 @@ export function defineHarnesses(options: HarnessOptions) {
 				let sessionId: string | undefined;
 				let outstanding = 0;
 				let cancelled = false;
+				const taken = new Set<number>(start.notes.flatMap((note, index) => (note.sent === true ? [index] : [])));
 				let finished: (state: HarnessState) => void = () => {};
 				const over = new Promise<HarnessState>((resolve) => {
 					finished = resolve;
@@ -495,10 +499,14 @@ export function defineHarnesses(options: HarnessOptions) {
 								return undefined;
 							}, ctx);
 						}
-						const unsent = session.notes
-							.map((note, index) => ({ note, index }))
-							.filter(({ note }) => note.sent !== true);
-						if (unsent.length > 0 && !cancelled) {
+						// watch callbacks overlap: a note is taken here, before any await, so it goes to the harness once
+						const unsent = cancelled
+							? []
+							: session.notes
+									.map((note, index) => ({ note, index }))
+									.filter(({ note, index }) => note.sent !== true && !taken.has(index));
+						for (const { index } of unsent) taken.add(index);
+						if (unsent.length > 0) {
 							await runtime.commit(async (tx) => {
 								const current = (await tx.doc(Harnesses)).sessions[id];
 								if (current === undefined) return undefined;
