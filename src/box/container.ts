@@ -133,12 +133,7 @@ async function build(
 	files: { readonly [name: string]: string },
 	building: () => void,
 ): Promise<string> {
-	const hash = createHash("sha256");
-	for (const [name, path] of Object.entries(files).sort()) {
-		hash.update(name);
-		hash.update(await readFile(path));
-	}
-	const tag = `${repository}:${hash.digest("hex").slice(0, 12)}`;
+	const tag = await imageTag(repository, files);
 	try {
 		await docker(["image", "inspect", "--format", "{{.Id}}", tag], 10_000);
 		return tag;
@@ -157,19 +152,45 @@ async function build(
 	return tag;
 }
 
-/** The box's image: the Dockerfile and the pi-env daemon it carries. */
-async function boxImage(building: () => void): Promise<string> {
-	const arch = await docker(["version", "--format", "{{.Server.Arch}}"], 10_000);
-	const daemon = packagedDaemon({ platform: "linux", arch: arch === "arm64" || arch === "aarch64" ? "arm64" : "x64" });
-	return build("banda-box", { Dockerfile: DOCKERFILE, "pi-env": daemon }, building);
+/** An image's tag: its repository and the hash of the files it is built from, by name. */
+async function imageTag(repository: string, files: { readonly [name: string]: string }): Promise<string> {
+	const hash = createHash("sha256");
+	for (const [name, path] of Object.entries(files).sort()) {
+		hash.update(name);
+		hash.update(await readFile(path));
+	}
+	return `${repository}:${hash.digest("hex").slice(0, 12)}`;
 }
 
-/** The proxy's image: mitmproxy, pinned, with the policy addon and the control script. */
-async function proxyImage(building: () => void): Promise<string> {
+/** The box's build files: the Dockerfile and the pi-env daemon it carries, for the Docker server's architecture. */
+async function boxFiles(): Promise<{ [name: string]: string }> {
+	const arch = await docker(["version", "--format", "{{.Server.Arch}}"], 10_000);
+	const daemon = packagedDaemon({ platform: "linux", arch: arch === "arm64" || arch === "aarch64" ? "arm64" : "x64" });
+	return { Dockerfile: DOCKERFILE, "pi-env": daemon };
+}
+
+/** The proxy's build files: mitmproxy, pinned, with the policy addon and the control script. */
+async function proxyFiles(): Promise<{ [name: string]: string }> {
 	const files: { [name: string]: string } = {};
 	for (const name of (await readdir(PROXY)).filter((n) => n === "Dockerfile" || n.endsWith(".py")).sort())
 		if (!name.startsWith("test_")) files[name] = join(PROXY, name);
-	return build("banda-proxy", files, building);
+	return files;
+}
+
+const boxImage = async (building: () => void) => build("banda-box", await boxFiles(), building);
+const proxyImage = async (building: () => void) => build("banda-proxy", await proxyFiles(), building);
+
+/**
+ * The images a box is made of, each with the tag banda looks for and the files it is built from, so something else
+ * (CI, with a layer cache) can build them first and banda finds them made.
+ */
+export async function imageSpecs(): Promise<{ readonly tag: string; readonly files: { [name: string]: string } }[]> {
+	const box = await boxFiles();
+	const proxy = await proxyFiles();
+	return [
+		{ tag: await imageTag("banda-box", box), files: box },
+		{ tag: await imageTag("banda-proxy", proxy), files: proxy },
+	];
 }
 
 /**

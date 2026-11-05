@@ -50,6 +50,9 @@ account, object, artifact, memory, box, workspace, gateway, inference, as DESIGN
 - The web UI is in `web/`: `npm run build:web` builds what the daemon serves, `npm run web:dev` serves it with hot
   reload against a daemon on `BANDA_PORT`, `npm run web:contrast` audits the palette, and `#/specimen` shows every
   component. A new component or variant joins the specimen.
+- CI runs the ordinary suites on every push and pull request, and the fault and Docker suites on pushes to main, side
+  by side; `node scripts/prebuild-images.ts` builds the box's images under the tags banda looks for (in CI through
+  GitHub's layer cache).
 - Releases: `npm run desktop:dev` opens the desktop app on a throwaway home; `npm run cli:pack` and
   `npm run desktop:pack` build this computer's release files into `release/`; a `v*` tag makes the release workflow
   draft a pre-release.
