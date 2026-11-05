@@ -14,7 +14,7 @@ import { useTiers } from "../areas/tiers.ts";
 import { Band, BandNotice } from "../chat/Band.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
 import { Face } from "../chat/Face.tsx";
-import { HarnessConnectCard } from "../chat/Harness.tsx";
+import { HarnessConnectCard, HarnessMissingCard } from "../chat/Harness.tsx";
 import { MemorySettings } from "../chat/MemorySettings.tsx";
 import { AgentPanel, firstTab, Panel, Routines } from "../chat/Panel.tsx";
 import { AppSettings, Archive, Personality, SettingsPage, ThinkingTiers } from "../chat/Settings.tsx";
@@ -601,32 +601,45 @@ function Main() {
 						<AddHarness />
 					</span>
 					<Catalogue
-						extra={(shell.harnesses?.harnesses ?? []).map(({ name, service, asks, about, custom }) => {
-							const account = shell.harnesses?.accounts[name];
-							return {
-								key: `harness:${name}`,
-								card: (
-									<HarnessConnectCard
-										harness={service}
-										asks={asks}
-										about={about}
-										folded
-										{...(custom === true
-											? { onRemove: () => void attempt("remove it", () => removeHarness(name)) }
-											: {})}
-										folder={shell.harnesses?.suggested ?? "~"}
-										connected={account?.folder}
-										onConnect={(folder) =>
-											// attempt says why in a toast and resolves nothing: the card keeps its field then
-											attempt("connect it", () => connectHarness(name, folder)).then((view) => {
-												if (view === undefined) throw new Error("refused");
-											})
-										}
-										onDisconnect={() => void attempt("disconnect it", () => disconnectHarness(name))}
-									/>
-								),
-							};
-						})}
+						extra={(shell.harnesses?.harnesses ?? [])
+							.map(({ name, service, asks, about, custom }) => {
+								const account = shell.harnesses?.accounts[name];
+								return {
+									key: `harness:${name}`,
+									card: (
+										<HarnessConnectCard
+											harness={service}
+											asks={asks}
+											about={about}
+											folded
+											{...(custom === true
+												? { onRemove: () => void attempt("remove it", () => removeHarness(name)) }
+												: {})}
+											folder={shell.harnesses?.suggested ?? "~"}
+											connected={account?.folder}
+											onConnect={(folder) =>
+												// attempt says why in a toast and resolves nothing: the card keeps its field then
+												attempt("connect it", () => connectHarness(name, folder)).then((view) => {
+													if (view === undefined) throw new Error("refused");
+												})
+											}
+											onDisconnect={() => void attempt("disconnect it", () => disconnectHarness(name))}
+										/>
+									),
+								};
+							})
+							.concat(
+								(shell.harnesses?.missing ?? []).map(({ name, service, about, install }) => ({
+									key: `harness-missing:${name}`,
+									card: (
+										<HarnessMissingCard
+											harness={service}
+											{...(about === undefined ? {} : { about })}
+											{...(install === undefined ? {} : { install })}
+										/>
+									),
+								})),
+							)}
 						onManage={(connection) => go({ name: "connections", connection })}
 						services={[
 							...(services.length === 0

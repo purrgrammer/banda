@@ -34,6 +34,13 @@ export type HarnessesView = {
 		/** The owner added it with a command line: they may remove it. */
 		readonly custom?: true;
 	}[];
+	/** What banda can run but this computer has not installed, and how to install it. */
+	readonly missing: readonly {
+		readonly name: string;
+		readonly service: string;
+		readonly about?: string;
+		readonly install?: string;
+	}[];
 	/** The folder each is connected in, and the agents it is on for. */
 	readonly accounts: { readonly [harness: string]: { readonly folder: string; readonly agents: readonly string[] } };
 	/** The code folder to suggest when connecting: the first of ~/code, ~/Developer, ~/src, ~/projects there is, else ~. */

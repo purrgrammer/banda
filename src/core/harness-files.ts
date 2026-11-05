@@ -14,7 +14,7 @@ import type { HarnessDefinition } from "./harness.ts";
 /** Where banda's own harness files are, in the checkout or the release. */
 export const SHIPPED_HARNESSES = fileURLToPath(new URL("../../shipped/harnesses/", import.meta.url));
 
-const FIELDS = ["service", "package", "bin", "command", "adapter", "args", "mode", "asks"] as const;
+const FIELDS = ["service", "package", "bin", "command", "adapter", "args", "mode", "asks", "install"] as const;
 /** banda's own ACP adapters, for harnesses that speak something else (src/adapters/). */
 export const ADAPTERS = ["pi"] as const as readonly string[];
 
@@ -28,8 +28,10 @@ export type HarnessFile = {
 	readonly about: string;
 	readonly asks: string;
 	readonly mode?: string;
-	readonly start:
-		| { readonly package: string; readonly bin: string }
+	/** How the owner installs it when it is not here, as a command line. */
+	readonly install?: string;
+	readonly start: /** A package banda's checkout may have, run with node; else `command`, the same adapter installed on the PATH. */
+		| { readonly package: string; readonly bin: string; readonly command?: string }
 		/** A command on the PATH; with `adapter`, banda's own adapter (src/adapters/<adapter>) runs it and speaks ACP. */
 		| { readonly command: string; readonly args: readonly string[]; readonly adapter?: string };
 };
@@ -55,10 +57,11 @@ export function parseHarness(
 	const pkg = read.one("package");
 	const bin = read.one("bin");
 	const command = read.one("command");
-	if ((pkg === undefined) === (command === undefined))
-		errors.push(`give "package:" (with "bin:") for one banda bundles, or "command:" for one on the PATH, not both`);
+	if (pkg === undefined && command === undefined)
+		errors.push(`give "package:" (with "bin:") for an adapter banda's checkout has, or "command:" for one on the PATH`);
 	if (pkg !== undefined && bin === undefined) errors.push(`a package names its "bin:", the script to run with node`);
 	const mode = read.one("mode");
+	const install = read.one("install");
 	const adapter = read.one("adapter");
 	if (adapter !== undefined && (command === undefined || !ADAPTERS.includes(adapter)))
 		errors.push(`"adapter" is one of banda's (${ADAPTERS.join(", ")}), around a "command:"`);
@@ -70,9 +73,10 @@ export function parseHarness(
 			about: read.body.trim(),
 			asks: read.one("asks") ?? OWN_ASKS,
 			...(mode === undefined ? {} : { mode }),
+			...(install === undefined ? {} : { install }),
 			start:
 				pkg !== undefined
-					? { package: pkg, bin: bin ?? "" }
+					? { package: pkg, bin: bin ?? "", ...(command === undefined ? {} : { command }) }
 					: {
 							command: command ?? "",
 							args: words(read.one("args") ?? ""),
@@ -109,14 +113,14 @@ export function resolveHarness(file: HarnessFile): HarnessDefinition | undefined
 		...(file.mode === undefined ? {} : { mode: file.mode }),
 	};
 	if ("package" in file.start) {
-		let root: string;
 		try {
-			root = dirname(require.resolve(`${file.start.package}/package.json`));
+			const script = join(dirname(require.resolve(`${file.start.package}/package.json`)), file.start.bin);
+			if (existsSync(script)) return { ...base, command: process.execPath, args: [script] };
 		} catch {
-			return undefined;
+			// not in this install: a release does not bundle it (its license, its size); the owner's own, on the PATH
 		}
-		const script = join(root, file.start.bin);
-		return existsSync(script) ? { ...base, command: process.execPath, args: [script] } : undefined;
+		const installed = file.start.command === undefined ? undefined : onPath(file.start.command);
+		return installed === undefined ? undefined : { ...base, command: installed, args: [] };
 	}
 	const found = onPath(file.start.command);
 	if (found === undefined) return undefined;

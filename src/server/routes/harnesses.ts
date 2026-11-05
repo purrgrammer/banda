@@ -28,7 +28,14 @@ import {
 	stopSession,
 	switchHarness,
 } from "../../core/harness.ts";
-import { onPath, resolveHarness, SHIPPED_HARNESSES, shippedHarnesses, words } from "../../core/harness-files.ts";
+import {
+	type HarnessFile,
+	onPath,
+	resolveHarness,
+	SHIPPED_HARNESSES,
+	shippedHarnesses,
+	words,
+} from "../../core/harness-files.ts";
 import { context } from "../../core/store.ts";
 import type { HarnessesView } from "../api.ts";
 import { BadRequest } from "../http.ts";
@@ -77,12 +84,16 @@ let harnesses: ReturnType<typeof defineHarnesses> | undefined;
 const SUGGESTED =
 	["~/code", "~/Developer", "~/src", "~/projects"].find((one) => existsSync(folderPath(one) ?? "")) ?? "~";
 let shipped: HarnessDefinition[] = [];
+let missing: HarnessFile[] = [];
 let custom: { [name: string]: { service: string; command: string } } = {};
 const definitions = () => definitionsOf(shipped, custom);
 
 export const harnessesArea: AreaModule = {
 	install: (boot) => {
-		shipped = shippedHarnesses(SHIPPED_HARNESSES, boot.log).flatMap((file) => resolveHarness(file) ?? []);
+		const files = shippedHarnesses(SHIPPED_HARNESSES, boot.log);
+		shipped = files.flatMap((file) => resolveHarness(file) ?? []);
+		// what banda knows how to run but this computer has not installed: offered with how to install it
+		missing = files.filter((file) => !shipped.some((one) => one.name === file.name));
 		harnesses = defineHarnesses({
 			definitions,
 			followUp: (tx, chat, input) => boot.core.followUp(tx, chat, input),
@@ -190,6 +201,12 @@ export const harnessesArea: AreaModule = {
 					...(about === undefined || about === "" ? {} : { about }),
 					...(asks === undefined ? {} : { asks }),
 					...(owned === true ? { custom: true } : {}),
+				})),
+				missing: missing.map(({ name, service, about, install }) => ({
+					name,
+					service,
+					...(about === "" ? {} : { about }),
+					...(install === undefined ? {} : { install }),
 				})),
 				accounts: doc.accounts,
 				suggested: SUGGESTED,

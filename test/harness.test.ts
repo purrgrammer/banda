@@ -270,7 +270,8 @@ describe("harness files", () => {
 		});
 		const goose = parseHarness("goose", "---\nservice: Goose\ncommand: goose\nargs: acp\n---\n");
 		expect(goose).toMatchObject({ harness: { start: { command: "goose", args: ["acp"] }, asks: OWN_ASKS } });
-		expect(parseHarness("both", "---\nservice: X\ncommand: x\npackage: y\nbin: z\n---\n")).toHaveProperty("errors");
+		expect(parseHarness("nobin", "---\nservice: X\npackage: y\n---\n")).toHaveProperty("errors");
+		expect(parseHarness("neither", "---\nservice: X\n---\n")).toHaveProperty("errors");
 	});
 
 	it("offer only what is installed: the bundled Claude Code is, a made-up command is not", () => {

@@ -8,6 +8,7 @@ import { Bubble, Run } from "../chat/Feed.tsx";
 import {
 	HarnessCard,
 	HarnessConnectCard,
+	HarnessMissingCard,
 	type HarnessSessionView,
 	type HarnessState,
 	type HarnessStep,
@@ -242,6 +243,11 @@ export function HarnessSection() {
 						onDisconnect={() => {}}
 					/>
 					<HarnessConnectCard harness={HARNESS} />
+					<HarnessMissingCard
+						harness="Codex"
+						about="OpenAI's coding agent, with your sign-in on this computer."
+						install="npm install -g @agentclientprotocol/codex-acp@2.5.0"
+					/>
 					<HarnessConnectCard
 						harness="Codex"
 						about="OpenAI's coding agent, with your sign-in on this computer."
