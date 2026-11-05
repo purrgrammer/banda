@@ -99,7 +99,7 @@ describe("applyUpdate", () => {
 describe("a harness session", () => {
 	const FAKE = join(import.meta.dirname, "fixtures/fake-acp-agent.ts");
 
-	async function setup(definition: { args?: string[]; env?: string } = {}) {
+	async function setup(definition: { args?: string[]; openMs?: number } = {}) {
 		const home = await tempHome();
 		const folder = await mkdtemp(join(homedir(), ".banda-test-folder-"));
 		onTestFinished(() => rm(folder, { recursive: true, force: true }));
@@ -123,7 +123,8 @@ describe("a harness session", () => {
 				return 0;
 			},
 			log: () => {},
-			openMs: 500,
+			// short only where a test waits on it: a loaded machine starts a harness slowly
+			openMs: definition.openMs ?? 20_000,
 		});
 		const registry = createRegistry();
 		registry.install(defineExtension({ name: "test.harness", tasks: [made.Session] }));
@@ -182,7 +183,7 @@ describe("a harness session", () => {
 		await dies.harness.close(context);
 		process.env.FAKE_ACP_HANG = "1";
 		try {
-			const hangs = await setup();
+			const hangs = await setup({ openMs: 500 });
 			const two = await hangs.harness.commit(
 				(tx) =>
 					hangs.made.begin(tx, { chat: hangs.chat, agent: "sancho", harness: "fake", folder: hangs.folder, ask: "x" }),
@@ -222,7 +223,7 @@ describe("a harness session", () => {
 	it("stops before its session opens: the ask is never sent", async () => {
 		process.env.FAKE_ACP_HANG = "1";
 		try {
-			const s = await setup();
+			const s = await setup({ openMs: 20_000 });
 			const task = await s.harness.commit(
 				(tx) => s.made.begin(tx, { chat: s.chat, agent: "sancho", harness: "fake", folder: s.folder, ask: "say hi" }),
 				context,

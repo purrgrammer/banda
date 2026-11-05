@@ -1,17 +1,5 @@
-/**
- * Harnesses (DESIGN.md "Connections"): an agent hands coding work to a harness (Claude Code, Codex, pi…) on the
- * owner's computer, in a project inside the code folder the owner connected, spoken to over ACP. The agent starts it
- * at once; a session task runs the harness: it sets the harness's mode, sends the ask once, keeps every step in the
- * store, puts the harness's own asks to the owner, takes the owner's notes and Stop, and when the work ends wakes the
- * agent with what the harness said, as foreign data.
- *
- * The harness's asks live as long as its process: a restart ends both, so they are slots in the session's record, not
- * Waits. A restart after the ask was sent never sends it again: the session says it was interrupted. Everything the
- * harness starts carries the session's marker in its environment, and is killed by it.
- */
-import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +24,7 @@ import {
 	prompt,
 	startAcp,
 } from "./acp.ts";
+import { killGroups, killMarked, MARKER, treeGroups } from "./processes.ts";
 
 /** A harness banda can run here: how it starts, the mode it is always set to (when it has one), and in words. */
 export type HarnessDefinition = {
@@ -380,122 +369,6 @@ export const SUPERVISOR = fileURLToPath(
 	new URL(`../adapters/supervise${import.meta.url.endsWith(".ts") ? ".ts" : ".js"}`, import.meta.url),
 );
 
-/** The variable every process a session starts carries in its environment, and its value: the session's marker. */
-export const MARKER = "BANDA_HARNESS";
-
-/**
- * The processes carrying `marker` in their environment: the harness and everything it started, its own process groups
- * included (Claude Code runs each command detached, in a group of its own), whatever their parents now are.
- */
-export function marked(marker: string): number[] {
-	const token = `${MARKER}=${marker}`;
-	const found: number[] = [];
-	if (process.platform === "linux") {
-		let pids: string[] = [];
-		try {
-			pids = readdirSync("/proc").filter((entry) => /^\d+$/.test(entry));
-		} catch {
-			return [];
-		}
-		for (const pid of pids) {
-			try {
-				if (readFileSync(`/proc/${pid}/environ`, "utf8").split("\0").includes(token)) found.push(Number(pid));
-			} catch {
-				// gone, or not ours to read
-			}
-		}
-	} else {
-		let listing = "";
-		try {
-			// macOS: -E adds the environment of the owner's own processes after each command
-			listing = execFileSync("ps", ["-E", "-ww", "-A", "-o", "pid=,command="], {
-				encoding: "utf8",
-				maxBuffer: 64 * 1024 * 1024,
-			});
-		} catch {
-			return [];
-		}
-		for (const line of listing.split("\n")) {
-			const match = /^\s*(\d+)\s(.*)$/.exec(line);
-			if (match === null) continue;
-			if ((match[2] ?? "").split(/\s+/).includes(token)) found.push(Number(match[1]));
-		}
-	}
-	return found.filter((pid) => pid !== process.pid);
-}
-
-/** Kill every process a session started, by its marker: nothing it ran outlives it, nothing else is touched. */
-export function killMarked(marker: string | undefined): void {
-	if (marker === undefined) return;
-	for (const pid of marked(marker))
-		try {
-			process.kill(pid, "SIGKILL");
-		} catch {
-			// gone already
-		}
-}
-
-type Process = { readonly pid: number; readonly ppid: number; readonly pgid: number; readonly started: number };
-
-/** Every process now, with its parent, its group and when it started (ms); empty when ps cannot be read. */
-function processes(): Process[] {
-	let listing = "";
-	try {
-		listing = execFileSync("ps", ["-A", "-o", "pid=,ppid=,pgid=,lstart="], {
-			encoding: "utf8",
-			maxBuffer: 64 * 1024 * 1024,
-			env: { ...process.env, LC_ALL: "C" },
-		});
-	} catch {
-		return [];
-	}
-	return listing.split("\n").flatMap((line) => {
-		const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/.exec(line);
-		if (match === null) return [];
-		const started = Date.parse(match[4] ?? "");
-		return [
-			{
-				pid: Number(match[1]),
-				ppid: Number(match[2]),
-				pgid: Number(match[3]),
-				started: Number.isNaN(started) ? 0 : started,
-			},
-		];
-	});
-}
-
-/** The groups of `root` and of everything below it, its own included: what killing its group alone would miss. */
-export function treeGroups(root: number | undefined): number[] {
-	if (root === undefined) return [];
-	const all = processes();
-	const below = new Set([root]);
-	for (let grew = true; grew; ) {
-		grew = false;
-		for (const one of all)
-			if (below.has(one.ppid) && !below.has(one.pid)) {
-				below.add(one.pid);
-				grew = true;
-			}
-	}
-	return [...new Set(all.filter((one) => below.has(one.pid)).map((one) => one.pgid))].filter((group) => group > 1);
-}
-
-/**
- * Kill the processes of `groups` that started since `since` (ms, a second's slack for ps's precision): what a session's
- * harness started, never a process that came later into a group whose number was given out again.
- */
-export function killGroups(groups: readonly number[] | undefined, since: number): void {
-	if (groups === undefined || groups.length === 0) return;
-	const wanted = new Set(groups);
-	for (const one of processes())
-		if (wanted.has(one.pgid) && one.started >= since - 1000 && one.pid !== process.pid)
-			try {
-				process.kill(one.pid, "SIGKILL");
-			} catch {
-				// gone already
-			}
-}
-
 /**
  * An ended session's steps, smaller: the ask, every edit, the owner's notes and the last words kept first, the rest
  * newest first, up to ENDED_STEPS in their order; texts cut to ENDED_TEXT. What is left out is counted.
@@ -831,12 +704,26 @@ export function defineHarnesses(options: HarnessOptions) {
 				watch?.start(async (doc) => {
 					const session = doc?.sessions[id];
 					if (session === undefined) return;
+					// everything is taken before the first await: watch callbacks overlap, and the turn may end meanwhile
 					if (session.stop === true && !cancelled) {
 						cancelled = true;
 						cancelAsks();
 						stopped();
 						if (connection !== undefined && sessionId !== undefined) cancel(connection, sessionId);
 					}
+					// the owner's notes, each once, none once the session is closing or before the harness has its session
+					const unsent =
+						cancelled || closing || sessionId === undefined
+							? []
+							: session.notes
+									.map((note, index) => ({ note, index }))
+									.filter(({ note, index }) => note.sent !== true && !taken.has(index));
+					for (const { index, note } of unsent) {
+						taken.add(index);
+						steps.push({ kind: "steered", text: cut(note.text, 2000), taken: true });
+						send(note.text);
+					}
+					if (unsent.length > 0) schedule();
 					const answered = [...open].filter(([ask]) => session.answers?.[ask] !== undefined);
 					for (const [ask, { request, resolve: answer }] of answered) {
 						open.delete(ask);
@@ -846,39 +733,24 @@ export function defineHarnesses(options: HarnessOptions) {
 							option === undefined ? { outcome: "cancelled" } : { outcome: "selected", optionId: option.optionId },
 						);
 					}
-					if (answered.length > 0)
-						await runtime.commit(async (tx) => {
-							const current = (await tx.doc(Harnesses)).sessions[id];
-							if (current === undefined || current.ended !== undefined) return undefined;
-							const done = new Set(answered.map(([ask]) => ask));
-							current.asks = (current.asks ?? []).filter((one) => !done.has(one.id));
-							for (const ask of done) delete current.answers?.[ask];
-							if (current.asks.length === 0) current.state = "working";
-							return undefined;
-						}, ctx);
-					// watch callbacks overlap: a note is taken here, before any await, so it goes to the harness once; none
-					// once the session is closing, or before the harness has its session
-					if (cancelled || closing || sessionId === undefined) return;
-					const unsent = session.notes
-						.map((note, index) => ({ note, index }))
-						.filter(({ note, index }) => note.sent !== true && !taken.has(index));
-					for (const { index } of unsent) taken.add(index);
-					if (unsent.length === 0) return;
+					if (unsent.length === 0 && answered.length === 0) return;
 					await runtime.commit(async (tx) => {
 						const current = (await tx.doc(Harnesses)).sessions[id];
-						if (current === undefined) return undefined;
+						if (current === undefined || current.ended !== undefined) return undefined;
 						for (const { index } of unsent) {
 							const note = current.notes[index];
 							if (note !== undefined) note.sent = true;
 						}
-						current.steps = current.steps.filter((step) => step.kind !== "steered" || step.taken);
+						if (unsent.length > 0)
+							current.steps = current.steps.filter((step) => step.kind !== "steered" || step.taken);
+						const done = new Set(answered.map(([ask]) => ask));
+						if (done.size > 0) {
+							current.asks = (current.asks ?? []).filter((one) => !done.has(one.id));
+							for (const ask of done) delete current.answers?.[ask];
+							if (current.asks.length === 0) current.state = "working";
+						}
 						return undefined;
 					}, ctx);
-					for (const { note } of unsent) {
-						steps.push({ kind: "steered", text: cut(note.text, 2000), taken: true });
-						schedule();
-						send(note.text);
-					}
 				});
 				try {
 					connection = startAcp({

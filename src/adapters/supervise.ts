@@ -7,7 +7,7 @@
  * killed, so a group number given out again is never touched.
  */
 import { spawn } from "node:child_process";
-import { killGroups, treeGroups } from "../core/harness.ts";
+import { killGroups, treeGroups } from "../core/processes.ts";
 
 const [command = "", ...args] = process.argv.slice(2);
 const since = Date.now();
