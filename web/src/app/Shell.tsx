@@ -602,7 +602,7 @@ function Main() {
 					</span>
 					<Catalogue
 						extra={(shell.harnesses?.harnesses ?? [])
-							.map(({ name, service, asks, about, custom, provider }) => {
+							.map(({ name, service, asks, about, custom, provider, logo }) => {
 								const account = shell.harnesses?.accounts[name];
 								return {
 									key: `harness:${name}`,
@@ -612,6 +612,7 @@ function Main() {
 											asks={asks}
 											about={about}
 											provider={provider}
+											logo={logo}
 											folded
 											{...(custom === true
 												? { onRemove: () => void attempt("remove it", () => removeHarness(name)) }
@@ -630,12 +631,13 @@ function Main() {
 								};
 							})
 							.concat(
-								(shell.harnesses?.missing ?? []).map(({ name, service, about, install, provider }) => ({
+								(shell.harnesses?.missing ?? []).map(({ name, service, about, install, provider, logo }) => ({
 									key: `harness-missing:${name}`,
 									card: (
 										<HarnessMissingCard
 											harness={service}
 											{...(provider === undefined ? {} : { provider })}
+											{...(logo === undefined ? {} : { logo })}
 											{...(about === undefined ? {} : { about })}
 											{...(install === undefined ? {} : { install })}
 										/>

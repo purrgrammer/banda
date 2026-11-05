@@ -17,6 +17,7 @@ export const SHIPPED_HARNESSES = fileURLToPath(new URL("../../shipped/harnesses/
 const FIELDS = [
 	"service",
 	"provider",
+	"logo",
 	"package",
 	"bin",
 	"command",
@@ -43,6 +44,8 @@ export type HarnessFile = {
 	readonly install?: string;
 	/** Whose it is, as the app's provider logos name them (anthropic, openai): its card shows that logo. */
 	readonly provider?: string;
+	/** Its own mark, in its own colours (web/public/harnesses/<logo>.svg): shown before a provider's. */
+	readonly logo?: string;
 	readonly start: /** A package banda's checkout may have, run with node; else `command`, the same adapter installed on the PATH. */
 		| { readonly package: string; readonly bin: string; readonly command?: string }
 		/** A command on the PATH; with `adapter`, banda's own adapter (src/adapters/<adapter>) runs it and speaks ACP. */
@@ -76,6 +79,9 @@ export function parseHarness(
 	const mode = read.one("mode");
 	const install = read.one("install");
 	const provider = read.one("provider");
+	const logo = read.one("logo");
+	if (logo !== undefined && !/^[a-z0-9-]{1,40}$/.test(logo))
+		errors.push(`"logo: ${logo}" names a harness's mark, such as pi`);
 	if (provider !== undefined && !/^[a-z0-9-]{1,40}$/.test(provider))
 		errors.push(`"provider: ${provider}" names a provider's logo, such as anthropic or openai`);
 	const adapter = read.one("adapter");
@@ -91,6 +97,7 @@ export function parseHarness(
 			...(mode === undefined ? {} : { mode }),
 			...(install === undefined ? {} : { install }),
 			...(provider === undefined ? {} : { provider }),
+			...(logo === undefined ? {} : { logo }),
 			start:
 				pkg !== undefined
 					? { package: pkg, bin: bin ?? "", ...(command === undefined ? {} : { command }) }
@@ -129,6 +136,7 @@ export function resolveHarness(file: HarnessFile): HarnessDefinition | undefined
 		asks: file.asks,
 		...(file.mode === undefined ? {} : { mode: file.mode }),
 		...(file.provider === undefined ? {} : { provider: file.provider }),
+		...(file.logo === undefined ? {} : { logo: file.logo }),
 	};
 	if ("package" in file.start) {
 		try {

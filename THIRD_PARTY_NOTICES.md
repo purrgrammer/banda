@@ -5,6 +5,7 @@ license. Dependencies installed by npm carry their licenses in `node_modules`.
 
 | Material | Where | Source | License |
 |---|---|---|---|
+| pi's logo (redrawn as SVG from its 4×4 terminal mark, `pi-logo.js`) | `web/public/harnesses/pi.svg` | [pi](https://github.com/badlogic/pi-mono) (`@earendil-works/pi-coding-agent`), © 2025 Mario Zechner | MIT |
 | Model provider logos | `web/src/assets/providers/`, `web/public/providers/` | [models.dev](https://models.dev) | MIT |
 | shadcn/ui components | `web/src/components/ui/` | [shadcn/ui](https://ui.shadcn.com) | MIT |
 | AI Elements components | `web/src/components/ai-elements/` | [AI Elements](https://elements.ai-sdk.dev) | See its repository |

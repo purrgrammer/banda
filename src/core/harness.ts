@@ -42,6 +42,8 @@ export type HarnessDefinition = {
 	readonly custom?: boolean;
 	/** Whose it is, by the app's provider logos (anthropic, openai). */
 	readonly provider?: string;
+	/** Its own mark, in its own colours (web/public/harnesses/). */
+	readonly logo?: string;
 };
 
 /** One step of a session, as the owner reads it. */
