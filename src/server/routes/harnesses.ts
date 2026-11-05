@@ -5,6 +5,7 @@
  * starts at once, and what reaches the owner is the harness's own asks. The owner steers a session
  * (`POST /api/harnesses/sessions/:task/steer`), answers its asks (`/answer`) and stops it (`/stop`).
  */
+import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
@@ -19,7 +20,9 @@ import {
 	HARNESS_TOOL,
 	type HarnessDefinition,
 	Harnesses,
+	type HarnessStep,
 	harnessesOf,
+	projectOf,
 	removeHarness,
 	steer,
 	stopSession,
@@ -59,7 +62,20 @@ function definitionsOf(
 	return found;
 }
 
+/** A session's steps with the files under its folder named from there: auth.js, not /Users/…/auth-demo/auth.js. */
+function relative(steps: readonly HarnessStep[], folder: string): HarnessStep[] {
+	const full = folderPath(folder);
+	if (full === undefined) return [...steps];
+	const strip = (path: string) => (path.startsWith(`${full}/`) ? path.slice(full.length + 1) : path);
+	return steps.map((step) =>
+		step.kind === "read" || step.kind === "edit" ? { ...step, path: strip(step.path) } : step,
+	);
+}
+
 let harnesses: ReturnType<typeof defineHarnesses> | undefined;
+/** Where code usually lives on this computer, to start the folder field with. */
+const SUGGESTED =
+	["~/code", "~/Developer", "~/src", "~/projects"].find((one) => existsSync(folderPath(one) ?? "")) ?? "~";
 let shipped: HarnessDefinition[] = [];
 let custom: { [name: string]: { service: string; command: string } } = {};
 const definitions = () => definitionsOf(shipped, custom);
@@ -82,38 +98,69 @@ export const harnessesArea: AreaModule = {
 				"It starts at once and returns; what the harness did comes back to you as a new message when it ends. The " +
 				"owner sees it work, answers what it asks, and may steer or stop it. Don't call it again for the same work.",
 			parameters: Type.Object({
-				harness: Type.String({ description: "The harness, by name: claude-code, codex, gemini…" }),
+				harness: Type.String({ description: "The harness, by name: claude-code, codex, pi…" }),
+				folder: Type.Optional(
+					Type.String({
+						description:
+							"The project to work in: a git repository inside the folder the owner connected, by its path from there " +
+							'("auth-demo", "work/api"). Leave it out to work in that folder itself. Name one that is not there and ' +
+							"the answer lists them.",
+					}),
+				),
 				prompt: Type.String({ description: "What it should do." }),
 			}),
 			// a rerun finds the session its call began: the work starts once
 			replay: "safe",
 			execute: async (args, api, ctx) => {
 				const chat = Number(api.conversationId);
-				const { harness: name, prompt } = args as { harness: string; prompt: string };
-				const said = await api.commit(async (tx) => {
+				const { harness: name, folder: project, prompt } = args as { harness: string; folder?: string; prompt: string };
+				const answer = (text: string, isError = false) => ({ output: [{ type: "text" as const, text }], isError });
+				// first: begun already (a rerun), or whose folder it works under
+				const found = await api.commit(async (tx) => {
 					const doc = await tx.doc(Harnesses);
 					const begun = Object.values(doc.sessions).find((one) => one.chat === chat && one.call === api.callId);
-					if (begun !== undefined) return { folder: begun.folder, service: definitions().get(begun.harness)?.service };
+					if (begun !== undefined) return { begun: begun.folder, harness: begun.harness };
 					const agent = (await tx.doc(AgentChats)).chats[chat];
 					if (agent === undefined) return { refused: "this chat has no agent" };
 					const mine = await harnessesOf(tx, agent);
-					const definition = definitions().get(name);
 					const account = doc.accounts[name];
-					if (definition === undefined || account === undefined || !mine.includes(name))
+					if (!definitions().has(name) || account === undefined || !mine.includes(name))
 						return {
 							refused:
 								mine.length === 0
 									? "the owner has turned no harness on for you"
 									: `"${name}" is not one of yours; you have: ${mine.join(", ")}`,
 						};
-					await made.begin(tx, { chat, call: api.callId, agent, harness: name, folder: account.folder, ask: prompt });
-					return { folder: account.folder, service: definition.service };
+					return { agent, root: account.folder };
 				}, ctx);
-				const text =
-					"refused" in said
-						? `It did not start: ${said.refused}.`
-						: `${said.service ?? name} started in ${said.folder}. What it did comes back to you as a message when it ends.`;
-				return { output: [{ type: "text", text }], isError: "refused" in said };
+				const service = (harness: string) => definitions().get(harness)?.service ?? harness;
+				if ("refused" in found) return answer(`It did not start: ${found.refused}.`, true);
+				if ("begun" in found)
+					return answer(
+						`${service(found.harness ?? name)} started in ${found.begun}. What it did comes back to you when it ends.`,
+					);
+				const where = projectOf(found.root, project);
+				if ("refused" in where)
+					return answer(
+						`It did not start: ${where.refused}.` +
+							(where.projects.length === 0 ? "" : ` Projects in ${found.root}: ${where.projects.join(", ")}.`),
+						true,
+					);
+				await api.commit(async (tx) => {
+					const doc = await tx.doc(Harnesses);
+					if (Object.values(doc.sessions).some((one) => one.chat === chat && one.call === api.callId)) return;
+					await made.begin(tx, {
+						chat,
+						call: api.callId,
+						agent: found.agent,
+						harness: name,
+						folder: where.folder,
+						ask: prompt,
+					});
+				}, ctx);
+				return answer(
+					`${service(name)} started in ${where.folder}. What it did comes back to you as a message when it ends.`,
+				);
 			},
 		});
 		return [defineExtension({ name: "banda.harnesses", tasks: [made.Session], tools: [tool] })];
@@ -145,6 +192,7 @@ export const harnessesArea: AreaModule = {
 					...(owned === true ? { custom: true } : {}),
 				})),
 				accounts: doc.accounts,
+				suggested: SUGGESTED,
 				sessions: Object.entries(doc.sessions)
 					.map(([task, session]) => ({
 						task: Number(task),
@@ -158,7 +206,7 @@ export const harnessesArea: AreaModule = {
 						at: session.at,
 						...(session.ended === undefined ? {} : { ended: session.ended }),
 						...(session.outcome === undefined ? {} : { outcome: session.outcome }),
-						steps: session.steps,
+						steps: relative(session.steps, session.folder),
 						dropped: session.dropped,
 						...(session.asking === undefined ? {} : { asking: session.asking }),
 					}))
@@ -234,8 +282,7 @@ export const harnessesArea: AreaModule = {
 					if (agent !== undefined && (typeof agent !== "string" || agent.length > 64))
 						throw new BadRequest("agent is an agent's name");
 					const full = folderPath(folder);
-					if (full === undefined)
-						throw new BadRequest("give a folder inside your home, like ~/code/project: not your whole home or /");
+					if (full === undefined) throw new BadRequest("give a folder on this computer, like ~/code");
 					const found = await stat(full).catch(() => undefined);
 					if (found?.isDirectory() !== true) throw new BadRequest(`${folder} is not a folder on this computer`);
 					await harness.commit(async (tx) => {

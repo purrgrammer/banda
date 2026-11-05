@@ -22,11 +22,23 @@ describe("changesOf", () => {
 				const edits = steps.filter((step) => step.kind === "edit");
 				const { files, added, removed } = changesOf(steps);
 				expect(files).toBe(new Set(edits.map((step) => step.path)).size);
-				expect(added).toBe(edits.reduce((sum, step) => sum + step.added, 0));
-				expect(removed).toBe(edits.reduce((sum, step) => sum + step.removed, 0));
+				expect(added).toBe(edits.reduce((sum, step) => sum + (step.added ?? 0), 0));
+				expect(removed).toBe(edits.reduce((sum, step) => sum + (step.removed ?? 0), 0));
 			}),
 			{ numRuns: pbtRuns(100) },
 		);
+	});
+});
+
+describe("changesOf, when a harness did not say", () => {
+	it("counts the file and leaves its lines unknown, never zero", () => {
+		expect(changesOf([{ kind: "edit", path: "auth.js" }])).toEqual({ files: 1 });
+		expect(
+			changesOf([
+				{ kind: "edit", path: "a", added: 2, removed: 1 },
+				{ kind: "edit", path: "b" },
+			]),
+		).toEqual({ files: 2 });
 	});
 });
 

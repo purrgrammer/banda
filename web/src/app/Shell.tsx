@@ -614,6 +614,7 @@ function Main() {
 										{...(custom === true
 											? { onRemove: () => void attempt("remove it", () => removeHarness(name)) }
 											: {})}
+										folder={shell.harnesses?.suggested ?? "~"}
 										connected={account?.folder}
 										onConnect={(folder) =>
 											// attempt says why in a toast and resolves nothing: the card keeps its field then

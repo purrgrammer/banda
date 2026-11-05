@@ -13,6 +13,8 @@ import {
 	folderPath,
 	Harnesses,
 	type HarnessStep,
+	projectOf,
+	shownPath,
 	steer,
 	switchHarness,
 } from "../src/core/harness.ts";
@@ -35,9 +37,9 @@ describe("diffOf", () => {
 });
 
 describe("folderPath", () => {
-	it("takes a folder in the home, never the home or the root", () => {
+	it("takes an absolute folder or one under the home, never / or a relative path", () => {
 		expect(folderPath("~/sancho")).toBe(join(homedir(), "sancho"));
-		expect(folderPath("~")).toBeUndefined();
+		expect(folderPath("~")).toBe(homedir());
 		expect(folderPath("/")).toBeUndefined();
 		expect(folderPath("code/x")).toBeUndefined();
 	});
@@ -246,5 +248,24 @@ describe("harness files", () => {
 			}),
 		).toBeUndefined();
 		expect(words(`"my agent" --acp 'two words'`)).toEqual(["my agent", "--acp", "two words"]);
+	});
+});
+
+describe("a session's project", () => {
+	it("is the root, or a git repository inside it; never outside, hidden, or not a repository", async () => {
+		const root = await mkdtemp(join(homedir(), ".banda-test-root-"));
+		onTestFinished(() => rm(root, { recursive: true, force: true }));
+		const { mkdir, symlink } = await import("node:fs/promises");
+		await mkdir(join(root, "app/.git"), { recursive: true });
+		await mkdir(join(root, "work/api/.git"), { recursive: true });
+		await mkdir(join(root, "notes"), { recursive: true });
+		await mkdir(join(root, ".secret/.git"), { recursive: true });
+		await symlink(homedir(), join(root, "escape"));
+		const shown = shownPath(root);
+		expect(projectOf(shown, undefined)).toEqual({ folder: shown });
+		expect(projectOf(shown, "app")).toEqual({ folder: `${shown}/app` });
+		expect(projectOf(shown, "work/api/")).toEqual({ folder: `${shown}/work/api` });
+		for (const bad of ["../x", "/etc", "~/x", ".secret", "escape", "notes", "missing"])
+			expect(projectOf(shown, bad), bad).toMatchObject({ projects: ["app", "work/api"] });
 	});
 });

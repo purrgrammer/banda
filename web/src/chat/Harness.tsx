@@ -36,8 +36,8 @@ export type HarnessStep =
 	| {
 			readonly kind: "edit";
 			readonly path: string;
-			readonly added: number;
-			readonly removed: number;
+			readonly added?: number;
+			readonly removed?: number;
 			readonly diff?: string;
 	  }
 	| { readonly kind: "run"; readonly command: string; readonly output?: string; readonly running?: boolean }
@@ -81,18 +81,25 @@ export function headlineOf(step: HarnessStep | undefined): { verb: string; objec
 	}
 }
 
-/** Files it changed, counted once per path, with the lines added and removed across its edits. */
-export function changesOf(steps: readonly HarnessStep[]): { files: number; added: number; removed: number } {
+/**
+ * Files it changed, counted once per path, with the lines added and removed across its edits: undefined counts once
+ * any edit did not say, never a made-up zero.
+ */
+export function changesOf(steps: readonly HarnessStep[]): { files: number; added?: number; removed?: number } {
 	const paths = new Set<string>();
-	let added = 0;
-	let removed = 0;
+	let added: number | undefined = 0;
+	let removed: number | undefined = 0;
 	for (const step of steps) {
 		if (step.kind !== "edit") continue;
 		paths.add(step.path);
-		added += step.added;
-		removed += step.removed;
+		added = added === undefined || step.added === undefined ? undefined : added + step.added;
+		removed = removed === undefined || step.removed === undefined ? undefined : removed + step.removed;
 	}
-	return { files: paths.size, added, removed };
+	return {
+		files: paths.size,
+		...(added === undefined ? {} : { added }),
+		...(removed === undefined ? {} : { removed }),
+	};
 }
 
 const live = (state: HarnessState) => state === "working" || state === "waiting";
@@ -102,8 +109,13 @@ function Changes({ steps }: { steps: readonly HarnessStep[] }) {
 	if (files === 0) return <span>No files changed</span>;
 	return (
 		<span className="tabular-nums">
-			{files} {files === 1 ? "file" : "files"} <span className="text-alive">+{added}</span>{" "}
-			<span className="text-danger">−{removed}</span>
+			{files} {files === 1 ? "file" : "files"}
+			{added === undefined || removed === undefined ? null : (
+				<>
+					{" "}
+					<span className="text-alive">+{added}</span> <span className="text-danger">−{removed}</span>
+				</>
+			)}
 		</span>
 	);
 }
@@ -244,19 +256,20 @@ export function HarnessConnectCard({
 			{asking ? (
 				<>
 					<label htmlFor={id} className="flex flex-col gap-1.5">
-						<span className="text-meta text-ink-2">The folder it works in</span>
+						<span className="text-meta text-ink-2">Your code folder</span>
 						<InputGroup>
 							<InputGroupInput
 								id={id}
 								value={folder}
 								className="font-code"
-								placeholder="~/code/project"
+								placeholder="~/code"
 								onChange={(event) => setFolder(event.target.value)}
 							/>
 						</InputGroup>
 					</label>
 					{connected === undefined ? (
 						<ul className="flex flex-col gap-1 text-ui text-ink-2">
+							<li>Each task works in one of its projects (a git repository), or in the folder itself.</li>
 							<li>{asks ?? "It asks you whatever its own settings on this computer ask."}</li>
 							<li>
 								{agent ?? "Your agents"} can start it without asking you. It uses your {harness} sign-in and settings on
@@ -456,9 +469,11 @@ function Step({ step, last, working }: { step: HarnessStep; last: boolean; worki
 				PencilIcon,
 				<span className="flex min-w-0 items-baseline gap-2">
 					{path("Edited", step.path)}
-					<span className="shrink-0 text-meta tabular-nums">
-						<span className="text-alive">+{step.added}</span> <span className="text-danger">−{step.removed}</span>
-					</span>
+					{step.added === undefined || step.removed === undefined ? null : (
+						<span className="shrink-0 text-meta tabular-nums">
+							<span className="text-alive">+{step.added}</span> <span className="text-danger">−{step.removed}</span>
+						</span>
+					)}
 				</span>,
 				step.diff === undefined ? null : <CodeBlock code={step.diff} language="diff" title={step.path} />,
 			);

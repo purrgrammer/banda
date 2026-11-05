@@ -58,8 +58,8 @@ The words the rules lean on:
 - **event**: a routine's wake as the chat shows it: what fired and when, before the agent's reply.
 - **connection**: a service the band can work with (GitHub, mail, a calendar); an **account** is one sign-in to it
   ("GitHub · @bandarra"), and a connection may have several.
-- **harness**: a coding agent on the owner's computer that the band hands work to over ACP (Claude Code, Codex); a
-  connection whose account is the folder it works in. A **session** is one piece of work a harness does, from the
+- **harness**: a coding agent on the owner's computer that the band hands work to over ACP (Claude Code, Codex, pi); a
+  connection whose account is the owner's code folder. A **session** is one piece of work a harness does, from the
   agent's ask to its end.
 - **object**: a thing in a connection the owner recognises (a pull request, an issue, a check run), drawn as a card.
 - **artifact**: a work product the agent made (a document, a table, a page), shown beside the chat and versioned in
@@ -84,7 +84,7 @@ The words the rules lean on:
 | **Permission** | a stored approval with a scope; an effect within an open permission runs without asking |
 | **Routine** | `routines/<name>.md` in the workspace: when it runs (a timer) and what it asks; its task submits those inputs to its agent's chat |
 | **Connection** | `connections/<name>.md`, shipped with the app: a service's tools, which only read, and its objects; its accounts' credentials stay with the daemon |
-| **Harness** | `shipped/harnesses/<name>.md`, or a command line the owner gave: an ACP agent on the owner's computer, connected in a folder, for the agents the owner turns it on for |
+| **Harness** | `shipped/harnesses/<name>.md`, or a command line the owner gave: an ACP agent on the owner's computer (or banda's own adapter around one that speaks something else), connected in the owner's code folder, for the agents the owner turns it on for |
 | **Object** | the daemon's rendering of one thing in a connection, read with an account's credentials for the owner's eyes |
 | **Gateway** | where the owner reaches the band: the app and the CLI |
 
@@ -373,8 +373,11 @@ by tool. Every object in every state is in the specimen, light and dark, both wi
 
 **Harnesses.** A harness is a connection that does work rather than reads: a coding agent on the owner's computer,
 spoken to over ACP, with the daemon as its client. It sits on Connections and in each agent's Access beside the
-services, connected in one folder the owner picks (inside the home, never the home or `/`); the folder is its account,
-and the owner turns it on per agent.
+services, connected in the owner's code folder (any folder but `/`; where code usually lives is suggested); that folder
+is its account, and the owner turns it on per agent. Each session works in a project the agent names: a git repository
+inside that folder, by its path from there, or the folder itself. Never outside it (symlinks resolved), never through a
+hidden folder, never a folder that is not a repository, so the home as the code folder never makes `~/.ssh` a project;
+naming one that is not there answers with those that are.
 - **What runs is the owner's.** A harness is a file banda ships (a bundled adapter, or a command on the PATH, offered
   only when installed) or a command line the owner typed. Never a file the box wrote: the daemon runs it on the
   owner's computer, outside the box. It runs in its own process group, killed whole when its session ends or a later
@@ -391,7 +394,8 @@ and the owner turns it on per agent.
 - **Once, and then the agent hears.** The ask is sent at most once: a restart after it was sent ends the session
   interrupted, never sends it again, and a session whose task ended without ending it ends failed. Either way, and
   when the harness finishes, its agent wakes once with what the harness said, as foreign data, and tells the owner in
-  its own words. Steps are kept in the store, bounded; a disconnect stops the sessions running there.
+  its own words. Steps are kept in the store, bounded, with files named from the project; lines added and removed are shown only
+  when the harness said, never a made-up zero. A disconnect stops the sessions running there.
 
 ## Messages
 `message_user(parts)` is the only path from an agent to a person in its own chats, and does that one thing; a group

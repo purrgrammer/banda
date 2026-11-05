@@ -145,6 +145,7 @@ function HarnessAccess({ agent }: { agent: { readonly id: string; readonly name:
 						asks={asks}
 						about={about}
 						folded
+						folder={harnesses.suggested}
 						connected={account?.folder}
 						on={account?.agents.includes(agent.id) === true}
 						onConnect={(folder) => doing(connectHarness(name, folder, agent.id))}

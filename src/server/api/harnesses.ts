@@ -36,6 +36,8 @@ export type HarnessesView = {
 	}[];
 	/** The folder each is connected in, and the agents it is on for. */
 	readonly accounts: { readonly [harness: string]: { readonly folder: string; readonly agents: readonly string[] } };
+	/** The code folder to suggest when connecting: the first of ~/code, ~/Developer, ~/src, ~/projects there is, else ~. */
+	readonly suggested: string;
 	/** Every session kept, newest first. */
 	readonly sessions: readonly HarnessSessionView[];
 };
