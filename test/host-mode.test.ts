@@ -115,7 +115,9 @@ describe("host mode", () => {
 			const { computer } = await start({ models: echoModels().models }, logged);
 			const view = await computer((v) => v.state === "offline");
 			expect(view).toMatchObject({ box: "container", network: "guarded", state: "offline" });
-			expect(logged).toContain("box: banda needs Docker: no Docker server answers");
+			// the app says why, in plain words
+			expect(view.why).toMatch(/^Docker isn't installed/);
+			expect(logged.some((line) => line.startsWith("box: banda needs Docker: Docker isn't installed"))).toBe(true);
 			expect(logged.some((line) => line.includes("no box"))).toBe(false);
 		} finally {
 			process.env.PATH = path;

@@ -9,7 +9,7 @@ import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { Connection, RemoteExecutionEnv } from "@earendil-works/pi-env";
 import type { EgressControl } from "../core/egress.ts";
 import type { BrowserSetup } from "./browser.ts";
-import { containerBox, dockerAvailable, sweepBoxes } from "./container.ts";
+import { containerBox, dockerReady, sweepBoxes } from "./container.ts";
 import type { Pushed } from "./egress-config.ts";
 import { hostBox } from "./host.ts";
 
@@ -64,8 +64,11 @@ export type BoxSetup = {
 	readonly workspace: string;
 	/** Where attachments that came in are written, outside the workspace. */
 	readonly attachments: string;
-	/** Bring the box up (build, create, start) if it is not; called before every start of pi-env in it. */
-	ensure(): Promise<void>;
+	/**
+	 * Bring the box up (build, create, start) if it is not; called before every start of pi-env in it. `building` is told
+	 * when an image is built, which takes minutes.
+	 */
+	ensure(building?: () => void): Promise<void>;
 	/** The command that starts pi-env in the box, before its own `serve` arguments. */
 	readonly command: readonly string[];
 	/** Its egress proxy, when its network is closed but for one; a box without one is a test's. */
@@ -76,8 +79,13 @@ export type BoxSetup = {
 	readonly host?: true;
 };
 
-/** Whether the box is up, as its last bring-up went: `offline` with why, rather than any fallback. */
-export type BoxState = { readonly state: "starting" | "up" } | { readonly state: "offline"; readonly why: string };
+/**
+ * Whether the box is up, as its last bring-up went: `building` while its image is built (the first run), `offline` with
+ * why, in the owner's words where it is theirs to fix, rather than any fallback.
+ */
+export type BoxState =
+	| { readonly state: "starting" | "building" | "up" }
+	| { readonly state: "offline"; readonly why: string };
 
 export type Box = {
 	readonly workspace: string;
@@ -121,7 +129,7 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 	// one bring-up at a time, and a fresh one at every start of pi-env: a lost connection may mean the box went away
 	const ensure = () =>
 		(running ??= setup
-			.ensure()
+			.ensure(() => set({ state: "building" }))
 			.then(
 				() => set({ state: "up" }),
 				(error: unknown) => {
@@ -188,8 +196,8 @@ export const HOST_WARNING =
 	"no box: commands run on this computer, in the home's workspace, without banda's network guard, the credentials it sets or a browser";
 
 /**
- * The container box; banda needs Docker (or Podman's docker). Without one the box is offline, and says so, until a
- * Docker server answers: there is no box without its closed network. Host mode only when `kind` names it.
+ * The container box; banda needs Docker Engine (`DOCKER_MIN` or later). Without one the box is offline, and says why,
+ * until one answers: there is no box without its closed network. Host mode only when `kind` names it.
  */
 export async function chooseBox(
 	home: string,
@@ -197,7 +205,11 @@ export async function chooseBox(
 	kind: BoxKind = "container",
 ): Promise<BoxSetup> {
 	if (kind === "host") return hostBox(home);
-	if (!(await dockerAvailable())) log("box: banda needs Docker: no Docker server answers");
+	const trouble = await dockerReady().then(
+		() => undefined,
+		(error: unknown) => (error instanceof Error ? error.message : String(error)),
+	);
+	if (trouble !== undefined) log(`box: banda needs Docker: ${trouble}`);
 	// what boxes of homes since deleted left behind goes, in the background: it holds the networks a new box needs
 	else
 		void sweepBoxes().then(

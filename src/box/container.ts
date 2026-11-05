@@ -26,29 +26,66 @@ const PROXY = fileURLToPath(new URL("../../proxy/", import.meta.url));
 
 export class DockerError extends Error {}
 
-function docker(args: readonly string[], timeoutMs = 60_000, input?: string): Promise<string> {
+/** The oldest Docker Engine the box runs on: it joins the proxy to two networks at once, one with an alias. */
+export const DOCKER_MIN = 25;
+/** The most memory the box takes, swap included: its commands and browsers share it. */
+export const BOX_MEMORY = "4g";
+
+/**
+ * What a failed docker command means, in plain words, when it is a trouble the owner fixes: Docker missing, not
+ * running, or out of this user's reach. Undefined otherwise: then the command's own words say it.
+ */
+export function dockerTrouble(error: { readonly code?: unknown }, stderr: string): string | undefined {
+	if (error.code === "ENOENT")
+		return "Docker isn't installed: install Docker Desktop (or Docker Engine), and the computer starts by itself.";
+	if (/permission denied.*docker/i.test(stderr))
+		return "banda can't use Docker: this user may not reach it. On Linux, add yourself to the docker group, then sign in again.";
+	if (
+		/Cannot connect to the Docker daemon|Is the docker daemon running|error during connect|docker_engine/i.test(stderr)
+	)
+		return "Docker isn't running: start Docker Desktop (or the Docker service), and the computer starts by itself.";
+	return undefined;
+}
+
+/** Why Docker Engine `version` cannot run the box, in plain words; undefined when it can. */
+export function engineTooOld(version: string): string | undefined {
+	const major = Number(/^(\d+)\./.exec(version.trim())?.[1]);
+	if (Number.isInteger(major) && major >= DOCKER_MIN) return undefined;
+	return `Docker is too old: the computer needs Docker Engine ${DOCKER_MIN} or later, and this one is ${version.trim() || "unknown"}. Update Docker, and it starts by itself.`;
+}
+
+/** Run docker; a failure says what it means (`dockerTrouble`), else the last `tail` lines docker wrote. */
+function docker(args: readonly string[], timeoutMs = 60_000, input?: string, tail = 1): Promise<string> {
 	return new Promise((resolve, reject) => {
 		const child = execFile("docker", args, { timeout: timeoutMs, maxBuffer: 64 << 20 }, (error, stdout, stderr) => {
-			if (error === null) resolve(stdout.trim());
-			else
-				reject(
-					new DockerError(
-						`docker ${args[0]}: ${(stderr.trim() || error.message).split("\n").at(-1) || "it did not answer in time"}`,
-					),
-				);
+			if (error === null) return resolve(stdout.trim());
+			const plain = dockerTrouble(error, stderr);
+			if (plain !== undefined) return reject(new DockerError(plain));
+			if (error.killed === true) return reject(new DockerError(`docker ${args[0]}: it did not answer in time`));
+			const said = (stderr.trim() || error.message)
+				.split("\n")
+				.filter((line) => line.trim() !== "")
+				.slice(-tail)
+				.join("\n");
+			reject(new DockerError(`docker ${args[0]}: ${said || "it did not answer in time"}`));
 		});
 		if (input !== undefined) child.stdin?.end(input);
 	});
 }
 
-/** Whether a Docker (or Podman's docker) server answers. */
+/** Throws, in plain words, unless a Docker Engine the box runs on answers. */
+export async function dockerReady(): Promise<void> {
+	const version = await docker(["version", "--format", "{{.Server.Version}}"], 5_000);
+	const old = engineTooOld(version);
+	if (old !== undefined) throw new DockerError(old);
+}
+
+/** Whether a Docker Engine the box runs on answers. */
 export async function dockerAvailable(): Promise<boolean> {
-	try {
-		await docker(["version", "--format", "{{.Server.Version}}"], 5_000);
-		return true;
-	} catch {
-		return false;
-	}
+	return dockerReady().then(
+		() => true,
+		() => false,
+	);
 }
 
 /** The container and volume names of `home`'s box; its proxy and networks are named after it. */
@@ -84,8 +121,18 @@ const TRUST_ENV = {
 	AWS_CA_BUNDLE: TRUST,
 } as const;
 
-/** An image built from `files` in a folder of their own, tagged by their hash; built only when missing. */
-async function build(repository: string, files: { readonly [name: string]: string }): Promise<string> {
+/** How many lines of a failed build's log its error keeps. */
+const BUILD_TAIL = 30;
+
+/**
+ * An image built from `files` in a folder of their own, tagged by their hash; built only when missing, `building` told
+ * first.
+ */
+async function build(
+	repository: string,
+	files: { readonly [name: string]: string },
+	building: () => void,
+): Promise<string> {
 	const hash = createHash("sha256");
 	for (const [name, path] of Object.entries(files).sort()) {
 		hash.update(name);
@@ -102,7 +149,8 @@ async function build(repository: string, files: { readonly [name: string]: strin
 	try {
 		for (const [name, path] of Object.entries(files)) await copyFile(path, join(context, name));
 		if ("pi-env" in files) await chmod(join(context, "pi-env"), 0o755);
-		await docker(["build", "--quiet", "--tag", tag, context], 20 * 60_000);
+		building();
+		await docker(["build", "--progress", "plain", "--tag", tag, context], 20 * 60_000, undefined, BUILD_TAIL);
 	} finally {
 		await rm(context, { recursive: true, force: true });
 	}
@@ -110,18 +158,18 @@ async function build(repository: string, files: { readonly [name: string]: strin
 }
 
 /** The box's image: the Dockerfile and the pi-env daemon it carries. */
-async function boxImage(): Promise<string> {
+async function boxImage(building: () => void): Promise<string> {
 	const arch = await docker(["version", "--format", "{{.Server.Arch}}"], 10_000);
 	const daemon = packagedDaemon({ platform: "linux", arch: arch === "arm64" || arch === "aarch64" ? "arm64" : "x64" });
-	return build("banda-box", { Dockerfile: DOCKERFILE, "pi-env": daemon });
+	return build("banda-box", { Dockerfile: DOCKERFILE, "pi-env": daemon }, building);
 }
 
 /** The proxy's image: mitmproxy, pinned, with the policy addon and the control script. */
-async function proxyImage(): Promise<string> {
+async function proxyImage(building: () => void): Promise<string> {
 	const files: { [name: string]: string } = {};
 	for (const name of (await readdir(PROXY)).filter((n) => n === "Dockerfile" || n.endsWith(".py")).sort())
 		if (!name.startsWith("test_")) files[name] = join(PROXY, name);
-	return build("banda-proxy", files);
+	return build("banda-proxy", files, building);
 }
 
 /**
@@ -380,8 +428,9 @@ export function containerBox(home: string): BoxSetup {
 			login: { username: browserLogin(agent), password: browserMark(key, agent) },
 			stamp: (chat) => tabStamp(key, agent, chat),
 		}),
-		ensure: async () => {
-			const [boxTag, proxyTag] = await Promise.all([boxImage(), proxyImage()]);
+		ensure: async (building = () => {}) => {
+			await dockerReady();
+			const [boxTag, proxyTag] = await Promise.all([boxImage(building), proxyImage(building)]);
 			await network(inside, home, true);
 			await network(outside, home, false);
 			// the proxy first: the box never runs without it, so it never has a network of its own
@@ -440,6 +489,10 @@ export function containerBox(home: string): BoxSetup {
 				"--init",
 				"--pids-limit",
 				"4096",
+				"--memory",
+				BOX_MEMORY,
+				"--memory-swap",
+				BOX_MEMORY,
 				"--tmpfs",
 				"/tmp:rw,nosuid,nodev,size=1g",
 				...Object.entries(VOLUMES).flatMap(([volume, path]) => [
@@ -491,17 +544,15 @@ function temporary(home: string): boolean {
 }
 
 /**
- * Remove what boxes left behind: every container labelled with a home (`banda.home`, and the earlier name's
- * `sancho.home`) that is gone from disk, with its proxy, its networks and its volumes; with `idle`, also a throwaway
+ * Remove what boxes left behind: every container labelled with a home (`banda.home`) that is gone from disk, with its proxy, its networks and its volumes; with `idle`, also a throwaway
  * home under the temporary folders with no daemon running in it. A home whose daemon runs is never touched, nor one
  * outside the temporary folders that still exists. `idle` is for the owner's own sweep only: a test's box runs with no
  * daemon, so another run's sweep must never take it. Answers the homes swept.
  */
 export async function sweepBoxes({ idle = false }: { idle?: boolean } = {}): Promise<string[]> {
-	const listed = await docker(
-		["ps", "--all", "--format", '{{.Names}}\t{{.Label "banda.home"}}{{.Label "sancho.home"}}'],
-		30_000,
-	).catch(() => "");
+	const listed = await docker(["ps", "--all", "--format", '{{.Names}}\t{{.Label "banda.home"}}'], 30_000).catch(
+		() => "",
+	);
 	const byHome = new Map<string, string[]>();
 	for (const line of listed.split("\n")) {
 		const [name, home] = line.split("\t");

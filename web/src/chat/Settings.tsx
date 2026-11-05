@@ -709,10 +709,14 @@ export type SettingsData = {
 	readonly paused: boolean;
 	/** This device notifies when an agent asks: on, off, or blocked by the browser. */
 	readonly notify?: "on" | "off" | "blocked" | undefined;
-	/** The band's computer: up, starting, or off; whether its commands run in a sandbox; what it can reach. */
+	/**
+	 * The band's computer: up, starting, built (the first run), or off and why; whether its commands run in a sandbox;
+	 * what it can reach.
+	 */
 	readonly computer?:
 		| {
-				readonly state: "up" | "starting" | "offline";
+				readonly state: "up" | "starting" | "building" | "offline";
+				readonly why?: string | undefined;
 				readonly box: "container" | "host";
 				readonly network: "guarded" | "none";
 		  }
@@ -1143,7 +1147,8 @@ function Accounts({ accounts, act }: { accounts: readonly Account[]; act: Settin
 
 /** The band's computer, alive or not, and what keeps it apart: where its commands run and what it can reach. */
 function Computer({ computer }: { computer: NonNullable<SettingsData["computer"]> }) {
-	const { state, box, network } = computer;
+	const { state, why, box, network } = computer;
+	const coming = state === "starting" || state === "building";
 	return (
 		<Block title="The computer" note="Where the band works: its files, its commands, its browser.">
 			<Rows>
@@ -1160,18 +1165,37 @@ function Computer({ computer }: { computer: NonNullable<SettingsData["computer"]
 								aria-hidden="true"
 								className={cn(
 									"relative size-2.5 rounded-full",
-									state === "up" ? "bg-alive" : state === "starting" ? "animate-pulse bg-alive" : "bg-ink-2/50",
+									state === "up" ? "bg-alive" : coming ? "animate-pulse bg-alive" : "bg-ink-2/50",
 								)}
 							/>
 						</span>
 					}
-					title={state === "up" ? "Running" : state === "starting" ? "Starting…" : "Off"}
+					title={
+						state === "up"
+							? "Running"
+							: state === "building"
+								? "Building the agent's computer…"
+								: state === "starting"
+									? "Starting…"
+									: "Off"
+					}
 					detail={
-						state === "offline"
-							? "The band answers, but can't browse, run commands or save files until it starts."
-							: state === "starting"
-								? "A moment: its files and browser are coming up."
-								: "Ready to browse, run commands and keep files."
+						state === "offline" ? (
+							<>
+								{why === undefined ? null : (
+									<span className="block whitespace-pre-line break-words text-ink">{why}</span>
+								)}
+								<span className="block">
+									The band answers, but can't browse, run commands or save files until it starts.
+								</span>
+							</>
+						) : state === "building" ? (
+							"The first run takes several minutes; it is ready once this says Running."
+						) : state === "starting" ? (
+							"A moment: its files and browser are coming up."
+						) : (
+							"Ready to browse, run commands and keep files."
+						)
 					}
 				/>
 				<RowOf

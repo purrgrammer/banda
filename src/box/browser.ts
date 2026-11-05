@@ -1179,7 +1179,7 @@ export function openBrowser(options: BrowserOptions): Browser {
 								functionDeclaration: `function () {
 								const el = this.nodeType === 1 ? this : this.parentElement;
 								if (!el) return;
-								el.dataset.sanchoStyle = el.getAttribute("style") ?? "";
+								el.dataset.bandaStyle = el.getAttribute("style") ?? "";
 								for (const p of ["color", "-webkit-text-fill-color", "caret-color", "text-shadow"])
 									el.style.setProperty(p, p === "text-shadow" ? "none" : "transparent", "important");
 								el.style.setProperty("-webkit-text-security", "none", "important");
@@ -1205,8 +1205,8 @@ export function openBrowser(options: BrowserOptions): Browser {
 									objectId: object,
 									functionDeclaration: `function () {
 									const el = this.nodeType === 1 ? this : this.parentElement;
-									if (!el || el.dataset.sanchoStyle === undefined) return;
-									const was = el.dataset.sanchoStyle; delete el.dataset.sanchoStyle;
+									if (!el || el.dataset.bandaStyle === undefined) return;
+									const was = el.dataset.bandaStyle; delete el.dataset.bandaStyle;
 									if (was === "") el.removeAttribute("style"); else el.setAttribute("style", was);
 								}`,
 								},

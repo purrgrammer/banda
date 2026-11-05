@@ -298,11 +298,13 @@ export type ChatRow = {
 };
 
 /**
- * The companion's computer (the box): up, coming up, or offline (it then runs nothing, and never falls back to an open
- * network); and whether its network is closed but for the egress proxy.
+ * The companion's computer (the box): up, coming up, built (the first run), or offline (it then runs nothing, and never
+ * falls back to an open network) and why; and whether its network is closed but for the egress proxy.
  */
 export type ComputerView = {
-	readonly state: "starting" | "up" | "offline";
+	readonly state: "starting" | "building" | "up" | "offline";
+	/** Offline: why, in plain words where it is the owner's to fix (Docker missing, stopped, too old). */
+	readonly why?: string;
 	/** `host`: no box, its commands run on the daemon's own machine, unguarded (host mode, asked for by name). */
 	readonly box: "container" | "host";
 	readonly network: "guarded" | "none";

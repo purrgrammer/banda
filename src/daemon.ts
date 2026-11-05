@@ -593,6 +593,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			const now = agentBox.state();
 			return {
 				state: now.state,
+				...(now.state === "offline" ? { why: now.why } : {}),
 				box: agentBox.host ? "host" : "container",
 				network: agentBox.egress === undefined ? "none" : "guarded",
 			};
