@@ -36,6 +36,44 @@ export interface BandaPlugin {
 	cancel(options: { readonly id: string }): Promise<void>;
 	addListener(event: "chunk", listener: (chunk: StreamChunk) => void): Promise<{ remove(): Promise<void> }>;
 	addListener(event: "end", listener: (end: StreamEnd) => void): Promise<{ remove(): Promise<void> }>;
+	/** A `banda://pair` link opened the shell while it ran (a camera app read the code). */
+	addListener(event: "link", listener: (link: { readonly url: string }) => void): Promise<{ remove(): Promise<void> }>;
+	/** Where the shell stands: the daemon it reaches, this device, and a pairing link it was opened with. */
+	state(): Promise<ShellState>;
+	/** Reach the daemon a pairing link's ticket names from now on. Rejects (`TICKET`) when it is not a ticket. */
+	setDaemon(options: { readonly ticket: string }): Promise<void>;
+	/** Forget the daemon and this device's key: the next pairing is a new device (a revoked one cannot pair again). */
+	forget(): Promise<void>;
+}
+
+/**
+ * What the shell knows of itself. A request the plugin rejects carries a `code`: `UNREACHABLE` (the daemon could not
+ * be reached), `REFUSED` (it closed this device's connection: the device was revoked) or `BROKEN`.
+ */
+export type ShellState = {
+	/** The daemon's endpoint id; absent before a pairing link chose one. */
+	readonly daemon?: string;
+	/** This device's endpoint id, what the daemon's Settings → Devices lists it by. */
+	readonly device: string;
+	/** A name to suggest for this device: the phone's own. */
+	readonly name: string;
+	/** A `banda://pair` link the shell was opened with and has not paired with yet. */
+	readonly link?: string;
+};
+
+/** The native shell's barcode scanner (`@capacitor/barcode-scanner`, registered as `CapacitorBarcodeScanner`). */
+export interface ScannerPlugin {
+	scanBarcode(options: {
+		/** 0: a QR code. */
+		readonly hint: number;
+		readonly scanInstructions: string;
+		readonly scanButton: boolean;
+		readonly scanText: string;
+		/** 1: the back camera. */
+		readonly cameraDirection: number;
+		/** 3: either way up. */
+		readonly scanOrientation: number;
+	}): Promise<{ readonly ScanResult: string }>;
 }
 
 /** Some of stream `id`'s body: base64 of its bytes, in order. */
@@ -170,13 +208,23 @@ export function nativeTransport(plugin: BandaPlugin, newId: () => string = () =>
 export type CapacitorGlobal = {
 	readonly Capacitor?: {
 		readonly isNativePlatform?: () => boolean;
-		readonly Plugins?: { readonly Banda?: BandaPlugin };
+		readonly Plugins?: { readonly Banda?: BandaPlugin; readonly CapacitorBarcodeScanner?: ScannerPlugin };
 	};
 };
 
+/** The native shell's plugins, when the page runs in it. */
+export function nativeShell(
+	global: CapacitorGlobal = globalThis as CapacitorGlobal,
+): { readonly banda: BandaPlugin; readonly scanner?: ScannerPlugin } | undefined {
+	const capacitor = global.Capacitor;
+	const banda = capacitor?.Plugins?.Banda;
+	if (banda === undefined || capacitor?.isNativePlatform?.() !== true) return undefined;
+	const scanner = capacitor.Plugins?.CapacitorBarcodeScanner;
+	return scanner === undefined ? { banda } : { banda, scanner };
+}
+
 /** The native shell's plugin when the page runs in it; otherwise the page's own origin. */
 export function pickTransport(global: CapacitorGlobal = globalThis as CapacitorGlobal): Transport {
-	const capacitor = global.Capacitor;
-	const plugin = capacitor?.Plugins?.Banda;
-	return plugin !== undefined && capacitor?.isNativePlatform?.() === true ? nativeTransport(plugin) : sameOrigin;
+	const shell = nativeShell(global);
+	return shell === undefined ? sameOrigin : nativeTransport(shell.banda);
 }

@@ -50,6 +50,7 @@ const CONTENTS = [
 	{ id: "settings", label: "Settings" },
 	{ id: "devices", label: "Devices" },
 	{ id: "devices-states", label: "Devices, each state" },
+	{ id: "pair-phone", label: "Pairing, on the phone" },
 	{ id: "qr", label: "QR code" },
 	{ id: "connections", label: "Connections" },
 	{ id: "connect", label: "Connecting" },

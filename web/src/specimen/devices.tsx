@@ -1,8 +1,10 @@
 import { type ReactNode, useContext, useState } from "react";
 import type { DevicesView } from "../../../src/server/api.ts";
 import { DevicesSettings, type ShownInvite } from "../chat/Devices.tsx";
+import { PairPhone } from "../chat/PairPhone.tsx";
 import { SettingsPage } from "../chat/Settings.tsx";
 import { QrCode } from "../components/QrCode.tsx";
+import { NOTES, type PairingStep } from "../lib/pairing.ts";
 import { Section, StageContext } from "./stage.tsx";
 
 const NOW = Date.UTC(2026, 10, 5, 17, 0);
@@ -77,6 +79,29 @@ function Example() {
 	);
 }
 
+/** A phone's screen, at a phone's size, whatever the stage's width. */
+const PhoneFrame = ({ children }: { children: ReactNode }) => (
+	<div className="h-[40rem] w-full max-w-[24rem] overflow-hidden rounded-tile border border-line-soft [&_main]:min-h-full">
+		{children}
+	</div>
+);
+
+/** The phone's side of pairing, end to end: scan, ask, wait, approved. */
+function PairExample() {
+	const [step, setStep] = useState<PairingStep>({ step: "scan", name: "Pixel 9" });
+	return (
+		<PairPhone
+			step={step.step === "paired" ? { step: "scan", name: "Pixel 9", note: "Paired. The app opens here." } : step}
+			onScan={(name) => {
+				setStep({ step: "asking", name });
+				setTimeout(() => setStep({ step: "waiting", name }), 800);
+				setTimeout(() => setStep({ step: "paired" }), 4000);
+			}}
+			onAgain={() => setStep({ step: "scan", name: "Pixel 9" })}
+		/>
+	);
+}
+
 export function DevicesSection() {
 	const phone = useContext(StageContext).width === "phone";
 	const frame = (children: ReactNode) => (
@@ -108,6 +133,33 @@ export function DevicesSection() {
 				{frame(<DevicesSettings devices={{ endpoint: null, devices: [], requests: [] }} now={NOW} />)}
 				{frame(<DevicesSettings devices={PAIRED} invite={INVITE} now={NOW} details />)}
 				{frame(<DevicesSettings devices={undefined} />)}
+			</Section>
+			<Section
+				id="pair-phone"
+				title="Pairing, on the phone"
+				note="The phone app before it is a device: interactive first (Scan pairs, then waits; the computer approves a moment later). Then each state: scan; a link opened; a note after a refusal; asking; waiting; the computer away."
+			>
+				<PhoneFrame>
+					<PairExample />
+				</PhoneFrame>
+				<PhoneFrame>
+					<PairPhone step={{ step: "scan", name: "Pixel 9" }} />
+				</PhoneFrame>
+				<PhoneFrame>
+					<PairPhone step={{ step: "scan", name: "Pixel 9", link: { ticket: "endpoint", invite: "secret" } }} />
+				</PhoneFrame>
+				<PhoneFrame>
+					<PairPhone step={{ step: "scan", name: "Pixel 9", note: NOTES.revoked }} />
+				</PhoneFrame>
+				<PhoneFrame>
+					<PairPhone step={{ step: "asking", name: "Ana's phone" }} />
+				</PhoneFrame>
+				<PhoneFrame>
+					<PairPhone step={{ step: "waiting", name: "Ana's phone" }} />
+				</PhoneFrame>
+				<PhoneFrame>
+					<PairPhone step={{ step: "unreachable" }} />
+				</PhoneFrame>
 			</Section>
 			<Section id="qr" title="QR code" note="Dark on a light tile in either theme, so any phone's camera reads it.">
 				<QrCode value={INVITE.pairing} label="A pairing code" className="size-44 p-1.5" />
