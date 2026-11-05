@@ -944,6 +944,13 @@ export type ProviderRow = {
 	/** Signs in, or takes a key. */
 	readonly by: "sign-in" | "key";
 	readonly connected: boolean;
+	/**
+	 * Connected by a credential from around the daemon (ANTHROPIC_API_KEY and its kind), not one connected here:
+	 * the band can think with it, but nothing has tried it and signing out cannot take it away.
+	 */
+	readonly ambient?: boolean | undefined;
+	/** What an ambient credential came from ("ANTHROPIC_API_KEY"), to name it to the owner. */
+	readonly source?: string | undefined;
 	/** A sign-in under way, in a tab of its own. */
 	readonly connecting?: boolean | undefined;
 	/** It takes a pasted code now; the provider's ways to sign in, and the one under way. */
@@ -996,10 +1003,13 @@ export function ModelProviders({
 				{providers.map((provider) => {
 					const using = provider.id === current;
 					const next = connected.find((each) => each.id !== provider.id);
+					// an ambient credential is connected but never ours: connecting over it is still a sign-in
+					const ambient = provider.ambient === true;
 					const signing =
 						provider.by === "sign-in" &&
-						!provider.connected &&
+						(!provider.connected || ambient) &&
 						(provider.id === waiting || provider.connecting === true);
+					const from = ambient ? (provider.source ?? "your environment") : undefined;
 					const detail =
 						provider.id === waiting || provider.connecting === true
 							? provider.by === "sign-in"
@@ -1007,13 +1017,17 @@ export function ModelProviders({
 								: "Connecting…"
 							: provider.error !== undefined
 								? `Didn't connect: ${provider.error}`
-								: using
-									? "In use"
-									: provider.connected
-										? "Connected"
-										: provider.by === "sign-in"
-											? "Sign in with your account"
-											: "Use a key";
+								: from !== undefined
+									? using
+										? `In use, with ${from} from outside banda`
+										: `Set by ${from} from outside banda`
+									: using
+										? "In use"
+										: provider.connected
+											? "Connected"
+											: provider.by === "sign-in"
+												? "Sign in with your account"
+												: "Use a key";
 					return (
 						<div key={provider.id} className="flex flex-col">
 							<RowOf
@@ -1032,7 +1046,7 @@ export function ModelProviders({
 												Use
 											</Button>
 										) : null}
-										{provider.connected ? (
+										{provider.connected && !ambient ? (
 											<Confirm
 												title={`Sign out of ${provider.name}?`}
 												body={
@@ -1065,7 +1079,7 @@ export function ModelProviders({
 									</span>
 								}
 							/>
-							{provider.id === open && !provider.connected ? (
+							{provider.id === open && (!provider.connected || ambient) ? (
 								<ProviderKeyForm
 									provider={provider}
 									action="Connect"
