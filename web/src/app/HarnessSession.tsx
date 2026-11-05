@@ -40,7 +40,11 @@ const viewOf = (session: HarnessSessionView, now: number): CardView => ({
 				: session.state === "waiting" && (session.asks ?? []).length === 0
 					? "working"
 					: session.state,
-	steps: session.steps,
+	// an open ask is what it waits on: the card's line says so
+	steps:
+		(session.asks ?? []).length === 0
+			? session.steps
+			: [...session.steps, { kind: "waiting", command: session.asks?.[0]?.command ?? "" }],
 	elapsed: clock((session.ended ?? now) - session.at),
 	...(session.outcome === undefined ? {} : { outcome: session.outcome }),
 });
