@@ -19,12 +19,19 @@ export type Device = {
 	close(): Promise<void>;
 };
 
-export async function testDevice(): Promise<Device> {
+/**
+ * `reach` is loopback for tests (no network); n0 only for a manual run against a daemon on n0's relays, whose ticket
+ * names a relay to dial through.
+ */
+export async function testDevice({ reach = "loopback" }: { reach?: "loopback" | "n0" } = {}): Promise<Device> {
 	const builder = Endpoint.builder();
-	builder.applyMinimal();
-	builder.relayMode(RelayMode.disabled());
-	builder.bindAddr("127.0.0.1:0");
-	builder.bindAddr("[::1]:0");
+	if (reach === "n0") builder.applyN0();
+	else {
+		builder.applyMinimal();
+		builder.relayMode(RelayMode.disabled());
+		builder.bindAddr("127.0.0.1:0");
+		builder.bindAddr("[::1]:0");
+	}
 	builder.secretKey(Array.from(randomBytes(32)));
 	const endpoint = await builder.bind();
 	let connection: Connection | undefined;

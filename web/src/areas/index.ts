@@ -4,6 +4,7 @@
  */
 import type { ShellHandlers } from "../lib/shell.ts";
 import { shell as artifacts } from "./artifacts.ts";
+import { shell as devices } from "./devices.ts";
 import { shell as groups } from "./groups.ts";
 import { shell as permissions } from "./permissions.ts";
 import { shell as routines } from "./routines.ts";
@@ -15,4 +16,5 @@ export const AREA_HANDLERS: ShellHandlers = {
 	...routines,
 	...artifacts,
 	...groups,
+	...devices,
 };
