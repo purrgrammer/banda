@@ -2,7 +2,12 @@
 
 ## Current work
 
-Remote access over Iroh is next, pending owner review: its spikes and slices are in [Operations](operations.md).
+Remote access over Iroh is built on the `spike/iroh-remote-access` branch and awaits owner review: the daemon's Iroh
+endpoint on n0's relays, devices paired by a QR code the owner approves in Settings → Devices (listed, renamed and
+revoked there, never from a device), and an Android shell (`mobile/`) that pairs and opens the app as a device. Its
+adversarial review's fix-now findings are fixed; the full suite passes. The phone's side was tried on the arm64
+emulator against a throwaway daemon on n0; a real phone on cellular, iOS and push remain
+([Operations](operations.md)).
 
 Pre-release binaries are on the `desktop-release` branch ([Operations](operations.md)): an Electron desktop app that
 starts or attaches to the daemon, a CLI archive that brings its own Node.js, and a release workflow that drafts an

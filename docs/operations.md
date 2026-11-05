@@ -36,25 +36,31 @@ defect. Remove it only when its fix and acceptance evidence are recorded in a co
   Then install each artifact on a clean machine: the desktop app and the CLI archive are tried only on macOS arm64
 - [ ] Windows: a graceful daemon stop (Quit ends the process outright), and a pass over atomic renames and paths
 - [ ] A smaller release: bundle the daemon so provider SDKs and web-only packages don't ship whole
-- [ ] Spike the daemon side of Iroh: an endpoint (ALPN `banda/0`, key in the home's `auth/`) that carries the HTTP
-  API unchanged. Exit: SSE stays open, a retried message dedupes and a reconnect catches up from `ready.tail`, over a
-  direct and a relayed path, with first-byte latency. Direct path done on loopback; the relayed path is blocked
-  until the owner allows a public relay (or names a self-hosted one), and a path across NAT is unrun
-- [ ] Spike the phone's Iroh client: the PWA with iroh's wasm build, or a native shell only if that fails. Exit: the
-  phone on cellular, the daemon on home Wi-Fi, one real answer from `/api/agents`. Desktop Chrome got it through a
-  hand-built wasm and a loopback relay; the phone on cellular over a public relay is the owner's manual run. The
-  Android shell (`mobile/`) pairs and chats on the arm64 emulator over a direct path; a real phone on cellular, across
-  NAT through a relay, is unrun
+- [ ] The phone on a real network: a real Android phone on cellular, the daemon on home Wi-Fi, across NAT through
+  n0's relays, pairs and chats, and survives sleep, backgrounding and a network change. The shell (`mobile/`) pairs,
+  chats, keeps its key across a daemon restart and pairs again once revoked on the arm64 emulator over n0; no real
+  phone has run it
 - [ ] The phone's shell on iOS: out of scope for now. It implements the same plugin contract as Android's
   (`BandaPlugin` in `web/src/lib/transport.ts`) with iroh-ffi's Swift bindings, and needs a real iPhone to try
 - [ ] The phone's shell, once paired: a device revoked while the app is open sees requests fail rather than the
   pairing screen (it shows on the next start), and the app's files come with the shell, so a new build reaches the
   phone only as a new APK
-- [ ] Pairing slice: the Iroh listener authorizes by the remote endpoint id among the paired phones, in place of the
-  single `auth/token` check, and is not held to the loopback Host/Origin check; Settings lists, renames and revokes
-  each phone, pairing by QR. Exit: a fault sweep at the pairing commit and a desktop and phone walkthrough
-- [ ] Off-network reach slice: the app's files and API over Iroh from the phone, cached by `web/public/sw.js`. Exit:
-  the installed app opens and chats off the home network, and survives sleep, backgrounding and a network change
+- [ ] Whoever reads the pairing code first wins the invite: the owner approves by the name the claimant chose, with no
+  id to compare. Show a short fingerprint of the device's endpoint id on the phone while it waits and on the
+  approval row, and ask the owner to match them
+- [ ] Any web page can open a `banda://pair` link (the intent filter is BROWSABLE) that names another daemon: an
+  unpaired or just-revoked phone is one tap from reaching it, and `setDaemon` keeps the new ticket before the ask
+  succeeds. Show which computer the link names (a fingerprint of its endpoint id, matched on the desktop) before
+  pairing, and keep the ticket only once the daemon answered
+- [ ] Debug builds log every plugin call and result to logcat (Capacitor's default `loggingBehavior`), the invite's
+  secret and API bodies among them: set `"loggingBehavior": "none"` in `mobile/capacitor.config.json`
+- [ ] The daemon's endpoint key (`auth/iroh.key`) is written without an fsync of the file or its directory, and a key
+  file of the wrong length is replaced by a new key: a crash after the rename can give the daemon a new identity, and
+  every paired phone silently loses it. Fsync before the rename, and refuse (log, stay off) a present but malformed
+  key
+- [ ] An endpoint that is not a device still makes a commit per pairing POST, a wrong secret included (it throws
+  inside the transaction): check the invite's hash against a snapshot before committing, and limit how often one
+  endpoint may ask
 - [ ] Push notifications that carry no content
 - [ ] Qualify recoverable updates, owner-controlled diagnostics and the exact packaged candidate (operations.md, verification.md)
 - [ ] The daemon runs the checkout's code: merged work takes effect only at a restart

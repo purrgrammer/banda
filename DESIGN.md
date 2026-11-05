@@ -46,7 +46,8 @@ code holds the details. If a sentence here only restates code, delete it.
 
 ## Words
 agent, band, group, chat, turn, queue, message, part, tool, wait, draft, permission, routine, watch, event, connection,
-account, object, artifact, memory, box, workspace, gateway, inference. One word per thing, in code, docs and the UI.
+account, object, artifact, memory, box, workspace, gateway, inference, device. One word per thing, in code, docs and
+the UI.
 The words the rules lean on:
 - **band**: the owner's agents, as the sidebar lists them.
 - **origin**: where a message came from (gateway, peer, thread); **replyTo**: the origin a Turn's messages and asks go
@@ -69,6 +70,8 @@ The words the rules lean on:
 - **inference**: one bounded model request outside any chat, on a tier's model, whose answer the app reads on the spot
   (a face from a description); nothing is stored and no tool runs. Work that uses tools, answers to a chat or must
   survive a restart is a turn.
+- **device**: a phone (or another computer) the owner paired, known by its Iroh endpoint id; it reaches the daemon
+  from anywhere and acts as the owner.
 
 ## Core
 | Primitive | What it is |
@@ -740,8 +743,18 @@ The daemon alone opens the store. The app and a minimal CLI (`serve`, `say`, `ap
 talk HTTP on loopback: Host and Origin checked, the owner's token on every API request. The app's own files are
 public code and need no token. The token lives in `auth/token` and survives restarts; `serve` and `status` print the
 app's link, which carries it in the URL fragment, so it never reaches a request or a log. Reads come from the harness
-(entries paged, doc snapshots, task graph); live updates are SSE. Reaching the app from another device (the phone)
-goes through a pairing the owner makes from a device already trusted, never by exposing the daemon's port.
+(entries paged, doc snapshots, task graph); live updates are SSE.
+
+A device reaches the same API over Iroh, never through an open port: the daemon's one endpoint, its key in `auth/`
+so its id outlives restarts, reached through n0's relays and discovery unless the owner says otherwise; one HTTP
+request a bi-stream. Who asks over Iroh is the endpoint id the handshake authenticated, never a header or the token:
+a paired device acts as the owner; any other endpoint reaches the pairing route alone and holds little while it does
+(a small body, one stream at a time, short deadlines, a bounded number of such connections), since a key costs
+nothing. The owner pairs a device on the computer banda runs on: an invite shown as a QR code, single use and live for
+ten minutes, that the device presents and the owner then approves. Devices are listed, renamed and revoked there too,
+never from a device, so no device can mint access that outlives its own revocation. A device learns what it is from
+the daemon's answer to the pairing route, never from how a connection closed: a restart or a dropped connection is
+only dialed again.
 
 ## Home
 `~/.banda` (`--home <dir>` or `BANDA_HOME`): `config.json`, `durable.db`, `search.db`, `blobs/`, `auth/`. The
@@ -762,10 +775,6 @@ workspace lives in the box.
 - Tools and connections the agent builds itself, offered once the owner accepts their definition.
 - Packaging the box's runtime so no owner installs Docker: a bundled VM, Podman, or a managed host.
 - Push to the phone without a vendor seeing the content: a notification that only says to open the app.
-- Pairing the phone to the daemon once, by a QR code the owner approves, each phone listed and revocable: Iroh
-  endpoint ids are the candidate identity.
-- Reaching the app from the phone off the home network, without exposing the daemon: the same HTTP API carried over
-  an Iroh stream (NAT traversal, relay fallback, no open port) is the candidate.
 - A guest in a group, through an invite scoped to that group.
 - Sending a copy of an agent's files to another banda.
 - The daemon on an always-on machine (a home server or a VPS), with the phone as its client.
