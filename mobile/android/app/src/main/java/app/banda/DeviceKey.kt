@@ -22,19 +22,21 @@ internal object DeviceKey {
     private const val IV_BYTES = 12
 
     /** The key, made on first use. */
+    @Synchronized
     fun load(context: Context): ByteArray {
-        val prefs = Prefs.of(context)
-        prefs.getString(SEALED, null)?.let { sealed ->
+        val key = Prefs.saved(context, SEALED)
+        key.value?.let { sealed ->
             unseal(sealed)?.let { return it }
         }
         val bytes = SecretKey.generate().use { it.toBytes() }
-        prefs.edit().putString(SEALED, seal(bytes)).commit()
+        key.set(seal(bytes))
         return bytes
     }
 
     /** Make the next key a new one: the daemon will know this device as another. */
+    @Synchronized
     fun forget(context: Context) {
-        Prefs.of(context).edit().remove(SEALED).commit()
+        Prefs.saved(context, SEALED).set(null)
         keystore().deleteEntry(ALIAS)
     }
 
@@ -74,5 +76,16 @@ internal object DeviceKey {
 
 /** The shell's own preferences: the sealed key and the daemon's ticket. */
 internal object Prefs {
-    fun of(context: Context) = context.getSharedPreferences("banda", Context.MODE_PRIVATE)
+    private val saved = mutableMapOf<String, SavedPreference>()
+
+    // SharedPreferences memory survives Activity recreation, so this last-successful cache must survive it too.
+    @Synchronized
+    fun saved(context: Context, key: String): SavedPreference = saved.getOrPut(key) {
+        val prefs = context.getSharedPreferences("banda", Context.MODE_PRIVATE)
+        SavedPreference(
+            { prefs.getString(key, null) },
+            this,
+            { value -> prefs.edit().apply { if (value == null) remove(key) else putString(key, value) }.commit() },
+        )
+    }
 }

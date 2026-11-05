@@ -24,17 +24,16 @@ internal class Daemon(private val context: Context) {
     private val lock = Mutex()
     private var endpoint: Endpoint? = null
     private var connection: Connection? = null
+    private val saved = Prefs.saved(context, TICKET)
 
     /** The ticket of a daemon being tried, not saved. */
     @Volatile private var trial: String? = null
 
     /** The daemon's ticket: the one being tried, else the one saved once it approved this phone; null before pairing. */
     val ticket: String?
-        get() = trial ?: Prefs.of(context).getString(TICKET, null)
+        get() = trial ?: saved.value
 
-    private fun keep(ticket: String?) {
-        Prefs.of(context).edit().apply { if (ticket == null) remove(TICKET) else putString(TICKET, ticket) }.commit()
-    }
+    private fun keep(ticket: String?) = saved.set(ticket)
 
     /** The daemon's endpoint id, from its ticket. */
     fun id(): String? =

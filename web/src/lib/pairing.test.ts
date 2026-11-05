@@ -92,11 +92,35 @@ describe("a pairing link", () => {
 });
 
 describe("pairing a phone", () => {
+	it("does not send a link's invite or accept its daemon before the owner confirms the computer", async () => {
+		const phone = rig({ asked: async () => "paired" });
+		await phone.flow.start();
+		const link = readPairingLink(LINK);
+		if (link === undefined) throw new Error("missing test link");
+		await phone.flow.pair(link, "P");
+		expect(phone.asks).toEqual([]);
+		expect(phone.kept()).toBeUndefined();
+		expect(phone.flow.get()).toMatchObject({ step: "confirm", computer: `c${"0".repeat(63)}` });
+		await phone.flow.confirm();
+		expect(phone.asks).toEqual([["s3cr3t_-", "P"]]);
+		expect(phone.flow.get().step).toBe("paired");
+	});
+
+	it("a trial daemon saying revoked cannot erase the saved computer or the device key", async () => {
+		const mine = "a".repeat(64);
+		const phone = rig({ state: { daemon: mine, device: "d", name: "P" }, asked: async () => "revoked" });
+		await phone.flow.scan("P");
+		await phone.flow.confirm();
+		expect(phone.forgot()).toBe(0);
+		expect(phone.kept()).toBe(mine);
+	});
+
 	it("scans, reaches the daemon the code names, asks under the phone's name and waits for approval", async () => {
 		const { flow, used, asks } = rig({ checks: [async () => "pending", async () => "paired"] });
 		await flow.start();
 		expect(flow.get()).toEqual({ step: "scan", name: "Pixel 9" });
 		await flow.scan(" Ana's phone ");
+		await flow.confirm();
 		expect(used).toEqual(["endpointabc+/="]);
 		expect(asks).toEqual([["s3cr3t_-", "Ana's phone"]]);
 		expect(flow.get()).toEqual({
@@ -116,6 +140,7 @@ describe("pairing a phone", () => {
 		const approved = rig({ checks: [async () => "paired"] });
 		await approved.flow.start();
 		await approved.flow.scan("P");
+		await approved.flow.confirm();
 		expect(approved.kept()).toBeUndefined();
 		await settled(approved.flow, "paired");
 		expect(approved.kept()).toBe(`c${"0".repeat(63)}`);
@@ -132,6 +157,7 @@ describe("pairing a phone", () => {
 		for (const [why, asked, checks] of answers) {
 			const phone = rig({ state: { daemon: mine, device: "d", name: "P" }, asked, checks });
 			await phone.flow.scan("P");
+			await phone.flow.confirm();
 			await settled(phone.flow, "scan");
 			expect(phone.daemon(), why).toBe(mine);
 			expect(phone.kept(), why).toBe(mine);
@@ -139,9 +165,84 @@ describe("pairing a phone", () => {
 		// and starting over while it waits goes back too
 		const waiting = rig({ state: { daemon: mine, device: "d", name: "P" }, checks: [async () => "pending"] });
 		await waiting.flow.scan("P");
+		await waiting.flow.confirm();
 		await settled(waiting.flow, "waiting");
 		waiting.flow.again();
 		await vi.waitFor(() => expect(waiting.daemon()).toBe(mine));
+	});
+
+	it("ignores a pairing answer that arrives after the owner starts over", async () => {
+		let reply!: (state: PairingState) => void;
+		const answer = new Promise<PairingState>((resolve) => {
+			reply = resolve;
+		});
+		let checking = false;
+		const phone = rig({
+			checks: [
+				() => {
+					checking = true;
+					return answer;
+				},
+			],
+		});
+		await phone.flow.start();
+		await phone.flow.scan("P");
+		await phone.flow.confirm();
+		await vi.waitFor(() => expect(checking).toBe(true));
+		phone.flow.again();
+		await settled(phone.flow, "scan");
+		reply("paired");
+		await answer;
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(phone.flow.get().step).toBe("scan");
+		expect(phone.kept()).toBeUndefined();
+		phone.flow.stop();
+	});
+
+	it("can restart after effect cleanup without accepting the previous start's answer", async () => {
+		let reply!: (state: PairingState) => void;
+		const old = new Promise<PairingState>((resolve) => {
+			reply = resolve;
+		});
+		let looked = false;
+		const phone = rig({
+			state: { daemon: "a".repeat(64), device: "d", name: "P" },
+			checks: [
+				() => {
+					looked = true;
+					return old;
+				},
+				async () => "paired",
+			],
+		});
+		const first = phone.flow.start();
+		await vi.waitFor(() => expect(looked).toBe(true));
+		phone.flow.stop();
+		await phone.flow.start();
+		expect(phone.flow.get().step).toBe("paired");
+		reply("revoked");
+		await first;
+		expect(phone.forgot()).toBe(0);
+		expect(phone.flow.get().step).toBe("paired");
+	});
+
+	it("cannot save a new trial with the previous attempt's late approval", async () => {
+		let reply!: (state: PairingState) => void;
+		const old = new Promise<PairingState>((resolve) => {
+			reply = resolve;
+		});
+		const phone = rig({ asked: () => old });
+		await phone.flow.start();
+		await phone.flow.scan("P");
+		const first = phone.flow.confirm();
+		phone.flow.again();
+		await settled(phone.flow, "scan");
+		await phone.flow.scan("P");
+		reply("paired");
+		await first;
+		expect(phone.flow.get().step).toBe("confirm");
+		expect(phone.kept()).toBeUndefined();
+		phone.flow.stop();
 	});
 
 	it("opens at once on a phone already paired", async () => {
@@ -154,12 +255,14 @@ describe("pairing a phone", () => {
 		const denied = rig({ checks: [async () => "denied"] });
 		await denied.flow.start();
 		await denied.flow.scan("P");
+		await denied.flow.confirm();
 		await settled(denied.flow, "scan");
 		expect(denied.flow.get()).toMatchObject({ note: NOTES.denied });
 
 		const expired = rig({ checks: [async () => "unpaired"] });
 		await expired.flow.start();
 		await expired.flow.scan("P");
+		await expired.flow.confirm();
 		await settled(expired.flow, "scan");
 		expect(expired.flow.get()).toMatchObject({ note: NOTES.expired });
 	});
@@ -170,6 +273,7 @@ describe("pairing a phone", () => {
 		});
 		await flow.start();
 		await flow.scan("P");
+		await flow.confirm();
 		await settled(flow, "paired");
 	});
 
@@ -197,12 +301,14 @@ describe("pairing a phone", () => {
 			const waiting = rig({ checks: [() => Promise.reject(rejection(code)), async () => "paired"] });
 			await waiting.flow.start();
 			await waiting.flow.scan("P");
+			await waiting.flow.confirm();
 			await settled(waiting.flow, "paired");
 			expect(waiting.forgot()).toBe(0);
 
 			const asking = rig({ asked: () => Promise.reject(rejection(code)) });
 			await asking.flow.start();
 			await asking.flow.scan("P");
+			await asking.flow.confirm();
 			expect(asking.forgot()).toBe(0);
 			expect(asking.flow.get()).toMatchObject({ step: "scan", note: NOTES.unreachable });
 		}
@@ -224,11 +330,13 @@ describe("pairing a phone", () => {
 		});
 		await refused.flow.start();
 		await refused.flow.scan("P");
+		await refused.flow.confirm();
 		expect(refused.flow.get()).toMatchObject({ step: "scan", note: "this invite expired" });
 
 		const away = rig({ asked: () => Promise.reject(rejection("UNREACHABLE")) });
 		await away.flow.start();
 		await away.flow.scan("P");
+		await away.flow.confirm();
 		expect(away.flow.get()).toMatchObject({ step: "scan", note: NOTES.unreachable });
 	});
 
@@ -236,12 +344,14 @@ describe("pairing a phone", () => {
 		const other = rig({ scanned: "https://example.com" });
 		await other.flow.start();
 		await other.flow.scan("P");
+		await other.flow.confirm();
 		expect(other.asks).toEqual([]);
 		expect(other.flow.get()).toMatchObject({ step: "scan", note: NOTES.notACode });
 
 		const closed = rig({ scanned: new Error("cancelled") });
 		await closed.flow.start();
 		await closed.flow.scan("P");
+		await closed.flow.confirm();
 		// the screen as it was: the name typed stays in its field
 		expect(closed.flow.get()).toEqual({ step: "scan", name: "Pixel 9" });
 	});
@@ -253,6 +363,7 @@ describe("pairing a phone", () => {
 		expect(step).toMatchObject({ step: "scan", link: { invite: "s3cr3t_-" } });
 		if (step.step !== "scan" || step.link === undefined) throw new Error("no link");
 		await flow.pair(step.link, "Pixel 9");
+		await flow.confirm();
 		expect(asks).toEqual([["s3cr3t_-", "Pixel 9"]]);
 
 		const later = rig();

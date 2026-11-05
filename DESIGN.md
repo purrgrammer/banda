@@ -751,7 +751,9 @@ request a bi-stream. Who asks over Iroh is the endpoint id the handshake authent
 a paired device acts as the owner; any other endpoint reaches the pairing route alone and holds little while it does
 (a small body, one stream at a time, short deadlines, a bounded number of such connections), since a key costs
 nothing. The owner pairs a device on the computer banda runs on: an invite shown as a QR code, single use and live for
-ten minutes, that the device presents and the owner then approves. Devices are listed, renamed and revoked there too,
+ten minutes. Before presenting it, the phone asks the owner to match the computer's code with the desktop; before
+approving, the desktop asks them to match the phone's code. A link cannot silently change a phone's computer, and a
+trial computer cannot erase an existing pairing. Devices are listed, renamed and revoked there too,
 never from a device, so no device can mint access that outlives its own revocation. A device learns what it is from
 the daemon's answer to the pairing route, never from how a connection closed: a restart or a dropped connection is
 only dialed again.

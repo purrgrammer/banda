@@ -94,8 +94,19 @@ function PairExample() {
 	return (
 		<PairPhone
 			step={step.step === "paired" ? { step: "scan", name: "Pixel 9", note: "Paired. The app opens here." } : step}
-			onScan={(name) => {
-				setStep({ step: "asking", name, device: PIXEL });
+			onScan={(name) =>
+				setStep({
+					step: "confirm",
+					name,
+					device: PIXEL,
+					computer: ENDPOINT.id,
+					link: { ticket: "specimen", invite: "specimen" },
+				})
+			}
+			onConfirm={() => {
+				if (step.step !== "confirm") return;
+				const { name } = step;
+				setStep({ step: "asking", name, device: PIXEL, computer: ENDPOINT.id });
 				setTimeout(() => setStep({ step: "waiting", name, device: PIXEL, computer: ENDPOINT.id }), 800);
 				setTimeout(() => setStep({ step: "paired" }), 4000);
 			}}

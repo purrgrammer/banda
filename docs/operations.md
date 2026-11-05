@@ -43,29 +43,15 @@ defect. Remove it only when its fix and acceptance evidence are recorded in a co
 - [ ] A signed release APK: the release workflow builds the APK unsigned, then signs it as
   `banda-<version>-android-arm64.apk` in a job of its own that runs no npm or Gradle, and refuses to tag one without
   banda's key in the repository's secrets (BANDA_ANDROID_KEYSTORE_BASE64, _KEYSTORE_PASSWORD, _KEY_ALIAS,
-  _KEY_PASSWORD). The key is still to be made, kept safe and set; a tagged run then needs trying, and the APK
+  _KEY_PASSWORD). The key is set; a signed workflow run still needs trying, and the APK
   installing over the one before
 - [ ] The phone's shell on iOS: out of scope for now. It implements the same plugin contract as Android's
   (`BandaPlugin` in `web/src/lib/transport.ts`) with iroh-ffi's Swift bindings, and needs a real iPhone to try
 - [ ] The phone's shell, once paired: a device revoked while the app is open sees requests fail rather than the
   pairing screen (it shows on the next start), and the app's files come with the shell, so a new build reaches the
   phone only as a new APK
-- [ ] Whoever reads the pairing code first wins the invite: the owner approves by the name the claimant chose, with no
-  id to compare. Show a short fingerprint of the device's endpoint id on the phone while it waits and on the
-  approval row, and ask the owner to match them
-- [ ] Any web page can open a `banda://pair` link (the intent filter is BROWSABLE) that names another daemon: an
-  unpaired or just-revoked phone is one tap from reaching it, and `setDaemon` keeps the new ticket before the ask
-  succeeds. Show which computer the link names (a fingerprint of its endpoint id, matched on the desktop) before
-  pairing, and keep the ticket only once the daemon answered
-- [ ] Debug builds log every plugin call and result to logcat (Capacitor's default `loggingBehavior`), the invite's
-  secret and API bodies among them: set `"loggingBehavior": "none"` in `mobile/capacitor.config.json`
-- [ ] The daemon's endpoint key (`auth/iroh.key`) is written without an fsync of the file or its directory, and a key
-  file of the wrong length is replaced by a new key: a crash after the rename can give the daemon a new identity, and
-  every paired phone silently loses it. Fsync before the rename, and refuse (log, stay off) a present but malformed
-  key
-- [ ] An endpoint that is not a device still makes a commit per pairing POST, a wrong secret included (it throws
-  inside the transaction): check the invite's hash against a snapshot before committing, and limit how often one
-  endpoint may ask
+- [ ] Windows endpoint-key publication: Node flushes the key file before rename, but does not expose directory
+  fsync on Windows; qualify power-loss recovery on a Windows filesystem
 - [ ] Push notifications that carry no content
 - [ ] Qualify recoverable updates, owner-controlled diagnostics and the exact packaged candidate (operations.md, verification.md)
 - [ ] The daemon runs the checkout's code: merged work takes effect only at a restart

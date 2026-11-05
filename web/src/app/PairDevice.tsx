@@ -42,6 +42,7 @@ export function PairDevice({
 			onPairLink={(name) => {
 				if (step.step === "scan" && step.link !== undefined) void flow.pair(step.link, name);
 			}}
+			onConfirm={() => void flow.confirm()}
 			onAgain={flow.again}
 			onRetry={() => void flow.start().catch(() => undefined)}
 		/>

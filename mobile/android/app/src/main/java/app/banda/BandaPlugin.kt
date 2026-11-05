@@ -112,20 +112,30 @@ class BandaPlugin : Plugin() {
     /** Keep the daemon being tried: it approved this phone. */
     @PluginMethod
     fun keepDaemon(call: PluginCall) {
+        if (refused(call)) return
         scope.launch {
-            daemon.keep()
-            call.resolve()
+            try {
+                daemon.keep()
+                call.resolve()
+            } catch (error: Exception) {
+                call.reject(error.message ?: "could not save the paired computer", error)
+            }
         }
     }
 
     /** Stop trying a daemon: requests go to the saved one again. */
     @PluginMethod
     fun revertDaemon(call: PluginCall) {
+        if (refused(call)) return
         scope.launch {
-            for (running in streams.values) running.job.cancel()
-            streams.clear()
-            daemon.revert()
-            call.resolve()
+            try {
+                for (running in streams.values) running.job.cancel()
+                streams.clear()
+                daemon.revert()
+                call.resolve()
+            } catch (error: Exception) {
+                call.reject(error.message ?: "could not stop trying the computer", error)
+            }
         }
     }
 
@@ -134,10 +144,14 @@ class BandaPlugin : Plugin() {
     fun forget(call: PluginCall) {
         if (refused(call)) return
         scope.launch {
-            for (running in streams.values) running.job.cancel()
-            streams.clear()
-            daemon.forget()
-            call.resolve()
+            try {
+                for (running in streams.values) running.job.cancel()
+                streams.clear()
+                daemon.forget()
+                call.resolve()
+            } catch (error: Exception) {
+                call.reject(error.message ?: "could not forget this pairing", error)
+            }
         }
     }
 

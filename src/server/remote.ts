@@ -5,8 +5,8 @@
  * stream is handed to it as a connection, and the socket it becomes carries the remote endpoint id the QUIC handshake
  * authenticated (`endpointOf`). Who a request is comes from that, never from a header.
  */
-import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { randomBytes, randomUUID } from "node:crypto";
+import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import type { IncomingMessage, Server } from "node:http";
 import { join } from "node:path";
 import { Duplex } from "node:stream";
@@ -128,25 +128,60 @@ export type Remote = {
 	close(): Promise<void>;
 };
 
-/** The daemon's endpoint key, made on first use and kept, owner-only. */
-async function endpointKey(home: string, { SecretKey }: typeof import("@number0/iroh")): Promise<SecretKey> {
-	const path = join(home, "auth", "iroh.key");
+export type KeyPoint = "key:written" | "key:synced" | "key:renamed" | "key:directory";
+
+/** The daemon's endpoint key is durable before its identity can be advertised. */
+export async function endpointKey(
+	home: string,
+	{ SecretKey }: typeof import("@number0/iroh"),
+	hit: (point: KeyPoint) => void = () => {},
+): Promise<SecretKey> {
+	const directory = join(home, "auth");
+	const path = join(directory, "iroh.key");
 	let bytes: Buffer | undefined;
 	try {
 		bytes = await readFile(path);
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 	}
+	let key: SecretKey;
 	if (bytes !== undefined) {
 		// never replaced: a new key is a new endpoint id, and every paired phone would lose this computer
 		if (bytes.length !== 32) throw new Error(`${path} is not an endpoint key (${bytes.length} bytes, not 32)`);
-		return SecretKey.fromBytes(Array.from(bytes));
+		key = SecretKey.fromBytes(Array.from(bytes));
+	} else {
+		await mkdir(directory, { recursive: true, mode: 0o700 });
+		key = SecretKey.fromBytes(Array.from(randomBytes(32)));
+		const temporary = `${path}.${randomUUID()}.tmp`;
+		try {
+			const file = await open(temporary, "wx", 0o600);
+			try {
+				await file.writeFile(Buffer.from(key.toBytes()));
+				hit("key:written");
+				await file.sync();
+				hit("key:synced");
+			} finally {
+				await file.close();
+			}
+			await rename(temporary, path);
+			hit("key:renamed");
+		} finally {
+			await rm(temporary, { force: true });
+		}
 	}
-	await mkdir(join(home, "auth"), { recursive: true, mode: 0o700 });
-	const key = SecretKey.fromBytes(Array.from(randomBytes(32)));
-	const temporary = `${path}.${process.pid}.tmp`;
-	await writeFile(temporary, Buffer.from(key.toBytes()), { mode: 0o600 });
-	await rename(temporary, path);
+	// Repeat on recovery too: a previous start may have failed after rename but before syncing the directory.
+	// Windows does not expose directory fsync through Node; the file itself is still flushed before rename.
+	if (process.platform !== "win32") {
+		for (const parent of [directory, home]) {
+			const file = await open(parent, "r");
+			try {
+				await file.sync();
+			} finally {
+				await file.close();
+			}
+		}
+	}
+	hit("key:directory");
 	return key;
 }
 

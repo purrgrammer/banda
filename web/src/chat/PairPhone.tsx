@@ -13,6 +13,7 @@ import { fingerprint, type PairingStep } from "../lib/pairing.ts";
 export type PairPhoneActions = {
 	readonly onScan?: ((name: string) => void) | undefined;
 	readonly onPairLink?: ((name: string) => void) | undefined;
+	readonly onConfirm?: (() => void) | undefined;
 	readonly onAgain?: (() => void) | undefined;
 	readonly onRetry?: (() => void) | undefined;
 };
@@ -75,6 +76,25 @@ export function PairPhone({ step, ...act }: { step: PairingStep } & PairPhoneAct
 				</div>
 			</Frame>
 		);
+	if (step.step === "confirm")
+		return (
+			<Frame>
+				<Heading
+					title="Is this your computer?"
+					note="Compare this code with Settings → Devices on your computer. Continue only if they match."
+				/>
+				<dl aria-label="Computer to pair with">
+					<Code label="Computer’s code" id={step.computer} />
+				</dl>
+				<Button size="lg" onClick={act.onConfirm}>
+					The codes match · Pair
+				</Button>
+				<Button size="lg" variant="ghost" onClick={act.onAgain}>
+					Cancel
+				</Button>
+			</Frame>
+		);
+
 	if (step.step === "waiting" || step.step === "asking")
 		return (
 			<Frame>
@@ -122,7 +142,7 @@ function Scan({ step, act }: { step: Extract<PairingStep, { step: "scan" }>; act
 				title="Pair this phone with banda"
 				note={
 					linked
-						? "You opened a pairing code. Pair, then approve this phone on your computer."
+						? "You opened a pairing code. Check which computer it names, then approve this phone there."
 						: "On your computer, open banda, then Settings → Devices → Pair a phone, and scan the code it shows."
 				}
 			/>
