@@ -301,6 +301,7 @@ export function handler(
 					path: url.pathname.slice("/api".length),
 					url,
 					json: () => json(req),
+					device,
 					signal: gone.signal,
 				});
 				if (answered === undefined || "file" in answered) return reply(res, 404, { error: "not found" });
@@ -861,6 +862,7 @@ export function handler(
 				path,
 				url,
 				json: () => json(req),
+				...(device === undefined ? {} : { device }),
 				signal: gone.signal,
 			});
 			if (answered === undefined) continue;

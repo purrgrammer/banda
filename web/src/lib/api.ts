@@ -62,6 +62,9 @@ export class Unauthorized extends Error {}
 
 export const hasToken = () => transport.identified || token !== undefined;
 
+/** The page runs on a paired device (the phone's shell), not on the computer banda runs on. */
+export const runsOnDevice = transport.identified;
+
 /** The link pasted into a page that is already open changes only the hash: take the token from it then too. */
 export function onToken(listener: () => void): () => void {
 	const check = () => {

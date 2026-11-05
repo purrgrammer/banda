@@ -2,7 +2,8 @@
  * Settings' devices: the phones that reach banda from anywhere, as the owner. "Pair a phone" shows a code to scan,
  * live for ten minutes; the phone that scans it asks to pair and waits here for the owner's Approve or Deny. Each paired
  * device is the owner's to rename or revoke (asked first). What identifies a device and how it reaches this computer
- * stays behind Details.
+ * stays behind Details. On a device itself (`here` false) the list is all there is: the daemon pairs, renames and
+ * revokes only for the computer it runs on, so a phone cannot mint access that outlives its own.
  */
 import { ChevronDownIcon, PencilIcon, PlusIcon, SmartphoneIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
@@ -53,7 +54,8 @@ export function DevicesSettings({
 	making = false,
 	now: fixed,
 	details: open,
-	...act
+	here = true,
+	...given
 }: {
 	/** As the daemon last said; undefined until read. */
 	devices: DevicesView | undefined;
@@ -65,8 +67,11 @@ export function DevicesSettings({
 	now?: number;
 	/** Details open from the start, for the specimen. */
 	details?: boolean;
+	/** On the computer banda runs on, where devices are paired, renamed and revoked; false on a device. */
+	here?: boolean;
 } & DevicesActions) {
-	const requests = devices?.requests ?? [];
+	const act: DevicesActions = here ? given : {};
+	const requests = here ? (devices?.requests ?? []) : [];
 	const now = useNow(invite !== undefined || requests.length > 0, fixed);
 	const off = devices !== undefined && devices.endpoint === null;
 	const list = devices?.devices ?? [];
@@ -75,7 +80,11 @@ export function DevicesSettings({
 		<>
 			<Block
 				title="Devices"
-				note="Phones you pair reach banda from anywhere, as you: your chats, your agents, your approvals."
+				note={
+					here
+						? "Phones you pair reach banda from anywhere, as you: your chats, your agents, your approvals."
+						: "Phones you pair reach banda from anywhere, as you. Pair, rename and revoke them in banda on your computer."
+				}
 			>
 				{requests.length > 0 ? (
 					<Rows>
@@ -83,37 +92,40 @@ export function DevicesSettings({
 							<RequestRow key={request.id} request={request} now={now} act={act} />
 						))}
 					</Rows>
-				) : invite !== undefined ? (
+				) : here && invite !== undefined ? (
 					<Pairing invite={invite} expired={expired} now={now} act={act} />
 				) : null}
 				<Rows>
 					{list.map((device) => (
-						<DeviceRow key={device.id} device={device} act={act} />
+						<DeviceRow key={device.id} device={device} act={act} here={here} />
 					))}
-					<RowOf
-						title={
-							<span className="text-ink-2">
-								{devices === undefined
-									? "Looking…"
-									: off
-										? "Reaching banda from your phone is off on this computer"
-										: list.length === 0
-											? "No phone paired yet"
-											: "Another phone"}
-							</span>
-						}
-						end={
-							<Button
-								variant="outline"
-								size="xs"
-								disabled={devices === undefined || off || making || (invite !== undefined && !expired)}
-								onClick={act.onPair}
-							>
-								<PlusIcon />
-								Pair a phone
-							</Button>
-						}
-					/>
+					{!here && devices === undefined ? <RowOf title={<span className="text-ink-2">Looking…</span>} /> : null}
+					{!here ? null : (
+						<RowOf
+							title={
+								<span className="text-ink-2">
+									{devices === undefined
+										? "Looking…"
+										: off
+											? "Reaching banda from your phone is off on this computer"
+											: list.length === 0
+												? "No phone paired yet"
+												: "Another phone"}
+								</span>
+							}
+							end={
+								<Button
+									variant="outline"
+									size="xs"
+									disabled={devices === undefined || off || making || (invite !== undefined && !expired)}
+									onClick={act.onPair}
+								>
+									<PlusIcon />
+									Pair a phone
+								</Button>
+							}
+						/>
+					)}
 				</Rows>
 			</Block>
 			{devices === undefined ? null : <Details devices={devices} invite={invite} open={open} />}
@@ -235,7 +247,7 @@ const Lead = ({ connected = false, revoked = false }: { connected?: boolean; rev
 );
 
 /** A paired device: renamed in place, revoked after a confirm. A revoked one stays listed, with nothing to do. */
-function DeviceRow({ device, act }: { device: DeviceView; act: DevicesActions }) {
+function DeviceRow({ device, act, here }: { device: DeviceView; act: DevicesActions; here: boolean }) {
 	const [editing, setEditing] = useState(false);
 	const [name, setName] = useState(device.name);
 	const revoked = device.revoked !== undefined;
@@ -281,7 +293,7 @@ function DeviceRow({ device, act }: { device: DeviceView; act: DevicesActions })
 						: `Paired ${day(device.paired)}`
 			}
 			end={
-				revoked ? null : (
+				revoked || !here ? null : (
 					<span className="flex shrink-0 gap-1">
 						<Button
 							variant="ghost"

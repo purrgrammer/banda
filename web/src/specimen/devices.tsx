@@ -123,13 +123,14 @@ export function DevicesSection() {
 			<Section
 				id="devices-states"
 				title="Devices, each state"
-				note="Nothing paired; the code, live and counting down; a phone asking; the code expired; devices connected, idle and revoked; reach off on this computer; Details open."
+				note="Nothing paired; the code, live and counting down; a phone asking; the code expired; devices connected, idle and revoked; the same on a phone, the list alone; reach off on this computer; Details open."
 			>
 				{frame(<DevicesSettings devices={NONE} now={NOW} />)}
 				{frame(<DevicesSettings devices={NONE} invite={INVITE} now={NOW} />)}
 				{frame(<DevicesSettings devices={ASKING} invite={INVITE} now={NOW} />)}
 				{frame(<DevicesSettings devices={NONE} invite={{ ...INVITE, expires: NOW - 1 }} now={NOW} />)}
 				{frame(<DevicesSettings devices={PAIRED} now={NOW} />)}
+				{frame(<DevicesSettings devices={{ ...PAIRED, requests: ASKING.requests }} now={NOW} here={false} />)}
 				{frame(<DevicesSettings devices={{ endpoint: null, devices: [], requests: [] }} now={NOW} />)}
 				{frame(<DevicesSettings devices={PAIRED} invite={INVITE} now={NOW} details />)}
 				{frame(<DevicesSettings devices={undefined} />)}

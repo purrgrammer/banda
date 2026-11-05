@@ -1,12 +1,14 @@
 /**
  * Settings' devices, live: the devices and the requests waiting, from the daemon and its `devices` events. The invite
  * on screen is this page's alone (its secret is shown once and kept nowhere): it goes once a request it brought is
- * answered, or the owner cancels it.
+ * answered, or the owner cancels it. On a device, the list alone: the daemon pairs, renames and revokes for the
+ * computer it runs on.
  */
 import { useState } from "react";
 import { toast } from "sonner";
 import { approveDevice, denyDevice, makeInvite, renameDevice, revokeDevice, useDevices } from "../areas/devices.ts";
 import { DevicesSettings, type ShownInvite } from "../chat/Devices.tsx";
+import { runsOnDevice } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 
 export function SettingsDevices() {
@@ -16,6 +18,7 @@ export function SettingsDevices() {
 	return (
 		<DevicesSettings
 			devices={devices}
+			here={!runsOnDevice}
 			invite={invite}
 			making={making}
 			onPair={() => {

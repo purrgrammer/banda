@@ -111,6 +111,46 @@ describe("remote reach over Iroh", () => {
 		}
 	});
 
+	it("lets a paired device read its fellow devices, and leaves pairing, renaming and revoking to the computer", async () => {
+		const home = await tempHome();
+		const { daemon, owner } = await start(home);
+		const phone = await testDevice();
+		const other = await testDevice();
+		try {
+			const invite = await owner<InviteView>("POST", "/devices/invites");
+			await phone.dial(invite.ticket);
+			await phone.request("POST", "/api/devices/pair", { invite: invite.secret, name: "Pixel" });
+			await owner("POST", `/devices/requests/${phone.id}/approve`, {});
+			const listed = await phone.request("GET", "/api/devices");
+			expect(listed.status).toBe(200);
+			expect((listed.body as DevicesView).devices).toEqual([expect.objectContaining({ id: phone.id })]);
+
+			// a device makes no invite: a phone (or a page in its app) cannot mint access that outlives its own
+			const here = { error: "devices are paired, renamed and revoked on the computer banda runs on" };
+			expect(await phone.request("POST", "/api/devices/invites")).toEqual({ status: 403, body: here });
+			const second = await owner<InviteView>("POST", "/devices/invites");
+			await other.dial(second.ticket);
+			expect((await other.request("POST", "/api/devices/pair", { invite: second.secret, name: "Pixel" })).status).toBe(
+				202,
+			);
+			for (const [method, path, body] of [
+				["POST", `/api/devices/requests/${other.id}/approve`, {}],
+				["POST", `/api/devices/requests/${other.id}/deny`, undefined],
+				["PUT", `/api/devices/${phone.id}`, { name: "Mine" }],
+				["POST", `/api/devices/${phone.id}/revoke`, undefined],
+			] as const)
+				expect(await phone.request(method, path, body)).toEqual({ status: 403, body: here });
+			const after = await owner("GET", "/devices");
+			expect(after.requests).toEqual([expect.objectContaining({ id: other.id })]);
+			expect(after.devices).toEqual([expect.objectContaining({ id: phone.id, name: "Pixel" })]);
+			expect(after.devices[0]?.revoked).toBeUndefined();
+		} finally {
+			await phone.close();
+			await other.close();
+			await daemon.close();
+		}
+	});
+
 	it("answers a device that finished its side right after asking, and lets go of a stream that asked nothing", async () => {
 		const home = await tempHome();
 		const { daemon, owner } = await start(home);

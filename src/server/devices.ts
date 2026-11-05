@@ -2,7 +2,9 @@
  * Devices in the app (DESIGN.md "Clients"): the owner makes an invite (`POST /api/devices/invites`), whose pairing
  * link the app shows as a QR code; a device that dials the daemon over Iroh presents it (`POST /api/devices/pair`) and
  * waits, polling the same route, while the owner approves or denies it; the owner lists, renames and revokes devices.
- * Every change is one commit to the `Devices` doc, and reaches the app as the `devices` shell event.
+ * Every change is one commit to the `Devices` doc, and reaches the app as the `devices` shell event. Only the computer
+ * banda runs on changes them: a device reads the list, so a phone (or a page in its app) cannot mint access that
+ * outlives its own revocation.
  */
 import type { Harness } from "@earendil-works/pi-durable";
 import {
@@ -35,6 +37,9 @@ export type DevicesDesk = {
 	/** Whether endpoint `id` may hold a connection at all: a revoked device may not. */
 	readonly admits: (id: string) => Promise<boolean>;
 };
+
+/** Why a device is refused what only the owner's computer does. */
+const HERE = "devices are paired, renamed and revoked on the computer banda runs on";
 
 /** The pairing link a QR code carries: the daemon's ticket and the invite's secret. */
 export const pairingLink = (ticket: string, secret: string) =>
@@ -100,8 +105,10 @@ export function openDevices({
 		return id;
 	};
 
-	const route = async ({ method, path, json }: AreaRequest): Promise<AreaReply | undefined> => {
+	const route = async ({ method, path, json, device }: AreaRequest): Promise<AreaReply | undefined> => {
 		if (path === "/devices" && method === "GET") return { body: await view() };
+		if (device !== undefined && path.startsWith("/devices/") && path !== "/devices/pair")
+			throw new BadRequest(HERE, 403);
 		if (path === "/devices/invites" && method === "POST") return { body: await invite() };
 		// pairing is a device's, over Iroh: the gate answers it before the areas
 		if (path === "/devices/pair") throw new BadRequest("a device pairs over Iroh, not on this computer", 400);
