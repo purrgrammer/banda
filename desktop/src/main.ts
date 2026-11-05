@@ -322,7 +322,11 @@ else {
 	app.on("window-all-closed", () => {
 		// the tray keeps the app; nothing to do
 	});
+	// a development shell is Electron's own app, which macOS names and draws as Electron; packaged, the bundle says
+	// banda (electron-builder.yml). The name in the Dock comes from the bundle; the icon and the app menu's can be set.
+	app.setName("banda");
 	void app.whenReady().then(async () => {
+		if (!app.isPackaged) app.dock?.setIcon(release().icon.replace("icon-192", "icon-512"));
 		makeTray(release().icon);
 		answerFolders();
 		if (!app.isPackaged && process.env.BANDA_HOME === undefined) {
