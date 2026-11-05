@@ -139,6 +139,8 @@ jsonLines(process.stdin, (line) => {
 		case "initialize":
 			return send({ id: message.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: true } } });
 		case "session/new": {
+			// a harness that never opens a session (not signed in, waiting on a prompt of its own)
+			if (process.env.FAKE_ACP_HANG === "1") return;
 			const sessionId = `fake-${process.pid}-${sessions.size + 1}`;
 			sessions.add(sessionId);
 			return send({ id: message.id, result: { sessionId, modes: { currentModeId: "auto", availableModes: [] } } });

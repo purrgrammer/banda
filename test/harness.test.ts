@@ -96,7 +96,7 @@ describe("applyUpdate", () => {
 describe("a harness session", () => {
 	const FAKE = join(import.meta.dirname, "fixtures/fake-acp-agent.ts");
 
-	async function setup() {
+	async function setup(definition: { args?: string[]; env?: string } = {}) {
 		const home = await tempHome();
 		const folder = await mkdtemp(join(homedir(), ".banda-test-folder-"));
 		onTestFinished(() => rm(folder, { recursive: true, force: true }));
@@ -106,7 +106,13 @@ describe("a harness session", () => {
 				new Map([
 					[
 						"fake",
-						{ name: "fake", service: "Fake Code", command: process.execPath, args: [FAKE], mode: "acceptEdits" },
+						{
+							name: "fake",
+							service: "Fake Code",
+							command: process.execPath,
+							args: definition.args ?? [FAKE],
+							mode: "acceptEdits",
+						},
 					],
 				]),
 			followUp: async (_tx, chat, input) => {
@@ -114,6 +120,7 @@ describe("a harness session", () => {
 				return 0;
 			},
 			log: () => {},
+			openMs: 500,
 		});
 		const registry = createRegistry();
 		registry.install(defineExtension({ name: "test.harness", tasks: [made.Session] }));
@@ -156,6 +163,38 @@ describe("a harness session", () => {
 		expect(ended?.steps.map((step) => step.kind)).toEqual(["asked", "edit", "run", "steered", "said"]);
 		expect(s.woke).toEqual([expect.objectContaining({ chat: s.chat, key: `harness:${task}`, state: "done" })]);
 		await s.harness.close(context);
+	});
+
+	it("says why it failed: a harness that dies at once, one that never opens a session", async () => {
+		const dies = await setup({ args: ["-e", "console.error('not signed in: run claude login'); process.exit(3)"] });
+		const one = await dies.harness.commit(
+			(tx) => dies.made.begin(tx, { chat: dies.chat, agent: "sancho", harness: "fake", folder: dies.folder, ask: "x" }),
+			context,
+		);
+		await until(() => dies.woke.length > 0);
+		expect((await dies.session())[one]).toMatchObject({
+			state: "failed",
+			outcome: expect.stringMatching(/exited|not signed in/),
+		});
+		await dies.harness.close(context);
+		process.env.FAKE_ACP_HANG = "1";
+		try {
+			const hangs = await setup();
+			const two = await hangs.harness.commit(
+				(tx) =>
+					hangs.made.begin(tx, { chat: hangs.chat, agent: "sancho", harness: "fake", folder: hangs.folder, ask: "x" }),
+				context,
+			);
+			await until(() => hangs.woke.length > 0);
+			expect((await hangs.session())[two]).toMatchObject({
+				state: "failed",
+				outcome: "it did not start a session in time",
+			});
+			expect(hangs.woke[0]?.text).toContain("could not start (it did not start a session in time)");
+			await hangs.harness.close(context);
+		} finally {
+			delete process.env.FAKE_ACP_HANG;
+		}
 	});
 
 	it("never sends the ask again after a restart past it: the session is interrupted", async () => {

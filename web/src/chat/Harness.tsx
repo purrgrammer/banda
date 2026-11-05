@@ -391,7 +391,7 @@ export function HarnessCard({
 							{state === "stopped"
 								? "You stopped it"
 								: state === "failed"
-									? "It ended with a problem. Nothing was sent again."
+									? `It ended with a problem: ${outcome ?? "it did not say why"}`
 									: "Interrupted when banda restarted. Nothing was sent again."}
 						</span>
 					</>

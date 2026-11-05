@@ -22,6 +22,7 @@ import {
 	type TaskId,
 	type Tx,
 } from "@earendil-works/pi-durable";
+import { ansiStripper } from "../box/ansi.ts";
 import {
 	type AcpConnection,
 	type AcpPermissionOutcome,
@@ -134,6 +135,11 @@ export const MAX_STEPS = 200;
 const MAX_TEXT = 4000;
 /** Sessions kept once ended, newest first. */
 const KEPT_ENDED = 30;
+/** How long a harness gets to start a session (initialize, session/new, its mode) before it ends as failed. */
+const OPEN_MS = 60_000;
+/** The last lines of a harness's stderr kept, for the reason a failed session gives. */
+const TAIL = 6;
+
 /** How long updates gather before they are committed together. */
 const FLUSH_MS = 250;
 
@@ -391,8 +397,8 @@ function wakeText(session: HarnessSession, service: string): string {
 				: session.state === "interrupted"
 					? "was interrupted when banda restarted; the ask was not sent again"
 					: session.prompted === true
-						? "ended with a problem"
-						: "could not start: the ask was never sent, so nothing was done and no other run is affected";
+						? `ended with a problem${session.outcome === undefined ? "" : ` (${session.outcome})`}`
+						: `could not start${session.outcome === undefined ? "" : ` (${session.outcome})`}: the ask was never sent, so nothing was done and no other run is affected`;
 	const files =
 		edits.size === 0
 			? "It changed no files."
@@ -415,6 +421,8 @@ export type HarnessOptions = {
 	readonly now?: () => number;
 	/** A fault point, named; tests throw or kill there. */
 	readonly fault?: (point: string) => void;
+	/** How long a harness gets to start a session; a minute unless a test says. */
+	readonly openMs?: number;
 };
 
 type SessionInput = { readonly harness: string };
@@ -424,7 +432,7 @@ export function defineHarnesses(options: HarnessOptions) {
 	const fault = (point: string) => options.fault?.(point);
 
 	/** End a session in its record, wake its agent, and drop the oldest ended sessions past the bound. */
-	async function ending(tx: Tx, task: number, state: HarnessState, service: string) {
+	async function ending(tx: Tx, task: number, state: HarnessState, service: string, reason?: string) {
 		const doc = await tx.doc(Harnesses);
 		const session = doc.sessions[task];
 		if (session === undefined || session.ended !== undefined) return undefined;
@@ -433,7 +441,9 @@ export function defineHarnesses(options: HarnessOptions) {
 		delete session.asking;
 		delete session.pid;
 		const said = [...session.steps].reverse().find((step) => step.kind === "said");
-		if (said !== undefined) session.outcome = said.text.split("\n")[0]?.slice(0, 300) ?? "";
+		// a failure says why, in its own words when the harness said none
+		if (state === "failed" && reason !== undefined) session.outcome = reason.slice(0, 300);
+		else if (said !== undefined) session.outcome = said.text.split("\n")[0]?.slice(0, 300) ?? "";
 		await options.followUp(tx, session.chat, {
 			key: `harness:${task}`,
 			text: wakeText(session, service),
@@ -479,7 +489,13 @@ export function defineHarnesses(options: HarnessOptions) {
 				const cwd = folderPath(start.folder);
 				if (cwd === undefined) {
 					await runtime.commit(async (tx) => {
-						await ending(tx, id, "failed", service);
+						await ending(
+							tx,
+							id,
+							"failed",
+							service,
+							`${start?.folder ?? "its folder"} is not a folder on this computer`,
+						);
 						return terminal;
 					}, ctx);
 					return;
@@ -558,11 +574,16 @@ export function defineHarnesses(options: HarnessOptions) {
 							if (outstanding === 0) finished(cancelled ? "stopped" : "done");
 						},
 						(error: unknown) => {
-							options.log(`harness: ${(error as Error).message}`);
+							why ??= (error as Error).message;
 							finished(cancelled ? "stopped" : "failed");
 						},
 					);
 				};
+				// why it failed, in words: its error, else the last of what it printed
+				const tail: string[] = [];
+				const strip = ansiStripper();
+				let why: string | undefined;
+				const reason = () => why ?? tail.at(-1) ?? "it ended without saying why";
 				const watch = await runtime.watchDoc(Harnesses, ctx);
 				try {
 					connection = startAcp({
@@ -578,9 +599,18 @@ export function defineHarnesses(options: HarnessOptions) {
 							},
 							permission: asked,
 						},
-						log: (line) => options.log(`${definition.name}: ${line}`),
+						// kept, not logged line by line: a harness's chatter is not the daemon's log; a failure logs its tail once
+						log: (line) => {
+							const plain = strip(line).trim();
+							if (plain === "") return;
+							tail.push(plain.slice(0, 300));
+							if (tail.length > TAIL) tail.shift();
+						},
 					});
-					void connection.exited.then(() => finished(cancelled ? "stopped" : "failed"));
+					void connection.exited.then(({ code, signal }) => {
+						why ??= `it exited (${signal ?? `code ${code}`})`;
+						finished(cancelled ? "stopped" : "failed");
+					});
 					const pid = connection.pid;
 					await runtime.commit(async (tx) => {
 						const session = (await tx.doc(Harnesses)).sessions[id];
@@ -588,7 +618,23 @@ export function defineHarnesses(options: HarnessOptions) {
 						return undefined;
 					}, ctx);
 					fault("harness:spawn");
-					const opened = await openSession(connection, { cwd, mode: definition.mode });
+					const opening = connection;
+					const opened = await new Promise<Awaited<ReturnType<typeof openSession>>>((resolve, reject) => {
+						const timer = setTimeout(
+							() => reject(new Error("it did not start a session in time")),
+							options.openMs ?? OPEN_MS,
+						);
+						openSession(opening, { cwd, mode: definition.mode }).then(
+							(value) => {
+								clearTimeout(timer);
+								resolve(value);
+							},
+							(error: unknown) => {
+								clearTimeout(timer);
+								reject(error);
+							},
+						);
+					});
 					sessionId = opened.sessionId;
 					// the ask goes once: from this commit on, a restart reports the session interrupted
 					await runtime.commit(async (tx) => {
@@ -663,16 +709,19 @@ export function defineHarnesses(options: HarnessOptions) {
 					await flush();
 					// the harness is gone before the session ends: an ended session is never reconciled
 					await connection.close();
+					if (state === "failed")
+						options.log(`${definition.name} failed: ${reason()}; it last printed: ${tail.join(" | ")}`);
 					await runtime.commit(async (tx) => {
-						await ending(tx, id, state, service);
+						await ending(tx, id, state, service, state === "failed" ? reason() : undefined);
 						return terminal;
 					}, ctx);
 				} catch (error) {
-					options.log(`harness: ${(error as Error).message}`);
 					if (runtime.signal.aborted) throw error;
+					why ??= (error as Error).message;
+					options.log(`${definition.name} failed: ${reason()}; it last printed: ${tail.join(" | ")}`);
 					await connection?.close();
 					await runtime.commit(async (tx) => {
-						await ending(tx, id, "failed", service);
+						await ending(tx, id, "failed", service, reason());
 						return terminal;
 					}, ctx);
 				} finally {
@@ -739,7 +788,7 @@ export function defineHarnesses(options: HarnessOptions) {
 				if (found !== undefined && found.state.status !== "terminal") continue;
 				const definition = options.definitions().get(session.harness);
 				killLeft(session.pid, definition);
-				await ending(tx, Number(task), "failed", definition?.service ?? session.harness);
+				await ending(tx, Number(task), "failed", definition?.service ?? session.harness, "banda stopped while it ran");
 				ended++;
 			}
 			return ended;
