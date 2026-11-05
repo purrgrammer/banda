@@ -563,7 +563,7 @@ export function Permissions({
 	onRevoke?: ((id: string) => void) | undefined;
 }) {
 	return (
-		<Block title={`What ${agent} may do without asking`} note="Each one you allowed, and until when.">
+		<Block title="Permissions" note={`What ${agent} may do without asking: each one you allowed, and until when.`}>
 			{permissions.length === 0 ? (
 				<p className="rounded-field bg-paper-2 px-3.5 py-3 text-ui text-ink-2">Nothing yet: {agent} asks every time.</p>
 			) : (

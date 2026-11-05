@@ -20,7 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { addHarness, connectHarness, foldersAt, removeHarness, switchHarness } from "../areas/harnesses.ts";
 import { Confirm } from "../chat/Confirm.tsx";
-import { FolderBrowser, projectsIn, projectsWord } from "../chat/FolderPicker.tsx";
+import { FolderBrowser, folderName, projectsIn, projectsWord } from "../chat/FolderPicker.tsx";
 import { HarnessMark } from "../chat/Harness.tsx";
 import type { FolderListing } from "../lib/api.ts";
 import { chatAgents } from "../lib/navigation.ts";
@@ -62,6 +62,7 @@ export function HarnessDialog({
 	const [error, setError] = useState<string | undefined>(undefined);
 	const account = name === undefined ? undefined : view?.accounts[name];
 	const chosen = view?.harnesses.find((one) => one.name === name);
+	const agentId = agent?.id;
 	// each time it opens, it starts from what is so now
 	useEffect(() => {
 		if (!open) return;
@@ -72,8 +73,9 @@ export function HarnessDialog({
 		// what is so now is read when it opens: the shell's later pushes do not reset the steps
 		const now = given === undefined ? undefined : current.current?.accounts[given];
 		setFolder(now?.folder ?? current.current?.suggested ?? "~");
-		setOn(new Set([...(now?.agents ?? []), ...(agent === undefined ? [] : [agent.id])]));
-	}, [open, given, agent]);
+		setOn(new Set([...(now?.agents ?? []), ...(agentId === undefined ? [] : [agentId])]));
+		// by the agent's id: the object is made anew on every render of the tile that opened it
+	}, [open, given, agentId]);
 	const onAt = useCallback((path: string, found: FolderListing) => {
 		setFolder(path);
 		setListing(found);
@@ -133,7 +135,7 @@ export function HarnessDialog({
 							: step === "own"
 								? "Any coding agent that speaks ACP, by the command that starts it so."
 								: step === "folder"
-									? "The folder your code is in. Each task works in one of its projects."
+									? "The folder your projects are in. Each task works in one of them."
 									: "What it may do, and for whom."}
 					</DialogDescription>
 				</DialogHeader>
@@ -227,19 +229,7 @@ export function HarnessDialog({
 							</Alert>
 						</>
 					) : step === "folder" ? (
-						<>
-							<label className="flex flex-col gap-1.5" htmlFor="harness-folder">
-								<span className="text-meta text-ink-2">Your code folder</span>
-								<Input
-									id="harness-folder"
-									value={folder}
-									className="font-code"
-									placeholder="~/code"
-									onChange={(event) => setFolder(event.target.value)}
-								/>
-							</label>
-							<FolderBrowser at={folder} browse={foldersAt} onAt={onAt} />
-						</>
+						<FolderBrowser at={folder} browse={foldersAt} onAt={onAt} />
 					) : (
 						<>
 							<dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-field bg-paper-2 px-3.5 py-3 text-ui">
@@ -335,7 +325,7 @@ export function HarnessDialog({
 							</Button>
 						) : step === "folder" ? (
 							<Button disabled={folder.trim() === ""} onClick={() => setStep("review")}>
-								Use this folder
+								Use {folderName(folder)}
 							</Button>
 						) : step === "review" ? (
 							<Button disabled={busy} onClick={() => void save()}>
