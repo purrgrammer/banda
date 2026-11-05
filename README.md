@@ -1,42 +1,41 @@
-# banda
+<p align="center"><img src="web/public/icon.svg" width="96" alt="Sancho, banda's first agent"></p>
 
-A band of personal agents. One default agent is where the app opens; you add agents of
-your own, each with its own chat, skills and permissions. They research, write, keep track of things and work with your
-services inside a computer of their own, keep working while you are away, and ask before anything consequential leaves
-that computer. You work with them through one app (web, and installed on your phone or desktop) and a small CLI.
+<h1 align="center">banda</h1>
 
-- **Sovereign.** One store on your machine holds everything; the model provider is a swappable choice.
-- **Private by structure.** Credentials never enter the computer the agent's code runs in: a proxy adds them on the way
-  out. Untrusted content, your data and an outbound send never meet without you.
-- **Safe by consequence.** You are asked only about what cannot be undone or sends data out, shown as the exact thing
-  that will happen.
-- **Durable.** A crash, a restart or a week offline loses nothing and does nothing twice.
+<p align="center">A band of AI agents that work for you, on your own machine.</p>
+
+banda gives you a small team of AI agents. Sancho is the first; you add others, each with its own name, face,
+personality and chat. They browse the web, research, write, make pages and documents, run on a schedule and use
+services like GitHub. Each works inside a sandboxed computer of its own, and asks you before anything leaves it.
+
+- **Yours.** Everything is stored on your machine. Pick any model provider and switch whenever you like.
+- **Asks before it acts.** Reading is free; sending, posting or anything that can't be undone waits for your OK, shown
+  as exactly what will happen.
+- **Keeps your keys out of reach.** Tokens for your services never enter the agents' computer: they are added on the
+  way out.
+- **Keeps going.** Close the app or restart the computer, and the work picks up where it left off.
 
 ![A group chat: Mara finds the trains, Sancho plans the food, and Otto turns both into a printable itinerary](docs/screenshots/group.png)
 
 | | |
 |---|---|
 | ![Sancho asks before opening a GitHub issue, showing exactly what will be sent](docs/screenshots/approval.png) | ![Sancho asks to set up a routine that runs every weekday at 8:00](docs/screenshots/routine.png) |
-| **Asks before it writes.** A write is a card with the exact repository, title and text. | **Routines.** An agent wakes on a schedule and reports what it finds. |
+| **Asks before it writes:** the exact repository, title and text. | **Routines:** an agent wakes on a schedule and reports back. |
 | ![Sancho's browser, live, reading Wikipedia's article on Porto](docs/screenshots/browser.png) | ![A printable comparison page Otto made from Mara's research](docs/screenshots/page.png) |
-| **A browser of its own.** Watch it work, take over, or stop it. | **Artifacts.** Pages and documents you open, print and keep. |
+| **A browser of its own:** watch it, take over, or stop it. | **Pages and documents** to open, print and keep. |
 
-> **Status: pre-release.** banda is under active development and not yet production-ready: the isolation, egress and
-> recovery work tracked in [docs/README.md](docs/README.md) is still open. Run it for yourself, on a machine you trust,
-> and expect stored shapes to change without migrations.
+> **Pre-release.** banda works, but it is young: expect rough edges and breaking changes, and run it on a machine you
+> trust. Its sandbox is not yet hardened against hostile code or content ([what's open](docs/README.md)).
 
-## Install
+## Get started
 
-Pre-release builds are on the [releases page](https://github.com/purrgrammer/banda/releases): a desktop app for macOS,
-Windows and Linux, and a command-line archive that brings its own Node.js. They are unsigned, and they need Docker
-running. Each release's notes say how to open an unsigned app.
+You need **Docker** running (Docker Desktop on macOS, Docker Engine 25+ on Linux): each agent's computer is a
+container. banda runs on macOS and Linux; Windows is untested.
 
-## Run it from source
+**Desktop app or CLI:** download a pre-release from the [releases page](https://github.com/purrgrammer/banda/releases).
+Builds are unsigned; each release's notes say how to open them.
 
-banda runs on macOS and Linux; Windows is untested. You need [Node 26](https://nodejs.org) (`mise install` reads
-[mise.toml](mise.toml)) and Docker Engine 25 or later (Docker Desktop on macOS, Docker Engine on Linux): the agent's
-computer is a container behind its own network. The first `serve` builds that computer's image, which takes several
-minutes.
+**From source** (needs [Node 26](https://nodejs.org); `mise install` sets it up):
 
 ```sh
 npm ci
@@ -45,31 +44,21 @@ node dist/cli/index.js serve
 ```
 
 Open the link it prints, pick a model provider and sign in. Anthropic, OpenAI, GitHub Copilot, OpenRouter, xAI and
-Meta sign in with your account; Google, Azure, Vertex AI, Amazon Bedrock, Mistral, DeepSeek, Groq and Cerebras take a
-key. Your home is `~/.banda` (`--home <dir>` or `BANDA_HOME` for another); `node dist/cli/index.js --help` lists the
-CLI.
+Meta use your account; Google, Azure, Vertex AI, Amazon Bedrock, Mistral, DeepSeek, Groq and Cerebras take an API key.
+The first start builds the agents' computer, which takes a few minutes.
 
-### Stop and clean up
+Your data lives in `~/.banda`. Ctrl-C stops banda; the agents' containers stay, and `npm run boxes:sweep` removes those
+of deleted homes. To start over, delete `~/.banda` and sweep.
 
-Ctrl-C stops the daemon. The agent's computer is a container that outlives it; `npm run boxes:sweep` removes the
-containers, networks and volumes of homes that are gone. To start over, delete `~/.banda`, then sweep.
-
-## Develop
+## Contribute
 
 ```sh
 npm run check && npm run typecheck && npm test
 ```
 
-`npm run desktop:dev` opens the desktop app on a throwaway home. `npm run cli:pack` and `npm run desktop:pack` build
-this computer's release files into `release/`. A `v*` tag makes the release workflow draft a pre-release.
-
-`npm run web:dev` serves the app with hot reload against a running daemon, and `#/specimen` shows every component. Read
-[DESIGN.md](DESIGN.md) for the ideas and the rules, [AGENTS.md](AGENTS.md) for how to work on it (by hand or with an
-agent). [docs/README.md](docs/README.md) has what is planned, and [docs/status.md](docs/status.md) the maintainer's
-working notes. Report security issues as [SECURITY.md](SECURITY.md) says.
-
-Contributions are welcome: read [AGENTS.md](AGENTS.md), which applies to people and agents alike, and open an issue
-before a large change.
+Start with [DESIGN.md](DESIGN.md) (how banda works and why) and [AGENTS.md](AGENTS.md) (how to work on it, by hand or
+with an agent). [docs/](docs/README.md) holds the plan. Open an issue before a large change, and report security
+issues privately as [SECURITY.md](SECURITY.md) says.
 
 ## License
 
