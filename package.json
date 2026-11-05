@@ -31,7 +31,9 @@
 		"test:pbt": "BANDA_PBT_RUNS=20 vitest run",
 		"check": "biome check .",
 		"fix": "biome check --write .",
-		"cli:pack": "npm run build && node scripts/stage.ts --archive"
+		"cli:pack": "npm run build && node scripts/stage.ts --archive",
+		"desktop:dev": "npm run build && npm --prefix desktop run build && BANDA_HOME=${BANDA_HOME:-$(mktemp -d)} BANDA_PORT=${BANDA_PORT:-0} npm --prefix desktop exec electron desktop",
+		"desktop:pack": "npm run build && node scripts/stage.ts && npm --prefix desktop ci && npm --prefix desktop run dist"
 	},
 	"dependencies": {
 		"@earendil-works/chord": "1.4.0",

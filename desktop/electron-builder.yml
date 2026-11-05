@@ -1,0 +1,32 @@
+# The desktop app's installers. The release tree (release/banda/, from scripts/stage.ts) ships beside the app as
+# resources/banda: the bundled Node.js runs the daemon from there, outside the asar archive.
+appId: app.banda.desktop
+productName: banda
+copyright: banda's authors, AGPL-3.0-only
+directories:
+  output: ../release/desktop
+  buildResources: build
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: ../release/banda
+    to: banda
+icon: ../web/public/icon-512.png
+artifactName: banda-${version}-${os}-${arch}.${ext}
+publish: null
+mac:
+  category: public.app-category.productivity
+  target: [dmg, zip]
+  # unsigned pre-release: no Developer ID yet
+  identity: null
+win:
+  target: [nsis]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+linux:
+  category: Utility
+  target: [AppImage, deb]
+  maintainer: banda

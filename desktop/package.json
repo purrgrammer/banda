@@ -1,0 +1,25 @@
+{
+	"name": "banda-desktop",
+	"version": "0.1.0",
+	"private": true,
+	"description": "banda's desktop app: a window and a tray around the daemon.",
+	"license": "AGPL-3.0-only",
+	"author": "banda",
+	"homepage": "https://github.com/purrgrammer/banda",
+	"type": "module",
+	"main": "dist/main.js",
+	"scripts": {
+		"build": "tsc -p tsconfig.json",
+		"start": "npm run build && electron .",
+		"dist": "npm run build && electron-builder --config electron-builder.yml --publish never"
+	},
+	"devDependencies": {
+		"@types/node": "24.19.2",
+		"electron": "45.2.3",
+		"electron-builder": "26.18.1",
+		"typescript": "5.9.3"
+	},
+	"allowScripts": {
+		"electron-winstaller@5.4.0": true
+	}
+}

@@ -12,6 +12,10 @@
 			"!!.worktrees",
 			"evals/**",
 			"scripts/**",
+			"desktop/**",
+			"!desktop/dist",
+			"!desktop/node_modules",
+			"!desktop/package-lock.json",
 			"*.json",
 			"!package-lock.json",
 			"!.claude"
