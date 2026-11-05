@@ -74,7 +74,7 @@ import { openDevices } from "./server/devices.ts";
 import { BadRequest, handler } from "./server/http.ts";
 import { add as addFact, boxMemory, edit as editFact, memory, remove as removeFact } from "./server/memory.ts";
 import { openObjects } from "./server/objects.ts";
-import { openRemote, type Remote, type RemoteSettings, remoteSettings } from "./server/remote.ts";
+import { openRemote, type Remote, type RemoteSettings, type RemoteState, remoteSettings } from "./server/remote.ts";
 import type { Area, Boot } from "./server/routes/area.ts";
 import { AREAS } from "./server/routes/index.ts";
 import {
@@ -139,6 +139,11 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 	let browsers: Browsers | undefined;
 	let server: Server | undefined;
 	let remote: Remote | undefined;
+	/** The endpoint binding, or bound: at most one at a time. */
+	let binding: Promise<Remote> | undefined;
+	/** Where remote reach stands (`DevicesView.remote`). */
+	let remoteState: RemoteState = "off";
+	let stopping = false;
 	let sweeping: NodeJS.Timeout | undefined;
 	let sweepingSent: NodeJS.Timeout | undefined;
 	let sweepSentNow: (() => Promise<void>) | undefined;
@@ -185,8 +190,9 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			// an area's work in flight, a provider's sign-in and its callback server among them, ends before the process
 			// may exit: a listener left open keeps it alive
 			for (const area of areas) await step("area", () => area.stop?.());
-			const reach = remote;
-			if (reach !== undefined) await step("remote", () => reach.close());
+			stopping = true;
+			const reach = binding;
+			if (reach !== undefined) await step("remote", async () => (await reach.catch(() => undefined))?.close());
 			if (server !== undefined) {
 				const listening = server;
 				await step(
@@ -644,7 +650,16 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 				}
 				return web.post(id, to, text, { files: attachments, images: seen });
 			});
-		const devices = openDevices({ harness: open, remote: () => remote, changed, log });
+		/** Bind the endpoint, once: at a start with a device paired, or when the owner makes an invite. */
+		let bindRemote: (() => Promise<Remote>) | undefined;
+		const devices = openDevices({
+			harness: open,
+			remote: () => remote,
+			state: () => remoteState,
+			bind: () => bindRemote?.() ?? Promise.reject(new Error("remote reach is not available on this computer")),
+			changed,
+			log,
+		});
 		areas = AREAS.flatMap((area) =>
 			area.start === undefined
 				? []
@@ -902,15 +917,40 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		const reach = options.remote ?? remoteSettings(config.remote);
 		if (reach.reach !== "off") {
 			const settings = { ...reach, reach: reach.reach };
-			try {
-				remote = await openRemote({ home, settings, server, paired: devices.gate.paired, changed, log });
-				log(
-					`remote: endpoint ${remote.id}, reached ${settings.reach === "n0" ? "through n0's relays" : "on loopback"}`,
+			const serving = server;
+			bindRemote = () => {
+				if (stopping) return Promise.reject(new Error("the daemon is stopping"));
+				binding ??= openRemote({ home, settings, server: serving, paired: devices.gate.paired, changed, log }).then(
+					(bound) => {
+						remote = bound;
+						remoteState = "on";
+						changed();
+						log(
+							`remote: endpoint ${bound.id}, reached ${settings.reach === "n0" ? "through n0's relays" : "on loopback"}`,
+						);
+						return bound;
+					},
+					(error: unknown) => {
+						// the daemon serves this computer whatever Iroh does; the next invite, or start, tries again
+						binding = undefined;
+						log(`remote: ${error instanceof Error ? error.message : String(error)}`);
+						throw error;
+					},
 				);
+				return binding;
+			};
+			try {
+				// the native addon, loaded without binding: a platform without its prebuilt says so in Settings
+				await import("@number0/iroh");
+				remoteState = "idle";
 			} catch (error) {
-				// the daemon serves this computer whatever Iroh does; devices reach it once it binds at a restart
-				log(`remote: ${error instanceof Error ? error.message : String(error)}`);
+				remoteState = "unavailable";
+				bindRemote = undefined;
+				log(`remote: not available on this computer: ${error instanceof Error ? error.message : String(error)}`);
 			}
+			// an endpoint reachable from anywhere is bound only once there is a device to reach it, or one is being paired
+			if (bindRemote !== undefined && (settings.reach === "loopback" || (await devices.anyPaired())))
+				await bindRemote().catch(() => undefined);
 		}
 		// a proxy that runs from before this daemon is told the store's config now, its own port in it, whether or not
 		// the box has come up yet

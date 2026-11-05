@@ -12,6 +12,9 @@ import { join } from "node:path";
 import { Duplex } from "node:stream";
 // types only: the native addon loads when the endpoint binds, so a platform without its prebuilt still serves loopback
 import type { BiStream, Connection, SecretKey } from "@number0/iroh";
+import type { RemoteState } from "./api/devices.ts";
+
+export type { RemoteState };
 
 /** The one protocol the endpoint speaks: the daemon's HTTP API, one request a bi-stream. */
 export const ALPN = Array.from(Buffer.from("banda/0", "utf8"));

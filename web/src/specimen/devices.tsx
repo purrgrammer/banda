@@ -17,13 +17,15 @@ const INVITE: ShownInvite = {
 	expires: NOW + 9 * 60_000 + 41_000,
 };
 
-const NONE: DevicesView = { endpoint: ENDPOINT, devices: [], requests: [] };
+const NONE: DevicesView = { remote: "on", endpoint: ENDPOINT, devices: [], requests: [] };
 const ASKING: DevicesView = {
+	remote: "on",
 	endpoint: ENDPOINT,
 	devices: [],
 	requests: [{ id: PIXEL, name: "Pixel 9", at: NOW - 20_000, expires: INVITE.expires }],
 };
 const PAIRED: DevicesView = {
+	remote: "on",
 	endpoint: ENDPOINT,
 	devices: [
 		{ id: PIXEL, name: "Ana's phone", paired: NOW - 60_000, connected: true },
@@ -131,7 +133,13 @@ export function DevicesSection() {
 				{frame(<DevicesSettings devices={NONE} invite={{ ...INVITE, expires: NOW - 1 }} now={NOW} />)}
 				{frame(<DevicesSettings devices={PAIRED} now={NOW} />)}
 				{frame(<DevicesSettings devices={{ ...PAIRED, requests: ASKING.requests }} now={NOW} here={false} />)}
-				{frame(<DevicesSettings devices={{ endpoint: null, devices: [], requests: [] }} now={NOW} />)}
+				{frame(<DevicesSettings devices={{ remote: "off", endpoint: null, devices: [], requests: [] }} now={NOW} />)}
+				{frame(
+					<DevicesSettings devices={{ remote: "unavailable", endpoint: null, devices: [], requests: [] }} now={NOW} />,
+				)}
+				{frame(
+					<DevicesSettings devices={{ remote: "idle", endpoint: null, devices: [], requests: [] }} now={NOW} details />,
+				)}
 				{frame(<DevicesSettings devices={PAIRED} invite={INVITE} now={NOW} details />)}
 				{frame(<DevicesSettings devices={undefined} />)}
 			</Section>

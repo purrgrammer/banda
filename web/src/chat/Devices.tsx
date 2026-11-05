@@ -75,7 +75,7 @@ export function DevicesSettings({
 	const act: DevicesActions = here ? given : {};
 	const requests = here ? (devices?.requests ?? []) : [];
 	const now = useNow(invite !== undefined || requests.length > 0, fixed);
-	const off = devices !== undefined && devices.endpoint === null;
+	const off = devices !== undefined && (devices.remote === "off" || devices.remote === "unavailable");
 	const list = devices?.devices ?? [];
 	const expired = invite !== undefined && invite.expires <= now;
 	return (
@@ -108,11 +108,13 @@ export function DevicesSettings({
 								<span className="text-ink-2">
 									{devices === undefined
 										? "Looking…"
-										: off
-											? "Reaching banda from your phone is off on this computer"
-											: list.length === 0
-												? "No phone paired yet"
-												: "Another phone"}
+										: devices.remote === "unavailable"
+											? "Reaching banda from your phone isn’t available on this computer yet"
+											: off
+												? "Reaching banda from your phone is off on this computer"
+												: list.length === 0
+													? "No phone paired yet"
+													: "Another phone"}
 								</span>
 							}
 							end={
@@ -379,7 +381,14 @@ function Details({
 			<CollapsibleContent>
 				<dl className="flex flex-col gap-3 rounded-tile border border-line-soft p-3.5">
 					{devices.endpoint === null ? (
-						line("Remote reach", "off (config.json remote.reach)")
+						line(
+							"Remote reach",
+							devices.remote === "off"
+								? "off (config.json remote.reach)"
+								: devices.remote === "unavailable"
+									? "not available: Iroh has no build for this computer"
+									: "starts when you pair a phone",
+						)
 					) : (
 						<>
 							{line("This computer's endpoint", devices.endpoint.id)}

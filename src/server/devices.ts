@@ -26,13 +26,15 @@ import {
 import { context } from "../core/store.ts";
 import type { DevicesView, InviteView, PairingView } from "./api.ts";
 import { BadRequest, type RemoteGate } from "./http.ts";
-import type { Remote } from "./remote.ts";
+import type { Remote, RemoteState } from "./remote.ts";
 import type { Area, AreaReply, AreaRequest } from "./routes/area.ts";
 
 export type DevicesDesk = {
 	readonly area: Area;
 	/** What the HTTP server, and the endpoint, ask of a request that came over Iroh. */
 	readonly gate: RemoteGate;
+	/** Whether any device is paired and not revoked: the daemon binds its endpoint at start for one. */
+	readonly anyPaired: () => Promise<boolean>;
 };
 
 /** Why a device is refused what only the owner's computer does. */
@@ -45,13 +47,23 @@ export const pairingLink = (ticket: string, secret: string) =>
 export function openDevices({
 	harness,
 	remote,
+	state = () => (remote() === undefined ? "off" : "on"),
+	bind = async () => {
+		const bound = remote();
+		if (bound === undefined) throw new Error("remote reach is off on this computer");
+		return bound;
+	},
 	changed,
 	log = () => {},
 	now = Date.now,
 }: {
 	readonly harness: Harness;
-	/** The endpoint, once bound; undefined while remote reach is off. */
+	/** The endpoint, once bound; undefined while it is not. */
 	readonly remote: () => Remote | undefined;
+	/** Where remote reach stands. */
+	readonly state?: () => RemoteState;
+	/** Bind the endpoint, if it is not bound: an invite needs it. Rejects when remote reach is off or unavailable. */
+	readonly bind?: () => Promise<Remote>;
 	readonly changed: () => void;
 	/** Where a paired device's requests are logged: which device, the method and the path, never a body. */
 	readonly log?: (line: string) => void;
@@ -72,6 +84,7 @@ export function openDevices({
 		const at = now();
 		const reach = remote();
 		return {
+			remote: state(),
 			endpoint: reach === undefined ? null : { id: reach.id, reach: reach.reach },
 			devices: Object.entries(doc?.devices ?? {})
 				.map(([id, device]) => ({
@@ -92,8 +105,18 @@ export function openDevices({
 	};
 
 	const invite = async (): Promise<InviteView> => {
-		const reach = remote();
-		if (reach === undefined) throw new BadRequest("remote reach is off on this computer", 409);
+		const at = state();
+		if (at === "off") throw new BadRequest("remote reach is off on this computer", 409);
+		if (at === "unavailable") throw new BadRequest("remote reach is not available on this computer", 409);
+		let reach: Remote;
+		try {
+			reach = await bind();
+		} catch (error) {
+			throw new BadRequest(
+				`could not start remote reach: ${error instanceof Error ? error.message : String(error)}`,
+				503,
+			);
+		}
 		const ticket = await reach.ticket();
 		const secret = newSecret();
 		const expires = await harness.commit((tx) => makeInvite(tx, hashOf(secret), now()), context);
@@ -165,6 +188,10 @@ export function openDevices({
 
 	return {
 		area: { watch: [Devices], shell: async () => [{ type: "devices", devices: await view() }], route },
+		anyPaired: async () => {
+			const doc = await read();
+			return Object.keys(doc?.devices ?? {}).some((id) => isPaired(doc, id));
+		},
 		gate: {
 			paired: async (id) => isPaired(await read(), id),
 			pair,

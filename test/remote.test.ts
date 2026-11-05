@@ -252,8 +252,37 @@ describe("remote reach over Iroh", () => {
 		const owner = (path: string, method = "GET") =>
 			fetch(`http://127.0.0.1:${daemon.port}/api${path}`, { method, headers: { authorization: `Bearer ${token}` } });
 		try {
-			expect(await (await owner("/devices")).json()).toEqual({ endpoint: null, devices: [], requests: [] });
+			expect(await (await owner("/devices")).json()).toEqual({
+				remote: "off",
+				endpoint: null,
+				devices: [],
+				requests: [],
+			});
 			expect((await owner("/devices/invites", "POST")).status).toBe(409);
+		} finally {
+			await daemon.close();
+		}
+	});
+
+	it("binds no public endpoint until a device is paired or an invite is made", async () => {
+		const home = await tempHome();
+		await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
+		const daemon = await startDaemon({
+			home,
+			port: 0,
+			models: echoModels().models,
+			log: () => {},
+			box: hostBox(home),
+			remote: { reach: "n0" },
+		});
+		const { token } = (await readDaemonFile(home))!;
+		try {
+			const view = await (
+				await fetch(`http://127.0.0.1:${daemon.port}/api/devices`, { headers: { authorization: `Bearer ${token}` } })
+			).json();
+			expect(view).toEqual({ remote: "idle", endpoint: null, devices: [], requests: [] });
+			// no endpoint was bound, so no key was made either
+			await expect(stat(join(home, "auth", "iroh.key"))).rejects.toMatchObject({ code: "ENOENT" });
 		} finally {
 			await daemon.close();
 		}

@@ -3,6 +3,13 @@ import type { PairingState } from "../../core/devices.ts";
 
 export type { PairingState };
 
+/**
+ * Where remote reach stands on this computer: `off` by the config; `unavailable`, Iroh's native addon does not load
+ * here; `idle`, on but not bound, since no device is paired and no invite was made since the daemon started; `on`,
+ * bound. Reach through n0 binds a public endpoint, so it waits until there is a device to reach it.
+ */
+export type RemoteState = "off" | "unavailable" | "idle" | "on";
+
 /** A paired device, as the owner's list shows it. `revoked` devices stay listed, refused. */
 export type DeviceView = {
 	/** Its Iroh endpoint id: 64 hex characters. */
@@ -25,10 +32,11 @@ export type PairingRequestView = {
 };
 
 /**
- * `GET /api/devices`, and the `devices` shell event: the daemon's own endpoint (null while remote reach is off), the
- * devices paired, newest first, and the requests waiting, oldest first.
+ * `GET /api/devices`, and the `devices` shell event: where remote reach stands, the daemon's own endpoint (null until
+ * it is bound), the devices paired, newest first, and the requests waiting, oldest first.
  */
 export type DevicesView = {
+	readonly remote: RemoteState;
 	readonly endpoint: { readonly id: string; readonly reach: "n0" | "loopback" } | null;
 	readonly devices: readonly DeviceView[];
 	readonly requests: readonly PairingRequestView[];

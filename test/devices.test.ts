@@ -133,4 +133,55 @@ describe("pairing a device", () => {
 		await harness.commit((tx) => makeInvite(tx, hashOf("a-secret"), 0), context);
 		expect(JSON.stringify(await doc(harness))).not.toContain("a-secret");
 	});
+
+	it("binds the endpoint for the first invite, and makes none where remote reach is off or unavailable", async () => {
+		const harness = await store();
+		const route = (desk: ReturnType<typeof openDevices>) =>
+			desk.area.route?.({ method: "POST", path: "/devices/invites", json: async () => ({}) } as never);
+		const bound = {
+			id: "c".repeat(64),
+			reach: "n0",
+			ticket: async () => "endpointticket",
+			connected: () => false,
+			drop: () => {},
+			close: async () => {},
+		} as const;
+		let binds = 0;
+		let remote: typeof bound | undefined;
+		const idle = openDevices({
+			harness,
+			remote: () => remote,
+			state: () => (remote === undefined ? "idle" : "on"),
+			bind: async () => {
+				binds++;
+				remote = bound;
+				return bound;
+			},
+			changed: () => {},
+		});
+		expect(await idle.anyPaired()).toBe(false);
+		expect((await idle.area.shell?.())?.[0]).toMatchObject({ devices: { remote: "idle", endpoint: null } });
+		expect(await route(idle)).toMatchObject({ body: { ticket: "endpointticket" } });
+		expect(binds).toBe(1);
+		for (const state of ["off", "unavailable"] as const) {
+			const desk = openDevices({
+				harness,
+				remote: () => undefined,
+				state: () => state,
+				bind: async () => {
+					binds++;
+					return bound;
+				},
+				changed: () => {},
+			});
+			await expect(route(desk)).rejects.toMatchObject({ status: 409 });
+		}
+		expect(binds).toBe(1);
+		await harness.commit((tx) => makeInvite(tx, hashOf("s"), Date.now()), context);
+		await harness.commit((tx) => requestPairing(tx, PHONE, "s", "Pixel", Date.now()), context);
+		await harness.commit((tx) => answerRequest(tx, PHONE, true, Date.now()), context);
+		expect(await idle.anyPaired()).toBe(true);
+		await harness.commit((tx) => revokeDevice(tx, PHONE, Date.now()), context);
+		expect(await idle.anyPaired()).toBe(false);
+	});
 });

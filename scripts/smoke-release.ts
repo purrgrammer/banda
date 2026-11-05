@@ -45,6 +45,15 @@ try {
 	const status = await fetch(`http://127.0.0.1:${port}/api/status`, { headers: { authorization: `Bearer ${token}` } });
 	if (!status.ok) throw new Error(`GET /api/status answered ${status.status}`);
 	console.log(`daemon served the web UI and its API on port ${port}`);
+	// remote reach: Iroh's native addon loads on every target it has a build for (none for Intel Macs, which say so)
+	const devices = await fetch(`http://127.0.0.1:${port}/api/devices`, {
+		headers: { authorization: `Bearer ${token}` },
+	});
+	const { remote } = (await devices.json()) as { remote?: string };
+	const expected = process.platform === "darwin" && process.arch === "x64" ? "unavailable" : "idle";
+	if (remote !== expected)
+		throw new Error(`remote reach is ${remote}, not ${expected}, on ${process.platform}-${process.arch}`);
+	console.log(`remote reach: ${remote}`);
 } catch (error) {
 	daemon.kill("SIGKILL");
 	console.error(stderr);
