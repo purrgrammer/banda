@@ -1,0 +1,164 @@
+/**
+ * Devices in the app (DESIGN.md "Clients"): the owner makes an invite (`POST /api/devices/invites`), whose pairing
+ * link the app shows as a QR code; a device that dials the daemon over Iroh presents it (`POST /api/devices/pair`) and
+ * waits, polling the same route, while the owner approves or denies it; the owner lists, renames and revokes devices.
+ * Every change is one commit to the `Devices` doc, and reaches the app as the `devices` shell event.
+ */
+import type { Harness } from "@earendil-works/pi-durable";
+import {
+	answerRequest,
+	Devices,
+	type DevicesValue,
+	deviceName,
+	ENDPOINT_ID,
+	hashOf,
+	isPaired,
+	isRevoked,
+	makeInvite,
+	newSecret,
+	pairingState,
+	Refused,
+	renameDevice,
+	requestPairing,
+	revokeDevice,
+} from "../core/devices.ts";
+import { context } from "../core/store.ts";
+import type { DevicesView, InviteView, PairingView } from "./api.ts";
+import { BadRequest, type RemoteGate } from "./http.ts";
+import type { Remote } from "./remote.ts";
+import type { Area, AreaReply, AreaRequest } from "./routes/area.ts";
+
+export type DevicesDesk = {
+	readonly area: Area;
+	/** What the HTTP server asks of a request that came over Iroh. */
+	readonly gate: RemoteGate;
+	/** Whether endpoint `id` may hold a connection at all: a revoked device may not. */
+	readonly admits: (id: string) => Promise<boolean>;
+};
+
+/** The pairing link a QR code carries: the daemon's ticket and the invite's secret. */
+export const pairingLink = (ticket: string, secret: string) =>
+	`banda://pair?ticket=${encodeURIComponent(ticket)}&invite=${encodeURIComponent(secret)}`;
+
+export function openDevices({
+	harness,
+	remote,
+	changed,
+	now = Date.now,
+}: {
+	readonly harness: Harness;
+	/** The endpoint, once bound; undefined while remote reach is off. */
+	readonly remote: () => Remote | undefined;
+	readonly changed: () => void;
+	readonly now?: () => number;
+}): DevicesDesk {
+	const read = async (): Promise<DevicesValue | undefined> => harness.snapshot(Devices, context);
+	const refusing = async <T>(run: () => Promise<T>): Promise<T> => {
+		try {
+			return await run();
+		} catch (error) {
+			if (error instanceof Refused) throw new BadRequest(error.message, error.status);
+			throw error;
+		}
+	};
+
+	const view = async (): Promise<DevicesView> => {
+		const doc = await read();
+		const at = now();
+		const reach = remote();
+		return {
+			endpoint: reach === undefined ? null : { id: reach.id, reach: reach.reach },
+			devices: Object.entries(doc?.devices ?? {})
+				.map(([id, device]) => ({
+					id,
+					name: device.name,
+					paired: device.paired,
+					...(device.revoked === undefined ? {} : { revoked: device.revoked }),
+					connected: device.revoked === undefined && (reach?.connected(id) ?? false),
+				}))
+				.sort((a, b) => b.paired - a.paired),
+			requests: Object.entries(doc?.requests ?? {})
+				.flatMap(([id, request]) => {
+					const expires = doc?.invites[request.invite]?.expires ?? 0;
+					return expires > at ? [{ id, name: request.name, at: request.at, expires }] : [];
+				})
+				.sort((a, b) => a.at - b.at),
+		};
+	};
+
+	const invite = async (): Promise<InviteView> => {
+		const reach = remote();
+		if (reach === undefined) throw new BadRequest("remote reach is off on this computer", 409);
+		const ticket = await reach.ticket();
+		const secret = newSecret();
+		const expires = await harness.commit((tx) => makeInvite(tx, hashOf(secret), now()), context);
+		return { secret, ticket, expires, pairing: pairingLink(ticket, secret) };
+	};
+
+	const endpointId = (id: string | undefined) => {
+		if (id === undefined || !ENDPOINT_ID.test(id)) throw new BadRequest("no such device", 404);
+		return id;
+	};
+
+	const route = async ({ method, path, json }: AreaRequest): Promise<AreaReply | undefined> => {
+		if (path === "/devices" && method === "GET") return { body: await view() };
+		if (path === "/devices/invites" && method === "POST") return { body: await invite() };
+		// pairing is a device's, over Iroh: the gate answers it before the areas
+		if (path === "/devices/pair") throw new BadRequest("a device pairs over Iroh, not on this computer", 400);
+		const answering = /^\/devices\/requests\/([^/]+)\/(approve|deny)$/.exec(path);
+		if (answering !== null && method === "POST") {
+			const id = endpointId(answering[1]);
+			const approved = answering[2] === "approve";
+			const body = approved ? await json() : {};
+			const name = body.name === undefined ? undefined : deviceName(body.name);
+			if (body.name !== undefined && name === undefined) throw new BadRequest(`a device's name is 1 to 64 characters`);
+			await refusing(() => harness.commit((tx) => answerRequest(tx, id, approved, now(), name), context));
+			changed();
+			return { body: await view() };
+		}
+		const revoking = /^\/devices\/([^/]+)\/revoke$/.exec(path);
+		if (revoking !== null && method === "POST") {
+			const id = endpointId(revoking[1]);
+			await refusing(() => harness.commit((tx) => revokeDevice(tx, id, now()), context));
+			// committed first, then dropped: a connection the accept loop is checking sees the revoke, or is dropped here
+			remote()?.drop(id);
+			changed();
+			return { body: await view() };
+		}
+		const renaming = /^\/devices\/([^/]+)$/.exec(path);
+		if (renaming !== null && method === "PUT") {
+			const id = endpointId(renaming[1]);
+			const name = deviceName((await json()).name);
+			if (name === undefined) throw new BadRequest(`a device's name is 1 to 64 characters`);
+			await refusing(() => harness.commit((tx) => renameDevice(tx, id, name), context));
+			changed();
+			return { body: await view() };
+		}
+		return undefined;
+	};
+
+	const pair = async (id: string, { method, json }: AreaRequest): Promise<AreaReply> => {
+		if (method === "GET") return { body: { state: pairingState(await read(), id, now()) } satisfies PairingView };
+		if (method !== "POST") return { status: 405, body: { error: "method not allowed" } };
+		const body = await json();
+		if (typeof body.invite !== "string" || body.invite.length > 128)
+			return { status: 400, body: { error: "invite is the secret the pairing link carries" } };
+		const name = body.name === undefined ? "Device" : deviceName(body.name);
+		if (name === undefined) return { status: 400, body: { error: "a device's name is 1 to 64 characters" } };
+		const secret = body.invite;
+		try {
+			const state = await harness.commit((tx) => requestPairing(tx, id, secret, name, now()), context);
+			if (state === "pending") changed();
+			return { status: state === "pending" ? 202 : 200, body: { state } satisfies PairingView };
+		} catch (error) {
+			if (error instanceof Refused) return { status: error.status, body: { error: error.message } };
+			throw error;
+		}
+	};
+
+	return {
+		area: { watch: [Devices], shell: async () => [{ type: "devices", devices: await view() }], route },
+		gate: { paired: async (id) => isPaired(await read(), id), pair },
+		admits: async (id) => !isRevoked(await read(), id),
+	};
+}

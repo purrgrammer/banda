@@ -45,6 +45,7 @@
 		"@earendil-works/pi-durable": "1.4.0",
 		"@earendil-works/pi-env": "1.4.0",
 		"@earendil-works/pi-mcp": "1.4.0",
+		"@number0/iroh": "1.2.0",
 		"@resvg/resvg-js": "2.6.2",
 		"motion": "14.5.0",
 		"open-bot-avatar": "0.1.2",

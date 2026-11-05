@@ -70,9 +70,11 @@ import type { ComputerView, OwnerInput, Posted, PostMessage, ViewEvent } from ".
 import { acceptedIconFace } from "./server/avatar-icon-face.ts";
 import { openCapabilities } from "./server/capabilities.ts";
 import { change, companion, validPicks } from "./server/companion.ts";
+import { openDevices } from "./server/devices.ts";
 import { BadRequest, handler } from "./server/http.ts";
 import { add as addFact, boxMemory, edit as editFact, memory, remove as removeFact } from "./server/memory.ts";
 import { openObjects } from "./server/objects.ts";
+import { openRemote, type Remote, type RemoteSettings, remoteSettings } from "./server/remote.ts";
 import type { Area, Boot } from "./server/routes/area.ts";
 import { AREAS } from "./server/routes/index.ts";
 import {
@@ -112,6 +114,8 @@ export type DaemonOptions = {
 	 */
 	// biome-ignore lint/suspicious/noExplicitAny: an effect tool of any parameters
 	readonly effects?: readonly EffectTool<any>[];
+	/** Where devices reach it over Iroh; default the config's `remote`, and `BANDA_REMOTE`. */
+	readonly remote?: RemoteSettings;
 };
 
 export type Daemon = {
@@ -134,6 +138,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 	let box: Box | undefined;
 	let browsers: Browsers | undefined;
 	let server: Server | undefined;
+	let remote: Remote | undefined;
 	let sweeping: NodeJS.Timeout | undefined;
 	let sweepingSent: NodeJS.Timeout | undefined;
 	let sweepSentNow: (() => Promise<void>) | undefined;
@@ -180,6 +185,8 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			// an area's work in flight, a provider's sign-in and its callback server among them, ends before the process
 			// may exit: a listener left open keeps it alive
 			for (const area of areas) await step("area", () => area.stop?.());
+			const reach = remote;
+			if (reach !== undefined) await step("remote", () => reach.close());
 			if (server !== undefined) {
 				const listening = server;
 				await step(
@@ -637,6 +644,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 				}
 				return web.post(id, to, text, { files: attachments, images: seen });
 			});
+		const devices = openDevices({ harness: open, remote: () => remote, changed });
 		areas = AREAS.flatMap((area) =>
 			area.start === undefined
 				? []
@@ -658,7 +666,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 							post,
 						}),
 					],
-		);
+		).concat(devices.area);
 		const token = await ownerToken(home);
 		server = createServer(
 			handler(
@@ -885,11 +893,25 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 				token,
 				options.web,
 				areas,
+				devices.gate,
 			),
 		);
 		await listen(server, options.port ?? 7787);
 		port = (server.address() as AddressInfo).port;
 		listening(port);
+		const reach = options.remote ?? remoteSettings(config.remote);
+		if (reach.reach !== "off") {
+			const settings = { ...reach, reach: reach.reach };
+			try {
+				remote = await openRemote({ home, settings, server, admits: devices.admits, changed, log });
+				log(
+					`remote: endpoint ${remote.id}, reached ${settings.reach === "n0" ? "through n0's relays" : "on loopback"}`,
+				);
+			} catch (error) {
+				// the daemon serves this computer whatever Iroh does; devices reach it once it binds at a restart
+				log(`remote: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		}
 		// a proxy that runs from before this daemon is told the store's config now, its own port in it, whether or not
 		// the box has come up yet
 		void tellProxyQuietly();

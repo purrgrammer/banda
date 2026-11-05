@@ -1,7 +1,10 @@
 /**
- * The daemon's HTTP server on loopback (DESIGN.md "Clients"). Host and Origin are checked on every request, so a web
- * page cannot reach it through DNS rebinding or a cross-site request. The API (`/api/`) needs the daemon's token on
- * every request; the web UI's files are public code and are served without it.
+ * The daemon's HTTP server (DESIGN.md "Clients"), on loopback and over Iroh (`remote.ts`). Who a request is comes from
+ * its transport. On loopback, Host and Origin are checked on every request, so a web page cannot reach it through DNS
+ * rebinding or a cross-site request, and the API (`/api/`) needs the daemon's token on every request; the web UI's
+ * files are public code and are served without it. Over Iroh the socket carries the endpoint id the handshake
+ * authenticated: a paired device acts as the owner, with no token and whatever Host it names; any other endpoint
+ * reaches the pairing route alone.
  */
 import { createHash, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -41,7 +44,8 @@ import type {
 } from "./api.ts";
 import type { ObjectAsk, ObjectShown } from "./objects.ts";
 import { FRAME_POLICY } from "./policy.ts";
-import type { Area } from "./routes/area.ts";
+import { endpointOf } from "./remote.ts";
+import type { Area, AreaReply, AreaRequest } from "./routes/area.ts";
 import type { ShippedSkillsView, SkillView } from "./skills.ts";
 import type { PageQuery } from "./transcript.ts";
 
@@ -245,6 +249,17 @@ const IMAGES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+/** How a request that came over Iroh is let in: by the endpoint id its handshake authenticated. */
+export type RemoteGate = {
+	/** Whether endpoint `id` is a paired device the owner has not revoked: such a device acts as the owner. */
+	readonly paired: (id: string) => Promise<boolean>;
+	/** `/api/devices/pair`, the one route an endpoint that is not a paired device reaches; undefined is a 404. */
+	readonly pair: (id: string, request: AreaRequest) => Promise<AreaReply | undefined>;
+};
+
+/** The one path any endpoint may ask for over Iroh. */
+export const PAIR_PATH = "/api/devices/pair";
+
 export function handler(
 	routes: Routes,
 	port: () => number,
@@ -252,6 +267,8 @@ export function handler(
 	web = WEB,
 	/** The areas' own routes (`routes/area.ts`), tried in order after the daemon's. */
 	areas: readonly Area[] = [],
+	/** Requests over Iroh; without it, every one is refused. */
+	remote?: RemoteGate,
 ): RequestListener {
 	const icons = avatarIcons();
 	const defaultFace = defaultAvatarFace();
@@ -264,12 +281,33 @@ export function handler(
 	};
 
 	async function serve(req: IncomingMessage, res: ServerResponse) {
-		const local = [`127.0.0.1:${port()}`, `localhost:${port()}`];
-		if (!local.includes(req.headers.host ?? "")) return reply(res, 403, { error: "bad host" });
-		const origin = req.headers.origin;
-		if (origin !== undefined && !local.some((host) => origin === `http://${host}`))
-			return reply(res, 403, { error: "bad origin" });
 		const url = new URL(req.url ?? "/", "http://local");
+		const device = endpointOf(req.socket);
+		if (device === undefined) {
+			const local = [`127.0.0.1:${port()}`, `localhost:${port()}`];
+			if (!local.includes(req.headers.host ?? "")) return reply(res, 403, { error: "bad host" });
+			const origin = req.headers.origin;
+			if (origin !== undefined && !local.some((host) => origin === `http://${host}`))
+				return reply(res, 403, { error: "bad origin" });
+		} else {
+			// one request a stream: its response ends the stream
+			res.setHeader("connection", "close");
+			if (remote === undefined) return reply(res, 403, { error: "this device is not paired" });
+			if (url.pathname === PAIR_PATH) {
+				const gone = new AbortController();
+				res.on("close", () => gone.abort(new Error("client went away")));
+				const answered = await remote.pair(device, {
+					method: req.method ?? "GET",
+					path: url.pathname.slice("/api".length),
+					url,
+					json: () => json(req),
+					signal: gone.signal,
+				});
+				if (answered === undefined || "file" in answered) return reply(res, 404, { error: "not found" });
+				return reply(res, answered.status ?? 200, answered.body);
+			}
+			if (!(await remote.paired(device))) return reply(res, 403, { error: "this device is not paired" });
+		}
 		if (url.pathname === "/oauth/callback" && req.method === "GET") {
 			// a sign-in coming back: no token (a browser redirect carries none), its state names the sign-in, once
 			const param = (name: string) => url.searchParams.get(name) ?? undefined;
@@ -331,7 +369,9 @@ export function handler(
 			if (req.method !== "GET" && req.method !== "HEAD") return reply(res, 405, { error: "method not allowed" });
 			return file(res, web, url.pathname);
 		}
-		if (!authorized(req.headers.authorization)) return reply(res, 401, { error: "missing or wrong token" });
+		// a paired device is the owner by its endpoint id, and never needs the token
+		if (device === undefined && !authorized(req.headers.authorization))
+			return reply(res, 401, { error: "missing or wrong token" });
 		const path = url.pathname.slice("/api".length);
 		const route = `${req.method} ${path}`;
 		const gone = new AbortController();
