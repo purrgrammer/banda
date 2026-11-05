@@ -17,7 +17,7 @@ import { parseAgent, shaOf } from "../src/core/agents.ts";
 import { OWNER } from "../src/core/gateway.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
-import { accept, decline, save, type Workspace } from "../src/server/agents.ts";
+import { accept, decline, save, seed, type Workspace } from "../src/server/agents.ts";
 import { BadRequest } from "../src/server/http.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { heedNudge, newestSaid } from "./fixtures/models.ts";
@@ -101,6 +101,8 @@ async function open() {
 		tools: () => [...BOX_TOOLS],
 		known: () => true,
 	};
+	// as the daemon does at start: until the box is seeded, no removal is offered or accepted
+	await seed(harness, workspace);
 	return { box, harness, core, workspace, seen };
 }
 
