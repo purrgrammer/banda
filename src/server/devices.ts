@@ -15,7 +15,6 @@ import {
 	ENDPOINT_ID,
 	hashOf,
 	isPaired,
-	isRevoked,
 	makeInvite,
 	newSecret,
 	pairingState,
@@ -32,10 +31,8 @@ import type { Area, AreaReply, AreaRequest } from "./routes/area.ts";
 
 export type DevicesDesk = {
 	readonly area: Area;
-	/** What the HTTP server asks of a request that came over Iroh. */
+	/** What the HTTP server, and the endpoint, ask of a request that came over Iroh. */
 	readonly gate: RemoteGate;
-	/** Whether endpoint `id` may hold a connection at all: a revoked device may not. */
-	readonly admits: (id: string) => Promise<boolean>;
 };
 
 /** Why a device is refused what only the owner's computer does. */
@@ -166,6 +163,5 @@ export function openDevices({
 	return {
 		area: { watch: [Devices], shell: async () => [{ type: "devices", devices: await view() }], route },
 		gate: { paired: async (id) => isPaired(await read(), id), pair },
-		admits: async (id) => !isRevoked(await read(), id),
 	};
 }

@@ -85,10 +85,6 @@ export const isPaired = (doc: DevicesValue | undefined, id: string): boolean => 
 	return device !== undefined && device.revoked === undefined;
 };
 
-/** Whether `id` was revoked: its connections are refused at accept. */
-export const isRevoked = (doc: DevicesValue | undefined, id: string): boolean =>
-	doc?.devices[id]?.revoked !== undefined;
-
 /** Where endpoint `id` stands at `now`. */
 export function pairingState(doc: DevicesValue | undefined, id: string, now: number): PairingState {
 	const device = doc?.devices[id];

@@ -99,7 +99,7 @@ console.log(
 				]),
 			),
 		),
-		admitted: { phone: await desk.admits(PHONE), tablet: await desk.admits(TABLET) },
+		paired: { phone: await desk.gate.paired(PHONE), tablet: await desk.gate.paired(TABLET) },
 		now: NOW,
 		commits: faults.hits("commit:after"),
 	}),

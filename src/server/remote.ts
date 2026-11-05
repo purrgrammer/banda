@@ -140,23 +140,47 @@ async function endpointKey(home: string, { SecretKey }: typeof import("@number0/
 const ONLINE_MS = 10_000;
 
 /**
- * Bind the daemon's endpoint and hand each bi-stream it accepts to `server`. `admits` decides at accept whether an
- * endpoint may hold a connection at all (a revoked device may not); `changed` is told when a connection comes or goes.
+ * What an endpoint that is not a paired device may hold. Any endpoint that knows the daemon's id can dial it, and a
+ * key costs nothing, so it reaches the pairing route alone (`http.ts`) and holds little while it does: its streams are
+ * served one at a time, each let go of when it is not answered within `requestMs`; its connection is closed (`again`)
+ * after `lifeMs`, and the device dials again for its next look; and past `connections` of them at once, another is
+ * closed (`busy`). A device paired meanwhile is held to none of it from its next stream.
+ */
+export type Unpaired = { readonly connections: number; readonly lifeMs: number; readonly requestMs: number };
+
+export const UNPAIRED: Unpaired = { connections: 16, lifeMs: 60_000, requestMs: 10_000 };
+
+/**
+ * The reasons the daemon closes a connection with, each its own word: `revoked`, the owner revoked the device;
+ * `closing`, the daemon is stopping; `busy` and `again`, an endpoint that is not a paired device was let go of. Only the
+ * pairing route says what a device is (`GET /api/devices/pair`); a reason is never why a device forgets its key.
+ */
+export type CloseReason = "revoked" | "closing" | "busy" | "again";
+
+const closeWith = (connection: Connection, reason: CloseReason) =>
+	connection.close(reason === "closing" ? 0n : 1n, Array.from(Buffer.from(reason)));
+
+/**
+ * Bind the daemon's endpoint and hand each bi-stream it accepts to `server`. `paired` says whether an endpoint is a
+ * paired device the owner has not revoked; any other is held to `unpaired`. `changed` is told when a device's
+ * connection comes or goes.
  */
 export async function openRemote({
 	home,
 	settings,
 	server,
-	admits,
+	paired,
 	changed,
 	log,
+	unpaired = UNPAIRED,
 }: {
 	readonly home: string;
 	readonly settings: RemoteSettings & { readonly reach: "n0" | "loopback" };
 	readonly server: Server;
-	readonly admits: (id: string) => Promise<boolean>;
+	readonly paired: (id: string) => Promise<boolean>;
 	readonly changed: () => void;
 	readonly log: (line: string) => void;
+	readonly unpaired?: Unpaired;
 }): Promise<Remote> {
 	const iroh = await import("@number0/iroh");
 	const { Endpoint, EndpointTicket, RelayMode } = iroh;
@@ -180,13 +204,16 @@ export async function openRemote({
 	online.catch(() => undefined);
 	const live = new Map<string, Set<Connection>>();
 	let closing = false;
+	/** Connections held now by endpoints that are not paired devices. */
+	let held = 0;
 
 	// one request a stream: the response's end ends it, and a peer that finished before it asked anything is let go
 	const asked = new WeakSet<object>();
 	const ask = (request: IncomingMessage) => void asked.add(request.socket);
 	server.prependListener("request", ask);
 
-	const serveStreams = async (connection: Connection, peer: string) => {
+	/** Serve a connection's streams; `release` is called once, when its endpoint turns out to be a paired device. */
+	const serveStreams = async (connection: Connection, peer: string, release: () => unknown) => {
 		for (;;) {
 			let bi: BiStream;
 			try {
@@ -194,13 +221,24 @@ export async function openRemote({
 			} catch {
 				return;
 			}
+			const device = await paired(peer);
+			if (device) release();
 			const socket: Duplex = streamSocket(bi, {
 				holdEnd: true,
 				onEnd: () => setImmediate(() => asked.has(socket) || socket.end()),
 			});
 			socket.once("finish", () => socket.destroy());
 			markEndpoint(socket, peer);
+			if (device) {
+				server.emit("connection", socket);
+				continue;
+			}
+			// not a device: this stream alone, until it is answered or its time is up
+			const done = new Promise((resolve) => socket.once("close", resolve));
+			const late = setTimeout(() => socket.destroy(), unpaired.requestMs);
 			server.emit("connection", socket);
+			await done;
+			clearTimeout(late);
 		}
 	};
 
@@ -215,15 +253,34 @@ export async function openRemote({
 				mine.add(connection);
 				live.set(peer, mine);
 				// registered before the check, so a revoke committed meanwhile either is seen here or drops it
-				if (closing || !(await admits(peer))) {
-					connection.close(1n, Array.from(Buffer.from("refused")));
-				} else {
-					changed();
-					await serveStreams(connection, peer);
+				try {
+					if (closing) return closeWith(connection, "closing");
+					if (await paired(peer)) {
+						changed();
+						return await serveStreams(connection, peer, () => {});
+					}
+					if (held >= unpaired.connections) return closeWith(connection, "busy");
+					held += 1;
+					let holding = true;
+					const life = setTimeout(() => closeWith(connection, "again"), unpaired.lifeMs);
+					const release = () => {
+						if (!holding) return false;
+						holding = false;
+						held -= 1;
+						clearTimeout(life);
+						return true;
+					};
+					try {
+						await serveStreams(connection, peer, () => release() && changed());
+					} finally {
+						release();
+					}
+				} finally {
+					mine.delete(connection);
+					if (mine.size === 0 && live.get(peer) === mine) live.delete(peer);
+					// only a device's connections are shown: an endpoint that is not one changes nothing
+					if (await paired(peer).catch(() => false)) changed();
 				}
-				mine.delete(connection);
-				if (mine.size === 0 && live.get(peer) === mine) live.delete(peer);
-				changed();
 			})().catch((error: unknown) => log(`remote: ${error instanceof Error ? error.message : String(error)}`));
 		}
 	})();
@@ -237,13 +294,12 @@ export async function openRemote({
 		},
 		connected: (peer) => (live.get(peer)?.size ?? 0) > 0,
 		drop: (peer) => {
-			for (const connection of live.get(peer) ?? []) connection.close(1n, Array.from(Buffer.from("revoked")));
+			for (const connection of live.get(peer) ?? []) closeWith(connection, "revoked");
 		},
 		close: async () => {
 			closing = true;
 			server.off("request", ask);
-			for (const connections of live.values())
-				for (const connection of connections) connection.close(0n, Array.from(Buffer.from("closing")));
+			for (const connections of live.values()) for (const connection of connections) closeWith(connection, "closing");
 			await endpoint.close();
 			await accepting;
 		},

@@ -99,10 +99,13 @@ describe("remote reach over Iroh", () => {
 			const connection = await phone.dial(invite.ticket);
 			const revoked: DevicesView = await owner("POST", `/devices/${phone.id}/revoke`);
 			expect(revoked.devices).toEqual([expect.objectContaining({ id: phone.id, revoked: expect.any(Number) })]);
-			// its live connections are closed, and a new one is refused at accept
-			await connection.closed();
+			// its live connections are closed, and it is told so: the reason is the daemon's word for a revoke
+			expect(await connection.closed()).toMatch(/revoked/);
+			// dialed again, it is held as any endpoint that is not a device: the API closed, and the pairing route says why
 			await phone.dial(invite.ticket);
-			await expect(phone.request("GET", "/api/status")).rejects.toThrow();
+			expect((await phone.request("GET", "/api/status")).status).toBe(403);
+			expect(await phone.request("GET", "/api/devices/pair")).toEqual({ status: 200, body: { state: "revoked" } });
+			expect((await phone.request("POST", "/api/devices/pair", { invite: invite.secret })).status).toBe(403);
 			expect((await owner("GET", "/devices")).devices[0].connected).toBe(false);
 		} finally {
 			await phone.close();
@@ -147,6 +150,43 @@ describe("remote reach over Iroh", () => {
 		} finally {
 			await phone.close();
 			await other.close();
+			await daemon.close();
+		}
+	});
+
+	it("reads no more of a pairing request than a pairing needs, before it knows who asks", async () => {
+		const home = await tempHome();
+		const { daemon, owner } = await start(home);
+		const stranger = await testDevice();
+		try {
+			const invite = await owner<InviteView>("POST", "/devices/invites");
+			const connection = await stranger.dial(invite.ticket);
+			const said = await stranger.request("POST", "/api/devices/pair", {
+				invite: invite.secret,
+				name: "x".repeat(8192),
+			});
+			expect(said.status).toBe(413);
+			// a body with no length, streamed on and on: let go of long before it ends
+			const bi = await connection.openBi();
+			await bi.send.writeAll(
+				Array.from(
+					Buffer.from(
+						"POST /api/devices/pair HTTP/1.1\r\nhost: banda.iroh\r\ncontent-type: application/json\r\ntransfer-encoding: chunked\r\n\r\n",
+					),
+				),
+			);
+			const chunk = Array.from(Buffer.from(`10000\r\n${"a".repeat(0x10000)}\r\n`));
+			let sent = 0;
+			try {
+				for (; sent < 4096; sent++) await bi.send.writeAll(chunk);
+			} catch {
+				// reset: the daemon stopped reading
+			}
+			expect(sent).toBeLessThan(4096);
+			// neither touched the invite: it still pairs
+			expect((await stranger.request("POST", "/api/devices/pair", { invite: invite.secret })).status).toBe(202);
+		} finally {
+			await stranger.close();
 			await daemon.close();
 		}
 	});

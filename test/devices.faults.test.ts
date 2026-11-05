@@ -13,7 +13,7 @@ type Summary = {
 	answers: { [step: string]: { status: number; body: unknown } };
 	doc: DevicesValue;
 	states: { [id: string]: string };
-	admitted: { phone: boolean; tablet: boolean };
+	paired: { phone: boolean; tablet: boolean };
 	now: number;
 	commits: number;
 };
@@ -38,7 +38,7 @@ const check = ({ summary }: Awaited<ReturnType<typeof run>>) => {
 	expect(Object.keys(doc.devices)).toEqual([PHONE]);
 	expect(doc.requests).toEqual({});
 	expect(summary.states).toEqual({ [PHONE]: "revoked", [STRANGER]: "unpaired", [TABLET]: "denied" });
-	expect(summary.admitted).toEqual({ phone: false, tablet: true });
+	expect(summary.paired).toEqual({ phone: false, tablet: false });
 };
 
 describe("pairing devices under faults", () => {

@@ -13,7 +13,7 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defaultAvatarFace } from "../core/avatar-face.ts";
 import { avatarIcons, avatarManifest, ICON_FILES, type IconPath } from "../core/avatar-icon.ts";
-import { type Attachment, safeName, tooBig } from "../core/blobs.ts";
+import { type Attachment, safeName, sizeOf, tooBig } from "../core/blobs.ts";
 
 import { INLINE_IMAGES, mainAgentOf, mimeOf, OWNER } from "../core/gateway.ts";
 import type { PermissionScope } from "../core/permissions.ts";
@@ -260,6 +260,12 @@ export type RemoteGate = {
 /** The one path any endpoint may ask for over Iroh. */
 export const PAIR_PATH = "/api/devices/pair";
 
+/** The most of a pairing request read, before the daemon knows who asks: an invite's secret and a name fit in it. */
+export const PAIR_BODY = 4 * 1024;
+
+/** The most of any JSON body read: an artifact's text is the largest; files go up as blobs. */
+export const JSON_BODY = 64 * 1024 * 1024;
+
 export function handler(
 	routes: Routes,
 	port: () => number,
@@ -300,7 +306,7 @@ export function handler(
 					method: req.method ?? "GET",
 					path: url.pathname.slice("/api".length),
 					url,
-					json: () => json(req),
+					json: () => json(req, PAIR_BODY),
 					device,
 					signal: gone.signal,
 				});
@@ -998,16 +1004,21 @@ export class BadRequest extends Error {
 }
 
 /** An upload's bytes, refused (413) past `limit`: by its declared length before reading, or as it streams in. */
-async function uploaded(req: IncomingMessage, name: string, limit: number): Promise<Buffer> {
+async function uploaded(
+	req: IncomingMessage,
+	name: string,
+	limit: number,
+	refusal = (size: number) => tooBig(name, size, limit),
+): Promise<Buffer> {
 	const declared = Number(req.headers["content-length"]);
-	if (Number.isFinite(declared) && declared > limit) throw new BadRequest(tooBig(name, declared, limit), 413);
+	if (Number.isFinite(declared) && declared > limit) throw new BadRequest(refusal(declared), 413);
 	const chunks: Buffer[] = [];
 	let size = 0;
 	for await (const chunk of req as AsyncIterable<Buffer>) {
 		size += chunk.length;
 		if (size > limit) {
 			req.destroy();
-			throw new BadRequest(tooBig(name, size, limit), 413);
+			throw new BadRequest(refusal(size), 413);
 		}
 		chunks.push(chunk);
 	}
@@ -1078,9 +1089,11 @@ function permissionOf(value: unknown): PermissionScope | undefined | null {
 	return null;
 }
 
-async function json(req: IncomingMessage): Promise<Record<string, unknown>> {
-	let text = "";
-	for await (const chunk of req) text += chunk;
+/** A request's body as a JSON object, refused (413) past `limit` as an upload is. */
+async function json(req: IncomingMessage, limit = JSON_BODY): Promise<Record<string, unknown>> {
+	const text = (await uploaded(req, "the body", limit, () => `the body may be ${sizeOf(limit)} at most`)).toString(
+		"utf8",
+	);
 	let body: unknown;
 	try {
 		body = JSON.parse(text);

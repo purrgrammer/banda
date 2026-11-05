@@ -215,14 +215,13 @@ class BandaPlugin : Plugin() {
         return bi
     }
 
-    /** Refused (revoked), unreachable or broken: the app tells them apart by the code. */
+    /**
+     * Unreachable or broken: the app tells them apart by the code. Neither says what this device is; the daemon's
+     * answer to `GET /api/devices/pair` does.
+     */
     private fun reject(call: PluginCall, error: Exception) {
-        val refused = error as? Daemon.Refused ?: daemon.refusal()?.let { Daemon.Refused(it) }
-        when {
-            refused != null -> call.reject("this phone was removed from banda", "REFUSED", refused)
-            error is Daemon.Unreachable -> call.reject(error.message, "UNREACHABLE", error)
-            else -> call.reject(error.message ?: "the request broke", "BROKEN", error)
-        }
+        if (error is Daemon.Unreachable) call.reject(error.message, "UNREACHABLE", error)
+        else call.reject(error.message ?: "the request broke", "BROKEN", error)
     }
 
     private fun headersOf(headers: JSObject?): Map<String, String> {

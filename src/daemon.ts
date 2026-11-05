@@ -903,7 +903,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		if (reach.reach !== "off") {
 			const settings = { ...reach, reach: reach.reach };
 			try {
-				remote = await openRemote({ home, settings, server, admits: devices.admits, changed, log });
+				remote = await openRemote({ home, settings, server, paired: devices.gate.paired, changed, log });
 				log(
 					`remote: endpoint ${remote.id}, reached ${settings.reach === "n0" ? "through n0's relays" : "on loopback"}`,
 				);

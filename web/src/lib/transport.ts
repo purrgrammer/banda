@@ -48,7 +48,7 @@ export interface BandaPlugin {
 
 /**
  * What the shell knows of itself. A request the plugin rejects carries a `code`: `UNREACHABLE` (the daemon could not
- * be reached), `REFUSED` (it closed this device's connection: the device was revoked) or `BROKEN`.
+ * be reached) or `BROKEN`. Neither says what this device is: only the daemon's answer does (`GET /api/devices/pair`).
  */
 export type ShellState = {
 	/** The daemon's endpoint id; absent before a pairing link chose one. */

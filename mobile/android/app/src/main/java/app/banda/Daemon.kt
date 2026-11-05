@@ -61,25 +61,22 @@ internal class Daemon(private val context: Context) {
     }
 
     /**
-     * Why the daemon will not serve this device, in its words, when the connection `stream` was opened on was closed
-     * with a refusal (a revoked device); null when it was not, and the daemon was only unreachable.
+     * A new bi-stream to the daemon, dialing it first when there is no live connection. A connection the daemon closed,
+     * whatever its reason (it restarted, let go of an unpaired phone, or revoked this one), is only dialed again: what
+     * this device is comes from the daemon's answer to `GET /api/devices/pair`, never from a close reason.
      */
-    fun refusal(): String? = connection?.closeReason()?.takeIf { reason -> REFUSALS.any { reason.contains(it) } }
-
-    /** A new bi-stream to the daemon, dialing it first when there is no live connection. */
     suspend fun open(): BiStream {
         val first = connected()
         return try {
             first.openBi()
         } catch (error: Exception) {
-            refusal()?.let { throw Refused(it) }
             // the connection went away under us: dial once more
             lock.withLock { if (connection === first) drop("broken") }
             val second = connected()
             try {
                 second.openBi()
             } catch (error: Exception) {
-                throw refusal()?.let { Refused(it) } ?: Unreachable("lost the connection to your computer")
+                throw Unreachable("lost the connection to your computer")
             }
         }
     }
@@ -88,7 +85,6 @@ internal class Daemon(private val context: Context) {
         lock.withLock {
             connection?.let { live ->
                 val reason = live.closeReason() ?: return@withLock live
-                if (REFUSALS.any { reason.contains(it) }) throw Refused(reason)
                 drop(reason)
             }
             val ticket = ticket ?: throw Unreachable("this phone is not paired with a computer yet")
@@ -123,9 +119,6 @@ internal class Daemon(private val context: Context) {
     /** The daemon could not be reached: nothing was asked. */
     class Unreachable(message: String) : Exception(message)
 
-    /** The daemon closed this device's connection on purpose: it was revoked. */
-    class Refused(message: String) : Exception(message)
-
     companion object {
         private const val TAG = "banda"
         private const val TICKET = "daemon.ticket"
@@ -133,8 +126,5 @@ internal class Daemon(private val context: Context) {
 
         /** The one protocol the daemon's endpoint speaks: its HTTP API, one request a bi-stream. */
         val ALPN = "banda/0".toByteArray()
-
-        /** The reasons the daemon closes a device's connection with when it will not serve it (`src/server/remote.ts`). */
-        private val REFUSALS = listOf("refused", "revoked")
     }
 }

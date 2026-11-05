@@ -1,6 +1,6 @@
 /**
  * Pairing on the phone: a code read, the daemon it names reached, the request made under the phone's name, then the
- * owner's answer waited for; a revoked phone forgets its key, and a daemon away is told apart from one refusing.
+ * owner's answer waited for; a phone the daemon says was revoked forgets its key, and nothing else makes it forget.
  */
 import { describe, expect, it, vi } from "vitest";
 import type { PairingState } from "../../../src/server/api.ts";
@@ -119,7 +119,7 @@ describe("pairing a phone", () => {
 		await settled(flow, "paired");
 	});
 
-	it("forgets its key when it was revoked, so it pairs again as a new device", async () => {
+	it("forgets its key when the daemon says it was revoked, so it pairs again as a new device", async () => {
 		const answered = rig({
 			state: { daemon: "a".repeat(64), device: "d", name: "P" },
 			checks: [async () => "revoked"],
@@ -127,15 +127,31 @@ describe("pairing a phone", () => {
 		await answered.flow.start();
 		expect(answered.forgot()).toBe(1);
 		expect(answered.flow.get()).toMatchObject({ step: "scan", note: NOTES.revoked });
+	});
 
-		// the daemon closes a revoked device's connection at accept: the shell says REFUSED
-		const closed = rig({
-			state: { daemon: "a".repeat(64), device: "d", name: "P" },
-			checks: [() => Promise.reject(rejection("REFUSED"))],
-		});
-		await closed.flow.start();
-		expect(closed.forgot()).toBe(1);
-		expect(closed.flow.get()).toMatchObject({ step: "scan", note: NOTES.revoked });
+	it("keeps its key whatever a rejection says: only the daemon's answer that it was revoked forgets it", async () => {
+		// a connection closed under it (the daemon restarting, or letting go of it) is no answer about this device
+		for (const code of ["REFUSED", "BROKEN", "UNREACHABLE"]) {
+			const started = rig({
+				state: { daemon: "a".repeat(64), device: "d", name: "P" },
+				checks: [() => Promise.reject(rejection(code))],
+			});
+			await started.flow.start();
+			expect(started.forgot()).toBe(0);
+			expect(started.flow.get().step).toBe("unreachable");
+
+			const waiting = rig({ checks: [() => Promise.reject(rejection(code)), async () => "paired"] });
+			await waiting.flow.start();
+			await waiting.flow.scan("P");
+			await settled(waiting.flow, "paired");
+			expect(waiting.forgot()).toBe(0);
+
+			const asking = rig({ asked: () => Promise.reject(rejection(code)) });
+			await asking.flow.start();
+			await asking.flow.scan("P");
+			expect(asking.forgot()).toBe(0);
+			expect(asking.flow.get()).toMatchObject({ step: "scan", note: NOTES.unreachable });
+		}
 	});
 
 	it("tells a daemon away from one refusing: a paired phone that cannot reach it offers to try again", async () => {

@@ -2,7 +2,8 @@
  * Pairing, as the phone sees it (the native shell; the owner's side is Settings → Devices). The phone scans the code
  * the owner's computer shows, a `banda://pair` link: its ticket says which daemon to reach, its invite lets this
  * device ask once. The phone asks under a name, then waits for the owner to approve it there; once approved it is a
- * device, and the app opens. A device that was revoked forgets its key and pairs again as a new one.
+ * device, and the app opens. A device the daemon says was revoked (`GET /api/devices/pair`) forgets its key and pairs
+ * again as a new one; nothing else makes it forget, since a connection closed under it says nothing about this device.
  */
 import type { PairingState } from "../../../src/server/api.ts";
 import type { BandaPlugin, ScannerPlugin } from "./transport.ts";
@@ -55,10 +56,6 @@ export const NOTES = {
 	noCamera: "This phone cannot scan codes. Open the code's link on this phone instead.",
 } as const;
 
-/** A rejection's code, as the shell's plugin gives it (`UNREACHABLE`, `REFUSED`, …). */
-const codeOf = (error: unknown) =>
-	typeof error === "object" && error !== null && "code" in error ? String(error.code) : undefined;
-
 /** The daemon's own words for a refusal it answered (`Refused` in `api.ts`), if it answered one. */
 const refusalOf = (error: unknown) =>
 	error instanceof Error && "status" in error && typeof error.status === "number" && error.status < 500
@@ -85,7 +82,7 @@ export function pairing({ shell, scanner, ask, check, every = 2000 }: PairingDep
 		toScan(NOTES.revoked);
 	};
 
-	/** Where this device stands now; a rejection is the daemon unreachable or refusing it. */
+	/** Where this device stands now, as the daemon answered. */
 	const settle = async (state: PairingState, waited: boolean) => {
 		if (state === "paired") go({ step: "paired" });
 		else if (state === "pending") wait();
@@ -100,10 +97,9 @@ export function pairing({ shell, scanner, ask, check, every = 2000 }: PairingDep
 		timer = setTimeout(async () => {
 			try {
 				await settle(await check(), true);
-			} catch (error) {
-				if (codeOf(error) === "REFUSED") await forgotten();
+			} catch {
 				// the daemon away for a moment: look again
-				else wait();
+				wait();
 			}
 		}, every);
 	};
@@ -119,9 +115,7 @@ export function pairing({ shell, scanner, ask, check, every = 2000 }: PairingDep
 		try {
 			await settle(await ask(link.invite, name), false);
 		} catch (error) {
-			const code = codeOf(error);
-			if (code === "REFUSED") await forgotten();
-			else toScan(refusalOf(error) ?? NOTES.unreachable);
+			toScan(refusalOf(error) ?? NOTES.unreachable);
 		}
 	};
 
@@ -141,9 +135,8 @@ export function pairing({ shell, scanner, ask, check, every = 2000 }: PairingDep
 			try {
 				await settle(await check(), false);
 				if (link !== undefined && current.step === "scan") toScan(undefined, link);
-			} catch (error) {
-				if (codeOf(error) === "REFUSED") await forgotten();
-				else go({ step: "unreachable" });
+			} catch {
+				go({ step: "unreachable" });
 			}
 		},
 		/** A link opened the shell while it was waiting to be scanned. */
