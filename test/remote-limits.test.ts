@@ -12,7 +12,7 @@ import { tempHome } from "./helpers.ts";
 
 const LIMITS: Unpaired = { connections: 2, lifeMs: 1500, requestMs: 400 };
 
-async function rig(paired: Set<string>, limits = LIMITS) {
+async function rig(paired: Set<string>, limits = LIMITS, admits?: (id: string) => Promise<boolean>) {
 	// one request a stream, as the daemon's handler answers over Iroh
 	const server = createServer((_, res) =>
 		res.writeHead(200, { "content-type": "application/json", connection: "close" }).end("{}"),
@@ -23,6 +23,7 @@ async function rig(paired: Set<string>, limits = LIMITS) {
 		settings: { reach: "loopback" },
 		server,
 		paired: async (id) => paired.has(id),
+		...(admits === undefined ? {} : { admits }),
 		changed: () => changes.push(Date.now()),
 		log: () => {},
 		unpaired: limits,
@@ -77,7 +78,7 @@ describe("an endpoint that is not a paired device", () => {
 		}
 	});
 
-	it("holds a connection a short while, and only so many at once; a paired device is held to neither", async () => {
+	it("holds a connection a short while, and only so many at once, the oldest making room; a paired device is held to neither", async () => {
 		const phone = await testDevice();
 		const { remote, ticket, changes } = await rig(new Set([phone.id]));
 		const strangers = await Promise.all([testDevice(), testDevice(), testDevice()]);
@@ -87,8 +88,10 @@ describe("an endpoint that is not a paired device", () => {
 			expect((await exchange(first!, GET)).text).toMatch(/^HTTP\/1\.1 200 /);
 			expect((await exchange(second!, GET)).text).toMatch(/^HTTP\/1\.1 200 /);
 			expect(changes).toEqual([]);
+			// a third gets in, and the one held longest makes room: strangers that keep dialing race a phone, never shut it out
 			const third = await strangers[2]!.dial(ticket);
-			expect(await third.closed()).toMatch(/busy/);
+			expect((await exchange(third, GET)).text).toMatch(/^HTTP\/1\.1 200 /);
+			expect(await first!.closed()).toMatch(/busy/);
 			// a paired device still gets in, with streams at once
 			const mine = await phone.dial(ticket);
 			const [a, b] = await Promise.all([exchange(mine, GET), exchange(mine, GET)]);
@@ -98,11 +101,25 @@ describe("an endpoint that is not a paired device", () => {
 			]);
 			expect(changes.length).toBeGreaterThan(0);
 			// an unpaired connection is let go of once its time is up: the device dials again for its next look
-			expect(await first!.closed()).toMatch(/again/);
+			expect(await second!.closed()).toMatch(/again/);
 			expect(remote.connected(phone.id)).toBe(true);
 		} finally {
 			for (const each of strangers) await each.close();
 			await phone.close();
+			await remote.close();
+		}
+	});
+
+	it("is let in only while the daemon has a reason to hear it", async () => {
+		const known = await testDevice();
+		const stranger = await testDevice();
+		const { remote, ticket } = await rig(new Set(), LIMITS, async (id) => id === known.id);
+		try {
+			expect((await exchange(await known.dial(ticket), GET)).text).toMatch(/^HTTP\/1\.1 200 /);
+			expect(await (await stranger.dial(ticket)).closed()).toMatch(/again/);
+		} finally {
+			await known.close();
+			await stranger.close();
 			await remote.close();
 		}
 	});

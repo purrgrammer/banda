@@ -184,4 +184,22 @@ describe("pairing a device", () => {
 		await harness.commit((tx) => revokeDevice(tx, PHONE, Date.now()), context);
 		expect(await idle.anyPaired()).toBe(false);
 	});
+
+	it("lets strangers in only while an invite is live, and commits nothing for a secret no invite has", async () => {
+		const harness = await store();
+		let clock = 1000;
+		const desk = openDevices({ harness, remote: () => undefined, changed: () => {}, now: () => clock });
+		const pair = (id: string, invite: string) =>
+			desk.gate.pair(id, { method: "POST", path: "/devices/pair", json: async () => ({ invite }) } as never);
+		expect(await desk.admits(OTHER)).toBe(false);
+		expect(await pair(OTHER, "guess")).toMatchObject({ status: 403 });
+		expect(await doc(harness)).toBeUndefined();
+		await harness.commit((tx) => makeInvite(tx, hashOf("live"), clock), context);
+		expect(await desk.admits(OTHER)).toBe(true);
+		expect(await pair(PHONE, "live")).toMatchObject({ status: 202 });
+		clock += INVITE_MS;
+		// the invite expired: a stranger is not let in, the phone that asked with it still is, to learn where it stands
+		expect(await desk.admits(OTHER)).toBe(false);
+		expect(await desk.admits(PHONE)).toBe(true);
+	});
 });

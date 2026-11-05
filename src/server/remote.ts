@@ -146,8 +146,10 @@ const ONLINE_MS = 10_000;
  * What an endpoint that is not a paired device may hold. Any endpoint that knows the daemon's id can dial it, and a
  * key costs nothing, so it reaches the pairing route alone (`http.ts`) and holds little while it does: its streams are
  * served one at a time, each let go of when it is not answered within `requestMs`; its connection is closed (`again`)
- * after `lifeMs`, and the device dials again for its next look; and past `connections` of them at once, another is
- * closed (`busy`). A device paired meanwhile is held to none of it from its next stream.
+ * after `lifeMs`, and the device dials again for its next look; and past `connections` of them at once, the one held
+ * longest is closed (`busy`) to make room, so endpoints that keep dialing never shut a phone out, they only race it.
+ * And it is let in at all only while the daemon has a reason to hear it (`admits`): an invite is live, or it is an
+ * endpoint the daemon knows. A device paired meanwhile is held to none of it from its next stream.
  */
 export type Unpaired = { readonly connections: number; readonly lifeMs: number; readonly requestMs: number };
 
@@ -173,6 +175,7 @@ export async function openRemote({
 	settings,
 	server,
 	paired,
+	admits = async () => true,
 	changed,
 	log,
 	unpaired = UNPAIRED,
@@ -181,6 +184,8 @@ export async function openRemote({
 	readonly settings: RemoteSettings & { readonly reach: "n0" | "loopback" };
 	readonly server: Server;
 	readonly paired: (id: string) => Promise<boolean>;
+	/** Whether an endpoint that is not a paired device is let in now; every one, when not given. */
+	readonly admits?: (id: string) => Promise<boolean>;
 	readonly changed: () => void;
 	readonly log: (line: string) => void;
 	readonly unpaired?: Unpaired;
@@ -207,8 +212,8 @@ export async function openRemote({
 	online.catch(() => undefined);
 	const live = new Map<string, Set<Connection>>();
 	let closing = false;
-	/** Connections held now by endpoints that are not paired devices. */
-	let held = 0;
+	/** Connections held now by endpoints that are not paired devices, oldest first: each closes itself to make room. */
+	const held = new Set<() => void>();
 
 	// one request a stream: the response's end ends it, and a peer that finished before it asked anything is let go
 	const asked = new WeakSet<object>();
@@ -262,17 +267,25 @@ export async function openRemote({
 						changed();
 						return await serveStreams(connection, peer, () => {});
 					}
-					if (held >= unpaired.connections) return closeWith(connection, "busy");
-					held += 1;
+					if (!(await admits(peer).catch(() => false))) return closeWith(connection, "again");
+					// full: the one held longest makes room
+					for (const oldest of held) {
+						if (held.size < unpaired.connections) break;
+						oldest();
+					}
 					let holding = true;
 					const life = setTimeout(() => closeWith(connection, "again"), unpaired.lifeMs);
 					const release = () => {
 						if (!holding) return false;
 						holding = false;
-						held -= 1;
+						held.delete(evict);
 						clearTimeout(life);
 						return true;
 					};
+					const evict = () => {
+						if (release()) closeWith(connection, "busy");
+					};
+					held.add(evict);
 					try {
 						await serveStreams(connection, peer, () => release() && changed());
 					} finally {

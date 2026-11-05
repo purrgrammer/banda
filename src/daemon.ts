@@ -920,7 +920,15 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			const serving = server;
 			bindRemote = () => {
 				if (stopping) return Promise.reject(new Error("the daemon is stopping"));
-				binding ??= openRemote({ home, settings, server: serving, paired: devices.gate.paired, changed, log }).then(
+				binding ??= openRemote({
+					home,
+					settings,
+					server: serving,
+					paired: devices.gate.paired,
+					admits: devices.admits,
+					changed,
+					log,
+				}).then(
 					(bound) => {
 						remote = bound;
 						remoteState = "on";

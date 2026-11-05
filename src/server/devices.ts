@@ -16,6 +16,7 @@ import {
 	hashOf,
 	isPaired,
 	makeInvite,
+	NOT_LIVE,
 	newSecret,
 	pairingState,
 	Refused,
@@ -33,6 +34,11 @@ export type DevicesDesk = {
 	readonly area: Area;
 	/** What the HTTP server, and the endpoint, ask of a request that came over Iroh. */
 	readonly gate: RemoteGate;
+	/**
+	 * Whether an endpoint that is not a paired device is let in over Iroh now: while an invite is live, or when the
+	 * daemon knows it (a device, revoked too, so it learns it was; or one with a request waiting).
+	 */
+	readonly admits: (id: string) => Promise<boolean>;
 	/** Whether any device is paired and not revoked: the daemon binds its endpoint at start for one. */
 	readonly anyPaired: () => Promise<boolean>;
 };
@@ -176,6 +182,17 @@ export function openDevices({
 		const name = body.name === undefined ? "Device" : deviceName(body.name);
 		if (name === undefined) return { status: 400, body: { error: "a device's name is 1 to 64 characters" } };
 		const secret = body.invite;
+		// a secret no live invite has is refused from a read: a stranger's guesses commit nothing
+		const known = await read();
+		const live = known?.invites[hashOf(secret)];
+		const state = pairingState(known, id, now());
+		if (
+			state !== "paired" &&
+			state !== "pending" &&
+			state !== "revoked" &&
+			(live === undefined || live.expires <= now())
+		)
+			return { status: 403, body: { error: NOT_LIVE } };
 		try {
 			const state = await harness.commit((tx) => requestPairing(tx, id, secret, name, now()), context);
 			if (state === "pending") changed();
@@ -188,6 +205,13 @@ export function openDevices({
 
 	return {
 		area: { watch: [Devices], shell: async () => [{ type: "devices", devices: await view() }], route },
+		admits: async (id) => {
+			const doc = await read();
+			if (doc === undefined) return false;
+			if (doc.devices[id] !== undefined || doc.requests[id] !== undefined) return true;
+			const at = now();
+			return Object.values(doc.invites).some((invite) => invite.spent === undefined && invite.expires > at);
+		},
 		anyPaired: async () => {
 			const doc = await read();
 			return Object.keys(doc?.devices ?? {}).some((id) => isPaired(doc, id));

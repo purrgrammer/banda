@@ -114,7 +114,8 @@ export class Refused extends Error {
 	}
 }
 
-const NOT_LIVE = "this invite is no longer valid: ask for a new one on the computer banda runs on";
+/** Why an invite is refused: unknown, expired, spent or another endpoint's. */
+export const NOT_LIVE = "this invite is no longer valid: ask for a new one on the computer banda runs on";
 
 /**
  * Endpoint `id` presents `secret`, asking to be paired as `name`: a live invite no one claimed becomes its pending
