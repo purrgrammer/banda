@@ -6,6 +6,7 @@ import { describe, expect, it, onTestFinished } from "vitest";
 import {
 	answerAsk,
 	applyUpdate,
+	compacted,
 	connectHarness,
 	defineHarnesses,
 	diffOf,
@@ -306,5 +307,27 @@ describe("a session's project", () => {
 		expect(projectOf(shown, "work/api/")).toEqual({ folder: `${shown}/work/api` });
 		for (const bad of ["../x", "/etc", "~/x", ".secret", "escape", "notes", "missing"])
 			expect(projectOf(shown, bad), bad).toMatchObject({ projects: ["app", "work/api"] });
+	});
+});
+
+describe("an ended session's steps", () => {
+	it("keep the ask, every edit, the notes and the last words first, within the bound, the rest counted", () => {
+		const steps: HarnessStep[] = [
+			{ kind: "asked", text: "fix it" },
+			...Array.from({ length: 60 }, (_, i): HarnessStep => ({ kind: "read", path: `f${i}` })),
+			{ kind: "edit", path: "a.ts", added: 1, removed: 0, diff: "x".repeat(5000) },
+			{ kind: "steered", text: "only a.ts", taken: true },
+			...Array.from({ length: 30 }, (_, i): HarnessStep => ({ kind: "run", command: `c${i}`, running: false })),
+			{ kind: "said", text: "done" },
+		];
+		const { steps: kept, dropped } = compacted(steps);
+		expect(kept).toHaveLength(40);
+		expect(dropped).toBe(steps.length - 40);
+		expect(kept[0]).toEqual({ kind: "asked", text: "fix it" });
+		expect(kept.some((step) => step.kind === "steered")).toBe(true);
+		expect(kept.at(-1)).toEqual({ kind: "said", text: "done" });
+		const edit = kept.find((step) => step.kind === "edit");
+		expect(edit?.kind === "edit" && edit.diff?.length).toBeLessThan(1100);
+		expect(compacted(steps.slice(0, 5)).dropped).toBe(0);
 	});
 });

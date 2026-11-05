@@ -134,7 +134,12 @@ export const MAX_STEPS = 200;
 /** How much of a command's output or a diff a step keeps. */
 const MAX_TEXT = 4000;
 /** Sessions kept once ended, newest first. */
-const KEPT_ENDED = 30;
+const KEPT_ENDED = 20;
+/** Steps an ended session keeps, and how much text each: the ask, its edits, the owner's notes and its last words first. */
+const ENDED_STEPS = 40;
+const ENDED_TEXT = 1000;
+/** Notes the owner may send one session. */
+export const MAX_NOTES = 50;
 /** How long a harness gets to start a session (initialize, session/new, its mode) before it ends as failed. */
 const OPEN_MS = 60_000;
 /** The last lines of a harness's stderr kept, for the reason a failed session gives. */
@@ -366,6 +371,33 @@ export function killLeft(pid: number | undefined, definition: HarnessDefinition 
 	}
 }
 
+/**
+ * An ended session's steps, smaller: the ask, every edit, the owner's notes and the last words kept first, the rest
+ * newest first, up to ENDED_STEPS in their order; texts cut to ENDED_TEXT. What is left out is counted.
+ */
+export function compacted(steps: readonly HarnessStep[]): { steps: HarnessStep[]; dropped: number } {
+	const lastSaid = lastIndex(steps, (step) => step.kind === "said");
+	const keep = new Set<number>();
+	const want = (index: number) => keep.size < ENDED_STEPS && keep.add(index);
+	steps.forEach((step, index) => {
+		if (step.kind === "asked" || step.kind === "steered" || index === lastSaid) want(index);
+	});
+	steps.forEach((step, index) => {
+		if (step.kind === "edit") want(index);
+	});
+	for (let index = steps.length - 1; index >= 0; index--) want(index);
+	const short = (text: string) => (text.length > ENDED_TEXT ? `${text.slice(0, ENDED_TEXT)}… (cut)` : text);
+	const kept = steps
+		.filter((_, index) => keep.has(index))
+		.map((step): HarnessStep => {
+			if (step.kind === "edit" && step.diff !== undefined) return { ...step, diff: short(step.diff) };
+			if (step.kind === "run" && step.output !== undefined) return { ...step, output: short(step.output) };
+			if ("text" in step) return { ...step, text: short(step.text) } as HarnessStep;
+			return step;
+		});
+	return { steps: kept, dropped: steps.length - kept.length };
+}
+
 /** Keep steps within the bound, the first (the ask) always. */
 function bounded(session: HarnessSession): void {
 	const over = session.steps.length - MAX_STEPS;
@@ -441,6 +473,9 @@ export function defineHarnesses(options: HarnessOptions) {
 		delete session.asking;
 		delete session.pid;
 		const said = [...session.steps].reverse().find((step) => step.kind === "said");
+		const small = compacted(session.steps);
+		session.steps = small.steps;
+		session.dropped += small.dropped;
 		// a failure says why, in its own words when the harness said none
 		if (state === "failed" && reason !== undefined) session.outcome = reason.slice(0, 300);
 		else if (said !== undefined) session.outcome = said.text.split("\n")[0]?.slice(0, 300) ?? "";
@@ -802,6 +837,7 @@ export function defineHarnesses(options: HarnessOptions) {
 export async function steer(tx: Tx, task: number, text: string, at: number): Promise<boolean> {
 	const session = (await tx.doc(Harnesses)).sessions[task];
 	if (session === undefined || session.ended !== undefined || session.stop === true) return false;
+	if (session.notes.length >= MAX_NOTES) return false;
 	session.notes.push({ text, at });
 	session.steps.push({ kind: "steered", text, taken: false });
 	return true;
@@ -877,7 +913,7 @@ export async function addHarness(
 	taken: ReadonlySet<string>,
 ): Promise<boolean> {
 	const doc = await tx.doc(Harnesses);
-	if (taken.has(name) || doc.custom?.[name] !== undefined) return false;
+	if (taken.has(name) || doc.custom?.[name] !== undefined || Object.keys(doc.custom ?? {}).length >= 20) return false;
 	doc.custom = { ...(doc.custom ?? {}), [name]: { service, command } };
 	return true;
 }
