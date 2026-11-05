@@ -98,7 +98,7 @@ export function Starters({
 	onPick?: ((starter: string) => void) | undefined;
 }) {
 	return (
-		<div className="flex flex-col items-start gap-2 pl-[38px]">
+		<div className="flex flex-col items-start gap-2">
 			{starters.map((starter) => (
 				<button
 					key={starter}

@@ -222,7 +222,8 @@ answered by a control, never by typing its id.
 **Design language.** Sober and plain; the agent's face is the colour.
 - Neutrals at chroma 0. The primary button is ink-filled, neutral. One accent marks changes; one error red. Agent
   faces carry the other colour on screen. Light and dark are designed, not inverted; every token passes the contrast audit.
-- Each agent has an open-bot-avatar face, never an emoji identity: 40px in rows, 28px beside a message group's name,
+- Each agent has an open-bot-avatar face, never an emoji identity: 40px in rows, 28px beside a message group's name in a group
+  (a 1:1 chat names no one above its messages: the header says who),
   64px in the panel, 96px on the first-run screen. The face itself moves while working; a subtle dot marks waiting,
   and paused routines dim it. There is no disc or working icon. In voice mode its states include listening, thinking
   and speaking. The owner's face choice also supplies the first agent's favicon and installed app icons.

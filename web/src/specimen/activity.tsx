@@ -297,20 +297,20 @@ export function ActivityChat() {
 						<Run time="10:41">
 							<Bubble copy={REQUEST}>{REQUEST}</Bubble>
 						</Run>
-						<Run who={MARA} time="10:42" compact={phone}>
+						<Run who={MARA} time="10:42" compact>
 							<Bubble copy={ACKNOWLEDGEMENT} onActivity={() => show()}>
 								{ACKNOWLEDGEMENT}
 							</Bubble>
 						</Run>
 						{done ? (
-							<Run who={MARA} time="10:43" compact={phone}>
+							<Run who={MARA} time="10:43" compact>
 								<Bubble copy={REPLY} onActivity={() => show()}>
 									{REPLY}
 								</Bubble>
 							</Run>
 						) : null}
 						{failed ? (
-							<Run who={MARA} compact={phone}>
+							<Run who={MARA} compact>
 								<Bubble copy={FAILURE} onActivity={() => show()}>
 									{FAILURE}
 								</Bubble>

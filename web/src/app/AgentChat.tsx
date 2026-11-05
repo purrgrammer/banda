@@ -11,6 +11,7 @@ import {
 	ConversationScrollButton,
 	useConversation,
 } from "@/components/ai-elements/conversation";
+import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import { agentMainThread } from "../../../src/core/gateway.ts";
 import { WaitingPill } from "../chat/Approval.tsx";
 import { Composer } from "../chat/Composer.tsx";
@@ -28,7 +29,7 @@ import { useShell } from "../lib/shell.ts";
 import { useTranscript } from "../lib/transcript.ts";
 import { ActivitySheet } from "./Activity.tsx";
 import { FeedView } from "./Feed.tsx";
-import { FIRST_STARTERS, firstWords } from "./first-words.ts";
+import { FACE_STARTER, FIRST_STARTERS, firstWords } from "./first-words.ts";
 import { useSkills } from "./Skills.tsx";
 import { useViewContext } from "./view-context.ts";
 
@@ -45,6 +46,11 @@ function stopped(items: readonly Item[], busy: boolean): boolean {
 		(last.notes ?? []).some((note) => (note as { code?: string }).code === "aborted")
 	);
 }
+
+const DEFAULT_SHAPE = JSON.stringify(defaultAvatarFace().definition);
+
+/** Whether the agent still wears the default face, whatever its colour: it has not been given one of its own. */
+const defaultFace = (who: Who) => JSON.stringify(who.face.definition) === DEFAULT_SHAPE;
 
 /** Post the owner's words and files to the agent's one chat; a refusal rejects with why. */
 async function send(agent: string, text: string, files: readonly File[], id: string = crypto.randomUUID()) {
@@ -110,11 +116,11 @@ export function AgentChat({
 				<>
 					<div className="min-h-0 flex-1 overflow-y-auto">
 						<div className="mx-auto flex w-full max-w-[44rem] flex-col gap-3 px-4 py-5">
-							<Run who={who} compact={phone}>
+							<Run who={who} compact>
 								<Bubble>{firstWords(who.name)}</Bubble>
 							</Run>
 							<Starters
-								starters={FIRST_STARTERS}
+								starters={[...(defaultFace(who) ? [FACE_STARTER] : []), ...FIRST_STARTERS]}
 								onPick={(starter) => void attempt("send it", () => send(agent, starter, []))}
 							/>
 						</div>
@@ -132,7 +138,6 @@ export function AgentChat({
 					read={row.read}
 					who={who}
 					mentionables={mentionables}
-					phone={phone}
 					agent={agent}
 					at={at}
 					onDoing={setDoing}
@@ -153,7 +158,6 @@ function Timeline({
 	read,
 	who,
 	mentionables,
-	phone,
 	agent,
 	at,
 	onDoing,
@@ -172,7 +176,6 @@ function Timeline({
 	/** What it does now, for the header: "Using its browser…". */
 	onDoing: (doing: string | undefined) => void;
 	who: Who;
-	phone: boolean;
 	agent: string;
 	at?: number | undefined;
 }) {
@@ -289,7 +292,7 @@ function Timeline({
 				{transcript.loaded ? null : <ChatLoading />}
 				{/* the chat's beginning, once reached: the agent's first words, as the empty chat showed them */}
 				{transcript.loaded && !transcript.older ? (
-					<Run who={who} compact={phone}>
+					<Run who={who} compact>
 						<Bubble>{firstWords(who.name)}</Bubble>
 					</Run>
 				) : null}
@@ -305,7 +308,7 @@ function Timeline({
 					agent={agent}
 					segments={segments}
 					unreadAfter={unreadAfter}
-					compact={phone}
+					compact
 					{...(transcript.busy
 						? {}
 						: { onTryAgain: () => void attempt("ask again", () => send(agent, "Try again.", [])) })}

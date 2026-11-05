@@ -5,5 +5,11 @@ export const FIRST_STARTERS = [
 	"Every weekday at 8:00, tell me the weather where I live",
 ] as const;
 
+/**
+ * Offered first while the agent still wears the default face: it designs one from its name and who it is, as a
+ * candidate card in this chat for the owner to accept.
+ */
+export const FACE_STARTER = "Design yourself a face that fits your name";
+
 export const firstWords = (name: string) =>
 	`Hi, I'm ${name}. Ask me anything: I can read the web, write, plan and keep track of things for you, and wake up on a schedule to check on something.`;

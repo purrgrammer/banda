@@ -83,8 +83,6 @@ function Keyboard() {
 }
 
 export function MaraChat({ keyboard = false }: { keyboard?: boolean } = {}) {
-	const { width } = useContext(StageContext);
-	const compact = width === "phone";
 	return (
 		<ChatScreen name="Mara" faces={[MARA]} pill="book the 9:15 to Lisbon?" keyboard={keyboard}>
 			<DaySeparator>Today</DaySeparator>
@@ -92,7 +90,7 @@ export function MaraChat({ keyboard = false }: { keyboard?: boolean } = {}) {
 				<VoiceMessage mine duration="0:05" segments={VOICE} />
 				<ImageFile src={PHOTO} alt="coast.jpg" width={220} />
 			</Run>
-			<Run who={MARA} time="10:21" compact={compact}>
+			<Run who={MARA} time="10:21" compact>
 				<Bubble>
 					On it: mornings, window seat, under €300. I'll ask <Mention who={ATLAS} /> about Friday.
 				</Bubble>
@@ -104,7 +102,7 @@ export function MaraChat({ keyboard = false }: { keyboard?: boolean } = {}) {
 				time="10:24"
 			/>
 			<UnreadDivider count={2} />
-			<Run who={MARA} time="10:42" compact={compact}>
+			<Run who={MARA} time="10:42" compact>
 				<Bubble>Three fit. The 9:15 is the one I'd take: €214, window 14A, back Sunday 18:40.</Bubble>
 				<ApprovalCard
 					agent="Mara"
@@ -274,7 +272,7 @@ export function Screens() {
 					<Line icon={CalendarClockIcon} time="8:00">
 						Routine "PR watch" ran
 					</Line>
-					<Run who={OCTO} time="8:01" compact={phone}>
+					<Run who={OCTO} time="8:01" compact>
 						<Bubble>One pull request needs you: CI went red overnight.</Bubble>
 						<PullRequestCard pr={{ ...PR, checks: { passed: 9, failed: 2, running: 0 } }} />
 					</Run>
@@ -301,7 +299,7 @@ export function Screens() {
 			>
 				{phone ? null : <Band rows={ROWS.filter((row) => row.id === "sancho")} selected="sancho" />}
 				<ChatScreen name="Sancho" faces={[SANCHO]}>
-					<Run who={SANCHO} compact={phone}>
+					<Run who={SANCHO} compact>
 						<Bubble>
 							<p>Hi, I'm Sancho. Ask me anything: I can read the web, write, plan and keep track of things for you.</p>
 							<p>Connect GitHub and I'll keep an eye on your pull requests.</p>
