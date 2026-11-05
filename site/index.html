@@ -306,7 +306,9 @@ footer nav { gap: 16px; }
 		const release = (await response.json()).find((r) => !r.draft);
 		if (!release) return;
 		const ext = { mac: ".dmg", win: ".exe", linux: ".AppImage" }[os];
-		const pick = (a) => release.assets.find((asset) => asset.name.startsWith("banda-") && !asset.name.startsWith("banda-cli-") && asset.name.endsWith(`-${os}-${a}${ext}`));
+		// electron-builder names Linux x64 x86_64 (AppImage) or amd64 (deb), and arm64 aarch64 on some targets
+		const archNames = { x64: ["x64", "x86_64", "amd64"], arm64: ["arm64", "aarch64"] };
+		const pick = (a) => release.assets.find((asset) => asset.name.startsWith("banda-") && !asset.name.startsWith("banda-cli-") && archNames[a].some((n) => asset.name.endsWith(`-${os}-${n}${ext}`)));
 		const asset = pick(arch);
 		if (!asset) return;
 		button.href = asset.browser_download_url;
