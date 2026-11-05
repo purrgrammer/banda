@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import { Face } from "./Face.tsx";
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
+import { ProviderSignIn, type SignInWay } from "./ProviderSignIn.tsx";
 
 const FIRST_FACE = defaultAvatarFace();
 
@@ -18,6 +19,11 @@ export type ProviderChoice = {
 	readonly note?: string | undefined;
 	/** Where a key is made, for a provider that takes one. */
 	readonly keyUrl?: string | undefined;
+	/** A sign-in under way: whether it takes a pasted code now, the provider's ways to sign in and the one it takes. */
+	readonly connecting?: boolean | undefined;
+	readonly asks?: boolean | undefined;
+	readonly ways?: readonly SignInWay[] | undefined;
+	readonly way?: string | undefined;
 };
 
 export function FirstRun({
@@ -27,6 +33,9 @@ export function FirstRun({
 	error,
 	onPick,
 	onKey,
+	onAnswer,
+	onWay,
+	onCancel,
 }: {
 	providers: readonly ProviderChoice[];
 	/** The provider whose key form is open. */
@@ -37,6 +46,10 @@ export function FirstRun({
 	error?: string | undefined;
 	onPick?: (id: string) => void;
 	onKey?: (id: string, key: string) => void;
+	/** A sign-in's pasted code or address; another way to sign in; ending the sign-in under way. */
+	onAnswer?: (id: string, value: string) => void;
+	onWay?: (id: string, way: string) => void;
+	onCancel?: (id: string) => void;
 }) {
 	return (
 		<div className="flex h-full flex-col items-center overflow-y-auto bg-paper px-4 py-12">
@@ -48,33 +61,48 @@ export function FirstRun({
 				</p>
 			</div>
 			<ul className="mt-8 flex w-full max-w-sm shrink-0 flex-col divide-y divide-line-soft overflow-y-auto overscroll-contain max-h-[min(24rem,50dvh)] rounded-tile border border-line-soft">
-				{providers.map((provider) => (
-					<li key={provider.id}>
-						<button
-							type="button"
-							aria-expanded={provider.by === "key" ? provider.id === open : undefined}
-							onClick={() => onPick?.(provider.id)}
-							className={cn(
-								"flex w-full items-center gap-3 px-3.5 py-3 text-left hover:bg-paper-2",
-								provider.id === open && "bg-paper-2",
-							)}
-						>
-							<img src={`/providers/${provider.id}.svg`} alt="" className="size-6 shrink-0 dark:invert" />
-							<span className="flex min-w-0 flex-1 flex-col">
-								<span className="text-ui font-medium text-ink">{provider.name}</span>
-								<span className="text-meta text-ink-2">
-									{provider.id === waiting
-										? "Finish signing in in the other tab…"
-										: (provider.note ?? (provider.by === "sign-in" ? "Sign in with your account" : "Use a key"))}
+				{providers.map((provider) => {
+					const signing = provider.by === "sign-in" && (provider.id === waiting || provider.connecting === true);
+					return (
+						<li key={provider.id}>
+							<button
+								type="button"
+								aria-expanded={provider.by === "key" ? provider.id === open : undefined}
+								onClick={() => onPick?.(provider.id)}
+								className={cn(
+									"flex w-full items-center gap-3 px-3.5 py-3 text-left hover:bg-paper-2",
+									provider.id === open && "bg-paper-2",
+								)}
+							>
+								<img src={`/providers/${provider.id}.svg`} alt="" className="size-6 shrink-0 dark:invert" />
+								<span className="flex min-w-0 flex-1 flex-col">
+									<span className="text-ui font-medium text-ink">{provider.name}</span>
+									<span className="text-meta text-ink-2">
+										{signing
+											? "Finish signing in in the other tab…"
+											: (provider.note ?? (provider.by === "sign-in" ? "Sign in with your account" : "Use a key"))}
+									</span>
 								</span>
-							</span>
-							<ChevronRightIcon className={cn("size-4 text-ink-3", provider.id === open && "rotate-90")} />
-						</button>
-						{provider.id === open ? (
-							<ProviderKeyForm provider={provider} className="bg-paper-2 px-3.5 pb-3.5" onKey={onKey} />
-						) : null}
-					</li>
-				))}
+								<ChevronRightIcon className={cn("size-4 text-ink-3", provider.id === open && "rotate-90")} />
+							</button>
+							{provider.id === open ? (
+								<ProviderKeyForm provider={provider} className="bg-paper-2 px-3.5 pb-3.5" onKey={onKey} />
+							) : null}
+							{signing ? (
+								<ProviderSignIn
+									provider={provider}
+									asks={provider.asks}
+									ways={provider.ways}
+									way={provider.way}
+									className="bg-paper-2 px-3.5 pt-1 pb-3.5"
+									onAnswer={onAnswer}
+									onWay={onWay}
+									onCancel={onCancel}
+								/>
+							) : null}
+						</li>
+					);
+				})}
 			</ul>
 			{error === undefined ? null : (
 				<p role="alert" className="mt-4 max-w-sm text-center text-ui text-danger">

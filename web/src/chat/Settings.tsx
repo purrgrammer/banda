@@ -37,6 +37,7 @@ import { Confirm } from "./Confirm.tsx";
 import { Face } from "./Face.tsx";
 import { GitHubMark } from "./Object.tsx";
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
+import { ProviderSignIn, type SignInWay } from "./ProviderSignIn.tsx";
 import type { Who } from "./Row.tsx";
 
 /** A settings page: a bar with back and the title, then sections at a reading width. */
@@ -945,6 +946,10 @@ export type ProviderRow = {
 	readonly connected: boolean;
 	/** A sign-in under way, in a tab of its own. */
 	readonly connecting?: boolean | undefined;
+	/** It takes a pasted code now; the provider's ways to sign in, and the one under way. */
+	readonly asks?: boolean | undefined;
+	readonly ways?: readonly SignInWay[] | undefined;
+	readonly way?: string | undefined;
 	readonly error?: string | undefined;
 };
 
@@ -962,6 +967,9 @@ export function ModelProviders({
 	onConnect,
 	onKey,
 	onSignOut,
+	onAnswer,
+	onWay,
+	onCancel,
 }: {
 	/** The provider the band thinks with. */
 	current: string;
@@ -976,6 +984,10 @@ export function ModelProviders({
 	onConnect?: ((id: string) => void) | undefined;
 	onKey?: ((id: string, key: string) => void) | undefined;
 	onSignOut?: ((id: string) => void) | undefined;
+	/** A sign-in's pasted code or address; another way to sign in; ending the sign-in under way. */
+	onAnswer?: ((id: string, value: string) => void) | undefined;
+	onWay?: ((id: string, way: string) => void) | undefined;
+	onCancel?: ((id: string) => void) | undefined;
 }) {
 	const connected = providers.filter((each) => each.connected);
 	return (
@@ -984,6 +996,10 @@ export function ModelProviders({
 				{providers.map((provider) => {
 					const using = provider.id === current;
 					const next = connected.find((each) => each.id !== provider.id);
+					const signing =
+						provider.by === "sign-in" &&
+						!provider.connected &&
+						(provider.id === waiting || provider.connecting === true);
 					const detail =
 						provider.id === waiting || provider.connecting === true
 							? provider.by === "sign-in"
@@ -1040,7 +1056,7 @@ export function ModelProviders({
 												size="xs"
 												aria-label={`Connect ${provider.name}`}
 												aria-expanded={provider.by === "key" ? provider.id === open : undefined}
-												disabled={provider.id === waiting}
+												disabled={provider.by === "key" && provider.id === waiting}
 												onClick={() => onConnect?.(provider.id)}
 											>
 												Connect
@@ -1056,6 +1072,18 @@ export function ModelProviders({
 									busy={provider.id === waiting}
 									className="border-t border-line-soft p-3"
 									onKey={onKey}
+								/>
+							) : null}
+							{signing ? (
+								<ProviderSignIn
+									provider={provider}
+									asks={provider.asks}
+									ways={provider.ways}
+									way={provider.way}
+									className="border-t border-line-soft p-3"
+									onAnswer={onAnswer}
+									onWay={onWay}
+									onCancel={onCancel}
 								/>
 							) : null}
 						</div>

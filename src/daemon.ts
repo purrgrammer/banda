@@ -73,7 +73,7 @@ import { change, companion, validPicks } from "./server/companion.ts";
 import { BadRequest, handler } from "./server/http.ts";
 import { add as addFact, boxMemory, edit as editFact, memory, remove as removeFact } from "./server/memory.ts";
 import { openObjects } from "./server/objects.ts";
-import type { Boot } from "./server/routes/area.ts";
+import type { Area, Boot } from "./server/routes/area.ts";
 import { AREAS } from "./server/routes/index.ts";
 import {
 	accept as acceptRoutine,
@@ -157,6 +157,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 	let stopped!: (end: { failed: boolean }) => void;
 	const ended = new Promise<{ failed: boolean }>((resolve) => (stopped = resolve));
 	const gateways = new Map<string, Gateway>();
+	let areas: readonly Area[] = [];
 	const close = () =>
 		(stop ??= (async () => {
 			const step = async (what: string, run: () => unknown) => {
@@ -176,6 +177,9 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			const sends = drain;
 			if (sends !== undefined) await step("sends", () => sends(SEND_DRAIN_MS));
 			for (const gateway of gateways.values()) await step(gateway.name, () => gateway.stop?.());
+			// an area's work in flight, a provider's sign-in and its callback server among them, ends before the process
+			// may exit: a listener left open keeps it alive
+			for (const area of areas) await step("area", () => area.stop?.());
 			if (server !== undefined) {
 				const listening = server;
 				await step(
@@ -633,7 +637,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 				}
 				return web.post(id, to, text, { files: attachments, images: seen });
 			});
-		const areas = AREAS.flatMap((area) =>
+		areas = AREAS.flatMap((area) =>
 			area.start === undefined
 				? []
 				: [

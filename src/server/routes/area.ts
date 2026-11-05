@@ -84,6 +84,8 @@ export type Area = {
 	readonly shell?: () => Promise<readonly ShellEvent[]>;
 	/** Docs whose changes push the shell. */
 	readonly watch?: readonly Watched[];
+	/** End the area's work in flight as the daemon stops, so nothing it opened keeps the process alive. */
+	readonly stop?: () => Promise<void>;
 };
 
 export type AreaModule = {

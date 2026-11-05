@@ -18,7 +18,20 @@ import { ProposalCard } from "../chat/Proposal.tsx";
 import type { Who } from "../chat/Row.tsx";
 import { VoiceMessage } from "../chat/Voice.tsx";
 import { Band, FirstRun } from "./brand.tsx";
-import { ATLAS, MARA, OCTO, PAGE, PHOTO, PR, PROVIDERS, ROWS, SANCHO, SKILL_OFFERS, VOICE } from "./fixtures.ts";
+import {
+	ATLAS,
+	MARA,
+	OCTO,
+	PAGE,
+	PHOTO,
+	PR,
+	PROVIDERS,
+	ROWS,
+	SANCHO,
+	SIGN_IN_WAYS,
+	SKILL_OFFERS,
+	VOICE,
+} from "./fixtures.ts";
 import { Section, StageContext } from "./stage.tsx";
 
 /** A chat: its header, its timeline, its composer. */
@@ -300,6 +313,22 @@ export function Screens() {
 			>
 				<div className="flex-1">
 					<FirstSkills skills={SKILL_OFFERS} picked={new Set(["bro", "catch-me-up"])} />
+				</div>
+			</Section>
+			<Section
+				id="first-run-signing-in"
+				title="First run, signing in"
+				note="A sign-in under way in its own tab: the code its page shows pasted here, another way to sign in, or Cancel."
+				bleed
+			>
+				<div className="flex-1">
+					<FirstRun
+						providers={PROVIDERS.map((provider) =>
+							provider.id === "anthropic"
+								? { ...provider, connecting: true, asks: true, ways: SIGN_IN_WAYS, way: "browser" }
+								: provider,
+						)}
+					/>
 				</div>
 			</Section>
 			<Section

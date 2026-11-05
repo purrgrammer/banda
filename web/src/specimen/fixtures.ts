@@ -209,11 +209,26 @@ export const SERVICES: readonly Service[] = [
 	{ id: "notion", name: "Notion", does: "Pages and databases" },
 ];
 
+/** A provider's ways to sign in, as the app words them. */
+export const SIGN_IN_WAYS = [
+	{ id: "browser", label: "Sign in in the browser" },
+	{ id: "copy_code", label: "Sign in with a code" },
+] as const;
+
 /** Settings' providers, one of each state: in use, connected, connecting, failed, by sign-in and by key. */
 export const SETTINGS_PROVIDERS: readonly import("../chat/Settings.tsx").ProviderRow[] = [
 	{ id: "anthropic", name: "Anthropic", by: "sign-in", connected: true },
 	{ id: "openai", name: "OpenAI", by: "sign-in", connected: true },
-	{ id: "github-copilot", name: "GitHub Copilot", by: "sign-in", connected: false, connecting: true },
+	{
+		id: "github-copilot",
+		name: "GitHub Copilot",
+		by: "sign-in",
+		connected: false,
+		connecting: true,
+		asks: true,
+		ways: SIGN_IN_WAYS,
+		way: "browser",
+	},
 	{ id: "google", name: "Google", by: "key", connected: false, error: "the key was refused" },
 	{ id: "mistral", name: "Mistral", by: "key", connected: false },
 	{ id: "groq", name: "Groq", by: "key", connected: false },
