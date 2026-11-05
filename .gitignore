@@ -10,3 +10,5 @@ dist/
 # local secrets for a manual banda serve
 .env
 __pycache__/
+
+release/

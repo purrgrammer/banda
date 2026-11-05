@@ -30,7 +30,8 @@
 		"test:docker": "vitest run --project docker",
 		"test:pbt": "BANDA_PBT_RUNS=20 vitest run",
 		"check": "biome check .",
-		"fix": "biome check --write ."
+		"fix": "biome check --write .",
+		"cli:pack": "npm run build && node scripts/stage.ts --archive"
 	},
 	"dependencies": {
 		"@earendil-works/chord": "1.4.0",
