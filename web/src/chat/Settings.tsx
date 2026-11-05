@@ -12,7 +12,7 @@ import {
 	Trash2Icon,
 	XIcon,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -146,6 +146,10 @@ export function FaceAndName({
 	const [face, setFace] = useState(who.face);
 	const [name, setName] = useState(who.name);
 	const [picking, setPicking] = useState(false);
+	// a face chosen elsewhere (designed from a description) replaces the one shown
+	useEffect(() => {
+		setFace(who.face);
+	}, [who.face]);
 	return (
 		<div className="flex items-center gap-4">
 			<Popover open={picking} onOpenChange={setPicking}>

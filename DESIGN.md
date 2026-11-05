@@ -45,8 +45,8 @@ code holds the details. If a sentence here only restates code, delete it.
 
 ## Words
 agent, band, group, chat, turn, queue, message, part, tool, wait, draft, permission, routine, event, connection,
-account, object, artifact, memory, box, workspace, gateway. One word per thing, in code, docs and the UI. The
-words the rules lean on:
+account, object, artifact, memory, box, workspace, gateway, inference. One word per thing, in code, docs and the UI.
+The words the rules lean on:
 - **band**: the owner's agents, as the sidebar lists them.
 - **origin**: where a message came from (gateway, peer, thread); **replyTo**: the origin a Turn's messages and asks go
   to.
@@ -63,6 +63,9 @@ words the rules lean on:
   the store.
 - **notice**: an entry telling the owner something went wrong, such as a message that was not delivered.
 - **attachment**: a file a message carries, in either direction; **blob**: its bytes, stored once by their sha256.
+- **inference**: one bounded model request outside any chat, on a tier's model, whose answer the app reads on the spot
+  (a face from a description); nothing is stored and no tool runs. Work that uses tools, answers to a chat or must
+  survive a restart is a turn.
 
 ## Core
 | Primitive | What it is |
@@ -263,7 +266,8 @@ The workspace starts with one agent, which is ordinary: renameable and archivabl
 that the last active agent cannot be archived, since the app opens in a chat. The owner makes another from the sheet:
 a face, a name, a personality, connections; nothing runs before the file is written. The default face is the chat
 bubble. The owner can choose a shape and colour or accept a generated candidate; generated geometry is data, validated
-and previewed before acceptance, never code or markup from the box.
+and previewed before acceptance, never code or markup from the box. The sheet designs one in place, from the owner's
+description or the name alone, by an inference on the Balanced tier; it is the owner's pick, written with the file.
 
 Archiving an agent stops its runs, pauses its routines, ends its permissions and removes it from the band and from
 groups' mentions. Its definition, chat, memory and artifacts remain; Settings lists it, to restore. Restoring it shows

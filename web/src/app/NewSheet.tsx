@@ -1,7 +1,8 @@
 /**
  * "+" (DESIGN.md "The app"): a new agent, the chat-bubble face picked for you, a name and a personality (three starters to begin
  * from); or a new group, who is in it and its name. Naming a friend, not filling a form. The agent's file is written
- * as the owner's own and is in effect at once; its chat opens.
+ * as the owner's own and is in effect at once; its chat opens. A face described here (or drawn from the name) is designed
+ * in place and becomes the face being picked, saved with the rest only when the agent is added.
  */
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -12,10 +13,11 @@ import { cn } from "@/lib/cn";
 import { agentId } from "../../../src/core/agent-id.ts";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import { createGroup } from "../areas/groups.ts";
+import { DescribeFace } from "../avatar/DescribeFace.tsx";
 import { Face } from "../chat/Face.tsx";
 import { FaceAndName, Personality } from "../chat/Settings.tsx";
 import type { Who } from "../chat/types.ts";
-import { saveAgent } from "../lib/api.ts";
+import { designFace, saveAgent } from "../lib/api.ts";
 import type { ChatAgent } from "../lib/navigation.ts";
 import { agentFile } from "./edit-file.ts";
 import type { Where } from "./where.ts";
@@ -107,6 +109,15 @@ export function NewSheet({
 									There is already an agent called {who.name}. Pick another name.
 								</p>
 							) : null}
+							<div className="-mt-2">
+								<DescribeFace
+									name={who.name}
+									design={designFace}
+									onDesigned={(definition) =>
+										setWho((was) => ({ ...was, face: { definition, color: was.face.color } }))
+									}
+								/>
+							</div>
 							<Personality starters onChange={setPersonality} />
 						</>
 					) : (

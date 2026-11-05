@@ -24,6 +24,7 @@ import type {
 	ShellEvent,
 	ViewEvent,
 } from "../../../src/server/api.ts";
+import type { DesignedFace } from "../../../src/server/routes/faces.ts";
 import type { SkillView } from "../../../src/server/skills.ts";
 import { oneStream } from "./one-stream.ts";
 
@@ -292,6 +293,10 @@ export const answerAgent = (name: string, allow: boolean, sha: string | null) =>
 		method: "POST",
 		...(allow ? { body: JSON.stringify({ sha }) } : {}),
 	});
+
+/** Design a face from the owner's description, or from the agent's name alone: a validated candidate, stored nowhere. */
+export const designFace = async (description: string, name: string) =>
+	(await api<DesignedFace>("/faces", { method: "POST", body: JSON.stringify({ description, name }) })).definition;
 
 /** Save the owner's reviewed definition; `base` is null when creating a permanent agent. */
 export const saveAgent = (name: string, text: string, base: string | null = null) =>
