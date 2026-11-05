@@ -65,6 +65,8 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    // to tell whether the WebView hears the main frame alone (as Capacitor's own bridge does)
+    implementation "androidx.webkit:webkit:$androidxWebkitVersion"
     // iroh's official Android bindings (iroh-ffi): the Kotlin API and libiroh_ffi.so per ABI, as the daemon's 1.2.0
     implementation 'computer.iroh:iroh-android:1.2.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'

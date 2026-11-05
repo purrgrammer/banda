@@ -5,6 +5,7 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Base64
 import android.util.Log
+import androidx.webkit.WebViewFeature
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -42,7 +43,16 @@ class BandaPlugin : Plugin() {
 
     private class Running(val job: Job, @Volatile var bi: BiStream? = null)
 
+    /**
+     * Only the app's own page may call the shell. Capacitor hears the main frame alone through a web message listener,
+     * but on a WebView without one it falls back to a JavaScript interface that every frame can call, an artifact's
+     * page too: there the shell answers nothing.
+     */
+    private var heard = false
+
     override fun load() {
+        heard = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) && !bridge.config.isUsingLegacyBridge
+        if (!heard) Log.w(TAG, "this WebView lets any frame call the shell: the shell refuses")
         IrohAndroid.installAndroidContext(context)
         daemon = Daemon(context)
         link = pairingLink(activity?.intent)
@@ -68,6 +78,7 @@ class BandaPlugin : Plugin() {
     /** Where the shell stands: the daemon it is set to, this device's id and a name to suggest, a link opened with. */
     @PluginMethod
     fun state(call: PluginCall) {
+        if (refused(call)) return
         scope.launch {
             try {
                 val answer = JSObject()
@@ -85,6 +96,7 @@ class BandaPlugin : Plugin() {
     /** Try the daemon a pairing link's ticket names: requests go to it until it is kept or reverted. */
     @PluginMethod
     fun setDaemon(call: PluginCall) {
+        if (refused(call)) return
         val ticket = call.getString("ticket") ?: return call.reject("a ticket is needed")
         scope.launch {
             try {
@@ -120,6 +132,7 @@ class BandaPlugin : Plugin() {
     /** Forget the daemon and this device's key: a revoked phone pairs again as a new device. */
     @PluginMethod
     fun forget(call: PluginCall) {
+        if (refused(call)) return
         scope.launch {
             for (running in streams.values) running.job.cancel()
             streams.clear()
@@ -130,6 +143,7 @@ class BandaPlugin : Plugin() {
 
     @PluginMethod
     fun request(call: PluginCall) {
+        if (refused(call)) return
         val method = call.getString("method") ?: "GET"
         val path = call.getString("path") ?: return call.reject("a path is needed")
         val headers = headersOf(call.getObject("headers"))
@@ -158,6 +172,7 @@ class BandaPlugin : Plugin() {
 
     @PluginMethod
     fun stream(call: PluginCall) {
+        if (refused(call)) return
         val id = call.getString("id") ?: return call.reject("an id is needed")
         val path = call.getString("path") ?: return call.reject("a path is needed")
         val headers = headersOf(call.getObject("headers"))
@@ -209,9 +224,16 @@ class BandaPlugin : Plugin() {
 
     @PluginMethod
     fun cancel(call: PluginCall) {
+        if (refused(call)) return
         val id = call.getString("id") ?: return call.reject("an id is needed")
         streams.remove(id)?.job?.cancel()
         call.resolve()
+    }
+
+    private fun refused(call: PluginCall): Boolean {
+        if (heard) return false
+        call.reject("this phone's Android System WebView is too old for banda: update it", "WEBVIEW")
+        return true
     }
 
     /** Open a bi-stream, write the request whole and finish its send side: the daemon answers once it has it all. */
