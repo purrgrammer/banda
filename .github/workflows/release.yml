@@ -1,0 +1,99 @@
+# Pre-release binaries: the desktop app and the CLI archive for each platform, each built and smoke-run on its own
+# runner (native addons and binaries are per platform). A `v*` tag makes a draft pre-release; publishing it stays a
+# person's click. A manual run only uploads workflow artifacts, to try a candidate without publishing anything.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-latest, target: mac-arm64 }
+          - { runner: macos-26-intel, target: mac-x64 }
+          - { runner: windows-latest, target: win-x64 }
+          - { runner: ubuntu-latest, target: linux-x64 }
+          - { runner: ubuntu-24.04-arm, target: linux-arm64 }
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+      - name: The tag names the version being built
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+      - run: npm ci
+      - name: Format, lint and types (once; they do not depend on the platform)
+        if: matrix.target == 'linux-x64'
+        run: npm run check && npm run typecheck
+      - run: npm run test:fast
+      - run: npm run cli:pack
+      - run: node scripts/smoke-release.ts
+      - run: npm --prefix desktop ci
+      - run: npm --prefix desktop run dist
+        env:
+          # unsigned pre-release: never pick up a certificate from the runner's keychain
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: banda-${{ matrix.target }}
+          if-no-files-found: error
+          path: |
+            release/banda-cli-*
+            release/desktop/banda-*.dmg
+            release/desktop/banda-*.zip
+            release/desktop/banda-*.exe
+            release/desktop/banda-*.AppImage
+            release/desktop/banda-*.deb
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: out
+          merge-multiple: true
+      - name: Checksums
+        working-directory: out
+        run: sha256sum -- * > SHA256SUMS && cat SHA256SUMS
+      - name: Draft pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" out/*
+          --draft --prerelease --verify-tag
+          --title "banda $GITHUB_REF_NAME"
+          --notes-file .github/release-notes.md

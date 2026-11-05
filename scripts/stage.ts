@@ -6,7 +6,7 @@
  *   app/             the built daemon and web UI with their runtime dependencies only
  *   bin/banda        the launcher (`bin/banda.cmd` on Windows): the bundled Node runs the bundled CLI
  *
- * With `--archive` it also writes `release/banda-<version>-<os>-<arch>.tar.gz` (`.zip` on Windows). The desktop app
+ * With `--archive` it also writes `release/banda-cli-<version>-<os>-<arch>.tar.gz` (`.zip` on Windows). The desktop app
  * carries the same tree in its resources, so the CLI and the app run identical bytes. Run `npm run build` first.
  * Native pieces (resvg's addon, pi-env's binaries) are per platform, so each target is staged on its own machine.
  */
@@ -21,9 +21,9 @@ export const NODE_VERSION = "26.13.0";
 
 export type Target = { readonly platform: NodeJS.Platform; readonly arch: string };
 
-/** The name a target goes by in release file names. */
+/** The name a target goes by in release file names, as electron-builder names the desktop installers. */
 export function targetName({ platform, arch }: Target): string {
-	const os = platform === "darwin" ? "macos" : platform === "win32" ? "windows" : platform;
+	const os = platform === "darwin" ? "mac" : platform === "win32" ? "win" : platform;
 	return `${os}-${arch}`;
 }
 
@@ -161,7 +161,7 @@ export async function stage(root: string, options: { archive?: boolean } = {}): 
 	console.log(`staged banda ${version} for ${targetName(target)} in ${out}`);
 	if (!options.archive) return undefined;
 	const extension = target.platform === "win32" ? "zip" : "tar.gz";
-	const archive = join(release, `banda-${version}-${targetName(target)}.${extension}`);
+	const archive = join(release, `banda-cli-${version}-${targetName(target)}.${extension}`);
 	await rm(archive, { force: true });
 	run(
 		tar,

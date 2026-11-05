@@ -13,8 +13,8 @@ const SUM = "a".repeat(64);
 
 describe("staging a release", () => {
 	it("names targets and Node archives as nodejs.org and the release page do", () => {
-		expect(targetName({ platform: "darwin", arch: "arm64" })).toBe("macos-arm64");
-		expect(targetName({ platform: "win32", arch: "x64" })).toBe("windows-x64");
+		expect(targetName({ platform: "darwin", arch: "arm64" })).toBe("mac-arm64");
+		expect(targetName({ platform: "win32", arch: "x64" })).toBe("win-x64");
 		expect(targetName({ platform: "linux", arch: "arm64" })).toBe("linux-arm64");
 		expect(nodeArchive({ platform: "darwin", arch: "x64" })).toBe(`node-v${NODE_VERSION}-darwin-x64.tar.gz`);
 		expect(nodeArchive({ platform: "linux", arch: "arm64" })).toBe(`node-v${NODE_VERSION}-linux-arm64.tar.gz`);
@@ -28,6 +28,14 @@ describe("staging a release", () => {
 		};
 		expect(NODE_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
 		expect(Number(NODE_VERSION.split(".")[0])).toBeGreaterThanOrEqual(Number(engines.node.replace(/\D/g, "")));
+	});
+
+	it("gives the desktop app the version the CLI and the tag carry", async () => {
+		const root = (await import("../package.json", { with: { type: "json" } })).default as { version: string };
+		const desktop = (await import("../desktop/package.json", { with: { type: "json" } })).default as {
+			version: string;
+		};
+		expect(desktop.version).toBe(root.version);
 	});
 
 	it("checks a download only against the line that names it, and refuses a list without it", () => {
