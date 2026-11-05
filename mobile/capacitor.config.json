@@ -1,0 +1,6 @@
+{
+	"appId": "app.banda",
+	"appName": "banda",
+	"webDir": "../web/dist",
+	"android": { "path": "android" }
+}

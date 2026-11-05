@@ -42,7 +42,14 @@ defect. Remove it only when its fix and acceptance evidence are recorded in a co
   until the owner allows a public relay (or names a self-hosted one), and a path across NAT is unrun
 - [ ] Spike the phone's Iroh client: the PWA with iroh's wasm build, or a native shell only if that fails. Exit: the
   phone on cellular, the daemon on home Wi-Fi, one real answer from `/api/agents`. Desktop Chrome got it through a
-  hand-built wasm and a loopback relay; the phone on cellular over a public relay is the owner's manual run
+  hand-built wasm and a loopback relay; the phone on cellular over a public relay is the owner's manual run. The
+  Android shell (`mobile/`) pairs and chats on the arm64 emulator over a direct path; a real phone on cellular, across
+  NAT through a relay, is unrun
+- [ ] The phone's shell on iOS: out of scope for now. It implements the same plugin contract as Android's
+  (`BandaPlugin` in `web/src/lib/transport.ts`) with iroh-ffi's Swift bindings, and needs a real iPhone to try
+- [ ] The phone's shell, once paired: a device revoked while the app is open sees requests fail rather than the
+  pairing screen (it shows on the next start), and the app's files come with the shell, so a new build reaches the
+  phone only as a new APK
 - [ ] Pairing slice: the Iroh listener authorizes by the remote endpoint id among the paired phones, in place of the
   single `auth/token` check, and is not held to the loopback Host/Origin check; Settings lists, renames and revokes
   each phone, pairing by QR. Exit: a fault sweep at the pairing commit and a desktop and phone walkthrough

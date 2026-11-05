@@ -1,0 +1,24 @@
+{
+	"name": "banda-mobile",
+	"version": "0.1.0",
+	"private": true,
+	"description": "banda's phone app: the web app in a native shell that reaches the daemon over Iroh, as a paired device.",
+	"license": "AGPL-3.0-only",
+	"author": "banda",
+	"homepage": "https://github.com/purrgrammer/banda",
+	"type": "module",
+	"scripts": {
+		"sync": "cap sync android",
+		"apk": "cap sync android && android/gradlew -p android assembleDebug",
+		"install:debug": "\"${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb\" install -r android/app/build/outputs/apk/debug/app-debug.apk && \"${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb\" shell am start -n app.banda/.MainActivity",
+		"test": "android/gradlew -p android testDebugUnitTest"
+	},
+	"dependencies": {
+		"@capacitor/android": "8.5.3",
+		"@capacitor/barcode-scanner": "3.1.3",
+		"@capacitor/core": "8.5.3"
+	},
+	"devDependencies": {
+		"@capacitor/cli": "8.5.3"
+	}
+}

@@ -17,6 +17,10 @@
 			"!desktop/dist",
 			"!desktop/node_modules",
 			"!desktop/package-lock.json",
+			"mobile/**",
+			"!mobile/android",
+			"!mobile/node_modules",
+			"!mobile/package-lock.json",
 			"*.json",
 			"!package-lock.json",
 			"!.claude"
