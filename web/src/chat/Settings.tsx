@@ -99,9 +99,14 @@ export function Block({ title, note, children }: { title: string; note?: string;
 }
 
 /** Rows in a hairline box: a setting each. */
-function Rows({ children }: { children: ReactNode }) {
+function Rows({ children, className }: { children: ReactNode; className?: string }) {
 	return (
-		<div className="flex flex-col divide-y divide-line-soft overflow-hidden rounded-tile border border-line-soft">
+		<div
+			className={cn(
+				"flex flex-col divide-y divide-line-soft overflow-hidden rounded-tile border border-line-soft",
+				className,
+			)}
+		>
 			{children}
 		</div>
 	);
@@ -975,7 +980,7 @@ export function ModelProviders({
 	const connected = providers.filter((each) => each.connected);
 	return (
 		<Block title="Providers" note="Connect another to switch between them. Only the one in use sees what you ask.">
-			<Rows>
+			<Rows className="max-h-[min(24rem,50dvh)] overflow-y-auto overscroll-contain">
 				{providers.map((provider) => {
 					const using = provider.id === current;
 					const next = connected.find((each) => each.id !== provider.id);

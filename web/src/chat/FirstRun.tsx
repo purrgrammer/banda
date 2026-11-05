@@ -47,7 +47,7 @@ export function FirstRun({
 					I'm the first of your band. Pick the model I think with, and we can start.
 				</p>
 			</div>
-			<ul className="mt-8 flex w-full max-w-sm shrink-0 flex-col divide-y divide-line-soft overflow-hidden rounded-tile border border-line-soft">
+			<ul className="mt-8 flex w-full max-w-sm shrink-0 flex-col divide-y divide-line-soft overflow-y-auto overscroll-contain max-h-[min(24rem,50dvh)] rounded-tile border border-line-soft">
 				{providers.map((provider) => (
 					<li key={provider.id}>
 						<button
