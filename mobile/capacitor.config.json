@@ -2,5 +2,5 @@
 	"appId": "app.banda",
 	"appName": "banda",
 	"webDir": "../web/dist",
-	"android": { "path": "android" }
+	"android": { "path": "android", "useLegacyBridge": false }
 }

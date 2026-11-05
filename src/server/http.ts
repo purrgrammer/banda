@@ -43,7 +43,7 @@ import type {
 	ViewEvent,
 } from "./api.ts";
 import type { ObjectAsk, ObjectShown } from "./objects.ts";
-import { FRAME_POLICY } from "./policy.ts";
+import { SERVED_POLICY } from "./policy.ts";
 import { endpointOf } from "./remote.ts";
 import type { Area, AreaReply, AreaRequest } from "./routes/area.ts";
 import type { ShippedSkillsView, SkillView } from "./skills.ts";
@@ -229,20 +229,6 @@ const TYPES: Record<string, string> = {
 	".webmanifest": "application/manifest+json",
 	".json": "application/json",
 };
-
-const POLICY = [
-	"default-src 'self'",
-	"img-src 'self' data: blob: https:",
-	// audio and video play from the bytes the page fetched with the token, as an object URL
-	"media-src 'self' blob:",
-	// the page reads back what it made itself (a file attached in the composer, as a blob: URL); nothing else
-	"connect-src 'self' blob:",
-	"style-src 'self' 'unsafe-inline'",
-	"object-src 'none'",
-	"base-uri 'none'",
-	"frame-ancestors 'none'",
-	FRAME_POLICY,
-].join("; ");
 
 /** Image types a transcript serves; anything else is not served as an image. */
 const IMAGES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
@@ -969,7 +955,7 @@ async function file(res: ServerResponse, web: string, pathname: string): Promise
 	const relative = normalize(decoded).replace(/^(\.\.(\/|\\|$))+/, "");
 	const path = join(web, relative);
 	const headers = {
-		"content-security-policy": POLICY,
+		"content-security-policy": SERVED_POLICY,
 		"x-content-type-options": "nosniff",
 		"referrer-policy": "no-referrer",
 	};
