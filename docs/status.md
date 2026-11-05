@@ -2,10 +2,12 @@
 
 ## Current work
 
-Harnesses are on the `feat/harness-acp` branch ([Connections](connections.md)): an agent hands coding work to any ACP
-agent on the owner's computer (Claude Code, Codex and others installed), connected in a folder; the session is live and
-steerable in the chat, and only the harness's own asks reach the owner. Claude Code and Codex each fixed a scratch
-repository through the app in a throwaway home; the harness fault sweep passes. Owner review is pending.
+Harnesses are on the `feat/harness-acp` branch ([Connections](connections.md)): an agent hands coding work to a
+coding agent on the owner's computer (Claude Code, Codex, pi through banda's own adapter, or one the owner adds),
+connected once to the owner's code folder, each task in a project there; the session is live and steerable in the chat,
+and only the harness's own asks reach the owner. Claude Code, Codex and pi each fixed a scratch repository through the
+app in a throwaway home; an adversarial review was triaged and fixed; the harness fault sweep passes. Owner review is
+pending, with one call of the owner's: whether harnesses that ask nothing of their own start without a draft.
 
 Pre-release binaries are on the `desktop-release` branch ([Operations](operations.md)): an Electron desktop app that
 starts or attaches to the daemon, a CLI archive that brings its own Node.js, and a release workflow that drafts an

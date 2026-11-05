@@ -72,10 +72,12 @@ in a throwaway home, at desktop and phone width.
 - [ ] Reads by argument are exact values only; a prefix waits for a spike of how a real server routes it
 - [ ] The shipped file's `events` and the watch intake are deleted with the routines slice; they return with the watch design (DESIGN.md "Open")
 - [ ] No built-in email or calendar yet: they follow GitHub as shipped connections
-- [x] Harnesses: ACP client, sessions, asks, notes, Stop, the wake; shipped files and the owner's own; the fault sweep
-- [x] Harnesses: Claude Code and Codex each fixed a scratch repository through the app
+- [x] Harnesses: ACP client, sessions, asks, notes, Stop, the wake; shipped files, banda's adapters and the owner's own; the fault sweep (detached commands included)
+- [x] Harnesses: Claude Code, Codex and pi each fixed a scratch repository through the app; Claude Code's background command was killed with its session
+- [x] Harnesses: an adversarial review (store growth, the home as a project, Stop before open, several asks, detached commands, blind asks) triaged and fixed
 - [ ] Harnesses: owner review of the slice, and the app's screens at phone width (only the specimen was seen at 390px)
-- [ ] Harnesses: a note or a wake does not carry "for this task" permissions (`errandOf` knows only owner inputs and wakes)
-- [ ] Harnesses: Gemini CLI, OpenCode, Cursor and Goose are offered when installed but never run here; their asks and modes need a spike each
-- [ ] Harnesses: Codex in workspace-write runs commands in its own sandbox without asking; whether that is the mode to set is the owner's call
-- [ ] Harnesses: a session's history is the harness's (session/load restores it); the store keeps the steps the owner saw, not the harness's context
+- [ ] Harnesses: owner's call: pi and the owner's own harnesses ask nothing of their own, so an agent's words run on the host unasked; a draft for those, or for chats holding foreign content, is the review's suggestion
+- [ ] Harnesses: Gemini CLI, OpenCode, Cursor and Goose are not shipped: each failed or was missing here; they need a spike and a sign-in each
+- [ ] Harnesses: their asks reach the owner only in the web app, not on other gateways; the agent still hears the end
+- [ ] Harnesses: a step may flicker between flushes (a note the harness has not taken yet); sessions are keyed by the model's call id, as artifacts and groups are
+- [ ] Harnesses: the adapters are not in a release (Claude Code's SDK is Anthropic's, all rights reserved); Connections says how to install them
