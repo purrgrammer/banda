@@ -8,6 +8,7 @@
  * their own origin, unless that notice was given up too, for a reason `undeliverable` admits.
  */
 import { expect } from "vitest";
+import { type DevicesValue, ENDPOINT_ID } from "../../src/core/devices.ts";
 import { type Inbound, OWNER, routeKey } from "../../src/core/gateway.ts";
 import { REACT, REACTION, SAY } from "../fixtures/models.ts";
 import { OWNER_ORIGIN, REFUSING, type Sent, type Summary } from "./sut.ts";
@@ -95,5 +96,34 @@ export function checkTurnInvariants(
 				continue;
 			else if (outcome.result.ended === "answered") expect(answers, `the answer to ${m.id}`).toContain(`re: ${m.text}`);
 		}
+	}
+}
+
+/**
+ * The pairing invariants (DESIGN.md "Clients"), whatever was killed: an endpoint is a device only by an invite it claimed
+ * and the owner approved; an invite is claimed by one endpoint and spent at most once, by the owner's answer; a waiting
+ * request holds the live, unspent invite its endpoint claimed; and no endpoint is a device and waiting at once.
+ */
+export function checkDeviceInvariants(doc: DevicesValue | undefined, now: number): void {
+	const { devices = {}, invites = {}, requests = {} } = doc ?? {};
+	for (const [id, device] of Object.entries(devices)) {
+		expect(id, "a device's id").toMatch(ENDPOINT_ID);
+		expect(requests[id], `${id} paired and waiting`).toBeUndefined();
+		const by = Object.values(invites).filter((invite) => invite.claimed?.by === id && invite.spent?.approved === true);
+		expect(by.length, `the approved invites that paired ${id}`).toBeGreaterThanOrEqual(1);
+		for (const invite of by) expect(invite.spent?.at, `${id} paired when approved`).toBe(device.paired);
+		if (device.revoked !== undefined) expect(device.revoked).toBeGreaterThanOrEqual(device.paired);
+	}
+	for (const [hash, invite] of Object.entries(invites)) {
+		if (invite.spent !== undefined) expect(invite.claimed, `invite ${hash} spent unclaimed`).toBeDefined();
+		const waiting = Object.entries(requests).filter(([, request]) => request.invite === hash);
+		expect(waiting.length, `requests on invite ${hash}`).toBeLessThanOrEqual(1);
+		for (const [id] of waiting) {
+			expect(invite.claimed?.by, `invite ${hash} claimed by its request`).toBe(id);
+			expect(invite.spent, `invite ${hash} waiting and spent`).toBeUndefined();
+			expect(invite.expires, `invite ${hash} waiting and expired`).toBeGreaterThan(now);
+		}
+		if (invite.spent?.approved === true && invite.claimed !== undefined)
+			expect(devices[invite.claimed.by], `the device invite ${hash} approved`).toBeDefined();
 	}
 }
