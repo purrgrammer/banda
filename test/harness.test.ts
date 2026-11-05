@@ -374,3 +374,49 @@ describe("an ended session's steps", () => {
 		expect(compacted(steps.slice(0, 5)).dropped).toBe(0);
 	});
 });
+
+describe("a session's end", () => {
+	it("tells the agent what it left running was stopped, and keeps the outcome plain", async () => {
+		const { mkdtemp: temp } = await import("node:fs/promises");
+		const home = await tempHome();
+		const folder = await temp(join(homedir(), ".banda-test-folder-"));
+		onTestFinished(() => rm(folder, { recursive: true, force: true }));
+		const woke: string[] = [];
+		const made = defineHarnesses({
+			definitions: () =>
+				new Map([
+					[
+						"fake",
+						{
+							name: "fake",
+							service: "Fake Code",
+							command: process.execPath,
+							args: [join(import.meta.dirname, "fixtures/fake-acp-agent.ts")],
+						},
+					],
+				]),
+			followUp: async (_tx, _chat, input) => {
+				woke.push(input.text);
+				return 0;
+			},
+			log: () => {},
+		});
+		const registry = createRegistry();
+		registry.install(defineExtension({ name: "test.harness", tasks: [made.Session] }));
+		const { models } = echoModels();
+		const harness = await openStore(home, { models, registry });
+		harness.resume();
+		const chat = await harness.commit(
+			async (tx) => Number((await tx.createConversation({ ownership: { kind: "ownerless" } })).id),
+			context,
+		);
+		const task = await harness.commit(
+			(tx) => made.begin(tx, { chat, agent: "sancho", harness: "fake", folder, ask: "say Server runs as **PID 7**" }),
+			context,
+		);
+		await until(() => woke.length > 0);
+		expect((await harness.snapshot(Harnesses, context))?.sessions[task]?.outcome).toBe("Server runs as PID 7");
+		expect(woke[0]).toContain("nothing it left running");
+		await harness.close(context);
+	});
+});
