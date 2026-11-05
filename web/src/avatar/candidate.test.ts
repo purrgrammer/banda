@@ -31,7 +31,7 @@ describe("generated face preview card", () => {
 		const html = renderToStaticMarkup(createElement(AvatarCandidateCard, { definition, current, name: "Mira", onUse }));
 		expect(html).toContain("Face preview for Mira");
 		expect(html).toContain("Use this face");
-		expect(html).toContain('data-preview-size="64"');
+		expect(html).toContain('data-preview-size="128"');
 		for (const field of ["body", "path", "eyes", "spacing", "version"]) expect(html).not.toContain(`"${field}"`);
 		expect(html).not.toContain(definition.body.path);
 		expect(onUse).not.toHaveBeenCalled();
@@ -47,8 +47,9 @@ describe("generated face preview card", () => {
 		const html = renderToStaticMarkup(
 			createElement(AvatarCandidateCard, { definition: current.definition, current, name: "Mira", onUse }),
 		);
-		expect(html).toContain("Current face");
+		expect(html).toContain(`${current.definition.name}, face preview`);
 		expect(html).not.toContain("Use this face");
+		expect(html).not.toContain("Nothing changes");
 		expect(controls.use).toBeUndefined();
 		expect(onUse).not.toHaveBeenCalled();
 	});

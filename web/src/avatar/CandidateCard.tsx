@@ -7,7 +7,10 @@ import type { AvatarFace } from "../../../src/core/avatar-face.ts";
 import { Tile } from "../chat/Cards.tsx";
 import { AvatarRenderer } from "./Renderer.tsx";
 
-/** Previewing, toggling motion and leaving the card never writes identity. Only Use this face calls onUse. */
+/**
+ * Previewing, toggling motion and leaving the card never writes identity. Only Use this face calls onUse; once the face is
+ * the agent's, the card is just the preview, at the same width.
+ */
 export function AvatarCandidateCard({
 	definition,
 	current,
@@ -37,16 +40,20 @@ export function AvatarCandidateCard({
 		}
 	};
 	return (
-		<Tile className="flex flex-col gap-3 p-4">
+		<Tile className="flex w-[22rem] max-w-full flex-col gap-3 p-4">
 			<div>
 				<p className="text-meta text-ink-2">Face preview for {name}</p>
 				<p className="text-body font-semibold text-ink">{definition.name}</p>
 			</div>
-			<div role="img" aria-label={`${definition.name}, face preview`}>
+			<div
+				role="img"
+				aria-label={`${definition.name}, face preview`}
+				className="flex items-center justify-center rounded-tile bg-paper-3 py-4"
+			>
 				<AvatarRenderer
 					definition={definition}
 					color={current.color}
-					size={64}
+					size={128}
 					animated={mood !== "idle"}
 					mood={mood}
 				/>
@@ -61,6 +68,7 @@ export function AvatarCandidateCard({
 				variant="outline"
 				size="sm"
 				spacing={0}
+				className="self-center"
 			>
 				<ToggleGroupItem value="idle" aria-label="Idle" title="Idle">
 					<CircleIcon aria-hidden="true" />
@@ -72,11 +80,7 @@ export function AvatarCandidateCard({
 					<SmileIcon aria-hidden="true" />
 				</ToggleGroupItem>
 			</ToggleGroup>
-			{same ? (
-				<p role="status" className="text-ui text-ink-2">
-					Current face
-				</p>
-			) : (
+			{same ? null : (
 				<>
 					<p className="text-ui text-ink-2">Nothing changes until you use this face. Your colour stays the same.</p>
 					<Button className="self-start" disabled={state === "saving"} onClick={() => void use()}>
