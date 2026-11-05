@@ -94,38 +94,64 @@ jobs:
       - name: The tag names the version being built
         if: startsWith(github.ref, 'refs/tags/v')
         run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+      # this job holds no secret: npm's install scripts and Gradle's plugins run here, so the key never does
       - run: npm ci
-      - name: banda's signing key, from the secrets
+      - run: npm run mobile:apk:release
+        env:
+          BANDA_VERSION_CODE: ${{ github.run_number }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-unsigned
+          if-no-files-found: error
+          path: mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
+
+  # Signs the APK the android job built, with banda's key, in a job that runs no third-party code: no npm, no Gradle,
+  # only the runner's own Android build tools. One compromised dependency must not be able to take the key.
+  android-sign:
+    name: sign (android-arm64)
+    needs: android
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: package.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: android-unsigned
+          path: unsigned
+      - name: Sign with banda's key, or name it unsigned when no key is set
         env:
           KEYSTORE: ${{ secrets.BANDA_ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.BANDA_ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.BANDA_ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.BANDA_ANDROID_KEY_PASSWORD }}
         run: |
+          version=$(jq -r .version package.json)
+          mkdir -p release
           if [ -z "$KEYSTORE" ]; then
             if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
               echo "::error::a release APK must be signed: set BANDA_ANDROID_KEYSTORE_BASE64 and its passwords"
               exit 1
             fi
             echo "no signing key: this run's APK is unsigned"
+            cp unsigned/app-release-unsigned.apk "release/banda-$version-android-arm64-unsigned.apk"
             exit 0
           fi
-          printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/banda.jks"
-          echo "BANDA_ANDROID_KEYSTORE=$RUNNER_TEMP/banda.jks" >> "$GITHUB_ENV"
-      - run: npm run mobile:apk:release
-        env:
-          BANDA_VERSION_CODE: ${{ github.run_number }}
-          BANDA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.BANDA_ANDROID_KEYSTORE_PASSWORD }}
-          BANDA_ANDROID_KEY_ALIAS: ${{ secrets.BANDA_ANDROID_KEY_ALIAS }}
-          BANDA_ANDROID_KEY_PASSWORD: ${{ secrets.BANDA_ANDROID_KEY_PASSWORD }}
-      - name: Name the APK as the other downloads are named
-        run: |
-          version=$(node -p 'require("./package.json").version')
-          out=mobile/android/app/build/outputs/apk/release
-          mkdir -p release
-          if [ -f "$out/app-release.apk" ]; then
-            cp "$out/app-release.apk" "release/banda-$version-android-arm64.apk"
-          else
-            cp "$out/app-release-unsigned.apk" "release/banda-$version-android-arm64-unsigned.apk"
-          fi
-          rm -f "$RUNNER_TEMP/banda.jks"
+          tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          keystore="$RUNNER_TEMP/banda.jks"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$KEYSTORE" | base64 -d > "$keystore"
+          "$tools/zipalign" -P 16 -f 4 unsigned/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk"
+          out="release/banda-$version-android-arm64.apk"
+          "$tools/apksigner" sign --ks "$keystore" --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEY_PASSWORD --out "$out" "$RUNNER_TEMP/aligned.apk"
+          "$tools/apksigner" verify --print-certs "$out"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: banda-android-arm64
@@ -133,7 +159,7 @@ jobs:
           path: release/banda-*-android-arm64*.apk
 
   publish:
-    needs: [build, android]
+    needs: [build, android-sign]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -146,6 +172,8 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: out
+          # the downloads alone: not the android job's unsigned APK
+          pattern: banda-*
           merge-multiple: true
       # the artifacts keep their folders (release/desktop/…); the release lists files side by side
       - name: Checksums
