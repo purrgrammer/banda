@@ -7,8 +7,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join } from "node:path";
+import type { BiStream } from "@number0/iroh";
 import { describe, expect, it } from "vitest";
-import { openRemote, type Remote, type Unpaired } from "../src/server/remote.ts";
+import { openRemote, type Remote, streamSocket, type Unpaired } from "../src/server/remote.ts";
 import { testDevice } from "./fixtures/iroh-client.ts";
 import { tempHome } from "./helpers.ts";
 
@@ -156,5 +157,61 @@ describe("an endpoint that is not a paired device", () => {
 			}),
 		).rejects.toThrow(/not an endpoint key/);
 		expect(await readFile(join(home, "auth", "iroh.key"), "utf8")).toBe("short");
+	});
+});
+
+describe("a stream let go of", () => {
+	/** A bi-stream whose peer sends `chunks`, then ends its side when `ends`; what this side did to it, in order. */
+	function fakeStream(chunks: number, ends: boolean) {
+		const did: string[] = [];
+		let sent = 0;
+		let pending = false;
+		const bi = {
+			recv: {
+				read: async () => {
+					if (sent < chunks) return [++sent];
+					if (ends) return [];
+					// a peer still sending: the next bytes are on their way, until this side stops reading
+					pending = true;
+					return new Promise<number[]>(() => {});
+				},
+				// as the binding does: a stop waits for a read still pending to give the receive side back
+				stop: (code: bigint) => {
+					did.push(`stop ${code}`);
+					return pending ? new Promise<void>(() => {}) : Promise.resolve();
+				},
+			},
+			send: {
+				writeAll: async () => {},
+				finish: async () => void did.push("finish"),
+				reset: async (code: bigint) => void did.push(`reset ${code}`),
+			},
+		} as unknown as BiStream;
+		return { bi, did };
+	}
+	const closed = (socket: ReturnType<typeof streamSocket>) => new Promise((resolve) => socket.once("close", resolve));
+
+	it("is stopped on the side it was reading, so its peer is told at once rather than whenever the handle is collected", async () => {
+		// as a refused body: the reader destroys the socket while the peer is still sending
+		const { bi, did } = fakeStream(2, false);
+		const socket = streamSocket(bi, { holdEnd: true });
+		await new Promise((resolve) => socket.once("data", resolve));
+		await new Promise((resolve) => setImmediate(resolve));
+		const gone = closed(socket);
+		socket.destroy();
+		await gone;
+		expect(did).toEqual(["reset 0", "stop 0"]);
+	});
+
+	it("is not stopped once its peer ended its side, nor reset once this side finished", async () => {
+		const { bi, did } = fakeStream(1, true);
+		const socket = streamSocket(bi);
+		socket.resume();
+		await new Promise((resolve) => socket.once("end", resolve));
+		const gone = closed(socket);
+		socket.end();
+		socket.once("finish", () => socket.destroy());
+		await gone;
+		expect(did).toEqual(["finish"]);
 	});
 });

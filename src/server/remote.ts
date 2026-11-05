@@ -57,12 +57,15 @@ const CHUNK = 64 * 1024;
  * A bi-stream as a socket node:http can use. `holdEnd`, on the daemon's side: the peer finishing its send side is not
  * passed on, since node:http answers a half-close by ending the socket under a response still being written. The
  * daemon's response ends the stream instead (`connection: close`). The send side is never reset once a finish began:
- * a reset would drop the response's last bytes.
+ * a reset would drop the response's last bytes. A socket destroyed before its peer ended its side stops that side:
+ * otherwise the peer is told only when the stream's handle is garbage collected, and until then it sends into a stream
+ * no one reads, its writes stalled once the window fills.
  */
 export function streamSocket(bi: BiStream | Promise<BiStream>, { holdEnd = false, onEnd = () => {} } = {}): Duplex {
 	const opened = Promise.resolve(bi);
 	let reading = false;
 	let finishing = false;
+	let ended = false;
 	const socket = new Duplex({
 		allowHalfOpen: true,
 		read() {
@@ -73,6 +76,7 @@ export function streamSocket(bi: BiStream | Promise<BiStream>, { holdEnd = false
 				for (;;) {
 					const chunk = await recv.read(CHUNK);
 					if (chunk.length === 0) {
+						ended = true;
 						if (holdEnd) onEnd();
 						else socket.push(null);
 						return;
@@ -98,6 +102,8 @@ export function streamSocket(bi: BiStream | Promise<BiStream>, { holdEnd = false
 		destroy(error, done) {
 			const reset =
 				finishing || socket.writableFinished ? Promise.resolve() : opened.then(({ send }) => send.reset(0n));
+			// not waited for: a read still pending holds the receive side, and a stop waits behind it
+			if (!ended) opened.then(({ recv }) => recv.stop(0n)).catch(() => {});
 			reset.catch(() => {}).finally(() => done(error));
 		},
 	});
