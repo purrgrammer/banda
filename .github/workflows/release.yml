@@ -85,9 +85,13 @@ jobs:
         with:
           path: out
           merge-multiple: true
+      # the artifacts keep their folders (release/desktop/…); the release lists files side by side
       - name: Checksums
         working-directory: out
-        run: sha256sum -- * > SHA256SUMS && cat SHA256SUMS
+        run: |
+          find . -mindepth 2 -type f -exec mv -t . {} +
+          find . -mindepth 1 -type d -empty -delete
+          sha256sum -- * > SHA256SUMS && cat SHA256SUMS
       - name: Draft pre-release
         env:
           GH_TOKEN: ${{ github.token }}
