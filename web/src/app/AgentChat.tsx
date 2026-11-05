@@ -21,7 +21,7 @@ import { Header } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { ChatLoading } from "../chat/Loading.tsx";
 import type { Who } from "../chat/Row.tsx";
-import { type ChatRow, type Item, postMessage, readChat, stopChat, upload } from "../lib/api.ts";
+import { type ChatRow, type Item, type Posted, postMessage, readChat, stopChat, upload } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { view } from "../lib/chat.ts";
 import { linkMentions } from "../lib/mentions.ts";
@@ -29,6 +29,7 @@ import { useShell } from "../lib/shell.ts";
 import { useTranscript } from "../lib/transcript.ts";
 import { ActivitySheet } from "./Activity.tsx";
 import { FeedView } from "./Feed.tsx";
+import { type PendingMessage, settledByAnswer, shownMessages, stillPending } from "./outgoing.ts";
 import { FACE_STARTER, FIRST_STARTERS, firstWords } from "./first-words.ts";
 import { useSkills } from "./Skills.tsx";
 import { useViewContext } from "./view-context.ts";
@@ -52,8 +53,13 @@ const DEFAULT_SHAPE = JSON.stringify(defaultAvatarFace().definition);
 /** Whether the agent still wears the default face, whatever its colour: it has not been given one of its own. */
 const defaultFace = (who: Who) => JSON.stringify(who.face.definition) === DEFAULT_SHAPE;
 
-/** Post the owner's words and files to the agent's one chat; a refusal rejects with why. */
-async function send(agent: string, text: string, files: readonly File[], id: string = crypto.randomUUID()) {
+/** Post the owner's words and files to the agent's one chat: what the daemon did with it, or a refusal rejects with why. */
+async function send(
+	agent: string,
+	text: string,
+	files: readonly File[],
+	id: string = crypto.randomUUID(),
+): Promise<Posted> {
 	const uploaded = await Promise.all(files.map((file) => upload(file)));
 	const posted = await postMessage({
 		id,
@@ -63,6 +69,7 @@ async function send(agent: string, text: string, files: readonly File[], id: str
 		...(uploaded.length === 0 ? {} : { files: uploaded.map(({ sha, name }) => ({ sha, name })) }),
 	});
 	if ("refused" in posted) throw new Error(posted.refused);
+	return posted;
 }
 
 export function AgentChat({
@@ -129,7 +136,9 @@ export function AgentChat({
 						agent={agent}
 						who={who}
 						mentionables={mentionables}
-						onSend={(text, files) => send(agent, text, files)}
+						onSend={async (text, files) => {
+							await send(agent, text, files);
+						}}
 					/>
 				</>
 			) : (
@@ -150,8 +159,6 @@ export function AgentChat({
 		</div>
 	);
 }
-
-type PendingMessage = { id: string; text: string; files: readonly File[]; state: "sending" | "failed" };
 
 function Timeline({
 	chat,
@@ -183,16 +190,22 @@ function Timeline({
 	const context = useViewContext(chat);
 	const [outgoing, setOutgoing] = useState<PendingMessage[]>([]);
 	const deliver = (pending: PendingMessage) => {
-		void send(agent, pending.text, pending.files, pending.id).catch(() =>
-			setOutgoing((items) => items.map((item) => (item.id === pending.id ? { ...item, state: "failed" } : item))),
+		void send(agent, pending.text, pending.files, pending.id).then(
+			(posted) => {
+				if (settledByAnswer(posted)) setOutgoing((items) => items.filter((item) => item.id !== pending.id));
+			},
+			() =>
+				setOutgoing((items) => items.map((item) => (item.id === pending.id ? { ...item, state: "failed" } : item))),
 		);
 	};
+	const shown = useMemo(
+		() => shownMessages(transcript.items, transcript.queued),
+		[transcript.items, transcript.queued],
+	);
+	// once shown, never pending again: a message the transcript holds leaves the list for good
 	useEffect(() => {
-		const delivered = new Set(
-			transcript.items.flatMap((item) => (item.role === "user" && item.message !== undefined ? [item.message] : [])),
-		);
-		if (delivered.size > 0) setOutgoing((items) => items.filter((item) => !delivered.has(item.id)));
-	}, [transcript.items]);
+		if (shown.size > 0) setOutgoing((items) => stillPending(items, shown));
+	}, [shown]);
 	const linkedItems = useMemo(
 		() =>
 			transcript.items.map((item) =>
@@ -209,10 +222,7 @@ function Timeline({
 			),
 		[transcript.items, mentionables],
 	);
-	const deliveredMessages = new Set(
-		transcript.items.flatMap((item) => (item.role === "user" && item.message !== undefined ? [item.message] : [])),
-	);
-	const visibleOutgoing = outgoing.filter((item) => !deliveredMessages.has(item.id));
+	const visibleOutgoing = stillPending(outgoing, shown);
 	const segments = useMemo(
 		() =>
 			view(
