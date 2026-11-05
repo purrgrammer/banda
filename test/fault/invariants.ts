@@ -8,7 +8,7 @@
  * their own origin, unless that notice was given up too, for a reason `undeliverable` admits.
  */
 import { expect } from "vitest";
-import { type DevicesValue, ENDPOINT_ID } from "../../src/core/devices.ts";
+import { type DevicesValue, ENDPOINT_ID, pairingState } from "../../src/core/devices.ts";
 import { type Inbound, OWNER, routeKey } from "../../src/core/gateway.ts";
 import { REACT, REACTION, SAY } from "../fixtures/models.ts";
 import { OWNER_ORIGIN, REFUSING, type Sent, type Summary } from "./sut.ts";
@@ -121,7 +121,9 @@ export function checkDeviceInvariants(doc: DevicesValue | undefined, now: number
 		for (const [id] of waiting) {
 			expect(invite.claimed?.by, `invite ${hash} claimed by its request`).toBe(id);
 			expect(invite.spent, `invite ${hash} waiting and spent`).toBeUndefined();
-			expect(invite.expires, `invite ${hash} waiting and expired`).toBeGreaterThan(now);
+			// an expired one stays in the doc until the next commit prunes it, and is never read as waiting
+			if (invite.expires <= now)
+				expect(pairingState(doc, id, now), `invite ${hash} waiting and expired`).not.toBe("pending");
 		}
 		if (invite.spent?.approved === true && invite.claimed !== undefined)
 			expect(devices[invite.claimed.by], `the device invite ${hash} approved`).toBeDefined();
