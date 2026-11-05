@@ -185,8 +185,11 @@ const RETRY_OFFLINE_MS = 15_000;
 export type BoxKind = "container" | "host";
 
 /** The box kind `value` names (`--box`, `BANDA_BOX`); unset is the container. */
-export function boxKind(value: string | undefined): BoxKind {
+export function boxKind(value: string | undefined, platform: NodeJS.Platform = process.platform): BoxKind {
 	if (value === undefined || value === "" || value === "container") return "container";
+	// host mode runs pi-env under `/usr/bin/env -i` (host.ts), which Windows does not have
+	if (value === "host" && platform === "win32")
+		throw new Error("--box host needs macOS or Linux; on Windows, commands run only in the box");
 	if (value === "host") return "host";
 	throw new Error(`--box is container or host, not ${value}`);
 }

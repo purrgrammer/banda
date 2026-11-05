@@ -70,6 +70,12 @@ describe("host mode", () => {
 		expect(() => boxKind("hots")).toThrow("--box is container or host, not hots");
 	});
 
+	it("is refused on Windows, which has no /usr/bin/env to run it under", () => {
+		expect(() => boxKind("host", "win32")).toThrow("--box host needs macOS or Linux");
+		expect(boxKind(undefined, "win32")).toBe("container");
+		expect(boxKind("host", "linux")).toBe("host");
+	});
+
 	it("runs a chat's bash in <home>/workspace, with none of the daemon's own variables, and says it has no box", async () => {
 		const faux = fauxProvider();
 		const models = createModels();

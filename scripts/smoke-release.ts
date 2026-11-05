@@ -24,8 +24,10 @@ const launcher = join(root, "bin", windows ? "banda.cmd" : "banda");
 const help = execFileSync(launcher, ["--help"], { encoding: "utf8", env, shell: windows });
 if (!help.startsWith("banda ")) throw new Error(`the launcher printed:\n${help}`);
 
-// the daemon is the bundled node directly, so a signal reaches it rather than a launcher's shell
-const daemon = spawn(node, [cli, "serve", "--port", "0", "--box", "host"], {
+// the daemon is the bundled node directly, so a signal reaches it rather than a launcher's shell. No box is built: host
+// mode where there is one, and on Windows (which has none) the container box, offline without a Linux Docker engine
+const box = windows ? [] : ["--box", "host"];
+const daemon = spawn(node, [cli, "serve", "--port", "0", ...box], {
 	env,
 	stdio: ["ignore", "inherit", "pipe"],
 });
