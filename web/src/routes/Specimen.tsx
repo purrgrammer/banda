@@ -16,6 +16,7 @@ import { Controls } from "../specimen/controls.tsx";
 import { Copy } from "../specimen/copy.tsx";
 import { Faces } from "../specimen/faces.tsx";
 import { Foundation } from "../specimen/foundation.tsx";
+import { HarnessSection } from "../specimen/harness.tsx";
 import { McpPreview, McpSection } from "../specimen/mcp.tsx";
 import { MemorySection } from "../specimen/memory.tsx";
 import { PanelSections } from "../specimen/panel.tsx";
@@ -49,6 +50,9 @@ const CONTENTS = [
 	{ id: "settings", label: "Settings" },
 	{ id: "connections", label: "Connections" },
 	{ id: "connect", label: "Connecting" },
+	{ id: "harness", label: "Claude Code in a chat" },
+	{ id: "harness-states", label: "A session, every state" },
+	{ id: "harness-panel", label: "Claude Code in the panel" },
 	{ id: "mcp", label: "Add MCP server" },
 	{ id: "github", label: "GitHub" },
 	{ id: "loading-app", label: "Opening the app" },
@@ -166,6 +170,7 @@ export function Specimen() {
 									<PanelSections />
 									<MemorySection />
 									<McpSection />
+									<HarnessSection />
 									<States />
 									<BandSection />
 									<Parts />
