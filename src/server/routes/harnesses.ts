@@ -14,11 +14,13 @@ import {
 	answerAsk,
 	connectHarness,
 	defineHarnesses,
+	disconnectHarness,
 	folderPath,
 	type HarnessDefinition,
 	Harnesses,
 	steer,
 	stopSession,
+	switchHarness,
 	workToolName,
 } from "../../core/harness.ts";
 import { context } from "../../core/store.ts";
@@ -47,7 +49,7 @@ function definitions(): ReadonlyMap<string, HarnessDefinition> {
 
 const DEFINITIONS = definitions();
 const PATH = /^\/harnesses\/sessions\/(\d+)\/(steer|stop|answer)$/;
-const CONNECT = /^\/harnesses\/([a-z0-9-]+)\/connect$/;
+const CONNECT = /^\/harnesses\/([a-z0-9-]+)\/(connect|switch|disconnect)$/;
 
 let harnesses: ReturnType<typeof defineHarnesses> | undefined;
 
@@ -155,6 +157,26 @@ export const harnessesArea: AreaModule = {
 					const name = connect[1] ?? "";
 					if (!DEFINITIONS.has(name)) throw new BadRequest("no such harness", 404);
 					const body = await request.json();
+					if (connect[2] === "disconnect") {
+						await harness.commit(async (tx) => {
+							for (const agent of await disconnectHarness(tx, name)) await deps.core.agentChanged(tx, agent);
+						}, context);
+						deps.changed();
+						return { body: await view() };
+					}
+					if (connect[2] === "switch") {
+						const { agent, on } = body;
+						if (typeof agent !== "string" || agent.length > 64 || typeof on !== "boolean")
+							throw new BadRequest("agent names one, on says whether it may use it");
+						const switched = await harness.commit(async (tx) => {
+							if (!(await switchHarness(tx, name, agent, on))) return false;
+							await deps.core.agentChanged(tx, agent);
+							return true;
+						}, context);
+						if (!switched) throw new BadRequest("connect it first", 409);
+						deps.changed();
+						return { body: await view() };
+					}
 					const { folder, agent } = body;
 					if (typeof folder !== "string" || folder.length > 1000) throw new BadRequest("folder is a path");
 					if (agent !== undefined && (typeof agent !== "string" || agent.length > 64))

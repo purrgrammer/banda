@@ -131,6 +131,7 @@ function Flow() {
 							harness={HARNESS}
 							folder={FOLDER}
 							connected={at > 0 ? FOLDER : undefined}
+							on={at > 0}
 							onConnect={() => setStep("ask")}
 							onDismiss={() => {}}
 						/>
@@ -247,7 +248,24 @@ export function HarnessSection() {
 						return <HarnessCard key={state} session={{ ...view, state }} />;
 					})}
 					<HarnessConnectCard agent="Mara" harness={HARNESS} />
-					<HarnessConnectCard agent="Mara" harness={HARNESS} connected={FOLDER} />
+					<HarnessConnectCard
+						agent="Mara"
+						harness={HARNESS}
+						connected={FOLDER}
+						on
+						onSwitch={() => {}}
+						onDisconnect={() => {}}
+					/>
+					<HarnessConnectCard
+						agent="Mara"
+						harness={HARNESS}
+						connected={FOLDER}
+						on={false}
+						onSwitch={() => {}}
+						onDisconnect={() => {}}
+					/>
+					<HarnessConnectCard harness={HARNESS} />
+					<HarnessConnectCard harness={HARNESS} connected={FOLDER} onDisconnect={() => {}} />
 				</div>
 			</Section>
 			<Section

@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { CapabilitiesView, ControlView, PermissionView } from "../../../src/server/api.ts";
-import { connectHarness } from "../areas/harnesses.ts";
+import { connectHarness, disconnectHarness, switchHarness } from "../areas/harnesses.ts";
 import { HarnessConnectCard } from "../chat/Harness.tsx";
 import { type ConnectionRow, Connections, Permissions } from "../chat/Settings.tsx";
 import { revokePermission, switchAccount, switchPublicConnection } from "../lib/api.ts";
@@ -126,24 +126,24 @@ function HarnessAccess({ agent }: { agent: { readonly id: string; readonly name:
 	const { harnesses } = useShell();
 	const [error, setError] = useState<string | undefined>(undefined);
 	if (harnesses === undefined || harnesses.harnesses.length === 0) return null;
+	const doing = (what: Promise<unknown>) => {
+		setError(undefined);
+		void what.catch((failed: unknown) => setError(failed instanceof Error ? failed.message : String(failed)));
+	};
 	return (
 		<div className="flex flex-col gap-3">
 			{harnesses.harnesses.map(({ name, service }) => {
 				const account = harnesses.accounts[name];
-				const on = account?.agents.includes(agent.id) === true;
 				return (
 					<HarnessConnectCard
 						key={name}
 						agent={agent.name}
 						harness={service}
-						{...(account === undefined ? {} : { folder: account.folder })}
-						connected={on ? account?.folder : undefined}
-						onConnect={(folder) => {
-							setError(undefined);
-							void connectHarness(name, folder, agent.id).catch((failed: unknown) =>
-								setError(failed instanceof Error ? failed.message : String(failed)),
-							);
-						}}
+						connected={account?.folder}
+						on={account?.agents.includes(agent.id) === true}
+						onConnect={(folder) => doing(connectHarness(name, folder, agent.id))}
+						onSwitch={(on) => doing(switchHarness(name, agent.id, on))}
+						onDisconnect={() => doing(disconnectHarness(name))}
 					/>
 				);
 			})}

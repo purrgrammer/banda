@@ -23,6 +23,14 @@ export const connectHarness = (harness: string, folder: string, agent?: string) 
 		body: JSON.stringify({ folder, ...(agent === undefined ? {} : { agent }) }),
 	});
 
+/** Turn `harness` on or off for `agent`. */
+export const switchHarness = (harness: string, agent: string, on: boolean) =>
+	api<HarnessesView>(`/harnesses/${harness}/switch`, { method: "POST", body: JSON.stringify({ agent, on }) });
+
+/** Forget `harness`'s folder; what runs there stops. */
+export const disconnectHarness = (harness: string) =>
+	api<HarnessesView>(`/harnesses/${harness}/disconnect`, { method: "POST", body: "{}" });
+
 const act = (task: number, action: string, body: object) =>
 	api<HarnessesView>(`/harnesses/sessions/${task}/${action}`, { method: "POST", body: JSON.stringify(body) });
 

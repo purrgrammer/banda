@@ -6,12 +6,15 @@ import { describe, expect, it, onTestFinished } from "vitest";
 import {
 	answerAsk,
 	applyUpdate,
+	connectHarness,
 	defineHarnesses,
 	diffOf,
+	disconnectHarness,
 	folderPath,
 	Harnesses,
 	type HarnessStep,
 	steer,
+	switchHarness,
 } from "../src/core/harness.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { echoModels } from "./fixtures/models.ts";
@@ -158,5 +161,40 @@ describe("a harness session", () => {
 		await until(() => s.woke.length > 0);
 		expect((await s.session())[task]?.state).toBe("interrupted");
 		await s.harness.close(context);
+	});
+});
+
+describe("a harness's account", () => {
+	it("keeps its agents across a new folder, switches one off, and a disconnect stops what runs", async () => {
+		const home = await tempHome();
+		const registry = createRegistry();
+		const { models } = echoModels();
+		const harness = await openStore(home, { models, registry });
+		const doc = () => harness.commit((tx) => tx.doc(Harnesses).then((d) => JSON.parse(JSON.stringify(d))), context);
+		await harness.commit(async (tx) => {
+			await connectHarness(tx, "fake", "~/a", "sancho");
+			await connectHarness(tx, "fake", "~/b", "mara");
+		}, context);
+		expect((await doc()).accounts.fake).toEqual({ folder: "~/b", agents: ["sancho", "mara"] });
+		await harness.commit((tx) => switchHarness(tx, "fake", "sancho", false), context);
+		expect((await doc()).accounts.fake.agents).toEqual(["mara"]);
+		await harness.commit(async (tx) => {
+			(await tx.doc(Harnesses)).sessions[7] = {
+				chat: 1,
+				agent: "mara",
+				harness: "fake",
+				folder: "~/b",
+				prompt: "x",
+				state: "working",
+				at: 0,
+				steps: [],
+				dropped: 0,
+				notes: [],
+			};
+		}, context);
+		expect(await harness.commit((tx) => disconnectHarness(tx, "fake"), context)).toEqual(["mara"]);
+		expect((await doc()).accounts.fake).toBeUndefined();
+		expect((await doc()).sessions[7].stop).toBe(true);
+		await harness.close(context);
 	});
 });

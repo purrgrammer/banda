@@ -3,15 +3,18 @@
  * phone, where the band is the first screen and a chat opens over it). Settings and Connections are plain pages.
  * `#/` opens the chat last shown on this device, else the first agent's. The tab's title counts asks, then unread.
  */
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FACE } from "../../../src/core/choices.ts";
 import type { CompanionView } from "../../../src/server/api.ts";
+import { connectHarness, disconnectHarness } from "../areas/harnesses.ts";
 import { actOnRoutine, clickKey } from "../areas/routines.ts";
 import { useTiers } from "../areas/tiers.ts";
 import { Band, BandNotice } from "../chat/Band.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
 import { Face } from "../chat/Face.tsx";
+import { HarnessConnectCard } from "../chat/Harness.tsx";
 import { MemorySettings } from "../chat/MemorySettings.tsx";
 import { AgentPanel, firstTab, Panel, Routines } from "../chat/Panel.tsx";
 import { AppSettings, Archive, Personality, SettingsPage, ThinkingTiers } from "../chat/Settings.tsx";
@@ -594,6 +597,20 @@ function Main() {
 						Add MCP server
 					</Button>
 					<Catalogue
+						extra={(shell.harnesses?.harnesses ?? []).map(({ name, service }) => {
+							const account = shell.harnesses?.accounts[name];
+							return {
+								key: `harness:${name}`,
+								card: (
+									<HarnessConnectCard
+										harness={service}
+										connected={account?.folder}
+										onConnect={(folder) => void attempt("connect it", () => connectHarness(name, folder))}
+										onDisconnect={() => void attempt("disconnect it", () => disconnectHarness(name))}
+									/>
+								),
+							};
+						})}
 						onManage={(connection) => go({ name: "connections", connection })}
 						services={[
 							...(services.length === 0
