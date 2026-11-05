@@ -195,9 +195,27 @@ function openWindow(url: string | undefined, page?: string): BrowserWindow {
 		if (/^(https?|mailto):/i.test(target)) void shell.openExternal(target);
 	};
 	created.webContents.setWindowOpenHandler(({ url: target }) => {
-		if (fromDaemon(target)) return { action: "allow" };
+		if (fromDaemon(target)) return { action: "allow", overrideBrowserWindowOptions: { autoHideMenuBar: true } };
+		// a sign-in opens a blank tab at once (so no pop-up blocker eats it) and sends it to the provider when the link
+		// comes: a hidden window here, whose first address outside the daemon goes to the system browser
+		if (target === "about:blank") return { action: "allow", overrideBrowserWindowOptions: { show: false } };
 		outside(target);
 		return { action: "deny" };
+	});
+	created.webContents.on("did-create-window", (child) => {
+		child.webContents.setWindowOpenHandler(({ url: target }) => {
+			outside(target);
+			return { action: "deny" };
+		});
+		child.webContents.on("will-navigate", (event, target) => {
+			if (fromDaemon(target)) {
+				if (!child.isVisible()) child.show();
+				return;
+			}
+			event.preventDefault();
+			outside(target);
+			if (!child.isVisible()) child.close();
+		});
 	});
 	created.webContents.on("will-navigate", (event, target) => {
 		if (fromDaemon(target)) return;
