@@ -62,6 +62,19 @@ describe("who a request is, by its transport", () => {
 		});
 	});
 
+	it("tells the gate of each request a paired device makes, by path alone, and of none other", async () => {
+		const heard: string[] = [];
+		const told: RemoteGate = {
+			...gate,
+			heard: (id, method, path) => heard.push(`${id.slice(0, 1)} ${method} ${path}`),
+		};
+		await ask(told, get("/api/status?token=never-logged", "host: banda.iroh\r\n"), PHONE);
+		await ask(told, get("/api/status", "host: x\r\n"), OTHER);
+		await ask(told, get("/api/devices/pair", "host: x\r\n"), OTHER);
+		await ask(told, get("/api/status", "host: 127.0.0.1:7787\r\nauthorization: Bearer secret\r\n"));
+		expect(heard).toEqual(["a GET /api/status"]);
+	});
+
 	it("keeps loopback as it was: the Host checked, the token needed, no pairing route without it", async () => {
 		expect((await ask(gate, get("/api/status", "host: banda.iroh\r\nauthorization: Bearer secret\r\n"))).status).toBe(
 			403,

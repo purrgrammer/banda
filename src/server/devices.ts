@@ -46,12 +46,15 @@ export function openDevices({
 	harness,
 	remote,
 	changed,
+	log = () => {},
 	now = Date.now,
 }: {
 	readonly harness: Harness;
 	/** The endpoint, once bound; undefined while remote reach is off. */
 	readonly remote: () => Remote | undefined;
 	readonly changed: () => void;
+	/** Where a paired device's requests are logged: which device, the method and the path, never a body. */
+	readonly log?: (line: string) => void;
 	readonly now?: () => number;
 }): DevicesDesk {
 	const read = async (): Promise<DevicesValue | undefined> => harness.snapshot(Devices, context);
@@ -162,6 +165,15 @@ export function openDevices({
 
 	return {
 		area: { watch: [Devices], shell: async () => [{ type: "devices", devices: await view() }], route },
-		gate: { paired: async (id) => isPaired(await read(), id), pair },
+		gate: {
+			paired: async (id) => isPaired(await read(), id),
+			pair,
+			heard: (id, method, path) => {
+				void read().then(
+					(doc) => log(`remote: ${doc?.devices[id]?.name ?? "device"} (${id.slice(0, 8)}) ${method} ${path}`),
+					() => log(`remote: device (${id.slice(0, 8)}) ${method} ${path}`),
+				);
+			},
+		},
 	};
 }

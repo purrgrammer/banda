@@ -644,7 +644,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 				}
 				return web.post(id, to, text, { files: attachments, images: seen });
 			});
-		const devices = openDevices({ harness: open, remote: () => remote, changed });
+		const devices = openDevices({ harness: open, remote: () => remote, changed, log });
 		areas = AREAS.flatMap((area) =>
 			area.start === undefined
 				? []

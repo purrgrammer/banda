@@ -255,6 +255,8 @@ export type RemoteGate = {
 	readonly paired: (id: string) => Promise<boolean>;
 	/** `/api/devices/pair`, the one route an endpoint that is not a paired device reaches; undefined is a 404. */
 	readonly pair: (id: string, request: AreaRequest) => Promise<AreaReply | undefined>;
+	/** Told of each request a paired device makes, before it is served: the daemon logs which device asked. */
+	readonly heard?: (id: string, method: string, path: string) => void;
 };
 
 /** The one path any endpoint may ask for over Iroh. */
@@ -314,6 +316,7 @@ export function handler(
 				return reply(res, answered.status ?? 200, answered.body);
 			}
 			if (!(await remote.paired(device))) return reply(res, 403, { error: "this device is not paired" });
+			remote.heard?.(device, req.method ?? "GET", url.pathname);
 		}
 		if (url.pathname === "/oauth/callback" && req.method === "GET") {
 			// a sign-in coming back: no token (a browser redirect carries none), its state names the sign-in, once

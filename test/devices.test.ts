@@ -2,7 +2,7 @@
 
 import { createModels } from "@earendil-works/pi-ai";
 import { createRegistry, type Harness } from "@earendil-works/pi-durable";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	answerRequest,
 	Devices,
@@ -17,6 +17,7 @@ import {
 	revokeDevice,
 } from "../src/core/devices.ts";
 import { context, openStore } from "../src/core/store.ts";
+import { openDevices } from "../src/server/devices.ts";
 import { tempHome } from "./helpers.ts";
 
 const PHONE = "a".repeat(64);
@@ -114,6 +115,17 @@ describe("pairing a device", () => {
 			/removed/,
 		);
 		await expect(harness.commit((tx) => renameDevice(tx, OTHER, "x"), context)).rejects.toThrow(Refused);
+	});
+
+	it("logs which device made a request, by its name and short id, with the method and path", async () => {
+		const harness = await store();
+		await harness.commit((tx) => makeInvite(tx, hashOf("s6"), 0), context);
+		await harness.commit((tx) => requestPairing(tx, PHONE, "s6", "Pixel", 1), context);
+		await harness.commit((tx) => answerRequest(tx, PHONE, true, 2), context);
+		const lines: string[] = [];
+		const desk = openDevices({ harness, remote: () => undefined, changed: () => {}, log: (line) => lines.push(line) });
+		desk.gate.heard?.(PHONE, "POST", "/api/messages");
+		await vi.waitFor(() => expect(lines).toEqual(["remote: Pixel (aaaaaaaa) POST /api/messages"]));
 	});
 
 	it("keeps the invite's hash, never its secret", async () => {
