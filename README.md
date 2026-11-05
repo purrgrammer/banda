@@ -12,7 +12,14 @@ that computer. You work with them through one app (web, and installed on your ph
   that will happen.
 - **Durable.** A crash, a restart or a week offline loses nothing and does nothing twice.
 
-![Sancho summarising the news and asking before it sets up a routine](docs/screenshot.png)
+![A group chat: Mara finds the trains, Sancho plans the food, and Otto turns both into a printable itinerary](docs/screenshots/group.png)
+
+| | |
+|---|---|
+| ![Sancho asks before opening a GitHub issue, showing exactly what will be sent](docs/screenshots/approval.png) | ![Sancho asks to set up a routine that runs every weekday at 8:00](docs/screenshots/routine.png) |
+| **Asks before it writes.** A write is a card with the exact repository, title and text. | **Routines.** An agent wakes on a schedule and reports what it finds. |
+| ![Sancho's browser, live, reading Wikipedia's article on Porto](docs/screenshots/browser.png) | ![A printable comparison page Otto made from Mara's research](docs/screenshots/page.png) |
+| **A browser of its own.** Watch it work, take over, or stop it. | **Artifacts.** Pages and documents you open, print and keep. |
 
 > **Status: pre-release.** banda is under active development and not yet production-ready: the isolation, egress and
 > recovery work tracked in [docs/README.md](docs/README.md) is still open. Run it for yourself, on a machine you trust,
