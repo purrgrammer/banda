@@ -128,7 +128,10 @@ function HarnessAccess({ agent }: { agent: { readonly id: string; readonly name:
 	if (harnesses === undefined || harnesses.harnesses.length === 0) return null;
 	const doing = (what: Promise<unknown>) => {
 		setError(undefined);
-		void what.catch((failed: unknown) => setError(failed instanceof Error ? failed.message : String(failed)));
+		return what.catch((failed: unknown) => {
+			setError(failed instanceof Error ? failed.message : String(failed));
+			throw failed;
+		});
 	};
 	return (
 		<div className="flex flex-col gap-3">
@@ -142,8 +145,8 @@ function HarnessAccess({ agent }: { agent: { readonly id: string; readonly name:
 						connected={account?.folder}
 						on={account?.agents.includes(agent.id) === true}
 						onConnect={(folder) => doing(connectHarness(name, folder, agent.id))}
-						onSwitch={(on) => doing(switchHarness(name, agent.id, on))}
-						onDisconnect={() => doing(disconnectHarness(name))}
+						onSwitch={(on) => void doing(switchHarness(name, agent.id, on)).catch(() => {})}
+						onDisconnect={() => void doing(disconnectHarness(name)).catch(() => {})}
 					/>
 				);
 			})}

@@ -605,7 +605,12 @@ function Main() {
 									<HarnessConnectCard
 										harness={service}
 										connected={account?.folder}
-										onConnect={(folder) => void attempt("connect it", () => connectHarness(name, folder))}
+										onConnect={(folder) =>
+											// attempt says why in a toast and resolves nothing: the card keeps its field then
+											attempt("connect it", () => connectHarness(name, folder)).then((view) => {
+												if (view === undefined) throw new Error("refused");
+											})
+										}
 										onDisconnect={() => void attempt("disconnect it", () => disconnectHarness(name))}
 									/>
 								),

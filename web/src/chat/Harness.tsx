@@ -172,7 +172,8 @@ export function HarnessConnectCard({
 	connected?: string | undefined;
 	/** Whether `agent` may use it. */
 	on?: boolean | undefined;
-	onConnect?: (folder: string) => void;
+	/** Connect, or change the folder; a promise keeps the field open until it settles, and open when it fails. */
+	onConnect?: (folder: string) => unknown;
 	onSwitch?: ((on: boolean) => void) | undefined;
 	onDisconnect?: (() => void) | undefined;
 	onDismiss?: (() => void) | undefined;
@@ -236,8 +237,12 @@ export function HarnessConnectCard({
 						<Button
 							disabled={folder.trim() === "" || folder.trim() === connected}
 							onClick={() => {
-								onConnect?.(folder.trim());
-								setChanging(false);
+								const done = onConnect?.(folder.trim());
+								// a refused folder leaves the field as it was, to fix
+								void Promise.resolve(done).then(
+									() => setChanging(false),
+									() => {},
+								);
 							}}
 						>
 							{connected === undefined ? `Connect ${harness}` : "Use this folder"}
