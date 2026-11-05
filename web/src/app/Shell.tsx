@@ -8,13 +8,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FACE } from "../../../src/core/choices.ts";
 import type { CompanionView } from "../../../src/server/api.ts";
-import { connectHarness, disconnectHarness, foldersAt, removeHarness } from "../areas/harnesses.ts";
 import { actOnRoutine, clickKey } from "../areas/routines.ts";
 import { useTiers } from "../areas/tiers.ts";
 import { Band, BandNotice } from "../chat/Band.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
 import { Face } from "../chat/Face.tsx";
-import { HarnessConnectCard, HarnessMissingCard } from "../chat/Harness.tsx";
+import { HarnessMissingCard } from "../chat/Harness.tsx";
 import { MemorySettings } from "../chat/MemorySettings.tsx";
 import { AgentPanel, firstTab, Panel, Routines } from "../chat/Panel.tsx";
 import { AppSettings, Archive, Personality, SettingsPage, ThinkingTiers } from "../chat/Settings.tsx";
@@ -26,13 +25,13 @@ import { type ArchivedAgent, archivedAgents, chatAgents } from "../lib/navigatio
 import { setTheme, useTheme } from "../lib/prefs.ts";
 import { showAgents, showCapabilities, showControl, showMemory, useShell } from "../lib/shell.ts";
 import { AccessTab, reachesSomething } from "./Access.tsx";
-import { AddHarness } from "./AddHarness.tsx";
 import { AgentChat } from "./AgentChat.tsx";
 import { ArtifactPage } from "./ArtifactPage.tsx";
 import { bandRows, titleOf, whoOf } from "./band.ts";
 import { ConnectFlow, freshAccounts } from "./ConnectFlow.tsx";
 import { saveEdit, setAgentState } from "./edits.ts";
 import { GroupChat } from "./GroupChat.tsx";
+import { AddHarnessButton, HarnessConnectionTile } from "./HarnessConnections.tsx";
 import { BrowserDialog } from "./LiveBrowser.tsx";
 import { McpSetup } from "./McpSetup.tsx";
 import { NewSheet } from "./NewSheet.tsx";
@@ -598,39 +597,11 @@ function Main() {
 						<Button className="self-start" onClick={() => go({ name: "connections", add: true })}>
 							Add MCP server
 						</Button>
-						<AddHarness />
+						<AddHarnessButton />
 					</span>
 					<Catalogue
 						extra={(shell.harnesses?.harnesses ?? [])
-							.map(({ name, service, asks, about, custom, provider, logo }) => {
-								const account = shell.harnesses?.accounts[name];
-								return {
-									key: `harness:${name}`,
-									card: (
-										<HarnessConnectCard
-											harness={service}
-											asks={asks}
-											about={about}
-											provider={provider}
-											logo={logo}
-											browse={foldersAt}
-											folded
-											{...(custom === true
-												? { onRemove: () => void attempt("remove it", () => removeHarness(name)) }
-												: {})}
-											folder={shell.harnesses?.suggested ?? "~"}
-											connected={account?.folder}
-											onConnect={(folder) =>
-												// attempt says why in a toast and resolves nothing: the card keeps its field then
-												attempt("connect it", () => connectHarness(name, folder)).then((view) => {
-													if (view === undefined) throw new Error("refused");
-												})
-											}
-											onDisconnect={() => void attempt("disconnect it", () => disconnectHarness(name))}
-										/>
-									),
-								};
-							})
+							.map(({ name }) => ({ key: `harness:${name}`, card: <HarnessConnectionTile name={name} /> }))
 							.concat(
 								(shell.harnesses?.missing ?? []).map(({ name, service, about, install, provider, logo }) => ({
 									key: `harness-missing:${name}`,

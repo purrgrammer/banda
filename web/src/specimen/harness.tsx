@@ -1,17 +1,18 @@
 /** Fixture-only: an agent hands coding work to Claude Code on the owner's computer, from connecting to its outcome. */
 import { SquareIcon } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Terminal } from "@/components/ai-elements/terminal";
 import { Button } from "@/components/ui/button";
 import { ApprovalCard } from "../chat/Approval.tsx";
 import { Bubble, Run } from "../chat/Feed.tsx";
+import { FolderBrowser } from "../chat/FolderPicker.tsx";
 import {
 	HarnessCard,
-	HarnessConnectCard,
 	HarnessMissingCard,
 	type HarnessSessionView,
 	type HarnessState,
 	type HarnessStep,
+	HarnessTile,
 	HarnessTranscript,
 } from "../chat/Harness.tsx";
 import { Line } from "../chat/Line.tsx";
@@ -69,6 +70,13 @@ const browseSample = async (path?: string): Promise<FolderListing> =>
 				],
 			}
 		: { path, parent: "~/code", folders: [] };
+
+/** The folder browser on sample folders, moving as the owner steps through them. */
+function FolderBrowserSample() {
+	const [at, setAt] = useState("~/code");
+	const onAt = useCallback((path: string) => setAt(path), []);
+	return <FolderBrowser at={at} browse={browseSample} onAt={onAt} />;
+}
 
 const OUTCOME = "Fixed: refresh compared seconds with milliseconds";
 
@@ -143,15 +151,15 @@ function Flow() {
 						<Bubble>
 							I can hand this to Claude Code in your <code>sancho</code> folder. It isn't connected yet.
 						</Bubble>
-						<HarnessConnectCard
+						<HarnessTile
 							agent="Mara"
 							harness={HARNESS}
 							provider="anthropic"
-							folder={FOLDER}
+							about="Anthropic's coding agent, with your Claude sign-in on this computer."
 							connected={at > 0 ? FOLDER : undefined}
 							on={at > 0}
 							onConnect={() => setStep("working")}
-							onDismiss={() => {}}
+							onSwitch={() => {}}
 						/>
 						{at < 1 ? null : <Bubble>Connected. I've asked Claude Code to fix it; you'll see it work here.</Bubble>}
 						{at < 1 ? null : (
@@ -243,42 +251,54 @@ export function HarnessSection() {
 						);
 						return <HarnessCard key={state} session={{ ...view, state }} />;
 					})}
-					<HarnessConnectCard
+					<HarnessTile
+						harness={HARNESS}
+						provider="anthropic"
+						connected="~/code"
+						agents={["Mara", "Sancho"]}
+						onEdit={() => {}}
+						onDisconnect={() => {}}
+					/>
+					<HarnessTile
+						harness="pi"
+						logo="pi"
+						about="The minimal coding agent, through banda's own adapter."
+						onConnect={() => {}}
+					/>
+					<HarnessTile
+						harness="Goose"
+						connected="~/code"
+						agents={[]}
+						onEdit={() => {}}
+						onDisconnect={() => {}}
+						onRemove={() => {}}
+					/>
+					<HarnessTile
 						agent="Mara"
 						harness={HARNESS}
 						provider="anthropic"
-						folder="~/code"
-						browse={browseSample}
-					/>
-					<HarnessConnectCard
-						agent="Mara"
-						harness={HARNESS}
-						connected={FOLDER}
+						connected="~/code"
 						on
 						onSwitch={() => {}}
-						onDisconnect={() => {}}
+						onEdit={() => {}}
 					/>
-					<HarnessConnectCard
+					<HarnessTile
 						agent="Mara"
-						harness={HARNESS}
-						connected={FOLDER}
+						harness="Codex"
+						provider="openai"
+						connected="~/code"
 						on={false}
 						onSwitch={() => {}}
-						onDisconnect={() => {}}
+						onEdit={() => {}}
 					/>
-					<HarnessConnectCard harness={HARNESS} />
 					<HarnessMissingCard
 						harness="Codex"
 						provider="openai"
 						about="OpenAI's coding agent, with your sign-in on this computer."
 						install="npm install -g @agentclientprotocol/codex-acp@2.5.0"
 					/>
-					<HarnessConnectCard
-						harness="Codex"
-						about="OpenAI's coding agent, with your sign-in on this computer."
-						folded
-					/>
-					<HarnessConnectCard harness={HARNESS} connected={FOLDER} onDisconnect={() => {}} />
+					<p className="text-meta text-ink-2">The code folder, as the connect dialog browses it:</p>
+					<FolderBrowserSample />
 				</div>
 			</Section>
 			<Section

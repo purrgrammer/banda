@@ -25,9 +25,8 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/cn";
-import type { FolderListing } from "../lib/api.ts";
 import { Tile } from "./Cards.tsx";
-import { FolderPicker } from "./FolderPicker.tsx";
+import { Confirm } from "./Confirm.tsx";
 
 /** One step of a session, as the harness reported it. */
 export type HarnessStep =
@@ -188,87 +187,50 @@ export function SteerField({
 }
 
 /**
- * A harness on this computer: connecting picks the folder it works in (the account); connected, it says where, is
- * switched on or off for the agent, and its folder changes or it disconnects. What runs freely and what asks is said
- * before connecting.
+ * A harness on this computer, as a tile: its mark, its name, where it works and for whom, and what to do. Connecting and
+ * changing it happen in the connect dialog (Connect, Edit); Disconnect and Remove ask first. In an agent's Access it has
+ * the switch for that agent instead.
  */
-export function HarnessConnectCard({
-	agent,
+export function HarnessTile({
 	harness,
-	folder: given = "",
-	connected,
-	on,
-	asks,
-	about,
 	provider,
 	logo,
-	browse,
-	folded = false,
-	onRemove,
+	about,
+	connected,
+	on,
+	agents,
+	agent,
 	onConnect,
+	onEdit,
 	onSwitch,
 	onDisconnect,
-	onDismiss,
+	onRemove,
 }: {
-	/** The agent it is for; none on the Connections page. */
-	agent?: string | undefined;
 	harness: string;
-	/** The folder the field starts with. */
-	folder?: string;
-	/** The folder it is connected in: the card says so. */
-	connected?: string | undefined;
-	/** Whether `agent` may use it. */
-	on?: boolean | undefined;
-	/** What it asks the owner, in its file's words. */
-	asks?: string | undefined;
-	/** What it is, in a line: the folded card's subtitle. */
-	about?: string | undefined;
-	/** Whose it is: its card shows that provider's logo. */
 	provider?: string | undefined;
-	/** Its own mark, shown before a provider's. */
 	logo?: string | undefined;
-	/** The folders at a path, for the picker beside the field; without it, the field alone. */
-	browse?: ((path?: string) => Promise<FolderListing>) | undefined;
-	/** Not connected, it shows as one row with Connect until that is tapped. */
-	folded?: boolean;
-	/** The owner added it: Remove forgets it. */
-	onRemove?: (() => void) | undefined;
-	/** Connect, or change the folder; a promise keeps the field open until it settles, and open when it fails. */
-	onConnect?: (folder: string) => unknown;
+	/** What it is, in a line, while not connected. */
+	about?: string | undefined;
+	/** The code folder it is connected to. */
+	connected?: string | undefined;
+	/** In an agent's Access: whether that agent may use it. */
+	on?: boolean | undefined;
+	/** The agents it is on for, by name, as the Connections page says. */
+	agents?: readonly string[] | undefined;
+	/** The agent of the Access tab it is in. */
+	agent?: string | undefined;
+	onConnect?: (() => void) | undefined;
+	onEdit?: (() => void) | undefined;
 	onSwitch?: ((on: boolean) => void) | undefined;
 	onDisconnect?: (() => void) | undefined;
-	onDismiss?: (() => void) | undefined;
+	onRemove?: (() => void) | undefined;
 }) {
-	const [folder, setFolder] = useState(connected ?? given);
-	const [changing, setChanging] = useState(false);
-	const id = `harness-folder-${harness.replace(/\W/g, "")}${agent === undefined ? "" : `-${agent.replace(/\W/g, "")}`}`;
-	const [opened, setOpened] = useState(false);
-	const asking = connected === undefined || changing;
-	if (connected === undefined && folded && !opened)
-		// laid out as every service tile beside it: what it is, then Connect
-		return (
-			<Tile className="flex flex-col gap-3 p-4">
-				<span className="flex items-center gap-3">
-					<span className="flex size-9 shrink-0 items-center justify-center rounded-field bg-paper-3">
-						<HarnessMark provider={provider} logo={logo} />
-					</span>
-					<span className="flex min-w-0 flex-1 flex-col">
-						<span className="text-ui font-semibold text-ink">{harness}</span>
-						<span className="min-w-0 truncate text-meta text-ink-2">{about ?? "On this computer"}</span>
-					</span>
-				</span>
-				<span className="flex flex-wrap gap-2">
-					<Button size="sm" onClick={() => setOpened(true)}>
-						Connect
-					</Button>
-					{onRemove === undefined ? null : (
-						<Button variant="destructive" size="sm" onClick={onRemove}>
-							Remove
-						</Button>
-					)}
-				</span>
-			</Tile>
-		);
+	const where =
+		connected === undefined
+			? (about ?? "On this computer")
+			: agents === undefined
+				? `In ${connected}`
+				: `In ${connected} · ${agents.length === 0 ? "on for no agent yet" : `on for ${agents.join(", ")}`}`;
 	return (
 		<Tile className="flex flex-col gap-3 p-4">
 			<span className="flex items-center gap-3">
@@ -276,16 +238,8 @@ export function HarnessConnectCard({
 					<HarnessMark provider={provider} logo={logo} />
 				</span>
 				<span className="flex min-w-0 flex-1 flex-col">
-					<span className="text-ui font-semibold text-ink">
-						{connected === undefined ? `Connect ${harness}` : harness}
-					</span>
-					<span className="min-w-0 truncate text-meta text-ink-2">
-						{connected === undefined
-							? agent === undefined
-								? "On this computer, for the agents you choose"
-								: `For ${agent}, on this computer`
-							: `In ${connected}`}
-					</span>
+					<span className="text-ui font-semibold text-ink">{harness}</span>
+					<span className="min-w-0 truncate text-meta text-ink-2">{where}</span>
 				</span>
 				{connected !== undefined && agent !== undefined && onSwitch !== undefined ? (
 					<Switch
@@ -295,91 +249,44 @@ export function HarnessConnectCard({
 					/>
 				) : null}
 			</span>
-			{asking ? (
-				<>
-					<div className="flex flex-col gap-1.5">
-						<label htmlFor={id} className="text-meta text-ink-2">
-							Your code folder
-						</label>
-						<span className="flex items-center gap-2">
-							<InputGroup className="min-w-0 flex-1">
-								<InputGroupInput
-									id={id}
-									value={folder}
-									className="font-code"
-									placeholder="~/code"
-									onChange={(event) => setFolder(event.target.value)}
-								/>
-							</InputGroup>
-							{browse === undefined ? null : <FolderPicker start={folder} browse={browse} onPick={setFolder} />}
-						</span>
-					</div>
-					{connected === undefined ? (
-						<ul className="flex flex-col gap-1 text-ui text-ink-2">
-							<li>Each task works in one of its projects (a git repository), or in the folder itself.</li>
-							<li>{asks ?? "It asks you whatever its own settings on this computer ask."}</li>
-							<li>
-								{agent ?? "Your agents"} can start it without asking you. It uses your {harness} sign-in and settings on
-								this computer.
-							</li>
-						</ul>
-					) : null}
-					<span className="flex flex-wrap gap-2">
-						<Button
-							disabled={folder.trim() === "" || folder.trim() === connected}
-							onClick={() => {
-								const done = onConnect?.(folder.trim());
-								// a refused folder leaves the field as it was, to fix
-								void Promise.resolve(done).then(
-									() => setChanging(false),
-									() => {},
-								);
-							}}
-						>
-							{connected === undefined ? `Connect ${harness}` : "Use this folder"}
-						</Button>
-						{changing ? (
-							<Button
-								variant="ghost"
-								onClick={() => {
-									setChanging(false);
-									setFolder(connected ?? given);
-								}}
-							>
-								Cancel
-							</Button>
-						) : onDismiss === undefined ? null : (
-							<Button variant="ghost" onClick={onDismiss}>
-								Not now
-							</Button>
-						)}
-						{connected === undefined && onRemove !== undefined ? (
-							<Button variant="destructive" onClick={onRemove}>
-								Remove
-							</Button>
-						) : null}
-					</span>
-				</>
-			) : (
-				<span className="flex flex-wrap items-center gap-2">
-					{agent !== undefined && onSwitch !== undefined ? (
-						<span className="mr-auto text-meta text-ink-2">{on === true ? `On for ${agent}` : `Off for ${agent}`}</span>
-					) : null}
-					<Button variant="outline" size="sm" onClick={() => setChanging(true)}>
-						Change folder
+			<span className="flex flex-wrap items-center gap-2">
+				{connected === undefined ? (
+					<Button size="sm" onClick={onConnect}>
+						Connect
 					</Button>
-					{onDisconnect === undefined ? null : (
-						<Button variant="destructive" size="sm" onClick={onDisconnect}>
+				) : onEdit === undefined ? null : (
+					<Button variant="outline" size="sm" onClick={onEdit}>
+						Edit
+					</Button>
+				)}
+				{connected === undefined || onDisconnect === undefined ? null : (
+					<Confirm
+						title={`Disconnect ${harness}?`}
+						body={`No agent can hand it work, and what it is doing now stops. Your folder and its files stay as they are.`}
+						action="Disconnect"
+						onConfirm={onDisconnect}
+					>
+						<Button variant="destructive" size="sm">
 							Disconnect
 						</Button>
-					)}
-					{onRemove === undefined ? null : (
-						<Button variant="destructive" size="sm" onClick={onRemove}>
+					</Confirm>
+				)}
+				{onRemove === undefined ? null : (
+					<Confirm
+						title={`Remove ${harness}?`}
+						body="banda forgets the command that starts it, and disconnects it."
+						action="Remove"
+						onConfirm={onRemove}
+					>
+						<Button variant="destructive" size="sm">
 							Remove
 						</Button>
-					)}
-				</span>
-			)}
+					</Confirm>
+				)}
+				{agent !== undefined && connected !== undefined ? (
+					<span className="ml-auto text-meta text-ink-2">{on === true ? `On for ${agent}` : `Off for ${agent}`}</span>
+				) : null}
+			</span>
 		</Tile>
 	);
 }
