@@ -63,6 +63,8 @@ export type HarnessAsk = { readonly id: string; readonly command: string; readon
 
 export type HarnessSession = {
 	chat: number;
+	/** The tool call that asked for it: the chat draws the session after that call's card. */
+	call?: string;
 	agent: string;
 	harness: string;
 	folder: string;
@@ -550,11 +552,12 @@ export function defineHarnesses(options: HarnessOptions) {
 		tx: Tx,
 		{
 			chat,
+			call,
 			agent,
 			harness,
 			folder,
 			ask,
-		}: { chat: number; agent: string; harness: string; folder: string; ask: string },
+		}: { chat: number; call?: string; agent: string; harness: string; folder: string; ask: string },
 	): Promise<number> {
 		const task = Number(
 			await tx.createTask(
@@ -566,6 +569,7 @@ export function defineHarnesses(options: HarnessOptions) {
 		const doc = await tx.doc(Harnesses);
 		doc.sessions[task] = {
 			chat,
+			...(call === undefined ? {} : { call }),
 			agent,
 			harness,
 			folder,

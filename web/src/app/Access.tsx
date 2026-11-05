@@ -6,9 +6,11 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { CapabilitiesView, ControlView, PermissionView } from "../../../src/server/api.ts";
+import { connectHarness } from "../areas/harnesses.ts";
+import { HarnessConnectCard } from "../chat/Harness.tsx";
 import { type ConnectionRow, Connections, Permissions } from "../chat/Settings.tsx";
 import { revokePermission, switchAccount, switchPublicConnection } from "../lib/api.ts";
-import { showCapabilities, showControl } from "../lib/shell.ts";
+import { showCapabilities, showControl, useShell } from "../lib/shell.ts";
 import { ConnectFlow } from "./ConnectFlow.tsx";
 import { McpSetup } from "./McpSetup.tsx";
 
@@ -94,6 +96,7 @@ export function AccessTab({
 					)
 				}
 			/>
+			<HarnessAccess agent={agent} />
 			<Button
 				variant="outline"
 				size="sm"
@@ -115,5 +118,36 @@ export function AccessTab({
 				}
 			/>
 		</>
+	);
+}
+
+/** The harnesses banda can run on this computer, each connected in a folder, and on for this agent or not. */
+function HarnessAccess({ agent }: { agent: { readonly id: string; readonly name: string } }) {
+	const { harnesses } = useShell();
+	const [error, setError] = useState<string | undefined>(undefined);
+	if (harnesses === undefined || harnesses.harnesses.length === 0) return null;
+	return (
+		<div className="flex flex-col gap-3">
+			{harnesses.harnesses.map(({ name, service }) => {
+				const account = harnesses.accounts[name];
+				const on = account?.agents.includes(agent.id) === true;
+				return (
+					<HarnessConnectCard
+						key={name}
+						agent={agent.name}
+						harness={service}
+						{...(account === undefined ? {} : { folder: account.folder })}
+						connected={on ? account?.folder : undefined}
+						onConnect={(folder) => {
+							setError(undefined);
+							void connectHarness(name, folder, agent.id).catch((failed: unknown) =>
+								setError(failed instanceof Error ? failed.message : String(failed)),
+							);
+						}}
+					/>
+				);
+			})}
+			{error === undefined ? null : <p className="text-meta text-danger">{error}</p>}
+		</div>
 	);
 }

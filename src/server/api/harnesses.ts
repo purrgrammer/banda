@@ -9,6 +9,8 @@ export type { HarnessAsk, HarnessState, HarnessStep } from "../../core/harness.t
 export type HarnessSessionView = {
 	readonly task: number;
 	readonly chat: number;
+	/** The tool call that asked for it. */
+	readonly call?: string;
 	readonly agent: string;
 	readonly harness: string;
 	readonly service: string;

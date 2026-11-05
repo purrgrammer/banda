@@ -38,6 +38,7 @@ import { kindWords } from "./ArtifactPage.tsx";
 import { ConnectFlow } from "./ConnectFlow.tsx";
 import { DraftApproval } from "./DraftApproval.tsx";
 import { FilePart } from "./FilePart.tsx";
+import { HarnessSessionPart } from "./HarnessSession.tsx";
 import { LiveView } from "./LiveBrowser.tsx";
 import { MessageObjects, OwnerMessage } from "./Objects.tsx";
 import { routineTitle } from "./titles.ts";
@@ -547,7 +548,8 @@ function partOf(
 		}
 		case "approval": {
 			const open = segment.open;
-			return (
+			const call = segment.call;
+			const card = (
 				<DraftApproval
 					chat={chat}
 					agent={{ id: agent, name: who.name }}
@@ -562,6 +564,15 @@ function partOf(
 								: { kind: "declined" }
 					}
 				/>
+			);
+			// a harness the owner let start: its session follows the card that asked
+			return call === undefined || !segment.ask.tool.endsWith("__work") ? (
+				card
+			) : (
+				<>
+					{card}
+					<HarnessSessionPart chat={chat} call={call} />
+				</>
 			);
 		}
 		case "skill":

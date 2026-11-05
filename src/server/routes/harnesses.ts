@@ -89,6 +89,7 @@ export const harnessesArea: AreaModule = {
 						if (agent === undefined || account === undefined) return undefined;
 						const task = await made.begin(tx, {
 							chat,
+							call: api.callId,
 							agent,
 							harness: definition.name,
 							folder: account.folder,
@@ -123,6 +124,7 @@ export const harnessesArea: AreaModule = {
 					.map(([task, session]) => ({
 						task: Number(task),
 						chat: session.chat,
+						...(session.call === undefined ? {} : { call: session.call }),
 						agent: session.agent,
 						harness: session.harness,
 						service: DEFINITIONS.get(session.harness)?.service ?? session.harness,

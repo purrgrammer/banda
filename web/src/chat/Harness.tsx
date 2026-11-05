@@ -43,7 +43,7 @@ export type HarnessStep =
 	| { readonly kind: "waiting"; readonly command: string }
 	| { readonly kind: "said"; readonly text: string };
 
-export type HarnessState = "working" | "waiting" | "done" | "stopped" | "interrupted";
+export type HarnessState = "working" | "waiting" | "done" | "stopped" | "interrupted" | "failed";
 
 export type HarnessSessionView = {
 	/** The harness by name: "Claude Code". */
@@ -262,7 +262,7 @@ export function HarnessCard({
 						<CheckIcon aria-hidden="true" className="size-4 shrink-0 self-center text-ink" />
 						<span className="min-w-0 text-ink">{outcome ?? "Finished"}</span>
 					</>
-				) : state === "stopped" || state === "interrupted" ? (
+				) : state === "stopped" || state === "interrupted" || state === "failed" ? (
 					<>
 						{state === "stopped" ? (
 							<SquareIcon aria-hidden="true" className="size-3.5 shrink-0 self-center text-ink-2" />
@@ -270,7 +270,11 @@ export function HarnessCard({
 							<CircleAlertIcon aria-hidden="true" className="size-4 shrink-0 self-center text-danger" />
 						)}
 						<span className="min-w-0 text-ink">
-							{state === "stopped" ? "You stopped it" : "Interrupted when banda restarted. Nothing was sent again."}
+							{state === "stopped"
+								? "You stopped it"
+								: state === "failed"
+									? "It ended with a problem. Nothing was sent again."
+									: "Interrupted when banda restarted. Nothing was sent again."}
 						</span>
 					</>
 				) : (

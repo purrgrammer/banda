@@ -219,6 +219,7 @@ const AT: Record<HarnessState, Step> = {
 	done: "done",
 	stopped: "stopped",
 	interrupted: "stopped",
+	failed: "stopped",
 };
 
 export function HarnessSection() {
