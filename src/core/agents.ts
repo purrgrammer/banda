@@ -31,7 +31,6 @@ import {
 	groupToolsName,
 	MESSAGE_GROUP,
 	MESSAGE_USER,
-	RENAMED_TOOLS,
 } from "./toolsets.ts";
 import { hiddenError, nfc } from "./visible.ts";
 
@@ -294,8 +293,8 @@ export function parseAgent(
 	if (tierText !== undefined && !isTier(tierText))
 		errors.push(`"tier: ${tierText}" is how hard it thinks: use ${TIERS.join(", ")}`);
 	if (id === LEAD && values.has("tools")) errors.push(`the lead gets every tool: drop "tools"`);
-	// a tool renamed since is read by its new name; one the daemon no longer has is refused only in a file being checked
-	const tools = [...new Set(names("tools").map((tool) => RENAMED_TOOLS[tool] ?? tool))];
+	// a tool the daemon no longer has is refused only in a file being checked
+	const tools = [...new Set(names("tools"))];
 	if (there !== undefined)
 		for (const tool of tools)
 			if (!there.includes(tool)) errors.push(`"${tool}" is not a tool: use ${there.join(", ")}`);

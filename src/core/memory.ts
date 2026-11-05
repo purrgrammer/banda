@@ -333,10 +333,7 @@ export function memorySection(files: Pick<MemoryFiles, "read">): PromptSection {
 					size += length;
 				}
 				if (selected.length > 0)
-					sections.push(
-						path === GLOBAL_MEMORY ? "Shared with the band:" : "Your agent's memory:",
-						...selected.map(factLine),
-					);
+					sections.push(path === GLOBAL_MEMORY ? "Shared with the band:" : "Your memory:", ...selected.map(factLine));
 				if (selected.length < facts.length)
 					sections.push("Some file-written facts exceed the memory budget; shorten them before relying on them.");
 			}

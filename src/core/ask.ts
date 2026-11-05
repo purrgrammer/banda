@@ -336,7 +336,7 @@ export function messageTool(asking: Asking, sending: Sending, blobs: BlobStore, 
 	return defineTool({
 		name: MESSAGE_USER,
 		description:
-			"The only way to reach the person you work for: nothing else you write reaches them. Say what is worth their " +
+			"The only way to reach the owner: nothing else you write reaches them. Say what is worth their " +
 			"attention, and nothing when nothing is. `text` is markdown; `files` are paths in your box, sent with it as " +
 			`attachments (${sizeOf(limit)} at most each; images show inline). ` +
 			"In `text`, an attachment already sent or received is a link to its blob, `[name](sha256:<id>)`, which " +

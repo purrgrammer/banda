@@ -134,7 +134,7 @@ export const NUDGES = 1;
 /** The nudge's words: fixed, the same whoever the companion is. */
 export const NUDGED =
 	"You ended your turn without answering the owner: your final text is your notes, which they never see. Answer " +
-	"them now with `message_user`, or, if nothing needs saying, react with its `reaction`. Nobody wrote this.";
+	"them now with `message_user`, or, if nothing needs saying, react with its `reaction`. This reminder is automatic, not from the owner.";
 
 /** Whether an input of `kind` goes on with the task before it, rather than starting one: a nudge. */
 export const goesOn = (kind: string | undefined) => kind === NUDGE;
@@ -593,13 +593,13 @@ export async function referAsk(harness: Harness, gateway: string, message: strin
 const speaking: PromptSection = {
 	key: "speaking",
 	render: () =>
-		"The person you work for sees only what you send with `message_user`. Your other text, the final text of a run " +
+		"You work for the owner, the person who set you up; the band is all of the owner's agents, you among them; your " +
+		"box is your own computer. The owner sees only what you send with `message_user`. Your other text, the final text of a run " +
 		"included, is your working notes: kept, never sent. So when they wrote to you (or answered you), end only once " +
 		"you answered them with `message_user`: words, a file, a question, or its `reaction` when nothing needs saying. A " +
 		"turn that ends without it is sent back to you to answer. In a routine's run, send what is worth their attention, " +
 		"and nothing when nothing is. Say a thing once: when it is said, end your turn with a reply that calls no tool. " +
-		"Files you were sent are " +
-		"in your box, named in the message that brought them; refer to an attachment in a message by its link, " +
+		"Files you were sent are in your box, named in the message that brought them; refer to an attachment in a message by its link, " +
 		"`[name](sha256:<id>)`.",
 };
 

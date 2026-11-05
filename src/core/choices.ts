@@ -75,14 +75,3 @@ export function personalityOf(text: string): string | undefined {
 	const section = SECTION.exec(text)?.[0];
 	return section === undefined ? undefined : section.trim().slice(HEADING.length).trim();
 }
-
-/**
- * The first chat's suggestions: complete requests, useful without assuming existing services or private details.
- * A tap sends one immediately; Sancho asks only for what is actually missing.
- */
-export const STARTERS = [
-	"Help me plan my week. Ask me what you need to know.",
-	"What can you help me automate or keep track of?",
-	"Help me get organized. Where should we start?",
-	"Help me connect my calendar and explain what you can do with it.",
-] as const;

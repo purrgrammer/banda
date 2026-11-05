@@ -33,7 +33,6 @@ import { Companion } from "./companion.ts";
 import { FLOOR_WORDS, type Floor } from "./floor.ts";
 import { WAKE, type WakeData } from "./routines.ts";
 import { context } from "./store.ts";
-import { RENAMED_TOOLS } from "./toolsets.ts";
 
 export { FLOOR_WORDS, FLOORS, type Floor } from "./floor.ts";
 
@@ -175,12 +174,11 @@ export function isOpen(permission: Permission, now: number, errand?: Errand): bo
 }
 
 /**
- * Whether `permission` covers a call of `tool` with `args`: the same tool (a permission given before the tool was renamed
- * names it by its old name, `RENAMED_TOOLS`), and every bound argument exactly as permitted.
+ * Whether `permission` covers a call of `tool` with `args`: the same tool, and every bound argument exactly as permitted.
  */
 export function matches(permission: Permission, tool: string, args: { readonly [key: string]: unknown }): boolean {
 	return (
-		(RENAMED_TOOLS[permission.tool] ?? permission.tool) === tool &&
+		permission.tool === tool &&
 		Object.entries(permission.match).every(([key, value]) => key in args && canonical(args[key]) === canonical(value))
 	);
 }

@@ -6,7 +6,7 @@ import { getExample } from "open-bot-avatar";
 import { describe, expect, it } from "vitest";
 import { readAvatarFace, writeAvatarFace } from "../src/core/avatar-face.ts";
 import { validateBoundedAvatar } from "../src/core/avatar-geometry.ts";
-import { DEFAULT_FACE, DEFAULT_NAME, STARTERS } from "../src/core/choices.ts";
+import { DEFAULT_FACE, DEFAULT_NAME } from "../src/core/choices.ts";
 import { handler, type Routes } from "../src/server/http.ts";
 import { EMOJIBASE_FILES, emojibase, vendorEmojibase } from "../web/vite.config.ts";
 import { tempHome } from "./helpers.ts";
@@ -95,16 +95,10 @@ describe("the emoji picker's data", () => {
 });
 
 describe("the first chat", () => {
-	it("starts as Sancho with a chat-bubble avatar and offers distinct, complete one-tap requests", () => {
+	it("starts as Sancho with a chat-bubble avatar", () => {
 		expect(DEFAULT_NAME).toBe("Sancho");
 		expect(Object.keys(DEFAULT_FACE).sort()).toEqual(["color", "definition"]);
 		expect(validateBoundedAvatar(getExample("chat"))).toMatchObject({ ok: true, value: DEFAULT_FACE.definition });
 		expect(readAvatarFace(writeAvatarFace(DEFAULT_FACE))).toEqual({ ok: true, face: DEFAULT_FACE });
-		expect(STARTERS.length).toBeGreaterThanOrEqual(3);
-		for (const text of STARTERS) {
-			expect(text.trim()).toBe(text);
-			expect(text).not.toContain("…");
-		}
-		expect(new Set(STARTERS).size).toBe(STARTERS.length);
 	});
 });

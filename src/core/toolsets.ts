@@ -72,12 +72,3 @@ export const EVERY_AGENT: readonly string[] = [
 	"skill",
 	...ALWAYS_TOOLSETS.flatMap((label) => TOOLSETS[label] ?? []),
 ];
-
-/**
- * Tools renamed since a file could have named them: an agent file names a tool by either, and is read with the new
- * name, so a definition the owner accepted keeps its meaning across a rename. Written back, a file says the new name.
- */
-export const RENAMED_TOOLS: { readonly [old: string]: string } = {
-	request_egress: "propose_send",
-	browser_keep_key: "propose_key",
-};

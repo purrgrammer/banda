@@ -24,7 +24,6 @@ import { AgentChats } from "./agents.ts";
 import type { EffectTool } from "./ask.ts";
 import { Permissions } from "./permissions.ts";
 import { context } from "./store.ts";
-import { RENAMED_TOOLS } from "./toolsets.ts";
 
 /** A request the proxy held: what the box sent, whole, and whose it is. */
 export type HeldRequest = {
@@ -148,8 +147,7 @@ export async function permittedHosts(harness: Harness, ctx: Context = context): 
 		const { permissions } = await tx.doc(Permissions);
 		const byAgent = new Map<string, Set<string>>();
 		for (const permission of Object.values(permissions)) {
-			if (permission.scope !== "host" || (RENAMED_TOOLS[permission.tool] ?? permission.tool) !== "propose_send")
-				continue;
+			if (permission.scope !== "host" || permission.tool !== "propose_send") continue;
 			const host = permission.match._host;
 			if (permission.agent === undefined || Object.keys(permission.match).length !== 1) continue;
 			if (typeof host !== "string" || host === "") continue;

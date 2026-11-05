@@ -178,9 +178,9 @@ async function entries(harness: Harness, chat: number) {
 }
 
 describe("permissions", () => {
-	it("a permission given before its tool was renamed still covers the tool by its new name", () => {
+	it("a permission covers its own tool and bound arguments, and nothing else", () => {
 		const given = {
-			tool: "request_egress",
+			tool: "propose_send",
 			match: { _host: "github.com" },
 			what: "",
 			scope: "host",
