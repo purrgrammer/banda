@@ -1,7 +1,9 @@
 /**
- * The daemon's API, with the owner's token. The link `serve` and `status` print carries it in the URL's fragment,
- * which the browser never sends; it is kept in this browser and dropped from the address bar. It survives daemon
- * restarts; when the daemon refuses it (rotated), the UI says where the link is.
+ * The daemon's API, through the page's transport (`transport.ts`). In a browser, with the owner's token: the link
+ * `serve` and `status` print carries it in the URL's fragment, which the browser never sends; it is kept in this
+ * browser and dropped from the address bar. It survives daemon restarts; when the daemon refuses it (rotated), the UI
+ * says where the link is. In the phone's native shell no token is kept: the shell's paired device identity is what
+ * lets a request in.
  */
 import type {
 	AgentView,
@@ -27,6 +29,7 @@ import type {
 import type { DesignedFace } from "../../../src/server/routes/faces.ts";
 import type { ShippedSkillsView, SkillView } from "../../../src/server/skills.ts";
 import { oneStream } from "./one-stream.ts";
+import { pickTransport } from "./transport.ts";
 
 export type * from "../../../src/server/api.ts";
 export type { ShippedSkillsView, ShippedSkillView, SkillView } from "../../../src/server/skills.ts";
@@ -51,17 +54,21 @@ function take(): string | undefined {
 	}
 }
 
-let token = take();
+const transport = pickTransport();
+let token = transport.identified ? undefined : take();
 
 /** No token, or the daemon refused it: the UI says where the link is. */
 export class Unauthorized extends Error {}
 
-export const hasToken = () => token !== undefined;
+export const hasToken = () => transport.identified || token !== undefined;
+
+/** The page runs on a paired device (the phone's shell), not on the computer banda runs on. */
+export const runsOnDevice = transport.identified;
 
 /** The link pasted into a page that is already open changes only the hash: take the token from it then too. */
 export function onToken(listener: () => void): () => void {
 	const check = () => {
-		if (!/(?:^#|&)token=/.test(location.hash)) return;
+		if (transport.identified || !/(?:^#|&)token=/.test(location.hash)) return;
 		token = take();
 		listener();
 	};
@@ -75,11 +82,15 @@ export function onUnauthorized(listener: () => void): () => void {
 	return () => unauthorized.delete(listener);
 }
 
-async function call(path: string, init: RequestInit = {}): Promise<Response> {
-	if (token === undefined) throw new Unauthorized("no token");
-	const response = await fetch(`/api${path}`, {
+async function call(path: string, init: RequestInit = {}, as: "request" | "stream" = "request"): Promise<Response> {
+	if (!transport.identified && token === undefined) throw new Unauthorized("no token");
+	const response = await transport[as](`/api${path}`, {
 		...init,
-		headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...init.headers },
+		headers: {
+			...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+			"content-type": "application/json",
+			...init.headers,
+		},
 	});
 	if (response.status === 401) {
 		for (const listener of unauthorized) listener();
@@ -159,9 +170,9 @@ export const browserInput = (chat: number, input: OwnerInput) =>
 export const signOutSite = (agent: string, site: string) =>
 	api<CapabilitiesView>(`/browsers/${agent}/sites/${encodeURIComponent(site)}`, { method: "DELETE" });
 
-/** Server-sent events read with fetch, as EventSource cannot send the token. */
+/** Server-sent events read from the response as it comes, as EventSource cannot send the token. */
 async function stream<E>(path: string, onEvent: (event: E) => void, signal: AbortSignal) {
-	const response = await call(path, { signal });
+	const response = await call(path, { signal }, "stream");
 	if (!response.ok || response.body === null) {
 		const body = (await response.json().catch(() => ({}))) as { error?: string };
 		throw new Error(body.error ?? `HTTP ${response.status}`);

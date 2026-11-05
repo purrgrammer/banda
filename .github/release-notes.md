@@ -1,6 +1,6 @@
 A pre-release build of banda, for convenience. It is not a qualified release: expect rough edges.
 
-Every release has two parts: the **desktop app** and the **command line**. `SHA256SUMS` lists
+Every release has three parts: the **desktop app**, the **command line** and the **phone app**. `SHA256SUMS` lists
 every file's checksum.
 
 **Docker is required** on the computer that runs banda: the agents' computer runs in a container. Install Docker
@@ -39,3 +39,14 @@ Unpack the archive, put its `banda/bin` folder on your PATH, and run `banda serv
 `banda --help` lists the commands. The desktop app and `banda serve` share `~/.banda`. If `banda serve` is already
 running, the app opens it instead of starting another, and quitting the app stops it.
 
+## Phone
+
+| You have | Download |
+|---|---|
+| Android phone (arm64) | `banda-<version>-android-arm64.apk` |
+
+Install the APK on an Android phone (allow installs from your browser or files app when it asks). Open it, then on
+the computer that runs banda open Settings → Devices → Pair a phone and scan the code. Approve the phone there and it
+opens your band, at home or away: it reaches your computer through Iroh's relays, never through an open port. A newer
+APK installs over this one. Your computer reaches no relay until you pair a phone. A Mac with Intel can't be reached
+from a phone yet: Iroh has no build for it.

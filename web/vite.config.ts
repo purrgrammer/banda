@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
-import { FRAME_POLICY } from "../src/server/policy.ts";
+import { APP_POLICY, FRAME_POLICY } from "../src/server/policy.ts";
 import { activityFixture } from "./scripts/activity-fixture.ts";
 
 const daemon = `http://127.0.0.1:${process.env.BANDA_PORT ?? "7787"}`;
@@ -29,6 +29,26 @@ function stampWorker(): Plugin {
 		closeBundle: async () => {
 			const path = join(outDir, "sw.js");
 			await writeFile(path, (await readFile(path, "utf8")).replaceAll("__BUILD__", id));
+		},
+	};
+}
+
+/**
+ * Writes the app's policy into the built `index.html` as a `<meta>`: the daemon sends it as a header, and the phone's
+ * shell, which serves the bundled files itself, sends none. Only the build: the dev server's inline script needs more.
+ */
+export function policyMeta(): Plugin {
+	return {
+		name: "banda:policy-meta",
+		apply: "build",
+		// right after the charset: a meta policy holds only for what comes after it
+		transformIndexHtml: (html) => {
+			const charset = '<meta charset="utf-8" />';
+			if (!html.includes(charset)) throw new Error("index.html has no charset meta to put the policy after");
+			return html.replace(
+				charset,
+				`${charset}\n\t\t<meta http-equiv="Content-Security-Policy" content="${APP_POLICY}" />`,
+			);
 		},
 	};
 }
@@ -83,6 +103,7 @@ export default defineConfig({
 		react(),
 		tailwindcss(),
 		stampWorker(),
+		policyMeta(),
 		vendorEmojibase(),
 		activityFixture(process.env.BANDA_ACTIVITY_FIXTURE),
 	],

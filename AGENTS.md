@@ -37,7 +37,7 @@ docs/status.md (current work and acceptance) and the relevant section's open wor
 
 ## Words
 agent, band, group, chat, turn, queue, message, part, tool, wait, draft, permission, routine, watch, event, connection,
-account, object, artifact, memory, box, workspace, gateway, inference, as DESIGN.md defines them. One word per thing, in code, docs and the UI.
+account, object, artifact, memory, box, workspace, gateway, inference, device, as DESIGN.md defines them. One word per thing, in code, docs and the UI.
 
 ## Setup and checks
 - Node 26, as `mise.toml` says (`mise install` gets it). `npm ci`, then `npm run check` (Biome: format and lint;
@@ -56,6 +56,11 @@ account, object, artifact, memory, box, workspace, gateway, inference, as DESIGN
 - Releases: `npm run desktop:dev` opens the desktop app on a throwaway home; `npm run cli:pack` and
   `npm run desktop:pack` build this computer's release files into `release/`; a `v*` tag makes the release workflow
   draft a pre-release.
+- The phone app is `mobile/`, Android only: the built web app in a Capacitor shell whose `Banda` plugin speaks the
+  API over Iroh as a paired device. `npm run mobile:apk` builds a debug APK (the Android SDK at `ANDROID_HOME` or
+  `~/Library/Android/sdk`; Gradle fetches the Java 21 it compiles with), `npm run mobile:install` installs and starts
+  it on the running emulator or phone, `npm run mobile:test` runs the shell's own tests. Start an emulator with `-no-snapshot-save`; a `banda://pair` link given to
+  `adb shell am start -a android.intent.action.VIEW -d '<link>' app.banda` stands in for the camera.
 - Reach for a shadcn component (https://ui.shadcn.com/docs/components, added with `npx shadcn@latest add <name>` into
   `web/src/components/ui/`, on the Radix build `components.json` names, with any new dependency pinned exactly)
   before writing a primitive by hand: drawer and sheet for the phone, sonner for quiet confirmations, command for

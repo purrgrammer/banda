@@ -1,11 +1,18 @@
 /**
  * The app: the shell (`app/Shell.tsx`) once the page holds the owner's token; without one, or with one the daemon no
- * longer takes, the page says where its link is. `#/specimen` shows every component, with no token needed.
+ * longer takes, the page says where its link is. In the phone's native shell there is no token: the app opens once
+ * the phone is a paired device (`app/PairDevice.tsx`). `#/specimen` shows every component, with no token needed.
  */
+
+/** The phone's native shell, when the page runs in it: read once, as the transport is. */
+const native = nativeShell();
+
 import { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
+import { PairDevice } from "./app/PairDevice.tsx";
 import { Shell } from "./app/Shell.tsx";
 import { hasToken, onToken, onUnauthorized } from "./lib/api.ts";
+import { nativeShell } from "./lib/transport.ts";
 import { Specimen } from "./routes/Specimen.tsx";
 
 function useSpecimen(): boolean {
@@ -28,6 +35,13 @@ export function App() {
 		return onToken(() => setRefused(!hasToken()));
 	}, []);
 	if (specimen) return <Specimen />;
+	if (native !== undefined)
+		return (
+			<PairDevice shell={native}>
+				<Shell />
+				<Toaster />
+			</PairDevice>
+		);
 	if (refused) return <Connect />;
 	return (
 		<>

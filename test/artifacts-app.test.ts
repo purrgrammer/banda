@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { ArtifactView, Item } from "../src/server/api.ts";
-import { FRAME_POLICY } from "../src/server/policy.ts";
+import { APP_POLICY, FRAME_POLICY, SERVED_POLICY } from "../src/server/policy.ts";
 import { PAGE_POLICY, pageDocument, parseCsv } from "../web/src/lib/artifacts.ts";
 import { view } from "../web/src/lib/chat.ts";
 
@@ -122,6 +122,18 @@ describe("artifacts in the app", () => {
 		// the daemon's whole policy is in web.test.ts; the dev server sends the frame's part of it
 		const { default: config } = await import("../web/vite.config.ts");
 		expect(config.server?.headers?.["content-security-policy"]).toBe(FRAME_POLICY);
+	});
+
+	it("the built app carries its own policy, so the phone's shell, which sends no header, holds to it too", async () => {
+		const { policyMeta } = await import("../web/vite.config.ts");
+		const transform = policyMeta().transformIndexHtml as (html: string) => string;
+		const html = transform('<head>\n<meta charset="utf-8" />\n<script src="/a.js"></script>');
+		const meta = `<meta http-equiv="Content-Security-Policy" content="${APP_POLICY}" />`;
+		expect(html.indexOf(meta)).toBeGreaterThan(html.indexOf("charset"));
+		expect(html.indexOf(meta)).toBeLessThan(html.indexOf("<script"));
+		expect(APP_POLICY).toContain(FRAME_POLICY);
+		expect(SERVED_POLICY).toBe(`${APP_POLICY}; frame-ancestors 'none'`);
+		expect(() => transform("<head></head>")).toThrow();
 	});
 
 	it("a CSV parses with quotes, doubled quotes and both line ends", () => {

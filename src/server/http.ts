@@ -1,7 +1,10 @@
 /**
- * The daemon's HTTP server on loopback (DESIGN.md "Clients"). Host and Origin are checked on every request, so a web
- * page cannot reach it through DNS rebinding or a cross-site request. The API (`/api/`) needs the daemon's token on
- * every request; the web UI's files are public code and are served without it.
+ * The daemon's HTTP server (DESIGN.md "Clients"), on loopback and over Iroh (`remote.ts`). Who a request is comes from
+ * its transport. On loopback, Host and Origin are checked on every request, so a web page cannot reach it through DNS
+ * rebinding or a cross-site request, and the API (`/api/`) needs the daemon's token on every request; the web UI's
+ * files are public code and are served without it. Over Iroh the socket carries the endpoint id the handshake
+ * authenticated: a paired device acts as the owner, with no token and whatever Host it names; any other endpoint
+ * reaches the pairing route alone.
  */
 import { createHash, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -10,7 +13,7 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defaultAvatarFace } from "../core/avatar-face.ts";
 import { avatarIcons, avatarManifest, ICON_FILES, type IconPath } from "../core/avatar-icon.ts";
-import { type Attachment, safeName, tooBig } from "../core/blobs.ts";
+import { type Attachment, safeName, sizeOf, tooBig } from "../core/blobs.ts";
 
 import { INLINE_IMAGES, mainAgentOf, mimeOf, OWNER } from "../core/gateway.ts";
 import type { PermissionScope } from "../core/permissions.ts";
@@ -40,8 +43,9 @@ import type {
 	ViewEvent,
 } from "./api.ts";
 import type { ObjectAsk, ObjectShown } from "./objects.ts";
-import { FRAME_POLICY } from "./policy.ts";
-import type { Area } from "./routes/area.ts";
+import { SERVED_POLICY } from "./policy.ts";
+import { endpointOf } from "./remote.ts";
+import type { Area, AreaReply, AreaRequest } from "./routes/area.ts";
 import type { ShippedSkillsView, SkillView } from "./skills.ts";
 import type { PageQuery } from "./transcript.ts";
 
@@ -226,24 +230,29 @@ const TYPES: Record<string, string> = {
 	".json": "application/json",
 };
 
-const POLICY = [
-	"default-src 'self'",
-	"img-src 'self' data: blob: https:",
-	// audio and video play from the bytes the page fetched with the token, as an object URL
-	"media-src 'self' blob:",
-	// the page reads back what it made itself (a file attached in the composer, as a blob: URL); nothing else
-	"connect-src 'self' blob:",
-	"style-src 'self' 'unsafe-inline'",
-	"object-src 'none'",
-	"base-uri 'none'",
-	"frame-ancestors 'none'",
-	FRAME_POLICY,
-].join("; ");
-
 /** Image types a transcript serves; anything else is not served as an image. */
 const IMAGES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** How a request that came over Iroh is let in: by the endpoint id its handshake authenticated. */
+export type RemoteGate = {
+	/** Whether endpoint `id` is a paired device the owner has not revoked: such a device acts as the owner. */
+	readonly paired: (id: string) => Promise<boolean>;
+	/** `/api/devices/pair`, the one route an endpoint that is not a paired device reaches; undefined is a 404. */
+	readonly pair: (id: string, request: AreaRequest) => Promise<AreaReply | undefined>;
+	/** Told of each request a paired device makes, before it is served: the daemon logs which device asked. */
+	readonly heard?: (id: string, method: string, path: string) => void;
+};
+
+/** The one path any endpoint may ask for over Iroh. */
+export const PAIR_PATH = "/api/devices/pair";
+
+/** The most of a pairing request read, before the daemon knows who asks: an invite's secret and a name fit in it. */
+export const PAIR_BODY = 4 * 1024;
+
+/** The most of any JSON body read: an artifact's text is the largest; files go up as blobs. */
+export const JSON_BODY = 64 * 1024 * 1024;
 
 export function handler(
 	routes: Routes,
@@ -252,6 +261,8 @@ export function handler(
 	web = WEB,
 	/** The areas' own routes (`routes/area.ts`), tried in order after the daemon's. */
 	areas: readonly Area[] = [],
+	/** Requests over Iroh; without it, every one is refused. */
+	remote?: RemoteGate,
 ): RequestListener {
 	const icons = avatarIcons();
 	const defaultFace = defaultAvatarFace();
@@ -264,12 +275,35 @@ export function handler(
 	};
 
 	async function serve(req: IncomingMessage, res: ServerResponse) {
-		const local = [`127.0.0.1:${port()}`, `localhost:${port()}`];
-		if (!local.includes(req.headers.host ?? "")) return reply(res, 403, { error: "bad host" });
-		const origin = req.headers.origin;
-		if (origin !== undefined && !local.some((host) => origin === `http://${host}`))
-			return reply(res, 403, { error: "bad origin" });
 		const url = new URL(req.url ?? "/", "http://local");
+		const device = endpointOf(req.socket);
+		if (device === undefined) {
+			const local = [`127.0.0.1:${port()}`, `localhost:${port()}`];
+			if (!local.includes(req.headers.host ?? "")) return reply(res, 403, { error: "bad host" });
+			const origin = req.headers.origin;
+			if (origin !== undefined && !local.some((host) => origin === `http://${host}`))
+				return reply(res, 403, { error: "bad origin" });
+		} else {
+			// one request a stream: its response ends the stream
+			res.setHeader("connection", "close");
+			if (remote === undefined) return reply(res, 403, { error: "this device is not paired" });
+			if (url.pathname === PAIR_PATH) {
+				const gone = new AbortController();
+				res.on("close", () => gone.abort(new Error("client went away")));
+				const answered = await remote.pair(device, {
+					method: req.method ?? "GET",
+					path: url.pathname.slice("/api".length),
+					url,
+					json: () => json(req, PAIR_BODY),
+					device,
+					signal: gone.signal,
+				});
+				if (answered === undefined || "file" in answered) return reply(res, 404, { error: "not found" });
+				return reply(res, answered.status ?? 200, answered.body);
+			}
+			if (!(await remote.paired(device))) return reply(res, 403, { error: "this device is not paired" });
+			remote.heard?.(device, req.method ?? "GET", url.pathname);
+		}
 		if (url.pathname === "/oauth/callback" && req.method === "GET") {
 			// a sign-in coming back: no token (a browser redirect carries none), its state names the sign-in, once
 			const param = (name: string) => url.searchParams.get(name) ?? undefined;
@@ -331,7 +365,9 @@ export function handler(
 			if (req.method !== "GET" && req.method !== "HEAD") return reply(res, 405, { error: "method not allowed" });
 			return file(res, web, url.pathname);
 		}
-		if (!authorized(req.headers.authorization)) return reply(res, 401, { error: "missing or wrong token" });
+		// a paired device is the owner by its endpoint id, and never needs the token
+		if (device === undefined && !authorized(req.headers.authorization))
+			return reply(res, 401, { error: "missing or wrong token" });
 		const path = url.pathname.slice("/api".length);
 		const route = `${req.method} ${path}`;
 		const gone = new AbortController();
@@ -821,6 +857,7 @@ export function handler(
 				path,
 				url,
 				json: () => json(req),
+				...(device === undefined ? {} : { device }),
 				signal: gone.signal,
 			});
 			if (answered === undefined) continue;
@@ -918,7 +955,7 @@ async function file(res: ServerResponse, web: string, pathname: string): Promise
 	const relative = normalize(decoded).replace(/^(\.\.(\/|\\|$))+/, "");
 	const path = join(web, relative);
 	const headers = {
-		"content-security-policy": POLICY,
+		"content-security-policy": SERVED_POLICY,
 		"x-content-type-options": "nosniff",
 		"referrer-policy": "no-referrer",
 	};
@@ -956,16 +993,21 @@ export class BadRequest extends Error {
 }
 
 /** An upload's bytes, refused (413) past `limit`: by its declared length before reading, or as it streams in. */
-async function uploaded(req: IncomingMessage, name: string, limit: number): Promise<Buffer> {
+async function uploaded(
+	req: IncomingMessage,
+	name: string,
+	limit: number,
+	refusal = (size: number) => tooBig(name, size, limit),
+): Promise<Buffer> {
 	const declared = Number(req.headers["content-length"]);
-	if (Number.isFinite(declared) && declared > limit) throw new BadRequest(tooBig(name, declared, limit), 413);
+	if (Number.isFinite(declared) && declared > limit) throw new BadRequest(refusal(declared), 413);
 	const chunks: Buffer[] = [];
 	let size = 0;
 	for await (const chunk of req as AsyncIterable<Buffer>) {
 		size += chunk.length;
 		if (size > limit) {
 			req.destroy();
-			throw new BadRequest(tooBig(name, size, limit), 413);
+			throw new BadRequest(refusal(size), 413);
 		}
 		chunks.push(chunk);
 	}
@@ -1036,9 +1078,11 @@ function permissionOf(value: unknown): PermissionScope | undefined | null {
 	return null;
 }
 
-async function json(req: IncomingMessage): Promise<Record<string, unknown>> {
-	let text = "";
-	for await (const chunk of req) text += chunk;
+/** A request's body as a JSON object, refused (413) past `limit` as an upload is. */
+async function json(req: IncomingMessage, limit = JSON_BODY): Promise<Record<string, unknown>> {
+	const text = (await uploaded(req, "the body", limit, () => `the body may be ${sizeOf(limit)} at most`)).toString(
+		"utf8",
+	);
 	let body: unknown;
 	try {
 		body = JSON.parse(text);

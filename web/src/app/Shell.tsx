@@ -37,6 +37,7 @@ import { Onboarding, SkillsOnboarding, useShippedSkills } from "./Onboarding.tsx
 import { ownerEdits } from "./owner-edits.ts";
 import { EditRoutine, routineRows } from "./routines.tsx";
 import { SearchDialog } from "./SearchDialog.tsx";
+import { SettingsDevices } from "./SettingsDevices.tsx";
 import { SettingsProviders } from "./SettingsProviders.tsx";
 import { ShortcutsDialog, typing as typingIn } from "./Shortcuts.tsx";
 import { SkillsPage, useSkills } from "./Skills.tsx";
@@ -544,6 +545,7 @@ function Main() {
 						}}
 						onNotify={setNotify}
 						providers={<SettingsProviders current={tiers?.provider.id ?? ""} />}
+						devices={<SettingsDevices />}
 						onTheme={setTheme}
 						onPause={(paused) => void setPaused(paused)}
 						onConnect={() => go({ name: "connections" })}

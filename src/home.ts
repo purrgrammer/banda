@@ -16,6 +16,12 @@ export type Config = {
 	readonly files?: { readonly maxBytes?: number };
 	/** The forges whose git fetches are reads, default the public ones banda lists. */
 	readonly egress?: { readonly git?: readonly string[] };
+	/**
+	 * Where the owner's devices reach the daemon over Iroh (`server/remote.ts`): `reach` is `n0` (the default, n0's
+	 * public relays), `loopback` (this computer only) or `off`; `relay` a relay's URL in place of n0's. `BANDA_REMOTE`
+	 * overrides `reach`.
+	 */
+	readonly remote?: { readonly reach?: "n0" | "loopback" | "off"; readonly relay?: string };
 };
 
 /**
