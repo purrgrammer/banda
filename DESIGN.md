@@ -539,7 +539,7 @@ never run again.
 What the box holds: `/workspace` (what the agents are made of, their memory and their files), `/work` (attachments,
 dependencies) and `/tools` (toolchains), each a volume. Nothing of the host's: no `auth/`, no store, no host home. It
 runs as the owner's uid, with a read-only root, all capabilities dropped, no new privileges, and limits on memory and
-processes. The owner never installs Docker by hand: the app brings its runtime.
+processes. The box's runtime is the app's to bring, never the owner's to install by hand.
 
 **Network.** The box sits on an internal network whose only other member is the egress proxy. It resolves no outside
 names and has no route out; only the proxy reaches the internet. The proxy terminates TLS with the app's own
