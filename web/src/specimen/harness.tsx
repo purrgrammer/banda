@@ -43,6 +43,7 @@ const BEFORE_ASK: readonly HarnessStep[] = [
 	},
 ];
 const AFTER_ASK: readonly HarnessStep[] = [
+	{ kind: "decided", command: COMMAND, allowed: true },
 	{
 		kind: "run",
 		command: COMMAND,
@@ -304,6 +305,20 @@ export function HarnessSection() {
 						session={sessionAt("working", [{ kind: "steered", text: "Keep the diff under 10 lines", taken: false }])}
 					/>
 					<HarnessTranscript session={sessionAt("done", [])} />
+					<HarnessTranscript
+						session={{
+							...sessionAt("working", [
+								{ kind: "steered", text: "Also run the linter on what you changed", taken: true, from: "agent" },
+							]),
+							agent: "Sancho",
+							task: 42,
+							continues: 41,
+						}}
+					/>
+					<HarnessCard
+						session={{ ...sessionAt("stopped", []), agent: "Sancho", task: 43, stoppedBy: "agent" }}
+						onOpen={() => {}}
+					/>
 				</div>
 			</Section>
 		</>

@@ -26,6 +26,10 @@ export type HarnessSessionView = {
 	/** Its own mark, in its own colours. */
 	readonly logo?: string;
 	readonly folder: string;
+	/** The session it goes on from, by task. */
+	readonly continues?: number;
+	/** Its agent stopped it, not the owner. */
+	readonly stoppedBy?: "agent";
 	readonly state: HarnessState;
 	readonly at: number;
 	readonly ended?: number;

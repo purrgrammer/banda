@@ -9,6 +9,8 @@
  *   say <text>             words, the turn's last message
  *   crash                  the process exits
  *   background <mark>      start a long command, detached in a group of its own, that outlives this process
+ * A line it does not know is said as words (a recap of earlier work, sent before the script). `session/load` replays
+ * history first, as real harnesses do; FAKE_ACP_NO_LOAD=1 makes it one that cannot reopen a session.
  * Prompts run one at a time, in order: one sent mid-turn waits (as claude-agent-acp queues it). Every prompt received,
  * permission answered and turn ended is appended to $FAKE_ACP_LOG (jsonl), so it survives a kill.
  */
@@ -159,7 +161,11 @@ jsonLines(process.stdin, (line) => {
 	const params = message.params ?? {};
 	switch (message.method) {
 		case "initialize":
-			return send({ id: message.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: true } } });
+			// FAKE_ACP_NO_LOAD=1: a harness that cannot reopen a session (as banda's pi adapter)
+			return send({
+				id: message.id,
+				result: { protocolVersion: 1, agentCapabilities: { loadSession: process.env.FAKE_ACP_NO_LOAD !== "1" } },
+			});
 		case "session/new": {
 			// a harness that never opens a session (not signed in, waiting on a prompt of its own)
 			if (process.env.FAKE_ACP_HANG === "1") return;
@@ -167,10 +173,22 @@ jsonLines(process.stdin, (line) => {
 			sessions.add(sessionId);
 			return send({ id: message.id, result: { sessionId, modes: { currentModeId: "auto", availableModes: [] } } });
 		}
-		case "session/load":
-			sessions.add(String(params.sessionId));
-			record({ loaded: params.sessionId });
+		case "session/load": {
+			const sessionId = String(params.sessionId);
+			sessions.add(sessionId);
+			record({ loaded: sessionId });
+			// as claude-agent-acp and codex-acp do: the session's history replayed as updates before the answer
+			update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "words from before" } });
+			update(sessionId, {
+				sessionUpdate: "tool_call",
+				toolCallId: "before-1",
+				title: "Read old.txt",
+				kind: "read",
+				status: "completed",
+				locations: [{ path: "old.txt" }],
+			});
 			return send({ id: message.id, result: {} });
+		}
 		case "session/set_mode":
 			mode = String(params.modeId);
 			record({ mode });

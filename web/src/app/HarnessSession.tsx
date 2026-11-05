@@ -11,6 +11,7 @@ import { ApprovalCard } from "../chat/Approval.tsx";
 import { type HarnessSessionView as CardView, HarnessCard, HarnessTranscript } from "../chat/Harness.tsx";
 import type { HarnessAsk, HarnessSessionView } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
+import { chatAgents } from "../lib/navigation.ts";
 import { useShell } from "../lib/shell.ts";
 
 const clock = (ms: number) => {
@@ -29,8 +30,12 @@ function useNow(on: boolean): number {
 	return now;
 }
 
-const viewOf = (session: HarnessSessionView, now: number): CardView => ({
+const viewOf = (session: HarnessSessionView, now: number, agent: string | undefined): CardView => ({
 	harness: session.service,
+	task: session.task,
+	...(agent === undefined ? {} : { agent }),
+	...(session.continues === undefined ? {} : { continues: session.continues }),
+	...(session.stoppedBy === undefined ? {} : { stoppedBy: session.stoppedBy }),
 	...(session.provider === undefined ? {} : { provider: session.provider }),
 	...(session.logo === undefined ? {} : { logo: session.logo }),
 	folder: session.folder,
@@ -62,7 +67,15 @@ const askWords = (kind: string): { what: string; verb: string; no: string } =>
 				: { what: "Do something", verb: "Allow", no: "Don't" };
 
 /** One of the harness's open asks: what it would do, all of it the owner must see, Allow or not. */
-function HarnessAskCard({ session, ask }: { session: HarnessSessionView; ask: HarnessAsk }) {
+function HarnessAskCard({
+	session,
+	ask,
+	agentName,
+}: {
+	session: HarnessSessionView;
+	ask: HarnessAsk;
+	agentName?: string | undefined;
+}) {
 	const words = askWords(ask.kind);
 	return (
 		<ApprovalCard
@@ -70,7 +83,7 @@ function HarnessAskCard({ session, ask }: { session: HarnessSessionView; ask: Ha
 			what={`${words.what} in ${session.folder}`}
 			verb={words.verb}
 			declineLabel={words.no}
-			as={`${session.agent}'s task`}
+			as={`${agentName ?? session.agent}'s task`}
 			object={
 				<>
 					{ask.kind === "execute" ? (
@@ -95,13 +108,15 @@ function HarnessAskCard({ session, ask }: { session: HarnessSessionView; ask: Ha
 
 /** The session the tool call `call` of chat `chat` started, if one did. */
 export function HarnessSessionPart({ chat, call }: { chat: number; call: string }) {
-	const { harnesses } = useShell();
+	const { harnesses, agents, companion } = useShell();
 	const session = harnesses?.sessions.find((one) => one.chat === chat && one.call === call);
+	const agent =
+		companion === undefined ? undefined : chatAgents(agents, companion).find((one) => one.id === session?.agent)?.name;
 	const live = session !== undefined && session.ended === undefined;
 	const now = useNow(live);
 	const [open, setOpen] = useState(false);
 	if (session === undefined) return null;
-	const view = viewOf(session, now);
+	const view = viewOf(session, now, agent);
 	const steer = (text: string) => void attempt("send your note", () => steerHarness(session.task, text));
 	return (
 		<>
@@ -112,7 +127,7 @@ export function HarnessSessionPart({ chat, call }: { chat: number; call: string 
 				onSteer={steer}
 			/>
 			{(session.asks ?? []).map((ask) => (
-				<HarnessAskCard key={ask.id} session={session} ask={ask} />
+				<HarnessAskCard key={ask.id} session={session} ask={ask} agentName={agent} />
 			))}
 			<Sheet open={open} onOpenChange={setOpen}>
 				<SheetContent className="gap-0 overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-[560px]">

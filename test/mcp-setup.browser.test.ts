@@ -103,6 +103,15 @@ for (const width of [390, 1440])
 				await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
 					await page.until(`document.body.textContent.includes('Sancho')`, 30000);
 					await page.run(`location.hash='#/connections'`);
+					// at desktop width Connections is the agent's Access, which shows only what it has: the rest is behind "Show more"
+					await page.until(
+						`${button("Add MCP server")} || [...document.querySelectorAll('button')].some(el => /^Show \\d+ more$/.test(el.textContent.trim()))`,
+					);
+					if (!(await page.run<boolean>(`Boolean(${button("Add MCP server")})`)))
+						await click(
+							page,
+							`[...document.querySelectorAll('button')].find(el => /^Show \\d+ more$/.test(el.textContent.trim()))`,
+						);
 					await click(page, button("Add MCP server"));
 					await phase(page, "setup");
 					await fill(page, "Server address", fake.url);

@@ -4,7 +4,10 @@
  * done. The worker answers the ask as the owner would. The fake logs every prompt it received to `<home>/fake.jsonl`,
  * and each wake is counted in the store, so what happened survives a killed process. Prints a summary as its last line.
  *
- * argv: home, mark, fault schedule JSON (Fault[])
+ * With `continue`, the session goes on from an ended one instead: the fake reopens that one's own session, so the
+ * follow-up is sent alone.
+ *
+ * argv: home, mark, optionally `continue`, then the fault schedule JSON (Fault[])
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -16,13 +19,21 @@ import { context, openStore } from "../../src/core/store.ts";
 import { echoModels } from "../fixtures/models.ts";
 import { type Fault, Faults } from "./faults.ts";
 
-const [home, mark, scheduleJson] = process.argv.slice(2) as [string, string, string];
+// the schedule comes last (runWorker appends it): `continue`, when given, before it
+const [home, mark, ...rest] = process.argv.slice(2) as [string, string, ...string[]];
+const scheduleJson = rest.at(-1) ?? "[]";
+const mode = rest.length > 1 ? rest[0] : undefined;
+const continuing = mode === "continue";
 const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
 const FAKE = join(import.meta.dirname, "../fixtures/fake-acp-agent.ts");
 const folder = join(home, "work");
 mkdirSync(folder, { recursive: true });
 process.env.FAKE_ACP_LOG = join(home, "fake.jsonl");
-const ASK = `edit src/a.ts +1 -0\nask npm test\nbackground ${mark}\nsay fixed`;
+const ASK = continuing
+	? `ask npm test\nbackground ${mark}\nsay again`
+	: `edit src/a.ts +1 -0\nask npm test\nbackground ${mark}\nsay fixed`;
+/** The ended session a follow-up goes on from: its harness's session is what the fake reopens. */
+const EARLIER = 9999;
 
 /** Each wake of the agent, by its key: exactly one per session. */
 const Woke = defineDoc<{ keys: string[] }>({
@@ -55,10 +66,33 @@ harness.resume();
 // the one session, begun once whatever process gets there first
 const task = await harness.commit(async (tx) => {
 	const doc = await tx.doc(Harnesses);
-	const found = Object.keys(doc.sessions)[0];
+	const found = Object.keys(doc.sessions).find((one) => Number(one) !== EARLIER);
 	if (found !== undefined) return Number(found);
 	const chat = Number((await tx.createConversation({ ownership: { kind: "ownerless" } })).id);
-	return made.begin(tx, { chat, call: "c1", agent: "sancho", harness: "fake", folder, ask: ASK });
+	if (continuing)
+		doc.sessions[EARLIER] = {
+			chat,
+			agent: "sancho",
+			harness: "fake",
+			folder,
+			prompt: "say first",
+			state: "done",
+			at: 1,
+			ended: 2,
+			steps: [{ kind: "asked", text: "say first" }],
+			dropped: 0,
+			notes: [],
+			sessionId: "earlier-session",
+		};
+	return made.begin(tx, {
+		chat,
+		call: "c1",
+		agent: "sancho",
+		harness: "fake",
+		folder,
+		ask: ASK,
+		...(continuing ? { continues: EARLIER } : {}),
+	});
 }, context);
 
 // the owner: allows every ask it sees, until the session ends
@@ -76,7 +110,7 @@ const log = existsSync(join(home, "fake.jsonl"))
 	? readFileSync(join(home, "fake.jsonl"), "utf8")
 			.split("\n")
 			.filter(Boolean)
-			.map((line) => JSON.parse(line) as { prompt?: string; pid: number })
+			.map((line) => JSON.parse(line) as { prompt?: string; loaded?: string; pid: number })
 	: [];
 // what a killed process's harness left running is gone once a later process took the session over (pgrep: 1 is none)
 const count = () => {
@@ -96,7 +130,9 @@ console.log(
 	JSON.stringify({
 		state: session?.state,
 		woke,
+		// a follow-up to a reopened session is sent alone, never with a recap
 		prompts: log.filter((entry) => entry.prompt === ASK).length,
+		loaded: log.filter((entry) => entry.loaded === "earlier-session").length,
 		orphans,
 		parked,
 		commits: faults.hits("commit:after"),

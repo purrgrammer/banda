@@ -644,6 +644,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						area.start({
 							...boot,
 							harness: open,
+							registry,
 							workspace,
 							desk,
 							models,

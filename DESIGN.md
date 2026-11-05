@@ -384,8 +384,14 @@ naming one that is not there answers with those that are.
   owner's computer, outside the box. It runs under banda's supervisor, which watches every process group below it
   (a harness may run each command detached, in a group of its own) and kills them all when its session ends or the
   daemon dies; a later daemon kills, from the groups the session recorded, only what started since the session did.
-- **The agent starts it; the harness asks.** One tool, `harness__work(harness, prompt)`, starts a session at once,
-  with no draft. What reaches the owner is the harness's own asks: its mode is set before anything is sent, where the
+- **The agent knows what it has.** It gets a tool per harness turned on for it (`harness__claude_code(prompt,
+  project?, session?)`), whose description says where it works and the projects there, rebuilt when that changes.
+  A call starts a session at once and answers with its number. Given an earlier `session`, it follows up: a running
+  one takes the prompt as a note after its current step; an ended one goes on in a new session that reopens the
+  harness's own (`session/load`, its replayed history left out), else is told what the earlier one did.
+  `harness__sessions` shows the agent its sessions (others' are not its to see), and `harness__stop` stops one, as
+  the owner's Stop does.
+- **The agent starts it; the harness asks.** A session starts with no draft. What reaches the owner is the harness's own asks: its mode is set before anything is sent, where the
   file names one, so it asks for what the owner would want asked (Claude Code: commands, and anything outside the
   folder); otherwise its own settings decide, and the connect card says which. The connect card says the agent can
   start it without asking. "Always allow" is never answered: it would write a rule into the owner's own settings.
@@ -397,8 +403,10 @@ naming one that is not there answers with those that are.
   prompt it takes after its current step. Stop cancels the turn.
 - **Once, and then the agent hears.** The ask is sent at most once: a restart after it was sent ends the session
   interrupted, never sends it again, and a session whose task ended without ending it ends failed. Either way, and
-  when the harness finishes, its agent wakes once with what the harness said, as foreign data, and tells the owner in
-  its own words. Steps are kept in the store, bounded, with files named from the project; lines added and removed are shown only
+  when the harness finishes, its agent wakes once with what was done, fenced as foreign data: how it ended, what it
+  said (in full at the end, a line for each earlier turn), the files and lines it changed, the commands it ran, and
+  the owner's notes and answers to its asks, so its report never contradicts what the owner did; bounded, the least
+  needed cut first. It tells the owner in its own words. Steps are kept in the store, bounded, with files named from the project; lines added and removed are shown only
   when the harness said, never a made-up zero. A disconnect stops the sessions running there.
 
 ## Messages

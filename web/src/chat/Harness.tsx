@@ -4,6 +4,7 @@
  * in their own words or stops it; the sheet shows every step. The harness's own asks are ordinary approval cards.
  */
 import {
+	BotIcon,
 	BrainIcon,
 	CheckIcon,
 	CircleAlertIcon,
@@ -15,6 +16,7 @@ import {
 	SquareIcon,
 	TerminalIcon,
 	UserIcon,
+	XIcon,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ChainOfThought, ChainOfThoughtContent, ChainOfThoughtStep } from "@/components/ai-elements/chain-of-thought";
@@ -31,7 +33,7 @@ import { Confirm } from "./Confirm.tsx";
 /** One step of a session, as the harness reported it. */
 export type HarnessStep =
 	| { readonly kind: "asked"; readonly text: string }
-	| { readonly kind: "steered"; readonly text: string; readonly taken: boolean }
+	| { readonly kind: "steered"; readonly text: string; readonly taken: boolean; readonly from?: "agent" }
 	| { readonly kind: "read"; readonly path: string }
 	| { readonly kind: "thought"; readonly text: string }
 	| {
@@ -43,6 +45,7 @@ export type HarnessStep =
 	  }
 	| { readonly kind: "run"; readonly command: string; readonly output?: string; readonly running?: boolean }
 	| { readonly kind: "waiting"; readonly command: string }
+	| { readonly kind: "decided"; readonly command: string; readonly allowed: boolean }
 	| { readonly kind: "said"; readonly text: string };
 
 export type HarnessState = "working" | "waiting" | "done" | "stopped" | "interrupted" | "failed";
@@ -62,6 +65,13 @@ export type HarnessSessionView = {
 	readonly elapsed: string;
 	/** Its last words once it ended, first line only. */
 	readonly outcome?: string | undefined;
+	/** The agent that started it, by name: whose follow-ups and Stop the card names. */
+	readonly agent?: string | undefined;
+	/** Its number, as its agent says it ("session 42"), and the one it goes on from. */
+	readonly task?: number | undefined;
+	readonly continues?: number | undefined;
+	/** Its agent stopped it, not the owner. */
+	readonly stoppedBy?: "agent" | undefined;
 };
 
 /**
@@ -100,7 +110,9 @@ export function headlineOf(step: HarnessStep | undefined): { verb: string; objec
 		case "thought":
 			return { verb: "Thinking", object: "" };
 		case "steered":
-			return { verb: "Taking your note", object: "" };
+			return { verb: step.from === "agent" ? "Taking a follow-up" : "Taking your note", object: "" };
+		case "decided":
+			return { verb: step.allowed ? "Going on: you allowed" : "Going on: you denied", object: step.command };
 		case "said":
 			return { verb: "Writing", object: "" };
 		default:
@@ -326,6 +338,12 @@ export function HarnessCard({
 				/>
 				<span className="font-medium text-ink">{harness}</span>
 				<span className="min-w-0 truncate font-code text-meta text-ink-2">{folder}</span>
+				{session.task === undefined ? null : (
+					<span className="shrink-0 text-meta text-ink-2 tabular-nums">
+						· session {session.task}
+						{session.continues === undefined ? "" : `, on from ${session.continues}`}
+					</span>
+				)}
 				{live(state) ? (
 					<Button variant="ghost" size="xs" className="ml-auto" onClick={onStop}>
 						<SquareIcon />
@@ -348,7 +366,9 @@ export function HarnessCard({
 						)}
 						<span className="min-w-0 text-ink">
 							{state === "stopped"
-								? "You stopped it"
+								? session.stoppedBy === "agent"
+									? `${session.agent ?? "Its agent"} stopped it`
+									: "You stopped it"
 								: state === "failed"
 									? `It ended with a problem: ${outcome ?? "it did not say why"}`
 									: "Interrupted when banda restarted. Nothing was sent again."}
@@ -371,7 +391,11 @@ export function HarnessCard({
 				<ul className="flex flex-col gap-1">
 					{notes.map((note) => (
 						<li key={note.text} className="flex min-w-0 items-baseline gap-1.5 text-meta text-ink-2">
-							<UserIcon aria-hidden="true" className="size-3 shrink-0 self-center" />
+							{note.from === "agent" ? (
+								<BotIcon aria-hidden="true" className="size-3 shrink-0 self-center" />
+							) : (
+								<UserIcon aria-hidden="true" className="size-3 shrink-0 self-center" />
+							)}
 							<span className="min-w-0 truncate text-ink">{note.text}</span>
 							<span className="shrink-0">· {note.taken ? "taken" : "after this step"}</span>
 						</li>
@@ -390,7 +414,17 @@ export function HarnessCard({
 	);
 }
 
-function Step({ step, last, working }: { step: HarnessStep; last: boolean; working: boolean }) {
+function Step({
+	step,
+	last,
+	working,
+	agent,
+}: {
+	step: HarnessStep;
+	last: boolean;
+	working: boolean;
+	agent?: string | undefined;
+}) {
 	const status = last && working ? "active" : "complete";
 	const at = (icon: LucideIcon, label: ReactNode, children?: ReactNode) => (
 		<ChainOfThoughtStep icon={icon} status={status} label={label}>
@@ -408,9 +442,18 @@ function Step({ step, last, working }: { step: HarnessStep; last: boolean; worki
 			return at(MessageSquareIcon, <span className="text-ink-2">Asked</span>, <p className="text-ui">{step.text}</p>);
 		case "steered":
 			return at(
-				UserIcon,
-				<span className="text-ink-2">You said{step.taken ? "" : " · after this step"}</span>,
+				step.from === "agent" ? BotIcon : UserIcon,
+				<span className="text-ink-2">
+					{step.from === "agent" ? `${agent ?? "Its agent"} followed up` : "You said"}
+					{step.taken ? "" : " · after this step"}
+				</span>,
 				<p className="text-ui">{step.text}</p>,
+			);
+		case "decided":
+			return at(
+				step.allowed ? CheckIcon : XIcon,
+				<span className="text-ink-2">{step.allowed ? "You allowed" : "You denied"}</span>,
+				<span className="font-code text-meta [overflow-wrap:anywhere]">{step.command}</span>,
 			);
 		case "read":
 			return at(FileTextIcon, path("Read", step.path));
@@ -487,6 +530,7 @@ export function HarnessTranscript({
 							step={step}
 							last={index === session.steps.length - 1}
 							working={working}
+							agent={session.agent}
 						/>
 					))}
 				</ChainOfThoughtContent>

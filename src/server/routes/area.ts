@@ -4,7 +4,7 @@
  * the agents get), answer requests under `/api`, and push events on the shell stream. `routes/index.ts` lists them all.
  */
 import type { MutableModels } from "@earendil-works/pi-ai";
-import type { Extension, Harness, ModelRef, SessionDocToken } from "@earendil-works/pi-durable";
+import type { Extension, Harness, ModelRef, Registry, SessionDocToken } from "@earendil-works/pi-durable";
 import type { BlobStore } from "../../core/blobs.ts";
 import type { defineCore } from "../../core/turn.ts";
 import type { Config } from "../../home.ts";
@@ -37,6 +37,8 @@ export type Boot = {
 /** What an area may use once the daemon is up. */
 export type Deps = Boot & {
 	readonly harness: Harness;
+	/** The tools the model is offered: an area re-installs its own extension (by its name) when they change. */
+	readonly registry: Registry;
 	readonly workspace: Workspace;
 	readonly desk: MemoryDesk;
 	readonly models: MutableModels;
