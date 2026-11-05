@@ -48,4 +48,3 @@ changes.
 - [ ] Groups in the band: rows, unread, member changes, the panel's member list, phone-width review
 - [ ] Give memory an agent audience and keep recall and search within it ([Memory](memory.md))
 - [ ] Replace the shared box and workspace with one structurally isolated computer per agent (DESIGN.md "Open")
-- [x] Delete skills and the `skill` tool (DESIGN.md "Open")
