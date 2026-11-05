@@ -78,7 +78,7 @@ export function Bubble({
 	const inMine = useContext(Mine);
 	const mine = told ?? inMine;
 	return (
-		<MessageActions copy={copy} onActivity={onActivity} reaction={reaction}>
+		<MessageActions copy={copy} onActivity={onActivity} reaction={reaction} mine={mine}>
 			<div
 				data-message-bubble=""
 				data-mine={mine ? "" : undefined}
@@ -99,11 +99,14 @@ export function MessageActions({
 	copy,
 	onActivity,
 	reaction,
+	mine = false,
 }: {
 	children: ReactNode;
 	copy?: string | undefined;
 	onActivity?: (() => void) | undefined;
 	reaction?: string | undefined;
+	/** The owner's: the controls sit on its left, the side facing the chat, never off its right edge. */
+	mine?: boolean;
 }) {
 	const [pressed, setPressed] = useState(false);
 	const press = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -112,6 +115,7 @@ export function MessageActions({
 		<div
 			className={cn(
 				"group/bubble relative flex max-w-[min(100%,var(--measure))] items-end gap-1",
+				mine && "flex-row-reverse",
 				reaction !== undefined && "mb-3",
 			)}
 			// A long press reveals the message's actions on touch; focus reveals them for keyboard users.
