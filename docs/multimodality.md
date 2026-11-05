@@ -23,7 +23,7 @@ adapter support, not account entitlement or successful requests. No live banda h
 
 Relevant code: [tiers](../src/core/tiers.ts), [tier API](../src/server/routes/tiers.ts),
 [agents](../src/core/agents.ts), [image intake](../src/daemon.ts), [search](../src/core/search.ts),
-[composer](../web/src/components/Composer.tsx), [provider connections](../src/server/routes/providers.ts).
+[composer](../web/src/chat/Composer.tsx), [provider connections](../src/server/routes/providers.ts).
 The app's provider connection list explicitly excludes `openai-codex`; CLI provider login exists.
 
 ## Subscription access and API access
