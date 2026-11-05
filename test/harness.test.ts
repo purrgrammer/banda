@@ -12,6 +12,7 @@ import {
 	diffOf,
 	disconnectHarness,
 	folderPath,
+	foldersIn,
 	Harnesses,
 	type HarnessStep,
 	projectOf,
@@ -349,6 +350,13 @@ describe("a session's project", () => {
 		expect(projectOf(`${shown}/app`, undefined)).toEqual({ folder: `${shown}/app` });
 		expect(projectOf(shown, "app")).toEqual({ folder: `${shown}/app` });
 		expect(projectOf(shown, "work/api/")).toEqual({ folder: `${shown}/work/api` });
+		// the picker lists the same folders, each with what is in it; hidden ones and links (escape) left out
+		expect(foldersIn(shown)?.folders.map((one) => [one.name, one.repo, one.projects])).toEqual([
+			["app", true, 0],
+			["notes", false, 0],
+			["work", false, 1],
+		]);
+		expect(foldersIn("/")).toBeUndefined();
 		for (const bad of ["../x", "/etc", "~/x", ".secret", "escape", "notes", "missing"])
 			expect(projectOf(shown, bad), bad).toMatchObject({ projects: ["app", "work/api"] });
 	});

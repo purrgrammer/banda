@@ -50,7 +50,7 @@ export function Catalogue({
 	const [open, setOpen] = useState<string | undefined>(undefined);
 	const toggle = (id: string) => setOpen(open === id ? undefined : id);
 	return (
-		<ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+		<ul className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2">
 			{[
 				...services.filter((each) => each.accounts !== undefined),
 				...extra,
@@ -58,7 +58,8 @@ export function Catalogue({
 			].map((item) => {
 				if ("card" in item)
 					return (
-						<li key={item.key} className="flex flex-col">
+						// a card of its own fills its cell: every tile in the grid the same size
+						<li key={item.key} className="flex flex-col [&>*]:flex-1">
 							{item.card}
 						</li>
 					);

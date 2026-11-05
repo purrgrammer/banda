@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { CapabilitiesView, ControlView, PermissionView } from "../../../src/server/api.ts";
-import { connectHarness, disconnectHarness, switchHarness } from "../areas/harnesses.ts";
+import { connectHarness, disconnectHarness, foldersAt, switchHarness } from "../areas/harnesses.ts";
 import { HarnessConnectCard } from "../chat/Harness.tsx";
 import { type ConnectionRow, Connections, Permissions } from "../chat/Settings.tsx";
 import { revokePermission, switchAccount, switchPublicConnection } from "../lib/api.ts";
@@ -146,6 +146,7 @@ function HarnessAccess({ agent }: { agent: { readonly id: string; readonly name:
 						about={about}
 						provider={provider}
 						logo={logo}
+						browse={foldersAt}
 						folded
 						folder={harnesses.suggested}
 						connected={account?.folder}

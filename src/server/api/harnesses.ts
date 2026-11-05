@@ -2,9 +2,16 @@
  * The API's shapes for harnesses (DESIGN.md "Connections"): what banda can hand coding work to, the folder each is
  * connected in and for whom, and every session, live. Re-exported by `../api.ts`.
  */
-import type { HarnessAsk, HarnessState, HarnessStep } from "../../core/harness.ts";
+import type { FolderEntry, HarnessAsk, HarnessState, HarnessStep } from "../../core/harness.ts";
 
-export type { HarnessAsk, HarnessState, HarnessStep } from "../../core/harness.ts";
+export type { FolderEntry, HarnessAsk, HarnessState, HarnessStep } from "../../core/harness.ts";
+
+/** The folders at a path, for the code folder picker. */
+export type FolderListing = {
+	readonly path: string;
+	readonly parent?: string;
+	readonly folders: readonly FolderEntry[];
+};
 
 export type HarnessSessionView = {
 	readonly task: number;

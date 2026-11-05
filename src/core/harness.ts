@@ -208,6 +208,48 @@ export function projectsIn(root: string): string[] {
 	return found;
 }
 
+/** A folder the owner may pick as a code folder, as the picker lists it. */
+export type FolderEntry = {
+	readonly name: string;
+	/** As the owner reads it: ~/code/banda. */
+	readonly path: string;
+	/** It is a git repository itself. */
+	readonly repo: boolean;
+	/** Git repositories inside it, two levels down at most (60 at most). */
+	readonly projects: number;
+};
+
+/**
+ * The folders in `at` (the home when not given), for the code folder picker: hidden ones and dependencies left out, at
+ * most 200, each with the projects in it; and its parent, while that is still a folder one may pick. Undefined when `at`
+ * is no folder one may pick.
+ */
+export function foldersIn(
+	at: string | undefined,
+): { path: string; parent?: string; folders: FolderEntry[] } | undefined {
+	const full = folderPath(at ?? "~");
+	const top = full === undefined ? undefined : real(full);
+	if (top === undefined) return undefined;
+	let names: string[];
+	try {
+		names = readdirSync(top, { withFileTypes: true })
+			.filter((entry) => entry.isDirectory() && !entry.name.startsWith(".") && !SKIPPED.has(entry.name))
+			.map((entry) => entry.name)
+			.sort((a, b) => a.localeCompare(b))
+			.slice(0, 200);
+	} catch {
+		return undefined;
+	}
+	const folders = names.map((name): FolderEntry => {
+		const inside = join(top, name);
+		const repo = isRepo(inside);
+		return { name, path: shownPath(inside), repo, projects: repo ? 0 : projectsIn(inside).length };
+	});
+	const up = resolve(top, "..");
+	const parent = up !== top && folderPath(up) !== undefined ? shownPath(up) : undefined;
+	return { path: shownPath(top), ...(parent === undefined ? {} : { parent }), folders };
+}
+
 /**
  * The folder a session works in: the connected root itself (no `project`), or a git repository inside it, named by its
  * path from the root. Never outside the root (symlinks resolved), never through a hidden folder; the root is a folder

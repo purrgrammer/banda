@@ -17,6 +17,7 @@ import {
 	defineHarnesses,
 	disconnectHarness,
 	folderPath,
+	foldersIn,
 	HARNESS_TOOL,
 	type HarnessDefinition,
 	Harnesses,
@@ -244,6 +245,14 @@ export const harnessesArea: AreaModule = {
 			shell: async () => [{ type: "harnesses", harnesses: await view() }],
 			route: async (request) => {
 				if (request.path === "/harnesses" && request.method === "GET") return { body: await view() };
+				// the code folder picker: the folders at a path, each with the projects in it; read only, the owner's alone
+				if (request.path === "/harnesses/folders" && request.method === "GET") {
+					const at = request.url.searchParams.get("path") ?? undefined;
+					if (at !== undefined && at.length > 1000) throw new BadRequest("path is a folder");
+					const listing = foldersIn(at);
+					if (listing === undefined) throw new BadRequest(`${at ?? "~"} is not a folder you can pick`, 404);
+					return { body: listing };
+				}
 				if (request.path === "/harnesses" && request.method === "POST") {
 					const { service, command } = await request.json();
 					if (typeof service !== "string" || service.trim() === "" || service.length > 60)

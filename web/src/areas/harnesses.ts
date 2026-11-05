@@ -2,7 +2,7 @@
  * Harnesses in the app (DESIGN.md "Connections"): Claude Code on the owner's computer, as the daemon last pushed it,
  * and the owner's calls: connect a folder, steer a session, answer its ask, stop it.
  */
-import { api, type HarnessesView, type HarnessSessionView } from "../lib/api.ts";
+import { api, type FolderListing, type HarnessesView, type HarnessSessionView } from "../lib/api.ts";
 import type { ShellHandlers } from "../lib/shell.ts";
 
 declare module "../lib/shell.ts" {
@@ -38,6 +38,10 @@ export const addHarness = (service: string, command: string) =>
 /** Forget a harness the owner added. */
 export const removeHarness = (harness: string) =>
 	api<HarnessesView>(`/harnesses/${harness}/remove`, { method: "POST", body: "{}" });
+
+/** The folders at `path` (the home when none), for the code folder picker. */
+export const foldersAt = (path?: string) =>
+	api<FolderListing>(`/harnesses/folders${path === undefined ? "" : `?path=${encodeURIComponent(path)}`}`);
 
 const act = (task: number, action: string, body: object) =>
 	api<HarnessesView>(`/harnesses/sessions/${task}/${action}`, { method: "POST", body: JSON.stringify(body) });

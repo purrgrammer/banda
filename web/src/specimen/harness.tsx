@@ -16,6 +16,7 @@ import {
 } from "../chat/Harness.tsx";
 import { Line } from "../chat/Line.tsx";
 import { Panel, PanelSection } from "../chat/Panel.tsx";
+import type { FolderListing } from "../lib/api.ts";
 import { MARA } from "./fixtures.ts";
 import { Section } from "./stage.tsx";
 
@@ -54,6 +55,21 @@ const AFTER_ASK: readonly HarnessStep[] = [
 		text: "Fixed: refresh compared seconds with milliseconds. src/auth.ts converts once; the 6 auth tests pass. The token helper minted ms too, so I fixed it.",
 	},
 ];
+/** Folders as the daemon lists them, for the picker beside the field. */
+const browseSample = async (path?: string): Promise<FolderListing> =>
+	path === undefined || path === "~" || path === "~/code"
+		? {
+				path: "~/code",
+				parent: "~",
+				folders: [
+					{ name: "banda", path: "~/code/banda", repo: true, projects: 0 },
+					{ name: "clients", path: "~/code/clients", repo: false, projects: 4 },
+					{ name: "notes", path: "~/code/notes", repo: false, projects: 0 },
+					{ name: "sancho", path: "~/code/sancho", repo: true, projects: 0 },
+				],
+			}
+		: { path, parent: "~/code", folders: [] };
+
 const OUTCOME = "Fixed: refresh compared seconds with milliseconds";
 
 type Step = "connect" | "working" | "waiting" | "done" | "stopped";
@@ -227,7 +243,13 @@ export function HarnessSection() {
 						);
 						return <HarnessCard key={state} session={{ ...view, state }} />;
 					})}
-					<HarnessConnectCard agent="Mara" harness={HARNESS} />
+					<HarnessConnectCard
+						agent="Mara"
+						harness={HARNESS}
+						provider="anthropic"
+						folder="~/code"
+						browse={browseSample}
+					/>
 					<HarnessConnectCard
 						agent="Mara"
 						harness={HARNESS}

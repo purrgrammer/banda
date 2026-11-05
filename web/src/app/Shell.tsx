@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FACE } from "../../../src/core/choices.ts";
 import type { CompanionView } from "../../../src/server/api.ts";
-import { connectHarness, disconnectHarness, removeHarness } from "../areas/harnesses.ts";
+import { connectHarness, disconnectHarness, foldersAt, removeHarness } from "../areas/harnesses.ts";
 import { actOnRoutine, clickKey } from "../areas/routines.ts";
 import { useTiers } from "../areas/tiers.ts";
 import { Band, BandNotice } from "../chat/Band.tsx";
@@ -613,6 +613,7 @@ function Main() {
 											about={about}
 											provider={provider}
 											logo={logo}
+											browse={foldersAt}
 											folded
 											{...(custom === true
 												? { onRemove: () => void attempt("remove it", () => removeHarness(name)) }

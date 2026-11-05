@@ -25,7 +25,9 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/cn";
+import type { FolderListing } from "../lib/api.ts";
 import { Tile } from "./Cards.tsx";
+import { FolderPicker } from "./FolderPicker.tsx";
 
 /** One step of a session, as the harness reported it. */
 export type HarnessStep =
@@ -200,6 +202,7 @@ export function HarnessConnectCard({
 	about,
 	provider,
 	logo,
+	browse,
 	folded = false,
 	onRemove,
 	onConnect,
@@ -224,6 +227,8 @@ export function HarnessConnectCard({
 	provider?: string | undefined;
 	/** Its own mark, shown before a provider's. */
 	logo?: string | undefined;
+	/** The folders at a path, for the picker beside the field; without it, the field alone. */
+	browse?: ((path?: string) => Promise<FolderListing>) | undefined;
 	/** Not connected, it shows as one row with Connect until that is tapped. */
 	folded?: boolean;
 	/** The owner added it: Remove forgets it. */
@@ -240,23 +245,28 @@ export function HarnessConnectCard({
 	const [opened, setOpened] = useState(false);
 	const asking = connected === undefined || changing;
 	if (connected === undefined && folded && !opened)
+		// laid out as every service tile beside it: what it is, then Connect
 		return (
-			<Tile className="flex items-center gap-3 p-3">
-				<span className="flex size-9 shrink-0 items-center justify-center rounded-field bg-paper-3">
-					<HarnessMark provider={provider} logo={logo} />
+			<Tile className="flex flex-col gap-3 p-4">
+				<span className="flex items-center gap-3">
+					<span className="flex size-9 shrink-0 items-center justify-center rounded-field bg-paper-3">
+						<HarnessMark provider={provider} logo={logo} />
+					</span>
+					<span className="flex min-w-0 flex-1 flex-col">
+						<span className="text-ui font-semibold text-ink">{harness}</span>
+						<span className="min-w-0 truncate text-meta text-ink-2">{about ?? "On this computer"}</span>
+					</span>
 				</span>
-				<span className="flex min-w-0 flex-1 flex-col">
-					<span className="text-ui font-semibold text-ink">{harness}</span>
-					<span className="min-w-0 truncate text-meta text-ink-2">{about ?? "On this computer"}</span>
-				</span>
-				{onRemove === undefined ? null : (
-					<Button variant="ghost" size="sm" onClick={onRemove}>
-						Remove
+				<span className="flex flex-wrap gap-2">
+					<Button size="sm" onClick={() => setOpened(true)}>
+						Connect
 					</Button>
-				)}
-				<Button variant="outline" size="sm" onClick={() => setOpened(true)}>
-					Connect
-				</Button>
+					{onRemove === undefined ? null : (
+						<Button variant="destructive" size="sm" onClick={onRemove}>
+							Remove
+						</Button>
+					)}
+				</span>
 			</Tile>
 		);
 	return (
@@ -287,18 +297,23 @@ export function HarnessConnectCard({
 			</span>
 			{asking ? (
 				<>
-					<label htmlFor={id} className="flex flex-col gap-1.5">
-						<span className="text-meta text-ink-2">Your code folder</span>
-						<InputGroup>
-							<InputGroupInput
-								id={id}
-								value={folder}
-								className="font-code"
-								placeholder="~/code"
-								onChange={(event) => setFolder(event.target.value)}
-							/>
-						</InputGroup>
-					</label>
+					<div className="flex flex-col gap-1.5">
+						<label htmlFor={id} className="text-meta text-ink-2">
+							Your code folder
+						</label>
+						<span className="flex items-center gap-2">
+							<InputGroup className="min-w-0 flex-1">
+								<InputGroupInput
+									id={id}
+									value={folder}
+									className="font-code"
+									placeholder="~/code"
+									onChange={(event) => setFolder(event.target.value)}
+								/>
+							</InputGroup>
+							{browse === undefined ? null : <FolderPicker start={folder} browse={browse} onPick={setFolder} />}
+						</span>
+					</div>
 					{connected === undefined ? (
 						<ul className="flex flex-col gap-1 text-ui text-ink-2">
 							<li>Each task works in one of its projects (a git repository), or in the folder itself.</li>
@@ -339,7 +354,7 @@ export function HarnessConnectCard({
 							</Button>
 						)}
 						{connected === undefined && onRemove !== undefined ? (
-							<Button variant="ghost" onClick={onRemove}>
+							<Button variant="destructive" onClick={onRemove}>
 								Remove
 							</Button>
 						) : null}
@@ -354,12 +369,12 @@ export function HarnessConnectCard({
 						Change folder
 					</Button>
 					{onDisconnect === undefined ? null : (
-						<Button variant="ghost" size="sm" onClick={onDisconnect}>
+						<Button variant="destructive" size="sm" onClick={onDisconnect}>
 							Disconnect
 						</Button>
 					)}
 					{onRemove === undefined ? null : (
-						<Button variant="ghost" size="sm" onClick={onRemove}>
+						<Button variant="destructive" size="sm" onClick={onRemove}>
 							Remove
 						</Button>
 					)}
