@@ -29,8 +29,8 @@ import { useShell } from "../lib/shell.ts";
 import { useTranscript } from "../lib/transcript.ts";
 import { ActivitySheet } from "./Activity.tsx";
 import { FeedView } from "./Feed.tsx";
-import { type PendingMessage, settledByAnswer, shownMessages, stillPending } from "./outgoing.ts";
 import { FACE_STARTER, FIRST_STARTERS, firstWords } from "./first-words.ts";
+import { type PendingMessage, settledByAnswer, shownMessages, stillPending } from "./outgoing.ts";
 import { useSkills } from "./Skills.tsx";
 import { useViewContext } from "./view-context.ts";
 
@@ -194,8 +194,7 @@ function Timeline({
 			(posted) => {
 				if (settledByAnswer(posted)) setOutgoing((items) => items.filter((item) => item.id !== pending.id));
 			},
-			() =>
-				setOutgoing((items) => items.map((item) => (item.id === pending.id ? { ...item, state: "failed" } : item))),
+			() => setOutgoing((items) => items.map((item) => (item.id === pending.id ? { ...item, state: "failed" } : item))),
 		);
 	};
 	const shown = useMemo(
