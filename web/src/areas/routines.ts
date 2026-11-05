@@ -38,6 +38,8 @@ export const makeRoutine = (made: {
 	readonly description: string;
 	readonly when: string;
 	readonly ask: string;
+	/** The IANA time zone its times are in: the owner's, as this browser says. */
+	readonly zone?: string;
 }) => api<{ name: string; control: ControlView }>("/routines", { method: "POST", body: JSON.stringify(made) });
 
 /** A new click's key. */

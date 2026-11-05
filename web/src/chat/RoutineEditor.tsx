@@ -10,7 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { nextRuns, parseSchedule, pickSchedule, type SchedulePick } from "../../../src/core/schedule.ts";
+import {
+	hostZone,
+	nextRuns,
+	parseSchedule,
+	pickSchedule,
+	type SchedulePick,
+	zoneWords,
+} from "../../../src/core/schedule.ts";
 import { nearTime } from "../app/titles.ts";
 import { Confirm } from "./Confirm.tsx";
 import { PanelBar } from "./Panel.tsx";
@@ -30,6 +37,8 @@ export type EditedRoutine = {
 	readonly paused: boolean;
 	/** Its last run and what came of it, in words: "Today 08:00, nothing to say". */
 	readonly last?: string | undefined;
+	/** The IANA time zone its times are in, when it has one: the picker's times are on that wall. */
+	readonly zone?: string | undefined;
 };
 
 const EMPTY: RoutineDraft = { description: "", pick: { kind: "weekdays", time: "08:00" }, ask: "" };
@@ -70,10 +79,11 @@ function switched(pick: SchedulePick, kind: SchedulePick["kind"], now: number): 
 function reading(
 	pick: SchedulePick,
 	now: number,
+	zone?: string,
 ): { ok: true; line: string; next: string } | { ok: false; why: string } {
 	const picked = pickSchedule(pick);
 	if ("error" in picked) return { ok: false, why: picked.error };
-	const when = parseSchedule(picked.text);
+	const when = parseSchedule(picked.text, zone);
 	if (when === undefined) return { ok: false, why: "That is not a time it can run at." };
 	const runs = nextRuns(when, now, now, 2);
 	if (runs.length === 0) return { ok: false, why: "That time has passed: pick one still to come." };
@@ -107,7 +117,10 @@ export function RoutineEditor({
 	const [draft, setDraft] = useState<RoutineDraft>(routine?.draft ?? EMPTY);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | undefined>(undefined);
-	const read = reading(draft.pick, now);
+	const zone = routine?.zone;
+	const read = reading(draft.pick, now, zone);
+	// the next runs are on this browser's clock; a routine on another wall says whose its times are
+	const elsewhere = zone !== undefined && zone !== hostZone() ? ` (your time). Its times are ${zoneWords(zone)}.` : "";
 	const ready = draft.description.trim() !== "" && draft.ask.trim() !== "" && read.ok;
 	const set = (change: Partial<RoutineDraft>) => {
 		setDraft((was) => ({ ...was, ...change }));
@@ -145,7 +158,10 @@ export function RoutineEditor({
 						onChange={(event) => set({ description: event.target.value })}
 					/>
 				</Field>
-				<Field label="When" hint={read.ok ? `Next: ${read.next}` : <span className="text-danger">{read.why}</span>}>
+				<Field
+					label="When"
+					hint={read.ok ? `Next: ${read.next}${elsewhere}` : <span className="text-danger">{read.why}</span>}
+				>
 					<Select
 						value={pick.kind}
 						onValueChange={(kind) => set({ pick: switched(pick, kind as SchedulePick["kind"], now) })}

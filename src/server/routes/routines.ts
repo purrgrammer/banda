@@ -36,13 +36,14 @@ export const routines: AreaModule = {
 					const description = optional(body, "description", 200);
 					const when = optional(body, "when", 200);
 					const ask = optional(body, "ask", 8000);
+					const zone = optional(body, "zone", 64);
 					if (agent === undefined || description === undefined || when === undefined || ask === undefined)
 						throw new BadRequest("a routine names its agent, what it is for, when it runs and what it does");
 					const name = await createRoutine(
 						deps.harness,
 						deps.workspace,
 						reconcile,
-						{ agent, description, when, ask },
+						{ agent, description, when, ask, ...(zone === undefined ? {} : { zone }) },
 						Date.now(),
 					);
 					deps.changed();

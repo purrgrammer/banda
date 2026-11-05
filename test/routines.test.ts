@@ -24,8 +24,11 @@ import {
 	withWhen,
 } from "../src/core/routines.ts";
 import {
+	hostZone,
+	localTime,
 	nextDue,
 	nextRuns,
+	parseAt,
 	parseSchedule,
 	pickOf,
 	pickSchedule,
@@ -33,6 +36,7 @@ import {
 	scheduleText,
 	type When,
 	whenWords,
+	zoneWords,
 } from "../src/core/schedule.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore, Routes } from "../src/core/turn.ts";
@@ -189,6 +193,130 @@ describe("next runs", () => {
 	});
 });
 
+describe("a routine's time zone", () => {
+	const weather = (zone?: string) =>
+		`---\ndescription: Weather in Lisbon\ncron: 0 8 * * 1-5\n${zone === undefined ? "" : `zone: ${zone}\n`}---\nSay the weather.\n`;
+
+	it("a routine for Lisbon runs at 08:00 in Lisbon, on a computer in Madrid, and says so", () => {
+		process.env.TZ = "Europe/Madrid";
+		const thursday = Date.UTC(2026, 10, 5, 12, 0);
+		const lisbon = parseRoutine("weather", weather("Europe/Lisbon"));
+		if (!("routine" in lisbon)) throw new Error(lisbon.errors.join("; "));
+		expect(whenWords(lisbon.routine.when)).toBe("Weekdays at 08:00, Lisbon time");
+		// Friday 6 November, 08:00 in Lisbon (UTC+0 in winter), 09:00 in Madrid
+		expect(nextDue(lisbon.routine.when, thursday, 0)).toBe(Date.UTC(2026, 10, 6, 8, 0));
+		// without a zone it keeps the computer's wall, and says whose that is
+		const local = parseRoutine("weather", weather());
+		if (!("routine" in local)) throw new Error(local.errors.join("; "));
+		expect(whenWords(local.routine.when)).toBe("Weekdays at 08:00, Madrid time");
+		expect(nextDue(local.routine.when, thursday, 0)).toBe(Date.UTC(2026, 10, 6, 7, 0));
+		expect(parseRoutine("weather", weather("Lisbon"))).toEqual({
+			errors: ['"zone: Lisbon" is not a time zone: write an IANA name, such as Europe/Lisbon'],
+		});
+	});
+
+	it("a time once is read on its zone's wall, and one the clock skips is refused", () => {
+		process.env.TZ = "Asia/Kolkata";
+		expect(parseAt("2026-11-06 08:00", "Europe/Lisbon")).toBe(Date.UTC(2026, 10, 6, 8, 0));
+		expect(parseAt("2026-07-06 08:00", "Europe/Lisbon")).toBe(Date.UTC(2026, 6, 6, 7, 0));
+		expect(localTime(Date.UTC(2026, 6, 6, 7, 0), "Europe/Lisbon")).toBe("2026-07-06 08:00");
+		// Lisbon's clock goes from 01:00 to 02:00 on 29 March 2026
+		expect(parseAt("2026-03-29 01:30", "Europe/Lisbon")).toBeUndefined();
+		expect(parseAt("2026-02-30 08:00", "Europe/Lisbon")).toBeUndefined();
+	});
+
+	it("property: a routine in a zone runs exactly when it would on a computer in that zone, wherever it runs", () => {
+		fc.assert(
+			fc.property(fc.constantFrom(...ZONES), fc.constantFrom(...ZONES), anyPick, anyTime, (host, zone, pick, after) => {
+				const text = (pickSchedule(pick) as { text: string }).text;
+				process.env.TZ = zone;
+				const there = nextRuns(parseSchedule(text) as When, after, after, 5);
+				process.env.TZ = host;
+				const zoned = parseSchedule(text, zone) as When;
+				expect(nextRuns(zoned, after, after, 5)).toEqual(there);
+				expect(scheduleText(zoned)).toBe(text);
+			}),
+			{ numRuns: pbtRuns(200) },
+		);
+	});
+
+	it("the agent names the place's zone; the card says it; the owner's edit and the panel keep to a wall", async () => {
+		const asks = [
+			fauxAssistantMessage(
+				[
+					fauxToolCall(
+						"schedule",
+						{
+							name: "weather",
+							description: "Weather in Lisbon",
+							cron: "0 8 * * 1-5",
+							zone: "Europe/Lisbon",
+							ask: "Tell the owner the weather in Lisbon.",
+						},
+						{ id: "c1" },
+					),
+				],
+				{ stopReason: "toolUse" },
+			),
+			fauxAssistantMessage("Asked them to allow it."),
+		];
+		const { home, daemon: started, api, post } = await daemon(asks);
+		try {
+			await post("/messages", { id: randomUUID(), thread: randomUUID(), text: "Every weekday at 8, the weather" });
+			const file = join(home, "workspace", "routines", "weather.md");
+			await until(async () => existsSync(file));
+			expect(await readFile(file, "utf8")).toContain("cron: 0 8 * * 1-5\nzone: Europe/Lisbon\n");
+			const waiting = await until(async () =>
+				(await api<ControlView>("/control")).routines.find((each) => each.name === "weather" && each.change),
+			);
+			// the card says whose wall its time is on
+			expect(waiting.change).toMatchObject({
+				routine: { when: "Weekdays at 08:00, Lisbon time", zone: "Europe/Lisbon" },
+			});
+			const sha = (waiting.change as { sha: string }).sha;
+			const allowed = await post<ControlView>("/routines/weather/accept", { sha });
+			const runs = allowed.routines.find((each) => each.name === "weather")?.nextRuns ?? [];
+			expect(runs.map((at) => localTime(at, "Europe/Lisbon").slice(11))).toEqual(["08:00", "08:00", "08:00"]);
+
+			// the owner moves it: its time is still Lisbon's
+			const moved = await post<ControlView>("/routines/weather/when", { when: "cron 30 7 * * 1-5", sha });
+			const view = moved.routines.find((each) => each.name === "weather");
+			expect(view?.accepted?.routine).toMatchObject({ when: "Weekdays at 07:30, Lisbon time", zone: "Europe/Lisbon" });
+			expect((view?.nextRuns ?? []).map((at) => localTime(at, "Europe/Lisbon").slice(11))).toEqual([
+				"07:30",
+				"07:30",
+				"07:30",
+			]);
+
+			// one the owner makes from the panel is on their browser's wall
+			await expect(
+				post("/routines", {
+					agent: "sancho",
+					description: "Brief",
+					when: "cron 0 8 * * *",
+					ask: "Go.",
+					zone: "Lisbon",
+				}),
+			).rejects.toThrow(/400/);
+			const made = await post<{ name: string; control: ControlView }>("/routines", {
+				agent: "sancho",
+				description: "Night owl",
+				when: "cron 0 22 * * *",
+				ask: "Say good night.",
+				zone: "America/New_York",
+			});
+			expect(await readFile(join(home, "workspace", "routines", `${made.name}.md`), "utf8")).toContain(
+				"cron: 0 22 * * *\nzone: America/New_York\n",
+			);
+			const owl = made.control.routines.find((each) => each.name === made.name);
+			expect(owl?.accepted?.routine?.when).toBe("Every day at 22:00, New York time");
+			expect(localTime(owl?.next as number, "America/New_York").slice(11)).toBe("22:00");
+		} finally {
+			await started.close();
+		}
+	});
+});
+
 describe("the owner's edit of when a routine runs", () => {
 	const FIELDS = fc.record({
 		description: fc.constantFrom("Tea time", "Price: watch it", "Standup notes"),
@@ -214,7 +342,7 @@ describe("the owner's edit of when a routine runs", () => {
 				expect(edited).toBeDefined();
 				const after = parseRoutine("tea", edited as string);
 				if (!("routine" in after)) throw new Error(after.errors.join("; "));
-				expect(after.routine).toEqual({ ...before.routine, when: parseSchedule(line) });
+				expect(after.routine).toEqual({ ...before.routine, when: parseSchedule(line, hostZone()) });
 				const kept = (t: string) => t.split("\n").filter((l) => !/^(every|at|cron):/.test(l));
 				expect(kept(edited as string)).toEqual(kept(text));
 			}),
@@ -472,7 +600,11 @@ describe("routines through the API", () => {
 			const edited = moved.routines.find((routine) => routine.name === "tea");
 			expect(edited).toMatchObject({
 				state: "active",
-				accepted: { sha: shaOf(after), routine: { when: "Weekdays at 08:00", schedule: "cron 0 8 * * 1-5" } },
+				accepted: {
+					sha: shaOf(after),
+					// a time on the wall says whose: here, the daemon's computer's
+					routine: { when: `Weekdays at 08:00, ${zoneWords(hostZone())}`, schedule: "cron 0 8 * * 1-5" },
+				},
 			});
 			expect(edited?.change).toBeUndefined();
 			for (const at of edited?.nextRuns ?? []) {
@@ -533,7 +665,7 @@ describe("the owner's own routine, from the panel", () => {
 			expect(brief).toMatchObject({
 				agent: "sancho",
 				state: "active",
-				accepted: { routine: { description: "Morning brief", when: "Weekdays at 08:00" } },
+				accepted: { routine: { description: "Morning brief", when: `Weekdays at 08:00, ${zoneWords(hostZone())}` } },
 			});
 			expect(brief?.change).toBeUndefined();
 			expect(brief?.next).toBeGreaterThan(Date.now());

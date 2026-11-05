@@ -4,7 +4,7 @@
  * daemon last pushed its routines, so it never ticks on its own: the daemon pushes again when a routine fires.
  */
 
-import { parseSchedule, pickOf } from "../../../src/core/schedule.ts";
+import { hostZone, parseSchedule, pickOf } from "../../../src/core/schedule.ts";
 import type { RoutineView } from "../../../src/server/api.ts";
 import { actOnRoutine, clickKey, makeRoutine } from "../areas/routines.ts";
 import type { RoutineRowView } from "../chat/Panel.tsx";
@@ -72,7 +72,7 @@ export function routineRows(all: readonly RoutineView[], agent: string, now: num
 /** A routine in effect as its editor opens on it; undefined while it has no version in effect. */
 function editedOf(routine: RoutineView, now: number) {
 	const file = routine.accepted?.routine;
-	const when = file === undefined ? undefined : parseSchedule(file.schedule);
+	const when = file === undefined ? undefined : parseSchedule(file.schedule, file.zone);
 	if (file === undefined || when === undefined) return undefined;
 	const draft: RoutineDraft = { description: file.description, pick: pickOf(when), ask: file.ask };
 	return {
@@ -80,6 +80,7 @@ function editedOf(routine: RoutineView, now: number) {
 		draft,
 		paused: routine.paused !== undefined,
 		last: lastWords(routine.last, now),
+		zone: file.zone,
 	};
 }
 
@@ -113,7 +114,14 @@ export function EditRoutine({
 			onBack={onDone}
 			onSave={async (draft, when) => {
 				if (routine === undefined || sha === undefined) {
-					const made = await makeRoutine({ agent, description: draft.description, when, ask: draft.ask });
+					// the owner's times are on their own wall, wherever the daemon runs
+					const made = await makeRoutine({
+						agent,
+						description: draft.description,
+						when,
+						ask: draft.ask,
+						zone: hostZone(),
+					});
 					showControl(made.control);
 				} else
 					showControl(

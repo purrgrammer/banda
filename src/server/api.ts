@@ -494,6 +494,8 @@ export type RoutineSummary = {
 	readonly at?: number;
 	/** When it runs as one line (`cron 0 8 * * 1-5`): what the schedule picker starts from. */
 	readonly schedule: string;
+	/** The IANA time zone its wall times (`at`, `cron`) are in: its file's, or the daemon's computer's. */
+	readonly zone?: string;
 
 	/** The most times it may run in one day before it pauses itself. */
 	readonly runsADay: number;

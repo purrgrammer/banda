@@ -1,10 +1,11 @@
 /**
- * When a routine is due (DESIGN.md "Routines"): every so long, once at a time, or on a cron-like schedule, in the
- * daemon's local time. Plain data and pure functions, so the app says a routine's schedule in the same words the daemon
- * keeps it by.
+ * When a routine is due (DESIGN.md "Routines"): every so long, once at a time, or on a cron-like schedule. A time on
+ * the wall (`at`, `cron`) is read in the routine's time zone, an IANA name, or else in this process's own. Plain data
+ * and pure functions, so the app says a routine's schedule in the same words the daemon keeps it by.
  */
 
 const MINUTE = 60_000;
+const DAY_MS = 24 * 60 * MINUTE;
 const UNITS: { readonly [unit: string]: number } = {
 	m: MINUTE,
 	h: 60 * MINUTE,
@@ -12,8 +13,73 @@ const UNITS: { readonly [unit: string]: number } = {
 	w: 7 * 24 * 60 * MINUTE,
 };
 
-/** A routine's schedule: every `every` ms from when it was allowed, once `at` (epoch ms), or on `cron`'s minutes. */
-export type When = { readonly every: number } | { readonly at: number } | { readonly cron: string };
+/**
+ * A routine's schedule: every `every` ms from when it was allowed, once `at` (epoch ms), or on `cron`'s minutes. `zone`
+ * is the IANA time zone its wall times are in; without one, this process's.
+ */
+export type When =
+	| { readonly every: number }
+	| { readonly at: number; readonly zone?: string }
+	| { readonly cron: string; readonly zone?: string };
+
+/** This process's time zone: the daemon's computer's, or the browser's. */
+export const hostZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+const formats = new Map<string, Intl.DateTimeFormat>();
+function format(zone: string): Intl.DateTimeFormat {
+	let made = formats.get(zone);
+	if (made === undefined) {
+		made = new Intl.DateTimeFormat("en-US", {
+			timeZone: zone,
+			hourCycle: "h23",
+			year: "numeric",
+			month: "numeric",
+			day: "numeric",
+			hour: "numeric",
+			minute: "numeric",
+		});
+		formats.set(zone, made);
+	}
+	return made;
+}
+
+/** Whether `zone` is a time zone this runtime knows (`Europe/Lisbon`, `UTC`). */
+export function isZone(zone: string): boolean {
+	try {
+		format(zone);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/** A calendar day and a time on the wall; `month` from 1. */
+type Wall = { readonly y: number; readonly mo: number; readonly d: number; readonly h: number; readonly mi: number };
+
+/** What the clock on the wall in `zone` says at `ms`. */
+function wallAt(ms: number, zone: string): Wall {
+	const parts: { [type: string]: number } = {};
+	for (const part of format(zone).formatToParts(ms)) parts[part.type] = Number(part.value);
+	return { y: parts.year ?? 0, mo: parts.month ?? 0, d: parts.day ?? 0, h: parts.hour ?? 0, mi: parts.minute ?? 0 };
+}
+
+const wallUtc = (w: Wall) => Date.UTC(w.y, w.mo - 1, w.d, w.h, w.mi);
+/** How far `zone`'s wall is ahead of UTC at `ms`. */
+const offsetAt = (ms: number, zone: string) => wallUtc(wallAt(ms, zone)) - (ms - (((ms % MINUTE) + MINUTE) % MINUTE));
+
+/**
+ * The moment `zone`'s wall says `w`: the earlier of two when the clock goes back over it. On a day the clock skips it,
+ * undefined, or with `skipped`, the moment the clock lands on instead (02:30 when 01:00 jumps to 02:00).
+ */
+function wallMoment(w: Wall, zone: string, skipped = false): number | undefined {
+	const utc = wallUtc(w);
+	// a zone's offset changes at most once in a day either side, so the offset a day before or a day after is the one
+	const before = utc - offsetAt(utc - DAY_MS, zone);
+	const after = utc - offsetAt(utc + DAY_MS, zone);
+	const fits = [before, after].filter((ms) => wallUtc(wallAt(ms, zone)) === utc);
+	if (fits.length > 0) return Math.min(...fits);
+	return skipped ? before : undefined;
+}
 
 /** `30m`, `2h`, `1d`, `1w` as ms; undefined when it is not one, or under a minute. */
 export function parseEvery(text: string): number | undefined {
@@ -23,16 +89,16 @@ export function parseEvery(text: string): number | undefined {
 	return ms >= MINUTE ? ms : undefined;
 }
 
-/** `2026-11-02 09:00` (or with a `T`), local time, as epoch ms; undefined when it is not one. */
-export function parseAt(text: string): number | undefined {
+/** `2026-11-02 09:00` (or with a `T`), on the wall in `zone`, as epoch ms; undefined when it is not one. */
+export function parseAt(text: string, zone: string = hostZone()): number | undefined {
 	const match = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/.exec(text.trim());
 	if (match === null) return undefined;
 	const [y, mo, d, h, mi] = match.slice(1).map(Number) as [number, number, number, number, number];
-	const date = new Date(y, mo - 1, d, h, mi);
-	// a date that rolled over (the 31st of a 30-day month, hour 25) is not the one written
-	if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d || date.getHours() !== h)
-		return undefined;
-	return date.getTime();
+	// a date that rolls over (the 31st of a 30-day month, hour 25) or the clock skips is not the one written
+	if (mo < 1 || mo > 12 || d < 1 || h > 23 || mi > 59) return undefined;
+	const date = new Date(Date.UTC(y, mo - 1, d));
+	if (date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return undefined;
+	return wallMoment({ y, mo, d, h, mi }, zone);
 }
 
 /** A cron field's allowed values, in order. */
@@ -93,14 +159,14 @@ export function parseCron(text: string): Cron | undefined {
 /** How far ahead a cron schedule is searched: one that matches no day in five years never comes. */
 const CRON_DAYS = 5 * 366;
 
-function cronAfter(cron: Cron, after: number): number | undefined {
-	const start = new Date(after);
-	start.setSeconds(0, 0);
-	const day = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-	for (let i = 0; i < CRON_DAYS; i++, day.setDate(day.getDate() + 1)) {
-		if (!cron.months.includes(day.getMonth() + 1)) continue;
-		const byDay = cron.days.includes(day.getDate());
-		const byWeekday = cron.weekdays.includes(day.getDay());
+function cronAfter(cron: Cron, after: number, zone: string): number | undefined {
+	const start = wallAt(after, zone);
+	// the calendar days on `zone`'s wall, counted in UTC so no clock of this process's moves them
+	const day = new Date(Date.UTC(start.y, start.mo - 1, start.d));
+	for (let i = 0; i < CRON_DAYS; i++, day.setUTCDate(day.getUTCDate() + 1)) {
+		if (!cron.months.includes(day.getUTCMonth() + 1)) continue;
+		const byDay = cron.days.includes(day.getUTCDate());
+		const byWeekday = cron.weekdays.includes(day.getUTCDay());
 		const matches =
 			cron.dayRestricted && cron.weekdayRestricted
 				? byDay || byWeekday
@@ -112,8 +178,9 @@ function cronAfter(cron: Cron, after: number): number | undefined {
 		if (!matches) continue;
 		for (const hour of cron.hours)
 			for (const minute of cron.minutes) {
-				const at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, minute).getTime();
-				if (at > after) return at;
+				const wall = { y: day.getUTCFullYear(), mo: day.getUTCMonth() + 1, d: day.getUTCDate(), h: hour, mi: minute };
+				const at = wallMoment(wall, zone, true);
+				if (at !== undefined && at > after) return at;
 			}
 	}
 	return undefined;
@@ -130,13 +197,19 @@ export function nextDue(when: When, after: number, since: number): number | unde
 		return since + (Math.floor((after - since) / when.every) + 1) * when.every;
 	}
 	const cron = parseCron(when.cron);
-	return cron === undefined ? undefined : cronAfter(cron, after);
+	return cron === undefined ? undefined : cronAfter(cron, after, when.zone ?? hostZone());
 }
 
-/** A time as a routine file writes one, local: `2026-11-02 09:00`. */
-export function localTime(ms: number): string {
-	const date = new Date(ms);
-	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+/** A time as a routine file writes one, on the wall in `zone`: `2026-11-02 09:00`. */
+export function localTime(ms: number, zone: string = hostZone()): string {
+	const w = wallAt(ms, zone);
+	return `${w.y}-${pad(w.mo)}-${pad(w.d)} ${pad(w.h)}:${pad(w.mi)}`;
+}
+
+/** A time zone as the owner reads it: `Lisbon time`, `UTC`. */
+export function zoneWords(zone: string): string {
+	const place = zone.split("/").at(-1) ?? zone;
+	return zone.includes("/") && !zone.startsWith("Etc/") ? `${place.replaceAll("_", " ")} time` : zone;
 }
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -162,6 +235,14 @@ function everyWords(ms: number): string {
  * plain words is "On its own schedule". A one-time routine says only that it runs once: the app writes the time itself.
  */
 export function whenWords(when: When): string {
+	const words = cronWords(when);
+	// a time on the wall says whose wall
+	return "cron" in when && when.zone !== undefined && / at \d\d:\d\d$/.test(words)
+		? `${words}, ${zoneWords(when.zone)}`
+		: words;
+}
+
+function cronWords(when: When): string {
 	if ("every" in when) return everyWords(when.every);
 	if ("at" in when) return "Once";
 	const parts = when.cron.trim().split(/\s+/);
@@ -201,7 +282,7 @@ export function everyText(ms: number): string {
  */
 export function scheduleText(when: When): string {
 	if ("every" in when) return `every ${everyText(when.every)}`;
-	if ("at" in when) return `at ${localTime(when.at)}`;
+	if ("at" in when) return `at ${localTime(when.at, when.zone)}`;
 	return `cron ${when.cron.trim().split(/\s+/).join(" ")}`;
 }
 
@@ -216,8 +297,8 @@ export function scheduleField(
 	return { key, value };
 }
 
-/** A schedule line (`scheduleText`) as a schedule; undefined when it is not one. */
-export function parseSchedule(text: string): When | undefined {
+/** A schedule line (`scheduleText`) as a schedule, its wall times in `zone` (else this process's); undefined when it is not one. */
+export function parseSchedule(text: string, zone?: string): When | undefined {
 	const field = scheduleField(text);
 	if (field === undefined) return undefined;
 	if (field.key === "every") {
@@ -225,10 +306,12 @@ export function parseSchedule(text: string): When | undefined {
 		return every === undefined ? undefined : { every };
 	}
 	if (field.key === "at") {
-		const at = parseAt(field.value);
-		return at === undefined ? undefined : { at };
+		const at = parseAt(field.value, zone);
+		return at === undefined ? undefined : { at, ...(zone === undefined ? {} : { zone }) };
 	}
-	return parseCron(field.value) === undefined ? undefined : { cron: field.value };
+	return parseCron(field.value) === undefined
+		? undefined
+		: { cron: field.value, ...(zone === undefined ? {} : { zone }) };
 }
 
 /**
@@ -306,7 +389,7 @@ export function pickSchedule(pick: SchedulePick): { readonly text: string } | { 
 
 /** The pick that shows a schedule in the picker: its preset when it is one, else custom. */
 export function pickOf(when: When): SchedulePick {
-	if ("at" in when) return { kind: "once", at: localTime(when.at) };
+	if ("at" in when) return { kind: "once", at: localTime(when.at, when.zone) };
 	if ("every" in when) {
 		const hours = when.every / (UNITS.h ?? 1);
 		if (Number.isInteger(hours) && hours >= 1 && hours <= 168) return { kind: "hours", hours };

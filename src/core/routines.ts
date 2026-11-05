@@ -1,6 +1,7 @@
 /**
  * Routines (DESIGN.md "Routines"): `routines/<name>.md` in the workspace, a "before" file: when it is due (every so
- * long, once, or on a cron-like schedule), how many runs a day it may have, and what to ask. The accepted file is what
+ * long, once, or on a cron-like schedule, its times on the wall of its `zone`, else the daemon's computer's), how many
+ * runs a day it may have, and what to ask. The accepted file is what
  * runs. A routine belongs to one agent and wakes in that agent's chat, never a chat of its own. Each routine has one
  * task, a timer: it sleeps until the routine is due, and then, in the commit that records the due time as fired, queues
  * one wake into its agent's chat, so a routine fires once per due time whatever restarts come between. Due times
@@ -31,7 +32,18 @@ import {
 import { log } from "./activity.ts";
 import { Accepted, AGENT_NAME, agentWords, ChatAgent, frontmatter, isArchived, LEAD, shaOf } from "./agents.ts";
 
-import { localTime, nextDue, parseAt, parseCron, parseEvery, scheduleField, type When, whenWords } from "./schedule.ts";
+import {
+	hostZone,
+	isZone,
+	localTime,
+	nextDue,
+	parseAt,
+	parseCron,
+	parseEvery,
+	scheduleField,
+	type When,
+	whenWords,
+} from "./schedule.ts";
 import { context } from "./store.ts";
 
 /** A routine's name, which is its file's: lowercase words joined by `-`, as an agent's. */
@@ -59,7 +71,7 @@ export type Routine = {
 	readonly ask: string;
 };
 
-const FIELDS = ["description", "every", "at", "cron", "runs_a_day"] as const;
+const FIELDS = ["description", "every", "at", "cron", "zone", "runs_a_day"] as const;
 
 /** Parse a routine file, each problem saying what to write instead. */
 export function parseRoutine(
@@ -78,6 +90,11 @@ export function parseRoutine(
 	const every = read.one("every");
 	const at = read.one("at");
 	const cron = read.one("cron");
+	const zoned = read.one("zone");
+	if (zoned !== undefined && !isZone(zoned))
+		errors.push(`"zone: ${zoned}" is not a time zone: write an IANA name, such as Europe/Lisbon`);
+	// a time on the wall is on the owner's wall when the file names it, else the daemon's computer's, said either way
+	const zone = zoned !== undefined && isZone(zoned) ? zoned : hostZone();
 	const given = [every, at, cron].filter((value) => value !== undefined).length;
 	let when: When | undefined;
 	if (given > 1) errors.push(`give one of "every", "at" and "cron"`);
@@ -87,13 +104,13 @@ export function parseRoutine(
 			errors.push(`"every: ${every}" is not a period: write a number and m, h, d or w, such as 30m`);
 		else when = { every: ms };
 	} else if (at !== undefined) {
-		const ms = parseAt(at);
+		const ms = parseAt(at, zone);
 		if (ms === undefined) errors.push(`"at: ${at}" is not a time: write it as 2026-11-02 09:00`);
-		else when = { at: ms };
+		else when = { at: ms, zone };
 	} else if (cron !== undefined) {
 		if (parseCron(cron) === undefined)
 			errors.push(`"cron: ${cron}" is not a schedule: write minute hour day month weekday, such as 0 9 * * 1-5`);
-		else when = { cron };
+		else when = { cron, zone };
 	} else errors.push(`say when it runs: "every", "at" or "cron"`);
 	const runsText = read.one("runs_a_day");
 	const runsADay = runsText === undefined ? DEFAULT_RUNS_A_DAY : Number(runsText);
@@ -297,9 +314,13 @@ export async function troubleIn(tx: Tx, chat: number, data: TroubleData): Promis
 
 /** What the model reads when a routine wakes it; `owner`, when the owner ran it now. */
 function wakeText(routine: Routine, due: number, owner = false): string {
+	const zone = "every" in routine.when ? hostZone() : (routine.when.zone ?? hostZone());
+	const words = whenWords(routine.when);
+	const when = `${localTime(due, zone)} ${zone}`;
+	const runs = (words[0] ?? "").toLowerCase() + words.slice(1);
 	const why = owner
-		? `The owner asked your routine "${routine.name}" to run now, at ${localTime(due)} (it runs ${whenWords(routine.when).toLowerCase()}): `
-		: `Your routine "${routine.name}" was due at ${localTime(due)} (${whenWords(routine.when).toLowerCase()}): `;
+		? `The owner asked your routine "${routine.name}" to run now, at ${when} (it runs ${runs}): `
+		: `Your routine "${routine.name}" was due at ${when} (${runs}): `;
 	return (
 		why +
 		`${routine.description}. ${owner ? "" : "Nobody is waiting on this run, and "}` +
@@ -666,19 +687,31 @@ export function defineRoutines(options: RoutinesOptions) {
 		description:
 			'Keep a promise in time: when you tell the owner you will do something later ("I\'ll check tomorrow", "every ' +
 			'Monday"), make it a routine, or it will not happen: you remember nothing between runs. Give exactly one of ' +
-			"`every` (30m, 2h, 1d, 1w), `at` (2026-11-02 09:00, local time, once) or `cron` (minute hour day month weekday). " +
-			"It writes routines/<name>.md, which runs once the owner allows it; writing the same name again changes it.",
+			"`every` (30m, 2h, 1d, 1w), `at` (2026-11-02 09:00, once) or `cron` (minute hour day month weekday). " +
+			"`at` and `cron` are times on a wall clock: give `zone`, the IANA time zone of the place the owner means " +
+			"(Europe/Lisbon), whenever you know it; without it they are in the zone your status line names, which is the " +
+			"computer you run on, not where the owner is. Say the time back in the place's zone. It writes routines/<name>.md, which runs once the owner allows it; writing the same name again changes it.",
 		parameters: Type.Object({
 			...common,
 			every: Type.Optional(Type.String()),
 			at: Type.Optional(Type.String()),
 			cron: Type.Optional(Type.String()),
+			zone: Type.Optional(
+				Type.String({
+					minLength: 1,
+					maxLength: 64,
+					description:
+						"The IANA time zone `at` and `cron` are in, such as Europe/Lisbon: where the owner is, or the place they name.",
+				}),
+			),
 		}),
 		replay: "safe",
 		execute: (args, api, ctx) =>
 			run(async () => {
 				const when = Object.fromEntries(
-					(["every", "at", "cron"] as const).flatMap((key) => (args[key] === undefined ? [] : [[key, args[key]]])),
+					(["every", "at", "cron", "zone"] as const).flatMap((key) =>
+						args[key] === undefined ? [] : [[key, args[key]]],
+					),
 				);
 				return propose(
 					api,

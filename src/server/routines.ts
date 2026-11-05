@@ -28,7 +28,7 @@ import {
 	withDescription,
 	withWhen,
 } from "../core/routines.ts";
-import { nextRuns, parseSchedule, scheduleField, scheduleText, whenWords } from "../core/schedule.ts";
+import { isZone, nextRuns, parseSchedule, scheduleField, scheduleText, whenWords } from "../core/schedule.ts";
 import { context } from "../core/store.ts";
 import { boxFiles, type Workspace, write } from "./agents.ts";
 import type {
@@ -49,6 +49,7 @@ const summary = (routine: Routine): RoutineSummary => ({
 	when: whenWords(routine.when),
 	...("at" in routine.when ? { at: routine.when.at } : {}),
 	schedule: scheduleText(routine.when),
+	...("every" in routine.when || routine.when.zone === undefined ? {} : { zone: routine.when.zone }),
 
 	runsADay: routine.runsADay,
 	ask: routine.ask,
@@ -62,6 +63,7 @@ const fileView = (name: string, sha: string, text: string): RoutineFileView => {
 const routineFiles = (workspace: Workspace, ctx: Context) => boxFiles(workspace, ctx, "routines", MAX_ROUTINE_BYTES);
 
 const DAY = 24 * 60 * 60_000;
+const lowerFirst = (words: string) => (words[0] ?? "").toLowerCase() + words.slice(1);
 /** How many runs of one routine the timeline is given for the week ahead: an hourly one says the rest in words. */
 const WEEK_SHOWN = 48;
 /** What came of a routine's newest run: it failed, or it ran; what it said is in its chat, which the card opens. */
@@ -236,8 +238,8 @@ async function boxText(workspace: Workspace, name: string, ctx: Context): Promis
 export type RoutineChange = { readonly when?: string; readonly description?: string; readonly ask?: string };
 
 /** A schedule line the owner gave, read; refused in words when it is none, or a time that has passed. */
-function scheduleOf(when: string, now: number) {
-	const schedule = parseSchedule(when);
+function scheduleOf(when: string, now: number, zone?: string) {
+	const schedule = parseSchedule(when, zone);
 	if (schedule === undefined)
 		throw new BadRequest(`"${when}" is not a schedule: every 4h, at 2026-11-02 09:00, or cron 0 8 * * 1-5`);
 	if ("at" in schedule && schedule.at <= now) throw new BadRequest("that time has passed: pick one still to come");
@@ -278,11 +280,14 @@ export async function changeRoutine(
 	now: number,
 	ctx: Context = context,
 ): Promise<void> {
-	const schedule = change.when === undefined ? undefined : scheduleOf(change.when, now);
 	const description = change.description === undefined ? undefined : descriptionOf(change.description);
 	const ask = change.ask === undefined ? undefined : askOf(change.ask);
 	const file = (await harness.snapshot(Accepted, ctx))?.files[routinePath(named(name))];
 	if (file === undefined) throw new BadRequest(`there is no routine named ${name}`, 404);
+	// the owner's times are on the wall the routine keeps: its zone stays as it was
+	const was = parseRoutine(name, file.text);
+	const zone = "routine" in was && !("every" in was.routine.when) ? was.routine.when.zone : undefined;
+	const schedule = change.when === undefined ? undefined : scheduleOf(change.when, now, zone);
 	if (file.sha !== sha) throw new BadRequest("it changed since you saw it: look again", 409);
 	const box = await boxText(workspace, name, ctx);
 	if (box === null) throw new BadRequest("it has a change waiting for you to allow it: answer that first", 409);
@@ -304,7 +309,7 @@ export async function changeRoutine(
 	if (changed === sha) return;
 	const what =
 		schedule !== undefined && description === undefined && ask === undefined
-			? `You changed when it runs: ${whenWords(schedule).toLowerCase()}`
+			? `You changed when it runs: ${lowerFirst(whenWords(schedule))}`
 			: "You changed it";
 	const edited = text;
 	await harness.commit(async (tx) => {
@@ -357,6 +362,8 @@ export type NewRoutine = {
 	readonly description: string;
 	readonly when: string;
 	readonly ask: string;
+	/** The IANA time zone its wall times are in: the owner's, as their browser says. */
+	readonly zone?: string;
 };
 
 /**
@@ -373,7 +380,9 @@ export async function createRoutine(
 	now: number,
 	ctx: Context = context,
 ): Promise<string> {
-	const schedule = scheduleOf(made.when, now);
+	if (made.zone !== undefined && !isZone(made.zone))
+		throw new BadRequest(`"${made.zone}" is not a time zone: an IANA name, such as Europe/Lisbon`);
+	const schedule = scheduleOf(made.when, now, made.zone);
 	const description = descriptionOf(made.description);
 	const ask = askOf(made.ask);
 	const accepted = (await harness.snapshot(Accepted, ctx))?.files ?? {};
@@ -386,7 +395,10 @@ export async function createRoutine(
 	if (field === undefined) throw new BadRequest("that is not a schedule");
 	const text = routineText({
 		description,
-		when: { [field.key]: field.value },
+		when: {
+			[field.key]: field.value,
+			...(made.zone === undefined || field.key === "every" ? {} : { zone: made.zone }),
+		},
 		runsADay: DEFAULT_RUNS_A_DAY,
 		ask,
 	});

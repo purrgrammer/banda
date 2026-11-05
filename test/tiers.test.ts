@@ -69,7 +69,7 @@ describe("the presets", () => {
 
 	it("a routine's file says no tier: it runs as its agent's chat thinks", () => {
 		expect(parseRoutine("tea", "---\ndescription: Tea\nevery: 1d\ntier: deep\n---\nTea.")).toEqual({
-			errors: ['"tier" is not a field: use description, every, at, cron, runs_a_day'],
+			errors: ['"tier" is not a field: use description, every, at, cron, zone, runs_a_day'],
 		});
 	});
 });

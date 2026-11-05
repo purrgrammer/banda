@@ -7,7 +7,7 @@ import { Accepted, shaOf } from "../src/core/agents.ts";
 import { pause, pauseRoutine, resume } from "../src/core/control.ts";
 import { OWNER } from "../src/core/gateway.ts";
 import { Control, parseRoutine, Routines, routinePath, TROUBLE, type TroubleData, WAKE } from "../src/core/routines.ts";
-import { nextDue, parseAt, parseCron, whenWords } from "../src/core/schedule.ts";
+import { hostZone, nextDue, parseAt, parseCron, whenWords } from "../src/core/schedule.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore, Routes } from "../src/core/turn.ts";
 import { chats } from "../src/server/transcript.ts";
@@ -30,7 +30,10 @@ describe("Routine files", () => {
 			},
 		});
 		const once = parseRoutine("call", "---\ndescription: Call\nat: 2026-11-03 09:30\n---\nCall mum.");
-		expect("routine" in once && once.routine.when).toEqual({ at: new Date(2026, 10, 3, 9, 30).getTime() });
+		expect("routine" in once && once.routine.when).toEqual({
+			at: new Date(2026, 10, 3, 9, 30).getTime(),
+			zone: hostZone(),
+		});
 		const cron = parseRoutine(
 			"standup",
 			"---\ndescription: Standup\ncron: 0 9 * * 1-5\nruns_a_day: 2\n---\nPrep notes.",

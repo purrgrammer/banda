@@ -437,6 +437,9 @@ gives it, the open asks it covers, and an ask a permission covers by the time it
   deduplicated.
 - **Due times.** A routine fires once per due time, in the commit that records the time as fired; due times missed
   while the daemon was down or paused come together as one wake. A routine whose last run still goes skips its turn.
+- **A time is on someone's wall**: `at` and `cron` are read in the routine file's `zone` (an IANA name), which the
+  agent gives for the place the owner means and the panel gives as the owner's browser's; without one, the daemon's
+  computer's. Its words always say whose wall ("Weekdays at 08:00, Lisbon time").
 - **Runs a day** are per routine (`runs_a_day` in its file); one that runs that many times in a day pauses alone and
   says so.
 
