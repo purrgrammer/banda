@@ -118,7 +118,6 @@ describe("a permanent agent's routines", () => {
 					"read",
 					"message_agent",
 					"read_agent_chat",
-					"opt_out_chat_reads",
 					"propose_agent",
 					"propose_group",
 					"propose_agent_change",

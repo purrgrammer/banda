@@ -1,6 +1,7 @@
 /**
- * The chat's timeline: runs of messages as bubbles, the owner's on the right, an agent's on the left under its face and
- * name; day separators, the unread divider, jump to latest. Cards sit in the agent's column, outside the bubbles.
+ * The chat's timeline: runs of messages as bubbles, the owner's on the right, an agent's on the left, under its face and
+ * name in a group (in a 1:1 chat the header already says who); day separators, the unread divider, jump to latest.
+ * Cards sit in the agent's column, outside the bubbles.
  */
 import { ArrowDownIcon, CheckIcon, CopyIcon, ListTreeIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
@@ -11,7 +12,7 @@ import type { Who } from "./Row.tsx";
 /** Whose run a bubble is in: the owner's, or an agent's. */
 const Mine = createContext(false);
 
-/** A run of consecutive messages from one side. In a 1:1 chat on the phone the face stands alone, the name at the top. */
+/** A run of consecutive messages from one side. In a 1:1 chat the agent's run has no face or name, its time below. */
 export function Run({
 	who,
 	time,
@@ -22,7 +23,7 @@ export function Run({
 	who?: Who | undefined;
 	time?: string | undefined;
 	children: ReactNode;
-	/** Phone, 1:1: the face without the name. */
+	/** A 1:1 chat: neither face nor name, which the header already shows. */
 	compact?: boolean;
 }) {
 	if (who === undefined)
@@ -32,16 +33,21 @@ export function Run({
 				{time === undefined ? null : <span className="px-1 text-meta text-ink-2">{time}</span>}
 			</div>
 		);
+	if (compact)
+		return (
+			<div className="flex flex-col items-start gap-1.5 pr-12">
+				{children}
+				{time === undefined ? null : <span className="px-1 text-meta text-ink-2">{time}</span>}
+			</div>
+		);
 	return (
 		<div className="flex gap-2.5 pr-6">
 			<Face face={who.face} name={who.name} size="message" className="-mt-0.5" />
 			<div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
-				{compact ? null : (
-					<span className="flex items-baseline gap-2">
-						<span className="text-body font-semibold text-ink">{who.name}</span>
-						{time === undefined ? null : <span className="text-meta text-ink-2">{time}</span>}
-					</span>
-				)}
+				<span className="flex items-baseline gap-2">
+					<span className="text-body font-semibold text-ink">{who.name}</span>
+					{time === undefined ? null : <span className="text-meta text-ink-2">{time}</span>}
+				</span>
 				{children}
 			</div>
 		</div>
@@ -210,7 +216,7 @@ export function Mention({ who }: { who: Who & { readonly id?: string | undefined
 			href={`#/a/${who.id ?? who.name.toLowerCase()}`}
 			className={cn(
 				"mx-px inline-flex rounded-[6px] bg-paper-3 font-medium text-ink no-underline hover:underline",
-				"items-center gap-0.5 py-px pr-1.5 align-middle leading-none",
+				"items-center gap-0.5 py-px pr-1.5 align-middle leading-none -translate-y-[0.1em]",
 			)}
 		>
 			<Face face={who.face} name={who.name} size="mention" />

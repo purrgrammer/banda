@@ -103,7 +103,6 @@ describe("a chat's tools are what is in effect now", () => {
 			"message_user",
 			"message_agent",
 			"read_agent_chat",
-			"opt_out_chat_reads",
 			"propose_agent",
 			"propose_group",
 			"propose_agent_change",

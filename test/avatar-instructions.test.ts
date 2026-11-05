@@ -50,7 +50,6 @@ describe("shipped avatar instructions", () => {
 					for (const tool of [
 						"message_agent",
 						"read_agent_chat",
-						"opt_out_chat_reads",
 						"propose_agent",
 						"propose_group",
 						"propose_agent_change",
@@ -61,7 +60,6 @@ describe("shipped avatar instructions", () => {
 						expect.arrayContaining([
 							"message_agent",
 							"read_agent_chat",
-							"opt_out_chat_reads",
 							"propose_agent",
 							"propose_group",
 							"propose_agent_change",
