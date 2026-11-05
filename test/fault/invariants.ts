@@ -82,6 +82,14 @@ export function checkTurnInvariants(
 		for (const m of mine) {
 			const outcome = summary.outcomes[m.id];
 			if (outcome?.status !== "completed") continue;
+			const nudges = summary.nudges[m.id] ?? [];
+			for (const nudge of nudges) {
+				expect(nudge.status, `the nudge for ${m.id} ended`).toBe("completed");
+				if (nudge.status === "completed" && "failed" in nudge.result)
+					expect(texts, `the nudge failure for ${m.id} told`).toContain(`The run failed: ${nudge.result.failed}`);
+			}
+			const failedNudge = nudges.some((n) => n.status === "completed" && "failed" in n.result);
+			if (owners && m.text.startsWith(SAY) && failedNudge) continue;
 			if ("failed" in outcome.result)
 				expect(texts, `the failure of ${m.id} told`).toContainEqual(expect.stringMatching(/^The run failed: /));
 			else if (outcome.result.ended === "answered" && m.text.startsWith(REACT))
