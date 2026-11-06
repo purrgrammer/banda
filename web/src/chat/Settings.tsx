@@ -3,15 +3,7 @@
  * owner's words, its connections, permissions, memory, thinking tier and archive. A new agent is a short sheet with the
  * face defaulted: naming a friend, not filling a form. And Settings, one page. Every change is in effect at once.
  */
-import {
-	ArchiveIcon,
-	ArchiveRestoreIcon,
-	ChevronLeftIcon,
-	PencilIcon,
-	PlusIcon,
-	Trash2Icon,
-	XIcon,
-} from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, ChevronLeftIcon, PencilIcon, PlusIcon, XIcon } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import {
 	AlertDialog,
@@ -25,7 +17,6 @@ import {
 	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
@@ -412,175 +403,6 @@ export function ThinkingTiers() {
 	);
 }
 
-/** What the agent remembers about the owner: each fact editable and deletable, in effect at once. */
-export type FactRow = { readonly id: string; readonly text: string };
-
-export function Memory({
-	agent,
-	facts,
-	onEdit,
-	onForget,
-	onAdd,
-	shared = false,
-}: {
-	agent: string;
-	facts: readonly FactRow[];
-	onEdit?: (id: string, text: string) => void | Promise<void>;
-	onForget?: (id: string) => void | Promise<void>;
-	onAdd?: (text: string) => Promise<void>;
-	shared?: boolean;
-}) {
-	const [editing, setEditing] = useState<FactRow>();
-	// Keep the owner's draft when SSE changes/removes its source row; Save must report a conflict, not lose the draft.
-	const shown = editing !== undefined && !facts.some((fact) => fact.id === editing.id) ? [...facts, editing] : facts;
-	const [adding, setAdding] = useState("");
-	const [pending, setPending] = useState(false);
-	const [error, setError] = useState<string>();
-	const save = async (run: () => void | Promise<void>, done: () => void = () => {}) => {
-		setPending(true);
-		setError(undefined);
-		try {
-			await run();
-			done();
-		} catch (failure) {
-			setError(failure instanceof Error ? failure.message : "Couldn't save memory. Try again.");
-		} finally {
-			setPending(false);
-		}
-	};
-	return (
-		<Block
-			title={shared ? "Shared memory" : `${agent}'s memory`}
-			note={
-				shared
-					? "Used by every agent in the band. A change applies to everyone."
-					: `Used by ${agent} in direct and group chats. Not shared automatically with other agents.`
-			}
-		>
-			{error === undefined ? null : (
-				<p role="alert" className="text-ui text-danger">
-					{error}
-				</p>
-			)}
-			{shown.length === 0 ? (
-				<p className="rounded-field bg-paper-2 px-3.5 py-3 text-ui text-ink-2">
-					{shared
-						? "Nothing shared yet. Save a fact the whole band should use."
-						: `Nothing yet. Tell ${agent} something worth keeping.`}
-				</p>
-			) : (
-				<Rows>
-					{shown.map((fact) =>
-						editing?.id === fact.id ? (
-							<form
-								key={fact.id}
-								className="flex items-center gap-2 px-3 py-2"
-								onSubmit={(event) => {
-									event.preventDefault();
-									const text = new FormData(event.currentTarget).get("text");
-									if (typeof text === "string" && text.trim() !== "")
-										void save(
-											() => onEdit?.(fact.id, text.trim()),
-											() => setEditing(undefined),
-										);
-								}}
-							>
-								<Input
-									name="text"
-									defaultValue={fact.text}
-									aria-label="The fact"
-									className="h-8 flex-1 text-ui"
-									maxLength={300}
-									disabled={pending}
-									autoFocus
-								/>
-								<Button type="submit" size="xs" disabled={pending}>
-									Save
-								</Button>
-								<Button
-									type="button"
-									variant="ghost"
-									size="xs"
-									disabled={pending}
-									onClick={() => {
-										setEditing(undefined);
-										setError(undefined);
-									}}
-								>
-									Cancel
-								</Button>
-							</form>
-						) : (
-							<RowOf
-								key={fact.id}
-								title={fact.text}
-								end={
-									<span className="flex gap-0.5">
-										<Button
-											variant="ghost"
-											size="icon-xs"
-											className="text-ink-2"
-											aria-label={`Edit: ${fact.text}`}
-											onClick={() => setEditing(fact)}
-										>
-											<PencilIcon />
-										</Button>
-										<Confirm
-											title="Forget this?"
-											body={`“${fact.text}” leaves ${shared ? "the band's shared memory" : `${agent}'s memory`}. What was said in chats stays.`}
-											action="Forget"
-											keep="Keep it"
-											onConfirm={() => save(() => onForget?.(fact.id))}
-										>
-											<Button variant="ghost" size="icon-xs" className="text-ink-2" aria-label={`Forget: ${fact.text}`}>
-												<Trash2Icon />
-											</Button>
-										</Confirm>
-									</span>
-								}
-							/>
-						),
-					)}
-				</Rows>
-			)}
-			{onAdd === undefined ? null : (
-				<form
-					onSubmit={(event) => {
-						event.preventDefault();
-						if (adding.trim())
-							void save(
-								() => onAdd(adding.trim()),
-								() => setAdding(""),
-							);
-					}}
-				>
-					<FieldGroup>
-						<Field>
-							<Input
-								aria-label={shared ? "New shared fact" : "New agent fact"}
-								placeholder="Something worth remembering…"
-								value={adding}
-								onChange={(event) => setAdding(event.target.value)}
-								maxLength={300}
-								disabled={pending}
-							/>
-						</Field>
-						<Button
-							type="submit"
-							variant="outline"
-							size="sm"
-							disabled={pending || !adding.trim()}
-							className="self-start"
-						>
-							Remember
-						</Button>
-					</FieldGroup>
-				</form>
-			)}
-		</Block>
-	);
-}
-
 /** The standing permissions the owner gave: each with its scope, revokable. */
 export function Permissions({
 	agent,
@@ -849,10 +671,11 @@ export function ArchivedAgents({
 
 /**
  * Settings, in tabs as the agent's panel has them: General (appearance, notifications, routines, the computer),
- * Model (the provider and the models the tiers use), Connections (every account), Agents (the archived, to restore),
- * Devices (the phones paired, and pairing one).
+ * Memory (the shared facts and each agent's own, one set, never copies), Model (the provider and the models the
+ * tiers use), Connections (every account), Agents (the archived, to restore), Devices (the phones paired, and
+ * pairing one).
  */
-export type SettingsTab = "general" | "model" | "connections" | "agents" | "devices";
+export type SettingsTab = "general" | "memory" | "model" | "connections" | "agents" | "devices";
 
 export function AppSettings({
 	data,
@@ -874,6 +697,7 @@ export function AppSettings({
 		<Tabs defaultValue={tab} className="gap-6">
 			<TabsList aria-label="Settings" className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none]">
 				<TabsTrigger value="general">General</TabsTrigger>
+				{memory === undefined ? null : <TabsTrigger value="memory">Memory</TabsTrigger>}
 				<TabsTrigger value="model">Model</TabsTrigger>
 				<TabsTrigger value="connections">Connections</TabsTrigger>
 				<TabsTrigger value="agents">Agents</TabsTrigger>
@@ -934,9 +758,13 @@ export function AppSettings({
 						</label>
 					</Rows>
 				</Block>
-				{memory}
 				{data.computer === undefined ? null : <Computer computer={data.computer} />}
 			</TabsContent>
+			{memory === undefined ? null : (
+				<TabsContent value="memory" className="flex flex-col gap-8">
+					{memory}
+				</TabsContent>
+			)}
 			<TabsContent value="model" className="flex flex-col gap-8">
 				<Block title="Model provider" note="Who thinks for the band. Your provider sees what you ask.">
 					<Rows>

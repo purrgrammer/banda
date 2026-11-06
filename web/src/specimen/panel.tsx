@@ -10,6 +10,7 @@ import { ConnectCard } from "../chat/Connect.tsx";
 import type { FaceState } from "../chat/Face.tsx";
 import { Bubble } from "../chat/Feed.tsx";
 import { ObjectUnavailable } from "../chat/Loading.tsx";
+import { MemorySettings } from "../chat/MemorySettings.tsx";
 import {
 	CheckRunCard,
 	IssueCard,
@@ -38,7 +39,6 @@ import {
 	Connections,
 	FaceAndName,
 	Members,
-	Memory,
 	ModelProviders,
 	Permissions,
 	Personality,
@@ -143,7 +143,19 @@ function AgentPanelOf({
 						<Permissions agent={who.name} permissions={permissions} />
 					</>
 				}
-				memory={<Memory agent={who.name} facts={facts} />}
+				memory={
+					<MemorySettings
+						agent={{ id: "specimen", name: who.name }}
+						phone={phone}
+						memory={{
+							facts: facts.map((fact) => ({ ...fact, scope: "agent" as const, agent: "specimen" })),
+							budget: 4000,
+						}}
+						onAdd={async () => {}}
+						onEdit={async () => {}}
+						onForget={async () => {}}
+					/>
+				}
 				about={
 					<>
 						<Personality text="Warm and brief. Plans our family trips, keeps to the budget, and asks before booking anything." />
