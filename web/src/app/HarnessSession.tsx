@@ -109,10 +109,15 @@ function HarnessAskCard({
 	);
 }
 
-/** The session the tool call `call` of chat `chat` started, if one did. */
-export function HarnessSessionPart({ chat, call }: { chat: number; call: string }) {
+/**
+ * A session in a transcript: the one the tool call `call` of chat `chat` started, or session `task` (a group shows its
+ * members' running sessions by number, their calls being in the members' own chats).
+ */
+export function HarnessSessionPart(where: { chat: number; call: string } | { task: number }) {
 	const { harnesses, agents, companion } = useShell();
-	const session = harnesses?.sessions.find((one) => one.chat === chat && one.call === call);
+	const session = harnesses?.sessions.find((one) =>
+		"task" in where ? one.task === where.task : one.chat === where.chat && one.call === where.call,
+	);
 	const agent =
 		companion === undefined ? undefined : chatAgents(agents, companion).find((one) => one.id === session?.agent)?.name;
 	const live = session !== undefined && session.ended === undefined;

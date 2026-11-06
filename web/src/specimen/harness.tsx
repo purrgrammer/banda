@@ -18,7 +18,7 @@ import { Header } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { Panel, PanelSection } from "../chat/Panel.tsx";
 import type { FolderListing } from "../lib/api.ts";
-import { MARA } from "./fixtures.ts";
+import { MARA, OCTO } from "./fixtures.ts";
 import { Section } from "./stage.tsx";
 
 const HARNESS = "Claude Code";
@@ -273,6 +273,31 @@ export function HarnessSection() {
 				wide
 			>
 				<Flow />
+			</Section>
+			<Section
+				id="harness-group"
+				title="Members' sessions in a group"
+				note="A member's session runs in its own chat; the room shows it under that member while it runs, its asks with it, and drops it when it ends: the member reports what was done."
+			>
+				<div className="flex max-w-2xl flex-col gap-3">
+					<Run who={MARA}>
+						<HarnessCard session={{ ...sessionAt(AT.working, []), state: "working", task: 12 }} />
+					</Run>
+					<Run who={OCTO}>
+						<HarnessCard
+							session={{
+								...sessionAt(AT.working, []),
+								harness: "Codex",
+								provider: "openai",
+								folder: "~/code/site",
+								state: "working",
+								task: 13,
+								elapsed: "0:42",
+								steps: [{ kind: "run", command: "npm run build", running: true }],
+							}}
+						/>
+					</Run>
+				</div>
 			</Section>
 			<Section
 				id="harness-states"

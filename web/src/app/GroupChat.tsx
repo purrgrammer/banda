@@ -40,7 +40,7 @@ import { ActivitySheet, type ActivityTarget } from "./Activity.tsx";
 import { kindWords } from "./ArtifactPage.tsx";
 import { whoOf } from "./band.ts";
 import { DraftApproval } from "./DraftApproval.tsx";
-import { HarnessActivitySheet } from "./HarnessSession.tsx";
+import { HarnessActivitySheet, HarnessSessionPart } from "./HarnessSession.tsx";
 import { chatActivity, harnessActivity } from "./harness-activity.ts";
 import { MessageObjects, OwnerMessage } from "./Objects.tsx";
 import { useSkills } from "./Skills.tsx";
@@ -308,6 +308,12 @@ export function GroupChat({
 										wait={wait.key}
 									/>
 								)}
+							</Run>
+						))}
+						{/* a member's coding session runs in its own chat: the room shows it while it runs, asks included */}
+						{delegated.sessions.map((session) => (
+							<Run key={`harness:${session.task}`} who={whoOf(known, session.agent)}>
+								<HarnessSessionPart task={session.task} />
 							</Run>
 						))}
 					</ConversationContent>

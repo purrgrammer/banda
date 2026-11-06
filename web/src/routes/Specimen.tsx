@@ -56,6 +56,7 @@ const CONTENTS = [
 	{ id: "connections", label: "Connections" },
 	{ id: "connect", label: "Connecting" },
 	{ id: "harness", label: "Claude Code in a chat" },
+	{ id: "harness-group", label: "Members' sessions in a group" },
 	{ id: "harness-states", label: "A session, every state" },
 	{ id: "harness-panel", label: "Claude Code in the panel" },
 	{ id: "mcp", label: "Add MCP server" },
