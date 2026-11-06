@@ -438,7 +438,10 @@ naming one that is not there answers with those that are.
   words where they exist, and only a single plain command earns them (a command loses its `cd … &&` throat-clearing,
   a simple search or read is said as such, a path reads from the project only when anchored at the project's own
   folder); a chain, a pipe, a redirection or a substitution shows the command whole, so a quiet verb never fronts a
-  second command, truncated in the middle so head and tail both read. The card names the harness and the
+  second command, truncated in the middle so head and tail both read. What the harness waits on is said by the kind of
+  thing asked ("Waiting on you: run a command"), and an answered ask the same way ("You allowed: run a command"),
+  never with the command or the path: a folded line never shows a command in part, so a cut can never hide its middle;
+  the command shows whole only on the ask's card and in the sheet's row once opened. The card names the harness and the
   project; the session's number and full path belong to the sheet's detail, not the card. Its state is said in words
   ("Working 1:48", "Waiting on you", "Took 0:03", "Stopped", "Interrupted", "Failed") and announced to a screen
   reader when it changes, never colour alone. The owner's notes live behind "Add a note" and show on the card with
