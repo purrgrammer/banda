@@ -95,8 +95,8 @@ const GITHUB_ROWS = [
 	{
 		connection: "GitHub",
 		accounts: [
-			{ login: "@bandarra", on: true },
-			{ login: "@purrgrammer", on: false },
+			{ login: "@bandarra", account: "bandarra", on: true },
+			{ login: "@purrgrammer", account: "purrgrammer", on: false },
 		],
 	},
 ];
@@ -139,7 +139,7 @@ function AgentPanelOf({
 				routines={<Routines agent={who.name} routines={routines} allPaused={paused} />}
 				access={
 					<>
-						<Connections agent={who.name} rows={connections} />
+						<Connections agent={who.name} rows={connections} compact />
 						<Permissions agent={who.name} permissions={permissions} />
 					</>
 				}
@@ -466,10 +466,13 @@ export function PanelSections() {
 			<Section
 				id="settings-providers"
 				title="Settings, providers"
-				note="Every provider the band may think with: in use, connected (Use, Sign out), connecting, failed, and a key form open."
+				note="Every provider the band may think with: in use, connected (Use, Sign out), connecting, failed, and a key form open; on a device, the connected ones alone."
 			>
 				<SettingsPage title="Settings" phone={phone}>
 					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} open="mistral" />
+				</SettingsPage>
+				<SettingsPage title="Settings, on a device" phone={phone}>
+					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} here={false} />
 				</SettingsPage>
 			</Section>
 			<Section
