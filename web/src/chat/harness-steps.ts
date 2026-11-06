@@ -62,3 +62,13 @@ export function changesOf(steps: readonly HarnessStep[]): { files: number; added
 		...(removed === undefined ? {} : { removed }),
 	};
 }
+
+/**
+ * A folder as a card has room for it: a long path by its last two parts ("…/code/demo"), the project being what tells
+ * sessions apart; the whole path stays in its title.
+ */
+export function shortFolder(folder: string, max = 28): string {
+	if (folder.length <= max) return folder;
+	const parts = folder.split("/").filter((part) => part !== "");
+	return parts.length <= 2 ? folder : `…/${parts.slice(-2).join("/")}`;
+}

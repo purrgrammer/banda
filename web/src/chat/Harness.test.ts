@@ -1,7 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { pbtRuns } from "../../../test/pbt.ts";
-import { changesOf, type HarnessStep, headlineOf } from "./harness-steps.ts";
+import { changesOf, type HarnessStep, headlineOf, shortFolder } from "./harness-steps.ts";
 
 const edit = fc.record({
 	kind: fc.constant("edit" as const),
@@ -54,5 +54,20 @@ describe("headlineOf", () => {
 		});
 		expect(headlineOf({ kind: "run", command: "npm test", running: false }).verb).toBe("Ran");
 		expect(headlineOf(undefined)).toEqual({ verb: "Starting", object: "" });
+	});
+});
+
+describe("shortFolder", () => {
+	it("keeps a short folder whole and a long one by its last two parts", () => {
+		expect(shortFolder("~/code")).toBe("~/code");
+		expect(shortFolder("/private/tmp/claude-501/-Users-bandarra-sancho/scratchpad/code/demo")).toBe("…/code/demo");
+		fc.assert(
+			fc.property(fc.array(fc.stringMatching(/^[a-z0-9-]{1,12}$/), { minLength: 1, maxLength: 8 }), (parts) => {
+				const folder = `/${parts.join("/")}`;
+				const shown = shortFolder(folder);
+				expect(folder.endsWith(shown.replace(/^…/, ""))).toBe(true);
+			}),
+			{ numRuns: pbtRuns(100) },
+		);
 	});
 });

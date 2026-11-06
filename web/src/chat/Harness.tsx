@@ -30,7 +30,7 @@ import { cn } from "@/lib/cn";
 import { Markdown } from "../components/Markdown.tsx";
 import { Tile } from "./Cards.tsx";
 import { Confirm } from "./Confirm.tsx";
-import { changesOf, type HarnessStep, headlineOf } from "./harness-steps.ts";
+import { changesOf, type HarnessStep, headlineOf, shortFolder } from "./harness-steps.ts";
 
 export type { HarnessStep };
 
@@ -286,8 +286,10 @@ export function HarnessCard({
 					logo={session.logo}
 					className={session.provider === undefined && session.logo === undefined ? "size-4" : "size-5"}
 				/>
-				<span className="font-medium text-ink">{harness}</span>
-				<span className="min-w-0 truncate font-code text-meta text-ink-2">{folder}</span>
+				<span className="shrink-0 font-medium whitespace-nowrap text-ink">{harness}</span>
+				<span title={folder} className="min-w-0 truncate font-code text-meta text-ink-2">
+					{shortFolder(folder)}
+				</span>
 				{session.task === undefined ? null : (
 					<span className="shrink-0 text-meta text-ink-2 tabular-nums">
 						· session {session.task}
@@ -399,7 +401,13 @@ function Step({
 	);
 	switch (step.kind) {
 		case "asked":
-			return at(MessageSquareIcon, <span className="text-ink-2">Asked</span>, <p className="text-ui">{step.text}</p>);
+			return at(
+				MessageSquareIcon,
+				<span className="text-ink-2">Asked</span>,
+				<div className="banda-compact min-w-0">
+					<Markdown>{step.text}</Markdown>
+				</div>,
+			);
 		case "steered":
 			return at(
 				step.from === "agent" ? BotIcon : UserIcon,
@@ -459,7 +467,7 @@ function Step({
 			return at(
 				MessageSquareIcon,
 				<span className="text-ink-2">Said</span>,
-				<div className="min-w-0 text-ui">
+				<div className="banda-compact min-w-0">
 					<Markdown>{step.text}</Markdown>
 				</div>,
 			);
@@ -483,8 +491,10 @@ export function HarnessTranscript({
 					logo={session.logo}
 					className={session.provider === undefined && session.logo === undefined ? "size-4" : "size-5"}
 				/>
-				<span className="font-medium text-ink">{session.harness}</span>
-				<span className="min-w-0 truncate font-code text-meta text-ink-2">{session.folder}</span>
+				<span className="shrink-0 font-medium whitespace-nowrap text-ink">{session.harness}</span>
+				<span title={session.folder} className="min-w-0 truncate font-code text-meta text-ink-2">
+					{shortFolder(session.folder)}
+				</span>
 				<span className="ml-auto shrink-0 text-meta text-ink-2 tabular-nums">{session.elapsed}</span>
 			</span>
 			<ChainOfThought open>

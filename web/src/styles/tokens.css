@@ -131,6 +131,15 @@
 	}
 }
 
+/* Words inside a step (a harness's ask and answers): the step's own small type, its blocks close together. */
+.banda-compact .sa-markdown {
+	font-size: var(--text-ui);
+	line-height: var(--text-ui--line-height);
+}
+.banda-compact .sa-markdown > * + * {
+	margin-top: 0.5rem;
+}
+
 /* An artifact read whole (the main pane): a document's own hierarchy, where a chat's replies keep theirs flat. */
 .banda-document .sa-markdown {
 	max-width: none;
