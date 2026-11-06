@@ -247,6 +247,10 @@ for (const width of [1440, 390, 320])
 						`document.querySelector('[data-raw-content]').textContent.includes('BROWSER_SEED_0') && !document.querySelector('[data-raw-content]').textContent.includes('BROWSER_SEED_11')`,
 					),
 				).toBe(true);
+				expect(
+					await page.run(`document.querySelector('[aria-label="Tools"] button').getAttribute('aria-expanded')`),
+				).toBe("false");
+				await page.run(`document.querySelector('[aria-label="Tools"] button').click()`);
 				expect(await page.run(`document.querySelector('[aria-label="Tools"]').textContent.includes('read')`)).toBe(
 					true,
 				);

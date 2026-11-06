@@ -13,12 +13,7 @@ export function ModelContext({ prompt }: { prompt: ChatPrompt }) {
 				<p className="whitespace-pre-wrap text-ui leading-relaxed text-ink-2">{prompt.system}</p>
 			</RawRow>
 			<section aria-label="Tools" className="flex min-w-0 flex-col gap-2">
-				<h3 className="flex min-h-11 items-center gap-2 text-ui font-medium">
-					<WrenchIcon aria-hidden="true" className="size-4 text-ink-2" />
-					Tools
-					<span className="ml-auto text-meta font-normal text-ink-2">{prompt.tools.length}</span>
-				</h3>
-				<div className="ml-6 flex min-w-0 flex-col gap-1">
+				<RawRow title="Tools" icon={<WrenchIcon className="size-4" />} state={String(prompt.tools.length)}>
 					{prompt.tools.map((tool) => (
 						<RawRow
 							key={tool.name}
@@ -30,7 +25,7 @@ export function ModelContext({ prompt }: { prompt: ChatPrompt }) {
 							<RawValue label="Parameters">{JSON.stringify(tool.parameters)}</RawValue>
 						</RawRow>
 					))}
-				</div>
+				</RawRow>
 			</section>
 		</>
 	);

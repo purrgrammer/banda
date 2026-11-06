@@ -120,6 +120,10 @@ for (const width of [390, 1440])
 				await click(page, '[aria-label="Inspect recorded call fetch"]');
 				await page.until(`document.querySelector('[aria-label="Tools"]')`);
 				expect(
+					await page.run(`document.querySelector('[aria-label="Tools"] button').getAttribute('aria-expanded')`),
+				).toBe("false");
+				await click(page, '[aria-label="Tools"] button');
+				expect(
 					await page.run(
 						`document.querySelector('[aria-label="Tools"] [data-tool-icon="web_fetch"]').classList.contains('lucide-globe')`,
 					),
@@ -133,7 +137,7 @@ for (const width of [390, 1440])
 					),
 				).toBe("https://example.test/events");
 				expect(await page.run(`document.querySelector('[aria-label="Tools"]').querySelectorAll('button').length`)).toBe(
-					22,
+					23,
 				);
 				expect(
 					await page.run(`document.querySelector('[role="dialog"]').textContent.includes('available_tool_21')`),

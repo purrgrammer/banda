@@ -93,8 +93,10 @@ for (const width of [320, 390, 1440]) {
 				),
 			).toEqual(["System prompt", "Tools3", "Your message10:41:58"]);
 			expect(await page.run(`${button("System prompt")}.getAttribute('aria-expanded')`)).toBe("false");
+			expect(await page.run(`${button("Tools3")}.getAttribute('aria-expanded')`)).toBe("false");
+			await press(page, button("Tools3"));
 			expect(await page.run(`document.querySelector('[aria-label="Tools"]').querySelectorAll('button').length`)).toBe(
-				3,
+				4,
 			);
 			await press(page, button("System prompt"));
 			await page.until(`${dialogText}?.includes('You are Mara')`);
