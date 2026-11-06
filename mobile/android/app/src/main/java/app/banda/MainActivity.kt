@@ -27,12 +27,17 @@ class MainActivity : BridgeActivity() {
         ViewCompat.requestApplyInsets(content)
         // Capacitor's core leaves the back button to the Activity, which closes the app. The web app moves
         // between screens by the URL's hash, so each screen is an entry in the web view's history: walk it
-        // back, and leave the app the usual way only from the first screen.
+        // back, and leave the app the usual way only from the first screen. Not through canGoBack()/goBack():
+        // Chromium marks a history entry added without a user gesture as skippable (its history manipulation
+        // intervention), so after a programmatic hash navigation those report false and skip every such entry
+        // (canGoBackOrForward(-1) too, measured on this emulator), and back would close the app. The
+        // back-forward list's index ignores the intervention, and the page's own history.back() walks one
+        // entry whatever marked it, so ask the list and let the page step.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 val web = bridge?.webView
-                if (web != null && web.canGoBack()) {
-                    web.goBack()
+                if (web != null && web.copyBackForwardList().currentIndex > 0) {
+                    web.evaluateJavascript("history.back()", null)
                     return
                 }
                 isEnabled = false
