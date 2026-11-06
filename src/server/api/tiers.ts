@@ -10,14 +10,23 @@ export type ModelView = { readonly id: string; readonly name: string };
  * The models the tiers run on (`GET /api/tiers`), never a model string on its own: the provider in plain words, and
  * whether it runs on this computer; per tier the model in effect, `own` when the owner chose it over the preset. A
  * provider without presets (`presets: false`) runs one model, the configured one, on every tier. `providers` are those
- * with credentials, which the owner may pick; `catalog` the provider's models, which one tier may run instead.
+ * with credentials, which the owner may pick, each `ambient` with its `source` when that credential came from outside
+ * banda (ANTHROPIC_API_KEY and its kind); `chosen` once the owner picked a provider, in the app or by naming a model
+ * in config.json, so first run never adopts an ambient key they never saw; `catalog` the provider's models, which one
+ * tier may run instead.
  * `PUT /api/tiers` changes them (`TiersChange`), answered with the view as it is after.
  */
 export type TiersView = {
 	readonly provider: { readonly id: string; readonly name: string; readonly local: boolean };
 	readonly presets: boolean;
 	readonly models: { readonly [T in Tier]: ModelView & { readonly own?: true } };
-	readonly providers: readonly { readonly id: string; readonly name: string }[];
+	readonly providers: readonly {
+		readonly id: string;
+		readonly name: string;
+		readonly ambient?: true;
+		readonly source?: string;
+	}[];
+	readonly chosen: boolean;
 	readonly catalog: readonly ModelView[];
 };
 

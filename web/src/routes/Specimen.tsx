@@ -14,6 +14,7 @@ import { AvatarSpike } from "../specimen/avatar-spike.tsx";
 import { BandSection } from "../specimen/band.tsx";
 import { Controls } from "../specimen/controls.tsx";
 import { Copy } from "../specimen/copy.tsx";
+import { DevicesSection } from "../specimen/devices.tsx";
 import { Faces } from "../specimen/faces.tsx";
 import { Foundation } from "../specimen/foundation.tsx";
 import { HarnessSection } from "../specimen/harness.tsx";
@@ -48,6 +49,10 @@ const CONTENTS = [
 	{ id: "new-agent", label: "A new agent" },
 	{ id: "new-group", label: "A new group" },
 	{ id: "settings", label: "Settings" },
+	{ id: "devices", label: "Devices" },
+	{ id: "devices-states", label: "Devices, each state" },
+	{ id: "pair-phone", label: "Pairing, on the phone" },
+	{ id: "qr", label: "QR code" },
 	{ id: "connections", label: "Connections" },
 	{ id: "connect", label: "Connecting" },
 	{ id: "harness", label: "Claude Code in a chat" },
@@ -169,6 +174,7 @@ export function Specimen() {
 									<Screens />
 									<PanelSections />
 									<MemorySection />
+									<DevicesSection />
 									<McpSection />
 									<HarnessSection />
 									<States />

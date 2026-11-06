@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { Terminal } from "@/components/ai-elements/terminal";
+import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { answerHarness, steerHarness, stopHarness } from "../areas/harnesses.ts";
 import { ApprovalCard } from "../chat/Approval.tsx";
@@ -35,6 +36,7 @@ const viewOf = (session: HarnessSessionView, now: number, agent: string | undefi
 	task: session.task,
 	...(agent === undefined ? {} : { agent }),
 	...(session.continues === undefined ? {} : { continues: session.continues }),
+	...(session.continuation === undefined ? {} : { continuation: session.continuation }),
 	...(session.stoppedBy === undefined ? {} : { stoppedBy: session.stoppedBy }),
 	...(session.provider === undefined ? {} : { provider: session.provider }),
 	...(session.logo === undefined ? {} : { logo: session.logo }),
@@ -80,12 +82,13 @@ function HarnessAskCard({
 	return (
 		<ApprovalCard
 			agent={session.service}
-			what={`${words.what} in ${session.folder}`}
-			verb={words.verb}
-			declineLabel={words.no}
+			what={words.what}
+			verb={ask.allow?.name ?? words.verb}
+			declineLabel={ask.deny?.name ?? "Cancel"}
 			as={`${agentName ?? session.agent}'s task`}
 			object={
 				<>
+					<p className="text-ui break-all text-ink-2">In {session.folder}</p>
 					{ask.kind === "execute" ? (
 						<Terminal command={ask.command} output="" />
 					) : (
@@ -141,5 +144,70 @@ export function HarnessSessionPart({ chat, call }: { chat: number; call: string 
 				</SheetContent>
 			</Sheet>
 		</>
+	);
+}
+
+/** Current delegated work, reachable from the header even when its chat card has scrolled away. */
+export function HarnessActivitySheet({ tasks, onClose }: { tasks: readonly number[]; onClose: () => void }) {
+	const { harnesses, agents, companion } = useShell();
+	const sessions = tasks.flatMap((task) => {
+		const session = harnesses?.sessions.find((one) => one.task === task);
+		return session === undefined ? [] : [session];
+	});
+	const [selected, setSelected] = useState<number | undefined>(tasks.length === 1 ? tasks[0] : undefined);
+	const session = sessions.find((one) => one.task === selected);
+	const now = useNow(sessions.some((one) => one.ended === undefined));
+	const agent =
+		companion === undefined ? undefined : chatAgents(agents, companion).find((one) => one.id === session?.agent)?.name;
+	return (
+		<Sheet
+			open
+			onOpenChange={(open) => {
+				if (!open) onClose();
+			}}
+		>
+			<SheetContent className="gap-0 overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-[560px]">
+				<SheetHeader className="border-b border-line-soft pr-12">
+					<SheetTitle>{session?.service ?? "Coding sessions"}</SheetTitle>
+					<SheetDescription>Recorded work, notes and approvals.</SheetDescription>
+				</SheetHeader>
+				<div className="flex flex-col gap-3 p-4">
+					{session === undefined ? (
+						sessions.map((one) => (
+							<Button
+								key={one.task}
+								variant="outline"
+								className="h-auto justify-start whitespace-normal text-left"
+								onClick={() => setSelected(one.task)}
+							>
+								{one.service} · session {one.task} ·{" "}
+								{(one.asks?.length ?? 0) > 0 ? "Waiting on you" : one.ended === undefined ? "Working" : "Finished"}
+							</Button>
+						))
+					) : (
+						<>
+							{tasks.length > 1 ? (
+								<Button variant="ghost" onClick={() => setSelected(undefined)}>
+									All coding sessions
+								</Button>
+							) : null}
+							<HarnessTranscript
+								session={viewOf(session, now, agent)}
+								onSteer={(text) => void attempt("send your note", () => steerHarness(session.task, text))}
+							/>
+							{session.ended === undefined ? (
+								<Button variant="outline" onClick={() => void attempt("stop it", () => stopHarness(session.task))}>
+									Stop {session.service}
+								</Button>
+							) : null}
+							{(session.asks ?? []).map((ask) => (
+								<HarnessAskCard key={ask.id} session={session} ask={ask} agentName={agent} />
+							))}
+						</>
+					)}
+					{sessions.length === 0 ? <p>This session is no longer kept.</p> : null}
+				</div>
+			</SheetContent>
+		</Sheet>
 	);
 }

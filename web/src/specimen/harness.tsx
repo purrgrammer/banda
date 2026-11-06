@@ -14,6 +14,7 @@ import {
 	HarnessTile,
 	HarnessTranscript,
 } from "../chat/Harness.tsx";
+import { Header } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { Panel, PanelSection } from "../chat/Panel.tsx";
 import type { FolderListing } from "../lib/api.ts";
@@ -230,6 +231,41 @@ const AT: Record<HarnessState, Step> = {
 export function HarnessSection() {
 	return (
 		<>
+			<Section id="harness-header" title="Delegated activity in the header">
+				<Header
+					name={MARA.name}
+					faces={[MARA]}
+					state="working"
+					doing="Claude Code is running a command…"
+					onActivity={() => {}}
+				/>
+				<Header
+					name={MARA.name}
+					faces={[MARA]}
+					state="waiting"
+					doing="Waiting on you · Claude Code"
+					attention
+					onActivity={() => {}}
+				/>
+				<Header
+					name={MARA.name}
+					faces={[MARA]}
+					state="working"
+					doing="2 coding sessions running"
+					onActivity={() => {}}
+				/>
+				<Header
+					name={MARA.name}
+					faces={[MARA]}
+					state="working"
+					doing="Thinking…"
+					attention
+					delegated={{ count: 2, waiting: true, onOpen: () => {} }}
+					phone
+					onActivity={() => {}}
+				/>
+			</Section>
+
 			<Section
 				id="harness"
 				title="Claude Code in a chat"

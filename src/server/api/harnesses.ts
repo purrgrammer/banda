@@ -28,6 +28,7 @@ export type HarnessSessionView = {
 	readonly folder: string;
 	/** The session it goes on from, by task. */
 	readonly continues?: number;
+	readonly continuation?: "native" | "summary";
 	/** Its agent stopped it, not the owner. */
 	readonly stoppedBy?: "agent";
 	readonly state: HarnessState;
@@ -41,6 +42,7 @@ export type HarnessSessionView = {
 };
 
 export type HarnessesView = {
+	readonly unavailable?: string;
 	/** What banda can run on this computer, by name: "claude-code" is "Claude Code"; what it is and what it asks. */
 	readonly harnesses: readonly {
 		readonly name: string;

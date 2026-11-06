@@ -17,7 +17,7 @@ import {
 	routeKey,
 } from "../../src/core/gateway.ts";
 import { context, openStore } from "../../src/core/store.ts";
-import { defineCore, MessageRefs, NUDGE, Routes, type TurnResult } from "../../src/core/turn.ts";
+import { defineCore, MessageRefs, NUDGE, Routes, type TurnInput, type TurnResult } from "../../src/core/turn.ts";
 import { echoModels, FAUX_MODEL } from "../fixtures/models.ts";
 import type { Faults } from "./faults.ts";
 
@@ -39,6 +39,8 @@ export type MessageSummary = {
 export type Summary = {
 	/** Per message id, its Turn's outcome. */
 	readonly outcomes: Record<string, TaskOutcome<TurnResult>>;
+	/** Nudge outcomes, attributed to the latest owner input admitted before that nudge in its chat. */
+	readonly nudges: Record<string, TaskOutcome<TurnResult>[]>;
 	/** Every message task, in the order they were created. */
 	readonly messages: readonly MessageSummary[];
 	/** Per route key, the message ids of its chat's inbound entries, in order. */
@@ -122,6 +124,21 @@ export async function summarize(harness: Harness, messages: readonly Inbound[]):
 		const turn = refs[messageKey(m.origin.gateway, m.id)]!.turn as TaskId<TurnResult>;
 		outcomes[m.id] = (await harness.getTask(turn, context))!.state.outcome as TaskOutcome<TurnResult>;
 	}
+	const nudges: Summary["nudges"] = {};
+	for (const task of await messageTasks(harness, "banda.turn")) {
+		const input = task.input as unknown as TurnInput;
+		if (input.internal?.kind !== NUDGE) continue;
+		const owner = messages
+			.filter((m) => {
+				const ref = refs[messageKey(m.origin.gateway, m.id)];
+				return ref?.chat === input.chat && ref.turn !== undefined && ref.turn < Number(task.id);
+			})
+			.at(-1);
+		if (owner !== undefined) {
+			nudges[owner.id] ??= [];
+			nudges[owner.id].push((task.state as { outcome: TaskOutcome<TurnResult> }).outcome);
+		}
+	}
 	const tasks = await messageTasks(harness);
 	const outcomeOf = (id: number) =>
 		(tasks.find((task) => Number(task.id) === id)?.state as { outcome?: TaskOutcome<Delivered> } | undefined)
@@ -153,7 +170,7 @@ export async function summarize(harness: Harness, messages: readonly Inbound[]):
 			e.kind === "banda.inbound" ? ["input"] : e.kind === NUDGE ? ["nudge"] : e.kind === "banda.notice" ? [] : [],
 		);
 	}
-	return { outcomes, messages: sent, inbound, inputs };
+	return { outcomes, nudges, messages: sent, inbound, inputs };
 }
 
 export function readSent(home: string): Sent[] {

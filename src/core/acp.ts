@@ -201,6 +201,7 @@ export function jsonLines(
 			const line = buffer.slice(0, at).replace(/\r$/, "");
 			buffer = buffer.slice(at + 1);
 			if (dropping) dropping = false;
+			else if (Buffer.byteLength(line) > max) over?.();
 			else if (line !== "") onLine(line);
 		}
 		if (Buffer.byteLength(buffer) > max) {
@@ -227,6 +228,8 @@ export async function openSession(
 			clientInfo: { name: "banda", version: "0" },
 		},
 	);
+	if (init.protocolVersion !== ACP_PROTOCOL_VERSION)
+		throw new AcpError("The harness does not support the required ACP protocol version.");
 	let sessionId: string;
 	let loaded = false;
 	if (resume !== undefined && init.agentCapabilities?.loadSession === true) {

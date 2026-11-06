@@ -1,6 +1,6 @@
 {
 	"name": "banda",
-	"version": "0.1.0-alpha.1",
+	"version": "0.1.0-alpha.2",
 	"private": true,
 	"description": "A band of personal agents.",
 	"license": "AGPL-3.0-only",
@@ -37,7 +37,11 @@
 		"fix": "biome check --write .",
 		"cli:pack": "npm run build && node scripts/stage.ts --archive",
 		"desktop:dev": "npm run build && npm --prefix desktop run build && BANDA_HOME=${BANDA_HOME:-$(mktemp -d)} BANDA_PORT=${BANDA_PORT:-0} npm --prefix desktop exec electron desktop",
-		"desktop:pack": "npm run build && node scripts/stage.ts && npm --prefix desktop ci && npm --prefix desktop run dist"
+		"desktop:pack": "npm run build && node scripts/stage.ts && npm --prefix desktop ci && npm --prefix desktop run dist",
+		"mobile:apk": "npm run build:web && npm --prefix mobile ci && npm --prefix mobile run apk",
+		"mobile:apk:release": "npm run build:web && npm --prefix mobile ci && npm --prefix mobile run apk:release",
+		"mobile:install": "npm --prefix mobile run install:debug",
+		"mobile:test": "npm --prefix mobile test"
 	},
 	"dependencies": {
 		"@earendil-works/chord": "1.4.0",
@@ -45,6 +49,7 @@
 		"@earendil-works/pi-durable": "1.4.0",
 		"@earendil-works/pi-env": "1.4.0",
 		"@earendil-works/pi-mcp": "1.4.0",
+		"@number0/iroh": "1.2.0",
 		"@resvg/resvg-js": "2.6.2",
 		"motion": "14.5.0",
 		"open-bot-avatar": "0.1.2",
@@ -79,6 +84,7 @@
 		"tailwindcss": "4.3.3",
 		"tw-animate-css": "1.4.0",
 		"typescript": "5.9.3",
+		"uqr": "0.1.3",
 		"vite": "7.3.7",
 		"vitest": "4.1.12"
 	}

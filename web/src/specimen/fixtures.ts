@@ -215,10 +215,22 @@ export const SIGN_IN_WAYS = [
 	{ id: "copy_code", label: "Sign in with a code" },
 ] as const;
 
-/** Settings' providers, one of each state: in use, connected, connecting, failed, by sign-in and by key. */
+/**
+ * Settings' providers, one of each state: in use, connected, set from outside banda, connecting, failed, by sign-in
+ * and by key.
+ */
 export const SETTINGS_PROVIDERS: readonly import("../chat/Settings.tsx").ProviderRow[] = [
 	{ id: "anthropic", name: "Anthropic", by: "sign-in", connected: true },
 	{ id: "openai", name: "OpenAI", by: "sign-in", connected: true },
+	// a key from around the daemon: usable, never tried, and not ours to forget, so it offers to connect over it
+	{
+		id: "xai",
+		name: "xAI",
+		by: "sign-in",
+		connected: true,
+		ambient: true,
+		source: "XAI_API_KEY",
+	},
 	{
 		id: "github-copilot",
 		name: "GitHub Copilot",

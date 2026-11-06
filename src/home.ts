@@ -16,6 +16,12 @@ export type Config = {
 	readonly files?: { readonly maxBytes?: number };
 	/** The forges whose git fetches are reads, default the public ones banda lists. */
 	readonly egress?: { readonly git?: readonly string[] };
+	/**
+	 * Where the owner's devices reach the daemon over Iroh (`server/remote.ts`): `reach` is `n0` (the default, n0's
+	 * public relays), `loopback` (this computer only) or `off`; `relay` a relay's URL in place of n0's. `BANDA_REMOTE`
+	 * overrides `reach`.
+	 */
+	readonly remote?: { readonly reach?: "n0" | "loopback" | "off"; readonly relay?: string };
 };
 
 /**
@@ -87,7 +93,9 @@ export function maxFileBytes(config: Config): number {
 	return value;
 }
 
-const DEFAULT_CONFIG: Config = { model: { provider: "anthropic", modelId: "claude-opus-5-5" } };
+/** The model banda runs when config.json names none: not the owner's pick, so first run still asks them. */
+export const DEFAULT_MODEL: ModelRef = { provider: "anthropic", modelId: "claude-opus-5-5" };
+const DEFAULT_CONFIG: Config = { model: DEFAULT_MODEL };
 
 /** `<home>/config.json`; absent fields take their defaults. */
 export async function readConfig(home: string): Promise<Config> {

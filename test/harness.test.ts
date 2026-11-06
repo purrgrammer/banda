@@ -16,6 +16,7 @@ import {
 	Harnesses,
 	type HarnessSession,
 	type HarnessStep,
+	harnessPlatform,
 	harnessTool,
 	harnessToolsOf,
 	isHarnessTool,
@@ -149,6 +150,80 @@ describe("a harness session", () => {
 		const session = async () => (await harness.snapshot(Harnesses, context))?.sessions ?? {};
 		return { harness, made, chat, folder, woke, session };
 	}
+
+	it("shows the complete command before allowing a long native request", async () => {
+		const s = await setup();
+		const command = `echo ${"x".repeat(2100)}; rm dangerous-tail`;
+		try {
+			const task = await s.harness.commit(
+				(tx) =>
+					s.made.begin(tx, { chat: s.chat, agent: "sancho", harness: "fake", folder: s.folder, ask: `ask ${command}` }),
+				context,
+			);
+			const ask = await until(async () => (await s.session())[task]?.asks?.[0]);
+			expect(ask.command).toBe(command);
+			await s.harness.commit((tx) => answerAsk(tx, task, ask.id, false), context);
+			await until(() => s.woke.length === 1);
+		} finally {
+			await s.harness.close(context);
+		}
+	});
+
+	for (const revoke of ["switch", "folder", "disconnect"] as const) {
+		it(`${revoke} revokes queued notes and outstanding approvals along with the running session`, async () => {
+			const s = await setup();
+			const log = join(s.folder, "requests.jsonl");
+			vi.stubEnv("FAKE_ACP_LOG", log);
+			onTestFinished(() => {
+				vi.unstubAllEnvs();
+			});
+			try {
+				await s.harness.commit((tx) => connectHarness(tx, "fake", s.folder, "sancho"), context);
+				const task = await s.harness.commit(
+					(tx) =>
+						s.made.begin(tx, { chat: s.chat, agent: "sancho", harness: "fake", folder: s.folder, ask: "ask npm test" }),
+					context,
+				);
+				const ask = await until(async () => (await s.session())[task]?.asks?.[0]);
+				await s.harness.commit(async (tx) => {
+					expect(await steer(tx, task, "say forbidden-follow-up", Date.now(), { call: "pending" })).toBe(true);
+					if (revoke === "switch") await switchHarness(tx, "fake", "sancho", false);
+					else if (revoke === "folder") await connectHarness(tx, "fake", join(s.folder, "other"), undefined);
+					else await disconnectHarness(tx, "fake");
+					expect(await answerAsk(tx, task, ask.id, true)).toBe(false);
+					expect(await steer(tx, task, "say also-forbidden", Date.now())).toBe(false);
+				}, context);
+				await until(() => s.woke.length === 1);
+				expect((await s.session())[task]?.state).toBe("stopped");
+				expect(await readFile(log, "utf8")).not.toContain("forbidden-follow-up");
+			} finally {
+				await s.harness.close(context);
+			}
+		});
+	}
+
+	it("refuses oversized native asks instead of offering approval of shortened content", async () => {
+		const s = await setup();
+		try {
+			const task = await s.harness.commit(
+				(tx) =>
+					s.made.begin(tx, {
+						chat: s.chat,
+						agent: "sancho",
+						harness: "fake",
+						folder: s.folder,
+						ask: `ask ${"x".repeat(70_000)}`,
+					}),
+				context,
+			);
+			await until(() => s.woke.length === 1);
+			const ended = (await s.session())[task];
+			expect(ended?.asks ?? []).toEqual([]);
+			expect(ended?.outcome).toContain("too large to review");
+		} finally {
+			await s.harness.close(context);
+		}
+	});
 
 	it("runs the ask once, answers its ask from the owner, takes a note, and wakes the agent at the end", async () => {
 		const s = await setup();
@@ -513,7 +588,7 @@ describe("following up on a session", () => {
 		const second = await s.begin("say second", first);
 		await until(() => s.woke.length === 2);
 		const after = (await s.sessions())[second];
-		expect(after).toMatchObject({ continues: first, resume: opened, state: "done" });
+		expect(after).toMatchObject({ continues: first, resume: opened, state: "done", continuation: "native" });
 		// what it replayed ("words from before", a read of old.txt) is not this session's
 		expect(after?.steps.map((step) => step.kind)).toEqual(["asked", "said"]);
 		const log = await s.logged();
@@ -532,8 +607,9 @@ describe("following up on a session", () => {
 		vi.stubEnv("FAKE_ACP_NO_LOAD", "1");
 		const first = await s.begin("edit src/a.ts +1 -0\nsay done the first part");
 		await until(() => s.woke.length === 1);
-		await s.begin("say second", first);
+		const second = await s.begin("say second", first);
 		await until(() => s.woke.length === 2);
+		expect((await s.sessions())[second]?.continuation).toBe("summary");
 		const prompts = (await s.logged()).flatMap((entry) => (entry.prompt === undefined ? [] : [entry.prompt]));
 		expect(prompts).toHaveLength(2);
 		expect(prompts[1]).toContain("<earlier-work>");
@@ -603,6 +679,28 @@ describe("a harness's tools", () => {
 });
 
 describe("what a session's end tells its agent", () => {
+	it("bounds valid long notes, decisions and file paths in bytes, with omitted content explicit", () => {
+		const session: HarnessSession = {
+			chat: 1,
+			agent: "sancho",
+			harness: "fake",
+			folder: "~/code",
+			prompt: "fix it",
+			state: "done",
+			at: 0,
+			ended: 1,
+			dropped: 0,
+			notes: [],
+			steps: [
+				...Array.from({ length: 50 }, (): HarnessStep => ({ kind: "steered", text: "界".repeat(500), taken: true })),
+				...Array.from({ length: 40 }, (_, i): HarnessStep => ({ kind: "edit", path: `${i}/${"x".repeat(1000)}` })),
+			],
+		};
+		const result = resultOf(7, session);
+		expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(8000);
+		expect(result).toHaveProperty("omitted");
+	});
+
 	it("stays within its bound: outputs go first, then earlier turns, then the oldest commands", () => {
 		const big = "x".repeat(2000);
 		const session: HarnessSession = {
@@ -630,4 +728,10 @@ describe("what a session's end tells its agent", () => {
 		expect(result.commands.every((command) => command.output === undefined)).toBe(true);
 		expect(result.minutes).toBe(1.5);
 	});
+});
+
+it("only offers harness execution on platforms with process supervision", () => {
+	expect(harnessPlatform("darwin")).toBe(true);
+	expect(harnessPlatform("linux")).toBe(true);
+	expect(harnessPlatform("win32")).toBe(false);
 });

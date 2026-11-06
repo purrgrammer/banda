@@ -6,11 +6,13 @@
  * A lazy chunk of an older build that is gone (`vite:preloadError`) reloads it too, once.
  */
 
+import { nativeShell } from "./transport.ts";
+
 const RELOADED = "banda.reloaded";
 
-/** Register the worker, in a built app only: a dev server serves no worker. */
+/** Register the worker, in a built app only: a dev server serves no worker, and the phone's shell carries its files. */
 export function registerWorker(): void {
-	if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
+	if (!import.meta.env.PROD || !("serviceWorker" in navigator) || nativeShell() !== undefined) return;
 	// a page the worker already controlled reloads when a new one takes over; the first install changes nothing
 	const controlled = navigator.serviceWorker.controller !== null;
 	navigator.serviceWorker.addEventListener("controllerchange", () => {
@@ -34,7 +36,7 @@ export function registerWorker(): void {
 
 /** Ask whether the daemon serves a new build: if it does, its worker installs, takes over, and the page reloads. */
 export function checkForUpdate(): void {
-	if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
+	if (!import.meta.env.PROD || !("serviceWorker" in navigator) || nativeShell() !== undefined) return;
 	void navigator.serviceWorker
 		.getRegistration()
 		.then((registration) => registration?.update())

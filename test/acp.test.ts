@@ -1,12 +1,14 @@
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
 import {
 	type AcpConnection,
 	type AcpPermissionOutcome,
 	type AcpUpdate,
 	cancel,
+	jsonLines,
 	openSession,
 	prompt,
 	startAcp,
@@ -125,4 +127,31 @@ describe("acp framing", () => {
 			await connection.close();
 		}
 	});
+});
+
+for (const chunks of [["0123456789\n"], ["01234", "56789\n"], ["界界界\n"]]) {
+	it(`rejects oversized complete frames regardless of chunking: ${JSON.stringify(chunks)}`, () => {
+		const stream = new PassThrough();
+		const lines: string[] = [];
+		let rejected = 0;
+		jsonLines(stream, (line) => lines.push(line), { max: 8, over: () => rejected++ });
+		for (const chunk of chunks) stream.write(chunk);
+		stream.write("ok\n");
+		expect(lines).toEqual(["ok"]);
+		expect(rejected).toBe(1);
+	});
+}
+
+it("does not proceed when the promised permission mode is unsupported", async () => {
+	const calls: string[] = [];
+	const connection = {
+		request: async (method: string) => {
+			calls.push(method);
+			if (method === "initialize") return { protocolVersion: 1 };
+			if (method === "session/new") return { sessionId: "s1" };
+			throw new Error("mode unavailable");
+		},
+	} as unknown as AcpConnection;
+	await expect(openSession(connection, { cwd: tmpdir(), mode: "acceptEdits" })).rejects.toThrow("mode unavailable");
+	expect(calls).toEqual(["initialize", "session/new", "session/set_mode"]);
 });

@@ -2,10 +2,11 @@
 
 banda is a band of agents the owner runs on their own machine, the bots that get things done for them. Each agent is an
 face and a name, with one conversation that never ends, a personality in the owner's words, the connections it may use
-and the routines it keeps; the owner talks to each directly, or to several at once in a group. They research, write,
-keep track of things and work with the owner's services in a computer of their own, keep working while the owner is
-away, wake on schedules, and ask before anything consequential leaves their computer. Everything an agent
-does, finds, asks or makes appears in its conversation, as a message or as a rich object the owner acts on in place.
+and the routines and watches it keeps; the owner talks to each directly, or to several at once in a group. They
+research, write, keep track of things and work with the owner's services in a computer of their own, keep working while
+the owner is away, wake on schedules and on what they follow, and ask before anything consequential leaves their
+computer. Everything an agent does, finds, asks or makes appears in its conversation, as a message or as a rich object
+the owner acts on in place.
 There is no other screen. The owner works with the band through one app, on the web, as an installed app on the phone
 and on the desktop. All state lives in one store on the owner's machine. This file holds the ideas and the rules; the
 code holds the details. If a sentence here only restates code, delete it.
@@ -18,17 +19,17 @@ code holds the details. If a sentence here only restates code, delete it.
    mounted, what is reachable and which process runs what, never an instruction in a prompt.
 3. **Safe by consequence.** The owner is asked only about what cannot be undone or what sends data out, shown as the
    exact thing that will happen, once. Everything else runs freely inside the box.
-4. **Durable.** Every promise the agent makes is a stored wait or routine, never something the model has to remember.
-   A crash, a restart or a week offline loses nothing and does nothing twice.
+4. **Durable.** Every promise the agent makes is a stored wait, routine or watch, never something the model has to
+   remember. A crash, a restart or a week offline loses nothing and does nothing twice.
 5. **Just a chat.** The owner sees agents and their conversations, never Docker, YAML, diffs, tool traces or ids. As
    agents take on more, the app asks less of the owner: no screen to supervise, no list to manage. The raw transcript
    exists behind activity disclosure, for whoever wants it.
 
 ## Bets
 1. **The agent is the object; the chat is its surface.** Every agent has one chat, its identity, personality, memory,
-   connections and routines, and the owner talks to it directly. The owner never manages threads: a routine's run, an
-   ask and a result all land in the agent's one conversation.
-2. **What the agent is made of is files.** Agents, connections, routines and memory are plain text files in the
+   connections, routines and watches, and the owner talks to it directly. The owner never manages threads: a routine's
+   run, an ask and a result all land in the agent's one conversation.
+2. **What the agent is made of is files.** Agents, connections, routines, watches and memory are plain text files in the
    workspace, inspectable and editable by the owner or an agent. The store holds what runs and what is in effect, never
    a second copy of a definition.
 3. **An agent speaks through one tool.** The only way to reach the owner is `message_user`, with typed parts; in a
@@ -44,8 +45,9 @@ code holds the details. If a sentence here only restates code, delete it.
 6. **One durable store.** pi-durable owns conversations, tasks and documents. Nothing else is a source of truth.
 
 ## Words
-agent, band, group, chat, turn, queue, message, part, tool, wait, draft, permission, routine, event, connection,
-account, object, harness, session, artifact, memory, box, workspace, gateway, inference. One word per thing, in code, docs and the UI.
+agent, band, group, chat, turn, queue, message, part, tool, wait, draft, permission, routine, watch, event, connection,
+account, object, harness, session, artifact, memory, box, workspace, gateway, inference, device. One word per thing, in code, docs and
+the UI.
 The words the rules lean on:
 - **band**: the owner's agents, as the sidebar lists them.
 - **origin**: where a message came from (gateway, peer, thread); **replyTo**: the origin a Turn's messages and asks go
@@ -55,7 +57,9 @@ The words the rules lean on:
 - **permission**: a stored, scoped approval the owner gave (once, for a task, for a time, always), within the floor.
 - **group**: a chat with several agents as equal participants; its shared message history is the context they receive.
 - **routine**: a file in `routines/` that wakes its agent on a timer.
-- **event**: a routine's wake as the chat shows it: what fired and when, before the agent's reply.
+- **watch**: a file in `watches/` that wakes its agent when an object in a connection changes, until what ends it.
+- **event**: a routine's or a watch's wake as the chat shows it: what fired or what changed, and when, before the
+  agent's reply.
 - **connection**: a service the band can work with (GitHub, mail, a calendar); an **account** is one sign-in to it
   ("GitHub · @bandarra"), and a connection may have several.
 - **harness**: a coding agent on the owner's computer that the band hands work to over ACP (Claude Code, Codex, pi); a
@@ -69,11 +73,13 @@ The words the rules lean on:
 - **inference**: one bounded model request outside any chat, on a tier's model, whose answer the app reads on the spot
   (a face from a description); nothing is stored and no tool runs. Work that uses tools, answers to a chat or must
   survive a restart is a turn.
+- **device**: a phone (or another computer) the owner paired, known by its Iroh endpoint id; it reaches the daemon
+  from anywhere and acts as the owner.
 
 ## Core
 | Primitive | What it is |
 |---|---|
-| **Agent** | `agents/<name>.md` in the workspace: identity, model and personality; one chat, its memory, its connections' accounts and its routines |
+| **Agent** | `agents/<name>.md` in the workspace: identity, model and personality; one chat, its memory, its connections' accounts, its routines and its watches |
 | **Group** | one shared message history and one hidden execution chat for each participating agent |
 | **Chat** | a conversation running one agent; a group presents its shared history as one chat |
 | **Queue** | a chat's inputs waiting for a run (pi-durable's inbox): the owner steers, everything else follows up |
@@ -83,6 +89,7 @@ The words the rules lean on:
 | **Draft** | an effect leaving the box, stored whole and shown for approval; approved, it runs exactly as stored, once |
 | **Permission** | a stored approval with a scope; an effect within an open permission runs without asking |
 | **Routine** | `routines/<name>.md` in the workspace: when it runs (a timer) and what it asks; its task submits those inputs to its agent's chat |
+| **Watch** | `watches/<name>.md` in the workspace: the object it follows, the account it looks with, what ends it and what matters; its task keeps the reading and submits each change to its agent's chat |
 | **Connection** | `connections/<name>.md`, shipped with the app: a service's tools, which only read, and its objects; its accounts' credentials stay with the daemon |
 | **Harness** | `shipped/harnesses/<name>.md`, or a command line the owner gave: an ACP agent on the owner's computer (or banda's own adapter around one that speaks something else), connected in the owner's code folder, for the agents the owner turns it on for |
 | **Object** | the daemon's rendering of one thing in a connection, read with an account's credentials for the owner's eyes |
@@ -99,7 +106,10 @@ one that gives them one more thing to manage stays out.
 
 - **First run meets an agent.** The first screen is the first agent's face, its name and one line, then the providers
   to pick from, each a row with its logo and name; the one picked signs the owner in, or takes a key where it has no
-  sign-in. One screen, no other step. Then the chat opens with the agent's first words (who it is and what to try) and
+  sign-in. One screen, no other step. A credential found outside banda (an ANTHROPIC_API_KEY around the daemon) is
+  named by where it came from wherever providers show, never passes for one connected here, and can be connected
+  over; first run stays until the owner picks it, so a key they never saw is never what the band silently thinks with.
+  Then the chat opens with the agent's first words (who it is and what to try) and
   complete, broadly useful requests a tap sends as written, none needing a connection; every new agent's chat starts
   so, and the first words stay at the chat's beginning (the starters go once the owner has written).
   Returning owners open straight into their last chat. While the box starts, the chat says so in a line ("Mara's
@@ -167,10 +177,14 @@ one that gives them one more thing to manage stays out.
   and inspecting them never submits work.
 - **The panel** is a 20rem column at the right on the desktop, open by default on wide screens, and a sheet from the
   header on the phone. An agent's panel is the agent's whole home; it has no settings page of its own. At the top, the
-  face large and the name; below, four tabs. It opens on Routines when the agent has some; else on Access while it can
-  reach nothing; else on About. **Routines**: Routines on (a switch) and Add, then rows (name, when in words, next run, last run and what it said, paused; run now and pause in
-  now on the row; tapping opens its editor) or, with none, one example in muted text ("Every weekday at 8:00, …"); Add
-  opens a short form the daemon writes as the owner's own file. **Access**: the connections first, one row per
+  face large and the name; below, four tabs. It opens on Routines when the agent has routines or watches; else on Access
+  while it can reach nothing; else on About. **Routines**: Routines on (a switch) and Add, then rows (name, when in
+  words, next run, last run and what it said, paused; run now and pause in now on the row; tapping opens its editor) or,
+  with none, one example in muted text ("Every weekday at 8:00, …"); Add opens a short form the daemon writes as the
+  owner's own file. Beneath them, **Watching**: rows (the service's icon and the object's title, what ends it, when it
+  last looked and what it last saw, paused or done; Check now and Pause on the row; tapping opens the object's card and
+  the watch's editor); Follow takes a link, and an object's card in the chat offers it too. **Access**: the connections
+  first, one row per
   connection with one switch per account and Connect when none is signed in, then what the agent may do without
   asking, each revokable. **Memory**: the facts, editable and deletable. The face and the name at the top are
   edited where they show: a tap on the face picks another, a tap on the name edits it in place. **About**: the
@@ -189,7 +203,7 @@ one that gives them one more thing to manage stays out.
   services: sign in another, sign out, which agents use it); agents (archived ones, to restore); appearance; shared memory; Pause all
   routines; Advanced (show how the work is done on this device; the computer's state).
 - **The phone** shows the sidebar first, full width; a row opens its chat full screen with a back control; the
-  header's name and a routine's event line open the panel's sheet; the composer sticks to the
+  header's name and a routine's or a watch's event line open the panel's sheet; the composer sticks to the
   keyboard, the pill above it; the enlarged browser has a full-screen landscape mode with Give back pinned. The same
   hierarchy as the desktop, never a different one.
 - **Keyboard**: Enter sends; Cmd/Ctrl+K searches; Cmd/Ctrl+1 to 9 open the band's rows; Esc closes the panel or a
@@ -260,14 +274,13 @@ and face, never the id:
 | `connections` | the connections it may use, by name; which of their accounts is the owner's switch |
 
 The body is its personality, a prompt section. Every direct agent chat gets the same base tools: the box, its files,
-its browser, memory, routines and `message_user`, plus `message_agent`, `read_agent_chat`, `propose_agent`,
+its browser, memory, routines, watches and `message_user`, plus `message_agent`, `read_agent_chat`, `propose_agent`,
 `propose_group` and `propose_agent_change`. Group executions do not get these direct-chat tools.
-What distinguishes agents is personality, connections, routines and memory. An agent never gets a connection's tools
-its file does not name. A tool that asks the owner to accept something is named `propose_<what>`; a tool that acts is a
-plain verb. Agent files are "before" files (see the
-workspace): the owner's own edit is accepted by construction, in effect at once; the agent's change to itself waits
-for the owner as a card in its chat. An accepted change reaches its chat at the next model boundary and deliberately
-starts its prompt cache cold.
+What distinguishes agents is personality, connections, routines, watches and memory. An agent never gets a connection's
+tools its file does not name. A tool that asks the owner to accept something is named `propose_<what>`; a tool that acts
+is a plain verb. Agent files are "before" files (see the workspace): the owner's own edit is accepted by construction,
+in effect at once; the agent's change to itself waits for the owner as a card in its chat. An accepted change reaches
+its chat at the next model boundary and deliberately starts its prompt cache cold.
 
 The workspace starts with one agent, which is ordinary: renameable and archivable like any other, except
 that the last active agent cannot be archived, since the app opens in a chat. The owner makes another from the sheet:
@@ -276,13 +289,13 @@ bubble. The owner can choose a shape and colour or accept a generated candidate;
 and previewed before acceptance, never code or markup from the box. The sheet designs one in place, from the owner's
 description or the name alone, by an inference on the Balanced tier; it is the owner's pick, written with the file.
 
-Archiving an agent stops its runs, pauses its routines, ends its permissions and removes it from the band and from
-groups' mentions. Its definition, chat, memory and artifacts remain; Settings lists it, to restore. Restoring it shows
-its current connections for review; old permissions and paused routines do not silently return.
+Archiving an agent stops its runs, pauses its routines and watches, ends its permissions and removes it from the band
+and from groups' mentions. Its definition, chat, memory and artifacts remain; Settings lists it, to restore. Restoring
+it shows its current connections for review; old permissions and paused routines and watches do not silently return.
 
 The agent climbs a ladder before it asks the owner: what it already knows, a connection, a search, the browser, and
-the owner last. **Pause routines** on an agent holds its routines and says so in its chat's header; Stop ends a run;
-Pause all routines, in Settings, holds every agent's. The owner's own messages always run.
+the owner last. **Pause routines** on an agent holds its routines and watches and says so in its chat's header; Stop
+ends a run; Pause all routines, in Settings, holds every agent's. The owner's own messages always run.
 
 Agents may send one another messages only from direct chats, through `message_agent`; the recipient gets a feed entry and a turn, and decides what to do. Another agent may read a bounded page of a direct chat through `read_agent_chat`. The read is untrusted data; tools, results and hidden group execution chats are not exposed. Agents may propose an agent, a group or a change to an existing agent. Agent proposals follow the agent definition's identity, face, description, model, tier and instructions; the owner still chooses tools and connections, and new agents start active. Existing-agent proposals can change identity, face, description, model, tier and instructions, but not state, tools, connections or permissions. Proposals are cards in the proposing chat; only the owner's acceptance makes a definition or group effective. An existing-agent change shows the resulting file and the previous file and is bound to the accepted version it started from.
 
@@ -368,13 +381,16 @@ Unfurls are few per message and never retried in a loop, so a chatty model canno
 reference names the object its URL opens, not a different object found before normalizing the URL. Equivalent names
 share a reading only under the connection's declared identity rules. A connection declares its objects as data,
 never code: for each kind, the URL and id shapes that name it, the read that
-fetches it (a tool and how its arguments come from the match), the fields the card shows and the writes that act on it,
-by tool. Every object in every state is in the specimen, light and dark, both widths.
+fetches it (a tool and how its arguments come from the match), the fields the card shows, the writes that act on it,
+by tool, and how it is followed ("Watches"). Every object in every state is in the specimen, light and dark, both
+widths.
 
 **Harnesses.** A harness is a connection that does work rather than reads: a coding agent on the owner's computer,
 spoken to over ACP, with the daemon as its client. It sits on Connections and in each agent's Access beside the
 services, connected in the owner's code folder (any folder but `/` or one above the home; where code usually lives is suggested); that folder
-is its account, and the owner turns it on per agent. Each session works in a project the agent names: a git repository
+is its account, and the owner turns it on per agent. It selects the starting project, not a sandbox: the harness runs
+with the owner's host access and its own permissions, stated before enabling it. Harness execution is available only
+on platforms where banda supervises its process tree (macOS and Linux). Each session works in a project the agent names: a git repository
 inside that folder, by its path from there, or the folder itself when it is one (a folder of projects, the home among
 them, never is). Never outside it (symlinks resolved), never through a
 hidden folder, never a folder that is not a repository, so the home as the code folder never makes `~/.ssh` a project;
@@ -383,22 +399,29 @@ naming one that is not there answers with those that are.
   only when installed) or a command line the owner typed. Never a file the box wrote: the daemon runs it on the
   owner's computer, outside the box. It runs under banda's supervisor, which watches every process group below it
   (a harness may run each command detached, in a group of its own) and kills them all when its session ends or the
-  daemon dies; a later daemon kills, from the groups the session recorded, only what started since the session did.
+  daemon dies; a later daemon uses the session marker and groups still anchored by a recorded process identity; a reused group number
+  alone never authorizes a kill.
 - **The agent knows what it has.** It gets a tool per harness turned on for it (`harness__claude_code(prompt,
   project?, session?)`), whose description says where it works and the projects there, rebuilt when that changes.
   A call starts a session at once and answers with its number. Given an earlier `session`, it follows up: a running
   one takes the prompt as a note after its current step; an ended one goes on in a new session that reopens the
-  harness's own (`session/load`, its replayed history left out), else is told what the earlier one did.
+  harness's own (`session/load`, its replayed history left out), else starts fresh with a summary of what the earlier one did.
+  Both the owner and the agent see which happened. Each continuation checks the currently connected folder and agent
+  access; changing either stops the affected work, including notes and approvals not yet sent.
   `harness__sessions` shows the agent its sessions (others' are not its to see), and `harness__stop` stops one, as
   the owner's Stop does.
 - **The agent starts it; the harness asks.** A session starts with no draft. What reaches the owner is the harness's own asks: its mode is set before anything is sent, where the
   file names one, so it asks for what the owner would want asked (Claude Code: commands, and anything outside the
   folder); otherwise its own settings decide, and the connect card says which. The connect card says the agent can
-  start it without asking. "Always allow" is never answered: it would write a rule into the owner's own settings.
+  start it without asking. Only an unambiguous one-time choice is answered, with its native label. "Always allow" is never answered: it would
+  write a rule into the owner's own settings. A request too large to show in full is refused, never shortened for approval;
+  an unsupported permission mode stops the session before work is sent.
 - **A session is live in the chat.** It is drawn in the call's place: one line for its current step, the owner's
   notes, Stop and Open; every step in a sheet. Each ask is a card under it, said by what it does (run a command, change a file, open
   a page) with all of it the owner must see (the command, the diff, the address, the choice Allow makes); several may be
-  open at once, and each lives as long as the harness's process. Stop answers them all, and before the ask was sent,
+  open at once, and each lives as long as the harness's process. The header shows delegated work from its recorded state,
+  with approval attention and a way to open its activity; several sessions have a picker. The agent's own active reply
+  takes priority, with a compact delegated indicator alongside it. Stop answers them all, and before the ask was sent,
   stops it from being sent. The owner steers in their own words: a note is sent to the harness as a
   prompt it takes after its current step. Stop cancels the turn.
 - **Once, and then the agent hears.** The ask is sent at most once: a restart after it was sent ends the session
@@ -421,15 +444,15 @@ the chat, "<name> didn't answer.", so the owner never meets silence. A run that 
 never nudged; a newer input of the owner's already queued is the one the next run answers, so it is not nudged
 either. In a group the same holds for a member's turn that an owner's message asked for: it ends in a `message_group`
 call that went through (words, files, a question, or a reaction on that message), or it is nudged once in the group's
-words, and then the room says "<name> didn't answer". Routines' runs and a member's turn another member asked for may
-stay silent. Parts:
+words, and then the room says "<name> didn't answer". Routines' and watches' runs and a member's turn another member
+asked for may stay silent. Parts:
 - **text**, markdown; a link the daemon recognises as an object draws its card beneath;
 - **file**: a path in the box, sent as an attachment and shown inline where it can be;
 - **artifact**: a path in the box published as its next version (see "The app"), a card in the app;
 - **view**: a live view of something in the box (the browser's page);
 - **question**: choices, a form or free text; the call opens a Wait and returns its answer;
 - **reaction**: one emoji on the owner's message the run answers; alone, it is the whole reply ("got it"). A routine's
-  run answers no one's message, so it has none.
+  or a watch's run answers no one's message, so it has none.
 
 A call returns once its message is delivered, or with why it was not; a question returns its answer. Calls in one
 round run one after another, so messages go in the order the model wrote them. A message is sent by the tool's own
@@ -475,8 +498,8 @@ gives it, the open asks it covers, and an ask a permission covers by the time it
   first and notes that the box still needs it, so a restart between the two finishes the box's copy, and an edit over
   a change the box made is refused until that change is answered. **Run now** is one wake beside the schedule, which it
   leaves as it was, once per click; like a due time, it waits while the routine's last run still goes.
-- **Wakes** (an owner's message, a routine, a finished wait, a mention in a group) go into the chat's queue,
-  deduplicated.
+- **Wakes** (an owner's message, a routine, a watch's change, a finished wait, a mention in a group) go into the
+  chat's queue, deduplicated.
 - **Due times.** A routine fires once per due time, in the commit that records the time as fired; due times missed
   while the daemon was down or paused come together as one wake. A routine whose last run still goes skips its turn.
 - **A time is on someone's wall**: `at` and `cron` are read in the routine file's `zone` (an IANA name), which the
@@ -485,10 +508,71 @@ gives it, the open asks it covers, and an ask a permission covers by the time it
 - **Runs a day** are per routine (`runs_a_day` in its file); one that runs that many times in a day pauses alone and
   says so.
 
+## Watches
+A watch follows one object outside, through a connection, and wakes its agent when it changes: a pull request until
+it merges, an issue until it closes, a mailbox for what matters. A routine's trigger is a time on someone's wall and
+a Wait blocks a tool call; a watch's trigger is the world, and the world ends it. Like a routine, it is kept whether
+or not the model remembers it.
+- **Watches are files**: `watches/<name>.md`, written by the `watch` tool (a card in its agent's chat the owner
+  accepts: "Follow banda#142 until merged?") or by the owner from an object's card or the panel, in effect at once;
+  the accepted file is what runs. The file names the object (a link the connection recognises), the account it looks
+  with and what ends it; its body says what matters and what to do about it, words the agent gets at every wake. The
+  store holds only the watch's task: its reading, its health and its wakes.
+- **A connection says how each kind of object is followed**, in that kind's entry beside the read that fetches it,
+  the fields its card shows and the writes that act on it, as data, never code: the further reads a following needs
+  (only tools listed under `reads`), how each list in the reading is keyed (comments by id; check runs by name, since
+  every push gives them new ids), what is noise, whose items are the account's own, conditions derived from the whole
+  ("all checks green again", so it wakes once), which changes wake and which only tell, each said in words from the
+  reading's fields, what ends it, and when it is busy. The daemon makes the reads with the account's credentials, in
+  the daemon: no box, no model. Any link the connection recognises as that kind can be followed; a kind without the
+  declaration cannot, and the card says so.
+- **One reading per object.** The daemon keeps one reading per (connection, account, object) fresh while any watch
+  holds it, the same reading the object's card draws, so five watches on one inbox read it once and a followed
+  object's card is always current. An object's card offers Follow among its quiet actions; a followed one says who
+  follows it and until what, in one line, and never says "as of" while the daemon can look.
+- **The change is the event, and its identity is the change.** Each reading is compared with the one before, or
+  read from a feed's cursor where the service keeps one; the events are the differences, and an event's id is the
+  change itself, so a read repeated after a crash yields the same events and the same wake key, which the chat's queue
+  deduplicates. A short page never counts as removal. Push (a server's notification, a webhook) only says when to
+  look, never what happened.
+- **The first look comes before the watch is live.** Making a watch reads the object once, and that reading is its
+  baseline: only what changes after it is an event; what came before, the agent can read for itself. A watch whose
+  first look fails is not made, and the card says why.
+- **Wake, tell or nothing.** The kind's rules sort each change: a wake starts the agent's run with the change as its
+  input, framed as data, the watch's words beside it; a change that only tells draws its line and card in the chat
+  and runs no model; the rest (noise, what the account itself did, a bot's) leaves no trace, so an agent never wakes
+  on its own work. At a wake the agent decides whether anything is worth a message, as at a routine's: its message
+  counts as unread, a line alone does not.
+- **A burst is one wake.** Changes that arrive while the watch's last run still goes, or before the kind's settling
+  time passes, come together as one wake carrying the newest reading, and its line names what came together. A
+  watch looks often while its object is busy (checks running) and seldom when it is quiet, as the kind says; wakes a
+  day are per watch, as runs a day are per routine.
+- **The wake in the chat** is an event line, the change in the kind's words with the service's icon ("banda#142 · Ana
+  approved · 2 checks failed"), the object's card beneath and then the agent's reply when it had one. Tapping the line
+  opens the watch in the panel.
+- **It ends itself.** When what ends it holds, the last wake says so and the watch is done, as a routine that ran
+  once is; its row says what ended it until the owner removes it. Following the same object again starts a new
+  watch from a fresh baseline.
+- **Health is observed and told.** A watch has what the owner wants (on, paused, done) and what the daemon sees
+  (looking; can't reach, since when; behind, when a feed's cursor expired or a gap could not be recovered). The row
+  says which, in words ("can't reach GitHub since 9:10"); a watch that could not look for an hour draws an error line
+  and marks the chat unread, like a failed routine. It never says it is caught up when it is not: a gap it cannot
+  replay is closed by a fresh reading, and the wake that follows says what may have been missed.
+- **Pause and resume.** Pause stops looking. Resume looks once and reconciles: what changed meanwhile is one wake
+  that says it comes from the pause, never dropped and never replayed as if live. Pause routines on an agent, and
+  Pause all routines, hold its watches too; Check now looks at once, as Run now runs.
+- **Authority.** A watch looks only for an agent given that connection's account, checked in the commit before each
+  look; switching the account off, signing it out or removing the connection ends its watches in that commit, and the
+  row says why. What a watch reads is foreign data ("Trust"): it changes nothing about admission, and what the agent
+  does about it leaves the box as a draft, as ever. A subscription the service itself keeps (a mail feed that expires
+  in days) is the connection's to declare and the daemon's to renew; one that lapsed is a health the row says, never a
+  silent gap.
+
 ## Flows
-- **Every input is a Turn** with a `replyTo`: an inbound's origin; for a routine's input or a group's mention, the
-  chat's last owner origin. Asks go to the `replyTo` of the Turn that raised them. The commit that ends a Turn checks,
-  once per run, whether the run left the owner unanswered ("Messages"), and queues the nudge or the notice in it.
+- **Every input is a Turn** with a `replyTo`: an inbound's origin; for a routine's or a watch's input or a group's
+  mention, the chat's last owner origin. Asks go to the `replyTo` of the Turn that raised them. The commit that ends a
+  Turn checks, once per run, whether the run left the owner unanswered ("Messages"), and queues the nudge or the notice
+  in it.
 - **Queue.** An input that fills a Wait is an answer, never an input. A chat answers one run at a time. The owner's
   input while it works steers: it joins the running run after the current tool round. Every other input follows up,
   and follow-ups queued together start one run. Inputs reach a chat in the order they arrived; cancel always works.
@@ -511,8 +595,8 @@ gives it, the open asks it covers, and an ask a permission covers by the time it
   send counts its attempts instead. On start, the daemon runs again a task parked while it owned an open Wait. The
   deadline is decided in the transaction that reads the slot: an expired Wait answers the tool `expired`, and an
   approval that expires is denied.
-- **Status** is derived from the task graph and the tasks' own inputs: `waiting`, `running`, `idle`, with routines
-  and parked tasks beside it.
+- **Status** is derived from the task graph and the tasks' own inputs: `waiting`, `running`, `idle`, with routines,
+  watches and parked tasks beside it.
 
 ## Memory
 Memory is compact facts in workspace files, with two scopes: **global**, shared with the band, and **agent**, used
@@ -524,7 +608,8 @@ between agents sharing a box.
 
 Both scopes are small enough to carry in context, with a fixed budget for each. A save that would exceed the budget
 is refused without discarding facts; the agent shortens or forgets something before retrying. Progress stays in chat,
-work products in artifacts, and future promises in routines: memory is neither a second transcript nor a scheduler.
+work products in artifacts, and future promises in routines and watches: memory is neither a second transcript nor a
+scheduler.
 A correction names the exact old fact and stays in its scope, so a stale edit cannot overwrite newer words.
 Replaying an interrupted save or deletion never undoes a later owner change, even when the owner restores the old words.
 
@@ -655,14 +740,15 @@ valid stamp.
   site that checks for bots does not serve the agent's browser, whoever clicks, so the agent goes elsewhere or says so.
 
 ## The workspace
-The workspace is the band's folder, in the box: `agents/`, `connections/`, `routines/`, `skills/`, `memory/`, and the files the
-agents work on. The daemon reads it over the box's connection, so no folder the box writes sits on the
-owner's machine. The agent writes it and the owner edits it, so the daemon decides when a change takes effect:
-- **Before**: `agents/`, `connections/`, `routines/` and skill instructions take effect once the owner accepts the change.
-  Accepting binds the hash of the bytes shown; the daemon keeps the accepted version in the store, and prompts and
-  loading read only from there. Until then the accepted version stays in effect, and the tool that made the change
-  tells the model so. The owner's own write through the app is accepted in the commit that stores it. The app shows
-  the agent's change as a plain question ("Allow this change?"), not a diff.
+The workspace is the band's folder, in the box: `agents/`, `connections/`, `routines/`, `watches/`, `skills/`,
+`memory/`, and the files the agents work on. The daemon reads it over the box's connection, so no folder the box writes
+sits on the owner's machine. The agent writes it and the owner edits it, so the daemon decides when a change takes
+effect:
+- **Before**: `agents/`, `connections/`, `routines/`, `watches/` and skill instructions take effect once the owner
+  accepts the change. Accepting binds the hash of the bytes shown; the daemon keeps the accepted version in the store,
+  and prompts and loading read only from there. Until then the accepted version stays in effect, and the tool that made
+  the change tells the model so. The owner's own write through the app is accepted in the commit that stores it. The app
+  shows the agent's change as a plain question ("Allow this change?"), not a diff.
 - **After**: everything else, memory included, takes effect at once. Admission still guards every effect that leaves
   the box.
 - The daemon opens workspace files without following symlinks.
@@ -708,17 +794,31 @@ The daemon alone opens the store. The app and a minimal CLI (`serve`, `say`, `ap
 talk HTTP on loopback: Host and Origin checked, the owner's token on every API request. The app's own files are
 public code and need no token. The token lives in `auth/token` and survives restarts; `serve` and `status` print the
 app's link, which carries it in the URL fragment, so it never reaches a request or a log. Reads come from the harness
-(entries paged, doc snapshots, task graph); live updates are SSE. Reaching the app from another device (the phone)
-goes through a pairing the owner makes from a device already trusted, never by exposing the daemon's port.
+(entries paged, doc snapshots, task graph); live updates are SSE.
+
+A device reaches the same API over Iroh, never through an open port: the daemon's one endpoint, its key in `auth/`
+so its id outlives restarts, reached through n0's relays and discovery unless the owner says otherwise; one HTTP
+request a bi-stream. Who asks over Iroh is the endpoint id the handshake authenticated, never a header or the token:
+a paired device acts as the owner; any other endpoint reaches the pairing route alone and holds little while it does
+(a small body, one stream at a time, short deadlines, a bounded number of such connections), since a key costs
+nothing. The owner pairs a device on the computer banda runs on: an invite shown as a QR code, single use and live for
+ten minutes. Before presenting it, the phone asks the owner to match the computer's code with the desktop; before
+approving, the desktop asks them to match the phone's code. A link cannot silently change a phone's computer, and a
+trial computer cannot erase an existing pairing. Devices are listed, renamed and revoked there too,
+never from a device, so no device can mint access that outlives its own revocation. A device learns what it is from
+the daemon's answer to the pairing route, never from how a connection closed: a restart or a dropped connection is
+only dialed again.
 
 ## Home
 `~/.banda` (`--home <dir>` or `BANDA_HOME`): `config.json`, `durable.db`, `search.db`, `blobs/`, `auth/`. The
 workspace lives in the box.
 
 ## Open
-- A watch: a routine following something outside through a connection (a pull request, new mail, a webhook), and a
-  monitor on a command's output in the box. Both need their own design: event sources as data, cursors, what wakes
-  and what is noise, and how the change is drawn as its object in the chat.
+- A monitor: a command in the box whose output a watch-like file follows, waking when it changes; it needs its own
+  design, apart from watches.
+- Push to a watch: a service's notification or webhook reaching the daemon, through a relay while the daemon is
+  off; it only says when to look ("Watches"), and whether the relay keeps the bytes or only that one came is the
+  owner's choice.
 - A hand-off: one agent messaging another for a piece of work, visible to the owner in the receiving agent's chat.
 - A "before" gate for the facts an agent writes to memory.
 - Why a message said what it did: the facts and sources that shaped it, in one line the owner can tap.
@@ -728,7 +828,9 @@ workspace lives in the box.
 - Tools and connections the agent builds itself, offered once the owner accepts their definition.
 - Packaging the box's runtime so no owner installs Docker: a bundled VM, Podman, or a managed host.
 - Push to the phone without a vendor seeing the content: a notification that only says to open the app.
-- Reaching the app from the phone off the home network, without exposing the daemon.
+- A guest in a group, through an invite scoped to that group.
+- Sending a copy of an agent's files to another banda.
+- The daemon on an always-on machine (a home server or a VPS), with the phone as its client.
 - Voice in the composer; the agent's voice.
 - Replying to or quoting a message, so "do this with that" can point at a card from last week; pinning rows; a
   proactivity dial per agent.

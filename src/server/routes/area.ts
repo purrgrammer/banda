@@ -63,6 +63,8 @@ export type AreaRequest = {
 	readonly url: URL;
 	/** The body as a JSON object; throws `BadRequest` when it is not one. */
 	readonly json: () => Promise<Record<string, unknown>>;
+	/** The paired device that asked, over Iroh, by its endpoint id; absent on the computer banda runs on. */
+	readonly device?: string;
 	/** Aborts when the client goes away. */
 	readonly signal: AbortSignal;
 };

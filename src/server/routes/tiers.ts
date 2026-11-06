@@ -9,10 +9,12 @@ import { ChatTier, defineTierSwitch } from "../../core/agents.ts";
 import { Companion, type CompanionDoc, setModels } from "../../core/companion.ts";
 import { context } from "../../core/store.ts";
 import { isTier, modelFor, PRESETS, presetOf, providerOf, TIERS, type Tier } from "../../core/tiers.ts";
+import { DEFAULT_MODEL } from "../../home.ts";
 import type { TiersView } from "../api.ts";
 import { BadRequest } from "../http.ts";
 import { defineWarm } from "../warm.ts";
 import type { AreaModule, Deps } from "./area.ts";
+import { credentialOf } from "./providers.ts";
 
 /** Each daemon's switch, by its core: the task it installs is the one its routes create. */
 const switches = new WeakMap<object, ReturnType<typeof defineTierSwitch>>();
@@ -20,8 +22,11 @@ const switches = new WeakMap<object, ReturnType<typeof defineTierSwitch>>();
 /** A provider in plain words, as who sees a chat names it. */
 const providerName = (deps: Deps, provider: string) => deps.seen({ provider, modelId: "" })?.name ?? provider;
 
-/** The providers the owner may pick: those with presets that have credentials, and the configured model's. */
-export async function offered(deps: Deps, fallback: ModelRef): Promise<{ id: string; name: string }[]> {
+/**
+ * The providers the owner may pick: those with presets that have credentials, and the configured model's; each
+ * `ambient` with its `source` when its credential came from outside banda.
+ */
+export async function offered(deps: Deps, fallback: ModelRef): Promise<TiersView["providers"][number][]> {
 	const candidates = [...new Set([...PRESETS.map((preset) => preset.provider), fallback.provider])];
 	const usable = await Promise.all(
 		candidates.map(async (id) => {
@@ -32,7 +37,19 @@ export async function offered(deps: Deps, fallback: ModelRef): Promise<{ id: str
 			}
 		}),
 	);
-	return candidates.filter((_, n) => usable[n]).map((id) => ({ id, name: providerName(deps, id) }));
+	return Promise.all(
+		candidates
+			.filter((_, n) => usable[n])
+			.map(async (id) => {
+				const { ambient, source } = await credentialOf(deps.models, id);
+				return {
+					id,
+					name: providerName(deps, id),
+					...(ambient ? { ambient } : {}),
+					...(source === undefined ? {} : { source }),
+				};
+			}),
+	);
 }
 
 async function view(deps: Deps): Promise<TiersView> {
@@ -55,6 +72,11 @@ async function view(deps: Deps): Promise<TiersView> {
 		presets,
 		models: { quick: model("quick"), balanced: model("balanced"), deep: model("deep") },
 		providers: await offered(deps, fallback),
+		// the owner's pick: one made in the app, or a model config.json names; never the default alone
+		chosen:
+			choice.provider !== undefined ||
+			fallback.provider !== DEFAULT_MODEL.provider ||
+			fallback.modelId !== DEFAULT_MODEL.modelId,
 		catalog: presets ? deps.models.getModels(id).map((each) => ({ id: each.id, name: each.name })) : [],
 	};
 }

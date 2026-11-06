@@ -70,6 +70,7 @@ export type HarnessSessionView = {
 	/** Its number, as its agent says it ("session 42"), and the one it goes on from. */
 	readonly task?: number | undefined;
 	readonly continues?: number | undefined;
+	readonly continuation?: "native" | "summary" | undefined;
 	/** Its agent stopped it, not the owner. */
 	readonly stoppedBy?: "agent" | undefined;
 };
@@ -351,6 +352,15 @@ export function HarnessCard({
 					</Button>
 				) : null}
 			</span>
+			{session.continues === undefined ? null : (
+				<p className="text-meta text-ink-2">
+					{session.continuation === "native"
+						? "Resumed its original session."
+						: session.continuation === "summary"
+							? "Started fresh with a summary of the earlier work."
+							: "Opening the follow-up…"}
+				</p>
+			)}
 			<span className="flex min-h-6 min-w-0 items-baseline gap-2 text-body">
 				{state === "done" ? (
 					<>

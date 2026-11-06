@@ -1,0 +1,7 @@
+{
+	"appId": "app.banda",
+	"appName": "banda",
+	"webDir": "../web/dist",
+	"loggingBehavior": "none",
+	"android": { "path": "android", "useLegacyBridge": false }
+}

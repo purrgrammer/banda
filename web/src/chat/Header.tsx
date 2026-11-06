@@ -4,7 +4,7 @@
  * paused). Said here once: the feed has no working line. The name opens the panel; on the phone a back control leads
  * to the band.
  */
-import { ChevronLeftIcon, PanelRightIcon } from "lucide-react";
+import { ChevronLeftIcon, PanelRightIcon, TerminalIcon } from "lucide-react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -22,12 +22,16 @@ export function Header({
 	onBack,
 	onPanel,
 	onActivity,
+	attention = false,
+	delegated,
 }: {
 	name: string;
 	faces: readonly (Who & { readonly state?: FaceState | undefined })[];
 	/** What it does now, or its presence, in words, when the state alone does not say it: "Using its browser…". */
 	doing?: string | undefined;
 	state?: FaceState | undefined;
+	attention?: boolean;
+	delegated?: { readonly count: number; readonly waiting: boolean; readonly onOpen: () => void } | undefined;
 	paused?: boolean;
 	phone?: boolean;
 	panelOpen?: boolean;
@@ -48,11 +52,11 @@ export function Header({
 					<ChevronLeftIcon className="size-5" />
 				</Button>
 			) : null}
-			<div className="flex min-w-0 items-center gap-2.5 px-1.5 py-1">
+			<div className="flex min-w-0 flex-1 items-center gap-2.5 px-1.5 py-1">
 				{faces.length > 1 || first === undefined ? (
-					<FaceStack faces={faces} name={name} size="message" waiting={state === "waiting"} />
+					<FaceStack faces={faces} name={name} size="message" waiting={attention || state === "waiting"} />
 				) : (
-					<Face face={first.face} name={name} size="message" state={state} paused={paused} />
+					<Face face={first.face} name={name} size="message" state={attention ? "waiting" : state} paused={paused} />
 				)}
 				<div className="flex min-w-0 flex-col">
 					<button
@@ -82,6 +86,19 @@ export function Header({
 					)}
 				</div>
 			</div>
+			{delegated === undefined ? null : (
+				<Button
+					variant="ghost"
+					size="sm"
+					className="shrink-0"
+					onClick={delegated.onOpen}
+					aria-label={`${delegated.waiting ? "Waiting on you: " : ""}${delegated.count} coding ${delegated.count === 1 ? "session" : "sessions"}`}
+				>
+					<TerminalIcon />
+					<span>{delegated.count}</span>
+					{phone ? null : <span>coding {delegated.count === 1 ? "session" : "sessions"}</span>}
+				</Button>
+			)}
 			{phone || onPanel === undefined ? null : (
 				<Button
 					variant="ghost"

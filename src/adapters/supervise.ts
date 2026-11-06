@@ -3,18 +3,16 @@
  * through, and watches the process tree below it, every process group it sees. When the daemon's end of the pipe
  * closes (the daemon ended, or died: nothing else outlives it) or the harness exits, it kills everything it saw, then
  * exits. A harness's commands may run detached, each in a group of its own, and lose their parent when it dies (Claude
- * Code's do); killing the harness's own group would miss them. Only processes started since the supervisor did are
- * killed, so a group number given out again is never touched.
+ * Code's do); killing the harness's own group would miss them. A group must still have a captured member with the same start time before it is killed; a reused group number grants no authority.
  */
 import { spawn } from "node:child_process";
-import { killGroups, treeGroups } from "../core/processes.ts";
+import { killGroups, type ProcessGroup, treeGroups } from "../core/processes.ts";
 
 const [command = "", ...args] = process.argv.slice(2);
-const since = Date.now();
 const child = spawn(command, args, { stdio: ["pipe", "pipe", "inherit"] });
-const seen = new Set<number>();
+const seen = new Map<number, ProcessGroup>();
 const look = () => {
-	for (const group of treeGroups(child.pid)) seen.add(group);
+	for (const group of treeGroups(child.pid)) seen.set(group.id, group);
 };
 const watching = setInterval(look, 500);
 let ending = false;
@@ -23,7 +21,7 @@ const end = (code: number) => {
 	ending = true;
 	clearInterval(watching);
 	look();
-	killGroups([...seen], since);
+	killGroups([...seen.values()]);
 	try {
 		if (child.pid !== undefined) process.kill(child.pid, "SIGKILL");
 	} catch {

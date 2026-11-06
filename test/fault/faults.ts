@@ -9,6 +9,7 @@
 import type { Storage } from "@earendil-works/pi-durable";
 
 export type FaultPoint =
+	| import("../../src/server/remote.ts").KeyPoint
 	| "commit:before"
 	| "commit:after"
 	| "send:before"
@@ -118,7 +119,8 @@ export type FaultPoint =
 	| "harness:spawn"
 	| "harness:prompted"
 	| "harness:update"
-	| "harness:ask";
+	| "harness:ask"
+	| "harness:note";
 export type Fault = { readonly point: FaultPoint; readonly hit: number; readonly kind: "kill" | "error" };
 
 export class InjectedFault extends Error {

@@ -1246,7 +1246,7 @@ describe("web", () => {
 			expect(worker.headers.get("cache-control")).toBe("no-cache");
 			expect(worker.headers.get("content-security-policy")).toBe(index.headers.get("content-security-policy"));
 			expect(index.headers.get("content-security-policy")).toBe(
-				"default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; frame-src 'none'",
+				"default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-src 'none'; frame-ancestors 'none'",
 			);
 			expect((await fetch(`${url}/api/companion`)).status).toBe(401);
 			expect((await fetch(`${url}/`, { method: "POST" })).status).toBe(405);

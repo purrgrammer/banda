@@ -16,14 +16,17 @@ import {
 	addHarness,
 	answerAsk,
 	connectHarness,
+	continuedProject,
 	defineHarnesses,
 	disconnectHarness,
 	folderPath,
 	foldersIn,
+	HARNESS_UNAVAILABLE,
 	type HarnessAccount,
 	type HarnessDefinition,
 	Harnesses,
 	type HarnessStep,
+	harnessPlatform,
 	harnessTool,
 	isRepo,
 	projectOf,
@@ -97,7 +100,7 @@ const SUGGESTED =
 let shipped: HarnessDefinition[] = [];
 let missing: HarnessFile[] = [];
 let custom: { [name: string]: { service: string; command: string } } = {};
-const definitions = () => definitionsOf(shipped, custom);
+const definitions = () => (harnessPlatform() ? definitionsOf(shipped, custom) : new Map<string, HarnessDefinition>());
 
 let made: ReturnType<typeof defineHarnesses> | undefined;
 const serviceOf = (harness: string) => definitions().get(harness)?.service ?? harness;
@@ -126,17 +129,15 @@ function workDescription(service: string, folder: string | undefined): string {
 		"and answers with a session number; what it did comes back to you as a message when it ends, so don't wait on it " +
 		"or call it again for the same work. The owner watches it work, answers what it asks, and may steer or stop it. " +
 		"To follow up on earlier work, give its `session`: while it runs, your prompt reaches it as a note after its " +
-		"current step; once it ended, it goes on from there with what it knew."
+		"current step; once it ended, it reopens natively if supported, otherwise starts fresh with a summary; the session reports which happened."
 	);
 }
 
 /** What a work call found, before it starts anything: refused, begun already, a note sent, or where to start. */
 type Found =
 	| { readonly refused: string }
-	| { readonly begun: number; readonly folder: string }
-	| { readonly noted: number }
-	| { readonly agent: string; readonly root: string }
-	| { readonly agent: string; readonly continues: number; readonly folder: string };
+	| { readonly begun: number; readonly folder: string; readonly continues?: number }
+	| { readonly noted: number };
 
 /** The tool an agent hands `name` work with: a new session, a follow-up note, or a session continued. */
 function workTool(name: string, folder: string | undefined): ToolRegistration {
@@ -174,17 +175,34 @@ function workTool(name: string, folder: string | undefined): ToolRegistration {
 				if (!definitions().has(name)) return { refused: `${service} is not on this computer any more` };
 				if (account === undefined || !account.agents.includes(agent))
 					return { refused: `the owner has not turned ${service} on for you` };
-				if (earlier === undefined) return { agent, root: account.folder };
-				const before = doc.sessions[earlier];
-				if (before === undefined || before.agent !== agent || before.harness !== name)
+				const before = earlier === undefined ? undefined : doc.sessions[earlier];
+				if (earlier !== undefined && (before === undefined || before.agent !== agent || before.harness !== name))
 					return {
 						refused: `session ${earlier} is not one of your ${service} sessions, or is no longer kept (${SESSIONS_TOOL} lists yours)`,
 					};
-				if (before.ended === undefined)
+				const where =
+					before === undefined ? projectOf(account.folder, project) : continuedProject(account.folder, before.folder);
+				if ("refused" in where)
+					return {
+						refused:
+							where.refused +
+							(where.projects.length === 0 ? "" : `. Projects in ${account.folder}: ${where.projects.join(", ")}`),
+					};
+				if (earlier !== undefined && before !== undefined && before.ended === undefined)
 					return (await steer(tx, earlier, prompt.trim(), Date.now(), { call: api.callId }))
 						? { noted: earlier }
 						: { refused: `session ${earlier} takes no more notes` };
-				return { agent, continues: earlier, folder: before.folder };
+				// Admission and creation share one commit: a disconnect/root change cannot fall between them.
+				const task = await (made as ReturnType<typeof defineHarnesses>).begin(tx, {
+					chat,
+					call: api.callId,
+					agent,
+					harness: name,
+					folder: where.folder,
+					ask: prompt.trim(),
+					...(earlier === undefined ? {} : { continues: earlier }),
+				});
+				return { begun: task, folder: where.folder, ...(earlier === undefined ? {} : { continues: earlier }) };
 			}, ctx);
 			if ("refused" in found) return answer(`It did not start: ${found.refused}.`, true);
 			if ("noted" in found)
@@ -192,38 +210,11 @@ function workTool(name: string, folder: string | undefined): ToolRegistration {
 					`Sent to session ${found.noted} as a note: it takes it after its current step. What it did comes back to ` +
 						"you as a message when the session ends.",
 				);
-			if ("begun" in found)
-				return answer(`Started session ${found.begun}: ${service} in ${found.folder}. What it did comes back to you.`);
-			let folder: string;
-			if ("continues" in found) folder = found.folder;
-			else {
-				const where = projectOf(found.root, project);
-				if ("refused" in where)
-					return answer(
-						`It did not start: ${where.refused}.` +
-							(where.projects.length === 0 ? "" : ` Projects in ${found.root}: ${where.projects.join(", ")}.`),
-						true,
-					);
-				folder = where.folder;
-			}
-			const continues = "continues" in found ? found.continues : undefined;
-			const task = await api.commit(async (tx) => {
-				const doc = await tx.doc(Harnesses);
-				const again = Object.entries(doc.sessions).find(([, one]) => one.chat === chat && one.call === api.callId);
-				if (again !== undefined) return Number(again[0]);
-				return (made as ReturnType<typeof defineHarnesses>).begin(tx, {
-					chat,
-					call: api.callId,
-					agent: found.agent,
-					harness: name,
-					folder,
-					ask: prompt.trim(),
-					...(continues === undefined ? {} : { continues }),
-				});
-			}, ctx);
 			return answer(
-				`Started session ${task}: ${service} in ${folder}` +
-					(continues === undefined ? "" : `, going on from session ${continues}`) +
+				`Started session ${found.begun}: ${service} in ${found.folder}` +
+					(found.continues === undefined
+						? ""
+						: `, following session ${found.continues}; it will resume natively if supported, otherwise start fresh with a summary`) +
 					`. What it did comes back to you as a message when it ends; ${SESSIONS_TOOL} shows how it goes meanwhile.`,
 			);
 		},
@@ -284,7 +275,7 @@ function stopTool(): ToolRegistration {
 
 /** A tool per harness banda can run or the owner connected, each saying where it works. */
 function harnessToolsExtension(accounts: { readonly [harness: string]: HarnessAccount }) {
-	const names = new Set([...definitions().keys(), ...Object.keys(accounts)]);
+	const names = new Set(harnessPlatform() ? [...definitions().keys(), ...Object.keys(accounts)] : []);
 	return defineExtension({
 		name: "banda.harness-tools",
 		tools: [...names]
@@ -298,7 +289,7 @@ export const harnessesArea: AreaModule = {
 		const files = shippedHarnesses(SHIPPED_HARNESSES, boot.log);
 		shipped = files.flatMap((file) => resolveHarness(file) ?? []);
 		// what banda knows how to run but this computer has not installed: offered with how to install it
-		missing = files.filter((file) => !shipped.some((one) => one.name === file.name));
+		missing = harnessPlatform() ? files.filter((file) => !shipped.some((one) => one.name === file.name)) : [];
 		harnesses = defineHarnesses({
 			definitions,
 			followUp: (tx, chat, input) => boot.core.followUp(tx, chat, input),
@@ -335,6 +326,7 @@ export const harnessesArea: AreaModule = {
 			const doc = (await harness.snapshot(Harnesses, context)) ?? { accounts: {}, sessions: {} };
 			const known = definitions();
 			return {
+				...(!harnessPlatform() ? { unavailable: HARNESS_UNAVAILABLE } : {}),
 				harnesses: [...known.values()].map(({ name, service, about, asks, custom: owned, provider, logo }) => ({
 					name,
 					service,
@@ -368,6 +360,7 @@ export const harnessesArea: AreaModule = {
 						...(known.get(session.harness)?.logo === undefined ? {} : { logo: known.get(session.harness)?.logo }),
 						folder: session.folder,
 						...(session.continues === undefined ? {} : { continues: session.continues }),
+						...(session.continuation === undefined ? {} : { continuation: session.continuation }),
 						...(session.stoppedBy === undefined ? {} : { stoppedBy: session.stoppedBy }),
 						state: session.state,
 						at: session.at,
@@ -395,6 +388,7 @@ export const harnessesArea: AreaModule = {
 					return { body: listing };
 				}
 				if (request.path === "/harnesses" && request.method === "POST") {
+					if (!harnessPlatform()) throw new BadRequest(HARNESS_UNAVAILABLE);
 					const { service, command } = await request.json();
 					if (typeof service !== "string" || service.trim() === "" || service.length > 60)
 						throw new BadRequest("service is what you call it, such as My agent");
@@ -435,7 +429,9 @@ export const harnessesArea: AreaModule = {
 						deps.changed();
 						return { body: await view() };
 					}
-					if (!definitions().has(name)) throw new BadRequest("no such harness on this computer", 404);
+					if (!harnessPlatform() && action !== "disconnect") throw new BadRequest(HARNESS_UNAVAILABLE);
+					if (!definitions().has(name) && action !== "disconnect")
+						throw new BadRequest("no such harness on this computer", 404);
 					if (action === "disconnect") {
 						await harness.commit(async (tx) => {
 							for (const agent of await disconnectHarness(tx, name)) await deps.core.agentChanged(tx, agent);

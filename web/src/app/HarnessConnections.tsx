@@ -20,6 +20,8 @@ export function AddHarnessButton({
 	size?: "sm" | undefined;
 } = {}) {
 	const [open, setOpen] = useState(false);
+	const unavailable = useShell().harnesses?.unavailable;
+	if (unavailable !== undefined) return <p className="text-meta text-ink-2">{unavailable}</p>;
 	return (
 		<>
 			<Button variant="outline" size={size} className="self-start" onClick={() => setOpen(true)}>

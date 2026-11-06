@@ -4,11 +4,12 @@
  */
 
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
-import type { ChatRow, GroupRow } from "../../../src/server/api.ts";
+import type { ChatRow, GroupRow, HarnessSessionView } from "../../../src/server/api.ts";
 import type { FaceState, RowView, Who } from "../chat/types.ts";
 import { agentMainOf } from "../lib/chats.ts";
 import type { ChatAgent } from "../lib/navigation.ts";
 import { firstWords } from "./first-words.ts";
+import { harnessActivity } from "./harness-activity.ts";
 
 /** The time at a row's right: the hour today, the weekday this week, else the day and month. */
 export function rowTime(at: number | undefined, now: number): string {
@@ -48,10 +49,12 @@ export function bandRows(
 	waiting: readonly Waiting[] = [],
 	/** Archived agents: no row of their own, but a group they were in still shows their faces. */
 	archived: readonly ChatAgent[] = [],
+	sessions: readonly HarnessSessionView[] = [],
 ): BandRow[] {
 	const known = [...agents, ...archived];
 	const agentRows = agents.map((agent): BandRow => {
 		const main = agentMainOf(rows, agent.id);
+		const delegated = harnessActivity(sessions, main === undefined ? [] : [main.chat]);
 		// ordered and timed by the newest thing that reached the owner, never by a run's own steps; one that has said
 		// nothing yet by when the owner made it (or last changed it), so a new agent comes first
 		const at = main?.said ?? agent.since ?? 0;
@@ -69,15 +72,27 @@ export function bandRows(
 			...(main?.ask !== undefined
 				? { ask: main.ask }
 				: (() => {
+						if (delegated.waiting)
+							return {
+								ask: `${delegated.sessions.length} coding session${delegated.sessions.length === 1 ? "" : "s"}`,
+							};
 						const change = waiting.find((each) => each.agent === agent.id);
 						return change === undefined ? {} : { ask: change.words };
 					})()),
-			...(stateOf(main) === undefined ? {} : { state: stateOf(main) }),
+			state:
+				delegated.waiting || stateOf(main) === "waiting"
+					? "waiting"
+					: stateOf(main) === "working"
+						? "working"
+						: delegated.sessions.length > 0
+							? "working"
+							: stateOf(main),
 			paused,
 		};
 	});
 	const groupRows = groups.map((group): BandRow => {
 		const at = group.last?.at ?? group.at;
+		const delegated = harnessActivity(sessions, Object.values(group.executions ?? {}));
 		const last = group.last;
 		const by = last === undefined ? undefined : "owner" in last.author ? "You" : whoOf(known, last.author.agent).name;
 		return {
@@ -100,7 +115,9 @@ export function bandRows(
 			at,
 			unread: group.unread,
 			...(group.asking.length === 0
-				? {}
+				? delegated.waiting
+					? { ask: `${delegated.sessions.length} coding session${delegated.sessions.length === 1 ? "" : "s"}` }
+					: {}
 				: { ask: `${group.asking.length === 1 ? "a member asks" : `${group.asking.length} asks`}` }),
 		};
 	});

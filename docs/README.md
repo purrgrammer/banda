@@ -20,14 +20,15 @@ reaches them.
 | 2 | [Agents and groups](agents.md) | Ordinary agents made by the owner; groups of equals in the band |
 | 3 | [Routines](routines.md) | Routines in their agent's chat, as events |
 | 4 | [Connections](connections.md) | Accounts, one connect flow, GitHub's objects in the chat |
-| 5 | [Isolation](isolation.md) | Shared files and identities cannot bypass trust policy |
-| 6 | [Egress](egress.md) | Durable intake and explicit write authority |
-| 7 | [Workspace](workspace.md) | Concurrent owner and box changes are preserved |
-| 8 | [Recovery](recovery.md) | Persistent bytes and complete restoration |
-| 9 | [Browser](browser.md) | Verified isolation, secrecy, take-over and signed-in sends |
-| 10 | [Performance](performance.md) | Bounded resource use and responsive accumulated history |
-| 11 | [Operations](operations.md) | Installation, runtime supervision, updates and support |
-| 12 | [Verification](verification.md) | Fault, adversarial, browser and release evidence |
+| 5 | [Watches](watches.md) | A watch on an object, its wakes in the chat, health, the panel's Watching list |
+| 6 | [Isolation](isolation.md) | Shared files and identities cannot bypass trust policy |
+| 7 | [Egress](egress.md) | Durable intake and explicit write authority |
+| 8 | [Workspace](workspace.md) | Concurrent owner and box changes are preserved |
+| 9 | [Recovery](recovery.md) | Persistent bytes and complete restoration |
+| 10 | [Browser](browser.md) | Verified isolation, secrecy, take-over and signed-in sends |
+| 11 | [Performance](performance.md) | Bounded resource use and responsive accumulated history |
+| 12 | [Operations](operations.md) | Installation, runtime supervision, updates and support |
+| 13 | [Verification](verification.md) | Fault, adversarial, browser and release evidence |
 
 [Architecture](architecture.md) contains the assessment across axes and cross-cutting modularity work. Use
 [Delivery](delivery.md) for the procedure shared by every section. Dependencies order implementation; smaller

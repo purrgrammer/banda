@@ -2,8 +2,9 @@
  * First run (DESIGN.md "The app"): while no provider the band thinks with is connected, the first agent's screen with
  * the providers to pick from. A provider with a sign-in opens it in a tab of its own (opened from the tap, so it is
  * not blocked) and this screen waits for it, takes the code its page shows when the page never comes back, or cancels
- * it; picked again, it starts over. One without a sign-in takes a key. Then the skills banda ships, once; then the
- * band opens.
+ * it; picked again, it starts over. One without a sign-in takes a key. A provider set from outside banda (an
+ * ANTHROPIC_API_KEY around the daemon) is named by its source, and a tap uses it as the owner's pick; it never counts
+ * as picked before. Then the skills banda ships, once; then the band opens.
  */
 import { useEffect, useState } from "react";
 import { useProviderConnect, wayLabel } from "../areas/tiers.ts";
@@ -15,7 +16,7 @@ import { chooseShippedSkills, type ShippedSkillsView, shippedSkills } from "../l
 const FIRST = ["anthropic", "openai", "github-copilot", "google"];
 
 export function Onboarding() {
-	const { providers, open, waiting, error, pick, answer, cancel, key } = useProviderConnect();
+	const { providers, open, waiting, error, pick, answer, cancel, key, use } = useProviderConnect();
 	const sorted = [...providers].sort((a, b) => (FIRST.indexOf(a.id) + 1 || 99) - (FIRST.indexOf(b.id) + 1 || 99));
 	return (
 		<FirstRun
@@ -23,7 +24,14 @@ export function Onboarding() {
 				id: provider.id,
 				name: provider.name,
 				by: provider.oauth ? ("sign-in" as const) : ("key" as const),
-				...(provider.connected ? { note: "Connected · use it" } : {}),
+				...(provider.connected
+					? {
+							note:
+								provider.ambient === true
+									? `From ${provider.source ?? "your environment"}, outside banda · use it`
+									: "Connected · use it",
+						}
+					: {}),
 				connecting: provider.connecting,
 				asks: provider.question !== undefined,
 				ways: provider.methods?.map((way) => ({ id: way.id, label: wayLabel(way) })),
@@ -32,7 +40,10 @@ export function Onboarding() {
 			open={open}
 			waiting={waiting}
 			error={error}
-			onPick={(id) => void pick(id)}
+			onPick={(id) =>
+				// an ambient key is usable as it is: the tap is the owner's pick of it (Settings connects over it)
+				void (providers.find((each) => each.id === id)?.ambient === true ? use(id) : pick(id))
+			}
 			onKey={(id, value) => void key(id, value)}
 			onAnswer={(id, value) => void answer(id, value)}
 			onWay={(id, way) => void pick(id, way)}

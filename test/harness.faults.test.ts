@@ -8,13 +8,14 @@ type Summary = {
 	woke: string[];
 	prompts: number;
 	loaded: number;
+	notes: number;
 	orphans: number;
 	parked: unknown[];
 	commits: number;
 };
 
 let n = 0;
-const run = async (schedules: readonly (readonly Fault[])[], mode?: "continue") => {
+const run = async (schedules: readonly (readonly Fault[])[], mode?: "continue" | "note") => {
 	// a mark no other run shares, so a command that outlived its process is this run's
 	const mark = `banda-harness-fault-${process.pid}-${n++}`;
 	const { last, kills } = await runWorker(
@@ -92,6 +93,25 @@ describe("a harness session under faults", () => {
 				} catch (error) {
 					throw new Error(`${fault.kind} at ${fault.point} #${fault.hit}: ${(error as Error).message}`);
 				}
+			}),
+		);
+	}, 600_000);
+	it("sweep, a queued note: committed once, sent at most once, cancelled on restart", async () => {
+		const clean = await run([], "note");
+		check(clean);
+		expect(clean.notes).toBe(1);
+		const points: Fault[] = [
+			...sweep(clean.commits),
+			{ point: "harness:note", hit: 1, kind: "kill" },
+			{ point: "harness:note", hit: 1, kind: "error" },
+		];
+		await pool(
+			2,
+			points.map((fault) => async () => {
+				const killed = await run([[fault]], "note");
+				check(killed);
+				expect(killed.notes).toBeLessThanOrEqual(1);
+				if (fault.kind === "kill") expect(killed.kills).toBe(1);
 			}),
 		);
 	}, 600_000);

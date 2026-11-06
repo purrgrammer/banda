@@ -100,7 +100,7 @@ export function Block({ title, note, children }: { title: string; note?: string;
 }
 
 /** Rows in a hairline box: a setting each. */
-function Rows({ children, className }: { children: ReactNode; className?: string }) {
+export function Rows({ children, className }: { children: ReactNode; className?: string }) {
 	return (
 		<div
 			className={cn(
@@ -113,7 +113,7 @@ function Rows({ children, className }: { children: ReactNode; className?: string
 	);
 }
 
-function RowOf({
+export function RowOf({
 	lead,
 	title,
 	detail,
@@ -818,31 +818,36 @@ export function ArchivedAgents({
 }
 
 /**
- * Settings, in four tabs as the agent's panel has them: General (appearance, notifications, routines, the computer),
- * Model (the provider and the models the tiers use), Connections (every account), Agents (the archived, to restore).
+ * Settings, in tabs as the agent's panel has them: General (appearance, notifications, routines, the computer),
+ * Model (the provider and the models the tiers use), Connections (every account), Agents (the archived, to restore),
+ * Devices (the phones paired, and pairing one).
  */
-export type SettingsTab = "general" | "model" | "connections" | "agents";
+export type SettingsTab = "general" | "model" | "connections" | "agents" | "devices";
 
 export function AppSettings({
 	data,
 	tab = "general",
 	memory,
 	providers,
+	devices,
 	...act
 }: {
 	data: SettingsData;
 	tab?: SettingsTab;
 	memory?: ReactNode;
+	/** The phones paired, and pairing one (`DevicesSettings`). */
+	devices?: ReactNode;
 	/** Every provider the band may think with, to connect, use or sign out of (`ModelProviders`). */
 	providers?: ReactNode;
 } & SettingsActions) {
 	return (
 		<Tabs defaultValue={tab} className="gap-6">
-			<TabsList aria-label="Settings" className="-mx-4 px-4">
+			<TabsList aria-label="Settings" className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none]">
 				<TabsTrigger value="general">General</TabsTrigger>
 				<TabsTrigger value="model">Model</TabsTrigger>
 				<TabsTrigger value="connections">Connections</TabsTrigger>
 				<TabsTrigger value="agents">Agents</TabsTrigger>
+				{devices === undefined ? null : <TabsTrigger value="devices">Devices</TabsTrigger>}
 			</TabsList>
 			<TabsContent value="general" className="flex flex-col gap-8">
 				<Block title="Appearance">
@@ -936,6 +941,11 @@ export function AppSettings({
 			<TabsContent value="agents" className="flex flex-col gap-8">
 				<ArchivedAgents archived={data.archived} onRestore={act.onRestore} />
 			</TabsContent>
+			{devices === undefined ? null : (
+				<TabsContent value="devices" className="flex flex-col gap-4">
+					{devices}
+				</TabsContent>
+			)}
 		</Tabs>
 	);
 }
@@ -947,6 +957,13 @@ export type ProviderRow = {
 	/** Signs in, or takes a key. */
 	readonly by: "sign-in" | "key";
 	readonly connected: boolean;
+	/**
+	 * Connected by a credential from around the daemon (ANTHROPIC_API_KEY and its kind), not one connected here:
+	 * the band can think with it, but nothing has tried it and signing out cannot take it away.
+	 */
+	readonly ambient?: boolean | undefined;
+	/** What an ambient credential came from ("ANTHROPIC_API_KEY"), to name it to the owner. */
+	readonly source?: string | undefined;
 	/** A sign-in under way, in a tab of its own. */
 	readonly connecting?: boolean | undefined;
 	/** It takes a pasted code now; the provider's ways to sign in, and the one under way. */
@@ -999,10 +1016,13 @@ export function ModelProviders({
 				{providers.map((provider) => {
 					const using = provider.id === current;
 					const next = connected.find((each) => each.id !== provider.id);
+					// an ambient credential is connected but never ours: connecting over it is still a sign-in
+					const ambient = provider.ambient === true;
 					const signing =
 						provider.by === "sign-in" &&
-						!provider.connected &&
+						(!provider.connected || ambient) &&
 						(provider.id === waiting || provider.connecting === true);
+					const from = ambient ? (provider.source ?? "your environment") : undefined;
 					const detail =
 						provider.id === waiting || provider.connecting === true
 							? provider.by === "sign-in"
@@ -1010,13 +1030,17 @@ export function ModelProviders({
 								: "Connecting…"
 							: provider.error !== undefined
 								? `Didn't connect: ${provider.error}`
-								: using
-									? "In use"
-									: provider.connected
-										? "Connected"
-										: provider.by === "sign-in"
-											? "Sign in with your account"
-											: "Use a key";
+								: from !== undefined
+									? using
+										? `In use · from ${from}, outside banda`
+										: `From ${from}, outside banda`
+									: using
+										? "In use"
+										: provider.connected
+											? "Connected"
+											: provider.by === "sign-in"
+												? "Sign in with your account"
+												: "Use a key";
 					return (
 						<div key={provider.id} className="flex flex-col">
 							<RowOf
@@ -1035,7 +1059,7 @@ export function ModelProviders({
 												Use
 											</Button>
 										) : null}
-										{provider.connected ? (
+										{provider.connected && !ambient ? (
 											<Confirm
 												title={`Sign out of ${provider.name}?`}
 												body={
@@ -1068,7 +1092,7 @@ export function ModelProviders({
 									</span>
 								}
 							/>
-							{provider.id === open && !provider.connected ? (
+							{provider.id === open && (!provider.connected || ambient) ? (
 								<ProviderKeyForm
 									provider={provider}
 									action="Connect"

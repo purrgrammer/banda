@@ -286,7 +286,11 @@ export function HarnessDialog({
 								</Alert>
 							)}
 							<p className="text-meta text-ink-2">
-								It uses your {service} sign-in and settings on this computer, including what you allowed there.
+								The code folder selects where work starts; it is not a sandbox. {service} runs on your computer with
+								your sign-in and its own permissions, including access you already granted outside that folder. Enabling
+								it lets your agent start work without another approval. Only one-time approvals are supported in banda;
+								unsupported choices are refused. If its required permission mode cannot be set, banda stops the session
+								before sending work.
 							</p>
 						</>
 					)}

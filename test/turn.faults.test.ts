@@ -1,5 +1,5 @@
 import fc from "fast-check";
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { Inbound } from "../src/core/gateway.ts";
 import { afterArb, faultsArb, messagesArb, ORIGINS } from "./fault/arbitraries.ts";
 import { drive } from "./fault/drive.ts";
@@ -33,6 +33,26 @@ describe("Turn under faults", () => {
 			{ numRuns: pbtFaultRuns(25) },
 		);
 	}, 300_000);
+
+	it("reports a failed nudge as failure, rather than requiring the reply that model request could not make", async () => {
+		const messages: Inbound[] = [{ id: "owner", origin: { gateway: "fake", peer: "owner" }, text: `${SAY}hello` }];
+		const { sent, summary } = await drive(
+			await tempHome(),
+			messages,
+			["none"],
+			new Faults([{ point: "model", hit: 2, kind: "error" }]),
+		);
+		expect(summary.nudges.owner).toEqual([{ status: "completed", result: { failed: "model_error: model #2" } }]);
+		checkTurnInvariants(messages, sent, summary);
+		// Removing that exact failure notice still violates delivery: an unrelated notice cannot satisfy it.
+		expect(() =>
+			checkTurnInvariants(
+				messages,
+				sent.filter((s) => !s.out.text.startsWith("The run failed:")),
+				summary,
+			),
+		).toThrow();
+	});
 
 	it("property: processes killed at any effect boundary, several times over", async () => {
 		await fc.assert(

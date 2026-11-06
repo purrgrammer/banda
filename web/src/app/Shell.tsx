@@ -39,6 +39,7 @@ import { Onboarding, SkillsOnboarding, useShippedSkills } from "./Onboarding.tsx
 import { ownerEdits } from "./owner-edits.ts";
 import { EditRoutine, routineRows } from "./routines.tsx";
 import { SearchDialog } from "./SearchDialog.tsx";
+import { SettingsDevices } from "./SettingsDevices.tsx";
 import { SettingsProviders } from "./SettingsProviders.tsx";
 import { ShortcutsDialog, typing as typingIn } from "./Shortcuts.tsx";
 import { SkillsPage, useSkills } from "./Skills.tsx";
@@ -86,7 +87,10 @@ const SERVICES = [
 export function Shell() {
 	const tiers = useTiers();
 	const [shipped, setShipped] = useShippedSkills();
-	if (tiers !== undefined && !tiers.providers.some((provider) => provider.id === tiers.provider.id))
+	// first run until the band can think: a provider with a credential, and not one from outside banda that the owner
+	// never picked (a stale ANTHROPIC_API_KEY would otherwise skip this screen and fail every answer)
+	const current = tiers?.providers.find((provider) => provider.id === tiers.provider.id);
+	if (tiers !== undefined && (current === undefined || (current.ambient === true && !tiers.chosen)))
 		return (
 			<div className="h-svh bg-paper">
 				<Onboarding />
@@ -188,8 +192,9 @@ function Main() {
 				Date.now(),
 				waiting,
 				archived,
+				shell.harnesses?.sessions,
 			),
-		[agents, shell.rows, shell.groups, shell.control?.paused, waiting, archived],
+		[agents, shell.rows, shell.groups, shell.control?.paused, waiting, archived, shell.harnesses?.sessions],
 	);
 
 	// `#/` opens the last chat shown here, else the first agent's
@@ -543,6 +548,7 @@ function Main() {
 						}}
 						onNotify={setNotify}
 						providers={<SettingsProviders current={tiers?.provider.id ?? ""} />}
+						devices={<SettingsDevices />}
 						onTheme={setTheme}
 						onPause={(paused) => void setPaused(paused)}
 						onConnect={() => go({ name: "connections" })}

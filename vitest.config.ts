@@ -17,6 +17,8 @@ const DOCKER = ["test/box.test.ts", "test/**/*.docker.test.ts", "test/tools.test
 // bound: generous, since many tests start processes, a daemon or a container, seconds each on a busy machine. A hook
 // does the same kind of work (removing a container and its volumes), so it gets more than vitest's 10 s too.
 const timeouts = { testTimeout: 30_000, hookTimeout: 120_000 };
+// A daemon a test starts binds no Iroh endpoint unless the test asks for one, on loopback: tests never need the network.
+const env = { BANDA_REMOTE: "off" };
 
 export default defineConfig({
 	test: {
@@ -26,13 +28,13 @@ export default defineConfig({
 		projects: [
 			{
 				resolve: { alias: { "@": fileURLToPath(new URL("./web/src", import.meta.url)) } },
-				test: { name: "unit", include: ["test/**/*.test.ts", "web/src/**/*.test.ts"], exclude: [...FAULTS, ...DOCKER], ...timeouts },
+				test: { name: "unit", include: ["test/**/*.test.ts", "web/src/**/*.test.ts"], exclude: [...FAULTS, ...DOCKER], env, ...timeouts },
 			},
 			{
-				test: { name: "faults", include: FAULTS, maxWorkers: 1, sequence: { groupOrder: 1 }, ...timeouts },
+				test: { name: "faults", include: FAULTS, maxWorkers: 1, sequence: { groupOrder: 1 }, env, ...timeouts },
 			},
 			{
-				test: { name: "docker", include: DOCKER, fileParallelism: false, sequence: { groupOrder: 2 }, ...timeouts },
+				test: { name: "docker", include: DOCKER, fileParallelism: false, sequence: { groupOrder: 2 }, env, ...timeouts },
 			},
 		],
 	},

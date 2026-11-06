@@ -281,7 +281,12 @@ function show(): void {
 }
 
 function makeTray(icon: string): void {
-	const image = nativeImage.createFromPath(icon).resize({ width: 18, height: 18 });
+	// macOS: a template image (black and alpha, @2x beside it), which the menu bar paints white or black to suit itself
+	const image =
+		process.platform === "darwin"
+			? nativeImage.createFromPath(join(app.getAppPath(), "assets", "trayTemplate.png"))
+			: nativeImage.createFromPath(icon).resize({ width: 18, height: 18 });
+	if (process.platform === "darwin") image.setTemplateImage(true);
 	tray = new Tray(image);
 	tray.setToolTip("banda");
 	const loginItem = process.platform !== "linux";

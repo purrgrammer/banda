@@ -4,7 +4,8 @@ Priority: **High**. Implementation status lives in [Status](status.md).
 
 Stored drafts, permissions and attempt admission use transactions. Credentials belong to accounts, never to the box;
 GitHub ships as a file with its reads, scopes and object definitions. DESIGN.md "Connections" defines accounts, one
-connect flow and daemon-read objects. Agent-built connections and `propose_connection` are out of scope.
+connect flow and daemon-read objects; DESIGN.md "Watches" follows an object through the same declaration, reading and
+card. Agent-built connections and `propose_connection` are out of scope.
 
 Entry points: ../src/core/connections.ts, ../src/core/mcp.ts, ../src/core/mcp-remote.ts, ../src/core/oauth.ts,
 ../src/server/capabilities.ts, ../shipped/connections/github.md and ../scripts/shipped-github.ts. Harnesses:
@@ -33,6 +34,15 @@ PR cards summarize checks; arbitrary standalone Checks API IDs are not Actions j
 unknown. Fake OAuth and MCP services cover automated tests and write approvals; manual app acceptance uses an isolated
 home at desktop and phone widths. Real-account reads require the owner's authorization; real writes use a disposable
 account. The specimen includes long metadata, reading details and interrupted approvals.
+
+**Followed objects.** A kind that can be followed says how in its own `objects:` entry, beside `reads`, `fields` and
+`writes`: the further reads a following needs, how each list is keyed, what is noise, whose items are the account's
+own, derived conditions, the rules that wake or only tell with the words each is said in, what ends it and when it is
+busy; the generator writes GitHub's for pull requests and issues. One reading per (connection, account, object) serves
+the card and every watch on it, kept fresh while one holds it. The card offers Follow among its quiet actions; a
+followed card says who follows it and until what; the event line says the change in the kind's words over the reading,
+never the model's, with the object's card beneath. The watch itself (its file, task, health and the panel's Watching
+list) is the watches slice; this section owns the object side.
 
 Bind remote descriptions and schemas to the accepted definition so a relisting cannot change prompt authority; verify
 effect authority at every call start and retry, idempotent replay after revocation included; verify OAuth refresh,
@@ -70,13 +80,23 @@ in a throwaway home, at desktop and phone width.
 - [ ] Each call is a session of its own; no server notifications, resources or prompts
 - [ ] A server's notes reach the model as first listed; a disconnect forgets the listing
 - [ ] Reads by argument are exact values only; a prefix waits for a spike of how a real server routes it
-- [ ] The shipped file's `events` and the watch intake are deleted with the routines slice; they return with the watch design (DESIGN.md "Open")
+- [ ] Following in each followable kind's `objects:` entry, generated for GitHub's pull request and issue; a kind
+  without it cannot be followed and the card says so
+- [ ] One reading per (connection, account, object), kept fresh while a watch holds it, drawn by the card and read by
+  every watch on it; "as of" only when the daemon cannot look
+- [ ] Follow among the card's quiet actions; a followed card's line (who, until what); the followed states (following,
+  done, can't reach) in the specimen, light and dark, both widths
+- [ ] The event line's words from the kind's rules over the reading, the object card beneath, in the specimen
+- [ ] A feed with a cursor (mail's history id) and a service's own subscription with its renewal, declared as data;
+  GitHub has neither, so they wait for the mail connection
 - [ ] No built-in email or calendar yet: they follow GitHub as shipped connections
 - [x] Harnesses: ACP client, sessions, asks, notes, Stop, the wake; shipped files, banda's adapters and the owner's own; the fault sweep (detached commands included)
 - [x] Harnesses: Claude Code, Codex and pi each fixed a scratch repository through the app; Claude Code's background command was killed with its session
 - [x] Harnesses: an adversarial review (store growth, the home as a project, Stop before open, several asks, detached commands, blind asks) triaged and fixed
-- [ ] Harnesses: owner review of the slice, and the app's screens at phone width (only the specimen was seen at 390px)
-- [ ] Harnesses: owner's call: pi and the owner's own harnesses ask nothing of their own, so an agent's words run on the host unasked; a draft for those, or for chats holding foreign content, is the review's suggestion
+- [x] Harnesses: desktop and phone app walkthrough of delegated status, concurrent sessions, approvals and Stop
+- [x] Harnesses: starts need no extra draft; enablement states host access and the harness's own permissions
+- [x] Harnesses: continuation and revocation regressions, native versus summary mode disclosure, real Codex native resumption through the app; owner authorized landing after final checks
+- [ ] Harnesses: Windows process supervision before offering execution on Windows
 - [ ] Harnesses: Gemini CLI, OpenCode, Cursor and Goose are not shipped: each failed or was missing here; they need a spike and a sign-in each
 - [ ] Harnesses: their asks reach the owner only in the web app, not on other gateways; the agent still hears the end
 - [ ] Harnesses: a step may flicker between flushes (a note the harness has not taken yet); sessions are keyed by the model's call id, as artifacts and groups are

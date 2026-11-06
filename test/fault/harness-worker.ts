@@ -13,7 +13,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createRegistry, defineDoc, defineExtension } from "@earendil-works/pi-durable";
-import { answerAsk, defineHarnesses, Harnesses } from "../../src/core/harness.ts";
+import { answerAsk, defineHarnesses, Harnesses, steer } from "../../src/core/harness.ts";
 import { status } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { echoModels } from "../fixtures/models.ts";
@@ -24,6 +24,8 @@ const [home, mark, ...rest] = process.argv.slice(2) as [string, string, ...strin
 const scheduleJson = rest.at(-1) ?? "[]";
 const mode = rest.length > 1 ? rest[0] : undefined;
 const continuing = mode === "continue";
+const noting = mode === "note";
+const NOTE = "say followed up";
 const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
 const FAKE = join(import.meta.dirname, "../fixtures/fake-acp-agent.ts");
 const folder = join(home, "work");
@@ -99,6 +101,8 @@ const task = await harness.commit(async (tx) => {
 for (;;) {
 	const session = (await harness.snapshot(Harnesses, context))?.sessions[task];
 	if (session?.ended !== undefined) break;
+	if (noting && (session?.asks?.length ?? 0) > 0)
+		await harness.commit((tx) => steer(tx, task, NOTE, Date.now(), { call: "note-1" }), context);
 	for (const ask of session?.asks ?? [])
 		if (session?.answers?.[ask.id] === undefined)
 			await harness.commit((tx) => answerAsk(tx, task, ask.id, true), context);
@@ -132,6 +136,7 @@ console.log(
 		woke,
 		// a follow-up to a reopened session is sent alone, never with a recap
 		prompts: log.filter((entry) => entry.prompt === ASK).length,
+		notes: log.filter((entry) => entry.prompt === NOTE).length,
 		loaded: log.filter((entry) => entry.loaded === "earlier-session").length,
 		orphans,
 		parked,

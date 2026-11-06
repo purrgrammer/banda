@@ -61,6 +61,12 @@ export function killMarked(marker: string | undefined): void {
 		}
 }
 
+/** A group is identified by observed members and their start times, never its reusable number alone. */
+export type ProcessGroup = {
+	readonly id: number;
+	readonly members: { readonly pid: number; readonly started: number }[];
+};
+
 type Process = { readonly pid: number; readonly ppid: number; readonly pgid: number; readonly started: number };
 
 /** Every process now, with its parent, its group and when it started (ms); empty when ps cannot be read. */
@@ -91,7 +97,7 @@ function processes(): Process[] {
 }
 
 /** The groups of `root` and of everything below it, its own included: what killing its group alone would miss. */
-export function treeGroups(root: number | undefined): number[] {
+export function treeGroups(root: number | undefined): ProcessGroup[] {
 	if (root === undefined) return [];
 	const all = processes();
 	const below = new Set([root]);
@@ -103,21 +109,40 @@ export function treeGroups(root: number | undefined): number[] {
 				grew = true;
 			}
 	}
-	return [...new Set(all.filter((one) => below.has(one.pid)).map((one) => one.pgid))].filter((group) => group > 1);
+	return [...new Set(all.filter((one) => below.has(one.pid)).map((one) => one.pgid))]
+		.filter((group) => group > 1)
+		.map((id) => ({
+			id,
+			members: all
+				.filter((one) => one.pgid === id && below.has(one.pid) && one.started > 0)
+				.map(({ pid, started }) => ({ pid, started })),
+		}));
 }
 
 /**
- * Kill the processes of `groups` that started since `since` (ms, a second's slack for ps's precision): what a session's
- * harness started, never a process that came later into a group whose number was given out again.
+ * A still-live observed member anchors its group: while it exists that group number cannot be reused. A stale record
+ * with no matching PID and start time authorizes no kill. Environment markers cover descendants no longer anchored.
  */
-export function killGroups(groups: readonly number[] | undefined, since: number): void {
+export function killGroups(groups: readonly ProcessGroup[] | undefined): void {
 	if (groups === undefined || groups.length === 0) return;
-	const wanted = new Set(groups);
-	for (const one of processes())
-		if (wanted.has(one.pgid) && one.started >= since - 1000 && one.pid !== process.pid)
+	const all = processes();
+	const wanted = new Set(
+		groups
+			.filter((group) =>
+				group.members.some((member) =>
+					all.some(
+						(one) =>
+							one.pgid === group.id && one.pid === member.pid && one.started === member.started && one.started > 0,
+					),
+				),
+			)
+			.map((group) => group.id),
+	);
+	for (const one of all)
+		if (wanted.has(one.pgid) && one.pid !== process.pid)
 			try {
 				process.kill(one.pid, "SIGKILL");
 			} catch {
-				// gone already
+				/* already gone */
 			}
 }
