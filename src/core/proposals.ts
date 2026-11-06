@@ -13,7 +13,7 @@ import {
 import type { Agent } from "./agents.ts";
 import { Accepted, AGENT_NAME, AgentChats, acceptedAgent, agentText, MAX_AGENT_BYTES, parseAgent } from "./agents.ts";
 import { type AvatarFace, defaultAvatarFace, readAvatarFace } from "./avatar-face.ts";
-import { Groups, MAX_GROUP_NAME } from "./groups.ts";
+import { GROUP_LIMIT_RANGE, Groups, groupLimitsIn, MAX_GROUP_NAME } from "./groups.ts";
 import { context } from "./store.ts";
 import type { ModelId, Tier } from "./tiers.ts";
 
@@ -189,10 +189,14 @@ export function proposalTools(make: MakeProposal): readonly ToolRegistration[] {
 		),
 		tool(
 			PROPOSAL_GROUP,
-			"Propose a group of two to six active agents. The owner reviews it; the group is not created unless accepted.",
+			"Propose a group of two or more active agents, up to as many as the owner's Settings allow. The owner reviews it; " +
+				"the group is not created unless accepted.",
 			Type.Object({
 				name: Type.String({ minLength: 1, maxLength: 60 }),
-				members: Type.Array(Type.String({ minLength: 1, maxLength: 64 }), { minItems: 2, maxItems: 6 }),
+				members: Type.Array(Type.String({ minLength: 1, maxLength: 64 }), {
+					minItems: 2,
+					maxItems: GROUP_LIMIT_RANGE.members[1],
+				}),
 			}),
 			"group",
 			make,
@@ -289,8 +293,9 @@ export async function makeProposal(
 			const members = [...new Set(value.members)];
 			const name = value.name.replace(/\s+/g, " ").trim().slice(0, MAX_GROUP_NAME);
 			if (name === "") return result("Not proposed: give the group a name.", true);
-			if (members.length < 2 || members.length > 6)
-				return result("Not proposed: choose two to six different agents.", true);
+			const most = (await groupLimitsIn(tx)).members;
+			if (members.length < 2 || members.length > most)
+				return result(`Not proposed: choose two to ${most} different agents.`, true);
 			const memberNames: string[] = [];
 			for (const member of members) {
 				const agent = await acceptedAgent(tx, member);

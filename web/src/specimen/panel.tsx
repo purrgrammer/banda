@@ -34,9 +34,11 @@ import {
 	Archive,
 	ArchiveConfirm,
 	ArchivedAgents,
+	ArchivedGroups,
 	type ConnectionRow,
 	Connections,
 	FaceAndName,
+	GroupLimitsBlock,
 	Members,
 	Memory,
 	ModelProviders,
@@ -214,7 +216,22 @@ export function PanelSections() {
 					</Specimen>
 					<Specimen label="A group: its members, and who may join">
 						<Panel name="Trip">
-							<GroupPanel name="Trip" members={[SANCHO, { ...MARA, state: "working" }]} others={[OCTO, ATLAS]} />
+							<GroupPanel
+								name="Trip"
+								members={[SANCHO, { ...MARA, state: "working" }]}
+								others={[OCTO, ATLAS]}
+								onArchive={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="A group nobody is in yet">
+						<Panel name="New group">
+							<GroupPanel name="New group" members={[]} others={[SANCHO, MARA, OCTO]} onRemove={() => {}} />
+						</Panel>
+					</Specimen>
+					<Specimen label="A group at the most Settings allows">
+						<Panel name="Desk">
+							<GroupPanel name="Desk" members={[SANCHO, MARA]} others={[OCTO, ATLAS]} most={2} onRemove={() => {}} />
 						</Panel>
 					</Specimen>
 				</div>
@@ -436,6 +453,14 @@ export function PanelSections() {
 					</div>
 					<div className="w-[30rem] max-w-full">
 						<ArchivedAgents archived={[{ ...ATLAS, id: "atlas", when: "2 Oct" }]} />
+					</div>
+				</Group>
+				<Group label="Settings' Agents: the limits on groups, and an archived group to restore" className="items-start">
+					<div className="w-[30rem] max-w-full">
+						<GroupLimitsBlock limits={{ members: 8, depth: 3, chain: 8 }} />
+					</div>
+					<div className="w-[30rem] max-w-full">
+						<ArchivedGroups groups={[{ room: 7, name: "Trip", faces: [SANCHO, MARA], when: "3 Nov" }]} />
 					</div>
 				</Group>
 			</Section>

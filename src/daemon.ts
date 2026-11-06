@@ -554,6 +554,8 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		await core.reconcile(open);
 		// an archived agent runs nothing, whatever a crash left between its archive and the stop that followed
 		await stopArchived(open);
+		// and an archived group, whatever a crash left between its archive and its stop
+		await core.groups.stopArchived(open);
 		/** After an agent file is accepted: an archived agent's runs stop, and its paused routines lose their tasks. */
 		const settleAgents = async () => {
 			await stopArchived(open);

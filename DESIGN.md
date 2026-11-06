@@ -192,7 +192,7 @@ one that gives them one more thing to manage stays out.
   in the owner's voice; thinking (Quick, Balanced, Deep), never a model's name;
   archive. A file or artifact the owner opens replaces the tabs
   until Back (an artifact's versions, edit and restore). The browser is not in the panel: the chat already shows it.
-  A group's panel has no tabs: its members, and who may be added. **New agent** is a short sheet, the face
+  A group's panel has no tabs: its members, who may be added, and archive. **New agent** is a short sheet, the face
   defaulted, a name and a personality that three tappable starters fill (Researcher, Writer, Keeper of the calendar):
   naming a friend, not filling a form. No description, no interview.
 - **Connections** is a page from the band's foot and from Settings: every service the band can work with, a tile each
@@ -200,7 +200,8 @@ one that gives them one more thing to manage stays out.
   that needs a connection carries the connect card instead of pointing elsewhere.
 - **Settings** is one page: the model providers (connect another, switch the band to it, sign out; the models the
   tiers use); connections (every account across
-  services: sign in another, sign out, which agents use it); agents (archived ones, to restore); appearance; shared memory; Pause all
+  services: sign in another, sign out, which agents use it); agents (the limits on groups; archived agents and groups,
+  to restore); appearance; shared memory; Pause all
   routines; Advanced (show how the work is done on this device; the computer's state).
 - **The phone** shows the sidebar first, full width; a row opens its chat full screen with a back control; the
   header's name and a routine's or a watch's event line open the panel's sheet; the composer sticks to the
@@ -313,9 +314,11 @@ structural rules, and the warmth of an agent never softens an approval: the card
 identical whoever the agent is.
 
 ## Groups
-A group is made by the owner, who chooses its agents (two to six) and alone adds or removes one. Every participant is
+A group is made by the owner, who chooses its agents (any number, none at first, up to the limit Settings sets) and
+alone adds or removes one; a group may lose its last member and wait for the next. Every participant is
 equal; there is no coordinator. A message asks everyone unless it mentions one or more agents (`@name`), which narrows
-it to them; each starts independently against the same shared history, and the cap of six bounds the cost. The composer
+it to them; each starts independently against the same shared history, and the members limit bounds the cost. With
+nobody in it, a message asks nobody and stays for whoever joins. The composer
 says so beneath the field ("To everyone · @ to pick one"). A mention, in the composer and in any message, shows as the
 agent's face and name, a link that opens its chat. A member speaks only with `message_group`, which posts to the
 room (words, files, an artifact, a question the owner answers there, or a reaction on the owner's message its turn
@@ -323,10 +326,17 @@ answers, shown on that message); `message_user` is not offered in a group, and
 `message_group` nowhere else. Its `ask` names the members whose work is needed, each starting a turn: its schema is an
 enum of the group's other active members by the names the group shows, so a member can name nobody else, and with
 nobody else there it has no `ask`. The enum follows the group at each member's turn. A name written with an @ in the
-words asks that member too. Agents' asks are visible and bounded in depth, total turns and concurrency; past a bound
-the message still posts, asking nobody, and says why. Each member keeps its own memory, permissions and browser; the
+words asks that member too. Agents' asks are visible and bounded in depth, total turns and concurrency; the owner
+sets the depth and the turns in Settings, for every group; past a bound
+the message still posts, asking nobody, and says why. A lowered limit binds what comes next: a group already past it
+keeps its members but takes no more. Each member keeps its own memory, permissions and browser; the
 group gives them shared context, nothing else. Joining reveals the full history; leaving prevents future work but cannot
 erase what the agent saw. The group's row sits in the band like an agent's; its panel lists its members.
+
+Archiving a group takes it out of the band and stops what its members are doing there; it takes no message, starts no
+turn and does not change until restored, and the room says when it was archived. Its history, members and their
+execution chats remain; Settings lists it, to restore, and a restored group goes on where it was: nothing it was doing
+comes back.
 
 ## Connections
 A connection is how the band works with the owner's services without holding them. It ships as a file

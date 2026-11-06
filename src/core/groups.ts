@@ -66,6 +66,9 @@ export type GroupNotice = { readonly at: number } & (
 	| { readonly agent: string; readonly added: true }
 	| { readonly agent: string; readonly removed: true }
 	| { readonly renamed: string }
+	/** The owner archived it, or restored it: said in the room, so the log explains the gap. */
+	| { readonly archived: true }
+	| { readonly restored: true }
 );
 
 /** How a member's run ended, when not as it should: it failed (why), or it was stopped. Undefined when it answered. */
@@ -121,11 +124,20 @@ export type GroupMessage = {
 };
 
 type Execution = { chat: number; cursor?: number; lastTurn?: number };
-type Group = { name: string; at: number; members: string[]; executions: { [agent: string]: Execution } };
+type Group = {
+	name: string;
+	at: number;
+	members: string[];
+	executions: { [agent: string]: Execution };
+	/** When the owner archived it: out of the band, nobody posts or works there, its history kept. */
+	archived?: number;
+};
 
 /** A group's name, in characters at most: a few words the owner gave, or its members' names. */
 export const MAX_GROUP_NAME = 60;
-/** The agents a group holds at most. */
+/** What a group with no members yet is called until the owner names it. */
+export const UNNAMED_GROUP = "New group";
+/** The agents a group holds at most, unless the owner set another in Settings. */
 export const MAX_MEMBERS = 8;
 /** A message's characters at most. */
 export const MAX_GROUP_TEXT = 20_000;
@@ -140,6 +152,37 @@ export const MAX_DEPTH = 3;
 /** The turns agents' mentions may start in all, from one owner's message. */
 export const MAX_CHAIN = 8;
 
+/**
+ * The owner's limits on every group, from Settings: how many agents a group holds (`members`), how deep agents ask each
+ * other from the owner's message (`depth`, as `MAX_DEPTH`), and how many turns their asks start from one (`chain`). They
+ * bound cost; each defaults to the constant of its name.
+ */
+export type GroupLimits = { readonly members: number; readonly depth: number; readonly chain: number };
+export const GROUP_LIMITS: GroupLimits = { members: MAX_MEMBERS, depth: MAX_DEPTH, chain: MAX_CHAIN };
+/** What each limit may be set to, inclusive: a depth of 1 means agents never ask each other. */
+export const GROUP_LIMIT_RANGE: { readonly [limit in keyof GroupLimits]: readonly [number, number] } = {
+	members: [1, 16],
+	depth: [1, 6],
+	chain: [1, 32],
+};
+
+/** The limits in effect: the owner's, else the defaults. */
+const limitsOf = (doc: { limits?: Partial<GroupLimits> }): GroupLimits => ({ ...GROUP_LIMITS, ...doc.limits });
+
+/** In `tx`: the limits in effect. */
+export const groupLimitsIn = async (tx: Tx): Promise<GroupLimits> => limitsOf(await tx.doc(Groups));
+
+/** Why `limits` cannot be set, or undefined when each is a whole number in its range. */
+export function limitsRefused(limits: Partial<Record<keyof GroupLimits, unknown>>): string | undefined {
+	for (const [limit, [low, high]] of Object.entries(GROUP_LIMIT_RANGE)) {
+		const value = limits[limit as keyof GroupLimits];
+		if (value === undefined) continue;
+		if (typeof value !== "number" || !Number.isInteger(value) || value < low || value > high)
+			return `${limit} is a whole number from ${low} to ${high}`;
+	}
+	return undefined;
+}
+
 /** Where a message stands in a chain: how deep, from which owner's message (its entry). */
 type Link = { depth: number; root: number };
 
@@ -152,6 +195,8 @@ export const Groups = defineDoc<{
 	spent?: { [root: string]: number };
 	/** A proposal id's created room, so retrying its accepted action cannot make a duplicate group. */
 	proposalRooms?: { [proposal: string]: number };
+	/** The owner's limits from Settings, each only once set (`GroupLimits`). */
+	limits?: Partial<GroupLimits>;
 }>({
 	kind: "banda.groups",
 	version: 1,
@@ -470,8 +515,10 @@ export function defineGroups(options: GroupOptions) {
 							};
 						}
 					}
-					const execution = (await tx.doc(Groups)).groups[task.input.room]?.executions[task.input.agent];
-					if (execution === undefined || execution.chat !== task.input.execution) {
+					const room = (await tx.doc(Groups)).groups[task.input.room];
+					const execution = room?.executions[task.input.agent];
+					// an archived room runs nothing: a turn queued before the archive ends unrun
+					if (execution === undefined || execution.chat !== task.input.execution || room?.archived !== undefined) {
 						done = true;
 						return { status: "terminal", outcome: { status: "completed", result: null } };
 					}
@@ -586,8 +633,8 @@ export function defineGroups(options: GroupOptions) {
 	/**
 	 * In `tx`: post `message` to its room, once per its key, and start a turn for each member it mentions. A member's
 	 * message (`from`: the place in its chain of the message whose turn it answers) may mention others only while the
-	 * chain is shallower than `MAX_DEPTH` and its owner's message has started fewer than `MAX_CHAIN` turns of agents'
-	 * mentions; never itself.
+	 * chain is shallower than the owner's `depth` and its owner's message has started fewer than their `chain` turns of
+	 * agents' mentions (`GroupLimits`); never itself. Nothing posts to an archived group.
 	 */
 	async function append(
 		tx: Tx,
@@ -600,6 +647,8 @@ export function defineGroups(options: GroupOptions) {
 		if (existing !== undefined) return copyAdmission(existing);
 		const group = doc.groups[message.room];
 		if (group === undefined) return { refused: "there is no such group" };
+		if (group.archived !== undefined) return { refused: "this group is archived: restore it from Settings to post" };
+		const { depth, chain } = limitsOf(doc);
 		const files = message.files ?? [];
 		if (message.text.trim() === "" && files.length === 0 && message.reaction === undefined)
 			return { refused: "a message needs words or files" };
@@ -617,17 +666,17 @@ export function defineGroups(options: GroupOptions) {
 				};
 		// an agent's mentions are bounded over the whole chain the owner's message began: structure, not judgment
 		const author = "agent" in message.author ? message.author.agent : undefined;
-		const link: Link | undefined = author === undefined ? undefined : (from ?? { depth: MAX_DEPTH, root: -1 });
+		const link: Link | undefined = author === undefined ? undefined : (from ?? { depth, root: -1 });
 		if (author !== undefined && mentions.length > 0) {
 			if (mentions.includes(author)) return { refused: "you cannot mention yourself" };
-			// this message is one deeper than what it answers: at MAX_DEPTH it asks nobody
-			if (link === undefined || link.depth + 1 >= MAX_DEPTH)
+			// this message is one deeper than what it answers: at the owner's depth it asks nobody
+			if (link === undefined || link.depth + 1 >= depth)
 				return {
-					refused: `agents have asked each other ${MAX_DEPTH} deep from the owner's message: say it without mentions, and the owner may ask them`,
+					refused: `agents have asked each other ${depth} deep from the owner's message: say it without mentions, and the owner may ask them`,
 				};
-			if ((doc.spent?.[link.root] ?? 0) + mentions.length > MAX_CHAIN)
+			if ((doc.spent?.[link.root] ?? 0) + mentions.length > chain)
 				return {
-					refused: `agents' mentions started ${MAX_CHAIN} turns from the owner's message already: say it without mentions, and the owner may ask them`,
+					refused: `agents' mentions started ${chain} turns from the owner's message already: say it without mentions, and the owner may ask them`,
 				};
 		}
 		const catalogue = "owner" in message.author ? acceptedSkills((await tx.doc(Accepted)).files) : [];
@@ -726,15 +775,18 @@ export function defineGroups(options: GroupOptions) {
 		return room;
 	}
 
-	/** In `tx`: a new group of these active agents, named as given or after them; its room. Throws with why not. */
+	/**
+	 * In `tx`: a new group of these active agents, none or up to the owner's `members` limit, named as given, else after
+	 * them, else `UNNAMED_GROUP`; its room. Throws with why not.
+	 */
 	async function createIn(
 		tx: Tx,
 		{ members, name }: { readonly members: readonly string[]; readonly name?: string },
 	): Promise<number> {
 		{
 			const names = [...new Set(members)];
-			if (names.length === 0) throw new Error("a group needs an agent");
-			if (names.length > MAX_MEMBERS) throw new Error(`a group holds ${MAX_MEMBERS} agents at most`);
+			const most = limitsOf(await tx.doc(Groups)).members;
+			if (names.length > most) throw new Error(`a group holds ${most} agents at most`);
 			const agents = [];
 			for (const id of names) {
 				const agent = await acceptedAgent(tx, id);
@@ -743,7 +795,12 @@ export function defineGroups(options: GroupOptions) {
 			}
 			const companion = await nameOf(tx);
 			const given = name?.replace(/\s+/g, " ").trim().slice(0, MAX_GROUP_NAME);
-			const titled = given === undefined || given === "" ? agents.map(({ agent }) => agent.name).join(", ") : given;
+			const titled =
+				given !== undefined && given !== ""
+					? given
+					: agents.length === 0
+						? UNNAMED_GROUP
+						: agents.map(({ agent }) => agent.name).join(", ");
 			const room = await tx.createConversation({ ownership: { kind: "ownerless" } });
 			const group: Group = { name: titled, at: Date.now(), members: names, executions: {} };
 			const doc = await tx.doc(Groups);
@@ -769,7 +826,8 @@ export function defineGroups(options: GroupOptions) {
 	/**
 	 * Change group `room`: its name, members added (each an active agent, with a chat of its own in the group that reads
 	 * the whole log the first time it is asked) and members removed (no longer asked; what it does now finishes). A
-	 * group keeps one member at least and MAX_MEMBERS at most. Throws with why not.
+	 * group holds none up to the owner's `members` limit; one over it keeps its members, but takes no more. An archived
+	 * group does not change until restored. Throws with why not.
 	 */
 	async function change(
 		harness: Harness,
@@ -785,6 +843,8 @@ export function defineGroups(options: GroupOptions) {
 			const doc = await tx.doc(Groups);
 			const group = doc.groups[room];
 			if (group === undefined) throw new Error("there is no such group");
+			if (group.archived !== undefined) throw new Error("this group is archived: restore it from Settings first");
+			const most = limitsOf(doc).members;
 			const notices: GroupNotice[] = [];
 			const at = Date.now();
 			if (name !== undefined) {
@@ -816,8 +876,9 @@ export function defineGroups(options: GroupOptions) {
 				group.executions[id] = { chat };
 				doc.byExecution[chat] = { room, agent: id };
 			}
-			if (members.length === 0) throw new Error("a group needs an agent");
-			if (members.length > MAX_MEMBERS) throw new Error(`a group holds ${MAX_MEMBERS} agents at most`);
+			// it grows only up to the limit: one already past it (the owner lowered it) keeps whom it has
+			if (members.length > group.members.length && members.length > most)
+				throw new Error(`a group holds ${most} agents at most`);
 			group.members = members;
 			// the room says what changed, in the order the owner made it
 			for (const notice of notices)
@@ -975,6 +1036,63 @@ export function defineGroups(options: GroupOptions) {
 		return true;
 	}
 
+	/**
+	 * Archive group `room`, or restore it (DESIGN.md "Groups"). Archived, it leaves the band, takes no messages and runs
+	 * nothing; its history, members and their chats stay. The switch is committed first, so a turn that starts meanwhile
+	 * already finds it, then its work is stopped. Restored, it goes on where it was: nothing it was doing comes back.
+	 * False when there is no such room.
+	 */
+	async function archive(harness: Harness, room: number, archived: boolean, ctx: Context = context): Promise<boolean> {
+		const found = await harness.commit(async (tx) => {
+			const group = (await tx.doc(Groups)).groups[room];
+			if (group === undefined) return false;
+			if ((group.archived !== undefined) === archived) return true;
+			const at = Date.now();
+			if (archived) group.archived = at;
+			else delete group.archived;
+			const notice: GroupNotice = archived ? { archived: true, at } : { restored: true, at };
+			await tx.appendEntry(room as ConversationId, { kind: GROUP_NOTICE, data: notice as unknown as JsonObject });
+			return true;
+		}, ctx);
+		if (found && archived) await stop(harness, room, undefined, ctx);
+		return found;
+	}
+
+	/** Stop the work of every archived group: at the start, so a crash between archiving and stopping leaves none. */
+	async function stopArchived(harness: Harness, ctx: Context = context): Promise<void> {
+		const doc = await harness.snapshot(Groups, ctx);
+		for (const [room, group] of Object.entries(doc?.groups ?? {}))
+			if (group.archived !== undefined) await stop(harness, Number(room), undefined, ctx);
+	}
+
+	/** The owner's limits on every group, as in effect now. */
+	async function limits(harness: Harness, ctx: Context = context): Promise<GroupLimits> {
+		return limitsOf((await harness.snapshot(Groups, ctx)) ?? {});
+	}
+
+	/**
+	 * Set some of the owner's limits; the others stay. A group already past a lowered `members` keeps its members; a
+	 * chain under way meets the new `depth` and `chain` at its next ask. Throws with why not; the limits as they are after.
+	 */
+	async function setLimits(
+		harness: Harness,
+		next: Partial<Record<keyof GroupLimits, unknown>>,
+		ctx: Context = context,
+	): Promise<GroupLimits> {
+		const refused = limitsRefused(next);
+		if (refused !== undefined) throw new Error(refused);
+		return harness.commit(async (tx) => {
+			const doc = await tx.doc(Groups);
+			const set: { -readonly [limit in keyof GroupLimits]?: number } = { ...doc.limits };
+			for (const limit of Object.keys(GROUP_LIMIT_RANGE) as (keyof GroupLimits)[]) {
+				const value = next[limit];
+				if (typeof value === "number") set[limit] = value;
+			}
+			doc.limits = set;
+			return limitsOf(doc);
+		}, ctx);
+	}
+
 	async function messages(harness: Harness, room: number, ctx: Context = context): Promise<GroupMessage[]> {
 		return harness.commit((tx) => messagesThrough(tx, room, 0, Number.MAX_SAFE_INTEGER), ctx);
 	}
@@ -1006,6 +1124,7 @@ export function defineGroups(options: GroupOptions) {
 				members: [...group.members],
 				working,
 				executions,
+				...(group.archived === undefined ? {} : { archived: group.archived }),
 			});
 		}
 		return all;
@@ -1023,6 +1142,10 @@ export function defineGroups(options: GroupOptions) {
 		say,
 		asks,
 		stop,
+		archive,
+		stopArchived,
+		limits,
+		setLimits,
 		messages,
 		log,
 		rooms,
