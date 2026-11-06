@@ -45,6 +45,8 @@ export function Faces() {
 				<FaceStack name="Trip" faces={BAND.slice(0, 2)} size="panel" />
 				<FaceStack name="Trip" faces={[{ ...BAND[0], state: "working" }, BAND[1]]} />
 				<FaceStack name="Trip" faces={[BAND[0], { ...BAND[1], state: "working" }]} />
+				<FaceStack name="New group" faces={[]} />
+				<FaceStack name="New group" faces={[]} size="panel" />
 			</Group>
 			<Group label="A band of faces" className="gap-4">
 				{BAND.map((face) => (

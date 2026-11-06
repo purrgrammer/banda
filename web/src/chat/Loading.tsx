@@ -150,7 +150,9 @@ export function GroupEmpty({ name, faces }: { name: string; faces: readonly Who[
 			<FaceStack faces={faces} name={name} size="panel" />
 			<p className="mt-2 text-heading font-semibold text-ink">{name}</p>
 			<p className="max-w-xs text-ui text-ink-2">
-				A message asks everyone. Start one with @ and a name to ask just that one.
+				{faces.length === 0
+					? "Nobody is in it yet. Add agents from its panel; until then, what you write here is kept for them."
+					: "A message asks everyone. Start one with @ and a name to ask just that one."}
 			</p>
 		</div>
 	);

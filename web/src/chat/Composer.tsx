@@ -188,7 +188,11 @@ function GroupHint({ members }: { members: readonly Who[] }) {
 	);
 	return (
 		<p className="px-3 text-meta text-ink-2">
-			{named.length === 0 ? "To everyone · @ to pick one" : `To ${named.map((member) => member.name).join(" and ")}`}
+			{members.length === 0
+				? "Nobody is in it yet · add agents from its panel"
+				: named.length === 0
+					? "To everyone · @ to pick one"
+					: `To ${named.map((member) => member.name).join(" and ")}`}
 		</p>
 	);
 }
