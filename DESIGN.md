@@ -121,8 +121,8 @@ one that gives them one more thing to manage stays out.
   bold name, an ink excerpt and an ink count on a neutral pill; read rows are muted. When an ask is open in a chat,
   its excerpt reads the ask in ink ("Waiting: send the email to Ana?"), a dot marks its face, and
   the tab's title counts asks before unread; on the desktop an open ask also fires a local notification, which needs
-  no vendor, while a routine's message only badges. A harness's ask notifies with the harness, the kind of thing and
-  the project by name, never the command or the path, which would sit in a banner on a lock screen. The agent's face moves while it works, a dot marks it while it waits
+  no vendor, while a routine's message only badges. A harness's ask notifies with the harness and the kind of thing asked, never the
+  command, the path or the project's name, any of which would sit in a banner on a lock screen. The agent's face moves while it works, a dot marks it while it waits
   on the owner, and it dims while its routines are paused. The header
   holds the app's name, search (Cmd/Ctrl+K: results are rows that open the chat scrolled to that message) and a quiet
   "+" for a new agent or group; the footer holds Connections, Settings and the daemon's notices. Collapsed, the rail shows faces
@@ -418,13 +418,17 @@ naming one that is not there answers with those that are.
   answered; the buttons speak banda's words, the same whatever the harness: the ask is named by what it does, approval
   by its verb, refusal by what will not happen (Don't run, Don't change, Don't open, Don't allow). "Always allow" is never answered: it would
   write a rule into the owner's own settings. Asks are reviewed whole, one at a time: the oldest in full, the rest
-  folded to a line each until opened, and a folded ask cannot be approved; there is no approve-all. A long command or
+  folded to a line each until opened, and a folded ask cannot be approved; there is no approve-all. What is open is
+  the owner's choice by id plus always the oldest, so an ask resolving elsewhere moves no other card; a card's
+  buttons rest a moment after it appears or moves, so a click aimed at one never lands on another. A long command or
   diff sits in a bounded window with "Show all": folded, never cut. A request too large to show in full is refused, never shortened for approval;
   an unsupported permission mode stops the session before work is sent. The device notification for an open ask says
-  the harness, the kind of thing and the project by name, never the command or the path.
+  the harness and the kind of thing asked, never the command, the path or the project's name.
 - **A session is live in the chat.** It is drawn in the call's place: one line for its current step, in the owner's
-  words where they exist (a command loses its `cd … &&` throat-clearing, paths read from the project, a search or a
-  test run is said as such), truncated in the middle so head and tail both read. The card names the harness and the
+  words where they exist, and only a single plain command earns them (a command loses its `cd … &&` throat-clearing,
+  a simple search or read is said as such, a path reads from the project only when anchored at the project's own
+  folder); a chain, a pipe, a redirection or a substitution shows the command whole, so a quiet verb never fronts a
+  second command, truncated in the middle so head and tail both read. The card names the harness and the
   project; the session's number and full path belong to the sheet's detail, not the card. Its state is said in words
   ("Working 1:48", "Waiting on you", "Took 0:03", "Stopped", "Interrupted", "Failed") and announced to a screen
   reader when it changes, never colour alone. The owner's notes live behind "Add a note" and show on the card with
@@ -437,7 +441,9 @@ naming one that is not there answers with those that are.
   with approval attention and a way to open its activity; several sessions have a picker. The agent's own active reply
   takes priority, with a compact delegated indicator alongside it. Stop answers them all, and before the ask was sent,
   stops it from being sent. The owner steers in their own words: a note is sent to the harness as a
-  prompt it takes after its current step. Stop cancels the turn.
+  prompt it takes after its current step. Stop cancels the turn. Stop acts at once, with no confirmation: a stopped
+  session keeps its record, and the agent can follow it up (native resume where the harness supports it, otherwise a
+  fresh session handed a summary of what happened), so stopping loses nothing the owner cannot take up again.
 - **Once, and then the agent hears.** The ask is sent at most once: a restart after it was sent ends the session
   interrupted, never sends it again, and a session whose task ended without ending it ends failed. Either way, and
   when the harness finishes, its agent wakes once with what was done, fenced as foreign data: how it ended, what it
