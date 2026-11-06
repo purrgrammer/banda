@@ -42,6 +42,9 @@ it("only canonical search source links open inside the app", () => {
 		"#token=secret",
 		"#/a/mara?token=secret",
 		"#/g/-1",
+		"#/a/mara?at=9007199254740992",
+		"#/artifact/abc123?v=0",
+		"#/a/mara?at=1&token=secret",
 	])
 		expect(isSourceHref(href)).toBe(false);
 });

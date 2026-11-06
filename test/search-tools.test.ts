@@ -108,6 +108,12 @@ describe("band search", () => {
 				source: { chat: s.chat },
 				excerpt: "Lisbon train booked",
 			});
+			expect(await s.service.label(found.results[0]!.href, context)).toEqual({
+				kind: "message",
+				label: "Lisbon train booked",
+			});
+			expect(await s.service.label("#/a/mara?at=999999", context)).toBeUndefined();
+			expect(await s.service.label("https://example.com", context)).toBeUndefined();
 			const read = await s.service.read(found.results[0]!.source, 0, context);
 			expect(read.text).toContain("Lisbon train booked");
 			expect(read.text).not.toContain("hidden");
@@ -130,6 +136,10 @@ describe("band search", () => {
 			const source = pages[0]!.results[0]!.source;
 			expect(source).toMatchObject({ kind: "group", room: s.room });
 			expect((await s.service.read(source, 0, context)).text).toContain("Porto train is confirmed");
+			expect(await s.service.label(pages[0]!.results[0]!.href, context)).toEqual({
+				kind: "group",
+				label: "Porto train is confirmed",
+			});
 			expect(s.index.rows().filter((row) => row.kind === "group")).toHaveLength(1);
 		} finally {
 			await s.close();
@@ -187,6 +197,10 @@ describe("band search", () => {
 				"different search",
 			);
 			const source = { kind: "artifact" as const, id: "0000000000000001" };
+			expect(await s.service.label("#/artifact/0000000000000001", context)).toEqual({
+				kind: "artifact",
+				label: "Plan 1",
+			});
 			const read = await s.service.read(source, 0, context);
 			expect(read.text).toHaveLength(12_000);
 			expect(read.nextOffset).toBe(12_000);
@@ -195,6 +209,7 @@ describe("band search", () => {
 				(await tx.doc(Artifacts)).artifacts = {};
 			}, context);
 			expect((await s.service.search({ query: "Lisbon", kinds: ["artifact"] }, context)).results).toEqual([]);
+			expect(await s.service.label("#/artifact/0000000000000001", context)).toBeUndefined();
 			await expect(s.service.read(source, 0, context)).rejects.toThrow("no longer available");
 		} finally {
 			await s.close();

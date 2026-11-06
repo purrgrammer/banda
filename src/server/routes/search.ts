@@ -12,6 +12,11 @@ import type { AreaModule } from "./area.ts";
 export const search: AreaModule = {
 	start: ({ retrieval }) => ({
 		route: async ({ method, path, url }) => {
+			if (path === "/search/source" && method === "GET") {
+				const href = url.searchParams.get("href") ?? "";
+				if (href.length > 200) throw new BadRequest("source link is too long");
+				return { body: (await retrieval.label(href, context)) ?? null };
+			}
 			if (path !== "/search" || method !== "GET") return undefined;
 			const query = url.searchParams.get("q") ?? "";
 			if (query.length > 200) throw new BadRequest("q is a few words");

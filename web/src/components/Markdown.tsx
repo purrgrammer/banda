@@ -13,6 +13,7 @@ import { codePlugin } from "../lib/highlight.ts";
 import { plainText } from "../lib/plain.ts";
 import { BlobFile, linkedBlob } from "./Blob.tsx";
 import { MentionChip, useMentioned } from "./MentionChip.tsx";
+import { SourceReference } from "./SourceLink.tsx";
 
 /** Optional, message-scoped rich links; ordinary markdown and code stay untouched. */
 export const MarkdownLinks = createContext<((href: string) => ReactNode) | undefined>(undefined);
@@ -30,8 +31,14 @@ function Link({ href, children, node: _node, ...props }: ComponentProps<"a"> & {
 		return <BlobFile sha={sha} name={typeof children === "string" ? children : "file"} download="right" />;
 	const rich = href === undefined ? undefined : richLink?.(href);
 	if (rich != null) return rich;
+	if (href !== undefined && isSourceHref(href))
+		return (
+			<SourceReference {...props} href={href}>
+				{children}
+			</SourceReference>
+		);
 	return (
-		<a {...props} href={href} target={isSourceHref(href) ? undefined : "_blank"} rel="noreferrer" data-markdown-link="">
+		<a {...props} href={href} target="_blank" rel="noreferrer" data-markdown-link="">
 			{children}
 		</a>
 	);

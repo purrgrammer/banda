@@ -37,6 +37,7 @@ for (const width of [1440, 390]) {
 	const models = createModels();
 	models.setProvider(faux.provider);
 	const searched: string[][] = [];
+	let references: { href: string; kind: string }[] = [];
 	const call = (name: string, args: JsonObject) =>
 		fauxAssistantMessage([fauxToolCall(name, args)], { stopReason: "toolUse" });
 	const respond = (ctx: Context) => {
@@ -46,6 +47,7 @@ for (const width of [1440, 390]) {
 			if (last.isError) return call("message_user", { text: "Search failed. Please try the query again." });
 			if (last.toolName === "search") {
 				const found = JSON.parse(textOf(last.content));
+				references = found.results;
 				searched.push(found.results.map((result: { kind: string }) => result.kind));
 				const artifact = found.results.find((result: { kind: string }) => result.kind === "artifact");
 				if (!artifact) return call("message_user", { text: "No itinerary found." });
@@ -54,7 +56,7 @@ for (const width of [1440, 390]) {
 			if (last.toolName === "read_search_result") {
 				const read = JSON.parse(textOf(last.content));
 				return call("message_user", {
-					text: `Found our train decision: ${read.text}\n\n[Open itinerary](#/artifact/${read.source.id})`,
+					text: `Found our train decision: ${read.text}\n\n[Open itinerary](#/artifact/${read.source.id})\n\n${references.map((ref) => `[](${ref.href})`).join(" · ")}\n\n[](#/artifact/0000000000000000)`,
 				});
 			}
 		}
@@ -114,8 +116,27 @@ for (const width of [1440, 390]) {
 			await page.until("document.body.textContent.includes('SUNRISE')", 30_000);
 			if (!searched.some((kinds) => ["message", "group", "artifact"].every((kind) => kinds.includes(kind))))
 				throw new Error("search did not cover every source kind");
+			await page.until(
+				"[...document.querySelectorAll('[data-source-kind=\"artifact\"]')].some(el=>el.textContent.includes('Lisbon itinerary'))",
+				30_000,
+			);
+			for (const kind of ["message", "group", "artifact"]) {
+				await page.until(`document.querySelector('[data-source-kind="${kind}"] svg')`, 30_000);
+			}
+			await page.until(
+				"[...document.querySelectorAll('[data-source-kind=\"group\"]')].some(el=>el.textContent.includes('group agreed'))",
+				30_000,
+			);
+			await page.until(
+				"[...document.querySelectorAll('[data-source-kind=\"message\"]')].some(el=>el.textContent.includes('Lisbon'))",
+				30_000,
+			);
+			await page.until(
+				"document.querySelector('a[href=\"#/artifact/0000000000000000\"]')?.textContent.includes('Artifact')",
+				30_000,
+			);
 			await page.shoot(`/tmp/banda-search-chat-${width}.png`);
-			await click(page, "[...document.querySelectorAll('a')].find(el => el.textContent==='Open itinerary')");
+			await click(page, "[...document.querySelectorAll('a')].find(el => el.textContent.endsWith('Open itinerary'))");
 			await page.until("location.hash.startsWith('#/artifact/')", 30_000);
 			await page.until("document.body.textContent.includes('SUNRISE')", 30_000);
 			await page.run("location.hash='#/a/atlas'");
@@ -125,7 +146,7 @@ for (const width of [1440, 390]) {
 			await fill(page, composer, "Find our train decision", "HTMLTextAreaElement");
 			await click(page, "document.querySelector('button[aria-label=\"Send\"]')");
 			await page.until(
-				"[...document.querySelectorAll('a')].filter(el => el.textContent==='Open itinerary').length === 2",
+				"[...document.querySelectorAll('a')].filter(el => el.textContent.endsWith('Open itinerary')).length === 2",
 				30_000,
 			);
 			await page.input("Input.dispatchKeyEvent", { type: "keyDown", key: "k", code: "KeyK", modifiers: 4 });

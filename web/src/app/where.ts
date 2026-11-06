@@ -1,3 +1,4 @@
+import { sourceLink } from "../../../src/core/source-link.ts";
 /**
  * Where the app is, in the hash, so the daemon serves one page: `#/` the last chat (or the first agent's), `#/a/<id>` an
  * agent's chat, `#/g/<room>` a group's, `#/settings`, `#/connections`, `#/specimen`. `?at=<entry>` opens a chat at
@@ -83,7 +84,5 @@ export function lastOf(stored: string | null): Last | undefined {
 
 /** Only canonical source references from search navigate inside the current app. */
 export function isSourceHref(href: string | undefined): boolean {
-	if (!href?.startsWith("#/")) return false;
-	const where = parse(href);
-	return (where.name === "agent" || where.name === "group" || where.name === "artifact") && hrefOf(where) === href;
+	return sourceLink(href) !== undefined;
 }

@@ -2,10 +2,12 @@
 import { createHash } from "node:crypto";
 import type { Context } from "@earendil-works/chord";
 import type { Harness } from "@earendil-works/pi-durable";
+import { acceptedAgent } from "./agents.ts";
 import { Artifacts } from "./artifacts.ts";
 import type { BlobStore } from "./blobs.ts";
 import { type defineGroups, Groups } from "./groups.ts";
 import type { ArtifactText, Hit, Search } from "./search.ts";
+import { sourceLink } from "./source-link.ts";
 import { Routes } from "./turn.ts";
 
 export const SEARCH_KINDS = ["message", "group", "artifact"] as const;
@@ -150,6 +152,33 @@ export function searchService({
 		};
 	}
 	return {
+		label: (href: string, ctx: Context) =>
+			exclusive(async () => {
+				const target = sourceLink(href);
+				if (!target) return undefined;
+				const state = await catchUp(ctx);
+				let label: string | undefined;
+				if (target.kind === "artifact") {
+					label = state.texts.find((item) => item.id === target.id)?.title;
+				} else {
+					const id =
+						target.kind === "group"
+							? target.room
+							: state.audience.chats.find((chat) => state.routes[chat]?.agent === target.agent);
+					if (id === undefined || !(target.kind === "group" ? state.audience.rooms : state.audience.chats).includes(id))
+						return undefined;
+					if (target.entry !== undefined) {
+						label = index.context(target.kind, id, target.entry).find((line) => line.entry === target.entry)?.text;
+					} else if (target.kind === "group") {
+						label = state.rooms.find((room) => room.room === id)?.name;
+					} else {
+						label = (await harness().commit((tx) => acceptedAgent(tx, target.agent), ctx))?.name ?? target.agent;
+					}
+				}
+				if (!label?.trim()) return undefined;
+				label = label.replace(/\s+/g, " ").trim();
+				return { kind: target.kind, label: label.length > 100 ? `${label.slice(0, 100)}…` : label };
+			}),
 		page: (args: SearchArgs, ctx: Context) => exclusive(() => page(args, ctx)),
 		search: (args: SearchArgs, ctx: Context) =>
 			exclusive(async () => {

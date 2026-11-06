@@ -108,6 +108,8 @@ About five weeks of agent work in all; slices 8 and 9 can run beside 6 and 7 onc
 ## Search tools
 
 Agents use the same retrieval path as Cmd+K for direct messages, shared group logs and artifact titles/latest text.
+Source links show an icon for their kind; explicit labels are preserved, and empty labels resolve to the source
+name or a bounded message excerpt. Unavailable sources retain a generic, usable link.
 `search` returns bounded excerpts, source references, app links and a continuation cursor; `read_search_result` reads
 bounded source context. Recall stays memory-only. Hidden execution chats are excluded before ranking and limiting.
 The text coverage of an artifact is its first 200 KB; binary contents, workspace files and live services are outside
