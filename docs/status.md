@@ -19,6 +19,11 @@ passes. The phone's side was tried on the arm64
 emulator against a throwaway daemon on n0; a real phone on cellular, iOS and push remain
 ([Operations](operations.md)).
 
+Tool discovery is wired in draft PR #4 using pi-durable’s existing search and deferred tool loading.
+The agent tool-access specimen is carried in the separate agent-search UI worktree; the owner requested that it
+stay a specimen while they give feedback. Per-agent switches are not wired to the daemon. Full/deep verification
+and owner review remain open ([Agents and groups](agents.md)).
+
 Pre-release binaries are on the `desktop-release` branch ([Operations](operations.md)): an Electron desktop app that
 starts or attaches to the daemon, a CLI archive that brings its own Node.js, and a release workflow that drafts an
 unsigned pre-release from a `v*` tag. Both were packaged and tried on macOS arm64 against throwaway homes. The

@@ -281,8 +281,13 @@ describe("a long chat", () => {
 	}, 120_000);
 
 	it("does not compact on every short turn when what a compaction keeps sits near the threshold", async () => {
-		const { daemon, model, say, all, counted } = await daemonOnFaux();
+		const { daemon, model, api, say, all, counted } = await daemonOnFaux();
 		try {
+			// A substantial retained prompt is part of this scenario, independent of how many tool schemas are inline.
+			await api("/companion", {
+				method: "PUT",
+				body: JSON.stringify({ personality: "Keep this reference in mind. ".repeat(60) }),
+			});
 			const chat = await say("hello");
 			const first = await counted(chat);
 			// the background threshold just under what the chat holds now: without the guard, every turn compacts

@@ -11,6 +11,8 @@ import {
 	fauxText,
 	fauxThinking,
 	fauxToolCall,
+	getCurrentTools,
+	type Message,
 	type MutableModels,
 } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
@@ -1061,9 +1063,15 @@ describe("web", () => {
 		};
 		faux.setResponses(
 			Array.from({ length: 50 }, () => (context: { messages: readonly { role: string; content: unknown }[] }) => {
-				const last = context.messages.at(-1);
-				const plan = last?.role === "user" ? plans[String(last.content)] : undefined;
+				const last = [...context.messages].reverse().find((message) => message.role !== "system");
+				const input = [...context.messages].reverse().find((message) => message.role === "user");
+				const searched = last?.role === "toolResult" && (last as { toolName?: string }).toolName === "tool_search";
+				const plan = last?.role === "user" || searched ? plans[String(input?.content)] : undefined;
 				if (plan === undefined) return fauxAssistantMessage("ok");
+				if (!getCurrentTools(context.messages as readonly Message[]).some((tool) => tool.name === plan[0]))
+					return fauxAssistantMessage([fauxToolCall("tool_search", { query: plan[0], limit: 1 })], {
+						stopReason: "toolUse",
+					});
 				return fauxAssistantMessage([fauxToolCall(plan[0], plan[1] as never)], { stopReason: "toolUse" });
 			}) as never,
 		);
