@@ -3,6 +3,7 @@ import { SquareIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Terminal } from "@/components/ai-elements/terminal";
 import { Button } from "@/components/ui/button";
+import { HarnessAsks } from "../app/HarnessSession.tsx";
 import { ApprovalCard } from "../chat/Approval.tsx";
 import { Bubble, Run } from "../chat/Feed.tsx";
 import { FolderBrowser } from "../chat/FolderPicker.tsx";
@@ -17,7 +18,7 @@ import {
 import { Header } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { Panel, PanelSection } from "../chat/Panel.tsx";
-import type { FolderListing } from "../lib/api.ts";
+import type { FolderListing, HarnessSessionView as SessionApiView } from "../lib/api.ts";
 import { MARA } from "./fixtures.ts";
 import { Section } from "./stage.tsx";
 
@@ -80,6 +81,66 @@ function FolderBrowserSample() {
 }
 
 const OUTCOME = "Fixed: refresh compared seconds with milliseconds";
+
+/** A card mid-work, for one state of the gallery: its steps as they would be at that moment. */
+const midwork = (steps: readonly HarnessStep[], state: HarnessState, elapsed = "0:12"): HarnessSessionView => ({
+	harness: HARNESS,
+	provider: "anthropic",
+	folder: FOLDER,
+	state,
+	steps,
+	elapsed,
+});
+
+const LONG_RUN =
+	"cd /Users/sam/sancho && NODE_OPTIONS=--max-old-space-size=4096 npm run build:web -- --mode production --outDir dist/web --sourcemap";
+
+const LONG_DIFF = [
+	"--- a/src/auth.ts",
+	"+++ b/src/auth.ts",
+	"@@ -12,9 +12,10 @@ export async function session(token: Token) {",
+	"-  if (token.expiresAt < Date.now()) {",
+	"+  const now = Math.floor(Date.now() / 1000);",
+	"+  if (token.expiresAt < now) {",
+	"     return refresh(token);",
+	"   }",
+	"   return token;",
+	" }",
+	"@@ -31,12 +32,12 @@ export function refresh(token: Token) {",
+	"-  const grace = 30_000;",
+	"+  const grace = 30;",
+	"   if (token.expiresAt + grace < nowSeconds()) {",
+	"     throw new SessionExpired();",
+	"   }",
+	"-  return mint(token.user, Date.now() + TTL_MS);",
+	"+  return mint(token.user, nowSeconds() + TTL_S);",
+	" }",
+	"@@ -51,7 +52,7 @@ function mint(user: string, expiresAt: number) {",
+	"-  expiresAt: expiresAt,",
+	"+  expiresAt, // seconds, as the token says it",
+	"   user,",
+	" }",
+].join("\n");
+
+/** A session as the API says it, for the asks fixtures: only what HarnessAsks reads. */
+const askSession = (asks: SessionApiView["asks"]): SessionApiView => ({
+	task: 7,
+	chat: 1,
+	agent: "mara",
+	harness: "claude-code",
+	service: HARNESS,
+	provider: "anthropic",
+	folder: FOLDER,
+	state: "waiting",
+	at: 0,
+	steps: [],
+	dropped: 0,
+	...(asks === undefined ? {} : { asks }),
+});
+
+const EXECUTE_ASK = { id: "a1", kind: "execute", command: COMMAND } as const;
+const EDIT_ASK = { id: "a2", kind: "edit", command: "src/auth.ts", title: "src/auth.ts", detail: LONG_DIFF } as const;
+const FETCH_ASK = { id: "a3", kind: "fetch", command: "https://nodejs.org/api/crypto.html" } as const;
 
 type Step = "connect" | "working" | "waiting" | "done" | "stopped";
 const STEPS: readonly { id: Step; label: string }[] = [
@@ -280,12 +341,17 @@ export function HarnessSection() {
 				note="Working and waiting can be steered and stopped. A note waits for the current step, then is taken. A restart never sends the ask again: it says so."
 			>
 				<div className="flex max-w-2xl flex-col gap-3">
-					{(["working", "waiting", "done", "stopped", "interrupted"] as const).map((state) => {
+					{(["working", "waiting", "done", "stopped", "interrupted", "failed"] as const).map((state) => {
 						const view = sessionAt(
 							AT[state],
 							state === "working" ? [{ kind: "steered", text: "Also update the changelog", taken: false }] : [],
 						);
-						return <HarnessCard key={state} session={{ ...view, state }} />;
+						return (
+							<HarnessCard
+								key={state}
+								session={{ ...view, state, ...(state === "failed" ? { outcome: "its adapter exited early" } : {}) }}
+							/>
+						);
 					})}
 					<HarnessTile
 						harness={HARNESS}
@@ -332,6 +398,44 @@ export function HarnessSection() {
 				</div>
 			</Section>
 			<Section
+				id="harness-headlines"
+				title="The card's one line"
+				note="The card speaks each step in the owner's words: a long command loses its cd prefix and truncates in the middle; a read names the file."
+			>
+				<div className="flex max-w-2xl flex-col gap-3">
+					<HarnessCard
+						session={midwork(
+							[{ kind: "asked", text: PROMPT }, ...BEFORE_ASK.slice(1, 3), { kind: "run", command: LONG_RUN }],
+							"working",
+							"0:58",
+						)}
+						onOpen={() => {}}
+					/>
+					<HarnessCard
+						session={midwork(
+							[
+								{ kind: "asked", text: PROMPT },
+								{ kind: "read", path: "~/sancho/test/auth.spec.ts" },
+							],
+							"working",
+							"0:07",
+						)}
+						onOpen={() => {}}
+					/>
+				</div>
+			</Section>
+			<Section
+				id="harness-asks"
+				title="Its asks, one at a time"
+				note="The oldest ask shows whole; a long command or diff scrolls in a bounded window with Show all; the rest fold to one line until each is reviewed. There is no approve-all."
+			>
+				<div className="flex max-w-2xl flex-col gap-3">
+					<HarnessAsks session={askSession([EXECUTE_ASK])} agentName="Mara" />
+					<HarnessAsks session={askSession([EDIT_ASK])} agentName="Mara" />
+					<HarnessAsks session={askSession([EXECUTE_ASK, EDIT_ASK, FETCH_ASK])} agentName="Mara" />
+				</div>
+			</Section>
+			<Section
 				id="harness-panel"
 				title="Claude Code in the panel"
 				note="Every step, compact: reads as one line, thoughts folded, edits as diffs, commands as terminals, the owner's notes where they went in."
@@ -355,6 +459,26 @@ export function HarnessSection() {
 						session={{ ...sessionAt("stopped", []), agent: "Sancho", task: 43, stoppedBy: "agent" }}
 						onOpen={() => {}}
 					/>
+				</div>
+			</Section>
+			<Section
+				id="harness-sheet"
+				title="The steps sheet"
+				note="Every step folds to one line; a row opens to the raw command, the diff or the whole text. The sheet opens at the newest step and follows it; scrolling up shows the chat's way back down."
+			>
+				<div className="flex max-w-md flex-col gap-6">
+					<div className="flex flex-col gap-2">
+						<p className="text-meta text-ink-2">Folded, as it opens:</p>
+						<HarnessTranscript session={sessionAt("done", [])} />
+					</div>
+					<div className="flex flex-col gap-2">
+						<p className="text-meta text-ink-2">A run and a diff opened:</p>
+						<HarnessTranscript session={sessionAt("done", [])} defaultOpenSteps={["edit:4", "run:6"]} />
+					</div>
+					<div className="flex h-80 flex-col gap-2">
+						<p className="text-meta text-ink-2">Bounded and following, as the sheet holds it:</p>
+						<HarnessTranscript session={sessionAt("working", [])} follow />
+					</div>
 				</div>
 			</Section>
 		</>
