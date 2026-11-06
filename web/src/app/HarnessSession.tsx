@@ -2,7 +2,7 @@
  * A harness session in a chat, live from the shell: its card in place of the call that started it, the harness's own
  * asks while it waits on the owner (several may be open), and every step in a sheet. The owner's notes, answers and Stop go to the daemon.
  */
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { Terminal } from "@/components/ai-elements/terminal";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import type { HarnessAsk, HarnessSessionView } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { chatAgents } from "../lib/navigation.ts";
 import { useShell } from "../lib/shell.ts";
+import { askSummary } from "./harness-activity.ts";
 
 const clock = (ms: number) => {
 	const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -59,14 +60,43 @@ const viewOf = (session: HarnessSessionView, now: number, agent: string | undefi
 });
 
 /** What an ask would do, in words, by its kind: the owner sees what they allow before they allow it. */
-const askWords = (kind: string): { what: string; verb: string; no: string } =>
-	kind === "execute"
-		? { what: "Run a command", verb: "Run", no: "Don't run" }
+const askWords = (kind: string): { what: string; verb: string; no: string } => {
+	const summary = askSummary(kind);
+	const what = summary.charAt(0).toUpperCase() + summary.slice(1);
+	return kind === "execute"
+		? { what, verb: "Run", no: "Don't run" }
 		: kind === "edit" || kind === "delete" || kind === "move"
-			? { what: "Change a file", verb: "Allow", no: "Don't" }
+			? { what, verb: "Allow", no: "Don't change" }
 			: kind === "fetch"
-				? { what: "Open a web page", verb: "Allow", no: "Don't" }
-				: { what: "Do something", verb: "Allow", no: "Don't" };
+				? { what, verb: "Allow", no: "Don't open" }
+				: { what, verb: "Allow", no: "Don't allow" };
+};
+
+/**
+ * A long command or diff behind a bounded, scrolling window and "Show all": a sheet with the whole of it (the full
+ * screen on a phone). Nothing is cut: the owner can always reach everything they approve.
+ */
+function Clamped({ text, title, children }: { text: string; title: string; children: ReactNode }) {
+	const [open, setOpen] = useState(false);
+	if (text.split("\n").length <= 12) return <>{children}</>;
+	return (
+		<>
+			<div className="max-h-80 overflow-y-auto overscroll-contain rounded-field">{children}</div>
+			<Button variant="outline" size="sm" className="self-start" onClick={() => setOpen(true)}>
+				Show all
+			</Button>
+			<Sheet open={open} onOpenChange={setOpen}>
+				<SheetContent className="flex h-full flex-col gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[640px]">
+					<SheetHeader className="border-b border-line-soft pr-12">
+						<SheetTitle>{title}</SheetTitle>
+						<SheetDescription>All of it, before you decide.</SheetDescription>
+					</SheetHeader>
+					<div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+				</SheetContent>
+			</Sheet>
+		</>
+	);
+}
 
 /** One of the harness's open asks: what it would do, all of it the owner must see, Allow or not. */
 function HarnessAskCard({
@@ -84,28 +114,58 @@ function HarnessAskCard({
 			agent={session.service}
 			what={words.what}
 			verb={ask.allow?.name ?? words.verb}
-			declineLabel={ask.deny?.name ?? "Cancel"}
+			declineLabel={ask.deny?.name ?? words.no}
 			as={`${agentName ?? session.agent}'s task`}
 			object={
 				<>
 					<p className="text-ui break-all text-ink-2">In {session.folder}</p>
 					{ask.kind === "execute" ? (
-						<Terminal command={ask.command} output="" />
+						<Clamped text={ask.command} title={words.what}>
+							<Terminal command={ask.command} output="" />
+						</Clamped>
 					) : (
 						<p className="text-ui break-words text-ink">{ask.title ?? ask.command}</p>
 					)}
 					{ask.detail === undefined ? null : ask.kind === "edit" || ask.kind === "delete" || ask.kind === "move" ? (
-						<CodeBlock code={ask.detail} language="diff" title="What it would change" />
+						<Clamped text={ask.detail} title="What it would change">
+							<CodeBlock code={ask.detail} language="diff" title="What it would change" />
+						</Clamped>
 					) : (
-						<p className="rounded-field bg-paper-2 px-3.5 py-2.5 text-ui break-words whitespace-pre-wrap text-ink-2">
-							{ask.detail}
-						</p>
+						<Clamped text={ask.detail} title={words.what}>
+							<p className="rounded-field bg-paper-2 px-3.5 py-2.5 text-ui break-words whitespace-pre-wrap text-ink-2">
+								{ask.detail}
+							</p>
+						</Clamped>
 					)}
 				</>
 			}
 			onApprove={() => attempt("allow it", () => answerHarness(session.task, ask.id, true))}
 			onDecline={() => attempt("refuse it", () => answerHarness(session.task, ask.id, false))}
 		/>
+	);
+}
+
+/**
+ * The harness's open asks: the oldest whole, the rest folded to one line, each reviewed whole before it can be
+ * approved. There is no approve-all.
+ */
+export function HarnessAsks({ session, agentName }: { session: HarnessSessionView; agentName?: string | undefined }) {
+	const [shown, setShown] = useState(1);
+	const asks = session.asks ?? [];
+	if (asks.length === 0) return null;
+	const visible = asks.slice(0, Math.max(1, Math.min(shown, asks.length)));
+	const rest = asks.slice(visible.length);
+	return (
+		<>
+			{visible.map((ask) => (
+				<HarnessAskCard key={ask.id} session={session} ask={ask} agentName={agentName} />
+			))}
+			{rest.length === 0 ? null : (
+				<Button variant="outline" size="sm" className="self-start" onClick={() => setShown((count) => count + 1)}>
+					{rest.length} more waiting · {rest.map((ask) => askSummary(ask.kind)).join(" · ")}
+				</Button>
+			)}
+		</>
 	);
 }
 
@@ -118,6 +178,7 @@ export function HarnessSessionPart({ chat, call }: { chat: number; call: string 
 	const live = session !== undefined && session.ended === undefined;
 	const now = useNow(live);
 	const [open, setOpen] = useState(false);
+	const titleRef = useRef<HTMLHeadingElement>(null);
 	if (session === undefined) return null;
 	const view = viewOf(session, now, agent);
 	const steer = (text: string) => void attempt("send your note", () => steerHarness(session.task, text));
@@ -129,18 +190,23 @@ export function HarnessSessionPart({ chat, call }: { chat: number; call: string 
 				onOpen={() => setOpen(true)}
 				onSteer={steer}
 			/>
-			{(session.asks ?? []).map((ask) => (
-				<HarnessAskCard key={ask.id} session={session} ask={ask} agentName={agent} />
-			))}
+			<HarnessAsks session={session} agentName={agent} />
 			<Sheet open={open} onOpenChange={setOpen}>
-				<SheetContent className="gap-0 overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-[560px]">
+				<SheetContent
+					className="flex h-full flex-col gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[560px]"
+					onOpenAutoFocus={(event) => {
+						// the sheet opens on its title, not on the first Copy button of a Terminal
+						event.preventDefault();
+						titleRef.current?.focus();
+					}}
+				>
 					<SheetHeader className="border-b border-line-soft pr-12">
-						<SheetTitle>{session.service}</SheetTitle>
+						<SheetTitle ref={titleRef} tabIndex={-1} className="outline-none">
+							{session.service}
+						</SheetTitle>
 						<SheetDescription>Every step, as it happened.</SheetDescription>
 					</SheetHeader>
-					<div className="p-4">
-						<HarnessTranscript session={view} onSteer={steer} />
-					</div>
+					<HarnessTranscript session={view} onSteer={steer} follow className="p-4" />
 				</SheetContent>
 			</Sheet>
 		</>
@@ -159,6 +225,7 @@ export function HarnessActivitySheet({ tasks, onClose }: { tasks: readonly numbe
 	const now = useNow(sessions.some((one) => one.ended === undefined));
 	const agent =
 		companion === undefined ? undefined : chatAgents(agents, companion).find((one) => one.id === session?.agent)?.name;
+	const titleRef = useRef<HTMLHeadingElement>(null);
 	return (
 		<Sheet
 			open
@@ -166,9 +233,17 @@ export function HarnessActivitySheet({ tasks, onClose }: { tasks: readonly numbe
 				if (!open) onClose();
 			}}
 		>
-			<SheetContent className="gap-0 overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-[560px]">
+			<SheetContent
+				className="gap-0 overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-[560px]"
+				onOpenAutoFocus={(event) => {
+					event.preventDefault();
+					titleRef.current?.focus();
+				}}
+			>
 				<SheetHeader className="border-b border-line-soft pr-12">
-					<SheetTitle>{session?.service ?? "Coding sessions"}</SheetTitle>
+					<SheetTitle ref={titleRef} tabIndex={-1} className="outline-none">
+						{session?.service ?? "Coding sessions"}
+					</SheetTitle>
 					<SheetDescription>Recorded work, notes and approvals.</SheetDescription>
 				</SheetHeader>
 				<div className="flex flex-col gap-3 p-4">
@@ -200,9 +275,7 @@ export function HarnessActivitySheet({ tasks, onClose }: { tasks: readonly numbe
 									Stop {session.service}
 								</Button>
 							) : null}
-							{(session.asks ?? []).map((ask) => (
-								<HarnessAskCard key={ask.id} session={session} ask={ask} agentName={agent} />
-							))}
+							<HarnessAsks session={session} agentName={agent} />
 						</>
 					)}
 					{sessions.length === 0 ? <p>This session is no longer kept.</p> : null}

@@ -2,6 +2,29 @@
 
 import type { HarnessSessionView } from "../../../src/server/api.ts";
 import type { FaceState } from "../chat/types.ts";
+import { projectOf } from "../lib/project.ts";
+
+/** An ask's kind in a few words, for a folded line or a notification: never the command or the path. */
+export const askSummary = (kind: string): string =>
+	kind === "execute"
+		? "run a command"
+		: kind === "edit" || kind === "delete" || kind === "move"
+			? "change a file"
+			: kind === "fetch"
+				? "open a web page"
+				: "do something";
+
+/**
+ * The device notification's body for harness asks: the harness, what kind of thing it asks, and the project by name;
+ * never the command or the path, which would sit in a banner on a lock screen.
+ */
+export function askNotice(sessions: readonly HarnessSessionView[]): string | undefined {
+	const waiting = sessions.filter((session) => (session.asks?.length ?? 0) > 0);
+	const first = waiting[0];
+	if (first === undefined) return undefined;
+	if (waiting.length > 1) return `${first.service} and ${waiting.length - 1} more are waiting on you`;
+	return `${first.service} asks to ${askSummary(first.asks?.[0]?.kind ?? "other")} in ${projectOf(first.folder)}`;
+}
 
 export function harnessActivity(sessions: readonly HarnessSessionView[], chats: readonly number[]) {
 	const active = sessions.filter(

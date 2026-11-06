@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { HarnessSessionView } from "../../../src/server/api.ts";
-import { chatActivity, harnessActivity } from "./harness-activity.ts";
+import { askNotice, chatActivity, harnessActivity } from "./harness-activity.ts";
 
 const one: HarnessSessionView = {
 	task: 1,
@@ -31,6 +31,22 @@ it("counts simultaneous sessions and keeps an approval first in the picker", () 
 	const active = harnessActivity([one, asking], [3]);
 	expect(active.waiting).toBe(true);
 	expect(active.sessions.map((session) => session.task)).toEqual([2, 1]);
+});
+it("notifies with the harness, the kind and the project, never the command or the path", () => {
+	expect(askNotice([one])).toBeUndefined();
+	const asking = {
+		...one,
+		service: "pi",
+		folder: "~/code/banda",
+		asks: [{ id: "ask", kind: "execute", command: "rm -rf node_modules" }],
+	};
+	expect(askNotice([asking])).toBe("pi asks to run a command in banda");
+	expect(askNotice([{ ...asking, asks: [{ id: "a", kind: "edit", command: "src/x.ts" }] }])).toBe(
+		"pi asks to change a file in banda",
+	);
+	expect(askNotice([asking, { ...asking, task: 2 }])).toBe("pi and 1 more are waiting on you");
+	expect(askNotice([asking])).not.toContain("rm -rf");
+	expect(askNotice([asking])).not.toContain("~/code");
 });
 it("preserves the agent's own activity while retaining delegated attention and clears on completion", () => {
 	const active = harnessActivity([one], [3]);
