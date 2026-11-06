@@ -71,6 +71,9 @@ export function States() {
 				<Group label="A new group: nothing said yet">
 					<GroupEmpty name="Sancho & Mara" faces={[SANCHO, MARA]} />
 				</Group>
+				<Group label="A new group: nobody in it yet">
+					<GroupEmpty name="New group" faces={[]} />
+				</Group>
 				<Group label="An object: being read · can't be read" className="items-start">
 					<div className="w-[24rem] max-w-full">
 						<ObjectLoading />

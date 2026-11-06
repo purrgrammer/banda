@@ -95,43 +95,46 @@ export function bandRows(
 			paused,
 		};
 	});
-	const groupRows = groups.map((group): BandRow => {
-		const at = group.last?.at ?? group.at;
-		const delegated = harnessActivity(sessions, Object.values(group.executions ?? {}));
-		const last = group.last;
-		const by = last === undefined ? undefined : "owner" in last.author ? "You" : whoOf(known, last.author.agent).name;
-		return {
-			id: `g:${group.room}`,
-			to: { name: "group", room: group.room },
-			name: group.name,
-			faces: group.members.map((member) => ({
-				...whoOf(known, member),
-				paused: paused || archived.some((agent) => agent.id === member),
-				...(group.working.includes(member) ? { state: "working" as const } : {}),
-			})),
-			excerpt:
-				last === undefined
-					? "Say hello to everyone"
-					: last.text.trim() === "" && last.reaction !== undefined
-						? `Reacted ${last.reaction.emoji}`
-						: last.text.replace(/\s+/g, " ").slice(0, 160),
-			...(by === undefined ? {} : { by }),
-			time: rowTime(at, now),
-			at,
-			unread: group.unread,
-			...(group.asking.length === 0
-				? delegated.waiting
-					? {
-							ask: `${delegated.sessions.length} coding session${delegated.sessions.length === 1 ? "" : "s"}`,
-							...(() => {
-								const notice = askNotice(delegated.sessions);
-								return notice === undefined ? {} : { notice };
-							})(),
-						}
-					: {}
-				: { ask: `${group.asking.length === 1 ? "a member asks" : `${group.asking.length} asks`}` }),
-		};
-	});
+	// an archived group leaves the band; Settings lists it, to restore
+	const groupRows = groups
+		.filter((group) => group.archived === undefined)
+		.map((group): BandRow => {
+			const at = group.last?.at ?? group.at;
+			const delegated = harnessActivity(sessions, Object.values(group.executions ?? {}));
+			const last = group.last;
+			const by = last === undefined ? undefined : "owner" in last.author ? "You" : whoOf(known, last.author.agent).name;
+			return {
+				id: `g:${group.room}`,
+				to: { name: "group", room: group.room },
+				name: group.name,
+				faces: group.members.map((member) => ({
+					...whoOf(known, member),
+					paused: paused || archived.some((agent) => agent.id === member),
+					...(group.working.includes(member) ? { state: "working" as const } : {}),
+				})),
+				excerpt:
+					last === undefined
+						? "Say hello to everyone"
+						: last.text.trim() === "" && last.reaction !== undefined
+							? `Reacted ${last.reaction.emoji}`
+							: last.text.replace(/\s+/g, " ").slice(0, 160),
+				...(by === undefined ? {} : { by }),
+				time: rowTime(at, now),
+				at,
+				unread: group.unread,
+				...(group.asking.length === 0
+					? delegated.waiting
+						? {
+								ask: `${delegated.sessions.length} coding session${delegated.sessions.length === 1 ? "" : "s"}`,
+								...(() => {
+									const notice = askNotice(delegated.sessions);
+									return notice === undefined ? {} : { notice };
+								})(),
+							}
+						: {}
+					: { ask: `${group.asking.length === 1 ? "a member asks" : `${group.asking.length} asks`}` }),
+			};
+		});
 	return [...agentRows, ...groupRows].sort((a, b) => b.at - a.at);
 }
 

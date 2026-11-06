@@ -152,13 +152,17 @@ describe("groups", () => {
 			const read = await api<GroupView>(`/groups/${room}`);
 			expect(read).toMatchObject({ read: answer, unread: 0 });
 			expect((await api<GroupRow[]>("/groups"))[0]).toMatchObject({ read: answer, unread: 0 });
-			// renamed, a member removed and added back: in effect at once, never below one member
+			// renamed, a member removed and added back: in effect at once, never past the owner's limit
 			const put = (body: object) => call(`/groups/${room}`, { method: "PUT", body: JSON.stringify(body) });
 			expect((await put({ name: "  Launch   crew " })).status).toBe(200);
 			expect((await api<GroupView>(`/groups/${room}`)).name).toBe("Launch crew");
 			expect((await put({ remove: ["writer"] })).status).toBe(200);
 			expect((await api<GroupView>(`/groups/${room}`)).members).toEqual(["researcher"]);
-			expect((await put({ remove: ["researcher"] })).status).toBe(400);
+			const limits = (body: object) => call("/groups/limits", { method: "PUT", body: JSON.stringify(body) });
+			expect((await limits({ members: 1 })).status).toBe(200);
+			expect((await put({ add: ["writer"] })).status).toBe(400);
+			expect((await limits({ members: 0 })).status).toBe(400);
+			expect((await limits({ members: 8 })).status).toBe(200);
 			expect((await put({ add: ["writer"] })).status).toBe(200);
 			expect((await api<GroupView>(`/groups/${room}`)).members).toEqual(["researcher", "writer"]);
 			expect((await put({ add: ["nobody"] })).status).toBe(400);
@@ -169,6 +173,15 @@ describe("groups", () => {
 				{ agent: "writer", removed: true },
 				{ agent: "writer", added: true },
 			]);
+			// archived, it leaves the band's list as archived and takes no message until restored
+			const archive = (archived: unknown) =>
+				call(`/groups/${room}/archive`, { method: "POST", body: JSON.stringify({ archived }) });
+			expect((await archive("yes")).status).toBe(400);
+			expect((await archive(true)).status).toBe(200);
+			expect((await api<GroupRow[]>("/groups"))[0]?.archived).toEqual(expect.any(Number));
+			expect((await post(room, { key: randomUUID(), text: "anyone?" })).status).toBe(400);
+			expect((await archive(false)).status).toBe(200);
+			expect((await api<GroupRow[]>("/groups"))[0]).not.toHaveProperty("archived");
 
 			// search finds it in the group, at its entry, and never in the member's own execution chat
 			const found = await api<SearchHit[]>(`/search?q=${encodeURIComponent("writer reply")}`);
