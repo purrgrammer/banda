@@ -10,6 +10,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell, Tray } from "electron";
+import { shellPath } from "./environment.js";
 import { failurePage, type Trouble, trouble } from "./trouble.js";
 
 const windows = process.platform === "win32";
@@ -124,11 +125,12 @@ async function ensureDaemon(): Promise<Published> {
 		if (running !== undefined) return running;
 	}
 	const { node, cli } = release();
+	const path = (await shellPath(node)) ?? process.env.PATH;
 	await mkdir(home, { recursive: true, mode: 0o700 });
 	// the daemon writes to a file, not to a pipe of ours: it must outlive this process without writing into a closed pipe
 	const output = openSync(log, "w", 0o600);
 	const child = spawn(node, [cli, "serve", "--port", String(port)], {
-		env: { ...process.env, BANDA_HOME: home, PATH: dockerPath(process.env.PATH) },
+		env: { ...process.env, BANDA_HOME: home, PATH: dockerPath(path) },
 		stdio: ["ignore", output, output],
 		detached: true,
 		windowsHide: true,

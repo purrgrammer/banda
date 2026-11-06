@@ -64,6 +64,8 @@ export type HarnessesView = {
 		readonly logo?: string;
 		readonly about?: string;
 		readonly install?: string;
+		/** The integration adapter is missing; the ordinary coding agent may already be installed. */
+		readonly adapterRequired?: boolean;
 	}[];
 	/** The folder each is connected in, and the agents it is on for. */
 	readonly accounts: { readonly [harness: string]: { readonly folder: string; readonly agents: readonly string[] } };
