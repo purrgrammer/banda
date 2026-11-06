@@ -6,28 +6,27 @@ check or owner review still pending means the gate is open.
 
 ## Required checks
 
-For the edit loop, use `npm run test:fast -- <test-file>` or `npm run test:fast` for all ordinary suites. This lane
-needs no Docker or process-kill sweeps. Test runs cap ordinary workers at two and fault files at one, with two child
-jobs per sweep. Separate agents may run targeted checks concurrently; coordinate full, deep and Docker checks so
-only one agent runs those expensive gates at a time. The fast lane does not replace the acceptance checks below.
+Local development runs the fast ordinary suites only: `npm test`, or `npm run test:fast -- <test-file>` during
+edits. Keep at most two test workers and use unique temp homes and OS-assigned ports. Fault sweeps and Docker
+suites run in CI, never as local pre-commit gates.
 
-Use the version in `mise.toml` and a clean lockfile install. Run these from the slice worktree, in order, without
-other heavy test runs competing for the machine:
+Use the version in `mise.toml` and a clean lockfile install. Before a slice commit, run:
 
 ```sh
 npm ci
 npm run check
 npm run typecheck
 npm test
-BANDA_PBT_RUNS=20 npm test
 npm run build
 npm run web:contrast
 ```
 
-All must pass before a slice commit, along with its targeted regression and fault tests. Docker tests may skip on
-an unsupported development machine, but cannot be skipped in slice acceptance for Docker changes or the release
-qualification environment. Raise `BANDA_PBT_FAULT_RUNS` when a reproduced rare path requires greater depth; retain
-the seed. Do not reduce existing property counts or timeouts merely to obtain a pass.
+These checks and the slice's ordinary regression tests must pass before committing. CI runs fault sweeps nightly
+at 02:17 UTC and Docker suites on pushes to main. Dispatch the `ci` workflow on a candidate ref when a change needs
+additional fault or Docker evidence before acceptance. Fault files run one at a time per shard, with at most two
+child jobs. Full/deep fault and Docker qualification belongs in CI, not on development machines. Increase
+`BANDA_PBT_FAULT_RUNS` in CI when a reproduced rare path requires greater depth and retain the seed; never reduce
+property counts or timeouts merely to obtain a pass. A local fast pass alone is not durability or Docker acceptance.
 
 Record the revision, runtime/dependency versions, OS/architecture, Docker availability, commands, exit codes,
 property seeds, fault boundaries, tested widths and owner review in the commit message. A passing run on another
@@ -130,7 +129,7 @@ explicit release instruction.
 
 ## Qualification workflow
 
-- Execute verification.md on the exact candidate revision and packaged artifact, including full/deep tests with Docker,
+- Execute verification.md on the exact candidate revision and packaged artifact, including full/deep fault and Docker checks in CI,
   adversarial review, restored-home testing and the sustained owner trial.
 - Triage defects by consequence. Every high/critical trust or data-loss finding blocks release; lower findings may
   remain only if the release contract still holds and the owner accepts their stated consequence.

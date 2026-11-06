@@ -41,18 +41,19 @@ account, object, harness, session, artifact, memory, box, workspace, gateway, in
 
 ## Setup and checks
 - Node 26, as `mise.toml` says (`mise install` gets it). `npm ci`, then `npm run check` (Biome: format and lint;
-  `npm run fix` applies it), `npm run typecheck` and `npm test` (vitest + fast-check). All green before every commit.
-- During edits use `npm run test:fast -- <test-file>`; `npm run test:fast` runs the ordinary suites without Docker
-  or process-kill sweeps. Runs use at most two test workers; fault suites run one file at a time with at most two
-  child jobs. Keep these caps when several agents share the machine. Use unique temp homes and OS-assigned ports.
-  `npm run test:faults` and `npm run test:docker` select the expensive checks; `npm test` still includes all three.
-  Coordinate full/deep/Docker runs so only one agent runs those gates at a time; targeted checks can run together.
+  `npm run fix` applies it), `npm run typecheck` and `npm test` (the fast ordinary suites). All green before every commit.
+- Fast tests only locally: `npm test` and `npm run test:fast` run the ordinary suites without Docker tests or
+  process-kill sweeps. During edits use `npm run test:fast -- <test-file>`. Keep at most two test workers and use
+  unique temp homes and OS-assigned ports. Do not run full/deep fault sweeps or Docker suites on development machines.
+- Fault suites run nightly in CI; Docker suites run in CI on pushes to main. For an additional fault or Docker check,
+  dispatch the `ci` workflow on the candidate ref. `npm run test:faults` and `npm run test:docker` are CI commands,
+  not local pre-commit gates. Fault suites run one file at a time with at most two child jobs per runner.
 - The web UI is in `web/`: `npm run build:web` builds what the daemon serves, `npm run web:dev` serves it with hot
   reload against a daemon on `BANDA_PORT`, `npm run web:contrast` audits the palette, and `#/specimen` shows every
   component. A new component or variant joins the specimen.
-- CI runs the ordinary suites on every push and pull request, and the fault and Docker suites on pushes to main, side
-  by side; `node scripts/prebuild-images.ts` builds the box's images under the tags banda looks for (in CI through
-  GitHub's layer cache).
+- CI runs ordinary suites on every push to main and pull request, fault sweeps nightly at 02:17 UTC, and Docker
+  suites on pushes to main. Manual CI runs select the fault and Docker suites. `node scripts/prebuild-images.ts`
+  builds the box's images under the tags banda looks for (in CI through GitHub's layer cache).
 - Releases: `npm run desktop:dev` opens the desktop app on a throwaway home; `npm run cli:pack` and
   `npm run desktop:pack` build this computer's release files into `release/`; a `v*` tag makes the release workflow
   draft a pre-release.
@@ -75,7 +76,7 @@ account, object, harness, session, artifact, memory, box, workspace, gateway, in
   a "details" disclosure, never on a consumer screen; `web-preview` renders untrusted content, so its iframe is
   sandboxed without `allow-same-origin` and never on the daemon's origin (it must not reach the token or the API),
   and its URL bar and console stay behind Developer mode.
-- Properties take their run counts from `test/pbt.ts`: `BANDA_PBT_RUNS=20 npm test` multiplies every suite, and
+- Properties take their run counts from `test/pbt.ts`: `BANDA_PBT_RUNS=20 npm test` multiplies the ordinary suites, and
   `BANDA_PBT_FAULT_RUNS` the fault-injection suites alone.
 - Tests use temp homes and pi-ai's faux provider; they never need network, keys or a live service. Tests that need
   Docker skip when it is not available.

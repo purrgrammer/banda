@@ -1,22 +1,25 @@
-# The checks AGENTS.md asks for before a commit, as jobs side by side: the ordinary suites on every push and pull
-# request; the fault sweeps (in six shards) and the Docker suite on pushes to main, the Docker one with the box's
-# images built first through GitHub's layer cache.
+# Ordinary checks on pushes and PRs; fault sweeps nightly; Docker on main pushes.
+# Manual CI runs provide both expensive suites without occupying local development machines.
 name: ci
 
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 2 * * *" # nightly at 02:17 UTC
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   check:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -35,7 +38,7 @@ jobs:
       - run: npm run build
 
   faults:
-    if: github.event_name == 'push'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     # one sweep can take minutes on a CI runner, so the suite is split by file across runners side by side
@@ -56,7 +59,7 @@ jobs:
       - run: npm run test:faults -- --shard=${{ matrix.shard }}/6
 
   docker:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
