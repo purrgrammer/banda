@@ -54,7 +54,7 @@ const AFTER_ASK: readonly HarnessStep[] = [
 	{ kind: "edit", path: "test/helpers/tokens.ts", added: 3, removed: 1 },
 	{
 		kind: "said",
-		text: "Fixed: refresh compared seconds with milliseconds. src/auth.ts converts once; the 6 auth tests pass. The token helper minted ms too, so I fixed it.",
+		text: "**Fixed:** refresh compared seconds with milliseconds.\n\n- `src/auth.ts` converts once; the 6 auth tests pass.\n- The token helper minted ms too, so I fixed it.",
 	},
 ];
 /** Folders as the daemon lists them, for the picker beside the field. */

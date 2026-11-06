@@ -157,8 +157,9 @@ export function HarnessActivitySheet({ tasks, onClose }: { tasks: readonly numbe
 	const [selected, setSelected] = useState<number | undefined>(tasks.length === 1 ? tasks[0] : undefined);
 	const session = sessions.find((one) => one.task === selected);
 	const now = useNow(sessions.some((one) => one.ended === undefined));
-	const agent =
-		companion === undefined ? undefined : chatAgents(agents, companion).find((one) => one.id === session?.agent)?.name;
+	const nameOf = (id: string | undefined) =>
+		companion === undefined ? undefined : chatAgents(agents, companion).find((one) => one.id === id)?.name;
+	const agent = nameOf(session?.agent);
 	return (
 		<Sheet
 			open
@@ -174,15 +175,13 @@ export function HarnessActivitySheet({ tasks, onClose }: { tasks: readonly numbe
 				<div className="flex flex-col gap-3 p-4">
 					{session === undefined ? (
 						sessions.map((one) => (
-							<Button
+							<HarnessCard
 								key={one.task}
-								variant="outline"
-								className="h-auto justify-start whitespace-normal text-left"
-								onClick={() => setSelected(one.task)}
-							>
-								{one.service} · session {one.task} ·{" "}
-								{(one.asks?.length ?? 0) > 0 ? "Waiting on you" : one.ended === undefined ? "Working" : "Finished"}
-							</Button>
+								session={viewOf(one, now, nameOf(one.agent))}
+								onStop={() => void attempt("stop it", () => stopHarness(one.task))}
+								onOpen={() => setSelected(one.task)}
+								onSteer={(text) => void attempt("send your note", () => steerHarness(one.task, text))}
+							/>
 						))
 					) : (
 						<>

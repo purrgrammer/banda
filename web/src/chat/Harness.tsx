@@ -27,26 +27,12 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/cn";
+import { Markdown } from "../components/Markdown.tsx";
 import { Tile } from "./Cards.tsx";
 import { Confirm } from "./Confirm.tsx";
+import { changesOf, type HarnessStep, headlineOf } from "./harness-steps.ts";
 
-/** One step of a session, as the harness reported it. */
-export type HarnessStep =
-	| { readonly kind: "asked"; readonly text: string }
-	| { readonly kind: "steered"; readonly text: string; readonly taken: boolean; readonly from?: "agent" }
-	| { readonly kind: "read"; readonly path: string }
-	| { readonly kind: "thought"; readonly text: string }
-	| {
-			readonly kind: "edit";
-			readonly path: string;
-			readonly added?: number;
-			readonly removed?: number;
-			readonly diff?: string;
-	  }
-	| { readonly kind: "run"; readonly command: string; readonly output?: string; readonly running?: boolean }
-	| { readonly kind: "waiting"; readonly command: string }
-	| { readonly kind: "decided"; readonly command: string; readonly allowed: boolean }
-	| { readonly kind: "said"; readonly text: string };
+export type { HarnessStep };
 
 export type HarnessState = "working" | "waiting" | "done" | "stopped" | "interrupted" | "failed";
 
@@ -95,51 +81,6 @@ export function HarnessMark({
 		// the logos are padded inside their box: a size up reads as large as GitHub's mark beside them
 		<img src={`/providers/${provider}.svg`} alt="" className={cn("size-6 dark:invert", className)} />
 	);
-}
-
-/** The one line the card shows for a step: a verb and what it acted on. */
-export function headlineOf(step: HarnessStep | undefined): { verb: string; object: string } {
-	switch (step?.kind) {
-		case "read":
-			return { verb: "Reading", object: step.path };
-		case "edit":
-			return { verb: "Editing", object: step.path };
-		case "run":
-			return { verb: step.running === false ? "Ran" : "Running", object: step.command };
-		case "waiting":
-			return { verb: "Waiting on you:", object: step.command };
-		case "thought":
-			return { verb: "Thinking", object: "" };
-		case "steered":
-			return { verb: step.from === "agent" ? "Taking a follow-up" : "Taking your note", object: "" };
-		case "decided":
-			return { verb: step.allowed ? "Going on: you allowed" : "Going on: you denied", object: step.command };
-		case "said":
-			return { verb: "Writing", object: "" };
-		default:
-			return { verb: "Starting", object: "" };
-	}
-}
-
-/**
- * Files it changed, counted once per path, with the lines added and removed across its edits: undefined counts once
- * any edit did not say, never a made-up zero.
- */
-export function changesOf(steps: readonly HarnessStep[]): { files: number; added?: number; removed?: number } {
-	const paths = new Set<string>();
-	let added: number | undefined = 0;
-	let removed: number | undefined = 0;
-	for (const step of steps) {
-		if (step.kind !== "edit") continue;
-		paths.add(step.path);
-		added = added === undefined || step.added === undefined ? undefined : added + step.added;
-		removed = removed === undefined || step.removed === undefined ? undefined : removed + step.removed;
-	}
-	return {
-		files: paths.size,
-		...(added === undefined ? {} : { added }),
-		...(removed === undefined ? {} : { removed }),
-	};
 }
 
 const live = (state: HarnessState) => state === "working" || state === "waiting";
@@ -407,8 +348,9 @@ export function HarnessCard({
 			</span>
 			{notes.length === 0 ? null : (
 				<ul className="flex flex-col gap-1">
-					{notes.map((note) => (
-						<li key={note.text} className="flex min-w-0 items-baseline gap-1.5 text-meta text-ink-2">
+					{notes.map((note, index) => (
+						// biome-ignore lint/suspicious/noArrayIndexKey: notes are append-only, and two may say the same
+						<li key={index} className="flex min-w-0 items-baseline gap-1.5 text-meta text-ink-2">
 							{note.from === "agent" ? (
 								<BotIcon aria-hidden="true" className="size-3 shrink-0 self-center" />
 							) : (
@@ -514,7 +456,13 @@ function Step({
 				</ChainOfThoughtStep>
 			);
 		case "said":
-			return at(MessageSquareIcon, <span className="text-ink-2">Said</span>, <p className="text-ui">{step.text}</p>);
+			return at(
+				MessageSquareIcon,
+				<span className="text-ink-2">Said</span>,
+				<div className="min-w-0 text-ui">
+					<Markdown>{step.text}</Markdown>
+				</div>,
+			);
 	}
 }
 

@@ -1,7 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { pbtRuns } from "../../../test/pbt.ts";
-import { changesOf, type HarnessStep, headlineOf } from "./Harness.tsx";
+import { changesOf, type HarnessStep, headlineOf } from "./harness-steps.ts";
 
 const edit = fc.record({
 	kind: fc.constant("edit" as const),
