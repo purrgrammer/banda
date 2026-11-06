@@ -1005,7 +1005,9 @@ export type ProviderRow = {
 
 /**
  * Settings' providers: each the band may think with. The one in use says so; a connected one is Use; one not connected
- * is Connect (a sign-in in its own tab, or a key here); any connected one signs out, asked first.
+ * is Connect (a sign-in in its own tab, or a key here); any connected one signs out, asked first. On a device (`here`
+ * false) only the connected ones show, to use or sign out of: a sign-in comes back to the computer banda runs on, so
+ * providers are connected there.
  */
 export function ModelProviders({
 	current,
@@ -1020,9 +1022,12 @@ export function ModelProviders({
 	onAnswer,
 	onWay,
 	onCancel,
+	here = true,
 }: {
 	/** The provider the band thinks with. */
 	current: string;
+	/** On the computer banda runs on, where providers are connected; false on a device. */
+	here?: boolean;
 	providers: readonly ProviderRow[];
 	/** The provider whose key form is open. */
 	open?: string | undefined;
@@ -1041,9 +1046,16 @@ export function ModelProviders({
 }) {
 	const connected = providers.filter((each) => each.connected);
 	return (
-		<Block title="Providers" note="Connect another to switch between them. Only the one in use sees what you ask.">
+		<Block
+			title="Providers"
+			note={
+				here
+					? "Connect another to switch between them. Only the one in use sees what you ask."
+					: "Connect another on the computer banda runs on. Only the one in use sees what you ask."
+			}
+		>
 			<Rows className="max-h-[min(24rem,50dvh)] overflow-y-auto overscroll-contain">
-				{providers.map((provider) => {
+				{(here ? providers : connected).map((provider) => {
 					const using = provider.id === current;
 					const next = connected.find((each) => each.id !== provider.id);
 					// an ambient credential is connected but never ours: connecting over it is still a sign-in
@@ -1107,7 +1119,7 @@ export function ModelProviders({
 													Sign out
 												</Button>
 											</Confirm>
-										) : (
+										) : !here ? null : (
 											<Button
 												variant="outline"
 												size="xs"
@@ -1122,7 +1134,7 @@ export function ModelProviders({
 									</span>
 								}
 							/>
-							{provider.id === open && (!provider.connected || ambient) ? (
+							{here && provider.id === open && (!provider.connected || ambient) ? (
 								<ProviderKeyForm
 									provider={provider}
 									action="Connect"
@@ -1131,7 +1143,7 @@ export function ModelProviders({
 									onKey={onKey}
 								/>
 							) : null}
-							{signing ? (
+							{here && signing ? (
 								<ProviderSignIn
 									provider={provider}
 									asks={provider.asks}
