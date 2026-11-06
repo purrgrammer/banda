@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { HarnessSessionView } from "../../../src/server/api.ts";
-import { askNotice, askWords, chatActivity, harnessActivity } from "./harness-activity.ts";
+import { askNotice, askWords, chatActivity, harnessActivity, shownAsks } from "./harness-activity.ts";
 
 const one: HarnessSessionView = {
 	task: 1,
@@ -38,6 +38,19 @@ it("labels an ask's buttons by its kind, never by the harness's own option names
 	expect(askWords("delete").no).toBe("Don't change");
 	expect(askWords("fetch")).toEqual({ what: "Open a web page", verb: "Allow", no: "Don't open" });
 	expect(askWords("other")).toEqual({ what: "Do something", verb: "Allow", no: "Don't allow" });
+});
+it("shows the asks the owner opened, by id, and always the oldest: a resolved ask moves no button", () => {
+	const a = { id: "a" };
+	const b = { id: "b" };
+	const c = { id: "c" };
+	expect(shownAsks([a, b, c], new Set())).toEqual({ visible: [a], folded: [b, c] });
+	expect(shownAsks([a, b, c], new Set(["b"]))).toEqual({ visible: [a, b], folded: [c] });
+	// the first ask resolves while the owner opens the next: what they opened stays open, nothing else unfolds
+	expect(shownAsks([b, c], new Set(["b"]))).toEqual({ visible: [b], folded: [c] });
+	expect(shownAsks([b, c], new Set())).toEqual({ visible: [b], folded: [c] });
+	// an opened ask that resolved leaves a stale id behind, harmlessly
+	expect(shownAsks([c], new Set(["b"]))).toEqual({ visible: [c], folded: [] });
+	expect(shownAsks([], new Set(["b"]))).toEqual({ visible: [], folded: [] });
 });
 it("notifies with the harness, the kind and the project, never the command or the path", () => {
 	expect(askNotice([one])).toBeUndefined();

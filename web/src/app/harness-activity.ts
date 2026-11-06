@@ -31,6 +31,21 @@ export const askWords = (kind: string): { what: string; verb: string; no: string
 };
 
 /**
+ * Which asks show whole: every one the owner opened, by id, and always the oldest. What is open is what the owner
+ * opened, never a count: an ask resolving elsewhere can fold nothing open and open nothing folded, so a button never
+ * turns into another ask's primary button under the pointer.
+ */
+export function shownAsks<T extends { readonly id: string }>(
+	asks: readonly T[],
+	opened: ReadonlySet<string>,
+): { visible: readonly T[]; folded: readonly T[] } {
+	return {
+		visible: asks.filter((ask, index) => index === 0 || opened.has(ask.id)),
+		folded: asks.filter((ask, index) => index !== 0 && !opened.has(ask.id)),
+	};
+}
+
+/**
  * The device notification's body for harness asks: the harness, what kind of thing it asks, and the project by name;
  * never the command or the path, which would sit in a banner on a lock screen.
  */

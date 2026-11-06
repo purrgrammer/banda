@@ -14,7 +14,7 @@ import type { HarnessAsk, HarnessSessionView } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { chatAgents } from "../lib/navigation.ts";
 import { useShell } from "../lib/shell.ts";
-import { askSummary, askWords } from "./harness-activity.ts";
+import { askSummary, askWords, shownAsks } from "./harness-activity.ts";
 
 const clock = (ms: number) => {
 	const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -103,17 +103,33 @@ function Clamped({ text, title, children }: { text: string; title: string; child
 	);
 }
 
+/** False until `key` has held still a moment: a button that just appeared or moved takes no click meant for another. */
+function useSettled(key: string, ms = 600): boolean {
+	const [settled, setSettled] = useState(false);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the key names what must hold still; its change restarts the clock
+	useEffect(() => {
+		setSettled(false);
+		const timer = setTimeout(() => setSettled(true), ms);
+		return () => clearTimeout(timer);
+	}, [key, ms]);
+	return settled;
+}
+
 /** One of the harness's open asks: what it would do, all of it the owner must see, Allow or not. */
 function HarnessAskCard({
 	session,
 	ask,
+	place,
 	agentName,
 }: {
 	session: HarnessSessionView;
 	ask: HarnessAsk;
+	/** Its position among the open asks: the buttons rest while the card appears or moves under the pointer. */
+	place: number;
 	agentName?: string | undefined;
 }) {
 	const words = askWords(ask.kind);
+	const settled = useSettled(`${ask.id}:${place}`);
 	return (
 		<ApprovalCard
 			agent={session.service}
@@ -144,6 +160,7 @@ function HarnessAskCard({
 					)}
 				</>
 			}
+			disabled={!settled}
 			onApprove={() => attempt("allow it", () => answerHarness(session.task, ask.id, true))}
 			onDecline={() => attempt("refuse it", () => answerHarness(session.task, ask.id, false))}
 		/>
@@ -155,19 +172,32 @@ function HarnessAskCard({
  * approved. There is no approve-all.
  */
 export function HarnessAsks({ session, agentName }: { session: HarnessSessionView; agentName?: string | undefined }) {
-	const [shown, setShown] = useState(1);
+	const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
 	const asks = session.asks ?? [];
 	if (asks.length === 0) return null;
-	const visible = asks.slice(0, Math.max(1, Math.min(shown, asks.length)));
-	const rest = asks.slice(visible.length);
+	const { visible, folded } = shownAsks(asks, opened);
 	return (
 		<>
 			{visible.map((ask) => (
-				<HarnessAskCard key={ask.id} session={session} ask={ask} agentName={agentName} />
+				<HarnessAskCard
+					key={ask.id}
+					session={session}
+					ask={ask}
+					place={asks.findIndex((one) => one.id === ask.id)}
+					agentName={agentName}
+				/>
 			))}
-			{rest.length === 0 ? null : (
-				<Button variant="outline" size="sm" className="self-start" onClick={() => setShown((count) => count + 1)}>
-					{rest.length} more waiting · {rest.map((ask) => askSummary(ask.kind)).join(" · ")}
+			{folded.length === 0 ? null : (
+				<Button
+					variant="outline"
+					size="sm"
+					className="self-start"
+					onClick={() => {
+						const next = folded[0];
+						if (next !== undefined) setOpened((prior) => new Set(prior).add(next.id));
+					}}
+				>
+					{folded.length} more waiting · {folded.map((ask) => askSummary(ask.kind)).join(" · ")}
 				</Button>
 			)}
 		</>
