@@ -1,13 +1,18 @@
 import fc from "fast-check";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { pbtRuns } from "../../../test/pbt.ts";
 import {
 	changesOf,
 	cleanCommand,
+	type HarnessSessionView,
 	type HarnessStep,
+	HarnessTranscript,
 	headlineOf,
 	middleEllipsis,
 	projectOf,
+	stepKey,
 	toggledStep,
 } from "./Harness.tsx";
 
@@ -129,6 +134,88 @@ describe("projectOf", () => {
 		expect(projectOf("~/code/banda")).toBe("banda");
 		expect(projectOf("/Users/ana/sancho/")).toBe("sancho");
 		expect(projectOf("~")).toBe("~");
+	});
+});
+
+describe("HarnessTranscript, as it opens", () => {
+	const session: HarnessSessionView = {
+		harness: "Claude Code",
+		provider: "anthropic",
+		folder: "~/sancho",
+		state: "working",
+		elapsed: "0:42",
+		steps: [
+			{ kind: "asked", text: `Fix the auth test.\n${"It fails on main. ".repeat(20)}` },
+			{ kind: "steered", text: "Keep the diff small", taken: true },
+			{ kind: "read", path: "test/auth.spec.ts" },
+			{ kind: "thought", text: "Refresh compares seconds with milliseconds." },
+			{ kind: "edit", path: "src/auth.ts", added: 2, removed: 1, diff: "- a\n+ b" },
+			{ kind: "decided", command: "npm test", allowed: true },
+			{ kind: "run", command: "npm test -- auth.spec.ts", output: "6 passed", running: true },
+			{ kind: "waiting", command: "cd /Users/sam/sancho && git push origin main" },
+			{ kind: "said", text: "Fixed: refresh compared seconds with milliseconds." },
+		],
+	};
+	it("folds every step, the last and the streaming ones included: none is born expanded", () => {
+		const html = renderToStaticMarkup(createElement(HarnessTranscript, { session }));
+		expect(html).not.toContain('aria-expanded="true"');
+		expect(html).not.toContain("data-terminal"); // a run's Terminal only exists once opened
+		expect(html).not.toContain("6 passed"); // its output too
+		expect(html).not.toContain("+ b"); // an edit's diff too
+		expect(html).not.toContain("cd /Users/sam/sancho"); // the raw command too: its row says it in words, cleaned
+	});
+	it("shows what was asked at three lines with Show all, with no click to see it", () => {
+		const html = renderToStaticMarkup(createElement(HarnessTranscript, { session }));
+		expect(html).toContain("line-clamp-3");
+		expect(html).toContain("Show all");
+		expect(html).toContain("Fix the auth test.");
+	});
+});
+
+describe("stepKey", () => {
+	const kinds = ["read", "run", "edit", "said", "thought"] as const;
+	const stepOf = (n: number): HarnessStep => {
+		const kind = kinds[n % kinds.length] as (typeof kinds)[number];
+		return kind === "read"
+			? { kind, path: `f${n}` }
+			: kind === "run"
+				? { kind, command: `c${n}` }
+				: kind === "edit"
+					? { kind, path: `f${n}` }
+					: { kind, text: `t${n}` };
+	};
+	it("never moves a kept step's key while the daemon drops old ones and more stream in", () => {
+		fc.assert(
+			fc.property(fc.nat(60), fc.nat(40), fc.nat(10), (count, drop, grow) => {
+				const steps: HarnessStep[] = [
+					{ kind: "asked", text: "do it" },
+					...Array.from({ length: count }, (_, n) => stepOf(n)),
+				];
+				const before = new Map(steps.map((step, index) => [step, stepKey(step, index, 0)]));
+				// the daemon keeps the first step (the ask) and drops the next `drop`, then `grow` more arrive
+				const dropped = Math.min(drop, steps.length - 1);
+				const after = [
+					steps[0] as HarnessStep,
+					...steps.slice(1 + dropped),
+					...Array.from({ length: grow }, (_, n) => stepOf(count + n)),
+				];
+				const keys = after.map((step, index) => stepKey(step, index, dropped));
+				// a surviving step keeps its key; a new step never inherits one
+				after.forEach((step, index) => {
+					const prior = before.get(step);
+					if (prior !== undefined) expect(keys[index]).toBe(prior);
+					else expect(before.has(step)).toBe(false);
+				});
+				expect(new Set(keys).size).toBe(keys.length);
+			}),
+			{ numRuns: pbtRuns(100) },
+		);
+	});
+	it("gives a step that arrives later a key no earlier step ever had", () => {
+		const steps: HarnessStep[] = [{ kind: "asked", text: "do it" }, ...Array.from({ length: 5 }, (_, n) => stepOf(n))];
+		const had = new Set(steps.map((step, index) => stepKey(step, index, 3)));
+		const fresh = stepKey(stepOf(99), steps.length, 3);
+		expect(had.has(fresh)).toBe(false);
 	});
 });
 

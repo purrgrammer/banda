@@ -19,7 +19,7 @@ import {
 	UserIcon,
 	XIcon,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChainOfThought, ChainOfThoughtContent, ChainOfThoughtStep } from "@/components/ai-elements/chain-of-thought";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
@@ -66,6 +66,8 @@ export type HarnessSessionView = {
 	readonly folder: string;
 	readonly state: HarnessState;
 	readonly steps: readonly HarnessStep[];
+	/** How many older steps the daemon dropped: with it, a kept step's place never moves while more stream in. */
+	readonly dropped?: number | undefined;
 	/** How long it has run: "1:48". */
 	readonly elapsed: string;
 	/** Its last words once it ended, first line only. */
@@ -234,6 +236,15 @@ export function announceOf(state: HarnessState, harness: string): string {
 		default:
 			return `${harness} stopped`;
 	}
+}
+
+/**
+ * A step's identity while the session streams: its kind at its absolute place. The daemon drops old steps (the first,
+ * the ask, always kept), so a relative index moves; `dropped` pins it. A key saved as expanded never lands on a
+ * different step, and a step that arrives later can never inherit one.
+ */
+export function stepKey(step: HarnessStep, index: number, dropped = 0): string {
+	return `${step.kind}:${index === 0 ? 0 : dropped + index}`;
 }
 
 /** The sheet's expanded steps, toggled one at a time: a step stays open while new ones arrive. */
@@ -588,13 +599,32 @@ export function HarnessCard({
 	);
 }
 
-/** A long text behind three lines and "Show all": nothing is cut, only folded. */
+/**
+ * A long text behind three lines and "Show all": nothing is cut, only folded. Whether the clamp cut anything is
+ * measured, not guessed: a narrow screen wraps sooner, and a cut with no way to the rest would lose words.
+ */
 function ClampedText({ text, muted = false }: { text: string; muted?: boolean }) {
 	const [all, setAll] = useState(false);
-	const long = text.split("\n").length > 3 || text.length > 240;
+	const [cut, setCut] = useState(false);
+	const ref = useRef<HTMLParagraphElement>(null);
+	useEffect(() => {
+		if (all) return;
+		const element = ref.current;
+		if (element === null) return;
+		const measure = () => setCut(element.scrollHeight > element.clientHeight + 1);
+		measure();
+		const watcher = new ResizeObserver(measure);
+		watcher.observe(element);
+		return () => watcher.disconnect();
+	}, [all]);
+	// the measure is the truth once mounted; the static guess covers server renders
+	const long = cut || text.split("\n").length > 3 || text.length > 240;
 	return (
 		<div className="flex flex-col items-start gap-1">
-			<p className={cn("text-ui whitespace-pre-wrap", muted ? "text-ink-2" : "text-ink", !all && "line-clamp-3")}>
+			<p
+				ref={ref}
+				className={cn("text-ui whitespace-pre-wrap", muted ? "text-ink-2" : "text-ink", !all && "line-clamp-3")}
+			>
 				{text}
 			</p>
 			{long && !all ? (
@@ -615,19 +645,20 @@ function Raw({ text }: { text: string }) {
 	);
 }
 
-/** One step as a one-line row: its icon, its phrase, and what expands. */
+/** One step as a one-line row: its icon, its phrase, and what expands. `always` shows folded or not: the ask. */
 function stepLine(
 	step: HarnessStep,
 	folder: string,
 	agent?: string,
-): { icon: LucideIcon; words: ReactNode; detail?: ReactNode } {
+): { icon: LucideIcon; words: ReactNode; detail?: ReactNode; always?: ReactNode } {
 	const oneline = (text: string) => text.replace(/\s+/g, " ").trim();
 	switch (step.kind) {
 		case "asked":
+			// what was asked is the session's point: three lines always, "Show all" for the rest, never a click to see it
 			return {
 				icon: MessageSquareIcon,
-				words: <HeadWords verb="Asked" object={oneline(step.text)} code={false} />,
-				detail: <ClampedText text={step.text} />,
+				words: <span className="shrink-0 text-ink-2">Asked</span>,
+				always: <ClampedText text={step.text} />,
 			};
 		case "steered":
 			return {
@@ -726,34 +757,39 @@ function StepRow({
 	onToggle: () => void;
 }) {
 	const status = step.kind === "waiting" ? "active" : last && working ? "active" : "complete";
-	const { icon, words, detail } = stepLine(step, folder, agent);
+	const { icon, words, detail, always } = stepLine(step, folder, agent);
 	if (detail === undefined)
 		return (
 			<ChainOfThoughtStep
 				icon={icon}
 				status={status}
 				label={<span className="flex min-w-0 items-baseline gap-1.5">{words}</span>}
-			/>
+			>
+				{always}
+			</ChainOfThoughtStep>
 		);
 	return (
 		<ChainOfThoughtStep
 			icon={icon}
 			status={status}
 			label={
+				// the touch target grows by an invisible halo (±13px: 44px on an 18px row), never by moving the text off
+				// the icon's line; expanded content stays in this text column, aligned with the words, not the icon
 				<button
 					type="button"
 					aria-expanded={open}
 					onClick={onToggle}
-					className="-mx-1 flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-field px-1 py-0.5 text-left outline-none hover:bg-paper-2 focus-visible:outline-[1.5px] focus-visible:outline-offset-2 focus-visible:outline-focus pointer-coarse:min-h-11 max-sm:min-h-11"
+					className="relative -mx-1 flex w-full min-w-0 cursor-pointer items-start gap-1.5 rounded-field px-1 text-left outline-none before:absolute before:inset-x-0 before:inset-y-0 hover:bg-paper-2 focus-visible:outline-[1.5px] focus-visible:outline-offset-2 focus-visible:outline-focus pointer-coarse:before:-inset-y-[13px] max-sm:before:-inset-y-[13px]"
 				>
 					<span className="flex min-w-0 flex-1 items-baseline gap-1.5">{words}</span>
-					<ChevronDownIcon
-						aria-hidden="true"
-						className={cn(
-							"size-3.5 shrink-0 text-ink-3 transition-transform motion-reduce:transition-none",
-							open && "rotate-180",
-						)}
-					/>
+					<span aria-hidden="true" className="flex h-[1.125rem] shrink-0 items-center">
+						<ChevronDownIcon
+							className={cn(
+								"size-3.5 shrink-0 text-ink-3 transition-transform motion-reduce:transition-none",
+								open && "rotate-180",
+							)}
+						/>
+					</span>
 				</button>
 			}
 		>
@@ -812,7 +848,7 @@ export function HarnessTranscript({
 		<ChainOfThought open>
 			<ChainOfThoughtContent>
 				{session.steps.map((step, index) => {
-					const key = `${step.kind}:${index}`;
+					const key = stepKey(step, index, session.dropped);
 					return (
 						<StepRow
 							key={key}
@@ -852,7 +888,7 @@ export function HarnessTranscript({
 					{steps}
 					{tail}
 				</ConversationContent>
-				<ConversationScrollButton />
+				<ConversationScrollButton label="Jump to latest" />
 			</Conversation>
 			{steer}
 		</div>

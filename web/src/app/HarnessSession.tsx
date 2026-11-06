@@ -42,6 +42,7 @@ const viewOf = (session: HarnessSessionView, now: number, agent: string | undefi
 	...(session.provider === undefined ? {} : { provider: session.provider }),
 	...(session.logo === undefined ? {} : { logo: session.logo }),
 	folder: session.folder,
+	dropped: session.dropped,
 	state:
 		session.state === "starting"
 			? "working"
