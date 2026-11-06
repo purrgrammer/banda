@@ -37,6 +37,7 @@ import { ActivityLog } from "./core/activity.ts";
 import { Accepted, AgentChats, agentPath } from "./core/agents.ts";
 import { stopArchived } from "./core/archive.ts";
 import type { EffectTool } from "./core/ask.ts";
+import { askHostsTool } from "./core/ask-hosts.ts";
 import { avatarInstructionsExtension } from "./core/avatar-instructions.ts";
 import { BlobStore, Blobs, safeName } from "./core/blobs.ts";
 import { ChatReads, readChat } from "./core/chat-reads.ts";
@@ -50,7 +51,7 @@ import { type Gateway, INLINE_IMAGES, mimeOf, OWNER, routeKey } from "./core/gat
 import { guardImages } from "./core/images.ts";
 import { MemoryLock, memoryExtension } from "./core/memory.ts";
 import { nowExtension } from "./core/now.ts";
-import { onPermissions, Permissions, revoke } from "./core/permissions.ts";
+import { allowHost, onPermissions, Permissions, revoke } from "./core/permissions.ts";
 import { FileCredentialStore } from "./core/provider-credentials.ts";
 import { Control, RoutineRefused, Routines } from "./core/routines.ts";
 import { Search } from "./core/search.ts";
@@ -366,7 +367,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			);
 		// a request the egress proxy held is sent only as an approved draft, or within a permission over its route
 		const effects = [
-			...(agentBox.egress === undefined ? [] : [proposeSendTool(agentBox.egress)]),
+			...(agentBox.egress === undefined ? [] : [proposeSendTool(agentBox.egress), askHostsTool()]),
 			...(options.effects ?? []),
 		];
 		if (effects.length > 0)
@@ -712,6 +713,15 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						const dismissed = await dismissQuestion(open, key, { gateway: "web", peer: OWNER }, "bearer");
 						if ("refused" in dismissed) throw new BadRequest(dismissed.refused);
 						return { chat: dismissed.chat };
+					},
+					allowHost: async (agent, host) => {
+						const now = Date.now();
+						const allowed = await allowHost(open, agent, host, now);
+						if ("refused" in allowed) throw new BadRequest(allowed.refused);
+						// the proxy is told before the owner hears it is allowed; if it cannot be, it is tried again
+						// with every change, and a write there is held meanwhile, never sent unrecorded
+						await tellProxy().catch(() => undefined);
+						return control(open, workspace, now);
 					},
 					revoke: async (id) => {
 						const now = Date.now();

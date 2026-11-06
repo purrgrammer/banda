@@ -288,16 +288,51 @@ def own_credentials(headers, path=""):
     return any(key.strip().lower() in SECRET_QUERY for key in parse_qs(query, keep_blank_values=True))
 
 
+def host_covers(allowed, spelled):
+    """
+    Whether the allowed host `allowed` covers `spelled`, both as `permitted_host` spells them: the same, or a pattern
+    whose name is `*` (every host) or `*.example.com` (any name under example.com, never example.com itself), with the
+    same scheme and port.
+    """
+    if allowed == spelled:
+        return True
+
+    def split(value):
+        scheme, sep, rest = value.partition("://")
+        if not sep:
+            scheme, rest = "https", value
+        if rest.startswith("["):
+            close = rest.find("]")
+            return scheme, rest[: close + 1], rest[close + 1 :]
+        named, colon, port = rest.partition(":")
+        return scheme, named, colon + port
+
+    scheme, named, port = split(allowed)
+    if not named.startswith("*"):
+        return False
+    other_scheme, other_name, other_port = split(spelled)
+    if (scheme, port) != (other_scheme, other_port) or other_name.startswith("["):
+        return False
+    return named == "*" or (named.startswith("*.") and other_name.endswith(named[1:]))
+
+
 def direct_write(scheme, host, port, headers, path, permitted):
     """
     Whether a write goes straight through, as it happens: its host is one the owner allowed for its chat's agent
-    (`permitted`, which the daemon's config names for that chat), it carries no credential of its own (the floor), and
-    it is no WebSocket upgrade (a stream, never one request). Anything else is held.
+    (`permitted`, which the daemon's config names for that chat, exactly or by a pattern `host_covers` reads), and it
+    carries no credential of its own (the floor). A WebSocket upgrade there opens a stream, recorded as it opens.
+    Anything else is held.
     """
-    if permitted_host(scheme, host, port) not in permitted or own_credentials(headers, path):
+    spelled = permitted_host(scheme, host, port)
+    if not any(host_covers(allowed, spelled) for allowed in permitted):
         return False
+    return not own_credentials(headers, path)
+
+
+def is_websocket(headers):
+    """Whether a request asks to become a WebSocket."""
     upgrade = ",".join(value for key, value in headers if key.lower() == "upgrade")
-    return "websocket" not in upgrade.lower()
+    return "websocket" in upgrade.lower()
 
 
 def held_words(ticket, scheme, host, port, headers, path=""):
@@ -306,9 +341,14 @@ def held_words(ticket, scheme, host, port, headers, path=""):
     if own_credentials(headers, path):
         return f"{said} It carries a credential of its own, so the owner is asked every time."
     allowed = permitted_host(scheme, host, port)
+    if is_websocket(headers):
+        return (
+            f"{said} A WebSocket is a stream, never sent as one request: ask the owner to allow {allowed} with "
+            "ask_hosts (with every other host the task needs), then run the command again."
+        )
     return (
-        f"{said} Ask the owner to allow {allowed} (propose_send with this ticket offers 'Always allow {allowed}'), "
-        "then run the command again."
+        f"{said} Ask the owner to allow {allowed} (propose_send with this ticket offers 'Always allow {allowed}'; "
+        "ask_hosts asks for several hosts at once), then run the command again."
     )
 
 

@@ -46,7 +46,8 @@ describe("agent files", () => {
 		]);
 		const helper = parseAgent("helper", "---\ndescription: x\ntools: [read, bash, read]\n---\n");
 		if (!("agent" in helper)) throw new Error(helper.errors.join("; "));
-		expect(toolsOf(helper.agent, ["write"])).toEqual([...EVERY_AGENT, "read", "bash"]);
+		// it runs commands, so it may ask about what its proxy held
+		expect(toolsOf(helper.agent, ["write"])).toEqual([...EVERY_AGENT, "read", "bash", "propose_send", "ask_hosts"]);
 		expect(toolsOf({ ...helper.agent, tools: [] }, [])).toEqual([...EVERY_AGENT]);
 	});
 
@@ -233,7 +234,7 @@ describe("a chat runs its agent", () => {
 			(await tx.doc(Accepted)).files[agentPath("reader")] = { sha: shaOf(changed), text: changed, at: 1 };
 			await core.agentChanged(tx, "reader");
 		}, context);
-		expect((await agentOf()).tools).toEqual([...EVERY_AGENT, "read", "bash"]);
+		expect((await agentOf()).tools).toEqual([...EVERY_AGENT, "read", "bash", "propose_send", "ask_hosts"]);
 		expect((await harness.snapshot(ChatAgent, got.chat as ConversationId, context))?.agent?.instructions).toBe(
 			"New instructions.",
 		);

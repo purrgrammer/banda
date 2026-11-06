@@ -7,9 +7,11 @@
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { CapabilitiesView, ControlView, PermissionView } from "../../../src/server/api.ts";
-import { Block, type ConnectionRow, Connections, Permissions } from "../chat/Settings.tsx";
-import { revokePermission, switchAccount, switchPublicConnection } from "../lib/api.ts";
+import { Confirm } from "../chat/Confirm.tsx";
+import { Block, type ConnectionRow, Connections, Permissions, RowOf, Rows } from "../chat/Settings.tsx";
+import { allowHost, revokePermission, switchAccount, switchPublicConnection } from "../lib/api.ts";
 import { showCapabilities, showControl, useShell } from "../lib/shell.ts";
 import { ConnectFlow } from "./ConnectFlow.tsx";
 import { AddHarnessButton, HarnessAccessTile } from "./HarnessConnections.tsx";
@@ -74,8 +76,13 @@ export function AccessTab({
 	const used = rows
 		.map((row) => ({ ...row, accounts: row.accounts.filter((account) => account.on) }))
 		.filter((row) => row.accounts.length > 0);
-	const permissions = (control?.permissions ?? [])
-		.filter((permission) => permission.agent === agent.id)
+	const theirs = (control?.permissions ?? []).filter((permission) => permission.agent === agent.id);
+	// a host allowed is listed with Allow a host, not among the other permissions
+	const hosts = theirs.flatMap((permission) =>
+		permission.host === undefined ? [] : [{ id: permission.id, host: permission.host }],
+	);
+	const permissions = theirs
+		.filter((permission) => permission.host === undefined)
 		.map((permission) => ({ id: permission.id, what: permission.what, scope: scopeWords(permission) }));
 	return (
 		<>
@@ -127,7 +134,99 @@ export function AccessTab({
 						.catch(() => {})
 				}
 			/>
+			<AllowHost agent={agent} hosts={hosts} />
 		</>
+	);
+}
+
+/**
+ * Allow this agent a host as the owner, not answering an ask: anything it sends there goes straight through,
+ * WebSockets included (a relay, a live API). `*.example.com` covers every name under it, `*` every host.
+ */
+function AllowHost({
+	agent,
+	hosts,
+}: {
+	agent: { readonly id: string; readonly name: string };
+	hosts: readonly { readonly id: string; readonly host: string }[];
+}) {
+	const [host, setHost] = useState("");
+	const [error, setError] = useState<string | undefined>(undefined);
+	const [busy, setBusy] = useState(false);
+	const every = host.trim() === "*" || /^[a-z]+:\/\/\*(?::\d+)?\/?$/i.test(host.trim());
+	return (
+		<Block
+			title="Hosts"
+			note={`Anything ${agent.name} sends there goes straight through, without asking you, WebSockets included. Use *.example.com for every name under it, or * for every host.`}
+		>
+			{hosts.length === 0 ? (
+				<p className="rounded-field bg-paper-2 px-3.5 py-3 text-ui text-ink-2">
+					{`None yet: ${agent.name} asks before sending anywhere.`}
+				</p>
+			) : (
+				<Rows>
+					{hosts.map(({ id, host: allowed }) => (
+						<RowOf
+							key={id}
+							title={allowed === "*" ? "Every host" : allowed}
+							detail="Always"
+							end={
+								<Confirm
+									title="Take this back?"
+									body={`${agent.name} will ask you again before sending to ${allowed === "*" ? "any host" : allowed}.`}
+									action="Revoke"
+									keep="Keep it"
+									onConfirm={() =>
+										void revokePermission(id)
+											.then(showControl)
+											.catch((failed: unknown) => setError(failed instanceof Error ? failed.message : String(failed)))
+									}
+								>
+									<Button variant="destructive" size="xs">
+										Revoke
+									</Button>
+								</Confirm>
+							}
+						/>
+					))}
+				</Rows>
+			)}
+			<form
+				className="flex gap-2"
+				onSubmit={(event) => {
+					event.preventDefault();
+					if (host.trim() === "" || busy) return;
+					setBusy(true);
+					setError(undefined);
+					void allowHost(agent.id, host)
+						.then((after) => {
+							showControl(after);
+							setHost("");
+						})
+						.catch((failed: unknown) => setError(failed instanceof Error ? failed.message : String(failed)))
+						.finally(() => setBusy(false));
+				}}
+			>
+				<Input
+					aria-label="Host to allow"
+					placeholder="relay.example.com"
+					value={host}
+					autoCapitalize="none"
+					autoCorrect="off"
+					spellCheck={false}
+					onChange={(event) => setHost(event.target.value)}
+				/>
+				<Button type="submit" variant="outline" disabled={host.trim() === "" || busy}>
+					Allow
+				</Button>
+			</form>
+			{every ? (
+				<p className="text-meta text-danger">
+					{`* lets ${agent.name} send anything anywhere on the internet without asking you.`}
+				</p>
+			) : null}
+			{error === undefined ? null : <p className="text-meta text-danger">{error}</p>}
+		</Block>
 	);
 }
 
