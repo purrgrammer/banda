@@ -1,0 +1,35 @@
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { expect, it } from "vitest";
+
+it("deploys all landing changes since the last deployment, even beneath an unrelated tip commit", async () => {
+	const { ignoreCommand } = JSON.parse(await readFile(new URL("../vercel.json", import.meta.url), "utf8"));
+	const cwd = await mkdtemp(join(tmpdir(), "banda-site-deploy-"));
+	const git = (...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+	const decision = (previous: string) =>
+		spawnSync("sh", ["-c", ignoreCommand], { cwd, env: { ...process.env, VERCEL_GIT_PREVIOUS_SHA: previous } }).status;
+	try {
+		git("init", "--quiet");
+		git("config", "user.name", "Test");
+		git("config", "user.email", "test@example.test");
+		await mkdir(join(cwd, "site"));
+		await writeFile(join(cwd, "site/index.html"), "old downloads");
+		git("add", ".");
+		git("-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "deployed");
+		const deployed = git("rev-parse", "HEAD");
+		expect(decision(deployed)).toBe(0);
+		await writeFile(join(cwd, "site/index.html"), "direct downloads");
+		git("commit", "-am", "landing", "--no-gpg-sign", "--quiet");
+		await writeFile(join(cwd, "unrelated.txt"), "other change");
+		git("add", ".");
+		git("commit", "-m", "unrelated tip", "--no-gpg-sign", "--quiet");
+		expect(decision(deployed)).toBe(1);
+		expect(decision("")).not.toBe(0);
+		expect(decision("missing-commit")).not.toBe(0);
+		expect(decision(git("rev-parse", "HEAD"))).toBe(0);
+	} finally {
+		await rm(cwd, { recursive: true, force: true });
+	}
+});
