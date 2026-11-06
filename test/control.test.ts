@@ -21,6 +21,7 @@ async function start() {
 	const models = createModels();
 	models.setProvider(faux.provider);
 	faux.setResponses([
+		fauxAssistantMessage([fauxToolCall("tool_search", { query: "schedule", limit: 1 })], { stopReason: "toolUse" }),
 		fauxAssistantMessage(
 			[
 				fauxToolCall(

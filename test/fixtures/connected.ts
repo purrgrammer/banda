@@ -40,8 +40,11 @@ export async function openConnected({
 	fault,
 	install,
 	shipped,
+	registry = createRegistry(),
 }: {
 	home: string;
+	/** The full daemon exposure policy when a test exercises discovery as well as connection admission. */
+	registry?: ReturnType<typeof createRegistry>;
 	/** Installs more tools, given the core, before the store opens (the browser's, for its fault suite). */
 	install?: (core: ReturnType<typeof defineCore>, registry: ReturnType<typeof createRegistry>) => void;
 	/** The model: each request answered by this. */
@@ -56,7 +59,6 @@ export async function openConnected({
 	const models = createModels();
 	models.setProvider(faux.provider);
 	faux.setResponses(Array.from({ length: 2000 }, () => respond));
-	const registry = createRegistry();
 	const names = () =>
 		registry
 			.snapshot()

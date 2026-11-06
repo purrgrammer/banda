@@ -278,7 +278,9 @@ The body is its personality, a prompt section. Every direct agent chat gets the 
 its browser, memory, routines, watches and `message_user`, plus `message_agent`, `read_agent_chat`, `propose_agent`,
 `propose_group` and `propose_agent_change`. Group executions do not get these direct-chat tools.
 What distinguishes agents is personality, connections, routines, watches and memory. An agent never gets a connection's
-tools its file does not name. A tool that asks the owner to accept something is named `propose_<what>`; a tool that acts
+tools its file does not name. Enabled tools need not all be offered upfront: secondary tools are discovered on demand,
+within the same authority. Discovery never grants access, and a previously discovered tool loses access when its
+authority is revoked. A tool that asks the owner to accept something is named `propose_<what>`; a tool that acts
 is a plain verb. Agent files are "before" files (see the workspace): the owner's own edit is accepted by construction,
 in effect at once; the agent's change to itself waits for the owner as a card in its chat. An accepted change reaches
 its chat at the next model boundary and deliberately starts its prompt cache cold.

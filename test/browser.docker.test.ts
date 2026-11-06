@@ -19,7 +19,14 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
+import {
+	createModels,
+	fauxAssistantMessage,
+	fauxProvider,
+	fauxToolCall,
+	getCurrentTools,
+	type Message,
+} from "@earendil-works/pi-ai";
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from "vitest";
 import { boxParts, containerBox, dockerAvailable, removeContainerBox } from "../src/box/container.ts";
 import type { Status } from "../src/core/status.ts";
@@ -145,11 +152,17 @@ describe.skipIf(!docker)("the browser", { timeout: 300_000 }, () => {
 				const lastUser = ctx.messages.length - 1 - [...ctx.messages].reverse().findIndex((m) => m.role === "user");
 				const asked = text(ctx.messages[lastUser]!);
 				const plan = [...plans].find(([word]) => asked.includes(word))?.[1] ?? [];
-				const results = ctx.messages.slice(lastUser).filter((m) => m.role === "toolResult");
+				const results = ctx.messages
+					.slice(lastUser)
+					.filter((m) => m.role === "toolResult" && (m as { toolName?: string }).toolName !== "tool_search");
 				const step = plan[results.length];
 				const call = step?.(results.length === 0 ? "" : text(results.at(-1)!));
 				n += 1;
 				if (call === undefined) return fauxAssistantMessage("Done.");
+				if (!getCurrentTools(ctx.messages as readonly Message[]).some((tool) => tool.name === call[0]))
+					return fauxAssistantMessage([fauxToolCall("tool_search", { query: call[0], limit: 1 })], {
+						stopReason: "toolUse",
+					});
 				return fauxAssistantMessage([fauxToolCall(call[0], call[1] as never, { id: `c${n}` })], {
 					stopReason: "toolUse",
 				});
