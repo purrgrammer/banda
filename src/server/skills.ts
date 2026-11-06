@@ -160,6 +160,7 @@ export const SHIPPED_SKILLS = fileURLToPath(new URL("../../shipped/skills/", imp
  * the model's), whether it starts on, and what else the owner should know before taking it.
  */
 export const OFFERED_SKILLS: readonly { name: string; about: string; byDefault: boolean; note?: string }[] = [
+	{ name: "eggbot", about: "Make an agent for the job you have in mind.", byDefault: true },
 	{ name: "bro", about: "Say that again, in plain words.", byDefault: true },
 	{ name: "in-your-own-words", about: "Check the agent understood what you're after.", byDefault: true },
 	{ name: "unslop", about: "Strip the tells of machine writing from a text.", byDefault: true },
