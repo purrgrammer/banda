@@ -594,8 +594,8 @@ function ChangedList({ files }: { files: readonly ChangedFile[] }) {
 									<p className="text-meta text-ink-2">The harness did not show this change.</p>
 								) : (
 									file.diffs.map((diff, index) => (
-										// biome-ignore lint/suspicious/noArrayIndexKey: a file's diffs are in order; their place is their key
 										<CodeBlock
+											// biome-ignore lint/suspicious/noArrayIndexKey: a file's diffs are in order; their place is their key
 											key={index}
 											code={diff}
 											language="diff"
