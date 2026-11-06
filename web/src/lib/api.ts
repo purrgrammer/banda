@@ -149,6 +149,9 @@ export const dismissQuestion = (key: string) => api<{ chat: number }>(`/waits/${
 
 /** Take back a permission: it covers nothing from now on. What the avatar sheet shows (`ControlView`) as it is after. */
 export const revokePermission = (id: string) => api<ControlView>(`/permissions/${id}/revoke`, { method: "POST" });
+/** Allow agent `agent` to send anything to `host`: a host, `*.example.com`, or `*` for every host. */
+export const allowHost = (agent: string, host: string) =>
+	api<ControlView>(`/agents/${agent}/hosts`, { method: "POST", body: JSON.stringify({ host }) });
 
 /** The page's one stream (`one-stream.ts`), over the daemon's `GET /api/events?chat=`. */
 const one = oneStream((path, onEvent, signal) => stream<ShellEvent>(path, onEvent, signal));

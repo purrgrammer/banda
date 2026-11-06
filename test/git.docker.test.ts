@@ -405,7 +405,7 @@ describe.skipIf(!docker)("git through the box's proxy", { timeout: 180_000 }, ()
 		const said = (await results(held.chat)).at(-1) ?? "";
 		expect(said).not.toMatch(/code=0/);
 		expect(said).toContain(
-			`Ask the owner to allow ${host} (propose_send with this ticket offers 'Always allow ${host}'), then run the command again`,
+			`Ask the owner to allow ${host} (propose_send with this ticket offers 'Always allow ${host}'; ask_hosts asks for several hosts at once), then run the command again`,
 		);
 		expect(forgeMain()).toBe(before);
 		expect(wait?.ask).toMatchObject({

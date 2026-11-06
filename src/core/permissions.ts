@@ -27,10 +27,11 @@ import {
 	type Tx,
 } from "@earendil-works/pi-durable";
 import { log } from "./activity.ts";
-import { AgentChats, ChatAgent, LEAD } from "./agents.ts";
+import { AgentChats, acceptedAgent, agentWords, ChatAgent, LEAD } from "./agents.ts";
 import { Companion } from "./companion.ts";
 
 import { FLOOR_WORDS, type Floor } from "./floor.ts";
+import { allowedHost, hostCovers } from "./hosts.ts";
 import { WAKE, type WakeData } from "./routines.ts";
 import { context } from "./store.ts";
 
@@ -174,13 +175,79 @@ export function isOpen(permission: Permission, now: number, errand?: Errand): bo
 }
 
 /**
- * Whether `permission` covers a call of `tool` with `args`: the same tool, and every bound argument exactly as permitted.
+ * Whether `permission` covers a call of `tool` with `args`: the same tool, and every bound argument exactly as permitted;
+ * a host permission's host may be a pattern (`*.example.com`, `*`), which covers what the proxy lets through.
  */
 export function matches(permission: Permission, tool: string, args: { readonly [key: string]: unknown }): boolean {
 	return (
 		permission.tool === tool &&
-		Object.entries(permission.match).every(([key, value]) => key in args && canonical(args[key]) === canonical(value))
+		Object.entries(permission.match).every(
+			([key, value]) =>
+				key in args &&
+				(canonical(args[key]) === canonical(value) ||
+					(permission.scope === "host" &&
+						key === HOST_ARG &&
+						typeof value === "string" &&
+						typeof args[key] === "string" &&
+						hostCovers(value, args[key] as string))),
+		)
 	);
+}
+
+/** The argument of `propose_send` a host permission binds: the host as the proxy spells it. */
+export const HOST_ARG = "_host";
+
+/**
+ * Allow agent `agent` to send anything to `typed` (a host, `*.example.com` or `*`), as the owner, not answering any ask:
+ * a host permission of `propose_send` like the one an approval gives, so the proxy lets that agent's writes there
+ * through, WebSockets included. The id of the permission (an equal one already given, if so), or why not.
+ */
+export async function allowHost(
+	harness: Harness,
+	agent: string,
+	typed: string,
+	now: number,
+	ctx: Context = context,
+): Promise<{ readonly id: string } | { readonly refused: string }> {
+	return harness.commit(async (tx) => {
+		if (agent !== LEAD && (await acceptedAgent(tx, agent)) === undefined) return { refused: "no such agent" };
+		return allowHostIn(tx, agent, typed, now, 0);
+	}, ctx);
+}
+
+/**
+ * `allowHost` in a commit already open, the agent already known; `wait` is the approval that gave it (0: the owner
+ * directly). Logged as the owner's.
+ */
+export async function allowHostIn(
+	tx: Tx,
+	agent: string,
+	typed: string,
+	now: number,
+	wait: number,
+): Promise<{ readonly id: string; readonly host: string } | { readonly refused: string }> {
+	const host = allowedHost(typed);
+	if (host === undefined)
+		return {
+			refused: `${JSON.stringify(typed)} is not a host: give a name like relay.example.com, *.example.com, or *`,
+		};
+	const doc = await tx.doc(Permissions);
+	const match = { [HOST_ARG]: host };
+	const same = Object.entries(doc.permissions).find(
+		([, permission]) =>
+			permission.scope === "host" &&
+			permission.agent === agent &&
+			permission.tool === "propose_send" &&
+			canonical(permission.match) === canonical(match),
+	);
+	if (same !== undefined) return { id: same[0], host };
+	const name = await agentWords(tx, agent);
+	const what = `${name} may send anything to ${host === "*" ? "any host" : host}`;
+	const id = String(doc.next);
+	doc.next += 1;
+	doc.permissions[id] = { tool: "propose_send", match, what, scope: "host", agent, at: now, wait };
+	await log(tx, { at: now, what: `You allowed: ${what}` });
+	return { id, host };
 }
 
 /**

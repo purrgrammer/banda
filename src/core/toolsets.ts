@@ -5,7 +5,7 @@
  */
 export const TOOLSETS: { readonly [name: string]: readonly string[] } = {
 	files: ["read", "write", "edit"],
-	shell: ["bash"],
+	shell: ["bash", "propose_send", "ask_hosts"],
 	routines: ["schedule"],
 	memory: ["remember", "recall", "forget"],
 	web: ["web_fetch"],
@@ -23,6 +23,12 @@ export const TOOLSETS: { readonly [name: string]: readonly string[] } = {
 		"propose_key",
 	],
 };
+
+/**
+ * What an agent that runs commands may ask about what its proxy held: to send one request, or to be allowed hosts. Its
+ * commands' writes are held whatever its file lists, so it gets both with `bash`.
+ */
+export const EGRESS_TOOLS = ["propose_send", "ask_hosts"] as const;
 
 /** Every agent can keep a promise with routines and maintain its scoped memory, whatever its file lists. */
 export const ALWAYS_TOOLSETS = ["routines", "memory"] as const;

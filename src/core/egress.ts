@@ -191,6 +191,10 @@ export function proxyKnows(harness: Harness, tell: () => Promise<unknown>, ctx: 
 	};
 }
 
+/** Whether a request asks to become a WebSocket, as the proxy reads it (policy.py `is_websocket`). */
+const webSocket = (headers: readonly (readonly [string, string])[]) =>
+	headers.some(([key, value]) => key.toLowerCase() === "upgrade" && value.toLowerCase().includes("websocket"));
+
 /**
  * Forges whose git fetches (a POST to `git-upload-pack`) are reads, unless the owner's config names others: hosts whose
  * upload-pack is git's.
@@ -423,9 +427,13 @@ export async function intake(
 			`Held, not sent: ${held.method} ${addressOf(held)} (ticket ${held.ticket}). It writes, so it waits for the ` +
 				(ownCredential(held.headers, held.path)
 					? "owner, every time, as it carries a credential of its own: call propose_send with the ticket to ask them."
-					: `owner. Ask the owner to allow ${host} (propose_send with this ticket offers 'Always allow ${host}'), ` +
-						"then run the command again: once allowed, writes there go straight through. If propose_send " +
-						"answers that it sent this request, it was sent: do not send it a second time."),
+					: webSocket(held.headers)
+						? `owner. A WebSocket is a stream, never sent as one request: ask the owner to allow ${host} with ` +
+							"ask_hosts (with every other host the task needs), then run the command again."
+						: `owner. Ask the owner to allow ${host} (propose_send with this ticket offers 'Always allow ${host}'; ` +
+							"ask_hosts asks for several hosts at once), then run the command again: once allowed, writes there " +
+							"go straight through. If propose_send answers that it sent this request, it was sent: do not send " +
+							"it a second time."),
 		);
 	}
 	return lines.length === 0 ? "" : `\n\n[banda] ${lines.join("\n[banda] ")}`;

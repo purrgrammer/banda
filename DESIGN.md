@@ -693,14 +693,19 @@ long as it runs.
   them; `propose_send` makes one a draft, and approved, the proxy sends exactly the stored request, once. A permission
   covers a route (the method, the host, the path with its ids as `*`) and is checked in the daemon's commit, never in
   the proxy. The owner may instead allow a host (its name in lower case, its port unless the scheme's): anything sent
-  there, always, a second shape the request binds, offered beside the route's and never the default. A host is allowed
+  there, always, a second shape the request binds, offered beside the route's and never the default. The owner may
+  also allow one for an agent directly, from its Access, and there a host may be a pattern: `*.example.com`, any name
+  under it, or `*`, every host, each at its scheme and port. An agent may ask for several at once, before it needs
+  them (`ask_hosts`): one approval, its list editable, approved as if the owner had added each; it offers no scope, so
+  every such ask asks. An agent that runs commands has both ways to ask, whatever its file lists. A host is allowed
   for the agent that asked, and covers only that agent's chats, as the proxy knows them by their logins; while the
   agents share one box, one agent's process can read another's login, so the binding is by login, not by the
   boundary, and the app says any agent there could use it. The daemon tells the proxy each chat's allowed hosts, in
   order and never an older config than the store's (a push that fails stops the proxy), so a write there goes straight
   through as it happens (a `git push` run again succeeds); the proxy records each, durably, before sending it, and the
-  daemon logs it with its outcome and its bytes' hash. A request carrying its own credential, and the browser's, are
-  still held.
+  daemon logs it with its outcome and its bytes' hash. A WebSocket opened there (a relay, a live API) is such a write:
+  its opening is what is recorded, its frames then pass unrecorded, and what its server sends is scrubbed of
+  credentials; every other WebSocket is cut. A request carrying its own credential, and the browser's, are still held.
 - **Credentials** for a host are swapped in at the proxy, from the daemon's `auth/`, so the box holds no secrets; a
   response that echoes one has it scrubbed. A request the box sends carrying a credential of its own is on the floor.
   A request that acts as nobody (`web_fetch`'s) gets none: the box can only ever give one up that way.
