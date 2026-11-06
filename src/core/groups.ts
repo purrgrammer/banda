@@ -211,7 +211,15 @@ type TurnInput = {
 	readonly execution: number;
 	readonly through: number;
 	readonly after?: number;
+	/**
+	 * Words nobody wrote in the room, for this member to act on in it (its harness session ended): run in place of the
+	 * room's messages, answered in the room as the owner's question is.
+	 */
+	readonly wake?: Wake;
 };
+
+/** What `followUp` queues into a chat: its key, its words, and the entry the chat records. */
+export type Wake = { readonly key: string; readonly text: string; readonly entry: { kind: string; data: JsonObject } };
 
 type TurnState = { phase: "run"; attempts: number };
 
@@ -522,6 +530,13 @@ export function defineGroups(options: GroupOptions) {
 						done = true;
 						return { status: "terminal", outcome: { status: "completed", result: null } };
 					}
+					names = (await askable(tx, task.input.room, task.input.agent)).map(({ name }) => name);
+					// a wake is its own words, answered in the room: the owner waits on what came of the work
+					if (task.input.wake !== undefined) {
+						input = task.input.wake.text;
+						asked = true;
+						return { status: "running", checkpoint: task.state.checkpoint };
+					}
 					const after = execution.cursor ?? 0;
 					if (after >= task.input.through) {
 						done = true;
@@ -532,7 +547,6 @@ export function defineGroups(options: GroupOptions) {
 					asked = messages.some((message) => "owner" in message.author && message.mentions.includes(task.input.agent));
 					files = messages.flatMap((message) => message.files ?? []);
 					loads = messages.flatMap((message) => (message.skills ?? []).map((skill) => ({ key: message.key, skill })));
-					names = (await askable(tx, task.input.room, task.input.agent)).map(({ name }) => name);
 					return { status: "running", checkpoint: task.state.checkpoint };
 				}, ctx);
 				if (wait || done || input === undefined) return;
@@ -566,7 +580,11 @@ export function defineGroups(options: GroupOptions) {
 
 				const execution = await runtime.conversation(task.input.execution as ConversationId, ctx);
 				if (execution === undefined) throw new Error(`group execution ${task.input.execution} is gone`);
-				const requestId = `group:${task.input.room}:${task.input.agent}:${task.input.through}`;
+				const wake = task.input.wake;
+				const requestId =
+					wake === undefined
+						? `group:${task.input.room}:${task.input.agent}:${task.input.through}`
+						: `group:${task.input.room}:${task.input.agent}:${wake.key}`;
 				let settled = await (
 					await execution.submit(
 						{
@@ -574,10 +592,10 @@ export function defineGroups(options: GroupOptions) {
 							content: input,
 							requestId,
 							whenBusy: "followUp",
-							entry: {
-								kind: GROUP_INPUT,
-								data: { room: task.input.room, through: task.input.through },
-							},
+							entry:
+								wake === undefined
+									? { kind: GROUP_INPUT, data: { room: task.input.room, through: task.input.through } }
+									: wake.entry,
 						},
 						ctx,
 					)
@@ -743,6 +761,34 @@ export function defineGroups(options: GroupOptions) {
 		const admitted = { room: message.room, entry: Number(entry.id), turns };
 		doc.admissions[key] = admitted;
 		return copyAdmission(admitted);
+	}
+
+	/**
+	 * In `tx`: queue `wake` for the member whose chat for its group is `chat`, after its other turns there, as a turn of
+	 * that group; undefined when `chat` is no member's. A member's chat has no route of its own: what nobody wrote
+	 * reaches it the way the room's messages do, and its answer goes to the room. In an archived room the turn ends unrun.
+	 */
+	async function wake(tx: Tx, chat: number, wake: Wake): Promise<number | undefined> {
+		const doc = await tx.doc(Groups);
+		const member = doc.byExecution[chat];
+		const execution = member === undefined ? undefined : doc.groups[member.room]?.executions[member.agent];
+		if (member === undefined || execution === undefined || execution.chat !== chat) return undefined;
+		const turn = Number(
+			await tx.createTask(
+				GroupTurn,
+				{
+					room: member.room,
+					agent: member.agent,
+					execution: chat,
+					through: execution.cursor ?? 0,
+					wake: { key: wake.key, text: wake.text, entry: { kind: wake.entry.kind, data: wake.entry.data } },
+					...(execution.lastTurn === undefined ? {} : { after: execution.lastTurn }),
+				},
+				{ ownership: { kind: "conversation" }, background: true, conversationId: member.room as ConversationId },
+			),
+		);
+		execution.lastTurn = turn;
+		return turn;
 	}
 
 	async function create(
@@ -1136,6 +1182,7 @@ export function defineGroups(options: GroupOptions) {
 		create,
 		createProposed,
 		createIn,
+		wake,
 		change,
 		post,
 		publish,

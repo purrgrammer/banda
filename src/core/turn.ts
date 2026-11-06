@@ -1299,6 +1299,9 @@ export function defineCore(options: CoreOptions) {
 		chat: number,
 		{ key, text, entry }: { key: string; text: string; entry: { kind: string; data: JsonObject } },
 	): Promise<number> {
+		// a group member's chat has no route: the group wakes it, and its answer goes to the room
+		const member = await groups.wake(tx, chat, { key, text, entry });
+		if (member !== undefined) return member;
 		const home = (await tx.doc(Routes)).chats[chat];
 		if (home === undefined) throw new Error(`chat ${chat} has no home origin`);
 		const input: Input = { chat, origin: home.origin, message: { id: key, text }, internal: entry };

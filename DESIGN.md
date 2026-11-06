@@ -438,7 +438,8 @@ naming one that is not there answers with those that are.
   prompt it takes after its current step. Stop cancels the turn.
 - **Once, and then the agent hears.** The ask is sent at most once: a restart after it was sent ends the session
   interrupted, never sends it again, and a session whose task ended without ending it ends failed. Either way, and
-  when the harness finishes, its agent wakes once with what was done, fenced as foreign data: how it ended, what it
+  when the harness finishes, its agent wakes once, where it asked (a group member in its chat for that group, as the
+  room's messages reach it, answering in the room), with what was done, fenced as foreign data: how it ended, what it
   said (in full at the end, a line for each earlier turn), the files and lines it changed, the commands it ran, and
   the owner's notes and answers to its asks, so its report never contradicts what the owner did; bounded, the least
   needed cut first. It tells the owner in its own words. Steps are kept in the store, bounded, with files named from the project; lines added and removed are shown only
