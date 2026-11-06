@@ -66,15 +66,31 @@ const viewOf = (session: HarnessSessionView, now: number, agent: string | undefi
  */
 function Clamped({ text, title, children }: { text: string; title: string; children: ReactNode }) {
 	const [open, setOpen] = useState(false);
+	const opener = useRef<HTMLElement | null>(null);
 	if (text.split("\n").length <= 12) return <>{children}</>;
 	return (
 		<>
 			<div className="max-h-80 overflow-y-auto overscroll-contain rounded-field">{children}</div>
-			<Button variant="outline" size="sm" className="self-start" onClick={() => setOpen(true)}>
+			<Button
+				variant="outline"
+				size="sm"
+				className="self-start"
+				onClick={(event) => {
+					opener.current = event.currentTarget;
+					setOpen(true);
+				}}
+			>
 				Show all
 			</Button>
 			<Sheet open={open} onOpenChange={setOpen}>
-				<SheetContent className="flex h-full flex-col gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[640px]">
+				<SheetContent
+					className="flex h-full flex-col gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[640px]"
+					// the sheet has no Radix trigger: closed, focus goes back to the button that opened it, by hand
+					onCloseAutoFocus={(event) => {
+						event.preventDefault();
+						opener.current?.focus();
+					}}
+				>
 					<SheetHeader className="border-b border-line-soft pr-12">
 						<SheetTitle>{title}</SheetTitle>
 						<SheetDescription>All of it, before you decide.</SheetDescription>
@@ -167,6 +183,7 @@ export function HarnessSessionPart({ chat, call }: { chat: number; call: string 
 	const now = useNow(live);
 	const [open, setOpen] = useState(false);
 	const titleRef = useRef<HTMLHeadingElement>(null);
+	const opener = useRef<HTMLElement | null>(null);
 	if (session === undefined) return null;
 	const view = viewOf(session, now, agent);
 	const steer = (text: string) => void attempt("send your note", () => steerHarness(session.task, text));
@@ -175,7 +192,11 @@ export function HarnessSessionPart({ chat, call }: { chat: number; call: string 
 			<HarnessCard
 				session={view}
 				onStop={() => void attempt("stop it", () => stopHarness(session.task))}
-				onOpen={() => setOpen(true)}
+				onOpen={() => {
+					// the card offers two openers (the step line and Steps): focus returns to the one used
+					opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+					setOpen(true);
+				}}
 				onSteer={steer}
 			/>
 			<HarnessAsks session={session} agentName={agent} />
@@ -186,6 +207,11 @@ export function HarnessSessionPart({ chat, call }: { chat: number; call: string 
 						// the sheet opens on its title, not on the first Copy button of a Terminal
 						event.preventDefault();
 						titleRef.current?.focus();
+					}}
+					onCloseAutoFocus={(event) => {
+						// no Radix trigger: closed, focus returns to the button that opened it
+						event.preventDefault();
+						opener.current?.focus();
 					}}
 				>
 					<SheetHeader className="border-b border-line-soft pr-12">
@@ -214,6 +240,8 @@ export function HarnessActivitySheet({ tasks, onClose }: { tasks: readonly numbe
 	const agent =
 		companion === undefined ? undefined : chatAgents(agents, companion).find((one) => one.id === session?.agent)?.name;
 	const titleRef = useRef<HTMLHeadingElement>(null);
+	// mounted when opened: whatever opened it holds focus then, and gets it back on close
+	const [opener] = useState(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null));
 	return (
 		<Sheet
 			open
@@ -226,6 +254,10 @@ export function HarnessActivitySheet({ tasks, onClose }: { tasks: readonly numbe
 				onOpenAutoFocus={(event) => {
 					event.preventDefault();
 					titleRef.current?.focus();
+				}}
+				onCloseAutoFocus={(event) => {
+					event.preventDefault();
+					opener?.focus();
 				}}
 			>
 				<SheetHeader className="border-b border-line-soft pr-12">
