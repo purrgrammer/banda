@@ -172,7 +172,11 @@ export function HarnessDialog({
 										</span>
 										<span className="flex min-w-0 flex-1 flex-col">
 											<span className="text-ui font-medium text-ink-2">{one.service}</span>
-											<span className="text-meta text-ink-2">Not installed on this computer</span>
+											<span className="text-meta text-ink-2">
+												{one.adapterRequired
+													? `Needs the ACP adapter to connect to banda, even if ${one.service} is already installed.`
+													: "Not found on this computer's command path."}
+											</span>
 										</span>
 									</span>
 									{one.install === undefined ? null : (

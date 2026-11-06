@@ -336,9 +336,10 @@ export const harnessesArea: AreaModule = {
 					...(asks === undefined ? {} : { asks }),
 					...(owned === true ? { custom: true } : {}),
 				})),
-				missing: missing.map(({ name, service, about, install, provider, logo }) => ({
+				missing: missing.map(({ name, service, about, install, provider, logo, start }) => ({
 					name,
 					service,
+					...("package" in start ? { adapterRequired: true } : {}),
 					...(provider === undefined ? {} : { provider }),
 					...(logo === undefined ? {} : { logo }),
 					...(about === "" ? {} : { about }),
