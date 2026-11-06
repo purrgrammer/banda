@@ -121,5 +121,9 @@ describe("band rows", () => {
 			{ ...agents[0], paused: false },
 			{ ...agents[1], paused: false, state: "working" },
 		]);
+		// archived, it leaves the band; Settings lists it
+		expect(bandRows(agents, [], [{ ...group, archived: NOW }], false, NOW).some((each) => each.id === "g:7")).toBe(
+			false,
+		);
 	});
 });

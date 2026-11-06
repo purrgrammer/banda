@@ -1,4 +1,5 @@
 /** An agent's accepted shape and colour. Motion lives in the face, never an orbit or working icon. */
+import { UsersIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { AvatarFace } from "../../../src/core/avatar-face.ts";
 import { AvatarRenderer } from "../avatar/Renderer.tsx";
@@ -78,6 +79,15 @@ export function FaceStack({
 			className={cn("relative inline-block shrink-0", className)}
 			style={{ width: box, height: box }}
 		>
+			{faces.length === 0 ? (
+				// a group nobody is in yet: an empty seat, not a blank
+				<span
+					aria-hidden="true"
+					className="absolute inset-0 inline-flex items-center justify-center rounded-full border border-dashed border-line text-ink-3"
+				>
+					<UsersIcon style={{ width: box * 0.42, height: box * 0.42 }} />
+				</span>
+			) : null}
 			{shown.map((who, i) => (
 				<span
 					key={who.id ?? who.name}

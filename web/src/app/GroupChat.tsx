@@ -3,7 +3,15 @@
  * mentions as the member's face and name, members' asks answered in place, and the composer, whose message goes to
  * everyone unless it @mentions someone. The log is read again whenever the group's row says it grew.
  */
-import { CircleAlertIcon, PencilIcon, SquareIcon, UserMinusIcon, UserPlusIcon } from "lucide-react";
+import {
+	ArchiveIcon,
+	ArchiveRestoreIcon,
+	CircleAlertIcon,
+	PencilIcon,
+	SquareIcon,
+	UserMinusIcon,
+	UserPlusIcon,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
 	Conversation,
@@ -11,7 +19,7 @@ import {
 	ConversationScrollButton,
 	useConversation,
 } from "@/components/ai-elements/conversation";
-import { groupOf, postToGroup } from "../areas/groups.ts";
+import { archiveGroup, groupOf, postToGroup } from "../areas/groups.ts";
 import { ArtifactCard, QuestionCard } from "../chat/Cards.tsx";
 import { Composer } from "../chat/Composer.tsx";
 import { Bubble, MessageActions, Run } from "../chat/Feed.tsx";
@@ -55,6 +63,7 @@ export function GroupChat({
 	phone,
 	at,
 	onBack,
+	onArchived = onBack,
 }: {
 	room: number;
 	/** Open at this entry, as a search result does. */
@@ -64,6 +73,8 @@ export function GroupChat({
 	archived?: readonly ChatAgent[];
 	phone: boolean;
 	onBack: () => void;
+	/** After the owner archived it: it left the band. */
+	onArchived?: () => void;
 }) {
 	const shell = useShell();
 	const row = shell.groups?.find((group) => group.room === room);
@@ -136,6 +147,8 @@ export function GroupChat({
 				onRename={(next) => change({ name: next })}
 				onAdd={(who) => (who.id === undefined ? undefined : change({ add: [who.id] }))}
 				onRemove={(who) => (who.id === undefined ? undefined : change({ remove: [who.id] }))}
+				most={shell.groupLimits?.members}
+				onArchive={() => void archiveGroup(room, true).then(onArchived, () => {})}
 			/>
 		</Panel>
 	);
@@ -425,6 +438,18 @@ function noticeLine(notice: GroupNoticeView, who: string | undefined) {
 		return (
 			<Line icon={PencilIcon} time={time}>
 				You named the group {notice.renamed}
+			</Line>
+		);
+	if (notice.archived)
+		return (
+			<Line icon={ArchiveIcon} time={time}>
+				You archived the group
+			</Line>
+		);
+	if (notice.restored)
+		return (
+			<Line icon={ArchiveRestoreIcon} time={time}>
+				You restored the group
 			</Line>
 		);
 	if (notice.stopped) return <Line icon={SquareIcon}>{who} was stopped</Line>;

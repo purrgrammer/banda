@@ -19,6 +19,7 @@ import { FaceAndName, Personality } from "../chat/Settings.tsx";
 import type { Who } from "../chat/types.ts";
 import { designFace, saveAgent } from "../lib/api.ts";
 import type { ChatAgent } from "../lib/navigation.ts";
+import { useShell } from "../lib/shell.ts";
 import { agentFile } from "./edit-file.ts";
 import type { Where } from "./where.ts";
 
@@ -49,8 +50,10 @@ export function NewSheet({
 	const [busy, setBusy] = useState(false);
 	const taken = new Set(agents.map((agent) => agent.id));
 	const id = agentId(who.name);
-	const ready =
-		kind === "agent" ? who.name.trim() !== "" && !taken.has(id) : members.length >= 2 && groupName.trim() !== "";
+	// a group may start with nobody in it, and holds up to what Settings allows
+	const most = useShell().groupLimits?.members;
+	const full = most !== undefined && members.length >= most;
+	const ready = kind === "agent" ? who.name.trim() !== "" && !taken.has(id) : true;
 
 	const create = async () => {
 		setError(undefined);
@@ -60,6 +63,7 @@ export function NewSheet({
 				await saveAgent(id, agentFile(who, personality));
 				onGo({ name: "agent", id });
 			} else {
+				// unnamed, the daemon names it after its members, or "New group"
 				const { room } = await createGroup(members, groupName.trim());
 				onGo({ name: "group", room });
 			}
@@ -128,13 +132,17 @@ export function NewSheet({
 								<Input
 									value={groupName}
 									onChange={(event) => setGroupName(event.target.value)}
-									placeholder="Trip"
+									placeholder="New group"
 									className="text-heading"
 								/>
 							</label>
 							<div className="flex flex-col gap-2">
 								<p className="text-ui font-medium text-ink">Who's in it</p>
-								<p className="text-meta text-ink-2">Two or more. A message asks everyone unless it mentions one.</p>
+								<p className="text-meta text-ink-2">
+									{full
+										? `Up to ${most}, as Settings allows. A message asks everyone unless it mentions one.`
+										: "Anyone, or nobody yet: add agents later from its panel. A message asks everyone unless it mentions one."}
+								</p>
 								<div className="flex flex-col divide-y divide-line-soft overflow-hidden rounded-tile border border-line-soft">
 									{agents.map((agent) => (
 										// biome-ignore lint/a11y/noLabelWithoutControl: the switch inside is the control
@@ -143,6 +151,7 @@ export function NewSheet({
 											<span className="flex-1 text-ui text-ink">{agent.name}</span>
 											<Switch
 												checked={members.includes(agent.id)}
+												disabled={full && !members.includes(agent.id)}
 												onCheckedChange={(on) =>
 													setMembers((was) => (on ? [...was, agent.id] : was.filter((each) => each !== agent.id)))
 												}
