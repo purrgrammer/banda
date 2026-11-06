@@ -39,6 +39,15 @@ it("labels an ask's buttons by its kind, never by the harness's own option names
 	expect(askWords("fetch")).toEqual({ what: "Open a web page", verb: "Allow", no: "Don't open" });
 	expect(askWords("other")).toEqual({ what: "Do something", verb: "Allow", no: "Don't allow" });
 });
+it("summarises an ask's kind in a few words: what a folded line or a notification says instead of the command", () => {
+	expect(askSummary("execute")).toBe("run a command");
+	expect(askSummary("edit")).toBe("change a file");
+	expect(askSummary("delete")).toBe("change a file");
+	expect(askSummary("move")).toBe("change a file");
+	expect(askSummary("fetch")).toBe("open a web page");
+	expect(askSummary("other")).toBe("do something");
+	expect(askSummary("read")).toBe("do something");
+});
 it("reads an ask's kind case-blind: a harness that shouts gets the same words, not the vaguest", () => {
 	expect(askWords("EXECUTE")).toEqual(askWords("execute"));
 	expect(askWords("Edit")).toEqual(askWords("edit"));

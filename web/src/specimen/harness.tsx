@@ -45,7 +45,7 @@ const BEFORE_ASK: readonly HarnessStep[] = [
 	},
 ];
 const AFTER_ASK: readonly HarnessStep[] = [
-	{ kind: "decided", command: COMMAND, allowed: true },
+	{ kind: "decided", command: COMMAND, ask: "execute", allowed: true },
 	{
 		kind: "run",
 		command: COMMAND,
@@ -221,7 +221,7 @@ function sessionAt(step: Step, notes: readonly HarnessStep[]): HarnessSessionVie
 		step === "working"
 			? [...BEFORE_ASK]
 			: step === "waiting"
-				? [...BEFORE_ASK, { kind: "waiting", command: COMMAND }]
+				? [...BEFORE_ASK, { kind: "waiting", command: COMMAND, ask: "execute" }]
 				: step === "stopped"
 					? BEFORE_ASK.slice(0, 4)
 					: [...BEFORE_ASK, ...AFTER_ASK];

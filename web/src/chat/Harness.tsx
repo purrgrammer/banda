@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/cn";
+import { askSummary } from "../app/harness-activity.ts";
 import { projectOf } from "../lib/project.ts";
 import { Tile } from "./Cards.tsx";
 import { Confirm } from "./Confirm.tsx";
@@ -49,8 +50,8 @@ export type HarnessStep =
 			readonly diff?: string;
 	  }
 	| { readonly kind: "run"; readonly command: string; readonly output?: string; readonly running?: boolean }
-	| { readonly kind: "waiting"; readonly command: string }
-	| { readonly kind: "decided"; readonly command: string; readonly allowed: boolean }
+	| { readonly kind: "waiting"; readonly command: string; readonly ask?: string }
+	| { readonly kind: "decided"; readonly command: string; readonly allowed: boolean; readonly ask?: string }
 	| { readonly kind: "said"; readonly text: string };
 
 export type HarnessState = "working" | "waiting" | "done" | "stopped" | "interrupted" | "failed";
@@ -227,8 +228,9 @@ export function headlineOf(
 			return { verb: "Editing", object: middleEllipsis(relativeTo(step.path, folder, root)), code: true };
 		case "run":
 			return runHeadline(step.command, folder, step.running === false, root);
+		// a headline never shows a command in part: what is asked is said by its kind, whole only on the ask's card
 		case "waiting":
-			return { verb: "Waiting on you:", object: middleEllipsis(cleanCommand(step.command, folder, root)), code: true };
+			return { verb: "Waiting on you:", object: askSummary(step.ask ?? "other"), code: false };
 		case "thought":
 			return { verb: "Thinking", object: "", code: false };
 		case "steered":
@@ -236,8 +238,8 @@ export function headlineOf(
 		case "decided":
 			return {
 				verb: step.allowed ? "Going on: you allowed" : "Going on: you denied",
-				object: middleEllipsis(cleanCommand(step.command, folder, root)),
-				code: true,
+				object: askSummary(step.ask ?? "other"),
+				code: false,
 			};
 		case "said":
 			return { verb: "Writing", object: "", code: false };
@@ -724,14 +726,15 @@ function stepLine(
 				),
 				detail: <ClampedText text={step.text} />,
 			};
+		// a folded row never shows a command in part: the kind in words folded, the command whole once opened
 		case "decided":
 			return {
 				icon: step.allowed ? CheckIcon : XIcon,
 				words: (
 					<HeadWords
-						verb={step.allowed ? "You allowed" : "You denied"}
-						object={middleEllipsis(cleanCommand(step.command, folder, root))}
-						code
+						verb={step.allowed ? "You allowed:" : "You denied:"}
+						object={askSummary(step.ask ?? "other")}
+						code={false}
 					/>
 				),
 				detail: <Raw text={step.command} />,
@@ -776,13 +779,7 @@ function stepLine(
 		case "waiting":
 			return {
 				icon: CircleAlertIcon,
-				words: (
-					<HeadWords
-						verb="Waiting on you to allow"
-						object={middleEllipsis(cleanCommand(step.command, folder, root))}
-						code
-					/>
-				),
+				words: <HeadWords verb="Waiting on you to allow:" object={askSummary(step.ask ?? "other")} code={false} />,
 				detail: <Raw text={step.command} />,
 			};
 		case "said":

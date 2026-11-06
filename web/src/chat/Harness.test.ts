@@ -66,11 +66,13 @@ describe("headlineOf", () => {
 			object: "src/auth.ts",
 			code: true,
 		});
-		expect(headlineOf({ kind: "waiting", command: "npm run dev" })).toEqual({
+		expect(headlineOf({ kind: "waiting", command: "npm run dev", ask: "execute" })).toEqual({
 			verb: "Waiting on you:",
-			object: "npm run dev",
-			code: true,
+			object: "run a command",
+			code: false,
 		});
+		expect(headlineOf({ kind: "waiting", command: "src/auth.ts", ask: "edit" }).object).toBe("change a file");
+		expect(headlineOf({ kind: "waiting", command: "something" }).object).toBe("do something");
 		expect(headlineOf(undefined)).toEqual({ verb: "Starting", object: "", code: false });
 	});
 	it("drops the cd prefix and makes paths under the real root relative to the project", () => {
@@ -226,9 +228,9 @@ describe("HarnessTranscript, as it opens", () => {
 			{ kind: "read", path: "test/auth.spec.ts" },
 			{ kind: "thought", text: "Refresh compares seconds with milliseconds." },
 			{ kind: "edit", path: "src/auth.ts", added: 2, removed: 1, diff: "- a\n+ b" },
-			{ kind: "decided", command: "npm test", allowed: true },
+			{ kind: "decided", command: "npm test", ask: "execute", allowed: true },
 			{ kind: "run", command: "npm test -- auth.spec.ts", output: "6 passed", running: true },
-			{ kind: "waiting", command: "cd /Users/sam/sancho && git push origin main" },
+			{ kind: "waiting", command: "cd /Users/sam/sancho && git push origin main", ask: "execute" },
 			{ kind: "said", text: "Fixed: refresh compared seconds with milliseconds." },
 		],
 	};
@@ -238,13 +240,67 @@ describe("HarnessTranscript, as it opens", () => {
 		expect(html).not.toContain("data-terminal"); // a run's Terminal only exists once opened
 		expect(html).not.toContain("6 passed"); // its output too
 		expect(html).not.toContain("+ b"); // an edit's diff too
-		expect(html).not.toContain("cd /Users/sam/sancho"); // the raw command too: its row says it in words, cleaned
+		expect(html).not.toContain("cd /Users/sam/sancho"); // the raw command too: its row says the ask's kind in words
+		expect(html).not.toContain("git push"); // no part of a waiting command: whole once opened, never in a folded row
 	});
 	it("shows what was asked at three lines with Show all, with no click to see it", () => {
 		const html = renderToStaticMarkup(createElement(HarnessTranscript, { session }));
 		expect(html).toContain("line-clamp-3");
 		expect(html).toContain("Show all");
 		expect(html).toContain("Fix the auth test.");
+	});
+});
+
+describe("a waiting or decided row never shows the command, whole or in part", () => {
+	// 127 chars with the risky tail last, 128 with it in the middle: either way a middle cut would hide or keep it by luck
+	const tailed = `make deploy ${"a".repeat(86)} git push --force origin main`;
+	const centred = `echo start ${"b".repeat(47)} rm -rf build ${"b".repeat(46)} echo done`;
+	const sessionWith = (steps: readonly HarnessStep[]): HarnessSessionView => ({
+		harness: "Claude Code",
+		folder: "~/sancho",
+		state: "waiting",
+		elapsed: "0:10",
+		steps: [{ kind: "asked", text: "Ship it." }, ...steps],
+	});
+	it("holds the lengths the finding named", () => {
+		expect(tailed).toHaveLength(127);
+		expect(centred).toHaveLength(128);
+	});
+	it("says the headline by the ask's kind, with no text of the command and no ellipsis", () => {
+		for (const command of [tailed, centred]) {
+			const head = headlineOf({ kind: "waiting", command, ask: "execute" });
+			expect(head).toEqual({ verb: "Waiting on you:", object: "run a command", code: false });
+			expect(head.object).not.toContain("…");
+		}
+	});
+	it("folds both rows to the kind in words, with no fragment of either command", () => {
+		const html = renderToStaticMarkup(
+			createElement(HarnessTranscript, {
+				session: sessionWith([
+					{ kind: "decided", command: centred, ask: "execute", allowed: true },
+					{ kind: "waiting", command: tailed, ask: "execute" },
+				]),
+			}),
+		);
+		expect(html).toContain("You allowed:");
+		expect(html).toContain("Waiting on you to allow:");
+		expect(html).toContain("run a command");
+		for (const fragment of ["make deploy", "git push", "rm -rf", "echo start", "aaaa", "bbbb", "…"])
+			expect(html).not.toContain(fragment);
+	});
+	it("shows the whole command, untruncated, once a row is opened; a denial too", () => {
+		const html = renderToStaticMarkup(
+			createElement(HarnessTranscript, {
+				session: sessionWith([
+					{ kind: "decided", command: centred, ask: "execute", allowed: false },
+					{ kind: "waiting", command: tailed, ask: "execute" },
+				]),
+				defaultOpenSteps: ["decided:1", "waiting:2"],
+			}),
+		);
+		expect(html).toContain("You denied:");
+		expect(html).toContain(tailed); // all 127 chars, nothing cut
+		expect(html).toContain(centred); // all 128 chars, the middle included
 	});
 });
 

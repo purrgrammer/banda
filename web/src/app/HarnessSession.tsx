@@ -52,11 +52,14 @@ const viewOf = (session: HarnessSessionView, now: number, agent: string | undefi
 				: session.state === "waiting" && (session.asks ?? []).length === 0
 					? "working"
 					: session.state,
-	// an open ask is what it waits on: the card's line says so
+	// an open ask is what it waits on: the card's line says its kind in words; the command lives on the ask's card
 	steps:
 		(session.asks ?? []).length === 0
 			? session.steps
-			: [...session.steps, { kind: "waiting", command: session.asks?.[0]?.command ?? "" }],
+			: [
+					...session.steps,
+					{ kind: "waiting", command: session.asks?.[0]?.command ?? "", ask: session.asks?.[0]?.kind ?? "other" },
+				],
 	elapsed: clock((session.ended ?? now) - session.at),
 	...(session.outcome === undefined ? {} : { outcome: session.outcome }),
 });
