@@ -96,7 +96,10 @@ export function Header({
 				>
 					<SquareTerminalIcon />
 					{delegated.waiting ? (
-						<span aria-hidden="true" className="absolute top-0.5 right-0.5 size-2 rounded-full bg-ink ring-2 ring-paper" />
+						<span
+							aria-hidden="true"
+							className="absolute top-0.5 right-0.5 size-2 rounded-full bg-ink ring-2 ring-paper"
+						/>
 					) : delegated.count > 1 ? (
 						<span
 							aria-hidden="true"

@@ -1,7 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { pbtRuns } from "../../../test/pbt.ts";
-import { changesOf, type HarnessStep, headlineOf, shortFolder } from "./harness-steps.ts";
+import { changedFiles, changesOf, foldedSteps, type HarnessStep, headlineOf, shortFolder } from "./harness-steps.ts";
 
 const edit = fc.record({
 	kind: fc.constant("edit" as const),
@@ -66,6 +66,55 @@ describe("shortFolder", () => {
 				const folder = `/${parts.join("/")}`;
 				const shown = shortFolder(folder);
 				expect(folder.endsWith(shown.replace(/^…/, ""))).toBe(true);
+			}),
+			{ numRuns: pbtRuns(100) },
+		);
+	});
+});
+
+describe("changedFiles", () => {
+	it("agrees with changesOf, keeps each file's diffs in order, and lists files as first changed", () => {
+		const diffed = fc.record({
+			kind: fc.constant("edit" as const),
+			path: fc.constantFrom("src/a.ts", "src/b.ts"),
+			added: fc.nat(9),
+			removed: fc.nat(9),
+			diff: fc.string(),
+		});
+		fc.assert(
+			fc.property(fc.array(fc.oneof(edit, diffed, other)), (steps) => {
+				const files = changedFiles(steps);
+				const total = changesOf(steps);
+				expect(files).toHaveLength(total.files);
+				expect(files.reduce((sum, file) => sum + (file.added ?? 0), 0)).toBe(total.added ?? 0);
+				const edits = steps.filter((step) => step.kind === "edit");
+				expect(files.map((file) => file.path)).toEqual([...new Set(edits.map((step) => step.path))]);
+				for (const file of files)
+					expect(file.diffs).toEqual(
+						edits.flatMap((step) => (step.path === file.path && "diff" in step ? [step.diff] : [])),
+					);
+			}),
+			{ numRuns: pbtRuns(100) },
+		);
+	});
+});
+
+describe("foldedSteps", () => {
+	it("folds each run of two or more reads, and loses no step", () => {
+		fc.assert(
+			fc.property(fc.array(fc.oneof(edit, other)), (steps) => {
+				const items = foldedSteps(steps);
+				const back = items.flatMap((item) =>
+					item.kind === "step" ? [item.step] : item.paths.map((path): HarnessStep => ({ kind: "read", path })),
+				);
+				expect(back).toEqual(steps);
+				for (const [i, item] of items.entries()) {
+					if (item.kind === "reads") expect(item.paths.length).toBeGreaterThan(1);
+					const next = items[i + 1];
+					// two reads never sit side by side unfolded
+					if (item.kind === "step" && item.step.kind === "read" && next?.kind === "step")
+						expect(next.step.kind).not.toBe("read");
+				}
 			}),
 			{ numRuns: pbtRuns(100) },
 		);

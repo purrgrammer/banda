@@ -63,6 +63,56 @@ export function changesOf(steps: readonly HarnessStep[]): { files: number; added
 	};
 }
 
+/** One file it changed: its lines across every edit of it (undefined once an edit did not say), and their diffs in order. */
+export type ChangedFile = {
+	readonly path: string;
+	readonly added?: number;
+	readonly removed?: number;
+	readonly diffs: readonly string[];
+};
+
+/** Every file it changed, once each, in the order it first changed them: what the owner reviews when it ends. */
+export function changedFiles(steps: readonly HarnessStep[]): ChangedFile[] {
+	const files = new Map<string, { added: number | undefined; removed: number | undefined; diffs: string[] }>();
+	for (const step of steps) {
+		if (step.kind !== "edit") continue;
+		const file = files.get(step.path) ?? { added: 0, removed: 0, diffs: [] };
+		file.added = file.added === undefined || step.added === undefined ? undefined : file.added + step.added;
+		file.removed = file.removed === undefined || step.removed === undefined ? undefined : file.removed + step.removed;
+		if (step.diff !== undefined) file.diffs.push(step.diff);
+		files.set(step.path, file);
+	}
+	return [...files].map(([path, { added, removed, diffs }]) => ({
+		path,
+		...(added === undefined ? {} : { added }),
+		...(removed === undefined ? {} : { removed }),
+		diffs,
+	}));
+}
+
+/** A step as the transcript draws it: alone, or a run of reads one after another, folded into one ("Read 12 files"). */
+export type StepItem =
+	| { readonly kind: "step"; readonly step: HarnessStep; readonly index: number }
+	| { readonly kind: "reads"; readonly paths: readonly string[]; readonly index: number };
+
+/** The steps, with each run of two or more reads in a row folded into one item; `index` is the first step's place. */
+export function foldedSteps(steps: readonly HarnessStep[]): StepItem[] {
+	const items: StepItem[] = [];
+	steps.forEach((step, index) => {
+		const last = items.at(-1);
+		if (step.kind === "read" && last?.kind === "reads") {
+			items[items.length - 1] = { ...last, paths: [...last.paths, step.path] };
+			return;
+		}
+		if (step.kind === "read" && last?.kind === "step" && last.step.kind === "read") {
+			items[items.length - 1] = { kind: "reads", paths: [last.step.path, step.path], index: last.index };
+			return;
+		}
+		items.push({ kind: "step", step, index });
+	});
+	return items;
+}
+
 /**
  * A folder as a card has room for it: a long path by its last two parts ("…/code/demo"), the project being what tells
  * sessions apart; the whole path stays in its title.

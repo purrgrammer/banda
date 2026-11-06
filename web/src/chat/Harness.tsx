@@ -18,7 +18,7 @@ import {
 	UserIcon,
 	XIcon,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChainOfThought, ChainOfThoughtContent, ChainOfThoughtStep } from "@/components/ai-elements/chain-of-thought";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -30,7 +30,15 @@ import { cn } from "@/lib/cn";
 import { Markdown } from "../components/Markdown.tsx";
 import { Tile } from "./Cards.tsx";
 import { Confirm } from "./Confirm.tsx";
-import { changesOf, type HarnessStep, headlineOf, shortFolder } from "./harness-steps.ts";
+import {
+	type ChangedFile,
+	changedFiles,
+	changesOf,
+	foldedSteps,
+	type HarnessStep,
+	headlineOf,
+	shortFolder,
+} from "./harness-steps.ts";
 
 export type { HarnessStep };
 
@@ -483,6 +491,17 @@ export function HarnessTranscript({
 	onSteer?: (text: string) => void;
 }) {
 	const working = session.state === "working";
+	const items = foldedSteps(session.steps);
+	const changed = live(session.state) ? [] : changedFiles(session.steps);
+	// while it works, the newest step stays in view, unless the owner scrolled up to read
+	const end = useRef<HTMLDivElement>(null);
+	const count = session.steps.length;
+	useEffect(() => {
+		if (!working || count === 0) return;
+		const box = scrollerOf(end.current);
+		if (box === undefined || box.scrollHeight - box.scrollTop - box.clientHeight < 160)
+			end.current?.scrollIntoView({ block: "end" });
+	}, [count, working]);
 	return (
 		<div className="flex min-w-0 flex-col gap-4">
 			<span className="flex items-center gap-2 text-ui">
@@ -497,18 +516,37 @@ export function HarnessTranscript({
 				</span>
 				<span className="ml-auto shrink-0 text-meta text-ink-2 tabular-nums">{session.elapsed}</span>
 			</span>
+			{changed.length === 0 ? null : <ChangedList files={changed} />}
 			<ChainOfThought open>
 				<ChainOfThoughtContent>
-					{session.steps.map((step, index) => (
-						<Step
-							// biome-ignore lint/suspicious/noArrayIndexKey: steps are append-only, a step is its place
-							key={`${step.kind}:${index}`}
-							step={step}
-							last={index === session.steps.length - 1}
-							working={working}
-							agent={session.agent}
-						/>
-					))}
+					{items.map((item, place) =>
+						item.kind === "reads" ? (
+							<ChainOfThoughtStep
+								key={`reads:${item.index}`}
+								icon={FileTextIcon}
+								status={place === items.length - 1 && working ? "active" : "complete"}
+								label={<span className="text-ink-2">Read {item.paths.length} files</span>}
+							>
+								<details className="text-meta text-ink-2">
+									<summary className="cursor-pointer hover:text-ink">Show</summary>
+									<ul className="mt-1 flex flex-col gap-0.5 font-code [overflow-wrap:anywhere]">
+										{item.paths.map((path, index) => (
+											// biome-ignore lint/suspicious/noArrayIndexKey: a file may be read twice; its place is its key
+											<li key={index}>{path}</li>
+										))}
+									</ul>
+								</details>
+							</ChainOfThoughtStep>
+						) : (
+							<Step
+								key={`${item.step.kind}:${item.index}`}
+								step={item.step}
+								last={place === items.length - 1}
+								working={working}
+								agent={session.agent}
+							/>
+						),
+					)}
 				</ChainOfThoughtContent>
 			</ChainOfThought>
 			{working ? (
@@ -517,6 +555,59 @@ export function HarnessTranscript({
 				</Shimmer>
 			) : null}
 			{live(session.state) ? <SteerField harness={session.harness} onSteer={onSteer} /> : null}
+			<div ref={end} />
 		</div>
+	);
+}
+
+/** The nearest ancestor that scrolls: where the transcript sits (the sheet). */
+function scrollerOf(element: HTMLElement | null): HTMLElement | undefined {
+	for (let at = element?.parentElement; at; at = at.parentElement) {
+		const overflow = getComputedStyle(at).overflowY;
+		if (overflow === "auto" || overflow === "scroll") return at;
+	}
+	return undefined;
+}
+
+/** What it changed, once it ended: each file with its lines, its diffs folded until opened. */
+function ChangedList({ files }: { files: readonly ChangedFile[] }) {
+	return (
+		<section aria-label="Changes" className="flex flex-col gap-1.5">
+			<span className="text-meta font-medium text-ink-2">Changes</span>
+			<ul className="flex flex-col divide-y divide-line-soft rounded-field border border-line-soft">
+				{files.map((file) => (
+					<li key={file.path}>
+						<details className="group">
+							<summary className="flex cursor-pointer items-baseline gap-2 px-3 py-2 text-ui hover:bg-paper-2">
+								<span className="min-w-0 flex-1 truncate font-code text-meta text-ink" title={file.path}>
+									{file.path}
+								</span>
+								{file.added === undefined || file.removed === undefined ? null : (
+									<span className="shrink-0 text-meta tabular-nums">
+										<span className="text-alive">+{file.added}</span>{" "}
+										<span className="text-danger">−{file.removed}</span>
+									</span>
+								)}
+							</summary>
+							<div className="flex flex-col gap-2 px-3 pb-3">
+								{file.diffs.length === 0 ? (
+									<p className="text-meta text-ink-2">The harness did not show this change.</p>
+								) : (
+									file.diffs.map((diff, index) => (
+										// biome-ignore lint/suspicious/noArrayIndexKey: a file's diffs are in order; their place is their key
+										<CodeBlock
+											key={index}
+											code={diff}
+											language="diff"
+											title={file.diffs.length === 1 ? file.path : `${file.path} · edit ${index + 1}`}
+										/>
+									))
+								)}
+							</div>
+						</details>
+					</li>
+				))}
+			</ul>
+		</section>
 	);
 }
