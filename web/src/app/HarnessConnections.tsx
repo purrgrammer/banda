@@ -25,7 +25,7 @@ export function AddHarnessButton({
 	return (
 		<>
 			<Button variant="outline" size={size} className="self-start" onClick={() => setOpen(true)}>
-				Add a harness
+				{agent === undefined ? "Add a harness" : "Add"}
 			</Button>
 			<HarnessDialog open={open} onOpenChange={setOpen} agent={agent} />
 		</>

@@ -95,8 +95,8 @@ const GITHUB_ROWS = [
 	{
 		connection: "GitHub",
 		accounts: [
-			{ login: "@bandarra", on: true },
-			{ login: "@purrgrammer", on: false },
+			{ login: "@bandarra", account: "bandarra", on: true },
+			{ login: "@purrgrammer", account: "purrgrammer", on: false },
 		],
 	},
 ];
@@ -139,7 +139,7 @@ function AgentPanelOf({
 				routines={<Routines agent={who.name} routines={routines} allPaused={paused} />}
 				access={
 					<>
-						<Connections agent={who.name} rows={connections} />
+						<Connections agent={who.name} rows={connections} compact />
 						<Permissions agent={who.name} permissions={permissions} />
 					</>
 				}
