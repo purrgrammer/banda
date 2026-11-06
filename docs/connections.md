@@ -96,6 +96,10 @@ in a throwaway home, at desktop and phone width.
 - [x] Harnesses: desktop and phone app walkthrough of delegated status, concurrent sessions, approvals and Stop
 - [x] Harnesses: starts need no extra draft; enablement states host access and the harness's own permissions
 - [x] Harnesses: continuation and revocation regressions, native versus summary mode disclosure, real Codex native resumption through the app; owner authorized landing after final checks
+- [x] Harnesses: the session card, asks and steps sheet in the owner's words (DESIGN.md "Harnesses"): humanized step
+  lines, project name on the card, state in words and announced, folded steps sheet that follows the end, one ask
+  whole at a time with kind verbs and bounded "Show all", quiet ask notification; verified in the real app against a
+  throwaway daemon at desktop and phone width, with axe clean on every screen
 - [ ] Harnesses: Windows process supervision before offering execution on Windows
 - [ ] Harnesses: Gemini CLI, OpenCode, Cursor and Goose are not shipped: each failed or was missing here; they need a spike and a sign-in each
 - [ ] Harnesses: their asks reach the owner only in the web app, not on other gateways; the agent still hears the end

@@ -121,7 +121,8 @@ one that gives them one more thing to manage stays out.
   bold name, an ink excerpt and an ink count on a neutral pill; read rows are muted. When an ask is open in a chat,
   its excerpt reads the ask in ink ("Waiting: send the email to Ana?"), a dot marks its face, and
   the tab's title counts asks before unread; on the desktop an open ask also fires a local notification, which needs
-  no vendor, while a routine's message only badges. The agent's face moves while it works, a dot marks it while it waits
+  no vendor, while a routine's message only badges. A harness's ask notifies with the harness, the kind of thing and
+  the project by name, never the command or the path, which would sit in a banner on a lock screen. The agent's face moves while it works, a dot marks it while it waits
   on the owner, and it dims while its routines are paused. The header
   holds the app's name, search (Cmd/Ctrl+K: results are rows that open the chat scrolled to that message) and a quiet
   "+" for a new agent or group; the footer holds Connections, Settings and the daemon's notices. Collapsed, the rail shows faces
@@ -413,12 +414,25 @@ naming one that is not there answers with those that are.
 - **The agent starts it; the harness asks.** A session starts with no draft. What reaches the owner is the harness's own asks: its mode is set before anything is sent, where the
   file names one, so it asks for what the owner would want asked (Claude Code: commands, and anything outside the
   folder); otherwise its own settings decide, and the connect card says which. The connect card says the agent can
-  start it without asking. Only an unambiguous one-time choice is answered, with its native label. "Always allow" is never answered: it would
-  write a rule into the owner's own settings. A request too large to show in full is refused, never shortened for approval;
-  an unsupported permission mode stops the session before work is sent.
-- **A session is live in the chat.** It is drawn in the call's place: one line for its current step, the owner's
-  notes, Stop and Open; every step in a sheet. Each ask is a card under it, said by what it does (run a command, change a file, open
-  a page) with all of it the owner must see (the command, the diff, the address, the choice Allow makes); several may be
+  start it without asking. Only an unambiguous one-time choice is answered, and the harness's exact option is what is
+  answered; the buttons speak banda's words, the same whatever the harness: the ask is named by what it does, approval
+  by its verb, refusal by what will not happen (Don't run, Don't change, Don't open, Don't allow). "Always allow" is never answered: it would
+  write a rule into the owner's own settings. Asks are reviewed whole, one at a time: the oldest in full, the rest
+  folded to a line each until opened, and a folded ask cannot be approved; there is no approve-all. A long command or
+  diff sits in a bounded window with "Show all": folded, never cut. A request too large to show in full is refused, never shortened for approval;
+  an unsupported permission mode stops the session before work is sent. The device notification for an open ask says
+  the harness, the kind of thing and the project by name, never the command or the path.
+- **A session is live in the chat.** It is drawn in the call's place: one line for its current step, in the owner's
+  words where they exist (a command loses its `cd … &&` throat-clearing, paths read from the project, a search or a
+  test run is said as such), truncated in the middle so head and tail both read. The card names the harness and the
+  project; the session's number and full path belong to the sheet's detail, not the card. Its state is said in words
+  ("Working 1:48", "Waiting on you", "Took 0:03", "Stopped", "Interrupted", "Failed") and announced to a screen
+  reader when it changes, never colour alone. The owner's notes live behind "Add a note" and show on the card with
+  whether each was taken; Stop and the step line's own target (and "Steps", the touch target the line repeats) open
+  what it does. Every step lives in a sheet, each folded to its one line until opened: it opens at the newest step and
+  follows the end while the session streams, stops following when the owner scrolls up and offers "Jump to latest"
+  back; a step that arrives while it is open never arrives expanded, and opening one never jumps the view. Each ask
+  is a card under the session's; several may be
   open at once, and each lives as long as the harness's process. The header shows delegated work from its recorded state,
   with approval attention and a way to open its activity; several sessions have a picker. The agent's own active reply
   takes priority, with a compact delegated indicator alongside it. Stop answers them all, and before the ask was sent,
