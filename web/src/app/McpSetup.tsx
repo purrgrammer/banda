@@ -27,9 +27,11 @@ type Phase = "setup" | "auth" | "waiting" | "review" | "done";
 export function McpSetup({
 	connection,
 	onCreated,
+	agent,
 	onClose,
 }: {
 	connection?: string;
+	agent?: { readonly id: string; readonly name: string };
 	onCreated?: (name: string) => void;
 	onClose: () => void;
 }) {
@@ -90,9 +92,9 @@ export function McpSetup({
 		const key = `${name}/${account}/${view?.accepted?.sha}`;
 		if (initialized.current === key) return;
 		initialized.current = key;
-		setSelected([...active]);
+		setSelected([...new Set([...active, ...(agent === undefined ? [] : [agent.id])])]);
 		setReads(view?.tools.filter((tool) => tool.kind === "read").map((tool) => tool.title) ?? []);
-	}, [name, account, view, active]);
+	}, [name, account, view, active, agent]);
 	const update = (next: CapabilitiesView) => {
 		showCapabilities(next);
 		return next.connections.find((each) => each.name === name);
