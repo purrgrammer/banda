@@ -1,6 +1,6 @@
 /** Fixture-only: an agent hands coding work to Claude Code on the owner's computer, from connecting to its outcome. */
 import { SquareIcon } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Terminal } from "@/components/ai-elements/terminal";
 import { Button } from "@/components/ui/button";
 import { HarnessAsks } from "../app/HarnessSession.tsx";
@@ -81,6 +81,60 @@ function FolderBrowserSample() {
 }
 
 const OUTCOME = "Fixed: refresh compared seconds with milliseconds";
+
+/** What streams in, one every tick, looping: reads, thoughts, runs and edits, as a live session hands them over. */
+const STREAMED: readonly HarnessStep[] = [
+	{ kind: "read", path: "src/session.ts" },
+	{ kind: "thought", text: "The refresh path also mints in milliseconds; the helper must follow." },
+	{ kind: "run", command: "npm test -- auth.spec.ts", output: " ✓ refresh keeps the session", running: true },
+	{ kind: "edit", path: "test/helpers/tokens.ts", added: 3, removed: 1 },
+	{ kind: "read", path: "test/helpers/tokens.ts" },
+	{ kind: "run", command: "npm run check", output: "Checked 412 files", running: true },
+];
+
+/** One tick of a streaming session: every third tick grows the last run's output, the rest append a step. */
+export function grownSteps(steps: readonly HarnessStep[], tick: number): readonly HarnessStep[] {
+	let lastRun = -1;
+	steps.forEach((step, index) => {
+		if (step.kind === "run") lastRun = index;
+	});
+	if (tick % 3 === 0 && lastRun >= 0) {
+		const run = steps[lastRun] as Extract<HarnessStep, { kind: "run" }>;
+		const grown = { ...run, output: `${run.output ?? ""}\n ✓ line ${tick} of its output` };
+		return steps.map((step, index) => (index === lastRun ? grown : step));
+	}
+	const next = STREAMED[tick % STREAMED.length] as HarnessStep;
+	return [...steps, next];
+}
+
+/** The sheet's bounded, following log, with a live stream on demand: a step (or more output) every ~800 ms. */
+function StreamingSheet() {
+	const [steps, setSteps] = useState<readonly HarnessStep[]>(() => [...BEFORE_ASK]);
+	const [streaming, setStreaming] = useState(false);
+	useEffect(() => {
+		if (!streaming) return;
+		let tick = 0;
+		const timer = setInterval(() => {
+			tick += 1;
+			setSteps((prior) => grownSteps(prior, tick));
+		}, 800);
+		return () => clearInterval(timer);
+	}, [streaming]);
+	return (
+		<div className="flex h-80 flex-col gap-2">
+			<div className="flex items-center gap-2">
+				<p className="text-meta text-ink-2">Bounded and following, as the sheet holds it:</p>
+				<Button size="xs" variant="outline" aria-pressed={streaming} onClick={() => setStreaming((on) => !on)}>
+					{streaming ? "Stop streaming" : "Simulate streaming"}
+				</Button>
+			</div>
+			<HarnessTranscript
+				session={{ harness: HARNESS, provider: "anthropic", folder: FOLDER, state: "working", steps, elapsed: "0:46" }}
+				follow
+			/>
+		</div>
+	);
+}
 
 /** A card mid-work, for one state of the gallery: its steps as they would be at that moment. */
 const midwork = (steps: readonly HarnessStep[], state: HarnessState, elapsed = "0:12"): HarnessSessionView => ({
@@ -475,10 +529,7 @@ export function HarnessSection() {
 						<p className="text-meta text-ink-2">A run and a diff opened:</p>
 						<HarnessTranscript session={sessionAt("done", [])} defaultOpenSteps={["edit:4", "run:6"]} />
 					</div>
-					<div className="flex h-80 flex-col gap-2">
-						<p className="text-meta text-ink-2">Bounded and following, as the sheet holds it:</p>
-						<HarnessTranscript session={sessionAt("working", [])} follow />
-					</div>
+					<StreamingSheet />
 				</div>
 			</Section>
 		</>
