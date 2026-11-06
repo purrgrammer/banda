@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { HarnessSessionView } from "../../../src/server/api.ts";
-import { askNotice, askWords, chatActivity, harnessActivity, shownAsks } from "./harness-activity.ts";
+import { askNotice, askSummary, askWords, chatActivity, harnessActivity, shownAsks } from "./harness-activity.ts";
 
 const one: HarnessSessionView = {
 	task: 1,
@@ -38,6 +38,11 @@ it("labels an ask's buttons by its kind, never by the harness's own option names
 	expect(askWords("delete").no).toBe("Don't change");
 	expect(askWords("fetch")).toEqual({ what: "Open a web page", verb: "Allow", no: "Don't open" });
 	expect(askWords("other")).toEqual({ what: "Do something", verb: "Allow", no: "Don't allow" });
+});
+it("reads an ask's kind case-blind: a harness that shouts gets the same words, not the vaguest", () => {
+	expect(askWords("EXECUTE")).toEqual(askWords("execute"));
+	expect(askWords("Edit")).toEqual(askWords("edit"));
+	expect(askSummary("EXECUTE")).toBe("run a command");
 });
 it("shows the asks the owner opened, by id, and always the oldest: a resolved ask moves no button", () => {
 	const a = { id: "a" };

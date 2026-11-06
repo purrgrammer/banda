@@ -4,27 +4,31 @@ import type { HarnessSessionView } from "../../../src/server/api.ts";
 import type { FaceState } from "../chat/types.ts";
 
 /** An ask's kind in a few words, for a folded line or a notification: never the command or the path. */
-export const askSummary = (kind: string): string =>
-	kind === "execute"
+export const askSummary = (kind: string): string => {
+	// ACP names kinds in lowercase; a harness that shouts "EXECUTE" gets the same words, not the vaguest
+	const k = kind.toLowerCase();
+	return k === "execute"
 		? "run a command"
-		: kind === "edit" || kind === "delete" || kind === "move"
+		: k === "edit" || k === "delete" || k === "move"
 			? "change a file"
-			: kind === "fetch"
+			: k === "fetch"
 				? "open a web page"
 				: "do something";
+};
 
 /**
  * An ask's buttons, by its kind: the verb of what would happen, and a refusal naming what will not. The harness's
  * own option names ("Allow", "Reject") never label the buttons: the owner reads the same words whatever the harness.
  */
 export const askWords = (kind: string): { what: string; verb: string; no: string } => {
-	const summary = askSummary(kind);
+	const k = kind.toLowerCase();
+	const summary = askSummary(k);
 	const what = summary.charAt(0).toUpperCase() + summary.slice(1);
-	return kind === "execute"
+	return k === "execute"
 		? { what, verb: "Run", no: "Don't run" }
-		: kind === "edit" || kind === "delete" || kind === "move"
+		: k === "edit" || k === "delete" || k === "move"
 			? { what, verb: "Allow", no: "Don't change" }
-			: kind === "fetch"
+			: k === "fetch"
 				? { what, verb: "Allow", no: "Don't open" }
 				: { what, verb: "Allow", no: "Don't allow" };
 };
