@@ -4,7 +4,7 @@
  * paused). Said here once: the feed has no working line. The name opens the panel; on the phone a back control leads
  * to the band.
  */
-import { ChevronLeftIcon, PanelRightIcon, TerminalIcon } from "lucide-react";
+import { ChevronLeftIcon, PanelRightIcon, SquareTerminalIcon } from "lucide-react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -89,21 +89,29 @@ export function Header({
 			{delegated === undefined ? null : (
 				<Button
 					variant="ghost"
-					size="sm"
-					className="shrink-0"
+					size="icon-sm"
+					className="relative ml-auto shrink-0 text-ink-2"
 					onClick={delegated.onOpen}
-					aria-label={`${delegated.waiting ? "Waiting on you: " : ""}${delegated.count} coding ${delegated.count === 1 ? "session" : "sessions"}`}
+					aria-label={`${delegated.waiting ? "Waiting on you: " : ""}${delegated.count} coding ${delegated.count === 1 ? "session" : "sessions"} running`}
 				>
-					<TerminalIcon />
-					<span>{delegated.count}</span>
-					{phone ? null : <span>coding {delegated.count === 1 ? "session" : "sessions"}</span>}
+					<SquareTerminalIcon />
+					{delegated.waiting ? (
+						<span aria-hidden="true" className="absolute top-0.5 right-0.5 size-2 rounded-full bg-ink ring-2 ring-paper" />
+					) : delegated.count > 1 ? (
+						<span
+							aria-hidden="true"
+							className="absolute -top-0.5 -right-0.5 min-w-3.5 rounded-full bg-paper-3 px-0.5 text-center text-[0.625rem] leading-3.5 font-semibold text-ink tabular-nums"
+						>
+							{delegated.count}
+						</span>
+					) : null}
 				</Button>
 			)}
 			{phone || onPanel === undefined ? null : (
 				<Button
 					variant="ghost"
 					size="icon-sm"
-					className={cn("ml-auto text-ink-2", panelOpen && "bg-paper-3 text-ink")}
+					className={cn(delegated === undefined && "ml-auto", "text-ink-2", panelOpen && "bg-paper-3 text-ink")}
 					aria-label={panelOpen ? "Hide the panel" : "Show the panel"}
 					aria-pressed={panelOpen}
 					onClick={onPanel}

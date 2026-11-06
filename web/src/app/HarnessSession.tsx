@@ -9,11 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { answerHarness, steerHarness, stopHarness } from "../areas/harnesses.ts";
 import { ApprovalCard } from "../chat/Approval.tsx";
+import { Run } from "../chat/Feed.tsx";
 import { type HarnessSessionView as CardView, HarnessCard, HarnessTranscript } from "../chat/Harness.tsx";
 import type { HarnessAsk, HarnessSessionView } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { chatAgents } from "../lib/navigation.ts";
 import { useShell } from "../lib/shell.ts";
+import { whoOf } from "./band.ts";
+import { runningSessions } from "./harness-activity.ts";
 
 const clock = (ms: number) => {
 	const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -162,9 +165,8 @@ export function HarnessActivitySheet({ tasks, onClose }: { tasks: readonly numbe
 	const [selected, setSelected] = useState<number | undefined>(tasks.length === 1 ? tasks[0] : undefined);
 	const session = sessions.find((one) => one.task === selected);
 	const now = useNow(sessions.some((one) => one.ended === undefined));
-	const nameOf = (id: string | undefined) =>
-		companion === undefined ? undefined : chatAgents(agents, companion).find((one) => one.id === id)?.name;
-	const agent = nameOf(session?.agent);
+	const known = companion === undefined ? [] : chatAgents(agents, companion);
+	const agent = session === undefined ? undefined : whoOf(known, session.agent).name;
 	return (
 		<Sheet
 			open
@@ -179,15 +181,25 @@ export function HarnessActivitySheet({ tasks, onClose }: { tasks: readonly numbe
 				</SheetHeader>
 				<div className="flex flex-col gap-3 p-4">
 					{session === undefined ? (
-						sessions.map((one) => (
-							<HarnessCard
-								key={one.task}
-								session={viewOf(one, now, nameOf(one.agent))}
-								onStop={() => void attempt("stop it", () => stopHarness(one.task))}
-								onOpen={() => setSelected(one.task)}
-								onSteer={(text) => void attempt("send your note", () => steerHarness(one.task, text))}
-							/>
-						))
+						// each under the agent whose it is, its asks with it: the list spans every chat
+						sessions.map((one) => {
+							const who = whoOf(known, one.agent);
+							return (
+								<Run key={one.task} who={who}>
+									<div className="flex w-full min-w-0 flex-col gap-3">
+										<HarnessCard
+											session={viewOf(one, now, who.name)}
+											onStop={() => void attempt("stop it", () => stopHarness(one.task))}
+											onOpen={() => setSelected(one.task)}
+											onSteer={(text) => void attempt("send your note", () => steerHarness(one.task, text))}
+										/>
+										{(one.asks ?? []).map((ask) => (
+											<HarnessAskCard key={ask.id} session={one} ask={ask} agentName={who.name} />
+										))}
+									</div>
+								</Run>
+							);
+						})
 					) : (
 						<>
 							{tasks.length > 1 ? (
@@ -214,4 +226,25 @@ export function HarnessActivitySheet({ tasks, onClose }: { tasks: readonly numbe
 			</SheetContent>
 		</Sheet>
 	);
+}
+
+/**
+ * The header's harness button and its list: every session running anywhere, this chat's (`here`) after those waiting
+ * on the owner. Absent while none runs; its dot says one waits on the owner.
+ */
+export function useHarnessButton(here: readonly number[]) {
+	const { harnesses } = useShell();
+	const [open, setOpen] = useState<readonly number[]>();
+	const running = runningSessions(harnesses?.sessions ?? [], here);
+	return {
+		delegated:
+			running.sessions.length === 0
+				? undefined
+				: {
+						count: running.sessions.length,
+						waiting: running.waiting,
+						onOpen: () => setOpen(running.sessions.map((session) => session.task)),
+					},
+		sheet: open === undefined ? null : <HarnessActivitySheet tasks={open} onClose={() => setOpen(undefined)} />,
+	};
 }

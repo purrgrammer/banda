@@ -1,7 +1,7 @@
 /** The band's rows from the daemon's chats and groups: one per agent and group, newest first; the tab counts asks first. */
 import { describe, expect, it } from "vitest";
 import { defaultAvatarFace } from "../src/core/avatar-face.ts";
-import type { ChatRow, GroupRow } from "../src/server/api.ts";
+import type { ChatRow, GroupRow, HarnessSessionView } from "../src/server/api.ts";
 import { bandRows, titleOf } from "../web/src/app/band.ts";
 
 const NOW = Date.parse("2026-11-03T12:00:00");
@@ -48,6 +48,48 @@ describe("band rows", () => {
 			time: "",
 		});
 		expect(titleOf(rows)).toBe("(1 waiting, 2 unread) banda");
+	});
+
+	it("puts a chat whose harness asks the owner first, by when it asked, an agent's as a group's", () => {
+		const session = (chat: number, asked?: number): HarnessSessionView => ({
+			task: chat * 10,
+			chat,
+			agent: "sancho",
+			harness: "fake",
+			service: "Fake Code",
+			folder: "~/code",
+			state: asked === undefined ? "working" : "waiting",
+			at: NOW - 3_600_000,
+			steps: [],
+			dropped: 0,
+			...(asked === undefined ? {} : { asks: [{ id: "a", kind: "execute", command: "npm test", at: asked }] }),
+		});
+		const rows = [
+			chat("sancho", NOW - 3_600_000, { said: NOW - 3_600_000 }),
+			chat("mara", NOW - 60_000, { said: NOW - 60_000 }),
+		];
+		// a session only working never reorders the band
+		expect(bandRows(agents, rows, [], false, NOW, [], [], [session(1)]).map((row) => row.name)).toEqual([
+			"Mara",
+			"Sancho",
+		]);
+		const asking = bandRows(agents, rows, [], false, NOW, [], [], [session(1, NOW - 1000)]);
+		expect(asking.map((row) => row.name)).toEqual(["Sancho", "Mara"]);
+		expect(asking[0]).toMatchObject({ state: "waiting", ask: "1 coding session" });
+		const group: GroupRow = {
+			room: 7,
+			name: "Trip",
+			members: ["sancho", "mara"],
+			working: [],
+			at: NOW - 7_200_000,
+			latest: 1,
+			executions: { sancho: 30 },
+			asking: [],
+			read: 0,
+			unread: 0,
+		};
+		const grouped = bandRows(agents, rows, [group], false, NOW, [], [], [session(30, NOW - 1000)]);
+		expect(grouped[0]).toMatchObject({ name: "Trip", ask: "1 coding session" });
 	});
 
 	it("greets with what an agent's tools can do: the web only when it has the web or a browser", () => {

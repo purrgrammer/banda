@@ -231,35 +231,37 @@ const AT: Record<HarnessState, Step> = {
 export function HarnessSection() {
 	return (
 		<>
-			<Section id="harness-header" title="Delegated activity in the header">
+			<Section
+				id="harness-header"
+				title="Coding sessions in the header"
+				note="The line under the name is the agent's own work, and opens its activity. The terminal button beside the panel's lists every session running anywhere, this chat's first: a dot when one waits on you, a count when several run."
+			>
 				<Header
 					name={MARA.name}
 					faces={[MARA]}
 					state="working"
-					doing="Claude Code is running a command…"
+					doing="Thinking…"
+					delegated={{ count: 1, waiting: false, onOpen: () => {} }}
+					onPanel={() => {}}
 					onActivity={() => {}}
 				/>
 				<Header
 					name={MARA.name}
 					faces={[MARA]}
-					state="waiting"
-					doing="Waiting on you · Claude Code"
-					attention
-					onActivity={() => {}}
+					delegated={{ count: 1, waiting: true, onOpen: () => {} }}
+					onPanel={() => {}}
 				/>
 				<Header
 					name={MARA.name}
 					faces={[MARA]}
-					state="working"
-					doing="2 coding sessions running"
-					onActivity={() => {}}
+					delegated={{ count: 3, waiting: false, onOpen: () => {} }}
+					onPanel={() => {}}
 				/>
 				<Header
 					name={MARA.name}
 					faces={[MARA]}
 					state="working"
 					doing="Thinking…"
-					attention
 					delegated={{ count: 2, waiting: true, onOpen: () => {} }}
 					phone
 					onActivity={() => {}}

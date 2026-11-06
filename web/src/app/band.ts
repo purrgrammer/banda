@@ -9,7 +9,7 @@ import type { FaceState, RowView, Who } from "../chat/types.ts";
 import { agentMainOf } from "../lib/chats.ts";
 import type { ChatAgent } from "../lib/navigation.ts";
 import { firstWords } from "./first-words.ts";
-import { harnessActivity } from "./harness-activity.ts";
+import { askedAt, harnessActivity } from "./harness-activity.ts";
 
 /** The time at a row's right: the hour today, the weekday this week, else the day and month. */
 export function rowTime(at: number | undefined, now: number): string {
@@ -55,9 +55,10 @@ export function bandRows(
 	const agentRows = agents.map((agent): BandRow => {
 		const main = agentMainOf(rows, agent.id);
 		const delegated = harnessActivity(sessions, main === undefined ? [] : [main.chat]);
-		// ordered and timed by the newest thing that reached the owner, never by a run's own steps; one that has said
-		// nothing yet by when the owner made it (or last changed it), so a new agent comes first
-		const at = main?.said ?? agent.since ?? 0;
+		// ordered and timed by the newest thing that reached the owner (what it said, or its harness's ask), never by a
+		// run's own steps; one that has said nothing yet by when the owner made it (or last changed it), so a new agent
+		// comes first
+		const at = Math.max(main?.said ?? agent.since ?? 0, askedAt(delegated.sessions) ?? 0);
 		return {
 			id: `a:${agent.id}`,
 			to: { name: "agent", id: agent.id },
@@ -94,8 +95,9 @@ export function bandRows(
 	const groupRows = groups
 		.filter((group) => group.archived === undefined)
 		.map((group): BandRow => {
-			const at = group.last?.at ?? group.at;
 			const delegated = harnessActivity(sessions, Object.values(group.executions ?? {}));
+			// as an agent's: its last message, or a member's harness asking the owner, whichever is newer
+			const at = Math.max(group.last?.at ?? group.at, askedAt(delegated.sessions) ?? 0);
 			const last = group.last;
 			const by = last === undefined ? undefined : "owner" in last.author ? "You" : whoOf(known, last.author.agent).name;
 			return {

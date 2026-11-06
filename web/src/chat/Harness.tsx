@@ -89,14 +89,14 @@ function Changes({ steps }: { steps: readonly HarnessStep[] }) {
 	const { files, added, removed } = changesOf(steps);
 	if (files === 0) return <span>No files changed</span>;
 	return (
+		// the lines first, as a diff's stat reads, then how many files
 		<span className="tabular-nums">
-			{files} {files === 1 ? "file" : "files"}
 			{added === undefined || removed === undefined ? null : (
 				<>
-					{" "}
-					<span className="text-alive">+{added}</span> <span className="text-danger">−{removed}</span>
+					<span className="text-alive">+{added}</span> <span className="text-danger">−{removed}</span> ·{" "}
 				</>
 			)}
+			{files} {files === 1 ? "file" : "files"}
 		</span>
 	);
 }

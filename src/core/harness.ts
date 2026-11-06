@@ -99,6 +99,8 @@ export type HarnessAsk = {
 	/** The exact one-time choices offered by the harness. No persistent permissions are answered. */
 	readonly allow?: { readonly id: string; readonly name: string };
 	readonly deny?: { readonly id: string; readonly name: string };
+	/** When it asked: the newest thing that reached the owner, by which their chat list orders the chat. */
+	readonly at: number;
 };
 
 export type HarnessSession = {
@@ -695,7 +697,7 @@ export function defineHarnesses(options: HarnessOptions) {
 	}
 
 	/** Full one-time approval content. Ambiguous/oversized asks are refused, never approved from a preview. */
-	function askOf(request: AcpPermissionRequest): HarnessAsk {
+	function askOf(request: AcpPermissionRequest): Omit<HarnessAsk, "at"> {
 		if (Buffer.byteLength(JSON.stringify(request)) > 64 * 1024)
 			throw new Error("The harness requested an action too large to review (64 KB maximum). It was refused.");
 		const call = request.toolCall as AcpPermissionRequest["toolCall"] & { content?: unknown; locations?: unknown };
@@ -844,7 +846,7 @@ export function defineHarnesses(options: HarnessOptions) {
 				const asked = async (request: AcpPermissionRequest): Promise<AcpPermissionOutcome> => {
 					fault("harness:ask");
 					if (cancelled || closing) return { outcome: "cancelled" };
-					let ask: HarnessAsk;
+					let ask: Omit<HarnessAsk, "at">;
 					try {
 						ask = askOf(request);
 					} catch (error) {
@@ -863,7 +865,7 @@ export function defineHarnesses(options: HarnessOptions) {
 							open.delete(ask.id);
 							return undefined;
 						}
-						session.asks = [...(session.asks ?? []).filter((one) => one.id !== ask.id), ask];
+						session.asks = [...(session.asks ?? []).filter((one) => one.id !== ask.id), { ...ask, at: now() }];
 						session.state = "waiting";
 						return undefined;
 					}, ctx);

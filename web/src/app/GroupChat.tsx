@@ -40,8 +40,8 @@ import { ActivitySheet, type ActivityTarget } from "./Activity.tsx";
 import { kindWords } from "./ArtifactPage.tsx";
 import { whoOf } from "./band.ts";
 import { DraftApproval } from "./DraftApproval.tsx";
-import { HarnessActivitySheet, HarnessSessionPart } from "./HarnessSession.tsx";
-import { chatActivity, harnessActivity } from "./harness-activity.ts";
+import { HarnessSessionPart, useHarnessButton } from "./HarnessSession.tsx";
+import { harnessActivity } from "./harness-activity.ts";
 import { MessageObjects, OwnerMessage } from "./Objects.tsx";
 import { useSkills } from "./Skills.tsx";
 
@@ -120,14 +120,10 @@ export function GroupChat({
 	const name = row?.name ?? group?.name ?? "Group";
 	const working = members.filter((member) => member.state === "working");
 	const executions = row?.executions ?? group?.executions ?? {};
-	const [delegatedOpen, setDelegatedOpen] = useState<readonly number[]>();
+	// the room's own: its members' sessions, drawn in it under each member
 	const delegated = harnessActivity(shell.harnesses?.sessions ?? [], Object.values(executions));
-	const status = chatActivity(
-		(row?.asking ?? group?.asking ?? []).length ? "waiting" : working.length ? "working" : "idle",
-		workingWords(working.map((member) => member.name)),
-		delegated,
-	);
-	const openDelegated = () => setDelegatedOpen(delegated.sessions.map((session) => session.task));
+	const harness = useHarnessButton(Object.values(executions));
+	const state = (row?.asking ?? group?.asking ?? []).length ? "waiting" : working.length ? "working" : "idle";
 	const activityTargets = (working.length ? working : members).flatMap((member) => {
 		const chat = executions[member.id];
 		return chat === undefined ? [] : [{ chat, name: member.name, heading: name }];
@@ -159,25 +155,15 @@ export function GroupChat({
 				<Header
 					name={name}
 					faces={all}
-					state={status.state}
-					attention={status.attention}
-					delegated={
-						status.secondary
-							? { count: delegated.sessions.length, waiting: delegated.waiting, onOpen: openDelegated }
-							: undefined
-					}
+					state={state}
+					attention={state === "waiting"}
+					delegated={harness.delegated}
 					phone={phone}
-					doing={status.doing}
+					doing={state === "working" ? workingWords(working.map((member) => member.name)) : undefined}
 					onBack={onBack}
 					panelOpen={panel}
 					onPanel={() => setPanel((open) => !open)}
-					onActivity={
-						status.delegatedPrimary
-							? openDelegated
-							: activityTargets.length
-								? () => setActivity(activityTargets)
-								: undefined
-					}
+					onActivity={activityTargets.length ? () => setActivity(activityTargets) : undefined}
 				/>
 				<Conversation className="flex flex-col">
 					<ConversationContent
@@ -346,9 +332,7 @@ export function GroupChat({
 					/>
 				</Conversation>
 			</div>
-			{delegatedOpen === undefined ? null : (
-				<HarnessActivitySheet tasks={delegatedOpen} onClose={() => setDelegatedOpen(undefined)} />
-			)}
+			{harness.sheet}
 			{activity === undefined ? null : <ActivitySheet targets={activity} onClose={() => setActivity(undefined)} />}
 			{!phone && panel ? panelView : null}
 		</>
