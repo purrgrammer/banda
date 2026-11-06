@@ -64,6 +64,8 @@ export type HarnessSessionView = {
 	readonly logo?: string | undefined;
 	/** The folder it works in, as the owner knows it: "~/sancho". */
 	readonly folder: string;
+	/** The folder's real absolute path, from the daemon: paths are cut only under it, never by name. */
+	readonly root?: string | undefined;
 	readonly state: HarnessState;
 	readonly steps: readonly HarnessStep[];
 	/** How many older steps the daemon dropped: with it, a kept step's place never moves while more stream in. */
@@ -106,24 +108,36 @@ export function HarnessMark({
 
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** `text` with the project's path gone: a path into the folder becomes relative, the folder itself ".". */
-export function relativeTo(text: string, folder?: string): string {
+/**
+ * `text` with the project's path gone: a path into the folder becomes relative, the folder itself ".". Only a path
+ * anchored at the folder as the owner writes it (`~/sancho`) or at its real root from the daemon (`/Users/ana/sancho`)
+ * is cut: a stranger's path that merely ends in the folder's name stays whole. Showing too much beats a command that
+ * reads as inside the project when it is not.
+ */
+export function relativeTo(text: string, folder?: string, root?: string): string {
 	if (folder === undefined || folder === "") return text;
-	const tail = escaped(folder.replace(/^~\//, "").replace(/^\//, ""));
-	return text
-		.replace(new RegExp(`(?:~|\\/)[^\\s'"]*?${tail}\\/`, "g"), "")
-		.replace(new RegExp(`(?:~|\\/)[^\\s'"]*?${tail}(?=[\\s'"]|$)`, "g"), ".");
+	const anchors = new Set(
+		[folder, ...(root === undefined || root === "" ? [] : [root])].map((one) => one.replace(/\/+$/, "")),
+	);
+	let out = text;
+	for (const anchor of anchors) {
+		const p = escaped(anchor);
+		out = out
+			.replace(new RegExp(`(?<![\\w.~/-])${p}\\/`, "g"), "")
+			.replace(new RegExp(`(?<![\\w.~/-])${p}(?=[\\s'"]|$)`, "g"), ".");
+	}
+	return out;
 }
 
 /** A command without the shell's throat-clearing: no `cd <path> &&` prefix, paths relative to the project. */
-export function cleanCommand(command: string, folder?: string): string {
+export function cleanCommand(command: string, folder?: string, root?: string): string {
 	let text = command.trim().replace(/\s+/g, " ");
 	for (;;) {
 		const match = /^cd (?:"[^"]*"|'[^']*'|[^\s&]+) ?&& ?/.exec(text);
 		if (match === null) break;
 		text = text.slice(match[0].length);
 	}
-	return relativeTo(text, folder);
+	return relativeTo(text, folder, root);
 }
 
 /** Truncated in the middle, never the end: a command's head and its tail both read. CSS ellipsis stays a last resort. */
@@ -138,18 +152,45 @@ const unquote = (token: string) => token.replace(/^["']|["']$/g, "");
 
 const TESTS = /\b(vitest|jest|pytest|cargo test|go test)\b|\bnpm (run )?test/;
 
+/** The command with its quoted strings blanked: what the shell itself would read as structure. */
+const bareOf = (command: string) => command.replace(/"(?:\\.|[^"\\])*"/g, '""').replace(/'[^']*'/g, "''");
+
+/** True when the shell would do more than one plain thing: chains, pipes, redirections, substitutions, outside quotes. */
+export function compoundCommand(command: string): boolean {
+	return /[|;&<>`\n]|\$\(/.test(bareOf(command));
+}
+
+const GIT_READS = new Set(["status", "diff", "log", "show", "rev-parse", "blame"]);
+const BRANCH_WRITES =
+	/^(-d|-D|--delete|-m|-M|--move|-c|-C|--copy|-f|--force|-u|--set-upstream-to(=.*)?|--unset-upstream|--edit-description)$/;
+
+/** A git invocation that only looks: status, diff, log, show, rev-parse, blame, a listing `branch`, `remote -v`. */
+function gitLooks(args: readonly string[]): boolean {
+	const sub = args[0];
+	if (sub === undefined || sub.startsWith("-")) return false;
+	if (GIT_READS.has(sub)) return true;
+	const rest = args.slice(1);
+	if (sub === "branch") return rest.every((arg) => arg.startsWith("-") && !BRANCH_WRITES.test(arg));
+	if (sub === "remote") return rest.every((arg) => arg === "-v" || arg === "--verbose");
+	return false;
+}
+
 /** What a command does, in words; an unknown command stays itself, cleaned and middle-truncated, in mono. */
 export function runHeadline(
 	command: string,
 	folder?: string,
 	ran = false,
+	root?: string,
 ): { verb: string; object: string; code: boolean } {
-	const clean = cleanCommand(command, folder);
+	const clean = cleanCommand(command, folder, root);
+	const whole = { verb: ran ? "Ran" : "Running", object: middleEllipsis(clean, 72), code: true };
+	// a chained, piped, redirected or substituting command never hides behind one quiet verb: the owner sees it whole
+	if (compoundCommand(clean)) return whole;
 	const tokens = clean.match(/"[^"]*"|'[^']*'|\S+/g) ?? [];
 	const head = (tokens[0] ?? "").split("/").at(-1) ?? "";
 	const positional = tokens
 		.slice(1)
-		.filter((token) => !token.startsWith("-") && token !== "&&" && token !== "|")
+		.filter((token) => !token.startsWith("-"))
 		.map(unquote);
 	const first = positional[0];
 	if ((head === "rg" || head === "grep") && first !== undefined && first !== "")
@@ -159,8 +200,6 @@ export function runHeadline(
 		const file = positional.filter((token) => !/^\d+$/.test(token)).at(-1);
 		if (file !== undefined) return { verb: ran ? "Read" : "Reading", object: middleEllipsis(file), code: true };
 	}
-	if (head === "sed" && positional.length > 1)
-		return { verb: ran ? "Read" : "Reading", object: middleEllipsis(positional.at(-1) ?? ""), code: true };
 	if (head === "ls")
 		return {
 			verb: ran ? "Listed" : "Listing",
@@ -168,25 +207,28 @@ export function runHeadline(
 				first === undefined || first === "." ? (folder === undefined ? "." : projectOf(folder)) : middleEllipsis(first),
 			code: true,
 		};
-	if (TESTS.test(clean)) return { verb: ran ? "Ran tests" : "Running tests", object: "", code: false };
-	if (head === "git") return { verb: ran ? "Checked git" : "Checking git", object: "", code: false };
-	return { verb: ran ? "Ran" : "Running", object: middleEllipsis(clean, 72), code: true };
+	// only a git that looks earns the quiet verb; one that writes shows itself whole: "Running git push --force …"
+	if (head === "git")
+		return gitLooks(tokens.slice(1)) ? { verb: ran ? "Checked git" : "Checking git", object: "", code: false } : whole;
+	if (TESTS.test(bareOf(clean))) return { verb: ran ? "Ran tests" : "Running tests", object: "", code: false };
+	return whole;
 }
 
 /** The one line the card shows for a step: a verb and what it acted on, in the owner's words where it can. */
 export function headlineOf(
 	step: HarnessStep | undefined,
 	folder?: string,
+	root?: string,
 ): { verb: string; object: string; code: boolean } {
 	switch (step?.kind) {
 		case "read":
-			return { verb: "Reading", object: middleEllipsis(relativeTo(step.path, folder)), code: true };
+			return { verb: "Reading", object: middleEllipsis(relativeTo(step.path, folder, root)), code: true };
 		case "edit":
-			return { verb: "Editing", object: middleEllipsis(relativeTo(step.path, folder)), code: true };
+			return { verb: "Editing", object: middleEllipsis(relativeTo(step.path, folder, root)), code: true };
 		case "run":
-			return runHeadline(step.command, folder, step.running === false);
+			return runHeadline(step.command, folder, step.running === false, root);
 		case "waiting":
-			return { verb: "Waiting on you:", object: middleEllipsis(cleanCommand(step.command, folder)), code: true };
+			return { verb: "Waiting on you:", object: middleEllipsis(cleanCommand(step.command, folder, root)), code: true };
 		case "thought":
 			return { verb: "Thinking", object: "", code: false };
 		case "steered":
@@ -194,7 +236,7 @@ export function headlineOf(
 		case "decided":
 			return {
 				verb: step.allowed ? "Going on: you allowed" : "Going on: you denied",
-				object: middleEllipsis(cleanCommand(step.command, folder)),
+				object: middleEllipsis(cleanCommand(step.command, folder, root)),
 				code: true,
 			};
 		case "said":
@@ -494,6 +536,7 @@ export function HarnessCard({
 	const { verb, object, code } = headlineOf(
 		state === "waiting" ? [...steps].reverse().find((step) => step.kind === "waiting") : last,
 		folder,
+		session.root,
 	);
 	const notes = steps.filter((step): step is Extract<HarnessStep, { kind: "steered" }> => step.kind === "steered");
 	const headline =
@@ -658,6 +701,7 @@ function stepLine(
 	step: HarnessStep,
 	folder: string,
 	agent?: string,
+	root?: string,
 ): { icon: LucideIcon; words: ReactNode; detail?: ReactNode; always?: ReactNode } {
 	const oneline = (text: string) => text.replace(/\s+/g, " ").trim();
 	switch (step.kind) {
@@ -686,7 +730,7 @@ function stepLine(
 				words: (
 					<HeadWords
 						verb={step.allowed ? "You allowed" : "You denied"}
-						object={middleEllipsis(cleanCommand(step.command, folder))}
+						object={middleEllipsis(cleanCommand(step.command, folder, root))}
 						code
 					/>
 				),
@@ -695,7 +739,7 @@ function stepLine(
 		case "read":
 			return {
 				icon: FileTextIcon,
-				words: <HeadWords verb="Read" object={relativeTo(step.path, folder)} code />,
+				words: <HeadWords verb="Read" object={relativeTo(step.path, folder, root)} code />,
 			};
 		case "thought":
 			return {
@@ -708,7 +752,7 @@ function stepLine(
 				icon: PencilIcon,
 				words: (
 					<>
-						<HeadWords verb="Edited" object={relativeTo(step.path, folder)} code />
+						<HeadWords verb="Edited" object={relativeTo(step.path, folder, root)} code />
 						{step.added === undefined || step.removed === undefined ? null : (
 							<span className="shrink-0 text-meta tabular-nums">
 								<span className="text-alive">+{step.added}</span> <span className="text-danger">−{step.removed}</span>
@@ -718,11 +762,11 @@ function stepLine(
 				),
 				detail:
 					step.diff === undefined ? undefined : (
-						<CodeBlock code={step.diff} language="diff" title={relativeTo(step.path, folder)} />
+						<CodeBlock code={step.diff} language="diff" title={relativeTo(step.path, folder, root)} />
 					),
 			};
 		case "run": {
-			const { verb, object, code } = headlineOf(step, folder);
+			const { verb, object, code } = headlineOf(step, folder, root);
 			return {
 				icon: TerminalIcon,
 				words: <HeadWords verb={verb} object={object} code={code} />,
@@ -733,7 +777,11 @@ function stepLine(
 			return {
 				icon: CircleAlertIcon,
 				words: (
-					<HeadWords verb="Waiting on you to allow" object={middleEllipsis(cleanCommand(step.command, folder))} code />
+					<HeadWords
+						verb="Waiting on you to allow"
+						object={middleEllipsis(cleanCommand(step.command, folder, root))}
+						code
+					/>
 				),
 				detail: <Raw text={step.command} />,
 			};
@@ -750,6 +798,7 @@ function stepLine(
 function StepRow({
 	step,
 	folder,
+	root,
 	last,
 	working,
 	agent,
@@ -758,6 +807,7 @@ function StepRow({
 }: {
 	step: HarnessStep;
 	folder: string;
+	root?: string | undefined;
 	last: boolean;
 	working: boolean;
 	agent?: string | undefined;
@@ -765,7 +815,7 @@ function StepRow({
 	onToggle: () => void;
 }) {
 	const status = step.kind === "waiting" ? "active" : last && working ? "active" : "complete";
-	const { icon, words, detail, always } = stepLine(step, folder, agent);
+	const { icon, words, detail, always } = stepLine(step, folder, agent, root);
 	if (detail === undefined)
 		return (
 			<ChainOfThoughtStep
@@ -862,6 +912,7 @@ export function HarnessTranscript({
 							key={key}
 							step={step}
 							folder={session.folder}
+							root={session.root}
 							last={index === session.steps.length - 1}
 							working={working}
 							agent={session.agent}

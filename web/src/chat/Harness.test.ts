@@ -6,12 +6,14 @@ import { pbtRuns } from "../../../test/pbt.ts";
 import {
 	changesOf,
 	cleanCommand,
+	compoundCommand,
 	type HarnessSessionView,
 	type HarnessStep,
 	HarnessTranscript,
 	headlineOf,
 	middleEllipsis,
 	projectOf,
+	relativeTo,
 	stepKey,
 	toggledStep,
 } from "./Harness.tsx";
@@ -71,11 +73,13 @@ describe("headlineOf", () => {
 		});
 		expect(headlineOf(undefined)).toEqual({ verb: "Starting", object: "", code: false });
 	});
-	it("drops the cd prefix and makes paths relative to the project", () => {
+	it("drops the cd prefix and makes paths under the real root relative to the project", () => {
 		expect(headlineOf(run("cd /Users/ana/code/banda && npm run build:web"), FOLDER).object).toBe("npm run build:web");
 		expect(headlineOf(run("cd ~/code/banda && node scripts/x.ts"), FOLDER).object).toBe("node scripts/x.ts");
 		expect(cleanCommand("cd '/Users/ana/code/banda' && make lint", FOLDER)).toBe("make lint");
-		expect(cleanCommand("node /Users/ana/code/banda/scripts/x.ts", FOLDER)).toBe("node scripts/x.ts");
+		expect(cleanCommand("node /Users/ana/code/banda/scripts/x.ts", FOLDER, "/Users/ana/code/banda")).toBe(
+			"node scripts/x.ts",
+		);
 	});
 	it("says a search in words, with its pattern", () => {
 		expect(headlineOf(run('rg -n "headlineOf" web/src'), FOLDER)).toEqual({
@@ -85,14 +89,24 @@ describe("headlineOf", () => {
 		});
 		expect(headlineOf(run("grep -r 'steer' src"), FOLDER).object).toBe('"steer"');
 	});
-	it("says a read in words, whatever reads it", () => {
+	it("says a read in words, for a plain cat, head or tail", () => {
 		expect(headlineOf(run("cat web/src/chat/Harness.tsx"), FOLDER)).toEqual({
 			verb: "Reading",
 			object: "web/src/chat/Harness.tsx",
 			code: true,
 		});
-		expect(headlineOf(run("sed -n '1,40p' src/core/harness.ts"), FOLDER).object).toBe("src/core/harness.ts");
 		expect(headlineOf(run("head -n 20 README.md"), FOLDER).object).toBe("README.md");
+	});
+	it("never titles a sed as a read: a sed shows itself, whatever its flags", () => {
+		expect(headlineOf(run("sed -i '' 's/a/b/' config.yml"), FOLDER)).toEqual({
+			verb: "Running",
+			object: "sed -i '' 's/a/b/' config.yml",
+			code: true,
+		});
+		expect(headlineOf(run("sed -n '1,40p' src/core/harness.ts"), FOLDER).verb).toBe("Running");
+		expect(headlineOf(run("sed -n 1,10p notes.txt > /tmp/out"), FOLDER).object).toBe(
+			"sed -n 1,10p notes.txt > /tmp/out",
+		);
 	});
 	it("says a listing in words, the bare folder as the project", () => {
 		expect(headlineOf(run("ls -la web/src"), FOLDER)).toEqual({ verb: "Listing", object: "web/src", code: true });
@@ -102,6 +116,51 @@ describe("headlineOf", () => {
 		expect(headlineOf(run("cd ~/code/banda && npm test -- auth.spec.ts"), FOLDER).verb).toBe("Running tests");
 		expect(headlineOf(run("npx vitest run --project unit"), FOLDER).verb).toBe("Running tests");
 		expect(headlineOf(run("git status --short"), FOLDER)).toEqual({ verb: "Checking git", object: "", code: false });
+	});
+	it("says Checking git only for a git that looks; one that writes shows itself whole", () => {
+		expect(headlineOf(run("git log --oneline -5"), FOLDER).verb).toBe("Checking git");
+		expect(headlineOf(run("git diff --stat"), FOLDER).verb).toBe("Checking git");
+		expect(headlineOf(run("git branch -a"), FOLDER).verb).toBe("Checking git");
+		expect(headlineOf(run("git remote -v"), FOLDER).verb).toBe("Checking git");
+		expect(headlineOf(run("git push --force origin main"), FOLDER)).toEqual({
+			verb: "Running",
+			object: "git push --force origin main",
+			code: true,
+		});
+		expect(headlineOf(run("git commit -m update"), FOLDER).verb).toBe("Running");
+		expect(headlineOf(run("git branch -D topic"), FOLDER).object).toBe("git branch -D topic");
+		expect(headlineOf(run("git branch topic"), FOLDER).verb).toBe("Running");
+		expect(headlineOf(run("git checkout -- ."), FOLDER).verb).toBe("Running");
+		expect(headlineOf(run("git stash pop"), FOLDER).verb).toBe("Running");
+	});
+	it("never hides a chained, piped or redirected command behind one quiet verb", () => {
+		expect(headlineOf(run("rg foo && make deploy"), FOLDER)).toEqual({
+			verb: "Running",
+			object: "rg foo && make deploy",
+			code: true,
+		});
+		expect(headlineOf(run("git status && git push --force origin main"), FOLDER).object).toBe(
+			"git status && git push --force origin main",
+		);
+		expect(headlineOf(run("npm test && make release"), FOLDER).verb).toBe("Running");
+		expect(headlineOf(run("cat a.txt; rm -rf build"), FOLDER).object).toBe("cat a.txt; rm -rf build");
+		expect(headlineOf(run("cat a.txt | wc -l"), FOLDER).object).toBe("cat a.txt | wc -l");
+		expect(headlineOf(run("grep -r pattern . | sort"), FOLDER).verb).toBe("Running");
+		expect(headlineOf(run("ls $(basename x)"), FOLDER).verb).toBe("Running");
+		expect(headlineOf(run("echo hi > out.txt"), FOLDER).verb).toBe("Running");
+		expect(headlineOf(run("make build 2>&1"), FOLDER).verb).toBe("Running");
+		expect(headlineOf(run("ls `pwd`"), FOLDER).verb).toBe("Running");
+	});
+	it("still drops a leading cd, and separators inside quotes stay words, not structure", () => {
+		expect(headlineOf(run("cd ~/code/banda && npm run build:web"), FOLDER).object).toBe("npm run build:web");
+		expect(headlineOf(run('rg "a && b" src'), FOLDER)).toEqual({
+			verb: "Searching for",
+			object: '"a && b"',
+			code: false,
+		});
+		expect(compoundCommand('echo "a | b"')).toBe(false);
+		expect(compoundCommand("echo 'a; b'")).toBe(false);
+		expect(compoundCommand("cat a.txt | wc -l")).toBe(true);
 	});
 	it("keeps an unknown command itself, cleaned, in mono", () => {
 		expect(headlineOf(run("cd ~/code/banda && make -j4 release"), FOLDER)).toEqual({
@@ -126,6 +185,23 @@ describe("middleEllipsis", () => {
 		expect(cut.endsWith("--reporter dot")).toBe(true);
 		expect(cut).toContain("…");
 		expect(middleEllipsis("short", 40)).toBe("short");
+	});
+});
+
+describe("relativeTo", () => {
+	it("cuts only paths anchored at the folder or its real root, never by the folder's name", () => {
+		expect(relativeTo("cat /Users/ana/sancho/notes.txt", "~/sancho", "/Users/ana/sancho")).toBe("cat notes.txt");
+		expect(relativeTo("ls ~/sancho/docs", "~/sancho")).toBe("ls docs");
+		expect(relativeTo("ls ~/sancho", "~/sancho")).toBe("ls .");
+		expect(relativeTo("ls /Users/ana/sancho", "~/sancho", "/Users/ana/sancho")).toBe("ls .");
+		// a stranger's path that merely ends in the folder's name stays whole
+		expect(relativeTo("cat /tmp/sancho/data.txt", "~/sancho", "/Users/ana/sancho")).toBe("cat /tmp/sancho/data.txt");
+		expect(relativeTo("cat /Users/other/sancho/notes.txt", "~/sancho", "/Users/ana/sancho")).toBe(
+			"cat /Users/other/sancho/notes.txt",
+		);
+		expect(relativeTo("ls /tmp/sancho", "~/sancho", "/Users/ana/sancho")).toBe("ls /tmp/sancho");
+		// with no root from the daemon, an absolute path stays whole: showing too much beats a wrong "inside the project"
+		expect(relativeTo("cat /Users/ana/sancho/notes.txt", "~/sancho")).toBe("cat /Users/ana/sancho/notes.txt");
 	});
 });
 
