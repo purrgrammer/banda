@@ -229,6 +229,16 @@ export function argList(args: { readonly [key: string]: unknown }): [string, str
 }
 
 /**
+ * `*` on an `ask_hosts` draft is every destination: the card flags that line in red, so the owner approves it knowing
+ * what it opens (or trims it out). Read from the current text, so an edit that removes `*` clears the flag.
+ */
+export function wildcardWarning(tool: string, hosts: string): string | undefined {
+	if (tool !== "ask_hosts") return undefined;
+	if (!hosts.split("\n").some((line) => line.trim() === "*")) return undefined;
+	return "* is every host: anything this agent sends, to any destination, would go straight through.";
+}
+
+/**
  * How an approval's draft is laid out: the text arguments the owner may edit, the rest as facts it leads with, and the
  * arguments that are the effect in full (a request's headers, its raw body) as rows behind a disclosure.
  */

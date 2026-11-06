@@ -673,6 +673,19 @@ export function PanelSections() {
 							/>
 						</div>
 					</Specimen>
+					<Specimen label="ask_hosts naming *: the wildcard flagged in red">
+						<DraftApproval
+							chat={0}
+							agent={{ name: "Nostr" }}
+							label="allow 3 hosts"
+							ask={{
+								type: "approval",
+								tool: "ask_hosts",
+								args: { hosts: "relay.damus.io\nnos.lol\n*", why: "read and post to my relays" },
+								editable: ["hosts"],
+							}}
+						/>
+					</Specimen>
 					<Specimen label="Interrupted attempt: original bytes only, retry or skip">
 						<DraftApproval
 							chat={0}
