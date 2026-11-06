@@ -52,7 +52,7 @@ it("shows the asks the owner opened, by id, and always the oldest: a resolved as
 	expect(shownAsks([c], new Set(["b"]))).toEqual({ visible: [c], folded: [] });
 	expect(shownAsks([], new Set(["b"]))).toEqual({ visible: [], folded: [] });
 });
-it("notifies with the harness, the kind and the project, never the command or the path", () => {
+it("notifies with the harness and the kind, never the command, the path or the project's name", () => {
 	expect(askNotice([one])).toBeUndefined();
 	const asking = {
 		...one,
@@ -60,13 +60,15 @@ it("notifies with the harness, the kind and the project, never the command or th
 		folder: "~/code/banda",
 		asks: [{ id: "ask", kind: "execute", command: "rm -rf node_modules" }],
 	};
-	expect(askNotice([asking])).toBe("pi asks to run a command in banda");
+	expect(askNotice([asking])).toBe("pi asks to run a command");
 	expect(askNotice([{ ...asking, asks: [{ id: "a", kind: "edit", command: "src/x.ts" }] }])).toBe(
-		"pi asks to change a file in banda",
+		"pi asks to change a file",
 	);
 	expect(askNotice([asking, { ...asking, task: 2 }])).toBe("pi and 1 more are waiting on you");
 	expect(askNotice([asking])).not.toContain("rm -rf");
 	expect(askNotice([asking])).not.toContain("~/code");
+	// the project's name can itself be a secret on a lock screen
+	expect(askNotice([asking])).not.toContain("banda");
 });
 it("preserves the agent's own activity while retaining delegated attention and clears on completion", () => {
 	const active = harnessActivity([one], [3]);
