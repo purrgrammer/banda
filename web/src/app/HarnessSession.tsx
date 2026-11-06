@@ -14,7 +14,7 @@ import type { HarnessAsk, HarnessSessionView } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { chatAgents } from "../lib/navigation.ts";
 import { useShell } from "../lib/shell.ts";
-import { askSummary } from "./harness-activity.ts";
+import { askSummary, askWords } from "./harness-activity.ts";
 
 const clock = (ms: number) => {
 	const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -60,19 +60,6 @@ const viewOf = (session: HarnessSessionView, now: number, agent: string | undefi
 	...(session.outcome === undefined ? {} : { outcome: session.outcome }),
 });
 
-/** What an ask would do, in words, by its kind: the owner sees what they allow before they allow it. */
-const askWords = (kind: string): { what: string; verb: string; no: string } => {
-	const summary = askSummary(kind);
-	const what = summary.charAt(0).toUpperCase() + summary.slice(1);
-	return kind === "execute"
-		? { what, verb: "Run", no: "Don't run" }
-		: kind === "edit" || kind === "delete" || kind === "move"
-			? { what, verb: "Allow", no: "Don't change" }
-			: kind === "fetch"
-				? { what, verb: "Allow", no: "Don't open" }
-				: { what, verb: "Allow", no: "Don't allow" };
-};
-
 /**
  * A long command or diff behind a bounded, scrolling window and "Show all": a sheet with the whole of it (the full
  * screen on a phone). Nothing is cut: the owner can always reach everything they approve.
@@ -114,8 +101,8 @@ function HarnessAskCard({
 		<ApprovalCard
 			agent={session.service}
 			what={words.what}
-			verb={ask.allow?.name ?? words.verb}
-			declineLabel={ask.deny?.name ?? words.no}
+			verb={words.verb}
+			declineLabel={words.no}
 			as={`${agentName ?? session.agent}'s task`}
 			object={
 				<>

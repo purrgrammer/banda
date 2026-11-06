@@ -15,6 +15,22 @@ export const askSummary = (kind: string): string =>
 				: "do something";
 
 /**
+ * An ask's buttons, by its kind: the verb of what would happen, and a refusal naming what will not. The harness's
+ * own option names ("Allow", "Reject") never label the buttons: the owner reads the same words whatever the harness.
+ */
+export const askWords = (kind: string): { what: string; verb: string; no: string } => {
+	const summary = askSummary(kind);
+	const what = summary.charAt(0).toUpperCase() + summary.slice(1);
+	return kind === "execute"
+		? { what, verb: "Run", no: "Don't run" }
+		: kind === "edit" || kind === "delete" || kind === "move"
+			? { what, verb: "Allow", no: "Don't change" }
+			: kind === "fetch"
+				? { what, verb: "Allow", no: "Don't open" }
+				: { what, verb: "Allow", no: "Don't allow" };
+};
+
+/**
  * The device notification's body for harness asks: the harness, what kind of thing it asks, and the project by name;
  * never the command or the path, which would sit in a banner on a lock screen.
  */

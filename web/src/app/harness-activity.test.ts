@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { HarnessSessionView } from "../../../src/server/api.ts";
-import { askNotice, chatActivity, harnessActivity } from "./harness-activity.ts";
+import { askNotice, askWords, chatActivity, harnessActivity } from "./harness-activity.ts";
 
 const one: HarnessSessionView = {
 	task: 1,
@@ -31,6 +31,13 @@ it("counts simultaneous sessions and keeps an approval first in the picker", () 
 	const active = harnessActivity([one, asking], [3]);
 	expect(active.waiting).toBe(true);
 	expect(active.sessions.map((session) => session.task)).toEqual([2, 1]);
+});
+it("labels an ask's buttons by its kind, never by the harness's own option names", () => {
+	expect(askWords("execute")).toEqual({ what: "Run a command", verb: "Run", no: "Don't run" });
+	expect(askWords("edit")).toEqual({ what: "Change a file", verb: "Allow", no: "Don't change" });
+	expect(askWords("delete").no).toBe("Don't change");
+	expect(askWords("fetch")).toEqual({ what: "Open a web page", verb: "Allow", no: "Don't open" });
+	expect(askWords("other")).toEqual({ what: "Do something", verb: "Allow", no: "Don't allow" });
 });
 it("notifies with the harness, the kind and the project, never the command or the path", () => {
 	expect(askNotice([one])).toBeUndefined();
