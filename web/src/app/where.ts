@@ -80,3 +80,10 @@ export function lastOf(stored: string | null): Last | undefined {
 	if (where.name === "group") return { name: "group", room: where.room };
 	return undefined;
 }
+
+/** Only canonical source references from search navigate inside the current app. */
+export function isSourceHref(href: string | undefined): boolean {
+	if (!href?.startsWith("#/")) return false;
+	const where = parse(href);
+	return (where.name === "agent" || where.name === "group" || where.name === "artifact") && hrefOf(where) === href;
+}

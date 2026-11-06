@@ -7,6 +7,7 @@
  * item's text and a block inside it (`blocksApart`).
  */
 import { type ComponentProps, createContext, lazy, type ReactNode, Suspense, useContext } from "react";
+import { isSourceHref } from "../app/where.ts";
 import { blocksApart } from "../lib/blocks.ts";
 import { codePlugin } from "../lib/highlight.ts";
 import { plainText } from "../lib/plain.ts";
@@ -18,7 +19,7 @@ export const MarkdownLinks = createContext<((href: string) => ReactNode) | undef
 
 /**
  * A link: one to a blob (`[name](sha256:<hex>)`) is the file itself; a mention of a known agent its chip; any other
- * opens in a tab.
+ * opens in a tab, except an app source reference, which opens in place.
  */
 function Link({ href, children, node: _node, ...props }: ComponentProps<"a"> & { node?: unknown }) {
 	const richLink = useContext(MarkdownLinks);
@@ -30,7 +31,7 @@ function Link({ href, children, node: _node, ...props }: ComponentProps<"a"> & {
 	const rich = href === undefined ? undefined : richLink?.(href);
 	if (rich != null) return rich;
 	return (
-		<a href={href} target="_blank" rel="noreferrer" {...props} data-markdown-link="">
+		<a {...props} href={href} target={isSourceHref(href) ? undefined : "_blank"} rel="noreferrer" data-markdown-link="">
 			{children}
 		</a>
 	);

@@ -51,7 +51,9 @@ const ICONS: Record<string, LucideIcon> = {
 	propose_key: KeyRoundIcon,
 	propose_send: ClipboardListIcon,
 	remember: MemoryStickIcon,
-	recall: SearchIcon,
+	recall: MemoryStickIcon,
+	search: SearchIcon,
+	read_search_result: BookOpenIcon,
 	forget: Trash2Icon,
 };
 
@@ -134,6 +136,7 @@ export function toolPreview(name: string, args: Readonly<Record<string, unknown>
 		case "remember":
 			value = text("fact");
 			break;
+		case "search":
 		case "recall":
 			value = text("query");
 			break;

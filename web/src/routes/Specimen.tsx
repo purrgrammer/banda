@@ -28,7 +28,10 @@ import { SkillDetailPreview, SkillsSection } from "../specimen/skills.tsx";
 import { type Scheme, StageContext, type Width } from "../specimen/stage.tsx";
 import { States } from "../specimen/states.tsx";
 
+import { ToolsetsPreview, ToolsetsSection } from "../specimen/toolsets.tsx";
+
 const CONTENTS = [
+	{ id: "toolsets", label: "Agent tools" },
 	{ id: "activity", label: "Activity drill-down" },
 	{ id: "skills", label: "Skills" },
 	{ id: "skill-activity", label: "Skill in Activity" },
@@ -110,6 +113,7 @@ export function Specimen() {
 			removeEventListener("hashchange", scrollToSection);
 		};
 	}, []);
+	if (location.hash === "#/specimen/toolsets") return <ToolsetsPreview />;
 	if (location.hash === "#/specimen/mcp") return <McpPreview />;
 	const skill = /^#\/specimen\/skills\/([a-z0-9-]+)$/.exec(location.hash);
 	if (skill !== null) return <SkillDetailPreview name={skill[1] ?? ""} />;
@@ -171,6 +175,7 @@ export function Specimen() {
 								<div className="mx-auto flex max-w-[110rem] flex-col gap-12 p-4 pb-24 md:p-6">
 									<ActivitySection />
 									<SkillsSection />
+									<ToolsetsSection />
 									<Screens />
 									<PanelSections />
 									<MemorySection />

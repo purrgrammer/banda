@@ -1,6 +1,6 @@
 /** The app's places in the hash: read and written back the same; anything else is home. */
 import { describe, expect, it } from "vitest";
-import { hrefOf, lastOf, parse } from "../web/src/app/where.ts";
+import { hrefOf, isSourceHref, lastOf, parse } from "../web/src/app/where.ts";
 
 describe("where", () => {
 	it("reads each place and writes it back", () => {
@@ -30,4 +30,18 @@ describe("where", () => {
 		expect(lastOf("#/settings")).toBeUndefined();
 		expect(lastOf(null)).toBeUndefined();
 	});
+});
+
+it("only canonical search source links open inside the app", () => {
+	for (const href of ["#/a/mara?at=9", "#/g/4?at=17", "#/artifact/abc123"]) expect(isSourceHref(href)).toBe(true);
+	for (const href of [
+		undefined,
+		"https://example.com/#/a/mara",
+		"javascript:alert(1)",
+		"#/settings",
+		"#token=secret",
+		"#/a/mara?token=secret",
+		"#/g/-1",
+	])
+		expect(isSourceHref(href)).toBe(false);
 });

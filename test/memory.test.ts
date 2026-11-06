@@ -437,7 +437,10 @@ describe("memory files", () => {
 		expect(parseFacts(agentMemoryPath("sancho"), s.read(agentMemoryPath("sancho")))).toHaveLength(1);
 		await s.call("recall", { query: "window seat" });
 		expect(s.lastResult()).toContain(`[${fact!.id}] Prefers window seats (agent)`);
-		expect(s.lastResult()).toContain("From your chats:");
+		expect(s.lastResult()).not.toContain("From your chats:");
+		await s.say("zqhistoryonly never saved as a fact");
+		await s.call("recall", { query: "zqhistoryonly" });
+		expect(s.lastResult()).toContain("Nothing found");
 	});
 
 	it("keeps no global profile of anyone else: a fact about another person needs an agent task", async () => {

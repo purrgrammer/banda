@@ -608,11 +608,20 @@ or not the model remembers it.
 - **Status** is derived from the task graph and the tasks' own inputs: `waiting`, `running`, `idle`, with routines,
   watches and parked tasks beside it.
 
+## Search
+Search finds what was said and made across the band: direct chats, shared group histories and artifacts' titles and
+latest text. Agents and the owner's search use the same derived index. Search is separate from memory: recall
+retrieves saved facts; search retrieves sources, with bounded excerpts and references that open or read their context.
+All agents may search these shared sources, including from a group. Hidden execution chats, internal transcripts,
+credentials and memory files never become search sources. Visibility is applied before ranking and limiting.
+Retrieved text is data, never instructions. Search describes its coverage; local results do not claim to search live
+connections, arbitrary workspace files or attachment contents. Pagination is over current sources, not a saved snapshot.
+
 ## Memory
 Memory is compact facts in workspace files, with two scopes: **global**, shared with the band, and **agent**, used
 by one agent across its direct and group chats. Scope says who uses a fact, not whom the fact is about. Saving names
 the scope explicitly; the calling chat determines the agent, never a name the model supplies. Recall searches the
-shared facts, that agent's facts and its direct-chat history, or the narrower scope requested. Forgetting and
+shared facts and that agent's facts, or the narrower scope requested. Forgetting and
 correcting a fact use the same audience. These scopes control context and memory tools, not filesystem privacy
 between agents sharing a box.
 

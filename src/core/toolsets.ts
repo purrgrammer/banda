@@ -76,5 +76,7 @@ export const EVERY_AGENT: readonly string[] = [
 	PROPOSE_AGENT_CHANGE,
 	"read_avatar_instructions",
 	"skill",
+	"search",
+	"read_search_result",
 	...ALWAYS_TOOLSETS.flatMap((label) => TOOLSETS[label] ?? []),
 ];

@@ -2,6 +2,12 @@
 
 ## Current work
 
+Agent search is in review on `feat/agent-search`: messages, shared group histories and artifacts use the same
+retrieval as Cmd+K, with bounded results and source reads. Recall now searches saved facts only. Validation and
+owner acceptance remain pending; definition and attachment coverage is tracked in [Chat](chat.md). The local tool-access
+preview has owner review: Connections, Permissions, Tools, toolset icons and highlighted schemas in Details. Its switches
+remain local to the preview.
+
 Harnesses are on the `feat/harness-acp` branch ([Connections](connections.md)): an agent hands coding work to a
 coding agent on the owner's computer (Claude Code, Codex, pi through banda's own adapter, or one the owner adds),
 connected once to the owner's code folder, each task in a project there; the session is live and steerable in the chat,
