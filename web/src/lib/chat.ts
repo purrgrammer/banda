@@ -78,6 +78,8 @@ type CoreSegment =
 	| {
 			readonly kind: "approval";
 			readonly key: string;
+			/** The tool call that asked, when the transcript names it. */
+			readonly call?: string;
 			readonly ask: Approval;
 			/** What it would run, in words, as the daemon labels it. */
 			readonly label: string;
@@ -366,7 +368,7 @@ export function view(
 			...(endedByCall.get(call) ?? []).map((item) => ({ ask: item.ask, item, label: item.label })),
 			...(openByCall.get(call) ?? []).map((wait) => ({ ask: wait.ask, wait, label: wait.label })),
 		];
-		return all.map((one, i) => askSegment(`${key}:ask:${i}`, one));
+		return all.map((one, i) => askSegment(`${key}:ask:${i}`, one, call));
 	};
 
 	const segments: Segment[] = [];
@@ -627,6 +629,7 @@ const withResult = (result: Extract<Item, { role: "tool" }> | undefined) => (res
 function askSegment(
 	key: string,
 	one: { ask: Ask; label?: string | undefined; item?: Extract<Item, { role: "wait" }>; wait?: ShownWait },
+	call?: string,
 ): Segment {
 	const open = one.wait === undefined ? {} : { open: { wait: one.wait.key, deadline: one.wait.deadline } };
 	const done = one.item === undefined ? {} : { ended: ended(one.ask, one.item) };
@@ -634,6 +637,7 @@ function askSegment(
 	return {
 		kind: "approval",
 		key,
+		...(call === undefined ? {} : { call }),
 		ask: one.item?.edited === undefined ? one.ask : { ...one.ask, args: one.item.edited },
 		label: one.label ?? one.ask.label ?? "this",
 		// what ran: the draft as the owner edited it

@@ -9,6 +9,7 @@ import { expect, it } from "vitest";
 import { LEAD } from "../src/core/agents.ts";
 import { Connected } from "../src/core/connections.ts";
 import { Devices, INVITE_MS, pairingState } from "../src/core/devices.ts";
+import { Harnesses } from "../src/core/harness.ts";
 import { keepReading, Readings } from "../src/core/objects.ts";
 import { Permissions } from "../src/core/permissions.ts";
 import { context, openStore } from "../src/core/store.ts";
@@ -172,6 +173,38 @@ it("reopens devices, an invite claimed and a request waiting as they were stored
 		});
 		expect(pairingState(doc, tablet, 32)).toBe("pending");
 		expect(pairingState(doc, phone, 32)).toBe("revoked");
+	} finally {
+		await after.close(context);
+	}
+});
+
+it("reopens current harness authority, continuation and process identities unchanged", async () => {
+	const home = await tempHome();
+	const before = await open(home);
+	const session = {
+		chat: 1,
+		agent: "sancho",
+		harness: "fake",
+		folder: "~/code/app",
+		prompt: "fix",
+		state: "working" as const,
+		at: 1,
+		steps: [],
+		dropped: 0,
+		notes: [{ text: "check", at: 2, from: "agent" as const, call: "n1", sent: true as const }],
+		continues: 9,
+		continuation: "native" as const,
+		groups: [{ id: 42, members: [{ pid: 42, started: 1234 }] }],
+	};
+	await before.commit(async (tx) => {
+		const doc = await tx.doc(Harnesses);
+		doc.accounts.fake = { folder: "~/code", agents: ["sancho"] };
+		doc.sessions[10] = session;
+	}, context);
+	await before.close(context);
+	const after = await open(home);
+	try {
+		expect((await after.snapshot(Harnesses, context))?.sessions[10]).toEqual(session);
 	} finally {
 		await after.close(context);
 	}

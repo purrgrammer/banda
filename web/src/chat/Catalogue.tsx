@@ -38,8 +38,11 @@ export function Catalogue({
 	services,
 	connect,
 	onManage,
+	extra = [],
 }: {
 	services: readonly Service[];
+	/** Whole cards of their own in the grid (a harness on this computer), after what can be connected, before what is coming. */
+	extra?: readonly { readonly key: string; readonly card: ReactNode }[];
 	onManage?: (id: string) => void;
 	/** The connect card for a service, opened in its tile by Connect or Add account. */
 	connect?: ((service: Service, close: () => void) => ReactNode) | undefined;
@@ -47,8 +50,20 @@ export function Catalogue({
 	const [open, setOpen] = useState<string | undefined>(undefined);
 	const toggle = (id: string) => setOpen(open === id ? undefined : id);
 	return (
-		<ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-			{services.map((service) => {
+		<ul className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2">
+			{[
+				...services.filter((each) => each.accounts !== undefined),
+				...extra,
+				...services.filter((each) => each.accounts === undefined),
+			].map((item) => {
+				if ("card" in item)
+					return (
+						// a card of its own fills its cell: every tile in the grid the same size
+						<li key={item.key} className="flex flex-col [&>*]:flex-1">
+							{item.card}
+						</li>
+					);
+				const service = item;
 				const soon = service.accounts === undefined;
 				const Icon = ICONS[service.id];
 				return (

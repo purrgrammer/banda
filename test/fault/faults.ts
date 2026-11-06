@@ -114,7 +114,13 @@ export type FaultPoint =
 	 * A box script cut short: it runs only its first `hit` lines and then the process is killed, as a daemon killed
 	 * while the script ran leaves it. Fired by the worker that runs the script, never by `hit()`.
 	 */
-	| "exec:cut";
+	| "exec:cut"
+	/** A harness session: its harness spawned, its ask sent, an update of its work, its ask of the owner. */
+	| "harness:spawn"
+	| "harness:prompted"
+	| "harness:update"
+	| "harness:ask"
+	| "harness:note";
 export type Fault = { readonly point: FaultPoint; readonly hit: number; readonly kind: "kill" | "error" };
 
 export class InjectedFault extends Error {

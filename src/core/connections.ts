@@ -15,12 +15,14 @@
  * changed URL never carries them along. The store is the truth of which accounts exist: credentials it does not name
  * are a sign-in that did not finish, or a sign-out that did, and are forgotten.
  */
+
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
 import { Accepted, AGENT_NAME, type Agent, agentPath, frontmatter, LEAD, parseAgent } from "./agents.ts";
 import { FLOORS, type Floor } from "./floor.ts";
+import { harnessToolsOf } from "./harness.ts";
 import type { OAuthClient, OAuthServer, Pending, Tokens } from "./oauth.ts";
 import { type ObjectKinds, parseObjects } from "./objects.ts";
 
@@ -630,7 +632,7 @@ export async function connectionToolsOf(tx: Tx, agent: Pick<Agent, "id" | "conne
 		}
 		found.push(tool.name);
 	}
-	return found;
+	return [...found, ...(await harnessToolsOf(tx, agent.id))];
 }
 
 // Credentials, in `auth/connections/<connection>/<account>/`: the daemon's alone, owner-only files, written whole (a

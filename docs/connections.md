@@ -8,7 +8,9 @@ connect flow and daemon-read objects; DESIGN.md "Watches" follows an object thro
 card. Agent-built connections and `propose_connection` are out of scope.
 
 Entry points: ../src/core/connections.ts, ../src/core/mcp.ts, ../src/core/mcp-remote.ts, ../src/core/oauth.ts,
-../src/server/capabilities.ts, ../shipped/connections/github.md and ../scripts/shipped-github.ts.
+../src/server/capabilities.ts, ../shipped/connections/github.md and ../scripts/shipped-github.ts. Harnesses:
+../src/core/acp.ts, ../src/core/harness.ts, ../src/core/harness-files.ts, ../src/server/routes/harnesses.ts,
+../shipped/harnesses/, ../web/src/chat/Harness.tsx and ../web/src/app/HarnessSession.tsx.
 
 ## Work and acceptance
 
@@ -46,6 +48,12 @@ Bind remote descriptions and schemas to the accepted definition so a relisting c
 effect authority at every call start and retry, idempotent replay after revocation included; verify OAuth refresh,
 interrupted sign-in, disconnect, tool switches and tools a server adds later.
 
+**Harnesses.** Any ACP agent, shipped as a file or added by its command line, connected in a folder per agent; one
+tool starts a session without a draft; the harness's asks, the owner's notes and Stop in the chat; the agent woken once
+at the end. A fake ACP harness (test/fixtures/fake-acp-agent.ts) stands in for the real ones in tests; the session
+runs under test/harness.faults.test.ts (a kill at every commit and harness boundary). Real runs use a scratch repository
+in a throwaway home, at desktop and phone width.
+
 ## Open work
 
 - [x] Accounts: credentials, Settings, switches, the `account` parameter, bindings
@@ -82,3 +90,14 @@ interrupted sign-in, disconnect, tool switches and tools a server adds later.
 - [ ] A feed with a cursor (mail's history id) and a service's own subscription with its renewal, declared as data;
   GitHub has neither, so they wait for the mail connection
 - [ ] No built-in email or calendar yet: they follow GitHub as shipped connections
+- [x] Harnesses: ACP client, sessions, asks, notes, Stop, the wake; shipped files, banda's adapters and the owner's own; the fault sweep (detached commands included)
+- [x] Harnesses: Claude Code, Codex and pi each fixed a scratch repository through the app; Claude Code's background command was killed with its session
+- [x] Harnesses: an adversarial review (store growth, the home as a project, Stop before open, several asks, detached commands, blind asks) triaged and fixed
+- [x] Harnesses: desktop and phone app walkthrough of delegated status, concurrent sessions, approvals and Stop
+- [x] Harnesses: starts need no extra draft; enablement states host access and the harness's own permissions
+- [x] Harnesses: continuation and revocation regressions, native versus summary mode disclosure, real Codex native resumption through the app; owner authorized landing after final checks
+- [ ] Harnesses: Windows process supervision before offering execution on Windows
+- [ ] Harnesses: Gemini CLI, OpenCode, Cursor and Goose are not shipped: each failed or was missing here; they need a spike and a sign-in each
+- [ ] Harnesses: their asks reach the owner only in the web app, not on other gateways; the agent still hears the end
+- [ ] Harnesses: a step may flicker between flushes (a note the harness has not taken yet); sessions are keyed by the model's call id, as artifacts and groups are
+- [ ] Harnesses: the adapters are not in a release (Claude Code's SDK is Anthropic's, all rights reserved); Connections says how to install them

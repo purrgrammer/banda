@@ -38,6 +38,7 @@ import { kindWords } from "./ArtifactPage.tsx";
 import { ConnectFlow } from "./ConnectFlow.tsx";
 import { DraftApproval } from "./DraftApproval.tsx";
 import { FilePart } from "./FilePart.tsx";
+import { HarnessSessionPart } from "./HarnessSession.tsx";
 import { LiveView } from "./LiveBrowser.tsx";
 import { MessageObjects, OwnerMessage } from "./Objects.tsx";
 import { routineTitle } from "./titles.ts";
@@ -204,6 +205,7 @@ const sideOf = (segment: Segment): "owner" | "agent" | "line" => {
 		segment.kind === "approval" ||
 		segment.kind === "browsed" ||
 		segment.kind === "connect" ||
+		segment.kind === "harness" ||
 		segment.kind === "avatar"
 	)
 		return "agent";
@@ -618,6 +620,8 @@ function partOf(
 		}
 		case "avatar":
 			return agent === undefined ? null : <AvatarCandidateMessage agent={agent} definition={segment.definition} />;
+		case "harness":
+			return <HarnessSessionPart chat={chat} call={segment.call} />;
 		case "connect":
 			return agent === undefined ? null : (
 				<ConnectFlow connection={segment.connection} agent={{ id: agent, name: who.name }} />

@@ -9,7 +9,7 @@ import { closeSync, openSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
-import { app, BrowserWindow, Menu, nativeImage, session, shell, Tray } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell, Tray } from "electron";
 import { failurePage, type Trouble, trouble } from "./trouble.js";
 
 const windows = process.platform === "win32";
@@ -165,6 +165,8 @@ async function stopDaemon(): Promise<void> {
 }
 
 let window: BrowserWindow | undefined;
+/** The daemon's origin, once a window shows it: the only page the folder dialog answers. */
+let daemonOrigin: string | undefined;
 let tray: Tray | undefined;
 let quitting = false;
 
@@ -173,6 +175,7 @@ const PERMITTED = new Set(["notifications", "media", "clipboard-sanitized-write"
 
 function openWindow(url: string | undefined, page?: string): BrowserWindow {
 	const origin = url === undefined ? undefined : new URL(url).origin;
+	daemonOrigin = origin;
 	const fromDaemon = (target: string) =>
 		origin !== undefined && URL.canParse(target) && new URL(target).origin === origin;
 	session.defaultSession.setPermissionRequestHandler((_contents, permission, grant, details) =>
@@ -189,7 +192,13 @@ function openWindow(url: string | undefined, page?: string): BrowserWindow {
 		title: "banda",
 		show: false,
 		autoHideMenuBar: true,
-		webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false },
+		webPreferences: {
+			contextIsolation: true,
+			sandbox: true,
+			nodeIntegration: false,
+			webviewTag: false,
+			preload: join(import.meta.dirname, "preload.cjs"),
+		},
 	});
 	const outside = (target: string) => {
 		if (/^(https?|mailto):/i.test(target)) void shell.openExternal(target);
@@ -232,6 +241,36 @@ function openWindow(url: string | undefined, page?: string): BrowserWindow {
 	if (page !== undefined) void created.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(page)}`);
 	else if (url !== undefined) void created.loadURL(url);
 	return created;
+}
+
+/**
+ * The system's folder dialog, for the daemon's own page and nothing else: its top frame, on its origin (never an
+ * artifact's frame, a sign-in window gone elsewhere, or the failure page). It hands back only the path the owner
+ * picked; the daemon still checks it as any typed path.
+ */
+function answerFolders(): void {
+	ipcMain.handle("banda:choose-folder", async (event, at: unknown) => {
+		const frame = event.senderFrame;
+		if (
+			frame === null ||
+			frame !== event.sender.mainFrame ||
+			daemonOrigin === undefined ||
+			!URL.canParse(frame.url) ||
+			new URL(frame.url).origin !== daemonOrigin
+		)
+			throw new Error("Only banda's own page may open the folder dialog.");
+		const start = typeof at === "string" && at.length < 4096 ? at.replace(/^~(?=$|[/\\])/, homedir()) : homedir();
+		const options: Electron.OpenDialogOptions = {
+			title: "Your code folder",
+			message: "The folder your projects are in",
+			buttonLabel: "Use this folder",
+			defaultPath: start,
+			properties: ["openDirectory", "createDirectory"],
+		};
+		const owner = BrowserWindow.fromWebContents(event.sender);
+		const picked = owner === null ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(owner, options);
+		return picked.canceled ? undefined : picked.filePaths[0];
+	});
 }
 
 function show(): void {
@@ -288,8 +327,13 @@ else {
 	app.on("window-all-closed", () => {
 		// the tray keeps the app; nothing to do
 	});
+	// a development shell is Electron's own app, which macOS names and draws as Electron; packaged, the bundle says
+	// banda (electron-builder.yml). The name in the Dock comes from the bundle; the icon and the app menu's can be set.
+	app.setName("banda");
 	void app.whenReady().then(async () => {
+		if (!app.isPackaged) app.dock?.setIcon(release().icon.replace("icon-192", "icon-512"));
 		makeTray(release().icon);
+		answerFolders();
 		if (!app.isPackaged && process.env.BANDA_HOME === undefined) {
 			// a development shell never touches the owner's home (AGENTS.md "Never touch a live banda")
 			window = openWindow(

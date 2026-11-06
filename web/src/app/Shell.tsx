@@ -3,6 +3,7 @@
  * phone, where the band is the first screen and a chat opens over it). Settings and Connections are plain pages.
  * `#/` opens the chat last shown on this device, else the first agent's. The tab's title counts asks, then unread.
  */
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FACE } from "../../../src/core/choices.ts";
@@ -29,6 +30,7 @@ import { bandRows, titleOf, whoOf } from "./band.ts";
 import { ConnectFlow, freshAccounts } from "./ConnectFlow.tsx";
 import { saveEdit, setAgentState } from "./edits.ts";
 import { GroupChat } from "./GroupChat.tsx";
+import { AddHarnessButton, HarnessConnectionTile } from "./HarnessConnections.tsx";
 import { BrowserDialog } from "./LiveBrowser.tsx";
 import { McpSetup } from "./McpSetup.tsx";
 import { NewSheet } from "./NewSheet.tsx";
@@ -190,8 +192,9 @@ function Main() {
 				Date.now(),
 				waiting,
 				archived,
+				shell.harnesses?.sessions,
 			),
-		[agents, shell.rows, shell.groups, shell.control?.paused, waiting, archived],
+		[agents, shell.rows, shell.groups, shell.control?.paused, waiting, archived, shell.harnesses?.sessions],
 	);
 
 	// `#/` opens the last chat shown here, else the first agent's
@@ -595,10 +598,16 @@ function Main() {
 			});
 			return (
 				<SettingsPage title="Connections" phone={phone} onBack={back}>
-					<Button className="self-start" onClick={() => go({ name: "connections", add: true })}>
-						Add MCP server
-					</Button>
+					<span className="flex flex-wrap gap-2">
+						<Button className="self-start" onClick={() => go({ name: "connections", add: true })}>
+							Add MCP server
+						</Button>
+						<AddHarnessButton />
+					</span>
 					<Catalogue
+						extra={(shell.harnesses?.harnesses ?? [])
+							.filter(({ name }) => shell.harnesses?.accounts[name] !== undefined)
+							.map(({ name }) => ({ key: `harness:${name}`, card: <HarnessConnectionTile name={name} /> }))}
 						onManage={(connection) => go({ name: "connections", connection })}
 						services={[
 							...(services.length === 0

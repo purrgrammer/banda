@@ -2,6 +2,15 @@
 
 ## Current work
 
+Harnesses are on the `feat/harness-acp` branch ([Connections](connections.md)): an agent hands coding work to a
+coding agent on the owner's computer (Claude Code, Codex, pi through banda's own adapter, or one the owner adds),
+connected once to the owner's code folder, each task in a project there; the session is live and steerable in the chat,
+and only the harness's own asks reach the owner. Claude Code, Codex and pi each fixed a scratch repository through the
+app in a throwaway home; an adversarial review was triaged and fixed; the harness fault sweep passes. The owner approved starts without an extra draft when enablement clearly explains host access and the harness's own
+permissions. The continuation redesign, access revocation fixes and delegated header status passed independent review
+and a desktop/phone app walkthrough in a throwaway home, including real Codex work and native resumption, concurrent
+sessions, approvals and Stop. Integrated checks are complete; the owner authorized landing.
+
 Remote access over Iroh is built, and the owner reviewed the app and the specimen: the daemon's Iroh
 endpoint on n0's relays, devices paired by a QR code the owner approves in Settings → Devices (listed, renamed and
 revoked there, never from a device), and an Android shell (`mobile/`) that pairs and opens the app as a device. Its
