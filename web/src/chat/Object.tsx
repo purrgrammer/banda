@@ -15,6 +15,7 @@ import {
 	GitMergeIcon,
 	GitPullRequestDraftIcon,
 	GitPullRequestIcon,
+	MailIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -215,17 +216,21 @@ export function ObjectMenu({
 	);
 }
 
-/** No daemon-relative links, credentials, script URLs or lookalike hosts on GitHub cards. */
+/** Only service URLs shipped by a connection are clickable; no daemon-relative links, credentials or lookalike hosts. */
 export function safeObjectUrl(value: string | undefined): string | undefined {
 	try {
 		const url = new URL(value ?? "");
-		return url.protocol === "https:" &&
-			url.hostname === "github.com" &&
-			url.port === "" &&
-			url.username === "" &&
-			url.password === ""
-			? url.href
-			: undefined;
+		const clean = url.protocol === "https:" && url.port === "" && url.username === "" && url.password === "";
+		if (!clean) return undefined;
+		if (url.hostname === "github.com") return url.href;
+		if (
+			url.hostname === "mail.google.com" &&
+			url.pathname === "/mail/u/0/" &&
+			url.search === "" &&
+			/^#all\/[A-Za-z0-9_-]{1,200}$/.test(url.hash)
+		)
+			return url.href;
+		return undefined;
 	} catch {
 		return undefined;
 	}
@@ -236,9 +241,34 @@ export function ObjectLink({
 	object,
 	href,
 }: {
-	object: (PullRequest & { card: "pull-request" }) | (Issue & { card: "issue" }) | (CheckRun & { card: "check-run" });
+	object:
+		| (PullRequest & { card: "pull-request" })
+		| (Issue & { card: "issue" })
+		| (CheckRun & { card: "check-run" })
+		| (EmailMessage & { card: "email" });
 	href: string;
 }) {
+	if (object.card === "email") {
+		const url = safeObjectUrl(href);
+		return (
+			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
+				<MailIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
+				{url === undefined ? (
+					<span className="min-w-0 truncate">{object.subject || "Email"}</span>
+				) : (
+					<a
+						href={url}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="min-w-0 max-w-80 truncate underline"
+						title={object.subject}
+					>
+						{object.subject || "Email"}
+					</a>
+				)}
+			</span>
+		);
+	}
 	const state =
 		object.card === "pull-request"
 			? STATE[object.state]
@@ -270,6 +300,64 @@ export function ObjectLink({
 				</a>
 			)}
 		</span>
+	);
+}
+
+export type EmailMessage = {
+	readonly from: string;
+	readonly to: string;
+	readonly subject: string;
+	readonly date: string;
+	readonly snippet: string;
+	readonly body: string;
+	readonly attachmentManifest?: string;
+	readonly unread: boolean;
+	readonly url?: string;
+	readonly asOf?: string;
+};
+
+/** A read-only email card. The daemon supplies plain text only; HTML and remote resources are never rendered. */
+export function EmailCard({
+	message,
+	actions,
+	attachments,
+}: {
+	message: EmailMessage;
+	actions?: ReactNode;
+	attachments?: ReactNode;
+}) {
+	const url = safeObjectUrl(message.url);
+	return (
+		<Tile className="flex flex-col gap-2.5 p-3.5">
+			<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-ink-2">
+				<MailIcon aria-hidden="true" className="size-3.5 shrink-0" />
+				{url === undefined ? (
+					<span className="min-w-0 flex-1 truncate">{message.from || "Sender unavailable"}</span>
+				) : (
+					<a href={url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate underline">
+						{message.from || "Sender unavailable"}
+					</a>
+				)}
+				{message.asOf === undefined ? null : <span>as of {message.asOf}</span>}
+				<span className="ml-auto shrink-0">{actions}</span>
+			</div>
+			<div className="flex min-w-0 items-start gap-2">
+				{message.unread ? (
+					<span role="img" aria-label="Unread" className="mt-2 size-2 shrink-0 rounded-full bg-ink" />
+				) : null}
+				<h3 className="min-w-0 flex-1 text-body font-semibold text-ink [overflow-wrap:anywhere]">
+					{message.subject || "(No subject)"}
+				</h3>
+			</div>
+			<span className="text-meta text-ink-2">
+				{message.date}
+				{message.to ? ` · To ${message.to}` : ""}
+			</span>
+			<p className="whitespace-pre-wrap text-body text-ink [overflow-wrap:anywhere]">
+				{message.body || message.snippet || "No plain text body"}
+			</p>
+			{attachments}
+		</Tile>
 	);
 }
 

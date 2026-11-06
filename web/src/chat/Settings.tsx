@@ -32,8 +32,10 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/cn";
+import type { ConnectionToolView } from "../../../src/server/api.ts";
 import { AvatarChoices } from "../avatar/Choices.tsx";
 import { Confirm } from "./Confirm.tsx";
+import { ConnectionTools } from "./Connect.tsx";
 import { Face } from "./Face.tsx";
 import { GitHubMark } from "./Object.tsx";
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
@@ -263,6 +265,7 @@ export type ConnectionRow = {
 	readonly id?: string | undefined;
 	/** Every account signed in to it, and whether this agent may use each. */
 	readonly accounts: readonly { readonly login: string; readonly on: boolean; readonly account?: string }[];
+	readonly tools?: readonly ConnectionToolView[] | undefined;
 };
 
 /**
@@ -318,8 +321,14 @@ export function Connections({
 											className="text-ink-2"
 											onClick={() => setOpen(open === row.connection ? undefined : row.connection)}
 										>
-											<PlusIcon />
-											Another account
+											{row.id === "gmail" || row.connection === "Gmail" ? (
+												<>Google access</>
+											) : (
+												<>
+													<PlusIcon />
+													Another account
+												</>
+											)}
 										</Button>
 									)
 								}
@@ -339,6 +348,14 @@ export function Connections({
 									/>
 								</label>
 							))}
+							{row.id === "gmail" ||
+							row.connection === "Gmail" ||
+							row.tools === undefined ||
+							row.tools.length === 0 ? null : (
+								<div className="px-3.5 pb-3 pl-[3.75rem]">
+									<ConnectionTools connection={row.connection} tools={row.tools} />
+								</div>
+							)}
 							{open === row.connection && connect !== undefined ? (
 								<div className="border-t border-line-soft p-3">{connect(row, () => setOpen(undefined))}</div>
 							) : null}

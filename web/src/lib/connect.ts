@@ -27,8 +27,15 @@ export function connectState(
 	const label = (key: string) => fresh.find((account) => account.account === key)?.label ?? key;
 	if (phase.kind === "started") {
 		const finished = view?.finished;
-		if (finished !== undefined && finished.at !== phase.before && finished.agent === agent)
+		if (finished !== undefined && finished.at !== phase.before && finished.agent === agent) {
+			if (finished.enabled === false)
+				return {
+					kind: "share",
+					login: label(finished.account),
+					...(finished.problem === undefined ? {} : { why: finished.problem }),
+				};
 			return { kind: finished.known ? "already" : "done", login: label(finished.account) };
+		}
 		if (view?.state === "signing-in" && view.code !== undefined)
 			return { kind: "code", code: view.code.code, url: view.code.page };
 		if (view?.state === "problem") return { kind: "failed", why: view.problem ?? "The sign-in did not finish." };

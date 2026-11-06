@@ -203,7 +203,6 @@ export const CHECK_RUN: CheckRun = {
 export const SERVICES: readonly Service[] = [
 	{ id: "github", name: "GitHub", does: "Pull requests, issues, checks", accounts: ["@bandarra", "@purrgrammer"] },
 	{ id: "gmail", name: "Gmail", does: "Read and draft email" },
-	{ id: "calendar", name: "Google Calendar", does: "Your days and invites" },
 	{ id: "linear", name: "Linear", does: "Issues and cycles" },
 	{ id: "slack", name: "Slack", does: "Channels and messages" },
 	{ id: "notion", name: "Notion", does: "Pages and databases" },

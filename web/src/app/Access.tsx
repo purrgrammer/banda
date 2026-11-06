@@ -27,6 +27,7 @@ export function connectionRows(capabilities: CapabilitiesView | undefined, agent
 		.map((view) => ({
 			connection: view.accepted?.connection?.service ?? view.name,
 			id: view.name,
+			tools: view.tools,
 			accounts:
 				view.accepted?.connection?.auth === "none" && view.agents !== undefined
 					? [{ login: "No sign-in needed", on: view.agents.includes(agent) }]
@@ -37,7 +38,7 @@ export function connectionRows(capabilities: CapabilitiesView | undefined, agent
 						})),
 		}));
 	for (const shipped of capabilities?.shipped ?? [])
-		if (!shipped.added && shipped.connection.auth !== "none")
+		if (!shipped.added && shipped.connection.auth !== "none" && !rows.some((row) => row.id === shipped.name))
 			rows.push({ connection: shipped.connection.service, id: shipped.name, accounts: [] });
 	return rows;
 }

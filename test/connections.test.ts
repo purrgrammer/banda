@@ -1045,6 +1045,21 @@ describe("connections banda ships", () => {
 		expect(cal?.missing).toBeUndefined();
 	});
 
+	it("recovers a shipped definition left in the box before it was allowed", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		const shipped = await shipping(fake);
+		const s = await open(fake, shipped);
+		s.writeBox("connections/cal.md", readFileSync(join(shipped, "cal.md"), "utf8"));
+
+		await s.capabilities.addShipped("cal");
+
+		expect((await s.capabilities.view()).connections.find((connection) => connection.name === "cal")).toMatchObject({
+			accepted: { connection: { auth: "oauth" } },
+			state: "sign-in",
+		});
+	});
+
 	it("one the companion proposed under the same name is never replaced by the shipped one", async () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
 		fakes.push(fake);

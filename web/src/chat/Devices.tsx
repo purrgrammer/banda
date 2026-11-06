@@ -39,7 +39,8 @@ function useNow(on: boolean, fixed?: number): number {
 		const timer = setInterval(() => setNow(Date.now()), 1000);
 		return () => clearInterval(timer);
 	}, [on, fixed]);
-	return fixed ?? now;
+	// When a code first appears, do not render one frame against the clock from before the async response arrived.
+	return fixed ?? (on ? Date.now() : now);
 }
 
 /** Minutes and seconds left, as a clock reads: 9:05. */

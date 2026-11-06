@@ -75,6 +75,11 @@ export type FaultPoint =
 	| "object:read"
 	| "object:answered"
 	| "object:kept"
+	/** A Gmail attachment: read, bytes received, blob put, and object/blob hold committed. */
+	| "object:attachment:read"
+	| "object:attachment:received"
+	| "object:attachment:stored"
+	| "object:attachment:kept"
 	/** A web_fetch read: before its request goes, and once it answered, before the read is taken into the store. */
 	| "fetch"
 	| "fetch:answered"

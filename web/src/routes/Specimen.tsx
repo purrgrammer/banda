@@ -6,6 +6,9 @@
 import { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/cn";
+import { EmailDraftPreview } from "../app/EmailDraftPreview.tsx";
+import { ConnectCard, GmailPermissions } from "../chat/Connect.tsx";
+import { EmailCard } from "../chat/Object.tsx";
 import { ActivityPreview, ActivitySection } from "../specimen/activity.tsx";
 import { AvatarCandidateSpecimen } from "../specimen/avatar-candidate.tsx";
 import { AvatarCreator, AvatarIcon } from "../specimen/avatar-creator.tsx";
@@ -25,7 +28,7 @@ import { Parts } from "../specimen/parts.tsx";
 import { RecordedActivityPreview } from "../specimen/recorded-activity.tsx";
 import { Screens } from "../specimen/screens.tsx";
 import { SkillDetailPreview, SkillsSection } from "../specimen/skills.tsx";
-import { type Scheme, StageContext, type Width } from "../specimen/stage.tsx";
+import { type Scheme, Section, StageContext, type Width } from "../specimen/stage.tsx";
 import { States } from "../specimen/states.tsx";
 
 const CONTENTS = [
@@ -60,6 +63,7 @@ const CONTENTS = [
 	{ id: "harness-panel", label: "Claude Code in the panel" },
 	{ id: "mcp", label: "Add MCP server" },
 	{ id: "github", label: "GitHub" },
+	{ id: "gmail", label: "Gmail" },
 	{ id: "loading-app", label: "Opening the app" },
 	{ id: "empty-chat", label: "A new agent's chat" },
 	{ id: "states", label: "Empty and loading" },
@@ -172,6 +176,61 @@ export function Specimen() {
 									<ActivitySection />
 									<SkillsSection />
 									<Screens />
+									<Section
+										id="gmail"
+										title="Gmail"
+										note="Choose Google access before connecting. Sends and mailbox changes always ask for your approval."
+									>
+										<div className="grid gap-6 lg:grid-cols-2">
+											<EmailCard
+												message={{
+													from: "Ana García <ana@example.com>",
+													to: "bandarra@example.com",
+													subject: "The launch checklist",
+													date: "Today · 10:24",
+													snippet: "Three things before Friday…",
+													body: "Three things before Friday:\n\n1. Confirm the final copy.\n2. Review the rollout plan.",
+													unread: true,
+												}}
+											/>
+											<EmailDraftPreview
+												args={{
+													to: "mira@northstar.example",
+													subject: "Re: quarterly planning",
+													body: "Thanks, Mira. Friday at 10:30 works for me. I’ve attached the updated notes.",
+													attachments: [{ name: "planning-notes.pdf", mimeType: "application/pdf", size: 1_258_291 }],
+												}}
+												edits={{}}
+												readOnly
+												onEdit={() => {}}
+											/>
+											<EmailCard
+												message={{
+													from: "Mira from Northstar <mira@northstar.example>",
+													to: "bandarra@example.com",
+													subject: "Re: quarterly planning",
+													date: "Yesterday · 16:42",
+													snippet: "I’ve attached the notes…",
+													body: "Thanks for the thoughtful review. I’ve added the three dates we agreed on.",
+													unread: false,
+												}}
+											/>
+											<div className="lg:col-span-2">
+												<ConnectCard
+													agent="Sancho"
+													connection="Gmail"
+													state={{ kind: "connect", why: "Choose access, then sign in to Gmail." }}
+													onConnect={() => {}}
+													permissions={
+														<GmailPermissions
+															scopes={["https://www.googleapis.com/auth/gmail.readonly"]}
+															onScopes={() => {}}
+														/>
+													}
+												/>
+											</div>
+										</div>
+									</Section>
 									<PanelSections />
 									<MemorySection />
 									<DevicesSection />

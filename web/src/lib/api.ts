@@ -407,6 +407,21 @@ export const signIn = (name: string, agent?: string) =>
 		},
 	);
 
+/** Fetch one file named by a Gmail card. The daemon verifies the message, account and attachment before storing it. */
+export const gmailAttachment = (
+	chat: number,
+	ref: string,
+	attachmentId: string,
+	options: { readonly agent?: string; readonly account?: string } = {},
+) =>
+	api<{ readonly sha: string; readonly name: string; readonly mimeType: string; readonly size: number }>(
+		"/objects/attachment",
+		{
+			method: "POST",
+			body: JSON.stringify({ chat, ref, attachmentId, ...options }),
+		},
+	);
+
 /** What the daemon drew of a blob, by the name it is shown by (its kind follows the name); `full` for the viewer. */
 export const blobPreview = (sha: string, name: string, full = false) =>
 	api<FilePreview>(`/blobs/${sha}/preview?name=${encodeURIComponent(name)}${full ? "&full=1" : ""}`);

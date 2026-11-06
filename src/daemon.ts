@@ -494,6 +494,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		// connections and the tools the agent built: what is in effect is installed before anything resumes
 		const capabilities = openCapabilities({
 			home,
+			blobs,
 			harness: open,
 			workspace,
 			registry,
@@ -507,7 +508,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			agentChanged: core.agentChanged,
 		});
 		await capabilities.install();
-		const objects = openObjects({ harness: open, capabilities });
+		const objects = openObjects({ harness: open, capabilities, blobs });
 		// the lead proposes a new agent by writing its before-file into the box; the owner reviews and accepts it in Agents
 
 		// a key a page showed is kept in auth/ alone: as a connection's key, or a credential the proxy sets for a host
@@ -853,6 +854,8 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 					},
 					signIn: (name, agent) => capabilities.signIn(name, context, agent),
 					objects: (chat, asks, refresh) => objects.show(chat, asks, refresh),
+					objectAttachment: (chat, ref, attachmentId, agent, account) =>
+						objects.attachment(chat, ref, attachmentId, agent, account),
 					callback: async (query) => {
 						const done = await capabilities.callback(query);
 						changed();

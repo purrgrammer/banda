@@ -1,11 +1,13 @@
 /** Message refs are only names. Every displayed fact comes from the daemon's account-bound reading. */
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import type { EmailCard as EmailObject } from "../../../src/core/objects.ts";
 import type { ObjectAsk, ObjectShown } from "../../../src/server/objects.ts";
 import { Tile } from "../chat/Cards.tsx";
 import { ObjectLoading, ObjectUnavailable } from "../chat/Loading.tsx";
 import {
 	CheckRunCard,
+	EmailCard,
 	IssueCard,
 	NotificationCard,
 	ObjectLink,
@@ -14,9 +16,10 @@ import {
 	PullRequestCard,
 } from "../chat/Object.tsx";
 import { Markdown, MarkdownLinks } from "../components/Markdown.tsx";
-import { api } from "../lib/api.ts";
+import { api, gmailAttachment, sizeOf } from "../lib/api.ts";
 import { githubKey, objectAsks } from "../lib/objects.ts";
 import { ConnectFlow } from "./ConnectFlow.tsx";
+import { FilePart } from "./FilePart.tsx";
 
 export function MessageObjects({
 	chat,
@@ -183,6 +186,7 @@ function ReadObjects({
 				return (
 					<div key={key} className="flex min-w-0 flex-col gap-1" data-object={key} aria-busy={busy === index}>
 						<ObjectReading
+							chat={chat}
 							shown={one}
 							agent={agent}
 							busy={busy !== undefined}
@@ -216,12 +220,14 @@ function ReadObjects({
 }
 
 export function ObjectReading({
+	chat,
 	shown,
 	agent,
 	hideActions = false,
 	onRefresh,
 	busy,
 }: {
+	chat: number;
 	shown: ObjectShown;
 	agent?: { readonly id: string; readonly name: string } | undefined;
 	hideActions?: boolean;
@@ -237,7 +243,125 @@ export function ObjectReading({
 				why={`${shown.service}${shown.account ? ` as ${shown.account}` : ""}: ${shown.why}`}
 			/>
 		);
-	return <ReadingCard shown={shown} agent={agent} hideActions={hideActions} onRefresh={onRefresh} busy={busy} />;
+	return (
+		<ReadingCard chat={chat} shown={shown} agent={agent} hideActions={hideActions} onRefresh={onRefresh} busy={busy} />
+	);
+}
+
+type GmailAttachmentMeta = {
+	readonly id: string;
+	readonly name: string;
+	readonly mimeType: string;
+	readonly size: number;
+	readonly sha?: string;
+};
+function attachmentsOf(card: Pick<EmailObject, "attachmentManifest">): GmailAttachmentMeta[] {
+	try {
+		const parsed: unknown = JSON.parse(card.attachmentManifest ?? "[]");
+		if (!Array.isArray(parsed)) return [];
+		return parsed.slice(0, 20).flatMap((item): GmailAttachmentMeta[] => {
+			if (typeof item !== "object" || item === null) return [];
+			const row = item as Record<string, unknown>;
+			if (
+				typeof row.id !== "string" ||
+				row.id.length > 500 ||
+				typeof row.name !== "string" ||
+				typeof row.mimeType !== "string" ||
+				typeof row.size !== "number" ||
+				!Number.isSafeInteger(row.size) ||
+				row.size < 0
+			)
+				return [];
+			return [
+				{
+					id: row.id,
+					name: row.name,
+					mimeType: row.mimeType,
+					size: row.size,
+					...(typeof row.sha === "string" && /^[0-9a-f]{64}$/.test(row.sha) ? { sha: row.sha } : {}),
+				},
+			];
+		});
+	} catch {
+		return [];
+	}
+}
+
+function EmailAttachments({
+	chat,
+	shown,
+	card,
+	agent,
+}: {
+	chat: number;
+	shown: Extract<ObjectShown, { shown: "card" }>;
+	card: EmailObject;
+	agent: { readonly id: string; readonly name: string } | undefined;
+}) {
+	const entries = attachmentsOf(card);
+	if (entries.length === 0) return null;
+	return (
+		<div className="flex flex-col gap-1.5 border-t border-line pt-2">
+			<p className="text-meta text-ink-2">Attachments</p>
+			{entries.map((attachment) => (
+				<EmailAttachmentItem key={attachment.id} chat={chat} shown={shown} attachment={attachment} agent={agent} />
+			))}
+		</div>
+	);
+}
+
+function EmailAttachmentItem({
+	chat,
+	shown,
+	attachment,
+	agent,
+}: {
+	chat: number;
+	shown: Extract<ObjectShown, { shown: "card" }>;
+	attachment: GmailAttachmentMeta;
+	agent: { readonly id: string; readonly name: string } | undefined;
+}) {
+	const [file, setFile] = useState(
+		attachment.sha === undefined ? undefined : { sha: attachment.sha, name: attachment.name },
+	);
+	const [busy, setBusy] = useState(false);
+	const [failure, setFailure] = useState<string>();
+	const oversized = attachment.size > 10 * 1024 * 1024;
+	const open = async () => {
+		if (busy || oversized || file !== undefined || shown.card.card !== "email" || shown.card.url === undefined) return;
+		setBusy(true);
+		setFailure(undefined);
+		try {
+			const saved = await gmailAttachment(chat, shown.card.url, attachment.id, {
+				...(agent === undefined ? {} : { agent: agent.id }),
+				...(shown.accountKey === undefined ? {} : { account: shown.accountKey }),
+			});
+			setFile({ sha: saved.sha, name: saved.name });
+		} catch (error) {
+			setFailure(error instanceof Error ? error.message : "Could not open this attachment.");
+		} finally {
+			setBusy(false);
+		}
+	};
+	return (
+		<div className="flex min-w-0 flex-col gap-1">
+			<div className="flex min-w-0 items-center gap-2">
+				<Button size="sm" variant="outline" disabled={busy || oversized} onClick={() => void open()}>
+					{file !== undefined ? "Open file" : busy ? "Loading…" : oversized ? "Over 10 MB" : "Get attachment"}
+				</Button>
+				<span className="min-w-0 truncate text-meta text-ink" title={attachment.name}>
+					{attachment.name}
+				</span>
+				<span className="shrink-0 text-meta text-ink-2">{sizeOf(attachment.size)}</span>
+			</div>
+			{failure === undefined ? null : (
+				<p role="alert" className="text-meta text-danger">
+					{failure}
+				</p>
+			)}
+			{file === undefined ? null : <FilePart chat={chat} file={{ kind: "blob", ...file, image: false }} />}
+		</div>
+	);
 }
 
 function readingDetails(shown: Extract<ObjectShown, { shown: "card" }>): [string, string][] {
@@ -256,10 +380,12 @@ function readingDetails(shown: Extract<ObjectShown, { shown: "card" }>): [string
 		if (subject.account !== shown.account || subject.connection !== shown.connection)
 			rows.push(["Subject read as", `${subject.account ?? "No account"} on ${subject.service}`]);
 	}
-	if (card.card !== "notification") rows.push(["Repository", card.repo]);
+	if (card.card === "pull-request" || card.card === "issue" || card.card === "check-run")
+		rows.push(["Repository", card.repo]);
 	if (card.card === "pull-request" || card.card === "issue") rows.push(["Title", card.title], ["Author", card.author]);
 	if (card.card === "pull-request") rows.push(["Branch", card.branch]);
 	if (card.card === "check-run") rows.push(["Check", card.name], ["Where", card.where ?? ""]);
+	if (card.card === "email") rows.push(["From", card.from], ["To", card.to], ["Subject", card.subject]);
 	return rows;
 }
 
@@ -276,12 +402,14 @@ function useOldReading(shown: Extract<ObjectShown, { shown: "card" }>) {
 }
 
 function ReadingCard({
+	chat,
 	shown,
 	agent,
 	hideActions,
 	onRefresh,
 	busy,
 }: {
+	chat: number;
 	shown: Extract<ObjectShown, { shown: "card" }>;
 	agent: { readonly id: string; readonly name: string } | undefined;
 	hideActions: boolean;
@@ -304,6 +432,12 @@ function ReadingCard({
 				<IssueCard issue={{ ...card, asOf }} actions={actions} />
 			) : card.card === "check-run" ? (
 				<CheckRunCard run={{ ...card, asOf }} actions={actions} />
+			) : card.card === "email" ? (
+				<EmailCard
+					message={{ ...card, ...(asOf === undefined ? {} : { asOf }) }}
+					actions={actions}
+					attachments={<EmailAttachments chat={chat} shown={shown} card={card} agent={agent} />}
+				/>
 			) : (
 				<NotificationCard
 					actions={actions}
@@ -312,7 +446,7 @@ function ReadingCard({
 					when={card.at === undefined ? "" : new Date(card.at).toLocaleString()}
 				>
 					{shown.subject !== undefined && shown.subject.shown !== "link" ? (
-						<ObjectReading shown={shown.subject} agent={agent} hideActions />
+						<ObjectReading chat={chat} shown={shown.subject} agent={agent} hideActions />
 					) : (
 						<Tile className="p-3.5">
 							<p className="text-body text-ink">{card.title || "Notification"}</p>

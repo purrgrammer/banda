@@ -732,7 +732,7 @@ it.skipIf(!hasChrome())(
 					await page.run(
 						`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Allow').click()`,
 					);
-					await page.until(`document.body.textContent.includes('Octo can use it now')`);
+					await page.until(`document.body.textContent.includes('GitHub connected')`);
 					expect(requests).toHaveLength(1); // granting does not start a passive retry loop
 					await page.run(`document.querySelector('[aria-label="Refresh preview"]').click()`);
 					await page.until(`document.querySelectorAll('[data-entry="200"] [data-object]').length === 3`);

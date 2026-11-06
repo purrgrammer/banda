@@ -45,6 +45,7 @@ import {
 	unaccept,
 } from "../core/agents.ts";
 import { EffectRun, type EffectTool, toolWords } from "../core/ask.ts";
+import { type BlobStore, Blobs, hasBlobHash, releaseConnection } from "../core/blobs.ts";
 import {
 	acceptedConnection,
 	accountKey,
@@ -88,6 +89,14 @@ import {
 } from "../core/connections.ts";
 import { type EgressControl, intake } from "../core/egress.ts";
 import {
+	GMAIL_TOOLS,
+	gmailAttachment,
+	gmailCall,
+	gmailWriteCall,
+	MAX_GMAIL_ATTACHMENT_BYTES,
+	MAX_GMAIL_SEND_ATTACHMENT_BYTES,
+} from "../core/gmail-rest.ts";
+import {
 	boxSession,
 	callTool,
 	InsufficientScope,
@@ -103,6 +112,7 @@ import {
 	type Device,
 	discover,
 	exchange,
+	googleOAuthClient,
 	type OAuthClient,
 	type OAuthServer,
 	pollDevice,
@@ -139,6 +149,7 @@ import { BadRequest } from "./http.ts";
 
 export type CapabilityOptions = {
 	readonly home: string;
+	readonly blobs?: BlobStore;
 	readonly harness: Harness;
 	readonly workspace: Workspace;
 	readonly registry: Registry;
@@ -169,6 +180,8 @@ type Finished = {
 	readonly account: string;
 	readonly id: string;
 	readonly agent?: string;
+	readonly enabled?: boolean;
+	readonly problem?: string;
 	/** The account was signed in to already: the card says so. */
 	readonly known: boolean;
 	readonly at: number;
@@ -398,7 +411,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		connection: Connection,
 		account: string | undefined,
 		ctx: Context,
-		exchange: (client: McpClient) => Promise<T>,
+		exchange: (client: McpClient | undefined, bearer?: string) => Promise<T>,
 		beforeRetry?: () => Promise<void>,
 		usedSecrets?: Set<string>,
 	): Promise<T> {
@@ -409,16 +422,19 @@ export function openCapabilities(options: CapabilityOptions) {
 			const authorize = await authorizationOf(connection, account, ctx, (snapshot) => {
 				attempted = snapshot;
 			});
+			const header = await authorize();
+			if (header?.startsWith("Bearer ")) usedSecrets?.add(header.slice(7));
+			if (connection.api === "gmail") {
+				if (header === undefined || !header.startsWith("Bearer "))
+					throw new Error(`${connection.service} is not signed in`);
+				return exchange(undefined, header.slice(7));
+			}
 			return remoteSession(
 				url,
-				async () => {
-					const header = await authorize();
-					if (header?.startsWith("Bearer ")) usedSecrets?.add(header.slice(7));
-					return header;
-				},
+				async () => header,
 				fetcher,
 				ctx.abortSignal,
-				exchange,
+				(client) => exchange(client),
 			);
 		};
 		try {
@@ -456,6 +472,12 @@ export function openCapabilities(options: CapabilityOptions) {
 			await beforeRetry?.();
 			return connect();
 		}
+	}
+
+	/** Resolve a shipped Google OAuth client from daemon-only configuration. Its secret is kept only with credentials. */
+	function oauthClient(connection: Connection): OAuthClient {
+		if (connection.client !== "google") return { id: connection.client as string };
+		return googleOAuthClient(process.env.BANDA_GOOGLE_CLIENT_ID, process.env.BANDA_GOOGLE_CLIENT_SECRET);
 	}
 
 	/**
@@ -646,7 +668,10 @@ export function openCapabilities(options: CapabilityOptions) {
 						tool.connection,
 						account,
 						ctx,
-						(client) => remoteCall(client, tool.tool, sent, ctx.abortSignal),
+						(client, bearer) =>
+							tool.connection.api === "gmail"
+								? gmailCall(bearer ?? "", tool.tool, sent as Record<string, unknown>, ctx.abortSignal, fetcher)
+								: remoteCall(client as McpClient, tool.tool, sent, ctx.abortSignal),
 						async () => {
 							const refused = await api.commit(
 								(tx) => allowedAs(tool, arg)(tx, account === undefined ? {} : { [arg]: account }, chat),
@@ -684,6 +709,10 @@ export function openCapabilities(options: CapabilityOptions) {
 		 * its own name; never words made by splitting that name, which read as a verb they are not ("issue write").
 		 */
 		const words = (args: JsonObject) => {
+			if (tool.connection.api === "gmail" && tool.tool === "send_message") {
+				const recipient = typeof args.to === "string" ? args.to : "the chosen recipient";
+				return `Send email to ${recipient}`;
+			}
 			const created = made(args);
 			if (created !== undefined) return created.what;
 			const object = on(args);
@@ -692,7 +721,10 @@ export function openCapabilities(options: CapabilityOptions) {
 				? `Use ${tool.connection.service}'s ${tool.tool}${as(args)}`
 				: `${object.what} ${nameOf(first, kinds)}`;
 		};
-		const editable = editableOf(tool.tool, kinds).filter((field) => !signed || field !== arg);
+		const editable = [
+			...editableOf(tool.tool, kinds).filter((field) => !signed || field !== arg),
+			...(tool.connection.api === "gmail" && tool.tool === "send_message" ? ["to", "subject", "body"] : []),
+		];
 		return options.effect({
 			name: tool.name,
 			description:
@@ -720,7 +752,9 @@ export function openCapabilities(options: CapabilityOptions) {
 								},
 								verb: object.verb,
 							}),
-					...(created === undefined ? {} : { verb: created.verb }),
+					...(created === undefined && !(tool.connection.api === "gmail" && tool.tool === "send_message")
+						? {}
+						: { verb: created?.verb ?? "Send" }),
 					...(account === undefined
 						? {}
 						: { as: `${labelOf(tool.connection.name, account)} on ${tool.connection.service}` }),
@@ -739,15 +773,42 @@ export function openCapabilities(options: CapabilityOptions) {
 			},
 			// the account it acts as, chosen once: a rerun drafts the same, whatever was switched since
 			expand: async (args, api, ctx) => {
-				if (!signed) return args as JsonObject;
 				const chat = Number(api.conversationId);
-				const resolved = await api.commit(
-					(tx) => accountFor(tx, tool.connection, chat, (args as JsonObject)[arg]),
-					ctx,
-				);
+				const given = args as JsonObject;
+				let expanded: JsonObject = given;
+				if (tool.connection.api === "gmail" && tool.tool === "send_message") {
+					const requested = Array.isArray(given.attachments) ? given.attachments : [];
+					if (requested.length > 10) return "A message may include up to 10 attachments.";
+					if (requested.length > 0) {
+						if (options.blobs === undefined) return "Attachments are unavailable on this connection.";
+						const files = await api.commit(async (tx) => {
+							const { blobs: held } = await tx.doc(Blobs);
+							let total = 0;
+							const checked = requested.map((entry) => {
+								const value = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : {};
+								const sha = value.sha;
+								if (typeof sha !== "string" || !/^[a-f0-9]{64}$/.test(sha))
+									throw new Error("Choose an attached file by its sha256 link.");
+								const blob = held[sha];
+								const source = blob?.holders[String(chat)];
+								if (blob === undefined || source === undefined)
+									throw new Error("That file is not attached to this chat.");
+								if (blob.size > MAX_GMAIL_ATTACHMENT_BYTES) throw new Error(`${source.name} is larger than 10 MB.`);
+								total += blob.size;
+								return { sha, name: source.name, mimeType: blob.mimeType, size: blob.size };
+							});
+							if (total > MAX_GMAIL_SEND_ATTACHMENT_BYTES)
+								throw new Error("Message attachments exceed 15 MB in total.");
+							return checked;
+						}, ctx);
+						expanded = { ...given, attachments: files };
+					}
+				}
+				if (!signed) return expanded;
+				const resolved = await api.commit((tx) => accountFor(tx, tool.connection, chat, given[arg]), ctx);
 				if ("refused" in resolved) return resolved.refused;
 				const account = await api.memo("account", resolved.account ?? "", ctx);
-				return { ...(args as JsonObject), [arg]: account };
+				return { ...expanded, [arg]: account };
 			},
 			allowed: allowedAs(tool, arg),
 			run: async (args, { api }, ctx) => {
@@ -756,12 +817,24 @@ export function openCapabilities(options: CapabilityOptions) {
 				fault("connection:call");
 				let result: Awaited<ReturnType<typeof callTool>>;
 				try {
+					const approved = signed ? without(args, arg) : (args as JsonObject);
+					const files =
+						tool.connection.api === "gmail" && tool.tool === "send_message"
+							? await loadApprovedGmailFiles(approved, chat, api, ctx)
+							: [];
 					result = await withServer(
 						tool.connection,
 						account,
 						ctx,
-						(client) =>
-							remoteCall(client, tool.tool, signed ? without(args, arg) : (args as JsonObject), ctx.abortSignal),
+						(client, bearer) =>
+							tool.connection.api === "gmail"
+								? gmailWriteCall(bearer ?? "", tool.tool, approved, ctx.abortSignal, fetcher, files)
+								: remoteCall(
+										client as McpClient,
+										tool.tool,
+										signed ? without(args, arg) : (args as JsonObject),
+										ctx.abortSignal,
+									),
 						async () => {
 							const refused = await api.commit((tx) => allowedAs(tool, arg)(tx, args as JsonObject, chat), ctx);
 							if (refused !== undefined) throw new Error(refused);
@@ -773,6 +846,51 @@ export function openCapabilities(options: CapabilityOptions) {
 				fault("connection:answered");
 				return answered(api, tool, result, true, ctx);
 			},
+		});
+	}
+
+	/** Resolve only files held by this chat; bytes remain local until the approved Gmail request is sent. */
+	async function loadApprovedGmailFiles(
+		args: JsonObject,
+		chat: number,
+		api: ToolExecutionApi,
+		ctx: Context,
+	): Promise<{ sha: string; name: string; mimeType: string; bytes: Buffer }[]> {
+		const rows = Array.isArray(args.attachments) ? args.attachments : [];
+		if (rows.length === 0) return [];
+		if (options.blobs === undefined || rows.length > 10) throw new Error("The approved attachments are unavailable.");
+		return options.blobs.exclusive(async () => {
+			const metadata = await api.commit(async (tx) => {
+				const { blobs } = await tx.doc(Blobs);
+				return rows.map((entry) => {
+					const value = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : {};
+					const sha = value.sha;
+					const held = typeof sha === "string" ? blobs[sha] : undefined;
+					const source = held?.holders[String(chat)];
+					if (
+						held === undefined ||
+						source === undefined ||
+						source.name !== value.name ||
+						held.size !== value.size ||
+						held.mimeType !== value.mimeType
+					)
+						throw new Error("An approved attachment changed or is no longer attached to this chat.");
+					return { sha: String(sha), name: source.name, mimeType: held.mimeType, size: held.size };
+				});
+			}, ctx);
+			let total = 0;
+			const files = await Promise.all(
+				metadata.map(async (file) => {
+					total += file.size;
+					if (file.size > MAX_GMAIL_ATTACHMENT_BYTES || total > MAX_GMAIL_SEND_ATTACHMENT_BYTES)
+						throw new Error("The approved attachments exceed Gmail's size limit.");
+					const bytes = await options.blobs?.read(file.sha);
+					if (bytes === undefined || bytes.byteLength !== file.size || !hasBlobHash(file.sha, bytes))
+						throw new Error("An approved attachment is incomplete.");
+					return { ...file, bytes };
+				}),
+			);
+			return files;
 		});
 	}
 
@@ -1031,13 +1149,20 @@ export function openCapabilities(options: CapabilityOptions) {
 		if (connection === undefined || connection.url === undefined) return;
 		const account = await listingAccount(connection, ctx);
 		if (signsIn(connection) && account === undefined) return;
+		if (connection.api === "gmail") {
+			fault("connect:listed");
+			await keepListing(name, connection.sha, GMAIL_TOOLS, ctx);
+			problems.delete(name);
+			options.changed?.();
+			return;
+		}
 		const used = new Set<string>();
 		try {
 			const listed = await withServer(
 				connection,
 				account,
 				ctx,
-				(client) => remoteListing(client, ctx.abortSignal),
+				(client) => remoteListing(client as McpClient, ctx.abortSignal),
 				undefined,
 				used,
 			);
@@ -1120,6 +1245,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			delete doc.accounts?.[name]?.[key];
 			// what was read as it goes with it: no card is drawn from a sign-in that is gone
 			await forgetReadings(tx, name, key);
+			await releaseConnection(tx, name, key);
 		}
 		if (doc.accounts?.[name] !== undefined && Object.keys(doc.accounts[name]).length === 0) delete doc.accounts[name];
 		for (const [agent, connections] of Object.entries(doc.on ?? {})) {
@@ -1768,6 +1894,16 @@ export function openCapabilities(options: CapabilityOptions) {
 		const read = connection.account;
 		const url = connection.url as string;
 		const bearer = "key" in credentials ? credentials.key : credentials.oauth.tokens.access;
+		if (connection.api === "gmail") {
+			const answer = await gmailCall(bearer, read?.tool ?? "get_profile", {}, ctx.abortSignal, fetcher);
+			let id = "";
+			try {
+				const parsed = JSON.parse(answer.text) as { [field: string]: unknown };
+				id = plainId(parsed[read?.field ?? "emailAddress"]);
+			} catch {}
+			if (answer.isError || id === "") throw new Error(`${connection.service} did not say who you are`);
+			return id;
+		}
 		if (read === undefined) {
 			// a sign-in is kept only once the server took it: listing its tools with it proves that much
 			await remoteSession(
@@ -1853,20 +1989,29 @@ export function openCapabilities(options: CapabilityOptions) {
 		fault("account:added");
 		problems.delete(name);
 		const done: Finished = { account, id, ...(agent === undefined ? {} : { agent }), known, at: now() };
-		finished.set(name, done);
 		const listed = await harness.commit(
 			async (tx) => (await tx.doc(Connected)).connections[name]?.sha === connection.sha,
 			ctx,
 		);
 		if (!listed) await connect(name, ctx);
-		// an agent whose file does not name it yet: its file is rewritten to, as the owner's switch does
+		// An agent's file may need the connection added. A refusal leaves the account signed in, but must not say the
+		// agent can use it; the connect card will offer the account switch and show why it was refused.
+		let accessProblem: string | undefined;
 		if (agent !== undefined)
 			await switchAccount(agent, name, account, true, ctx, connection.sha).catch((error: unknown) => {
 				if (!(error instanceof BadRequest)) throw error;
+				accessProblem = error.message;
 			});
 		await install(ctx);
 		options.changed?.();
-		return done;
+		if (accessProblem !== undefined) {
+			const updated = { ...done, enabled: false, problem: accessProblem };
+			finished.set(name, updated);
+			return updated;
+		}
+		const updated = agent === undefined ? done : { ...done, enabled: true };
+		finished.set(name, updated);
+		return updated;
 	}
 
 	/** Switch a tool (a connection's, by the model's name for it, or one the agent built) on or off, at once. */
@@ -1930,7 +2075,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			const server: OAuthServer =
 				connection.scopes === undefined ? discovered : { ...discovered, scopes: connection.scopes };
 			if (connection.client !== undefined && server.device !== undefined) {
-				const client = { id: connection.client };
+				const client = oauthClient(connection);
 				const device = await startDevice(server, client, connection.url, now(), fetcher);
 				fault("oauth:device");
 				stopDevice(name);
@@ -1944,8 +2089,9 @@ export function openCapabilities(options: CapabilityOptions) {
 			}
 			const redirect = options.redirect();
 			const client =
-				connection.client !== undefined ? { id: connection.client } : await register(server, redirect, fetcher);
-			const started = begin(name, connection.url, server, client, redirect, now(), agent);
+				connection.client !== undefined ? oauthClient(connection) : await register(server, redirect, fetcher);
+			const pendingClient = connection.client === "google" ? { id: client.id } : client;
+			const started = begin(name, connection.url, server, pendingClient, redirect, now(), agent);
 			await keepPending(home, started.pending);
 			return { url: started.url };
 		} catch (error) {
@@ -2071,9 +2217,12 @@ export function openCapabilities(options: CapabilityOptions) {
 		const connection = await harness.commit((tx) => acceptedConnection(tx, pending.connection), ctx);
 		if (connection?.url !== pending.resource)
 			return { ok: false, words: "That connection changed while you signed in. Start again from the app." };
+		if (connection.client === "google" && pending.client.id !== process.env.BANDA_GOOGLE_CLIENT_ID)
+			return { ok: false, words: "The Google OAuth client changed during sign-in. Start again from the app." };
 		let tokens: Awaited<ReturnType<typeof exchange>>;
 		try {
-			tokens = await exchange(pending, query.code, now(), fetcher);
+			const client = connection.client === "google" ? oauthClient(connection) : pending.client;
+			tokens = await exchange({ ...pending, client }, query.code, now(), fetcher);
 		} catch (error) {
 			return { ok: false, words: `Signing in did not finish: ${await problemOf(error)}` };
 		}
@@ -2082,7 +2231,14 @@ export function openCapabilities(options: CapabilityOptions) {
 		try {
 			done = await signedIn(
 				pending.connection,
-				{ url: pending.resource, oauth: { server: pending.server, client: pending.client, tokens } },
+				{
+					url: pending.resource,
+					oauth: {
+						server: pending.server,
+						client: connection.client === "google" ? oauthClient(connection) : pending.client,
+						tokens,
+					},
+				},
 				pending.agent,
 				ctx,
 			);
@@ -2167,10 +2323,17 @@ export function openCapabilities(options: CapabilityOptions) {
 			async (tx) => (await tx.doc(Accepted)).files[connectionPath(name)] !== undefined,
 			ctx,
 		);
-		if (there || (await boxedFiles("connections", ctx)).has(name))
+		if (there) throw new BadRequest(`there is a connection named ${name} already`, 409);
+		const box = (await boxedFiles("connections", ctx)).get(name) as
+			| { text: string }
+			| { unreadable: string }
+			| undefined;
+		if (box !== undefined && ("unreadable" in box || box.text !== shipped.text))
 			throw new BadRequest(`there is a connection named ${name} already`, 409);
-		await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, shipped.text, ctx);
-		fault("shipped:written");
+		if (box === undefined) {
+			await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, shipped.text, ctx);
+			fault("shipped:written");
+		}
 		await acceptConnection(name, shaOf(shipped.text), ctx);
 	}
 
@@ -2527,9 +2690,12 @@ export function openCapabilities(options: CapabilityOptions) {
 				found.connection,
 				signsIn(found.connection) ? account : undefined,
 				ctx,
-				async (client) => {
+				async (client, bearer) => {
 					await check();
-					const result = await remoteCall(client, tool, args, ctx.abortSignal);
+					const result =
+						found.connection.api === "gmail"
+							? await gmailCall(bearer ?? "", tool, args, ctx.abortSignal, fetcher)
+							: await remoteCall(client as McpClient, tool, args, ctx.abortSignal);
 					await check();
 					return result;
 				},
@@ -2538,6 +2704,63 @@ export function openCapabilities(options: CapabilityOptions) {
 			);
 			const said = scrub(answer.text, [...usedSecrets, ...(await secrets(home))]);
 			return answer.isError ? { failed: `${found.connection.service} said: ${said.slice(0, 300)}` } : { text: said };
+		} catch (error) {
+			return {
+				failed: scrub(error instanceof Error ? error.message : String(error), [
+					...usedSecrets,
+					...(await secrets(home)),
+				]).slice(0, 300),
+			};
+		}
+	}
+
+	/** Fetch attachment bytes only for a message this exact account-bound object definition can read. */
+	async function readAttachment(
+		name: string,
+		account: string,
+		messageId: string,
+		attachmentId: string,
+		authority: { readonly chat: number; readonly ref: ObjectRef; readonly stamp: string },
+		ctx: Context = context,
+	): Promise<{ readonly bytes: Buffer } | { readonly failed: string }> {
+		const found = await harness.commit(async (tx) => {
+			const access = await objectAccess(tx, authority.chat, authority.ref, account);
+			if (access?.stamp !== authority.stamp || access.connection.name !== name || access.connection.api !== "gmail")
+				return undefined;
+			const connection = access.connection;
+			const doc = await tx.doc(Connected);
+			const declared = Object.values(access.reads).some(
+				(read) =>
+					read.tool === "get_message" &&
+					canonical(readArgs(read, authority.ref, doc.connections[name]?.tools[read.tool]?.schema)) ===
+						canonical({ message_id: messageId }),
+			);
+			const listed = doc.connections[name];
+			return declared && listed?.sha === connection.sha && listed.tools.get_message !== undefined
+				? { connection }
+				: undefined;
+		}, ctx);
+		if (found === undefined) return { failed: "This Gmail message is not available as that account." };
+		const usedSecrets = new Set(await secrets(home));
+		try {
+			const check = async () => {
+				const access = await harness.commit((tx) => objectAccess(tx, authority.chat, authority.ref, account), ctx);
+				if (access?.stamp !== authority.stamp) throw new Error("Object access was taken back.");
+			};
+			const bytes = await withServer(
+				found.connection,
+				account,
+				ctx,
+				async (_client, bearer) => {
+					await check();
+					const data = await gmailAttachment(bearer ?? "", messageId, attachmentId, ctx.abortSignal, fetcher);
+					await check();
+					return data;
+				},
+				check,
+				usedSecrets,
+			);
+			return { bytes };
 		} catch (error) {
 			return {
 				failed: scrub(error instanceof Error ? error.message : String(error), [
@@ -2564,6 +2787,7 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	return {
 		readFor,
+		readAttachment,
 		listedSchema,
 		shipped,
 		install,

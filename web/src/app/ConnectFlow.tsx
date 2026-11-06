@@ -5,8 +5,9 @@
  * daemon sees the grant, then whom it signed in as. For an agent with no account of it while some exist, the card is one
  * tap: "Let Mara use GitHub as @bandarra?".
  */
-import { useState } from "react";
-import { ConnectCard } from "../chat/Connect.tsx";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { ConnectCard, GmailPermissions } from "../chat/Connect.tsx";
 import { actOnCapability, signIn, switchAccount } from "../lib/api.ts";
 import { connectState, freshAccounts, type Phase } from "../lib/connect.ts";
 import { showCapabilities, useShell } from "../lib/shell.ts";
@@ -43,6 +44,7 @@ export function ConnectFlow({
 	const { capabilities } = useShell();
 	const [phase, setPhase] = useState<Phase>({ kind: "idle" });
 	const [busy, setBusy] = useState(false);
+	const toasted = useRef<string | undefined>(undefined);
 	const view = capabilities?.connections.find((each) => each.name === connection);
 	const shipped = capabilities?.shipped?.find((each) => each.name === connection);
 	const service = serviceOf(connection, capabilities);
@@ -55,8 +57,8 @@ export function ConnectFlow({
 		setBusy(true);
 		const before = view?.finished?.at;
 		try {
-			// a connection banda ships, not added yet: added first, as the owner chose it
-			if (view === undefined) {
+			// Finish adding a shipped connection before sign-in, including recovery when its exact file was left in the box.
+			if (view?.accepted?.connection === undefined) {
 				if (shipped === undefined) throw new Error(`${service} is not one banda can connect yet.`);
 				showCapabilities(await actOnCapability({ action: "add", name: connection }));
 			}
@@ -80,16 +82,59 @@ export function ConnectFlow({
 			setBusy(false);
 		}
 	};
+	const setGmailScopes = async (scopes: readonly string[]) => {
+		setBusy(true);
+		const before = view?.finished?.at;
+		try {
+			if (view?.accepted?.connection === undefined) {
+				if (shipped === undefined) throw new Error(`${service} is not one banda can connect yet.`);
+				showCapabilities(await actOnCapability({ action: "add", name: connection }));
+			}
+			showCapabilities(await actOnCapability({ action: "scopes", name: connection, scopes }));
+			const started = await signIn(connection, agent?.id);
+			setPhase({ kind: "started", before, ...("url" in started ? { url: started.url } : {}) });
+		} catch (error) {
+			setPhase({ kind: "failed", why: wordsOf(error) });
+		} finally {
+			setBusy(false);
+		}
+	};
 	const state = connectState(view, phase, agent?.id, reason);
+	useEffect(() => {
+		if (
+			phase.kind !== "started" ||
+			(state.kind !== "done" && state.kind !== "already") ||
+			view?.finished === undefined ||
+			view.finished.at === phase.before
+		)
+			return;
+		const key = `${connection}:${view.finished.at}:${state.kind}:${state.login}`;
+		if (toasted.current === key) return;
+		toasted.current = key;
+		toast.success(state.kind === "done" ? `Signed in as ${state.login}` : `Already connected as ${state.login}`);
+	}, [connection, phase, state, view?.finished]);
 	return (
-		<ConnectCard
-			agent={agent?.name}
-			connection={service}
-			state={state}
-			busy={busy}
-			onConnect={() => void start()}
-			onUse={(login) => void use(login)}
-			{...(onDismiss === undefined ? {} : { onDismiss })}
-		/>
+		<div className="flex flex-col gap-2">
+			<ConnectCard
+				agent={agent?.name}
+				connection={service}
+				state={state}
+				busy={busy}
+				{...(connection === "gmail"
+					? {
+							permissions: (
+								<GmailPermissions
+									scopes={view?.accepted?.connection?.scopes ?? ["https://www.googleapis.com/auth/gmail.readonly"]}
+									onScopes={(scopes) => void setGmailScopes(scopes)}
+									busy={busy}
+								/>
+							),
+						}
+					: {})}
+				onConnect={() => void start()}
+				onUse={(login) => void use(login)}
+				{...(onDismiss === undefined ? {} : { onDismiss })}
+			/>
+		</div>
 	);
 }

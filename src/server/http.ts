@@ -160,6 +160,14 @@ export type Routes = {
 	 * as the account its agent uses, the connect card, or a plain link; `refresh`, the owner tapped one.
 	 */
 	readonly objects?: (chat: number, asks: readonly ObjectAsk[], refresh: boolean) => Promise<ObjectShown[]>;
+	/** Fetch an attachment named by an authorized Gmail object; bytes are stored as a held blob before publishing. */
+	readonly objectAttachment?: (
+		chat: number,
+		ref: string,
+		attachmentId: string,
+		agent?: string,
+		account?: string,
+	) => Promise<Attachment | undefined>;
 	/** Chat `chat`'s tab as the owner sees it: its state, and its frames while they watch, until `signal` aborts. */
 	readonly browser?: (chat: number, write: (event: ViewEvent) => void, signal: AbortSignal) => Promise<void>;
 	/** The owner takes chat `chat`'s tab, or gives it back; throws `BadRequest` with why not. */
@@ -653,6 +661,29 @@ export function handler(
 			});
 			return reply(res, 200, await routes.objects(chat, checked, refresh === true));
 		}
+		if (route === "POST /objects/attachment" && routes.objectAttachment !== undefined) {
+			const { chat, ref, attachmentId, agent, account } = await json(req);
+			if (typeof chat !== "number" || !Number.isSafeInteger(chat) || chat <= 0)
+				throw new BadRequest("chat is a chat's number");
+			if (typeof ref !== "string" || ref.length === 0 || ref.length > 500)
+				throw new BadRequest("ref names a Gmail message");
+			if (typeof attachmentId !== "string" || attachmentId.length === 0 || attachmentId.length > 500)
+				throw new BadRequest("attachmentId names an attachment on that message");
+			if (agent !== undefined && (typeof agent !== "string" || agent.length > 100))
+				throw new BadRequest("agent is a member's name");
+			if (account !== undefined && (typeof account !== "string" || account.length > 100))
+				throw new BadRequest("account is a connection account");
+			const file = await routes.objectAttachment(
+				chat,
+				ref,
+				attachmentId,
+				agent as string | undefined,
+				account as string | undefined,
+			);
+			return file === undefined
+				? reply(res, 404, { error: "no such authorized Gmail attachment" })
+				: reply(res, 200, file);
+		}
 		if (route === "GET /capabilities") return reply(res, 200, await routes.capabilities());
 		if (route === "POST /capabilities/mcp" && routes.addMcp !== undefined)
 			return reply(res, 200, await routes.addMcp(await json(req)));
@@ -722,10 +753,19 @@ export function handler(
 			return reply(res, 404, { error: "not found" });
 		}
 		// an account of a connection: switched on or off for an agent, or signed out
-		const account =
-			/^\/capabilities\/connections\/([a-z0-9-]{1,64})\/accounts\/([a-z0-9._@+-]{1,100})\/(switch|signout)$/.exec(path);
+		const account = /^\/capabilities\/connections\/([a-z0-9-]{1,64})\/accounts\/([^/]{1,300})\/(switch|signout)$/.exec(
+			path,
+		);
 		if (account !== null && req.method === "POST") {
-			const [, name = "", key = "", action] = account;
+			const [, name = "", encodedKey = "", action] = account;
+			let key: string;
+			try {
+				key = decodeURIComponent(encodedKey);
+			} catch {
+				throw new BadRequest("account key is not valid URL encoding");
+			}
+			if (!/^[a-z0-9][a-z0-9._@+-]{0,99}$/.test(key) || key.includes(".."))
+				throw new BadRequest("account key is invalid");
 			if (action === "signout")
 				return reply(res, 200, await routes.capability({ action: "signout", name, account: key }));
 			const { agent, on, sha } = await json(req);
