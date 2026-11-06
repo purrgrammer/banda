@@ -6,8 +6,8 @@ import { createElement, Fragment } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Ask } from "../lib/api.ts";
-import { argList, draftParts } from "../lib/chat.ts";
-import { ApprovalCard, Details, Facts } from "./Approval.tsx";
+import { argList, draftParts, wildcardWarning } from "../lib/chat.ts";
+import { ApprovalCard, Details, Facts, HostsWarning } from "./Approval.tsx";
 
 const ask: Extract<Ask, { type: "approval" }> = {
 	type: "approval",
@@ -65,5 +65,29 @@ describe("a held request's card", () => {
 		const parts = draftParts(plain);
 		expect(parts.details).toEqual([]);
 		expect(argList(parts.rest)).toEqual([["to", "ines@example.com"]]);
+	});
+});
+
+describe("an ask_hosts draft naming *", () => {
+	it("flags * for what it is: every host", () => {
+		expect(wildcardWarning("ask_hosts", "relay.damus.io\nnos.lol\n*")).toContain("every host");
+		expect(wildcardWarning("ask_hosts", " * ")).toContain("every host");
+	});
+
+	it("says nothing for plain hosts or patterns, and the owner's trim clears it", () => {
+		expect(wildcardWarning("ask_hosts", "relay.damus.io\n*.example.com")).toBeUndefined();
+		// the owner trimmed the * line out before approving
+		expect(wildcardWarning("ask_hosts", "relay.damus.io\nnos.lol")).toBeUndefined();
+		// another tool's argument happening to hold * is not an ask for every host
+		expect(wildcardWarning("browser_send", "*")).toBeUndefined();
+	});
+
+	it("draws the mark in red, as an alert", () => {
+		const warning = wildcardWarning("ask_hosts", "*");
+		expect(warning).toBeDefined();
+		const html = renderToStaticMarkup(createElement(HostsWarning, { warning: warning as string }));
+		expect(html).toContain('role="alert"');
+		expect(html).toContain("text-danger");
+		expect(html).toContain("every host");
 	});
 });

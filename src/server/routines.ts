@@ -484,6 +484,9 @@ export async function control(
 			at: permission.at,
 			...(permission.task === undefined ? {} : { chat: permission.task.chat }),
 			...(permission.agent === undefined ? {} : { agent: permission.agent }),
+			...(permission.scope === "host" && typeof permission.match._host === "string"
+				? { host: permission.match._host }
+				: {}),
 			...(serves === undefined ? {} : { serves }),
 		}),
 	);

@@ -616,7 +616,7 @@ export function Permissions({
 											: () => onRevoke(permission.id as string)
 									}
 								>
-									<Button variant="outline" size="xs">
+									<Button variant="destructive" size="xs">
 										Revoke
 									</Button>
 								</Confirm>

@@ -52,7 +52,8 @@ import {
 	Tickets,
 } from "../src/core/egress.ts";
 import { OWNER, type Received } from "../src/core/gateway.ts";
-import { covering, Permissions, revoke } from "../src/core/permissions.ts";
+import { hostCovers } from "../src/core/hosts.ts";
+import { allowHost, covering, Permissions, revoke } from "../src/core/permissions.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
@@ -408,6 +409,50 @@ describe("a host the owner allowed", () => {
 			expect(await revoke(harness, id, Date.now())).toBe(true);
 			expect(await permittedHosts(harness)).toEqual({});
 			await asks({ path: "/v1/issues/42/comments" });
+		} finally {
+			await close();
+		}
+	});
+
+	it("is allowed by the owner directly, a pattern or every host, for one agent; the proxy is told", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const first = await s.say(harness);
+			await until(() => done(harness, first.turn));
+			// what the owner typed, spelled as the proxy reads it; what names no host is refused
+			expect(await allowHost(harness, LEAD, "wss://*.Damus.io/", 1)).toEqual({ id: "1", host: "*.damus.io" });
+			expect(await allowHost(harness, LEAD, "*.damus.io", 2)).toEqual({ id: "1", host: "*.damus.io" });
+			expect(await allowHost(harness, LEAD, "*", 3)).toEqual({ id: "2", host: "*" });
+			expect(await allowHost(harness, LEAD, "ws://relay.example:8080", 4)).toMatchObject({ id: "3" });
+			for (const typed of ["", "a.*.example", "example.com/path", "ftp://x.example", "*.", "x.example:0"])
+				expect(await allowHost(harness, LEAD, typed, 5)).toMatchObject({ refused: expect.any(String) });
+			expect(await allowHost(harness, "nobody-here", "x.example", 5)).toEqual({ refused: "no such agent" });
+			const stored = Object.values((await harness.snapshot(Permissions, context))!.permissions);
+			expect(stored.map((p) => [p.match._host, p.scope, p.agent, p.what])).toEqual([
+				["*.damus.io", "host", LEAD, "Sancho may send anything to *.damus.io"],
+				["*", "host", LEAD, "Sancho may send anything to any host"],
+				["http://relay.example:8080", "host", LEAD, "Sancho may send anything to http://relay.example:8080"],
+			]);
+			const events = (await harness.snapshot(ActivityLog, context))!.events.map((event) => event.what);
+			expect(events).toContain("You allowed: Sancho may send anything to *.damus.io");
+			expect(await permittedHosts(harness)).toEqual({
+				[String(first.chat)]: ["*", "*.damus.io", "http://relay.example:8080"],
+			});
+			// a pattern covers a held request to a name under it, as the proxy would have let it through
+			const under = { tool: "propose_send", args: draftArgs(held(first.chat, { host: "relay.damus.io" })) };
+			const covered = await harness.commit(
+				async (tx) => (await covering(tx, under, first.chat, Date.now()))?.permission.match._host,
+				context,
+			);
+			expect(covered).toBe("*.damus.io");
+			// another agent's chat is not covered
+			const other = first.chat + 1000;
+			await harness.commit(async (tx) => {
+				(await tx.doc(AgentChats)).chats[other] = "ledger";
+			}, context);
+			const theirs = { tool: "propose_send", args: draftArgs(held(other, { host: "relay.damus.io" })) };
+			expect(await harness.commit((tx) => covering(tx, theirs, other, Date.now()), context)).toBeUndefined();
 		} finally {
 			await close();
 		}
@@ -995,7 +1040,10 @@ function admit(config: object, cases: readonly object[]) {
 			encoding: "utf8",
 		});
 		return JSON.parse(out) as {
-			cases: ({ status: number; body: string } | { on: true; headers: [string, string][] })[];
+			cases: (
+				| { status: number; body: string }
+				| { on: true; headers: [string, string][]; streams?: boolean; frames?: string[] }
+			)[];
 			held: { [chat: string]: HeldRequest[] };
 			sent: { [chat: string]: SentRequest[] };
 		};
@@ -1052,7 +1100,6 @@ describe.skipIf(!python)("a host the owner allowed, at the proxy", () => {
 			{ ...push, headers: [["Authorization", "Bearer mine-own-token"]] },
 			{ ...push, headers: [["Cookie", "session=1"]] },
 			{ ...push, headers: [["X-Api-Key", "k"]] },
-			{ ...push, headers: [["Upgrade", "websocket"]], method: "GET" },
 			// chat 8's tab in sancho's browser: a browser's write never goes by a host permission, it waits
 			{ ...push, login: "b-sancho", headers: [["x-banda-tab", tabStamp(key, "sancho", 8)]] },
 			{ ...push, scheme: "http", port: 80 },
@@ -1072,17 +1119,17 @@ describe.skipIf(!python)("a host the owner allowed, at the proxy", () => {
 			"Bearer owner-token-12345",
 		]);
 		expect(rest.map((one) => ("status" in one ? one.status : 200))).toEqual([
-			403, 403, 403, 403, 403, 403, 403, 403, 403, 403, 403, 200, 200,
+			403, 403, 403, 403, 403, 403, 403, 403, 403, 403, 200, 200,
 		]);
 		const body = (n: number) => (rest[n] as { body: string }).body;
 		expect(body(0)).toMatch(
-			/ticket t[0-9a-f]{10}\. It has not been sent\. Ask the owner to allow other\.example \(propose_send with this ticket offers 'Always allow other\.example'\), then run the command again\./,
+			/ticket t[0-9a-f]{10}\. It has not been sent\. Ask the owner to allow other\.example \(propose_send with this ticket offers 'Always allow other\.example'; ask_hosts asks for several hosts at once\), then run the command again\./,
 		);
 		expect(body(1)).toContain("It carries a credential of its own, so the owner is asked every time.");
-		expect(body(6)).toContain("Always allow http://forge.example'");
-		expect(body(7)).toContain("Always allow forge.example:8443'");
-		expect(body(9)).toContain("nobody's chat only reads");
-		expect(body(10)).toContain("Ask the owner to allow forge.example");
+		expect(body(5)).toContain("Always allow http://forge.example'");
+		expect(body(6)).toContain("Always allow forge.example:8443'");
+		expect(body(8)).toContain("nobody's chat only reads");
+		expect(body(9)).toContain("Ask the owner to allow forge.example");
 		// the one write sent is recorded, with its bytes' hash, before it went; nothing else of chat 7's was
 		expect(result.sent).toEqual({
 			"7": [
@@ -1101,6 +1148,60 @@ describe.skipIf(!python)("a host the owner allowed, at the proxy", () => {
 		});
 		// the browser's page write is held under its holder, as before
 		expect(Object.keys(result.held).sort()).toEqual(["11", "7", "8"]);
+	});
+
+	it("streams a WebSocket to a permitted host, recorded as it opens and scrubbed; cuts every other", () => {
+		const relay = { login: "c7", method: "GET", host: "relay.example", path: "/", headers: [["Upgrade", "websocket"]] };
+		const result = admit(config(["*.example", "forge.example"]), [
+			{ ...relay, answer: 101, frames: ['["EVENT",{}]', "echo Bearer owner-token-12345"] },
+			{ ...relay, host: "forge.example", answer: 101, frames: ["ok"] },
+			// held, so never opened: another host, nobody's chat, a credential of its own, the browser
+			{ ...relay, host: "relay.other", frames: ["no"] },
+			{ ...relay, login: "c11", frames: ["no"] },
+			{ ...relay, headers: [...relay.headers, ["Authorization", "Bearer mine"]], frames: ["no"] },
+			// a plain read that becomes a WebSocket without asking (no Upgrade it said) is cut
+			{ login: "c7", method: "GET", host: "relay.example", path: "/", frames: ["no"] },
+		]);
+		expect(result.cases.map((one) => ("status" in one ? one.status : (one as { streams: boolean }).streams))).toEqual([
+			true,
+			true,
+			403,
+			403,
+			403,
+			false,
+		]);
+		// a held WebSocket points at ask_hosts: a stream is never replayed as one request
+		expect((result.cases[2] as { body: string }).body).toContain("ask the owner to allow relay.other with ask_hosts");
+		// what the server sends is scrubbed of the owner's credentials
+		expect((result.cases[0] as { frames: string[] }).frames).toEqual(['["EVENT",{}]', "echo [removed by banda]"]);
+		expect((result.cases[1] as { frames: string[] }).frames).toEqual(["ok"]);
+		// each opening is recorded before it went, with what its server answered
+		expect(result.sent["7"]?.map((one) => [one.host, one.status]).sort()).toEqual([
+			["forge.example", 101],
+			["relay.example", 101],
+		]);
+	});
+
+	it("reads a pattern as the daemon does: a name under it, or every host, at its scheme and port", () => {
+		const cases: [string, string][] = [
+			["*.damus.io", "relay.damus.io"],
+			["*.damus.io", "a.b.damus.io"],
+			["*.damus.io", "damus.io"],
+			["*.damus.io", "evildamus.io"],
+			["*.damus.io", "relay.damus.io.evil"],
+			["*.damus.io", "relay.damus.io:8443"],
+			["*.damus.io", "http://relay.damus.io"],
+			["*", "nos.lol"],
+			["*", "nos.lol:444"],
+			["*", "[2001:db8::1]"],
+			["http://*", "http://a.example"],
+			["*:8443", "a.example:8443"],
+			["nos.lol", "nos.lol"],
+			["nos.lol", "x.nos.lol"],
+		];
+		const expected = [true, true, false, false, false, false, false, true, false, false, true, true, true, false];
+		expect(policy("policy.host_covers(x[0], x[1])", cases)).toEqual(expected);
+		expect(cases.map(([allowed, spelled]) => hostCovers(allowed, spelled))).toEqual(expected);
 	});
 
 	it("notes each direct write's outcome after it was recorded: its server's status, or why the connection failed", () => {
