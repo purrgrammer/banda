@@ -195,6 +195,16 @@ const askSession = (asks: SessionApiView["asks"]): SessionApiView => ({
 const EXECUTE_ASK = { id: "a1", kind: "execute", command: COMMAND } as const;
 const EDIT_ASK = { id: "a2", kind: "edit", command: "src/auth.ts", title: "src/auth.ts", detail: LONG_DIFF } as const;
 const FETCH_ASK = { id: "a3", kind: "fetch", command: "https://nodejs.org/api/crypto.html" } as const;
+/** Enough folded asks that the "more waiting" line must truncate, never overflow. */
+const MANY_ASKS = [
+	EXECUTE_ASK,
+	EDIT_ASK,
+	FETCH_ASK,
+	{ id: "a4", kind: "delete", command: "src/old.ts" } as const,
+	{ id: "a5", kind: "move", command: "src/a.ts → src/b.ts" } as const,
+	{ id: "a6", kind: "execute", command: "npm test" } as const,
+	{ id: "a7", kind: "other", command: "something else" } as const,
+];
 
 type Step = "connect" | "working" | "waiting" | "done" | "stopped";
 const STEPS: readonly { id: Step; label: string }[] = [
@@ -487,6 +497,7 @@ export function HarnessSection() {
 					<HarnessAsks session={askSession([EXECUTE_ASK])} agentName="Mara" />
 					<HarnessAsks session={askSession([EDIT_ASK])} agentName="Mara" />
 					<HarnessAsks session={askSession([EXECUTE_ASK, EDIT_ASK, FETCH_ASK])} agentName="Mara" />
+					<HarnessAsks session={askSession(MANY_ASKS)} agentName="Mara" />
 				</div>
 			</Section>
 			<Section

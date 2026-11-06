@@ -96,7 +96,7 @@ function Clamped({ text, title, children }: { text: string; title: string; child
 						<SheetTitle>{title}</SheetTitle>
 						<SheetDescription>All of it, before you decide.</SheetDescription>
 					</SheetHeader>
-					<div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+					<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">{children}</div>
 				</SheetContent>
 			</Sheet>
 		</>
@@ -191,13 +191,15 @@ export function HarnessAsks({ session, agentName }: { session: HarnessSessionVie
 				<Button
 					variant="outline"
 					size="sm"
-					className="self-start"
+					className="max-w-full min-w-0 self-start"
 					onClick={() => {
 						const next = folded[0];
 						if (next !== undefined) setOpened((prior) => new Set(prior).add(next.id));
 					}}
 				>
-					{folded.length} more waiting · {folded.map((ask) => askSummary(ask.kind)).join(" · ")}
+					<span className="truncate">
+						{folded.length} more waiting · {folded.map((ask) => askSummary(ask.kind)).join(" · ")}
+					</span>
 				</Button>
 			)}
 		</>
@@ -246,7 +248,11 @@ export function HarnessSessionPart({ chat, call }: { chat: number; call: string 
 					}}
 				>
 					<SheetHeader className="border-b border-line-soft pr-12">
-						<SheetTitle ref={titleRef} tabIndex={-1} className="outline-none">
+						<SheetTitle
+							ref={titleRef}
+							tabIndex={-1}
+							className="rounded-sm outline-none focus-visible:outline-[1.5px] focus-visible:outline-offset-2 focus-visible:outline-focus"
+						>
 							{session.service}
 						</SheetTitle>
 						<SheetDescription>Every step, as it happened.</SheetDescription>
@@ -281,7 +287,7 @@ export function HarnessActivitySheet({ tasks, onClose }: { tasks: readonly numbe
 			}}
 		>
 			<SheetContent
-				className="gap-0 overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-[560px]"
+				className="gap-0 overflow-y-auto overscroll-contain data-[side=right]:w-full data-[side=right]:sm:max-w-[560px]"
 				onOpenAutoFocus={(event) => {
 					event.preventDefault();
 					titleRef.current?.focus();
@@ -292,7 +298,11 @@ export function HarnessActivitySheet({ tasks, onClose }: { tasks: readonly numbe
 				}}
 			>
 				<SheetHeader className="border-b border-line-soft pr-12">
-					<SheetTitle ref={titleRef} tabIndex={-1} className="outline-none">
+					<SheetTitle
+						ref={titleRef}
+						tabIndex={-1}
+						className="rounded-sm outline-none focus-visible:outline-[1.5px] focus-visible:outline-offset-2 focus-visible:outline-focus"
+					>
 						{session?.service ?? "Coding sessions"}
 					</SheetTitle>
 					<SheetDescription>Recorded work, notes and approvals.</SheetDescription>

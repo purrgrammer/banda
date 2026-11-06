@@ -371,7 +371,7 @@ export function SteerField({
 				value={text}
 				autoFocus
 				aria-label={`Note for ${harness}`}
-				placeholder={`Note for ${harness} · read after this step`}
+				placeholder={`Note for ${harness} · read after this step…`}
 				onChange={(event) => setText(event.target.value)}
 				onKeyDown={(event) => {
 					if (event.key === "Escape") {
@@ -558,7 +558,7 @@ export function HarnessCard({
 							? `${session.agent ?? "Its agent"} stopped it`
 							: "You stopped it"
 						: state === "failed"
-							? `It ended with a problem: ${outcome ?? "it did not say why"}`
+							? `It ended with a problem: ${outcome ?? "it did not say why"}. Ask ${session.agent ?? "its agent"} to try again.`
 							: "Interrupted when banda restarted. Nothing was sent again."}
 				</span>
 			</>
