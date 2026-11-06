@@ -238,6 +238,14 @@ export function HarnessTile({
 	onDisconnect?: (() => void) | undefined;
 	onRemove?: (() => void) | undefined;
 }) {
+	if (agent !== undefined && connected !== undefined)
+		return (
+			<div className="flex min-h-11 items-center gap-3 py-1.5">
+				<HarnessMark provider={provider} logo={logo} className="size-5 shrink-0" />
+				<span className="min-w-0 flex-1 truncate text-ui text-ink">{harness}</span>
+				<Switch checked={on === true} aria-label={`${harness} for ${agent}`} onCheckedChange={onSwitch} />
+			</div>
+		);
 	const where =
 		connected === undefined
 			? (about ?? "On this computer")

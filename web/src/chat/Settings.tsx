@@ -275,9 +275,11 @@ export function Connections({
 	onSwitch,
 	connect,
 	empty = "Nothing to connect yet.",
+	compact = false,
 }: {
 	agent: string;
 	rows: readonly ConnectionRow[];
+	compact?: boolean;
 	/** What it says with no rows. */
 	empty?: string | undefined;
 	/** The owner switched an account on or off for the agent. */
@@ -290,6 +292,34 @@ export function Connections({
 		<Block title="Connections" note={`What ${agent} may read. It asks before anything it writes.`}>
 			{rows.length === 0 ? (
 				<p className="rounded-field bg-paper-2 px-3.5 py-3 text-ui text-ink-2">{empty}</p>
+			) : compact ? (
+				<div className="flex flex-col">
+					{rows.flatMap((row) =>
+						row.accounts.map((account) => (
+							<div
+								key={`${row.id ?? row.connection}/${account.account ?? account.login}`}
+								className="flex min-h-11 items-center gap-3 py-1.5"
+							>
+								<span title={row.connection} className="flex size-5 shrink-0 items-center justify-center">
+									{row.connection === "GitHub" ? (
+										<GitHubMark />
+									) : (
+										<span className="text-meta font-semibold text-ink-2">{row.connection.slice(0, 1)}</span>
+									)}
+								</span>
+								<span className="min-w-0 flex-1 truncate text-ui text-ink">
+									{account.account === undefined ? row.connection : account.login}
+								</span>
+								<Switch
+									{...(onSwitch === undefined
+										? { defaultChecked: account.on }
+										: { checked: account.on, onCheckedChange: (on: boolean) => onSwitch(row, account, on) })}
+									aria-label={`${agent} may use ${row.connection} as ${account.login}`}
+								/>
+							</div>
+						)),
+					)}
+				</div>
 			) : (
 				<Rows>
 					{rows.map((row) => (
