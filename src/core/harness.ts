@@ -171,6 +171,8 @@ const KEPT_ENDED = 20;
 /** Steps an ended session keeps, and how much text each: the ask, its edits, the owner's notes and its last words first. */
 const ENDED_STEPS = 40;
 const ENDED_TEXT = 1000;
+/** Changed files its agent sees named when it looks at a session; the rest are counted. */
+const SHOWN_FILES = 30;
 /** Notes the owner may send one session. */
 export const MAX_NOTES = 50;
 /** How long a harness gets to start a session (initialize, session/new, its mode) before it ends as failed. */
@@ -1356,9 +1358,13 @@ export async function sessionOf(
 		(file) => `${file.path}${file.added === undefined ? "" : ` +${file.added} -${file.removed ?? 0}`}`,
 	);
 	const recent = session.steps.slice(-20).map((step) => `- ${stepLine(step)}`);
+	const named =
+		files.length > SHOWN_FILES
+			? `${files.slice(0, SHOWN_FILES).join(", ")}, and ${files.length - SHOWN_FILES} more`
+			: files.join(", ");
 	const body = [
 		waiting.length === 0 ? "" : `Waiting for the owner to answer:\n${waiting.join("\n")}`,
-		files.length === 0 ? "" : `Files changed: ${files.join(", ")}`,
+		files.length === 0 ? "" : `Files changed: ${named}`,
 		`Latest steps${session.dropped + Math.max(0, session.steps.length - 20) > 0 ? " (earlier ones left out)" : ""}:\n${recent.join("\n")}`,
 	]
 		.filter((part) => part !== "")

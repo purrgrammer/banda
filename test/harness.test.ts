@@ -636,6 +636,24 @@ describe("following up on a session", () => {
 		await s.harness.close(context);
 	});
 
+	it("names at most 30 changed files when its agent looks at a session", async () => {
+		const s = await setup();
+		const edits = Array.from({ length: 40 }, (_, i) => `edit src/f${i}.ts +1 -0`).join("\n");
+		const task = await s.begin(`${edits}\nsleep 5000\nsay late`);
+		await until(
+			async () => ((await s.sessions())[task]?.steps.filter((step) => step.kind === "edit").length ?? 0) === 40,
+		);
+		await s.harness.commit(async (tx) => {
+			const shown = (await sessionOf(tx, "sancho", task, () => "Fake Code", Date.now())) ?? "";
+			const line = shown.split("\n").find((one) => one.startsWith("Files changed")) ?? "";
+			expect(line.match(/src\/f\d+\.ts/g)).toHaveLength(30);
+			expect(line).toContain("and 10 more");
+			await stopOwnSession(tx, "sancho", task);
+		}, context);
+		await until(() => s.woke.length === 1);
+		await s.harness.close(context);
+	});
+
 	it("lets its agent see and stop its own sessions, never another agent's", async () => {
 		const s = await setup();
 		const task = await s.begin("sleep 5000\nsay late");
