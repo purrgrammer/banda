@@ -107,6 +107,22 @@ it("reopens current account authority and object readings without a migration", 
 				url: "https://www.google.com/calendar/event?eid=x",
 			},
 		});
+		await keepReading(tx, "contacts/me@example.test/contact:contacts/oc1", {
+			connection: "contacts",
+			account: "me@example.test",
+			kind: "contact",
+			source: "accepted-definition-and-account-generation",
+			at: 790,
+			card: {
+				card: "contact",
+				name: "Bo",
+				emails: "bo@example.test",
+				phones: "",
+				organization: "",
+				title: "",
+				other: true,
+			},
+		});
 	}, context);
 	await before.close(context);
 	const after = await open(home);
@@ -126,6 +142,9 @@ it("reopens current account authority and object readings without a migration", 
 		expect(
 			(await after.snapshot(Readings, context))?.readings["calendar/me@example.test/event:calendar/cHJpbWFyeSBlMQ"],
 		).toMatchObject({ card: { card: "event", attendees: null, allDay: false, who: "Ana +2" } });
+		expect(
+			(await after.snapshot(Readings, context))?.readings["contacts/me@example.test/contact:contacts/oc1"],
+		).toMatchObject({ card: { card: "contact", other: true, emails: "bo@example.test" } });
 	} finally {
 		await after.close(context);
 	}

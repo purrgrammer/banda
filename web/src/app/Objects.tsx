@@ -7,6 +7,7 @@ import { Tile } from "../chat/Cards.tsx";
 import { ObjectLoading, ObjectUnavailable } from "../chat/Loading.tsx";
 import {
 	CheckRunCard,
+	ContactCard,
 	EmailCard,
 	EventCard,
 	eventWhen,
@@ -397,6 +398,7 @@ function readingDetails(shown: Extract<ObjectShown, { shown: "card" }>): [string
 	if (card.card === "email") rows.push(["From", card.from], ["To", card.to], ["Subject", card.subject]);
 	if (card.card === "event")
 		rows.push(["When", eventWhen(card)], ["Location", card.location], ["Organizer", card.organizer]);
+	if (card.card === "contact") rows.push(["Name", card.name], ["Email", card.emails], ["Company", card.organization]);
 	return rows;
 }
 
@@ -451,6 +453,8 @@ function ReadingCard({
 				/>
 			) : card.card === "event" ? (
 				<EventCard event={{ ...card, asOf }} actions={actions} />
+			) : card.card === "contact" ? (
+				<ContactCard person={{ ...card, asOf }} actions={actions} />
 			) : (
 				<NotificationCard
 					actions={actions}
