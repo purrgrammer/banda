@@ -188,7 +188,9 @@ export function Done({
 							<span className="shrink-0 font-medium text-ink">{who.name}</span>
 						</>
 					)}
-					<span className="shrink-0 text-ink-2">{said}</span>
+					<span className="min-w-0 truncate text-ink-2" title={said}>
+						{said}
+					</span>
 					{ref}
 					{note === undefined ? null : (
 						<span className="hidden min-w-0 shrink-[99] truncate text-ink-2 @sm:inline">{note}</span>

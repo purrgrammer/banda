@@ -11,7 +11,6 @@ import {
 	FilePenIcon,
 	FileXIcon,
 	RotateCwIcon,
-	ShieldCheckIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
@@ -21,6 +20,7 @@ import { AvatarCandidateMessage } from "../avatar/CandidateMessage.tsx";
 import { AgentMessage } from "../chat/AgentMessage.tsx";
 import { ApprovalCard, ChangeCard, Facts } from "../chat/Approval.tsx";
 import { ArtifactCard, Browsed, QuestionCard } from "../chat/Cards.tsx";
+import { Done, Settling } from "../chat/Done.tsx";
 import { Bubble, DaySeparator, MessageActions, Run, UnreadDivider } from "../chat/Feed.tsx";
 import { Line } from "../chat/Line.tsx";
 import { ProposalCard } from "../chat/Proposal.tsx";
@@ -31,7 +31,7 @@ import { Markdown } from "../components/Markdown.tsx";
 import { actOnCapability, actOnProposal, answerAgent, answerWait, dismissQuestion } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { type Segment, tryAgainAfter } from "../lib/chat.ts";
-import { changeWords } from "../lib/segments/changes.ts";
+import { changeNoun, changeWords } from "../lib/segments/changes.ts";
 import { showAgents, showCapabilities, showControl, useShell } from "../lib/shell.ts";
 import { AgentPreview } from "./AgentPreview.tsx";
 import { kindWords } from "./ArtifactPage.tsx";
@@ -41,6 +41,7 @@ import { FilePart } from "./FilePart.tsx";
 import { HarnessSessionPart } from "./HarnessSession.tsx";
 import { LiveView } from "./LiveBrowser.tsx";
 import { MessageObjects, OwnerMessage } from "./Objects.tsx";
+import { AskRef, approvalKind, didNotWords, didWords, sawOpen, wasOpen } from "./Settled.tsx";
 import { routineTitle } from "./titles.ts";
 
 const day = (at: number) => new Date(at).toDateString();
@@ -54,13 +55,53 @@ const dayLabel = (at: number) => {
 };
 
 function ProposalFeedCard({ segment }: { segment: Extract<Segment, { kind: "proposal" }> }) {
-	return (
+	const { proposal, state } = segment;
+	const card = (
 		<ProposalCard
-			proposal={segment.proposal}
-			state={segment.state}
-			onAct={(action) => actOnProposal(segment.proposal.id, action).then(({ state }) => state)}
+			proposal={proposal}
+			state={state}
+			onAct={(action) => actOnProposal(proposal.id, action).then(({ state }) => state)}
 		/>
 	);
+	if (state === "pending") {
+		sawOpen(segment.key);
+		return card;
+	}
+	const yes = state === "accepted";
+	const row =
+		proposal.kind === "agent" ? (
+			<Done
+				kind={yes ? "agent" : "declined"}
+				action={yes ? "created" : "didn't create"}
+				reference={
+					yes
+						? { agent: { id: proposal.agentId, name: proposal.name, face: proposal.face }, title: proposal.description }
+						: { where: proposal.name }
+				}
+				card={card}
+			/>
+		) : proposal.kind === "group" ? (
+			<Done
+				kind={yes ? "agent" : "declined"}
+				action={yes ? "created the group" : "didn't create the group"}
+				reference={{ where: proposal.name, title: proposal.memberNames.join(", ") }}
+				card={card}
+			/>
+		) : (
+			<Done
+				kind={yes ? "change" : "declined"}
+				action={yes ? "updated" : "kept as it was"}
+				reference={{
+					agent: {
+						id: proposal.agent,
+						name: proposal.displayName,
+						face: (yes ? proposal.proposedAgent : proposal.beforeAgent).face,
+					},
+				}}
+				card={card}
+			/>
+		);
+	return <Settling settled fresh={wasOpen(segment.key)} card={card} row={row} />;
 }
 
 /** A routine's file name as words: portugal-fun-fact reads Portugal fun fact. */
@@ -71,6 +112,7 @@ function ChangeLine({ who, segment }: { who: Who; segment: Extract<Segment, { ki
 	const { subject, folder, name, state } = segment;
 	const agentFile = subject?.agent;
 	const capability = subject?.tool ?? subject?.connection;
+	if (state === "pending") sawOpen(segment.key);
 	if (state === "pending" && agentFile?.change !== undefined) {
 		const change = agentFile.change;
 		const removed = change.kind === "removed";
@@ -129,13 +171,29 @@ function ChangeLine({ who, segment }: { who: Who; segment: Extract<Segment, { ki
 				segment={{ kind: "routine", key: segment.key, state, name, routine: subject.routine }}
 			/>
 		);
-	return (
-		<Line icon={state === "declined" || state === "removed" ? FileXIcon : FilePenIcon}>{changeWords(segment)}</Line>
-	);
+	if (state === "done" || state === "declined")
+		return (
+			<Done
+				kind={state === "declined" ? "declined" : folder === "agents" ? "change" : "permission"}
+				action={state === "declined" ? "didn't allow" : "allowed"}
+				reference={{ where: changeNoun(segment) }}
+				time={segment.at === undefined ? undefined : time(segment.at)}
+			/>
+		);
+	return <Line icon={state === "removed" ? FileXIcon : FilePenIcon}>{changeWords(segment)}</Line>;
 }
 
-/** A routine an agent wrote: its card while it waits for the owner, a line once answered. */
-function RoutineLine({ who, segment }: { chat: number; who: Who; segment: Extract<Segment, { kind: "routine" }> }) {
+/** A routine an agent wrote: its card while it waits for the owner; set up, declined or stopped, a row. */
+function RoutineLine({
+	who,
+	segment,
+	onRoutine,
+}: {
+	chat: number;
+	who: Who;
+	segment: Extract<Segment, { kind: "routine" }>;
+	onRoutine?: ((name: string) => void) | undefined;
+}) {
 	const { routine, state, name } = segment;
 	const title =
 		name === undefined
@@ -146,6 +204,43 @@ function RoutineLine({ who, segment }: { chat: number; who: Who; segment: Extrac
 						(routine?.change && "routine" in routine.change ? routine.change.routine?.description : undefined),
 				);
 	const change = routine?.change;
+	if (state === "pending") sawOpen(segment.key);
+	const set = routine?.accepted?.routine;
+	if (state === "done" && set !== undefined) {
+		const open = name === undefined || onRoutine === undefined ? undefined : () => onRoutine(name);
+		const card = (
+			<RoutineProposal
+				routine={{
+					agent: who.name,
+					title,
+					kind: "new",
+					when: set.when,
+					next: (routine?.nextRuns ?? []).slice(0, 3).map(clock),
+					ask: set.ask,
+				}}
+				settled="Set up"
+			/>
+		);
+		return (
+			<Settling
+				settled
+				fresh={wasOpen(segment.key)}
+				card={card}
+				row={
+					<Done
+						kind="routine"
+						action="set up"
+						reference={{ routine: { title, when: set.when }, onOpen: open }}
+						card={card}
+					/>
+				}
+			/>
+		);
+	}
+	if (state === "declined" || state === "removed")
+		return (
+			<Done kind="declined" action={state === "declined" ? "didn't set up" : "stopped"} reference={{ where: title }} />
+		);
 	if (state === "pending" && routine !== undefined && name !== undefined && change !== undefined) {
 		const shown = change.kind === "removed" ? routine.accepted?.routine : change.routine;
 		return (
@@ -176,19 +271,12 @@ function RoutineLine({ who, segment }: { chat: number; who: Who; segment: Extrac
 				return `Didn't finish setting up ${title}`;
 			case "refused":
 				return segment.why === undefined ? "No routine set up" : `No routine set up: ${segment.why}`;
-			case "declined":
-				return `${title} not set up`;
-			case "removed":
-				return `${title} stopped`;
 			default:
 				return `${title} set up${routine?.accepted?.routine === undefined ? "" : ` · ${routine.accepted.routine.when}`}`;
 		}
 	})();
 	return (
-		<Line
-			icon={state === "declined" || state === "removed" ? CalendarXIcon : CalendarClockIcon}
-			tone={state === "refused" ? "danger" : "quiet"}
-		>
+		<Line icon={CalendarClockIcon} tone={state === "refused" ? "danger" : "quiet"}>
 			{line}
 		</Line>
 	);
@@ -199,6 +287,7 @@ const clock = (at: number) => new Date(at).toLocaleString([], { weekday: "short"
 /** Where a segment sits: the owner's side, the agent's, or across the feed. */
 const sideOf = (segment: Segment): "owner" | "agent" | "line" => {
 	if (segment.kind === "owner" || segment.kind === "owner-message") return "owner";
+	if ((segment.kind === "question" || segment.kind === "approval") && segment.open === undefined) return "line";
 	if (
 		segment.kind === "companion" ||
 		segment.kind === "question" ||
@@ -533,7 +622,7 @@ function partOf(
 		case "question": {
 			const { ask } = segment;
 			const open = segment.open;
-			return (
+			const card = (
 				<QuestionCard
 					question={ask.question}
 					choices={ask.options ?? []}
@@ -553,10 +642,28 @@ function partOf(
 							})}
 				/>
 			);
+			if (open !== undefined) {
+				sawOpen(segment.key);
+				return card;
+			}
+			const ended = segment.ended;
+			const answered = ended?.outcome === "answered";
+			const row =
+				answered && ended?.inChat !== true ? (
+					<Done kind="answer" action="answered" reference={{ where: ended.said, title: ask.question }} card={card} />
+				) : (
+					<Done
+						kind={answered ? "answer" : "declined"}
+						action={answered ? "answered below" : (ended?.said ?? "dismissed").toLowerCase()}
+						reference={{ where: ask.question }}
+						card={card}
+					/>
+				);
+			return <Settling settled fresh={wasOpen(segment.key)} card={card} row={row} />;
 		}
 		case "approval": {
 			const open = segment.open;
-			return (
+			const card = (
 				<DraftApproval
 					chat={chat}
 					agent={{ id: agent, name: who.name }}
@@ -569,6 +676,33 @@ function partOf(
 							: segment.ended?.outcome === "answered" && segment.ended.answer === "approve"
 								? { kind: "done", words: segment.ended.said }
 								: { kind: "declined" }
+					}
+				/>
+			);
+			if (open !== undefined) {
+				sawOpen(segment.key);
+				return card;
+			}
+			const { ask, label, ended } = segment;
+			const verb = ask.verb ?? "Allow";
+			const yes = ended?.outcome === "answered" && ended.answer === "approve";
+			const outcome = ended?.outcome === "expired" || ended?.outcome === "cancelled" ? ended.outcome : "declined";
+			// how it was approved, past the yes itself: "as you edited it", "allowed for this task"
+			const how = yes ? ended.said.replace(/^Approved,?\s*(?:and\s+)?/, "") : "";
+			const on = ask.on;
+			return (
+				<Settling
+					settled
+					fresh={wasOpen(segment.key)}
+					card={card}
+					row={
+						<Done
+							kind={yes ? approvalKind(verb, label) : "declined"}
+							action={yes ? didWords(label, verb) : didNotWords(label, outcome)}
+							note={how === "" ? undefined : how}
+							reference={on === undefined ? undefined : { node: <AskRef chat={chat} on={on} agent={agent} /> }}
+							card={card}
+						/>
 					}
 				/>
 			);
@@ -587,7 +721,7 @@ function partOf(
 				</Line>
 			);
 		case "effect":
-			return <Line icon={ShieldCheckIcon}>{segment.label}</Line>;
+			return <Done kind="permission" action={segment.label} />;
 		case "proposal":
 			return <ProposalFeedCard segment={segment} />;
 		case "agentMessage":
@@ -611,7 +745,7 @@ function partOf(
 				</Line>
 			);
 		case "routine":
-			return <RoutineLine chat={chat} who={who} segment={segment} />;
+			return <RoutineLine chat={chat} who={who} segment={segment} onRoutine={onRoutine} />;
 		case "working":
 			return null;
 		case "artifact": {
