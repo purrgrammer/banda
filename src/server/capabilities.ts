@@ -122,6 +122,7 @@ import {
 	forgetReadings,
 	nameOf,
 	type ObjectRef,
+	plainLine,
 	readArgs,
 	refKey,
 } from "../core/objects.ts";
@@ -1911,7 +1912,9 @@ export function openCapabilities(options: CapabilityOptions) {
 				const parsed = JSON.parse(answer.text) as { [field: string]: unknown };
 				id = plainId(parsed[field]);
 			} catch {}
-			if (answer.isError || id === "") throw new Error(`${connection.service} did not say who you are`);
+			// a built-in adapter's error words hold no URL, body or token, and say why Google refused
+			if (answer.isError) throw new Error(`${connection.service} did not say who you are: ${plainLine(answer.text)}`);
+			if (id === "") throw new Error(`${connection.service} did not say who you are`);
 			return id;
 		}
 		if (read === undefined) {

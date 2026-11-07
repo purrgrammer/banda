@@ -308,6 +308,26 @@ describe("Google Calendar REST connection", () => {
 		const result = await call(failing, "list_events", {}, "private-token");
 		expect(result).toEqual({ text: "Google Calendar answered 403", isError: true });
 		expect(new Headers(failing.mock.calls[0]?.[1]?.headers).get("authorization")).toBe("Bearer private-token");
+		const disabled = vi.fn<typeof fetch>().mockResolvedValue(
+			response(
+				{
+					error: {
+						code: 403,
+						message: "Google Calendar API has not been used in project 1 https://console.developers.google.com/x",
+						errors: [{ reason: "accessNotConfigured" }],
+						details: [{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "SERVICE_DISABLED" }],
+					},
+				},
+				403,
+			),
+		);
+		expect((await call(disabled, "get_profile")).text).toBe(
+			"Google Calendar answered 403 (SERVICE_DISABLED): the Google Calendar API is not enabled for banda's Google Cloud project",
+		);
+		const odd = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(response({ error: { errors: [{ reason: "x https://evil.example/" }] } }, 403));
+		expect((await call(odd, "get_profile")).text).toBe("Google Calendar answered 403");
 		const unknown = await call(failing, "create_event");
 		expect(unknown.isError).toBe(true);
 		expect((await (REST_APIS.calendar as RestApi).write("t", "create_event", {})).isError).toBe(true);

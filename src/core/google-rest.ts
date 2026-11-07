@@ -10,6 +10,34 @@ export type GoogleApi = {
 	readonly base: string;
 };
 
+const REASONS: { readonly [reason: string]: string } = {
+	SERVICE_DISABLED: "the {service} API is not enabled for banda's Google Cloud project",
+	ACCESS_TOKEN_SCOPE_INSUFFICIENT: "the sign-in did not grant this access; sign in again and allow it",
+};
+
+/**
+ * Google's machine-readable reason for a refusal ("SERVICE_DISABLED"), from a bounded read of its error body. Only a
+ * bare code word is kept: the body's message holds URLs and project details that never reach an error.
+ */
+async function reasonOf(response: Response): Promise<string | undefined> {
+	try {
+		if (Number(response.headers.get("content-length")) > 16_384) {
+			await response.body?.cancel();
+			return undefined;
+		}
+		const text = await response.text();
+		if (text.length > 16_384) return undefined;
+		const error = (JSON.parse(text) as { error?: { details?: unknown; errors?: unknown } }).error;
+		const details = Array.isArray(error?.details) ? error.details : [];
+		const errors = Array.isArray(error?.errors) ? error.errors : [];
+		for (const entry of [...details, ...errors]) {
+			const reason = (entry as { reason?: unknown } | null)?.reason;
+			if (typeof reason === "string" && /^[A-Za-z_]{1,64}$/.test(reason)) return reason;
+		}
+	} catch {}
+	return undefined;
+}
+
 export async function googleRequest(
 	api: GoogleApi,
 	fetcher: typeof fetch,
@@ -58,7 +86,12 @@ export async function googleRequest(
 			});
 	}
 	if (response.status === 401) throw new Unauthorized(`${service} did not take the credentials`);
-	if (!response.ok) throw new Error(`${service} answered ${response.status}`);
+	if (!response.ok) {
+		const reason = await reasonOf(response);
+		const meaning = reason === undefined ? undefined : REASONS[reason]?.replace("{service}", service);
+		const said = reason === undefined ? "" : ` (${reason})${meaning === undefined ? "" : `: ${meaning}`}`;
+		throw new Error(`${service} answered ${response.status}${said}`);
+	}
 	if (Number(response.headers.get("content-length")) > limit) {
 		await response.body?.cancel();
 		throw new Error(`${service}'s answer was too large`);
