@@ -124,7 +124,8 @@ one that gives them one more thing to manage stays out.
   no vendor, while a routine's message only badges. A harness's ask notifies with the harness and the kind of thing asked, never the
   command, the path or the project's name, any of which would sit in a banner on a lock screen. The agent's face moves while it works, a dot marks it while it waits
   on the owner, and it dims while its routines are paused. The header
-  holds the app's name, search (Cmd/Ctrl+K: results are rows that open the chat scrolled to that message) and a quiet
+  holds the app's name, search (Cmd/Ctrl+K: with nothing typed, the band's rows, a switcher; typed, agents, skills and
+  pages found in the app, then the chats' messages, each opening its chat scrolled to it) and a quiet
   "+" for a new agent or group, and one menu: Skills, Connections, Settings. A dot on the menu, and on its item, says
   something there waits on the owner, and the page it opens says what: a skill the box added or changed, to review; a
   connection not reached, or an account to sign in to again. A skill the box removed has nothing to allow, and a

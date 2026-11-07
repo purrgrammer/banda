@@ -713,11 +713,16 @@ function Main() {
 		<div className="flex h-svh bg-paper text-ink">
 			{showBand ? band : null}
 			{phone && where.name === "home" ? null : <main className="flex min-w-0 flex-1">{main}</main>}
-			{making ? <NewSheet open={making} onOpenChange={setMaking} agents={agents} onGo={go} /> : null}
+			{/* mounted while closed, so Esc or a click outside keeps a half-written agent */}
+			<NewSheet open={making} onOpenChange={setMaking} agents={agents} onGo={go} />
 			<BrowserDialog who={(chat) => whoOf(agents, shell.rows.find((each) => each.chat === chat)?.agent ?? "sancho")} />
 			<SearchDialog
 				open={searching}
 				onOpenChange={setSearching}
+				rows={rows}
+				agents={agents}
+				skills={skillSummaries}
+				phone={phone}
 				whoOf={(agent) => whoOf(agents, agent)}
 				groupName={(room) => shell.groups?.find((group) => group.room === room)?.name ?? "a group"}
 				onGo={go}
