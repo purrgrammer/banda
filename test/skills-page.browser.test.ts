@@ -17,23 +17,30 @@ import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const button = (label: string) =>
 	`[...document.querySelectorAll('button')].find(el => el.getClientRects().length && el.textContent.trim() === ${JSON.stringify(label)})`;
-async function click(page: Page, selector: string) {
+type ClickTarget = { button: string; within?: string } | { selector: string };
+async function click(page: Page, target: ClickTarget) {
+	const expression =
+		"button" in target
+			? `[...document.querySelectorAll(${JSON.stringify(target.within ?? "button")})].find(el => el.getClientRects().length && el.textContent.trim() === ${JSON.stringify(target.button)})`
+			: `document.querySelector(${JSON.stringify(target.selector)})`;
 	try {
-		await page.until(selector);
+		await page.until(expression);
 	} catch (error) {
 		throw new Error(
 			`${String(error)}; at ${await page.run("location.hash")}; page: ${String(await page.run("document.body.innerText")).slice(0, 1100)}`,
 		);
 	}
 	await page.run(
-		`(() => { const el = ${selector}; el.scrollIntoView({block:'nearest'}); el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:0})); el.click(); })()`,
+		`(() => { const el = ${expression}; el.scrollIntoView({block:'nearest'}); el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:0})); el.click(); })()`,
 	);
 }
-async function fill(page: Page, selector: string, value: string, type = "HTMLInputElement") {
-	await page.until(selector);
+async function fill(page: Page, selector: string, value: string) {
+	const expression = `document.querySelector(${JSON.stringify(selector)})`;
+	await page.until(expression);
 	await page.run(
-		`(() => { const el = ${selector}; Object.getOwnPropertyDescriptor(${type}.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true})); })()`,
+		`(() => { const el = ${expression}; el.focus(); el.select(); const type = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement : HTMLInputElement; Object.getOwnPropertyDescriptor(type.prototype,'value').set.call(el,''); el.dispatchEvent(new Event('input',{bubbles:true})); })()`,
 	);
+	if (value !== "") await page.input("Input.insertText", { text: value });
 }
 
 const file = (name: string, description: string, body: string, ownerOnly = false) =>
@@ -83,7 +90,7 @@ for (const width of [390, 1440])
 			await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
 				// first run: take the six defaults (catch-me-up among them is owner-only)
 				await page.until(`document.body.textContent.includes('Skills to start with')`);
-				await click(page, button("Add 6 skills"));
+				await click(page, { button: "Add 6 skills" });
 				await page.until(`!document.body.textContent.includes('Skills to start with')`);
 				// more accepted skills, as the owner would save them
 				for (const name of ["pdf", "xlsx", "deploy-staging", "invoices"])
@@ -125,39 +132,39 @@ for (const width of [390, 1440])
 					),
 				).toBe(true);
 				// nine accepted skills: the filter appears, matches case aside, and says when nothing does
-				await fill(page, `document.querySelector('input[aria-label="Filter skills"]')`, "PDF");
+				await fill(page, 'input[aria-label="Filter skills"]', "PDF");
 				await page.until(`document.querySelectorAll('[data-skill-list] a').length === 1`);
-				await fill(page, `document.querySelector('input[aria-label="Filter skills"]')`, "zzz");
+				await fill(page, 'input[aria-label="Filter skills"]', "zzz");
 				await page.until(`document.body.textContent.includes('No skill matches \u201czzz\u201d.')`);
-				await fill(page, `document.querySelector('input[aria-label="Filter skills"]')`, "");
+				await fill(page, 'input[aria-label="Filter skills"]', "");
 				await page.until(`document.querySelectorAll('[data-skill-list] a').length >= 9`);
 				// the axe pass over the full page
 				expect(await axeFindings(page)).toEqual([]);
 				// From banda: the one left at first run joins with one tap, accepted, and the section empties away
-				await click(page, `document.querySelector('button[aria-label="Add /diagram-design"]')`);
+				await click(page, { selector: 'button[aria-label="Add /diagram-design"]' });
 				await page.until(`document.querySelector('[data-skill-list] a[href="#/skills/diagram-design"]')`);
 				await page.until(`!document.querySelector('section[aria-label="Skills from banda"]')`);
 				// the changed skill's detail: the agent's version, accepted by the bytes shown
-				await click(page, `document.querySelector('[data-skill-list] a[href="#/skills/pdf"]')`);
+				await click(page, { selector: '[data-skill-list] a[href="#/skills/pdf"]' });
 				await page.until(`document.body.textContent.includes('An agent changed this skill')`);
 				expect(await page.run(`document.body.textContent.includes("Proposed version · agents don't use it yet")`)).toBe(
 					true,
 				);
 				expect(await axeFindings(page)).toEqual([]);
-				await click(page, button("Accept this version"));
+				await click(page, { button: "Accept this version" });
 				await page.until(`document.querySelector('[data-skill-detail]')?.textContent.includes('Flatten the form')`);
 				await page.run(`location.hash='#/skills'`);
 				// a new draft's detail says an agent wrote it
 				await page.until(`document.body.textContent.includes('2 skills are waiting for your review')`);
-				await click(
-					page,
-					`[...document.querySelectorAll('section[aria-label="Skills waiting for review"] button')].find((el) => el.textContent.trim() === '/meeting-notes')`,
-				);
+				await click(page, {
+					button: "/meeting-notes",
+					within: 'section[aria-label="Skills waiting for review"] button',
+				});
 				await page.until(`document.body.textContent.includes('An agent wrote this skill')`);
 				expect(await page.run(`document.body.textContent.includes("New skill · agents don't use it yet")`)).toBe(true);
 				await page.run(`location.hash='#/skills'`);
 				// Accept all takes the rest; nothing waits, and the menu's dot goes
-				await click(page, button("Accept all 2 skills"));
+				await click(page, { button: "Accept all 2 skills" });
 				await page.until(`!document.querySelector('section[aria-label="Skills waiting for review"]')`);
 				await page.until(`document.querySelector('[data-skill-list] a[href="#/skills/meeting-notes"]')`);
 				if (width === 1440) {
@@ -167,19 +174,19 @@ for (const width of [390, 1440])
 					);
 				}
 				// the form refuses a bad name and a taken name in words, and saves a good one at once
-				await click(page, button("Create a skill"));
-				await fill(page, `document.querySelector('input[aria-label="Skill name"]')`, "My Skill");
+				await click(page, { button: "Create a skill" });
+				await fill(page, 'input[aria-label="Skill name"]', "My Skill");
 				await page.until(`document.querySelector('input[aria-label="Skill name"]')?.value === 'my skill'`);
 				await page.until(`${button("Save and use")}?.disabled === true`);
 				expect(
 					await page.run(`document.body.textContent.includes('Names use lowercase letters, digits and hyphens.')`),
 				).toBe(true);
-				await fill(page, `document.querySelector('input[aria-label="Skill name"]')`, "pdf");
+				await fill(page, 'input[aria-label="Skill name"]', "pdf");
 				await page.until(`document.body.textContent.includes('A skill called /pdf already exists.')`);
 				expect(await page.run(`${button("Save and use")}?.disabled`)).toBe(true);
-				await fill(page, `document.querySelector('input[aria-label="Skill name"]')`, "release-notes");
+				await fill(page, 'input[aria-label="Skill name"]', "release-notes");
 				await page.until(`${button("Save and use")}?.disabled === false`);
-				await click(page, button("Save and use"));
+				await click(page, { button: "Save and use" });
 				await page.until(`location.hash === '#/skills/release-notes'`);
 				await page.until(`document.querySelector('[data-skill-detail]')?.textContent.includes('/release-notes')`);
 			});
