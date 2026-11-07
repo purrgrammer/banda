@@ -31,6 +31,7 @@ import { Screens } from "../specimen/screens.tsx";
 import { SkillDetailPreview, SkillsSection } from "../specimen/skills.tsx";
 import { type Scheme, Section, StageContext, type Width } from "../specimen/stage.tsx";
 import { States } from "../specimen/states.tsx";
+import { WatchesPreview, WatchesSection } from "../specimen/watches.tsx";
 
 const CONTENTS = [
 	{ id: "activity", label: "Activity drill-down" },
@@ -86,6 +87,9 @@ const CONTENTS = [
 	{ id: "working", label: "Working" },
 	{ id: "lines", label: "Lines" },
 	{ id: "routine-items", label: "Routines in the chat" },
+	{ id: "watch-rows", label: "A watch in the sidebar" },
+	{ id: "watch-lines", label: "A watch in the chat" },
+	{ id: "watching-panel", label: "Watching, in the panel" },
 	{ id: "feed-lines", label: "What else the chat says" },
 	{ id: "composer", label: "Composer" },
 	{ id: "object-in-chat", label: "An object in the chat" },
@@ -124,6 +128,7 @@ export function Specimen() {
 		};
 	}, []);
 	if (location.hash === "#/specimen/mcp") return <McpPreview />;
+	if (location.hash.startsWith("#/specimen/watches")) return <WatchesPreview />;
 	const skill = /^#\/specimen\/skills\/([a-z0-9-]+)$/.exec(location.hash);
 	if (skill !== null) return <SkillDetailPreview name={skill[1] ?? ""} />;
 	if (location.hash === "#/specimen/activity/recorded") return <RecordedActivityPreview />;
@@ -248,6 +253,7 @@ export function Specimen() {
 									<States />
 									<BandSection />
 									<Parts />
+									<WatchesSection />
 									<DoneSection />
 									<Foundation />
 									<Faces />
