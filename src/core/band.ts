@@ -1,9 +1,9 @@
 /**
  * The band's own file, `band.json` at the workspace root: which agents and groups are pinned to the top of the band, in
- * the owner's order. Data, not prose, so it is typed: `BandFile` is its schema, checked on every read. A file like
- * memory, not a definition: it takes effect at once, whoever wrote it, and only orders what the app shows. A pin names
- * an agent by its id (`sancho`) or a group by its room (`group:3`). With no file, Sancho is pinned; an empty list pins
- * nothing.
+ * the owner's order, and whether their tiles sit in the middle of the row (Settings, Appearance). Data, not prose, so
+ * it is typed: `BandFile` is its schema, checked on every read. A file like memory, not a definition: it takes effect
+ * at once, whoever wrote it, and only changes what the app shows. A pin names an agent by its id (`sancho`) or a group
+ * by its room (`group:3`). With no file, Sancho is pinned; an empty list pins nothing.
  */
 import { type Static, Type } from "@earendil-works/pi-ai";
 import { Value } from "typebox/value";
@@ -29,6 +29,9 @@ export const BandFile = Type.Object(
 			uniqueItems: true,
 			description: "Pinned to the top of the band, in this order",
 		}),
+		centred: Type.Optional(
+			Type.Boolean({ description: "Centre the pinned tiles while they fit in one row; left-aligned when absent" }),
+		),
 	},
 	{ additionalProperties: false, title: "band.json", description: "The band's own file, at the workspace root" },
 );
@@ -54,10 +57,10 @@ export function readBandFile(text: string | undefined): BandFile | { readonly un
 	return { unreadable: `it does not fit its schema${first === undefined ? "" : `: ${first.message}`}` };
 }
 
-/** `band.json` holding `pins`, in that order. */
-export function bandFile(pins: readonly string[]): string {
-	const band: BandFile = { pinned: [...pins] };
-	return `${JSON.stringify(band, null, "\t")}\n`;
+/** `band.json` holding `band`: its pins in order, and `centred` only when on. */
+export function bandFile(band: BandFile): string {
+	const written: BandFile = { pinned: [...band.pinned], ...(band.centred === true ? { centred: true } : {}) };
+	return `${JSON.stringify(written, null, "\t")}\n`;
 }
 
 /** `pins` with `pin` pinned (last, so it lands at the end of the row) or unpinned. */

@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FACE } from "../../../src/core/choices.ts";
 import type { CompanionView } from "../../../src/server/api.ts";
-import { pinRow, usePinnedRows } from "../areas/band.ts";
+import { centreBand, pinRow, useBand } from "../areas/band.ts";
 import { archiveGroup, setGroupLimits } from "../areas/groups.ts";
 import { actOnRoutine, clickKey } from "../areas/routines.ts";
 import { useTiers } from "../areas/tiers.ts";
@@ -157,7 +157,7 @@ function Main() {
 	};
 	const where = useWhere();
 	const phone = usePhone();
-	const pinned = usePinnedRows();
+	const { pinned, centred } = useBand();
 	// closed by default, so the screen is the conversation; it opens for what needs room (a routine, the face tapped)
 	const [panel, setPanel] = useState(false);
 	const [sheet, setSheet] = useState(false);
@@ -301,6 +301,7 @@ function Main() {
 		<Band
 			rows={rows}
 			pinned={pinned}
+			centred={centred}
 			onPin={pinRow}
 			phone={phone}
 			selected={selected}
@@ -599,6 +600,7 @@ function Main() {
 										: new Date(each.at).toLocaleDateString([], { day: "numeric", month: "short" }),
 							})),
 							theme,
+							centred,
 							paused: shell.control?.paused !== undefined,
 							...(shell.computer === undefined ? {} : { computer: shell.computer }),
 							signedIn: (shell.capabilities?.signedIn ?? []).map(({ agent, site, at }) => ({
@@ -612,6 +614,7 @@ function Main() {
 						providers={<SettingsProviders current={tiers?.provider.id ?? ""} />}
 						devices={<SettingsDevices />}
 						onTheme={setTheme}
+						onCentred={centreBand}
 						onPause={(paused) => void setPaused(paused)}
 						onConnect={() => go({ name: "connections" })}
 						onSignOut={(agent, site) => void signOutSite(agent, site).then(showCapabilities)}

@@ -772,6 +772,8 @@ export type SettingsData = {
 	/** The owner's limits on every group; undefined until the daemon said. */
 	readonly groupLimits?: GroupLimits | undefined;
 	readonly theme: "system" | "light" | "dark";
+	/** The pinned agents' tiles sit in the middle of the band's top row while they fit in one; left-aligned otherwise. */
+	readonly centred?: boolean;
 	/** Every routine is paused. */
 	readonly paused: boolean;
 	/** This device notifies when an agent asks: on, off, or blocked by the browser. */
@@ -796,6 +798,7 @@ export type SettingsData = {
 
 export type SettingsActions = {
 	readonly onTheme?: (theme: SettingsData["theme"]) => void;
+	readonly onCentred?: (centred: boolean) => void;
 	readonly onPause?: (paused: boolean) => void;
 	readonly onConnect?: () => void;
 	readonly onNotify?: (on: boolean) => void;
@@ -1079,6 +1082,16 @@ export function AppSettings({
 							</button>
 						))}
 					</div>
+					<Rows>
+						{/* biome-ignore lint/a11y/noLabelWithoutControl: the switch inside is the control */}
+						<label className="flex min-h-12 items-center gap-3 px-3.5 py-2.5">
+							<span className="flex flex-1 flex-col">
+								<span className="text-ui text-ink">Centre pinned agents</span>
+								<span className="text-meta text-ink-2">While they fit in one row at the top of the band.</span>
+							</span>
+							<Switch checked={data.centred === true} onCheckedChange={(on) => act.onCentred?.(on)} />
+						</label>
+					</Rows>
 				</Block>
 				{data.notify === undefined ? null : (
 					<Block title="Notifications" note="On this device, when an agent waits on you and banda is not in front.">
