@@ -1000,8 +1000,22 @@ export function fileModified(value: string, now = new Date()): string {
 }
 
 /** What kind of file it is, in words: "Google Doc", "PDF", or a binary's own type. */
-export const fileType = (file: Pick<DriveFile, "kind" | "mimeType">) =>
-	file.kind === "file" && file.mimeType !== "" ? file.mimeType : FILE_KIND[file.kind].word;
+/** Google's own file kinds without a card kind of their own, by the last part of their type. */
+const GOOGLE_KIND: { readonly [kind: string]: string } = {
+	drawing: "Google Drawing",
+	form: "Google Form",
+	site: "Google Site",
+	map: "Google My Map",
+	jam: "Jamboard",
+	script: "Apps Script",
+	shortcut: "Shortcut",
+};
+
+export const fileType = (file: Pick<DriveFile, "kind" | "mimeType">) => {
+	if (file.kind !== "file" || file.mimeType === "") return FILE_KIND[file.kind].word;
+	const google = /^application\/vnd\.google-apps\.([a-z]+)$/.exec(file.mimeType)?.[1];
+	return google === undefined ? file.mimeType : (GOOGLE_KIND[google] ?? "Google file");
+};
 
 /** A read-only file card: what it is, whose, when it changed. The description is plain text the daemon bounded. */
 export function FileCard({ file, actions }: { file: DriveFile; actions?: ReactNode }) {
