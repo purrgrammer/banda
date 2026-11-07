@@ -78,6 +78,11 @@ export const SCOPE_CHOICES: { readonly [connection: string]: ScopeChoices } = {
 		choices: [],
 		note: "Changing access signs in again. Banda only reads your calendar for now.",
 	},
+	drive: {
+		required: { scope: `${GOOGLE}drive.readonly`, label: "Find and read your files, including Docs and Sheets" },
+		choices: [],
+		note: "Changing access signs in again. Banda only reads your files: it never changes, moves or shares them.",
+	},
 	github: {
 		choices: [
 			{ scope: "repo", label: "Repositories, including private repositories" },
