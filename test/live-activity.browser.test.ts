@@ -424,22 +424,20 @@ it.skipIf(!hasChrome())(
 			release = resolve;
 		});
 		entered = false;
-		const write = async (page: Page, value: string) => {
-			await page.run(`document.querySelector('textarea[name="message"]').focus()`);
-			await page.input("Input.insertText", { text: value });
-		};
+		const write = (value: string) =>
+			`(()=>{const el=document.querySelector('textarea[name="message"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));})()`;
 		const button = (label: string) => `document.querySelector('form button[aria-label="${label}"]')`;
 		const waiting = `[...document.querySelectorAll('.opacity-60')].some(el => el.textContent.includes('BROWSER_STEER_NOTE') && el.textContent.includes('Waiting its turn'))`;
 		try {
 			await withPage(`${base}/#token=${token}`, { width: 1440, height: 900 }, async (page) => {
 				await open(page, "#/a/sancho");
 				await page.until(`document.querySelector('textarea[name="message"]')`);
-				await write(page, "BROWSER_STEER_LIVE");
+				await page.run(write("BROWSER_STEER_LIVE"));
 				await page.run(`document.querySelector('textarea[name="message"]').closest('form').requestSubmit()`);
 				await until(() => Promise.resolve(entered));
 				// working with nothing written: Stop; with words: Send
 				await page.until(`${button("Stop")} && !${button("Send")}`);
-				await write(page, "BROWSER_STEER_NOTE");
+				await page.run(write("BROWSER_STEER_NOTE"));
 				await page.until(`${button("Send")} && !${button("Stop")}`);
 				await page.run(`${button("Send")}.click()`);
 				// queued behind the run: dimmed, waiting its turn, and the composer empty again
@@ -471,10 +469,8 @@ it.skipIf(!hasChrome())(
 		});
 		entered = false;
 		const field = `document.querySelector('textarea[name="message"]')`;
-		const write = async (page: Page, value: string) => {
-			await page.run(`${field}.focus()`);
-			await page.input("Input.insertText", { text: value });
-		};
+		const write = (value: string) =>
+			`(()=>{const el=${field};Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));})()`;
 		const button = (label: string) => `document.querySelector('form button[aria-label="${label}"]')`;
 		const attached = `[...document.querySelectorAll('[data-attachment]')].map(el => el.dataset.attachment)`;
 		try {
@@ -485,7 +481,7 @@ it.skipIf(!hasChrome())(
 				await until(() => Promise.resolve(entered));
 				// a member at work, nothing written: Stop; words: Send
 				await page.until(`${button("Stop")} && !${button("Send")}`);
-				await write(page, "GROUP_STEER_NOTE");
+				await page.run(write("GROUP_STEER_NOTE"));
 				await page.until(`${button("Send")} && !${button("Stop")}`);
 				// the draft, words and a file, survives a reload
 				await page.run(`(() => {
