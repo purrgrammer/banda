@@ -104,3 +104,21 @@ About five weeks of agent work in all; slices 8 and 9 can run beside 6 and 7 onc
 - [ ] The panel's tab when switching agents: the one that fits what happens in that chat
 - [ ] A page handed over that the owner cannot get through in the agent's browser (a bot check that keeps checking) offers "Open in your browser": the same address in the owner's own browser
 - [ ] Long chats: "Earlier messages" and opening at a search hit, tried on a chat of hundreds of entries
+
+## Search tools
+
+Agents use the same retrieval path as Cmd+K for direct messages, shared group logs and artifact titles/latest text.
+Source links show an icon for their kind; explicit labels are preserved, and empty labels resolve to the source
+name or a bounded message excerpt. Unavailable sources retain a generic, usable link.
+`search` returns bounded excerpts, source references, app links and a continuation cursor; `read_search_result` reads
+bounded source context. Recall stays memory-only. Hidden execution chats are excluded before ranking and limiting.
+The text coverage of an artifact is its first 200 KB; binary contents, workspace files and live services are outside
+this slice. Source changes can change pagination; restart the query for a fresh traversal.
+
+- [ ] Extend shared search to agent/group names and routine/watch definitions, after this slice's owner review
+- [ ] Search attachment contents and workspace files only through an explicit indexing and access mechanism
+
+The tool-access specimen (`#/specimen/toolsets`) is a local proposal: Connections, Permissions, then Tools, with
+icons, per-tool descriptions and syntax-highlighted input schemas. Built-in schemas are generated from registrations
+by `node scripts/specimen-tools.ts`; live connection schemas are not fabricated. Its switches do not change daemon
+settings. Owner review of this layout is complete; wiring tool access is a separate slice.

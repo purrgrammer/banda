@@ -59,6 +59,10 @@ export function doing(tool: string, args: unknown): string | undefined {
 			return name === undefined ? "writing a file" : `writing ${name}`;
 		}
 
+		case "search":
+			return "searching conversations and artifacts";
+		case "read_search_result":
+			return "reading a source";
 		case "schedule":
 			return "setting up a routine";
 		case "web_fetch": {

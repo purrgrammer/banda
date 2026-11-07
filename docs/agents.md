@@ -58,5 +58,5 @@ changes.
 - [ ] Groups in the band: rows, unread, member changes, the panel's member list, phone-width review
 - [x] Groups start with nobody and may lose their last member; the owner's group limits in Settings; archive and restore a group
 - [ ] Add archiving a group to the groups fault sweep: a kill between its commit and the stop of its work
-- [ ] Give memory an agent audience and keep recall and search within it ([Memory](memory.md))
+- [ ] Give memory an agent audience and keep recall within it; band search excludes memory files ([Memory](memory.md))
 - [ ] Replace the shared box and workspace with one structurally isolated computer per agent (DESIGN.md "Open")
