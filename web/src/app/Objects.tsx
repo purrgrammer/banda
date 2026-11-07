@@ -19,6 +19,7 @@ import {
 import { Markdown, MarkdownLinks } from "../components/Markdown.tsx";
 import { api, gmailAttachment, sizeOf } from "../lib/api.ts";
 import { githubKey, objectAsks } from "../lib/objects.ts";
+import { type Shell, useShellPick } from "../lib/shell.ts";
 import { ConnectFlow } from "./ConnectFlow.tsx";
 import { FilePart } from "./FilePart.tsx";
 import { watchActions } from "./watches.tsx";
@@ -124,6 +125,19 @@ export function ObjectPreviews({
 	);
 }
 
+/** What the watches have done, as one string: it changes when any of them looks, sees, ends, pauses, comes or goes. */
+const watchesMoved = (shell: Shell) =>
+	JSON.stringify(
+		(shell.control?.watches ?? []).map((watch) => [
+			watch.name,
+			watch.looked,
+			watch.sawAt,
+			watch.accepted?.watch?.until,
+			watch.paused,
+			watch.done?.at,
+		]),
+	);
+
 function ReadObjects({
 	chat,
 	request,
@@ -167,6 +181,26 @@ function ReadObjects({
 			gone = true;
 		};
 	}, [chat, request]);
+	// a card of a kind that can be followed shows its newest reading and who follows it: each look or change of a watch
+	// reads the kept reading again (from the daemon's store, not the service), so a card shown before never goes stale
+	const moved = useShellPick(watchesMoved);
+	const followable = shown?.some((one) => one.shown === "card" && one.follow !== undefined) === true;
+	const seenMoved = useRef(moved);
+	useEffect(() => {
+		if (seenMoved.current === moved) return;
+		seenMoved.current = moved;
+		if (!followable) return;
+		let gone = false;
+		api<ObjectShown[]>("/objects", { method: "POST", body: JSON.stringify({ chat, asks: JSON.parse(request) }) }).then(
+			(next) => {
+				if (!gone) setShown(next);
+			},
+			() => {},
+		);
+		return () => {
+			gone = true;
+		};
+	}, [moved, followable, chat, request]);
 	const refresh = async (indices?: readonly number[]) => {
 		if (busy !== undefined) return;
 		setBusy(indices?.[0] ?? "all");

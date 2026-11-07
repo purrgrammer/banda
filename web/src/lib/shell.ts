@@ -145,6 +145,11 @@ export function useShell(): Shell {
 	return useSyncExternalStore(subscribe, () => state);
 }
 
+/** One string `pick` makes of the shell: a component re-renders only when it changes, not at every event. */
+export function useShellPick(pick: (shell: Shell) => string): string {
+	return useSyncExternalStore(subscribe, () => pick(state));
+}
+
 /** The agent chat `chat` runs, as the chat list says; the companion's when the list does not have it yet. */
 export const chatAgentOf = (shell: Pick<Shell, "rows">, chat: number | undefined): string =>
 	shell.rows.find((row) => row.chat === chat)?.agent ?? "sancho";
