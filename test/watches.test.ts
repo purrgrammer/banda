@@ -95,4 +95,3 @@ describe("a watch on a pull request", () => {
 		expect(summary.wakes.flatMap((wake) => wake.changes).some((change) => change.includes("bob"))).toBe(false);
 	}, 60_000);
 });
-
