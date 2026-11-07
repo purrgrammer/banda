@@ -23,7 +23,7 @@ import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable"
 import { Accepted, AGENT_NAME, type Agent, agentPath, frontmatter, LEAD, parseAgent } from "./agents.ts";
 import { FLOORS, type Floor } from "./floor.ts";
 import { harnessToolsOf } from "./harness.ts";
-import type { OAuthClient, OAuthServer, Pending, Tokens } from "./oauth.ts";
+import { DEFAULT_GOOGLE_CLIENT_ID, type OAuthClient, type OAuthServer, type Pending, type Tokens } from "./oauth.ts";
 import { type ObjectKinds, parseObjects } from "./objects.ts";
 
 export const connectionPath = (name: string) => `connections/${name}.md`;
@@ -702,7 +702,7 @@ export function fits(credentials: Credentials | undefined, connection: Connectio
 	if (!("oauth" in credentials)) return connection.auth === "key";
 	if (connection.auth !== "oauth") return false;
 	if (connection.client === "google") {
-		if (credentials.oauth.client.id !== process.env.BANDA_GOOGLE_CLIENT_ID) return false;
+		if (credentials.oauth.client.id !== (process.env.BANDA_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID)) return false;
 	} else if (connection.client !== undefined && credentials.oauth.client.id !== connection.client) return false;
 	// what was asked, not what was granted: a scope the owner left out at the consent screen is theirs to add again
 	const asked = credentials.oauth.server.scopes ?? [];

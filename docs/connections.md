@@ -8,9 +8,9 @@ connect flow and daemon-read objects; DESIGN.md "Watches" follows an object thro
 card. Agent-built connections and `propose_connection` are out of scope.
 
 Gmail is a built-in daemon REST adapter: the accepted file declares scoped reads and approval-required writes, while
-the adapter calls Gmail's API directly. Its OAuth client id comes from `BANDA_GOOGLE_CLIENT_ID`; an optional client
-secret comes from `BANDA_GOOGLE_CLIENT_SECRET`. A Google Desktop OAuth client is public and relies on PKCE, so a
-secret is not required. The first sign-in asks for read-only access; send and mailbox changes have separate scope
+the adapter calls Gmail's API directly. Its public OAuth client id ships with Banda; `BANDA_GOOGLE_CLIENT_ID` can
+override it for development, and an optional daemon-only secret can be set with `BANDA_GOOGLE_CLIENT_SECRET`. A public
+Google OAuth client relies on PKCE, so no secret ships with the app. The first sign-in asks for read-only access; send and mailbox changes have separate scope
 choices and always use account-bound approval drafts. Email cards render sanitized plain text and retrieve attachments
 through the daemon into the chat's blob store.
 
@@ -107,7 +107,7 @@ in a throwaway home, at desktop and phone width.
 - [x] Gmail attachments: list metadata and retrieve bounded bytes through the daemon; never render HTML or expose credentials to the box
 - [x] Gmail send: show recipient, subject, body and held attachments in the existing approval draft; send only the approved content and account
 - [x] Gmail mailbox actions: archive, trash, read/unread and label changes as individually named, account-bound approvals
-- [ ] Gmail onboarding: publish an app-owned public Desktop OAuth client with PKCE and no confidential client secret; least-privilege scope bundles and re-consent are wired, but Google's restricted-scope verification remains external
+- [ ] Gmail onboarding: Google OAuth verification and production publication for restricted/sensitive scopes remain external; the public client id ships with the adapter, least-privilege scope bundles and re-consent are wired
 - [ ] Gmail hardening: pagination limits, revoked/expired grants, and approved attachment content-hash verification are covered; bounded retry behavior, additional write/attachment fault coverage and review remain
 - [ ] Gmail: adversarial review and owner walkthrough of every shipped slice, including a throwaway account for send and mailbox changes
 - [ ] Files: Drive and Docs adapters with scoped reads, rich file objects/previews, and approval-backed writes; no Google Workspace MCP token store

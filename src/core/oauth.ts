@@ -27,10 +27,13 @@ export type OAuthServer = {
 /** The client the daemon is at that server. */
 export type OAuthClient = { readonly id: string; readonly secret?: string };
 
+/** Banda's public Google OAuth client id; it identifies the app and is safe to ship with the daemon. */
+export const DEFAULT_GOOGLE_CLIENT_ID = "199878157109-ge1kebauu0ec88f69ksn1skpacf8l7q1.apps.googleusercontent.com";
+
 /** The installed Google client is public: desktop OAuth uses PKCE and cannot keep a client secret confidential. */
 export function googleOAuthClient(id: string | undefined, secret: string | undefined): OAuthClient {
-	if (id === undefined || id === "") throw new Error("set BANDA_GOOGLE_CLIENT_ID for a Google connection");
-	return { id, ...(secret === undefined || secret === "" ? {} : { secret }) };
+	const clientId = id || DEFAULT_GOOGLE_CLIENT_ID;
+	return { id: clientId, ...(secret === undefined || secret === "" ? {} : { secret }) };
 }
 
 export type Tokens = {

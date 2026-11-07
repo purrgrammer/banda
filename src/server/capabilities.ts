@@ -109,6 +109,7 @@ import { connectionWord, hostWord, mcpConfig, mcpDefinition, serviceOf } from ".
 import { remoteCall, remoteListing, remoteSession } from "../core/mcp-remote.ts";
 import {
 	begin,
+	DEFAULT_GOOGLE_CLIENT_ID,
 	type Device,
 	discover,
 	exchange,
@@ -2222,7 +2223,10 @@ export function openCapabilities(options: CapabilityOptions) {
 		const connection = await harness.commit((tx) => acceptedConnection(tx, pending.connection), ctx);
 		if (connection?.url !== pending.resource)
 			return { ok: false, words: "That connection changed while you signed in. Start again from the app." };
-		if (connection.client === "google" && pending.client.id !== process.env.BANDA_GOOGLE_CLIENT_ID)
+		if (
+			connection.client === "google" &&
+			pending.client.id !== (process.env.BANDA_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID)
+		)
 			return { ok: false, words: "The Google OAuth client changed during sign-in. Start again from the app." };
 		let tokens: Awaited<ReturnType<typeof exchange>>;
 		try {
