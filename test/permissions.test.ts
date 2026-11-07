@@ -563,6 +563,28 @@ describe("the scopes an ask offers", () => {
 		await until(() => done(harness, three.turn));
 		await harness.close(context);
 	});
+	it("a permission given answers only its own agent's open asks, never another agent's of the same shape", async () => {
+		const s = setup();
+		const harness = await s.open(await tempHome());
+		const one = await s.say(harness, [{ tool: "send", to: "ana", body: "1" }], "a");
+		const two = await s.say(harness, [{ tool: "send", to: "ana", body: "2" }], "b");
+		const open = await until(async () => {
+			const waits = await openWaits(harness);
+			return waits.length === 2 ? waits : undefined;
+		});
+		// the second chat runs another agent
+		await harness.commit(async (tx) => {
+			(await tx.doc(AgentChats)).chats[two.chat] = "mara";
+		}, context);
+		const first = open.find((wait) => wait.chat === one.chat)!;
+		await approve(harness, first.key, { permission: { scope: "always" } });
+		await until(() => done(harness, one.turn));
+		expect((await openWaits(harness)).map((wait) => wait.chat)).toEqual([two.chat]);
+		expect(s.runs.map((run) => run.body)).toEqual(["1"]);
+		await answer(harness, (await openWaits(harness))[0]!.key, "deny", web, "bearer");
+		await until(() => done(harness, two.turn));
+		await harness.close(context);
+	});
 });
 
 /** One thing that happens, in the property. */

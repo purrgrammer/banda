@@ -418,8 +418,8 @@ export async function dismissQuestion(
 
 /**
  * The other open approvals a permission about to be given would cover, as an effect starting now would find it: the
- * same tool and bound values, open for that ask's task, never on the floor or for a run again, and a host's only in
- * the chats of its agent. Reads only.
+ * same tool and bound values, open for that ask's task, never on the floor or for a run again, and only in the chats
+ * of its agent. Reads only.
  */
 async function coveredAsks(
 	tx: Tx,
@@ -442,11 +442,9 @@ async function coveredAsks(
 	for (const wait of await liveWaits(tx)) {
 		const { ask } = wait.input;
 		if (wait.id === id || ask.type !== "approval" || now >= wait.input.deadline) continue;
-		const host = permission.scope === "host";
 		if (ask.floor !== undefined || ask.permission === undefined || ask.interrupted === true) continue;
 		if (!matches(permission, ask.tool, ask.args)) continue;
-		// a host covers only the chats of the agent it was allowed for
-		if (host && (permission.agent === undefined || (await agentOfChat(tx, wait.chat)) !== permission.agent)) continue;
+		if (permission.agent === undefined || (await agentOfChat(tx, wait.chat)) !== permission.agent) continue;
 		const errand = permission.scope === "task" ? await errandOf(tx, wait.chat) : undefined;
 		if (!isOpen(permission, now, errand)) continue;
 		if ((await tx.doc(Answers, wait.id as TaskId)).answer !== undefined) continue;
