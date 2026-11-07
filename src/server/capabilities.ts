@@ -88,7 +88,6 @@ import {
 	withList,
 	withoutSignIn,
 	withReads,
-	withScopes,
 } from "../core/connections.ts";
 import { type EgressControl, intake } from "../core/egress.ts";
 import { gmailAttachment, MAX_GMAIL_ATTACHMENT_BYTES, MAX_GMAIL_SEND_ATTACHMENT_BYTES } from "../core/gmail-rest.ts";
@@ -2398,41 +2397,6 @@ export function openCapabilities(options: CapabilityOptions) {
 			: { ok: false, words: `Signed in, but ${connection.service} did not answer: ${problem}` };
 	}
 
-	/**
-	 * The owner picks the scopes connection `name` signs in with: its file is rewritten with them, in the box too, so the
-	 * file stays what is in effect. A connection in effect is accepted again at once (the owner wrote it); one waiting to
-	 * be allowed shows the rewritten version to allow. Asking for more than the sign-in was given means signing in again.
-	 */
-	async function setScopes(name: string, scopes: unknown, ctx: Context = context): Promise<void> {
-		if (
-			!Array.isArray(scopes) ||
-			scopes.length > 50 ||
-			!scopes.every((scope) => typeof scope === "string" && /^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/.test(scope))
-		)
-			throw new BadRequest("give the scopes as a list of names");
-		const picked = [...new Set(scopes as string[])];
-		const box = (await boxedFiles("connections", ctx)).get(name) as
-			| { text: string }
-			| { unreadable: string }
-			| undefined;
-		if (box === undefined || "unreadable" in box) throw new BadRequest(`there is no connection named ${name}`, 404);
-		const accepted = await harness.commit(
-			async (tx) => (await tx.doc(Accepted)).files[connectionPath(name)]?.text,
-			ctx,
-		);
-		if (accepted !== undefined && accepted !== box.text)
-			throw new BadRequest("it proposes a change to this connection: allow or decline that first", 409);
-		const parsed = parseConnection(name, box.text);
-		if ("errors" in parsed || parsed.connection.auth !== "oauth")
-			throw new BadRequest(`${name} is not a connection you sign in to`);
-		const rewritten = withScopes(name, box.text, picked);
-		if (rewritten === undefined) throw new BadRequest(`could not write the scopes into connections/${name}.md`);
-		if (rewritten === box.text) return;
-		await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, rewritten, ctx);
-		if (accepted !== undefined) await acceptConnection(name, shaOf(rewritten), ctx);
-		options.changed?.();
-	}
-
 	/** The connections banda ships, as read now; one that does not parse is left out, and said in the log. */
 	async function shippedFiles(): Promise<Map<string, { readonly text: string; readonly connection: Connection }>> {
 		const dir = options.shipped ?? SHIPPED;
@@ -2946,7 +2910,6 @@ export function openCapabilities(options: CapabilityOptions) {
 		signIn,
 		callback,
 		setKey,
-		setScopes,
 		addShipped,
 		addByAddress,
 		addMcp,

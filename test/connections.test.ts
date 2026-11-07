@@ -19,14 +19,7 @@ import { AgentDoc, type ConversationId, type TaskId, type ToolExecutionApi } fro
 import fc from "fast-check";
 import { afterEach, describe, expect, it } from "vitest";
 import { Accepted, parseAgent, shaOf } from "../src/core/agents.ts";
-import {
-	Connected,
-	connectionTools,
-	connectionToolsOf,
-	parseConnection,
-	parseTool,
-	withScopes,
-} from "../src/core/connections.ts";
+import { Connected, connectionTools, connectionToolsOf, parseConnection, parseTool } from "../src/core/connections.ts";
 import { OWNER } from "../src/core/gateway.ts";
 import { MAX_NOTES, notesOf } from "../src/core/mcp.ts";
 import { Permissions } from "../src/core/permissions.ts";
@@ -479,20 +472,6 @@ describe("signing in by code, as a file's named client", () => {
 		expect(fake.scopesAsked).toEqual(["read:user", "repo"]);
 	});
 
-	it("a file's scopes are rewritten in place, whatever form they were in, and nothing else changes", () => {
-		const file = (lines: string) => `---\nservice: Cal\nurl: https://a.example/mcp\nauth: oauth\n${lines}---\nWhy.\n`;
-		expect(withScopes("cal", file("client: app\nscopes: [a]\nreads: [x]\n"), ["a", "b"])).toBe(
-			file("client: app\nscopes: [a, b]\nreads: [x]\n"),
-		);
-		expect(withScopes("cal", file("scopes:\n  - a\n  - b\nreads: [x]\n"), ["c"])).toBe(
-			file("scopes: [c]\nreads: [x]\n"),
-		);
-		expect(withScopes("cal", file("client: app\nreads: [x]\n"), ["repo"])).toBe(
-			file("client: app\nscopes: [repo]\nreads: [x]\n"),
-		);
-		expect(withScopes("cal", "no frontmatter", ["a"])).toBeUndefined();
-	});
-
 	it("a scope a tool needs shows on it, from the server's challenge; adding it means signing in again", async () => {
 		const fake = await startFakeMcp({
 			auth: "oauth",
@@ -519,12 +498,12 @@ describe("signing in by code, as a file's named client", () => {
 		const before = await shown(s);
 		expect(before?.accounts?.[0]?.missing).toEqual(["repo"]);
 		expect(before?.tools.find((t) => t.title === "whoami")?.needs).toEqual(["repo"]);
-		// the owner adds it to the default: the file is rewritten and accepted; the account keeps working as it was
-		await s.capabilities.setScopes("cal", ["read:user", "repo"]);
-		expect(readFileSync(join(s.box.workspace, "connections/cal.md"), "utf8")).toContain("scopes: [read:user, repo]");
-		expect((await shown(s))?.state).toBe("connected");
-		// and signs it in again, as the same account, given the new default
-		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
+		// beyond what the file allows, an account cannot ask: the owner widens the file, then signs that account in again
+		const choice = { scopes: ["read:user", "repo"], account: before?.accounts?.[0]?.account as string };
+		await expect(signInAsOwner(s.capabilities, "cal", { fake, choice })).rejects.toThrow(/may not ask for repo/);
+		s.writeBox("connections/cal.md", fileOf(fake, { scopes: ["read:user", "repo"], account: "get_me.login" }));
+		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		expect(await signInAsOwner(s.capabilities, "cal", { fake, choice })).toEqual({ ok: true, words: "connected" });
 		const after = await shown(s);
 		expect(after?.accounts).toHaveLength(1);
 		expect(after?.accounts?.[0]?.missing).toBeUndefined();
@@ -533,24 +512,6 @@ describe("signing in by code, as a file's named client", () => {
 		const again = await s.say("and now?");
 		await s.done(again.turn);
 		expect((await s.results(again.chat)).at(-1)?.error).toBe(false);
-	});
-
-	it("scopes picked before allowing rewrite the version shown; with a change waiting, they are refused", async () => {
-		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
-		fakes.push(fake);
-		const s = await open(fake);
-		s.writeBox("connections/cal.md", fileOf(fake, { scopes: ["read:user"] }));
-		const first = ((await changeOf(s, "cal")) as { sha: string }).sha;
-		await s.capabilities.setScopes("cal", ["read:user", "repo"]);
-		const shownNow = (await changeOf(s, "cal")) as unknown as { sha: string; connection: { scopes: string[] } };
-		expect(shownNow.sha).not.toBe(first);
-		expect(shownNow.connection.scopes).toEqual(["read:user", "repo"]);
-		expect((await shown(s))?.accepted).toBeUndefined();
-		await s.capabilities.acceptConnection("cal", shownNow.sha);
-		// the companion proposes a change: the owner allows or declines it before picking scopes
-		s.writeBox("connections/cal.md", fileOf(fake, { scopes: ["read:user", "repo", "gist"] }));
-		await expect(s.capabilities.setScopes("cal", ["read:user"])).rejects.toThrow(/allow or decline that first/);
-		await expect(s.capabilities.setScopes("cal", "repo")).rejects.toThrow(/a list of names/);
 	});
 
 	it("a scope the owner left out at the consent screen is not the account's; it connects with what was given", async () => {
@@ -771,7 +732,7 @@ describe("adding a server", () => {
 		expect(fake.calls).toEqual([]);
 	});
 
-	it("a numbered sign-in with changed scopes is new, not an identity match that inherits old grants", async () => {
+	it("a numbered sign-in is new, not an identity match that inherits old grants", async () => {
 		const fake = await startFakeMcp({ auth: "oauth" });
 		fakes.push(fake);
 		const s = await open();
@@ -780,14 +741,11 @@ describe("adding a server", () => {
 		const state = () => s.capabilities.view().then((view) => view.connections.find((each) => each.name === name)!);
 		const first = (await state()).accounts![0]!;
 		await s.capabilities.switchAccount("sancho", name, first.account, true);
-		await s.capabilities.setScopes(name, ["calendar", "extra"]);
 		expect((await signInAsOwner(s.capabilities, name, { agent: null })).ok).toBe(true);
 		expect((await state()).accounts).toEqual([
 			expect.objectContaining({ id: "account 1", agents: ["sancho"] }),
 			expect.objectContaining({ id: "account 2", agents: [] }),
 		]);
-		// a wider default leaves the first account's sign-in as it was
-		expect((await state()).accounts?.map((account) => account.scopes)).toEqual([["calendar"], ["calendar", "extra"]]);
 	});
 
 	it("by its address: banda finds how it signs in, names it by its host and allows it", async () => {

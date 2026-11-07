@@ -312,19 +312,6 @@ export function parseConnection(
 }
 
 /**
- * `text` (a connection file) asking for `scopes` instead: its `scopes:` line replaced, or added after `client:` (else
- * `auth:`), every other byte as it was. Undefined when the result would not read back as those scopes.
- */
-export function withScopes(name: string, text: string, scopes: readonly string[]): string | undefined {
-	const rewritten = withList(text, "scopes", scopes, ["client", "auth"]);
-	if (rewritten === undefined) return undefined;
-	const parsed = parseConnection(name, rewritten);
-	if ("errors" in parsed) return undefined;
-	const read = parsed.connection.scopes ?? [];
-	return read.length === scopes.length && read.every((scope, i) => scope === scopes[i]) ? rewritten : undefined;
-}
-
-/**
  * `text` (a connection file) for a server that needs no sign-in: its `auth`, `client` and `scopes` dropped, every
  * other byte as it was; undefined when it would not read back as needing none.
  */

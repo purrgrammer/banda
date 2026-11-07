@@ -117,9 +117,7 @@ export function ConnectFlow({
 				if (shipped === undefined) throw new Error(`${service} is not one banda can connect yet.`);
 				showCapabilities(await actOnCapability({ action: "add", name: connection }));
 			}
-			if (scopesChanged)
-				showCapabilities(await actOnCapability({ action: "scopes", name: connection, scopes: pickedScopes }));
-			const started = await signIn(connection, agent?.id);
+			const started = await signIn(connection, agent?.id, choices ? { scopes: pickedScopes } : {});
 			const page = "url" in started ? started.url : "page" in started ? started.page : undefined;
 			if (page === undefined) tab?.close();
 			else tab?.location.replace(page);

@@ -368,7 +368,6 @@ export type CapabilityAct =
 	| { readonly action: "decline" | "remove"; readonly folder: "connections" | "tools"; readonly name: string }
 	| { readonly action: "disconnect"; readonly name: string }
 	| { readonly action: "key"; readonly name: string; readonly key: string }
-	| { readonly action: "scopes"; readonly name: string; readonly scopes: readonly string[] }
 	| { readonly action: "add"; readonly name: string }
 	| { readonly action: "address"; readonly url: string }
 	| { readonly action: "trust"; readonly name: string; readonly tools: readonly string[] }
@@ -383,21 +382,11 @@ export const actOnCapability = (act: CapabilityAct) =>
 			})
 		: act.action === "address"
 			? api<CapabilitiesView>("/capabilities/connections", { method: "POST", body: JSON.stringify({ url: act.url }) })
-			: act.action === "disconnect" ||
-					act.action === "key" ||
-					act.action === "scopes" ||
-					act.action === "add" ||
-					act.action === "trust"
+			: act.action === "disconnect" || act.action === "key" || act.action === "add" || act.action === "trust"
 				? api<CapabilitiesView>(`/capabilities/connections/${act.name}/${act.action}`, {
 						method: "POST",
 						body: JSON.stringify(
-							act.action === "key"
-								? { key: act.key }
-								: act.action === "scopes"
-									? { scopes: act.scopes }
-									: act.action === "trust"
-										? { tools: act.tools }
-										: {},
+							act.action === "key" ? { key: act.key } : act.action === "trust" ? { tools: act.tools } : {},
 						),
 					})
 				: api<CapabilitiesView>(`/capabilities/${act.folder}/${act.name}/${act.action}`, {
@@ -409,12 +398,17 @@ export const actOnCapability = (act: CapabilityAct) =>
  * Start signing in to a connection: the page to send the browser to, which comes back to banda; or the code the owner
  * types on the service's own page, which the connection then shows until it is typed.
  */
-export const signIn = (name: string, agent?: string) =>
+/** Sign an account of connection `name` in, asking for `scopes` (else the file's default); `account` signs that one in again. */
+export const signIn = (
+	name: string,
+	agent?: string,
+	choice: { readonly scopes?: readonly string[]; readonly account?: string } = {},
+) =>
 	api<{ url: string } | { code: string; page: string; expires: number } | { connected: true }>(
 		`/capabilities/connections/${name}/signin`,
 		{
 			method: "POST",
-			body: JSON.stringify(agent === undefined ? {} : { agent }),
+			body: JSON.stringify({ ...(agent === undefined ? {} : { agent }), ...choice }),
 		},
 	);
 
