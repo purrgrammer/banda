@@ -111,10 +111,13 @@ for (const width of [390, 1280])
 
 					await click(page, button("Details"));
 					await page.until(`${text}.includes('Pairing link')`);
+					// the link and the ids stay out of the text, short; Copy carries them whole
 					const pairing = await page.run<string>(
-						`[...document.querySelectorAll('dt')].find(el => el.textContent === 'Pairing link').nextElementSibling.textContent`,
+						`[...document.querySelectorAll('dt')].find(el => el.textContent === 'Pairing link').nextElementSibling.querySelector('[data-copy]').dataset.copy`,
 					);
-					expect(await page.run<string>(text)).toContain(endpoint);
+					expect(await page.run<string>(text)).not.toContain(pairing);
+					expect(await page.run<string>(text)).toContain(`${endpoint.slice(0, 8)}…${endpoint.slice(-8)}`);
+					expect(await page.run<boolean>(`!!document.querySelector('[data-copy="${endpoint}"]')`)).toBe(true);
 					const link = new URL(pairing);
 					await phone.dial(link.searchParams.get("ticket")!);
 					expect(

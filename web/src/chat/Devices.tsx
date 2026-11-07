@@ -5,7 +5,7 @@
  * stays behind Details. On a device itself (`here` false) the list is all there is: the daemon pairs, renames and
  * revokes only for the computer it runs on, so a phone cannot mint access that outlives its own.
  */
-import { ChevronDownIcon, PencilIcon, PlusIcon, SmartphoneIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, CopyIcon, PencilIcon, PlusIcon, SmartphoneIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -153,48 +153,53 @@ function Pairing({
 	act: DevicesActions;
 }) {
 	return (
-		<div className="flex flex-col items-center gap-4 rounded-tile border border-line-soft p-4 sm:flex-row sm:items-start">
-			<div className="relative shrink-0">
-				<QrCode
-					value={invite.pairing}
-					label="Code to scan with banda on your phone"
-					className={cn("size-44 p-1.5", expired && "opacity-15")}
-				/>
-				{expired ? (
-					<span className="absolute inset-0 flex items-center justify-center text-ui font-medium text-ink">
-						Expired
-					</span>
-				) : null}
-			</div>
-			<div className="flex min-w-0 flex-1 flex-col gap-3 self-stretch">
-				<div className="flex flex-col gap-1">
-					<p className="text-body font-semibold text-ink">{expired ? "This code expired" : "Scan with your phone"}</p>
-					<p className="text-ui text-ink-2">
-						{expired
-							? "Codes last ten minutes. Make a new one when your phone is ready."
-							: "Open banda on your phone and scan this code. It asks to pair here, and you approve it."}
-					</p>
-				</div>
-				{expired || computer === undefined ? null : (
-					<p className="text-meta text-ink-2">
-						This computer’s code:{" "}
-						<span className="font-mono font-medium tracking-wide text-ink">{fingerprint(computer)}</span>
-					</p>
-				)}
-				{expired ? null : (
-					<p className="text-meta text-ink-2" aria-live="off">
-						Works for <span className="font-medium text-ink tabular-nums">{countdown(invite.expires - now)}</span>, once
-					</p>
-				)}
-				<div className="mt-auto flex gap-2">
+		<div className="@container rounded-tile border border-line-soft p-4">
+			<div className="flex flex-col items-center gap-4 @md:flex-row @md:items-start">
+				<div className="relative shrink-0">
+					<QrCode
+						value={invite.pairing}
+						label="Code to scan with banda on your phone"
+						className={cn("size-44 p-1.5", expired && "opacity-15")}
+					/>
 					{expired ? (
-						<Button size="sm" onClick={act.onPair}>
-							Make a new code
-						</Button>
+						<span className="absolute inset-0 flex items-center justify-center text-ui font-medium text-ink">
+							Expired
+						</span>
 					) : null}
-					<Button variant="ghost" size="sm" onClick={act.onCancel}>
-						{expired ? "Close" : "Cancel"}
-					</Button>
+				</div>
+				<div className="flex min-w-0 flex-1 flex-col gap-3 self-stretch">
+					<div className="flex flex-col gap-1">
+						<p className="text-body font-semibold text-ink">{expired ? "This code expired" : "Scan with your phone"}</p>
+						<p className="text-ui text-ink-2">
+							{expired
+								? "Codes last ten minutes. Make a new one when your phone is ready."
+								: "Open banda on your phone and scan this code. It asks to pair here, and you approve it."}
+						</p>
+					</div>
+					{expired || computer === undefined ? null : (
+						<p className="text-meta text-ink-2">
+							This computer’s code:{" "}
+							<span className="font-mono font-medium tracking-wide whitespace-nowrap text-ink">
+								{fingerprint(computer)}
+							</span>
+						</p>
+					)}
+					{expired ? null : (
+						<p className="text-meta text-ink-2" aria-live="off">
+							Works for <span className="font-medium text-ink tabular-nums">{countdown(invite.expires - now)}</span>,
+							once
+						</p>
+					)}
+					<div className="mt-auto flex gap-2">
+						{expired ? (
+							<Button size="sm" onClick={act.onPair}>
+								Make a new code
+							</Button>
+						) : null}
+						<Button variant="ghost" size="sm" onClick={act.onCancel}>
+							{expired ? "Close" : "Cancel"}
+						</Button>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -228,7 +233,9 @@ function RequestRow({ request, now, act }: { request: PairingRequestView; now: n
 			<div className="flex flex-col gap-2 rounded-tile bg-paper-2 px-3.5 py-3">
 				<p className="text-meta text-ink-2">
 					Its code:{" "}
-					<span className="font-mono text-body font-medium tracking-wide text-ink">{fingerprint(request.id)}</span>
+					<span className="font-mono text-body font-medium tracking-wide whitespace-nowrap text-ink">
+						{fingerprint(request.id)}
+					</span>
 				</p>
 				<div className="flex items-center gap-2">
 					<Checkbox id={matchId} checked={matched} onCheckedChange={(checked) => setMatched(checked === true)} />
@@ -367,9 +374,10 @@ function Details({
 	const line = (label: string, value: ReactNode, key: string = label) => (
 		<div key={key} className="flex flex-col gap-0.5">
 			<dt className="text-meta text-ink-2">{label}</dt>
-			<dd className="font-mono text-meta break-all text-ink">{value}</dd>
+			<dd className="text-meta text-ink">{value}</dd>
 		</div>
 	);
+	const id = (label: string, value: string, key: string = label) => line(label, <Key value={value} />, key);
 	return (
 		<Collapsible defaultOpen={open} className="group/details flex flex-col gap-3">
 			<CollapsibleTrigger asChild>
@@ -391,18 +399,76 @@ function Details({
 						)
 					) : (
 						<>
-							{line("This computer's endpoint", devices.endpoint.id)}
+							{id("This computer's endpoint", devices.endpoint.id)}
 							{line(
 								"Reached",
 								devices.endpoint.reach === "n0" ? "through n0's public relays, or directly" : "on loopback only",
 							)}
 						</>
 					)}
-					{invite === undefined ? null : line("Pairing link", invite.pairing)}
-					{devices.devices.map((device) => line(device.name, device.id, device.id))}
-					{devices.requests.map((request) => line(`${request.name} (asking)`, request.id, `asking ${request.id}`))}
+					{invite === undefined ? null : line("Pairing link", <CopyText text={invite.pairing} label="Copy link" />)}
+					{devices.devices.map((device) => id(device.name, device.id, device.id))}
+					{devices.requests.map((request) => id(`${request.name} (asking)`, request.id, `asking ${request.id}`))}
 				</dl>
 			</CollapsibleContent>
 		</Collapsible>
+	);
+}
+
+/** A long id said short, its ends kept: the whole on a tap, and a copy. */
+function Key({ value }: { value: string }) {
+	const [whole, setWhole] = useState(false);
+	const short = value.length > 20 ? `${value.slice(0, 8)}…${value.slice(-8)}` : value;
+	return (
+		<span className="flex min-w-0 items-center gap-1">
+			<button
+				type="button"
+				aria-expanded={whole}
+				aria-label={whole ? value : `${short}, show all`}
+				title={whole ? undefined : value}
+				onClick={() => setWhole(!whole)}
+				className={cn(
+					"-mx-1 min-w-0 rounded-field px-1 py-0.5 text-left font-mono hover:bg-paper-3",
+					whole ? "break-all" : "truncate",
+				)}
+			>
+				{whole ? value : short}
+			</button>
+			<CopyText text={value} label="Copy" icon />
+		</span>
+	);
+}
+
+/** Copies its text; says Copied for a moment, or Couldn't copy when the browser refuses. */
+function CopyText({ text, label, icon = false }: { text: string; label: string; icon?: boolean }) {
+	const [said, setSaid] = useState<"Copied" | "Couldn't copy" | undefined>(undefined);
+	useEffect(() => {
+		if (said === undefined) return;
+		const timer = setTimeout(() => setSaid(undefined), 1500);
+		return () => clearTimeout(timer);
+	}, [said]);
+	const copy = () =>
+		void navigator.clipboard.writeText(text).then(
+			() => setSaid("Copied"),
+			() => setSaid("Couldn't copy"),
+		);
+	const words = said ?? label;
+	return icon ? (
+		<Button
+			variant="ghost"
+			size="icon-xs"
+			aria-label={words}
+			title={words}
+			data-copy={text}
+			onClick={copy}
+			className="shrink-0 text-ink-2"
+		>
+			{said === "Copied" ? <CheckIcon /> : <CopyIcon />}
+		</Button>
+	) : (
+		<Button variant="outline" size="xs" data-copy={text} onClick={copy} className="self-start">
+			{said === "Copied" ? <CheckIcon /> : <CopyIcon />}
+			{words}
+		</Button>
 	);
 }
