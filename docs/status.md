@@ -5,8 +5,8 @@
 Gmail REST is implemented in a topic worktree with least-privilege sign-in, account-bound email cards and attachment
 reads, approval-required sending and mailbox actions, and separate OAuth scopes for reading, sending and modifying
 mail ([Connections](connections.md)). Redirect sign-in starts on the computer; paired devices can use accounts already
-connected there. The public Google OAuth client id ships with the daemon; development can override it and optionally
-configure a daemon-only client secret.
+connected there. The public Google Desktop OAuth client id and client secret ship with the daemon; development can
+override both through daemon environment variables.
 The owner connected a real Gmail account and confirmed mail works through the app. Email previews render plain text and
 fetch attachments only on request; the send approval previews and permits editing the recipient, subject and body, and
 names each attached file with its size. The owner reviewed and approved the draft preview specimen. Approved send
