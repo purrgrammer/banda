@@ -5,10 +5,9 @@
  * access to grant, the service's page (and a code to enter on it), what failed, and an account banda already has.
  * Without an agent (from Settings or the Connections page) it signs an account in for none.
  */
-import { CheckIcon, ChevronDownIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
 import { type CSSProperties, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
 	Dialog,
 	DialogContent,
@@ -20,7 +19,6 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import type { AvatarFace } from "../../../src/core/avatar-face.ts";
-import type { ConnectionToolView } from "../../../src/server/api.ts";
 import { scopeChoicesOf } from "../lib/connect.ts";
 import { Tile } from "./Cards.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
@@ -390,63 +388,6 @@ export function ConnectionPermissions({
 					: note}
 			</p>
 		</fieldset>
-	);
-}
-
-/** Connection tools, available behind details in Settings. */
-export function ConnectionTools({
-	connection,
-	tools,
-	defaultOpen = false,
-}: {
-	connection: string;
-	tools: readonly ConnectionToolView[];
-	defaultOpen?: boolean | undefined;
-}) {
-	const [open, setOpen] = useState(defaultOpen);
-	if (tools.length === 0) return null;
-	return (
-		<Collapsible open={open} onOpenChange={setOpen} className="rounded-field border border-line-soft">
-			<CollapsibleTrigger asChild>
-				<Button variant="ghost" size="sm" className="w-full justify-between px-3.5">
-					<span>
-						{connection} tools · {tools.length}
-					</span>
-					<ChevronDownIcon className={open ? "rotate-180" : ""} data-icon="inline-end" />
-				</Button>
-			</CollapsibleTrigger>
-			<CollapsibleContent className="border-t border-line-soft px-3.5 py-3">
-				<div className="flex flex-col gap-3">
-					{tools.map((tool) => (
-						<div key={tool.name} className="flex min-w-0 flex-col gap-1">
-							<p className="break-words font-medium text-ui text-ink">{tool.words}</p>
-							<p className="text-meta text-ink-2">
-								{!tool.on
-									? "Switched off"
-									: tool.kind === "read"
-										? "Reads without asking"
-										: tool.floor || tool.alwaysAsk
-											? "Asks every time"
-											: "Asks first"}
-							</p>
-							{tool.needs?.length ? (
-								<p className="text-meta text-ink-2">Needs Google access: {tool.needs.join(", ")}</p>
-							) : null}
-							<details>
-								<summary className="cursor-pointer text-meta text-ink-2">Tool details</summary>
-								<p className="mt-2 break-all font-mono text-meta">{tool.title}</p>
-								<p className="mt-2 whitespace-pre-wrap break-words text-meta text-ink-2">{tool.description}</p>
-								{tool.parameters ? (
-									<pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all font-mono text-meta">
-										{JSON.stringify(tool.parameters, null, 2)}
-									</pre>
-								) : null}
-							</details>
-						</div>
-					))}
-				</div>
-			</CollapsibleContent>
-		</Collapsible>
 	);
 }
 

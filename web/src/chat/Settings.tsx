@@ -33,14 +33,10 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/cn";
-import type { ConnectionToolView } from "../../../src/server/api.ts";
 import { AvatarChoices } from "../avatar/Choices.tsx";
-import { scopeChoicesOf } from "../lib/connect.ts";
 import { Confirm } from "./Confirm.tsx";
-import { ConnectionTools } from "./Connect.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
 import { Face, FaceStack } from "./Face.tsx";
-import { GitHubMark } from "./Object.tsx";
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
 import { ProviderSignIn, type SignInWay } from "./ProviderSignIn.tsx";
 import type { Who } from "./Row.tsx";
@@ -270,118 +266,62 @@ export type ConnectionRow = {
 	readonly url?: string | undefined;
 	/** Every account signed in to it, and whether this agent may use each. */
 	readonly accounts: readonly { readonly login: string; readonly on: boolean; readonly account?: string }[];
-	readonly tools?: readonly ConnectionToolView[] | undefined;
 };
 
 /**
- * The connections an agent may use: one row per connection, one switch per account; Connect when none is signed in,
- * and Another account when some are. Either opens the connect dialog (`connect`), where it signs in.
+ * The connections an agent uses: one row per account switched on for it, Remove asked first. Managing access and
+ * accounts lives on the Connections page; adding one is the caller's (Add opens its dialog).
  */
 export function Connections({
 	agent,
 	rows,
 	onSwitch,
-	connect,
 	empty = "Nothing to connect yet.",
-	compact = false,
 }: {
 	agent: string;
 	rows: readonly ConnectionRow[];
-	compact?: boolean;
-	/** What it says with no rows. */
+	/** What it says with no account on for the agent. */
 	empty?: string | undefined;
-	/** The owner switched an account on or off for the agent. */
+	/** The owner took an account away from the agent (or gave it back). */
 	onSwitch?: ((row: ConnectionRow, account: ConnectionRow["accounts"][number], on: boolean) => void) | undefined;
-	/** The connect dialog for a row. */
-	connect?: ((row: ConnectionRow, close: () => void) => ReactNode) | undefined;
 }) {
-	const [open, setOpen] = useState<string | undefined>(undefined);
+	const used = rows.flatMap((row) => row.accounts.filter((account) => account.on).map((account) => ({ row, account })));
 	return (
 		<Block title="Connections" note={`What ${agent} may read. It asks before anything it writes.`}>
-			{rows.length === 0 ? (
+			{used.length === 0 ? (
 				<p className="rounded-field bg-paper-2 px-3.5 py-3 text-ui text-ink-2">{empty}</p>
-			) : compact ? (
+			) : (
 				<div className="flex flex-col">
-					{rows.flatMap((row) =>
-						row.accounts.map((account) => (
+					{used.map(({ row, account }) => {
+						const as = account.account === undefined ? undefined : account.login;
+						const what = as === undefined ? row.connection : `${row.connection} as ${as}`;
+						return (
 							<div
 								key={`${row.id ?? row.connection}/${account.account ?? account.login}`}
 								className="flex min-h-11 items-center gap-3 py-1.5"
 							>
-								<span title={row.connection} className="flex size-5 shrink-0 items-center justify-center">
+								<span className="flex size-5 shrink-0 items-center justify-center">
 									{row.icon ?? <ConnectionIcon connection={row.id ?? row.connection} url={row.url} />}
 								</span>
-								<span className="min-w-0 flex-1 truncate text-ui text-ink">
-									{account.account === undefined ? row.connection : account.login}
+								<span className="flex min-w-0 flex-1 flex-col">
+									<span className="truncate text-ui text-ink">{row.connection}</span>
+									{as === undefined ? null : <span className="truncate text-meta text-ink-2">{as}</span>}
 								</span>
-								<Switch
-									{...(onSwitch === undefined
-										? { defaultChecked: account.on }
-										: { checked: account.on, onCheckedChange: (on: boolean) => onSwitch(row, account, on) })}
-									aria-label={`${agent} may use ${row.connection} as ${account.login}`}
-								/>
-							</div>
-						)),
-					)}
-				</div>
-			) : (
-				<Rows>
-					{rows.map((row) => (
-						<div key={row.connection} className="flex flex-col">
-							<RowOf
-								lead={
-									<span className="flex size-8 shrink-0 items-center justify-center rounded-field bg-paper-3">
-										{row.icon ?? <ConnectionIcon connection={row.id ?? row.connection} url={row.url} />}
-									</span>
-								}
-								title={<span className="font-medium">{row.connection}</span>}
-								detail={row.accounts.length === 0 ? "Not connected" : undefined}
-								end={
-									row.accounts.length === 0 ? (
-										<Button size="sm" onClick={() => setOpen(row.connection)}>
-											Connect
-										</Button>
-									) : (
-										<Button variant="ghost" size="xs" className="text-ink-2" onClick={() => setOpen(row.connection)}>
-											{scopeChoicesOf(row.id) !== undefined ? (
-												<>Manage access</>
-											) : (
-												<>
-													<PlusIcon />
-													Another account
-												</>
-											)}
-										</Button>
-									)
-								}
-							/>
-							{row.accounts.map((account) => (
-								// biome-ignore lint/a11y/noLabelWithoutControl: the switch inside is the control
-								<label
-									key={account.login}
-									className="flex h-10 items-center gap-3 border-t border-line-soft pr-3.5 pl-[3.75rem] text-ui text-ink"
+								<Confirm
+									title={`Remove ${row.connection}?`}
+									body={`${agent} stops using ${what}. The account stays signed in for the others; add it back at any time.`}
+									action="Remove"
+									keep="Keep it"
+									onConfirm={() => onSwitch?.(row, account, false)}
 								>
-									<span className="flex-1">{account.login}</span>
-									<Switch
-										{...(onSwitch === undefined
-											? { defaultChecked: account.on }
-											: { checked: account.on, onCheckedChange: (on: boolean) => onSwitch(row, account, on) })}
-										aria-label={`${agent} may use ${account.login}`}
-									/>
-								</label>
-							))}
-							{row.id === "gmail" ||
-							row.connection === "Gmail" ||
-							row.tools === undefined ||
-							row.tools.length === 0 ? null : (
-								<div className="px-3.5 pb-3 pl-[3.75rem]">
-									<ConnectionTools connection={row.connection} tools={row.tools} />
-								</div>
-							)}
-							{open === row.connection && connect !== undefined ? connect(row, () => setOpen(undefined)) : null}
-						</div>
-					))}
-				</Rows>
+									<Button variant="ghost" size="icon-xs" className="text-ink-2" aria-label={`Remove ${what}`}>
+										<XIcon />
+									</Button>
+								</Confirm>
+							</div>
+						);
+					})}
+				</div>
 			)}
 		</Block>
 	);
@@ -793,8 +733,6 @@ export type SettingsActions = {
 	readonly onSignOut?: (agent: string, site: string) => void;
 	/** Sign an account of a connection out: off for every agent, its permissions taken back. */
 	readonly onAccountSignOut?: (account: Account) => void;
-	/** The connect dialog for connection `name`, signing in another account for no agent. */
-	readonly connect?: (name: string, close: () => void) => ReactNode;
 	/** Restore an archived agent; a refusal rejects with why. */
 	readonly onRestore?: (who: Who & { readonly id?: string }) => Promise<unknown> | undefined;
 	/** Restore an archived group; a refusal rejects with why. */
@@ -1354,12 +1292,10 @@ export function ModelProviders({
 }
 
 /**
- * Every account across services: who it is, which agents use it, Sign out (asked first); per connection, Sign in
- * another, which opens its connect dialog; and Connect a service, the Connections page.
+ * Every account across services: who it is, which agents use it, Sign out (asked first); and Connect a service, the
+ * Connections page, where access and accounts are managed.
  */
 function Accounts({ accounts, act }: { accounts: readonly Account[]; act: SettingsActions }) {
-	const [open, setOpen] = useState<string | undefined>(undefined);
-	const names = [...new Map(accounts.flatMap((a) => (a.name === undefined ? [] : [[a.name, a.connection]]))).entries()];
 	return (
 		<Block title="Accounts" note="Every account you signed in to, and which agents use it.">
 			<Rows>
@@ -1368,11 +1304,7 @@ function Accounts({ accounts, act }: { accounts: readonly Account[]; act: Settin
 						key={account.id}
 						lead={
 							<span className="flex size-8 shrink-0 items-center justify-center rounded-field bg-paper-3">
-								{account.connection === "GitHub" ? (
-									<GitHubMark />
-								) : (
-									<span className="text-meta font-semibold text-ink-2">{account.connection.slice(0, 1)}</span>
-								)}
+								<ConnectionIcon connection={account.name ?? account.connection} />
 							</span>
 						}
 						title={
@@ -1405,20 +1337,6 @@ function Accounts({ accounts, act }: { accounts: readonly Account[]; act: Settin
 							</Confirm>
 						}
 					/>
-				))}
-				{names.map(([name, connection]) => (
-					<div key={name} className="flex flex-col">
-						<RowOf
-							title={<span className="text-ink-2">Another {connection} account</span>}
-							end={
-								<Button variant="ghost" size="xs" onClick={() => setOpen(name)}>
-									<PlusIcon />
-									Sign in another
-								</Button>
-							}
-						/>
-						{open === name && act.connect !== undefined ? act.connect(name, () => setOpen(undefined)) : null}
-					</div>
 				))}
 				<RowOf
 					title={<span className="text-ink-2">{accounts.length === 0 ? "No accounts yet" : "More services"}</span>}

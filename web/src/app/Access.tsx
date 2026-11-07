@@ -25,7 +25,6 @@ export function connectionRows(capabilities: CapabilitiesView | undefined, agent
 			connection: view.accepted?.connection?.service ?? view.name,
 			id: view.name,
 			url: view.accepted?.connection?.url,
-			tools: view.tools,
 			accounts:
 				view.accepted?.connection?.auth === "none" && view.agents !== undefined
 					? [{ login: "No sign-in needed", on: view.agents.includes(agent) }]
@@ -91,7 +90,6 @@ export function AccessTab({
 		<>
 			<Connections
 				agent={agent.name}
-				compact
 				rows={used}
 				empty={`${agent.name} reaches nothing yet.`}
 				onSwitch={(row, account, on) => {

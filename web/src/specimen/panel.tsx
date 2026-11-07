@@ -142,7 +142,7 @@ function AgentPanelOf({
 				routines={<Routines agent={who.name} routines={routines} allPaused={paused} />}
 				access={
 					<>
-						<Connections agent={who.name} rows={connections} compact />
+						<Connections agent={who.name} rows={connections} />
 						<Permissions agent={who.name} permissions={permissions} />
 					</>
 				}
@@ -179,13 +179,25 @@ export function PanelSections() {
 			<Section
 				id="connections-signed-in"
 				title="Connections after sign-in"
-				note="The account row and switch confirm sign-in. When a service gives no account name, use the connection's name. A supplied icon replaces the initial; the initial remains the fallback."
+				note="One row per account the agent uses: the service, the account under it, and Remove, asked first. When a service gives no account name, the row is the connection's name. A supplied icon replaces the initial; the initial remains the fallback."
 			>
 				<div className="max-w-md">
 					<Connections
 						agent="Sancho"
 						rows={[
-							{ connection: "GitHub", accounts: [{ login: "@purrgrammer", on: true }] },
+							{
+								connection: "GitHub",
+								id: "github",
+								accounts: [{ login: "@purrgrammer", account: "purrgrammer", on: true }],
+							},
+							{
+								connection: "Gmail",
+								id: "gmail",
+								accounts: [
+									{ login: "bandarra@example.com", account: "bandarra@example.com", on: true },
+									{ login: "work@example.com", account: "work@example.com", on: false },
+								],
+							},
 							{
 								connection: "Vercel",
 								icon: (

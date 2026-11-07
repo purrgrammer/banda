@@ -630,7 +630,6 @@ function Main() {
 								.then(showCapabilities)
 								.catch(() => {});
 						}}
-						connect={(name, close) => <ConnectFlow connection={name} onClose={close} />}
 						onRestore={(who) => (who.id === undefined ? undefined : restore(who.id))}
 						onRestoreGroup={(room) => archiveGroup(room, false)}
 						onGroupLimits={(limits) => setGroupLimits(limits)}
