@@ -52,6 +52,10 @@ export type FaultPoint =
 	| "oauth:kept"
 	| "oauth:device"
 	| "shipped:written"
+	/** Bringing from the other harnesses: the skills written, then accepted, then each agent saved. */
+	| "bring:written"
+	| "bring:accepted"
+	| "bring:agent"
 	| "address:written"
 	| "trust:written"
 	| "nosignin:written"

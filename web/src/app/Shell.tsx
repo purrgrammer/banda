@@ -27,6 +27,7 @@ import { showAgents, showCapabilities, showControl, showMemory, useShell } from 
 import { AccessTab, reachesSomething } from "./Access.tsx";
 import { AgentChat } from "./AgentChat.tsx";
 import { ArtifactPage } from "./ArtifactPage.tsx";
+import { BringOnboarding, BringSettings, useBring } from "./Bring.tsx";
 import { bandRows, titleOf, whoOf } from "./band.ts";
 import { ConnectFlow, freshAccounts } from "./ConnectFlow.tsx";
 import { saveEdit, setAgentState } from "./edits.ts";
@@ -88,6 +89,7 @@ const SERVICES = [
 export function Shell() {
 	const tiers = useTiers();
 	const [shipped, setShipped] = useShippedSkills();
+	const [brought, setBrought] = useBring();
 	// first run until the band can think: a provider with a credential, and not one from outside banda that the owner
 	// never picked (a stale ANTHROPIC_API_KEY would otherwise skip this screen and fail every answer)
 	const current = tiers?.providers.find((provider) => provider.id === tiers.provider.id);
@@ -97,8 +99,22 @@ export function Shell() {
 				<Onboarding />
 			</div>
 		);
-	// right after the provider, once: the skills banda ships
-	if (shipped === undefined) return <div className="h-svh bg-paper" />;
+	// right after the provider, once: in the desktop app, what the other harnesses on this computer have; when the owner
+	// brings nothing from them (or there are none), the skills banda ships
+	if (brought === undefined || shipped === undefined) return <div className="h-svh bg-paper" />;
+	if (!brought.view.chosen)
+		return (
+			<div className="h-svh bg-paper">
+				<BringOnboarding
+					view={brought.view}
+					harnesses={brought.harnesses}
+					onChosen={(next, brought) => {
+						if (brought) setShipped({ ...shipped, chosen: true });
+						setBrought({ view: next });
+					}}
+				/>
+			</div>
+		);
 	if (!shipped.chosen)
 		return (
 			<div className="h-svh bg-paper">
@@ -523,6 +539,7 @@ function Main() {
 			return (
 				<SettingsPage title="Settings" phone={phone} onBack={back}>
 					<AppSettings
+						bring={<BringSettings />}
 						memory={
 							<MemorySettings
 								memory={shell.memory}

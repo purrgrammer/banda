@@ -777,7 +777,20 @@ one recorded tool call and result; an earlier running request must not see the l
 chat names only what loaded; Activity holds the exact result. Other files in a skill's folder remain box data, never
 instructions the daemon loads from an unaccepted change. banda ships a few skills; first run offers them once, right
 after the provider, and the ones the owner keeps are written into the workspace and accepted in that step, since banda
-wrote them and the owner chose them. A skill of that name already there is never replaced.
+wrote them and the owner chose them. A skill of that name already accepted is never replaced.
+
+**Bringing your own.** An owner who already works with another harness on this computer (Claude Code, Codex, pi) has
+skills and agents there. In the desktop app, first run offers those in place of banda's own: the owner picks harnesses,
+sees everything they bring, and leaves any of it behind; bringing nothing goes on to banda's skills, bringing anything
+means they are not offered. Settings offers the same any time. The daemon reads the harnesses' own folders on the
+owner's computer, the only host files it reads for this, and only names and descriptions until a pick; a pick is read
+again then, never taken from the request. A skill comes as its folder's text files (hidden files, links and files that
+are not text stay behind) and its SKILL.md is accepted by the hash of the bytes written, as a shipped one is: the owner
+chose it from their own computer. Since they saw its name and description, not every character, a SKILL.md with
+characters nobody sees is refused, as an agent file is. An agent comes as a banda agent file with its name, description and instructions;
+its own tools and model are another harness's words and stay behind. A skill or agent of that name already accepted is
+left as it is; one the box wrote and nobody accepted is superseded, so a bring cut part way is finished by bringing
+again.
 
 ## Trust
 Laws (property-tested):

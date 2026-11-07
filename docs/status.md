@@ -33,6 +33,11 @@ The Library and panel redesign is a separate slice.
 Watches are designed: DESIGN.md "Watches", [Watches](watches.md) for the watch and [Connections](connections.md)
 for the object side. Owner review of the design is pending before slice 1 starts.
 
+Bringing your own is in code ([Chat](chat.md)): at first run on the desktop, the skills and agents of Claude Code,
+Codex and pi on this computer, in place of banda's skills, and again from Settings; the band's menu with Skills and a
+dot while something waits. Unit and fault tests pass; the real desktop app on a fresh home, phone width and owner
+review remain.
+
 Settings → Model lists every model provider to connect, use or sign out of, so the band can switch providers after
 first run ([Chat](chat.md)). Owner review is pending.
 

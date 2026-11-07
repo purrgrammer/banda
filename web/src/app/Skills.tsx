@@ -30,6 +30,9 @@ export function useSkills() {
 }
 
 const changed = () => dispatchEvent(new Event(CHANGED));
+/** Skills changed elsewhere (a bring): every list of them reads again. */
+export const skillsChanged = changed;
+
 /** A skill the owner can act on: a file the box added or changed. A removal has nothing to allow (the accepted text stays). */
 export const waitsOnOwner = (view: SkillView) => view.change !== undefined && view.change.kind !== "removed";
 
