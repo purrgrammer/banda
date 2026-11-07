@@ -601,6 +601,7 @@ export function PanelSections() {
 				<div className="grid gap-6 lg:grid-cols-2">
 					<Specimen label="Quiet actions and details · long metadata">
 						<ObjectReading
+							chat={1}
 							onRefresh={() => {}}
 							shown={{
 								shown: "card",

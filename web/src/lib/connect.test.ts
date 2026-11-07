@@ -59,6 +59,27 @@ describe("the connect card", () => {
 		expect(connectState(done, { kind: "started", before: 5 }, "mara", "why")).toMatchObject({ kind: "done" });
 	});
 
+	it("does not claim the agent was enabled when the sign-in access switch was refused", () => {
+		const connected = view({
+			state: "connected",
+			accounts: [account("bandarra")],
+			finished: {
+				account: "bandarra",
+				id: "bandarra",
+				agent: "mara",
+				enabled: false,
+				problem: "review the agent's pending file first",
+				known: false,
+				at: 5,
+			},
+		});
+		expect(connectState(connected, { kind: "started", before: 2 }, "mara", "why")).toEqual({
+			kind: "share",
+			login: "@bandarra",
+			why: "review the agent's pending file first",
+		});
+	});
+
 	it("fails with why, and Try again; a code that expired is a failure", () => {
 		expect(connectState(view(), { kind: "failed", why: "no" }, "mara", "why")).toEqual({ kind: "failed", why: "no" });
 		const expired = view({ state: "problem", problem: "the code expired before it was typed: sign in again" });

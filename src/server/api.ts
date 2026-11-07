@@ -692,6 +692,8 @@ export type ConnectionView = {
 		readonly account: string;
 		readonly id: string;
 		readonly agent?: string;
+		readonly enabled?: boolean;
+		readonly problem?: string;
 		readonly known: boolean;
 		readonly at: number;
 	};

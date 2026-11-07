@@ -2,6 +2,19 @@
 
 ## Current work
 
+Gmail REST is implemented in a topic worktree with least-privilege sign-in, account-bound email cards and attachment
+reads, approval-required sending and mailbox actions, and separate OAuth scopes for reading, sending and modifying
+mail ([Connections](connections.md)). Redirect sign-in starts on the computer; paired devices can use accounts already
+connected there. The public Google OAuth client id ships with the daemon; development can override it and optionally
+configure a daemon-only client secret.
+The owner connected a real Gmail account and confirmed mail works through the app. Email previews render plain text and
+fetch attachments only on request; the send approval previews and permits editing the recipient, subject and body, and
+names each attached file with its size. The owner reviewed and approved the draft preview specimen. Approved send
+attachments are SHA-256 checked again at execution, so bytes changed after approval are refused. Adapter, blob,
+attachment, specimen and browser checks, static checks, typecheck and the production web build pass. The complete
+desktop/phone walkthrough, real send and mailbox approval flows, adversarial review and acceptance remain. Google's
+restricted-scope verification and publishing a public Desktop OAuth client remain external gates.
+
 Harnesses are on the `feat/harness-acp` branch ([Connections](connections.md)): an agent hands coding work to a
 coding agent on the owner's computer (Claude Code, Codex, pi through banda's own adapter, or one the owner adds),
 connected once to the owner's code folder, each task in a project there; the session is live and steerable in the chat,

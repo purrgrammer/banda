@@ -80,7 +80,6 @@ function usePhone(): boolean {
 
 const SERVICES = [
 	{ id: "gmail", name: "Gmail", does: "Read and draft email" },
-	{ id: "calendar", name: "Google Calendar", does: "Your days and invites" },
 	{ id: "linear", name: "Linear", does: "Issues and cycles" },
 	{ id: "slack", name: "Slack", does: "Channels and messages" },
 	{ id: "notion", name: "Notion", does: "Pages and databases" },
@@ -674,7 +673,7 @@ function Main() {
 							...(services.length === 0
 								? [{ id: "github", name: "GitHub", does: "Pull requests, issues, checks", accounts: [] }]
 								: services),
-							...SERVICES,
+							...SERVICES.filter((service) => !services.some((existing) => existing.id === service.id)),
 						]}
 						connect={(service, close) =>
 							service.accounts === undefined ? null : capabilities?.connections.find((each) => each.name === service.id)

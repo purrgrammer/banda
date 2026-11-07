@@ -14,6 +14,8 @@ export type OAuthServer = {
 	readonly issuer: string;
 	/** RFC 9207: this issuer promises to identify itself in the authorization response. */
 	readonly issuerParameter?: true;
+	/** Google OAuth's RFC 8693 resource parameter is not part of this API's token exchange. */
+	readonly resourceParameter?: false;
 	readonly authorize: string;
 	readonly token: string;
 	readonly register?: string;
@@ -24,6 +26,15 @@ export type OAuthServer = {
 
 /** The client the daemon is at that server. */
 export type OAuthClient = { readonly id: string; readonly secret?: string };
+
+/** Banda's public Google OAuth client id; it identifies the app and is safe to ship with the daemon. */
+export const DEFAULT_GOOGLE_CLIENT_ID = "199878157109-ge1kebauu0ec88f69ksn1skpacf8l7q1.apps.googleusercontent.com";
+
+/** The installed Google client is public: desktop OAuth uses PKCE and cannot keep a client secret confidential. */
+export function googleOAuthClient(id: string | undefined, secret: string | undefined): OAuthClient {
+	const clientId = id || DEFAULT_GOOGLE_CLIENT_ID;
+	return { id: clientId, ...(secret === undefined || secret === "" ? {} : { secret }) };
+}
 
 export type Tokens = {
 	readonly access: string;
@@ -50,18 +61,30 @@ export type Pending = {
 
 const base64url = (bytes: Buffer) => bytes.toString("base64url");
 
+function responseProblem(url: string, status: number, body: unknown): Error {
+	const code =
+		typeof body === "object" && body !== null && "error" in body && typeof body.error === "string"
+			? body.error
+			: undefined;
+	const safeCode = code !== undefined && /^[a-zA-Z0-9_-]{1,80}$/.test(code) ? ` (${code})` : "";
+	return new Error(`${new URL(url).host} answered ${status}${safeCode}`);
+}
+
 /** A fetch that never follows a redirect, and an answer read as JSON, or why not. */
 async function json(fetcher: typeof fetch, url: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
 	const response = await fetcher(url, { ...init, redirect: "error" });
 	const text = await response.text();
-	if (!response.ok) throw new Error(`${new URL(url).host} answered ${response.status}`);
+	let parsed: unknown;
 	try {
-		const body = JSON.parse(text) as unknown;
-		if (typeof body !== "object" || body === null || Array.isArray(body)) throw new Error();
-		return body as Record<string, unknown>;
+		parsed = JSON.parse(text) as unknown;
 	} catch {
+		if (!response.ok) throw responseProblem(url, response.status, undefined);
 		throw new Error(`${new URL(url).host} did not answer JSON`);
 	}
+	if (!response.ok) throw responseProblem(url, response.status, parsed);
+	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+		throw new Error(`${new URL(url).host} did not answer JSON`);
+	return parsed as Record<string, unknown>;
 }
 
 /** A URL a server named, only https (or http on loopback, for a server on this machine). */
@@ -102,6 +125,20 @@ async function resourceMetadata(fetcher: typeof fetch, resource: string): Promis
 
 /** Find where to sign in for `resource` (an MCP server's URL). */
 export async function discover(resource: string, fetcher: typeof fetch = fetch): Promise<OAuthServer> {
+	// Gmail's API is a first-party Google resource, not an RFC 9728 MCP server. Its user consent and token
+	// endpoints are fixed by Google; tool access remains restricted to the scopes in the shipped connection file.
+	const google = new URL(resource);
+	if (
+		google.protocol === "https:" &&
+		google.hostname === "gmail.googleapis.com" &&
+		google.pathname === "/gmail/v1/users/me"
+	)
+		return {
+			issuer: "https://accounts.google.com",
+			authorize: "https://accounts.google.com/o/oauth2/v2/auth",
+			token: "https://oauth2.googleapis.com/token",
+			resourceParameter: false,
+		};
 	const metadata = await resourceMetadata(fetcher, resource);
 	const servers = Array.isArray(metadata?.authorization_servers) ? metadata.authorization_servers : [];
 	const issuer = typeof servers[0] === "string" ? servers[0] : new URL(resource).origin;
@@ -182,7 +219,11 @@ export function begin(
 	url.searchParams.set("code_challenge", challenge);
 	url.searchParams.set("code_challenge_method", "S256");
 	url.searchParams.set("state", state);
-	url.searchParams.set("resource", resource);
+	if (server.resourceParameter !== false) url.searchParams.set("resource", resource);
+	if (server.issuer === "https://accounts.google.com") {
+		url.searchParams.set("access_type", "offline");
+		url.searchParams.set("prompt", "consent");
+	}
 	if (server.scopes !== undefined) url.searchParams.set("scope", server.scopes.join(" "));
 	return {
 		pending: {
@@ -237,7 +278,7 @@ export async function exchange(pending: Pending, code: string, now: number, fetc
 		code,
 		redirect_uri: pending.redirect,
 		code_verifier: pending.verifier,
-		resource: pending.resource,
+		...(pending.server.resourceParameter === false ? {} : { resource: pending.resource }),
 	});
 	return tokensOf(body, now);
 }
@@ -255,7 +296,7 @@ export async function refresh(
 	const body = await tokenRequest(fetcher, server, client, {
 		grant_type: "refresh_token",
 		refresh_token: tokens.refresh,
-		resource,
+		...(server.resourceParameter === false ? {} : { resource }),
 	});
 	return tokensOf(body, now, tokens);
 }
@@ -318,6 +359,7 @@ export async function pollDevice(
 		client_id: client.id,
 		resource,
 	});
+	if (client.secret !== undefined) params.set("client_secret", client.secret);
 	const response = await fetcher(server.token, {
 		method: "POST",
 		redirect: "error",

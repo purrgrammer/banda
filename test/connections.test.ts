@@ -595,6 +595,7 @@ describe("signing in by code, as a file's named client", () => {
 		const s = await open(fake);
 		s.writeBox("connections/cal.md", fileOf(fake, { scopes: ["read:user"] }));
 		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await expect(s.capabilities.signIn("cal", context, "sancho", true)).rejects.toThrow(/computer Banda runs on/);
 		expect(await signInAsOwner(s.capabilities, "cal")).toEqual({
 			ok: true,
 			words: "Signed in to Calendar as account 1.",
@@ -1049,6 +1050,21 @@ describe("connections banda ships", () => {
 		expect(cal?.tools.find((t) => t.title === "whoami")?.needs).toEqual(["repo"]);
 		expect(cal?.tools.find((t) => t.title === "list_events")?.needs).toBeUndefined();
 		expect(cal?.missing).toBeUndefined();
+	});
+
+	it("recovers a shipped definition left in the box before it was allowed", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		const shipped = await shipping(fake);
+		const s = await open(fake, shipped);
+		s.writeBox("connections/cal.md", readFileSync(join(shipped, "cal.md"), "utf8"));
+
+		await s.capabilities.addShipped("cal");
+
+		expect((await s.capabilities.view()).connections.find((connection) => connection.name === "cal")).toMatchObject({
+			accepted: { connection: { auth: "oauth" } },
+			state: "sign-in",
+		});
 	});
 
 	it("one the companion proposed under the same name is never replaced by the shipped one", async () => {
