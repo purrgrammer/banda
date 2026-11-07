@@ -281,7 +281,16 @@ export const setPaused = (paused: boolean) =>
 
 /** What the owner does to memory: add a fact, change its words, or delete it. */
 export type FactAct =
-	| { readonly action: "add"; readonly text: string; readonly scope: "global" | "agent"; readonly agent?: string }
+	| {
+			readonly action: "add";
+			readonly text: string;
+			readonly scope: "global" | "agent";
+			readonly agent?: string;
+			/** Whom it is about, when not the owner: declared by the owner, never detected. */
+			readonly about?: string;
+			/** For a fact about someone else: the owner's task it serves. */
+			readonly task?: string;
+	  }
 	| { readonly action: "edit"; readonly id: string; readonly text: string }
 	| { readonly action: "delete"; readonly id: string };
 
@@ -294,6 +303,8 @@ export const actOnFact = (act: FactAct) =>
 					text: act.text,
 					scope: act.scope,
 					...(act.agent === undefined ? {} : { agent: act.agent }),
+					...(act.about === undefined ? {} : { about: act.about }),
+					...(act.task === undefined ? {} : { task: act.task }),
 				}),
 			})
 		: act.action === "edit"
