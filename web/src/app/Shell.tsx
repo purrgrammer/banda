@@ -43,7 +43,7 @@ import { SearchDialog } from "./SearchDialog.tsx";
 import { SettingsDevices } from "./SettingsDevices.tsx";
 import { SettingsProviders } from "./SettingsProviders.tsx";
 import { ShortcutsDialog, typing as typingIn } from "./Shortcuts.tsx";
-import { SkillsPage, useSkills } from "./Skills.tsx";
+import { SkillsPage, useSkills, waitsOnOwner } from "./Skills.tsx";
 import { routineTitle } from "./titles.ts";
 import { hrefOf, lastOf, parse, type Where } from "./where.ts";
 
@@ -292,6 +292,14 @@ function Main() {
 			}}
 			onSearch={() => setSearching(true)}
 			onNew={() => setMaking(true)}
+			onSkills={() => go({ name: "skills" })}
+			waiting={{
+				skills: skillViews.some(waitsOnOwner),
+				// a problem, or an account to sign in to again; a change to a connection's file is answered in the chat
+				connections: (shell.capabilities?.connections ?? []).some(
+					(view) => view.state === "problem" || (view.accounts ?? []).some((account) => account.stale === true),
+				),
+			}}
 			onConnections={() => go({ name: "connections" })}
 			onSettings={() => go({ name: "settings" })}
 		/>

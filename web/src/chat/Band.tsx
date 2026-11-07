@@ -1,11 +1,18 @@
 /**
- * The band: the sidebar, and the whole of the app's navigation. Its name, search and "+" at the top; one row per agent
- * and group, by their latest message; Connections, Settings and the daemon's notices at the foot. Collapsed, the rail of faces.
+ * The band: the sidebar, and the whole of the app's navigation. Its name, search, "+" and the menu (Skills, Connections,
+ * Settings; a dot on it, and on each, while something there waits on the owner) at the top; one row per agent and
+ * group, by their latest message; the daemon's notices at the foot. Collapsed, the rail of faces, the menu below.
  */
-import { PanelLeftIcon, PlugIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
+import { BlocksIcon, BookOpenIcon, PanelLeftIcon, PlugIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
 import { MotionConfig, motion } from "motion/react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
 import { RowsLoading } from "./Loading.tsx";
 import { Row, type RowView } from "./Row.tsx";
@@ -19,6 +26,8 @@ export function Band({
 	onSelect,
 	onSearch,
 	onNew,
+	onSkills,
+	waiting = {},
 	onConnections,
 	onSettings,
 	className,
@@ -35,6 +44,9 @@ export function Band({
 	onSelect?: (id: string) => void;
 	onSearch?: () => void;
 	onNew?: () => void;
+	onSkills?: () => void;
+	/** What waits on the owner: a dot on the menu and on that item. */
+	waiting?: { readonly skills?: boolean; readonly connections?: boolean };
 	onConnections?: () => void;
 	onSettings?: () => void;
 	className?: string;
@@ -76,6 +88,7 @@ export function Band({
 						>
 							<PlusIcon />
 						</Button>
+						<Menu waiting={waiting} onSkills={onSkills} onConnections={onConnections} onSettings={onSettings} />
 					</>
 				)}
 			</div>
@@ -101,33 +114,58 @@ export function Band({
 				</MotionConfig>
 			</div>
 			{notice === undefined || collapsed ? null : <div className="px-3 pb-2">{notice}</div>}
-			<div className={cn("flex shrink-0 items-center py-2", collapsed ? "justify-center" : "px-2")}>
-				{collapsed ? (
-					<Button variant="ghost" size="icon-sm" className="text-ink-2" aria-label="Settings">
-						<SettingsIcon />
-					</Button>
-				) : (
-					<div className="flex w-full flex-col">
-						<Button
-							variant="ghost"
-							className="w-full justify-start gap-2.5 px-2.5 font-normal text-ink-2"
-							onClick={onConnections}
-						>
-							<PlugIcon />
-							Connections
-						</Button>
-						<Button
-							variant="ghost"
-							className="w-full justify-start gap-2.5 px-2.5 font-normal text-ink-2"
-							onClick={onSettings}
-						>
-							<SettingsIcon />
-							Settings
-						</Button>
-					</div>
-				)}
-			</div>
+			{collapsed ? (
+				<div className="flex shrink-0 justify-center py-2">
+					<Menu waiting={waiting} onSkills={onSkills} onConnections={onConnections} onSettings={onSettings} />
+				</div>
+			) : null}
 		</nav>
+	);
+}
+
+/** The menu: Skills, Connections, Settings; a dot on it, and on an item, while something there waits on the owner. */
+function Menu({
+	waiting,
+	onSkills,
+	onConnections,
+	onSettings,
+}: {
+	waiting: { readonly skills?: boolean; readonly connections?: boolean };
+	onSkills?: (() => void) | undefined;
+	onConnections?: (() => void) | undefined;
+	onSettings?: (() => void) | undefined;
+}) {
+	const any = waiting.skills === true || waiting.connections === true;
+	const items = [
+		{ label: "Skills", icon: BookOpenIcon, on: onSkills, dot: waiting.skills === true },
+		{ label: "Connections", icon: PlugIcon, on: onConnections, dot: waiting.connections === true },
+		{ label: "Settings", icon: SettingsIcon, on: onSettings, dot: false },
+	];
+	return (
+		<DropdownMenu>
+			<DropdownMenuTrigger asChild>
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					className="relative text-ink-2"
+					aria-label={any ? "Menu, something waits on you" : "Menu"}
+				>
+					<BlocksIcon />
+					{any ? <span aria-hidden="true" className="absolute top-1 right-1 size-1.5 rounded-full bg-ink" /> : null}
+				</Button>
+			</DropdownMenuTrigger>
+			<DropdownMenuContent align="end" className="min-w-40">
+				{items.map(({ label, icon: Icon, on, dot }) => (
+					<DropdownMenuItem key={label} onSelect={() => on?.()}>
+						<Icon />
+						{label}
+						{dot ? (
+							<span role="img" aria-label="waits on you" className="ml-auto size-1.5 rounded-full bg-ink" />
+						) : null}
+					</DropdownMenuItem>
+				))}
+			</DropdownMenuContent>
+		</DropdownMenu>
 	);
 }
 

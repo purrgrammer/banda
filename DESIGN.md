@@ -124,8 +124,11 @@ one that gives them one more thing to manage stays out.
   no vendor, while a routine's message only badges. The agent's face moves while it works, a dot marks it while it waits
   on the owner, and it dims while its routines are paused. The header
   holds the app's name, search (Cmd/Ctrl+K: results are rows that open the chat scrolled to that message) and a quiet
-  "+" for a new agent or group; the footer holds Connections, Settings and the daemon's notices. Collapsed, the rail shows faces
-  alone.
+  "+" for a new agent or group, and one menu: Skills, Connections, Settings. A dot on the menu, and on its item, says
+  something there waits on the owner, and the page it opens says what: a skill the box added or changed, to review; a
+  connection not reached, or an account to sign in to again. A skill the box removed has nothing to allow, and a
+  connection's change is answered in the chat, so neither lights it: the dot never cries wolf. The footer holds only the
+  daemon's notices. Collapsed, the rail shows faces alone, the menu below them.
 - **The chat** is one timeline where the owner's words, the agent's messages, events and cards share the transcript. The
   header (48px) is the agent's face and name and, under it, its presence in a word or two (working, waiting on you,
   routines paused): what it does is said once, at the foot; tapping the name opens the panel on the phone and toggles it on the desktop. The owner's messages sit on
@@ -195,7 +198,7 @@ one that gives them one more thing to manage stays out.
   A group's panel has no tabs: its members, who may be added, and archive. **New agent** is a short sheet, the face
   defaulted, a name and a personality that three tappable starters fill (Researcher, Writer, Keeper of the calendar):
   naming a friend, not filling a form. No description, no interview.
-- **Connections** is a page from the band's foot and from Settings: every service the band can work with, a tile each
+- **Connections** is a page from the band's menu and from Settings: every service the band can work with, a tile each
   (its accounts, or Connect; one not shipped yet says so), so the owner connects before any agent needs it. A chat
   that needs a connection carries the connect card instead of pointing elsewhere.
 - **Settings** is one page: the model providers (connect another, switch the band to it, sign out; the models the

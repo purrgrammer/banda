@@ -23,13 +23,14 @@ export function BandSection() {
 			<Section
 				id="sidebar"
 				title="The sidebar"
-				note="The band, search and +; Settings and the daemon's notices at the foot."
+				note="The band, search, + and the menu (Skills, Connections, Settings; a dot while something there waits on you); the daemon's notices at the foot."
 			>
 				<div className="flex h-[560px] gap-4 overflow-x-auto">
 					<Band
 						rows={ROWS}
 						selected="octo"
 						className="rounded-tile"
+						waiting={{ skills: true }}
 						notice={<BandNotice>Your computer is starting…</BandNotice>}
 					/>
 					<Band rows={ROWS} selected="octo" collapsed className="rounded-tile" />
