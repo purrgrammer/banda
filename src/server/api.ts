@@ -21,6 +21,7 @@ export type { Preview } from "../core/preview.ts";
 export type { Answer, Approving, Ask, Field, Sender as Answered } from "../core/wait.ts";
 // Each area's shapes live in its own file (slice 8's seams); this file only gathers them.
 export type * from "./api/artifacts.ts";
+export type * from "./api/band.ts";
 export type * from "./api/devices.ts";
 export type * from "./api/groups.ts";
 export type * from "./api/harnesses.ts";
@@ -30,6 +31,7 @@ export type * from "./api/tiers.ts";
 export type { OpenWait, Parked, State };
 
 import type { ArtifactsShellEvent } from "./api/artifacts.ts";
+import type { BandShellEvent } from "./api/band.ts";
 import type { DevicesShellEvent } from "./api/devices.ts";
 import type { GroupsShellEvent } from "./api/groups.ts";
 import type { HarnessesShellEvent } from "./api/harnesses.ts";
@@ -478,6 +480,7 @@ export type ShellEvent =
 	| { readonly type: "capabilities"; readonly capabilities: CapabilitiesView }
 	| { readonly type: "browsers"; readonly browsers: readonly AgentBrowserView[] }
 	| ArtifactsShellEvent
+	| BandShellEvent
 	| DevicesShellEvent
 	| GroupsShellEvent
 	| HarnessesShellEvent;

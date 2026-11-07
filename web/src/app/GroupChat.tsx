@@ -82,7 +82,8 @@ export function GroupChat({
 	/** Its log could not be read: said, with Try again. */
 	const [unread, setUnread] = useState(false);
 	const [attempted, setAttempted] = useState(0);
-	const [panel, setPanel] = useState(!phone);
+	// closed by default, like an agent's: the screen is the conversation; the face or the name opens it
+	const [panel, setPanel] = useState(false);
 	const [activity, setActivity] = useState<readonly ActivityTarget[]>();
 	const latest = row?.latest;
 	const asking = row?.asking.join(",");
@@ -155,7 +156,7 @@ export function GroupChat({
 	if (phone && panel) return panelView;
 	return (
 		<>
-			<div className="relative flex min-w-0 flex-1 flex-col bg-paper">
+			<div className="feed-scope relative flex min-w-0 flex-1 flex-col bg-paper">
 				<Header
 					name={name}
 					faces={all}
@@ -181,7 +182,7 @@ export function GroupChat({
 				/>
 				<Conversation className="flex flex-col">
 					<ConversationContent
-						scrollClassName="min-h-0 flex-1 overflow-y-auto"
+						scrollClassName="feed-scroll min-h-0 flex-1 overflow-y-auto"
 						className={`mx-auto w-full max-w-[44rem] px-4 pb-5 ${HEADER_CLEARANCE}`}
 					>
 						{group === undefined && unread ? (

@@ -799,6 +799,11 @@ effect:
   the box.
 - The daemon opens workspace files without following symlinks.
 
+`band.md` at the root is the band's own file: the agents (by id) and groups (`group:<room>`) pinned to the top of the
+band, in the owner's order. It only orders what the app shows, so it is an "after" file: in effect at once, whoever
+wrote it. With no file Sancho is pinned; the app writes it when the owner pins or unpins, and never writes over one it
+does not read.
+
 A skill is one shared prompt file, not an agent's private copy. Agents may load one by name; an owner's unquoted
 `/name` invokes a known skill. The accepted instructions are loaded before that message's first model request, as
 one recorded tool call and result; an earlier running request must not see the load without the owner's message. The

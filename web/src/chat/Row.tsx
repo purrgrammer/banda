@@ -185,7 +185,8 @@ function held(on: (() => void) | undefined) {
 
 /**
  * A pinned agent or group at the top of the band: its face large over its name, every tile the same size. It has no
- * row in the list below; what it wants of the owner rides on the face as a dot: waiting at its foot, unread at its top.
+ * row in the list below. What it wants of the owner shows in one place, at the face's foot: the unread count, or a dot
+ * while it waits on the owner with nothing unread; the name goes ink for either. A group's face keeps its member count.
  */
 export function PinnedTile({
 	row,
@@ -236,15 +237,28 @@ export function PinnedTile({
 				<span className="relative inline-flex">
 					<Flies id={row.id}>
 						{row.faces.length > 1 || first === undefined ? (
-							<FaceStack faces={row.faces} name={row.name} size="panel" waiting={state === "waiting"} />
+							<FaceStack faces={row.faces} name={row.name} size="panel" />
 						) : (
-							<Face face={first.face} name={row.name} size="panel" state={state} paused={row.paused ?? false} />
+							<Face
+								face={first.face}
+								name={row.name}
+								size="panel"
+								state={state === "working" ? "working" : "idle"}
+								paused={row.paused ?? false}
+							/>
 						)}
 					</Flies>
 					{unread ? (
 						<span
 							aria-hidden="true"
-							className="absolute top-0.5 right-0.5 size-3 rounded-full bg-ink ring-2 ring-paper-2"
+							className="absolute -right-1 -bottom-0.5 z-20 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-ink px-1.5 text-meta font-semibold text-paper ring-2 ring-paper-2"
+						>
+							{row.unread}
+						</span>
+					) : state === "waiting" ? (
+						<span
+							aria-hidden="true"
+							className="absolute right-0.5 bottom-0.5 z-20 size-3 rounded-full bg-ink ring-2 ring-paper-2"
 						/>
 					) : null}
 				</span>
@@ -265,7 +279,8 @@ export function PinnedTile({
 					title="Unpin"
 					onClick={onUnpin}
 					className={cn(
-						"absolute top-1 left-1 inline-flex size-6 items-center justify-center rounded-full bg-paper text-ink-2 shadow-composer hover:text-ink",
+						// at the top right, as a row's pin is, over the face and a group's member count
+						"absolute top-1 right-1 z-30 inline-flex size-6 items-center justify-center rounded-full bg-paper text-ink-2 shadow-composer hover:text-ink",
 						"opacity-0 group-focus-within/tile:opacity-100 group-hover/tile:opacity-100",
 						revealed && "opacity-100",
 					)}

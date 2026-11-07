@@ -119,7 +119,7 @@ export function AgentChat({
 			: [];
 	});
 	return (
-		<div className="relative flex min-w-0 flex-1 flex-col bg-paper">
+		<div className="feed-scope relative flex min-w-0 flex-1 flex-col bg-paper">
 			<Header
 				name={who.name}
 				faces={[who]}
@@ -142,7 +142,7 @@ export function AgentChat({
 			)}
 			{row === undefined ? (
 				<>
-					<div className="min-h-0 flex-1 overflow-y-auto">
+					<div className="feed-scroll min-h-0 flex-1 overflow-y-auto">
 						<div className={`mx-auto flex w-full max-w-[44rem] flex-col gap-3 px-4 pb-5 ${HEADER_CLEARANCE}`}>
 							<Run who={who} compact>
 								<Bubble>{firstWords(who.name, tools)}</Bubble>
@@ -325,7 +325,7 @@ function Timeline({
 	return (
 		<Conversation className="flex flex-col">
 			<ConversationContent
-				scrollClassName="min-h-0 flex-1 overflow-y-auto"
+				scrollClassName="feed-scroll min-h-0 flex-1 overflow-y-auto"
 				className={`mx-auto w-full max-w-[44rem] px-4 pb-5 ${HEADER_CLEARANCE}`}
 			>
 				{transcript.older ? (

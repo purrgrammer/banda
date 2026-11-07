@@ -63,7 +63,7 @@ export function ChatScreen({
 	const { width } = useContext(StageContext);
 	const phone = width === "phone";
 	return (
-		<div className="relative flex min-w-0 flex-1 flex-col bg-paper">
+		<div className="feed-scope relative flex min-w-0 flex-1 flex-col bg-paper">
 			<Header
 				name={name}
 				faces={faces}
@@ -73,7 +73,7 @@ export function ChatScreen({
 				panelOpen={panelOpen}
 				onPanel={() => {}}
 			/>
-			<div className="min-h-0 flex-1 overflow-y-auto">
+			<div className="feed-scroll min-h-0 flex-1 overflow-y-auto">
 				<div className={`mx-auto flex max-w-[44rem] flex-col gap-4 px-4 pb-5 ${HEADER_CLEARANCE}`}>{children}</div>
 			</div>
 			<div className="mx-auto flex w-full max-w-[44rem] flex-col items-center gap-2 px-3 pb-3">
@@ -306,7 +306,7 @@ export function Screens() {
 			<Section
 				id="pinned"
 				title="Pinned"
-				note="Pinned agents and groups sit above every conversation as tiles of the same size, three to a row, and leave the list. Past three the row scrolls sideways, the next tile peeking in. A tile's face carries the dots: waiting at its foot, unread at its top. Sancho is pinned from the start. Pins are kept in band.md at the workspace root. Try it: pin a row and its face grows and flies to the top row, which scrolls to it; unpin and it flies back. Hover a row for its pin, a tile for its unpin; on the phone, long-press."
+				note="Pinned agents and groups sit above every conversation as tiles of the same size, three to a row, and leave the list. Past three the row scrolls sideways, the next tile peeking in. What a tile wants of you shows in one place, at its face's foot: the unread count, or a dot while it waits on you. Sancho is pinned from the start. Pins are kept in band.md at the workspace root. Try it: pin a row and its face grows and flies to the top row, which scrolls to it; unpin and it flies back. Hover a row or a tile for its pin, at the top right; on the phone, long-press."
 				bleed
 			>
 				<PinnableBand phone={phone} />

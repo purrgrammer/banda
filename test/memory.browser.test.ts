@@ -77,7 +77,8 @@ for (const width of [390, 1440])
 				await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
 					await page.until(`document.body.textContent.includes('Mara')`);
 					await page.run(`location.hash='#/a/mara'`);
-					if (width < 768) await click(page, `document.querySelector('[aria-label="Mara: open its panel"]')`);
+					// the panel starts closed at every width: the name opens it
+					await click(page, `document.querySelector('[aria-label="Mara: open its panel"]')`);
 					await click(page, button("Memory"));
 					await fill(page, "New agent fact", "Compare direct trains first");
 					await click(page, button("Shared with the band"));

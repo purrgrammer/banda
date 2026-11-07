@@ -3,8 +3,8 @@
  * ("Using its browser…", "Thinking…"; in a group, "Mara and Sancho are working…"), shimmering while it works, or its
  * presence (waiting on you, routines paused). Said here once: the feed has no working line. It has no bar and no
  * border: they sit on one small frosted shape, so the conversation scrolls around and beneath it and keeps the screen. The face and the
- * name open the panel; on the phone a back control leads to the band. Its parent is `relative`, and the feed clears
- * it with `HEADER_CLEARANCE`.
+ * name open the panel; on the phone a back control leads to the band. Its parent is `relative feed-scope`, and the
+ * feed's scroller `feed-scroll` and clears it with `HEADER_CLEARANCE`.
  */
 import { ChevronLeftIcon, PanelRightIcon, TerminalIcon } from "lucide-react";
 import { useId } from "react";
@@ -75,8 +75,8 @@ export function Header({
 					aria-label={`${name}: open its panel`}
 					onClick={onPanel}
 				>
-					<span className="inline-flex rounded-full p-1">{face}</span>
-					<span className={cn("max-w-full truncate px-2.5 text-ui font-semibold", line === undefined && "pb-1")}>
+					<span className="inline-flex rounded-full p-2">{face}</span>
+					<span className={cn("max-w-full truncate px-3 text-ui font-semibold", line === undefined && "pb-1.5")}>
 						{name}
 					</span>
 				</button>
@@ -86,7 +86,7 @@ export function Header({
 						onClick={onActivity}
 						disabled={onActivity === undefined || paused}
 						aria-label={onActivity === undefined || paused ? undefined : `Activity: ${line}`}
-						className="max-w-full min-w-0 truncate px-2.5 pb-1 text-center text-meta text-ink-2 enabled:hover:text-ink"
+						className="max-w-full min-w-0 truncate px-3 pb-1.5 text-center text-meta text-ink-2 enabled:hover:text-ink"
 					>
 						{state === "working" && !paused ? (
 							<Shimmer as="span" aria-live="polite" duration={2.4}>
@@ -131,36 +131,33 @@ export function Header({
 
 /**
  * The shape behind the face and the name, following their outline: a circle round the face and a pill round the
- * words, melted into one where they meet (blurred, then cut at half its alpha), lifted like the composer. It lays out
- * the same boxes as what it sits behind, words hidden, so it fits any name without measuring.
+ * words, melted into one where they meet (blurred a little, then cut at half its alpha), in the chat's own paper with
+ * no line round it. It lifts with a soft shadow only once the feed scrolls under it (`header-lift`). It lays out the
+ * same boxes as what it sits behind, words hidden, so it fits any name without measuring.
  */
 function Contour({ name, line }: { name: string; line: string | undefined }) {
 	const id = useId();
 	return (
-		<div
-			aria-hidden="true"
-			className="pointer-events-none absolute inset-0 -z-10 flex flex-col items-center"
-			style={{
-				filter: `url(#${CSS.escape(id)}) drop-shadow(0 0 0.5px var(--line)) drop-shadow(0 6px 14px light-dark(oklch(0 0 0 / 7%), oklch(0 0 0 / 35%)))`,
-			}}
-		>
-			<svg width="0" height="0" className="absolute" aria-hidden="true">
-				<filter id={id} x="-20%" y="-20%" width="140%" height="140%">
-					<feGaussianBlur in="SourceGraphic" stdDeviation="5" />
-					<feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -10" />
-				</filter>
-			</svg>
-			<span className="size-[4.5rem] shrink-0 rounded-full bg-paper" />
-			<span className="-mt-1.5 flex max-w-full flex-col items-center rounded-full bg-paper px-2.5 pt-1.5 pb-1 text-transparent select-none">
-				<span className="max-w-full truncate text-ui font-semibold">{name}</span>
-				{line === undefined ? null : <span className="max-w-full truncate text-meta">{line}</span>}
-			</span>
+		<div aria-hidden="true" className="header-lift pointer-events-none absolute inset-0 -z-10">
+			<div className="flex h-full flex-col items-center" style={{ filter: `url(#${CSS.escape(id)})` }}>
+				<svg width="0" height="0" className="absolute" aria-hidden="true">
+					<filter id={id} x="-20%" y="-20%" width="140%" height="140%">
+						<feGaussianBlur in="SourceGraphic" stdDeviation="3" />
+						<feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -12" />
+					</filter>
+				</svg>
+				<span className="size-20 shrink-0 rounded-full bg-paper" />
+				<span className="-mt-2 flex max-w-full flex-col items-center rounded-full bg-paper px-3 pt-2 pb-1.5 text-transparent select-none">
+					<span className="max-w-full truncate text-ui font-semibold">{name}</span>
+					{line === undefined ? null : <span className="max-w-full truncate text-meta">{line}</span>}
+				</span>
+			</div>
 		</div>
 	);
 }
 
 /** How far the feed starts below the top, so its first message clears the floating header. */
-export const HEADER_CLEARANCE = "pt-30";
+export const HEADER_CLEARANCE = "pt-32";
 
 /** What the header says while a group works: who, in words. */
 export function workingWords(names: readonly string[]): string | undefined {

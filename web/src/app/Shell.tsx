@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FACE } from "../../../src/core/choices.ts";
 import type { CompanionView } from "../../../src/server/api.ts";
+import { pinRow, usePinnedRows } from "../areas/band.ts";
 import { archiveGroup, setGroupLimits } from "../areas/groups.ts";
 import { actOnRoutine, clickKey } from "../areas/routines.ts";
 import { useTiers } from "../areas/tiers.ts";
@@ -156,7 +157,9 @@ function Main() {
 	};
 	const where = useWhere();
 	const phone = usePhone();
-	const [panel, setPanel] = useState(true);
+	const pinned = usePinnedRows();
+	// closed by default, so the screen is the conversation; it opens for what needs room (a routine, the face tapped)
+	const [panel, setPanel] = useState(false);
 	const [sheet, setSheet] = useState(false);
 	const [searching, setSearching] = useState(false);
 	const [shortcuts, setShortcuts] = useState(false);
@@ -297,6 +300,9 @@ function Main() {
 	const band = (
 		<Band
 			rows={rows}
+			pinned={pinned}
+			onPin={pinRow}
+			phone={phone}
 			selected={selected}
 			loading={!shell.loaded}
 			{...(phone ? { className: "w-full" } : {})}
