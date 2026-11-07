@@ -93,7 +93,14 @@ in a throwaway home, at desktop and phone width.
 - [x] Agents know their own permissions: a prompt section lists them and how asking works, each effect's result says
   what let it run; tried in a forked home: Sancho named its one host permission, and after a task-scoped approval
   said the second identical POST went out without asking because of it
-- [ ] Agent trust, slice 2's walkthrough: needs a fresh GitHub sign-in and the new github.md accepted in the forked home
+- [x] Agent trust, slice 2's walkthrough: in a forked home at both widths, Access allowed Sancho to merge pull requests
+  in purrgrammer/sancho, always; the row reads "Always · Not used yet", and Sancho, asked, named it and said merging in
+  banda still asks
+- [ ] A connection banda ships is never updated in a home that added it (`addShipped` never replaces), so a home made
+  before grains never gets them; the forked home also had no connections/github.md in its workspace, a pending removal
+- [ ] Access says Revoke where DESIGN.md says Take back
+- [ ] "For this task" in an effect's result does not say the task ends with the owner's next message, so an agent
+  still counted a task's permission after it ended
 - [ ] Agent trust, slice 3: the card offers the earned place after three clean approvals, a foreign-content chat
   only that; the widest grain of a tool with no way back from Access only
 - [ ] Agent trust, slice 4: a connection's tools and groups set to Allow, Ask, Always ask or Off in Settings
