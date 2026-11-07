@@ -3,6 +3,7 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { eventWhen } from "../chat/Object.tsx";
+import { wallOf, withWall } from "../lib/wall.ts";
 
 /** The Calendar changes a draft may be, by the tool's own name. */
 export const CALENDAR_DRAFT = /^calendar__(create_event|update_event|respond_to_event|delete_event)$/;
@@ -100,6 +101,15 @@ export function EventDraftPreview({
 							placeholder={name === "attendees" ? "Email addresses, separated by commas" : undefined}
 							className={`bg-paper text-body ${name === "description" ? "min-h-24" : "min-h-12"}`}
 							onChange={(event) => onEdit(name, event.target.value)}
+						/>
+					) : name === "start" || name === "end" ? (
+						// a picker of the wall clock the event was given in; a time keeps its offset when changed
+						<Input
+							id={`${id}-${name}`}
+							type={/^\d{4}-\d{2}-\d{2}$/.test(wallOf(value(name))) ? "date" : "datetime-local"}
+							value={wallOf(value(name))}
+							readOnly={readOnly}
+							onChange={(event) => onEdit(name, withWall(value(name), event.target.value))}
 						/>
 					) : (
 						<Input

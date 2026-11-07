@@ -27,9 +27,10 @@ export const objects: MessagePart = {
 		),
 	},
 	describe:
-		"In `text`, name a thing in a connection as a link, [its name](its address or id, such as calendar/<id>): the " +
-		"owner sees its name and opens its card from there. Give `objects` (links or ids) to show one as its card " +
-		"beneath the message; the owner sees what the service says of it now.",
+		"In `text`, write every email, event, person, file, pull request or issue you mention from a connection as a " +
+		"link, [its name](its address or id, such as calendar/<id>), never as a bare id: the owner sees its name and " +
+		"opens its card from there. Give `objects` (links or ids) to show one as its card beneath the message; the " +
+		"owner sees what the service says of it now.",
 	present: (args) => named(args).length > 0,
 	refuse: (args) => {
 		if (args.objects === undefined) return undefined;
