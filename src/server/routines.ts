@@ -487,6 +487,11 @@ export async function control(
 			...(permission.scope === "host" && typeof permission.match._host === "string"
 				? { host: permission.match._host }
 				: {}),
+			...(permission.tool.includes("__")
+				? { connection: permission.tool.slice(0, permission.tool.indexOf("__")) }
+				: {}),
+			...(permission.grain === undefined ? {} : { grain: permission.grain }),
+			...(permission.ran === undefined ? {} : { ran: { ...permission.ran } }),
 			...(serves === undefined ? {} : { serves }),
 		}),
 	);

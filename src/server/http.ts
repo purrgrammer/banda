@@ -16,6 +16,7 @@ import { avatarIcons, avatarManifest, ICON_FILES, type IconPath } from "../core/
 import { type Attachment, safeName, sizeOf, tooBig } from "../core/blobs.ts";
 
 import { INLINE_IMAGES, mainAgentOf, mimeOf, OWNER } from "../core/gateway.ts";
+import type { GrainAsked } from "../core/grains.ts";
 import type { PermissionScope } from "../core/permissions.ts";
 import { FULL, GLIMPSE, type Preview, preview } from "../core/preview.ts";
 import type { Approving } from "../core/wait.ts";
@@ -75,6 +76,8 @@ export type Routes = {
 	readonly revoke: (id: string) => Promise<ControlView | undefined>;
 	/** Allow agent `agent` to send anything to `host` (a host, `*.example.com` or `*`); throws `BadRequest` with why not. */
 	readonly allowHost: (agent: string, host: string) => Promise<ControlView>;
+	/** Allow a write ahead at a wider grain, as the owner, from the agent's Access; throws `BadRequest` with why not. */
+	readonly allowGrain: (asked: GrainAsked) => Promise<ControlView>;
 	readonly chats: () => Promise<ChatRow[]>;
 	/** Mark at most the displayed entry read; false when no chat has that id. */
 	readonly read: (chat: number, through: number) => Promise<boolean>;
@@ -635,6 +638,40 @@ export function handler(
 		if (revoking !== null && req.method === "POST") {
 			const after = await routes.revoke(revoking[1] ?? "");
 			return after === undefined ? reply(res, 404, { error: "no such permission" }) : reply(res, 200, after);
+		}
+		const granting = /^\/agents\/([a-z0-9-]+)\/permissions$/.exec(path);
+		if (granting !== null && req.method === "POST") {
+			const { connection, tool, account, grain, place, scope, until } = await json(req);
+			if (
+				typeof connection !== "string" ||
+				typeof tool !== "string" ||
+				typeof account !== "string" ||
+				(grain !== "place" && grain !== "action") ||
+				(place !== undefined &&
+					(typeof place !== "object" ||
+						place === null ||
+						Array.isArray(place) ||
+						Object.values(place).some((value) => typeof value !== "string"))) ||
+				(scope !== "always" && scope !== "until") ||
+				(scope === "until" && typeof until !== "number")
+			)
+				return reply(res, 400, {
+					error:
+						'give connection, tool, account, grain ("place" or "action"), place for a place, and scope ("always", or "until" with until)',
+				});
+			return reply(
+				res,
+				200,
+				await routes.allowGrain({
+					agent: granting[1] ?? "",
+					connection,
+					tool,
+					account,
+					grain,
+					...(place === undefined ? {} : { place: place as { [placeholder: string]: string } }),
+					scope: scope === "until" ? { scope, until: until as number } : { scope },
+				}),
+			);
 		}
 		const hosting = /^\/agents\/([a-z0-9-]+)\/hosts$/.exec(path);
 		if (hosting !== null && req.method === "POST") {

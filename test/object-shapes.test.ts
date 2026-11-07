@@ -287,7 +287,11 @@ it("words a write's wider grains from its kinds: one verb, their plurals, and th
 	if (!("objects" in parsed)) throw new Error(parsed.errors.join("; "));
 	expect(grainsOf("merge_pull_request", parsed.objects)).toEqual({
 		what: "merge pull requests",
-		place: { words: "merge pull requests in {owner}/{repo}", args: { owner: "owner", repo: "repo" } },
+		place: {
+			words: "merge pull requests in {owner}/{repo}",
+			place: "{owner}/{repo}",
+			args: { owner: "owner", repo: "repo" },
+		},
 		action: { words: "merge pull requests anywhere" },
 	});
 	expect(grainsOf("add_issue_comment", parsed.objects)).toMatchObject({

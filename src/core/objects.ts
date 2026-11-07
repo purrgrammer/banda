@@ -616,7 +616,11 @@ export function grainsOf(
 ):
 	| {
 			readonly what: string;
-			readonly place?: { readonly words: string; readonly args: { readonly [placeholder: string]: string } };
+			readonly place?: {
+				readonly words: string;
+				readonly place: string;
+				readonly args: { readonly [placeholder: string]: string };
+			};
 			readonly action?: { readonly words: string };
 	  }
 	| undefined {
@@ -642,7 +646,7 @@ export function grainsOf(
 			({ kind, write }) =>
 				kind.place === template && Object.entries(args).every(([each, arg]) => write.id[each] === arg),
 		);
-		return same ? { words: `${what} in ${template}`, args } : undefined;
+		return same ? { words: `${what} in ${template}`, place: template, args } : undefined;
 	})();
 	if (place === undefined && !allows("action")) return undefined;
 	return {

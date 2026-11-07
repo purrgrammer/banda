@@ -22,7 +22,7 @@ import { oneEmoji } from "./choices.ts";
 import { mimeOf } from "./gateway.ts";
 import { MESSAGE_PARTS } from "./parts/index.ts";
 import type { MessagePart } from "./parts/part.ts";
-import { covering, type Floor, offering, type PermissionScope, type ScopeKind } from "./permissions.ts";
+import { countRan, covering, type Floor, offering, type PermissionScope, type ScopeKind } from "./permissions.ts";
 import { MESSAGE_AGENT, MESSAGE_GROUP, MESSAGE_USER, READ_AGENT_CHAT } from "./toolsets.ts";
 import { type Answer, type Ask, TasksOf, type WaitResult } from "./wait.ts";
 
@@ -617,6 +617,8 @@ export function effect<P extends TSchema>(asking: Asking, tool: EffectTool<P>): 
 			if (found === undefined) return undefined;
 			const run = await tx.doc(EffectRun, api.taskId);
 			run.draft ??= JSON.parse(JSON.stringify(draft.args)) as JsonObject;
+			// an idempotent rerun after a restart starts the same attempt again: it ran once
+			if (run.started[attempt] === undefined) await countRan(tx, found.id, now);
 			run.started[attempt] = { permission: found.id };
 			const { permission } = found;
 			const ran: EffectRan = {

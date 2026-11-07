@@ -18,6 +18,7 @@ import {
 import { type Origin, OWNER, type Strength } from "./gateway.ts";
 import {
 	agentOfChat,
+	countRan,
 	covering,
 	type Errand,
 	errandOf,
@@ -379,16 +380,30 @@ export async function fill(
 			...(permission.scope === "until" ? { until: permission.until } : {}),
 		};
 		slot.permission = permitted;
-		// never ask twice: the open asks the new permission covers are answered by it, in this commit
-		for (const other of covered) {
-			const answers = await tx.doc(Answers, other as TaskId);
-			answers.answer = "approve";
-			answers.by = sender;
-			answers.at = now;
-			answers.permission = { ...permitted };
-		}
+		await answerCovered(tx, covered, permitted, sender, now);
 	}
 	return { answered: id, chat };
+}
+
+/**
+ * Never ask twice: answer the open asks `covered` (`coveredAsks`, read before the commit's first write) with the
+ * permission just given, `permitted`, in the commit that gives it; each counts as an effect it let run.
+ */
+export async function answerCovered(
+	tx: Tx,
+	covered: readonly number[],
+	permitted: { readonly id: string; readonly scope: PermissionScope["scope"]; readonly until?: number },
+	sender: Sender,
+	now: number,
+): Promise<void> {
+	for (const other of covered) {
+		const answers = await tx.doc(Answers, other as TaskId);
+		answers.answer = "approve";
+		answers.by = sender;
+		answers.at = now;
+		answers.permission = { ...permitted };
+	}
+	await countRan(tx, permitted.id, now, covered.length);
 }
 
 /** Close an unanswered question without inventing an answer; only the owner can dismiss it. */
@@ -421,7 +436,7 @@ export async function dismissQuestion(
  * same tool and bound values, open for that ask's task, never on the floor or for a run again, and only in the chats
  * of its agent. Reads only.
  */
-async function coveredAsks(
+export async function coveredAsks(
 	tx: Tx,
 	id: number,
 	given: { tool: string; shape: PermissionShape; scope: PermissionScope; errand: Errand; agent: string | undefined },
@@ -630,6 +645,7 @@ async function coveredAtStart(tx: Tx, ask: Ask, chat: number, id: TaskId, now: n
 		scope: found.permission.scope,
 		...(found.permission.until === undefined ? {} : { until: found.permission.until }),
 	};
+	await countRan(tx, found.id, now);
 }
 
 /**

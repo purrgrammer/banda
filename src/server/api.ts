@@ -8,6 +8,7 @@ import type { Audience, Fact } from "../core/memory.ts";
 export type { AvatarFace } from "../core/avatar-face.ts";
 
 import type { Origin, Received } from "../core/gateway.ts";
+import type { Grain } from "../core/objects.ts";
 import type { Floor, PermissionScope, Serves } from "../core/permissions.ts";
 import type { OpenWait, Parked, State } from "../core/status.ts";
 import type { Answer, WaitEnded } from "../core/wait.ts";
@@ -575,6 +576,12 @@ export type PermissionView = {
 	readonly agent?: string;
 	/** For a host's: the host it allows, as the proxy spells it (`*.example.com`, `*` for every host). */
 	readonly host?: string;
+	/** For a connection's tool: the connection (`github`), which Access groups it under. */
+	readonly connection?: string;
+	/** The grain it was given at, wider than one object (`POST /api/agents/:agent/permissions`); absent, exactly. */
+	readonly grain?: Grain;
+	/** What it let run: how many effects, and when the last one started. */
+	readonly ran?: { readonly count: number; readonly last: number };
 	/** What it serves: the task it was given in, or the routine whose run asked; Permissions groups by it. */
 	readonly serves?: Serves;
 };
@@ -639,6 +646,16 @@ export type ConnectionToolView = {
 	readonly needs?: readonly string[];
 	/** What the server says of it (`readOnlyHint`): only reads, or changes something; absent when it said nothing. */
 	readonly hint?: "reads" | "changes";
+	/**
+	 * For a write its connection's objects let be allowed wider than one object: what it does ("merge pull requests"),
+	 * each grain's words before " as " and the account, the place's with its placeholders still to fill, and the place
+	 * itself ("merge pull requests in {owner}/{repo}", "{owner}/{repo}"). `POST /api/agents/:agent/permissions` gives one.
+	 */
+	readonly grains?: {
+		readonly what: string;
+		readonly place?: { readonly words: string; readonly place: string };
+		readonly action?: { readonly words: string };
+	};
 };
 
 /**

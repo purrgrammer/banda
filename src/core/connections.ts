@@ -491,6 +491,10 @@ export function accountKey(id: string): string {
 		: `a-${createHash("sha256").update(id).digest("hex").slice(0, 16)}`;
 }
 
+/** The argument a connection's tool takes its account in: `account`, unless the server's own tool has one so named. */
+export const accountArg = (schema: JsonObject) =>
+	(schema.properties as { [key: string]: unknown } | undefined)?.account === undefined ? "account" : "as_account";
+
 /** An account as the owner reads it: "@bandarra", or an address as it is. */
 export const accountLabel = (id: string) => (/[@\s]/.test(id) ? id : `@${id}`);
 

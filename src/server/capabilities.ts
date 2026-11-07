@@ -48,6 +48,7 @@ import { EffectRun, type EffectTool, toolWords } from "../core/ask.ts";
 import { type BlobStore, Blobs, hasBlobHash, releaseConnection } from "../core/blobs.ts";
 import {
 	acceptedConnection,
+	accountArg,
 	accountKey,
 	accountLabel,
 	accountsOn,
@@ -127,6 +128,7 @@ import {
 	draftedOn,
 	editableOf,
 	forgetReadings,
+	grainsOf,
 	nameOf,
 	type ObjectRef,
 	readArgs,
@@ -187,10 +189,6 @@ type Finished = {
 	readonly known: boolean;
 	readonly at: number;
 };
-
-/** The argument a connection's tool takes its account in: `account`, unless the server's own tool has one so named. */
-const accountArg = (schema: JsonObject) =>
-	(schema.properties as { [key: string]: unknown } | undefined)?.account === undefined ? "account" : "as_account";
 
 /** `args` without `arg`: what the server is sent, the account being the daemon's to choose, never the server's. */
 const without = (args: unknown, arg: string): JsonObject => {
@@ -1432,6 +1430,32 @@ export function openCapabilities(options: CapabilityOptions) {
 											}
 										: {}),
 									...(floor === undefined ? {} : { floor }),
+									...(() => {
+										const grains =
+											floor === undefined &&
+											connection.command === undefined &&
+											!connection.reads.includes(tool) &&
+											connection.readsWhen?.[tool] === undefined &&
+											!(connection.ask === "always")
+												? grainsOf(tool, connection.objects)
+												: undefined;
+										return grains === undefined
+											? {}
+											: {
+													grains: {
+														what: grains.what,
+														...(grains.place === undefined
+															? {}
+															: {
+																	place: {
+																		words: grains.place.words,
+																		place: grains.place.place,
+																	},
+																}),
+														...(grains.action === undefined ? {} : { action: grains.action }),
+													},
+												};
+									})(),
 									on: inEffectNow.some((each) => each.name === model),
 									...(missingFor(model).length === 0 ? {} : { needs: missingFor(model) }),
 								};

@@ -32,6 +32,7 @@ import { Companion } from "./companion.ts";
 
 import { FLOOR_WORDS, type Floor } from "./floor.ts";
 import { allowedHost, hostCovers } from "./hosts.ts";
+import type { Grain } from "./objects.ts";
 import { WAKE, type WakeData } from "./routines.ts";
 import { context } from "./store.ts";
 
@@ -90,9 +91,13 @@ export type Permission = {
 	readonly task?: Errand;
 	/** The task it was given in, whatever its scope: what it serves. */
 	readonly from?: Errand;
-	/** The agent of the chat it was given in; a host permission covers only that agent's chats. */
+	/** The agent it was given to: it covers only that agent's chats. */
 	readonly agent?: string;
-	/** When it was given, and by which approval (its Wait). */
+	/** The grain it was given at, wider than the one object its tool binds by default; absent, exactly that. */
+	readonly grain?: Grain;
+	/** What it let run: how many effects, and when the last one started. */
+	readonly ran?: { readonly count: number; readonly last: number };
+	/** When it was given, and by which approval (its Wait; 0, by the owner directly). */
 	readonly at: number;
 	readonly wait: number;
 };
@@ -276,6 +281,18 @@ export async function covering(
 }
 
 /**
+ * Count `count` effects that permission `id` let run, at `now`: in the commit that admits them, so what it let run is
+ * never more or less than what started within it.
+ */
+export async function countRan(tx: Tx, id: string, now: number, count = 1): Promise<void> {
+	if (count === 0) return;
+	const doc = await tx.doc(Permissions);
+	const permission = doc.permissions[id];
+	if (permission === undefined) return;
+	doc.permissions[id] = { ...permission, ran: { count: (permission.ran?.count ?? 0) + count, last: now } };
+}
+
+/**
  * The scopes an ask may offer, in order: the task's first, the primary choice; a host's last, only with a host shape.
  * "This once" is no scope, always offered.
  */
@@ -415,7 +432,7 @@ export async function give(
 }
 
 /** For how long, in the daemon's words: the time in its own zone, which is the owner's machine's. */
-const permissionWhen = (scope: PermissionScope) =>
+export const permissionWhen = (scope: PermissionScope) =>
 	scope.scope === "always" || scope.scope === "host"
 		? "always"
 		: scope.scope === "task"

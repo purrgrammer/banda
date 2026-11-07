@@ -47,6 +47,7 @@ import { pause, pauseRoutine, resume } from "./core/control.ts";
 import { GIT_HOSTS, proposeSendTool, proxyKnows, sweepSent } from "./core/egress.ts";
 import { dropEmptyReplies } from "./core/empty-replies.ts";
 import { type Gateway, INLINE_IMAGES, mimeOf, OWNER, routeKey } from "./core/gateway.ts";
+import { allowGrain } from "./core/grains.ts";
 import { guardImages } from "./core/images.ts";
 import { MemoryLock, memoryExtension } from "./core/memory.ts";
 import { nowExtension } from "./core/now.ts";
@@ -724,6 +725,12 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						// the proxy is told before the owner hears it is allowed; if it cannot be, it is tried again
 						// with every change, and a write there is held meanwhile, never sent unrecorded
 						await tellProxy().catch(() => undefined);
+						return control(open, workspace, now);
+					},
+					allowGrain: async (asked) => {
+						const now = Date.now();
+						const allowed = await allowGrain(open, asked, now);
+						if ("refused" in allowed) throw new BadRequest(allowed.refused);
 						return control(open, workspace, now);
 					},
 					revoke: async (id) => {

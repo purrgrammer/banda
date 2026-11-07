@@ -222,6 +222,8 @@ describe("permissions", () => {
 				at: expect.any(Number),
 			},
 		]);
+		// what it let run: the second send, never the approval that gave it
+		expect((await openPermissions(harness, s.now()))[0]?.permission.ran).toMatchObject({ count: 1 });
 		const third = await s.say(harness, [{ tool: "send", to: "bob", body: "hello" }]);
 		expect((await nextAsk(harness, third.turn)).wait?.ask).toMatchObject({ args: { to: "bob" } });
 		await harness.close(context);
@@ -553,6 +555,8 @@ describe("the scopes an ask offers", () => {
 		expect(ended).toMatchObject([{ outcome: "answered", answer: "approve", permitted: { scope: "always" } }]);
 		const permissions = await openPermissions(harness, s.now());
 		expect(permissions).toHaveLength(1);
+		// the ask it answered in the commit that gave it is what it let run; the approval that gave it is not
+		expect(permissions[0]?.permission.ran).toEqual({ count: 1, last: expect.any(Number) });
 		// what it serves: the task it was given in, titled by the owner's words
 		expect(permissions[0]?.serves).toEqual({ kind: "task", chat: one.chat, input: expect.any(Number), title: "m1" });
 		const events = (await harness.snapshot(ActivityLog, context))!.events.map((event) => event.what);
