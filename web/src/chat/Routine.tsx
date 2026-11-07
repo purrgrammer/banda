@@ -57,8 +57,8 @@ export function RoutineProposal({
 					: `It wakes ${routine.agent} on its own; what it finds lands here, and it stays quiet when nothing does.`}
 			</p>
 			{settled !== undefined ? (
-				<span className="flex items-center gap-1.5 text-ui text-ink-2">
-					<CheckIcon className="size-4 text-ink" />
+				<span className="flex min-h-9 items-center gap-1.5 text-ui text-ink-2">
+					<CheckIcon className="size-4 text-alive" />
 					{settled}
 				</span>
 			) : (

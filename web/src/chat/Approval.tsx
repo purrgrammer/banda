@@ -118,12 +118,13 @@ export function ApprovalCard({
 					</span>
 				</>
 			) : state.kind === "done" ? (
-				<span className="flex items-center gap-1.5 text-ui text-ink-2">
-					<CheckIcon className="size-4 text-ink" />
+				// as tall as the buttons it replaces: the card keeps its height when it settles, until it folds
+				<span className="flex min-h-9 items-center gap-1.5 text-ui text-ink-2">
+					<CheckIcon className="size-4 text-alive" />
 					{state.words}
 				</span>
 			) : (
-				<span className="flex items-center gap-1.5 text-ui text-ink-2">
+				<span className="flex min-h-9 items-center gap-1.5 text-ui text-ink-2">
 					<XIcon className="size-4" />
 					You said no: didn't {verb.toLowerCase()}
 				</span>

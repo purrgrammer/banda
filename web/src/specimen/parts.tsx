@@ -207,6 +207,18 @@ export function Parts() {
 				note="The daemon's card, the same for every agent: who it acts as, the verb is the button, the quiet one says what it won't do, at most one scope, never ticked until the owner ticks it. Money gets its facts. A service's tool with no words of its own is named as it is, with Allow."
 			>
 				<div className="flex max-w-2xl flex-col gap-3">
+					<Group label="Allow → Approved · same card height" className="flex-col items-start">
+						{(["open", "done"] as const).map((kind) => (
+							<ApprovalCard
+								key={kind}
+								agent="Sancho"
+								what="Use GitHub's label_write as @purrgrammer"
+								verb="Allow"
+								as="@purrgrammer on GitHub"
+								state={kind === "open" ? { kind } : { kind, words: "Approved" }}
+							/>
+						))}
+					</Group>
 					<ApprovalCard
 						agent="Octo"
 						what="Comment on purrgrammer/banda #34"
