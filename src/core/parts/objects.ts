@@ -1,8 +1,8 @@
 /**
- * Objects an agent shows (DESIGN.md "Connections", objects): a pull request, an issue, a check run, a notification,
- * named by its link or id. The app draws each as the daemon's card beneath the message, read as the account the agent
- * uses; a link in the text draws the same. The agent names the thing alone: what the card says is the daemon's reading,
- * never the model's words.
+ * Objects an agent shows (DESIGN.md "Connections", objects): a pull request, an issue, an email, an event, a person, a
+ * file, named by its link or id. The app draws each as the daemon's card beneath the message, read as the account the
+ * agent uses; one named in the text stays in the text, as its name, and opens its card there. The agent names the thing
+ * alone: what the card says is the daemon's reading, never the model's words.
  */
 import { Type } from "@earendil-works/pi-ai";
 import type { JsonObject } from "@earendil-works/pi-durable";
@@ -21,13 +21,15 @@ export const objects: MessagePart = {
 				maxItems: MAX_OBJECTS,
 				description:
 					"Things in a connection to show as cards beneath the message, each by its link or id (a pull request's " +
-					"or an issue's https://github.com/… address, owner/repo#34, a notification as notification/<its id>).",
+					"or an issue's https://github.com/… address, owner/repo#34, notification/<id>, gmail/<id>, calendar/<id>, " +
+					"contacts/<id>, drive/<id>). Only what the owner should see whole; name the rest in the text.",
 			}),
 		),
 	},
 	describe:
-		"Give `objects` (links or ids) to show a pull request, an issue, a check run or a notification as its card; a " +
-		"link to one in `text` draws its card too. The owner sees what the service says of it now.",
+		"In `text`, name a thing in a connection as a link, [its name](its address or id, such as calendar/<id>): the " +
+		"owner sees its name and opens its card from there. Give `objects` (links or ids) to show one as its card " +
+		"beneath the message; the owner sees what the service says of it now.",
 	present: (args) => named(args).length > 0,
 	refuse: (args) => {
 		if (args.objects === undefined) return undefined;

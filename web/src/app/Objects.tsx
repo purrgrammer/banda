@@ -1,6 +1,7 @@
 /** Message refs are only names. Every displayed fact comes from the daemon's account-bound reading. */
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { EmailCard as EmailObject } from "../../../src/core/objects.ts";
 import type { ObjectAsk, ObjectShown } from "../../../src/server/objects.ts";
 import { Tile } from "../chat/Cards.tsx";
@@ -23,39 +24,50 @@ import {
 } from "../chat/Object.tsx";
 import { Markdown, MarkdownLinks } from "../components/Markdown.tsx";
 import { api, gmailAttachment } from "../lib/api.ts";
-import { githubKey, objectAsks } from "../lib/objects.ts";
+import { githubKey, idLinks, idOfLink, objectAsks } from "../lib/objects.ts";
 import { sizeOf } from "../lib/size.ts";
 import { ConnectFlowCard } from "./ConnectFlow.tsx";
 import { FilePart } from "./FilePart.tsx";
 
 export function MessageObjects({
 	chat,
-	text,
 	objects,
 	agent,
 }: {
 	chat: number;
-	text: string;
 	objects?: readonly string[] | undefined;
 	agent?: { readonly id: string; readonly name: string } | undefined;
 }) {
-	return <ObjectPreviews chat={chat} asks={objectAsks(text, objects)} agent={agent} explicit={objects} />;
+	// only what the message shows: an object the prose names stays in the prose
+	return <ObjectPreviews chat={chat} asks={objectAsks("", objects)} agent={agent} explicit={objects} />;
 }
 
-/** Owner references stay inside the prose. Unreadable/unknown links remain usable, never become cards. */
-export function OwnerMessage({
+/** A link to an id, not an address, has nothing to open: its words. */
+const wordsOfIds = (href: string, children: ReactNode) =>
+	href.startsWith("object:") ? <span>{children}</span> : undefined;
+
+/**
+ * A message's prose, anyone's: an object it names stays inside the words as its icon and name, and opens its card when
+ * clicked. Unreadable or unknown links remain usable; an id that names nothing readable is its words.
+ */
+export function MessageText({
 	chat,
 	text,
 	agent,
+	shown = [],
 }: {
 	chat: number;
 	text: string;
 	agent?: { readonly id: string; readonly name: string } | undefined;
+	/** What the message shows as cards beneath it: named in the prose too, it stays the prose's words, read once. */
+	shown?: readonly string[] | undefined;
 }) {
-	const asks = objectAsks(text);
+	const asks = objectAsks(text).filter((ask) => !("ref" in ask) || !shown.includes(ask.ref));
 	const request = JSON.stringify(asks.map((ask) => ({ ...ask, ...(agent === undefined ? {} : { agent: agent.id }) })));
 	return asks.length === 0 ? (
-		<Markdown>{text}</Markdown>
+		<MarkdownLinks.Provider value={wordsOfIds}>
+			<Markdown>{idLinks(text)}</Markdown>
+		</MarkdownLinks.Provider>
 	) : (
 		<ReadObjects
 			key={`${chat}:${request}`}
@@ -65,6 +77,37 @@ export function OwnerMessage({
 			explicit={[]}
 			inlineText={text}
 		/>
+	);
+}
+
+/** An object named in prose: its icon and name, which open its card; the card links out to the service. */
+function InlineObject({
+	chat,
+	reading,
+	agent,
+	href,
+}: {
+	chat: number;
+	reading: Extract<ObjectShown, { shown: "card" }>;
+	agent: { readonly id: string; readonly name: string } | undefined;
+	href: string;
+}) {
+	if (reading.card.card === "notification") return null;
+	return (
+		<Popover>
+			<PopoverTrigger asChild>
+				<button
+					type="button"
+					className="inline max-w-full cursor-pointer rounded-sm align-baseline underline decoration-dotted underline-offset-2"
+					title={href}
+				>
+					<ObjectLink object={reading.card} href="" />
+				</button>
+			</PopoverTrigger>
+			<PopoverContent align="start" className="w-[min(28rem,calc(100vw-2rem))] p-0">
+				<ObjectReading chat={chat} shown={reading} agent={agent} />
+			</PopoverContent>
+		</Popover>
 	);
 }
 
@@ -149,17 +192,24 @@ function ReadObjects({
 		const asks = JSON.parse(request) as ObjectAsk[];
 		return (
 			<MarkdownLinks.Provider
-				value={(href) => {
+				value={(link, children) => {
+					const href = idOfLink(link);
 					const key = githubKey(href);
 					const index = asks.findIndex(
 						(ask) => "ref" in ask && (ask.ref === href || (key !== undefined && githubKey(ask.ref) === key)),
 					);
 					const reading = shown?.[index];
-					if (reading?.shown !== "card" || reading.card.card === "notification") return undefined;
-					return <ObjectLink object={reading.card} href={href} />;
+					// an address goes where it was written; an id has nowhere to go but its card, which it opens
+					if (reading?.shown === "card" && reading.card.card !== "notification")
+						return /^https?:/i.test(href) ? (
+							<ObjectLink object={reading.card} href={href} />
+						) : (
+							<InlineObject chat={chat} reading={reading} agent={agent} href={href} />
+						);
+					return wordsOfIds(link, children);
 				}}
 			>
-				<Markdown>{inlineText}</Markdown>
+				<Markdown>{idLinks(inlineText)}</Markdown>
 			</MarkdownLinks.Provider>
 		);
 	}

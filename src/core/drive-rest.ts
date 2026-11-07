@@ -32,7 +32,7 @@ export const DRIVE_TOOLS: McpTool[] = [
 	tool("get_profile", "Read the signed-in Google account's address.", {}),
 	tool(
 		"search_files",
-		"Find files in Google Drive, newest first unless text is given (then by relevance); trashed files are left out. Returns a ref for each file: include them as drive/<id> references in your answer so banda shows file cards. Use page_token with a returned nextPageToken to continue.",
+		"Find files in Google Drive, newest first unless text is given (then by relevance); trashed files are left out. Returns a ref for each file. Name each in your answer as a link, [its name](drive/<id>); to show cards, give them in the message's objects. Use page_token with a returned nextPageToken to continue.",
 		{
 			text: { type: "string", maxLength: 200, description: "Words to find in the files' names and contents" },
 			query: {
@@ -47,7 +47,7 @@ export const DRIVE_TOOLS: McpTool[] = [
 	),
 	tool(
 		"get_file",
-		"Read one file's details: its name, type, owner, when it changed, its size and description. Include its drive/<id> reference in your answer so banda shows its card.",
+		"Read one file's details: its name, type, owner, when it changed, its size and description. Name it in your answer as a link, [its name](drive/<id>); to show cards, give them in the message's objects.",
 		{ file_id: fileId },
 		["file_id"],
 	),

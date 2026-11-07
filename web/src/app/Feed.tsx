@@ -40,7 +40,7 @@ import { DraftApproval } from "./DraftApproval.tsx";
 import { FilePart } from "./FilePart.tsx";
 import { HarnessSessionPart } from "./HarnessSession.tsx";
 import { LiveView } from "./LiveBrowser.tsx";
-import { MessageObjects, OwnerMessage } from "./Objects.tsx";
+import { MessageObjects, MessageText } from "./Objects.tsx";
 import { AskRef, approvalKind, didNotWords, didWords, sawOpen, wasOpen } from "./Settled.tsx";
 import { routineTitle } from "./titles.ts";
 
@@ -570,7 +570,7 @@ function partOf(
 							{segment.queued ? (
 								<Markdown>{segment.text}</Markdown>
 							) : (
-								<OwnerMessage chat={chat} text={segment.text} agent={objectAgent} />
+								<MessageText chat={chat} text={segment.text} agent={objectAgent} />
 							)}
 						</Bubble>
 					)}
@@ -586,7 +586,7 @@ function partOf(
 				<>
 					{segment.text.trim() === "" ? null : (
 						<Bubble mine reaction={segment.reaction} copy={segment.text}>
-							<OwnerMessage chat={chat} text={segment.text} agent={objectAgent} />
+							<MessageText chat={chat} text={segment.text} agent={objectAgent} />
 						</Bubble>
 					)}
 					{segment.files.map((file) => (
@@ -603,7 +603,7 @@ function partOf(
 					{segment.undelivered ? (
 						<span className="px-1 text-meta text-danger">Not delivered</span>
 					) : (
-						<MessageObjects chat={chat} text={segment.text} objects={segment.objects} agent={objectAgent} />
+						<MessageObjects chat={chat} objects={segment.objects} agent={objectAgent} />
 					)}
 				</>
 			);
@@ -618,7 +618,7 @@ function partOf(
 			return (
 				<>
 					<Bubble copy={segment.text} onActivity={onActivity}>
-						<Markdown>{segment.text}</Markdown>
+						<MessageText chat={chat} text={segment.text} agent={objectAgent} shown={segment.objects} />
 					</Bubble>
 					{parts}
 				</>

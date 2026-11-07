@@ -14,7 +14,7 @@ import { BlobFile, linkedBlob } from "./Blob.tsx";
 import { MentionChip, useMentioned } from "./MentionChip.tsx";
 
 /** Optional, message-scoped rich links; ordinary markdown and code stay untouched. */
-export const MarkdownLinks = createContext<((href: string) => ReactNode) | undefined>(undefined);
+export const MarkdownLinks = createContext<((href: string, children: ReactNode) => ReactNode) | undefined>(undefined);
 
 /**
  * A link: one to a blob (`[name](sha256:<hex>)`) is the file itself; a mention of a known agent its chip; any other
@@ -27,7 +27,7 @@ function Link({ href, children, node: _node, ...props }: ComponentProps<"a"> & {
 	const sha = linkedBlob(href);
 	if (sha !== undefined)
 		return <BlobFile sha={sha} name={typeof children === "string" ? children : "file"} download="right" />;
-	const rich = href === undefined ? undefined : richLink?.(href);
+	const rich = href === undefined ? undefined : richLink?.(href, children);
 	if (rich != null) return rich;
 	return (
 		<a href={href} target="_blank" rel="noreferrer" {...props} data-markdown-link="">
@@ -39,10 +39,26 @@ function Link({ href, children, node: _node, ...props }: ComponentProps<"a"> & {
 const loading = import("streamdown");
 const Streamdown = lazy(async () => {
 	const { Streamdown, defaultRehypePlugins, defaultUrlTransform } = await loading;
-	const rehypePlugins = [...Object.values(defaultRehypePlugins), blocksApart];
-	// a blob link survives; every other URL is made safe as Streamdown makes it
+	// sanitizing keeps a link to an object's id (object:calendar/<id>), which only names a card banda reads itself
+	const [sanitize, schema] = defaultRehypePlugins.sanitize as unknown as [
+		unknown,
+		{ readonly protocols?: { readonly href?: readonly string[] } },
+	];
+	const plugins = {
+		...defaultRehypePlugins,
+		sanitize: [
+			sanitize,
+			{ ...schema, protocols: { ...schema.protocols, href: [...(schema.protocols?.href ?? []), "object"] } },
+		],
+	};
+	const rehypePlugins = [...Object.values(plugins), blocksApart] as NonNullable<
+		Parameters<typeof Streamdown>[0]["rehypePlugins"]
+	>;
+	// a blob link and a link to an object's id survive; every other URL is made safe as Streamdown makes it
 	const urlTransform: typeof defaultUrlTransform = (url, key, node) =>
-		linkedBlob(url) === undefined ? defaultUrlTransform(url, key, node) : url;
+		linkedBlob(url) !== undefined || /^object:[a-z][a-z0-9-]{0,63}\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,399}$/.test(url)
+			? url
+			: defaultUrlTransform(url, key, node);
 	return {
 		default: (props: Parameters<typeof Streamdown>[0]) => (
 			<Streamdown rehypePlugins={rehypePlugins} urlTransform={urlTransform} components={{ a: Link }} {...props} />

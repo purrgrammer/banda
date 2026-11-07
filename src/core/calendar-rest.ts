@@ -81,7 +81,7 @@ export const CALENDAR_TOOLS: McpTool[] = [
 	),
 	tool(
 		"list_events",
-		"List events in a calendar between time_min and time_max (default: the next 7 days, at most 366 days), in start order, recurring events expanded. Returns a ref for each event: include them as calendar/<id> references in your answer so banda can show event cards.",
+		"List events in a calendar between time_min and time_max (default: the next 7 days, at most 366 days), in start order, recurring events expanded. Returns a ref for each event. Name each in your answer as a link, [its name](calendar/<id>); to show cards, give them in the message's objects.",
 		{
 			calendar_id: { type: "string", minLength: 1, maxLength: 254, description: 'A calendar id; default "primary"' },
 			time_min: time("Where the range starts"),
@@ -93,7 +93,7 @@ export const CALENDAR_TOOLS: McpTool[] = [
 	),
 	tool(
 		"get_event",
-		"Read one event: its time, place, organizer, guests, the owner's response, its description and its video call. Include its calendar/<id> reference in your answer so banda shows its card.",
+		"Read one event: its time, place, organizer, guests, the owner's response, its description and its video call. Name it in your answer as a link, [its name](calendar/<id>); to show cards, give them in the message's objects.",
 		{
 			event_id: {
 				type: "string",

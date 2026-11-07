@@ -32,19 +32,19 @@ export const CONTACTS_TOOLS: McpTool[] = [
 	tool("get_profile", "Read the signed-in Google account's address.", {}),
 	tool(
 		"search_contacts",
-		"Find people in the owner's saved contacts by name, address, phone number or company, with their addresses and numbers. Returns a ref for each: include them as contacts/<id> references in your answer so banda shows contact cards.",
+		"Find people in the owner's saved contacts by name, address, phone number or company, with their addresses and numbers. Returns a ref for each person. Name each in your answer as a link, [its name](contacts/<id>); to show cards, give them in the message's objects.",
 		search,
 		["query"],
 	),
 	tool(
 		"search_other_contacts",
-		"Find people the owner has emailed but not saved as contacts, by name, address or phone number. Returns a ref for each: include them as contacts/<id> references in your answer so banda shows contact cards.",
+		"Find people the owner has emailed but not saved as contacts, by name, address or phone number. Returns a ref for each person. Name each in your answer as a link, [its name](contacts/<id>); to show cards, give them in the message's objects.",
 		search,
 		["query"],
 	),
 	tool(
 		"get_contact",
-		"Read one person in full: names, addresses, phone numbers, company and job title. Include its contacts/<id> reference in your answer so banda shows its card.",
+		"Read one person in full: names, addresses, phone numbers, company and job title. Name them in your answer as a link, [its name](contacts/<id>); to show cards, give them in the message's objects.",
 		{
 			contact_id: {
 				type: "string",
