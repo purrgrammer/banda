@@ -668,6 +668,16 @@ export function recapOf(session: HarnessSession): string {
 		.join("\n");
 }
 
+/**
+ * What a harness is told it runs under, apart from the owner's ask: sent as a system prompt in `append` mode when the
+ * agent announces `sessionCapabilities.systemPrompt`, never replacing its own instructions; otherwise not sent at all.
+ */
+export const HARNESS_SYSTEM =
+	"You are run by banda, an assistant app on its owner's computer, for one task in the folder your session opened in. " +
+	"The prompt and any follow-up notes come from the owner or their agent. Permission requests are answered by the " +
+	"owner, one at a time; no persistent permission is ever granted. When the task ends, everything you started (servers, " +
+	"watchers, background commands) is stopped, so leave nothing meant to keep running. Work only in that folder.";
+
 export type HarnessOptions = {
 	readonly definitions: () => ReadonlyMap<string, HarnessDefinition>;
 	readonly followUp: (
@@ -1088,7 +1098,7 @@ export function defineHarnesses(options: HarnessOptions) {
 					const opening = connection;
 					let wait: NodeJS.Timeout | undefined;
 					const opened = await Promise.race([
-						openSession(opening, { cwd, mode: definition.mode, resume: start.resume }),
+						openSession(opening, { cwd, mode: definition.mode, resume: start.resume, system: HARNESS_SYSTEM }),
 						new Promise<never>((_, reject) => {
 							wait = setTimeout(
 								() => reject(new Error("it did not start a session in time")),

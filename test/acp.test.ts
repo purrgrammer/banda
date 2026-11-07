@@ -171,6 +171,45 @@ describe("acp session capabilities", () => {
 		await expect(closeSession(refuse(-32002), "s")).resolves.toBeUndefined();
 		await expect(closeSession(refuse(-32601), "s")).rejects.toThrow("refused");
 	});
+
+	it("appends banda's instructions as a system prompt only when the agent announces systemPrompt", async () => {
+		const offered = fake(deny, { FAKE_ACP_SYSTEM: "1" });
+		try {
+			const { sessionId } = await openSession(offered.connection, { cwd: tmpdir(), system: "banda's rules" });
+			expect(offered.entries()).toContainEqual(
+				expect.objectContaining({
+					made: sessionId,
+					systemPrompt: { mode: "append", content: [{ type: "text", text: "banda's rules" }] },
+				}),
+			);
+		} finally {
+			await offered.connection.close();
+		}
+		const plain = fake(deny);
+		try {
+			const { sessionId } = await openSession(plain.connection, { cwd: tmpdir(), system: "banda's rules" });
+			const made = plain.entries().find((entry) => entry.made === sessionId);
+			expect(made).toBeDefined();
+			expect(made).not.toHaveProperty("systemPrompt");
+		} finally {
+			await plain.connection.close();
+		}
+	});
+
+	it("sends the same system prompt again on resume", async () => {
+		const { connection, entries } = fake(deny, { FAKE_ACP_RESUME: "1", FAKE_ACP_SYSTEM: "1" });
+		try {
+			await openSession(connection, { cwd: tmpdir(), resume: "earlier-9", system: "banda's rules" });
+			expect(entries()).toContainEqual(
+				expect.objectContaining({
+					resumed: "earlier-9",
+					systemPrompt: { mode: "append", content: [{ type: "text", text: "banda's rules" }] },
+				}),
+			);
+		} finally {
+			await connection.close();
+		}
+	});
 });
 
 describe("acp framing", () => {

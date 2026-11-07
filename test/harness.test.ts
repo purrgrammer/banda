@@ -13,6 +13,7 @@ import {
 	disconnectHarness,
 	folderPath,
 	foldersIn,
+	HARNESS_SYSTEM,
 	Harnesses,
 	type HarnessSession,
 	type HarnessStep,
@@ -667,6 +668,8 @@ describe("following up on a session", () => {
 							prompt?: string;
 							loaded?: string;
 							resumed?: string;
+							made?: string;
+							systemPrompt?: unknown;
 							sessionId?: string;
 						},
 				);
@@ -727,6 +730,21 @@ describe("following up on a session", () => {
 			"say first",
 			"say second",
 		]);
+		await s.harness.close(context);
+	});
+
+	it("sends banda's instructions as an appended system prompt, apart from the ask, when announced", async () => {
+		vi.stubEnv("FAKE_ACP_SYSTEM", "1");
+		const s = await setup();
+		await s.begin("say hi");
+		await until(() => s.woke.length === 1);
+		const log = await s.logged();
+		expect(log.find((entry) => entry.made !== undefined)?.systemPrompt).toEqual({
+			mode: "append",
+			content: [{ type: "text", text: HARNESS_SYSTEM }],
+		});
+		// the owner's ask goes as the prompt, alone
+		expect(log.filter((entry) => entry.prompt !== undefined).map((entry) => entry.prompt)).toEqual(["say hi"]);
 		await s.harness.close(context);
 	});
 

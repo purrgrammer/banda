@@ -14,9 +14,10 @@
  *   crash                  the process exits
  *   background <mark>      start a long command, detached in a group of its own, that outlives this process
  * A line it does not know is said as words (a recap of earlier work, sent before the script). `session/load` replays
- * history first, as real harnesses do; FAKE_ACP_NO_LOAD=1 makes it one that cannot reopen a session. FAKE_ACP_RESUME
- * and FAKE_ACP_CLOSE (=1) announce the matching sessionCapabilities: session/resume reopens with no replay, and
- * session/close forgets the session (-32002 for one it does not have).
+ * history first, as real harnesses do; FAKE_ACP_NO_LOAD=1 makes it one that cannot reopen a session. FAKE_ACP_RESUME,
+ * FAKE_ACP_CLOSE and FAKE_ACP_SYSTEM (=1) announce the matching sessionCapabilities: session/resume reopens with no
+ * replay, session/close forgets the session (-32002 for one it does not have), and a systemPrompt given on
+ * new/load/resume goes into the log beside the session it opened.
  * Prompts run one at a time, in order: one sent mid-turn waits (as claude-agent-acp queues it). Every prompt received,
  * permission answered and turn ended is appended to $FAKE_ACP_LOG (jsonl), so it survives a kill.
  */
@@ -181,8 +182,8 @@ jsonLines(process.stdin, (line) => {
 	const params = message.params ?? {};
 	switch (message.method) {
 		case "initialize":
-			// FAKE_ACP_NO_LOAD=1: a harness that cannot reopen a session (as banda's pi adapter). FAKE_ACP_RESUME
-			// and FAKE_ACP_CLOSE (=1) announce the matching sessionCapabilities.
+			// FAKE_ACP_NO_LOAD=1: a harness that cannot reopen a session (as banda's pi adapter). FAKE_ACP_RESUME,
+			// FAKE_ACP_CLOSE and FAKE_ACP_SYSTEM (=1) announce the matching sessionCapabilities.
 			return send({
 				id: message.id,
 				result: {
@@ -192,6 +193,7 @@ jsonLines(process.stdin, (line) => {
 						sessionCapabilities: {
 							...(process.env.FAKE_ACP_RESUME === "1" ? { resume: {} } : {}),
 							...(process.env.FAKE_ACP_CLOSE === "1" ? { close: {} } : {}),
+							...(process.env.FAKE_ACP_SYSTEM === "1" ? { systemPrompt: {} } : {}),
 						},
 					},
 				},
@@ -201,13 +203,17 @@ jsonLines(process.stdin, (line) => {
 			if (process.env.FAKE_ACP_HANG === "1") return;
 			const sessionId = `fake-${process.pid}-${sessions.size + 1}`;
 			sessions.add(sessionId);
+			record({ made: sessionId, ...(params.systemPrompt === undefined ? {} : { systemPrompt: params.systemPrompt }) });
 			return send({ id: message.id, result: { sessionId, modes: { currentModeId: "auto", availableModes: [] } } });
 		}
 		case "session/resume": {
 			// the session again, nothing replayed (unlike session/load)
 			const sessionId = String(params.sessionId);
 			sessions.add(sessionId);
-			record({ resumed: sessionId });
+			record({
+				resumed: sessionId,
+				...(params.systemPrompt === undefined ? {} : { systemPrompt: params.systemPrompt }),
+			});
 			return send({ id: message.id, result: {} });
 		}
 		case "session/close": {
@@ -221,7 +227,10 @@ jsonLines(process.stdin, (line) => {
 		case "session/load": {
 			const sessionId = String(params.sessionId);
 			sessions.add(sessionId);
-			record({ loaded: sessionId });
+			record({
+				loaded: sessionId,
+				...(params.systemPrompt === undefined ? {} : { systemPrompt: params.systemPrompt }),
+			});
 			// as claude-agent-acp and codex-acp do: the session's history replayed as updates before the answer
 			update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "words from before" } });
 			update(sessionId, {

@@ -231,17 +231,24 @@ export type OpenedSession = {
 
 /**
  * Initialize, then open a session in `cwd` (reopening `resume` by `session/resume`, with no history replayed, when the
- * agent offers it, else by `session/load`), then set its mode.
+ * agent offers it, else by `session/load`), then set its mode. `system` is banda's own instructions, appended to the
+ * agent's (never replacing them: mode `override` is never used) when it announces `sessionCapabilities.systemPrompt`;
+ * an agent that does not is opened exactly as before, the instructions left unsent.
  */
 export async function openSession(
 	connection: AcpConnection,
-	{ cwd, mode, resume }: { cwd: string; mode?: string | undefined; resume?: string | undefined },
+	{
+		cwd,
+		mode,
+		resume,
+		system,
+	}: { cwd: string; mode?: string | undefined; resume?: string | undefined; system?: string | undefined },
 ): Promise<OpenedSession> {
 	const init = await connection.request<{
 		protocolVersion?: number;
 		agentCapabilities?: {
 			loadSession?: boolean;
-			sessionCapabilities?: { resume?: unknown; close?: unknown };
+			sessionCapabilities?: { resume?: unknown; close?: unknown; systemPrompt?: unknown };
 		};
 	}>("initialize", {
 		protocolVersion: ACP_PROTOCOL_VERSION,
@@ -251,19 +258,23 @@ export async function openSession(
 	if (init.protocolVersion !== ACP_PROTOCOL_VERSION)
 		throw new AcpError("The harness does not support the required ACP protocol version.");
 	const capabilities = init.agentCapabilities?.sessionCapabilities ?? {};
+	const instructed =
+		system === undefined || !offered(capabilities.systemPrompt)
+			? {}
+			: { systemPrompt: { mode: "append", content: [{ type: "text", text: system }] } };
 	let sessionId: string;
 	let loaded = false;
 	if (resume !== undefined && offered(capabilities.resume)) {
 		// the same session again, nothing replayed: what it did before is already this side's record
-		await connection.request("session/resume", { sessionId: resume, cwd, mcpServers: [] });
+		await connection.request("session/resume", { sessionId: resume, cwd, mcpServers: [], ...instructed });
 		sessionId = resume;
 		loaded = true;
 	} else if (resume !== undefined && init.agentCapabilities?.loadSession === true) {
-		await connection.request("session/load", { sessionId: resume, cwd, mcpServers: [] });
+		await connection.request("session/load", { sessionId: resume, cwd, mcpServers: [], ...instructed });
 		sessionId = resume;
 		loaded = true;
 	} else {
-		const made = await connection.request<{ sessionId: string }>("session/new", { cwd, mcpServers: [] });
+		const made = await connection.request<{ sessionId: string }>("session/new", { cwd, mcpServers: [], ...instructed });
 		sessionId = made.sessionId;
 	}
 	// the harness starts in the owner's own default (which may ask nothing): the connection's mode is set, always
