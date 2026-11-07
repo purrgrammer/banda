@@ -1052,6 +1052,20 @@ describe("connections banda ships", () => {
 		expect(cal?.missing).toBeUndefined();
 	});
 
+	it("a shipped connection signed in for no agent is on for the lead; signing in again keeps the owner's switch", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		const s = await open(fake, await shipping(fake));
+		await s.capabilities.addShipped("cal");
+		expect(await signInAsOwner(s.capabilities, "cal", { fake, agent: null })).toEqual({ ok: true, words: "connected" });
+		const accounts = async () => (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.accounts;
+		const [account] = (await accounts()) ?? [];
+		expect(account?.agents).toEqual(["sancho"]);
+		await s.capabilities.switchAccount("sancho", "cal", account?.account, false);
+		expect(await signInAsOwner(s.capabilities, "cal", { fake, agent: null })).toEqual({ ok: true, words: "connected" });
+		expect((await accounts())?.[0]?.agents).toEqual([]);
+	});
+
 	it("recovers a shipped definition left in the box before it was allowed", async () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
 		fakes.push(fake);

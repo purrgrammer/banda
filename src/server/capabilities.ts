@@ -2015,6 +2015,12 @@ export function openCapabilities(options: CapabilityOptions) {
 				if (!(error instanceof BadRequest)) throw error;
 				accessProblem = error.message;
 			});
+		// A new account of a connection banda ships, signed in for no agent, is on for the lead: its tools are curated,
+		// and an account nobody can use reads as a broken connection. One added by URL waits for the owner's switch.
+		else if (!known && shaOf((await shippedFiles()).get(name)?.text ?? "") === connection.sha)
+			await switchAccount(LEAD, name, account, true, ctx, connection.sha).catch((error: unknown) => {
+				if (!(error instanceof BadRequest)) throw error;
+			});
 		await install(ctx);
 		options.changed?.();
 		if (accessProblem !== undefined) {
