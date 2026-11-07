@@ -24,7 +24,6 @@ const message = {
 	snippet: "Attached",
 	body: "See notes",
 	unread: true,
-	url: "https://mail.google.com/mail/u/0/#all/msg_1",
 	attachments: [{ id: "att_1", name: "notes.txt", mimeType: "text/plain", size: 5 }],
 };
 let summary: unknown;
@@ -77,9 +76,9 @@ for (let attempt = 0; attempt < 4; attempt++) {
 				readAttachment: async () => ({ bytes: Buffer.from("notes") }),
 			},
 		});
-		const url = message.url;
-		const shown = (await service.show(chat, [{ ref: url, agent: "reader" }]))[0];
-		const file = await service.attachment(chat, url, "att_1", "reader", "alice");
+		const ref = "gmail/msg_1";
+		const shown = (await service.show(chat, [{ ref, agent: "reader" }]))[0];
+		const file = await service.attachment(chat, ref, "att_1", "reader", "alice");
 		const reading = Object.values((await harness.snapshot(Readings, context))?.readings ?? {}).find(
 			(each) => each.account === "alice",
 		);
