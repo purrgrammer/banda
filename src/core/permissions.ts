@@ -252,7 +252,7 @@ export async function allowHostIn(
 
 /**
  * The open permission covering a call of `tool` with `args` from `chat`, if any: never one for a draft on the floor,
- * and a host permission only from the chats of the agent it was allowed for. Reads only.
+ * and only one given to the agent `chat` runs, so a chat of no agent the store knows is covered by none. Reads only.
  */
 export async function covering(
 	tx: Tx,
@@ -261,13 +261,11 @@ export async function covering(
 	now: number,
 ): Promise<{ readonly id: string; readonly permission: Permission } | undefined> {
 	if (draft.floor !== undefined) return undefined;
-	// a host is allowed for one agent: it covers only that agent's chats, as the proxy is told
 	const agent = await agentOfChat(tx, chat);
+	if (agent === undefined) return undefined;
 	const { permissions } = await tx.doc(Permissions);
 	const candidates = Object.entries(permissions).filter(
-		([, permission]) =>
-			(permission.scope !== "host" || (agent !== undefined && permission.agent === agent)) &&
-			matches(permission, draft.tool, draft.args),
+		([, permission]) => permission.agent === agent && matches(permission, draft.tool, draft.args),
 	);
 	if (candidates.length === 0) return undefined;
 	const errand = candidates.some(([, permission]) => permission.scope === "task")

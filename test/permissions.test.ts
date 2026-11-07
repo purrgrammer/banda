@@ -419,7 +419,13 @@ describe("the scopes an ask offers", () => {
 			await harness.commit(async (tx) => {
 				const doc = await tx.doc(Permissions);
 				const base = { tool: "propose_send", at, wait: 1 };
-				doc.permissions["1"] = { ...base, match: { _route: "POST github.com/x" }, what: "route", scope: "always" };
+				doc.permissions["1"] = {
+					...base,
+					match: { _route: "POST github.com/x" },
+					what: "route",
+					scope: "always",
+					agent: LEAD,
+				};
 				doc.permissions["2"] = { ...base, match: { _host: "github.com" }, what: "host", scope: "host", agent: LEAD };
 				doc.next = 3;
 				// chat 7 runs the lead, chat 8 another agent, chat 9 none the store knows of
@@ -428,7 +434,10 @@ describe("the scopes an ask offers", () => {
 			}, context);
 			const found = () => harness.commit((tx) => covering(tx, draft, 7, at), context);
 			expect((await found())?.id).toBe("1");
-			// the route's covers every chat; the lead's host none of another agent's chats, nor one of no agent
+			// a permission is its agent's: the lead's route covers none of another agent's chats, nor one of no agent
+			for (const chat of [8, 9])
+				expect(await harness.commit((tx) => covering(tx, draft, chat, at), context), `chat ${chat}`).toBeUndefined();
+			// the lead's host covers none of another agent's chats, nor one of no agent
 			const hostOnly = { ...draft, args: { ...draft.args, _route: "POST github.com/y" } };
 			expect((await harness.commit((tx) => covering(tx, hostOnly, 7, at), context))?.id).toBe("2");
 			for (const chat of [8, 9])
