@@ -9,6 +9,7 @@ import type { Who } from "../chat/Row.tsx";
 import { Search } from "../chat/Search.tsx";
 import { api, type SearchHit } from "../lib/api.ts";
 import type { ChatAgent } from "../lib/navigation.ts";
+import { useReturnFocus } from "../lib/return-focus.ts";
 import type { BandRow } from "./band.ts";
 import { matchAgents, matchPages, matchSkills } from "./palette.ts";
 import type { Where } from "./where.ts";
@@ -50,6 +51,7 @@ export function SearchDialog({
 	onGo: (where: Where) => void;
 	phone?: boolean;
 }) {
+	const returnFocus = useReturnFocus(open);
 	const [query, setQuery] = useState("");
 	/** The newest answer, and the query it answered: hits stay (dimmed) while the next search runs. */
 	const [found, setFound] = useState<{ hits: readonly SearchHit[]; for: string }>();
@@ -57,6 +59,14 @@ export function SearchDialog({
 	const [failed, setFailed] = useState(false);
 	const [tries, setTries] = useState(0);
 	const trimmed = query.trim();
+	// closed, it forgets: reopening starts at Recent, not at the last query
+	useEffect(() => {
+		if (open) return;
+		setQuery("");
+		setFound(undefined);
+		setSearching(false);
+		setFailed(false);
+	}, [open]);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `tries` searches again after a failure
 	useEffect(() => {
 		if (trimmed === "") {
@@ -132,6 +142,7 @@ export function SearchDialog({
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent
 				showCloseButton={false}
+				onCloseAutoFocus={returnFocus}
 				className="top-[12vh] translate-y-0 border-0 bg-transparent p-0 shadow-none ring-0 sm:max-w-lg"
 			>
 				<DialogTitle className="sr-only">Search banda</DialogTitle>

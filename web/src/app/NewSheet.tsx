@@ -19,6 +19,7 @@ import { FaceAndName, Personality } from "../chat/Settings.tsx";
 import type { Who } from "../chat/types.ts";
 import { designFace, saveAgent } from "../lib/api.ts";
 import type { ChatAgent } from "../lib/navigation.ts";
+import { useReturnFocus } from "../lib/return-focus.ts";
 import { useShell } from "../lib/shell.ts";
 import { agentFile } from "./edit-file.ts";
 import type { Where } from "./where.ts";
@@ -50,6 +51,7 @@ export function NewSheet({
 	agents: readonly ChatAgent[];
 	onGo: (where: Where) => void;
 }) {
+	const returnFocus = useReturnFocus(open);
 	const [kind, setKind] = useState<"agent" | "group">("agent");
 	const [who, setWho] = useState<Who>(() => ({ face: defaultAvatarFace(), name: "" }));
 	const [personality, setPersonality] = useState("");
@@ -108,7 +110,10 @@ export function NewSheet({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[90svh] flex-col gap-0 overflow-hidden rounded-tile p-0 sm:max-w-md">
+			<DialogContent
+				onCloseAutoFocus={returnFocus}
+				className="flex max-h-[90svh] flex-col gap-0 overflow-hidden rounded-tile p-0 sm:max-w-md"
+			>
 				<Tabs
 					value={kind}
 					onValueChange={(next) => setKind(next as "agent" | "group")}
