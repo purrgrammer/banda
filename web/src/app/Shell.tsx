@@ -401,6 +401,11 @@ function Main() {
 			// an agent's routines and watches wake in its chat; their times are read when the daemon last pushed them
 			const routines = routineRows(shell.control?.routines ?? [], where.id, pushedAt);
 			const watches = watchRows(shell.control?.watches ?? [], where.id, pushedAt);
+			// a routine's editor and a watch's detail are opened from the Routines tab, and closing one goes back to it
+			const backToRoutines = () => {
+				setEditing(undefined);
+				setFocus((was) => ({ agent: where.id, n: (was?.agent === where.id ? was.n : 0) + 1 }));
+			};
 			const openWatch =
 				editing?.watch === undefined ? undefined : shell.control?.watches.find((each) => each.name === editing.watch);
 			const editor =
@@ -410,7 +415,7 @@ function Main() {
 						chat={row?.chat}
 						watch={openWatch}
 						now={pushedAt}
-						onDone={() => setEditing(undefined)}
+						onDone={backToRoutines}
 					/>
 				) : editing.watch !== undefined ? undefined : (
 					<EditRoutine
@@ -418,7 +423,7 @@ function Main() {
 						name={who.name}
 						routine={shell.control?.routines.find((each) => each.name === editing.routine)}
 						now={pushedAt}
-						onDone={() => setEditing(undefined)}
+						onDone={backToRoutines}
 					/>
 				);
 			const agentFile = shell.agents.find((each) => each.accepted?.agent?.id === where.id)?.accepted;
