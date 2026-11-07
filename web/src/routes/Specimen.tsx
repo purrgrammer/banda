@@ -39,6 +39,7 @@ const CONTENTS = [
 	{ id: "skills-about", label: "Skills in About" },
 	{ id: "app", label: "The app" },
 	{ id: "pinned", label: "Pinned" },
+	{ id: "pinned-alignment", label: "Pinned: left or centred" },
 	{ id: "pinned-hold", label: "Pinning on the phone" },
 	{ id: "agent-meta-tools", label: "Agent-to-agent tools in a chat" },
 	{ id: "working-chat", label: "A chat at work" },

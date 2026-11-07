@@ -26,6 +26,7 @@ export function Band({
 	onPin,
 	phone = false,
 	revealed,
+	centred = false,
 	selected,
 	collapsed = false,
 	notice,
@@ -50,6 +51,8 @@ export function Band({
 	phone?: boolean;
 	/** Show the pin of this row or tile as on hover (the specimen). */
 	revealed?: string | undefined;
+	/** Centre the pinned tiles while they fit in one row (the specimen compares it with the default, left-aligned). */
+	centred?: boolean;
 	selected?: string | undefined;
 	collapsed?: boolean;
 	/** A daemon's notice at the foot: offline, the computer off. */
@@ -156,6 +159,7 @@ export function Band({
 									"grid shrink-0 snap-x snap-mandatory grid-flow-col gap-1 overflow-x-auto pb-2 [scrollbar-width:none]",
 									// three to a row; past three, the next one peeks in so the row reads as one that scrolls
 									tiles.length > 3 ? "auto-cols-[calc((100%-0.5rem)/3.4)]" : "auto-cols-[calc((100%-0.5rem)/3)]",
+									centred && tiles.length < 3 && "justify-center",
 								)}
 							>
 								{tiles.map((row) => (

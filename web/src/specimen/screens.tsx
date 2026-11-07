@@ -319,6 +319,25 @@ export function Screens() {
 					<Band rows={ROWS} pinned={["sancho", "mara", "octo", "trip", "atlas"]} revealed="mara" onPin={() => {}} />
 				)}
 			</Section>
+			<Section
+				id="pinned-alignment"
+				title="Pinned: left or centred"
+				note="The same band with one, two and three pins: left-aligned (the default) on the left, centred on the right. From three on they are the same."
+				bleed
+			>
+				<div className="flex w-full flex-col gap-3">
+					{[["sancho"], ["sancho", "mara"], ["sancho", "mara", "octo"]].map((pins) => (
+						<div key={pins.length} className="flex gap-3">
+							<div className="h-40 overflow-hidden rounded-card">
+								<Band rows={ROWS} pinned={pins} />
+							</div>
+							<div className="h-40 overflow-hidden rounded-card">
+								<Band rows={ROWS} pinned={pins} centred />
+							</div>
+						</div>
+					))}
+				</div>
+			</Section>
 			{phone ? (
 				<Section
 					id="pinned-hold"
