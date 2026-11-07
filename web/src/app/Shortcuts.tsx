@@ -3,15 +3,13 @@
  * and Alt+↓ the chat above or below, Esc closes the panel or a sheet; "?" lists them, in a dialog of their own.
  */
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-
-const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
-const MOD = MAC ? "⌘" : "Ctrl";
+import { MOD } from "@/lib/keys";
 
 /** Each shortcut: its keys, and what it does in words. */
 export const SHORTCUTS: readonly (readonly [readonly string[], string])[] = [
 	[["Enter"], "Send"],
 	[["Shift", "Enter"], "A new line"],
-	[[MOD, "K"], "Search every chat"],
+	[[MOD, "K"], "Search banda"],
 	[[MOD, "1–9"], "Open a chat of the band, top to bottom"],
 	[["Alt", "↑"], "The chat above"],
 	[["Alt", "↓"], "The chat below"],
