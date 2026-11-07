@@ -5,6 +5,8 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
+	CalendarIcon,
+	ChevronDownIcon,
 	CircleCheckIcon,
 	CircleDashedIcon,
 	CircleDotIcon,
@@ -16,9 +18,11 @@ import {
 	GitPullRequestDraftIcon,
 	GitPullRequestIcon,
 	MailIcon,
+	VideoIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -238,9 +242,36 @@ export function ObjectLink({
 		| (PullRequest & { card: "pull-request" })
 		| (Issue & { card: "issue" })
 		| (CheckRun & { card: "check-run" })
-		| (EmailMessage & { card: "email" });
+		| (EmailMessage & { card: "email" })
+		| (CalendarEvent & { card: "event" });
 	href: string;
 }) {
+	if (object.card === "event") {
+		const url = calendarUrl(href) ?? calendarUrl(object.url);
+		return (
+			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
+				<CalendarIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
+				{url === undefined ? (
+					<span
+						className={cn("min-w-0 truncate", object.status === "cancelled" && "line-through")}
+						title={object.title}
+					>
+						{object.title || "Event"}
+					</span>
+				) : (
+					<a
+						href={url}
+						target="_blank"
+						rel="noopener noreferrer"
+						className={cn("min-w-0 max-w-80 truncate underline", object.status === "cancelled" && "line-through")}
+						title={object.title}
+					>
+						{object.title || "Event"}
+					</a>
+				)}
+			</span>
+		);
+	}
 	if (object.card === "email") {
 		const url = safeObjectUrl(href);
 		return (
@@ -350,6 +381,182 @@ export function EmailCard({
 				{message.body || message.snippet || "No plain text body"}
 			</p>
 			{attachments}
+		</Tile>
+	);
+}
+
+export type CalendarEvent = {
+	readonly title: string;
+	readonly start: string;
+	readonly end: string;
+	readonly allDay: boolean;
+	readonly timeZone: string;
+	readonly location: string;
+	readonly organizer: string;
+	readonly who: string;
+	readonly attendees: number | null;
+	readonly response: "accepted" | "declined" | "tentative" | "needs-action" | "none";
+	readonly status: "confirmed" | "tentative" | "cancelled";
+	readonly description: string;
+	readonly meet?: string | undefined;
+	readonly url?: string | undefined;
+	readonly asOf?: string | undefined;
+};
+
+/** Only Google Calendar's own pages open from an event; the daemon already kept them https. */
+function calendarUrl(value: string | undefined): string | undefined {
+	try {
+		const url = new URL(value ?? "");
+		return url.protocol === "https:" &&
+			url.port === "" &&
+			url.username === "" &&
+			url.password === "" &&
+			(url.hostname === "www.google.com" || url.hostname === "calendar.google.com")
+			? url.href
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** A call's address may be any https host a calendar names; the link says which, so a lookalike is visible. */
+function callUrl(value: string | undefined): URL | undefined {
+	try {
+		const url = new URL(value ?? "");
+		return url.protocol === "https:" && url.username === "" && url.password === "" ? url : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+const RESPONSE: Record<CalendarEvent["response"], string | undefined> = {
+	accepted: "Going",
+	declined: "Declined",
+	tentative: "Maybe",
+	"needs-action": "Not answered",
+	none: undefined,
+};
+
+/** A date the calendar gives without a time is a day where the owner is, not a UTC midnight. */
+function dayOf(value: string): Date | undefined {
+	const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+	if (match === null) return undefined;
+	const day = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+	return Number.isNaN(day.getTime()) ? undefined : day;
+}
+
+/** When an event is, in the owner's own time: "Mon, Nov 9 · 10:00 – 11:30", or its days for an all-day event. */
+export function eventWhen(event: Pick<CalendarEvent, "start" | "end" | "allDay">): string {
+	const day = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" });
+	if (event.allDay) {
+		const start = dayOf(event.start);
+		const after = dayOf(event.end);
+		if (start === undefined) return event.start;
+		const last = after === undefined ? start : new Date(after.getFullYear(), after.getMonth(), after.getDate() - 1);
+		return last.getTime() <= start.getTime()
+			? `${day.format(start)} · All day`
+			: `${day.format(start)} – ${day.format(last)} · All day`;
+	}
+	const start = new Date(event.start);
+	const end = new Date(event.end);
+	if (Number.isNaN(start.getTime())) return event.start;
+	const hour = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+	if (Number.isNaN(end.getTime())) return `${day.format(start)} · ${hour.format(start)}`;
+	return start.toDateString() === end.toDateString()
+		? `${day.format(start)} · ${hour.format(start)} – ${hour.format(end)}`
+		: `${day.format(start)} ${hour.format(start)} – ${day.format(end)} ${hour.format(end)}`;
+}
+
+/** A read-only event card: when, where, who, and the owner's answer. The description is plain text the daemon bounded. */
+export function EventCard({ event, actions }: { event: CalendarEvent; actions?: ReactNode }) {
+	const cancelled = event.status === "cancelled";
+	const declined = event.response === "declined";
+	const answer = RESPONSE[event.response];
+	const open = calendarUrl(event.url);
+	const call = callUrl(event.meet);
+	return (
+		<Tile className={cn("flex flex-col gap-2.5 p-3.5", (cancelled || declined) && "bg-paper-2")}>
+			<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-ink-2">
+				<CalendarIcon aria-hidden="true" className="size-3.5 shrink-0" />
+				<span data-event-when="" className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+					{eventWhen(event)}
+				</span>
+				{event.asOf === undefined ? null : <span>as of {event.asOf}</span>}
+				<span className="ml-auto shrink-0">{actions}</span>
+			</div>
+			<h3
+				className={cn(
+					"text-body font-semibold [overflow-wrap:anywhere]",
+					cancelled || declined ? "text-ink-2" : "text-ink",
+					cancelled && "line-through",
+				)}
+			>
+				{event.title || "(No title)"}
+			</h3>
+			{cancelled || answer !== undefined || event.status === "tentative" ? (
+				<span className="flex flex-wrap items-center gap-2 text-meta">
+					{cancelled ? <StatePill icon={CircleSlashIcon} word="Cancelled" live={false} /> : null}
+					{!cancelled && event.status === "tentative" ? (
+						<StatePill icon={CircleDashedIcon} word="Tentative" live={false} />
+					) : null}
+					{answer === undefined ? null : (
+						<span data-event-response={event.response} className={cn(declined ? "text-ink-2" : "text-ink")}>
+							{answer}
+						</span>
+					)}
+				</span>
+			) : null}
+			{event.location || event.organizer || event.who ? (
+				<dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-meta">
+					{(
+						[
+							["Where", event.location],
+							["Organizer", event.organizer],
+							["Guests", event.who],
+						] as const
+					)
+						.filter(([, value]) => value !== "")
+						.map(([label, value]) => (
+							<div key={label} className="contents">
+								<dt className="text-ink-2">{label}</dt>
+								<dd className="text-ink [overflow-wrap:anywhere]">{value}</dd>
+							</div>
+						))}
+				</dl>
+			) : null}
+			{event.description === "" ? null : (
+				<Collapsible className="border-t border-line-soft pt-2">
+					<CollapsibleTrigger asChild>
+						<Button variant="ghost" size="xs" className="group -ml-2 text-ink-2">
+							Description
+							<ChevronDownIcon className="group-data-[state=open]:rotate-180" data-icon="inline-end" />
+						</Button>
+					</CollapsibleTrigger>
+					<CollapsibleContent>
+						<p className="whitespace-pre-wrap pt-1 text-body text-ink [overflow-wrap:anywhere]">{event.description}</p>
+					</CollapsibleContent>
+				</Collapsible>
+			)}
+			{call === undefined && open === undefined ? null : (
+				<span className="flex flex-wrap items-center gap-2">
+					{call === undefined || cancelled ? null : (
+						<Button asChild size="sm">
+							<a href={call.href} target="_blank" rel="noopener noreferrer" title={call.href}>
+								<VideoIcon />
+								Join{call.hostname === "meet.google.com" ? "" : ` on ${call.hostname}`}
+							</a>
+						</Button>
+					)}
+					{open === undefined ? null : (
+						<Button asChild size="sm" variant="ghost">
+							<a href={open} target="_blank" rel="noopener noreferrer">
+								<ExternalLinkIcon />
+								Open in Google Calendar
+							</a>
+						</Button>
+					)}
+				</span>
+			)}
 		</Tile>
 	);
 }

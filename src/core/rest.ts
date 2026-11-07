@@ -1,4 +1,5 @@
 /** The built-in daemon REST adapters: first-party APIs that do not speak MCP, each signed in to as Google. */
+import { CALENDAR_TOOLS, calendarCall, calendarWriteCall } from "./calendar-rest.ts";
 import { GMAIL_TOOLS, gmailCall, gmailWriteCall } from "./gmail-rest.ts";
 import type { McpResult, McpTool } from "./mcp.ts";
 
@@ -51,6 +52,16 @@ export const REST_APIS = {
 		account: { tool: "get_profile", field: "emailAddress" },
 		read: gmailCall,
 		write: gmailWriteCall,
+	},
+	calendar: {
+		service: "Google Calendar",
+		url: "https://www.googleapis.com/calendar/v3",
+		base: "https://www.googleapis.com/auth/calendar.readonly",
+		scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+		tools: CALENDAR_TOOLS,
+		account: { tool: "get_profile", field: "email" },
+		read: (token, tool, args, signal, fetcher) => calendarCall(token, tool, args, signal, fetcher),
+		write: calendarWriteCall,
 	},
 } as const satisfies Record<string, RestApi>;
 

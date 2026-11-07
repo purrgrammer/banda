@@ -84,6 +84,29 @@ it("reopens current account authority and object readings without a migration", 
 				comments: null,
 			},
 		});
+		await keepReading(tx, "calendar/me@example.test/event:calendar/cHJpbWFyeSBlMQ", {
+			connection: "calendar",
+			account: "me@example.test",
+			kind: "event",
+			source: "accepted-definition-and-account-generation",
+			at: 789,
+			card: {
+				card: "event",
+				title: "Planning",
+				start: "2026-11-09T10:00:00+01:00",
+				end: "2026-11-09T11:00:00+01:00",
+				allDay: false,
+				timeZone: "Europe/Madrid",
+				location: "",
+				organizer: "me@example.test",
+				who: "Ana +2",
+				attendees: null,
+				response: "accepted",
+				status: "confirmed",
+				description: "",
+				url: "https://www.google.com/calendar/event?eid=x",
+			},
+		});
 	}, context);
 	await before.close(context);
 	const after = await open(home);
@@ -100,6 +123,9 @@ it("reopens current account authority and object readings without a migration", 
 			at: 456,
 			card: { title: "Readings survive a restart", state: "unknown", comments: null },
 		});
+		expect(
+			(await after.snapshot(Readings, context))?.readings["calendar/me@example.test/event:calendar/cHJpbWFyeSBlMQ"],
+		).toMatchObject({ card: { card: "event", attendees: null, allDay: false, who: "Ana +2" } });
 	} finally {
 		await after.close(context);
 	}

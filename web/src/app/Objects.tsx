@@ -8,6 +8,8 @@ import { ObjectLoading, ObjectUnavailable } from "../chat/Loading.tsx";
 import {
 	CheckRunCard,
 	EmailCard,
+	EventCard,
+	eventWhen,
 	IssueCard,
 	NotificationCard,
 	ObjectLink,
@@ -393,6 +395,8 @@ function readingDetails(shown: Extract<ObjectShown, { shown: "card" }>): [string
 	if (card.card === "pull-request") rows.push(["Branch", card.branch]);
 	if (card.card === "check-run") rows.push(["Check", card.name], ["Where", card.where ?? ""]);
 	if (card.card === "email") rows.push(["From", card.from], ["To", card.to], ["Subject", card.subject]);
+	if (card.card === "event")
+		rows.push(["When", eventWhen(card)], ["Location", card.location], ["Organizer", card.organizer]);
 	return rows;
 }
 
@@ -445,6 +449,8 @@ function ReadingCard({
 					actions={actions}
 					attachments={<EmailAttachments chat={chat} shown={shown} card={card} agent={agent} />}
 				/>
+			) : card.card === "event" ? (
+				<EventCard event={{ ...card, asOf }} actions={actions} />
 			) : (
 				<NotificationCard
 					actions={actions}
