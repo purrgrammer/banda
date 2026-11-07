@@ -130,7 +130,7 @@ import {
 } from "../core/objects.ts";
 import { agentOfChat, canonical, Permissions } from "../core/permissions.ts";
 import { publicFetch } from "../core/public-fetch.ts";
-import { REST_APIS } from "../core/rest.ts";
+import { REST_APIS, type RestApi } from "../core/rest.ts";
 import { context } from "../core/store.ts";
 import { liveWaits } from "../core/wait.ts";
 import { type AgentChanged, boxFiles, type Workspace, write } from "./agents.ts";
@@ -742,7 +742,12 @@ export function openCapabilities(options: CapabilityOptions) {
 		 * What the draft does, in the owner's words: what the connection's objects say of it, or else the service's tool by
 		 * its own name; never words made by splitting that name, which read as a verb they are not ("issue write").
 		 */
+		/** A built-in API's own words for its write's draft, when it has them. */
+		const builtIn: RestApi | undefined = tool.connection.api === undefined ? undefined : REST_APIS[tool.connection.api];
+		const own = (args: JsonObject) => builtIn?.drafts?.words(tool.tool, args);
 		const words = (args: JsonObject) => {
+			const said = own(args);
+			if (said !== undefined) return said.what;
 			if (tool.connection.api === "gmail" && tool.tool === "send_message") {
 				const recipient = typeof args.to === "string" ? args.to : "the chosen recipient";
 				return `Send email to ${recipient}`;
@@ -758,6 +763,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		const editable = [
 			...editableOf(tool.tool, kinds).filter((field) => !signed || field !== arg),
 			...(tool.connection.api === "gmail" && tool.tool === "send_message" ? ["to", "subject", "body"] : []),
+			...(builtIn?.drafts?.editable(tool.tool) ?? []),
 		];
 		return options.effect({
 			name: tool.name,
@@ -767,7 +773,8 @@ export function openCapabilities(options: CapabilityOptions) {
 				"approved. Do not call it again to retry an approval.)" +
 				notesFor(tool),
 			parameters: schemaOf(tool, accounts) as never,
-			effect: "unsafe",
+			// a write its API makes the same change when run again with the same key runs again unasked after a crash
+			effect: builtIn?.idempotent?.includes(tool.tool) === true ? "idempotent" : "unsafe",
 			describe: (args) => words(args as JsonObject),
 			...(editable.length === 0 ? {} : { editable }),
 			// the card draws the object it acts on, read as the account it acts as, and says that account
@@ -789,6 +796,10 @@ export function openCapabilities(options: CapabilityOptions) {
 					...(created === undefined && !(tool.connection.api === "gmail" && tool.tool === "send_message")
 						? {}
 						: { verb: created?.verb ?? "Send" }),
+					...(() => {
+						const said = own(given);
+						return said === undefined ? {} : { verb: said.verb };
+					})(),
 					...(account === undefined
 						? {}
 						: { as: `${labelOf(tool.connection.name, account)} on ${tool.connection.service}` }),
@@ -801,15 +812,19 @@ export function openCapabilities(options: CapabilityOptions) {
 					const given = args as JsonObject;
 					const said = words(given);
 					// the neutral words say the account already
-					const own = made(given) !== undefined || on(given) !== undefined ? `${said}${as(given)}` : said;
-					return `${own.charAt(0).toLowerCase()}${own.slice(1)}`;
+					const full =
+						made(given) !== undefined || on(given) !== undefined || own(given) !== undefined
+							? `${said}${as(given)}`
+							: said;
+					return `${full.charAt(0).toLowerCase()}${full.slice(1)}`;
 				},
 			},
 			// the account it acts as, chosen once: a rerun drafts the same, whatever was switched since
 			expand: async (args, api, ctx) => {
 				const chat = Number(api.conversationId);
 				const given = args as JsonObject;
-				let expanded: JsonObject = given;
+				let expanded: JsonObject =
+					builtIn?.drafts === undefined ? given : (builtIn.drafts.expand(tool.tool, given) as JsonObject);
 				if (tool.connection.api === "gmail" && tool.tool === "send_message") {
 					const requested = Array.isArray(given.attachments) ? given.attachments : [];
 					if (requested.length > 10) return "A message may include up to 10 attachments.";
@@ -845,7 +860,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				return { ...expanded, [arg]: account };
 			},
 			allowed: allowedAs(tool, arg),
-			run: async (args, { api }, ctx) => {
+			run: async (args, { api, key }, ctx) => {
 				const chat = Number(api.conversationId);
 				const account = signed ? ((args as JsonObject)[arg] as string | undefined) : undefined;
 				fault("connection:call");
@@ -869,6 +884,7 @@ export function openCapabilities(options: CapabilityOptions) {
 										ctx.abortSignal,
 										fetcher,
 										files,
+										key,
 									)
 								: remoteCall(
 										client as McpClient,

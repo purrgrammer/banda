@@ -1,4 +1,5 @@
 /** Google Calendar's event cards: timed, all-day across days, cancelled, declined, long words, and no description. */
+import { DraftApproval } from "../app/DraftApproval.tsx";
 import { Bubble } from "../chat/Feed.tsx";
 import { type CalendarEvent, EventCard, ObjectLink } from "../chat/Object.tsx";
 import { Section } from "./stage.tsx";
@@ -75,18 +76,113 @@ export const EVENTS: readonly (readonly [string, CalendarEvent])[] = [
 	],
 ];
 
+type Draft = Parameters<typeof DraftApproval>[0]["ask"];
+const AS = "alice@example.test on Google Calendar";
+const REF = { refs: ["calendar:event:cHJpbWFyeSBldnQx"], account: "alice" };
+
+/** A draft of each change, as the daemon words them: a new event with guests and a call, a change, an answer, a deletion. */
+const DRAFTS: readonly (readonly [string, Draft, string, boolean])[] = [
+	[
+		"Draft: create, with guests and a Meet link",
+		{
+			type: "approval",
+			tool: "calendar__create_event",
+			verb: "Create",
+			as: AS,
+			args: {
+				title: "Tea with Ana",
+				start: "2026-11-09T16:00:00+01:00",
+				end: "2026-11-09T17:00:00+01:00",
+				location: "Café Comercial",
+				description: "Catch up before the offsite.",
+				attendees: "ana@example.test, teo@example.test",
+				add_meet: true,
+				account: "alice",
+			},
+			editable: ["title", "start", "end", "location", "description", "attendees"],
+		},
+		"Create “Tea with Ana” on Mon 9 Nov 2026, 16:00–17:00 with ana@example.test, teo@example.test, with a Google Meet link",
+		false,
+	],
+	[
+		"Draft: change the time and place",
+		{
+			type: "approval",
+			tool: "calendar__update_event",
+			verb: "Change",
+			as: AS,
+			on: REF,
+			args: {
+				event_id: "cHJpbWFyeSBldnQx",
+				start: "2026-11-09T12:00:00+01:00",
+				end: "2026-11-09T13:30:00+01:00",
+				location: "Room 4",
+				send_updates: "all",
+				account: "alice",
+			},
+			editable: ["start", "end", "location"],
+		},
+		"Change this event: time to Mon 9 Nov 2026, 12:00–13:30, location to “Room 4”",
+		true,
+	],
+	[
+		"Draft: answer maybe, with a note",
+		{
+			type: "approval",
+			tool: "calendar__respond_to_event",
+			verb: "Maybe",
+			as: AS,
+			on: REF,
+			args: {
+				event_id: "cHJpbWFyeSBldnQx",
+				response: "tentative",
+				comment: "Might be 10 minutes late.",
+				account: "alice",
+			},
+		},
+		"Answer maybe to this invitation, saying “Might be 10 minutes late.”",
+		true,
+	],
+	[
+		"Draft: delete, telling no one",
+		{
+			type: "approval",
+			tool: "calendar__delete_event",
+			verb: "Delete",
+			as: AS,
+			on: REF,
+			args: { event_id: "cHJpbWFyeSBldnQx", send_updates: "none", account: "alice" },
+		},
+		"Delete this event without telling its guests",
+		true,
+	],
+];
+
 export function CalendarSection() {
 	return (
 		<Section
 			id="calendar"
 			title="Google Calendar"
-			note="Events an agent names, drawn from banda's own reading. Read-only: nothing here answers or changes an event."
+			note="Events an agent names, drawn from banda's own reading. An agent's change to one is a draft the owner approves: create, change, answer, delete."
 		>
 			<div className="grid gap-6 lg:grid-cols-2">
 				{EVENTS.map(([label, event]) => (
 					<div key={label} className="flex min-w-0 flex-col gap-1.5">
 						<span className="text-meta text-ink-2">{label}</span>
 						<EventCard event={event} />
+					</div>
+				))}
+				{DRAFTS.map(([label, ask, words, drawn]) => (
+					<div key={label} className="flex min-w-0 flex-col gap-1.5">
+						<span className="text-meta text-ink-2">{label}</span>
+						<DraftApproval
+							chat={0}
+							agent={{ name: "Iris" }}
+							label={words}
+							ask={ask}
+							wait={`specimen-${label}`}
+							drawn={drawn ? <EventCard event={PLANNING} /> : undefined}
+						/>
 					</div>
 				))}
 				<div className="flex min-w-0 flex-col gap-1.5">

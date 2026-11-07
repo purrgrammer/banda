@@ -1,5 +1,13 @@
 /** The built-in daemon REST adapters: first-party APIs that do not speak MCP, each signed in to as Google. */
-import { CALENDAR_TOOLS, calendarCall, calendarWriteCall } from "./calendar-rest.ts";
+import {
+	CALENDAR_TOOLS,
+	CALENDAR_WRITES,
+	calendarCall,
+	calendarDraft,
+	calendarEditable,
+	calendarExpand,
+	calendarWriteCall,
+} from "./calendar-rest.ts";
 import { GMAIL_TOOLS, gmailCall, gmailWriteCall } from "./gmail-rest.ts";
 import type { McpResult, McpTool } from "./mcp.ts";
 
@@ -28,6 +36,10 @@ export type RestApi = {
 		signal?: AbortSignal,
 		fetcher?: typeof fetch,
 	) => Promise<McpResult>;
+	/**
+	 * Run an approved change. `key` is the approved effect's own, the same when a crash cut its run short and it runs
+	 * again: what an idempotent write uses to make a repeat change nothing.
+	 */
 	readonly write: (
 		token: string,
 		tool: string,
@@ -35,7 +47,16 @@ export type RestApi = {
 		signal?: AbortSignal,
 		fetcher?: typeof fetch,
 		files?: readonly ApprovedFile[],
+		key?: string,
 	) => Promise<McpResult>;
+	/** The writes that are the same change when run again with the same key, so a crash's repeat runs unasked. */
+	readonly idempotent?: readonly string[];
+	/** A write's draft in the owner's words: what it does, its button, what they may edit, and the draft they see. */
+	readonly drafts?: {
+		readonly words: (tool: string, args: Record<string, unknown>) => { what: string; verb: string } | undefined;
+		readonly editable: (tool: string) => readonly string[];
+		readonly expand: (tool: string, args: Record<string, unknown>) => Record<string, unknown>;
+	};
 };
 
 export const REST_APIS = {
@@ -57,11 +78,14 @@ export const REST_APIS = {
 		service: "Google Calendar",
 		url: "https://www.googleapis.com/calendar/v3",
 		base: "https://www.googleapis.com/auth/calendar.readonly",
-		scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+		scopes: ["https://www.googleapis.com/auth/calendar.readonly", "https://www.googleapis.com/auth/calendar.events"],
 		tools: CALENDAR_TOOLS,
 		account: { tool: "get_profile", field: "email" },
 		read: (token, tool, args, signal, fetcher) => calendarCall(token, tool, args, signal, fetcher),
-		write: calendarWriteCall,
+		write: (token, tool, args, signal, fetcher, _files, key) =>
+			calendarWriteCall(token, tool, args, signal, fetcher, key),
+		idempotent: CALENDAR_WRITES,
+		drafts: { words: calendarDraft, editable: calendarEditable, expand: calendarExpand },
 	},
 } as const satisfies Record<string, RestApi>;
 
