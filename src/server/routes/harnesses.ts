@@ -350,6 +350,8 @@ export const harnessesArea: AreaModule = {
 				sessions: Object.entries(doc.sessions)
 					.map(([task, session]) => ({
 						task: Number(task),
+						// the folder's real path: the web cuts only paths under it, never paths that merely share its name
+						...(folderPath(session.folder) === undefined ? {} : { root: folderPath(session.folder) }),
 						chat: session.chat,
 						...(session.call === undefined ? {} : { call: session.call }),
 						agent: session.agent,

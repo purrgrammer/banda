@@ -105,10 +105,19 @@ export async function withPage<T>(
 		const page: Page = {
 			errors: () => errors,
 			run,
-			until: async (expression, ms = 10_000) => {
+			// waits on state, not on a clock of its own: the test's timeout is the bound (vitest.config.ts); this one only
+			// names what never came, should the state not arrive within a minute
+			until: async (expression, ms = 60_000) => {
 				const end = Date.now() + ms;
 				while (!(await run<boolean>(`Boolean(${expression})`))) {
-					if (Date.now() > end) throw new Error(`timed out waiting for ${expression}`);
+					if (Date.now() > end) {
+						// what the page was showing, and what went wrong in it, say why the state never came
+						const shown = await run<string>("document.body?.innerText.slice(0, 300) ?? ''").catch(() => "?");
+						const at = await run<string>("location.href").catch(() => "?");
+						throw new Error(
+							`timed out waiting for ${expression}\nat ${at}\nshowing: ${JSON.stringify(shown)}\nerrors: ${JSON.stringify(errors.slice(-5))}`,
+						);
+					}
 					await new Promise((resolve) => setTimeout(resolve, 100));
 				}
 			},

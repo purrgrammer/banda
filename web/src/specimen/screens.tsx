@@ -9,6 +9,7 @@ import { ConnectCard } from "../chat/Connect.tsx";
 import type { FaceState } from "../chat/Face.tsx";
 import { Bubble, DaySeparator, Mention, Run, UnreadDivider } from "../chat/Feed.tsx";
 import { ImageFile } from "../chat/Files.tsx";
+import { BringBlock, type BringHarness, FirstBring, pickKey } from "../chat/FirstBring.tsx";
 import { Starters } from "../chat/FirstRun.tsx";
 import { FirstSkills } from "../chat/FirstSkills.tsx";
 import { Header, workingWords } from "../chat/Header.tsx";
@@ -308,12 +309,38 @@ export function Screens() {
 			<Section
 				id="first-skills"
 				title="First run: skills"
-				note="Right after the provider, once: the skills banda ships, each with a switch. One already there stays."
+				note="Right after the provider, once, when the owner brought nothing of their own: the skills banda ships, each with a switch. One already there stays."
 				bleed
 			>
 				<div className="flex-1">
 					<FirstSkills skills={SKILL_OFFERS} picked={new Set(["bro", "catch-me-up"])} />
 				</div>
+			</Section>
+			<Section
+				id="first-bring"
+				title="First run: bring your own"
+				note="In the desktop app, in place of banda's skills when other harnesses are here: pick harnesses, see what comes along, leave any of it behind. Start fresh goes to banda's skills."
+				bleed
+			>
+				<div className="flex-1">
+					<FirstBring
+						harnesses={BRING_HARNESSES}
+						picked={new Set(["claude-code", "codex"])}
+						left={new Set([pickKey("skills", "motion-brief")])}
+					/>
+				</div>
+			</Section>
+			<Section
+				id="bring-settings"
+				title="Settings: bring skills and agents"
+				note="Settings → Agents, on the desktop: the same picker, any time; what came in last under the button."
+			>
+				<BringBlock
+					harnesses={BRING_HARNESSES}
+					picked={new Set(["codex"])}
+					left={new Set()}
+					done="3 skills and 1 agent"
+				/>
 			</Section>
 			<Section
 				id="first-run-signing-in"
@@ -402,3 +429,32 @@ export function Screens() {
 		</>
 	);
 }
+
+const BRING_HARNESSES: readonly BringHarness[] = [
+	{
+		name: "claude-code",
+		service: "Claude Code",
+		folder: "~/.claude",
+		provider: "anthropic",
+		connect: { install: "npm install -g @agentclientprotocol/claude-agent-acp@0.100.0" },
+		skills: [
+			{ name: "shadcn", about: "Manages shadcn components and projects.", added: false },
+			{ name: "motion-brief", about: "Turn a motion idea into a brief.", added: false },
+			{ name: "bro", about: "Say that again, in plain words.", added: true },
+			{ name: "My_Notes", about: "", added: false, problem: "Its folder's name is not a skill name banda takes." },
+		],
+		agents: [{ name: "code-reviewer", about: "Reviews a diff for bugs before it lands.", added: false }],
+	},
+	{
+		name: "codex",
+		service: "Codex",
+		folder: "~/.codex",
+		provider: "openai",
+		connect: "ready",
+		skills: [
+			{ name: "shadcn", about: "Manages shadcn components and projects.", added: false },
+			{ name: "openai-docs", about: "Look up OpenAI's API docs.", added: false },
+		],
+		agents: [],
+	},
+];

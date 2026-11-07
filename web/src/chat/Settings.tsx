@@ -262,6 +262,7 @@ export function Personality({
 
 export type ConnectionRow = {
 	readonly connection: string;
+	readonly icon?: ReactNode;
 	/** Its name in the daemon ("github"), when it has one: what `connect` and the switches are for. */
 	readonly id?: string | undefined;
 	/** Every account signed in to it, and whether this agent may use each. */
@@ -331,11 +332,12 @@ export function Connections({
 							<RowOf
 								lead={
 									<span className="flex size-8 shrink-0 items-center justify-center rounded-field bg-paper-3">
-										{row.connection === "GitHub" ? (
-											<GitHubMark />
-										) : (
-											<span className="text-meta font-semibold text-ink-2">{row.connection.slice(0, 1)}</span>
-										)}
+										{row.icon ??
+											(row.connection === "GitHub" ? (
+												<GitHubMark />
+											) : (
+												<span className="text-meta font-semibold text-ink-2">{row.connection.slice(0, 1)}</span>
+											))}
 									</span>
 								}
 								title={<span className="font-medium">{row.connection}</span>}
@@ -1035,11 +1037,14 @@ export function AppSettings({
 	memory,
 	providers,
 	devices,
+	bring,
 	...act
 }: {
 	data: SettingsData;
 	tab?: SettingsTab;
 	memory?: ReactNode;
+	/** Bringing skills and agents from the other harnesses on this computer, on the desktop (`BringSettings`). */
+	bring?: ReactNode;
 	/** The phones paired, and pairing one (`DevicesSettings`). */
 	devices?: ReactNode;
 	/** Every provider the band may think with, to connect, use or sign out of (`ModelProviders`). */
@@ -1144,6 +1149,7 @@ export function AppSettings({
 				<SignedIn sites={data.signedIn ?? []} onSignOut={act.onSignOut} />
 			</TabsContent>
 			<TabsContent value="agents" className="flex flex-col gap-8">
+				{bring}
 				{data.groupLimits === undefined ? null : (
 					<GroupLimitsBlock limits={data.groupLimits} onChange={act.onGroupLimits} />
 				)}

@@ -69,6 +69,7 @@ import { daemonFile, egressCredentials, keepEgressCredential, maxFileBytes, owne
 import { accept, agents, decline, save, seed, seedUntilDone, type Workspace, watchAgents } from "./server/agents.ts";
 import type { ComputerView, OwnerInput, Posted, PostMessage, ViewEvent } from "./server/api.ts";
 import { acceptedIconFace } from "./server/avatar-icon-face.ts";
+import { bringable, chooseBring } from "./server/bring.ts";
 import { openCapabilities } from "./server/capabilities.ts";
 import { change, companion, validPicks } from "./server/companion.ts";
 import { openDevices } from "./server/devices.ts";
@@ -792,6 +793,12 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 					saveSkill: (name, text, base) => saveSkill(open, workspace, name, text, base),
 					shippedSkills: () => shippedSkills(open, workspace),
 					chooseShippedSkills: (names) => chooseShippedSkills(open, workspace, names),
+					bringable: () => bringable(open, workspace),
+					chooseBring: async (picks) => {
+						const view = await chooseBring(open, workspace, picks, core.agentChanged);
+						await settleAgents();
+						return view;
+					},
 					accept: async (name, sha) => {
 						const views = await accept(open, workspace, name, sha, core.agentChanged);
 						await settleAgents();

@@ -21,6 +21,8 @@ export type CompanionDoc = {
 	overrides?: { [provider: string]: { [T in Tier]?: string } };
 	/** The owner chose from the skills banda ships, or skipped them, at first run: they are not offered again. */
 	skillsChosen?: true;
+	/** The owner imported from the other harnesses on this computer, or skipped them, at first run on the desktop. */
+	bringChosen?: true;
 };
 
 export const Companion = defineDoc<CompanionDoc>({

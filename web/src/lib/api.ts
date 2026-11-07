@@ -26,12 +26,14 @@ import type {
 	ShellEvent,
 	ViewEvent,
 } from "../../../src/server/api.ts";
+import type { BringPick, BringView } from "../../../src/server/bring.ts";
 import type { DesignedFace } from "../../../src/server/routes/faces.ts";
 import type { ShippedSkillsView, SkillView } from "../../../src/server/skills.ts";
 import { oneStream } from "./one-stream.ts";
 import { pickTransport } from "./transport.ts";
 
 export type * from "../../../src/server/api.ts";
+export type { BringOffer, BringPick, BringView, HostHarnessView } from "../../../src/server/bring.ts";
 export type { ShippedSkillsView, ShippedSkillView, SkillView } from "../../../src/server/skills.ts";
 
 const KEY = "banda.token";
@@ -346,6 +348,12 @@ export const saveSkill = (name: string, text: string, base: string | null) =>
 /** The skills banda ships, offered once at first run. */
 export const shippedSkills = () => api<ShippedSkillsView>("/skills/shipped");
 /** Add the shipped skills picked, accepted; none skips. */
+/** What the other harnesses on this computer have to import at first run. */
+export const bringable = () => api<BringView>("/bring");
+/** Import the picks; none skips. */
+export const chooseBring = (skills: readonly BringPick[], agents: readonly BringPick[]) =>
+	api<BringView>("/bring", { method: "POST", body: JSON.stringify({ skills, agents }) });
+
 export const chooseShippedSkills = (add: readonly string[]) =>
 	api<ShippedSkillsView>("/skills/shipped", { method: "POST", body: JSON.stringify({ add }) });
 

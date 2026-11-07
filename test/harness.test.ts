@@ -251,6 +251,8 @@ describe("a harness session", () => {
 		expect(ended?.state).toBe("done");
 		expect(ended?.call).toBe("c1");
 		expect(ended?.steps.map((step) => step.kind)).toEqual(["asked", "edit", "run", "steered", "decided", "said"]);
+		// the decided step keeps the ask's kind: the folded row says "You allowed: run a command", never the command
+		expect(ended?.steps.find((step) => step.kind === "decided")).toMatchObject({ command: "npm test", ask: "execute" });
 		// the wake carries what the owner decided and told it, not only its last words
 		const result = JSON.parse(
 			/<harness-result[^>]*>\n(.*)\n<\/harness-result>/s.exec(s.woke[0]?.text ?? "")?.[1] ?? "{}",
@@ -633,6 +635,24 @@ describe("following up on a session", () => {
 		expect(ended?.notes).toHaveLength(1);
 		expect(ended?.steps.find((step) => step.kind === "steered")).toMatchObject({ from: "agent", taken: true });
 		expect(s.woke[0]?.text).toContain('"from":"agent"');
+		await s.harness.close(context);
+	});
+
+	it("names at most 30 changed files when its agent looks at a session", async () => {
+		const s = await setup();
+		const edits = Array.from({ length: 40 }, (_, i) => `edit src/f${i}.ts +1 -0`).join("\n");
+		const task = await s.begin(`${edits}\nsleep 5000\nsay late`);
+		await until(
+			async () => ((await s.sessions())[task]?.steps.filter((step) => step.kind === "edit").length ?? 0) === 40,
+		);
+		await s.harness.commit(async (tx) => {
+			const shown = (await sessionOf(tx, "sancho", task, () => "Fake Code", Date.now())) ?? "";
+			const line = shown.split("\n").find((one) => one.startsWith("Files changed")) ?? "";
+			expect(line.match(/src\/f\d+\.ts/g)).toHaveLength(30);
+			expect(line).toContain("and 10 more");
+			await stopOwnSession(tx, "sancho", task);
+		}, context);
+		await until(() => s.woke.length === 1);
 		await s.harness.close(context);
 	});
 

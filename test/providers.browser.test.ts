@@ -10,7 +10,7 @@ import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { TiersView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome } from "./helpers.ts";
+import { freePort, skipShippedSkills, tempHome, viteCacheDir } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const ANTHROPIC = presetOf("anthropic")!;
@@ -93,9 +93,11 @@ for (const width of [390, 1440])
 				).json()) as TiersView;
 			const server = await createServer({
 				configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
+				cacheDir: await viteCacheDir(),
 				server: {
 					host: "127.0.0.1",
-					port: 0,
+					port: await freePort(),
+					strictPort: true,
 					open: false,
 					proxy: { "/api": { target: base, changeOrigin: true, headers: { origin: base } } },
 				},
@@ -105,7 +107,7 @@ for (const width of [390, 1440])
 				const address = server.httpServer!.address();
 				if (!address || typeof address === "string") throw new Error("No app port");
 				await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
-					await page.until(`document.body.textContent.includes('Sancho')`, 30000);
+					await page.until(`document.body.textContent.includes('Sancho')`);
 					// the app may route to the first agent's chat once it has loaded: ask for Settings until it shows
 					await page.until(
 						`(location.hash.startsWith('#/settings') || (location.hash='#/settings', false)) && ${tab("Model")}`,

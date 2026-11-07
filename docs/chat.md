@@ -85,6 +85,14 @@ About five weeks of agent work in all; slices 8 and 9 can run beside 6 and 7 onc
 
 - [x] Owner review of live activity disclosure: direct and group chats now open a readable timeline from the status or a quiet message action beside Copy; any item opens the full streaming transcript in the same sheet. Historical prompt/tool declarations, unused tools, arguments, results, provider-exposed thinking and errors come from daemon records. There is no device-wide transcript mode. Desktop and 320px/390px fork walkthroughs and live/group browser checks are in place. `#/specimen/activity` remains the interactive fixture; `#/specimen/activity/recorded` reads an opt-in private fork snapshot through `BANDA_ACTIVITY_FIXTURE`, never bundled.
 
+- [ ] Bringing your own (DESIGN.md "Bringing your own"): in the desktop app, first run offers the skills and agents of
+  Claude Code, Codex and pi on this computer in place of banda's skills (harnesses picked, a preview of what comes,
+  any of it left behind; nothing brought goes on to banda's skills), and Settings → Agents offers it any time; each
+  harness says how to connect it over ACP. The band's menu (Skills, Connections, Settings) replaces the footer's
+  links, with a dot while a skill or connection waits on the owner. In code with unit and fault tests, tried on a
+  fork with the desktop bridge stubbed; the real desktop app on a fresh home, the menu at phone width and owner
+  review remain
+
 - [ ] Model providers in Settings: every provider listed to connect (sign-in or key), use or sign out of; signing out
   of the one in use moves the band to another still connected. In code with tests; owner review pending
 

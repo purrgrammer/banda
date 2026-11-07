@@ -26,6 +26,8 @@ export type HarnessSessionView = {
 	/** Its own mark, in its own colours. */
 	readonly logo?: string;
 	readonly folder: string;
+	/** The folder's real absolute path: the web cuts only paths under it, never paths that merely share its name. */
+	readonly root?: string;
 	/** The session it goes on from, by task. */
 	readonly continues?: number;
 	readonly continuation?: "native" | "summary";

@@ -42,6 +42,7 @@ import type {
 	ShellEvent,
 	ViewEvent,
 } from "./api.ts";
+import type { BringPick, BringView } from "./bring.ts";
 import type { ObjectAsk, ObjectShown } from "./objects.ts";
 import { SERVED_POLICY } from "./policy.ts";
 import { endpointOf } from "./remote.ts";
@@ -116,6 +117,13 @@ export type Routes = {
 	readonly shippedSkills: () => Promise<ShippedSkillsView>;
 	/** Add the shipped skills picked, accepted; none skips. Either way they are not offered again. */
 	readonly chooseShippedSkills: (names: readonly string[]) => Promise<ShippedSkillsView>;
+	/** What the other harnesses on this computer have to import, and whether the owner chose at first run. */
+	readonly bringable: () => Promise<BringView>;
+	/** Import the skills and agents picked; none skips. Either way the step is not offered again. */
+	readonly chooseBring: (picks: {
+		readonly skills: readonly BringPick[];
+		readonly agents: readonly BringPick[];
+	}) => Promise<BringView>;
 	/** Throws `BadRequest` when the file changed since `sha` was shown, or does not parse. */
 	readonly accept: (name: string, sha: string | null) => Promise<AgentView[]>;
 	readonly decline: (name: string) => Promise<AgentView[]>;
@@ -559,6 +567,25 @@ export function handler(
 			if (!Array.isArray(add) || !add.every((name) => typeof name === "string"))
 				return reply(res, 400, { error: "add is the names of the shipped skills picked; none skips" });
 			return reply(res, 200, await routes.chooseShippedSkills(add));
+		}
+		if (route === "GET /bring") return reply(res, 200, await routes.bringable());
+		if (route === "POST /bring") {
+			const { skills, agents } = await json(req);
+			const picks = (list: unknown): BringPick[] | undefined =>
+				Array.isArray(list) &&
+				list.every(
+					(pick) =>
+						typeof pick === "object" &&
+						pick !== null &&
+						typeof pick.harness === "string" &&
+						typeof pick.name === "string",
+				)
+					? list.map(({ harness, name }: BringPick) => ({ harness, name }))
+					: undefined;
+			const wanted = { skills: picks(skills), agents: picks(agents) };
+			if (wanted.skills === undefined || wanted.agents === undefined)
+				return reply(res, 400, { error: "skills and agents are lists of { harness, name } picked; none skips" });
+			return reply(res, 200, await routes.chooseBring({ skills: wanted.skills, agents: wanted.agents }));
 		}
 		const skill = /^\/skills\/([a-z0-9-]+)(?:\/(accept))?$/.exec(path);
 		if (skill !== null) {

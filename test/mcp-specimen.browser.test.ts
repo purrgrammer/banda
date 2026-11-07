@@ -3,6 +3,7 @@ import { createServer as createHttpServer, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { viteCacheDir } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 let server: ViteDevServer;
@@ -13,6 +14,7 @@ beforeAll(async () => {
 	listener = createHttpServer((req, res) => server.middlewares(req, res));
 	server = await createServer({
 		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
+		cacheDir: await viteCacheDir(),
 		server: { middlewareMode: true, hmr: { server: listener }, open: false },
 		plugins: [
 			{

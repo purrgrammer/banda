@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { freePort, viteCacheDir } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 let server: ViteDevServer;
@@ -9,7 +10,8 @@ beforeAll(async () => {
 	if (!hasChrome()) return;
 	server = await createServer({
 		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		server: { port: 0, host: "127.0.0.1", open: false },
+		cacheDir: await viteCacheDir(),
+		server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
 	});
 	await server.listen();
 	const address = server.httpServer?.address();
@@ -143,7 +145,7 @@ it.skipIf(!hasChrome())("streaming preserves inspection and keeps the sheet open
 		await press(page, button("Play"));
 		await page.until(`document.querySelector('[data-thinking]').textContent.length > ${before}`);
 		expect(await page.run(`document.querySelector('[data-raw-content]').parentElement.scrollTop`)).toBe(0);
-		await page.until(`${dialogText}?.includes('Finished · 32s')`, 20000);
+		await page.until(`${dialogText}?.includes('Finished · 32s')`);
 		expect(await page.run(`document.querySelectorAll('[role="dialog"]').length`)).toBe(1);
 		expect(await page.run(`document.querySelector('[data-raw-content]').parentElement.scrollTop`)).toBe(0);
 		await press(page, button("Latest"));
