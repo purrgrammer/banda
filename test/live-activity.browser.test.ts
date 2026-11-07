@@ -416,3 +416,47 @@ it.skipIf(!hasChrome())(
 	},
 	30000,
 );
+
+it.skipIf(!hasChrome())(
+	"a message sent while the agent works shows dimmed as waiting its turn, then as sent once the agent takes it",
+	async () => {
+		gate = new Promise((resolve) => {
+			release = resolve;
+		});
+		entered = false;
+		const write = (value: string) =>
+			`(()=>{const el=document.querySelector('textarea[name="message"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));})()`;
+		const button = (label: string) => `document.querySelector('form button[aria-label="${label}"]')`;
+		const waiting = `[...document.querySelectorAll('.opacity-60')].some(el => el.textContent.includes('BROWSER_STEER_NOTE') && el.textContent.includes('Waiting its turn'))`;
+		try {
+			await withPage(`${base}/#token=${token}`, { width: 1440, height: 900 }, async (page) => {
+				await open(page, "#/a/sancho");
+				await page.until(`document.querySelector('textarea[name="message"]')`);
+				await page.run(write("BROWSER_STEER_LIVE"));
+				await page.run(`document.querySelector('textarea[name="message"]').closest('form').requestSubmit()`);
+				await until(() => Promise.resolve(entered));
+				// working with nothing written: Stop; with words: Send
+				await page.until(`${button("Stop")} && !${button("Send")}`);
+				await page.run(write("BROWSER_STEER_NOTE"));
+				await page.until(`${button("Send")} && !${button("Stop")}`);
+				await page.run(`${button("Send")}.click()`);
+				// queued behind the run: dimmed, waiting its turn, and the composer empty again
+				await page.until(waiting);
+				await page.until(`document.querySelector('textarea[name="message"]').value === '' && ${button("Stop")}`);
+				release();
+				gate = undefined;
+				await idle();
+				// taken by the agent: shown as sent, no longer waiting
+				await page.until(
+					`!document.body.textContent.includes('Waiting its turn') && [...document.querySelectorAll('[data-slot]'), ...document.querySelectorAll('div')].some(el => el.textContent === 'BROWSER_STEER_NOTE')`,
+				);
+				expect(await page.run(waiting)).toBe(false);
+				expect(page.errors()).toEqual([]);
+			});
+		} finally {
+			release();
+			gate = undefined;
+		}
+	},
+	30000,
+);

@@ -252,10 +252,24 @@ function Timeline({
 			view(
 				linkedItems,
 				transcript.waits,
-				{ busy: transcript.busy, running: transcript.running, thinking: transcript.thinking },
+				{
+					busy: transcript.busy,
+					running: transcript.running,
+					thinking: transcript.thinking,
+					// the owner's messages waiting for the run (a steer, or a follow-up), dimmed until the agent takes them
+					queued: transcript.queued,
+				},
 				context,
 			),
-		[linkedItems, transcript.waits, transcript.busy, transcript.running, transcript.thinking, context],
+		[
+			linkedItems,
+			transcript.waits,
+			transcript.busy,
+			transcript.running,
+			transcript.thinking,
+			transcript.queued,
+			context,
+		],
 	);
 	// the divider sits after the last segment from an entry the owner had read when the chat opened, and only when
 	// something unread was already there then: what arrives while the owner watches is not unread

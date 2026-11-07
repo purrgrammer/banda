@@ -464,7 +464,13 @@ function partOf(
 	switch (segment.kind) {
 		case "owner":
 			return (
-				<>
+				// queued, it shows dimmed, as a message on its way does, until the agent takes it
+				<div
+					className={cn(
+						"contents",
+						segment.queued === true && "flex flex-col items-end gap-1 opacity-60 transition-opacity duration-200",
+					)}
+				>
 					{segment.text.trim() === "" ? null : (
 						<Bubble mine copy={segment.text}>
 							{segment.queued ? (
@@ -477,8 +483,9 @@ function partOf(
 					{segment.files.map((file) => (
 						<FilePart key={`${file.name}-${"sha" in file ? file.sha : ""}`} chat={chat} file={file} />
 					))}
-					{segment.queued === true ? <span className="px-1 text-meta text-ink-2">Waiting its turn</span> : null}
-				</>
+					{/* the dimming says it to the eye; the words only to a screen reader */}
+					{segment.queued === true ? <span className="sr-only">Waiting its turn</span> : null}
+				</div>
 			);
 		case "owner-message":
 			return (
