@@ -79,7 +79,9 @@ for (const width of [390, 1440])
 				await page.run(`location.hash='#/skills'`);
 				// the list is flat and visible: no disclosure to open
 				await page.until(`document.querySelector('[data-skill-list]')?.textContent.includes('/catch-me-up')`);
-				expect(await page.run(`document.querySelector('[data-skill-list]')?.textContent.includes('/unslop')`)).toBe(false);
+				expect(await page.run(`document.querySelector('[data-skill-list]')?.textContent.includes('/unslop')`)).toBe(
+					false,
+				);
 				// the one left off at first run is offered again, from banda
 				await page.until(`document.querySelector('[aria-label="Skills from banda"]')?.textContent.includes('/unslop')`);
 				await page.run(`location.hash='#/a/sancho'`);

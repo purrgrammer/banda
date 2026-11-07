@@ -61,7 +61,9 @@ export function SkillsPage({
 	const [editing, setEditing] = useState(false);
 	// an editor left open belongs to the page it was opened on, not the next one
 	// biome-ignore lint/correctness/useExhaustiveDependencies: name is the page
-	useEffect(() => setEditing(false), [name]);
+	useEffect(() => {
+		setEditing(false);
+	}, [name]);
 	const [shipped, setShipped] = useState<readonly ShippedSkillView[]>();
 	useEffect(() => {
 		void shippedSkills()
