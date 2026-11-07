@@ -1,6 +1,6 @@
 /** Whole screens: the app on the desktop and the phone, first run, the first chat, a group. */
 import { CalendarClockIcon } from "lucide-react";
-import { type ReactNode, useContext } from "react";
+import { type ReactNode, useContext, useState } from "react";
 import { AgentMessage } from "../chat/AgentMessage.tsx";
 import { ApprovalCard, Facts, WaitingPill } from "../chat/Approval.tsx";
 import { ViewCard } from "../chat/Cards.tsx";
@@ -16,7 +16,7 @@ import { HEADER_CLEARANCE, Header, workingWords } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { PullRequestCard } from "../chat/Object.tsx";
 import { ProposalCard } from "../chat/Proposal.tsx";
-import type { Who } from "../chat/Row.tsx";
+import { RowActions, type Who } from "../chat/Row.tsx";
 import { VoiceMessage } from "../chat/Voice.tsx";
 import { Band, FirstRun } from "./brand.tsx";
 import {
@@ -250,6 +250,23 @@ function AgentToolsChat() {
 	);
 }
 
+/** The band as the owner would use it: pin and unpin, Sancho pinned from the start. */
+function PinnableBand({ phone }: { phone: boolean }) {
+	const [pinned, setPinned] = useState<readonly string[]>(["sancho", "mara"]);
+	return (
+		<Band
+			rows={ROWS}
+			pinned={pinned}
+			phone={phone}
+			selected="mara"
+			onPin={(id, on) =>
+				setPinned((was) => (on ? [...was.filter((each) => each !== id), id] : was.filter((each) => each !== id)))
+			}
+			{...(phone ? { className: "w-full" } : {})}
+		/>
+	);
+}
+
 export function Screens() {
 	const { width } = useContext(StageContext);
 	const phone = width === "phone";
@@ -267,21 +284,31 @@ export function Screens() {
 			<Section
 				id="pinned"
 				title="Pinned"
-				note="Pinned agents and groups sit above every conversation as tiles of the same size, three to a row. Past three the row scrolls sideways, the next tile peeking in. A tile carries what the row would: the waiting dot, the unread count, a face at work."
+				note="Pinned agents and groups sit above every conversation as tiles of the same size, three to a row, and leave the list. Past three the row scrolls sideways, the next tile peeking in. A tile's face carries the dots: waiting at its foot, unread at its top. Sancho is pinned from the start. Pins are kept in band.md at the workspace root. Try it: hover a row for its pin, a tile for its unpin; on the phone, long-press."
 				bleed
 			>
-				<Band
-					rows={ROWS}
-					pinned={["mara", "octo", "trip"]}
-					selected="mara"
-					{...(phone ? { className: "w-full" } : {})}
-				/>
-				<Band
-					rows={ROWS}
-					pinned={["mara", "octo", "trip", "sancho", "atlas"]}
-					{...(phone ? { className: "w-full" } : {})}
-				/>
+				<PinnableBand phone={phone} />
+				{phone ? null : <Band rows={ROWS} pinned={["sancho", "mara", "octo"]} revealed="atlas" onPin={() => {}} />}
+				{phone ? null : (
+					<Band rows={ROWS} pinned={["sancho", "mara", "octo", "trip", "atlas"]} revealed="mara" onPin={() => {}} />
+				)}
 			</Section>
+			{phone ? (
+				<Section
+					id="pinned-hold"
+					title="Pinning on the phone"
+					note="A long press on a row or a tile opens a sheet with its face, its name and the one thing to do."
+					bleed
+				>
+					<div className="relative flex w-full flex-col">
+						<Band rows={ROWS} pinned={["sancho"]} className="w-full" />
+						<div aria-hidden="true" className="absolute inset-0 bg-black/40" />
+						<div className="absolute inset-x-0 bottom-0 rounded-t-tile bg-paper shadow-lg">
+							<RowActions row={ROWS[1] ?? ROWS[0]!} pinned={false} />
+						</div>
+					</div>
+				</Section>
+			) : null}
 			{phone ? (
 				<Section id="app-chat" title="A chat on the phone" bleed>
 					<MaraChat />

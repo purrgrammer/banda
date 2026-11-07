@@ -7,6 +7,7 @@
 import { BlocksIcon, BookOpenIcon, PanelLeftIcon, PlugIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
 import { MotionConfig, motion } from "motion/react";
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -14,13 +15,17 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/cn";
 import { RowsLoading } from "./Loading.tsx";
-import { PinnedTile, Row, type RowView } from "./Row.tsx";
+import { PinnedTile, Row, RowActions, type RowView } from "./Row.tsx";
 
 export function Band({
 	rows,
 	pinned = [],
+	onPin,
+	phone = false,
+	revealed,
 	selected,
 	collapsed = false,
 	notice,
@@ -39,6 +44,12 @@ export function Band({
 	rows: readonly RowView[];
 	/** The rows pinned to the top, by id, in the owner's order. */
 	pinned?: readonly string[];
+	/** Pin a row to the top, or let it go back among the rows. */
+	onPin?: ((id: string, pinned: boolean) => void) | undefined;
+	/** On the phone a long press offers the pin; elsewhere it sits on the row on hover. */
+	phone?: boolean;
+	/** Show the pin of this row or tile as on hover (the specimen). */
+	revealed?: string | undefined;
 	selected?: string | undefined;
 	collapsed?: boolean;
 	/** A daemon's notice at the foot: offline, the computer off. */
@@ -57,6 +68,10 @@ export function Band({
 }) {
 	const tiles = pinned.flatMap((id) => rows.filter((row) => row.id === id));
 	const rest = rows.filter((row) => !pinned.includes(row.id));
+	const [heldId, setHeld] = useState<string>();
+	const held = rows.find((row) => row.id === heldId);
+	const hold = (id: string) => (phone && onPin !== undefined ? () => setHeld(id) : undefined);
+	const pin = (id: string, on: boolean) => (phone || onPin === undefined ? undefined : () => onPin(id, on));
 	return (
 		<nav
 			aria-label="Your band"
@@ -119,6 +134,9 @@ export function Band({
 								<PinnedTile
 									row={row}
 									selected={row.id === selected}
+									revealed={row.id === revealed}
+									onUnpin={pin(row.id, false)}
+									onHold={hold(row.id)}
 									{...(onSelect === undefined ? {} : { onSelect: () => onSelect(row.id) })}
 								/>
 							</li>
@@ -133,12 +151,31 @@ export function Band({
 								row={row}
 								selected={row.id === selected}
 								collapsed={collapsed}
+								revealed={row.id === revealed}
+								onPin={collapsed ? undefined : pin(row.id, true)}
+								onHold={hold(row.id)}
 								{...(onSelect === undefined ? {} : { onSelect: () => onSelect(row.id) })}
 							/>
 						</motion.div>
 					))}
 				</MotionConfig>
 			</div>
+			<Sheet open={held !== undefined} onOpenChange={(open) => (open ? undefined : setHeld(undefined))}>
+				<SheetContent side="bottom" showCloseButton={false} className="gap-0 rounded-t-tile bg-paper p-0">
+					<SheetTitle className="sr-only">{held?.name ?? ""}</SheetTitle>
+					<SheetDescription className="sr-only">Pin it to the top, or unpin it</SheetDescription>
+					{held === undefined ? null : (
+						<RowActions
+							row={held}
+							pinned={pinned.includes(held.id)}
+							onPin={(on) => {
+								onPin?.(held.id, on);
+								setHeld(undefined);
+							}}
+						/>
+					)}
+				</SheetContent>
+			</Sheet>
 			{notice === undefined || collapsed ? null : <div className="px-3 pb-2">{notice}</div>}
 			{collapsed ? (
 				<div className="flex shrink-0 justify-center py-2">
