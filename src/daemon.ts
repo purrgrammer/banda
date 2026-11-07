@@ -383,8 +383,8 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		registry.install(
 			memoryExtension({ files: memoryFiles, search: index, lock: memoryLock, changed: () => memoryChanged() }),
 		);
-		// the date and the hour, for every agent, as a status line beside the prompt's fixed start
-		registry.install(nowExtension());
+		// the date, the hour and how full memory is, for every agent, as a status line beside the prompt's fixed start
+		registry.install(nowExtension(Date.now, memoryFiles));
 		// each area's extensions, before the store opens: what it installs is there when anything resumes
 		const boot: Boot = { core, blobs, config, home, root: agentBox.workspace, log };
 		for (const area of AREAS) for (const extension of area.install?.(boot) ?? []) registry.install(extension);
