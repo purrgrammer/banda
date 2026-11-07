@@ -20,9 +20,11 @@ import {
 	harnessTool,
 	harnessToolsOf,
 	isHarnessTool,
+	keepUpdate,
 	projectOf,
 	resultOf,
 	SESSIONS_TOOL,
+	type SessionUpdates,
 	STOP_TOOL,
 	sessionOf,
 	sessionsOf,
@@ -105,6 +107,45 @@ describe("applyUpdate", () => {
 			{ kind: "edit", path: "/w/auth.js", added: 1, removed: 1, diff: "-a\n+b", call: "t3" },
 			{ kind: "said", text: "done" },
 		]);
+	});
+});
+
+describe("keepUpdate", () => {
+	it("keeps the latest of each useful kind, never message or thought chunks", () => {
+		const kept: SessionUpdates = {};
+		expect(keepUpdate(kept, { sessionUpdate: "usage_update", used: 10, size: 100 })).toBe(true);
+		expect(keepUpdate(kept, { sessionUpdate: "usage_update", used: 20, size: 100 })).toBe(true);
+		expect(keepUpdate(kept, { sessionUpdate: "session_info_update", title: "Fixing" })).toBe(true);
+		expect(
+			keepUpdate(kept, { sessionUpdate: "plan", entries: [{ content: "a", priority: "medium", status: "pending" }] }),
+		).toBe(true);
+		expect(keepUpdate(kept, { sessionUpdate: "available_commands_update", availableCommands: [] })).toBe(true);
+		expect(keepUpdate(kept, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "hi" } })).toBe(
+			false,
+		);
+		expect(keepUpdate(kept, { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "hm" } })).toBe(
+			false,
+		);
+		expect(kept).toEqual({
+			usage: { used: 20, size: 100 },
+			info: { title: "Fixing" },
+			plan: { entries: [{ content: "a", priority: "medium", status: "pending" }] },
+			commands: { availableCommands: [] },
+		});
+	});
+
+	it("drops an oversized update, or one that would put the whole over the bound, keeping the earlier one", () => {
+		const kept: SessionUpdates = { info: { title: "before" } };
+		expect(keepUpdate(kept, { sessionUpdate: "session_info_update", title: "x".repeat(5000) })).toBe(false);
+		expect(kept.info).toEqual({ title: "before" });
+		// each under the per-kind bound; the last would put all of them over the total
+		expect(keepUpdate(kept, { sessionUpdate: "plan", entries: [{ content: "y".repeat(3900) }] })).toBe(true);
+		expect(keepUpdate(kept, { sessionUpdate: "usage_update", used: 1, size: 2, note: "z".repeat(3900) })).toBe(true);
+		expect(
+			keepUpdate(kept, { sessionUpdate: "available_commands_update", availableCommands: [{ name: "c".repeat(3900) }] }),
+		).toBe(false);
+		expect(kept.commands).toBeUndefined();
+		expect(kept.usage).toMatchObject({ used: 1, size: 2 });
 	});
 });
 
@@ -265,6 +306,37 @@ describe("a harness session", () => {
 		});
 		expect(s.woke[0]?.text).toContain(`call harness__fake with session ${task}`);
 		expect(s.woke).toEqual([expect.objectContaining({ chat: s.chat, key: `harness:${task}`, state: "done" })]);
+		await s.harness.close(context);
+	});
+
+	it("keeps the latest useful updates (usage, info, plan, commands), never the chunks", async () => {
+		const s = await setup();
+		const task = await s.harness.commit(
+			(tx) =>
+				s.made.begin(tx, {
+					chat: s.chat,
+					agent: "sancho",
+					harness: "fake",
+					folder: s.folder,
+					ask: "usage 10 100\nusage 20 100\ntitle Fixing the tests\nplan tidy the suite\ncommands lint test\nsay done",
+				}),
+			context,
+		);
+		await until(() => s.woke.length === 1);
+		const ended = (await s.session())[task];
+		// the latest of each kind, apart from the steps; what it said stays a step, never an update kept here
+		expect(ended?.updates).toEqual({
+			usage: { used: 20, size: 100 },
+			info: { title: "Fixing the tests" },
+			plan: { entries: [{ content: "tidy the suite", priority: "medium", status: "pending" }] },
+			commands: {
+				availableCommands: [
+					{ name: "lint", description: "lint" },
+					{ name: "test", description: "test" },
+				],
+			},
+		});
+		expect(ended?.steps.map((step) => step.kind)).toEqual(["asked", "said"]);
 		await s.harness.close(context);
 	});
 

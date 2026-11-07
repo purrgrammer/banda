@@ -7,6 +7,10 @@
  *   asks2 <a> <b>          two permission requests at once, as parallel subagents send them
  *   sleep <ms>             wait, cancellable
  *   say <text>             words, the turn's last message
+ *   usage <used> <size>    a usage_update
+ *   title <text>           a session_info_update
+ *   plan <text>            a plan update with one entry
+ *   commands <a> <b> …     an available_commands_update
  *   crash                  the process exits
  *   background <mark>      start a long command, detached in a group of its own, that outlives this process
  * A line it does not know is said as words (a recap of earlier work, sent before the script). `session/load` replays
@@ -131,6 +135,20 @@ async function run(sessionId: string, script: string): Promise<string> {
 			await sleep(Number(rest[0] ?? 0), sessionId);
 		} else if (verb === "say") {
 			update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: rest.join(" ") } });
+		} else if (verb === "usage") {
+			update(sessionId, { sessionUpdate: "usage_update", used: Number(rest[0] ?? 0), size: Number(rest[1] ?? 0) });
+		} else if (verb === "title") {
+			update(sessionId, { sessionUpdate: "session_info_update", title: rest.join(" ") });
+		} else if (verb === "plan") {
+			update(sessionId, {
+				sessionUpdate: "plan",
+				entries: [{ content: rest.join(" "), priority: "medium", status: "pending" }],
+			});
+		} else if (verb === "commands") {
+			update(sessionId, {
+				sessionUpdate: "available_commands_update",
+				availableCommands: rest.map((name) => ({ name, description: name })),
+			});
 		} else if (verb === "background") {
 			// detached, in a group of its own, as Claude Code runs each command: killing the harness's group misses it
 			spawn("sh", ["-c", `: ${rest[0]}; sleep 600`], { stdio: "ignore", detached: true }).unref();
