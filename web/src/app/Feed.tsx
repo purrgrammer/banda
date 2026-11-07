@@ -439,7 +439,12 @@ export function FeedView({
 		if (side === "line") {
 			flush();
 			nodes.push(
-				<div key={segment.key} data-entry={entryOf(segment.key)}>
+				<div
+					key={segment.key}
+					data-entry={entryOf(segment.key)}
+					// a folded row sits close: a stretch of them reads as one log, a little apart from the words around it
+					className="has-[[data-done]]:-my-1.5"
+				>
 					{part}
 				</div>,
 			);

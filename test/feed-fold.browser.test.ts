@@ -241,6 +241,12 @@ for (const width of [390, 1280]) {
 				);
 				await page.run(`${chevron}.click()`);
 				await page.until(`!${rowText("comment")}.includes('as @bandarra on GitHub')`);
+				// a stretch of rows reads as one log: close together, not a message's distance apart
+				const spaced = await page.run<number[]>(
+					`(() => { const boxes = [...document.querySelectorAll('[data-done]')].map(el => el.getBoundingClientRect()).sort((a, b) => a.top - b.top); return boxes.slice(1).map((box, i) => Math.round(box.top - boxes[i].bottom)); })()`,
+				);
+				expect(spaced.length).toBe(5);
+				for (const gap of spaced) expect(gap).toBeLessThanOrEqual(8);
 				// rows sit across the feed, centred, never wider than the page
 				expect(
 					await page.run<boolean>(
