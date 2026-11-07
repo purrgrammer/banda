@@ -1180,8 +1180,8 @@ export function openCapabilities(options: CapabilityOptions) {
 	/**
 	 * At start: credentials the store names no account for (a sign-in that did not finish, or a sign-out that did)
 	 * forgotten; asks for drafts on an account that is gone, ended; every accepted remote connection whose tools were
-	 * never listed for its file (a kill came between its sign-in and the listing), listed now; and sign-ins no browser
-	 * came back from, forgotten.
+	 * never listed for its file (a kill came between its sign-in and the listing), listed now; sign-ins no browser
+	 * came back from, forgotten; and the connections banda ships brought to its version (`followShipped`).
 	 */
 	async function reconcile(ctx: Context = context): Promise<void> {
 		await prunePending(home, now());
@@ -1208,6 +1208,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			return names;
 		}, ctx);
 		for (const name of due) await connect(name, ctx);
+		await followShipped(ctx);
 	}
 
 	/**
@@ -1586,13 +1587,15 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	/**
 	 * Accept the box's connection `name` as the owner saw it (`sha`; null for a removal). A server in the box binds the
-	 * tools it listed too, so the model is offered exactly those. A file changed since is refused.
+	 * tools it listed too, so the model is offered exactly those. A file changed since is refused. `how.shipped` says
+	 * banda wrote it from what it ships ("added", as the owner added it or picked its scopes; "updated", as banda's next
+	 * version), so it follows banda's next version too.
 	 */
 	async function acceptConnection(
 		name: string,
 		sha: string | null,
 		ctx: Context = context,
-		restricted = false,
+		how: { readonly restricted?: true; readonly shipped?: "added" | "updated" } = {},
 	): Promise<void> {
 		const box = (await boxedFiles("connections", ctx)).get(name) as
 			| { text: string }
@@ -1622,9 +1625,17 @@ export function openCapabilities(options: CapabilityOptions) {
 		const fileSha = shaOf(box.text);
 		fault("accept:before");
 		await harness.commit(async (tx) => {
-			(await tx.doc(Accepted)).files[connectionPath(name)] = { sha: fileSha, text: box.text, at: now() };
-			if (restricted) (await tx.doc(Connected)).public[name] = [];
-			await log(tx, { at: now(), what: `You allowed ${connection.service}` });
+			const accepted = await tx.doc(Accepted);
+			accepted.files[connectionPath(name)] = { sha: fileSha, text: box.text, at: now() };
+			accepted.shipped = { ...accepted.shipped, [connectionPath(name)]: how.shipped !== undefined };
+			if (how.restricted) (await tx.doc(Connected)).public[name] = [];
+			await log(tx, {
+				at: now(),
+				what:
+					how.shipped === "updated"
+						? `banda updated ${connection.service}'s connection`
+						: `You allowed ${connection.service}`,
+			});
 			if (listing !== undefined) {
 				const doc = await tx.doc(Connected);
 				doc.connections[name] = { sha: fileSha, tools: listedOf(listing), at: now() };
@@ -2304,10 +2315,10 @@ export function openCapabilities(options: CapabilityOptions) {
 			| { unreadable: string }
 			| undefined;
 		if (box === undefined || "unreadable" in box) throw new BadRequest(`there is no connection named ${name}`, 404);
-		const accepted = await harness.commit(
-			async (tx) => (await tx.doc(Accepted)).files[connectionPath(name)]?.text,
-			ctx,
-		);
+		const { accepted, ours } = await harness.commit(async (tx) => {
+			const doc = await tx.doc(Accepted);
+			return { accepted: doc.files[connectionPath(name)]?.text, ours: doc.shipped?.[connectionPath(name)] };
+		}, ctx);
 		if (accepted !== undefined && accepted !== box.text)
 			throw new BadRequest("it proposes a change to this connection: allow or decline that first", 409);
 		const parsed = parseConnection(name, box.text);
@@ -2317,7 +2328,11 @@ export function openCapabilities(options: CapabilityOptions) {
 		if (rewritten === undefined) throw new BadRequest(`could not write the scopes into connections/${name}.md`);
 		if (rewritten === box.text) return;
 		await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, rewritten, ctx);
-		if (accepted !== undefined) await acceptConnection(name, shaOf(rewritten), ctx);
+		if (accepted !== undefined) {
+			const shipped = (await shippedFiles()).get(name);
+			const kept = shipped !== undefined && bandas(name, ours, accepted, shipped.connection);
+			await acceptConnection(name, shaOf(rewritten), ctx, kept ? { shipped: "added" } : {});
+		}
 		options.changed?.();
 	}
 
@@ -2333,6 +2348,61 @@ export function openCapabilities(options: CapabilityOptions) {
 			else files.set(name, { text, connection: parsed.connection });
 		}
 		return files;
+	}
+
+	/**
+	 * Whether the accepted connection `name` (its `text`, and what the store says of it) is banda's: written from what
+	 * banda ships and changed since only by banda (its scopes, its next version). A home whose store says nothing of it
+	 * (made before the store kept it) counts one still the shipped service, at its address, signing in as its client.
+	 */
+	function bandas(name: string, ours: boolean | undefined, text: string, shipped: Connection): boolean {
+		if (ours !== undefined) return ours;
+		const parsed = parseConnection(name, text);
+		if ("errors" in parsed) return false;
+		const { connection } = parsed;
+		return (
+			connection.service === shipped.service &&
+			connection.url === shipped.url &&
+			connection.api === shipped.api &&
+			connection.command === shipped.command &&
+			connection.client === shipped.client
+		);
+	}
+
+	/**
+	 * At start: each connection the home added from what banda ships, and nobody but banda changed since, follows
+	 * banda's version: the shipped file, with the scopes the owner picked (so its accounts stay signed in), written into
+	 * the workspace (or back into it, if the box lost it) and allowed at once. Everything else the owner chose is kept by
+	 * its name. One the box changed and nobody accepted yet is left for the owner. A kill once the file is written
+	 * finds it written next time, and allows it.
+	 */
+	async function followShipped(ctx: Context): Promise<void> {
+		const files = await shippedFiles();
+		if (files.size === 0) return;
+		const boxed = await boxedFiles("connections", ctx);
+		for (const [name, shipped] of files) {
+			const path = connectionPath(name);
+			const { accepted, ours } = await harness.commit(async (tx) => {
+				const doc = await tx.doc(Accepted);
+				return { accepted: doc.files[path]?.text, ours: doc.shipped?.[path] };
+			}, ctx);
+			if (accepted === undefined || !bandas(name, ours, accepted, shipped.connection)) continue;
+			const parsed = parseConnection(name, accepted);
+			const scopes = "connection" in parsed ? parsed.connection.scopes : undefined;
+			const text = (scopes === undefined ? undefined : withScopes(name, shipped.text, scopes)) ?? shipped.text;
+			const box = boxed.get(name) as { text: string } | { unreadable: string } | undefined;
+			if (box !== undefined && ("unreadable" in box || (box.text !== accepted && box.text !== text))) continue;
+			if (box?.text === text && text === accepted) continue;
+			try {
+				if (box?.text !== text) {
+					await write(workspace.env(), workspace, `${workspace.root}/${path}`, text, ctx);
+					fault("shipped:followed");
+				}
+				if (text !== accepted) await acceptConnection(name, shaOf(text), ctx, { shipped: "updated" });
+			} catch (error) {
+				say(`connections/${name}.md: banda's version was not taken up: ${(error as Error).message}`);
+			}
+		}
 	}
 
 	async function shippedView(present: ReadonlySet<string>, _ctx: Context): Promise<ShippedView[]> {
@@ -2366,7 +2436,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, shipped.text, ctx);
 			fault("shipped:written");
 		}
-		await acceptConnection(name, shaOf(shipped.text), ctx);
+		await acceptConnection(name, shaOf(shipped.text), ctx, { shipped: "added" });
 	}
 
 	/**
@@ -2477,7 +2547,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			if (written === undefined)
 				await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, text, ctx);
 			fault("address:written");
-			await acceptConnection(name, shaOf(text), ctx, true);
+			await acceptConnection(name, shaOf(text), ctx, { restricted: true });
 			return name;
 		});
 		addingMcp = operation.then(

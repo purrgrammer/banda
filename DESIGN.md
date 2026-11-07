@@ -353,6 +353,8 @@ A connection is how the band works with the owner's services without holding the
 with PKCE, or by code where the server registers no clients, as GitHub), the scopes it asks for, which tools only
 read and its objects. The owner adds one with a tap: its bytes are written into the workspace and
 allowed at once, since the app wrote them and the owner chose them; from then on it is an ordinary "before" file. It
+follows banda's version: at each start, one nobody but banda changed since is written again as banda ships it now, with
+the scopes the owner picked, and allowed at once; one the owner allowed a box change to is theirs, and stays. It
 is first class in the UI (a logo and a name on every card, event and draft of its) and secondary in the hierarchy: it
 lives inside agents' settings and the app's Settings, never as a screen of its own.
 - **Accounts.** An account is one sign-in: `auth/connections/<connection>/<account>/` holds its credentials, bound to

@@ -52,6 +52,8 @@ export type FaultPoint =
 	| "oauth:kept"
 	| "oauth:device"
 	| "shipped:written"
+	/** A shipped connection brought to banda's version: its file written, before it is allowed. */
+	| "shipped:followed"
 	/** Bringing from the other harnesses: the skills written, then accepted, then each agent saved. */
 	| "bring:written"
 	| "bring:accepted"

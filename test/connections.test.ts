@@ -5,7 +5,7 @@
  * write is a draft that runs once, approved; a tool switched off is refused even mid-run; credentials reach nothing
  * but the server they were given for.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	type AssistantMessage,
@@ -18,6 +18,7 @@ import {
 import { AgentDoc, type ConversationId, type TaskId, type ToolExecutionApi } from "@earendil-works/pi-durable";
 import fc from "fast-check";
 import { afterEach, describe, expect, it } from "vitest";
+import { ActivityLog } from "../src/core/activity.ts";
 import { Accepted, parseAgent, shaOf } from "../src/core/agents.ts";
 import {
 	Connected,
@@ -1074,6 +1075,142 @@ describe("connections banda ships", () => {
 		s.writeBox("connections/cal.md", connectionFile({ url: fake.url, reads: [] }));
 		expect((await s.capabilities.view()).shipped?.[0]?.added).toBe(true);
 		await expect(s.capabilities.addShipped("cal")).rejects.toThrow(/already/);
+	});
+
+	/** Banda ships the next version of cal; returns its text. */
+	const shipNext = (dir: string) => {
+		const next = `${readFileSync(join(dir, "cal.md"), "utf8")}\nbanda's next version.\n`;
+		writeFileSync(join(dir, "cal.md"), next);
+		return next;
+	};
+	const acceptedText = async (s: Awaited<ReturnType<typeof open>>) =>
+		(await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"]?.text;
+	const boxText = (s: Awaited<ReturnType<typeof open>>) => {
+		const path = join(s.box.workspace, "connections/cal.md");
+		return existsSync(path) ? readFileSync(path, "utf8") : undefined;
+	};
+	const cal = async (s: Awaited<ReturnType<typeof open>>) =>
+		(await s.capabilities.view()).connections.find((c) => c.name === "cal");
+
+	it("one the owner added follows banda's next version at start, keeping its accounts, switches and scopes", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		const shipped = await shipping(fake);
+		const s = await open(fake, shipped);
+		await s.capabilities.addShipped("cal");
+		await s.capabilities.setScopes("cal", ["read:user", "repo"]);
+		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
+		const account = (await cal(s))?.accounts?.[0];
+		await s.capabilities.switchAccount("sancho", "cal", account?.account, true);
+		await s.capabilities.toggle("cal__list_events", false);
+		const before = { view: await cal(s), connected: await s.harness.snapshot(Connected, context) };
+		const next = shipNext(shipped);
+
+		await s.capabilities.reconcile();
+
+		const wanted = withScopes("cal", next, ["read:user", "repo"]);
+		expect(wanted).toBeDefined();
+		expect(await acceptedText(s)).toBe(wanted);
+		expect(boxText(s)).toBe(wanted);
+		const after = await cal(s);
+		expect(after?.change).toBeUndefined();
+		expect(after?.state).toBe("connected");
+		expect(after?.accounts).toEqual(before.view?.accounts);
+		expect(after?.accounts?.[0]).toMatchObject({ agents: ["sancho"] });
+		expect(after?.accounts?.[0]?.stale).toBeFalsy();
+		const connected = await s.harness.snapshot(Connected, context);
+		expect(connected?.accounts).toEqual(before.connected?.accounts);
+		expect(connected?.on).toEqual(before.connected?.on);
+		expect(connected?.off).toEqual(before.connected?.off);
+		const events = (await s.harness.snapshot(ActivityLog, context))?.events.map((event) => event.what) ?? [];
+		expect(events.filter((what) => what === "banda updated Calendar's connection")).toHaveLength(1);
+		// a start again changes nothing, and a version after that follows too
+		await s.capabilities.reconcile();
+		expect(await acceptedText(s)).toBe(wanted);
+		const later = shipNext(shipped);
+		await s.capabilities.reconcile();
+		expect(await acceptedText(s)).toBe(withScopes("cal", later, ["read:user", "repo"]));
+	});
+
+	it("one the box lost is written back, at banda's version; one from before the store said so counts too", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		const shipped = await shipping(fake);
+		const s = await open(fake, shipped);
+		await s.capabilities.addShipped("cal");
+		// a home made before the store kept which connections are banda's
+		await s.harness.commit(async (tx) => {
+			delete (await tx.doc(Accepted)).shipped;
+		}, context);
+		rmSync(join(s.box.workspace, "connections/cal.md"));
+		expect((await cal(s))?.change).toMatchObject({ kind: "removed" });
+		const original = await acceptedText(s);
+
+		await s.capabilities.reconcile();
+
+		expect(boxText(s)).toBe(original);
+		expect(await acceptedText(s)).toBe(original);
+		expect((await cal(s))?.change).toBeUndefined();
+		rmSync(join(s.box.workspace, "connections/cal.md"));
+		const next = shipNext(shipped);
+		await s.capabilities.reconcile();
+		expect(boxText(s)).toBe(next);
+		expect(await acceptedText(s)).toBe(next);
+		expect((await cal(s))?.change).toBeUndefined();
+	});
+
+	it("one whose next version was written when it was cut short is allowed at the next start", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		const shipped = await shipping(fake);
+		let cut = false;
+		const s = await openConnected({
+			home: await tempHome(),
+			respond: scripted().respond as never,
+			shipped,
+			fault: (point) => {
+				if (point === "shipped:followed" && !cut) {
+					cut = true;
+					throw new Error("cut short");
+				}
+			},
+		});
+		opened.push(s);
+		mkdirSync(join(s.box.workspace, "connections"), { recursive: true });
+		await s.capabilities.addShipped("cal");
+		const original = (await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"]?.text;
+		const next = shipNext(shipped);
+		await s.capabilities.reconcile();
+		expect(cut).toBe(true);
+		expect(readFileSync(join(s.box.workspace, "connections/cal.md"), "utf8")).toBe(next);
+		expect((await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"]?.text).toBe(original);
+
+		await s.capabilities.reconcile();
+
+		expect((await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"]?.text).toBe(next);
+		expect((await s.capabilities.view()).connections.find((c) => c.name === "cal")?.change).toBeUndefined();
+	});
+
+	it("one the owner changed by allowing the box's change, or one the box changed, is left alone", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		const shipped = await shipping(fake);
+		const s = await open(fake, shipped);
+		await s.capabilities.addShipped("cal");
+		// the box changes it, and nobody has allowed that yet
+		const boxed = `${boxText(s)}\nthe companion's note.\n`;
+		s.writeBox("connections/cal.md", boxed);
+		const original = await acceptedText(s);
+		shipNext(shipped);
+		await s.capabilities.reconcile();
+		expect(boxText(s)).toBe(boxed);
+		expect(await acceptedText(s)).toBe(original);
+		// the owner allows it: it is theirs now, and banda's next version passes it by
+		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		shipNext(shipped);
+		await s.capabilities.reconcile();
+		expect(boxText(s)).toBe(boxed);
+		expect(await acceptedText(s)).toBe(boxed);
 	});
 });
 

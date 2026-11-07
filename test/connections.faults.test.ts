@@ -19,6 +19,7 @@ type Summary = {
 	parked: unknown[];
 	accepted: boolean;
 	connected: boolean;
+	followed: boolean;
 	answers: string[];
 	open: number;
 	commits: number;
@@ -27,7 +28,7 @@ type Summary = {
 /** One scenario, against a fake server of its own, which outlives the processes killed. */
 const run = async (
 	schedules: readonly (readonly Fault[])[],
-	mode: "callback" | "code" | "shipped" | "rule" | "address" | "mcp" = "callback",
+	mode: "callback" | "code" | "shipped" | "followed" | "rule" | "address" | "mcp" = "callback",
 ) => {
 	const home = await tempHome();
 	const fake = await startFakeMcp(
@@ -151,6 +152,31 @@ describe("connections under faults", () => {
 					expect(killed.creates).toBe(1);
 				} catch (error) {
 					throw new Error(`killed at ${point}: ${(error as Error).message}`);
+				}
+			}),
+		);
+	}, 300_000);
+
+	it("sweep, following banda's next version: one kill once its file was written, and once it was allowed", async () => {
+		const clean = await run([], "followed");
+		check(clean);
+		expect(clean.followed).toBe(true);
+		const points: [FaultPoint, number][] = [
+			["shipped:followed", 1],
+			["accept:before", 2],
+			["accept:after", 2],
+		];
+		await pool(
+			2,
+			points.map(([point, hit]) => async () => {
+				const killed = await run([[{ point, hit, kind: "kill" }]], "followed");
+				try {
+					expect(killed.kills).toBe(1);
+					check(killed);
+					expect(killed.followed).toBe(true);
+					expect(killed.creates).toBe(1);
+				} catch (error) {
+					throw new Error(`killed at ${point} #${hit}: ${(error as Error).message}`);
 				}
 			}),
 		);

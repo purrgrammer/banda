@@ -96,8 +96,8 @@ in a throwaway home, at desktop and phone width.
 - [x] Agent trust, slice 2's walkthrough: in a forked home at both widths, Access allowed Sancho to merge pull requests
   in purrgrammer/sancho, always; the row reads "Always · Not used yet", and Sancho, asked, named it and said merging in
   banda still asks
-- [ ] A connection banda ships is never updated in a home that added it (`addShipped` never replaces), so a home made
-  before grains never gets them; the forked home also had no connections/github.md in its workspace, a pending removal
+- [x] A connection banda ships follows banda's version: at each start one nobody but banda changed is written and
+  allowed again as shipped now, with the owner's scopes, accounts and switches kept, and one the box lost is written back
 - [x] Access says Revoke where DESIGN.md says Take back
 - [x] "For this task" in an effect's result does not say the task ends with the owner's next message, so an agent
   still counted a task's permission after it ended

@@ -8,6 +8,9 @@
  * With "code", the file names its client and the owner signs in by code, typed on the fake server's page; a sign-in by
  * code dies with the process that waited for it, so a restart starts it again.
  *
+ * With "followed", the owner adds the one banda ships, as "shipped" does; once signed in, banda ships its next version
+ * and the start that follows brings it there.
+ *
  * argv: home, the fake server's URL, "callback" or "code", fault schedule JSON (Fault[])
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -28,10 +31,11 @@ import { ownerAnswer } from "./owner.ts";
 const [home, url, mode, scheduleJson] = process.argv.slice(2) as [
 	string,
 	string,
-	"callback" | "code" | "shipped" | "rule" | "address" | "mcp",
+	"callback" | "code" | "shipped" | "followed" | "rule" | "address" | "mcp",
 	string,
 ];
-const byCode = mode === "code" || mode === "shipped";
+const fromShipped = mode === "shipped" || mode === "followed";
+const byCode = mode === "code" || fromShipped;
 const calendar = connectionFile({
 	url,
 	auth: "oauth",
@@ -41,7 +45,8 @@ const calendar = connectionFile({
 });
 // what banda ships, for "shipped": the same file, in a folder of its own
 const shipped = join(home, "shipped");
-if (mode === "shipped" && !existsSync(shipped)) {
+const next = `${calendar}\nbanda's next version.\n`;
+if (fromShipped && !existsSync(shipped)) {
 	mkdirSync(shipped, { recursive: true });
 	writeFileSync(join(shipped, "cal.md"), calendar);
 }
@@ -70,7 +75,7 @@ const s = await openConnected({
 	respond: respond as never,
 	wrapStorage: (storage) => faults.storage(storage),
 	fault: (point) => faults.hit(point as FaultPoint),
-	...(mode === "shipped" ? { shipped } : {}),
+	...(fromShipped ? { shipped } : {}),
 });
 
 // the agent proposes it, or the owner adds the one banda ships (a kill after the file was written leaves it to allow)
@@ -80,7 +85,7 @@ if (mode === "mcp") {
 	const named = await s.capabilities.addMcp({ url, service: "Cal" });
 	if (named !== "cal") throw new Error(`setting it up again made ${named}, not cal`);
 } else if (!existsSync(file)) {
-	if (mode === "shipped") await s.capabilities.addShipped("cal");
+	if (fromShipped) await s.capabilities.addShipped("cal");
 	else if (mode === "address") await s.capabilities.addByAddress(url, context, "cal");
 	else {
 		mkdirSync(join(s.box.workspace, "connections"), { recursive: true });
@@ -96,6 +101,11 @@ const state = (await s.capabilities.view()).connections.find((c) => c.name === "
 if (state === "sign-in") {
 	const signed = await signInAsOwner(s.capabilities, "cal", byCode ? { fake: typingAt(new URL(url).origin) } : {});
 	if (!signed.ok) throw new Error(signed.words);
+}
+// "followed": banda ships its next version, and a start takes it up (as the next process's start does, after a kill)
+if (mode === "followed") {
+	writeFileSync(join(shipped, "cal.md"), next);
+	await s.capabilities.reconcile();
 }
 // "address": its reads are none at first; the owner lets what the server says only reads run without asking
 if (mode === "address" || mode === "mcp") {
@@ -125,6 +135,7 @@ const outcome = (await s.harness.getTask(received.turn as TaskId<TurnResult>, co
 const { parked } = await status(s.harness);
 const accepted = (await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"] !== undefined;
 const connected = (await s.harness.snapshot(Connected, context))?.connections.cal !== undefined;
+const followed = (await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"]?.text === next;
 const answers = readFileSync(join(home, "answers.txt"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean);
 console.log(
 	JSON.stringify({
@@ -132,6 +143,7 @@ console.log(
 		parked,
 		accepted,
 		connected,
+		followed,
 		answers,
 		open: (await openWaits(s.harness)).length,
 		commits: faults.hits("commit:after"),

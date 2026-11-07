@@ -102,6 +102,11 @@ export const Accepted = defineDoc<{
 	 * is one the daemon has yet to write, never a removal the box proposes.
 	 */
 	seeded?: true;
+	/**
+	 * By connection path: whether its accepted file is one banda wrote from what it ships (added, its scopes picked, or
+	 * banda's next version), so it follows banda's version; false once the owner accepts one the box wrote.
+	 */
+	shipped?: { [path: string]: boolean };
 }>({
 	kind: "banda.accepted",
 	version: 1,
