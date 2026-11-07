@@ -30,6 +30,8 @@ export function useSkills() {
 }
 
 const changed = () => dispatchEvent(new Event(CHANGED));
+/** A skill the owner can act on: a file the box added or changed. A removal has nothing to allow (the accepted text stays). */
+export const waitsOnOwner = (view: SkillView) => view.change !== undefined && view.change.kind !== "removed";
 
 export function SkillsPage({
 	name,
@@ -191,7 +193,7 @@ function Waiting({
 	onOpen: (name: string) => void;
 	reload: () => Promise<void>;
 }) {
-	const waiting = list.filter((item) => item.change !== undefined && item.change.kind !== "removed");
+	const waiting = list.filter(waitsOnOwner);
 	if (waiting.length === 0) return null;
 	const ready = waiting.flatMap(({ name, change }) =>
 		change?.sha !== undefined && change.errors === undefined ? [{ name, sha: change.sha }] : [],

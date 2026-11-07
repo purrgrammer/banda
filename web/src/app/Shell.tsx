@@ -628,6 +628,8 @@ function Main() {
 					does: name === "github" ? "Pull requests, issues, checks" : (view?.accepted?.connection?.where ?? ""),
 					accounts: freshAccounts(view).map((account) => account.label),
 					managed: view?.agents !== undefined,
+					stale: (view?.accounts ?? []).filter((account) => account.stale === true).map((account) => account.label),
+					problem: view?.state === "problem" ? (view.problem ?? "Not reached") : undefined,
 				};
 			});
 			return (
