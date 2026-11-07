@@ -372,6 +372,13 @@ lives inside agents' settings and the app's Settings, never as a screen of its o
 - **What is offered is what was listed.** On connecting, the daemon lists the server's tools and keeps them in the
   store for that accepted file; the model is offered exactly those, under stable names (`<connection>__<tool>`). A
   tool the server adds later waits switched off.
+- **What each tool does is said once, on adding.** A tool's kind (a read, a write, or a write on the floor and its
+  class) and its group ("Issues", "Pull requests") come from the shipped file, else the server's annotations, else an
+  inference over the listing framed as foreign data, else it is a write. The owner sees them grouped, a group
+  collapsed to its count and one control, each tool saying where its kind came from ("GitHub says", "banda's guess"),
+  changes any of them, and accepts; only then are they the file's `reads`, floors and `groups`. A guess may make a tool
+  a write or put it on the floor; it only proposes a read, which the owner's acceptance makes one. A tool listed later
+  is guessed the same way and waits switched off, marked new in its group.
 - **A read runs, a write is a draft.** A read runs when called, and its answer comes back framed as foreign data. A
   tool that runs many routes may read for some exact arguments only, `tool(arg=value)` in the file; any other call of
   it is a write. Every other tool is a write: a draft the owner approves, run once as approved; one the file puts on
@@ -384,6 +391,9 @@ lives inside agents' settings and the app's Settings, never as a screen of its o
 - **Switches.** The owner switches any tool off, signs an account out or removes a connection from Settings. Whether a
   tool is in effect is checked in the commit that starts each call, so one taken back is refused even mid-run, a write
   waiting for approval included.
+- **A connection only narrows.** In Settings each tool or group is a read (Allow, Ask, Off), a write (Ask, Always ask,
+  Off) or on the floor (Always ask, Off). Ask on a read, or Always ask on a write, puts it on the floor for every agent. Nothing set
+  on a connection lets a write run unasked: that is a permission, and a permission is one agent's.
 
 **Objects.** An object is a thing in a connection the owner recognises. In the owner's words, a recognised link is a
 compact inline reference: the service's icon, the object's type icon and its linked title, aligned with the owner's
@@ -510,13 +520,21 @@ the model.
 
 **Permissions.** An approval can be given with a scope: this once, for this task, for an hour, always. A permission is
 stored; an effect within an open permission runs without asking and is listed in the activity log, and the owner revokes
-a permission from the agent's panel. A permission belongs to one agent, one account and one chat. Below every
+a permission from the agent's panel. A permission belongs to one agent and one account, and covers only that agent's
+chats; one for a task, only the task's chat. Below every
 permission sits a floor no permission covers: money, credentials and account changes, and anything that sends private
 data to a recipient the owner has not approved, ask every time. A tool declares its floor class and the daemon enforces
 it: a draft on the floor offers no permission, a permission asked for it is refused, and no permission covers it. A
 permission binds one tool and the values of the arguments the tool names (by default all but the text the owner may
 edit): a later call is within it only with exactly those values. "For this task" lasts while the run answers the same
-input, so the owner's next message ends it. An effect checks its permission in the commit that records its start, so a
+input, so the owner's next message ends it. A tool declares wider grains as data, each a subset of what it binds and
+worded by the daemon: the object ("Merge banda#34"), the place ("Merge pull requests in purrgrammer/banda"), the
+action ("Merge any pull request as @bandarra"); a permission at a grain binds only that subset. Trust is earned from
+the owner's answers, never the model's asking: after three approvals of one place, unedited and with none declined in
+between, the card's offered row is that place's grain. The widest grain of a tool with no way back is never offered on
+a card; it is granted from the agent's permissions, its consequence in full. A chat that read foreign content is
+offered no scope but an earned place. Each permission shows what it let run ("Merged 4 pull requests this week"), and
+one unused for a month says so beside Take back. An effect checks its permission in the commit that records its start, so a
 revoked permission covers nothing after it. The daemon offers at most one scope on a card, the task's where it applies,
 worded as its consequence ("Don't ask again for this task"); every other scope is granted from the agent's permissions;
 an answer giving a scope it did not offer is refused. Nothing is asked twice: a permission answers, in the commit that
