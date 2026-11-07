@@ -101,7 +101,7 @@ const DRAFTS: readonly (readonly [string, Draft, string, boolean])[] = [
 			},
 			editable: ["title", "start", "end", "location", "description", "attendees"],
 		},
-		"Create “Tea with Ana” on Mon 9 Nov 2026, 16:00–17:00 with ana@example.test, teo@example.test, with a Google Meet link",
+		"Create “Tea with Ana”",
 		false,
 	],
 	[
@@ -122,7 +122,7 @@ const DRAFTS: readonly (readonly [string, Draft, string, boolean])[] = [
 			},
 			editable: ["start", "end", "location"],
 		},
-		"Change this event: time to Mon 9 Nov 2026, 12:00–13:30, location to “Room 4”",
+		"Change this event",
 		true,
 	],
 	[

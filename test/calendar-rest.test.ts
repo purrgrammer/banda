@@ -10,7 +10,6 @@ import {
 	createdEventId,
 	eventOfRef,
 	eventRef,
-	whenWords,
 } from "../src/core/calendar-rest.ts";
 import { parseConnection } from "../src/core/connections.ts";
 import { discover } from "../src/core/oauth.ts";
@@ -705,7 +704,7 @@ describe("Google Calendar changes", () => {
 		expect((await write(other, "delete_event", { event_id: event })).isError).toBe(true);
 	});
 
-	it("says what each change does in the owner's words, with its button", () => {
+	it("names each change and its object, as every ask does, with its button", () => {
 		expect(
 			calendarDraft("create_event", {
 				title: "Tea",
@@ -715,16 +714,14 @@ describe("Google Calendar changes", () => {
 				add_meet: true,
 			}),
 		).toEqual({
-			what: "Create “Tea” on Mon 9 Nov 2026, 09:00–10:00 with ana@example.test, bo@example.test, cy@example.test and 1 more, with a Google Meet link",
+			what: "Create “Tea”",
 			verb: "Create",
 		});
-		expect(whenWords("2026-11-10", "2026-11-12", true)).toBe("Tue 10 Nov 2026 to Wed 11 Nov 2026, all day");
-		expect(whenWords("2026-11-10", "2026-11-11", true)).toBe("Tue 10 Nov 2026, all day");
-		expect(whenWords("2026-11-09T23:00:00Z", "2026-11-10T01:00:00Z", false)).toBe(
-			"Mon 9 Nov 2026, 23:00 to Tue 10 Nov 2026, 01:00",
+		expect(calendarDraft("create_event", { title: " ", start: "2026-11-09T09:00:00+01:00" })?.what).toBe(
+			"Create an event",
 		);
 		expect(calendarDraft("update_event", { event_id: "x", title: "Tea at four", location: "" })).toEqual({
-			what: "Change this event: title to “Tea at four”, no location",
+			what: "Change this event",
 			verb: "Change",
 		});
 		expect(calendarDraft("respond_to_event", { event_id: "x", response: "declined", comment: "Away" })).toEqual({

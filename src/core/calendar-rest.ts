@@ -705,80 +705,22 @@ export async function calendarWriteCall(
 
 // ---- the owner's words for a change
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-/** A day as the owner reads it, from its own digits ("Mon 9 Nov 2026"): never moved to another time zone. */
-function dayWords(date: string): string | undefined {
-	const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(date);
-	if (match === null) return undefined;
-	const [, y, m, d] = match.map(Number) as [number, number, number, number];
-	const at = new Date(Date.UTC(y, m - 1, d));
-	if (at.getUTCMonth() !== m - 1) return undefined;
-	return `${DAYS[at.getUTCDay()]} ${d} ${MONTHS[m - 1]} ${y}`;
-}
-
-/** When an event is, as the owner reads it: "Mon 9 Nov 2026, 09:00–10:00", in the time it was given in. */
-export function whenWords(start: unknown, end: unknown, allDay: unknown): string {
-	if (typeof start !== "string") return "the time given";
-	const day = dayWords(start);
-	if (day === undefined) return start;
-	if (allDay === true || DATE.test(start)) {
-		const last = typeof end === "string" && DATE.test(end) ? Date.parse(`${end}T00:00:00Z`) - DAY : Number.NaN;
-		const lastDay = Number.isFinite(last) ? dayWords(new Date(last).toISOString().slice(0, 10)) : undefined;
-		return lastDay === undefined || lastDay === day ? `${day}, all day` : `${day} to ${lastDay}, all day`;
-	}
-	const time = (value: string) => /T(\d{2}:\d{2})/.exec(value)?.[1];
-	const from = time(start);
-	if (from === undefined) return start;
-	if (typeof end !== "string" || time(end) === undefined) return `${day}, ${from}`;
-	const endDay = dayWords(end);
-	return endDay === day ? `${day}, ${from}–${time(end)}` : `${day}, ${from} to ${endDay}, ${time(end)}`;
-}
-
 const quoted = (value: string) => `“${value.trim().slice(0, 200)}”`;
-function guestWords(value: unknown): string {
-	let guests: string[];
-	try {
-		guests = guestsOf(value);
-	} catch {
-		return "the guests given";
-	}
-	if (guests.length === 0) return "no guests";
-	const shown = guests.slice(0, 3).join(", ");
-	return guests.length > 3 ? `${shown} and ${guests.length - 3} more` : shown;
-}
-
 /**
- * What a change does, in the owner's words, and its button: "Create “Tea” on Mon 9 Nov 2026, 09:00–10:00 with ana@…".
- * The change of one event is drawn beside its card, so its words say what changes, not which event.
+ * What a change does, in the owner's words, and its button: "Create “Tea”", "Change this event". Like every ask, the
+ * heading names the action and its object; the draft's lines and the event's card say the rest.
  */
 export function calendarDraft(name: string, args: Record<string, unknown>): { what: string; verb: string } | undefined {
 	switch (name) {
 		case "create_event": {
-			const title = typeof args.title === "string" && args.title.trim() !== "" ? args.title : "an event";
-			const guests = given(args, "attendees") && guestWords(args.attendees) !== "no guests";
-			return {
-				what:
-					`Create ${title === "an event" ? title : quoted(title)} on ${whenWords(args.start, args.end, args.all_day)}` +
-					(guests ? ` with ${guestWords(args.attendees)}` : "") +
-					(args.add_meet === true ? ", with a Google Meet link" : ""),
-				verb: "Create",
-			};
+			// the heading names the event, as every ask names its object; when, the call and who is emailed are the
+			// draft's own lines beneath it
+			const title = typeof args.title === "string" && args.title.trim() !== "" ? args.title : undefined;
+			return { what: title === undefined ? "Create an event" : `Create ${quoted(title)}`, verb: "Create" };
 		}
 		case "update_event": {
-			const changes: string[] = [];
-			if (typeof args.title === "string") changes.push(`title to ${quoted(args.title)}`);
-			if (given(args, "start") || given(args, "end"))
-				changes.push(`time to ${whenWords(args.start, args.end, args.all_day)}`);
-			if (typeof args.location === "string")
-				changes.push(args.location.trim() === "" ? "no location" : `location to ${quoted(args.location)}`);
-			if (given(args, "description")) changes.push("the description");
-			if (given(args, "attendees")) changes.push(`guests to ${guestWords(args.attendees)}`);
-			return {
-				what: changes.length === 0 ? "Change this event" : `Change this event: ${changes.join(", ")}`,
-				verb: "Change",
-			};
+			// the event's card beneath names it, and the draft's Changes list what changes
+			return { what: "Change this event", verb: "Change" };
 		}
 		case "respond_to_event": {
 			const verb = args.response === "accepted" ? "Accept" : args.response === "declined" ? "Decline" : "Maybe";

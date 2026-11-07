@@ -95,7 +95,7 @@ describe("Calendar changes as drafts", () => {
 		if (wait.ask.type !== "approval") throw new Error("not an approval");
 		expect(wait.ask).toMatchObject({
 			tool: "calendar__create_event",
-			label: "Create “Tea” on Mon 9 Nov 2026, 09:00–10:00 with ana@example.test, with a Google Meet link",
+			label: "Create “Tea”",
 			verb: "Create",
 			args: { title: "Tea", attendees: "ana@example.test", location: "", description: "", account: expect.any(String) },
 		});

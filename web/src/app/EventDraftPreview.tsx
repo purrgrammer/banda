@@ -29,12 +29,10 @@ const ANSWER: { readonly [value: string]: string } = {
 
 const text = (value: unknown) => (typeof value === "string" ? value : undefined);
 
-/** A new event's words as the owner edits it: what the card's heading says. */
+/** A new event's heading as the owner edits it, naming it as the daemon's words do; its When is a line beneath. */
 export function eventDraftWhat(args: Record<string, unknown>, edits: Record<string, string>): string {
-	const value = (name: string) => edits[name] ?? text(args[name]) ?? "";
-	const title = value("title").trim();
-	const when = eventWhen({ start: value("start"), end: value("end"), allDay: args.all_day === true });
-	return `Create ${title === "" ? "an event" : `“${title}”`} on ${when}`;
+	const title = (edits.title ?? text(args.title) ?? "").trim();
+	return title === "" ? "Create an event" : `Create “${title}”`;
 }
 
 /**
