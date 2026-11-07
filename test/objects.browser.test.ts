@@ -4,6 +4,7 @@ import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { defaultAvatarFace } from "../src/core/avatar-face.ts";
 import type { ObjectAsk, ObjectShown } from "../src/server/objects.ts";
+import { freePort, viteCacheDir } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 async function openObjectMenu(page: Page, selector: string, keyboard = true) {
@@ -264,7 +265,8 @@ beforeAll(async () => {
 	if (!hasChrome()) return;
 	server = await createServer({
 		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		server: { port: 0, host: "127.0.0.1", open: false },
+		cacheDir: await viteCacheDir(),
+		server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
 		plugins: [
 			{
 				name: "objects-browser-fixture",
@@ -411,7 +413,7 @@ for (const width of [390, 1280])
 					`${base}/objects-fixture?theme=${theme}#token=objects-test`,
 					{ width, height: 900 },
 					async (page) => {
-						await page.until(`document.querySelector('[aria-label="Reading from GitHub"]')`, 30_000);
+						await page.until(`document.querySelector('[aria-label="Reading from GitHub"]')`);
 						release?.();
 						hold = undefined;
 						await page.until(
@@ -547,7 +549,7 @@ for (const width of [320, 390, 1440])
 						`${base}/objects-fixture?long=1&theme=${theme}#token=objects-test`,
 						{ width, height: 900 },
 						async (page) => {
-							await page.until(`document.querySelector('[data-object-branch]')`, 30_000);
+							await page.until(`document.querySelector('[data-object-branch]')`);
 							expect(await page.run(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
 							expect(
 								await page.run(
@@ -676,7 +678,7 @@ for (const grouped of [false, true])
 						`${base}/objects-fixture?interrupted=1${grouped ? "&group=1" : ""}#token=objects-test`,
 						{ width: 390, height: 900 },
 						async (page) => {
-							await page.until(`document.body.textContent.includes('Original stored bytes')`, 30_000);
+							await page.until(`document.body.textContent.includes('Original stored bytes')`);
 							// The fake enforces core/wait's refusal: even an empty edits object is forbidden.
 							expect(
 								await page.run(
@@ -765,7 +767,7 @@ it.skipIf(!hasChrome())(
 		answers = [];
 		hold = undefined;
 		await withPage(`${base}/objects-fixture?stale=1#token=objects-test`, { width: 390, height: 900 }, async (page) => {
-			await page.until(`document.body.textContent.includes('Fresh daemon title')`, 30_000);
+			await page.until(`document.body.textContent.includes('Fresh daemon title')`);
 			expect(await page.run(`document.body.textContent`)).not.toContain("as of");
 			await page.until(`document.body.textContent.includes('as of')`);
 			expect(requests).toHaveLength(0);

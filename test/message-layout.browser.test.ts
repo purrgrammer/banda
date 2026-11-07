@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { defaultAvatarFace } from "../src/core/avatar-face.ts";
+import { freePort, viteCacheDir } from "./helpers.ts";
 import { CHROME, hasChrome } from "./smoke/chrome.ts";
 
 const fixture = fileURLToPath(new URL("../web/message-layout-fixture.tsx", import.meta.url));
@@ -50,7 +51,8 @@ beforeAll(async () => {
 	if (!hasChrome()) return;
 	server = await createServer({
 		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		server: { port: 0, host: "127.0.0.1", open: false },
+		cacheDir: await viteCacheDir(),
+		server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
 		plugins: [
 			{
 				name: "message-layout-fixture",

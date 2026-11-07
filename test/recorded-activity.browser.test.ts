@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import type { RecordedActivity } from "../web/src/specimen/recorded-types.ts";
+import { freePort, viteCacheDir } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 let server: ViteDevServer;
@@ -70,7 +71,8 @@ beforeAll(async () => {
 	try {
 		server = await createServer({
 			configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-			server: { port: 0, host: "127.0.0.1", open: false },
+			cacheDir: await viteCacheDir(),
+			server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
 		});
 	} finally {
 		if (before === undefined) delete process.env.BANDA_ACTIVITY_FIXTURE;

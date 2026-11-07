@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { until } from "./helpers.ts";
+import { freePort, until, viteCacheDir } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
 /**
@@ -38,7 +38,8 @@ beforeAll(async () => {
 	if (!hasChrome()) return;
 	server = await createServer({
 		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		server: { port: 0, host: "127.0.0.1", open: false },
+		cacheDir: await viteCacheDir(),
+		server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
 		plugins: [
 			{
 				name: "approval-card-fixture",
@@ -115,7 +116,7 @@ for (const width of [390, 1280])
 		async () => {
 			answers = [];
 			await withPage(`${base}/approval-card-fixture#token=approval-test`, { width, height: 900 }, async (page) => {
-				await page.until(`document.querySelector('[role="checkbox"]')`, 30_000);
+				await page.until(`document.querySelector('[role="checkbox"]')`);
 				expect(await page.run<string>(`document.body.textContent`)).toContain(
 					"Use GitHub's issue_write as @purrgrammer",
 				);

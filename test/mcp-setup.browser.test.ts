@@ -11,7 +11,7 @@ import { readDaemonFile } from "../src/home.ts";
 import type { CapabilitiesView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { startFakeMcp } from "./fixtures/mcp-server.ts";
-import { skipShippedSkills, tempHome } from "./helpers.ts";
+import { skipShippedSkills, tempHome, viteCacheDir } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const button = (text: string) =>
@@ -38,7 +38,7 @@ async function fill(page: Page, label: string, value: string) {
 		`(() => {const el=${labelled(label)}; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true}));})()`,
 	);
 }
-const phase = (page: Page, value: string) => page.until(`document.querySelector('[data-mcp-phase="${value}"]')`, 30000);
+const phase = (page: Page, value: string) => page.until(`document.querySelector('[data-mcp-phase="${value}"]')`);
 
 for (const width of [390, 1440])
 	it.skipIf(!hasChrome())(
@@ -86,6 +86,7 @@ for (const width of [390, 1440])
 			const listener = createServer((req, res) => vite.middlewares(req, res));
 			vite = await createViteServer({
 				configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
+				cacheDir: await viteCacheDir(),
 				server: {
 					middlewareMode: true,
 					hmr: { server: listener },
@@ -101,7 +102,7 @@ for (const width of [390, 1440])
 				const address = listener.address();
 				if (!address || typeof address === "string") throw new Error("No app port");
 				await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
-					await page.until(`document.body.textContent.includes('Sancho')`, 30000);
+					await page.until(`document.body.textContent.includes('Sancho')`);
 					await page.run(`location.hash='#/connections'`);
 					// at desktop width Connections is the agent's Access, which shows only what it has: the rest is behind "Show more"
 					await page.until(

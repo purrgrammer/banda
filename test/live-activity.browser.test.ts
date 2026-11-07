@@ -19,7 +19,7 @@ import { type Daemon, startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { ChatRow, GroupView, Item, ItemPage, Posted } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, until } from "./helpers.ts";
+import { freePort, skipShippedSkills, tempHome, until, viteCacheDir } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 let daemon: Daemon;
@@ -161,9 +161,11 @@ beforeAll(async () => {
 	}
 	web = await createServer({
 		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
+		cacheDir: await viteCacheDir(),
 		server: {
 			host: "127.0.0.1",
-			port: 0,
+			port: await freePort(),
+			strictPort: true,
 			open: false,
 			proxy: {
 				"/api": {
