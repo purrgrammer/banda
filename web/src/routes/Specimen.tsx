@@ -42,6 +42,7 @@ const CONTENTS = [
 	{ id: "group", label: "A group" },
 	{ id: "panel-app", label: "A chat and its panel" },
 	{ id: "panel", label: "The panel" },
+	{ id: "connections-signed-in", label: "Connections after sign-in" },
 	{ id: "scoped-memory", label: "Scoped memory" },
 	{ id: "open-file", label: "What opens in the panel" },
 	{ id: "browser", label: "The browser, enlarged" },

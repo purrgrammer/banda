@@ -176,6 +176,30 @@ export function PanelSections() {
 				<AgentPanelOf who={MARA} state="waiting" phone={phone} />
 			</Section>
 			<Section
+				id="connections-signed-in"
+				title="Connections after sign-in"
+				note="The account row and switch confirm sign-in. When a service gives no account name, use the connection's name. A supplied icon replaces the initial; the initial remains the fallback."
+			>
+				<div className="max-w-md">
+					<Connections
+						agent="Sancho"
+						rows={[
+							{ connection: "GitHub", accounts: [{ login: "@purrgrammer", on: true }] },
+							{
+								connection: "Vercel",
+								icon: (
+									<svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
+										<path d="M12 3 24 23H0Z" fill="currentColor" />
+									</svg>
+								),
+								accounts: [{ login: "Vercel", on: true }],
+							},
+							{ connection: "My workspace", accounts: [{ login: "My workspace", on: true }] },
+						]}
+					/>
+				</div>
+			</Section>
+			<Section
 				id="panel"
 				title="The panel"
 				note="The agent's whole home: routines, what it can reach and do, what it remembers, and who it is. It opens on Routines when there are some; else Access when nothing is connected; else About."

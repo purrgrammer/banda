@@ -260,6 +260,7 @@ export function Personality({
 
 export type ConnectionRow = {
 	readonly connection: string;
+	readonly icon?: ReactNode;
 	/** Its name in the daemon ("github"), when it has one: what `connect` and the switches are for. */
 	readonly id?: string | undefined;
 	/** Every account signed in to it, and whether this agent may use each. */
@@ -298,11 +299,12 @@ export function Connections({
 							<RowOf
 								lead={
 									<span className="flex size-8 shrink-0 items-center justify-center rounded-field bg-paper-3">
-										{row.connection === "GitHub" ? (
-											<GitHubMark />
-										) : (
-											<span className="text-meta font-semibold text-ink-2">{row.connection.slice(0, 1)}</span>
-										)}
+										{row.icon ??
+											(row.connection === "GitHub" ? (
+												<GitHubMark />
+											) : (
+												<span className="text-meta font-semibold text-ink-2">{row.connection.slice(0, 1)}</span>
+											))}
 									</span>
 								}
 								title={<span className="font-medium">{row.connection}</span>}
