@@ -533,7 +533,11 @@ action ("Merge any pull request as @bandarra"); a permission at a grain binds on
 the owner's answers, never the model's asking: after three approvals of one place, unedited and with none declined in
 between, the card's offered row is that place's grain. The widest grain of a tool with no way back is never offered on
 a card; it is granted from the agent's permissions, its consequence in full. A chat that read foreign content is
-offered no scope but an earned place. Each permission shows what it let run ("Merged 4 pull requests this week"), and
+offered no scope but an earned place. An agent knows its own: a section of its prompt says how it asks (a write
+it proposes is the owner's review, never a way around it; the floor asks every time) and lists, in the daemon's
+words, what it may do without asking and until when, so a grant or a revocation reaches it at its next model
+boundary; and each effect's result says what let it run ("The owner approved this", "Ran without asking, within
+your permission to …"). It never sees another agent's permissions, and knowing one widens nothing. Each permission shows what it let run ("Merged 4 pull requests this week"), and
 one unused for a month says so beside Take back. An effect checks its permission in the commit that records its start, so a
 revoked permission covers nothing after it. The daemon offers at most one scope on a card, the task's where it applies,
 worded as its consequence ("Don't ask again for this task"); every other scope is granted from the agent's permissions;
