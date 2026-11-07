@@ -8,6 +8,8 @@ import type { Context } from "@earendil-works/chord";
 import type { Harness } from "@earendil-works/pi-durable";
 import { log } from "../core/activity.ts";
 import { Accepted, activeAgents, agentWords, isArchived, shaOf, unaccept } from "../core/agents.ts";
+import { connectionPath, parseConnection } from "../core/connections.ts";
+import { withAsk } from "../core/routines.ts";
 import { context } from "../core/store.ts";
 import {
 	ALLOWED_KEPT,
@@ -25,6 +27,7 @@ import {
 	watchAgent,
 	watchPath,
 	watchText,
+	withUntil,
 } from "../core/watches.ts";
 import { boxFiles, type Workspace, write } from "./agents.ts";
 import type { WatchFileView, WatchState, WatchSummary, WatchView } from "./api.ts";
@@ -45,6 +48,15 @@ const fileView = (name: string, sha: string, text: string): WatchFileView => {
 };
 
 const watchFiles = (workspace: Workspace, ctx: Context) => boxFiles(workspace, ctx, "watches", MAX_WATCH_BYTES);
+
+/** The words that can end a watch on the kind `ref` names (`github:pull_request:…`), as its accepted connection says. */
+function endsOf(accepted: { readonly [path: string]: { readonly text: string } }, connection: string, ref: string) {
+	const file = accepted[connectionPath(connection)];
+	if (file === undefined) return undefined;
+	const parsed = parseConnection(connection, file.text);
+	const follow = "connection" in parsed ? parsed.connection.objects?.[ref.split(":")[1] ?? ""]?.follow : undefined;
+	return follow === undefined ? undefined : Object.keys(follow.ends);
+}
 
 /** How a watch stands, in the one word its row shows. */
 function stateOf(view: Omit<WatchView, "state">, record: WatchRecord): WatchState {
@@ -91,6 +103,8 @@ export async function watches(harness: Harness, workspace: Workspace, ctx: Conte
 			(record.key === undefined
 				? undefined
 				: `${record.key.split("/")[0] ?? ""}:${record.key.split("/").slice(2).join("/")}`);
+		const ends =
+			record.connection === undefined || ref === undefined ? undefined : endsOf(accepted, record.connection, ref);
 		const object =
 			record.key === undefined || ref === undefined || record.name === undefined || record.connection === undefined
 				? undefined
@@ -101,6 +115,7 @@ export async function watches(harness: Harness, workspace: Workspace, ctx: Conte
 						connection: record.connection,
 						service: record.service ?? record.connection,
 						...(record.account === undefined ? {} : { account: record.account }),
+						...(ends === undefined ? {} : { ends }),
 					};
 		const view = {
 			name,
@@ -225,6 +240,73 @@ export async function pause(
 	}, ctx);
 	if (found) await reconcile(harness, ctx);
 	return found;
+}
+
+/** What the owner changes in a watch, from its detail: what ends it (null: any of the kind's ends), what matters. */
+export type WatchChange = { readonly until?: string | null; readonly ask?: string };
+
+/**
+ * Change watch `name` as the owner: what ends it and what matters; `sha` is the version in effect they saw. Only the
+ * lines changed are rewritten, every other byte kept. It is the owner's edit, so it takes effect at once: the store
+ * accepts the new text and notes that the box still needs it, then the box gets it and the note goes, then the task
+ * reads the new file. Refused when the version in effect is not the one shown, when `until` is none of the kind's
+ * ends, or when the box holds a change of its own waiting to be allowed: an edit over it would allow what the owner
+ * never saw. A restart between the two writes finishes the box's (`finishEdits`).
+ */
+export async function changeWatch(
+	harness: Harness,
+	workspace: Workspace,
+	reconcile: Reconcile,
+	name: string,
+	change: WatchChange,
+	sha: string,
+	now: number,
+	ctx: Context = context,
+): Promise<void> {
+	if (change.ask !== undefined && (change.ask.trim() === "" || change.ask.length > 8000))
+		throw new BadRequest("say what matters in a few lines");
+	const file = (await harness.snapshot(Accepted, ctx))?.files[watchPath(named(name))];
+	if (file === undefined) throw new BadRequest(`there is no watch named ${name}`, 404);
+	if (file.sha !== sha) throw new BadRequest("it changed since you saw it: look again", 409);
+	const box = (await watchFiles(workspace, ctx)).files.get(name);
+	if (box !== undefined && "unreadable" in box)
+		throw new BadRequest("it has a change waiting for you to allow it: answer that first", 409);
+	const pending = (await harness.snapshot(Watches, ctx))?.watches[name]?.edit;
+	// the box holds what is in effect, or what was before an edit of the owner's it does not hold yet
+	const base = box === undefined ? null : shaOf(box.text);
+	if (base !== sha && !(pending?.sha === sha && pending.base === base))
+		throw new BadRequest("it has a change waiting for you to allow it: answer that first", 409);
+	let text: string | undefined = file.text;
+	if (change.until !== undefined) text = withUntil(text, change.until);
+	if (change.ask !== undefined && text !== undefined) text = withAsk(text, change.ask);
+	const parsed = text === undefined ? undefined : parseWatch(name, text);
+	if (text === undefined || parsed === undefined || "errors" in parsed)
+		throw new BadRequest(
+			parsed !== undefined && "errors" in parsed ? parsed.errors.join("; ") : "it has no frontmatter",
+		);
+	const changed = shaOf(text);
+	if (changed === sha) return;
+	const edited = text;
+	const until = change.until;
+	await harness.commit(async (tx) => {
+		const files = (await tx.doc(Accepted)).files;
+		if (files[watchPath(name)]?.sha !== sha) throw new BadRequest("it changed since you saw it: look again", 409);
+		if (typeof until === "string") {
+			const found = await followed(tx, parsed.watch.object);
+			const ends = found === undefined ? [] : Object.keys(found.kind.follow.ends);
+			if (!ends.includes(until))
+				throw new BadRequest(
+					ends.length === 0 ? "no connection you have can follow its link" : `until is one of ${ends.join(", ")}`,
+				);
+		}
+		files[watchPath(name)] = { sha: changed, text: edited, at: now };
+		const { watches } = await tx.doc(Watches);
+		watches[name] ??= {};
+		(watches[name] as WatchRecord).edit = { sha: changed, base };
+		await log(tx, { at: now, watch: name, what: "You changed it" });
+	}, ctx);
+	await finishEdit(harness, workspace, name, ctx);
+	await reconcile(harness, ctx);
 }
 
 /**

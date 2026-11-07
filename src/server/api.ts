@@ -652,6 +652,8 @@ export type WatchView = {
 		readonly connection: string;
 		readonly service: string;
 		readonly account?: string;
+		/** The words that can end it, as its kind says: what `until` may be. */
+		readonly ends?: readonly string[];
 	};
 	/** When it last looked, and when it looks next. */
 	readonly looked?: number;

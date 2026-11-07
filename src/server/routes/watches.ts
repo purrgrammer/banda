@@ -1,15 +1,16 @@
 /**
  * Watches in full: the owner follows an object (`POST /api/watches`), allows or declines the box's change to one
- * (`POST /api/watches/:name/accept` with the `sha` shown or null, `/decline`), pauses, resumes or removes one, and
- * looks now (`/check`), each in effect at once and answered with the control view. On start it finishes an owner's
- * edit a restart cut short, so the box holds what the store accepted.
+ * (`POST /api/watches/:name/accept` with the `sha` shown or null, `/decline`), changes what ends one and what matters
+ * (`/edit` with the `sha` shown; `until: null` is any end), pauses, resumes or removes one, and looks now (`/check`),
+ * each in effect at once and answered with the control view. On start it finishes an owner's edit a restart cut
+ * short, so the box holds what the store accepted.
  */
 
 import { BadRequest } from "../http.ts";
-import { accept, checkNow, createWatch, decline, finishEdits, pause, remove } from "../watches.ts";
+import { accept, changeWatch, checkNow, createWatch, decline, finishEdits, pause, remove } from "../watches.ts";
 import type { AreaModule } from "./area.ts";
 
-const PATH = /^\/watches\/([a-z0-9-]+)\/(accept|decline|pause|resume|remove|check)$/;
+const PATH = /^\/watches\/([a-z0-9-]+)\/(accept|decline|edit|pause|resume|remove|check)$/;
 const SHA = /^[0-9a-f]{64}$/;
 
 /** An optional string field of a body, at most `max` long. */
@@ -66,6 +67,24 @@ export const watches: AreaModule = {
 					if (sha !== null && (typeof sha !== "string" || !SHA.test(sha)))
 						throw new BadRequest("sha is the hash of the version you saw, or null for a removal");
 					await accept(deps.harness, deps.workspace, reconcile, name, sha, now);
+				} else if (action === "edit") {
+					const { sha, until } = body;
+					if (typeof sha !== "string" || !SHA.test(sha)) throw new BadRequest("sha is the hash of the version you saw");
+					if (until !== undefined && until !== null && (typeof until !== "string" || until.length > 32))
+						throw new BadRequest("until is one of its ends, or null for any of them");
+					const ask = optional(body, "ask", 8000);
+					await changeWatch(
+						deps.harness,
+						deps.workspace,
+						reconcile,
+						name,
+						{
+							...(until === undefined ? {} : { until: until as string | null }),
+							...(ask === undefined ? {} : { ask }),
+						},
+						sha,
+						now,
+					);
 				} else if (action === "decline") await decline(deps.harness, deps.workspace, name);
 				else if (action === "remove") await remove(deps.harness, deps.workspace, reconcile, name, now);
 				else if (action === "pause" || action === "resume") {
