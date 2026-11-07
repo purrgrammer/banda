@@ -16,7 +16,7 @@ import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable"
 type JsonValue = JsonObject[string];
 
 /** The cards the daemon draws. */
-export const CARDS = ["pull-request", "issue", "check-run", "notification", "email", "event"] as const;
+export const CARDS = ["pull-request", "issue", "check-run", "notification", "email", "event", "contact"] as const;
 export type CardKind = (typeof CARDS)[number];
 
 /** A read that fetches an object: a tool, and its arguments, each a value or a `{placeholder}` the match fills. */
@@ -680,7 +680,29 @@ export type EventCard = {
 	readonly url?: string;
 };
 
-export type ObjectCard = PullRequestCard | IssueCard | CheckRunCard | NotificationCard | EmailCard | EventCard;
+/** A person from the owner's contacts, or from the people they have emailed (`other`). */
+export type ContactCard = {
+	readonly card: "contact";
+	readonly name: string;
+	/** Comma-separated, the primary first. */
+	readonly emails: string;
+	readonly phones: string;
+	readonly organization: string;
+	/** Their job title. */
+	readonly title: string;
+	readonly other: boolean;
+	readonly photo?: string;
+	readonly url?: string;
+};
+
+export type ObjectCard =
+	| PullRequestCard
+	| IssueCard
+	| CheckRunCard
+	| NotificationCard
+	| EmailCard
+	| EventCard
+	| ContactCard;
 
 /** A plain line: no control or invisible characters, one space for each run of spaces, bounded. */
 export function plainLine(value: unknown, max = 200): string {
@@ -793,8 +815,10 @@ const REASONS: { readonly [reason: string]: Reason } = {
  */
 export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as: string]: unknown }): ObjectCard {
 	const field = (name: string) => at(answers, kind.fields[name]);
-	const titleField = kind.card === "check-run" ? "name" : kind.card === "email" ? "subject" : "title";
-	if (typeof field(titleField) !== "string" || plainLine(field(titleField)) === "")
+	const titleField =
+		kind.card === "check-run" || kind.card === "contact" ? "name" : kind.card === "email" ? "subject" : "title";
+	// a person may have no name: the card names them by address
+	if (typeof field(titleField) !== "string" || (kind.card !== "contact" && plainLine(field(titleField)) === ""))
 		throw new Error("Incomplete object");
 	const repo = plainLine(field("repo"), 100) || plainLine(`${ref.values.owner ?? ""}/${ref.values.repo ?? ""}`, 100);
 	const number = count(field("number")) || Number(ref.values.number ?? 0) || 0;
@@ -959,6 +983,24 @@ export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as
 				description: plainBody(field("description"), 1000),
 				...(meet === undefined ? {} : { meet }),
 				...withUrl,
+			};
+		}
+		case "contact": {
+			const joined = (value: unknown, max: number) =>
+				plainLine(Array.isArray(value) ? value.filter((each) => typeof each === "string").join(", ") : value, max);
+			const emails = joined(field("emails"), 300);
+			const other = field("other") === true;
+			const photo = webUrl(field("photo"));
+			return {
+				card: "contact",
+				name: plainLine(field("name")) || plainLine(emails.split(",")[0]) || "(No name)",
+				emails,
+				phones: joined(field("phones"), 200),
+				organization: plainLine(field("organization"), 200),
+				title: plainLine(field("title"), 200),
+				other,
+				...(photo === undefined ? {} : { photo }),
+				...(other ? {} : withUrl),
 			};
 		}
 	}

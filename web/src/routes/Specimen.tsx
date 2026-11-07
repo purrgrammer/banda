@@ -16,6 +16,7 @@ import { AvatarColorsContext, AvatarSpecimenContext } from "../specimen/avatar-f
 import { AvatarSpike } from "../specimen/avatar-spike.tsx";
 import { BandSection } from "../specimen/band.tsx";
 import { CalendarSection } from "../specimen/calendar.tsx";
+import { ContactsSection } from "../specimen/contacts.tsx";
 import { Controls } from "../specimen/controls.tsx";
 import { Copy } from "../specimen/copy.tsx";
 import { DevicesSection } from "../specimen/devices.tsx";
@@ -74,6 +75,7 @@ const CONTENTS = [
 	{ id: "github", label: "GitHub" },
 	{ id: "gmail", label: "Gmail" },
 	{ id: "calendar", label: "Google Calendar" },
+	{ id: "contacts", label: "Google Contacts" },
 	{ id: "loading-app", label: "Opening the app" },
 	{ id: "empty-chat", label: "A new agent's chat" },
 	{ id: "states", label: "Empty and loading" },
@@ -252,6 +254,7 @@ export function Specimen() {
 										</div>
 									</Section>
 									<CalendarSection />
+									<ContactsSection />
 									<PanelSections />
 									<MemorySection />
 									<DevicesSection />

@@ -18,9 +18,12 @@ import {
 	GitPullRequestDraftIcon,
 	GitPullRequestIcon,
 	MailIcon,
+	PhoneIcon,
+	UserRoundIcon,
 	VideoIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -243,9 +246,33 @@ export function ObjectLink({
 		| (Issue & { card: "issue" })
 		| (CheckRun & { card: "check-run" })
 		| (EmailMessage & { card: "email" })
-		| (CalendarEvent & { card: "event" });
+		| (CalendarEvent & { card: "event" })
+		| (Person & { card: "contact" });
 	href: string;
 }) {
+	if (object.card === "contact") {
+		const url = contactsUrl(href) ?? contactsUrl(object.url);
+		return (
+			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
+				<UserRoundIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
+				{url === undefined ? (
+					<span className="min-w-0 truncate" title={object.name}>
+						{object.name}
+					</span>
+				) : (
+					<a
+						href={url}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="min-w-0 max-w-80 truncate underline"
+						title={object.name}
+					>
+						{object.name}
+					</a>
+				)}
+			</span>
+		);
+	}
 	if (object.card === "event") {
 		const url = calendarUrl(href) ?? calendarUrl(object.url);
 		return (
@@ -555,6 +582,115 @@ export function EventCard({ event, actions }: { event: CalendarEvent; actions?: 
 							</a>
 						</Button>
 					)}
+				</span>
+			)}
+		</Tile>
+	);
+}
+
+export type Person = {
+	readonly name: string;
+	/** Comma-separated, the primary first. */
+	readonly emails: string;
+	readonly phones: string;
+	readonly organization: string;
+	readonly title: string;
+	/** From the people the owner has emailed, not a saved contact. */
+	readonly other: boolean;
+	readonly photo?: string | undefined;
+	readonly url?: string | undefined;
+	readonly asOf?: string | undefined;
+};
+
+/** Only Google Contacts' own pages open from a person. */
+function contactsUrl(value: string | undefined): string | undefined {
+	try {
+		const url = new URL(value ?? "");
+		return url.protocol === "https:" &&
+			url.port === "" &&
+			url.username === "" &&
+			url.password === "" &&
+			url.hostname === "contacts.google.com"
+			? url.href
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+const initialsOf = (name: string) =>
+	(name.split("@")[0] ?? "")
+		.split(/[\s._-]+/)
+		.filter((word) => /^\p{L}/u.test(word))
+		.slice(0, 2)
+		.map((word) => [...word][0]?.toUpperCase())
+		.join("");
+
+const listOf = (value: string) =>
+	value
+		.split(",")
+		.map((each) => each.trim())
+		.filter(Boolean);
+
+/** A read-only person card: who, where they work, and their addresses and numbers as links that start an email or call. */
+export function ContactCard({ person, actions }: { person: Person; actions?: ReactNode }) {
+	const open = contactsUrl(person.url);
+	const work = [person.title, person.organization].filter(Boolean).join(" · ");
+	const initials = initialsOf(person.name);
+	return (
+		<Tile className="flex flex-col gap-2.5 p-3.5">
+			<div className="flex min-w-0 items-center gap-3">
+				<Avatar size="lg">
+					{person.photo === undefined ? null : <AvatarImage src={person.photo} alt="" referrerPolicy="no-referrer" />}
+					<AvatarFallback>{initials || <UserRoundIcon aria-hidden="true" className="size-4" />}</AvatarFallback>
+				</Avatar>
+				<div className="flex min-w-0 flex-1 flex-col">
+					<h3 className="text-body font-semibold text-ink [overflow-wrap:anywhere]">{person.name}</h3>
+					{work === "" ? null : <span className="text-meta text-ink-2 [overflow-wrap:anywhere]">{work}</span>}
+				</div>
+				{person.asOf === undefined ? null : <span className="text-meta text-ink-2">as of {person.asOf}</span>}
+				<span className="shrink-0 self-start">{actions}</span>
+			</div>
+			{person.emails || person.phones ? (
+				<ul className="flex flex-col gap-1 text-meta">
+					{listOf(person.emails).map((email) => (
+						<li key={email} className="flex min-w-0 items-center gap-2">
+							<MailIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-2" />
+							{/^[^\s@,;?&#/]+@[^\s@,;?&#/]+$/.test(email) ? (
+								<a href={`mailto:${email}`} className="min-w-0 text-ink underline [overflow-wrap:anywhere]">
+									{email}
+								</a>
+							) : (
+								<span className="min-w-0 text-ink [overflow-wrap:anywhere]">{email}</span>
+							)}
+						</li>
+					))}
+					{listOf(person.phones).map((phone) => (
+						<li key={phone} className="flex min-w-0 items-center gap-2">
+							<PhoneIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-2" />
+							<a
+								href={`tel:${phone.replace(/[^\d+*#]/g, "")}`}
+								className="min-w-0 text-ink underline [overflow-wrap:anywhere]"
+							>
+								{phone}
+							</a>
+						</li>
+					))}
+				</ul>
+			) : null}
+			{person.other ? (
+				<span data-contact-other="" className="text-meta text-ink-2">
+					From people you've emailed
+				</span>
+			) : null}
+			{open === undefined ? null : (
+				<span className="flex flex-wrap items-center gap-2">
+					<Button asChild size="sm" variant="ghost">
+						<a href={open} target="_blank" rel="noopener noreferrer">
+							<ExternalLinkIcon />
+							Open in Google Contacts
+						</a>
+					</Button>
 				</span>
 			)}
 		</Tile>

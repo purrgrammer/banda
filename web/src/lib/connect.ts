@@ -78,6 +78,11 @@ export const SCOPE_CHOICES: { readonly [connection: string]: ScopeChoices } = {
 		choices: [{ scope: `${GOOGLE}calendar.events`, label: "Create, change and answer events" }],
 		note: "Changing access signs in again. Creating, changing, answering and deleting events still ask you to approve each one.",
 	},
+	contacts: {
+		required: { scope: `${GOOGLE}contacts.readonly`, label: "Read your contacts" },
+		choices: [{ scope: `${GOOGLE}contacts.other.readonly`, label: "People you've emailed" }],
+		note: "Changing access signs in again. Banda only reads your contacts.",
+	},
 	github: {
 		choices: [
 			{ scope: "repo", label: "Repositories, including private repositories" },
