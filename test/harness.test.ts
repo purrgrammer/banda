@@ -251,6 +251,8 @@ describe("a harness session", () => {
 		expect(ended?.state).toBe("done");
 		expect(ended?.call).toBe("c1");
 		expect(ended?.steps.map((step) => step.kind)).toEqual(["asked", "edit", "run", "steered", "decided", "said"]);
+		// the decided step keeps the ask's kind: the folded row says "You allowed: run a command", never the command
+		expect(ended?.steps.find((step) => step.kind === "decided")).toMatchObject({ command: "npm test", ask: "execute" });
 		// the wake carries what the owner decided and told it, not only its last words
 		const result = JSON.parse(
 			/<harness-result[^>]*>\n(.*)\n<\/harness-result>/s.exec(s.woke[0]?.text ?? "")?.[1] ?? "{}",
