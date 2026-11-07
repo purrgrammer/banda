@@ -14,7 +14,9 @@
  *   crash                  the process exits
  *   background <mark>      start a long command, detached in a group of its own, that outlives this process
  * A line it does not know is said as words (a recap of earlier work, sent before the script). `session/load` replays
- * history first, as real harnesses do; FAKE_ACP_NO_LOAD=1 makes it one that cannot reopen a session.
+ * history first, as real harnesses do; FAKE_ACP_NO_LOAD=1 makes it one that cannot reopen a session. FAKE_ACP_RESUME
+ * and FAKE_ACP_CLOSE (=1) announce the matching sessionCapabilities: session/resume reopens with no replay, and
+ * session/close forgets the session (-32002 for one it does not have).
  * Prompts run one at a time, in order: one sent mid-turn waits (as claude-agent-acp queues it). Every prompt received,
  * permission answered and turn ended is appended to $FAKE_ACP_LOG (jsonl), so it survives a kill.
  */
@@ -179,10 +181,20 @@ jsonLines(process.stdin, (line) => {
 	const params = message.params ?? {};
 	switch (message.method) {
 		case "initialize":
-			// FAKE_ACP_NO_LOAD=1: a harness that cannot reopen a session (as banda's pi adapter)
+			// FAKE_ACP_NO_LOAD=1: a harness that cannot reopen a session (as banda's pi adapter). FAKE_ACP_RESUME
+			// and FAKE_ACP_CLOSE (=1) announce the matching sessionCapabilities.
 			return send({
 				id: message.id,
-				result: { protocolVersion: 1, agentCapabilities: { loadSession: process.env.FAKE_ACP_NO_LOAD !== "1" } },
+				result: {
+					protocolVersion: 1,
+					agentCapabilities: {
+						loadSession: process.env.FAKE_ACP_NO_LOAD !== "1",
+						sessionCapabilities: {
+							...(process.env.FAKE_ACP_RESUME === "1" ? { resume: {} } : {}),
+							...(process.env.FAKE_ACP_CLOSE === "1" ? { close: {} } : {}),
+						},
+					},
+				},
 			});
 		case "session/new": {
 			// a harness that never opens a session (not signed in, waiting on a prompt of its own)
@@ -190,6 +202,21 @@ jsonLines(process.stdin, (line) => {
 			const sessionId = `fake-${process.pid}-${sessions.size + 1}`;
 			sessions.add(sessionId);
 			return send({ id: message.id, result: { sessionId, modes: { currentModeId: "auto", availableModes: [] } } });
+		}
+		case "session/resume": {
+			// the session again, nothing replayed (unlike session/load)
+			const sessionId = String(params.sessionId);
+			sessions.add(sessionId);
+			record({ resumed: sessionId });
+			return send({ id: message.id, result: {} });
+		}
+		case "session/close": {
+			const sessionId = String(params.sessionId);
+			if (!sessions.has(sessionId))
+				return send({ id: message.id, error: { code: -32002, message: "no such session" } });
+			sessions.delete(sessionId);
+			record({ closed: sessionId });
+			return send({ id: message.id, result: {} });
 		}
 		case "session/load": {
 			const sessionId = String(params.sessionId);

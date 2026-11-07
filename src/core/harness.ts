@@ -20,6 +20,7 @@ import {
 	type AcpPermissionRequest,
 	type AcpUpdate,
 	cancel,
+	closeSession,
 	openSession,
 	prompt,
 	startAcp,
@@ -206,6 +207,8 @@ const KEPT_ENDED = 20;
 /** What one kept session update may weigh as JSON, and what all of them together may. */
 export const UPDATE_MAX_BYTES = 4_000;
 export const UPDATES_MAX_BYTES = 10_000;
+/** How long a closing session's `session/close` gets before its process is ended anyway. */
+const CLOSE_MS = 2_000;
 /** Steps an ended session keeps, and how much text each: the ask, its edits, the owner's notes and its last words first. */
 const ENDED_STEPS = 40;
 const ENDED_TEXT = 1000;
@@ -916,6 +919,18 @@ export function defineHarnesses(options: HarnessOptions) {
 				};
 				let connection: AcpConnection | undefined;
 				let sessionId: string | undefined;
+				let canClose = false;
+				// the session told goodbye (session/close) when the agent takes it: best effort, its group is killed either way
+				const closeOpened = async () => {
+					if (connection === undefined || sessionId === undefined || !canClose) return;
+					let wait: NodeJS.Timeout | undefined;
+					await Promise.race([
+						closeSession(connection, sessionId).catch(() => {}),
+						new Promise<void>((resolve) => {
+							wait = setTimeout(resolve, CLOSE_MS);
+						}),
+					]).finally(() => clearTimeout(wait));
+				};
 				// a reopened session replays its history as updates: none is this run's until its session is open
 				let live = false;
 				let outstanding = 0;
@@ -1097,6 +1112,7 @@ export function defineHarnesses(options: HarnessOptions) {
 					}, ctx);
 					if (!go) throw new Stopped();
 					sessionId = opened.sessionId;
+					canClose = opened.canClose;
 					live = true;
 					fault("harness:prompted");
 					// a harness that reopened its session remembers; one that could not is told what it did
@@ -1108,6 +1124,7 @@ export function defineHarnesses(options: HarnessOptions) {
 					await flushing;
 					dirty = true;
 					await flush();
+					await closeOpened();
 					// the harness, and all it started, gone before the session ends: an ended session is never reconciled; its
 					// tree is read before it closes, since what it started detached loses its parent then
 					const tree = treeGroups(connection.pid);
@@ -1127,6 +1144,7 @@ export function defineHarnesses(options: HarnessOptions) {
 					if (!wasStopped) why ??= (error as Error).message;
 					closing = true;
 					cancelAsks();
+					await closeOpened();
 					const tree = treeGroups(connection?.pid);
 					await connection?.close();
 					killGroups(tree);

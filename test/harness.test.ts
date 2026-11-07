@@ -340,6 +340,30 @@ describe("a harness session", () => {
 		await s.harness.close(context);
 	});
 
+	it("tells a harness that announces close that its session is over, before its process ends", async () => {
+		const s = await setup();
+		const log = join(s.folder, "close.jsonl");
+		vi.stubEnv("FAKE_ACP_LOG", log);
+		vi.stubEnv("FAKE_ACP_CLOSE", "1");
+		onTestFinished(() => {
+			vi.unstubAllEnvs();
+		});
+		const task = await s.harness.commit(
+			(tx) => s.made.begin(tx, { chat: s.chat, agent: "sancho", harness: "fake", folder: s.folder, ask: "say hi" }),
+			context,
+		);
+		await until(() => s.woke.length === 1);
+		const sessionId = (await s.session())[task]?.sessionId;
+		expect(sessionId).toBeDefined();
+		const entries = (await readFile(log, "utf8"))
+			.trim()
+			.split("\n")
+			.map((line) => JSON.parse(line) as { [key: string]: unknown });
+		expect(entries).toContainEqual(expect.objectContaining({ closed: sessionId }));
+		expect((await s.session())[task]?.state).toBe("done");
+		await s.harness.close(context);
+	});
+
 	it("says why it failed: a harness that dies at once, one that never opens a session", async () => {
 		const dies = await setup({ args: ["-e", "console.error('not signed in: run claude login'); process.exit(3)"] });
 		const one = await dies.harness.commit(
@@ -637,7 +661,15 @@ describe("following up on a session", () => {
 			(await readFile(log, "utf8").catch(() => ""))
 				.split("\n")
 				.filter((line) => line !== "")
-				.map((line) => JSON.parse(line) as { prompt?: string; loaded?: string; sessionId?: string });
+				.map(
+					(line) =>
+						JSON.parse(line) as {
+							prompt?: string;
+							loaded?: string;
+							resumed?: string;
+							sessionId?: string;
+						},
+				);
 		const begin = (ask: string, continues?: number) =>
 			harness.commit(
 				(tx) =>
@@ -668,6 +700,29 @@ describe("following up on a session", () => {
 		const log = await s.logged();
 		expect(log.find((entry) => entry.loaded !== undefined)?.loaded).toBe(opened);
 		// it remembers, so it is sent the follow-up alone
+		expect(log.filter((entry) => entry.prompt !== undefined).map((entry) => entry.prompt)).toEqual([
+			"say first",
+			"say second",
+		]);
+		await s.harness.close(context);
+	});
+
+	it("reopens by session/resume, with no replay, when the harness cannot load but announces resume", async () => {
+		vi.stubEnv("FAKE_ACP_NO_LOAD", "1");
+		vi.stubEnv("FAKE_ACP_RESUME", "1");
+		const s = await setup();
+		const first = await s.begin("say first");
+		await until(() => s.woke.length === 1);
+		const opened = (await s.sessions())[first]?.sessionId;
+		const second = await s.begin("say second", first);
+		await until(() => s.woke.length === 2);
+		const after = (await s.sessions())[second];
+		expect(after).toMatchObject({ continues: first, resume: opened, state: "done", continuation: "native" });
+		// nothing replayed: the second session's steps are its own
+		expect(after?.steps.map((step) => step.kind)).toEqual(["asked", "said"]);
+		const log = await s.logged();
+		expect(log.find((entry) => entry.resumed !== undefined)?.resumed).toBe(opened);
+		// it remembers, so it is sent the follow-up alone, with no recap
 		expect(log.filter((entry) => entry.prompt !== undefined).map((entry) => entry.prompt)).toEqual([
 			"say first",
 			"say second",

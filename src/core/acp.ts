@@ -215,24 +215,50 @@ export function jsonLines(
 /** The protocol version this client speaks. */
 export const ACP_PROTOCOL_VERSION = 1;
 
-/** Initialize, then open a session in `cwd` (or load `resume`), then set its mode. Returns the session's id. */
+/** A capability an agent announces by an object (ACP: `{}` means offered; omitted or `null` means not). */
+const offered = (capability: unknown): boolean => typeof capability === "object" && capability !== null;
+
+/** ACP's "resource not found": a session already gone is as closed as one the agent just let go. */
+const NOT_FOUND = -32002;
+
+export type OpenedSession = {
+	readonly sessionId: string;
+	/** The harness reopened its own session (`session/resume` or `session/load`), so it remembers. */
+	readonly loaded: boolean;
+	/** The agent takes `session/close` when the session ends. */
+	readonly canClose: boolean;
+};
+
+/**
+ * Initialize, then open a session in `cwd` (reopening `resume` by `session/resume`, with no history replayed, when the
+ * agent offers it, else by `session/load`), then set its mode.
+ */
 export async function openSession(
 	connection: AcpConnection,
 	{ cwd, mode, resume }: { cwd: string; mode?: string | undefined; resume?: string | undefined },
-): Promise<{ readonly sessionId: string; readonly loaded: boolean }> {
-	const init = await connection.request<{ protocolVersion?: number; agentCapabilities?: { loadSession?: boolean } }>(
-		"initialize",
-		{
-			protocolVersion: ACP_PROTOCOL_VERSION,
-			clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-			clientInfo: { name: "banda", version: "0" },
-		},
-	);
+): Promise<OpenedSession> {
+	const init = await connection.request<{
+		protocolVersion?: number;
+		agentCapabilities?: {
+			loadSession?: boolean;
+			sessionCapabilities?: { resume?: unknown; close?: unknown };
+		};
+	}>("initialize", {
+		protocolVersion: ACP_PROTOCOL_VERSION,
+		clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+		clientInfo: { name: "banda", version: "0" },
+	});
 	if (init.protocolVersion !== ACP_PROTOCOL_VERSION)
 		throw new AcpError("The harness does not support the required ACP protocol version.");
+	const capabilities = init.agentCapabilities?.sessionCapabilities ?? {};
 	let sessionId: string;
 	let loaded = false;
-	if (resume !== undefined && init.agentCapabilities?.loadSession === true) {
+	if (resume !== undefined && offered(capabilities.resume)) {
+		// the same session again, nothing replayed: what it did before is already this side's record
+		await connection.request("session/resume", { sessionId: resume, cwd, mcpServers: [] });
+		sessionId = resume;
+		loaded = true;
+	} else if (resume !== undefined && init.agentCapabilities?.loadSession === true) {
 		await connection.request("session/load", { sessionId: resume, cwd, mcpServers: [] });
 		sessionId = resume;
 		loaded = true;
@@ -242,7 +268,20 @@ export async function openSession(
 	}
 	// the harness starts in the owner's own default (which may ask nothing): the connection's mode is set, always
 	if (mode !== undefined) await connection.request("session/set_mode", { sessionId, modeId: mode });
-	return { sessionId, loaded };
+	return { sessionId, loaded, canClose: offered(capabilities.close) };
+}
+
+/**
+ * Tell the agent its session is over (`session/close`, for one that announced it); a session it no longer has
+ * (-32002) is as closed. The process is still ended and its group killed after, whatever this says.
+ */
+export async function closeSession(connection: AcpConnection, sessionId: string): Promise<void> {
+	try {
+		await connection.request("session/close", { sessionId });
+	} catch (error) {
+		if (error instanceof AcpError && error.code === NOT_FOUND) return;
+		throw error;
+	}
 }
 
 export type AcpStopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | "cancelled" | string;
