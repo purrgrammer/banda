@@ -40,7 +40,7 @@ export const WATCH =
 	"---\nobject: https://github.com/acme/banda/pull/142\naccount: bandarra\n---\nTell me when it is approved or a check fails.\n";
 export const CLICKS = ["k1", "k2", "k3"];
 
-type World = { [read: string]: Json };
+export type World = { [read: string]: Json };
 
 /** The world at each step: what GitHub answers each read of the pull request. */
 export function world(step: number): World {
@@ -105,8 +105,15 @@ export const WATCHES = ["banda-142", "banda-142-otto"] as const;
 export async function watchScenario(
 	home: string,
 	faults: Faults,
-	options: { readonly second?: boolean } = {},
+	options: {
+		readonly second?: boolean;
+		/** What GitHub answers at each step, and the owner's clicks, one per step; the pull request's life by default. */
+		readonly world?: (step: number) => World;
+		readonly clicks?: readonly string[];
+	} = {},
 ): Promise<WatchSummary> {
+	const worldAt = options.world ?? world;
+	const clicks = options.clicks ?? CLICKS;
 	const names = options.second ? WATCHES : WATCHES.slice(0, 1);
 	const worldFile = join(home, "world.json");
 	const stepOf = () => {
@@ -147,7 +154,7 @@ export async function watchScenario(
 		read: async (_connection, account, tool, args) => {
 			appendFileSync(join(home, "reads.jsonl"), `${JSON.stringify({ tool, account, method: args.method })}\n`);
 			if (tool !== "pull_request_read" || account !== "bandarra") return { failed: "not that" };
-			const answer = world(stepOf())[String(args.method)];
+			const answer = worldAt(stepOf())[String(args.method)];
 			return answer === undefined ? { failed: `no ${String(args.method)}` } : { text: JSON.stringify(answer) };
 		},
 		fault: (point) => faults.hit(point as "watch:read"),
@@ -210,7 +217,7 @@ export async function watchScenario(
 		};
 		while (!(await looked())) await new Promise((r) => setTimeout(r, 5));
 		// the world moves on, and the owner checks now at each step: the same click, sent again after a kill
-		for (const [i, key] of CLICKS.entries()) {
+		for (const [i, key] of clicks.entries()) {
 			const step = i + 1;
 			if (stepOf() < step) writeFileSync(worldFile, String(step));
 			for (const name of names) await core.checkWatch(harness, name, key);

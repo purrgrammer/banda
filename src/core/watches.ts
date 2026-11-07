@@ -122,6 +122,26 @@ export function watchText(watch: Omit<Watch, "name">): string {
 }
 
 /**
+ * A watch file's text with its `until` line set to `until`, or gone for null, every other byte as it was: the owner
+ * changing what ends it changes nothing else. A new line goes after the object and the account. Undefined when the
+ * text has no frontmatter.
+ */
+export function withUntil(text: string, until: string | null): string | undefined {
+	const match = /^(---\r?\n)([\s\S]*?)(\r?\n---[ \t]*(?:\r?\n|$))/.exec(text);
+	if (match === null) return undefined;
+	const lines = (match[2] ?? "").split(/\r?\n/);
+	const at = lines.findIndex((each) => each.startsWith("until:"));
+	if (until === null) {
+		if (at !== -1) lines.splice(at, 1);
+	} else if (at !== -1) lines[at] = `until: ${until}`;
+	else {
+		const after = lines.reduce((last, each, n) => (/^(object|account):/.test(each) ? n : last), -1);
+		lines.splice(after + 1, 0, `until: ${until}`);
+	}
+	return `${match[1]}${lines.join("\n")}${match[3]}${text.slice(match[0].length)}`;
+}
+
+/**
  * What a `watch` call wrote, in its result's details: the watch by name, the hash of the file, and whether it made one
  * (`added`), changed one in effect (`changed`), or found it in effect as written (`same`).
  */
@@ -406,9 +426,19 @@ export type Looked =
 	| { readonly outcome: "raced" };
 
 /** The hash that keys a wake: the changes themselves, and what ended the watch. */
-const wakeKey = (name: string, ids: readonly string[], ended: string | undefined) =>
+/**
+ * A wake's key: the transition it is, from the watch's cursor (since it began) to the reading it saw. The chat keeps
+ * every key it was given, so a key of the changes alone would swallow the same change happening again later.
+ */
+const wakeKey = (
+	name: string,
+	since: number | undefined,
+	seen: number,
+	ids: readonly string[],
+	ended: string | undefined,
+) =>
 	`watch:${name}:${createHash("sha256")
-		.update(JSON.stringify([ids, ended ?? null]))
+		.update(JSON.stringify([since ?? null, seen, ids, ended ?? null]))
 		.digest("hex")
 		.slice(0, 24)}`;
 
@@ -604,6 +634,8 @@ export function defineWatches(options: WatchesOptions) {
 				record.turn = await options.followUp(tx, chat, {
 					key: wakeKey(
 						name,
+						record.since,
+						seen,
 						wake.map((each) => each.change.id),
 						ended,
 					),
