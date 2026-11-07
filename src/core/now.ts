@@ -8,7 +8,7 @@
  */
 import { defineExtension, type PromptSection } from "@earendil-works/pi-durable";
 import { AgentChats } from "./agents.ts";
-import { MAX_MEMORY_CHARS, type MemoryFiles, memoryFill } from "./memory.ts";
+import { type MemoryFiles, memoryFill } from "./memory.ts";
 
 /** How full an agent's memory is, in percent of each scope's budget. */
 export type Fill = { readonly agent: number; readonly global: number };
@@ -34,8 +34,9 @@ export function nowLine(at: number, timeZone?: string, agentId?: string, fill?: 
 		"a date the owner gives without a year is the next one to come." +
 		(fill === undefined
 			? ""
-			: ` Your memory is ${fill.agent}% full and the band's shared memory ${fill.global}% ` +
-				`(${MAX_MEMORY_CHARS} characters each).`)
+			: ` Memory: yours ${fill.agent}% full, shared ${fill.global}%${
+					Math.max(fill.agent, fill.global) >= 80 ? "; merge or forget facts" : ""
+				}.`)
 	);
 }
 

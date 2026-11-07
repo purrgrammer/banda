@@ -35,9 +35,13 @@ describe("now", () => {
 			read: { snapshot: async () => ({ chats: { "42": "reader" } }) },
 		} as unknown as Parameters<ReturnType<typeof nowSection>["render"]>[0];
 		const line = await nowSection(() => at, memory).render(input, context);
-		expect(line).toMatch(/Your memory is [1-9]0% full and the band's shared memory 0% \(4000 characters each\)\./);
+		expect(line).toMatch(/Memory: yours [1-7]0% full, shared 0%\./);
 		files.set(agentMemoryPath("reader"), `${facts(15)}\n- one more short fact`);
 		expect(await nowSection(() => at, memory).render(input, context)).toBe(line);
+		files.set(agentMemoryPath("reader"), facts(40));
+		expect(await nowSection(() => at, memory).render(input, context)).toMatch(
+			/Memory: yours [89]0% full, shared 0%; merge or forget facts\./,
+		);
 	});
 
 	it("leaves memory out when it cannot be read", async () => {
