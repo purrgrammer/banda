@@ -9,6 +9,7 @@ import {
 	calendarWriteCall,
 } from "./calendar-rest.ts";
 import { CONTACTS_TOOLS, contactsCall, contactsWriteCall } from "./contacts-rest.ts";
+import { DRIVE_TOOLS, driveCall, driveWriteCall } from "./drive-rest.ts";
 import { GMAIL_TOOLS, gmailCall, gmailWriteCall } from "./gmail-rest.ts";
 import type { McpResult, McpTool } from "./mcp.ts";
 
@@ -101,6 +102,16 @@ export const REST_APIS = {
 		account: { tool: "get_profile", field: "email" },
 		read: (token, tool, args, signal, fetcher) => contactsCall(token, tool, args, signal, fetcher),
 		write: contactsWriteCall,
+	},
+	drive: {
+		service: "Google Drive",
+		url: "https://www.googleapis.com/drive/v3",
+		base: "https://www.googleapis.com/auth/drive.readonly",
+		scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+		tools: DRIVE_TOOLS,
+		account: { tool: "get_profile", field: "email" },
+		read: driveCall,
+		write: driveWriteCall,
 	},
 } as const satisfies Record<string, RestApi>;
 

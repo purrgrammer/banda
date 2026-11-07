@@ -16,7 +16,16 @@ import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable"
 type JsonValue = JsonObject[string];
 
 /** The cards the daemon draws. */
-export const CARDS = ["pull-request", "issue", "check-run", "notification", "email", "event", "contact"] as const;
+export const CARDS = [
+	"pull-request",
+	"issue",
+	"check-run",
+	"notification",
+	"email",
+	"event",
+	"contact",
+	"file",
+] as const;
 export type CardKind = (typeof CARDS)[number];
 
 /** A read that fetches an object: a tool, and its arguments, each a value or a `{placeholder}` the match fills. */
@@ -695,6 +704,22 @@ export type ContactCard = {
 	readonly url?: string;
 };
 
+/** A file in a drive, every value scalar so the store's bounded JSON shape holds. */
+export type FileCard = {
+	readonly card: "file";
+	readonly name: string;
+	readonly kind: "doc" | "sheet" | "slides" | "pdf" | "folder" | "image" | "file";
+	readonly mimeType: string;
+	readonly owner: string;
+	/** When it last changed, as the drive gives it. */
+	readonly modified: string;
+	/** Its bytes; null for a Google Doc, Sheet or Slides deck, which have none of their own. */
+	readonly size: number | null;
+	readonly description: string;
+	/** Only the drive's own page for it (docs.google.com or drive.google.com). */
+	readonly url?: string;
+};
+
 export type ObjectCard =
 	| PullRequestCard
 	| IssueCard
@@ -702,7 +727,8 @@ export type ObjectCard =
 	| NotificationCard
 	| EmailCard
 	| EventCard
-	| ContactCard;
+	| ContactCard
+	| FileCard;
 
 /** A plain line: no control or invisible characters, one space for each run of spaces, bounded. */
 export function plainLine(value: unknown, max = 200): string {
@@ -816,7 +842,11 @@ const REASONS: { readonly [reason: string]: Reason } = {
 export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as: string]: unknown }): ObjectCard {
 	const field = (name: string) => at(answers, kind.fields[name]);
 	const titleField =
-		kind.card === "check-run" || kind.card === "contact" ? "name" : kind.card === "email" ? "subject" : "title";
+		kind.card === "check-run" || kind.card === "contact" || kind.card === "file"
+			? "name"
+			: kind.card === "email"
+				? "subject"
+				: "title";
 	// a person may have no name: the card names them by address
 	if (typeof field(titleField) !== "string" || (kind.card !== "contact" && plainLine(field(titleField)) === ""))
 		throw new Error("Incomplete object");
@@ -1001,6 +1031,23 @@ export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as
 				other,
 				...(photo === undefined ? {} : { photo }),
 				...(other ? {} : withUrl),
+			};
+		}
+		case "file": {
+			const kindWord = String(field("kind") ?? "");
+			const page = url === undefined ? undefined : new URL(url);
+			const own = page?.port === "" && (page.hostname === "docs.google.com" || page.hostname === "drive.google.com");
+			return {
+				card: "file",
+				name: plainLine(field("name"), 300),
+				kind:
+					(["doc", "sheet", "slides", "pdf", "folder", "image"] as const).find((each) => each === kindWord) ?? "file",
+				mimeType: plainLine(field("mime_type"), 100),
+				owner: plainLine(field("owner"), 200),
+				modified: plainLine(field("modified"), 40),
+				size: count(field("size")),
+				description: plainBody(field("description"), 500),
+				...(own ? withUrl : {}),
 			};
 		}
 	}

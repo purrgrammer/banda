@@ -3,7 +3,7 @@
  * Tokens are supplied per call by the daemon and never enter a box.
  */
 import { createHash } from "node:crypto";
-import { type GoogleMethod, GoogleRefused, googleRequest } from "./google-rest.ts";
+import { GoogleError, type GoogleMethod, googleRequest } from "./google-rest.ts";
 import { type McpResult, type McpTool, Unauthorized } from "./mcp.ts";
 
 const CALENDAR = { service: "Google Calendar", base: "https://www.googleapis.com/calendar/v3" };
@@ -619,7 +619,7 @@ export async function calendarWriteCall(
 					);
 				} catch (error) {
 					// the id is taken: by this change, made before a crash cut its run short
-					if (!(error instanceof GoogleRefused) || error.status !== 409) throw error;
+					if (!(error instanceof GoogleError) || error.status !== 409) throw error;
 					created = object(await request(eventPath(calendarId, id)));
 				}
 				answer = made(calendarId, created, id);
@@ -685,7 +685,7 @@ export async function calendarWriteCall(
 					await request(`${eventPath(ref.calendarId, ref.eventId)}?${params}`, "DELETE");
 				} catch (error) {
 					// gone already: deleted by this change before a crash cut its run short, or by someone else
-					if (!(error instanceof GoogleRefused) || (error.status !== 404 && error.status !== 410)) throw error;
+					if (!(error instanceof GoogleError) || (error.status !== 404 && error.status !== 410)) throw error;
 				}
 				answer = { ok: true, ref: `calendar/${eventRef(ref.calendarId, ref.eventId)}` };
 				break;

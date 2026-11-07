@@ -21,6 +21,7 @@ import { Controls } from "../specimen/controls.tsx";
 import { Copy } from "../specimen/copy.tsx";
 import { DevicesSection } from "../specimen/devices.tsx";
 import { DoneSection } from "../specimen/done.tsx";
+import { DriveSection } from "../specimen/drive.tsx";
 import { Faces } from "../specimen/faces.tsx";
 import { Foundation } from "../specimen/foundation.tsx";
 import { HarnessSection } from "../specimen/harness.tsx";
@@ -76,6 +77,7 @@ const CONTENTS = [
 	{ id: "gmail", label: "Gmail" },
 	{ id: "calendar", label: "Google Calendar" },
 	{ id: "contacts", label: "Google Contacts" },
+	{ id: "drive", label: "Google Drive" },
 	{ id: "loading-app", label: "Opening the app" },
 	{ id: "empty-chat", label: "A new agent's chat" },
 	{ id: "states", label: "Empty and loading" },
@@ -255,6 +257,7 @@ export function Specimen() {
 									</Section>
 									<CalendarSection />
 									<ContactsSection />
+									<DriveSection />
 									<PanelSections />
 									<MemorySection />
 									<DevicesSection />

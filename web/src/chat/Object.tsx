@@ -14,11 +14,18 @@ import {
 	CircleXIcon,
 	EllipsisIcon,
 	ExternalLinkIcon,
+	FileIcon,
+	FileTextIcon,
+	FileTypeIcon,
+	FolderIcon,
 	GitMergeIcon,
 	GitPullRequestDraftIcon,
 	GitPullRequestIcon,
+	ImageIcon,
 	MailIcon,
 	PhoneIcon,
+	PresentationIcon,
+	SheetIcon,
 	UserRoundIcon,
 	VideoIcon,
 } from "lucide-react";
@@ -36,6 +43,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
+import { sizeOf } from "../lib/size.ts";
 import { Tile } from "./Cards.tsx";
 
 export type PullRequest = {
@@ -247,9 +255,35 @@ export function ObjectLink({
 		| (CheckRun & { card: "check-run" })
 		| (EmailMessage & { card: "email" })
 		| (CalendarEvent & { card: "event" })
-		| (Person & { card: "contact" });
+		| (Person & { card: "contact" })
+		| (DriveFile & { card: "file" });
 	href: string;
 }) {
+	if (object.card === "file") {
+		const Icon = FILE_KIND[object.kind].icon;
+		const url = driveUrl(href) ?? driveUrl(object.url);
+		const name = object.name || "File";
+		return (
+			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
+				<Icon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
+				{url === undefined ? (
+					<span className="min-w-0 truncate" title={name}>
+						{name}
+					</span>
+				) : (
+					<a
+						href={url}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="min-w-0 max-w-80 truncate underline"
+						title={name}
+					>
+						{name}
+					</a>
+				)}
+			</span>
+		);
+	}
 	if (object.card === "contact") {
 		const url = contactsUrl(href) ?? contactsUrl(object.url);
 		return (
@@ -910,5 +944,99 @@ export function NotificationCard({
 			</span>
 			{children}
 		</div>
+	);
+}
+
+export type DriveFile = {
+	readonly name: string;
+	readonly kind: "doc" | "sheet" | "slides" | "pdf" | "folder" | "image" | "file";
+	readonly mimeType: string;
+	readonly owner: string;
+	readonly modified: string;
+	readonly size: number | null;
+	readonly description: string;
+	readonly url?: string | undefined;
+	readonly asOf?: string | undefined;
+};
+
+const FILE_KIND: Record<DriveFile["kind"], { readonly icon: LucideIcon; readonly word: string; readonly app: string }> =
+	{
+		doc: { icon: FileTextIcon, word: "Google Doc", app: "Google Docs" },
+		sheet: { icon: SheetIcon, word: "Google Sheet", app: "Google Sheets" },
+		slides: { icon: PresentationIcon, word: "Google Slides", app: "Google Slides" },
+		pdf: { icon: FileTypeIcon, word: "PDF", app: "Google Drive" },
+		folder: { icon: FolderIcon, word: "Folder", app: "Google Drive" },
+		image: { icon: ImageIcon, word: "Image", app: "Google Drive" },
+		file: { icon: FileIcon, word: "File", app: "Google Drive" },
+	};
+
+/** Only Google's own pages for a file open from it; the daemon already kept them https. */
+function driveUrl(value: string | undefined): string | undefined {
+	try {
+		const url = new URL(value ?? "");
+		return url.protocol === "https:" &&
+			url.port === "" &&
+			url.username === "" &&
+			url.password === "" &&
+			(url.hostname === "docs.google.com" || url.hostname === "drive.google.com")
+			? url.href
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** When a file changed, in the owner's own time: "Today, 10:32", "Nov 3" or "Nov 3, 2024". */
+export function fileModified(value: string, now = new Date()): string {
+	const at = new Date(value);
+	if (value === "" || Number.isNaN(at.getTime())) return value;
+	if (at.toDateString() === now.toDateString())
+		return `Today, ${new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(at)}`;
+	return new Intl.DateTimeFormat(undefined, {
+		month: "short",
+		day: "numeric",
+		...(at.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+	}).format(at);
+}
+
+/** What kind of file it is, in words: "Google Doc", "PDF", or a binary's own type. */
+export const fileType = (file: Pick<DriveFile, "kind" | "mimeType">) =>
+	file.kind === "file" && file.mimeType !== "" ? file.mimeType : FILE_KIND[file.kind].word;
+
+/** A read-only file card: what it is, whose, when it changed. The description is plain text the daemon bounded. */
+export function FileCard({ file, actions }: { file: DriveFile; actions?: ReactNode }) {
+	const kind = FILE_KIND[file.kind];
+	const open = driveUrl(file.url);
+	const facts = [
+		fileType(file),
+		file.owner,
+		file.modified === "" ? "" : `Modified ${fileModified(file.modified)}`,
+		file.size === null || file.kind === "folder" ? "" : sizeOf(file.size),
+	].filter((each) => each !== "");
+	return (
+		<Tile className="flex flex-col gap-2.5 p-3.5">
+			<div className="flex min-w-0 items-start gap-2.5">
+				<kind.icon aria-hidden="true" data-file-kind={file.kind} className="mt-0.5 size-5 shrink-0 text-ink-2" />
+				<div className="flex min-w-0 flex-1 flex-col gap-1">
+					<h3 className="text-body font-semibold text-ink [overflow-wrap:anywhere]">{file.name || "(Untitled)"}</h3>
+					<span className="text-meta text-ink-2 [overflow-wrap:anywhere]">{facts.join(" · ")}</span>
+				</div>
+				{file.asOf === undefined ? null : <span className="shrink-0 text-meta text-ink-2">as of {file.asOf}</span>}
+				<span className="shrink-0">{actions}</span>
+			</div>
+			{file.description === "" ? null : (
+				<p className="whitespace-pre-wrap text-meta text-ink [overflow-wrap:anywhere]">{file.description}</p>
+			)}
+			{open === undefined ? null : (
+				<span className="flex flex-wrap items-center gap-2">
+					<Button asChild size="sm" variant="ghost" className="-ml-2">
+						<a href={open} target="_blank" rel="noopener noreferrer">
+							<ExternalLinkIcon />
+							Open in {kind.app}
+						</a>
+					</Button>
+				</span>
+			)}
+		</Tile>
 	);
 }

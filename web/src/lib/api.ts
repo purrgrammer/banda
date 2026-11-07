@@ -226,9 +226,6 @@ export function limits(): Promise<{ fileBytes: number }> {
 }
 
 /** A size as people read it. */
-export const sizeOf = (size: number) =>
-	size < 1024 * 1024 ? `${Math.ceil(size / 1024)} KB` : `${(size / 1024 / 1024).toFixed(1).replace(/\.0$/, "")} MB`;
-
 /** Upload a file as a blob for a message to name; resolves with what the message names it by. */
 export async function upload(
 	file: File,

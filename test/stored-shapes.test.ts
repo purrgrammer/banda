@@ -123,6 +123,24 @@ it("reopens current account authority and object readings without a migration", 
 				other: true,
 			},
 		});
+		await keepReading(tx, "drive/me@example.test/file:drive/1aBcD", {
+			connection: "drive",
+			account: "me@example.test",
+			kind: "file",
+			source: "accepted-definition-and-account-generation",
+			at: 790,
+			card: {
+				card: "file",
+				name: "Q1 rollout plan",
+				kind: "doc",
+				mimeType: "application/vnd.google-apps.document",
+				owner: "Ana",
+				modified: "2026-11-05T16:42:10.000Z",
+				size: null,
+				description: "",
+				url: "https://docs.google.com/document/d/1aBcD/edit",
+			},
+		});
 	}, context);
 	await before.close(context);
 	const after = await open(home);
@@ -145,6 +163,11 @@ it("reopens current account authority and object readings without a migration", 
 		expect(
 			(await after.snapshot(Readings, context))?.readings["contacts/me@example.test/contact:contacts/oc1"],
 		).toMatchObject({ card: { card: "contact", other: true, emails: "bo@example.test" } });
+		expect((await after.snapshot(Readings, context))?.readings["drive/me@example.test/file:drive/1aBcD"]).toMatchObject(
+			{
+				card: { card: "file", kind: "doc", size: null, name: "Q1 rollout plan" },
+			},
+		);
 	} finally {
 		await after.close(context);
 	}

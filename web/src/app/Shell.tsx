@@ -83,6 +83,7 @@ const SERVICES = [
 	{ id: "gmail", name: "Gmail", does: "Read and draft email" },
 	{ id: "calendar", name: "Google Calendar", does: "Read your calendar" },
 	{ id: "contacts", name: "Google Contacts", does: "Find people and their addresses" },
+	{ id: "drive", name: "Google Drive", does: "Find and read your files" },
 	{ id: "linear", name: "Linear", does: "Issues and cycles" },
 	{ id: "slack", name: "Slack", does: "Channels and messages" },
 	{ id: "notion", name: "Notion", does: "Pages and databases" },

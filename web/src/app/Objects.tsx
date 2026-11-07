@@ -11,6 +11,9 @@ import {
 	EmailCard,
 	EventCard,
 	eventWhen,
+	FileCard,
+	fileModified,
+	fileType,
 	IssueCard,
 	NotificationCard,
 	ObjectLink,
@@ -19,8 +22,9 @@ import {
 	PullRequestCard,
 } from "../chat/Object.tsx";
 import { Markdown, MarkdownLinks } from "../components/Markdown.tsx";
-import { api, gmailAttachment, sizeOf } from "../lib/api.ts";
+import { api, gmailAttachment } from "../lib/api.ts";
 import { githubKey, objectAsks } from "../lib/objects.ts";
+import { sizeOf } from "../lib/size.ts";
 import { ConnectFlowCard } from "./ConnectFlow.tsx";
 import { FilePart } from "./FilePart.tsx";
 
@@ -399,6 +403,8 @@ function readingDetails(shown: Extract<ObjectShown, { shown: "card" }>): [string
 	if (card.card === "event")
 		rows.push(["When", eventWhen(card)], ["Location", card.location], ["Organizer", card.organizer]);
 	if (card.card === "contact") rows.push(["Name", card.name], ["Email", card.emails], ["Company", card.organization]);
+	if (card.card === "file")
+		rows.push(["Owner", card.owner], ["Modified", fileModified(card.modified)], ["Type", fileType(card)]);
 	return rows;
 }
 
@@ -455,6 +461,8 @@ function ReadingCard({
 				<EventCard event={{ ...card, asOf }} actions={actions} />
 			) : card.card === "contact" ? (
 				<ContactCard person={{ ...card, asOf }} actions={actions} />
+			) : card.card === "file" ? (
+				<FileCard file={{ ...card, asOf }} actions={actions} />
 			) : (
 				<NotificationCard
 					actions={actions}
