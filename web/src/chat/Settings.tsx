@@ -277,9 +277,11 @@ export function Connections({
 	onSwitch,
 	connect,
 	empty = "Nothing to connect yet.",
+	compact = false,
 }: {
 	agent: string;
 	rows: readonly ConnectionRow[];
+	compact?: boolean;
 	/** What it says with no rows. */
 	empty?: string | undefined;
 	/** The owner switched an account on or off for the agent. */
@@ -292,6 +294,34 @@ export function Connections({
 		<Block title="Connections" note={`What ${agent} may read. It asks before anything it writes.`}>
 			{rows.length === 0 ? (
 				<p className="rounded-field bg-paper-2 px-3.5 py-3 text-ui text-ink-2">{empty}</p>
+			) : compact ? (
+				<div className="flex flex-col">
+					{rows.flatMap((row) =>
+						row.accounts.map((account) => (
+							<div
+								key={`${row.id ?? row.connection}/${account.account ?? account.login}`}
+								className="flex min-h-11 items-center gap-3 py-1.5"
+							>
+								<span title={row.connection} className="flex size-5 shrink-0 items-center justify-center">
+									{row.connection === "GitHub" ? (
+										<GitHubMark />
+									) : (
+										<span className="text-meta font-semibold text-ink-2">{row.connection.slice(0, 1)}</span>
+									)}
+								</span>
+								<span className="min-w-0 flex-1 truncate text-ui text-ink">
+									{account.account === undefined ? row.connection : account.login}
+								</span>
+								<Switch
+									{...(onSwitch === undefined
+										? { defaultChecked: account.on }
+										: { checked: account.on, onCheckedChange: (on: boolean) => onSwitch(row, account, on) })}
+									aria-label={`${agent} may use ${row.connection} as ${account.login}`}
+								/>
+							</div>
+						)),
+					)}
+				</div>
 			) : (
 				<Rows>
 					{rows.map((row) => (
@@ -1143,7 +1173,9 @@ export type ProviderRow = {
 
 /**
  * Settings' providers: each the band may think with. The one in use says so; a connected one is Use; one not connected
- * is Connect (a sign-in in its own tab, or a key here); any connected one signs out, asked first.
+ * is Connect (a sign-in in its own tab, or a key here); any connected one signs out, asked first. On a device (`here`
+ * false) only the connected ones show, to use or sign out of: a sign-in comes back to the computer banda runs on, so
+ * providers are connected there.
  */
 export function ModelProviders({
 	current,
@@ -1158,9 +1190,12 @@ export function ModelProviders({
 	onAnswer,
 	onWay,
 	onCancel,
+	here = true,
 }: {
 	/** The provider the band thinks with. */
 	current: string;
+	/** On the computer banda runs on, where providers are connected; false on a device. */
+	here?: boolean;
 	providers: readonly ProviderRow[];
 	/** The provider whose key form is open. */
 	open?: string | undefined;
@@ -1179,9 +1214,16 @@ export function ModelProviders({
 }) {
 	const connected = providers.filter((each) => each.connected);
 	return (
-		<Block title="Providers" note="Connect another to switch between them. Only the one in use sees what you ask.">
+		<Block
+			title="Providers"
+			note={
+				here
+					? "Connect another to switch between them. Only the one in use sees what you ask."
+					: "Connect another on the computer banda runs on. Only the one in use sees what you ask."
+			}
+		>
 			<Rows className="max-h-[min(24rem,50dvh)] overflow-y-auto overscroll-contain">
-				{providers.map((provider) => {
+				{(here ? providers : connected).map((provider) => {
 					const using = provider.id === current;
 					const next = connected.find((each) => each.id !== provider.id);
 					// an ambient credential is connected but never ours: connecting over it is still a sign-in
@@ -1245,7 +1287,7 @@ export function ModelProviders({
 													Sign out
 												</Button>
 											</Confirm>
-										) : (
+										) : !here ? null : (
 											<Button
 												variant="outline"
 												size="xs"
@@ -1260,7 +1302,7 @@ export function ModelProviders({
 									</span>
 								}
 							/>
-							{provider.id === open && (!provider.connected || ambient) ? (
+							{here && provider.id === open && (!provider.connected || ambient) ? (
 								<ProviderKeyForm
 									provider={provider}
 									action="Connect"
@@ -1269,7 +1311,7 @@ export function ModelProviders({
 									onKey={onKey}
 								/>
 							) : null}
-							{signing ? (
+							{here && signing ? (
 								<ProviderSignIn
 									provider={provider}
 									asks={provider.asks}

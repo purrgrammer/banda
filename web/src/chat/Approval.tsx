@@ -3,7 +3,7 @@
  * the owner may edit; one primary button that is the effect's own verb, a quiet Don't, and at most one scope. And the
  * change card: an agent's change to itself, shown in full.
  */
-import { CheckIcon, ChevronRightIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronRightIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -26,6 +26,7 @@ export function ApprovalCard({
 	text,
 	scope,
 	state = { kind: "open" },
+	disabled = false,
 	onApprove,
 	onDecline,
 }: {
@@ -45,6 +46,8 @@ export function ApprovalCard({
 	/** The one scope offered: "Don't ask again for this task". */
 	scope?: string | undefined;
 	state?: ApprovalState;
+	/** The buttons stand but take nothing yet: a card that just appeared or moved must hold still before a click lands. */
+	disabled?: boolean | undefined;
 	/** Run it as stored (or with the owner's edit); `scoped`: the one scope offered was ticked. */
 	onApprove?: (scoped: boolean, text?: string) => unknown | Promise<unknown>;
 	onDecline?: () => unknown | Promise<unknown>;
@@ -98,7 +101,10 @@ export function ApprovalCard({
 						</span>
 					)}
 					<span className="flex flex-wrap items-center gap-2">
-						<Button disabled={busy} onClick={() => void act(() => onApprove?.(scoped, editing ? draft : text))}>
+						<Button
+							disabled={busy || disabled}
+							onClick={() => void act(() => onApprove?.(scoped, editing ? draft : text))}
+						>
 							{verb}
 						</Button>
 						{text === undefined || editing ? null : (
@@ -106,7 +112,7 @@ export function ApprovalCard({
 								Edit
 							</Button>
 						)}
-						<Button variant="ghost" disabled={busy} onClick={() => void act(() => onDecline?.())}>
+						<Button variant="ghost" disabled={busy || disabled} onClick={() => void act(() => onDecline?.())}>
 							{declineLabel ?? `Don't ${verb.toLowerCase()}`}
 						</Button>
 					</span>
@@ -194,6 +200,16 @@ export function Details({ rows }: { rows: readonly (readonly [string, string])[]
 				</dl>
 			</CollapsibleContent>
 		</Collapsible>
+	);
+}
+
+/** The red mark on a draft that opens every destination (`*` on an ask_hosts): said plainly before the owner approves. */
+export function HostsWarning({ warning }: { warning: string }) {
+	return (
+		<p role="alert" className="flex items-center gap-1.5 text-ui font-medium text-danger">
+			<TriangleAlertIcon className="size-4 shrink-0" aria-hidden />
+			{warning}
+		</p>
 	);
 }
 

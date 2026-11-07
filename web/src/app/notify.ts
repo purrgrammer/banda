@@ -47,7 +47,8 @@ export function useAskNotifications(rows: readonly BandRow[], on: boolean, open:
 			if (before.get(id) === ask) continue;
 			const row = rows.find((each) => each.id === id);
 			if (row === undefined) continue;
-			const notice = new Notification(`${row.name} is waiting on you`, { body: ask, tag: id });
+			// a harness's ask carries its own body (harness, kind and project), never the command or the path
+			const notice = new Notification(`${row.name} is waiting on you`, { body: row.notice ?? ask, tag: id });
 			notice.onclick = () => {
 				window.focus();
 				open(row);

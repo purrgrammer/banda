@@ -242,6 +242,7 @@ describe("a routine's time zone", () => {
 
 	it("the agent names the place's zone; the card says it; the owner's edit and the panel keep to a wall", async () => {
 		const asks = [
+			fauxAssistantMessage([fauxToolCall("tool_search", { query: "schedule", limit: 1 })], { stopReason: "toolUse" }),
 			fauxAssistantMessage(
 				[
 					fauxToolCall(
@@ -463,6 +464,7 @@ describe("run now", () => {
 
 /** A model's call of `schedule` writing routine tea, then its reply. */
 const writesTea = (id: string, cron: string, ask = "Remind the owner to drink tea.") => [
+	fauxAssistantMessage([fauxToolCall("tool_search", { query: "schedule", limit: 1 })], { stopReason: "toolUse" }),
 	fauxAssistantMessage([fauxToolCall("schedule", { name: "tea", description: "Tea time", cron, ask }, { id })], {
 		stopReason: "toolUse",
 	}),
@@ -521,7 +523,8 @@ describe("a routine rewritten in its chat", () => {
 				const chat = (await api<ChatRow[]>("/chats"))[0]?.chat;
 				return (await api<{ items: Item[] }>(`/chats/${chat}/items?after=0`)).items;
 			};
-			const receipts = async () => (await items()).flatMap((item) => (item.role === "tool" ? [item.receipt] : []));
+			const receipts = async () =>
+				(await items()).flatMap((item) => (item.role === "tool" && item.receipt ? [item.receipt] : []));
 			const feed = async () => {
 				const routines = (await api<ControlView>("/control")).routines;
 				return view(await items(), [], { busy: false, running: [], thinking: false }, { routines }).flatMap(

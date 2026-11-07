@@ -11,7 +11,6 @@ import type { MutableModels } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import {
 	type ConversationId,
-	createRegistry,
 	defineExtension,
 	type Harness,
 	type HarnessSettings,
@@ -59,6 +58,7 @@ import { skillsExtension } from "./core/skills.ts";
 import { status } from "./core/status.ts";
 import { context, openStore } from "./core/store.ts";
 import { timeThinking } from "./core/timing.ts";
+import { toolDiscoveryExtension, toolRegistry } from "./core/tool-discovery.ts";
 import { MESSAGE_GROUP, MESSAGE_USER } from "./core/toolsets.ts";
 import { defineCore, Routes, stop as stopChat, type TurnResult } from "./core/turn.ts";
 import { answer, dismissQuestion, revive } from "./core/wait.ts";
@@ -254,7 +254,8 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 					`box: no box, so the credentials auth/egress.json sets for ${unset.map((c) => c.host).join(", ")} are not set`,
 				);
 		}
-		const registry = createRegistry();
+		const registry = toolRegistry();
+		registry.install(toolDiscoveryExtension);
 		const core = defineCore({
 			blobs,
 			registry,

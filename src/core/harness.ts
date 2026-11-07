@@ -79,9 +79,9 @@ export type HarnessStep =
 			readonly running?: boolean;
 			readonly call?: string;
 	  }
-	| { readonly kind: "waiting"; readonly command: string }
-	/** The owner's answer to one of its asks. */
-	| { readonly kind: "decided"; readonly command: string; readonly allowed: boolean }
+	| { readonly kind: "waiting"; readonly command: string; readonly ask?: string }
+	/** The owner's answer to one of its asks; `ask` is the ask's kind, so the folded row says it in words. */
+	| { readonly kind: "decided"; readonly command: string; readonly allowed: boolean; readonly ask?: string }
 	| { readonly kind: "said"; readonly text: string };
 
 export type HarnessState = "starting" | "working" | "waiting" | "done" | "stopped" | "interrupted" | "failed";
@@ -975,7 +975,8 @@ export function defineHarnesses(options: HarnessOptions) {
 							}
 							for (const [ask, { request, resolve: answer }] of answered) {
 								const allowed = accepted.decisions.find((decision) => decision.ask === ask)?.allowed === true;
-								steps.push({ kind: "decided", command: askOf(request).command, allowed });
+								const asked = askOf(request);
+								steps.push({ kind: "decided", command: asked.command, ask: asked.kind, allowed });
 								const option = request.options.find((each) => each.kind === (allowed ? "allow_once" : "reject_once"));
 								answer(
 									option === undefined ? { outcome: "cancelled" } : { outcome: "selected", optionId: option.optionId },

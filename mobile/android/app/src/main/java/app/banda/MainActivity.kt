@@ -2,6 +2,7 @@ package app.banda
 
 import android.os.Bundle
 import android.view.View
+import androidx.activity.OnBackPressedCallback
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.getcapacitor.BridgeActivity
@@ -24,5 +25,20 @@ class MainActivity : BridgeActivity() {
             WindowInsetsCompat.CONSUMED
         }
         ViewCompat.requestApplyInsets(content)
+        // Capacitor's core leaves the back button to the Activity, which closes the app. The web app moves
+        // between screens by the URL's hash, so each screen is an entry in the web view's history: walk it
+        // back, and leave the app the usual way only from the first screen.
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val web = bridge?.webView
+                if (web != null && web.canGoBack()) {
+                    web.goBack()
+                    return
+                }
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+                isEnabled = true
+            }
+        })
     }
 }
