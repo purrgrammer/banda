@@ -3,7 +3,15 @@
  * owner's words, its connections, permissions, memory, thinking tier and archive. A new agent is a short sheet with the
  * face defaulted: naming a friend, not filling a form. And Settings, one page. Every change is in effect at once.
  */
-import { ArchiveIcon, ArchiveRestoreIcon, ChevronLeftIcon, PencilIcon, PlusIcon, XIcon } from "lucide-react";
+import {
+	ArchiveIcon,
+	ArchiveRestoreIcon,
+	ChevronLeftIcon,
+	EllipsisIcon,
+	PencilIcon,
+	PlusIcon,
+	XIcon,
+} from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import {
 	AlertDialog,
@@ -17,6 +25,12 @@ import {
 	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -1085,6 +1099,7 @@ export function ModelProviders({
 }) {
 	const [adding, setAdding] = useState<string | undefined>(openAdding);
 	const [renaming, setRenaming] = useState<string | undefined>(openRenaming);
+	const [leaving, setLeaving] = useState<string | undefined>(undefined);
 	const connected = providers.filter((each) => each.connected);
 	const backend = (row: ProviderRow) => row.provider ?? row.id;
 	const many = (row: ProviderRow) =>
@@ -1114,6 +1129,12 @@ export function ModelProviders({
 						(!provider.connected || ambient) &&
 						(provider.id === waiting || provider.connecting === true);
 					const from = ambient ? (provider.source ?? "your environment") : undefined;
+					const renamable = provider.connected && !ambient && many(provider) && onRename !== undefined;
+					const leave = !using
+						? "Its sign-in is forgotten. You can connect it again any time."
+						: next === undefined
+							? "It is the only provider connected: the band stops thinking until you connect one."
+							: `The band thinks with ${title(next)} from its next answer on.`;
 					const last = shown[n + 1] === undefined || backend(shown[n + 1] as ProviderRow) !== backend(provider);
 					const addable =
 						here &&
@@ -1146,17 +1167,6 @@ export function ModelProviders({
 								detail={detail}
 								end={
 									<span className="flex shrink-0 gap-1.5">
-										{provider.connected && !ambient && many(provider) && onRename !== undefined ? (
-											<Button
-												variant="ghost"
-												size="xs"
-												aria-label={`Rename ${name}`}
-												aria-expanded={renaming === provider.id}
-												onClick={() => setRenaming((was) => (was === provider.id ? undefined : provider.id))}
-											>
-												Rename
-											</Button>
-										) : null}
 										{provider.connected && !using ? (
 											<Button
 												variant="outline"
@@ -1168,23 +1178,67 @@ export function ModelProviders({
 											</Button>
 										) : null}
 										{provider.connected && !ambient ? (
-											<Confirm
-												title={`Sign out of ${name}?`}
-												body={
-													!using
-														? "Its sign-in is forgotten. You can connect it again any time."
-														: next === undefined
-															? "It is the only provider connected: the band stops thinking until you connect one."
-															: `The band thinks with ${title(next)} from its next answer on.`
-												}
-												action="Sign out"
-												keep="Stay signed in"
-												onConfirm={onSignOut === undefined ? undefined : () => onSignOut(provider.id)}
-											>
-												<Button variant="ghost" size="xs" aria-label={`Sign out of ${name}`}>
-													Sign out
-												</Button>
-											</Confirm>
+											<>
+												{renamable ? (
+													<DropdownMenu>
+														<DropdownMenuTrigger asChild>
+															<Button
+																variant="ghost"
+																size="icon-xs"
+																className="sm:hidden"
+																aria-label={`More for ${name}`}
+															>
+																<EllipsisIcon />
+															</Button>
+														</DropdownMenuTrigger>
+														<DropdownMenuContent align="end">
+															<DropdownMenuItem onSelect={() => setRenaming(provider.id)}>Rename</DropdownMenuItem>
+															<DropdownMenuItem variant="destructive" onSelect={() => setLeaving(provider.id)}>
+																Sign out
+															</DropdownMenuItem>
+														</DropdownMenuContent>
+													</DropdownMenu>
+												) : null}
+												{renamable ? (
+													<Button
+														variant="ghost"
+														size="xs"
+														className="hidden sm:inline-flex"
+														aria-label={`Rename ${name}`}
+														aria-expanded={renaming === provider.id}
+														onClick={() => setRenaming((was) => (was === provider.id ? undefined : provider.id))}
+													>
+														Rename
+													</Button>
+												) : null}
+												<Confirm
+													title={`Sign out of ${name}?`}
+													body={leave}
+													action="Sign out"
+													keep="Stay signed in"
+													onConfirm={onSignOut === undefined ? undefined : () => onSignOut(provider.id)}
+												>
+													<Button
+														variant="ghost"
+														size="xs"
+														className={renamable ? "hidden sm:inline-flex" : undefined}
+														aria-label={`Sign out of ${name}`}
+													>
+														Sign out
+													</Button>
+												</Confirm>
+												{renamable ? (
+													<Confirm
+														title={`Sign out of ${name}?`}
+														body={leave}
+														action="Sign out"
+														keep="Stay signed in"
+														onConfirm={onSignOut === undefined ? undefined : () => onSignOut(provider.id)}
+														open={leaving === provider.id}
+														onOpenChange={(open) => setLeaving(open ? provider.id : undefined)}
+													/>
+												) : null}
+											</>
 										) : !here ? null : (
 											<>
 												<Button

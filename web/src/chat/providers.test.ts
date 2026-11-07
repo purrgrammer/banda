@@ -90,6 +90,9 @@ describe("Settings' providers", () => {
 		expect(page).toContain('aria-label="Rename Anthropic"');
 		expect(page).toContain('aria-label="Rename Anthropic · Work"');
 		expect(page).not.toContain('aria-label="Rename OpenAI"');
+		// a phone gathers Rename and Sign out under one menu, where a label makes the row long
+		expect(page).toContain('aria-label="More for Anthropic · Work"');
+		expect(page).not.toContain('aria-label="More for OpenAI"');
 		const renaming = renderToStaticMarkup(
 			createElement(ModelProviders, {
 				current: "anthropic",
