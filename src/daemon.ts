@@ -872,7 +872,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						changed();
 						return capabilitiesView();
 					},
-					signIn: (name, agent, onDevice) => capabilities.signIn(name, context, agent, onDevice),
+					signIn: (name, { agent, ...choice }) => capabilities.signIn(name, context, agent, choice),
 					objects: (chat, asks, refresh) => objects.show(chat, asks, refresh),
 					objectAttachment: (chat, ref, attachmentId, agent, account) =>
 						objects.attachment(chat, ref, attachmentId, agent, account),

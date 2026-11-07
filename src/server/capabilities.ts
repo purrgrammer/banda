@@ -54,11 +54,13 @@ import {
 	Connected,
 	type Connection,
 	type Credentials,
+	ceilingOf,
 	connectionPath,
 	connectionTools,
 	credentialed,
 	credentialsOf,
 	fits,
+	givenFor,
 	grantedScopes,
 	type InEffect,
 	inEffect,
@@ -75,6 +77,7 @@ import {
 	publicOn,
 	readsFor,
 	remoteUrl,
+	requiredOf,
 	scrub,
 	secrets,
 	signsIn,
@@ -180,6 +183,8 @@ type Finished = {
 	readonly problem?: string;
 	/** The account was signed in to already: the card says so. */
 	readonly known: boolean;
+	/** The account the owner was signing in again, when the sign-in came back as another (`account`). */
+	readonly expected?: string;
 	readonly at: number;
 };
 
@@ -244,6 +249,14 @@ const summaryOf = (connection: Connection): ConnectionSummary => ({
 	why: connection.why,
 	...(connection.command === undefined ? {} : { command: connection.command }),
 	...(connection.scopes === undefined ? {} : { scopes: connection.scopes }),
+	...(() => {
+		const ceiling = ceilingOf(connection);
+		const required = requiredOf(connection);
+		return {
+			...(ceiling === undefined ? {} : { ceiling: [...ceiling] }),
+			...(required === undefined ? {} : { required }),
+		};
+	})(),
 	...(connection.needs === undefined
 		? {}
 		: {
@@ -285,7 +298,12 @@ export function openCapabilities(options: CapabilityOptions) {
 	/** Sign-ins by code in progress, by connection: the code the owner types, until they do, it expires or is stopped. */
 	const devices = new Map<
 		string,
-		{ readonly device: Device; readonly stop: AbortController; readonly agent?: string | undefined }
+		{
+			readonly device: Device;
+			readonly stop: AbortController;
+			readonly agent?: string | undefined;
+			readonly account?: string | undefined;
+		}
 	>();
 	/** The last sign-in that finished, by connection: what the card that started it says. */
 	const finished = new Map<string, Finished>();
@@ -485,6 +503,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		connection: Connection,
 		chat: number,
 		asked: unknown,
+		tool?: string,
 	): Promise<{ readonly account?: string } | { readonly refused: string }> {
 		const agent = await agentOfChat(tx, chat);
 		if (!signsIn(connection))
@@ -493,10 +512,15 @@ export function openCapabilities(options: CapabilityOptions) {
 				: { refused: "the owner has not given this agent access to the connection" };
 		if (agent === undefined) return { refused: "this chat runs no agent" };
 		const granted = await accountsOn(tx, agent, connection.name);
-		const on: string[] = [];
-		for (const key of granted) if (fits(await credentialsOf(home, connection.name, key), connection)) on.push(key);
+		const held = new Map<string, Credentials>();
+		for (const key of granted) {
+			const credentials = await credentialsOf(home, connection.name, key);
+			if (fits(credentials, connection)) held.set(key, credentials);
+		}
+		const on = [...held.keys()];
 		const known = (await tx.doc(Connected)).accounts?.[connection.name] ?? {};
-		const labels = on.map((key) => accountLabel(known[key]?.id ?? key));
+		const labelOfKey = (key: string) => accountLabel(known[key]?.id ?? key);
+		const labels = on.map(labelOfKey);
 		if (on.length === 0)
 			return {
 				refused:
@@ -504,13 +528,22 @@ export function openCapabilities(options: CapabilityOptions) {
 						? `the owner has not given you a ${connection.service} account: ask them to connect it (the connect card)`
 						: `${connection.service} needs a new sign-in for the accounts you may use: ask the owner to sign in again`,
 			};
+		let key: string;
 		if (asked === undefined || asked === null || asked === "") {
-			if (on.length === 1) return { account: on[0] as string };
-			return { refused: `say which ${connection.service} account to act as, in "account": ${labels.join(" or ")}` };
+			if (on.length !== 1)
+				return { refused: `say which ${connection.service} account to act as, in "account": ${labels.join(" or ")}` };
+			key = on[0] as string;
+		} else {
+			if (typeof asked !== "string") return { refused: "account is the name of one of your accounts" };
+			key = accountKey(asked.trim().replace(/^@/, ""));
+			if (!on.includes(key)) return { refused: `${asked} is not an account you may use: ${labels.join(", ")}` };
 		}
-		if (typeof asked !== "string") return { refused: "account is the name of one of your accounts" };
-		const key = accountKey(asked.trim().replace(/^@/, ""));
-		if (!on.includes(key)) return { refused: `${asked} is not an account you may use: ${labels.join(", ")}` };
+		// a clear word before the call, not the boundary: the service's token is what enforces the account's access
+		const credentials = held.get(key);
+		if (tool !== undefined && credentials !== undefined && !givenFor(credentials, connection, tool))
+			return {
+				refused: `${labelOfKey(key)} was not given access for this on ${connection.service}: the owner can change its access in Connections`,
+			};
 		return { account: key };
 	}
 
@@ -534,7 +567,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		async (tx: Tx, args: JsonObject, chat: number): Promise<string | undefined> => {
 			const off = await allowed(tool.name, tool.connection)(tx);
 			if (off !== undefined) return off;
-			const resolved = await accountFor(tx, tool.connection, chat, args[arg]);
+			const resolved = await accountFor(tx, tool.connection, chat, args[arg], tool.tool);
 			return "refused" in resolved ? resolved.refused : undefined;
 		};
 
@@ -635,7 +668,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				const resolved = await api.commit(async (tx) => {
 					const off = await allowed(tool.name, tool.connection)(tx);
 					if (off !== undefined) return { refused: off };
-					return accountFor(tx, tool.connection, chat, (args as JsonObject)[arg]);
+					return accountFor(tx, tool.connection, chat, (args as JsonObject)[arg], tool.tool);
 				}, ctx);
 				if ("refused" in resolved) return text(`${tool.name} did not run: ${resolved.refused}.`, true);
 				const account = resolved.account;
@@ -807,7 +840,7 @@ export function openCapabilities(options: CapabilityOptions) {
 					}
 				}
 				if (!signed) return expanded;
-				const resolved = await api.commit((tx) => accountFor(tx, tool.connection, chat, given[arg]), ctx);
+				const resolved = await api.commit((tx) => accountFor(tx, tool.connection, chat, given[arg], tool.tool), ctx);
 				if ("refused" in resolved) return resolved.refused;
 				const account = await api.memo("account", resolved.account ?? "", ctx);
 				return { ...expanded, [arg]: account };
@@ -1374,10 +1407,24 @@ export function openCapabilities(options: CapabilityOptions) {
 			const listed = connected.connections[name];
 			// its accounts, and which agents may use each; one whose credentials no longer fit the file signs in again
 			const accounts: AccountView[] = [];
+			/** What account `credentials` lacks that a tool needs: one scope each. */
+			const lacking = (credentials: Credentials | undefined) => {
+				if (connection?.auth !== "oauth" || credentials === undefined || !("oauth" in credentials)) return [];
+				const given = grantedScopes(credentials);
+				const listedTools = listed !== undefined && listed.sha === file?.sha ? Object.keys(listed.tools) : [];
+				const found: string[] = [];
+				for (const [tool, anyOf] of Object.entries(connection.needs ?? {}))
+					if (!givenFor(credentials, connection, tool) && anyOf[0] !== undefined) found.push(anyOf[0]);
+				// and what the server's challenges said its listed tools need, which the file may not let it ask for yet
+				for (const tool of listedTools)
+					for (const scope of needs.get(toolName(name, tool)) ?? []) if (!given.includes(scope)) found.push(scope);
+				return [...new Set(found)];
+			};
 			for (const [key, account] of Object.entries(connected.accounts?.[name] ?? {}).sort(([a], [b]) =>
 				a.localeCompare(b),
 			)) {
 				const credentials = await heldBy(name, key);
+				const missing = lacking(credentials);
 				accounts.push({
 					account: key,
 					id: account.id,
@@ -1388,6 +1435,8 @@ export function openCapabilities(options: CapabilityOptions) {
 						.map(([agent]) => agent)
 						.sort(),
 					...(connection !== undefined && !fits(credentials, connection) ? { stale: true } : {}),
+					...(credentials !== undefined && "oauth" in credentials ? { scopes: [...grantedScopes(credentials)] } : {}),
+					...(missing.length === 0 ? {} : { missing }),
 				});
 			}
 			const fresh = accounts.filter((account) => account.stale !== true);
@@ -1499,13 +1548,6 @@ export function openCapabilities(options: CapabilityOptions) {
 					return hinted.length === 0 ? {} : { hinted };
 				})(),
 				...(listed?.sha === file?.sha && listed?.notes !== undefined ? { notes: listed.notes } : {}),
-				...(() => {
-					// what its tools turned out to need, and what the file asks for that the sign-in was not given
-					const short = held1 === undefined ? [] : (connection?.scopes ?? []).filter((s) => !granted.includes(s));
-					const refused = tools.flatMap((tool) => (needs.has(tool.name) ? (tool.needs ?? []) : []));
-					const missing = [...new Set([...refused, ...short])];
-					return missing.length === 0 ? {} : { missing };
-				})(),
 				...(connectionProblem === undefined ? {} : { problem: connectionProblem }),
 				tools,
 			});
@@ -1965,6 +2007,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		credentials: Credentials,
 		agent: string | undefined,
 		ctx: Context,
+		expected?: string,
 	): Promise<Finished> {
 		const connection = await harness.commit((tx) => acceptedConnection(tx, name), ctx);
 		if (connection?.url !== credentials.url) throw new Error("that connection changed while you signed in");
@@ -2001,7 +2044,15 @@ export function openCapabilities(options: CapabilityOptions) {
 		});
 		fault("account:added");
 		problems.delete(name);
-		const done: Finished = { account, id, ...(agent === undefined ? {} : { agent }), known, at: now() };
+		const done: Finished = {
+			account,
+			id,
+			...(agent === undefined ? {} : { agent }),
+			known,
+			// signing one account in again and coming back as another: kept as the one it is, and said
+			...(expected === undefined || expected === account ? {} : { expected }),
+			at: now(),
+		};
 		const listed = await harness.commit(
 			async (tx) => (await tx.doc(Connected)).connections[name]?.sha === connection.sha,
 			ctx,
@@ -2061,13 +2112,15 @@ export function openCapabilities(options: CapabilityOptions) {
 	/**
 	 * Start signing in to connection `name`: the page the owner's browser opens, or, for a connection whose file names
 	 * its client and a server that offers it, the code the owner types on the server's own page while the daemon asks
-	 * for the tokens. A file that names no client registers one, at every sign-in.
+	 * for the tokens. A file that names no client registers one, at every sign-in. The account asks for `scopes` (from
+	 * what the file lets one ask for, the required one among them), else, signing `account` in again, what it asked for
+	 * last, else the file's default.
 	 */
 	async function signIn(
 		name: string,
 		ctx: Context = context,
 		agent?: string,
-		onDevice = false,
+		choice: { readonly onDevice?: boolean; readonly scopes?: unknown; readonly account?: unknown } = {},
 	): Promise<
 		| { readonly url: string }
 		| { readonly code: string; readonly page: string; readonly expires: number }
@@ -2078,6 +2131,8 @@ export function openCapabilities(options: CapabilityOptions) {
 			throw new BadRequest(`${name} is not a connection you sign in to`);
 		if (agent !== undefined && (await harness.commit((tx) => acceptedAgent(tx, agent), ctx)) === undefined)
 			throw new BadRequest(`there is no agent named ${agent}`, 404);
+		const again = await accountToSignIn(connection, choice.account, ctx);
+		const scopes = await scopesToAsk(connection, choice.scopes, again?.account);
 		finished.delete(name);
 		problems.delete(name);
 		const url = connection.url;
@@ -2091,36 +2146,93 @@ export function openCapabilities(options: CapabilityOptions) {
 				await needsNoSignIn(name, ctx);
 				return { connected: true };
 			}
-			// the scopes the file asks for, not every scope the server says it could grant
-			const server: OAuthServer =
-				connection.scopes === undefined ? discovered : { ...discovered, scopes: connection.scopes };
+			// the scopes this account asks for, not every scope the server says it could grant
+			const server: OAuthServer = scopes === undefined ? discovered : { ...discovered, scopes };
 			if (connection.client !== undefined && server.device !== undefined) {
 				const client = oauthClient(connection);
 				const device = await startDevice(server, client, connection.url, now(), fetcher);
 				fault("oauth:device");
 				stopDevice(name);
 				const stop = new AbortController();
-				devices.set(name, { device, stop, agent });
+				devices.set(name, { device, stop, agent, account: again?.account });
 				problems.delete(name);
 				// it outlives the request that started it
-				void waitForCode(name, connection.url, server, client, device, stop.signal, context, agent);
+				void waitForCode(name, connection.url, server, client, device, stop.signal, context, agent, again?.account);
 				options.changed?.();
 				return { code: device.code, page: device.page, expires: device.expires };
 			}
-			if (onDevice)
+			if (choice.onDevice === true)
 				throw new BadRequest(
 					"Start sign-in on the computer Banda runs on; accounts connected there are available on this device.",
 				);
 			const redirect = connection.client === "google" ? new URL(options.redirect()).origin : options.redirect();
 			const client =
 				connection.client !== undefined ? oauthClient(connection) : await register(server, redirect, fetcher);
-			const started = begin(name, connection.url, server, client, redirect, now(), agent);
+			const started = begin(name, connection.url, server, client, redirect, now(), agent, again);
 			await keepPending(home, started.pending);
 			return { url: started.url };
 		} catch (error) {
 			if (error instanceof BadRequest) throw error;
 			throw new BadRequest(`could not start signing in to ${connection.service}: ${await problemOf(error)}`, 502);
 		}
+	}
+
+	/** The account of `connection` the owner signs in again, when they named one: its key and its id; or why not. */
+	async function accountToSignIn(
+		connection: Connection,
+		account: unknown,
+		ctx: Context,
+	): Promise<{ readonly account: string; readonly id: string } | undefined> {
+		if (account === undefined || account === null) return undefined;
+		const id =
+			typeof account === "string"
+				? await harness.commit(async (tx) => (await tx.doc(Connected)).accounts?.[connection.name]?.[account]?.id, ctx)
+				: undefined;
+		if (typeof account !== "string" || id === undefined)
+			throw new BadRequest(`${connection.service} has no account ${String(account)} to sign in again`);
+		return { account, id };
+	}
+
+	/**
+	 * The scopes a sign-in to `connection` asks for: `picked`, checked against what the file lets an account ask for and
+	 * holding the one every account asks for; else what account `again` asked for last, as far as the file still lets
+	 * it; else the file's default. Undefined for a file that names no scopes: the server's offer is asked for.
+	 */
+	async function scopesToAsk(
+		connection: Connection,
+		picked: unknown,
+		again: string | undefined,
+	): Promise<readonly string[] | undefined> {
+		const ceiling = ceilingOf(connection);
+		const required = requiredOf(connection);
+		if (picked === undefined || picked === null) {
+			if (ceiling === undefined || again === undefined) return connection.scopes;
+			const held = await credentialsOf(home, connection.name, again);
+			const before = held !== undefined && "oauth" in held ? (held.oauth.server.scopes ?? []) : [];
+			const kept = before.filter((scope) => ceiling.includes(scope));
+			if (kept.length === 0) return connection.scopes;
+			return required === undefined || kept.includes(required) ? kept : [required, ...kept];
+		}
+		if (
+			!Array.isArray(picked) ||
+			picked.length === 0 ||
+			picked.length > 50 ||
+			!picked.every((scope) => typeof scope === "string" && /^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/.test(scope))
+		)
+			throw new BadRequest("give the scopes as a list of names");
+		const scopes = [...new Set(picked as string[])];
+		if (ceiling === undefined)
+			throw new BadRequest(
+				`${connection.service} asks for what its server offers: its file names no scopes to choose from`,
+			);
+		const beyond = scopes.filter((scope) => !ceiling.includes(scope));
+		if (beyond.length > 0)
+			throw new BadRequest(
+				`${connection.service} may not ask for ${beyond.join(", ")}: an account asks for some of ${ceiling.join(", ")}`,
+			);
+		if (required !== undefined && !scopes.includes(required))
+			throw new BadRequest(`every ${connection.service} account asks for ${required}`);
+		return scopes;
 	}
 
 	/** Whether the server at `url` lists its tools with no credentials at all. */
@@ -2173,6 +2285,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		signal: AbortSignal,
 		ctx: Context,
 		agent?: string,
+		account?: string,
 	): Promise<void> {
 		const pause = (seconds: number) =>
 			new Promise<void>((resolve) => {
@@ -2208,7 +2321,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				fault("oauth:exchanged");
 				const connection = await harness.commit((tx) => acceptedConnection(tx, name), ctx);
 				if (connection?.url !== resource) return finish("that connection changed while you signed in: sign in again");
-				await signedIn(name, { url: resource, oauth: { server, client, tokens: asked.tokens } }, agent, ctx);
+				await signedIn(name, { url: resource, oauth: { server, client, tokens: asked.tokens } }, agent, ctx, account);
 				devices.delete(name);
 				options.changed?.();
 				return;
@@ -2267,6 +2380,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				},
 				pending.agent,
 				ctx,
+				pending.account,
 			);
 		} catch (error) {
 			const why = `Signing in did not finish: ${await problemOf(error)}`;
@@ -2275,8 +2389,12 @@ export function openCapabilities(options: CapabilityOptions) {
 			return { ok: false, words: why };
 		}
 		const problem = problems.get(pending.connection);
+		const other =
+			done.expected === undefined
+				? ""
+				: ` That is not ${labelOf(pending.connection, done.expected)}, which you were signing in again: it is kept as an account of its own.`;
 		return problem === undefined
-			? { ok: true, words: `Signed in to ${connection.service} as ${accountLabel(done.id)}.` }
+			? { ok: true, words: `Signed in to ${connection.service} as ${accountLabel(done.id)}.${other}` }
 			: { ok: false, words: `Signed in, but ${connection.service} did not answer: ${problem}` };
 	}
 

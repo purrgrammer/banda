@@ -61,6 +61,8 @@ export type Pending = {
 	readonly at: number;
 	/** The agent the sign-in is for: the account is switched on for it once signed in. */
 	readonly agent?: string;
+	/** The account the owner signs in again, by its key: a sign-in that comes back as another says so. */
+	readonly account?: string;
 };
 
 const base64url = (bytes: Buffer) => bytes.toString("base64url");
@@ -220,6 +222,7 @@ export function begin(
 	redirect: string,
 	now: number,
 	agent?: string,
+	again?: { readonly account: string; readonly id: string },
 ): { readonly pending: Pending; readonly url: string } {
 	const state = base64url(randomBytes(32));
 	const verifier = base64url(randomBytes(48));
@@ -235,6 +238,8 @@ export function begin(
 	if (server.issuer === "https://accounts.google.com") {
 		url.searchParams.set("access_type", "offline");
 		url.searchParams.set("prompt", "consent");
+		// signing an account in again: Google offers that account first (a hint, never a promise)
+		if (again !== undefined) url.searchParams.set("login_hint", again.id);
 	}
 	if (server.scopes !== undefined) url.searchParams.set("scope", server.scopes.join(" "));
 	return {
@@ -248,6 +253,7 @@ export function begin(
 			client,
 			at: now,
 			...(agent === undefined ? {} : { agent }),
+			...(again === undefined ? {} : { account: again.account }),
 		},
 		url: url.toString(),
 	};

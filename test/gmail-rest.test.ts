@@ -86,6 +86,15 @@ describe("Gmail REST connection", () => {
 				scopes: "[https://www.googleapis.com/auth/gmail.readonly, https://www.googleapis.com/auth/gmail.readonly]",
 			}).join(),
 		).toContain("Gmail uses OAuth client");
+		// what a tool needs is what an account may ask for: only scopes the API allows
+		const needing = (needs: Record<string, string[]>) => {
+			const parsed = parseConnection("gmail", `${file({})}\n\`\`\`json\n${JSON.stringify({ needs })}\n\`\`\`\n`);
+			return "errors" in parsed ? parsed.errors : [];
+		};
+		expect(needing({ send_message: ["https://www.googleapis.com/auth/gmail.send"] })).toEqual([]);
+		expect(needing({ send_message: ["https://www.googleapis.com/auth/drive"] })).toEqual([
+			"Gmail's tools may need only https://www.googleapis.com/auth/gmail.readonly, https://www.googleapis.com/auth/gmail.send, https://www.googleapis.com/auth/gmail.modify: drop https://www.googleapis.com/auth/drive",
+		]);
 	});
 
 	it("sends the approved recipient, subject and body as a Gmail MIME message", async () => {

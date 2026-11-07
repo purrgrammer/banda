@@ -54,7 +54,10 @@ export type Connection = {
 	 * id: it names the app, proves nothing alone, and a sign-in with it is by code when the server offers that.
 	 */
 	readonly client?: string;
-	/** The scopes a sign-in asks for, as the file says: never what the server advertises it could grant. */
+	/**
+	 * The scopes a new account asks for unless the owner chooses others, as the file says: never what the server
+	 * advertises it could grant. With every scope `needs` names, it is what an account may ask for (`ceilingOf`).
+	 */
 	readonly scopes?: readonly string[];
 	/**
 	 * The scope each tool always needs, as the file says (a ```json block, `{"needs": {tool: [scope, …]}}`): any one of
@@ -275,6 +278,12 @@ export function parseConnection(
 			}
 		}
 		if (needs !== undefined && auth !== "oauth") errors.push(`"needs" is for a server the owner signs in to`);
+		if (needs !== undefined && builtIn !== undefined) {
+			const allowed: readonly string[] = builtIn.scopes;
+			const beyond = [...new Set(Object.values(needs).flat())].filter((scope) => !allowed.includes(scope));
+			if (beyond.length > 0)
+				errors.push(`${builtIn.service}'s tools may need only ${allowed.join(", ")}: drop ${beyond.join(", ")}`);
+		}
 	}
 	if (why.length > 2000) errors.push("say why in a few lines");
 	if (errors.length > 0) return { errors };
@@ -695,9 +704,23 @@ async function readPrivate<T>(path: string): Promise<T | undefined> {
 }
 
 /**
+ * What an account of `connection` may ask for: the scopes its file asks for by default and every scope its tools
+ * `needs`. Undefined for a file that names no scopes: its sign-in asks for what the server offers, and takes no choice.
+ */
+export function ceilingOf(connection: Pick<Connection, "scopes" | "needs">): readonly string[] | undefined {
+	if (connection.scopes === undefined) return undefined;
+	return [...new Set([...connection.scopes, ...Object.values(connection.needs ?? {}).flat()])];
+}
+
+/** The scope every account of `connection` asks for: a built-in API's base; none otherwise. */
+export const requiredOf = (connection: Pick<Connection, "api">): string | undefined =>
+	connection.api === undefined ? undefined : REST_APIS[connection.api].base;
+
+/**
  * Whether `credentials` were given for `connection` as its accepted file says it now: the same URL, and for a sign-in,
- * the client it names and every scope it asks for, asked at that sign-in. A file that widens its scopes or changes its
- * client needs a new sign-in; the old token is never stretched to cover it.
+ * the client it names, the scope every account asks for, and nothing beyond what the file lets an account ask for.
+ * Each account asks for its own scopes: changing the file's default leaves them be, while narrowing what may be asked
+ * or changing the client needs a new sign-in; the old token is never stretched to cover it.
  */
 export function fits(credentials: Credentials | undefined, connection: Connection): credentials is Credentials {
 	if (credentials === undefined || credentials.url !== connection.url) return false;
@@ -708,12 +731,28 @@ export function fits(credentials: Credentials | undefined, connection: Connectio
 	} else if (connection.client !== undefined && credentials.oauth.client.id !== connection.client) return false;
 	// what was asked, not what was granted: a scope the owner left out at the consent screen is theirs to add again
 	const asked = credentials.oauth.server.scopes ?? [];
-	return (connection.scopes ?? []).every((scope) => asked.includes(scope));
+	const ceiling = ceilingOf(connection);
+	if (ceiling !== undefined && !asked.every((scope) => ceiling.includes(scope))) return false;
+	const required = requiredOf(connection);
+	return required === undefined || asked.includes(required);
 }
 
 /** The scopes a sign-in was given: as the server said when it granted them, else as they were asked for. */
 export const grantedScopes = (credentials: Credentials): readonly string[] =>
 	"oauth" in credentials ? (credentials.oauth.tokens.scopes ?? credentials.oauth.server.scopes ?? []) : [];
+
+/**
+ * Whether `credentials` may call `tool` of `connection`, as far as the daemon can tell: the tool needs no scope, the
+ * sign-in records none, or it was given one of those the tool needs. The service's token stays what enforces it.
+ */
+export function givenFor(credentials: Credentials, connection: Pick<Connection, "needs">, tool: string): boolean {
+	const anyOf = connection.needs?.[tool];
+	if (anyOf === undefined || !("oauth" in credentials)) return true;
+	const { tokens, server } = credentials.oauth;
+	if (tokens.scopes === undefined && server.scopes === undefined) return true;
+	const given = grantedScopes(credentials);
+	return anyOf.some((scope) => given.includes(scope));
+}
 
 /** Account `account` of connection `name`: its credentials, if any. */
 export const credentialsOf = (home: string, name: string, account: string) =>
