@@ -1075,7 +1075,7 @@ describe("connections banda ships", () => {
 		const cal = view.connections.find((c) => c.name === "cal");
 		expect(cal?.accepted?.sha).not.toBe(offered);
 		expect(readFileSync(join(s.box.workspace, "connections/cal.md"), "utf8")).toContain("It can now be followed.");
-		expect(cal?.accepted?.connection.scopes).toEqual(["read:user", "repo"]);
+		expect(cal?.accepted?.connection?.scopes).toEqual(["read:user", "repo"]);
 		expect([before, cal?.state]).toEqual(["connected", "connected"]);
 		expect(cal?.change).toBeUndefined();
 	});

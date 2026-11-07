@@ -256,7 +256,14 @@ export const CHECK_RUN: CheckRun = {
 };
 
 export const SERVICES: readonly Service[] = [
-	{ id: "github", name: "GitHub", does: "Pull requests, issues, checks", accounts: ["@bandarra", "@purrgrammer"] },
+	// banda ships a newer GitHub than the one in effect: the tile offers it
+	{
+		id: "github",
+		name: "GitHub",
+		does: "Pull requests, issues, checks",
+		accounts: ["@bandarra", "@purrgrammer"],
+		onUpdate: () => new Promise((resolve) => setTimeout(resolve, 800)),
+	},
 	// an account whose sign-in no longer fits: the tile says so, and signs in again
 	{ id: "gmail", name: "Gmail", does: "Read and draft email", accounts: [], stale: ["you@example.com"] },
 	// a server not reached

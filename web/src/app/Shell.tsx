@@ -19,7 +19,7 @@ import { MemorySettings, type NewFactSpec } from "../chat/MemorySettings.tsx";
 import { AgentPanel, firstTab, Panel, Routines, Watching } from "../chat/Panel.tsx";
 import { AppSettings, Archive, Personality, SettingsPage, ThinkingTiers } from "../chat/Settings.tsx";
 import { SkillCatalogue } from "../chat/Skill.tsx";
-import { actOnFact, setPaused, signOutAccount, signOutSite } from "../lib/api.ts";
+import { actOnFact, setPaused, signOutAccount, signOutSite, updateConnection } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { agentMainOf } from "../lib/chats.ts";
 import { type ArchivedAgent, archivedAgents, chatAgents } from "../lib/navigation.ts";
@@ -706,6 +706,10 @@ function Main() {
 					managed: view?.agents !== undefined,
 					stale: (view?.accounts ?? []).filter((account) => account.stale === true).map((account) => account.label),
 					problem: view?.state === "problem" ? (view.problem ?? "Not reached") : undefined,
+					onUpdate:
+						shipped?.update === undefined
+							? undefined
+							: () => updateConnection(name, shipped.update as string).then(showCapabilities),
 				};
 			});
 			return (
