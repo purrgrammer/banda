@@ -11,6 +11,8 @@ import {
 	type AssistantMessage,
 	fauxAssistantMessage,
 	fauxToolCall,
+	getCurrentSystemPrompt,
+	getCurrentTools,
 	type Context as ModelContext,
 } from "@earendil-works/pi-ai";
 import { AgentDoc, type ConversationId, type TaskId, type ToolExecutionApi } from "@earendil-works/pi-durable";
@@ -31,6 +33,7 @@ import { Permissions } from "../src/core/permissions.ts";
 import { publicAddress, publicFetch } from "../src/core/public-fetch.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context } from "../src/core/store.ts";
+import { toolDiscoveryExtension, toolRegistry } from "../src/core/tool-discovery.ts";
 import type { TurnResult } from "../src/core/turn.ts";
 import { answer } from "../src/core/wait.ts";
 import { startDaemon } from "../src/daemon.ts";
@@ -86,10 +89,13 @@ function scripted() {
 	return { respond, plan, requests };
 }
 
-async function open(fake?: FakeMcp, shipped?: string) {
+async function open(fake?: FakeMcp, shipped?: string, discovery = false) {
 	const home = await tempHome();
 	const model = scripted();
+	const registry = discovery ? toolRegistry() : undefined;
+	registry?.install(toolDiscoveryExtension);
 	const s = await openConnected({
+		...(registry === undefined ? {} : { registry }),
 		home,
 		respond: model.respond as never,
 		...(shipped === undefined ? {} : { shipped }),
@@ -589,6 +595,7 @@ describe("signing in by code, as a file's named client", () => {
 		const s = await open(fake);
 		s.writeBox("connections/cal.md", fileOf(fake, { scopes: ["read:user"] }));
 		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await expect(s.capabilities.signIn("cal", context, "sancho", true)).rejects.toThrow(/computer Banda runs on/);
 		expect(await signInAsOwner(s.capabilities, "cal")).toEqual({
 			ok: true,
 			words: "Signed in to Calendar as account 1.",
@@ -1043,6 +1050,21 @@ describe("connections banda ships", () => {
 		expect(cal?.tools.find((t) => t.title === "whoami")?.needs).toEqual(["repo"]);
 		expect(cal?.tools.find((t) => t.title === "list_events")?.needs).toBeUndefined();
 		expect(cal?.missing).toBeUndefined();
+	});
+
+	it("recovers a shipped definition left in the box before it was allowed", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		const shipped = await shipping(fake);
+		const s = await open(fake, shipped);
+		s.writeBox("connections/cal.md", readFileSync(join(shipped, "cal.md"), "utf8"));
+
+		await s.capabilities.addShipped("cal");
+
+		expect((await s.capabilities.view()).connections.find((connection) => connection.name === "cal")).toMatchObject({
+			accepted: { connection: { auth: "oauth" } },
+			state: "sign-in",
+		});
 	});
 
 	it("one the companion proposed under the same name is never replaced by the shipped one", async () => {
@@ -1531,4 +1553,28 @@ describe("accounts", () => {
 		expect(existsSync(join(s.home, "auth/connections/cal/ghost"))).toBe(false);
 		expect(existsSync(join(s.home, "auth/connections/cal/bea"))).toBe(true);
 	});
+});
+
+it("a connection installed after startup stays deferred until pi search loads its accepted schema", async () => {
+	const fake = await startFakeMcp();
+	fakes.push(fake);
+	const s = await open(fake, undefined, true);
+	s.writeBox("connections/cal.md", connectionFile({ url: fake.url, reads: ["list_events"] }));
+	await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+	s.model.plan(
+		[{ tool: "tool_search", args: { query: "cal__list_events", limit: 1 } }],
+		[{ tool: "cal__list_events", args: { day: "mon" } }],
+	);
+	const received = await s.say("Monday’s events");
+	await s.done(received.turn);
+	expect(fake.calls).toEqual([{ tool: "list_events", args: { day: "mon" } }]);
+	expect(getCurrentTools(s.model.requests[0]!.messages).map((tool) => tool.name)).not.toContain("cal__list_events");
+	expect(getCurrentSystemPrompt(s.model.requests[0]!.messages)).toContain("cal: 4 tools on demand");
+	expect(getCurrentTools(s.model.requests[1]!.messages).map((tool) => tool.name)).toContain("cal__list_events");
+	await s.capabilities.toggle("cal__list_events", false);
+	s.model.plan([{ tool: "tool_search", args: { query: "cal__list_events", limit: 1 } }]);
+	const revoked = await s.say("Again after revocation");
+	await s.done(revoked.turn);
+	expect(getCurrentTools(s.model.requests.at(-1)!.messages).map((tool) => tool.name)).not.toContain("cal__list_events");
+	expect(fake.calls).toHaveLength(1);
 });

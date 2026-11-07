@@ -121,11 +121,15 @@ one that gives them one more thing to manage stays out.
   bold name, an ink excerpt and an ink count on a neutral pill; read rows are muted. When an ask is open in a chat,
   its excerpt reads the ask in ink ("Waiting: send the email to Ana?"), a dot marks its face, and
   the tab's title counts asks before unread; on the desktop an open ask also fires a local notification, which needs
-  no vendor, while a routine's message only badges. The agent's face moves while it works, a dot marks it while it waits
+  no vendor, while a routine's message only badges. A harness's ask notifies with the harness and the kind of thing asked, never the
+  command, the path or the project's name, any of which would sit in a banner on a lock screen. The agent's face moves while it works, a dot marks it while it waits
   on the owner, and it dims while its routines are paused. The header
   holds the app's name, search (Cmd/Ctrl+K: results are rows that open the chat scrolled to that message) and a quiet
-  "+" for a new agent or group; the footer holds Connections, Settings and the daemon's notices. Collapsed, the rail shows faces
-  alone.
+  "+" for a new agent or group, and one menu: Skills, Connections, Settings. A dot on the menu, and on its item, says
+  something there waits on the owner, and the page it opens says what: a skill the box added or changed, to review; a
+  connection not reached, or an account to sign in to again. A skill the box removed has nothing to allow, and a
+  connection's change is answered in the chat, so neither lights it: the dot never cries wolf. The footer holds only the
+  daemon's notices. Collapsed, the rail shows faces alone, the menu below them.
 - **The chat** is one timeline where the owner's words, the agent's messages, events and cards share the transcript. The
   header (48px) is the agent's face and name and, under it, its presence in a word or two (working, waiting on you,
   routines paused): what it does is said once, at the foot; tapping the name opens the panel on the phone and toggles it on the desktop. The owner's messages sit on
@@ -151,10 +155,13 @@ one that gives them one more thing to manage stays out.
   paged, the image zoomed, text and code readable, a sheet as a table, with Download and Open in the device's apps.
   Previews are drawn by the daemon from the bytes, never by code the box wrote; a file the daemon cannot preview
   shows its card.
-- **The composer** is ai-elements' `prompt-input`: text, attachments (previewed as above), send; Stop while the agent
-  works; `@` autocomplete everywhere. In a direct chat it inserts a reference to an agent; in a group it targets
-  members for work. Its draft survives navigation. Enter sends and Shift+Enter breaks a line. No transcript mode,
-  model or tier choice lives here.
+- **The composer** is ai-elements' `prompt-input`: text, attachments (previewed as above), send. While the agent
+  works it offers Stop only when empty; with words or files it offers Send, and what is sent steers the turn under way
+  (see Queue), so writing never waits on the agent or stops it. `@` autocomplete everywhere. In a direct chat it inserts
+  a reference to an agent; in a group it targets members for work. Its draft, words and files, is kept per chat on
+  the device until sent, through navigation and reloads; a send takes back only what it sent, so whatever is written
+  or attached while it is on its way stays. Enter sends and Shift+Enter breaks a line. No transcript mode, model or
+  tier choice lives here.
 - **The approval card** is the daemon's, plain, identical whoever the agent is: what will happen, on its object where
   it has one, the account it acts as ("as @bandarra on GitHub"), its text editable where the owner may edit it; an
   action with money or no way back lists its facts (what, when, how much, paid how, the way back); one primary button
@@ -192,15 +199,16 @@ one that gives them one more thing to manage stays out.
   in the owner's voice; thinking (Quick, Balanced, Deep), never a model's name;
   archive. A file or artifact the owner opens replaces the tabs
   until Back (an artifact's versions, edit and restore). The browser is not in the panel: the chat already shows it.
-  A group's panel has no tabs: its members, and who may be added. **New agent** is a short sheet, the face
+  A group's panel has no tabs: its members, who may be added, and archive. **New agent** is a short sheet, the face
   defaulted, a name and a personality that three tappable starters fill (Researcher, Writer, Keeper of the calendar):
   naming a friend, not filling a form. No description, no interview.
-- **Connections** is a page from the band's foot and from Settings: every service the band can work with, a tile each
+- **Connections** is a page from the band's menu and from Settings: every service the band can work with, a tile each
   (its accounts, or Connect; one not shipped yet says so), so the owner connects before any agent needs it. A chat
   that needs a connection carries the connect card instead of pointing elsewhere.
 - **Settings** is one page: the model providers (connect another, switch the band to it, sign out; the models the
   tiers use); connections (every account across
-  services: sign in another, sign out, which agents use it); agents (archived ones, to restore); appearance; shared memory; Pause all
+  services: sign in another, sign out, which agents use it); agents (the limits on groups; archived agents and groups,
+  to restore); appearance; shared memory; Pause all
   routines; Advanced (show how the work is done on this device; the computer's state).
 - **The phone** shows the sidebar first, full width; a row opens its chat full screen with a back control; the
   header's name and a routine's or a watch's event line open the panel's sheet; the composer sticks to the
@@ -277,7 +285,9 @@ The body is its personality, a prompt section. Every direct agent chat gets the 
 its browser, memory, routines, watches and `message_user`, plus `message_agent`, `read_agent_chat`, `propose_agent`,
 `propose_group` and `propose_agent_change`. Group executions do not get these direct-chat tools.
 What distinguishes agents is personality, connections, routines, watches and memory. An agent never gets a connection's
-tools its file does not name. A tool that asks the owner to accept something is named `propose_<what>`; a tool that acts
+tools its file does not name. Enabled tools need not all be offered upfront: secondary tools are discovered on demand,
+within the same authority. Discovery never grants access, and a previously discovered tool loses access when its
+authority is revoked. A tool that asks the owner to accept something is named `propose_<what>`; a tool that acts
 is a plain verb. Agent files are "before" files (see the workspace): the owner's own edit is accepted by construction,
 in effect at once; the agent's change to itself waits for the owner as a card in its chat. An accepted change reaches
 its chat at the next model boundary and deliberately starts its prompt cache cold.
@@ -313,9 +323,11 @@ structural rules, and the warmth of an agent never softens an approval: the card
 identical whoever the agent is.
 
 ## Groups
-A group is made by the owner, who chooses its agents (two to six) and alone adds or removes one. Every participant is
+A group is made by the owner, who chooses its agents (any number, none at first, up to the limit Settings sets) and
+alone adds or removes one; a group may lose its last member and wait for the next. Every participant is
 equal; there is no coordinator. A message asks everyone unless it mentions one or more agents (`@name`), which narrows
-it to them; each starts independently against the same shared history, and the cap of six bounds the cost. The composer
+it to them; each starts independently against the same shared history, and the members limit bounds the cost. With
+nobody in it, a message asks nobody and stays for whoever joins. The composer
 says so beneath the field ("To everyone · @ to pick one"). A mention, in the composer and in any message, shows as the
 agent's face and name, a link that opens its chat. A member speaks only with `message_group`, which posts to the
 room (words, files, an artifact, a question the owner answers there, or a reaction on the owner's message its turn
@@ -323,10 +335,17 @@ answers, shown on that message); `message_user` is not offered in a group, and
 `message_group` nowhere else. Its `ask` names the members whose work is needed, each starting a turn: its schema is an
 enum of the group's other active members by the names the group shows, so a member can name nobody else, and with
 nobody else there it has no `ask`. The enum follows the group at each member's turn. A name written with an @ in the
-words asks that member too. Agents' asks are visible and bounded in depth, total turns and concurrency; past a bound
-the message still posts, asking nobody, and says why. Each member keeps its own memory, permissions and browser; the
+words asks that member too. Agents' asks are visible and bounded in depth, total turns and concurrency; the owner
+sets the depth and the turns in Settings, for every group; past a bound
+the message still posts, asking nobody, and says why. A lowered limit binds what comes next: a group already past it
+keeps its members but takes no more. Each member keeps its own memory, permissions and browser; the
 group gives them shared context, nothing else. Joining reveals the full history; leaving prevents future work but cannot
 erase what the agent saw. The group's row sits in the band like an agent's; its panel lists its members.
+
+Archiving a group takes it out of the band and stops what its members are doing there; it takes no message, starts no
+turn and does not change until restored, and the room says when it was archived. Its history, members and their
+execution chats remain; Settings lists it, to restore, and a restored group goes on where it was: nothing it was doing
+comes back.
 
 ## Connections
 A connection is how the band works with the owner's services without holding them. It ships as a file
@@ -413,17 +432,39 @@ naming one that is not there answers with those that are.
 - **The agent starts it; the harness asks.** A session starts with no draft. What reaches the owner is the harness's own asks: its mode is set before anything is sent, where the
   file names one, so it asks for what the owner would want asked (Claude Code: commands, and anything outside the
   folder); otherwise its own settings decide, and the connect card says which. The connect card says the agent can
-  start it without asking. Only an unambiguous one-time choice is answered, with its native label. "Always allow" is never answered: it would
-  write a rule into the owner's own settings. A request too large to show in full is refused, never shortened for approval;
-  an unsupported permission mode stops the session before work is sent.
-- **A session is live in the chat.** It is drawn in the call's place: one line for its current step, the owner's
-  notes, Stop and Open; every step in a sheet. Each ask is a card under it, said by what it does (run a command, change a file, open
-  a page) with all of it the owner must see (the command, the diff, the address, the choice Allow makes); several may be
+  start it without asking. Only an unambiguous one-time choice is answered, and the harness's exact option is what is
+  answered; the buttons speak banda's words, the same whatever the harness: the ask is named by what it does, approval
+  by its verb, refusal by what will not happen (Don't run, Don't change, Don't open, Don't allow). "Always allow" is never answered: it would
+  write a rule into the owner's own settings. Asks are reviewed whole, one at a time: the oldest in full, the rest
+  folded to a line each until opened, and a folded ask cannot be approved; there is no approve-all. What is open is
+  the owner's choice by id plus always the oldest, so an ask resolving elsewhere moves no other card; a card's
+  buttons rest a moment after it appears or moves, so a click aimed at one never lands on another. A long command or
+  diff sits in a bounded window with "Show all": folded, never cut. A request too large to show in full is refused, never shortened for approval;
+  an unsupported permission mode stops the session before work is sent. The device notification for an open ask says
+  the harness and the kind of thing asked, never the command, the path or the project's name.
+- **A session is live in the chat.** It is drawn in the call's place: one line for its current step, in the owner's
+  words where they exist, and only a single plain command earns them (a command loses its `cd … &&` throat-clearing,
+  a simple search or read is said as such, a path reads from the project only when anchored at the project's own
+  folder); a chain, a pipe, a redirection or a substitution shows the command whole, so a quiet verb never fronts a
+  second command, truncated in the middle so head and tail both read. What the harness waits on is said by the kind of
+  thing asked ("Waiting on you: run a command"), and an answered ask the same way ("You allowed: run a command"),
+  never with the command or the path: a folded line never shows a command in part, so a cut can never hide its middle;
+  the command shows whole only on the ask's card and in the sheet's row once opened. The card names the harness and the
+  project; the session's number and full path belong to the sheet's detail, not the card. Its state is said in words
+  ("Working 1:48", "Waiting on you", "Took 0:03", "Stopped", "Interrupted", "Failed") and announced to a screen
+  reader when it changes, never colour alone. The owner's notes live behind "Add a note" and show on the card with
+  whether each was taken; Stop and the step line's own target (and "Steps", the touch target the line repeats) open
+  what it does. Every step lives in a sheet, each folded to its one line until opened: it opens at the newest step and
+  follows the end while the session streams, stops following when the owner scrolls up and offers "Jump to latest"
+  back; a step that arrives while it is open never arrives expanded, and opening one never jumps the view. Each ask
+  is a card under the session's; several may be
   open at once, and each lives as long as the harness's process. The header shows delegated work from its recorded state,
   with approval attention and a way to open its activity; several sessions have a picker. The agent's own active reply
   takes priority, with a compact delegated indicator alongside it. Stop answers them all, and before the ask was sent,
   stops it from being sent. The owner steers in their own words: a note is sent to the harness as a
-  prompt it takes after its current step. Stop cancels the turn.
+  prompt it takes after its current step. Stop cancels the turn. Stop acts at once, with no confirmation: a stopped
+  session keeps its record, and the agent can follow it up (native resume where the harness supports it, otherwise a
+  fresh session handed a summary of what happened), so stopping loses nothing the owner cannot take up again.
 - **Once, and then the agent hears.** The ask is sent at most once: a restart after it was sent ends the session
   interrupted, never sends it again, and a session whose task ended without ending it ends failed. Either way, and
   when the harness finishes, its agent wakes once with what was done, fenced as foreign data: how it ended, what it
@@ -693,14 +734,19 @@ long as it runs.
   them; `propose_send` makes one a draft, and approved, the proxy sends exactly the stored request, once. A permission
   covers a route (the method, the host, the path with its ids as `*`) and is checked in the daemon's commit, never in
   the proxy. The owner may instead allow a host (its name in lower case, its port unless the scheme's): anything sent
-  there, always, a second shape the request binds, offered beside the route's and never the default. A host is allowed
+  there, always, a second shape the request binds, offered beside the route's and never the default. The owner may
+  also allow one for an agent directly, from its Access, and there a host may be a pattern: `*.example.com`, any name
+  under it, or `*`, every host, each at its scheme and port. An agent may ask for several at once, before it needs
+  them (`ask_hosts`): one approval, its list editable, approved as if the owner had added each; it offers no scope, so
+  every such ask asks. An agent that runs commands has both ways to ask, whatever its file lists. A host is allowed
   for the agent that asked, and covers only that agent's chats, as the proxy knows them by their logins; while the
   agents share one box, one agent's process can read another's login, so the binding is by login, not by the
   boundary, and the app says any agent there could use it. The daemon tells the proxy each chat's allowed hosts, in
   order and never an older config than the store's (a push that fails stops the proxy), so a write there goes straight
   through as it happens (a `git push` run again succeeds); the proxy records each, durably, before sending it, and the
-  daemon logs it with its outcome and its bytes' hash. A request carrying its own credential, and the browser's, are
-  still held.
+  daemon logs it with its outcome and its bytes' hash. A WebSocket opened there (a relay, a live API) is such a write:
+  its opening is what is recorded, its frames then pass unrecorded, and what its server sends is scrubbed of
+  credentials; every other WebSocket is cut. A request carrying its own credential, and the browser's, are still held.
 - **Credentials** for a host are swapped in at the proxy, from the daemon's `auth/`, so the box holds no secrets; a
   response that echoes one has it scrubbed. A request the box sends carrying a credential of its own is on the floor.
   A request that acts as nobody (`web_fetch`'s) gets none: the box can only ever give one up that way.
@@ -753,13 +799,37 @@ effect:
   the box.
 - The daemon opens workspace files without following symlinks.
 
+Data the workspace holds is typed: `.json` with a schema the daemon checks on every read, and `.md` only where
+free-form text is the point (instructions, personality, memory). `band.json` at the root is the band's own file: the
+agents (by id) and groups (`group:<room>`) pinned to the top of the band, in the owner's order. It only orders what the
+app shows, so it is an "after" file: in effect at once, whoever wrote it. With no file Sancho is pinned; the app writes
+it when the owner pins or unpins, and never writes over one that does not fit its schema.
+
 A skill is one shared prompt file, not an agent's private copy. Agents may load one by name; an owner's unquoted
 `/name` invokes a known skill. The accepted instructions are loaded before that message's first model request, as
 one recorded tool call and result; an earlier running request must not see the load without the owner's message. The
 chat names only what loaded; Activity holds the exact result. Other files in a skill's folder remain box data, never
-instructions the daemon loads from an unaccepted change. banda ships a few skills; first run offers them once, right
-after the provider, and the ones the owner keeps are written into the workspace and accepted in that step, since banda
-wrote them and the owner chose them. A skill of that name already there is never replaced.
+instructions the daemon loads from an unaccepted change. A skill may be owner-only (`disable-model-invocation: true`):
+only the owner's /name loads it, agents never see it, and the app says so wherever the skill shows. banda ships a few
+skills; first run offers them once, right after the provider, and the ones the owner keeps are written into the
+workspace and accepted in that step, since banda wrote them and the owner chose them. The Skills page offers the
+shipped skills the workspace lacks the same way, any time: adding one is the same choice, accepted by the hash of the
+bytes banda wrote. A skill of that name already accepted is never replaced. The Skills page puts what waits on the
+owner first, then every accepted skill in one flat list, marked where owner-only or where a change waits; nothing the
+page is for hides behind a disclosure.
+
+**Bringing your own.** An owner who already works with another harness on this computer (Claude Code, Codex, pi) has
+skills and agents there. In the desktop app, first run offers those in place of banda's own: the owner picks harnesses,
+sees everything they bring, and leaves any of it behind; bringing nothing goes on to banda's skills, bringing anything
+means they are not offered. Settings offers the same any time. The daemon reads the harnesses' own folders on the
+owner's computer, the only host files it reads for this, and only names and descriptions until a pick; a pick is read
+again then, never taken from the request. A skill comes as its folder's text files (hidden files, links and files that
+are not text stay behind) and its SKILL.md is accepted by the hash of the bytes written, as a shipped one is: the owner
+chose it from their own computer. Since they saw its name and description, not every character, a SKILL.md with
+characters nobody sees is refused, as an agent file is. An agent comes as a banda agent file with its name, description and instructions;
+its own tools and model are another harness's words and stay behind. A skill or agent of that name already accepted is
+left as it is; one the box wrote and nobody accepted is superseded, so a bring cut part way is finished by bringing
+again.
 
 ## Trust
 Laws (property-tested):

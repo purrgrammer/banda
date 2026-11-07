@@ -35,9 +35,11 @@ import {
 	Archive,
 	ArchiveConfirm,
 	ArchivedAgents,
+	ArchivedGroups,
 	type ConnectionRow,
 	Connections,
 	FaceAndName,
+	GroupLimitsBlock,
 	Members,
 	ModelProviders,
 	Permissions,
@@ -177,13 +179,37 @@ export function PanelSections() {
 			<Section
 				id="panel-app"
 				title="A chat and its panel"
-				note="On wide screens the panel is open by default; on the phone the header's name opens it as a sheet."
+				note="The panel is closed by default, so the screen is the conversation. It opens for what needs room: a routine's line, a new routine, the face or the name tapped. Here a routine's line opened it on Routines. On the phone it is a sheet."
 				bleed
 				wide
 			>
 				{phone ? null : <Band rows={ROWS} selected="mara" />}
-				{phone ? null : <MaraChat />}
-				<AgentPanelOf who={MARA} state="waiting" phone={phone} />
+				{phone ? null : <MaraChat panelOpen />}
+				<AgentPanelOf who={MARA} state="waiting" phone={phone} tab="routines" />
+			</Section>
+			<Section
+				id="connections-signed-in"
+				title="Connections after sign-in"
+				note="The account row and switch confirm sign-in. When a service gives no account name, use the connection's name. A supplied icon replaces the initial; the initial remains the fallback."
+			>
+				<div className="max-w-md">
+					<Connections
+						agent="Sancho"
+						rows={[
+							{ connection: "GitHub", accounts: [{ login: "@purrgrammer", on: true }] },
+							{
+								connection: "Vercel",
+								icon: (
+									<svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
+										<path d="M12 3 24 23H0Z" fill="currentColor" />
+									</svg>
+								),
+								accounts: [{ login: "Vercel", on: true }],
+							},
+							{ connection: "My workspace", accounts: [{ login: "My workspace", on: true }] },
+						]}
+					/>
+				</div>
 			</Section>
 			<Section
 				id="panel"
@@ -226,7 +252,22 @@ export function PanelSections() {
 					</Specimen>
 					<Specimen label="A group: its members, and who may join">
 						<Panel name="Trip">
-							<GroupPanel name="Trip" members={[SANCHO, { ...MARA, state: "working" }]} others={[OCTO, ATLAS]} />
+							<GroupPanel
+								name="Trip"
+								members={[SANCHO, { ...MARA, state: "working" }]}
+								others={[OCTO, ATLAS]}
+								onArchive={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="A group nobody is in yet">
+						<Panel name="New group">
+							<GroupPanel name="New group" members={[]} others={[SANCHO, MARA, OCTO]} onRemove={() => {}} />
+						</Panel>
+					</Specimen>
+					<Specimen label="A group at the most Settings allows">
+						<Panel name="Desk">
+							<GroupPanel name="Desk" members={[SANCHO, MARA]} others={[OCTO, ATLAS]} most={2} onRemove={() => {}} />
 						</Panel>
 					</Specimen>
 				</div>
@@ -450,6 +491,14 @@ export function PanelSections() {
 						<ArchivedAgents archived={[{ ...ATLAS, id: "atlas", when: "2 Oct" }]} />
 					</div>
 				</Group>
+				<Group label="Settings' Agents: the limits on groups, and an archived group to restore" className="items-start">
+					<div className="w-[30rem] max-w-full">
+						<GroupLimitsBlock limits={{ members: 8, depth: 3, chain: 8 }} />
+					</div>
+					<div className="w-[30rem] max-w-full">
+						<ArchivedGroups groups={[{ room: 7, name: "Trip", faces: [SANCHO, MARA], when: "3 Nov" }]} />
+					</div>
+				</Group>
 			</Section>
 			<Section
 				id="settings"
@@ -478,10 +527,13 @@ export function PanelSections() {
 			<Section
 				id="settings-providers"
 				title="Settings, providers"
-				note="Every provider the band may think with: in use, connected (Use, Sign out), connecting, failed, and a key form open."
+				note="Every provider the band may think with: in use, connected (Use, Sign out), connecting, failed, and a key form open; on a device, the connected ones alone."
 			>
 				<SettingsPage title="Settings" phone={phone}>
 					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} open="mistral" />
+				</SettingsPage>
+				<SettingsPage title="Settings, on a device" phone={phone}>
+					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} here={false} />
 				</SettingsPage>
 			</Section>
 			<Section
@@ -561,6 +613,7 @@ export function PanelSections() {
 				<div className="grid gap-6 lg:grid-cols-2">
 					<Specimen label="Quiet actions and details · long metadata">
 						<ObjectReading
+							chat={1}
 							onRefresh={() => {}}
 							shown={{
 								shown: "card",
@@ -684,6 +737,19 @@ export function PanelSections() {
 								text="Fixed in #34: the panel keeps the open file across reloads."
 							/>
 						</div>
+					</Specimen>
+					<Specimen label="ask_hosts naming *: the wildcard flagged in red">
+						<DraftApproval
+							chat={0}
+							agent={{ name: "Nostr" }}
+							label="allow 3 hosts"
+							ask={{
+								type: "approval",
+								tool: "ask_hosts",
+								args: { hosts: "relay.damus.io\nnos.lol\n*", why: "read and post to my relays" },
+								editable: ["hosts"],
+							}}
+						/>
 					</Specimen>
 					<Specimen label="Interrupted attempt: original bytes only, retry or skip">
 						<DraftApproval

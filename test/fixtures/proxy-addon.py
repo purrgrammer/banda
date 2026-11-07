@@ -115,6 +115,20 @@ for n, case in enumerate(json.load(sys.stdin)):
         else:
             flow.response = Response(case.get("answer", 200), b"", Headers([]))
             egress.responseheaders(flow)
+        # a WebSocket the case opens: whether it streams, and what each frame its server sends arrives as
+        if "frames" in case:
+            killed = []
+            flow.kill = lambda: killed.append(True)
+            flow.websocket = types.SimpleNamespace(messages=[])
+            egress.websocket_start(flow)
+            arrived = []
+            for frame in case["frames"] if not killed else []:
+                message = types.SimpleNamespace(from_client=False, content=frame.encode())
+                flow.websocket.messages.append(message)
+                egress.websocket_message(flow)
+                arrived.append(message.content.decode())
+            out[-1]["streams"] = not killed
+            out[-1]["frames"] = arrived
     egress.client_disconnected(flow.client_conn)
 
 

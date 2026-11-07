@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { freePort, viteCacheDir } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
 let web: ViteDevServer | undefined;
@@ -9,8 +10,9 @@ beforeAll(async () => {
 	if (!hasChrome()) return;
 	web = await createServer({
 		root: fileURLToPath(new URL("../site", import.meta.url)),
+		cacheDir: await viteCacheDir(),
 		configFile: false,
-		server: { host: "127.0.0.1", port: 0 },
+		server: { host: "127.0.0.1", port: await freePort(), strictPort: true },
 	});
 	await web.listen();
 	base = web.resolvedUrls!.local[0];

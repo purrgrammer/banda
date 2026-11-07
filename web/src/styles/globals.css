@@ -468,3 +468,28 @@ svg.lucide {
 		background-position: 0% center;
 	}
 }
+
+/*
+ * The floating header lifts only while the feed is under it: the feed's scroller names its scroll `--feed`, the chat
+ * shares the name with the header (`feed-scope`), and the header's shape takes its shadow over the first 24px of
+ * scrolling. With no feed scrolled, or no timeline, it lies flat in the chat's own paper.
+ */
+@utility feed-scroll {
+	scroll-timeline: --feed y;
+}
+@utility feed-scope {
+	timeline-scope: --feed;
+}
+@keyframes header-lift {
+	from {
+		filter: drop-shadow(0 4px 14px transparent);
+	}
+	to {
+		filter: drop-shadow(0 4px 14px light-dark(oklch(0 0 0 / 9%), oklch(0 0 0 / 45%)));
+	}
+}
+@utility header-lift {
+	animation: header-lift linear both;
+	animation-timeline: --feed;
+	animation-range: 0 24px;
+}

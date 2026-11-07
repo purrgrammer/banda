@@ -94,3 +94,16 @@ export function Group({ label, children, className }: { label: string; children:
 		</div>
 	);
 }
+
+/** A floating header shown alone: the top of a chat, with a line of feed under it for the fade to fall on. */
+export function HeaderStage({ children }: { children: ReactNode }) {
+	return (
+		<div className="relative h-40 w-full overflow-hidden rounded-card border border-line-soft bg-paper">
+			{children}
+			<p className="absolute inset-x-0 top-20 mx-auto max-w-[36rem] px-4 text-body text-ink-2">
+				One pull request needs you: CI went red overnight. I've pulled the failing checks and the diff that changed
+				them.
+			</p>
+		</div>
+	);
+}

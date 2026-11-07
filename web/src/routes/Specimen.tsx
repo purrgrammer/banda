@@ -6,6 +6,9 @@
 import { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/cn";
+import { EmailDraftPreview } from "../app/EmailDraftPreview.tsx";
+import { ConnectCard, GmailPermissions } from "../chat/Connect.tsx";
+import { EmailCard } from "../chat/Object.tsx";
 import { ActivityPreview, ActivitySection } from "../specimen/activity.tsx";
 import { AvatarCandidateSpecimen } from "../specimen/avatar-candidate.tsx";
 import { AvatarCreator, AvatarIcon } from "../specimen/avatar-creator.tsx";
@@ -15,6 +18,7 @@ import { BandSection } from "../specimen/band.tsx";
 import { Controls } from "../specimen/controls.tsx";
 import { Copy } from "../specimen/copy.tsx";
 import { DevicesSection } from "../specimen/devices.tsx";
+import { DoneSection } from "../specimen/done.tsx";
 import { Faces } from "../specimen/faces.tsx";
 import { Foundation } from "../specimen/foundation.tsx";
 import { HarnessSection } from "../specimen/harness.tsx";
@@ -25,7 +29,7 @@ import { Parts } from "../specimen/parts.tsx";
 import { RecordedActivityPreview } from "../specimen/recorded-activity.tsx";
 import { Screens } from "../specimen/screens.tsx";
 import { SkillDetailPreview, SkillsSection } from "../specimen/skills.tsx";
-import { type Scheme, StageContext, type Width } from "../specimen/stage.tsx";
+import { type Scheme, Section, StageContext, type Width } from "../specimen/stage.tsx";
 import { States } from "../specimen/states.tsx";
 
 const CONTENTS = [
@@ -34,6 +38,9 @@ const CONTENTS = [
 	{ id: "skill-activity", label: "Skill in Activity" },
 	{ id: "skills-about", label: "Skills in About" },
 	{ id: "app", label: "The app" },
+	{ id: "pinned", label: "Pinned" },
+	{ id: "pinned-alignment", label: "Pinned: left or centred" },
+	{ id: "pinned-hold", label: "Pinning on the phone" },
 	{ id: "agent-meta-tools", label: "Agent-to-agent tools in a chat" },
 	{ id: "working-chat", label: "A chat at work" },
 	{ id: "first-run", label: "First run" },
@@ -42,6 +49,7 @@ const CONTENTS = [
 	{ id: "group", label: "A group" },
 	{ id: "panel-app", label: "A chat and its panel" },
 	{ id: "panel", label: "The panel" },
+	{ id: "connections-signed-in", label: "Connections after sign-in" },
 	{ id: "scoped-memory", label: "Scoped memory" },
 	{ id: "open-file", label: "What opens in the panel" },
 	{ id: "browser", label: "The browser, enlarged" },
@@ -57,9 +65,13 @@ const CONTENTS = [
 	{ id: "connect", label: "Connecting" },
 	{ id: "harness", label: "Claude Code in a chat" },
 	{ id: "harness-states", label: "A session, every state" },
+	{ id: "harness-headlines", label: "The card's one line" },
+	{ id: "harness-asks", label: "Its asks, one at a time" },
 	{ id: "harness-panel", label: "Claude Code in the panel" },
+	{ id: "harness-sheet", label: "The steps sheet" },
 	{ id: "mcp", label: "Add MCP server" },
 	{ id: "github", label: "GitHub" },
+	{ id: "gmail", label: "Gmail" },
 	{ id: "loading-app", label: "Opening the app" },
 	{ id: "empty-chat", label: "A new agent's chat" },
 	{ id: "states", label: "Empty and loading" },
@@ -77,6 +89,7 @@ const CONTENTS = [
 	{ id: "feed-lines", label: "What else the chat says" },
 	{ id: "composer", label: "Composer" },
 	{ id: "object-in-chat", label: "An object in the chat" },
+	{ id: "done", label: "Done, folded" },
 	{ id: "colour", label: "Colour" },
 	{ id: "type", label: "Type" },
 	{ id: "shape", label: "Shape" },
@@ -172,6 +185,61 @@ export function Specimen() {
 									<ActivitySection />
 									<SkillsSection />
 									<Screens />
+									<Section
+										id="gmail"
+										title="Gmail"
+										note="Choose Google access before connecting. Sends and mailbox changes always ask for your approval."
+									>
+										<div className="grid gap-6 lg:grid-cols-2">
+											<EmailCard
+												message={{
+													from: "Ana García <ana@example.com>",
+													to: "bandarra@example.com",
+													subject: "The launch checklist",
+													date: "Today · 10:24",
+													snippet: "Three things before Friday…",
+													body: "Three things before Friday:\n\n1. Confirm the final copy.\n2. Review the rollout plan.",
+													unread: true,
+												}}
+											/>
+											<EmailDraftPreview
+												args={{
+													to: "mira@northstar.example",
+													subject: "Re: quarterly planning",
+													body: "Thanks, Mira. Friday at 10:30 works for me. I’ve attached the updated notes.",
+													attachments: [{ name: "planning-notes.pdf", mimeType: "application/pdf", size: 1_258_291 }],
+												}}
+												edits={{}}
+												readOnly
+												onEdit={() => {}}
+											/>
+											<EmailCard
+												message={{
+													from: "Mira from Northstar <mira@northstar.example>",
+													to: "bandarra@example.com",
+													subject: "Re: quarterly planning",
+													date: "Yesterday · 16:42",
+													snippet: "I’ve attached the notes…",
+													body: "Thanks for the thoughtful review. I’ve added the three dates we agreed on.",
+													unread: false,
+												}}
+											/>
+											<div className="lg:col-span-2">
+												<ConnectCard
+													agent="Sancho"
+													connection="Gmail"
+													state={{ kind: "connect", why: "Choose access, then sign in to Gmail." }}
+													onConnect={() => {}}
+													permissions={
+														<GmailPermissions
+															scopes={["https://www.googleapis.com/auth/gmail.readonly"]}
+															onScopes={() => {}}
+														/>
+													}
+												/>
+											</div>
+										</div>
+									</Section>
 									<PanelSections />
 									<MemorySection />
 									<DevicesSection />
@@ -180,6 +248,7 @@ export function Specimen() {
 									<States />
 									<BandSection />
 									<Parts />
+									<DoneSection />
 									<Foundation />
 									<Faces />
 									<AvatarSpike />

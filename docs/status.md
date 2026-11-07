@@ -2,6 +2,19 @@
 
 ## Current work
 
+Gmail REST is implemented in a topic worktree with least-privilege sign-in, account-bound email cards and attachment
+reads, approval-required sending and mailbox actions, and separate OAuth scopes for reading, sending and modifying
+mail ([Connections](connections.md)). Redirect sign-in starts on the computer; paired devices can use accounts already
+connected there. The public Google Desktop OAuth client id and client secret ship with the daemon; development can
+override both through daemon environment variables.
+The owner connected a real Gmail account and confirmed mail works through the app. Email previews render plain text and
+fetch attachments only on request; the send approval previews and permits editing the recipient, subject and body, and
+names each attached file with its size. The owner reviewed and approved the draft preview specimen. Approved send
+attachments are SHA-256 checked again at execution, so bytes changed after approval are refused. Adapter, blob,
+attachment, specimen and browser checks, static checks, typecheck and the production web build pass. The complete
+desktop/phone walkthrough, real send and mailbox approval flows, adversarial review and acceptance remain. Google's
+restricted-scope verification and publishing a public Desktop OAuth client remain external gates.
+
 Harnesses are on the `feat/harness-acp` branch ([Connections](connections.md)): an agent hands coding work to a
 coding agent on the owner's computer (Claude Code, Codex, pi through banda's own adapter, or one the owner adds),
 connected once to the owner's code folder, each task in a project there; the session is live and steerable in the chat,
@@ -19,6 +32,11 @@ passes. The phone's side was tried on the arm64
 emulator against a throwaway daemon on n0; a real phone on cellular, iOS and push remain
 ([Operations](operations.md)).
 
+Tool discovery is wired in draft PR #4 using pi-durable’s existing search and deferred tool loading.
+The agent tool-access specimen is carried in the separate agent-search UI worktree; the owner requested that it
+stay a specimen while they give feedback. Per-agent switches are not wired to the daemon. Full/deep verification
+and owner review remain open ([Agents and groups](agents.md)).
+
 Pre-release binaries are on the `desktop-release` branch ([Operations](operations.md)): an Electron desktop app that
 starts or attaches to the daemon, a CLI archive that brings its own Node.js, and a release workflow that drafts an
 unsigned pre-release from a `v*` tag. Both were packaged and tried on macOS arm64 against throwaway homes. The
@@ -32,6 +50,11 @@ The Library and panel redesign is a separate slice.
 
 Watches are designed: DESIGN.md "Watches", [Watches](watches.md) for the watch and [Connections](connections.md)
 for the object side. Owner review of the design is pending before slice 1 starts.
+
+Bringing your own is in code ([Chat](chat.md)): at first run on the desktop, the skills and agents of Claude Code,
+Codex and pi on this computer, in place of banda's skills, and again from Settings; the band's menu with Skills and a
+dot while something waits. Unit and fault tests pass; the real desktop app on a fresh home, phone width and owner
+review remain.
 
 Settings → Model lists every model provider to connect, use or sign out of, so the band can switch providers after
 first run ([Chat](chat.md)). Owner review is pending.

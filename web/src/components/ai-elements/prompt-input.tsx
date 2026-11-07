@@ -4,6 +4,7 @@ import type {
 	ChangeEventHandler,
 	ClipboardEventHandler,
 	ComponentProps,
+	Dispatch,
 	FormEvent,
 	FormEventHandler,
 	HTMLAttributes,
@@ -11,6 +12,7 @@ import type {
 	PropsWithChildren,
 	ReactNode,
 	RefObject,
+	SetStateAction,
 } from "react";
 import { Children, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -144,7 +146,7 @@ export interface AttachmentsContext {
 
 export interface TextInputContext {
 	value: string;
-	setInput: (v: string) => void;
+	setInput: Dispatch<SetStateAction<string>>;
 	clear: () => void;
 }
 
@@ -768,29 +770,35 @@ export const PromptInput = ({
 
 				const result = onSubmit({ files: convertedFiles, text }, event);
 
+				// banda: take back only what was sent. Words typed and files attached while it was on its way stay (a steer
+				// sent mid-turn while the owner keeps writing), where clearing everything would lose them.
+				const sent = files.map((file) => file.id);
+				const settle = () => {
+					for (const id of sent) remove(id);
+					clearReferencedSources();
+					if (usingProvider && text !== "")
+						controller.textInput.setInput((now) =>
+							now === text ? "" : now.startsWith(text) ? now.slice(text.length).replace(/^\s+/, "") : now,
+						);
+				};
+
 				// Handle both sync and async onSubmit
 				if (result instanceof Promise) {
 					try {
 						await result;
-						clear();
-						if (usingProvider) {
-							controller.textInput.clear();
-						}
+						settle();
 					} catch {
 						// Don't clear on error - user may want to retry
 					}
 				} else {
 					// Sync function completed without throwing, clear inputs
-					clear();
-					if (usingProvider) {
-						controller.textInput.clear();
-					}
+					settle();
 				}
 			} catch {
 				// Don't clear on error - user may want to retry
 			}
 		},
-		[usingProvider, controller, files, onSubmit, clear],
+		[usingProvider, controller, files, onSubmit, remove, clearReferencedSources],
 	);
 
 	// Render with or without local provider

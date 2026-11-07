@@ -57,6 +57,8 @@ export type GroupRow = {
 	/** The newest entry the owner read (`POST /api/groups/:room/read`), and the members' messages after it. */
 	readonly read: number;
 	readonly unread: number;
+	/** When the owner archived it: it is out of the band, and Settings lists it to restore. */
+	readonly archived?: number;
 };
 
 /** An ask a member waits on the owner for, answered in the room. */
@@ -77,6 +79,8 @@ export type GroupNoticeView = {
 	readonly added?: true;
 	readonly removed?: true;
 	readonly renamed?: string;
+	readonly archived?: true;
+	readonly restored?: true;
 };
 
 /** `GET /api/groups/:room`: the group and its whole log, oldest first: its messages, and the daemon's notices. */
@@ -112,5 +116,19 @@ export type ChangeGroup = {
 /** `POST /api/groups/:room/stop`: stop `agent`'s work in the group, or every member's. Answers with the group. */
 export type StopGroup = { readonly agent?: string };
 
-/** The groups, pushed on the shell stream whenever one changes: newest message first. */
-export type GroupsShellEvent = { readonly type: "groups"; readonly groups: readonly GroupRow[] };
+/** `POST /api/groups/:room/archive`: archive the group, or restore it (`archived: false`). Answers with the group. */
+export type ArchiveGroup = { readonly archived: boolean };
+
+/**
+ * The owner's limits on every group (`GET`/`PUT /api/groups/limits`): how many agents a group holds, how deep agents
+ * ask each other from the owner's message (1: never), and how many turns their asks start from one. A `PUT` sets some
+ * and answers with all.
+ */
+export type GroupLimitsView = { readonly members: number; readonly depth: number; readonly chain: number };
+
+/** The groups, pushed on the shell stream whenever one changes: newest message first; and the limits on them. */
+export type GroupsShellEvent = {
+	readonly type: "groups";
+	readonly groups: readonly GroupRow[];
+	readonly limits: GroupLimitsView;
+};

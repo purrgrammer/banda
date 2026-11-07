@@ -10,6 +10,7 @@ import {
 	ShieldCheckIcon,
 	SquareIcon,
 } from "lucide-react";
+import { useState } from "react";
 import { ApprovalCard, ChangeCard, Details, Facts, WaitingPill } from "../chat/Approval.tsx";
 import { ArtifactCard, Browsed, QuestionCard, SignInCard, ViewCard } from "../chat/Cards.tsx";
 import { Composer } from "../chat/Composer.tsx";
@@ -32,7 +33,7 @@ import { RoutineProposal } from "../chat/Routine.tsx";
 import { VoiceMessage } from "../chat/Voice.tsx";
 import { Markdown } from "../components/Markdown.tsx";
 import { ATLAS, ATTACHED, MARA, OCTO, PAGE, PHOTO, POSTER, PR, REPLY_VOICE, SANCHO, VOICE } from "./fixtures.ts";
-import { Group, Section } from "./stage.tsx";
+import { Group, HeaderStage, Section } from "./stage.tsx";
 
 export function Parts() {
 	return (
@@ -206,6 +207,18 @@ export function Parts() {
 				note="The daemon's card, the same for every agent: who it acts as, the verb is the button, the quiet one says what it won't do, at most one scope, never ticked until the owner ticks it. Money gets its facts. A service's tool with no words of its own is named as it is, with Allow."
 			>
 				<div className="flex max-w-2xl flex-col gap-3">
+					<Group label="Allow → Approved · same card height" className="flex-col items-start">
+						{(["open", "done"] as const).map((kind) => (
+							<ApprovalCard
+								key={kind}
+								agent="Sancho"
+								what="Use GitHub's label_write as @purrgrammer"
+								verb="Allow"
+								as="@purrgrammer on GitHub"
+								state={kind === "open" ? { kind } : { kind, words: "Approved" }}
+							/>
+						))}
+					</Group>
 					<ApprovalCard
 						agent="Octo"
 						what="Comment on purrgrammer/banda #34"
@@ -347,24 +360,30 @@ export function Parts() {
 			<Section
 				id="working"
 				title="Working"
-				note="In the header while an agent works: its face with the ring, and what it does now, shimmering. The feed has no working line."
+				note="Under the floating face while an agent works: what it does now, shimmering. The feed has no working line."
 			>
 				<Group label="A chat with one agent">
-					<Header name="Octo" faces={[OCTO]} state="working" doing="Reading the checks on #34…" />
+					<HeaderStage>
+						<Header name="Octo" faces={[OCTO]} state="working" doing="Reading the checks on #34…" />
+					</HeaderStage>
 				</Group>
 				<Group label="Working, nothing more said">
-					<Header name="Octo" faces={[OCTO]} state="working" />
+					<HeaderStage>
+						<Header name="Octo" faces={[OCTO]} state="working" />
+					</HeaderStage>
 				</Group>
 				<Group label="A group: who is at work">
-					<Header
-						name="Trip"
-						faces={[
-							{ ...MARA, state: "working" },
-							{ ...SANCHO, state: "working" },
-						]}
-						state="working"
-						doing={workingWords(["Mara", "Sancho"])}
-					/>
+					<HeaderStage>
+						<Header
+							name="Trip"
+							faces={[
+								{ ...MARA, state: "working" },
+								{ ...SANCHO, state: "working" },
+							]}
+							state="working"
+							doing={workingWords(["Mara", "Sancho"])}
+						/>
+					</HeaderStage>
 				</Group>
 			</Section>
 			<Section
@@ -454,17 +473,19 @@ export function Parts() {
 			<Section
 				id="composer"
 				title="Composer"
-				note="Words, files, a voice message (transcribed here, sent with its audio); Stop while the agent works."
+				note="Words, files, a voice message (transcribed here, sent with its audio). While the agent works: Stop when empty, Send once something is written, which steers the turn. The last one is live: its draft, words and files, survives a reload."
 			>
 				<div className="flex max-w-2xl flex-col gap-5">
 					<Composer to="Mara" />
 					<Composer to="Mara" files={ATTACHED} draft="Here are the photos and the terms. Which hotel is closer?" />
 					<Composer to="Octo" state="working" />
+					<Composer to="Octo" state="working" draft="Also check the 10:40, it might be cheaper." />
 					<Composer to="Mara" state="recording" />
 					<Composer to="Trip" group />
 					<div className="flex justify-center">
 						<WaitingPill ask="book the 9:15 to Lisbon?" />
 					</div>
+					<SteerComposer />
 				</div>
 			</Section>
 			<Section
@@ -480,5 +501,33 @@ export function Parts() {
 				</div>
 			</Section>
 		</>
+	);
+}
+
+/** A composer while Octo works, live: what is sent steers (listed under it), Stop stops, and its draft is kept. */
+function SteerComposer() {
+	const [sent, setSent] = useState<readonly string[]>([]);
+	const [stopped, setStopped] = useState(false);
+	return (
+		<div id="composer-steer" className="flex flex-col gap-2">
+			<Composer
+				to="Octo"
+				state={stopped ? "ready" : "working"}
+				keep="specimen:steer"
+				onSend={async (text, files) => {
+					// on its way a moment, as over a network: words written meanwhile stay in the composer
+					await new Promise((resolve) => setTimeout(resolve, 600));
+					setSent((was) => [...was, [text, ...files.map((file) => file.name)].filter(Boolean).join(" + ")]);
+				}}
+				onStop={() => setStopped(true)}
+			/>
+			<ul data-sent className="px-3 text-meta text-ink-2">
+				{sent.map((each, index) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: a fixture's log, appended only
+					<li key={index}>Steered: {each}</li>
+				))}
+				{stopped ? <li>Stopped</li> : null}
+			</ul>
+		</div>
 	);
 }

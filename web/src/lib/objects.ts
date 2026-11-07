@@ -67,6 +67,7 @@ export function objectAsks(text: string, objects: readonly string[] = []): Objec
 	const refs = [
 		...objects,
 		...(text.match(/https:\/\/[^\s<>"`]+/gi) ?? []).map((ref) => ref.replace(/[),.;!?\]]+$/, "")),
+		...(text.match(/[a-z][a-z0-9-]{0,63}:[a-z][a-z0-9_]{0,63}:[A-Za-z0-9_.:/-]{1,400}/g) ?? []),
 	];
 	const unique = new Map<string, string>();
 	for (const ref of refs) {

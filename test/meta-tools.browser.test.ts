@@ -6,6 +6,7 @@ import { agentText } from "../src/core/agents.ts";
 import { defaultAvatarFace } from "../src/core/avatar-face.ts";
 import { PROPOSAL_ENTRY } from "../src/core/proposals.ts";
 import { itemOf } from "../src/server/transcript.ts";
+import { freePort, viteCacheDir } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
 const fixture = fileURLToPath(new URL("./fixtures/meta-tools-browser.tsx", import.meta.url));
@@ -62,7 +63,8 @@ beforeAll(async () => {
 	if (!hasChrome()) return;
 	server = await createServer({
 		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		server: { port: 0, host: "127.0.0.1", open: false },
+		cacheDir: await viteCacheDir(),
+		server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
 		plugins: [
 			{
 				name: "meta-tools-fixture",

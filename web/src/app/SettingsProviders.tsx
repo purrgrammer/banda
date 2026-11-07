@@ -1,15 +1,18 @@
 /**
  * Settings' providers, live: every provider the band may think with, read from the daemon while the Model tab shows,
- * to connect, use or sign out of. The tiers follow the one in use.
+ * to connect, use or sign out of. The tiers follow the one in use. On a device, the connected ones alone: a sign-in
+ * comes back to the computer banda runs on.
  */
 import { useProviderConnect, wayLabel } from "../areas/tiers.ts";
 import { ModelProviders } from "../chat/Settings.tsx";
+import { runsOnDevice } from "../lib/api.ts";
 
 export function SettingsProviders({ current }: { current: string }) {
 	const { providers, open, waiting, error, pick, answer, cancel, key, use, signOut } = useProviderConnect();
 	return (
 		<ModelProviders
 			current={current}
+			here={!runsOnDevice}
 			providers={providers.map((provider) => ({
 				id: provider.id,
 				name: provider.name,

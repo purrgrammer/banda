@@ -5,9 +5,9 @@ import { BadRequest, handler, type Routes } from "../src/server/http.ts";
 import type { Area } from "../src/server/routes/area.ts";
 
 /** A server whose routes are only the given areas': the daemon's own are never reached for these paths. */
-async function serve(areas: readonly Area[]) {
+async function serve(areas: readonly Area[], routes: Partial<Routes> = {}) {
 	let port = 0;
-	const server = createServer(handler({} as Routes, () => port, "secret", "/nonexistent", areas));
+	const server = createServer(handler(routes as Routes, () => port, "secret", "/nonexistent", areas));
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 	port = (server.address() as AddressInfo).port;
 	const call = (path: string, init: RequestInit = {}) =>
@@ -51,6 +51,34 @@ describe("an area's routes", () => {
 			expect(await file.text()).toBe("<b>hi</b>");
 			expect((await call("/nothing")).status).toBe(404);
 			expect(seen).toContain("a GET /file");
+		} finally {
+			await close();
+		}
+	});
+});
+
+describe("account connection routes", () => {
+	it("decodes an encoded email account key before switching it", async () => {
+		let received: unknown;
+		const { call, close } = await serve([], {
+			capability: async (action) => {
+				received = action;
+				return {} as Awaited<ReturnType<Routes["capability"]>>;
+			},
+		});
+		try {
+			const response = await call("/capabilities/connections/gmail/accounts/alex%2Bwork%40example.com/switch", {
+				method: "POST",
+				body: JSON.stringify({ agent: "sancho", on: true }),
+			});
+			expect(response.status).toBe(200);
+			expect(received).toEqual({
+				action: "account",
+				name: "gmail",
+				account: "alex+work@example.com",
+				agent: "sancho",
+				on: true,
+			});
 		} finally {
 			await close();
 		}

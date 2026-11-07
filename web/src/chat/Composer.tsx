@@ -1,7 +1,8 @@
 /**
  * The composer, on ai-elements' prompt-input: words, files (photos, documents, video, dropped or pasted anywhere), a
- * voice message (transcribed here, sent as words with its audio), send; Stop while the agent works. One quiet menu holds the rest. In a group it says who
- * a message goes to.
+ * voice message (transcribed here, sent as words with its audio), send. While the agent works, Stop when the composer is
+ * empty and Send once it holds something: sent then, it steers the turn under way. One quiet menu holds the rest. In a
+ * group it says who a message goes to. Its draft, words and files, is kept per chat until it is sent.
  */
 import { ArrowUpIcon, PaperclipIcon, SquareIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -34,7 +35,7 @@ import type { FileUIPart } from "@/components/ai-elements/types";
 import { cn } from "@/lib/cn";
 import { slashQuery } from "../../../src/core/skill-tokens.ts";
 import { localPreview, type Preview } from "../lib/api.ts";
-import { readDraft, saveDraft } from "../lib/drafts.ts";
+import { readDraft, readDraftFiles, saveDraft, saveDraftFiles } from "../lib/drafts.ts";
 import { mentionQuery } from "../lib/mentions.ts";
 import { Face } from "./Face.tsx";
 import type { SkillSummary } from "./Skill.tsx";
@@ -143,13 +144,7 @@ export function Composer({
 								<SpeechInput variant="ghost" size="icon-sm" aria-label="Record a voice message" />
 							) : null}
 							{state === "working" ? (
-								<PromptInputSubmit
-									status="streaming"
-									onStop={onStop ?? (() => {})}
-									className="rounded-full bg-ink text-paper hover:bg-ink/85"
-								>
-									<SquareIcon className="size-3.5 fill-current" />
-								</PromptInputSubmit>
+								<SendOrStop shown={files.length} onStop={onStop} />
 							) : (
 								<PromptInputSubmit className="rounded-full bg-ink text-paper hover:bg-ink/85" aria-label="Send">
 									<ArrowUpIcon className="size-4" />
@@ -169,13 +164,57 @@ export function Composer({
 	);
 }
 
-/** The words as they stand, kept for the chat; sent, the composer empties and the draft goes with it. */
+/**
+ * While the agent works: Stop with nothing written, Send once there are words or files. Sent then, the message steers
+ * the turn under way (DESIGN.md "Queue"), so writing never has to wait for the agent or stop it first.
+ */
+function SendOrStop({ shown, onStop }: { shown: number; onStop?: (() => void) | undefined }) {
+	const { textInput, attachments } = usePromptInputController();
+	const empty = textInput.value.trim() === "" && attachments.files.length === 0 && shown === 0;
+	return empty ? (
+		<PromptInputSubmit
+			status="streaming"
+			onStop={onStop ?? (() => {})}
+			className="rounded-full bg-ink text-paper hover:bg-ink/85"
+		>
+			<SquareIcon className="size-3.5 fill-current" />
+		</PromptInputSubmit>
+	) : (
+		<PromptInputSubmit className="rounded-full bg-ink text-paper hover:bg-ink/85" aria-label="Send">
+			<ArrowUpIcon className="size-4" />
+		</PromptInputSubmit>
+	);
+}
+
+/**
+ * The draft as it stands, kept for the chat: its words, and its files, put back as the composer opens. Sent, the
+ * composer empties and the draft goes with it.
+ */
 function KeepDraft({ chat }: { chat: string }) {
-	const { textInput } = usePromptInputController();
+	const { textInput, attachments } = usePromptInputController();
 	const text = textInput.value;
 	useEffect(() => {
 		saveDraft(chat, text);
 	}, [chat, text]);
+	// the files kept are put back before any is saved, so an empty composer opening never forgets them
+	const [restored, setRestored] = useState(false);
+	const add = useRef(attachments.add);
+	add.current = attachments.add;
+	useEffect(() => {
+		let gone = false;
+		void readDraftFiles(chat).then((files) => {
+			if (gone) return;
+			if (files.length > 0) add.current(files);
+			setRestored(true);
+		});
+		return () => {
+			gone = true;
+		};
+	}, [chat]);
+	const parts = attachments.files;
+	useEffect(() => {
+		if (restored) void saveDraftFiles(chat, () => Promise.all(parts.map((part) => fileOf(part))));
+	}, [restored, chat, parts]);
 	return null;
 }
 
@@ -188,7 +227,11 @@ function GroupHint({ members }: { members: readonly Who[] }) {
 	);
 	return (
 		<p className="px-3 text-meta text-ink-2">
-			{named.length === 0 ? "To everyone · @ to pick one" : `To ${named.map((member) => member.name).join(" and ")}`}
+			{members.length === 0
+				? "Nobody is in it yet · add agents from its panel"
+				: named.length === 0
+					? "To everyone · @ to pick one"
+					: `To ${named.map((member) => member.name).join(" and ")}`}
 		</p>
 	);
 }
@@ -481,7 +524,13 @@ function Attached({ shown }: { shown: readonly (FileUIPart & { id: string })[] }
 		<PromptInputHeader>
 			<Attachments variant="inline" className="px-1 pt-1">
 				{all.map((file) => (
-					<Attachment key={file.id} data={file} onRemove={() => remove(file.id)} className="max-w-full">
+					<Attachment
+						key={file.id}
+						data={file}
+						data-attachment={file.filename}
+						onRemove={() => remove(file.id)}
+						className="max-w-full"
+					>
 						<AttachmentPreview />
 						<AttachmentInfo />
 						<Glimpse part={file} />

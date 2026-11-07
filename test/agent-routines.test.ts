@@ -71,13 +71,18 @@ describe("a permanent agent's routines", () => {
 			const react = fauxAssistantMessage([fauxToolCall("message_user", { reaction: "👍" })], {
 				stopReason: "toolUse",
 			});
-			if (last?.role === "toolResult") {
+			if (last?.role === "toolResult" && last.toolName !== "tool_search") {
 				if (last.toolName === "message_user") return fauxAssistantMessage("done");
 
 				return react;
 			}
-			const plan = plans[text];
+			const input = [...ctx.messages].reverse().find((message) => message.role === "user");
+			const plan = plans[textOf(input?.content)];
 			if (plan === undefined) return react;
+			if (!toolsOf(ctx).includes(plan[0]))
+				return fauxAssistantMessage([fauxToolCall("tool_search", { query: plan[0], limit: 1 })], {
+					stopReason: "toolUse",
+				});
 			return fauxAssistantMessage([fauxToolCall(plan[0], plan[1] as never)], { stopReason: "toolUse" });
 		};
 		faux.setResponses(Array.from({ length: 200 }, () => respond as never));
@@ -112,17 +117,8 @@ describe("a permanent agent's routines", () => {
 			const researcher = await until(async () =>
 				requests.find((request) => request.prompt.includes("RESEARCHER INSTRUCTIONS")),
 			);
-			expect(researcher.tools).toEqual(
-				expect.arrayContaining([
-					"schedule",
-					"read",
-					"message_agent",
-					"read_agent_chat",
-					"propose_agent",
-					"propose_group",
-					"propose_agent_change",
-				]),
-			);
+			expect(researcher.tools).toEqual(expect.arrayContaining(["read", "message_user", "tool_search"]));
+			expect(researcher.tools).not.toContain("schedule");
 			for (const tool of ["propose_identity", "propose_preference", "bash"])
 				expect(researcher.tools, tool).not.toContain(tool);
 			await allowAndRun("daily-digest");

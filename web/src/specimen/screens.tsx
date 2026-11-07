@@ -1,6 +1,6 @@
 /** Whole screens: the app on the desktop and the phone, first run, the first chat, a group. */
 import { CalendarClockIcon } from "lucide-react";
-import { type ReactNode, useContext } from "react";
+import { type ReactNode, useContext, useState } from "react";
 import { AgentMessage } from "../chat/AgentMessage.tsx";
 import { ApprovalCard, Facts, WaitingPill } from "../chat/Approval.tsx";
 import { ViewCard } from "../chat/Cards.tsx";
@@ -9,19 +9,21 @@ import { ConnectCard } from "../chat/Connect.tsx";
 import type { FaceState } from "../chat/Face.tsx";
 import { Bubble, DaySeparator, Mention, Run, UnreadDivider } from "../chat/Feed.tsx";
 import { ImageFile } from "../chat/Files.tsx";
+import { BringBlock, type BringHarness, FirstBring, pickKey } from "../chat/FirstBring.tsx";
 import { Starters } from "../chat/FirstRun.tsx";
 import { FirstSkills } from "../chat/FirstSkills.tsx";
-import { Header, workingWords } from "../chat/Header.tsx";
+import { HEADER_CLEARANCE, Header, workingWords } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { PullRequestCard } from "../chat/Object.tsx";
 import { ProposalCard } from "../chat/Proposal.tsx";
-import type { Who } from "../chat/Row.tsx";
+import { RowActions, type RowView, type Who } from "../chat/Row.tsx";
 import { VoiceMessage } from "../chat/Voice.tsx";
 import { Band, FirstRun } from "./brand.tsx";
 import {
 	ATLAS,
 	MARA,
 	OCTO,
+	OTTO,
 	PAGE,
 	PHOTO,
 	PR,
@@ -43,6 +45,7 @@ export function ChatScreen({
 	group = false,
 	pill,
 	keyboard = false,
+	panelOpen = false,
 	children,
 }: {
 	name: string;
@@ -53,15 +56,25 @@ export function ChatScreen({
 	pill?: string;
 	/** The phone's keyboard is up: the composer and the pill ride on it. */
 	keyboard?: boolean;
+	/** The panel is open beside it: its toggle shows pressed. */
+	panelOpen?: boolean;
 	children: ReactNode;
 }) {
 	const { width } = useContext(StageContext);
 	const phone = width === "phone";
 	return (
-		<div className="flex min-w-0 flex-1 flex-col bg-paper">
-			<Header name={name} faces={faces} doing={doing} state={state ?? "idle"} phone={phone} />
-			<div className="min-h-0 flex-1 overflow-y-auto">
-				<div className="mx-auto flex max-w-[44rem] flex-col gap-4 px-4 py-5">{children}</div>
+		<div className="feed-scope relative flex min-w-0 flex-1 flex-col bg-paper">
+			<Header
+				name={name}
+				faces={faces}
+				doing={doing}
+				state={state ?? "idle"}
+				phone={phone}
+				panelOpen={panelOpen}
+				onPanel={() => {}}
+			/>
+			<div className="feed-scroll min-h-0 flex-1 overflow-y-auto">
+				<div className={`mx-auto flex max-w-[44rem] flex-col gap-4 px-4 pb-5 ${HEADER_CLEARANCE}`}>{children}</div>
 			</div>
 			<div className="mx-auto flex w-full max-w-[44rem] flex-col items-center gap-2 px-3 pb-3">
 				{pill === undefined ? null : <WaitingPill ask={pill} />}
@@ -96,9 +109,9 @@ function Keyboard() {
 	);
 }
 
-export function MaraChat({ keyboard = false }: { keyboard?: boolean } = {}) {
+export function MaraChat({ keyboard = false, panelOpen = false }: { keyboard?: boolean; panelOpen?: boolean } = {}) {
 	return (
-		<ChatScreen name="Mara" faces={[MARA]} pill="book the 9:15 to Lisbon?" keyboard={keyboard}>
+		<ChatScreen name="Mara" faces={[MARA]} pill="book the 9:15 to Lisbon?" keyboard={keyboard} panelOpen={panelOpen}>
 			<DaySeparator>Today</DaySeparator>
 			<Run time="10:20">
 				<VoiceMessage mine duration="0:05" segments={VOICE} />
@@ -238,6 +251,44 @@ function AgentToolsChat() {
 	);
 }
 
+/** The band's rows and groups of every size, two members to five, one with a long name: what flies when pinned. */
+const PIN_ROWS: readonly RowView[] = [
+	...ROWS,
+	{ id: "weekend", name: "Weekend", faces: [MARA, ATLAS, OTTO], excerpt: "Otto: Market opens at 9.", time: "Sat" },
+	{
+		id: "launch",
+		name: "Launch",
+		faces: [OCTO, ATLAS, OTTO, SANCHO],
+		excerpt: "Atlas: The post is drafted.",
+		time: "Fri",
+		unread: 3,
+	},
+	{
+		id: "everyone",
+		name: "Everyone in the band",
+		faces: [SANCHO, MARA, OCTO, ATLAS, OTTO],
+		excerpt: "Sancho: Morning, all.",
+		time: "Thu",
+	},
+];
+
+/** The band as the owner would use it: pin and unpin, and watch the face fly; Sancho pinned from the start. */
+function PinnableBand({ phone }: { phone: boolean }) {
+	const [pinned, setPinned] = useState<readonly string[]>(["sancho", "mara"]);
+	return (
+		<Band
+			rows={PIN_ROWS}
+			pinned={pinned}
+			phone={phone}
+			selected="mara"
+			onPin={(id, on) =>
+				setPinned((was) => (on ? [...was.filter((each) => each !== id), id] : was.filter((each) => each !== id)))
+			}
+			{...(phone ? { className: "w-full" } : {})}
+		/>
+	);
+}
+
 export function Screens() {
 	const { width } = useContext(StageContext);
 	const phone = width === "phone";
@@ -246,12 +297,63 @@ export function Screens() {
 			<Section
 				id="app"
 				title="The app"
-				note="The band and a chat. On the phone, the band is the first screen and a chat opens over it."
+				note="The band and a chat, the panel closed: the face and the name float centred over the feed, which scrolls beneath them. On the phone, the band is the first screen and a chat opens over it."
 				bleed
 			>
-				{phone ? <Band rows={ROWS} className="w-full" /> : <Band rows={ROWS} selected="mara" />}
+				{phone ? (
+					<Band rows={ROWS} pinned={["sancho"]} className="w-full" />
+				) : (
+					<Band rows={ROWS} pinned={["sancho"]} selected="mara" />
+				)}
 				{phone ? null : <MaraChat />}
 			</Section>
+			<Section
+				id="pinned"
+				title="Pinned"
+				note="Pinned agents and groups sit above every conversation as tiles of the same size, three to a row, and leave the list. Past three the row scrolls sideways, the next tile peeking in. What a tile wants of you shows in one place, at its face's foot: the unread count, or a dot while it waits on you. Sancho is pinned from the start. Pins are kept in band.json at the workspace root, typed by its schema. Try it: pin a row and its face grows and flies to the top row, which scrolls to it; unpin and it flies back. Hover a row or a tile for its pin, at the top right; on the phone, long-press."
+				bleed
+			>
+				<PinnableBand phone={phone} />
+				{phone ? null : <Band rows={ROWS} pinned={["sancho", "mara", "octo"]} revealed="atlas" onPin={() => {}} />}
+				{phone ? null : (
+					<Band rows={ROWS} pinned={["sancho", "mara", "octo", "trip", "atlas"]} revealed="mara" onPin={() => {}} />
+				)}
+			</Section>
+			<Section
+				id="pinned-alignment"
+				title="Pinned: left or centred"
+				note="The same band with one, two and three pins: left-aligned (the default) on the left, centred on the right. From three on they are the same."
+				bleed
+			>
+				<div className="flex w-full flex-col gap-3">
+					{[["sancho"], ["sancho", "mara"], ["sancho", "mara", "octo"]].map((pins) => (
+						<div key={pins.length} className="flex gap-3">
+							<div className="h-40 overflow-hidden rounded-card">
+								<Band rows={ROWS} pinned={pins} />
+							</div>
+							<div className="h-40 overflow-hidden rounded-card">
+								<Band rows={ROWS} pinned={pins} centred />
+							</div>
+						</div>
+					))}
+				</div>
+			</Section>
+			{phone ? (
+				<Section
+					id="pinned-hold"
+					title="Pinning on the phone"
+					note="A long press on a row or a tile opens a sheet with its face, its name and the one thing to do."
+					bleed
+				>
+					<div className="relative flex w-full flex-col">
+						<Band rows={ROWS} pinned={["sancho"]} className="w-full" />
+						<div aria-hidden="true" className="absolute inset-0 bg-black/40" />
+						<div className="absolute inset-x-0 bottom-0 rounded-t-tile bg-paper shadow-lg">
+							{ROWS[1] === undefined ? null : <RowActions row={ROWS[1]} pinned={false} />}
+						</div>
+					</div>
+				</Section>
+			) : null}
 			{phone ? (
 				<Section id="app-chat" title="A chat on the phone" bleed>
 					<MaraChat />
@@ -308,12 +410,38 @@ export function Screens() {
 			<Section
 				id="first-skills"
 				title="First run: skills"
-				note="Right after the provider, once: the skills banda ships, each with a switch. One already there stays."
+				note="Right after the provider, once, when the owner brought nothing of their own: the skills banda ships, each with a switch. One already there stays."
 				bleed
 			>
 				<div className="flex-1">
 					<FirstSkills skills={SKILL_OFFERS} picked={new Set(["bro", "catch-me-up"])} />
 				</div>
+			</Section>
+			<Section
+				id="first-bring"
+				title="First run: bring your own"
+				note="In the desktop app, in place of banda's skills when other harnesses are here: pick harnesses, see what comes along, leave any of it behind. Start fresh goes to banda's skills."
+				bleed
+			>
+				<div className="flex-1">
+					<FirstBring
+						harnesses={BRING_HARNESSES}
+						picked={new Set(["claude-code", "codex"])}
+						left={new Set([pickKey("skills", "motion-brief")])}
+					/>
+				</div>
+			</Section>
+			<Section
+				id="bring-settings"
+				title="Settings: bring skills and agents"
+				note="Settings → Agents, on the desktop: the same picker, any time; what came in last under the button."
+			>
+				<BringBlock
+					harnesses={BRING_HARNESSES}
+					picked={new Set(["codex"])}
+					left={new Set()}
+					done="3 skills and 1 agent"
+				/>
 			</Section>
 			<Section
 				id="first-run-signing-in"
@@ -402,3 +530,32 @@ export function Screens() {
 		</>
 	);
 }
+
+const BRING_HARNESSES: readonly BringHarness[] = [
+	{
+		name: "claude-code",
+		service: "Claude Code",
+		folder: "~/.claude",
+		provider: "anthropic",
+		connect: { install: "npm install -g @agentclientprotocol/claude-agent-acp@0.100.0" },
+		skills: [
+			{ name: "shadcn", about: "Manages shadcn components and projects.", added: false },
+			{ name: "motion-brief", about: "Turn a motion idea into a brief.", added: false },
+			{ name: "bro", about: "Say that again, in plain words.", added: true },
+			{ name: "My_Notes", about: "", added: false, problem: "Its folder's name is not a skill name banda takes." },
+		],
+		agents: [{ name: "code-reviewer", about: "Reviews a diff for bugs before it lands.", added: false }],
+	},
+	{
+		name: "codex",
+		service: "Codex",
+		folder: "~/.codex",
+		provider: "openai",
+		connect: "ready",
+		skills: [
+			{ name: "shadcn", about: "Manages shadcn components and projects.", added: false },
+			{ name: "openai-docs", about: "Look up OpenAI's API docs.", added: false },
+		],
+		agents: [],
+	},
+];

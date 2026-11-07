@@ -2,19 +2,29 @@
  * Groups in the app (DESIGN.md "Groups"): the groups as the daemon last pushed them, and the owner's calls: make one,
  * post to it (asking the agents mentioned to work), read it, stop its work.
  */
-import { api, type GroupRow, type GroupView, type PostedFile } from "../lib/api.ts";
+import { api, type GroupLimitsView, type GroupRow, type GroupView, type PostedFile } from "../lib/api.ts";
 import type { ShellHandlers } from "../lib/shell.ts";
 
 declare module "../lib/shell.ts" {
 	interface Shell {
 		/** Every group, newest message first; undefined until the daemon said. */
 		readonly groups?: readonly GroupRow[];
+		/** The owner's limits on every group, from Settings. */
+		readonly groupLimits?: GroupLimitsView;
 	}
 }
 
 export const shell: ShellHandlers = {
-	groups: (event) => ({ groups: event.groups }),
+	groups: (event) => ({ groups: event.groups, groupLimits: event.limits }),
 };
+
+/** Archive group `room`, or restore it. The group as it is after. */
+export const archiveGroup = (room: number, archived: boolean) =>
+	api<GroupView>(`/groups/${room}/archive`, { method: "POST", body: JSON.stringify({ archived }) });
+
+/** Set some of the owner's limits on every group; all of them as they are after, or rejects with why. */
+export const setGroupLimits = (limits: Partial<GroupLimitsView>) =>
+	api<GroupLimitsView>("/groups/limits", { method: "PUT", body: JSON.stringify(limits) });
 
 /** A new group of these agents; its room. */
 export const createGroup = (members: readonly string[], name?: string) =>

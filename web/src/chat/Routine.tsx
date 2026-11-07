@@ -3,6 +3,7 @@
  * one verb and a quiet no), since a routine runs on its own once allowed. A change shows what it becomes; a removal
  * asks to stop it.
  */
+import { CheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Facts } from "./Approval.tsx";
 import { Tile } from "./Cards.tsx";
@@ -23,8 +24,11 @@ export function RoutineProposal({
 	routine,
 	onAllow,
 	onDecline,
+	settled,
 }: {
 	routine: RoutineProposalView;
+	/** Answered: the result in words ("Set up · 9:12") in place of the buttons. */
+	settled?: string | undefined;
 	onAllow?: () => void;
 	onDecline?: () => void;
 }) {
@@ -52,14 +56,21 @@ export function RoutineProposal({
 					? "It stops waking; what it said stays in the chat."
 					: `It wakes ${routine.agent} on its own; what it finds lands here, and it stays quiet when nothing does.`}
 			</p>
-			<span className="flex items-center gap-2">
-				<Button onClick={onAllow}>
-					{kind === "removed" ? "Stop it" : kind === "changed" ? "Change it" : "Set it up"}
-				</Button>
-				<Button variant="ghost" onClick={onDecline}>
-					{kind === "removed" ? "Keep it" : "Don't"}
-				</Button>
-			</span>
+			{settled !== undefined ? (
+				<span className="flex min-h-9 items-center gap-1.5 text-ui text-ink-2">
+					<CheckIcon className="size-4 text-alive" />
+					{settled}
+				</span>
+			) : (
+				<span className="flex items-center gap-2">
+					<Button onClick={onAllow}>
+						{kind === "removed" ? "Stop it" : kind === "changed" ? "Change it" : "Set it up"}
+					</Button>
+					<Button variant="ghost" onClick={onDecline}>
+						{kind === "removed" ? "Keep it" : "Don't"}
+					</Button>
+				</span>
+			)}
 		</Tile>
 	);
 }

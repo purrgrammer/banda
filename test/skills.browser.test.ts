@@ -8,14 +8,14 @@ import { expect, it } from "vitest";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { tempHome } from "./helpers.ts";
+import { freePort, tempHome, viteCacheDir } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const button = (label: string) =>
 	`[...document.querySelectorAll('button')].find(el => el.getClientRects().length && el.textContent.trim() === ${JSON.stringify(label)})`;
 async function click(page: Page, selector: string) {
 	try {
-		await page.until(selector, 5_000);
+		await page.until(selector);
 	} catch (error) {
 		throw new Error(
 			`${String(error)}; at ${await page.run("location.hash")}; page: ${String(await page.run("document.body.innerText")).slice(0, 1100)}`,
@@ -54,9 +54,11 @@ for (const width of [390, 1440])
 		const token = (await readDaemonFile(home))!.token!;
 		const server = await createServer({
 			configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
+			cacheDir: await viteCacheDir(),
 			server: {
 				host: "127.0.0.1",
-				port: 0,
+				port: await freePort(),
+				strictPort: true,
 				open: false,
 				proxy: { "/api": { target: base, changeOrigin: true, headers: { origin: base } } },
 			},
@@ -67,17 +69,21 @@ for (const width of [390, 1440])
 			if (!address || typeof address === "string") throw new Error("No app port");
 			await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
 				// first run offers the skills banda ships, once: the owner turns one off and adds the rest
-				await page.until(`document.body.textContent.includes('Skills to start with')`, 12_000);
+				await page.until(`document.body.textContent.includes('Skills to start with')`);
 				await click(page, `document.querySelector('#first-skill-unslop')`);
 				expect(await page.run(`document.querySelector('#first-skill-eggbot')?.getAttribute('aria-checked')`)).toBe(
 					"true",
 				);
 				await click(page, button("Add 5 skills"));
-				await page.until(`!document.body.textContent.includes('Skills to start with')`, 12_000);
+				await page.until(`!document.body.textContent.includes('Skills to start with')`);
 				await page.run(`location.hash='#/skills'`);
-				await click(page, `[...document.querySelectorAll('button')].find(el => el.textContent.includes('5 shared'))`);
-				await page.until(`document.body.textContent.includes('/catch-me-up')`);
-				expect(await page.run(`document.body.textContent.includes('/unslop')`)).toBe(false);
+				// the list is flat and visible: no disclosure to open
+				await page.until(`document.querySelector('[data-skill-list]')?.textContent.includes('/catch-me-up')`);
+				expect(await page.run(`document.querySelector('[data-skill-list]')?.textContent.includes('/unslop')`)).toBe(
+					false,
+				);
+				// the one left off at first run is offered again, from banda
+				await page.until(`document.querySelector('[aria-label="Skills from banda"]')?.textContent.includes('/unslop')`);
 				await page.run(`location.hash='#/a/sancho'`);
 				await page.until(`document.querySelector('textarea[placeholder^="Message "]')`);
 				await page.run(`location.hash='#/skills'`);
@@ -99,7 +105,7 @@ for (const width of [390, 1440])
 					"HTMLTextAreaElement",
 				);
 				await click(page, `document.querySelector('button[aria-label="Send"]')`);
-				await page.until(`document.body.textContent.includes('Loaded /research')`, 30_000);
+				await page.until(`document.body.textContent.includes('Loaded /research')`);
 				expect(await page.run(`document.body.textContent.includes('Cite your sources.')`)).toBe(false);
 				await click(
 					page,
@@ -124,7 +130,7 @@ for (const width of [390, 1440])
 					"---\nname: research\ndescription: Gather sources\n---\n\n# Research\nCheck every source.",
 				);
 				await page.run(`dispatchEvent(new Event('banda.skills-changed'))`);
-				await page.until(`document.body.textContent.includes('A change in the box needs your review')`);
+				await page.until(`document.body.textContent.includes('An agent changed this skill')`);
 				expect(
 					await page.run(`document.querySelector('[data-skill-detail]')?.textContent.includes('Cite your sources.')`),
 				).toBe(true);
@@ -139,7 +145,7 @@ for (const width of [390, 1440])
 					"HTMLTextAreaElement",
 				);
 				await click(page, `document.querySelector('button[aria-label="Send"]')`);
-				await page.until(`document.body.textContent.includes('Loaded /eggbot')`, 30_000);
+				await page.until(`document.body.textContent.includes('Loaded /eggbot')`);
 			});
 		} finally {
 			await server.close();
