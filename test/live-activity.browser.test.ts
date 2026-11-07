@@ -460,3 +460,57 @@ it.skipIf(!hasChrome())(
 	},
 	30000,
 );
+
+it.skipIf(!hasChrome())(
+	"in a group while a member works: Send shows once written, the message joins the room at once, and the draft keeps its file",
+	async () => {
+		gate = new Promise((resolve) => {
+			release = resolve;
+		});
+		entered = false;
+		const field = `document.querySelector('textarea[name="message"]')`;
+		const write = (value: string) =>
+			`(()=>{const el=${field};Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));})()`;
+		const button = (label: string) => `document.querySelector('form button[aria-label="${label}"]')`;
+		const attached = `[...document.querySelectorAll('[data-attachment]')].map(el => el.dataset.attachment)`;
+		try {
+			await withPage(`${base}/#token=${token}`, { width: 390, height: 900 }, async (page) => {
+				await open(page, `#/g/${room}`);
+				await page.until(field);
+				await api(`/groups/${room}/messages`, { key: randomUUID(), text: "GROUP_STEER_LIVE", mentions: ["sancho"] });
+				await until(() => Promise.resolve(entered));
+				// a member at work, nothing written: Stop; words: Send
+				await page.until(`${button("Stop")} && !${button("Send")}`);
+				await page.run(write("GROUP_STEER_NOTE"));
+				await page.until(`${button("Send")} && !${button("Stop")}`);
+				// the draft, words and a file, survives a reload
+				await page.run(`(() => {
+					const input = document.querySelector('input[type="file"]');
+					const files = new DataTransfer();
+					files.items.add(new File(["seat 12A"], "group-notes.txt", { type: "text/plain" }));
+					input.files = files.files;
+					input.dispatchEvent(new Event("change", { bubbles: true }));
+				})()`);
+				await page.until(`${attached}.includes('group-notes.txt')`);
+				await new Promise((resolve) => setTimeout(resolve, 500));
+				await page.run(`location.reload()`);
+				await page.until(`${field}?.value === 'GROUP_STEER_NOTE'`);
+				await page.until(`${attached}.includes('group-notes.txt')`);
+				// sent while the member works: in the room at once, the composer empty, Stop back
+				await page.run(`${button("Send")}.click()`);
+				await page.until(
+					`[...document.querySelectorAll('[data-entry]')].some(el => el.textContent.includes('GROUP_STEER_NOTE'))`,
+				);
+				await page.until(`${field}.value === '' && ${attached}.length === 0 && ${button("Stop")}`);
+				release();
+				gate = undefined;
+				expect(await page.run(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
+				expect(page.errors()).toEqual([]);
+			});
+		} finally {
+			release();
+			gate = undefined;
+		}
+	},
+	30000,
+);
