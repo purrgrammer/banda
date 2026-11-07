@@ -1128,6 +1128,8 @@ export function openCapabilities(options: CapabilityOptions) {
 		ctx: Context,
 		given?: string,
 		used: ReadonlySet<string> = new Set(),
+		/** The daemon's own words (a built-in API's), not a server's: each listing's are the current build's. */
+		own = false,
 	): Promise<boolean> {
 		// what a server echoes of a credential never reaches the model, its notes included: scrubbed, then bounded
 		const known = [...used, ...(await secrets(home))];
@@ -1149,13 +1151,15 @@ export function openCapabilities(options: CapabilityOptions) {
 			const was = doc.connections[name];
 			const proposed = listedOf(listed);
 			const fresh = was?.sha === sha ? Object.keys(proposed).filter((tool) => !Object.hasOwn(was.tools, tool)) : [];
-			// A relisting may remove a tool, but never rewrite the prompt authority of an existing one.
-			const tools = Object.fromEntries(
-				Object.entries(proposed).map(([tool, shape]) => [
-					tool,
-					(was?.sha === sha && Object.hasOwn(was.tools, tool) ? was.tools[tool] : undefined) ?? shape,
-				]),
-			);
+			// A server's relisting may remove a tool, but never rewrite the prompt authority of an existing one.
+			const tools = own
+				? proposed
+				: Object.fromEntries(
+						Object.entries(proposed).map(([tool, shape]) => [
+							tool,
+							(was?.sha === sha && Object.hasOwn(was.tools, tool) ? was.tools[tool] : undefined) ?? shape,
+						]),
+					);
 			// notes too are kept as first listed for this file, on the tool chosen then to carry them: a relisting never
 			// rewrites what the model was told, and switching other tools never moves them from one description to another
 			const same = was?.sha === sha;
@@ -1208,7 +1212,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		if (signsIn(connection) && account === undefined) return;
 		if (connection.api !== undefined) {
 			fault("connect:listed");
-			await keepListing(name, connection.sha, REST_APIS[connection.api].tools, ctx);
+			await keepListing(name, connection.sha, REST_APIS[connection.api].tools, ctx, undefined, new Set(), true);
 			problems.delete(name);
 			options.changed?.();
 			return;
@@ -1261,7 +1265,13 @@ export function openCapabilities(options: CapabilityOptions) {
 				const name = /^connections\/(.+)\.md$/.exec(path)?.[1];
 				if (name === undefined) continue;
 				const connection = await acceptedConnection(tx, name);
-				if (connection?.url !== undefined && connections[name]?.sha !== connection.sha) names.push(name);
+				// a built-in API's tools are this daemon's own: listed again at every start, so a new build's words reach
+				// the model without the file changing
+				if (
+					connection?.url !== undefined &&
+					(connections[name]?.sha !== connection.sha || connection.api !== undefined)
+				)
+					names.push(name);
 			}
 			return names;
 		}, ctx);

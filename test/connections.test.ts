@@ -1161,6 +1161,28 @@ describe("Google accounts", () => {
 		return { page, done };
 	};
 
+	it("a built-in API's tools are listed again at every start, so a new build's words reach the model", async () => {
+		const g = google();
+		const s = await open(undefined, SHIPPED, false, g.fetcher);
+		await s.capabilities.addShipped("gmail");
+		await signInAs(s, g, "alice@example.test");
+		const words = async () =>
+			s.harness.commit(
+				async (tx) =>
+					Object.values((await tx.doc(Connected)).connections.gmail?.tools ?? {}).map((tool) => tool.description),
+				context,
+			);
+		expect(await words()).not.toContain("stale words");
+		// an older build listed other words; the file is the same
+		await s.harness.commit(async (tx) => {
+			const listed = (await tx.doc(Connected)).connections.gmail;
+			for (const tool of Object.values(listed?.tools ?? {})) tool.description = "stale words";
+		}, context);
+		expect(await words()).toContain("stale words");
+		await s.capabilities.reconcile();
+		expect(await words()).not.toContain("stale words");
+	});
+
 	it("ask for each account's own scopes; a sign-in again offers that account first and says when it was another", async () => {
 		const g = google();
 		const s = await open(undefined, SHIPPED, false, g.fetcher);
