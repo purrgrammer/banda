@@ -31,7 +31,16 @@ import {
 import { log } from "./activity.ts";
 import { Accepted, AGENT_NAME, agentWords, ChatAgent, frontmatter, isArchived, LEAD, shaOf } from "./agents.ts";
 import { acceptedConnection, accountsOn, Connected, type Connection, signsIn } from "./connections.ts";
-import { endedBy, type Follow, type Item, type Json, lookEvery, reading as readingOf, sort } from "./follow.ts";
+import {
+	canonical,
+	endedBy,
+	type Follow,
+	type Item,
+	type Json,
+	lookEvery,
+	reading as readingOf,
+	sort,
+} from "./follow.ts";
 import { objectAccess } from "./object-access.ts";
 import {
 	cardOf,
@@ -146,6 +155,8 @@ export type WatchRecord = {
 	/** When it last looked, and when it looks next. */
 	looked?: number;
 	next?: number;
+	/** Its cursor on the followed object's readings: the version it last diffed to; unset before its baseline. */
+	seen?: number;
 	/** The newest changes it saw, in the kind's words, and when. */
 	saw?: string[];
 	sawAt?: number;
@@ -188,9 +199,24 @@ export type FollowedReading = {
 	answers: Item;
 	at: number;
 	source: string;
-	/** Counts the looks kept: a look that read against an older reading keeps nothing. */
+	/** Counts the readings that differed: the newest's number, which each watch's cursor (`seen`) names. */
 	version: number;
+	/**
+	 * The readings before the newest, oldest first, at most `EARLIER_KEPT`: what a watch that last looked at one of
+	 * them diffs from. One that fell off diffs from the oldest kept, so it sees every change since, coarser.
+	 */
+	earlier?: { version: number; answers: Item }[];
 };
+
+/** How many earlier readings of a followed object are kept beside the newest. */
+export const EARLIER_KEPT = 3;
+
+/** The reading of `kept` at `version`: the newest, an earlier one, or, when that fell off, the oldest kept. */
+export function readingAt(kept: FollowedReading, version: number): Item {
+	if (version >= kept.version) return kept.answers;
+	const earlier = kept.earlier ?? [];
+	return earlier.find((each) => each.version === version)?.answers ?? earlier[0]?.answers ?? kept.answers;
+}
 
 /** The followed objects' readings, by (connection, account, object): the key `Readings` uses. */
 export const Followed = defineDoc<{ objects: { [key: string]: FollowedReading } }>({
@@ -335,8 +361,8 @@ type Resolved = {
 	readonly stamp: string;
 	readonly source: string;
 	readonly reads: { readonly [as: string]: ObjectRead };
-	/** The version of the reading kept, which the look's commit must still find. */
-	readonly version: number;
+	/** The watch's cursor as resolved, which the look's commit must still find: another look moved it, keep nothing. */
+	readonly seen: number | undefined;
 };
 
 export type WatchesOptions = {
@@ -401,13 +427,16 @@ export function defineWatches(options: WatchesOptions) {
 		const found = await followed(tx, watch.object);
 		if (found === undefined) return { why: "no connection follows that link" };
 		const { ref, kind, connection } = found;
+		// a file's `until` the kind has no end for would never end: said, not waited on
+		if (watch.until !== undefined && kind.follow.ends[watch.until] === undefined)
+			return { why: `"until: ${watch.until}" is none of its ends: ${Object.keys(kind.follow.ends).join(", ")}` };
 		const picked = await accountFor(tx, agent, connection, watch.account);
 		if ("refused" in picked) return { why: picked.refused };
 		const access = await objectAccess(tx, chat, ref, picked.account);
 		if (access === undefined)
 			return { why: `${connection.service} is not connected for ${await agentWords(tx, agent)}` };
 		const key = readingKey(picked.account, refKey(ref, connection.objects ?? {}));
-		const version = (await tx.doc(Followed)).objects[key]?.version ?? 0;
+		const seen = record.seen;
 		Object.assign(record, {
 			key,
 			ref: refKey(ref, connection.objects ?? {}),
@@ -432,7 +461,7 @@ export function defineWatches(options: WatchesOptions) {
 			stamp: access.stamp,
 			source: access.source,
 			reads: access.reads,
-			version,
+			seen,
 		};
 	}
 
@@ -455,7 +484,7 @@ export function defineWatches(options: WatchesOptions) {
 			resolved = found;
 		});
 		if (resolved === undefined) return why === "gone" ? { outcome: "gone" } : { outcome: "failed", why: why ?? "" };
-		const { watch, chat, ref, kind, connection, account, me, key, stamp, source, reads, version } = resolved;
+		const { watch, chat, ref, kind, connection, account, me, key, stamp, source, reads, seen } = resolved;
 		if (options.read === undefined) return await failing("banda cannot read for a watch here");
 		const answers: Item = {};
 		let failed: string | undefined;
@@ -503,9 +532,10 @@ export function defineWatches(options: WatchesOptions) {
 				record.failed = { at: now, why: outcome.why };
 				return;
 			}
+			// another look of this watch moved its cursor meanwhile: it read against an older cursor, so keep nothing
+			if (record.seen !== seen) return;
 			const doc = await tx.doc(Followed);
 			const kept = doc.objects[key];
-			if ((kept?.version ?? 0) !== version) return;
 			const after = readingOf(kind.follow, answers);
 			const every = lookEvery(kind.follow, after);
 			let card: ReturnType<typeof cardOf> | undefined;
@@ -519,18 +549,42 @@ export function defineWatches(options: WatchesOptions) {
 			delete record.failed;
 			record.looked = now;
 			record.next = now + every;
-			if (kept === undefined) {
-				doc.objects[key] = { answers: after, at: now, source, version: 1 };
+			// one reading per object, kept with the few before it; a reading the same as the newest is no new version
+			const same = kept !== undefined && canonical(kept.answers) === canonical(after);
+			const version = kept === undefined ? 1 : same ? kept.version : kept.version + 1;
+			if (kept === undefined) doc.objects[key] = { answers: after, at: now, source, version };
+			else if (same) Object.assign(kept, { at: now, source });
+			else {
+				const earlier = [...(kept.earlier ?? []), { version: kept.version, answers: kept.answers }].slice(
+					-EARLIER_KEPT,
+				);
+				doc.objects[key] = { answers: after, at: now, source, version, earlier };
+			}
+			// the owner's click is taken in the commit that keeps what it looked at: a kill before leaves it to look again
+			const taken = async () => {
+				if (click === undefined) return;
+				record.checked = [...(record.checked ?? []).slice(-(CHECKED_KEPT - 1)), click];
+				await log(tx, { at: now, watch: name, what: "You checked it now" });
+			};
+			if (seen === undefined) {
+				// the watch's first look is its baseline: only what changes after it is a change, whoever else follows
+				record.seen = version;
+				await taken();
 				outcome = { outcome: "baseline" };
 				return;
 			}
-			const sorted = sort(kind.follow, me, kept.answers, after);
+			record.seen = version;
+			if (kept === undefined || (same && seen === version)) {
+				await taken();
+				outcome = { outcome: "looked", changes: [] };
+				return;
+			}
+			const sorted = sort(kind.follow, me, readingAt(kept, seen), after);
 			const wake = sorted.filter((each) => each.does === "wake");
 			const tell = sorted.filter((each) => each.does === "tell");
 			const ended = endedBy(kind.follow, watch.until, after);
 			const changes = [...new Set([...wake, ...tell].map((each) => each.says))];
 			if (ended !== undefined && changes.length === 0) changes.push(ended);
-			doc.objects[key] = { answers: after, at: now, source, version: kept.version + 1 };
 			const label = (await tx.doc(Connected)).accounts[connection.name]?.[account]?.id;
 			const data: WatchWakeData = {
 				watch: name,
@@ -570,11 +624,7 @@ export function defineWatches(options: WatchesOptions) {
 				record.done = { at: now, why: ended };
 				await log(tx, { at: now, watch: name, what: `done: ${ended}` });
 			}
-			// the owner's click is taken in the commit that keeps what it looked at: a kill before leaves it to look again
-			if (click !== undefined) {
-				record.checked = [...(record.checked ?? []).slice(-(CHECKED_KEPT - 1)), click];
-				await log(tx, { at: now, watch: name, what: "You checked it now" });
-			}
+			await taken();
 			outcome = { outcome: "looked", changes, ...(ended === undefined ? {} : { ended }) };
 		});
 		return outcome;
@@ -675,6 +725,10 @@ export function defineWatches(options: WatchesOptions) {
 				delete record.task;
 			};
 			for (const [name, record] of Object.entries(watches)) if (!names.includes(name)) drop(name, record);
+			// a followed object's readings live while an accepted watch holds them
+			const held = new Set(names.map((name) => watches[name]?.key).filter((key) => key !== undefined));
+			const followed = await tx.doc(Followed);
+			for (const key of Object.keys(followed.objects)) if (!held.has(key)) delete followed.objects[key];
 			for (const name of names) {
 				const watch = await acceptedWatch(tx, name);
 				watches[name] ??= {};
@@ -735,7 +789,10 @@ export function defineWatches(options: WatchesOptions) {
 			return "looking" as const;
 		}, ctx);
 		if (vetted === "already") return { outcome: "already" };
-		const looked = await look(name, now(), (fn) => harness.commit(fn, ctx), ctx, key);
+		// the task's own look may move the cursor while the click's look reads: the click looks again, never dropped
+		let looked: Looked = { outcome: "raced" };
+		for (let attempt = 0; attempt < 3 && looked.outcome === "raced"; attempt++)
+			looked = await look(name, now(), (fn) => harness.commit(fn, ctx), ctx, key);
 		// a look that ended the watch leaves its task nothing to do
 		if (looked.outcome === "looked" && looked.ended !== undefined) await reconcile(harness, now(), ctx);
 		return looked;

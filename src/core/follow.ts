@@ -236,27 +236,44 @@ const pathText = (path: Path) =>
 /** A change in plain words when no rule says it: `new reviews[12]`, `pr.state: open → closed`. */
 export function changeWords(change: Change): string {
 	const at = pathText(change.path);
-	if (change.kind === "added") return `new ${at}`;
-	if (change.kind === "removed") return `gone ${at}`;
-	return `${at}: ${quote(change.from)} → ${quote(change.to)}`;
+	if (change.kind === "added") return plainWords(`new ${at}`);
+	if (change.kind === "removed") return plainWords(`gone ${at}`);
+	return plainWords(`${at}: ${quote(change.from)} → ${quote(change.to)}`);
 }
 
 /** The value at a dotted path of `value`. */
 const at = (value: Json | undefined, path: string): Json | undefined =>
 	path.split(".").reduce<Json | undefined>((v, part) => (object(v) ? v[part] : undefined), value);
 
-/** A rule's words for a change: each `{path}` from the item (or `{to}`, `{from}`), said as `words` say. */
+/** The most characters a change's words may have, whatever the service put in a value. */
+export const SAID = 200;
+
+/**
+ * A change's words as one plain line: what the service put in a value is foreign, so no control or invisible
+ * characters reach the chat's line or the model's input, one space for each run of spaces, bounded.
+ */
+export function plainWords(text: string, max = SAID): string {
+	const visible = text
+		.normalize("NFKC")
+		.replace(/[\p{Cf}\p{Co}\p{Cn}\p{Cs}]/gu, "")
+		.replace(/\p{Cc}/gu, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+	const characters = [...visible];
+	return characters.length <= max ? visible : `${characters.slice(0, max - 1).join("")}…`;
+}
+
+/** A rule's words for a change: each `{path}` from the item (or `{to}`, `{from}`), said as `words` say, plain. */
 export function saysOf(rule: Pick<Rule, "says" | "words">, change: Change): string {
 	const scope: Item = { ...(change.item ?? {}), ...(change.to === undefined ? {} : { to: change.to }) };
 	if (change.from !== undefined) scope.from = change.from;
-	return rule.says
-		.replace(/\{([\w.]+)\}/g, (_, path: string) => {
+	return plainWords(
+		rule.says.replace(/\{([\w.]+)\}/g, (_, path: string) => {
 			const value = at(scope, path);
 			const text = value === undefined || value === null ? "" : quote(value);
 			return rule.words?.[text] ?? text;
-		})
-		.replace(/\s+/g, " ")
-		.trim();
+		}),
+	);
 }
 
 /**

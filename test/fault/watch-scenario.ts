@@ -82,6 +82,8 @@ export function world(step: number): World {
 
 export type WatchSummary = {
 	record: WatchRecord;
+	/** The second watch's record, when the scenario had one. */
+	second?: WatchRecord;
 	task?: { status: string };
 	followed?: { version: number; at: number };
 	card?: { state?: string };
@@ -97,7 +99,15 @@ export type WatchSummary = {
 	models: number;
 };
 
-export async function watchScenario(home: string, faults: Faults): Promise<WatchSummary> {
+/** The watches on the pull request: Mara's, and, with `second`, Otto's on the same object as the same account. */
+export const WATCHES = ["banda-142", "banda-142-otto"] as const;
+
+export async function watchScenario(
+	home: string,
+	faults: Faults,
+	options: { readonly second?: boolean } = {},
+): Promise<WatchSummary> {
+	const names = options.second ? WATCHES : WATCHES.slice(0, 1);
 	const worldFile = join(home, "world.json");
 	const stepOf = () => {
 		try {
@@ -183,17 +193,27 @@ export async function watchScenario(home: string, faults: Faults): Promise<Watch
 			connected.on.mara = { github: ["bandarra"] };
 			accepted.files[watchPath("banda-142")] = { sha: shaOf(WATCH), text: WATCH, at: NOW };
 			(await tx.doc(Watches)).watches["banda-142"] = { agent: "mara", since: NOW };
+			if (options.second) {
+				// a second agent follows the same pull request as the same account: one reading, two watches
+				const otto = "---\nname: Otto\ndescription: Also follows\nconnections: [github]\n---\nFollow things too.";
+				accepted.files["agents/otto.md"] = { sha: shaOf(otto), text: otto, at: NOW };
+				connected.on.otto = { github: ["bandarra"] };
+				accepted.files[watchPath("banda-142-otto")] = { sha: shaOf(WATCH), text: WATCH, at: NOW };
+				(await tx.doc(Watches)).watches["banda-142-otto"] = { agent: "otto", since: NOW };
+			}
 		}, context);
 		// as the daemon does on start: the task, whose first look is the baseline
 		await core.reconcile(harness);
-		const looked = async () =>
-			(await harness.snapshot(Followed, context))?.objects["github/bandarra/pull_request:acme/banda#142"] !== undefined;
+		const looked = async () => {
+			const records = (await harness.snapshot(Watches, context))?.watches ?? {};
+			return names.every((name) => records[name]?.looked !== undefined);
+		};
 		while (!(await looked())) await new Promise((r) => setTimeout(r, 5));
 		// the world moves on, and the owner checks now at each step: the same click, sent again after a kill
 		for (const [i, key] of CLICKS.entries()) {
 			const step = i + 1;
 			if (stepOf() < step) writeFileSync(worldFile, String(step));
-			await core.checkWatch(harness, "banda-142", key);
+			for (const name of names) await core.checkWatch(harness, name, key);
 		}
 		const idle = async () => {
 			const graph = await harness.taskGraph(context);
@@ -229,8 +249,10 @@ export async function watchScenario(home: string, faults: Faults): Promise<Watch
 			} while (cursor !== undefined);
 			return found.map((task) => (task.state as { outcome?: { status: string; result?: TurnResult } }).outcome);
 		}, context);
-		const record = (await harness.snapshot(Watches, context))?.watches["banda-142"] ?? {};
+		const records = (await harness.snapshot(Watches, context))?.watches ?? {};
+		const record = records["banda-142"] ?? {};
 		const task = record.task === undefined ? undefined : await harness.getTask(record.task as TaskId, context);
+		const second = records["banda-142-otto"];
 		const followed = (await harness.snapshot(Followed, context))?.objects[
 			"github/bandarra/pull_request:acme/banda#142"
 		];
@@ -238,6 +260,7 @@ export async function watchScenario(home: string, faults: Faults): Promise<Watch
 			?.card as { state?: string } | undefined;
 		return {
 			record,
+			...(second === undefined ? {} : { second }),
 			...(task === undefined ? {} : { task: { status: task.state.status } }),
 			...(followed === undefined ? {} : { followed: { version: followed.version, at: followed.at } }),
 			...(card === undefined ? {} : { card: { ...(card.state === undefined ? {} : { state: card.state }) } }),
@@ -268,29 +291,36 @@ export function watchProblems(summary: WatchSummary): string[] {
 	const say = (what: string, ok: boolean) => {
 		if (!ok) errors.push(what);
 	};
-	say(`two wakes, got ${summary.wakes.length}`, summary.wakes.length === 2);
-	const [first, last] = summary.wakes;
-	say(
-		"the first wake says what changed",
-		[...(first?.changes ?? [])].sort().join(", ") === "ana approved, checks finished, lint failed",
-	);
-	say("the first wake ends nothing", first?.ended === undefined);
-	say(
-		"the last wake says merged and ends the watch",
-		last?.ended === "merged" && (last?.changes ?? []).includes("merged"),
-	);
+	// each watch on the object sees every change, whoever looked first: one reading, a cursor per watch
+	const watches = summary.second === undefined ? [summary.record] : [summary.record, summary.second];
+	const names = summary.second === undefined ? WATCHES.slice(0, 1) : WATCHES;
+	for (const [i, name] of names.entries()) {
+		const wakes = summary.wakes.filter((wake) => wake.watch === name);
+		const record = watches[i] as WatchRecord;
+		say(`${name}: two wakes, got ${wakes.length}`, wakes.length === 2);
+		const [first, last] = wakes;
+		say(
+			`${name}: the first wake says what changed`,
+			[...(first?.changes ?? [])].sort().join(", ") === "ana approved, checks finished, lint failed",
+		);
+		say(`${name}: the first wake ends nothing`, first?.ended === undefined);
+		say(
+			`${name}: the last wake says merged and ends the watch`,
+			last?.ended === "merged" && (last?.changes ?? []).includes("merged"),
+		);
+		say(`${name}: the watch is done: merged`, record.done?.why === "merged");
+		say(`${name}: every click was taken once`, JSON.stringify(record.checked) === JSON.stringify(CLICKS));
+	}
 	say(
 		"no change of the account's own woke",
 		!summary.wakes.some((wake) => wake.changes.some((c) => c.includes("bandarra"))),
 	);
-	say("the watch is done: merged", summary.record.done?.why === "merged");
 	say("done, it has no live task", summary.task === undefined || summary.task.status === "terminal");
-	say("every click was taken once", JSON.stringify(summary.record.checked) === JSON.stringify(CLICKS));
-	// a look a kill cut short is made again: a reading kept again is the same, never a second wake
-	say("the reading kept is the newest, four looks in at least", (summary.followed?.version ?? 0) >= 4);
+	// a look a kill cut short is made again: a reading the same as the newest is no new version, never a second wake
+	say("the reading kept is the newest: three that differed", summary.followed?.version === 3);
 	say("the card is the newest reading", summary.card?.state === "merged");
 	say("no tell beside the wakes", summary.tells.length === 0);
-	say(`two runs, got ${summary.turns.length}`, summary.turns.length === 2);
+	say(`${2 * names.length} runs, got ${summary.turns.length}`, summary.turns.length === 2 * names.length);
 	for (const turn of summary.turns) say("a run ended", turn?.status === "completed");
 	// sends are at least once: a kill after the bytes went and before the store heard sends them again
 	say(

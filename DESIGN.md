@@ -570,10 +570,13 @@ or not the model remembers it.
   reading's fields, what ends it, and when it is busy. The daemon makes the reads with the account's credentials, in
   the daemon: no box, no model. Any link the connection recognises as that kind can be followed; a kind without the
   declaration cannot, and the card says so.
-- **One reading per object.** The daemon keeps one reading per (connection, account, object) fresh while any watch
-  holds it, the same reading the object's card draws, so five watches on one inbox read it once and a followed
-  object's card is always current. An object's card offers Follow among its quiet actions; a followed one says who
-  follows it and until what, in one line, and never says "as of" while the daemon can look.
+- **One reading per object, a cursor per watch.** The daemon keeps one reading per (connection, account, object)
+  while any watch holds it, with the few before it, and the same reading draws the object's card, so a followed
+  object's card is always current. Each watch keeps its own cursor on those readings, the one it last diffed to, so
+  whoever looked first, every watch on the object sees every change since its own last look; a cursor that fell off
+  the readings kept diffs from the oldest kept and sees the changes since, coarser, never fewer. An object's card
+  offers Follow among its quiet actions; a followed one says who follows it and until what, in one line, and never
+  says "as of" while the daemon can look.
 - **The change is the event, and its identity is the change.** Each reading is compared with the one before, or
   read from a feed's cursor where the service keeps one; the events are the differences, and an event's id is the
   change itself, so a read repeated after a crash yields the same events and the same wake key, which the chat's queue

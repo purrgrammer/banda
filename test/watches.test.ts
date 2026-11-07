@@ -48,4 +48,9 @@ describe("a watch on a pull request", () => {
 		expect(summary.record.saw).toEqual(["merged", "closed"]);
 		expect(summary.record.looked).toBeDefined();
 	}, 60_000);
+
+	it("two watches on one object, as one account, each see every change: one reading, a cursor per watch", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), { second: true });
+		expect(watchProblems(summary)).toEqual([]);
+	}, 60_000);
 });
