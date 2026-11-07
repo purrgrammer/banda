@@ -4,22 +4,15 @@
  * says so, and is not a button. What waits on the owner (an account to sign in to again, a server not reached) shows on
  * its tile with the band menu's dot.
  */
-import {
-	CalendarIcon,
-	type LucideIcon,
-	MailIcon,
-	MessageSquareIcon,
-	NotebookIcon,
-	SquareKanbanIcon,
-} from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import { GitHubMark } from "./Object.tsx";
+import { ConnectionIcon } from "./ConnectionIcon.tsx";
 
 export type Service = {
 	readonly id: string;
 	readonly name: string;
+	readonly url?: string | undefined;
 	/** What it lets the band do, in a few words. */
 	readonly does: string;
 	/** Accounts signed in to it; undefined when the service is not shipped yet. */
@@ -29,14 +22,6 @@ export type Service = {
 	readonly stale?: readonly string[] | undefined;
 	/** Why the connection is not reached, in words. */
 	readonly problem?: string | undefined;
-};
-
-const ICONS: Record<string, LucideIcon> = {
-	gmail: MailIcon,
-	calendar: CalendarIcon,
-	slack: MessageSquareIcon,
-	linear: SquareKanbanIcon,
-	notion: NotebookIcon,
 };
 
 export function Catalogue({
@@ -70,7 +55,6 @@ export function Catalogue({
 					);
 				const service = item;
 				const soon = service.accounts === undefined;
-				const Icon = ICONS[service.id];
 				const stale = soon ? [] : (service.stale ?? []);
 				const problem = soon ? undefined : service.problem;
 				return (
@@ -80,11 +64,7 @@ export function Catalogue({
 					>
 						<span className="flex items-center gap-3">
 							<span className="flex size-10 shrink-0 items-center justify-center rounded-field bg-paper-3">
-								{service.id === "github" ? (
-									<GitHubMark className="size-5" />
-								) : Icon === undefined ? null : (
-									<Icon aria-hidden="true" className="size-5 text-ink-2" />
-								)}
+								<ConnectionIcon connection={service.id} url={service.url} className="size-5" />
 							</span>
 							<span className="flex min-w-0 flex-col">
 								<span className={cn("text-ui font-semibold", soon ? "text-ink-2" : "text-ink")}>{service.name}</span>
@@ -124,7 +104,11 @@ export function Catalogue({
 									className="ml-auto"
 									onClick={() => toggle(service.id)}
 								>
-									{stale.length > 0 ? "Sign in again" : "Add account"}
+									{stale.length > 0
+										? "Sign in again"
+										: service.id === "github" || service.id === "gmail"
+											? "Manage access"
+											: "Add account"}
 								</Button>
 							</span>
 						)}
