@@ -2311,13 +2311,54 @@ export function openCapabilities(options: CapabilityOptions) {
 		return files;
 	}
 
-	async function shippedView(present: ReadonlySet<string>, _ctx: Context): Promise<ShippedView[]> {
-		return [...(await shippedFiles())].map(([name, { connection }]) => ({
-			name,
-			connection: summaryOf(connection),
-			reads: connection.reads.length,
-			added: present.has(name),
-		}));
+	async function shippedView(present: ReadonlySet<string>, ctx: Context): Promise<ShippedView[]> {
+		const accepted = (await harness.snapshot(Accepted, ctx))?.files ?? {};
+		return [...(await shippedFiles())].map(([name, { text, connection }]) => {
+			const file = accepted[connectionPath(name)];
+			const update = file === undefined ? undefined : shippedUpdate(name, text, file.text);
+			return {
+				name,
+				connection: summaryOf(connection),
+				reads: connection.reads.length,
+				added: present.has(name),
+				...(update === undefined || file === undefined ? {} : { update: file.sha }),
+			};
+		});
+	}
+
+	/**
+	 * The shipped file `shipped` as the accepted one `accepted` would become by updating: with the scopes the owner
+	 * picked kept, since those are the owner's choice and the rest is banda's. Undefined when nothing would change.
+	 */
+	function shippedUpdate(name: string, shipped: string, accepted: string): string | undefined {
+		const was = parseConnection(name, accepted);
+		const scopes = "connection" in was ? was.connection.scopes : undefined;
+		const next = scopes === undefined ? shipped : (withScopes(name, shipped, scopes) ?? shipped);
+		return next === accepted ? undefined : next;
+	}
+
+	/**
+	 * The owner updates a connection banda ships to the version this banda ships: its file rewritten in the workspace
+	 * and allowed at once, as adding it was, the owner's scopes kept. `sha` is the version in effect they saw; refused
+	 * when it changed since, or while the box holds a change of its own to the file waiting to be allowed.
+	 */
+	async function updateShipped(name: string, sha: string, ctx: Context = context): Promise<void> {
+		const shipped = (await shippedFiles()).get(name);
+		if (shipped === undefined) throw new BadRequest(`banda ships no connection named ${name}`, 404);
+		const file = (await harness.snapshot(Accepted, ctx))?.files[connectionPath(name)];
+		if (file === undefined) throw new BadRequest(`there is no connection named ${name}`, 404);
+		if (file.sha !== sha) throw new BadRequest(`connections/${name}.md changed since you saw it: look again`, 409);
+		const box = (await boxedFiles("connections", ctx)).get(name) as
+			| { text: string }
+			| { unreadable: string }
+			| undefined;
+		if (box === undefined || "unreadable" in box || box.text !== file.text)
+			throw new BadRequest("it proposes a change to this connection: allow or decline that first", 409);
+		const next = shippedUpdate(name, shipped.text, file.text);
+		if (next === undefined) return;
+		await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, next, ctx);
+		fault("shipped:written");
+		await acceptConnection(name, shaOf(next), ctx);
 	}
 
 	/**
@@ -2812,6 +2853,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		setKey,
 		setScopes,
 		addShipped,
+		updateShipped,
 		addByAddress,
 		addMcp,
 		refresh: connect,

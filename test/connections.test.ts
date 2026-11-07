@@ -1052,6 +1052,34 @@ describe("connections banda ships", () => {
 		expect(cal?.missing).toBeUndefined();
 	});
 
+	it("a newer shipped file is offered as an update that keeps the owner's scopes and the sign-in", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		const shipped = await shipping(fake);
+		const s = await open(fake, shipped);
+		await s.capabilities.addShipped("cal");
+		await s.capabilities.setScopes("cal", ["read:user", "repo"]);
+		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
+		const before = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.state;
+		// the owner's own scope choice is no update
+		expect((await s.capabilities.view()).shipped?.[0]?.update).toBeUndefined();
+		// this banda ships a newer file
+		const newer = `${readFileSync(join(shipped, "cal.md"), "utf8")}\nIt can now be followed.\n`;
+		writeFileSync(join(shipped, "cal.md"), newer);
+		const offered = (await s.capabilities.view()).shipped?.[0]?.update;
+		expect(offered).toMatch(/^[0-9a-f]{64}$/);
+		await expect(s.capabilities.updateShipped("cal", "0".repeat(64))).rejects.toThrow(/changed since you saw it/);
+		await s.capabilities.updateShipped("cal", offered as string);
+		const view = await s.capabilities.view();
+		expect(view.shipped?.[0]?.update).toBeUndefined();
+		const cal = view.connections.find((c) => c.name === "cal");
+		expect(cal?.accepted?.sha).not.toBe(offered);
+		expect(readFileSync(join(s.box.workspace, "connections/cal.md"), "utf8")).toContain("It can now be followed.");
+		expect(cal?.accepted?.connection.scopes).toEqual(["read:user", "repo"]);
+		expect([before, cal?.state]).toEqual(["connected", "connected"]);
+		expect(cal?.change).toBeUndefined();
+	});
+
 	it("recovers a shipped definition left in the box before it was allowed", async () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
 		fakes.push(fake);

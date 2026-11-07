@@ -843,6 +843,11 @@ export type ShippedView = {
 	readonly reads: number;
 	/** A connection of that name is in the workspace already (this one, or another the companion made). */
 	readonly added: boolean;
+	/**
+	 * This banda ships a newer version of the one in effect: the sha of the version in effect, which updating names.
+	 * The owner's scopes are kept, so a scope choice alone is no update.
+	 */
+	readonly update?: string;
 };
 
 export type CapabilitiesView = {
