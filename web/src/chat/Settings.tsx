@@ -32,7 +32,7 @@ import { ConnectionTools } from "./Connect.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
 import { Face, FaceStack } from "./Face.tsx";
 import { GitHubMark } from "./Object.tsx";
-import { ProviderAccountForm } from "./ProviderAccountForm.tsx";
+import { ProviderAccountForm, ProviderAccountRename } from "./ProviderAccountForm.tsx";
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
 import { ProviderSignIn, type SignInWay } from "./ProviderSignIn.tsx";
 import type { Who } from "./Row.tsx";
@@ -1050,7 +1050,9 @@ export function ModelProviders({
 	onWay,
 	onCancel,
 	onAdd,
+	onRename,
 	adding: openAdding,
+	renaming: openRenaming,
 	here = true,
 }: {
 	/** The provider account the band thinks with. */
@@ -1074,10 +1076,15 @@ export function ModelProviders({
 	onCancel?: ((id: string) => void) | undefined;
 	/** Another account of a provider: its name, and its key for one that takes a key. */
 	onAdd?: ((provider: string, label: string, key?: string) => void) | undefined;
+	/** A new name for an account, in the owner's words. */
+	onRename?: ((id: string, label: string) => void) | undefined;
 	/** The provider whose "Add another account" form shows at first. */
 	adding?: string | undefined;
+	/** The account whose rename form shows at first. */
+	renaming?: string | undefined;
 }) {
 	const [adding, setAdding] = useState<string | undefined>(openAdding);
+	const [renaming, setRenaming] = useState<string | undefined>(openRenaming);
 	const connected = providers.filter((each) => each.connected);
 	const backend = (row: ProviderRow) => row.provider ?? row.id;
 	const many = (row: ProviderRow) =>
@@ -1139,6 +1146,17 @@ export function ModelProviders({
 								detail={detail}
 								end={
 									<span className="flex shrink-0 gap-1.5">
+										{provider.connected && !ambient && many(provider) && onRename !== undefined ? (
+											<Button
+												variant="ghost"
+												size="xs"
+												aria-label={`Rename ${name}`}
+												aria-expanded={renaming === provider.id}
+												onClick={() => setRenaming((was) => (was === provider.id ? undefined : provider.id))}
+											>
+												Rename
+											</Button>
+										) : null}
 										{provider.connected && !using ? (
 											<Button
 												variant="outline"
@@ -1194,6 +1212,14 @@ export function ModelProviders({
 									</span>
 								}
 							/>
+							{renaming === provider.id ? (
+								<ProviderAccountRename
+									account={{ id: provider.id, title: name, label: provider.label ?? provider.name }}
+									className="border-t border-line-soft p-3"
+									onRename={onRename}
+									onClose={() => setRenaming(undefined)}
+								/>
+							) : null}
 							{here && provider.id === open && (!provider.connected || ambient) ? (
 								<ProviderKeyForm
 									provider={{ ...provider, name }}

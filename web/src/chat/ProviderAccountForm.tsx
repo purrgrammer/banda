@@ -65,3 +65,47 @@ export function ProviderAccountForm({
 		</form>
 	);
 }
+
+/** A provider account's name, changed in place: its current name to start from, saved on Enter or Save. */
+export function ProviderAccountRename({
+	account,
+	className,
+	onRename,
+	onClose,
+}: {
+	account: { readonly id: string; readonly title: string; readonly label: string };
+	className?: string | undefined;
+	onRename?: ((id: string, label: string) => void) | undefined;
+	onClose?: (() => void) | undefined;
+}) {
+	return (
+		<form
+			className={cn("flex flex-col gap-2", className)}
+			onSubmit={(event) => {
+				event.preventDefault();
+				const label = new FormData(event.currentTarget).get("label");
+				if (typeof label !== "string" || label.trim() === "") return;
+				if (label.trim() !== account.label) onRename?.(account.id, label.trim());
+				onClose?.();
+			}}
+		>
+			<Input
+				name="label"
+				autoComplete="off"
+				maxLength={60}
+				defaultValue={account.label}
+				aria-label={`New name for ${account.title}`}
+				placeholder="Its name, like Work or Personal"
+				className="bg-paper"
+			/>
+			<span className="flex gap-1.5 self-end">
+				<Button type="button" variant="ghost" size="xs" onClick={onClose}>
+					Cancel
+				</Button>
+				<Button type="submit" size="xs">
+					Save
+				</Button>
+			</span>
+		</form>
+	);
+}

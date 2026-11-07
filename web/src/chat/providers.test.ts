@@ -77,4 +77,28 @@ describe("Settings' providers", () => {
 		);
 		expect(device).not.toContain("Add another");
 	});
+
+	it("renames an account only where a provider has more than one, starting from its name", () => {
+		const accounts: readonly ProviderRow[] = [
+			{ id: "anthropic", name: "Anthropic", provider: "anthropic", label: "Anthropic", by: "sign-in", connected: true },
+			{ id: "anthropic@work", name: "Anthropic", provider: "anthropic", label: "Work", by: "sign-in", connected: true },
+			{ id: "openai", name: "OpenAI", provider: "openai", label: "OpenAI", by: "sign-in", connected: true },
+		];
+		const page = renderToStaticMarkup(
+			createElement(ModelProviders, { current: "anthropic", providers: accounts, onRename: () => {} }),
+		);
+		expect(page).toContain('aria-label="Rename Anthropic"');
+		expect(page).toContain('aria-label="Rename Anthropic · Work"');
+		expect(page).not.toContain('aria-label="Rename OpenAI"');
+		const renaming = renderToStaticMarkup(
+			createElement(ModelProviders, {
+				current: "anthropic",
+				providers: accounts,
+				onRename: () => {},
+				renaming: "anthropic@work",
+			}),
+		);
+		expect(renaming).toContain('aria-label="New name for Anthropic · Work"');
+		expect(renaming).toContain('value="Work"');
+	});
 });

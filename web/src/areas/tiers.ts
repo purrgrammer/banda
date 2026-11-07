@@ -100,6 +100,13 @@ export const addProviderAccount = (provider: string, label: string, type: "oauth
 		body: JSON.stringify({ label, type, ...(key === undefined ? {} : { key }) }),
 	});
 
+/** Name a provider account in the owner's words; unique among its provider's accounts. */
+export const renameProviderAccount = (id: string, label: string) =>
+	api<Record<string, never>>(`/providers/${encodeURIComponent(id)}/label`, {
+		method: "PUT",
+		body: JSON.stringify({ label }),
+	});
+
 /** End a sign-in under way; its link no longer finishes anything. */
 export const cancelSignIn = (id: string) =>
 	api<Record<string, never>>(`/providers/${encodeURIComponent(id)}/sign-in`, { method: "DELETE" });
@@ -127,7 +134,7 @@ export const disconnectProvider = (id: string) =>
  * seconds while shown, so a sign-in finished in another tab shows); `pick` opens a provider's sign-in in a tab of its
  * own (opened from the tap, so it is not blocked; picked again, or another `method`, it replaces the one under way) or
  * toggles its key form; `answer` finishes a sign-in with a pasted code; `cancel` ends one; `key` connects with a key;
- * `use` thinks with a connected one; `signOut` forgets one; `add` adds another account to a provider, named by the
+ * `use` thinks with a connected one; `signOut` forgets one; `rename` names one; `add` adds another account to a provider, named by the
  * owner, with a key or a sign-in. Each takes an account's id. A connected account becomes the band's.
  */
 export function useProviderConnect() {
@@ -247,6 +254,12 @@ export function useProviderConnect() {
 		await readTiers();
 		await refresh();
 	};
+	const rename = async (id: string, label: string) => {
+		setError(undefined);
+		await renameProviderAccount(id, label).catch(failed);
+		await readTiers();
+		await refresh();
+	};
 	const add = async (provider: string, label: string, value?: string) => {
 		const found = providers.find((each) => each.id === provider);
 		if (found === undefined) return;
@@ -283,7 +296,7 @@ export function useProviderConnect() {
 			failed(reason);
 		}
 	};
-	return { providers, open, waiting, error, pick, answer, cancel, key, use, signOut, add };
+	return { providers, open, waiting, error, pick, answer, cancel, key, use, signOut, add, rename };
 }
 
 /** Put a chat on `tier`, from its next run on; rejects with why not. */
