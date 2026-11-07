@@ -9,6 +9,8 @@ export const GITHUB_OBJECTS = {
 		card: "pull-request",
 		normalize: { owner: "lowercase", repo: "lowercase", number: "integer" },
 		name: "{owner}/{repo} #{number}",
+		plural: "pull requests",
+		place: "{owner}/{repo}",
 		urls: [
 			"https://github.com/{owner}/{repo}/pull/{number}",
 			"https://api.github.com/repos/{owner}/{repo}/pulls/{number}",
@@ -66,8 +68,14 @@ export const GITHUB_OBJECTS = {
 				verb: "Comment",
 				what: "Comment on",
 				text: "body",
+				grains: ["place", "action"],
 			},
-			{ tool: "merge_pull_request", id: { owner: "owner", repo: "repo", number: "pullNumber" }, verb: "Merge" },
+			{
+				tool: "merge_pull_request",
+				id: { owner: "owner", repo: "repo", number: "pullNumber" },
+				verb: "Merge",
+				grains: ["place", "action"],
+			},
 			{
 				tool: "pull_request_review_write",
 				id: { owner: "owner", repo: "repo", number: "pullNumber" },
@@ -93,6 +101,8 @@ export const GITHUB_OBJECTS = {
 		card: "issue",
 		normalize: { owner: "lowercase", repo: "lowercase", number: "integer" },
 		name: "{owner}/{repo} #{number}",
+		plural: "issues",
+		place: "{owner}/{repo}",
 		urls: [
 			"https://github.com/{owner}/{repo}/issues/{number}",
 			"https://api.github.com/repos/{owner}/{repo}/issues/{number}",
@@ -122,6 +132,7 @@ export const GITHUB_OBJECTS = {
 				verb: "Comment",
 				what: "Comment on",
 				text: "body",
+				grains: ["place", "action"],
 			},
 			{
 				tool: "issue_write",

@@ -1,7 +1,17 @@
 import fc from "fast-check";
 import { expect, it } from "vitest";
 import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
-import { cardOf, draftedOn, parseObjects, plainLine, readArgs, recognise, refKey } from "../src/core/objects.ts";
+import {
+	cardOf,
+	draftedOn,
+	grainsOf,
+	grainWords,
+	parseObjects,
+	plainLine,
+	readArgs,
+	recognise,
+	refKey,
+} from "../src/core/objects.ts";
 import { objects } from "../src/core/parts/objects.ts";
 import { githubObjectTools } from "./fixtures/github-objects.ts";
 import { pbtRuns } from "./pbt.ts";
@@ -43,6 +53,7 @@ it("accepts curated data, rejects reads that can write and unbounded overlapping
 				ids: ["{a}/{b}/end"],
 				normalize: {},
 				name: "Issue",
+				place: undefined,
 				writes: [],
 				creates: [],
 				reads: { issue: { tool: "get", args: {} } },
@@ -239,4 +250,61 @@ it("draft data names exact effect verbs and editable fields, never caller card p
 	).toMatchObject({ verb: "Close", what: "Close as not planned" });
 	expect(objects.refuse?.({ objects: ["a/b#1", "a/b#2", "a/b#3", "a/b#4"] })).toMatch(/at most/);
 	expect(plainLine("hello\u202e\nworld")).toBe("hello world");
+});
+
+it("a kind's place names only its name's placeholders, and a write's grains need the words and place to say them", () => {
+	const errors = (issue: object) => {
+		const parsed = parseObjects({ issue: { ...GITHUB_OBJECTS.issue, ...issue } }, () => true);
+		return "errors" in parsed ? parsed.errors : [];
+	};
+	expect(errors({})).toEqual([]);
+	expect(errors({ place: "{owner}/{team}" })).toEqual([
+		"objects.issue.place names {team}, which its name does not use",
+	]);
+	for (const place of ["", "repo", "{owner}{repo}", "{owner}/{owner}", 7])
+		expect(errors({ place }), String(place)).toEqual([
+			'objects.issue.place is where one lives, from its name\'s placeholders: "{owner}/{repo}"',
+		]);
+	expect(errors({ plural: "Issues!" })).toHaveLength(1);
+	const comment = GITHUB_OBJECTS.issue.writes[0];
+	expect(errors({ place: undefined, writes: [comment] })).toEqual([
+		"objects.issue.writes[0].grains: its kind says no place for the place's grain",
+	]);
+	expect(errors({ plural: undefined, writes: [comment] })).toEqual([
+		"objects.issue.writes[0].grains: its kind says no plural to word them with",
+	]);
+	expect(errors({ writes: [{ ...comment, grains: ["object"] }] })).toEqual([
+		"objects.issue.writes[0].grains is a list of place, action",
+	]);
+	// a write whose words depend on its arguments has no one verb for a grain
+	expect(errors({ writes: [{ ...GITHUB_OBJECTS.issue.writes[1], grains: ["action"] }] })).toEqual([
+		"objects.issue.writes[0].grains: a write with other words for some arguments has no wider grain",
+	]);
+});
+
+it("words a write's wider grains from its kinds: one verb, their plurals, and the place every kind agrees on", () => {
+	const parsed = parseObjects(GITHUB_OBJECTS, () => true);
+	if (!("objects" in parsed)) throw new Error(parsed.errors.join("; "));
+	expect(grainsOf("merge_pull_request", parsed.objects)).toEqual({
+		what: "merge pull requests",
+		place: { words: "merge pull requests in {owner}/{repo}", args: { owner: "owner", repo: "repo" } },
+		action: { words: "merge pull requests anywhere" },
+	});
+	expect(grainsOf("add_issue_comment", parsed.objects)).toMatchObject({
+		what: "comment on pull requests and issues",
+		place: { words: "comment on pull requests and issues in {owner}/{repo}" },
+	});
+	// a review's free method could be any of its writes: it declares none
+	expect(grainsOf("pull_request_review_write", parsed.objects)).toBeUndefined();
+	expect(grainsOf("dismiss_notification", parsed.objects)).toBeUndefined();
+	expect(grainWords("merge pull requests in {owner}/{repo}", { owner: "purrgrammer", repo: "banda" })).toBe(
+		"merge pull requests in purrgrammer/banda",
+	);
+	// kinds that disagree on where the place is give no place's grain
+	const { pull_request, issue } = parsed.objects;
+	if (pull_request === undefined || issue === undefined) throw new Error("no kinds");
+	expect(grainsOf("add_issue_comment", { pull_request, issue: { ...issue, place: "{owner}" } })).toEqual({
+		what: "comment on pull requests and issues",
+		action: { words: "comment on pull requests and issues anywhere" },
+	});
 });

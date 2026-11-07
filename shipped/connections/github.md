@@ -313,6 +313,8 @@ draws as cards, from scripts/github-objects.ts.
 				"number": "integer"
 			},
 			"name": "{owner}/{repo} #{number}",
+			"plural": "pull requests",
+			"place": "{owner}/{repo}",
 			"urls": [
 				"https://github.com/{owner}/{repo}/pull/{number}",
 				"https://api.github.com/repos/{owner}/{repo}/pulls/{number}"
@@ -380,7 +382,11 @@ draws as cards, from scripts/github-objects.ts.
 					},
 					"verb": "Comment",
 					"what": "Comment on",
-					"text": "body"
+					"text": "body",
+					"grains": [
+						"place",
+						"action"
+					]
 				},
 				{
 					"tool": "merge_pull_request",
@@ -389,7 +395,11 @@ draws as cards, from scripts/github-objects.ts.
 						"repo": "repo",
 						"number": "pullNumber"
 					},
-					"verb": "Merge"
+					"verb": "Merge",
+					"grains": [
+						"place",
+						"action"
+					]
 				},
 				{
 					"tool": "pull_request_review_write",
@@ -449,6 +459,8 @@ draws as cards, from scripts/github-objects.ts.
 				"number": "integer"
 			},
 			"name": "{owner}/{repo} #{number}",
+			"plural": "issues",
+			"place": "{owner}/{repo}",
 			"urls": [
 				"https://github.com/{owner}/{repo}/issues/{number}",
 				"https://api.github.com/repos/{owner}/{repo}/issues/{number}"
@@ -488,7 +500,11 @@ draws as cards, from scripts/github-objects.ts.
 					},
 					"verb": "Comment",
 					"what": "Comment on",
-					"text": "body"
+					"text": "body",
+					"grains": [
+						"place",
+						"action"
+					]
 				},
 				{
 					"tool": "issue_write",

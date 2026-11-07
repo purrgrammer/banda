@@ -43,7 +43,17 @@ export type ObjectWrite = {
 		readonly verb: string;
 		readonly what?: string;
 	}[];
+	/**
+	 * The wider grains a permission for it may be given at, beyond the one object: its kind's place ("merge pull
+	 * requests in purrgrammer/banda") or the action anywhere. Each frees every argument but the account and, for a
+	 * place, the place's; so only a write whose every other argument is safe to leave free declares one.
+	 */
+	readonly grains?: readonly Grain[];
 };
+
+/** A grain wider than one object: the kind's place, or the action anywhere (DESIGN.md "Permissions"). */
+export const GRAINS = ["place", "action"] as const;
+export type Grain = (typeof GRAINS)[number];
 
 /**
  * A write that makes one, so it names none yet: the arguments that say where, and the words its draft says. `{"tool":
@@ -68,6 +78,10 @@ export type ObjectKind = {
 	readonly card: CardKind;
 	/** How the owner reads its name: "{owner}/{repo} #{number}". */
 	readonly name: string;
+	/** What several are called, for the words of a wider permission: "pull requests". */
+	readonly plural?: string;
+	/** Where one lives, from some of its name's placeholders: "{owner}/{repo}". */
+	readonly place?: string;
 	/**
 	 * Web addresses that name it, as templates: anything after the template's end (a tab, a query) still names it, and
 	 * a `*` stands for one part of the path that does not matter.
@@ -101,6 +115,8 @@ const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const TOOL = /^[A-Za-z0-9_.-]{1,64}$/;
 const PATH = /^[A-Za-z0-9_+-]{1,64}(?:\.[A-Za-z0-9_+-]{1,64}){0,7}$/;
 const WORDS = /^[A-Za-z][A-Za-z ]{0,39}$/;
+const PLURAL = /^[a-z][a-z ]{0,39}$/;
+const FIELDS = ["card", "name", "plural", "place", "urls", "ids", "normalize", "reads", "fields", "writes", "creates"];
 /** What a write that makes an object says, each placeholder read as one letter: "Create an issue on x/x". */
 const CREATED = /^[A-Za-z][A-Za-z0-9 /#.:-]{0,79}$/;
 const plain = (value: unknown): value is { [key: string]: unknown } =>
@@ -146,10 +162,7 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 		}
 		const given = raw as { [key: string]: unknown };
 		for (const key of Object.keys(given))
-			if (!["card", "name", "urls", "ids", "normalize", "reads", "fields", "writes", "creates"].includes(key))
-				errors.push(
-					`${where}.${key} is not a field: use card, name, urls, ids, normalize, reads, fields, writes, creates`,
-				);
+			if (!FIELDS.includes(key)) errors.push(`${where}.${key} is not a field: use ${FIELDS.join(", ")}`);
 		const card = given.card;
 		if (typeof card !== "string" || !(CARDS as readonly string[]).includes(card))
 			errors.push(`${where}.card is one of ${CARDS.join(", ")}`);
@@ -210,6 +223,25 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 		const name = given.name;
 		if (typeof name !== "string" || name.length > 100 || placeholders(name).some((each) => !named.has(each)))
 			errors.push(`${where}.name is how the owner reads its name, from its placeholders`);
+		const plural = given.plural;
+		if (plural !== undefined && (typeof plural !== "string" || !PLURAL.test(plural)))
+			errors.push(`${where}.plural is what several are called, in lowercase words: "pull requests"`);
+		const place = given.place;
+		if (place !== undefined) {
+			const own = typeof place === "string" ? placeholders(place) : [];
+			const inName = typeof name === "string" ? placeholders(name) : [];
+			if (
+				typeof place !== "string" ||
+				own.length === 0 ||
+				new Set(own).size !== own.length ||
+				/\}\{/.test(place) ||
+				!CREATED.test(place.replace(PLACEHOLDER, "x"))
+			)
+				errors.push(`${where}.place is where one lives, from its name's placeholders: "{owner}/{repo}"`);
+			else
+				for (const each of own)
+					if (!inName.includes(each)) errors.push(`${where}.place names {${each}}, which its name does not use`);
+		}
 		const reads: { [as: string]: ObjectRead } = {};
 		const rawReads = given.reads;
 		if (
@@ -334,6 +366,25 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 						});
 				}
 				if (w.verbs !== undefined && !Array.isArray(w.verbs)) errors.push(`${at}.verbs is a list`);
+				const grains: Grain[] = [];
+				if (w.grains !== undefined) {
+					if (
+						!Array.isArray(w.grains) ||
+						w.grains.length === 0 ||
+						w.grains.some((grain) => !(GRAINS as readonly unknown[]).includes(grain)) ||
+						new Set(w.grains).size !== w.grains.length
+					)
+						errors.push(`${at}.grains is a list of ${GRAINS.join(", ")}`);
+					else {
+						// a grain's words are one verb for every call, so a write whose words depend on its arguments has none
+						if (w.verbs !== undefined)
+							errors.push(`${at}.grains: a write with other words for some arguments has no wider grain`);
+						if (plural === undefined) errors.push(`${at}.grains: its kind says no plural to word them with`);
+						if (w.grains.includes("place") && place === undefined)
+							errors.push(`${at}.grains: its kind says no place for the place's grain`);
+						grains.push(...(w.grains as Grain[]));
+					}
+				}
 				writes.push({
 					tool: w.tool,
 					id: idArgs as { [placeholder: string]: string },
@@ -341,6 +392,7 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					...(w.what === undefined ? {} : { what: w.what as string }),
 					...(w.text === undefined ? {} : { text: w.text as string }),
 					...(verbs.length === 0 ? {} : { verbs }),
+					...(grains.length === 0 ? {} : { grains }),
 				});
 			}
 		const creates: ObjectCreate[] = [];
@@ -390,6 +442,8 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 		objects[kind] = {
 			card: card as CardKind,
 			name: typeof name === "string" ? name : kind,
+			...(typeof plural === "string" ? { plural } : {}),
+			...(typeof place === "string" ? { place } : {}),
 			urls,
 			ids,
 			...(Object.keys(normalize).length === 0 ? {} : { normalize }),
@@ -548,6 +602,61 @@ export function draftedOn(
 		}
 	return words === undefined ? undefined : { refs, ...words };
 }
+
+/**
+ * What a permission for `tool` may be given at beyond one object, as its kinds' writes declare it: the grains every one
+ * of its writes allows, in the daemon's words before the account ("merge pull requests in {owner}/{repo}", "merge pull
+ * requests anywhere"), the place's still a template, and the arguments that give the place. A tool that is a write of
+ * several kinds names their plurals together ("comment on pull requests and issues"); one whose kinds disagree on the
+ * verb, or on where the place is, has no such grain. None when it has none.
+ */
+export function grainsOf(
+	tool: string,
+	kinds: ObjectKinds | undefined,
+):
+	| {
+			readonly what: string;
+			readonly place?: { readonly words: string; readonly args: { readonly [placeholder: string]: string } };
+			readonly action?: { readonly words: string };
+	  }
+	| undefined {
+	const writes = Object.values(kinds ?? {}).flatMap((kind) =>
+		(kind.writes ?? []).filter((write) => write.tool === tool).map((write) => ({ kind, write })),
+	);
+	const first = writes[0];
+	if (first === undefined) return undefined;
+	const verb = first.write.what ?? first.write.verb;
+	if (writes.some(({ write }) => (write.what ?? write.verb) !== verb || write.grains === undefined)) return undefined;
+	const plurals = [...new Set(writes.map(({ kind }) => kind.plural ?? ""))];
+	if (plurals.includes("")) return undefined;
+	const allows = (grain: Grain) => writes.every(({ write }) => write.grains?.includes(grain) === true);
+	const what = `${verb.charAt(0).toLowerCase()}${verb.slice(1)} ${
+		plurals.length === 1 ? plurals[0] : `${plurals.slice(0, -1).join(", ")} and ${plurals.at(-1)}`
+	}`;
+	/** The place, when every kind says the same, from the same arguments. */
+	const place = (() => {
+		const template = first.kind.place;
+		if (!allows("place") || template === undefined) return undefined;
+		const args = Object.fromEntries(placeholders(template).map((each) => [each, first.write.id[each] ?? ""]));
+		const same = writes.every(
+			({ kind, write }) =>
+				kind.place === template && Object.entries(args).every(([each, arg]) => write.id[each] === arg),
+		);
+		return same ? { words: `${what} in ${template}`, args } : undefined;
+	})();
+	if (place === undefined && !allows("action")) return undefined;
+	return {
+		what,
+		...(place === undefined ? {} : { place }),
+		...(allows("action") ? { action: { words: `${what} anywhere` } } : {}),
+	};
+}
+
+/** A grain's words with the place's values filled: "merge pull requests in purrgrammer/banda". */
+export const grainWords = (words: string, values: { readonly [placeholder: string]: string }) => fill(words, values);
+
+/** Whether `value` may fill a placeholder: a bounded identity segment, never a separator, a space or `..`. */
+export const placeValue = (value: string) => new RegExp(`^${VALUE}$`).test(value);
 
 /**
  * The words of a write's draft that makes an object, from its arguments: the first of the connection's creates that
