@@ -248,7 +248,8 @@ export type Item =
 
 /**
  * `GET /api/search?q=`: the best matches, best first: a message in an agent's chat or in a group, each at its entry
- * (the chat opens there), or an artifact by its title and words.
+ * (the chat opens there), or an artifact by its title and words. Text is a bounded matching excerpt; open the source
+ * for its full context.
  */
 export type SearchHit =
 	| {

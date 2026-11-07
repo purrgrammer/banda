@@ -305,7 +305,13 @@ export class Search {
 		query: string,
 		limit: number,
 		kinds: readonly Hit["kind"][] = ["fact", "message"],
-		audience?: { readonly paths: readonly string[]; readonly chats: readonly number[] },
+		audience?: {
+			readonly paths: readonly string[];
+			readonly chats: readonly number[];
+			readonly rooms?: readonly number[];
+			readonly artifacts?: boolean;
+		},
+		{ offset = 0, excerpts = false }: { offset?: number; excerpts?: boolean } = {},
 	): Hit[] {
 		const match = terms(query);
 		if (match === undefined || kinds.length === 0) return [];
@@ -315,13 +321,21 @@ export class Search {
 				? ""
 				: ` AND (
 			(kind = 'fact' AND path IN (${audience.paths.map(() => "?").join(",")})) OR
-			(kind = 'message' AND json_extract(meta, '$.chat') IN (${audience.chats.map(() => "?").join(",")}))
+			(kind = 'message' AND json_extract(meta, '$.chat') IN (${audience.chats.map(() => "?").join(",")})) OR
+			(kind = 'group' AND json_extract(meta, '$.room') IN (${(audience.rooms ?? []).map(() => "?").join(",")})) OR
+			(kind = 'artifact' AND ${audience.artifacts === true ? "1" : "0"})
 		)`;
 		const rows = this.#db
 			.prepare(
-				`SELECT kind, text, meta FROM rows WHERE rows MATCH ? AND kind IN (${kinds.map(() => "?").join(", ")})${scoped} ORDER BY bm25(rows) LIMIT ?`,
+				`SELECT kind, ${excerpts ? "snippet(rows, 0, '', '', '…', 48)" : "text"} AS text, meta FROM rows WHERE rows MATCH ? AND kind IN (${kinds.map(() => "?").join(", ")})${scoped} ORDER BY bm25(rows), key LIMIT ? OFFSET ?`,
 			)
-			.all(match, ...kinds, ...(audience === undefined ? [] : [...audience.paths, ...audience.chats]), limit) as {
+			.all(
+				match,
+				...kinds,
+				...(audience === undefined ? [] : [...audience.paths, ...audience.chats, ...(audience.rooms ?? [])]),
+				limit,
+				offset,
+			) as {
 			kind: string;
 			text: string;
 			meta: string;
@@ -353,6 +367,21 @@ export class Search {
 				},
 			];
 		});
+	}
+
+	/** Bounded visible context around a message; the caller has checked that this chat or room is public. */
+	context(kind: "message" | "group", id: number, entry: number): { entry: number; who: string; text: string }[] {
+		const field = kind === "message" ? "chat" : "room";
+		const rows = this.#db
+			.prepare(`
+			SELECT meta, text FROM rows WHERE kind = ? AND json_extract(meta, '$.${field}') = ?
+			ORDER BY abs(json_extract(meta, '$.entry') - ?), key LIMIT 5
+		`)
+			.all(kind, id, entry) as { meta: string; text: string }[];
+		const lines = rows.map(
+			(row) => ({ ...JSON.parse(row.meta), text: row.text }) as { entry: number; who: string; text: string },
+		);
+		return lines.some((line) => line.entry === entry) ? lines.sort((a, b) => a.entry - b.entry) : [];
 	}
 
 	/** Every row, in a fixed order. */

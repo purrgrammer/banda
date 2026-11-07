@@ -54,6 +54,8 @@ import { allowHost, onPermissions, Permissions, revoke } from "./core/permission
 import { FileCredentialStore } from "./core/provider-credentials.ts";
 import { Control, RoutineRefused, Routines } from "./core/routines.ts";
 import { Search } from "./core/search.ts";
+import { searchService } from "./core/search-service.ts";
+import { searchExtension } from "./core/search-tools.ts";
 import { skillsExtension } from "./core/skills.ts";
 import { status } from "./core/status.ts";
 import { context, openStore } from "./core/store.ts";
@@ -379,6 +381,16 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		const memoryLock = new MemoryLock();
 		const index = new Search(join(home, "search.db"));
 		search = index;
+		const retrieval = searchService({
+			index,
+			groups: core.groups,
+			blobs,
+			harness: () => {
+				if (harness === undefined) throw new Error("the store is not open");
+				return harness;
+			},
+		});
+		registry.install(searchExtension(retrieval));
 		let memoryChanged = () => {};
 		registry.install(
 			memoryExtension({ files: memoryFiles, search: index, lock: memoryLock, changed: () => memoryChanged() }),
@@ -386,7 +398,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		// the date, the hour and how full memory is, for every agent, as a status line beside the prompt's fixed start
 		registry.install(nowExtension(Date.now, memoryFiles));
 		// each area's extensions, before the store opens: what it installs is there when anything resumes
-		const boot: Boot = { core, blobs, config, home, root: agentBox.workspace, log };
+		const boot: Boot = { core, blobs, config, home, retrieval, root: agentBox.workspace, log };
 		for (const area of AREAS) for (const extension of area.install?.(boot) ?? []) registry.install(extension);
 		const models = timeThinking(
 			dropEmptyReplies(options.models ?? builtinModels({ credentials: new FileCredentialStore(home) })),
