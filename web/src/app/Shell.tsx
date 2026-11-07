@@ -230,6 +230,9 @@ function Main() {
 			return;
 		}
 		if (phone || !shell.loaded) return;
+		// `where` is the render's; the address may have moved on since (a link followed, a hash set before its
+		// hashchange arrived). Only home goes to the last chat: never overwrite where the owner already went.
+		if (parse(location.hash).name !== "home") return;
 		let stored: string | null = null;
 		try {
 			stored = localStorage.getItem(LAST);
