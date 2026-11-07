@@ -40,6 +40,7 @@ export async function openConnected({
 	fault,
 	install,
 	shipped,
+	fetch: fetcher,
 	registry = createRegistry(),
 }: {
 	home: string;
@@ -53,6 +54,8 @@ export async function openConnected({
 	fault?: (point: string) => void;
 	/** Where the connections banda ships are, for this test. */
 	shipped?: string;
+	/** How the daemon reaches servers, a built-in API's fake among them; the network when not said. */
+	fetch?: typeof fetch;
 }) {
 	const box = openBox(hostBox(home), () => {});
 	const faux = fauxProvider();
@@ -99,6 +102,7 @@ export async function openConnected({
 		log: (line) => logs.push(line),
 		...(fault === undefined ? {} : { fault }),
 		...(shipped === undefined ? {} : { shipped }),
+		...(fetcher === undefined ? {} : { fetch: fetcher }),
 		// the fake servers are on this machine: the tests probe them as they are
 		probe: fetch,
 		agentChanged: core.agentChanged,
