@@ -471,7 +471,7 @@ export function eventWhen(event: Pick<CalendarEvent, "start" | "end" | "allDay">
 export function EventCard({ event, actions }: { event: CalendarEvent; actions?: ReactNode }) {
 	const cancelled = event.status === "cancelled";
 	const declined = event.response === "declined";
-	const answer = RESPONSE[event.response];
+	const answer = cancelled ? undefined : RESPONSE[event.response];
 	const open = calendarUrl(event.url);
 	const call = callUrl(event.meet);
 	return (
