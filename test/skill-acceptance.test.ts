@@ -50,6 +50,31 @@ describe("skill acceptance boundary", () => {
 		}
 	});
 
+	it("the view says a skill is owner-only, and creating over a taken name is refused", async () => {
+		const home = await tempHome();
+		const box = openBox(hostBox(home), () => {});
+		const harness = await openStore(home, { models: echoModels().models, registry: createRegistry() });
+		const workspace: Workspace = { env: () => box.env(), root: box.workspace, tools: () => [], known: () => true };
+		const mine = "---\nname: mine\ndescription: Owner only\ndisable-model-invocation: true\n---\n\nJust for you.";
+		try {
+			await saveSkill(harness, workspace, "mine", mine, null);
+			await saveSkill(harness, workspace, "research", draft("Cite sources."), null);
+			const views = await skills(harness, workspace);
+			expect(views.find(({ name }) => name === "mine")?.accepted?.ownerOnly).toBe(true);
+			expect(views.find(({ name }) => name === "research")?.accepted?.ownerOnly).toBeUndefined();
+			// a create is a save with no base: over an accepted name it is refused, and the accepted text stands
+			await expect(saveSkill(harness, workspace, "research", draft("Overwrite it."), null)).rejects.toThrow(
+				"changed since you opened it",
+			);
+			expect(acceptedSkills((await harness.snapshot(Accepted, context))!.files).map(({ body }) => body)).not.toContain(
+				"\nOverwrite it.",
+			);
+		} finally {
+			await harness.close(context);
+			await box.close();
+		}
+	});
+
 	it("a pack is accepted as the list reviewed: all of it, or none when one changed since", async () => {
 		const home = await tempHome();
 		const box = openBox(hostBox(home), () => {});
