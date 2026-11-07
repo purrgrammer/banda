@@ -300,7 +300,11 @@ export function Screens() {
 				note="The band and a chat, the panel closed: the face and the name float centred over the feed, which scrolls beneath them. On the phone, the band is the first screen and a chat opens over it."
 				bleed
 			>
-				{phone ? <Band rows={ROWS} className="w-full" /> : <Band rows={ROWS} selected="mara" />}
+				{phone ? (
+					<Band rows={ROWS} pinned={["sancho"]} className="w-full" />
+				) : (
+					<Band rows={ROWS} pinned={["sancho"]} selected="mara" />
+				)}
 				{phone ? null : <MaraChat />}
 			</Section>
 			<Section
