@@ -5,6 +5,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { DraftApproval } from "../app/DraftApproval.tsx";
 import { MakeTabsList } from "../app/NewSheet.tsx";
 import { ObjectReading } from "../app/Objects.tsx";
+import { WatchDetail } from "../app/watches.tsx";
 import { ApprovalCard } from "../chat/Approval.tsx";
 import { BrowserWindow } from "../chat/Browser.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
@@ -72,6 +73,7 @@ import {
 	SERVICES,
 	SETTINGS,
 	SETTINGS_PROVIDERS,
+	WATCH_VIEW,
 	WATCHES,
 } from "./fixtures.ts";
 import { MaraChat } from "./screens.tsx";
@@ -148,7 +150,7 @@ function AgentPanelOf({
 				routines={
 					<>
 						<Routines agent={who.name} routines={routines} allPaused={paused} />
-						<Watching agent={who.name} watches={watches} allPaused={paused} />
+						<Watching agent={who.name} watches={watches} allPaused={paused} onFollow={async () => {}} />
 					</>
 				}
 				access={
@@ -253,8 +255,32 @@ export function PanelSections() {
 					<Specimen label="Connected, no routines: it opens on About">
 						<AgentPanelOf who={SANCHO} routines={[]} facts={[]} permissions={[]} />
 					</Specimen>
-					<Specimen label="No routines yet">
-						<AgentPanelOf who={OCTO} tab="routines" routines={[]} />
+					<Specimen label="No routines or watches yet: Add takes a link">
+						<AgentPanelOf who={OCTO} tab="routines" routines={[]} watches={[]} />
+					</Specimen>
+					<Specimen label="Add, its first look running">
+						<Panel name="Octo">
+							<Watching
+								agent="Octo"
+								watches={[]}
+								form={{ step: "looking", link: "https://github.com/purrgrammer/banda/pull/142" }}
+								onFollow={() => new Promise(() => {})}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="Add, refused in the daemon's words">
+						<Panel name="Octo">
+							<Watching
+								agent="Octo"
+								watches={WATCHES.slice(0, 1)}
+								form={{
+									step: "refused",
+									link: "https://gitlab.com/acme/banda/-/merge_requests/7",
+									why: "no connection you have can follow that link",
+								}}
+								onFollow={async () => {}}
+							/>
+						</Panel>
 					</Specimen>
 					<Specimen label="Nothing remembered yet">
 						<AgentPanelOf who={OCTO} tab="memory" facts={[]} />
@@ -287,7 +313,7 @@ export function PanelSections() {
 			<Section
 				id="open-file"
 				title="What opens in the panel"
-				note="A file in full (full screen on the phone), an artifact and its versions, a routine's editor."
+				note="A file in full (full screen on the phone), an artifact and its versions, a routine's editor, a watch's detail and its editor."
 			>
 				<div className="flex flex-wrap items-start gap-4">
 					<Specimen label="A PDF, its first page">
@@ -423,6 +449,46 @@ export function PanelSections() {
 					<Specimen label="+, a new routine">
 						<Panel name="Octo">
 							<RoutineEditor agent="Octo" now={SPECIMEN_NOW} onSave={async () => {}} />
+						</Panel>
+					</Specimen>
+					<Specimen label="A watch's detail">
+						<Panel name="Mara">
+							<WatchDetail
+								agent={{ id: "mara", name: "Mara" }}
+								chat={undefined}
+								watch={WATCH_VIEW}
+								now={SPECIMEN_NOW}
+								onDone={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="Editing what ends it and what matters">
+						<Panel name="Mara">
+							<WatchDetail
+								agent={{ id: "mara", name: "Mara" }}
+								chat={undefined}
+								watch={WATCH_VIEW}
+								now={SPECIMEN_NOW}
+								edit={{ step: "editing", until: null, ask: WATCH_VIEW.accepted?.watch?.ask ?? "" }}
+								onDone={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="An edit refused in the daemon's words">
+						<Panel name="Mara">
+							<WatchDetail
+								agent={{ id: "mara", name: "Mara" }}
+								chat={undefined}
+								watch={WATCH_VIEW}
+								now={SPECIMEN_NOW}
+								edit={{
+									step: "refused",
+									until: "closed",
+									ask: WATCH_VIEW.accepted?.watch?.ask ?? "",
+									why: "it changed since you saw it: look again",
+								}}
+								onDone={() => {}}
+							/>
 						</Panel>
 					</Specimen>
 				</div>

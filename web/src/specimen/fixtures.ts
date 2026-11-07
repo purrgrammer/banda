@@ -2,6 +2,7 @@
 import { getExample } from "open-bot-avatar";
 import type { FileUIPart } from "@/components/ai-elements/types";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
+import type { WatchView } from "../../../src/server/api.ts";
 import type { Service } from "../chat/Catalogue.tsx";
 import type { CheckRun, Issue, PullRequest } from "../chat/Object.tsx";
 import type { RoutineRowView, WatchRowView } from "../chat/Panel.tsx";
@@ -186,6 +187,31 @@ export const WATCHES: readonly WatchRowView[] = [
 		done: true,
 	},
 ];
+
+/** Mara's watch on #142 as the daemon sends it, which its detail opens on. */
+export const WATCH_VIEW: WatchView = {
+	name: "banda-142",
+	accepted: {
+		sha: "0".repeat(64),
+		watch: {
+			object: "https://github.com/purrgrammer/banda/pull/142",
+			account: "bandarra",
+			until: "merged",
+			ask: "Tell me when it is approved or a check fails. A comment of my own is not news.",
+		},
+	},
+	state: "active",
+	agent: "mara",
+	object: {
+		key: "github/bandarra/pull_request:purrgrammer/banda#142",
+		ref: "github:pull_request:purrgrammer/banda#142",
+		name: "purrgrammer/banda #142",
+		connection: "github",
+		service: "GitHub",
+		account: "bandarra",
+		ends: ["merged", "closed"],
+	},
+};
 
 export const ACCOUNTS = [
 	{ id: "gh-bandarra", connection: "GitHub", login: "@bandarra", agents: ["Mara", "Octo"] },

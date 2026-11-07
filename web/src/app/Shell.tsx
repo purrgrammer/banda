@@ -470,6 +470,7 @@ function Main() {
 											/>
 										)}
 										onOpen={(id) => setEditing({ agent: where.id, watch: id })}
+										onFollow={(link) => watchActions.follow({ agent: where.id, object: link })}
 										onCheck={(id) => void watchActions.check(id)}
 										onPause={(id, paused) => void watchActions.pause(id, paused)}
 										onRemove={(id) => void watchActions.remove(id)}

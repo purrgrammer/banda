@@ -1,7 +1,7 @@
 /**
- * Watches in the app: what the owner does to a watch, as one call each: allow or decline the box's change, pause,
- * resume, remove, and check now. Each answers with the control view, as it is after. And following an object from
- * its card or the panel, as the owner, in effect at once.
+ * Watches in the app: what the owner does to a watch, as one call each: allow or decline the box's change, change
+ * its words, pause, resume, remove, and check now. Each answers with the control view, as it is after. And following
+ * an object from its card or the panel, as the owner, in effect at once.
  */
 import type { Looked } from "../../../src/core/watches.ts";
 import { api, type ControlView } from "../lib/api.ts";
@@ -13,6 +13,8 @@ export const shell: ShellHandlers = {};
 export type WatchAct =
 	| { readonly action: "accept"; readonly sha: string | null }
 	| { readonly action: "decline" | "pause" | "resume" | "remove" }
+	/** Change what ends it (null: any of its ends) and what matters, over the version `sha` the owner saw. */
+	| { readonly action: "edit"; readonly sha: string; readonly until?: string | null; readonly ask?: string }
 	/** Look now; `key` names the click, so a click sent twice looks once. */
 	| { readonly action: "check"; readonly key: string };
 

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/cn";
@@ -422,15 +423,26 @@ export type { WatchRowView };
 const WATCH_ALLOW = { "set up": "Follow it", change: "Change it", stop: "Stop it" } as const;
 
 /**
+ * Add's form beneath Watching's header: closed, a link being written, its first look running, or refused in the
+ * daemon's words. The link stays as written through each.
+ */
+export type FollowForm =
+	| { readonly step: "closed" }
+	| { readonly step: "editing" | "looking"; readonly link: string }
+	| { readonly step: "refused"; readonly link: string; readonly why: string };
+
+/**
  * What the agent is watching (DESIGN.md "Watches"), beneath its routines: rows, each with what it follows and what
- * it last saw; Check now, Pause and Remove on the row; tapping opens the watch. Nothing when it watches nothing, since
- * the chat and an object's card offer Follow where it is wanted.
+ * it last saw; Check now, Pause and Remove on the row; tapping opens the watch. Add takes a link: the first look runs
+ * before the row appears, and a link nothing can follow is refused under the field.
  */
 export function Watching({
 	watches,
 	agent,
 	allPaused = false,
 	inline,
+	form: opened = { step: "closed" },
+	onFollow,
 	onCheck,
 	onPause,
 	onRemove,
@@ -442,6 +454,10 @@ export function Watching({
 	allPaused?: boolean;
 	/** The object drawn inline, as the owner's references are (its mark, state and title), by its reference; else its name. */
 	inline?: ((ref: string, name: string) => ReactNode) | undefined;
+	/** Add's form as it opens; closed unless the specimen shows it open. */
+	form?: FollowForm;
+	/** Follow a link for the agent; rejects with why the daemon refused, which the form says. */
+	onFollow?: (link: string) => Promise<unknown>;
 	onCheck?: (id: string) => void;
 	/** Pause one watch, or resume it. */
 	onPause?: (id: string, paused: boolean) => void;
@@ -450,24 +466,92 @@ export function Watching({
 	/** Open a watch. */
 	onOpen?: (id: string) => void;
 }) {
-	if (watches.length === 0) return null;
+	const [form, setForm] = useState<FollowForm>(opened);
+	const follow = (link: string) => {
+		if (onFollow === undefined || link.trim() === "") return;
+		setForm({ step: "looking", link });
+		onFollow(link.trim()).then(
+			() => setForm({ step: "closed" }),
+			(refused: unknown) =>
+				setForm({ step: "refused", link, why: refused instanceof Error ? refused.message : String(refused) }),
+		);
+	};
 	return (
-		<PanelSection title="Watching">
-			<ul className="-mx-2 flex flex-col">
-				{watches.map((watch) => (
-					<WatchRow
-						key={watch.id}
-						watch={watch}
-						agent={agent}
-						{...(inline === undefined ? {} : { inline })}
-						paused={allPaused || watch.paused === true}
-						{...(onCheck === undefined ? {} : { onCheck: () => onCheck(watch.id) })}
-						{...(onOpen === undefined ? {} : { onOpen: () => onOpen(watch.id) })}
-						{...(onRemove === undefined ? {} : { onRemove: () => onRemove(watch.id) })}
-						{...(onPause === undefined || allPaused ? {} : { onPause: () => onPause(watch.id, watch.paused !== true) })}
+		<PanelSection
+			title="Watching"
+			action={
+				onFollow === undefined || form.step !== "closed" ? undefined : (
+					<Button variant="outline" size="xs" onClick={() => setForm({ step: "editing", link: "" })}>
+						<PlusIcon />
+						Add
+					</Button>
+				)
+			}
+		>
+			{form.step === "closed" ? null : (
+				<form
+					className="flex flex-col gap-2"
+					onSubmit={(event) => {
+						event.preventDefault();
+						follow(form.link);
+					}}
+				>
+					<Input
+						autoFocus
+						aria-label="Link to follow"
+						aria-invalid={form.step === "refused"}
+						placeholder="https://github.com/owner/repo/pull/1"
+						value={form.link}
+						disabled={form.step === "looking"}
+						onChange={(event) => setForm({ step: "editing", link: event.target.value })}
 					/>
-				))}
-			</ul>
+					{form.step === "refused" ? (
+						<p role="alert" className="text-meta text-danger">
+							{form.why}
+						</p>
+					) : null}
+					<span className="flex gap-1.5">
+						<Button type="submit" size="xs" disabled={form.step === "looking" || form.link.trim() === ""}>
+							{form.step === "looking" ? <Spinner data-icon="inline-start" /> : null}
+							{form.step === "looking" ? "Looking…" : "Follow"}
+						</Button>
+						<Button
+							type="button"
+							variant="ghost"
+							size="xs"
+							disabled={form.step === "looking"}
+							onClick={() => setForm({ step: "closed" })}
+						>
+							Cancel
+						</Button>
+					</span>
+				</form>
+			)}
+			{watches.length === 0 ? (
+				form.step === "closed" ? (
+					<p className="text-meta text-ink-2">
+						Follow a pull request: paste its link, and {agent} wakes when it changes.
+					</p>
+				) : null
+			) : (
+				<ul className="-mx-2 flex flex-col">
+					{watches.map((watch) => (
+						<WatchRow
+							key={watch.id}
+							watch={watch}
+							agent={agent}
+							{...(inline === undefined ? {} : { inline })}
+							paused={allPaused || watch.paused === true}
+							{...(onCheck === undefined ? {} : { onCheck: () => onCheck(watch.id) })}
+							{...(onOpen === undefined ? {} : { onOpen: () => onOpen(watch.id) })}
+							{...(onRemove === undefined ? {} : { onRemove: () => onRemove(watch.id) })}
+							{...(onPause === undefined || allPaused
+								? {}
+								: { onPause: () => onPause(watch.id, watch.paused !== true) })}
+						/>
+					))}
+				</ul>
+			)}
 		</PanelSection>
 	);
 }
