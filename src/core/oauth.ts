@@ -74,13 +74,15 @@ function responseProblem(url: string, status: number, body: unknown): Error {
 		body !== null &&
 		"error_description" in body &&
 		typeof body.error_description === "string"
-			? body.error_description
-					.replace(/[\r\n\t]+/g, " ")
-					.replace(/\b(code|client_secret|refresh_token|access_token)=([^&\s]+)/gi, "$1=[redacted]")
-					.slice(0, 180)
+			? body.error_description.trim().toLowerCase()
 			: undefined;
 	const safeCode = code !== undefined && /^[a-zA-Z0-9_-]{1,80}$/.test(code) ? ` (${code})` : "";
-	const safeDescription = description === undefined || description === "" ? "" : `: ${description}`;
+	const safeDescription =
+		new URL(url).host === "oauth2.googleapis.com" &&
+		code === "invalid_request" &&
+		description === "client_secret is missing"
+			? ": client_secret is missing"
+			: "";
 	return new Error(`${new URL(url).host} answered ${status}${safeCode}${safeDescription}`);
 }
 

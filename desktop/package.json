@@ -1,6 +1,6 @@
 {
 	"name": "banda-desktop",
-	"version": "0.1.0-alpha.3",
+	"version": "0.1.0-alpha.4",
 	"private": true,
 	"description": "banda's desktop app: a window and a tray around the daemon.",
 	"license": "AGPL-3.0-only",

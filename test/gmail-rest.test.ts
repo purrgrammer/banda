@@ -210,7 +210,7 @@ describe("Gmail REST connection", () => {
 		expect(JSON.stringify(started.pending)).not.toContain("client_secret");
 	});
 
-	it("exchanges a public Desktop client code with PKCE and no client secret", async () => {
+	it("exchanges a public Desktop client code with PKCE and the bundled client secret", async () => {
 		const fetcher = vi
 			.fn<typeof fetch>()
 			.mockResolvedValue(response({ access_token: "access", refresh_token: "refresh" }));
@@ -231,7 +231,7 @@ describe("Gmail REST connection", () => {
 		const body = new URLSearchParams(String(fetcher.mock.calls[0]?.[1]?.body));
 		expect(body.get("grant_type")).toBe("authorization_code");
 		expect(body.get("code_verifier")).toBe(started.pending.verifier);
-		expect(body.has("client_secret")).toBe(false);
+		expect(body.get("client_secret")).toBe(DEFAULT_GOOGLE_CLIENT_SECRET);
 	});
 
 	it("searches the account with the daemon bearer and returns bounded headers", async () => {
