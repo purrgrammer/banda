@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { cn } from "@/lib/cn";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { agentId } from "../../../src/core/agent-id.ts";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import { createGroup } from "../areas/groups.ts";
@@ -22,6 +22,22 @@ import type { ChatAgent } from "../lib/navigation.ts";
 import { useShell } from "../lib/shell.ts";
 import { agentFile } from "./edit-file.ts";
 import type { Where } from "./where.ts";
+
+/** The Agent/Group switch, styled as a segmented control; tabs, so the arrow keys move between them. */
+export function MakeTabsList() {
+	const segment =
+		"-mb-0 h-auto rounded-[6px] border-0 px-3 py-1 text-ui data-[state=active]:bg-paper data-[state=active]:shadow-[0_0_0_1px_var(--line-soft)]";
+	return (
+		<TabsList aria-label="Make" className="gap-0.5 rounded-field border-0 bg-paper-3 p-0.5">
+			<TabsTrigger value="agent" className={segment}>
+				Agent
+			</TabsTrigger>
+			<TabsTrigger value="group" className={segment}>
+				Group
+			</TabsTrigger>
+		</TabsList>
+	);
+}
 
 export function NewSheet({
 	open,
@@ -39,6 +55,15 @@ export function NewSheet({
 	const [personality, setPersonality] = useState("");
 	const [members, setMembers] = useState<readonly string[]>([]);
 	const [typedName, setGroupName] = useState<string | undefined>(undefined);
+	// closing by Esc or a click outside keeps the draft; only Cancel and a successful create let it go
+	const reset = () => {
+		setKind("agent");
+		setWho({ face: defaultAvatarFace(), name: "" });
+		setPersonality("");
+		setMembers([]);
+		setGroupName(undefined);
+		setError(undefined);
+	};
 	// until the owner names it, the group's name follows who is in it: "Sancho & Mara"
 	const memberNames = members.map((member) => agents.find((agent) => agent.id === member)?.name ?? member);
 	const groupName =
@@ -68,6 +93,7 @@ export function NewSheet({
 				onGo({ name: "group", room });
 			}
 			onOpenChange(false);
+			reset();
 		} catch (failed) {
 			const why = (failed as Error).message;
 			setError(
@@ -83,30 +109,17 @@ export function NewSheet({
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="flex max-h-[90svh] flex-col gap-0 overflow-hidden rounded-tile p-0 sm:max-w-md">
-				<div className="flex items-center gap-3 border-b border-line-soft px-4 py-3">
-					<DialogTitle className="text-ui font-semibold text-ink">New</DialogTitle>
-					<div role="radiogroup" aria-label="Make" className="flex rounded-field bg-paper-3 p-0.5">
-						{(["agent", "group"] as const).map((one) => (
-							// biome-ignore lint/a11y/useSemanticElements: a segment of a segmented control
-							<button
-								key={one}
-								type="button"
-								role="radio"
-								aria-checked={kind === one}
-								onClick={() => setKind(one)}
-								className={cn(
-									"rounded-[6px] px-3 py-1 text-ui text-ink-2",
-									kind === one && "bg-paper font-medium text-ink shadow-[0_0_0_1px_var(--line-soft)]",
-								)}
-							>
-								{one === "agent" ? "Agent" : "Group"}
-							</button>
-						))}
+				<Tabs
+					value={kind}
+					onValueChange={(next) => setKind(next as "agent" | "group")}
+					className="flex min-h-0 flex-col"
+				>
+					<div className="flex items-center gap-3 border-b border-line-soft px-4 py-3">
+						<DialogTitle className="text-ui font-semibold text-ink">New</DialogTitle>
+						<MakeTabsList />
 					</div>
-				</div>
-				<div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 py-5">
-					{kind === "agent" ? (
-						<>
+					<div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 py-5">
+						<TabsContent value="agent" className="flex flex-col gap-6">
 							<FaceAndName who={who} onChange={setWho} autoFocus />
 							{who.name.trim() !== "" && taken.has(id) ? (
 								<p className="-mt-3 text-meta text-danger">
@@ -122,10 +135,9 @@ export function NewSheet({
 									}
 								/>
 							</div>
-							<Personality starters onChange={setPersonality} />
-						</>
-					) : (
-						<>
+							<Personality text={personality} starters onChange={setPersonality} />
+						</TabsContent>
+						<TabsContent value="group" className="flex flex-col gap-6">
 							{/* biome-ignore lint/a11y/noLabelWithoutControl: the input inside is the control */}
 							<label className="flex flex-col gap-1.5">
 								<span className="text-ui font-medium text-ink">Name</span>
@@ -161,22 +173,28 @@ export function NewSheet({
 									))}
 								</div>
 							</div>
-						</>
-					)}
-					{error === undefined ? null : (
-						<p role="alert" className="text-ui text-danger">
-							{error}
-						</p>
-					)}
-				</div>
-				<div className="flex gap-2 border-t border-line-soft px-4 py-3">
-					<Button className="flex-1" disabled={!ready || busy} onClick={() => void create()}>
-						{kind === "agent" ? "Add to the band" : "Start the group"}
-					</Button>
-					<Button variant="ghost" onClick={() => onOpenChange(false)}>
-						Cancel
-					</Button>
-				</div>
+						</TabsContent>
+						{error === undefined ? null : (
+							<p role="alert" className="text-ui text-danger">
+								{error}
+							</p>
+						)}
+					</div>
+					<div className="flex gap-2 border-t border-line-soft px-4 py-3">
+						<Button className="flex-1" disabled={!ready || busy} onClick={() => void create()}>
+							{kind === "agent" ? "Add to the band" : "Start the group"}
+						</Button>
+						<Button
+							variant="ghost"
+							onClick={() => {
+								reset();
+								onOpenChange(false);
+							}}
+						>
+							Cancel
+						</Button>
+					</div>
+				</Tabs>
 			</DialogContent>
 		</Dialog>
 	);
