@@ -32,7 +32,7 @@ export const GMAIL_TOOLS: McpTool[] = [
 	tool("get_labels", "List Gmail labels and their names and identifiers.", {}),
 	tool(
 		"search_messages",
-		"Search Gmail using Gmail search syntax. Defaults to the inbox. Returns matching messages, Gmail links, and a nextPageToken when more results exist. Use that token as page_token to continue; include returned Gmail links in your answer so banda can show email cards.",
+		"Search Gmail using Gmail search syntax. Defaults to the inbox. Returns matching message ids and a nextPageToken when more results exist. Use that token as page_token to continue; include returned ids as gmail/<id> references in your answer so banda can show email cards.",
 		{
 			query: { type: "string", description: "Gmail search query; defaults to in:inbox", maxLength: 500 },
 			max_results: { type: "integer", minimum: 1, maximum: 25 },
@@ -49,7 +49,7 @@ export const GMAIL_TOOLS: McpTool[] = [
 	),
 	tool(
 		"get_thread",
-		"Read a Gmail conversation and its messages. Include returned Gmail links in your answer so banda can show email cards.",
+		"Read a Gmail conversation and its messages. Include returned ids as gmail/<id> references in your answer so banda can show email cards.",
 		{
 			thread_id: { type: "string", minLength: 1, maxLength: 200 },
 		},
@@ -149,6 +149,14 @@ function decodePart(payload: unknown): string {
 	const part = object(payload);
 	const mime = typeof part.mimeType === "string" ? part.mimeType : "";
 	const body = object(part.body);
+	const headers = Array.isArray(part.headers) ? part.headers.map(object) : [];
+	const disposition = headers.find((header) => String(header.name ?? "").toLowerCase() === "content-disposition");
+	if (
+		(typeof part.filename === "string" && part.filename !== "") ||
+		typeof body.attachmentId === "string" ||
+		(typeof disposition?.value === "string" && /^\s*attachment\b/i.test(disposition.value))
+	)
+		return "";
 	if (mime === "text/plain" && typeof body.data === "string") {
 		const decoded = Buffer.from(body.data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
 		return decoded.slice(0, 40_000);
@@ -204,8 +212,26 @@ function messageOf(raw: unknown) {
 			? msg.labelIds.filter((x): x is string => typeof x === "string").slice(0, 30)
 			: [],
 		unread: Array.isArray(msg.labelIds) && msg.labelIds.includes("UNREAD"),
-		url: typeof msg.id === "string" ? `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(msg.id)}` : "",
 	};
+}
+
+/** RFC 2047 encoded-words are limited to 75 characters; keep UTF-8 chunks whole and fold between words. */
+function encodeSubject(subject: string): string {
+	const words: string[] = [];
+	let chunk = "";
+	let bytes = 0;
+	for (const char of subject) {
+		const size = Buffer.byteLength(char, "utf8");
+		if (bytes + size > 42 && chunk !== "") {
+			words.push(`=?UTF-8?B?${Buffer.from(chunk, "utf8").toString("base64")}?=`);
+			chunk = "";
+			bytes = 0;
+		}
+		chunk += char;
+		bytes += size;
+	}
+	if (chunk !== "" || words.length === 0) words.push(`=?UTF-8?B?${Buffer.from(chunk, "utf8").toString("base64")}?=`);
+	return words.join("\r\n ");
 }
 
 /** Fetch bytes for a message attachment. Bearer and base64 stay inside the daemon. */
@@ -363,7 +389,7 @@ export async function gmailWriteCall(
 				hasControl(subject)
 			)
 				throw new Error("Give a valid recipient, subject and message body within the size limits.");
-			const safeSubject = `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`;
+			const safeSubject = encodeSubject(subject);
 			const boundary = `banda_${randomUUID().replaceAll("-", "")}`;
 			const headers = [`To: ${to}`, `Subject: ${safeSubject}`, "MIME-Version: 1.0"];
 			const encodedBody = Buffer.from(body, "utf8")
@@ -520,7 +546,6 @@ export async function gmailCall(
 							subject: get("Subject"),
 							date: get("Date"),
 							snippet: typeof msg.snippet === "string" ? msg.snippet.slice(0, 2000) : "",
-							url: `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(id)}`,
 						};
 					}),
 				);

@@ -145,6 +145,7 @@ export type Routes = {
 	readonly signIn: (
 		name: string,
 		agent?: string,
+		onDevice?: boolean,
 	) => Promise<
 		| { readonly url: string }
 		| { readonly code: string; readonly page: string; readonly expires: number }
@@ -709,7 +710,7 @@ export function handler(
 				const { agent } = await json(req);
 				if (agent !== undefined && (typeof agent !== "string" || !/^[a-z0-9-]{1,64}$/.test(agent)))
 					throw new BadRequest("agent names an agent");
-				return reply(res, 200, await routes.signIn(name, agent as string | undefined));
+				return reply(res, 200, await routes.signIn(name, agent as string | undefined, device !== undefined));
 			}
 			if (action === "accept") {
 				const { sha } = await json(req);

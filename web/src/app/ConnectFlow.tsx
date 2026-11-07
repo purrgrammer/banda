@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConnectCard, GmailPermissions } from "../chat/Connect.tsx";
-import { actOnCapability, signIn, switchAccount } from "../lib/api.ts";
+import { actOnCapability, runsOnDevice, signIn, switchAccount } from "../lib/api.ts";
 import { connectState, freshAccounts, type Phase } from "../lib/connect.ts";
 import { showCapabilities, useShell } from "../lib/shell.ts";
 
@@ -48,11 +48,17 @@ export function ConnectFlow({
 	const view = capabilities?.connections.find((each) => each.name === connection);
 	const shipped = capabilities?.shipped?.find((each) => each.name === connection);
 	const service = serviceOf(connection, capabilities);
-	const reason =
+	const reason = [
 		why ??
-		(agent === undefined
-			? `Sign in once; then switch it on for the agents that may use it.`
-			: `${agent.name} reads with it and asks before anything it writes.`);
+			(agent === undefined
+				? "Sign in once; then switch it on for the agents that may use it."
+				: `${agent.name} reads with it and asks before anything it writes.`),
+		runsOnDevice && connection === "gmail"
+			? "Sign in and change Gmail access on the computer Banda runs on. Connected accounts are available on this device."
+			: undefined,
+	]
+		.filter(Boolean)
+		.join(" ");
 	const start = async () => {
 		setBusy(true);
 		const before = view?.finished?.at;
@@ -127,6 +133,7 @@ export function ConnectFlow({
 									scopes={view?.accepted?.connection?.scopes ?? ["https://www.googleapis.com/auth/gmail.readonly"]}
 									onScopes={(scopes) => void setGmailScopes(scopes)}
 									busy={busy}
+									readonly={runsOnDevice}
 								/>
 							),
 						}

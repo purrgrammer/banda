@@ -595,6 +595,7 @@ describe("signing in by code, as a file's named client", () => {
 		const s = await open(fake);
 		s.writeBox("connections/cal.md", fileOf(fake, { scopes: ["read:user"] }));
 		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await expect(s.capabilities.signIn("cal", context, "sancho", true)).rejects.toThrow(/computer Banda runs on/);
 		expect(await signInAsOwner(s.capabilities, "cal")).toEqual({
 			ok: true,
 			words: "Signed in to Calendar as account 1.",

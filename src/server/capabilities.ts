@@ -2048,6 +2048,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		name: string,
 		ctx: Context = context,
 		agent?: string,
+		onDevice = false,
 	): Promise<
 		| { readonly url: string }
 		| { readonly code: string; readonly page: string; readonly expires: number }
@@ -2087,6 +2088,10 @@ export function openCapabilities(options: CapabilityOptions) {
 				options.changed?.();
 				return { code: device.code, page: device.page, expires: device.expires };
 			}
+			if (onDevice)
+				throw new BadRequest(
+					"Start sign-in on the computer Banda runs on; accounts connected there are available on this device.",
+				);
 			const redirect = options.redirect();
 			const client =
 				connection.client !== undefined ? oauthClient(connection) : await register(server, redirect, fetcher);

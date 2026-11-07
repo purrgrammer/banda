@@ -10,7 +10,7 @@ account: get_profile.emailAddress
 reads: [get_profile, get_labels, search_messages, get_message, get_thread]
 ---
 Read your Gmail inbox and conversations. Search with bounded pagination, inspect message headers and plain text, and read
-a complete thread. Search results include Gmail message links; use them in the answer to show email cards in chat.
+a complete thread. Reference messages as `gmail/<id>` in the answer to show their email cards in chat.
 The owner starts with read-only access. Sending and mailbox changes are separate tools that always ask for approval;
 they require the owner to add the matching Google scope and sign in again. The daemon keeps credentials outside the
 store and the agent's computer.
@@ -30,7 +30,6 @@ store and the agent's computer.
 		"email": {
 			"card": "email",
 			"name": "{id}",
-			"urls": ["https://mail.google.com/mail/u/0/#all/{id}"],
 			"ids": ["gmail/{id}"],
 			"reads": {
 				"message": { "tool": "get_message", "args": { "message_id": "{id}" } }
@@ -43,8 +42,7 @@ store and the agent's computer.
 				"snippet": "message.snippet",
 				"body": "message.body",
 				"attachments": "message.attachments",
-				"unread": "message.unread",
-				"url": "message.url"
+				"unread": "message.unread"
 			},
 			"writes": [
 				{ "tool": "mailbox_archive", "id": { "id": "message_id" }, "verb": "Archive" },

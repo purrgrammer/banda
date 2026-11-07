@@ -40,7 +40,6 @@ it("fetches only an attachment named by the same authorized Gmail message and ho
 					snippet: "Attached",
 					body: "See notes",
 					unread: true,
-					url: "https://mail.google.com/mail/u/0/#all/msg_1",
 					attachments: [{ id: "att_1", name: "notes.txt", mimeType: "text/plain", size: 5 }],
 				},
 			},
@@ -86,7 +85,6 @@ it("fetches only an attachment named by the same authorized Gmail message and ho
 					snippet: "Attached",
 					body: "See notes",
 					unread: true,
-					url: "https://mail.google.com/mail/u/0/#all/msg_1",
 					attachments: [{ id: "att_1", name: "notes.txt", mimeType: "text/plain", size: 5 }],
 				}),
 			}),
@@ -96,13 +94,13 @@ it("fetches only an attachment named by the same authorized Gmail message and ho
 			},
 		},
 	});
-	const url = "https://mail.google.com/mail/u/0/#all/msg_1";
-	const card = (await service.show(chat, [{ ref: url, agent: "reader" }]))[0];
+	const ref = "gmail/msg_1";
+	const card = (await service.show(chat, [{ ref, agent: "reader" }]))[0];
 	expect(card).toMatchObject({ shown: "card" });
-	const denied = await service.attachment(chat, url, "att_other", "reader", "alice");
+	const denied = await service.attachment(chat, ref, "att_other", "reader", "alice");
 	expect(denied).toBeUndefined();
 	expect(fetched).toBe(0);
-	const file = await service.attachment(chat, url, "att_1", "reader", "alice");
+	const file = await service.attachment(chat, ref, "att_1", "reader", "alice");
 	expect(file).toMatchObject({ name: "notes.txt", size: 5 });
 	expect(file?.sha).toMatch(/^[0-9a-f]{64}$/);
 	expect(await blobs.read(file!.sha)).toEqual(Buffer.from("notes"));

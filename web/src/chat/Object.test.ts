@@ -3,9 +3,7 @@ import { safeObjectUrl } from "./Object.tsx";
 
 describe("connection object links", () => {
 	it("accepts the declared Gmail message URL and GitHub object URLs", () => {
-		expect(safeObjectUrl("https://mail.google.com/mail/u/0/#all/abc_123-xy")).toBe(
-			"https://mail.google.com/mail/u/0/#all/abc_123-xy",
-		);
+		expect(safeObjectUrl("https://mail.google.com/mail/u/0/#all/abc_123-xy")).toBeUndefined();
 		expect(safeObjectUrl("https://github.com/banda/repo/pull/42")).toBe("https://github.com/banda/repo/pull/42");
 	});
 

@@ -328,11 +328,18 @@ function EmailAttachmentItem({
 	const [failure, setFailure] = useState<string>();
 	const oversized = attachment.size > 10 * 1024 * 1024;
 	const open = async () => {
-		if (busy || oversized || file !== undefined || shown.card.card !== "email" || shown.card.url === undefined) return;
+		if (
+			busy ||
+			oversized ||
+			file !== undefined ||
+			shown.card.card !== "email" ||
+			!/^[A-Za-z0-9_-]{1,200}$/.test(shown.name)
+		)
+			return;
 		setBusy(true);
 		setFailure(undefined);
 		try {
-			const saved = await gmailAttachment(chat, shown.card.url, attachment.id, {
+			const saved = await gmailAttachment(chat, `gmail/${shown.name}`, attachment.id, {
 				...(agent === undefined ? {} : { agent: agent.id }),
 				...(shown.accountKey === undefined ? {} : { account: shown.accountKey }),
 			});

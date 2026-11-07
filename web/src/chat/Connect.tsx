@@ -162,10 +162,12 @@ export function GmailPermissions({
 	scopes,
 	onScopes,
 	busy = false,
+	readonly = false,
 }: {
 	scopes: readonly string[];
 	onScopes: (scopes: readonly string[]) => void;
 	busy?: boolean;
+	readonly?: boolean;
 }) {
 	const read = "https://www.googleapis.com/auth/gmail.readonly";
 	const choices = [
@@ -173,7 +175,7 @@ export function GmailPermissions({
 		["https://www.googleapis.com/auth/gmail.modify", "Archive, trash, mark read and manage labels"],
 	] as const;
 	return (
-		<fieldset className="flex flex-col gap-2 rounded-field bg-paper-2 p-3 text-meta" disabled={busy}>
+		<fieldset className="flex flex-col gap-2 rounded-field bg-paper-2 p-3 text-meta" disabled={busy || readonly}>
 			<legend className="font-medium text-ink">Google access</legend>
 			<label className="flex items-start gap-2 text-ink-2">
 				<input type="checkbox" checked={scopes.includes(read)} disabled readOnly className="mt-0.5" />
@@ -195,7 +197,9 @@ export function GmailPermissions({
 				</label>
 			))}
 			<p className="text-ink-3">
-				Changing access restarts Google sign-in. Sending and mailbox changes still ask you to approve each action.
+				{readonly
+					? "Change access and sign in again on the computer Banda runs on. Connected accounts are available on this device."
+					: "Changing access restarts Google sign-in. Sending and mailbox changes still ask you to approve each action."}
 			</p>
 		</fieldset>
 	);

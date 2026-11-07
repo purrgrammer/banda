@@ -59,6 +59,19 @@ describe("Gmail REST connection", () => {
 		expect(result.text).not.toContain("token");
 	});
 
+	it("folds long Unicode subjects into RFC 2047 encoded-words of at most 75 characters", async () => {
+		const subject = "Launch 🚀 café 世界 ".repeat(18);
+		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ id: "sent_long" }));
+		await gmailWriteCall("token", "send_message", { to: "a@example.test", subject, body: "Hi" }, undefined, fetcher);
+		const raw = (JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as { raw: string }).raw;
+		const mime = Buffer.from(raw, "base64url").toString("utf8");
+		const encodedHeader = mime.match(/^Subject: ([^\r]*(?:\r\n [^\r]*)*)/m)?.[1]?.replaceAll("\r\n ", " ");
+		const words = encodedHeader?.match(/=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=/g) ?? [];
+		expect(words.length).toBeGreaterThan(1);
+		expect(words.every((word) => word.length <= 75)).toBe(true);
+		expect(words.map((word) => Buffer.from(word.slice(10, -2), "base64").toString("utf8")).join("")).toBe(subject);
+	});
+
 	it("puts approved attachment bytes in a bounded MIME part without returning them", async () => {
 		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ id: "sent_2" }));
 		const bytes = Buffer.from("attachment bytes");
@@ -151,7 +164,6 @@ describe("Gmail REST connection", () => {
 					snippet: "First paragraph",
 					body: "First paragraph\n\nSecond paragraph",
 					unread: true,
-					url: "https://mail.google.com/mail/u/0/#all/abc_123",
 				},
 			},
 		);
@@ -243,7 +255,6 @@ describe("Gmail REST connection", () => {
 					threadId: "t_1",
 					from: "Ana <ana@example.test>",
 					subject: "Hi",
-					url: "https://mail.google.com/mail/u/0/#all/m_1",
 				},
 			],
 		});
@@ -254,36 +265,53 @@ describe("Gmail REST connection", () => {
 		expect(result.text).not.toContain("private-token");
 	});
 
-	it("reads only plain text and refuses invalid identifiers before fetching", async () => {
+	it("reads plain text and excludes text attachments from the message body", async () => {
 		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
 			response({
 				id: "m1",
 				payload: {
 					headers: [{ name: "Subject", value: "Private" }],
-					mimeType: "multipart/alternative",
+					mimeType: "multipart/mixed",
 					parts: [
-						{ mimeType: "text/html", body: { data: Buffer.from("<script>bad()</script>").toString("base64url") } },
-						{ mimeType: "text/plain", body: { data: Buffer.from("Safe body").toString("base64url") } },
+						{
+							mimeType: "multipart/alternative",
+							parts: [
+								{ mimeType: "text/html", body: { data: Buffer.from("<script>bad()</script>").toString("base64url") } },
+								{ mimeType: "text/plain", body: { data: Buffer.from("Safe body").toString("base64url") } },
+							],
+						},
+						{
+							mimeType: "text/plain",
+							filename: "private.txt",
+							headers: [{ name: "Content-Disposition", value: "attachment; filename=private.txt" }],
+							body: {
+								attachmentId: "att_private",
+								data: Buffer.from("Do not expose this attachment").toString("base64url"),
+							},
+						},
 					],
 				},
 			}),
 		);
 		const result = await gmailCall("t", "get_message", { message_id: "m1" }, undefined, fetcher);
 		expect(JSON.parse(result.text).body).toBe("Safe body");
+		expect(JSON.parse(result.text).body).not.toContain("Do not expose");
+		expect(JSON.parse(result.text).attachments).toMatchObject([{ name: "private.txt", id: "att_private" }]);
 		const invalid = await gmailCall("t", "get_message", { message_id: "../settings" }, undefined, fetcher);
 		expect(invalid.isError).toBe(true);
 		expect(fetcher).toHaveBeenCalledTimes(1);
 	});
 
-	it("reads a bounded thread and includes Gmail links for its messages", async () => {
+	it("reads a bounded thread with canonical message ids and no account-assuming links", async () => {
 		const fetcher = vi
 			.fn<typeof fetch>()
 			.mockResolvedValue(response({ id: "t_1", messages: [{ id: "m_1", threadId: "t_1", payload: { headers: [] } }] }));
 		const result = await gmailCall("t", "get_thread", { thread_id: "t_1" }, undefined, fetcher);
 		expect(JSON.parse(result.text)).toMatchObject({
 			id: "t_1",
-			messages: [{ id: "m_1", url: "https://mail.google.com/mail/u/0/#all/m_1" }],
+			messages: [{ id: "m_1" }],
 		});
+		expect(JSON.parse(result.text)).not.toHaveProperty("messages.0.url");
 	});
 
 	it("fetches external and inline attachment bytes only from their Gmail message", async () => {

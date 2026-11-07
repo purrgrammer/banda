@@ -223,13 +223,6 @@ export function safeObjectUrl(value: string | undefined): string | undefined {
 		const clean = url.protocol === "https:" && url.port === "" && url.username === "" && url.password === "";
 		if (!clean) return undefined;
 		if (url.hostname === "github.com") return url.href;
-		if (
-			url.hostname === "mail.google.com" &&
-			url.pathname === "/mail/u/0/" &&
-			url.search === "" &&
-			/^#all\/[A-Za-z0-9_-]{1,200}$/.test(url.hash)
-		)
-			return url.href;
 		return undefined;
 	} catch {
 		return undefined;

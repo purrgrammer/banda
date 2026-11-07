@@ -101,7 +101,8 @@ in a throwaway home, at desktop and phone width.
 - [x] Gmail chat connection action: on the running throwaway app, Connect Gmail changed to Open Gmail / Waiting for Gmail; this verifies the chat action starts OAuth
 - [x] Gmail OAuth callback and account grant: the owner connected a real Google account and verified Gmail reads through the app
 - [ ] Gmail: complete the app walkthrough at desktop and phone widths, including the connection success toast and compact card; owner acceptance
-- [x] Gmail reads: bounded page tokens, safe message links from search and thread reads, and existing email-object cards for those links
+- [x] Gmail reads: bounded page tokens and canonical `gmail/<id>` references from search and thread reads; Banda email cards are the canonical view
+- [x] Gmail hardening: text attachment parts stay out of message bodies; long Unicode subjects use folded RFC 2047 words; redirect OAuth sign-in starts on the computer and connected accounts remain usable on paired devices
 - [ ] Gmail reads: try search pagination and thread cards through the running app; owner acceptance
 - [x] Gmail attachments: list metadata and retrieve bounded bytes through the daemon; never render HTML or expose credentials to the box
 - [x] Gmail send: show recipient, subject, body and held attachments in the existing approval draft; send only the approved content and account
