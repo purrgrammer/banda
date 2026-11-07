@@ -1,51 +1,53 @@
 /**
- * The band's own file (`../../core/band.ts`): `GET /api/band` reads the pins from `band.md` at the workspace root, and
- * `POST /api/band/pin` pins or unpins one, writing the file in effect at once. The shell stream carries the pins on
+ * The band's own file (`../../core/band.ts`): `GET /api/band` reads the pins from `band.json` at the workspace root,
+ * checked against its schema, and `POST /api/band/pin` pins or unpins one, writing the file in effect at once. The shell stream carries the pins on
  * every push, so a change to the file by hand or by an agent shows with the next one. The file is read without
  * following a link, and one the daemon does not read is never written over.
  */
 import type { Context } from "@earendil-works/chord";
-import { BAND_FILE, bandFile, DEFAULT_PINS, isPin, MAX_BAND_BYTES, pinned, pinsOf } from "../../core/band.ts";
+import { BAND_FILE, bandFile, DEFAULT_PINS, isPin, MAX_BAND_BYTES, pinned, readBandFile } from "../../core/band.ts";
 import { context } from "../../core/store.ts";
 import { readBytes, textOf, type Workspace, write } from "../agents.ts";
 import type { BandView } from "../api.ts";
 import { BadRequest } from "../http.ts";
 import type { AreaModule } from "./area.ts";
 
-/** `band.md` as the daemon reads it: its text, none, or why it is not one it reads. */
+/** `band.json` as the daemon reads it: its pins (Sancho with no file), or why it is not one it reads. */
 async function readBand(
 	workspace: Workspace,
 	ctx: Context,
-): Promise<{ readonly text: string | undefined } | { readonly unreadable: string }> {
+): Promise<{ readonly pinned: readonly string[] } | { readonly unreadable: string }> {
 	const env = workspace.env();
 	const path = `${workspace.root}/${BAND_FILE}`;
 	// opened without following a link: none there is no file, a link (even one to nothing) is not one it reads
 	const opened = await env.openBinaryReader(path, { noFollow: true }, ctx);
 	if (!opened.ok) {
-		if (opened.error.code === "not_found") return { text: undefined };
+		if (opened.error.code === "not_found") return readBandFile(undefined);
 		if (opened.error.code === "invalid") return { unreadable: "it is a link, not a file" };
 		throw opened.error;
 	}
 	await opened.value.close(ctx);
 	const read = await readBytes(env, path, MAX_BAND_BYTES, ctx);
-	return "bytes" in read ? textOf(read.bytes) : read;
+	if (!("bytes" in read)) return read;
+	const text = textOf(read.bytes);
+	return "text" in text ? readBandFile(text.text) : text;
 }
 
 /** The band as the app shows it: the file's pins, or Sancho's when the file is one the daemon does not read. */
 export async function bandView(workspace: Workspace, ctx: Context = context): Promise<BandView> {
 	try {
 		const read = await readBand(workspace, ctx);
-		return "unreadable" in read ? { pinned: [...DEFAULT_PINS], unavailable: true } : { pinned: pinsOf(read.text) };
+		return "unreadable" in read ? { pinned: [...DEFAULT_PINS], unavailable: true } : { pinned: read.pinned };
 	} catch {
 		return { pinned: [...DEFAULT_PINS], unavailable: true };
 	}
 }
 
-/** Pin `pin` (to the end of the row) or unpin it, and write `band.md`; the band as it is after. */
+/** Pin `pin` (to the end of the row) or unpin it, and write `band.json`; the band as it is after. */
 export async function pin(workspace: Workspace, pin: string, on: boolean, ctx: Context = context): Promise<BandView> {
 	const read = await readBand(workspace, ctx);
-	if ("unreadable" in read) throw new BadRequest(`band.md can't be changed here: ${read.unreadable}`, 409);
-	const next = pinned(pinsOf(read.text), pin, on);
+	if ("unreadable" in read) throw new BadRequest(`band.json can't be changed here: ${read.unreadable}`, 409);
+	const next = pinned(read.pinned, pin, on);
 	await write(workspace.env(), workspace, `${workspace.root}/${BAND_FILE}`, bandFile(next), ctx);
 	return { pinned: next };
 }

@@ -1,10 +1,14 @@
-/** The band's own file, `band.md` at the workspace root: its pins read, written in the owner's order, never through a link. */
+/**
+ * The band's own file, `band.json` at the workspace root: typed by its schema, its pins written in the owner's order,
+ * never through a link nor over a file that does not fit.
+ */
 import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import { type Box, openBox } from "../src/box/box.ts";
-import { BAND_FILE, bandFile, DEFAULT_PINS, isPin, MAX_PINS, pinned, pinsOf } from "../src/core/band.ts";
+import { AGENT_NAME } from "../src/core/agents.ts";
+import { BAND_FILE, bandFile, DEFAULT_PINS, isPin, MAX_PINS, pinned, readBandFile } from "../src/core/band.ts";
 import type { Workspace } from "../src/server/agents.ts";
 import { BadRequest } from "../src/server/http.ts";
 import { bandView, pin } from "../src/server/routes/band.ts";
@@ -28,23 +32,30 @@ const pinArb = fc.oneof(
 	fc.integer({ min: 1, max: 99_999 }).map((room) => `group:${room}`),
 );
 
-describe("band.md", () => {
+describe("band.json", () => {
 	it("pins Sancho with no file, nothing with an empty list", () => {
-		expect(pinsOf(undefined)).toEqual(DEFAULT_PINS);
-		expect(pinsOf(bandFile([]))).toEqual([]);
-		expect(pinsOf("no front matter")).toEqual([]);
+		expect(readBandFile(undefined)).toEqual({ pinned: DEFAULT_PINS });
+		expect(readBandFile(bandFile([]))).toEqual({ pinned: [] });
 	});
 
-	it("reads what the owner wrote by hand, skipping what is not a pin and repeats", () => {
-		const text = '---\ntitle: mine\npinned:\n  - mara\n  - "group:3"\n  - Not A Pin\n  - mara\nother:\n  - octo\n---\n';
-		expect(pinsOf(text)).toEqual(["mara", "group:3"]);
+	it("reads only what fits its schema, so nothing else is ever written over", () => {
+		for (const text of [
+			"pinned: [sancho]",
+			"{}",
+			'{"pinned": "sancho"}',
+			'{"pinned": ["Sancho"]}',
+			'{"pinned": ["mara", "mara"]}',
+			'{"pinned": [], "more": true}',
+			JSON.stringify({ pinned: Array.from({ length: MAX_PINS + 1 }, (_, i) => `group:${i + 1}`) }),
+		])
+			expect(readBandFile(text)).toHaveProperty("unreadable");
+		expect(readBandFile('{ "pinned": ["mara", "group:3"] }')).toEqual({ pinned: ["mara", "group:3"] });
 	});
 
-	it("reads back any pins it writes, in order, each once", () => {
+	it("reads back any pins it writes, in order", () => {
 		fc.assert(
-			fc.property(fc.array(pinArb, { maxLength: 60 }), (pins) => {
-				const once = [...new Set(pins)].slice(0, MAX_PINS);
-				expect(pinsOf(bandFile(once))).toEqual(once);
+			fc.property(fc.uniqueArray(pinArb, { maxLength: MAX_PINS }), (pins) => {
+				expect(readBandFile(bandFile(pins))).toEqual({ pinned: pins });
 			}),
 			{ numRuns: pbtRuns(100) },
 		);
@@ -62,27 +73,42 @@ describe("band.md", () => {
 		);
 	});
 
-	it("takes agents' ids and groups' rooms as pins, nothing else", () => {
+	it("takes agents' ids, as an agent file names them, and groups' rooms as pins, nothing else", () => {
+		fc.assert(
+			fc.property(fc.string({ maxLength: 12 }), (text) => {
+				expect(isPin(text)).toBe(AGENT_NAME.test(text) || /^group:[1-9][0-9]{0,9}$/.test(text));
+			}),
+			{ numRuns: pbtRuns(200) },
+		);
 		expect(["sancho", "mara-2", "group:3"].every(isPin)).toBe(true);
 		expect(["", "Sancho", "group:0", "group:x", "../x", "a b"].some(isPin)).toBe(false);
 	});
 });
 
 describe("pinning in the box", () => {
-	it("writes band.md at the workspace root and reads it back", async () => {
+	it("writes band.json at the workspace root and reads it back", async () => {
 		const at = await workspace();
 		expect(await bandView(at)).toEqual({ pinned: ["sancho"] });
 		expect(await pin(at, "mara", true)).toEqual({ pinned: ["sancho", "mara"] });
 		expect(await pin(at, "group:4", true)).toEqual({ pinned: ["sancho", "mara", "group:4"] });
 		expect(await pin(at, "sancho", false)).toEqual({ pinned: ["mara", "group:4"] });
 		expect(await bandView(at)).toEqual({ pinned: ["mara", "group:4"] });
-		expect(readFileSync(join(at.root, BAND_FILE), "utf8")).toBe(bandFile(["mara", "group:4"]));
+		expect(JSON.parse(readFileSync(join(at.root, BAND_FILE), "utf8"))).toEqual({ pinned: ["mara", "group:4"] });
 	});
 
-	it("never writes through a link, and shows Sancho's pins while one is there", async () => {
+	it("never writes over a file that does not fit, and shows Sancho's pins while it is there", async () => {
 		const at = await workspace();
 		mkdirSync(at.root, { recursive: true });
-		const outside = join(at.root, "..", "outside.md");
+		writeFileSync(join(at.root, BAND_FILE), "pinned:\n  - mara\n");
+		expect(await bandView(at)).toEqual({ pinned: ["sancho"], unavailable: true });
+		await expect(pin(at, "octo", true)).rejects.toBeInstanceOf(BadRequest);
+		expect(readFileSync(join(at.root, BAND_FILE), "utf8")).toBe("pinned:\n  - mara\n");
+	});
+
+	it("never writes through a link", async () => {
+		const at = await workspace();
+		mkdirSync(at.root, { recursive: true });
+		const outside = join(at.root, "..", "outside.json");
 		writeFileSync(outside, bandFile(["mara"]));
 		symlinkSync(outside, join(at.root, BAND_FILE));
 		expect(await bandView(at)).toEqual({ pinned: ["sancho"], unavailable: true });

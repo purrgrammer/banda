@@ -306,7 +306,7 @@ export function Screens() {
 			<Section
 				id="pinned"
 				title="Pinned"
-				note="Pinned agents and groups sit above every conversation as tiles of the same size, three to a row, and leave the list. Past three the row scrolls sideways, the next tile peeking in. What a tile wants of you shows in one place, at its face's foot: the unread count, or a dot while it waits on you. Sancho is pinned from the start. Pins are kept in band.md at the workspace root. Try it: pin a row and its face grows and flies to the top row, which scrolls to it; unpin and it flies back. Hover a row or a tile for its pin, at the top right; on the phone, long-press."
+				note="Pinned agents and groups sit above every conversation as tiles of the same size, three to a row, and leave the list. Past three the row scrolls sideways, the next tile peeking in. What a tile wants of you shows in one place, at its face's foot: the unread count, or a dot while it waits on you. Sancho is pinned from the start. Pins are kept in band.json at the workspace root, typed by its schema. Try it: pin a row and its face grows and flies to the top row, which scrolls to it; unpin and it flies back. Hover a row or a tile for its pin, at the top right; on the phone, long-press."
 				bleed
 			>
 				<PinnableBand phone={phone} />

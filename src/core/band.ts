@@ -1,51 +1,63 @@
 /**
- * The band's own file, `band.md` at the workspace root: which agents and groups are pinned to the top of the band, in
- * the owner's order. A file like memory, not a definition: it takes effect at once, whoever wrote it, and it only
- * orders what the app shows. A pin names an agent by its id (`sancho`) or a group by its room (`group:3`). With no
- * file, Sancho is pinned; a file with an empty list pins nothing.
+ * The band's own file, `band.json` at the workspace root: which agents and groups are pinned to the top of the band, in
+ * the owner's order. Data, not prose, so it is typed: `BandFile` is its schema, checked on every read. A file like
+ * memory, not a definition: it takes effect at once, whoever wrote it, and only orders what the app shows. A pin names
+ * an agent by its id (`sancho`) or a group by its room (`group:3`). With no file, Sancho is pinned; an empty list pins
+ * nothing.
  */
-import { AGENT_NAME } from "./agents.ts";
+import { type Static, Type } from "@earendil-works/pi-ai";
+import { Value } from "typebox/value";
 
-export const BAND_FILE = "band.md";
+export const BAND_FILE = "band.json";
 export const MAX_BAND_BYTES = 16 * 1024;
 /** The most pins kept: more than anyone scrolls through in one row. */
 export const MAX_PINS = 50;
 /** What a band with no file pins. */
 export const DEFAULT_PINS: readonly string[] = ["sancho"];
 
-const GROUP_PIN = /^group:([1-9][0-9]{0,9})$/;
+/** An agent's id (as `AGENT_NAME` says) or `group:<room>`. */
+export const Pin = Type.String({
+	pattern: "^(?:[a-z][a-z0-9]*(?:-[a-z0-9]+)*|group:[1-9][0-9]{0,9})$",
+	description: "An agent's id, or group:<room> for a group",
+});
+
+/** `band.json`'s schema. */
+export const BandFile = Type.Object(
+	{
+		pinned: Type.Array(Pin, {
+			maxItems: MAX_PINS,
+			uniqueItems: true,
+			description: "Pinned to the top of the band, in this order",
+		}),
+	},
+	{ additionalProperties: false, title: "band.json", description: "The band's own file, at the workspace root" },
+);
+export type BandFile = Static<typeof BandFile>;
 
 /** Whether `pin` names an agent (its id) or a group (`group:<room>`). */
-export const isPin = (pin: string): boolean => AGENT_NAME.test(pin) || GROUP_PIN.test(pin);
+export const isPin = (pin: unknown): pin is string => Value.Check(Pin, pin);
 
 /**
- * The pins a `band.md` holds, in its order: the `pinned:` list of its front matter, each `- <pin>` on its own line
- * (or `pinned: []`). What is not a pin is skipped, a repeat kept once. No file: Sancho alone.
+ * The band a `band.json` holds, or why it is not one the daemon reads (not JSON, or not of its schema: such a file is
+ * shown as no file and never written over). No file: Sancho alone.
  */
-export function pinsOf(text: string | undefined): string[] {
-	if (text === undefined) return [...DEFAULT_PINS];
-	const front = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text)?.[1];
-	if (front === undefined) return [];
-	const pins: string[] = [];
-	let listing = false;
-	for (const line of front.split(/\r?\n/)) {
-		const key = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line);
-		if (key !== null) {
-			listing = key[1] === "pinned" && key[2]?.trim() === "";
-			continue;
-		}
-		const item = /^\s+-\s+(.+?)\s*$/.exec(line);
-		if (!listing || item === null) continue;
-		const pin = item[1]?.replace(/^["']|["']$/g, "") ?? "";
-		if (isPin(pin) && !pins.includes(pin) && pins.length < MAX_PINS) pins.push(pin);
+export function readBandFile(text: string | undefined): BandFile | { readonly unreadable: string } {
+	if (text === undefined) return { pinned: [...DEFAULT_PINS] };
+	let value: unknown;
+	try {
+		value = JSON.parse(text);
+	} catch {
+		return { unreadable: "it is not JSON" };
 	}
-	return pins;
+	if (Value.Check(BandFile, value)) return value;
+	const [first] = Value.Errors(BandFile, value);
+	return { unreadable: `it does not fit its schema${first === undefined ? "" : `: ${first.message}`}` };
 }
 
-/** `band.md` holding `pins`, in that order, with a line saying what the file is for. */
+/** `band.json` holding `pins`, in that order. */
 export function bandFile(pins: readonly string[]): string {
-	const list = pins.length === 0 ? "pinned: []" : `pinned:\n${pins.map((pin) => `  - ${pin}`).join("\n")}`;
-	return `---\n${list}\n---\n\nThe band's own file. Pinned agents (by id) and groups (group:<room>) sit at the top of the band, in this order.\n`;
+	const band: BandFile = { pinned: [...pins] };
+	return `${JSON.stringify(band, null, "\t")}\n`;
 }
 
 /** `pins` with `pin` pinned (last, so it lands at the end of the row) or unpinned. */
