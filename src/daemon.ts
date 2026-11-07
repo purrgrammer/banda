@@ -120,6 +120,8 @@ export type DaemonOptions = {
 	readonly effects?: readonly EffectTool<any>[];
 	/** Where devices reach it over Iroh; default the config's `remote`, and `BANDA_REMOTE`. */
 	readonly remote?: RemoteSettings;
+	/** Where the connections banda ships are; default `shipped/connections/` of its install. */
+	readonly shipped?: string;
 };
 
 export type Daemon = {
@@ -529,6 +531,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			log,
 			changed: () => capabilitiesChanged(),
 			agentChanged: core.agentChanged,
+			...(options.shipped === undefined ? {} : { shipped: options.shipped }),
 		});
 		await capabilities.install();
 		reader = capabilities;
