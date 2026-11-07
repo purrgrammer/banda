@@ -38,6 +38,18 @@ async function reasonOf(response: Response): Promise<string | undefined> {
 	return undefined;
 }
 
+/** Google's refusal of a request: its words, and the status a caller may treat as an answer (a 409 for an id taken). */
+export class GoogleRefused extends Error {
+	override name = "GoogleRefused";
+	readonly status: number;
+	constructor(message: string, status: number) {
+		super(message);
+		this.status = status;
+	}
+}
+
+export type GoogleMethod = "GET" | "POST" | "PATCH" | "DELETE";
+
 export async function googleRequest(
 	api: GoogleApi,
 	fetcher: typeof fetch,
@@ -45,7 +57,7 @@ export async function googleRequest(
 	path: string,
 	signal?: AbortSignal,
 	limit = MAX_RESPONSE_BYTES,
-	method: "GET" | "POST" = "GET",
+	method: GoogleMethod = "GET",
 	body?: unknown,
 ): Promise<unknown> {
 	const { service } = api;
@@ -62,7 +74,7 @@ export async function googleRequest(
 			...(body === undefined ? {} : { body: JSON.stringify(body) }),
 			...(signal === undefined ? {} : { signal }),
 		});
-		// A GET retries safely; a POST never does, because Google may have applied it (a free/busy query is a POST that
+		// A GET retries safely; a change never does, because Google may have applied it (a free/busy query is a POST that
 		// only reads, and it is cheap enough to fail and be asked again).
 		if (method !== "GET" || attempt >= 2 || ![429, 500, 502, 503, 504].includes(response.status)) break;
 		await response.body?.cancel();
@@ -90,7 +102,12 @@ export async function googleRequest(
 		const reason = await reasonOf(response);
 		const meaning = reason === undefined ? undefined : REASONS[reason]?.replace("{service}", service);
 		const said = reason === undefined ? "" : ` (${reason})${meaning === undefined ? "" : `: ${meaning}`}`;
-		throw new Error(`${service} answered ${response.status}${said}`);
+		throw new GoogleRefused(`${service} answered ${response.status}${said}`, response.status);
+	}
+	// a deletion answers 204 with nothing to read
+	if (response.status === 204) {
+		await response.body?.cancel();
+		return {};
 	}
 	if (Number(response.headers.get("content-length")) > limit) {
 		await response.body?.cancel();
