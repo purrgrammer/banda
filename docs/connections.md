@@ -104,8 +104,12 @@ in a throwaway home, at desktop and phone width.
 - [ ] Agent trust, slice 3: the card offers the earned place after three clean approvals, a foreign-content chat
   only that; the widest grain of a tool with no way back from Access only
 - [ ] Agent trust, slice 4: a connection's tools and groups set to Allow, Ask, Always ask or Off in Settings
-- [ ] Classifying a new connection: spike first, a script that strips GitHub's hints, runs the inference over its
-  listing and counts writes guessed as reads against the shipped file; if not near zero, the guess only groups
+- [x] Classifying a new connection: spike first. scripts/spike-classify.ts runs the inference (Balanced, Sonnet 5.5)
+  over 340 listed tools of five services whose kind is known (GitHub and Gmail by their files, Vercel, ClickUp and
+  Bitrefill by their servers' hints), without the hints: 2 of 127 writes guessed as reads (GitHub's
+  get_copilot_job_status and run_secret_scanning, both read-like by their words; GitHub annotates them, so the guess
+  is never asked there), 0 of 213 reads guessed as writes. Groups need a first pass over the whole listing (at most
+  8, then each tool sorted into one): one pass per chunk made 69 groups for Vercel's 200 tools
 - [ ] Classifying a new connection: the grouped review after sign-in, each tool's source, new tools marked in their
   group
 - [ ] "Don't ask again today" ends at the browser's midnight; the daemon checks only that the end is within a week
