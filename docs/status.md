@@ -7,6 +7,10 @@ reads, approval-required sending and mailbox actions, and separate OAuth scopes 
 mail ([Connections](connections.md)). Redirect sign-in starts on the computer; paired devices can use accounts already
 connected there. The public Google Desktop OAuth client id and client secret ship with the daemon; development can
 override both through daemon environment variables.
+GitHub and Gmail now open scope selection in a dialog, keeping permission details off the connection cards. Existing
+accounts can change scopes and re-consent; the daemon replaces credentials for the same provider identity and preserves
+its agent switches. Connection tiles use official provider marks/favicons where known, try the configured HTTPS MCP
+origin's favicon for other servers, and fall back to the connection name. The desktop and phone walkthrough remains open.
 The owner connected a real Gmail account and confirmed mail works through the app. Email previews render plain text and
 fetch attachments only on request; the send approval previews and permits editing the recipient, subject and body, and
 names each attached file with its size. The owner reviewed and approved the draft preview specimen. Approved send

@@ -7,7 +7,16 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ConnectCard, GmailPermissions } from "../chat/Connect.tsx";
+import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { ConnectCard, ConnectionPermissions } from "../chat/Connect.tsx";
 import { actOnCapability, runsOnDevice, signIn, switchAccount } from "../lib/api.ts";
 import { connectState, freshAccounts, type Phase } from "../lib/connect.ts";
 import { showCapabilities, useShell } from "../lib/shell.ts";
@@ -44,10 +53,15 @@ export function ConnectFlow({
 	const { capabilities } = useShell();
 	const [phase, setPhase] = useState<Phase>({ kind: "idle" });
 	const [busy, setBusy] = useState(false);
+	const [permissionsOpen, setPermissionsOpen] = useState(false);
+	const [pickedScopes, setPickedScopes] = useState<readonly string[]>([]);
 	const toasted = useRef<string | undefined>(undefined);
 	const view = capabilities?.connections.find((each) => each.name === connection);
 	const shipped = capabilities?.shipped?.find((each) => each.name === connection);
 	const service = serviceOf(connection, capabilities);
+	const connectionUrl = view?.accepted?.connection?.url ?? shipped?.connection.url;
+	const currentScopes = view?.accepted?.connection?.scopes ?? shipped?.connection.scopes ?? [];
+	const supportsPermissionPicker = connection === "gmail" || connection === "github";
 	const reason = [
 		why ??
 			(agent === undefined
@@ -76,6 +90,10 @@ export function ConnectFlow({
 			setBusy(false);
 		}
 	};
+	const openPermissions = () => {
+		setPickedScopes([...currentScopes]);
+		setPermissionsOpen(true);
+	};
 	const use = async (login: string) => {
 		const account = freshAccounts(view).find((each) => each.label === login);
 		if (agent === undefined || account === undefined) return;
@@ -88,7 +106,7 @@ export function ConnectFlow({
 			setBusy(false);
 		}
 	};
-	const setGmailScopes = async (scopes: readonly string[]) => {
+	const connectWithScopes = async () => {
 		setBusy(true);
 		const before = view?.finished?.at;
 		try {
@@ -96,8 +114,13 @@ export function ConnectFlow({
 				if (shipped === undefined) throw new Error(`${service} is not one banda can connect yet.`);
 				showCapabilities(await actOnCapability({ action: "add", name: connection }));
 			}
-			showCapabilities(await actOnCapability({ action: "scopes", name: connection, scopes }));
+			if (
+				pickedScopes.length !== currentScopes.length ||
+				pickedScopes.some((scope, index) => scope !== currentScopes[index])
+			)
+				showCapabilities(await actOnCapability({ action: "scopes", name: connection, scopes: pickedScopes }));
 			const started = await signIn(connection, agent?.id);
+			setPermissionsOpen(false);
 			setPhase({ kind: "started", before, ...("url" in started ? { url: started.url } : {}) });
 		} catch (error) {
 			setPhase({ kind: "failed", why: wordsOf(error) });
@@ -124,24 +147,42 @@ export function ConnectFlow({
 			<ConnectCard
 				agent={agent?.name}
 				connection={service}
+				connectionUrl={connectionUrl}
 				state={state}
 				busy={busy}
-				{...(connection === "gmail"
-					? {
-							permissions: (
-								<GmailPermissions
-									scopes={view?.accepted?.connection?.scopes ?? ["https://www.googleapis.com/auth/gmail.readonly"]}
-									onScopes={(scopes) => void setGmailScopes(scopes)}
-									busy={busy}
-									readonly={runsOnDevice}
-								/>
-							),
-						}
-					: {})}
-				onConnect={() => void start()}
+				{...(supportsPermissionPicker ? { onPermissions: openPermissions } : {})}
+				onConnect={() => (supportsPermissionPicker ? openPermissions() : void start())}
 				onUse={(login) => void use(login)}
 				{...(onDismiss === undefined ? {} : { onDismiss })}
 			/>
+			<Dialog open={permissionsOpen} onOpenChange={setPermissionsOpen}>
+				<DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
+					<DialogHeader>
+						<DialogTitle>{service} access</DialogTitle>
+						<DialogDescription>
+							Choose what Banda can access. You can change this later by signing in again.
+						</DialogDescription>
+					</DialogHeader>
+					<ConnectionPermissions
+						connection={connection}
+						scopes={pickedScopes}
+						onScopes={setPickedScopes}
+						busy={busy}
+						readonly={runsOnDevice && connection === "gmail"}
+					/>
+					<DialogFooter>
+						<Button variant="ghost" disabled={busy} onClick={() => setPermissionsOpen(false)}>
+							Cancel
+						</Button>
+						<Button
+							disabled={busy || (runsOnDevice && connection === "gmail")}
+							onClick={() => void connectWithScopes()}
+						>
+							{busy ? "Starting…" : "Save and sign in"}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }

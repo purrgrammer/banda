@@ -37,6 +37,7 @@ import type { ConnectionToolView } from "../../../src/server/api.ts";
 import { AvatarChoices } from "../avatar/Choices.tsx";
 import { Confirm } from "./Confirm.tsx";
 import { ConnectionTools } from "./Connect.tsx";
+import { ConnectionIcon } from "./ConnectionIcon.tsx";
 import { Face, FaceStack } from "./Face.tsx";
 import { GitHubMark } from "./Object.tsx";
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
@@ -265,6 +266,7 @@ export type ConnectionRow = {
 	readonly icon?: ReactNode;
 	/** Its name in the daemon ("github"), when it has one: what `connect` and the switches are for. */
 	readonly id?: string | undefined;
+	readonly url?: string | undefined;
 	/** Every account signed in to it, and whether this agent may use each. */
 	readonly accounts: readonly { readonly login: string; readonly on: boolean; readonly account?: string }[];
 	readonly tools?: readonly ConnectionToolView[] | undefined;
@@ -306,11 +308,7 @@ export function Connections({
 								className="flex min-h-11 items-center gap-3 py-1.5"
 							>
 								<span title={row.connection} className="flex size-5 shrink-0 items-center justify-center">
-									{row.connection === "GitHub" ? (
-										<GitHubMark />
-									) : (
-										<span className="text-meta font-semibold text-ink-2">{row.connection.slice(0, 1)}</span>
-									)}
+									{row.icon ?? <ConnectionIcon connection={row.id ?? row.connection} url={row.url} />}
 								</span>
 								<span className="min-w-0 flex-1 truncate text-ui text-ink">
 									{account.account === undefined ? row.connection : account.login}
@@ -332,12 +330,7 @@ export function Connections({
 							<RowOf
 								lead={
 									<span className="flex size-8 shrink-0 items-center justify-center rounded-field bg-paper-3">
-										{row.icon ??
-											(row.connection === "GitHub" ? (
-												<GitHubMark />
-											) : (
-												<span className="text-meta font-semibold text-ink-2">{row.connection.slice(0, 1)}</span>
-											))}
+										{row.icon ?? <ConnectionIcon connection={row.id ?? row.connection} url={row.url} />}
 									</span>
 								}
 								title={<span className="font-medium">{row.connection}</span>}
@@ -354,8 +347,8 @@ export function Connections({
 											className="text-ink-2"
 											onClick={() => setOpen(open === row.connection ? undefined : row.connection)}
 										>
-											{row.id === "gmail" || row.connection === "Gmail" ? (
-												<>Google access</>
+											{row.id === "gmail" || row.connection === "Gmail" || row.id === "github" ? (
+												<>Manage access</>
 											) : (
 												<>
 													<PlusIcon />

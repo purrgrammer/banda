@@ -5,13 +5,13 @@
  * shared with another agent. Without an agent (from Settings or the Connections page) it signs an account in for none.
  */
 import { CheckIcon, ChevronDownIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Spinner } from "@/components/ui/spinner";
 import type { ConnectionToolView } from "../../../src/server/api.ts";
 import { Tile } from "./Cards.tsx";
-import { GitHubMark } from "./Object.tsx";
+import { ConnectionIcon } from "./ConnectionIcon.tsx";
 
 export type ConnectState =
 	| { readonly kind: "connect"; readonly why: string }
@@ -33,25 +33,25 @@ export type ConnectActions = {
 	readonly onDismiss?: (() => void) | undefined;
 	/** A control is waiting on banda. */
 	readonly busy?: boolean | undefined;
-	/** Optional permission choices shown inside the connection card. */
-	readonly permissions?: ReactNode | undefined;
+	/** Opens the provider permission picker without changing the card's size. */
+	readonly onPermissions?: (() => void) | undefined;
 };
-
-const LOGOS: Record<string, ReactNode> = { GitHub: <GitHubMark className="size-5" /> };
 
 export function ConnectCard({
 	agent,
 	connection,
+	connectionUrl,
 	state,
 	onConnect,
 	onUse,
 	onDismiss,
-	permissions,
+	onPermissions,
 	busy = false,
 }: {
 	/** The agent it connects for; none from Settings or the Connections page. */
 	agent?: string | undefined;
 	connection: string;
+	connectionUrl?: string | undefined;
 	state: ConnectState;
 } & ConnectActions) {
 	const [copied, setCopied] = useState(false);
@@ -65,7 +65,7 @@ export function ConnectCard({
 		<Tile className={`flex flex-col ${state.kind === "done" || state.kind === "already" ? "gap-0 p-3" : "gap-3 p-4"}`}>
 			<span className="flex items-center gap-3">
 				<span className="flex size-9 shrink-0 items-center justify-center rounded-field bg-paper-3">
-					{LOGOS[connection] ?? <span className="text-ui font-semibold text-ink-2">{connection.slice(0, 1)}</span>}
+					<ConnectionIcon connection={connection} url={connectionUrl} className="size-5" />
 				</span>
 				<span className="flex min-w-0 flex-col">
 					<span className="flex items-center gap-1.5 text-ui font-semibold text-ink">
@@ -77,7 +77,6 @@ export function ConnectCard({
 					)}
 				</span>
 			</span>
-			{permissions}
 			{state.kind === "connect" ? (
 				<span className="flex flex-wrap gap-2">
 					<Button disabled={busy} onClick={onConnect}>
@@ -153,36 +152,58 @@ export function ConnectCard({
 					)}
 				</span>
 			)}
+			{onPermissions === undefined ? null : (
+				<Button variant="outline" size="sm" disabled={busy} onClick={onPermissions}>
+					Change permissions
+				</Button>
+			)}
 		</Tile>
 	);
 }
 
-/** Least-privilege Google access choices, visible before the owner connects. */
-export function GmailPermissions({
+/** OAuth permissions chosen before sign-in; the dialog keeps provider details off the connection card. */
+export function ConnectionPermissions({
+	connection,
 	scopes,
 	onScopes,
 	busy = false,
 	readonly = false,
 }: {
+	connection: string;
 	scopes: readonly string[];
 	onScopes: (scopes: readonly string[]) => void;
 	busy?: boolean;
 	readonly?: boolean;
 }) {
-	const read = "https://www.googleapis.com/auth/gmail.readonly";
-	const choices = [
-		["https://www.googleapis.com/auth/gmail.send", "Send email"],
-		["https://www.googleapis.com/auth/gmail.modify", "Archive, trash, mark read and manage labels"],
-	] as const;
+	const google = connection.toLowerCase() === "gmail";
+	const required = google ? "https://www.googleapis.com/auth/gmail.readonly" : undefined;
+	const choices = google
+		? ([
+				["https://www.googleapis.com/auth/gmail.send", "Send email"],
+				["https://www.googleapis.com/auth/gmail.modify", "Archive, trash, mark read and manage labels"],
+			] as const)
+		: ([
+				["repo", "Repositories, including private repositories"],
+				["read:org", "Organization and team information"],
+				["notifications", "Read and manage notifications"],
+				["gist", "Read and manage gists"],
+				["security_events", "Repository security alerts"],
+				["project", "Read and manage projects"],
+				["read:project", "Read projects"],
+				["admin:org", "Administer organizations"],
+				["write:org", "Manage organization membership and teams"],
+				["delete_repo", "Delete repositories"],
+			] as const);
 	return (
-		<fieldset className="flex flex-col gap-2 rounded-field bg-paper-2 p-3 text-meta" disabled={busy || readonly}>
-			<legend className="font-medium text-ink">Google access</legend>
-			<label className="flex items-start gap-2 text-ink-2">
-				<input type="checkbox" checked={scopes.includes(read)} disabled readOnly className="mt-0.5" />
-				<span>
-					Read email <span className="text-ink-3">· required</span>
-				</span>
-			</label>
+		<fieldset className="flex flex-col gap-3 text-meta" disabled={busy || readonly}>
+			{required === undefined ? null : (
+				<label className="flex items-start gap-2 text-ink-2">
+					<input type="checkbox" checked={scopes.includes(required)} disabled readOnly className="mt-0.5" />
+					<span>
+						Read email <span className="text-ink-3">· required</span>
+					</span>
+				</label>
+			)}
 			{choices.map(([scope, label]) => (
 				<label key={scope} className="flex items-start gap-2 text-ink-2">
 					<input
@@ -198,8 +219,10 @@ export function GmailPermissions({
 			))}
 			<p className="text-ink-3">
 				{readonly
-					? "Change access and sign in again on the computer Banda runs on. Connected accounts are available on this device."
-					: "Changing access restarts Google sign-in. Sending and mailbox changes still ask you to approve each action."}
+					? `Change access and sign in again on the computer Banda runs on. Connected ${connection} accounts are available on this device.`
+					: google
+						? "Changing access signs in again. Sending and mailbox changes still ask you to approve each action."
+						: "Changing access signs in again. Actions that change GitHub still ask you to approve them."}
 			</p>
 		</fieldset>
 	);

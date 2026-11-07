@@ -66,6 +66,7 @@ in a throwaway home, at desktop and phone width.
 
 - [x] Accounts: credentials, Settings, switches, the `account` parameter, bindings
 - [x] The connect card by code and by redirect; the callback page for a failed sign-in is plain HTML
+- [x] GitHub and Gmail scope choices live in a dialog; the card stays compact while the owner changes scopes and re-consents
 - [x] Agents using a real GitHub account, read-only in an isolated home
 - [ ] Slice 8's owner review
 - [ ] The `account` parameter is offered to every agent once one has two accounts of a connection: the registry has

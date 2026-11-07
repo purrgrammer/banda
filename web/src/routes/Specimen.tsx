@@ -4,10 +4,19 @@
  */
 
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/cn";
 import { EmailDraftPreview } from "../app/EmailDraftPreview.tsx";
-import { ConnectCard, GmailPermissions } from "../chat/Connect.tsx";
+import { ConnectCard, ConnectionPermissions } from "../chat/Connect.tsx";
 import { EmailCard } from "../chat/Object.tsx";
 import { ActivityPreview, ActivitySection } from "../specimen/activity.tsx";
 import { AvatarCandidateSpecimen } from "../specimen/avatar-candidate.tsx";
@@ -107,6 +116,8 @@ export function Specimen() {
 	const [scheme, setScheme] = useState<Scheme>("both");
 	const [width, setWidth] = useState<Width>("desktop");
 	const [colors, setColors] = useState<Record<string, string>>({});
+	const [permissionDialog, setPermissionDialog] = useState(false);
+	const [gmailScopes, setGmailScopes] = useState<string[]>(["https://www.googleapis.com/auth/gmail.readonly"]);
 	useEffect(() => {
 		let frame = 0;
 		const scrollToSection = () => {
@@ -229,14 +240,28 @@ export function Specimen() {
 													agent="Sancho"
 													connection="Gmail"
 													state={{ kind: "connect", why: "Choose access, then sign in to Gmail." }}
-													onConnect={() => {}}
-													permissions={
-														<GmailPermissions
-															scopes={["https://www.googleapis.com/auth/gmail.readonly"]}
-															onScopes={() => {}}
-														/>
-													}
+													onConnect={() => setPermissionDialog(true)}
+													onPermissions={() => setPermissionDialog(true)}
 												/>
+												<Dialog open={permissionDialog} onOpenChange={setPermissionDialog}>
+													<DialogContent>
+														<DialogHeader>
+															<DialogTitle>Gmail access</DialogTitle>
+															<DialogDescription>Choose what Banda can access before signing in.</DialogDescription>
+														</DialogHeader>
+														<ConnectionPermissions
+															connection="gmail"
+															scopes={gmailScopes}
+															onScopes={(scopes) => setGmailScopes([...scopes])}
+														/>
+														<DialogFooter>
+															<Button variant="ghost" onClick={() => setPermissionDialog(false)}>
+																Cancel
+															</Button>
+															<Button onClick={() => setPermissionDialog(false)}>Save and sign in</Button>
+														</DialogFooter>
+													</DialogContent>
+												</Dialog>
 											</div>
 										</div>
 									</Section>

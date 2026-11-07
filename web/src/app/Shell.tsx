@@ -661,6 +661,7 @@ function Main() {
 				return {
 					id: name,
 					name: view?.accepted?.connection?.service ?? shipped?.connection.service ?? name,
+					url: view?.accepted?.connection?.url ?? shipped?.connection.url,
 					does: name === "github" ? "Pull requests, issues, checks" : (view?.accepted?.connection?.where ?? ""),
 					accounts: freshAccounts(view).map((account) => account.label),
 					managed: view?.agents !== undefined,
