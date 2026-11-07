@@ -32,6 +32,7 @@ import {
 import { type Browsers, openBrowsers } from "./box/browsers.ts";
 import { attachmentsIn, boxEnv, boxTools } from "./box/tools.ts";
 import { webFetchTool } from "./box/web-fetch.ts";
+import { registerAccount } from "./core/account-provider.ts";
 import { ActivityLog } from "./core/activity.ts";
 import { Accepted, AgentChats, agentPath } from "./core/agents.ts";
 import { stopArchived } from "./core/archive.ts";
@@ -60,7 +61,7 @@ import { skillsExtension } from "./core/skills.ts";
 import { status } from "./core/status.ts";
 import { context, openStore } from "./core/store.ts";
 import { timeThinking } from "./core/timing.ts";
-import { toolDiscoveryExtension, toolRegistry } from "./core/tool-discovery.ts";
+import { toolDiscoveryExtension, toolRegistry, toolSearchExtension } from "./core/tool-discovery.ts";
 import { MESSAGE_GROUP, MESSAGE_USER } from "./core/toolsets.ts";
 import { defineCore, Routes, stop as stopChat, type TurnResult } from "./core/turn.ts";
 import { answer, dismissQuestion, revive } from "./core/wait.ts";
@@ -257,7 +258,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 				);
 		}
 		const registry = toolRegistry();
-		registry.install(toolDiscoveryExtension);
+		registry.install(toolSearchExtension);
 		const core = defineCore({
 			blobs,
 			registry,
@@ -397,12 +398,18 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		);
 		// the date, the hour and how full memory is, for every agent, as a status line beside the prompt's fixed start
 		registry.install(nowExtension(Date.now, memoryFiles));
+		registry.install(toolDiscoveryExtension);
 		// each area's extensions, before the store opens: what it installs is there when anything resumes
 		const boot: Boot = { core, blobs, config, home, retrieval, root: agentBox.workspace, log };
 		for (const area of AREAS) for (const extension of area.install?.(boot) ?? []) registry.install(extension);
-		const models = timeThinking(
-			dropEmptyReplies(options.models ?? builtinModels({ credentials: new FileCredentialStore(home) })),
-		);
+		const credentials = new FileCredentialStore(home);
+		const models = timeThinking(dropEmptyReplies(options.models ?? builtinModels({ credentials })));
+		// each account beyond a backend's first, cloned from the wrapped backend so it is wrapped the same
+		const stored = await credentials.list().catch((error: unknown) => {
+			log(`provider accounts: ${error instanceof Error ? error.message : String(error)}`);
+			return [];
+		});
+		for (const { providerId } of stored) registerAccount(models, providerId);
 		const seen = (model: ModelRef) => seenBy(model, models.getModel(model.provider, model.modelId)?.baseUrl);
 		harness = await openStore(home, {
 			models,

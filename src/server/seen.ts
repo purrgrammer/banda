@@ -3,6 +3,7 @@
  * plain words, and whether it runs on this computer, so nothing leaves it. Never a model string.
  */
 import type { ModelRef } from "@earendil-works/pi-durable";
+import { backendOf } from "../core/provider-accounts.ts";
 import type { SeenBy } from "./api.ts";
 
 /** Providers by the name their makers go by. */
@@ -37,7 +38,8 @@ const LOOPBACK = /^[a-z]+:\/\/(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:\d+)?(\/|$
 
 /** Who sees a chat run with `model`, whose endpoint is `baseUrl` when known. */
 export function seenBy(model: ModelRef, baseUrl: string | undefined): SeenBy {
-	const name = NAMES[model.provider] ?? model.provider.replace(/[-_]+/g, " ");
-	const local = model.provider === "faux" || (baseUrl !== undefined && LOOPBACK.test(baseUrl));
+	const backend = backendOf(model.provider);
+	const name = NAMES[backend] ?? backend.replace(/[-_]+/g, " ");
+	const local = backend === "faux" || (baseUrl !== undefined && LOOPBACK.test(baseUrl));
 	return { name, local };
 }
