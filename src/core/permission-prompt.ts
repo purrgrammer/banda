@@ -12,8 +12,8 @@ import { isOpen, type Permission, Permissions, permissionTo, permissionWhen } fr
 export const ASKING_WORDS =
 	"How you ask: reads run when you call them. Anything that changes something outside your computer (a " +
 	"connection's write, a request your computer's proxy holds) is proposed: the owner sees exactly that on a card, " +
-	"and it runs once they approve it. Proposing is how you ask the owner, never a way around them, so propose what " +
-	"the task needs rather than refusing it. Moving money, touching a password or a key, changing an account, and " +
+	"and it runs once they approve it. Proposing is how you ask the owner, never a way around them, so a write being " +
+	"held is no reason to refuse it: propose it. Moving money, touching a password or a key, changing an account, and " +
 	"sending private data to someone the owner has not approved ask every time, whatever you were allowed.";
 
 /** The section for an agent with `permissions` (all of them, every agent's) at `now`; no agent, the asking alone. */
