@@ -19,7 +19,7 @@ import { Accepted, agentPath, shaOf } from "../../src/core/agents.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
 import { OWNER } from "../../src/core/gateway.ts";
 import { context, openStore } from "../../src/core/store.ts";
-import { toolDiscoveryExtension, toolRegistry } from "../../src/core/tool-discovery.ts";
+import { toolDiscoveryExtension, toolRegistry, toolSearchExtension } from "../../src/core/tool-discovery.ts";
 import { defineCore } from "../../src/core/turn.ts";
 import { FAUX_MODEL } from "./models.ts";
 
@@ -64,6 +64,7 @@ export async function discoveryFixture(
 		}),
 	});
 	registry.install(core.extension);
+	registry.install(toolSearchExtension);
 	registry.install(toolDiscoveryExtension);
 	registry.install(
 		defineExtension({

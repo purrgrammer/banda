@@ -23,33 +23,29 @@ export function deferredTools(extension: Extension): Extension {
 function namespace(name: string): string {
 	if (name.includes("__")) return name.slice(0, name.indexOf("__"));
 	for (const [label, tools] of Object.entries(TOOLSETS)) if (tools.includes(name)) return label;
-	return "secondary";
+	return "other";
 }
 
-/** Only the tools pi says search can load appear here; counts shrink as tools become offered. */
+/**
+ * The groups of tools search can load, by name only: a group leaves once none of its tools is left to load, so the
+ * words change only when a whole group does.
+ */
 export function discoveryWords(tools: readonly ToolRegistration[]): string | undefined {
 	if (tools.length === 0) return undefined;
-	const groups = new Map<string, number>();
-	for (const tool of tools) {
-		const label = namespace(tool.name);
-		groups.set(label, (groups.get(label) ?? 0) + 1);
-	}
+	const groups = [...new Set(tools.map((tool) => namespace(tool.name)))].sort((a, b) => a.localeCompare(b));
 	return (
-		"Some tools are available on demand. Use tool_search with a descriptive query and optional limit. " +
-		"Matching tools become available on your next model call; call them directly using their exposed schemas. " +
-		"For MCP tools, use tool_search to discover them. Tools already offered do not appear in search results. " +
-		"The groups below are orientation, not a namespace filter: include a service or capability in the query. " +
-		"When an instruction names a tool that is not offered yet, search for it first.\n" +
-		[...groups]
-			.sort(([a], [b]) => a.localeCompare(b))
-			.map(([name, count]) => `${name}: ${count} tools on demand`)
-			.join("\n")
+		`More tools load on demand: call \`${TOOL_SEARCH_TOOL_NAME}\` with what you need, naming a service or a capability; ` +
+		"what it finds you can call from your next step. When an instruction names a tool you do not have, search for it " +
+		`first. On demand: ${groups.join(", ")}.`
 	);
 }
 
-const search = createToolSearchExtension();
+/** `tool_search` itself: installed first, so it keeps its place among the tools. */
+export const toolSearchExtension = createToolSearchExtension();
+
+/** The words about it: installed after the other sections, so the prompt says who the agent is before its tools. */
 export const toolDiscoveryExtension = defineExtension({
-	...search,
+	name: "banda.tool-discovery",
 	sections: [
 		{
 			key: "tool_discovery",

@@ -58,7 +58,13 @@ describe("a chat's prompt", () => {
 			);
 			const { status, body } = await api<ChatPrompt>(`/chats/${chat}/prompt`);
 			expect(status).toBe(200);
-			const last = sent.at(-1)!;
+			// the status line rides each request on its own, beside the prompt, never in it
+			const last = sent
+				.at(-1)!
+				.filter(
+					(message) =>
+						!(message.role === "system" && message.sections === undefined && message.toolsAdded === undefined),
+				);
 			expect(body.system).toBe(getCurrentSystemPrompt(last));
 			expect(body.system.length).toBeGreaterThan(0);
 			expect(body.tools).toEqual(
@@ -79,7 +85,7 @@ describe("a chat's prompt", () => {
 			]);
 			const discovery = body.tools.find((tool) => tool.name === "tool_search")!;
 			expect(Object.keys(discovery.parameters.properties ?? {}).sort()).toEqual(["limit", "query"]);
-			expect(body.system).toContain("When an instruction names a tool that is not offered yet, search for it first.");
+			expect(body.system).toContain("When an instruction names a tool you do not have, search for it first.");
 			// the daemon's own credential never reaches the model
 			expect(JSON.stringify(body)).not.toContain(token);
 			expect((await api(`/chats/999999/prompt`)).status).toBe(404);
@@ -113,7 +119,8 @@ describe("a chat's prompt", () => {
 			const after = (await api<ChatPrompt>(`/chats/${chat}/prompt?at=${loaded.id}`)).body;
 			expect(before.tools.map((tool) => tool.name)).not.toContain("read_avatar_instructions");
 			expect(after.tools.map((tool) => tool.name)).toContain("read_avatar_instructions");
-			expect(after.system).not.toContain("avatar: 1 tools on demand");
+			expect(before.system).toMatch(/On demand: .*\bavatar\b/);
+			expect(after.system).not.toMatch(/On demand: .*\bavatar\b/);
 			expect(entries.filter((item) => item.role === "tool" && item.error)).toEqual([]);
 		} finally {
 			await daemon.close();
