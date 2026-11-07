@@ -5,9 +5,9 @@
  * away; the daemon's notices at the foot. Collapsed, the rail of faces, pinned first, the menu below.
  */
 import { BlocksIcon, BookOpenIcon, PanelLeftIcon, PlugIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
-import { MotionConfig, motion } from "motion/react";
+import { LayoutGroup, MotionConfig, motion } from "motion/react";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -68,10 +68,29 @@ export function Band({
 }) {
 	const tiles = pinned.flatMap((id) => rows.filter((row) => row.id === id));
 	const rest = rows.filter((row) => !pinned.includes(row.id));
+	const band = useId();
+	// a tile just pinned past the strip's edge: the strip scrolls to it before it paints, so its face flies to where
+	// it shows
+	const strip = useRef<HTMLUListElement>(null);
+	const before = useRef(pinned);
+	useLayoutEffect(() => {
+		const added = pinned.find((id) => !before.current.includes(id));
+		before.current = pinned;
+		const list = strip.current;
+		if (added === undefined || list === null) return;
+		const tile = list.querySelector<HTMLElement>(`[data-pin="${CSS.escape(added)}"]`);
+		if (tile !== null) list.scrollLeft = tile.offsetLeft + tile.offsetWidth - list.clientWidth;
+	}, [pinned]);
 	const [heldId, setHeld] = useState<string>();
 	const held = rows.find((row) => row.id === heldId);
 	const hold = (id: string) => (phone && onPin !== undefined ? () => setHeld(id) : undefined);
-	const pin = (id: string, on: boolean) => (phone || onPin === undefined ? undefined : () => onPin(id, on));
+	// the row or tile that just moved: its words arrive after its face, which flies there
+	const [moved, setMoved] = useState<string>();
+	const move = (id: string, on: boolean) => {
+		setMoved(id);
+		onPin?.(id, on);
+	};
+	const pin = (id: string, on: boolean) => (phone || onPin === undefined ? undefined : () => move(id, on));
 	return (
 		<nav
 			aria-label="Your band"
@@ -113,53 +132,64 @@ export function Band({
 					</>
 				)}
 			</div>
-			<div
-				className={cn("flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto", collapsed ? "items-center px-2" : "px-2")}
-			>
-				{loading ? <RowsLoading /> : null}
-				{rows.length === 0 && !collapsed && !loading ? (
-					<p className="px-3 py-6 text-ui text-ink-2">Your band is empty. Make an agent with +.</p>
-				) : null}
-				{tiles.length === 0 || collapsed ? null : (
-					<ul
-						aria-label="Pinned"
+			{/* a face flies between its row and its tile, and what moves for it slides; reduced motion keeps it still.
+			    One group per band, so two bands on a page never trade faces. */}
+			<MotionConfig reducedMotion="user" transition={{ type: "spring", duration: 0.45, bounce: 0.1 }}>
+				<LayoutGroup id={band}>
+					<motion.div
+						layoutScroll
 						className={cn(
-							"grid shrink-0 snap-x snap-mandatory grid-flow-col gap-1 overflow-x-auto pb-2 [scrollbar-width:none]",
-							// three to a row; past three, the next one peeks in so the row reads as one that scrolls
-							tiles.length > 3 ? "auto-cols-[calc((100%-0.5rem)/3.4)]" : "auto-cols-[calc((100%-0.5rem)/3)]",
+							"flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto",
+							collapsed ? "items-center px-2" : "px-2",
 						)}
 					>
-						{tiles.map((row) => (
-							<li key={row.id} className="flex">
-								<PinnedTile
+						{loading ? <RowsLoading /> : null}
+						{rows.length === 0 && !collapsed && !loading ? (
+							<p className="px-3 py-6 text-ui text-ink-2">Your band is empty. Make an agent with +.</p>
+						) : null}
+						{tiles.length === 0 || collapsed ? null : (
+							<motion.ul
+								ref={strip}
+								layoutScroll
+								aria-label="Pinned"
+								className={cn(
+									"grid shrink-0 snap-x snap-mandatory grid-flow-col gap-1 overflow-x-auto pb-2 [scrollbar-width:none]",
+									// three to a row; past three, the next one peeks in so the row reads as one that scrolls
+									tiles.length > 3 ? "auto-cols-[calc((100%-0.5rem)/3.4)]" : "auto-cols-[calc((100%-0.5rem)/3)]",
+								)}
+							>
+								{tiles.map((row) => (
+									<motion.li key={row.id} layout="position" data-pin={row.id} className="flex">
+										<PinnedTile
+											row={row}
+											selected={row.id === selected}
+											revealed={row.id === revealed}
+											arriving={row.id === moved}
+											onUnpin={pin(row.id, false)}
+											onHold={hold(row.id)}
+											{...(onSelect === undefined ? {} : { onSelect: () => onSelect(row.id) })}
+										/>
+									</motion.li>
+								))}
+							</motion.ul>
+						)}
+						{(collapsed ? [...tiles, ...rest] : rest).map((row) => (
+							<motion.div key={row.id} layout="position" className={cn(collapsed && "flex justify-center")}>
+								<Row
 									row={row}
 									selected={row.id === selected}
+									collapsed={collapsed}
 									revealed={row.id === revealed}
-									onUnpin={pin(row.id, false)}
+									arriving={row.id === moved}
+									onPin={collapsed ? undefined : pin(row.id, true)}
 									onHold={hold(row.id)}
 									{...(onSelect === undefined ? {} : { onSelect: () => onSelect(row.id) })}
 								/>
-							</li>
+							</motion.div>
 						))}
-					</ul>
-				)}
-				{/* a row that moves up slides to its place rather than jumping; reduced motion keeps it still */}
-				<MotionConfig reducedMotion="user" transition={{ type: "spring", stiffness: 520, damping: 42, mass: 0.8 }}>
-					{(collapsed ? [...tiles, ...rest] : rest).map((row) => (
-						<motion.div key={row.id} layout="position" className={cn(collapsed && "flex justify-center")}>
-							<Row
-								row={row}
-								selected={row.id === selected}
-								collapsed={collapsed}
-								revealed={row.id === revealed}
-								onPin={collapsed ? undefined : pin(row.id, true)}
-								onHold={hold(row.id)}
-								{...(onSelect === undefined ? {} : { onSelect: () => onSelect(row.id) })}
-							/>
-						</motion.div>
-					))}
-				</MotionConfig>
-			</div>
+					</motion.div>
+				</LayoutGroup>
+			</MotionConfig>
 			<Sheet open={held !== undefined} onOpenChange={(open) => (open ? undefined : setHeld(undefined))}>
 				<SheetContent side="bottom" showCloseButton={false} className="gap-0 rounded-t-tile bg-paper p-0">
 					<SheetTitle className="sr-only">{held?.name ?? ""}</SheetTitle>
@@ -169,7 +199,7 @@ export function Band({
 							row={held}
 							pinned={pinned.includes(held.id)}
 							onPin={(on) => {
-								onPin?.(held.id, on);
+								move(held.id, on);
 								setHeld(undefined);
 							}}
 						/>

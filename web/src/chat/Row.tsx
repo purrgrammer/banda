@@ -3,6 +3,8 @@
  * ink; an open ask reads as the ask itself; the face says whether the agent works, waits or rests.
  */
 import { PinIcon, PinOffIcon } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { Face, FaceStack } from "./Face.tsx";
 import { Inline } from "./inline.tsx";
@@ -15,6 +17,7 @@ export function Row({
 	selected = false,
 	collapsed = false,
 	revealed = false,
+	arriving = false,
 	onSelect,
 	onPin,
 	onHold,
@@ -23,6 +26,8 @@ export function Row({
 	selected?: boolean;
 	/** The rail: the face alone, and a dot when something is unread. */
 	collapsed?: boolean;
+	/** It just came back from the pinned: its words arrive after its face. */
+	arriving?: boolean;
 	/** Show the pin as a pointer over the row would (the specimen). */
 	revealed?: boolean;
 	onSelect?: () => void;
@@ -36,12 +41,15 @@ export function Row({
 	const unread = (row.unread ?? 0) > 0;
 	const loud = unread || row.ask !== undefined;
 	const state: FaceState = row.ask !== undefined ? "waiting" : (row.state ?? "idle");
-	const face =
-		group || first === undefined ? (
-			<FaceStack faces={row.faces} name={row.name} waiting={state === "waiting"} />
-		) : (
-			<Face face={first.face} name={row.name} state={state} paused={row.paused ?? false} />
-		);
+	const face = (
+		<Flies id={row.id}>
+			{group || first === undefined ? (
+				<FaceStack faces={row.faces} name={row.name} waiting={state === "waiting"} />
+			) : (
+				<Face face={first.face} name={row.name} state={state} paused={row.paused ?? false} />
+			)}
+		</Flies>
+	);
 	const label = [
 		row.name,
 		row.ask === undefined ? undefined : `waiting on you: ${row.ask}`,
@@ -86,7 +94,7 @@ export function Row({
 				)}
 			>
 				{face}
-				<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<Arrives arriving={arriving} className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<span className="flex items-baseline gap-2">
 						<span className={cn("truncate text-ui text-ink", loud ? "font-semibold" : "font-medium")}>{row.name}</span>
 						<span
@@ -117,7 +125,7 @@ export function Row({
 							</span>
 						) : null}
 					</span>
-				</span>
+				</Arrives>
 			</button>
 			{onPin === undefined ? null : (
 				<button
@@ -135,6 +143,33 @@ export function Row({
 				</button>
 			)}
 		</div>
+	);
+}
+
+/** A face that flies between the row and the tile of the same agent or group, growing or shrinking on the way. */
+function Flies({ id, children }: { id: string; children: ReactNode }) {
+	return (
+		<motion.span layoutId={`face:${id}`} className="inline-flex shrink-0">
+			{children}
+		</motion.span>
+	);
+}
+
+/**
+ * Words that arrive after the face that flew ahead of them: a short rise and fade, eased out, timed to land with it.
+ * Still when not arriving, or when the owner asks for less motion.
+ */
+function Arrives({ arriving, className, children }: { arriving: boolean; className?: string; children: ReactNode }) {
+	const still = useReducedMotion() === true || !arriving;
+	return (
+		<motion.span
+			className={className}
+			initial={still ? false : { opacity: 0, y: 4 }}
+			animate={{ opacity: 1, y: 0 }}
+			transition={{ duration: 0.2, delay: 0.15, ease: [0.23, 1, 0.32, 1] }}
+		>
+			{children}
+		</motion.span>
 	);
 }
 
@@ -156,12 +191,15 @@ export function PinnedTile({
 	row,
 	selected = false,
 	revealed = false,
+	arriving = false,
 	onSelect,
 	onUnpin,
 	onHold,
 }: {
 	row: RowView;
 	selected?: boolean;
+	/** It was just pinned: its name arrives after its face. */
+	arriving?: boolean;
 	/** Show the unpin as a pointer over the tile would (the specimen). */
 	revealed?: boolean;
 	onSelect?: () => void;
@@ -196,11 +234,13 @@ export function PinnedTile({
 				)}
 			>
 				<span className="relative inline-flex">
-					{row.faces.length > 1 || first === undefined ? (
-						<FaceStack faces={row.faces} name={row.name} size="panel" waiting={state === "waiting"} />
-					) : (
-						<Face face={first.face} name={row.name} size="panel" state={state} paused={row.paused ?? false} />
-					)}
+					<Flies id={row.id}>
+						{row.faces.length > 1 || first === undefined ? (
+							<FaceStack faces={row.faces} name={row.name} size="panel" waiting={state === "waiting"} />
+						) : (
+							<Face face={first.face} name={row.name} size="panel" state={state} paused={row.paused ?? false} />
+						)}
+					</Flies>
 					{unread ? (
 						<span
 							aria-hidden="true"
@@ -208,14 +248,15 @@ export function PinnedTile({
 						/>
 					) : null}
 				</span>
-				<span
+				<Arrives
+					arriving={arriving}
 					className={cn(
 						"max-w-full truncate text-meta",
 						unread || row.ask !== undefined ? "font-semibold text-ink" : "font-medium text-ink-2",
 					)}
 				>
 					{row.name}
-				</span>
+				</Arrives>
 			</button>
 			{onUnpin === undefined ? null : (
 				<button

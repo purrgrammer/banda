@@ -16,13 +16,14 @@ import { HEADER_CLEARANCE, Header, workingWords } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { PullRequestCard } from "../chat/Object.tsx";
 import { ProposalCard } from "../chat/Proposal.tsx";
-import { RowActions, type Who } from "../chat/Row.tsx";
+import { RowActions, type RowView, type Who } from "../chat/Row.tsx";
 import { VoiceMessage } from "../chat/Voice.tsx";
 import { Band, FirstRun } from "./brand.tsx";
 import {
 	ATLAS,
 	MARA,
 	OCTO,
+	OTTO,
 	PAGE,
 	PHOTO,
 	PR,
@@ -250,12 +251,33 @@ function AgentToolsChat() {
 	);
 }
 
-/** The band as the owner would use it: pin and unpin, Sancho pinned from the start. */
+/** The band's rows and groups of every size, two members to five, one with a long name: what flies when pinned. */
+const PIN_ROWS: readonly RowView[] = [
+	...ROWS,
+	{ id: "weekend", name: "Weekend", faces: [MARA, ATLAS, OTTO], excerpt: "Otto: Market opens at 9.", time: "Sat" },
+	{
+		id: "launch",
+		name: "Launch",
+		faces: [OCTO, ATLAS, OTTO, SANCHO],
+		excerpt: "Atlas: The post is drafted.",
+		time: "Fri",
+		unread: 3,
+	},
+	{
+		id: "everyone",
+		name: "Everyone in the band",
+		faces: [SANCHO, MARA, OCTO, ATLAS, OTTO],
+		excerpt: "Sancho: Morning, all.",
+		time: "Thu",
+	},
+];
+
+/** The band as the owner would use it: pin and unpin, and watch the face fly; Sancho pinned from the start. */
 function PinnableBand({ phone }: { phone: boolean }) {
 	const [pinned, setPinned] = useState<readonly string[]>(["sancho", "mara"]);
 	return (
 		<Band
-			rows={ROWS}
+			rows={PIN_ROWS}
 			pinned={pinned}
 			phone={phone}
 			selected="mara"
@@ -284,7 +306,7 @@ export function Screens() {
 			<Section
 				id="pinned"
 				title="Pinned"
-				note="Pinned agents and groups sit above every conversation as tiles of the same size, three to a row, and leave the list. Past three the row scrolls sideways, the next tile peeking in. A tile's face carries the dots: waiting at its foot, unread at its top. Sancho is pinned from the start. Pins are kept in band.md at the workspace root. Try it: hover a row for its pin, a tile for its unpin; on the phone, long-press."
+				note="Pinned agents and groups sit above every conversation as tiles of the same size, three to a row, and leave the list. Past three the row scrolls sideways, the next tile peeking in. A tile's face carries the dots: waiting at its foot, unread at its top. Sancho is pinned from the start. Pins are kept in band.md at the workspace root. Try it: pin a row and its face grows and flies to the top row, which scrolls to it; unpin and it flies back. Hover a row for its pin, a tile for its unpin; on the phone, long-press."
 				bleed
 			>
 				<PinnableBand phone={phone} />
