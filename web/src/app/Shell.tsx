@@ -8,11 +8,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FACE } from "../../../src/core/choices.ts";
 import type { CompanionView } from "../../../src/server/api.ts";
+import { archiveGroup, setGroupLimits } from "../areas/groups.ts";
 import { actOnRoutine, clickKey } from "../areas/routines.ts";
 import { useTiers } from "../areas/tiers.ts";
 import { Band, BandNotice } from "../chat/Band.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
-import { Face } from "../chat/Face.tsx";
+import { Face, FaceStack } from "../chat/Face.tsx";
 import { MemorySettings } from "../chat/MemorySettings.tsx";
 import { AgentPanel, firstTab, Panel, Routines } from "../chat/Panel.tsx";
 import { AppSettings, Archive, Personality, SettingsPage, ThinkingTiers } from "../chat/Settings.tsx";
@@ -219,7 +220,8 @@ function Main() {
 		const known =
 			last?.name === "agent"
 				? agents.some((each) => each.id === last.id)
-				: last?.name === "group" && (shell.groups ?? []).some((group) => group.room === last.room);
+				: last?.name === "group" &&
+					(shell.groups ?? []).some((group) => group.room === last.room && group.archived === undefined);
 		const first = agents[0];
 		if (last !== undefined && known) location.replace(hrefOf(last));
 		else if (first !== undefined) location.replace(hrefOf({ name: "agent", id: first.id }));
@@ -305,6 +307,17 @@ function Main() {
 		}
 		if (where.name === "group" && shell.groups !== undefined && !shell.groups.some((g) => g.room === where.room))
 			return <Gone what="This group" onHome={() => go({ name: "home" })} />;
+		const archivedGroup =
+			where.name === "group" ? shell.groups?.find((g) => g.room === where.room && g.archived !== undefined) : undefined;
+		if (archivedGroup !== undefined)
+			return (
+				<ArchivedGroupPage
+					name={archivedGroup.name}
+					faces={archivedGroup.members.map((id) => whoOf([...agents, ...archived], id))}
+					onRestore={() => archiveGroup(archivedGroup.room, false)}
+					onHome={() => go({ name: "home" })}
+				/>
+			);
 		if (where.name === "agent") {
 			const agent = agents.find((each) => each.id === where.id);
 			const who = whoOf(agents, where.id);
@@ -463,6 +476,12 @@ function Main() {
 					archived={archived}
 					phone={phone}
 					onBack={() => go({ name: "home" })}
+					onArchived={() => {
+						// it left the band: to a chat that is in it (the band itself on the phone), never through the
+						// home's redirect, which may still remember this group until the shell says it is archived
+						const first = agents[0];
+						go(phone || first === undefined ? { name: "home" } : { name: "agent", id: first.id });
+					}}
 				/>
 			);
 		if (where.name === "artifact")
@@ -526,6 +545,19 @@ function Main() {
 									...(account.stale === true ? { stale: true } : {}),
 								})),
 							),
+							archivedGroups: (shell.groups ?? []).flatMap((group) =>
+								group.archived === undefined
+									? []
+									: [
+											{
+												room: group.room,
+												name: group.name,
+												faces: group.members.map((id) => whoOf([...agents, ...archived], id)),
+												when: new Date(group.archived).toLocaleDateString([], { day: "numeric", month: "short" }),
+											},
+										],
+							),
+							...(shell.groupLimits === undefined ? {} : { groupLimits: shell.groupLimits }),
 							archived: archived.map((each) => ({
 								id: each.id,
 								face: each.face,
@@ -560,6 +592,8 @@ function Main() {
 						}}
 						connect={(name, close) => <ConnectFlow connection={name} onDismiss={close} />}
 						onRestore={(who) => (who.id === undefined ? undefined : restore(who.id))}
+						onRestoreGroup={(room) => archiveGroup(room, false)}
+						onGroupLimits={(limits) => setGroupLimits(limits)}
 					/>
 				</SettingsPage>
 			);
@@ -661,6 +695,45 @@ function Gone({ what, onHome }: { what: string; onHome: () => void }) {
 			<Button variant="outline" size="sm" onClick={onHome}>
 				Back to your band
 			</Button>
+		</div>
+	);
+}
+
+/** An archived group's link: it is not in the band, its messages are kept, and Restore brings it back. */
+function ArchivedGroupPage({
+	name,
+	faces,
+	onRestore,
+	onHome,
+}: {
+	name: string;
+	faces: readonly ArchivedAgent[];
+	onRestore: () => Promise<unknown>;
+	onHome: () => void;
+}) {
+	const [error, setError] = useState<string | undefined>(undefined);
+	return (
+		<div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-paper p-6 text-center">
+			<FaceStack faces={faces.map((face) => ({ ...face, paused: true }))} name={name} size="panel" />
+			<p className="max-w-[24rem] text-ui text-ink-2">
+				{name} is archived. Its messages are kept; restored, it goes on where it was.
+			</p>
+			{error === undefined ? null : <p className="text-meta text-danger">{error}</p>}
+			<div className="flex gap-2">
+				<Button variant="outline" size="sm" onClick={onHome}>
+					Back to your band
+				</Button>
+				<Button
+					size="sm"
+					onClick={() =>
+						void onRestore().catch((failed: unknown) =>
+							setError(failed instanceof Error ? failed.message : String(failed)),
+						)
+					}
+				>
+					Restore {name}
+				</Button>
+			</div>
 		</div>
 	);
 }

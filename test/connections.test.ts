@@ -11,6 +11,8 @@ import {
 	type AssistantMessage,
 	fauxAssistantMessage,
 	fauxToolCall,
+	getCurrentSystemPrompt,
+	getCurrentTools,
 	type Context as ModelContext,
 } from "@earendil-works/pi-ai";
 import { AgentDoc, type ConversationId, type TaskId, type ToolExecutionApi } from "@earendil-works/pi-durable";
@@ -31,6 +33,7 @@ import { Permissions } from "../src/core/permissions.ts";
 import { publicAddress, publicFetch } from "../src/core/public-fetch.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context } from "../src/core/store.ts";
+import { toolDiscoveryExtension, toolRegistry } from "../src/core/tool-discovery.ts";
 import type { TurnResult } from "../src/core/turn.ts";
 import { answer } from "../src/core/wait.ts";
 import { startDaemon } from "../src/daemon.ts";
@@ -86,10 +89,13 @@ function scripted() {
 	return { respond, plan, requests };
 }
 
-async function open(fake?: FakeMcp, shipped?: string) {
+async function open(fake?: FakeMcp, shipped?: string, discovery = false) {
 	const home = await tempHome();
 	const model = scripted();
+	const registry = discovery ? toolRegistry() : undefined;
+	registry?.install(toolDiscoveryExtension);
 	const s = await openConnected({
+		...(registry === undefined ? {} : { registry }),
 		home,
 		respond: model.respond as never,
 		...(shipped === undefined ? {} : { shipped }),
@@ -1546,4 +1552,28 @@ describe("accounts", () => {
 		expect(existsSync(join(s.home, "auth/connections/cal/ghost"))).toBe(false);
 		expect(existsSync(join(s.home, "auth/connections/cal/bea"))).toBe(true);
 	});
+});
+
+it("a connection installed after startup stays deferred until pi search loads its accepted schema", async () => {
+	const fake = await startFakeMcp();
+	fakes.push(fake);
+	const s = await open(fake, undefined, true);
+	s.writeBox("connections/cal.md", connectionFile({ url: fake.url, reads: ["list_events"] }));
+	await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+	s.model.plan(
+		[{ tool: "tool_search", args: { query: "cal__list_events", limit: 1 } }],
+		[{ tool: "cal__list_events", args: { day: "mon" } }],
+	);
+	const received = await s.say("Monday’s events");
+	await s.done(received.turn);
+	expect(fake.calls).toEqual([{ tool: "list_events", args: { day: "mon" } }]);
+	expect(getCurrentTools(s.model.requests[0]!.messages).map((tool) => tool.name)).not.toContain("cal__list_events");
+	expect(getCurrentSystemPrompt(s.model.requests[0]!.messages)).toContain("cal: 4 tools on demand");
+	expect(getCurrentTools(s.model.requests[1]!.messages).map((tool) => tool.name)).toContain("cal__list_events");
+	await s.capabilities.toggle("cal__list_events", false);
+	s.model.plan([{ tool: "tool_search", args: { query: "cal__list_events", limit: 1 } }]);
+	const revoked = await s.say("Again after revocation");
+	await s.done(revoked.turn);
+	expect(getCurrentTools(s.model.requests.at(-1)!.messages).map((tool) => tool.name)).not.toContain("cal__list_events");
+	expect(fake.calls).toHaveLength(1);
 });

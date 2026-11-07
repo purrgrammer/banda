@@ -72,6 +72,8 @@ export type Routes = {
 	readonly dismissQuestion: (key: string) => Promise<{ chat: number }>;
 	/** Take back permission `id`; false when there is no such permission. */
 	readonly revoke: (id: string) => Promise<ControlView | undefined>;
+	/** Allow agent `agent` to send anything to `host` (a host, `*.example.com` or `*`); throws `BadRequest` with why not. */
+	readonly allowHost: (agent: string, host: string) => Promise<ControlView>;
 	readonly chats: () => Promise<ChatRow[]>;
 	/** Mark at most the displayed entry read; false when no chat has that id. */
 	readonly read: (chat: number, through: number) => Promise<boolean>;
@@ -599,6 +601,12 @@ export function handler(
 		if (revoking !== null && req.method === "POST") {
 			const after = await routes.revoke(revoking[1] ?? "");
 			return after === undefined ? reply(res, 404, { error: "no such permission" }) : reply(res, 200, after);
+		}
+		const hosting = /^\/agents\/([a-z0-9-]+)\/hosts$/.exec(path);
+		if (hosting !== null && req.method === "POST") {
+			const { host } = await json(req);
+			if (typeof host !== "string") return reply(res, 400, { error: "host is the host to allow" });
+			return reply(res, 200, await routes.allowHost(hosting[1] ?? "", host));
 		}
 		if (route === "POST /control/pause") return reply(res, 200, await routes.pause(true));
 		if (route === "POST /control/resume") return reply(res, 200, await routes.pause(false));

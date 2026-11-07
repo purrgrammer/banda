@@ -21,9 +21,10 @@ The last active agent cannot be archived. Archive durably stops the agent's runs
 permissions and removes it from the band and from mentions, keeping its chat and accepted history; restore
 re-establishes only accepted authority.
 
-Groups: two to six members, chosen and changed by the owner alone, without rewriting history; `@name` and everyone in
-the composer; per-agent Stop and Stop all; unread per group; a member's asks in the room; the group's panel lists its
-members. Each member keeps its own memory, permissions and browser.
+Groups: none up to the owner's members limit, chosen and changed by the owner alone, without rewriting history; the
+limits on members, ask depth and chained turns in Settings; `@name` and everyone in the composer; per-agent Stop and
+Stop all; unread per group; a member's asks in the room; the group's panel lists its members; archive and restore.
+Each member keeps its own memory, permissions and browser.
 
 Acceptance includes group snapshot properties and a fault sweep at every append, fan-out, reply, ask, chained mention,
 archive and wake boundary. Through the running app at desktop and phone width: make an agent, change it during a
@@ -31,6 +32,15 @@ run, pause, archive and restore it, and run a group with concurrent mentions, un
 changes.
 
 ## Open work
+
+- [ ] Review the tool-access specimen: built-in toolsets, shipped GitHub inventory, individual and whole-set switches,
+  partial selections, account access, per-agent choices and save failure. Keep it specimen-only until owner feedback.
+- [ ] After specimen acceptance, wire tool choices to accepted agent files and enforce them in direct and group chats,
+  search, already-loaded tools and retries. Reconcile the existing always-granted memory/routine/meta tools and first
+  agent special case with owner-controlled choices; replying and discovery stay available. A tool switch controls
+  that tool, not equivalent capabilities reachable through shell or browser access.
+- [ ] Qualify pi-durable tool search through the app: initial core exposure, discovery, historical schemas, restart,
+  compaction and revocation; search uses pi’s query/limit contract, with no namespace parameter or custom loader.
 
 - [x] Replace emoji identity end to end with accepted avatar faces, defaulting to the chat bubble; choose shape and colour, and review generated candidates before accepting them
 - [ ] Make owner definition saves and box publication crash-safe and concurrency-safe across all publishers before accepting avatar identity changes
@@ -46,5 +56,7 @@ changes.
 - [ ] Reconcile accepted-definition removal across runs, routines and permissions
 - [ ] Restoring an agent shows its current connections for review (DESIGN.md "Agents")
 - [ ] Groups in the band: rows, unread, member changes, the panel's member list, phone-width review
+- [x] Groups start with nobody and may lose their last member; the owner's group limits in Settings; archive and restore a group
+- [ ] Add archiving a group to the groups fault sweep: a kill between its commit and the stop of its work
 - [ ] Give memory an agent audience and keep recall and search within it ([Memory](memory.md))
 - [ ] Replace the shared box and workspace with one structurally isolated computer per agent (DESIGN.md "Open")

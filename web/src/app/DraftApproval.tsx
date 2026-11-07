@@ -3,11 +3,11 @@
 import { useId, useState } from "react";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
-import { ApprovalCard, type ApprovalState, Details, Facts } from "../chat/Approval.tsx";
+import { ApprovalCard, type ApprovalState, Details, Facts, HostsWarning } from "../chat/Approval.tsx";
 import { FileChanges } from "../chat/FileChanges.tsx";
 import { type Ask, answerWait } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
-import { argList, draftParts } from "../lib/chat.ts";
+import { argList, draftParts, wildcardWarning } from "../lib/chat.ts";
 import { fileChanges } from "../lib/file-changes.ts";
 import { scopeOf, scopesOf } from "../lib/permissions.ts";
 import { EmailDraftPreview } from "./EmailDraftPreview.tsx";
@@ -79,23 +79,29 @@ function Draft({ chat, agent, ask, label, wait, state }: Props) {
 					{details.length === 0 ? null : <Details rows={details} />}
 					{emailDraft || fields.length === 0 ? null : (
 						<FieldGroup>
-							{fields.map((name) => (
-								<Field key={name}>
-									<FieldLabel htmlFor={readOnly ? undefined : `${id}-${name}`}>
-										{name === "body" ? "What will be sent" : name.replaceAll("_", " ")}
-									</FieldLabel>
-									{readOnly ? (
-										<p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere]">{String(ask.args[name])}</p>
-									) : (
-										<Textarea
-											id={`${id}-${name}`}
-											value={edits[name] ?? String(ask.args[name])}
-											disabled={busy}
-											onChange={(event) => setEdits((prior) => ({ ...prior, [name]: event.target.value }))}
-										/>
-									)}
-								</Field>
-							))}
+							{fields.map((name) => {
+								const value = edits[name] ?? String(ask.args[name]);
+								// `*` on an ask_hosts draft is every destination: flagged in red, on the text as edited
+								const warning = name === "hosts" ? wildcardWarning(ask.tool, value) : undefined;
+								return (
+									<Field key={name}>
+										<FieldLabel htmlFor={readOnly ? undefined : `${id}-${name}`}>
+											{name === "body" ? "What will be sent" : name.replaceAll("_", " ")}
+										</FieldLabel>
+										{readOnly ? (
+											<p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere]">{String(ask.args[name])}</p>
+										) : (
+											<Textarea
+												id={`${id}-${name}`}
+												value={value}
+												disabled={busy}
+												onChange={(event) => setEdits((prior) => ({ ...prior, [name]: event.target.value }))}
+											/>
+										)}
+										{warning === undefined ? null : <HostsWarning warning={warning} />}
+									</Field>
+								);
+							})}
 						</FieldGroup>
 					)}
 				</>

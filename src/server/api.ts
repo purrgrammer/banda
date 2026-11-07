@@ -570,6 +570,8 @@ export type PermissionView = {
 	readonly chat?: number;
 	/** The agent of the chat it was given in: its Access tab lists it. */
 	readonly agent?: string;
+	/** For a host's: the host it allows, as the proxy spells it (`*.example.com`, `*` for every host). */
+	readonly host?: string;
 	/** What it serves: the task it was given in, or the routine whose run asked; Permissions groups by it. */
 	readonly serves?: Serves;
 };

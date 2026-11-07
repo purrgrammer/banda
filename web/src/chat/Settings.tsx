@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,7 +37,7 @@ import type { ConnectionToolView } from "../../../src/server/api.ts";
 import { AvatarChoices } from "../avatar/Choices.tsx";
 import { Confirm } from "./Confirm.tsx";
 import { ConnectionTools } from "./Connect.tsx";
-import { Face } from "./Face.tsx";
+import { Face, FaceStack } from "./Face.tsx";
 import { GitHubMark } from "./Object.tsx";
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
 import { ProviderSignIn, type SignInWay } from "./ProviderSignIn.tsx";
@@ -632,7 +633,7 @@ export function Permissions({
 											: () => onRevoke(permission.id as string)
 									}
 								>
-									<Button variant="outline" size="xs">
+									<Button variant="destructive" size="xs">
 										Revoke
 									</Button>
 								</Confirm>
@@ -764,6 +765,10 @@ export type SettingsData = {
 	readonly accounts: readonly Account[];
 	/** Archived agents, to restore: each with when it was archived, in words. */
 	readonly archived: readonly (Who & { readonly id?: string; readonly when: string })[];
+	/** Archived groups, to restore: each its room, name, members' faces, and when it was archived, in words. */
+	readonly archivedGroups?: readonly ArchivedGroup[];
+	/** The owner's limits on every group; undefined until the daemon said. */
+	readonly groupLimits?: GroupLimits | undefined;
 	readonly theme: "system" | "light" | "dark";
 	/** Every routine is paused. */
 	readonly paused: boolean;
@@ -800,7 +805,160 @@ export type SettingsActions = {
 	readonly connect?: (name: string, close: () => void) => ReactNode;
 	/** Restore an archived agent; a refusal rejects with why. */
 	readonly onRestore?: (who: Who & { readonly id?: string }) => Promise<unknown> | undefined;
+	/** Restore an archived group; a refusal rejects with why. */
+	readonly onRestoreGroup?: (room: number) => Promise<unknown> | undefined;
+	/** Set one of the limits on every group; a refusal rejects with why. */
+	readonly onGroupLimits?: (limits: Partial<GroupLimits>) => Promise<unknown> | undefined;
 };
+
+/** The owner's limits on every group: the agents one holds, how deep agents ask each other (1: never), their turns. */
+export type GroupLimits = { readonly members: number; readonly depth: number; readonly chain: number };
+
+export type ArchivedGroup = {
+	readonly room: number;
+	readonly name: string;
+	readonly faces: readonly Who[];
+	readonly when: string;
+};
+
+/** Each limit's choices, its words for each, and what the row says it bounds. */
+const LIMIT_CHOICES: readonly {
+	readonly limit: keyof GroupLimits;
+	readonly title: string;
+	readonly note: string;
+	readonly values: readonly number[];
+	readonly words: (value: number) => string;
+}[] = [
+	{
+		limit: "members",
+		title: "Agents in a group",
+		note: "Each one asked works, so more agents cost more.",
+		values: [2, 3, 4, 6, 8, 12, 16],
+		words: (n) => `Up to ${n}`,
+	},
+	{
+		limit: "depth",
+		title: "Agents asking each other",
+		note: "How many times an answer may ask another agent in turn.",
+		values: [1, 2, 3, 4, 6],
+		words: (n) => (n <= 1 ? "Never" : n === 2 ? "Once" : `Up to ${n - 1} deep`),
+	},
+	{
+		limit: "chain",
+		title: "Their turns from one message",
+		note: "Past it, an agent's answer still posts but asks nobody.",
+		values: [2, 4, 8, 16, 32],
+		words: (n) => `Up to ${n}`,
+	},
+];
+
+/** Settings' Groups: the limits on every group, a choice each; a refusal shows under it. */
+export function GroupLimitsBlock({
+	limits,
+	onChange,
+}: {
+	limits: GroupLimits;
+	onChange?: SettingsActions["onGroupLimits"];
+}) {
+	const [error, setError] = useState<string | undefined>(undefined);
+	return (
+		<Block title="Groups" note="What bounds the work and cost of every group.">
+			<Rows>
+				{LIMIT_CHOICES.map(({ limit, title, note, values, words }) => {
+					// a value set elsewhere, not among the choices, still shows as itself
+					const all = values.includes(limits[limit]) ? values : [...values, limits[limit]].sort((a, b) => a - b);
+					return (
+						<div key={limit} className="flex min-h-14 items-center gap-3 px-3.5 py-2">
+							<span className="flex flex-1 flex-col">
+								<span className="text-ui text-ink">{title}</span>
+								<span className="text-meta text-ink-2">{note}</span>
+							</span>
+							<Select
+								value={String(limits[limit])}
+								onValueChange={(value) => {
+									setError(undefined);
+									void Promise.resolve(onChange?.({ [limit]: Number(value) })).catch((failed: unknown) =>
+										setError(failed instanceof Error ? failed.message : String(failed)),
+									);
+								}}
+							>
+								<SelectTrigger aria-label={title} className="w-36 shrink-0">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									{all.map((value) => (
+										<SelectItem key={value} value={String(value)}>
+											{words(value)}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+					);
+				})}
+			</Rows>
+			{error === undefined ? null : <p className="text-meta text-danger">{error}</p>}
+		</Block>
+	);
+}
+
+/** An archived group in Settings: its faces, its name, when it was archived, and Restore. */
+function ArchivedGroupRow({
+	group,
+	onRestore,
+}: {
+	group: ArchivedGroup;
+	onRestore?: SettingsActions["onRestoreGroup"];
+}) {
+	const [error, setError] = useState<string | undefined>(undefined);
+	const [busy, setBusy] = useState(false);
+	return (
+		<RowOf
+			lead={
+				<FaceStack faces={group.faces.map((face) => ({ ...face, paused: true }))} name={group.name} size="message" />
+			}
+			title={group.name}
+			detail={error ?? `Archived ${group.when}`}
+			end={
+				<Button
+					variant="outline"
+					size="xs"
+					disabled={busy}
+					onClick={() => {
+						setError(undefined);
+						setBusy(true);
+						void Promise.resolve(onRestore?.(group.room))
+							.catch((failed: unknown) => setError(failed instanceof Error ? failed.message : String(failed)))
+							.finally(() => setBusy(false));
+					}}
+				>
+					<ArchiveRestoreIcon />
+					Restore
+				</Button>
+			}
+		/>
+	);
+}
+
+/** Settings' archived groups, each to restore; shown only once there is one. */
+export function ArchivedGroups({
+	groups,
+	onRestore,
+}: {
+	groups: readonly ArchivedGroup[];
+	onRestore?: SettingsActions["onRestoreGroup"];
+}) {
+	if (groups.length === 0) return null;
+	return (
+		<Block title="Archived groups" note="Their messages kept. A restored group goes on where it was.">
+			<Rows>
+				{groups.map((group) => (
+					<ArchivedGroupRow key={group.room} group={group} onRestore={onRestore} />
+				))}
+			</Rows>
+		</Block>
+	);
+}
 
 /** An archived agent in Settings: its face, paused, when it was archived, and Restore. */
 function ArchivedRow({
@@ -866,7 +1024,7 @@ export function ArchivedAgents({
 
 /**
  * Settings, in tabs as the agent's panel has them: General (appearance, notifications, routines, the computer),
- * Model (the provider and the models the tiers use), Connections (every account), Agents (the archived, to restore),
+ * Model (the provider and the models the tiers use), Connections (every account), Agents (the limits on groups; the archived agents and groups, to restore),
  * Devices (the phones paired, and pairing one).
  */
 export type SettingsTab = "general" | "model" | "connections" | "agents" | "devices";
@@ -986,7 +1144,11 @@ export function AppSettings({
 				<SignedIn sites={data.signedIn ?? []} onSignOut={act.onSignOut} />
 			</TabsContent>
 			<TabsContent value="agents" className="flex flex-col gap-8">
+				{data.groupLimits === undefined ? null : (
+					<GroupLimitsBlock limits={data.groupLimits} onChange={act.onGroupLimits} />
+				)}
 				<ArchivedAgents archived={data.archived} onRestore={act.onRestore} />
+				<ArchivedGroups groups={data.archivedGroups ?? []} onRestore={act.onRestoreGroup} />
 			</TabsContent>
 			{devices === undefined ? null : (
 				<TabsContent value="devices" className="flex flex-col gap-4">
@@ -1022,7 +1184,9 @@ export type ProviderRow = {
 
 /**
  * Settings' providers: each the band may think with. The one in use says so; a connected one is Use; one not connected
- * is Connect (a sign-in in its own tab, or a key here); any connected one signs out, asked first.
+ * is Connect (a sign-in in its own tab, or a key here); any connected one signs out, asked first. On a device (`here`
+ * false) only the connected ones show, to use or sign out of: a sign-in comes back to the computer banda runs on, so
+ * providers are connected there.
  */
 export function ModelProviders({
 	current,
@@ -1037,9 +1201,12 @@ export function ModelProviders({
 	onAnswer,
 	onWay,
 	onCancel,
+	here = true,
 }: {
 	/** The provider the band thinks with. */
 	current: string;
+	/** On the computer banda runs on, where providers are connected; false on a device. */
+	here?: boolean;
 	providers: readonly ProviderRow[];
 	/** The provider whose key form is open. */
 	open?: string | undefined;
@@ -1058,9 +1225,16 @@ export function ModelProviders({
 }) {
 	const connected = providers.filter((each) => each.connected);
 	return (
-		<Block title="Providers" note="Connect another to switch between them. Only the one in use sees what you ask.">
+		<Block
+			title="Providers"
+			note={
+				here
+					? "Connect another to switch between them. Only the one in use sees what you ask."
+					: "Connect another on the computer banda runs on. Only the one in use sees what you ask."
+			}
+		>
 			<Rows className="max-h-[min(24rem,50dvh)] overflow-y-auto overscroll-contain">
-				{providers.map((provider) => {
+				{(here ? providers : connected).map((provider) => {
 					const using = provider.id === current;
 					const next = connected.find((each) => each.id !== provider.id);
 					// an ambient credential is connected but never ours: connecting over it is still a sign-in
@@ -1124,7 +1298,7 @@ export function ModelProviders({
 													Sign out
 												</Button>
 											</Confirm>
-										) : (
+										) : !here ? null : (
 											<Button
 												variant="outline"
 												size="xs"
@@ -1139,7 +1313,7 @@ export function ModelProviders({
 									</span>
 								}
 							/>
-							{provider.id === open && (!provider.connected || ambient) ? (
+							{here && provider.id === open && (!provider.connected || ambient) ? (
 								<ProviderKeyForm
 									provider={provider}
 									action="Connect"
@@ -1148,7 +1322,7 @@ export function ModelProviders({
 									onKey={onKey}
 								/>
 							) : null}
-							{signing ? (
+							{here && signing ? (
 								<ProviderSignIn
 									provider={provider}
 									asks={provider.asks}

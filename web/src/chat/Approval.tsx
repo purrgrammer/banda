@@ -3,7 +3,7 @@
  * the owner may edit; one primary button that is the effect's own verb, a quiet Don't, and at most one scope. And the
  * change card: an agent's change to itself, shown in full.
  */
-import { CheckIcon, ChevronRightIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronRightIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -194,6 +194,16 @@ export function Details({ rows }: { rows: readonly (readonly [string, string])[]
 				</dl>
 			</CollapsibleContent>
 		</Collapsible>
+	);
+}
+
+/** The red mark on a draft that opens every destination (`*` on an ask_hosts): said plainly before the owner approves. */
+export function HostsWarning({ warning }: { warning: string }) {
+	return (
+		<p role="alert" className="flex items-center gap-1.5 text-ui font-medium text-danger">
+			<TriangleAlertIcon className="size-4 shrink-0" aria-hidden />
+			{warning}
+		</p>
 	);
 }
 

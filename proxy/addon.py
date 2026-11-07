@@ -13,7 +13,8 @@ The egress proxy's addon (DESIGN.md "The box", Network): every request from the 
   takes it into its store, and the proxy sends it only when the owner approved it (the control script's replay).
   A write to a host the owner allowed for the agent its chat runs (the daemon's config names them by chat) goes
   straight through, recorded for the daemon before it is sent and its outcome noted after, unless it carries a
-  credential of its own (the floor).
+  credential of its own (the floor). A WebSocket opened there streams: its opening is the write recorded, its frames
+  pass, and what the server sends is scrubbed of credentials. Every other WebSocket is cut.
 - Credentials the daemon gave for a host are set at the proxy, never in the box, and scrubbed from what comes back;
   none on a request that acts as nobody (web_fetch's reads).
 - Anything that is not HTTP (raw TCP in a tunnel) is cut.
@@ -239,6 +240,7 @@ class Egress:
             record["hash"] = policy.write_hash(flow.request.method, host, port, flow.request.path, body)
             record["bytes"] = len(body)
             flow.metadata["banda"]["sent"] = state.sent(chat, record)
+            flow.metadata["banda"]["stream"] = policy.is_websocket(headers)
             self._credentials(flow, host)
             return host, port
         if writes:
@@ -307,6 +309,9 @@ class Egress:
         if decode is None:
             flow.kill()
             return
+        if flow.response.status_code == 101:
+            # a protocol switch has no body: what follows is the stream's, scrubbed frame by frame
+            return
         bodiless = flow.request.method.upper() == "HEAD" or flow.response.status_code in (204, 304)
         if encoding.strip().lower() not in ("", "identity") and not bodiless:
             # it goes on as sent, of a length nobody knows until its end
@@ -334,7 +339,17 @@ class Egress:
         state.outcome(meta["chat"], meta["sent"], {"failed": why, "reached": reached})
 
     def websocket_start(self, flow):
-        flow.kill()
+        # only a WebSocket opened as a write the owner allowed, recorded as it opened, streams
+        if not (flow.metadata.get("banda") or {}).get("stream"):
+            flow.kill()
+
+    def websocket_message(self, flow):
+        message = flow.websocket.messages[-1]
+        if message.from_client:
+            return
+        cleaned = policy.scrub(message.content, state.config().get("credentials", []))
+        if cleaned != message.content:
+            message.content = cleaned
 
     def tcp_start(self, flow):
         flow.kill()

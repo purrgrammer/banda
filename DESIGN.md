@@ -192,7 +192,7 @@ one that gives them one more thing to manage stays out.
   in the owner's voice; thinking (Quick, Balanced, Deep), never a model's name;
   archive. A file or artifact the owner opens replaces the tabs
   until Back (an artifact's versions, edit and restore). The browser is not in the panel: the chat already shows it.
-  A group's panel has no tabs: its members, and who may be added. **New agent** is a short sheet, the face
+  A group's panel has no tabs: its members, who may be added, and archive. **New agent** is a short sheet, the face
   defaulted, a name and a personality that three tappable starters fill (Researcher, Writer, Keeper of the calendar):
   naming a friend, not filling a form. No description, no interview.
 - **Connections** is a page from the band's foot and from Settings: every service the band can work with, a tile each
@@ -200,7 +200,8 @@ one that gives them one more thing to manage stays out.
   that needs a connection carries the connect card instead of pointing elsewhere.
 - **Settings** is one page: the model providers (connect another, switch the band to it, sign out; the models the
   tiers use); connections (every account across
-  services: sign in another, sign out, which agents use it); agents (archived ones, to restore); appearance; shared memory; Pause all
+  services: sign in another, sign out, which agents use it); agents (the limits on groups; archived agents and groups,
+  to restore); appearance; shared memory; Pause all
   routines; Advanced (show how the work is done on this device; the computer's state).
 - **The phone** shows the sidebar first, full width; a row opens its chat full screen with a back control; the
   header's name and a routine's or a watch's event line open the panel's sheet; the composer sticks to the
@@ -277,7 +278,9 @@ The body is its personality, a prompt section. Every direct agent chat gets the 
 its browser, memory, routines, watches and `message_user`, plus `message_agent`, `read_agent_chat`, `propose_agent`,
 `propose_group` and `propose_agent_change`. Group executions do not get these direct-chat tools.
 What distinguishes agents is personality, connections, routines, watches and memory. An agent never gets a connection's
-tools its file does not name. A tool that asks the owner to accept something is named `propose_<what>`; a tool that acts
+tools its file does not name. Enabled tools need not all be offered upfront: secondary tools are discovered on demand,
+within the same authority. Discovery never grants access, and a previously discovered tool loses access when its
+authority is revoked. A tool that asks the owner to accept something is named `propose_<what>`; a tool that acts
 is a plain verb. Agent files are "before" files (see the workspace): the owner's own edit is accepted by construction,
 in effect at once; the agent's change to itself waits for the owner as a card in its chat. An accepted change reaches
 its chat at the next model boundary and deliberately starts its prompt cache cold.
@@ -313,9 +316,11 @@ structural rules, and the warmth of an agent never softens an approval: the card
 identical whoever the agent is.
 
 ## Groups
-A group is made by the owner, who chooses its agents (two to six) and alone adds or removes one. Every participant is
+A group is made by the owner, who chooses its agents (any number, none at first, up to the limit Settings sets) and
+alone adds or removes one; a group may lose its last member and wait for the next. Every participant is
 equal; there is no coordinator. A message asks everyone unless it mentions one or more agents (`@name`), which narrows
-it to them; each starts independently against the same shared history, and the cap of six bounds the cost. The composer
+it to them; each starts independently against the same shared history, and the members limit bounds the cost. With
+nobody in it, a message asks nobody and stays for whoever joins. The composer
 says so beneath the field ("To everyone · @ to pick one"). A mention, in the composer and in any message, shows as the
 agent's face and name, a link that opens its chat. A member speaks only with `message_group`, which posts to the
 room (words, files, an artifact, a question the owner answers there, or a reaction on the owner's message its turn
@@ -323,10 +328,17 @@ answers, shown on that message); `message_user` is not offered in a group, and
 `message_group` nowhere else. Its `ask` names the members whose work is needed, each starting a turn: its schema is an
 enum of the group's other active members by the names the group shows, so a member can name nobody else, and with
 nobody else there it has no `ask`. The enum follows the group at each member's turn. A name written with an @ in the
-words asks that member too. Agents' asks are visible and bounded in depth, total turns and concurrency; past a bound
-the message still posts, asking nobody, and says why. Each member keeps its own memory, permissions and browser; the
+words asks that member too. Agents' asks are visible and bounded in depth, total turns and concurrency; the owner
+sets the depth and the turns in Settings, for every group; past a bound
+the message still posts, asking nobody, and says why. A lowered limit binds what comes next: a group already past it
+keeps its members but takes no more. Each member keeps its own memory, permissions and browser; the
 group gives them shared context, nothing else. Joining reveals the full history; leaving prevents future work but cannot
 erase what the agent saw. The group's row sits in the band like an agent's; its panel lists its members.
+
+Archiving a group takes it out of the band and stops what its members are doing there; it takes no message, starts no
+turn and does not change until restored, and the room says when it was archived. Its history, members and their
+execution chats remain; Settings lists it, to restore, and a restored group goes on where it was: nothing it was doing
+comes back.
 
 ## Connections
 A connection is how the band works with the owner's services without holding them. It ships as a file
@@ -693,14 +705,19 @@ long as it runs.
   them; `propose_send` makes one a draft, and approved, the proxy sends exactly the stored request, once. A permission
   covers a route (the method, the host, the path with its ids as `*`) and is checked in the daemon's commit, never in
   the proxy. The owner may instead allow a host (its name in lower case, its port unless the scheme's): anything sent
-  there, always, a second shape the request binds, offered beside the route's and never the default. A host is allowed
+  there, always, a second shape the request binds, offered beside the route's and never the default. The owner may
+  also allow one for an agent directly, from its Access, and there a host may be a pattern: `*.example.com`, any name
+  under it, or `*`, every host, each at its scheme and port. An agent may ask for several at once, before it needs
+  them (`ask_hosts`): one approval, its list editable, approved as if the owner had added each; it offers no scope, so
+  every such ask asks. An agent that runs commands has both ways to ask, whatever its file lists. A host is allowed
   for the agent that asked, and covers only that agent's chats, as the proxy knows them by their logins; while the
   agents share one box, one agent's process can read another's login, so the binding is by login, not by the
   boundary, and the app says any agent there could use it. The daemon tells the proxy each chat's allowed hosts, in
   order and never an older config than the store's (a push that fails stops the proxy), so a write there goes straight
   through as it happens (a `git push` run again succeeds); the proxy records each, durably, before sending it, and the
-  daemon logs it with its outcome and its bytes' hash. A request carrying its own credential, and the browser's, are
-  still held.
+  daemon logs it with its outcome and its bytes' hash. A WebSocket opened there (a relay, a live API) is such a write:
+  its opening is what is recorded, its frames then pass unrecorded, and what its server sends is scrubbed of
+  credentials; every other WebSocket is cut. A request carrying its own credential, and the browser's, are still held.
 - **Credentials** for a host are swapped in at the proxy, from the daemon's `auth/`, so the box holds no secrets; a
   response that echoes one has it scrubbed. A request the box sends carrying a credential of its own is on the floor.
   A request that acts as nobody (`web_fetch`'s) gets none: the box can only ever give one up that way.

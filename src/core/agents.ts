@@ -26,6 +26,7 @@ import { context } from "./store.ts";
 import { DEFAULT_TIER, isTier, modelFor, TIERS, type Tier } from "./tiers.ts";
 import {
 	DIRECT_META_TOOLS,
+	EGRESS_TOOLS,
 	EVERY_AGENT,
 	GROUP_TOOLS,
 	groupToolsName,
@@ -352,7 +353,9 @@ function unquote(value: string): string {
  */
 export function toolsOf(agent: Pick<Agent, "id" | "tools">, all: readonly string[]): string[] {
 	const named = agent.id === LEAD ? all : agent.tools;
-	return [...new Set([...EVERY_AGENT, ...named])];
+	// its commands' writes are held: an agent that runs them may ask about them
+	const asking = agent.id !== LEAD && named.includes("bash") ? EGRESS_TOOLS : [];
+	return [...new Set([...EVERY_AGENT, ...named, ...asking])];
 }
 
 /**

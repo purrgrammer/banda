@@ -11,7 +11,6 @@ import type { MutableModels } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import {
 	type ConversationId,
-	createRegistry,
 	defineExtension,
 	type Harness,
 	type HarnessSettings,
@@ -37,6 +36,7 @@ import { ActivityLog } from "./core/activity.ts";
 import { Accepted, AgentChats, agentPath } from "./core/agents.ts";
 import { stopArchived } from "./core/archive.ts";
 import type { EffectTool } from "./core/ask.ts";
+import { askHostsTool } from "./core/ask-hosts.ts";
 import { avatarInstructionsExtension } from "./core/avatar-instructions.ts";
 import { BlobStore, Blobs, safeName } from "./core/blobs.ts";
 import { ChatReads, readChat } from "./core/chat-reads.ts";
@@ -50,7 +50,7 @@ import { type Gateway, INLINE_IMAGES, mimeOf, OWNER, routeKey } from "./core/gat
 import { guardImages } from "./core/images.ts";
 import { MemoryLock, memoryExtension } from "./core/memory.ts";
 import { nowExtension } from "./core/now.ts";
-import { onPermissions, Permissions, revoke } from "./core/permissions.ts";
+import { allowHost, onPermissions, Permissions, revoke } from "./core/permissions.ts";
 import { FileCredentialStore } from "./core/provider-credentials.ts";
 import { Control, RoutineRefused, Routines } from "./core/routines.ts";
 import { Search } from "./core/search.ts";
@@ -58,6 +58,7 @@ import { skillsExtension } from "./core/skills.ts";
 import { status } from "./core/status.ts";
 import { context, openStore } from "./core/store.ts";
 import { timeThinking } from "./core/timing.ts";
+import { toolDiscoveryExtension, toolRegistry } from "./core/tool-discovery.ts";
 import { MESSAGE_GROUP, MESSAGE_USER } from "./core/toolsets.ts";
 import { defineCore, Routes, stop as stopChat, type TurnResult } from "./core/turn.ts";
 import { answer, dismissQuestion, revive } from "./core/wait.ts";
@@ -252,7 +253,8 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 					`box: no box, so the credentials auth/egress.json sets for ${unset.map((c) => c.host).join(", ")} are not set`,
 				);
 		}
-		const registry = createRegistry();
+		const registry = toolRegistry();
+		registry.install(toolDiscoveryExtension);
 		const core = defineCore({
 			blobs,
 			registry,
@@ -366,7 +368,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			);
 		// a request the egress proxy held is sent only as an approved draft, or within a permission over its route
 		const effects = [
-			...(agentBox.egress === undefined ? [] : [proposeSendTool(agentBox.egress)]),
+			...(agentBox.egress === undefined ? [] : [proposeSendTool(agentBox.egress), askHostsTool()]),
 			...(options.effects ?? []),
 		];
 		if (effects.length > 0)
@@ -555,6 +557,8 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		await core.reconcile(open);
 		// an archived agent runs nothing, whatever a crash left between its archive and the stop that followed
 		await stopArchived(open);
+		// and an archived group, whatever a crash left between its archive and its stop
+		await core.groups.stopArchived(open);
 		/** After an agent file is accepted: an archived agent's runs stop, and its paused routines lose their tasks. */
 		const settleAgents = async () => {
 			await stopArchived(open);
@@ -711,6 +715,15 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						const dismissed = await dismissQuestion(open, key, { gateway: "web", peer: OWNER }, "bearer");
 						if ("refused" in dismissed) throw new BadRequest(dismissed.refused);
 						return { chat: dismissed.chat };
+					},
+					allowHost: async (agent, host) => {
+						const now = Date.now();
+						const allowed = await allowHost(open, agent, host, now);
+						if ("refused" in allowed) throw new BadRequest(allowed.refused);
+						// the proxy is told before the owner hears it is allowed; if it cannot be, it is tried again
+						// with every change, and a write there is held meanwhile, never sent unrecorded
+						await tellProxy().catch(() => undefined);
+						return control(open, workspace, now);
 					},
 					revoke: async (id) => {
 						const now = Date.now();

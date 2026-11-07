@@ -3,7 +3,16 @@
  * agent's whole home: who it is over four tabs (routines, access, memory, about); a file or artifact the owner
  * opens replaces it until Back. The browser is not here: the chat already shows it. A group's panel lists its members.
  */
-import { ChevronLeftIcon, MoreHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, PlusIcon, XIcon } from "lucide-react";
+import {
+	ArchiveIcon,
+	ChevronLeftIcon,
+	MoreHorizontalIcon,
+	PauseIcon,
+	PencilIcon,
+	PlayIcon,
+	PlusIcon,
+	XIcon,
+} from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -430,14 +439,27 @@ export function PanelBar({
 	);
 }
 
-/** A group's panel: its faces and name, its members, and who may join. No tabs: a group keeps nothing else. */
+/** What archiving group `name` does, as its confirm says it. */
+export function archiveGroupWords(name: string) {
+	return {
+		title: `Archive ${name}?`,
+		body: `${name} leaves the band and what its members are doing there stops. Its messages stay; restore it from Settings.`,
+	};
+}
+
+/**
+ * A group's panel: its faces and name, its members, who may join (none once it holds `most`), and Archive. No tabs: a
+ * group keeps nothing else. A group may have nobody in it yet.
+ */
 export function GroupPanel({
 	name,
 	members,
 	others,
+	most,
 	onRename,
 	onAdd,
 	onRemove,
+	onArchive,
 }: {
 	name: string;
 	members: readonly (Who & { readonly state?: FaceState | undefined; readonly paused?: boolean })[];
@@ -446,8 +468,12 @@ export function GroupPanel({
 	onRename?: (name: string) => void;
 	onAdd?: (who: Who & { readonly id?: string }) => void;
 	onRemove?: (who: Who & { readonly id?: string }) => void;
+	/** The agents a group holds at most, from Settings. */
+	most?: number | undefined;
+	onArchive?: () => void;
 }) {
 	const [editing, setEditing] = useState(false);
+	const full = most !== undefined && members.length >= most;
 	return (
 		<>
 			<PanelSection className="relative">
@@ -482,11 +508,14 @@ export function GroupPanel({
 						</button>
 					)}
 					<p className="text-meta text-ink-2">
-						{members.length} agents · a message asks everyone unless it mentions one
+						{members.length === 0
+							? "Nobody is in it yet"
+							: `${members.length === 1 ? "1 agent" : `${members.length} agents`} · a message asks everyone unless it mentions one`}
 					</p>
 				</div>
 			</PanelSection>
 			<PanelSection title="Members">
+				{members.length === 0 ? <p className="text-ui text-ink-2">Add agents below to start asking them.</p> : null}
 				<ul className="-mx-2 flex flex-col">
 					{members.map((member) => (
 						<li
@@ -501,7 +530,7 @@ export function GroupPanel({
 								paused={member.paused ?? false}
 							/>
 							<span className="flex-1 text-ui text-ink">{member.name}</span>
-							{members.length <= 1 || onRemove === undefined ? null : (
+							{onRemove === undefined ? null : (
 								<Confirm
 									title={`Remove ${member.name}?`}
 									body={`${member.name} leaves this group: it no longer sees what is said here. Its own chat is kept.`}
@@ -522,7 +551,11 @@ export function GroupPanel({
 					))}
 				</ul>
 			</PanelSection>
-			{others.length === 0 ? null : (
+			{others.length === 0 ? null : full ? (
+				<PanelSection title="Add to the group">
+					<p className="text-ui text-ink-2">It holds {most} agents, the most a group may. Settings can allow more.</p>
+				</PanelSection>
+			) : (
 				<PanelSection title="Add to the group">
 					<ul className="-mx-2 flex flex-col">
 						{others.map((other) => (
@@ -539,6 +572,19 @@ export function GroupPanel({
 							</li>
 						))}
 					</ul>
+				</PanelSection>
+			)}
+			{onArchive === undefined ? null : (
+				<PanelSection title="Archive">
+					<p className="text-meta text-ink-2">
+						It leaves the band; its messages are kept, and Settings can bring it back.
+					</p>
+					<Confirm {...archiveGroupWords(name)} action="Archive" keep={`Keep ${name}`} onConfirm={onArchive}>
+						<Button variant="destructive" size="sm" className="mt-2 self-start">
+							<ArchiveIcon />
+							Archive the group
+						</Button>
+					</Confirm>
 				</PanelSection>
 			)}
 		</>

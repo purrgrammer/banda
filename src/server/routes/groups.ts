@@ -211,7 +211,7 @@ export const groups: AreaModule = {
 			watch: [Groups, GroupReads],
 			shell: async () => {
 				await ready;
-				return [{ type: "groups", groups: await groupRows(api, harness) }];
+				return [{ type: "groups", groups: await groupRows(api, harness), limits: await api.limits(harness) }];
 			},
 			route: async ({ method, path, json }) => {
 				if (path === "/groups" && method === "GET") return { body: await groupRows(api, harness) };
@@ -226,7 +226,16 @@ export const groups: AreaModule = {
 					deps.changed();
 					return { body: { room } };
 				}
-				const match = /^\/groups\/(\d{1,12})(?:\/(messages|stop|read))?$/.exec(path);
+				if (path === "/groups/limits" && method === "GET") return { body: await api.limits(harness) };
+				if (path === "/groups/limits" && method === "PUT") {
+					const body = await json();
+					const limits = await api.setLimits(harness, body ?? {}).catch((error: unknown) => {
+						throw new BadRequest((error as Error).message);
+					});
+					deps.changed();
+					return { body: limits };
+				}
+				const match = /^\/groups\/(\d{1,12})(?:\/(messages|stop|read|archive))?$/.exec(path);
 				if (match === null) return undefined;
 				const room = Number(match[1]);
 				const action = match[2];
@@ -277,6 +286,13 @@ export const groups: AreaModule = {
 						});
 					});
 					if ("refused" in posted) throw new BadRequest(posted.refused);
+					deps.changed();
+					return { body: await groupView(api, harness, room) };
+				}
+				if (action === "archive" && method === "POST") {
+					const { archived } = await json();
+					if (typeof archived !== "boolean") throw new BadRequest("archived is true or false");
+					if (!(await api.archive(harness, room, archived))) throw new BadRequest("no such group", 404);
 					deps.changed();
 					return { body: await groupView(api, harness, room) };
 				}
