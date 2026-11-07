@@ -154,3 +154,48 @@ export function servesGroups(permissions: readonly PermissionView[]): ServesGrou
 		key.startsWith("task:") ? 0 : key.startsWith("routine:") ? 1 : key.startsWith("artifact:") ? 2 : 3;
 	return [...groups.entries()].sort(([a], [b]) => order(a) - order(b)).map(([key, group]) => ({ key, ...group }));
 }
+
+/** How long a permission may go unused, since it was given or last let something run, before it says so. */
+export const LATELY_MS = 30 * 86_400_000;
+
+/** When a permission last let something run: "Tue 14:02" within the week, else the date. */
+function lastWords(at: number, now: number): string {
+	const then = new Date(at);
+	return now - at < 6 * 86_400_000
+		? then.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })
+		: then.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+/** What a permission let run: "Used 4 times · last Tue 14:02", "Not used yet", or, a month unused, "Not used lately". */
+export function usedWords(permission: Pick<PermissionView, "at" | "ran">, now = Date.now()): string {
+	const { ran } = permission;
+	if (now - (ran?.last ?? permission.at) >= LATELY_MS) return "Not used lately";
+	if (ran === undefined || ran.count === 0) return "Not used yet";
+	return `Used ${ran.count === 1 ? "once" : `${ran.count} times`} · last ${lastWords(ran.last, now)}`;
+}
+
+const PLACEHOLDER = /\{([a-z_]{1,32})\}/g;
+const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+
+/**
+ * A place as the owner types it, read by its template: "purrgrammer/banda" for "{owner}/{repo}" is each placeholder's
+ * value, or undefined when it does not read as one: each value as the daemon takes it, no separator or space.
+ */
+export function placeValues(template: string, typed: string): { [placeholder: string]: string } | undefined {
+	const names: string[] = [];
+	let source = "";
+	let last = 0;
+	for (const match of template.matchAll(PLACEHOLDER)) {
+		source += `${literal(template.slice(last, match.index))}([A-Za-z0-9_][A-Za-z0-9_.-]{0,399})`;
+		names.push(match[1] as string);
+		last = (match.index ?? 0) + match[0].length;
+	}
+	source += literal(template.slice(last));
+	const found = new RegExp(`^${source}$`).exec(typed.trim());
+	if (found === null) return undefined;
+	return Object.fromEntries(names.map((name, i) => [name, found[i + 1] as string]));
+}
+
+/** The sentence the daemon stores for a grain's permission: its words, the place filled, and the account. */
+export const grainSentence = (words: string, values: { readonly [placeholder: string]: string }, account: string) =>
+	`${words.replace(PLACEHOLDER, (_, name: string) => values[name] ?? "")} as ${account}`;

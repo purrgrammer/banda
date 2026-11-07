@@ -154,6 +154,22 @@ export const revokePermission = (id: string) => api<ControlView>(`/permissions/$
 /** Allow agent `agent` to send anything to `host`: a host, `*.example.com`, or `*` for every host. */
 export const allowHost = (agent: string, host: string) =>
 	api<ControlView>(`/agents/${agent}/hosts`, { method: "POST", body: JSON.stringify({ host }) });
+/**
+ * Allow agent `agent` a connection's write without asking, wider than one object: at its place (`place` gives each of
+ * the place's parts) or anywhere, as one account, always or until a time within a week. Rejects with why not.
+ */
+export const allowGrain = (
+	agent: string,
+	asked: {
+		readonly connection: string;
+		readonly tool: string;
+		readonly account: string;
+		readonly grain: "place" | "action";
+		readonly place?: { readonly [placeholder: string]: string };
+		readonly scope: "always" | "until";
+		readonly until?: number;
+	},
+) => api<ControlView>(`/agents/${agent}/permissions`, { method: "POST", body: JSON.stringify(asked) });
 
 /** The page's one stream (`one-stream.ts`), over the daemon's `GET /api/events?chat=`. */
 const one = oneStream((path, onEvent, signal) => stream<ShellEvent>(path, onEvent, signal));

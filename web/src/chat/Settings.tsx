@@ -594,48 +594,99 @@ export function Memory({
 	);
 }
 
-/** The standing permissions the owner gave: each with its scope, revokable. */
+/** A standing permission as Permissions lists it: what it lets run, for how long, and what it let run. */
+export type PermissionRow = {
+	readonly id?: string;
+	readonly what: string;
+	readonly scope: string;
+	/** "Used 4 times · last Tue 14:02", "Not used yet", "Not used lately". */
+	readonly used?: string;
+	/** The connection it is of, by its name in the daemon: listed under it. */
+	readonly connection?: string;
+};
+
+/** A connection Permissions lists the permissions of, and its Add, when one may be allowed there from here. */
+export type PermissionConnection = {
+	readonly id: string;
+	readonly name: string;
+	readonly url?: string | undefined;
+	readonly add?: ReactNode;
+};
+
+/**
+ * The standing permissions the owner gave: each one sentence, how long and what it let run, revokable; those of a
+ * connection under it, with its Add.
+ */
 export function Permissions({
 	agent,
 	permissions,
+	connections = [],
 	onRevoke,
 }: {
 	agent: string;
-	permissions: readonly { readonly id?: string; readonly what: string; readonly scope: string }[];
+	permissions: readonly PermissionRow[];
+	connections?: readonly PermissionConnection[];
 	/** Take one back: it covers nothing from then on. */
 	onRevoke?: ((id: string) => void) | undefined;
 }) {
+	const known = (permission: PermissionRow) => connections.some((each) => each.id === permission.connection);
+	const loose = permissions.filter((permission) => !known(permission));
+	const rows = (list: readonly PermissionRow[]) => (
+		<Rows>
+			{list.map((permission) => (
+				<RowOf
+					key={permission.id ?? permission.what}
+					title={`${permission.what.charAt(0).toUpperCase()}${permission.what.slice(1)}`}
+					detail={permission.used === undefined ? permission.scope : `${permission.scope} · ${permission.used}`}
+					end={
+						<Confirm
+							title="Take this back?"
+							body={`${agent} will ask you again before it does this: ${permission.what}.`}
+							action="Revoke"
+							keep="Keep it"
+							onConfirm={
+								permission.id === undefined || onRevoke === undefined
+									? undefined
+									: () => onRevoke(permission.id as string)
+							}
+						>
+							<Button variant="destructive" size="xs">
+								Revoke
+							</Button>
+						</Confirm>
+					}
+				/>
+			))}
+		</Rows>
+	);
 	return (
 		<Block title="Permissions" note={`What ${agent} may do without asking: each one you allowed, and until when.`}>
 			{permissions.length === 0 ? (
 				<p className="rounded-field bg-paper-2 px-3.5 py-3 text-ui text-ink-2">Nothing yet: {agent} asks every time.</p>
-			) : (
-				<Rows>
-					{permissions.map((permission) => (
-						<RowOf
-							key={permission.id ?? permission.what}
-							title={permission.what}
-							detail={permission.scope}
-							end={
-								<Confirm
-									title="Take this back?"
-									body={`${agent} will ask you again before it does this: ${permission.what}.`}
-									action="Revoke"
-									keep="Keep it"
-									onConfirm={
-										permission.id === undefined || onRevoke === undefined
-											? undefined
-											: () => onRevoke(permission.id as string)
-									}
-								>
-									<Button variant="destructive" size="xs">
-										Revoke
-									</Button>
-								</Confirm>
-							}
-						/>
-					))}
-				</Rows>
+			) : null}
+			{connections.map((connection) => {
+				const own = permissions.filter((permission) => permission.connection === connection.id);
+				if (own.length === 0 && connection.add === undefined) return null;
+				return (
+					<div key={connection.id} className="flex flex-col gap-2">
+						<div className="flex min-h-9 items-center gap-3">
+							<span title={connection.name} className="flex size-5 shrink-0 items-center justify-center">
+								<ConnectionIcon connection={connection.id} url={connection.url} />
+							</span>
+							<span className="min-w-0 flex-1 truncate text-ui font-medium text-ink">{connection.name}</span>
+							{connection.add}
+						</div>
+						{own.length === 0 ? null : rows(own)}
+					</div>
+				);
+			})}
+			{loose.length === 0 ? null : (
+				<div className="flex flex-col gap-2">
+					{connections.length === 0 ? null : (
+						<span className="flex min-h-9 items-center text-ui font-medium text-ink">Other</span>
+					)}
+					{rows(loose)}
+				</div>
 			)}
 		</Block>
 	);

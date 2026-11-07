@@ -1,12 +1,17 @@
 /** Compact per-account and harness access, with add flows in dialogs. */
+import { PlusIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { CapabilitiesView, ControlView, PermissionView } from "../../../src/server/api.ts";
+import { type AheadAction, AllowAhead } from "../chat/AllowAhead.tsx";
 import { Confirm } from "../chat/Confirm.tsx";
 import { Block, type ConnectionRow, Connections, Permissions, RowOf, Rows } from "../chat/Settings.tsx";
-import { allowHost, revokePermission, switchAccount, switchPublicConnection } from "../lib/api.ts";
+import { allowGrain, allowHost, revokePermission, switchAccount, switchPublicConnection } from "../lib/api.ts";
+import { usedWords } from "../lib/permissions.ts";
+import { usePhone } from "../lib/phone.ts";
 import { showCapabilities, showControl, useShell } from "../lib/shell.ts";
 import { ConnectFlow } from "./ConnectFlow.tsx";
 import { AddHarnessButton, HarnessAccessTile } from "./HarnessConnections.tsx";
@@ -75,6 +80,8 @@ export function AccessTab({
 	const [error, setError] = useState<string | undefined>(undefined);
 	const [adding, setAdding] = useState(false);
 	const [pick, setPick] = useState<string>();
+	/** The connection whose Allow without asking is open. */
+	const [ahead, setAhead] = useState<string>();
 	const rows = connectionRows(capabilities, agent.id);
 	const used = rows.filter((row) => row.accounts.length > 0);
 	const theirs = (control?.permissions ?? []).filter((permission) => permission.agent === agent.id);
@@ -82,9 +89,46 @@ export function AccessTab({
 	const hosts = theirs.flatMap((permission) =>
 		permission.host === undefined ? [] : [{ id: permission.id, host: permission.host }],
 	);
+	const now = Date.now();
 	const permissions = theirs
 		.filter((permission) => permission.host === undefined)
-		.map((permission) => ({ id: permission.id, what: permission.what, scope: scopeWords(permission) }));
+		.map((permission) => ({
+			id: permission.id,
+			what: permission.what,
+			scope: scopeWords(permission),
+			used: usedWords(permission, now),
+			...(permission.connection === undefined ? {} : { connection: permission.connection }),
+		}));
+	const permitting = (capabilities?.connections ?? []).flatMap((view) => {
+		const service = view.accepted?.connection;
+		if (service === undefined) return [];
+		const actions = view.tools.flatMap((tool) =>
+			tool.on && tool.grains !== undefined ? [{ tool: tool.name, grains: tool.grains }] : [],
+		);
+		const accounts = (view.accounts ?? []).filter(
+			(account) => account.stale !== true && account.agents.includes(agent.id),
+		);
+		return [
+			{
+				id: view.name,
+				name: service.service,
+				url: service.url,
+				...(actions.length === 0 || accounts.length === 0
+					? {}
+					: {
+							add: (
+								<Button variant="ghost" size="xs" className="text-ink-2" onClick={() => setAhead(view.name)}>
+									<PlusIcon />
+									Allow without asking
+								</Button>
+							),
+							actions,
+							accounts: accounts.map((account) => ({ account: account.account, label: account.label })),
+						}),
+			},
+		];
+	});
+	const allowing = permitting.find((connection) => connection.id === ahead);
 	return (
 		<>
 			<Connections
@@ -151,14 +195,101 @@ export function AccessTab({
 			<Permissions
 				agent={agent.name}
 				permissions={permissions}
+				connections={permitting}
 				onRevoke={(id) =>
 					void revokePermission(id)
 						.then(showControl)
 						.catch(() => {})
 				}
 			/>
+			<AllowAheadDialog
+				agent={agent}
+				connection={
+					allowing?.actions === undefined || allowing.accounts === undefined
+						? undefined
+						: { ...allowing, actions: allowing.actions, accounts: allowing.accounts }
+				}
+				onClose={() => setAhead(undefined)}
+			/>
 			<AllowHost agent={agent} hosts={hosts} />
 		</>
+	);
+}
+
+/**
+ * Allow without asking, for one connection: a dialog on the desktop, a sheet from below on the phone. Allowed, it
+ * closes and Permissions lists what the daemon stored; refused, it says why and stays open.
+ */
+function AllowAheadDialog({
+	agent,
+	connection,
+	onClose,
+}: {
+	agent: { readonly id: string; readonly name: string };
+	connection:
+		| {
+				readonly id: string;
+				readonly name: string;
+				readonly actions: readonly AheadAction[];
+				readonly accounts: readonly { readonly account: string; readonly label: string }[];
+		  }
+		| undefined;
+	onClose: () => void;
+}) {
+	const phone = usePhone();
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | undefined>(undefined);
+	const open = connection !== undefined;
+	const close = (still: boolean) => {
+		if (still) return;
+		setError(undefined);
+		onClose();
+	};
+	const title = connection === undefined ? "" : `Let ${agent.name} act on ${connection.name} without asking`;
+	const note = "It still asks for anything else, and you can take it back here at any time.";
+	const form =
+		connection === undefined ? null : (
+			<AllowAhead
+				key={connection.id}
+				agent={agent.name}
+				actions={connection.actions}
+				accounts={connection.accounts}
+				busy={busy}
+				error={error}
+				onCancel={() => close(false)}
+				onAllow={(asked) => {
+					setBusy(true);
+					setError(undefined);
+					void allowGrain(agent.id, { connection: connection.id, ...asked })
+						.then((after) => {
+							showControl(after);
+							close(false);
+						})
+						.catch((failed: unknown) => setError(failed instanceof Error ? failed.message : String(failed)))
+						.finally(() => setBusy(false));
+				}}
+			/>
+		);
+	return phone ? (
+		<Sheet open={open} onOpenChange={close}>
+			<SheetContent side="bottom" className="max-h-[calc(100dvh-2rem)] overflow-y-auto px-4 pb-6">
+				<SheetHeader className="px-0">
+					<SheetTitle>{title}</SheetTitle>
+					<SheetDescription>{note}</SheetDescription>
+				</SheetHeader>
+				{form}
+			</SheetContent>
+		</Sheet>
+	) : (
+		<Dialog open={open} onOpenChange={close}>
+			<DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
+				<DialogHeader>
+					<DialogTitle>{title}</DialogTitle>
+					<DialogDescription>{note}</DialogDescription>
+				</DialogHeader>
+				{form}
+			</DialogContent>
+		</Dialog>
 	);
 }
 

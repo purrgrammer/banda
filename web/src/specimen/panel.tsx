@@ -1,8 +1,10 @@
 /** The panel, settings and connections: the agent beside its chat, what opens there, and the pages behind the gear. */
+import { PlusIcon } from "lucide-react";
 import { isValidElement, type ReactNode, useContext } from "react";
 import { Button } from "@/components/ui/button";
 import { DraftApproval } from "../app/DraftApproval.tsx";
 import { ObjectReading } from "../app/Objects.tsx";
+import { type AheadAction, AllowAhead } from "../chat/AllowAhead.tsx";
 import { ApprovalCard } from "../chat/Approval.tsx";
 import { BrowserWindow } from "../chat/Browser.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
@@ -257,6 +259,99 @@ export function PanelSections() {
 						<Panel name="Desk">
 							<GroupPanel name="Desk" members={[SANCHO, MARA]} others={[OCTO, ATLAS]} most={2} onRemove={() => {}} />
 						</Panel>
+					</Specimen>
+				</div>
+			</Section>
+			<Section
+				id="permissions"
+				title="Permissions, by connection"
+				note="Each one sentence, how long it lasts and what it let run; one unused for a month says so. Allow without asking picks the action, where and for how long, and shows the sentence the daemon will store; anywhere says what it lets happen."
+			>
+				<div className="flex flex-wrap items-start gap-6">
+					<Specimen label="Listed under their connection">
+						<div className="flex w-[22rem] max-w-full flex-col">
+							<Permissions
+								agent="Mara"
+								connections={[{ id: "github", name: "GitHub", add: ADD_AHEAD }]}
+								permissions={[
+									{
+										id: "1",
+										what: "merge pull requests in purrgrammer/banda as @bandarra",
+										scope: "Always",
+										used: "Used 4 times · last Tue 14:02",
+										connection: "github",
+									},
+									{
+										id: "2",
+										what: "comment on pull requests and issues anywhere as @bandarra",
+										scope: "Until Fri 18:00",
+										used: "Not used yet",
+										connection: "github",
+									},
+									{
+										id: "3",
+										what: "merge purrgrammer/banda #34 as @bandarra",
+										scope: "Always",
+										used: "Not used lately",
+										connection: "github",
+									},
+									{ id: "4", what: "send messages to ana", scope: "For this task", used: "Used once · last 09:12" },
+								]}
+							/>
+						</div>
+					</Specimen>
+					<Specimen label="None yet, with a connection to allow on">
+						<div className="flex w-[22rem] max-w-full flex-col">
+							<Permissions
+								agent="Mara"
+								connections={[{ id: "github", name: "GitHub", add: ADD_AHEAD }]}
+								permissions={[]}
+							/>
+						</div>
+					</Specimen>
+					<Specimen label="Allow without asking: where, still to say">
+						<div className="w-[24rem] max-w-full rounded-card border border-line-soft bg-paper p-4">
+							<AllowAhead
+								agent="Mara"
+								actions={AHEAD_ACTIONS}
+								accounts={AHEAD_ACCOUNTS.slice(0, 1)}
+								onCancel={() => {}}
+							/>
+						</div>
+					</Specimen>
+					<Specimen label="In one place: the sentence it stores">
+						<div className="w-[24rem] max-w-full rounded-card border border-line-soft bg-paper p-4">
+							<AllowAhead
+								agent="Mara"
+								actions={AHEAD_ACTIONS}
+								accounts={AHEAD_ACCOUNTS.slice(0, 1)}
+								initial={{ place: "purrgrammer/banda" }}
+								onCancel={() => {}}
+							/>
+						</div>
+					</Specimen>
+					<Specimen label="Anywhere, as one of two accounts: its consequence">
+						<div className="w-[24rem] max-w-full rounded-card border border-line-soft bg-paper p-4">
+							<AllowAhead
+								agent="Mara"
+								actions={AHEAD_ACTIONS}
+								accounts={AHEAD_ACCOUNTS}
+								initial={{ grain: "action" }}
+								onCancel={() => {}}
+							/>
+						</div>
+					</Specimen>
+					<Specimen label="A place that does not read as one, and the daemon's refusal">
+						<div className="w-[24rem] max-w-full rounded-card border border-line-soft bg-paper p-4">
+							<AllowAhead
+								agent="Mara"
+								actions={AHEAD_ACTIONS}
+								accounts={AHEAD_ACCOUNTS.slice(0, 1)}
+								initial={{ tool: "github__add_issue_comment", place: "purrgrammer banda" }}
+								error="that account is not switched on for Mara"
+								onCancel={() => {}}
+							/>
+						</div>
 					</Specimen>
 				</div>
 			</Section>
@@ -779,6 +874,38 @@ export function PanelSections() {
 		</>
 	);
 }
+
+/** GitHub's writes that may be allowed wider than one object, as the daemon words them. */
+const AHEAD_ACTIONS: readonly AheadAction[] = [
+	{
+		tool: "github__merge_pull_request",
+		grains: {
+			what: "merge pull requests",
+			place: { words: "merge pull requests in {owner}/{repo}", place: "{owner}/{repo}" },
+			action: { words: "merge pull requests anywhere" },
+		},
+	},
+	{
+		tool: "github__add_issue_comment",
+		grains: {
+			what: "comment on pull requests and issues",
+			place: { words: "comment on pull requests and issues in {owner}/{repo}", place: "{owner}/{repo}" },
+			action: { words: "comment on pull requests and issues anywhere" },
+		},
+	},
+];
+
+const AHEAD_ACCOUNTS = [
+	{ account: "bandarra", label: "@bandarra" },
+	{ account: "purrbot", label: "@purrbot" },
+] as const;
+
+const ADD_AHEAD = (
+	<Button variant="ghost" size="xs" className="text-ink-2">
+		<PlusIcon />
+		Allow without asking
+	</Button>
+);
 
 /** One specimen with its label; a panel gets the height of a short screen, bordered as it would sit. */
 function Specimen({ label, children }: { label: string; children: ReactNode }) {

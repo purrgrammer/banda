@@ -32,7 +32,15 @@ import { openWaits } from "../src/core/status.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
 import { type Approving, type Ask, answer, WAIT, type WaitEnded } from "../src/core/wait.ts";
-import { groupApprovals, scopeOf, servesGroups, sharedScopes } from "../web/src/lib/permissions.ts";
+import {
+	grainSentence,
+	groupApprovals,
+	placeValues,
+	scopeOf,
+	servesGroups,
+	sharedScopes,
+	usedWords,
+} from "../web/src/lib/permissions.ts";
 import { blobStore, FAUX_MODEL, FakeGateway, tempHome, until } from "./helpers.ts";
 import { pbtRuns } from "./pbt.ts";
 
@@ -764,6 +772,28 @@ describe("the app's permission words and groups", () => {
 			scopes: offeredScopes({ permission: { match: { to }, what: `send messages to ${to}` } }),
 			...extra,
 		}) as Extract<Ask, { type: "approval" }>;
+
+	it("says what a permission let run, and that one a month unused is not used lately", () => {
+		const now = new Date(2026, 10, 7, 12).getTime();
+		const day = 86_400_000;
+		expect(usedWords({ at: now - day }, now)).toBe("Not used yet");
+		expect(usedWords({ at: now - 31 * day }, now)).toBe("Not used lately");
+		expect(usedWords({ at: now - 40 * day, ran: { count: 2, last: now - day } }, now)).toMatch(/^Used 2 times · last /);
+		expect(usedWords({ at: now - 40 * day, ran: { count: 1, last: now - day } }, now)).toMatch(/^Used once · last /);
+		expect(usedWords({ at: now - 90 * day, ran: { count: 9, last: now - 30 * day } }, now)).toBe("Not used lately");
+	});
+
+	it("reads a typed place by its template and fills the daemon's words with it", () => {
+		expect(placeValues("{owner}/{repo}", " purrgrammer/banda ")).toEqual({ owner: "purrgrammer", repo: "banda" });
+		for (const typed of ["purrgrammer", "purrgrammer/banda/x", "purr grammer/banda", "/banda", ""])
+			expect(placeValues("{owner}/{repo}", typed), typed).toBeUndefined();
+		expect(
+			grainSentence("merge pull requests in {owner}/{repo}", { owner: "purrgrammer", repo: "banda" }, "@bandarra"),
+		).toBe("merge pull requests in purrgrammer/banda as @bandarra");
+		expect(grainSentence("merge pull requests anywhere", {}, "@bandarra")).toBe(
+			"merge pull requests anywhere as @bandarra",
+		);
+	});
 
 	it("groups the asks of one task and tool; the floor, an ask with no scope and a run again stand alone", () => {
 		const waits = [

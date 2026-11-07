@@ -23,6 +23,7 @@ import { actOnFact, setPaused, signOutAccount, signOutSite } from "../lib/api.ts
 import { attempt } from "../lib/attempt.ts";
 import { agentMainOf } from "../lib/chats.ts";
 import { type ArchivedAgent, archivedAgents, chatAgents } from "../lib/navigation.ts";
+import { usePhone } from "../lib/phone.ts";
 import { setTheme, useTheme } from "../lib/prefs.ts";
 import { showAgents, showCapabilities, showControl, showMemory, useShell } from "../lib/shell.ts";
 import { AccessTab, reachesSomething } from "./Access.tsx";
@@ -66,18 +67,6 @@ const go = (where: Where) => {
 };
 
 const openRow = (row: { to: Where }) => go(row.to);
-
-function usePhone(): boolean {
-	const query = "(max-width: 767px)";
-	const [phone, setPhone] = useState(() => matchMedia(query).matches);
-	useEffect(() => {
-		const list = matchMedia(query);
-		const changed = () => setPhone(list.matches);
-		list.addEventListener("change", changed);
-		return () => list.removeEventListener("change", changed);
-	}, []);
-	return phone;
-}
 
 const SERVICES = [
 	{ id: "gmail", name: "Gmail", does: "Read and draft email" },
