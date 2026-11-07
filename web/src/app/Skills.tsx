@@ -266,6 +266,7 @@ const TEMPLATE = (name: string) =>
 export function SkillForm({
 	heading,
 	name,
+	initialName,
 	initialText,
 	existing,
 	onSave,
@@ -274,6 +275,8 @@ export function SkillForm({
 	heading: string;
 	/** Set on an edit: the name is fixed. */
 	name?: string;
+	/** A create's starting name, for a prefilled form. */
+	initialName?: string;
 	initialText?: string;
 	/** Names already in the workspace: a new skill cannot take one. */
 	existing: readonly string[];
@@ -281,7 +284,7 @@ export function SkillForm({
 	onCancel: () => void;
 }) {
 	const create = name === undefined;
-	const [typed, setTyped] = useState("");
+	const [typed, setTyped] = useState(initialName ?? "");
 	const [text, setText] = useState(initialText ?? "");
 	const [saving, setSaving] = useState(false);
 	const target = name ?? typed;
