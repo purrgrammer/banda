@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 import { GitHubMark } from "./Object.tsx";
 
 /** Marks banda ships for the services it knows: a service's own favicon address needs its sign-in and is no image. */
-const SHIPPED_MARKS = new Set(["gmail", "calendar", "drive", "docs"]);
+const SHIPPED_MARKS = new Set(["gmail", "calendar", "contacts", "drive", "docs"]);
 
 function serverFavicon(url: string | undefined): string | undefined {
 	if (!url) return undefined;
