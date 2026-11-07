@@ -12,7 +12,7 @@ import { ImageFile } from "../chat/Files.tsx";
 import { BringBlock, type BringHarness, FirstBring, pickKey } from "../chat/FirstBring.tsx";
 import { Starters } from "../chat/FirstRun.tsx";
 import { FirstSkills } from "../chat/FirstSkills.tsx";
-import { Header, workingWords } from "../chat/Header.tsx";
+import { HEADER_CLEARANCE, Header, workingWords } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { PullRequestCard } from "../chat/Object.tsx";
 import { ProposalCard } from "../chat/Proposal.tsx";
@@ -44,6 +44,7 @@ export function ChatScreen({
 	group = false,
 	pill,
 	keyboard = false,
+	panelOpen = false,
 	children,
 }: {
 	name: string;
@@ -54,15 +55,25 @@ export function ChatScreen({
 	pill?: string;
 	/** The phone's keyboard is up: the composer and the pill ride on it. */
 	keyboard?: boolean;
+	/** The panel is open beside it: its toggle shows pressed. */
+	panelOpen?: boolean;
 	children: ReactNode;
 }) {
 	const { width } = useContext(StageContext);
 	const phone = width === "phone";
 	return (
-		<div className="flex min-w-0 flex-1 flex-col bg-paper">
-			<Header name={name} faces={faces} doing={doing} state={state ?? "idle"} phone={phone} />
+		<div className="relative flex min-w-0 flex-1 flex-col bg-paper">
+			<Header
+				name={name}
+				faces={faces}
+				doing={doing}
+				state={state ?? "idle"}
+				phone={phone}
+				panelOpen={panelOpen}
+				onPanel={() => {}}
+			/>
 			<div className="min-h-0 flex-1 overflow-y-auto">
-				<div className="mx-auto flex max-w-[44rem] flex-col gap-4 px-4 py-5">{children}</div>
+				<div className={`mx-auto flex max-w-[44rem] flex-col gap-4 px-4 pb-5 ${HEADER_CLEARANCE}`}>{children}</div>
 			</div>
 			<div className="mx-auto flex w-full max-w-[44rem] flex-col items-center gap-2 px-3 pb-3">
 				{pill === undefined ? null : <WaitingPill ask={pill} />}
@@ -97,9 +108,9 @@ function Keyboard() {
 	);
 }
 
-export function MaraChat({ keyboard = false }: { keyboard?: boolean } = {}) {
+export function MaraChat({ keyboard = false, panelOpen = false }: { keyboard?: boolean; panelOpen?: boolean } = {}) {
 	return (
-		<ChatScreen name="Mara" faces={[MARA]} pill="book the 9:15 to Lisbon?" keyboard={keyboard}>
+		<ChatScreen name="Mara" faces={[MARA]} pill="book the 9:15 to Lisbon?" keyboard={keyboard} panelOpen={panelOpen}>
 			<DaySeparator>Today</DaySeparator>
 			<Run time="10:20">
 				<VoiceMessage mine duration="0:05" segments={VOICE} />
@@ -247,7 +258,7 @@ export function Screens() {
 			<Section
 				id="app"
 				title="The app"
-				note="The band and a chat. On the phone, the band is the first screen and a chat opens over it."
+				note="The band and a chat, the panel closed: the face and the name float centred over the feed, which scrolls beneath them. On the phone, the band is the first screen and a chat opens over it."
 				bleed
 			>
 				{phone ? <Band rows={ROWS} className="w-full" /> : <Band rows={ROWS} selected="mara" />}

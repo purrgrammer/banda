@@ -167,13 +167,13 @@ export function PanelSections() {
 			<Section
 				id="panel-app"
 				title="A chat and its panel"
-				note="On wide screens the panel is open by default; on the phone the header's name opens it as a sheet."
+				note="The panel is closed by default, so the screen is the conversation. It opens for what needs room: a routine's line, a new routine, the face or the name tapped. Here a routine's line opened it on Routines. On the phone it is a sheet."
 				bleed
 				wide
 			>
 				{phone ? null : <Band rows={ROWS} selected="mara" />}
-				{phone ? null : <MaraChat />}
-				<AgentPanelOf who={MARA} state="waiting" phone={phone} />
+				{phone ? null : <MaraChat panelOpen />}
+				<AgentPanelOf who={MARA} state="waiting" phone={phone} tab="routines" />
 			</Section>
 			<Section
 				id="connections-signed-in"

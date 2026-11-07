@@ -1,8 +1,10 @@
 /**
- * The chat's header: the agent's face and name and, under it, what it does now ("Using its browser…", "Thinking…";
- * in a group, "Mara and Sancho are working…"), shimmering while it works, or its presence (waiting on you, routines
- * paused). Said here once: the feed has no working line. The name opens the panel; on the phone a back control leads
- * to the band.
+ * The chat's header: the agent's face and name, centred and floating over the feed, and under them what it does now
+ * ("Using its browser…", "Thinking…"; in a group, "Mara and Sancho are working…"), shimmering while it works, or its
+ * presence (waiting on you, routines paused). Said here once: the feed has no working line. It has no bar and no
+ * border: the paper fades out under it, so the conversation scrolls beneath and keeps the screen. The face and the
+ * name open the panel; on the phone a back control leads to the band. Its parent is `relative`, and the feed clears
+ * it with `HEADER_CLEARANCE`.
  */
 import { ChevronLeftIcon, PanelRightIcon, TerminalIcon } from "lucide-react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -45,75 +47,91 @@ export function Header({
 	const line = paused
 		? "Routines paused"
 		: (doing ?? (state === "working" ? "Working…" : state === "waiting" ? "Waiting on you" : undefined));
+	const face =
+		faces.length > 1 || first === undefined ? (
+			<FaceStack faces={faces} name={name} size="header" waiting={attention || state === "waiting"} />
+		) : (
+			<Face face={first.face} name={name} size="header" state={attention ? "waiting" : state} paused={paused} />
+		);
 	return (
-		<header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-line-soft bg-paper px-2.5">
+		<header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center px-2.5 pt-2 pb-10">
+			{/* frosted paper behind the face and the name, fading out so the feed shows through beneath them */}
+			<div
+				aria-hidden="true"
+				className="absolute inset-0 bg-paper/90 backdrop-blur-md [mask-image:linear-gradient(to_bottom,black_70%,transparent)]"
+			/>
 			{phone ? (
-				<Button variant="ghost" size="icon-sm" aria-label="Back to the band" className="-ml-1" onClick={onBack}>
-					<ChevronLeftIcon className="size-5" />
-				</Button>
-			) : null}
-			<div className="flex min-w-0 flex-1 items-center gap-2.5 px-1.5 py-1">
-				{faces.length > 1 || first === undefined ? (
-					<FaceStack faces={faces} name={name} size="message" waiting={attention || state === "waiting"} />
-				) : (
-					<Face face={first.face} name={name} size="message" state={attention ? "waiting" : state} paused={paused} />
-				)}
-				<div className="flex min-w-0 flex-col">
-					<button
-						type="button"
-						className="truncate rounded-field text-left text-heading font-semibold text-ink hover:bg-paper-3"
-						aria-label={`${name}: open its panel`}
-						onClick={onPanel}
-					>
-						{name}
-					</button>
-					{line === undefined ? null : (
-						<button
-							type="button"
-							onClick={onActivity}
-							disabled={onActivity === undefined || paused}
-							aria-label={onActivity === undefined || paused ? undefined : `Activity: ${line}`}
-							className="min-w-0 truncate rounded-field text-left text-meta text-ink-2 enabled:hover:text-ink"
-						>
-							{state === "working" && !paused ? (
-								<Shimmer as="span" aria-live="polite" duration={2.4}>
-									{line}
-								</Shimmer>
-							) : (
-								line
-							)}
-						</button>
-					)}
-				</div>
-			</div>
-			{delegated === undefined ? null : (
-				<Button
-					variant="ghost"
-					size="sm"
-					className="shrink-0"
-					onClick={delegated.onOpen}
-					aria-label={`${delegated.waiting ? "Waiting on you: " : ""}${delegated.count} coding ${delegated.count === 1 ? "session" : "sessions"}`}
-				>
-					<TerminalIcon />
-					<span>{delegated.count}</span>
-					{phone ? null : <span>coding {delegated.count === 1 ? "session" : "sessions"}</span>}
-				</Button>
-			)}
-			{phone || onPanel === undefined ? null : (
 				<Button
 					variant="ghost"
 					size="icon-sm"
-					className={cn("ml-auto text-ink-2", panelOpen && "bg-paper-3 text-ink")}
-					aria-label={panelOpen ? "Hide the panel" : "Show the panel"}
-					aria-pressed={panelOpen}
+					aria-label="Back to the band"
+					className="pointer-events-auto absolute top-2.5 left-1.5"
+					onClick={onBack}
+				>
+					<ChevronLeftIcon className="size-5" />
+				</Button>
+			) : null}
+			<div className="relative flex max-w-[min(28rem,calc(100%-6rem))] min-w-0 flex-col items-center">
+				<button
+					type="button"
+					className="pointer-events-auto flex min-w-0 max-w-full flex-col items-center gap-1 rounded-card px-2 pt-0.5 text-ink outline-none focus-visible:ring-2 focus-visible:ring-line"
+					aria-label={`${name}: open its panel`}
 					onClick={onPanel}
 				>
-					<PanelRightIcon />
-				</Button>
-			)}
+					{face}
+					<span className="max-w-full truncate text-heading font-semibold">{name}</span>
+				</button>
+				{line === undefined ? null : (
+					<button
+						type="button"
+						onClick={onActivity}
+						disabled={onActivity === undefined || paused}
+						aria-label={onActivity === undefined || paused ? undefined : `Activity: ${line}`}
+						className="pointer-events-auto max-w-full min-w-0 truncate rounded-field px-2 text-center text-meta text-ink-2 enabled:hover:text-ink"
+					>
+						{state === "working" && !paused ? (
+							<Shimmer as="span" aria-live="polite" duration={2.4}>
+								{line}
+							</Shimmer>
+						) : (
+							line
+						)}
+					</button>
+				)}
+			</div>
+			<div className="pointer-events-auto absolute top-2.5 right-1.5 flex items-center gap-1">
+				{delegated === undefined ? null : (
+					<Button
+						variant="ghost"
+						size="sm"
+						className="shrink-0"
+						onClick={delegated.onOpen}
+						aria-label={`${delegated.waiting ? "Waiting on you: " : ""}${delegated.count} coding ${delegated.count === 1 ? "session" : "sessions"}`}
+					>
+						<TerminalIcon />
+						<span>{delegated.count}</span>
+						{phone ? null : <span>coding {delegated.count === 1 ? "session" : "sessions"}</span>}
+					</Button>
+				)}
+				{phone || onPanel === undefined ? null : (
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						className={cn("text-ink-2", panelOpen && "bg-paper-3 text-ink")}
+						aria-label={panelOpen ? "Hide the panel" : "Show the panel"}
+						aria-pressed={panelOpen}
+						onClick={onPanel}
+					>
+						<PanelRightIcon />
+					</Button>
+				)}
+			</div>
 		</header>
 	);
 }
+
+/** How far the feed starts below the top, so its first message clears the floating header. */
+export const HEADER_CLEARANCE = "pt-28";
 
 /** What the header says while a group works: who, in words. */
 export function workingWords(names: readonly string[]): string | undefined {

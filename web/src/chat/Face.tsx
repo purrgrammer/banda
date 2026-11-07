@@ -7,7 +7,7 @@ import type { FaceState, Who } from "./types.ts";
 
 export type { FaceState } from "./types.ts";
 
-export const FACE_SIZE = { mention: 20, message: 28, row: 40, panel: 64, hero: 96 } as const;
+export const FACE_SIZE = { mention: 20, message: 28, row: 40, header: 48, panel: 64, hero: 96 } as const;
 export type FaceSize = keyof typeof FACE_SIZE;
 
 export function Face({
@@ -60,7 +60,7 @@ export function FaceStack({
 }: {
 	faces: readonly (Who & { state?: FaceState | undefined; paused?: boolean | undefined })[];
 	name: string;
-	size?: "message" | "row" | "panel";
+	size?: "message" | "row" | "header" | "panel";
 	waiting?: boolean;
 	className?: string;
 }) {

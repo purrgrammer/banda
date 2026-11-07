@@ -23,7 +23,7 @@ import { archiveGroup, groupOf, postToGroup } from "../areas/groups.ts";
 import { ArtifactCard, QuestionCard } from "../chat/Cards.tsx";
 import { Composer } from "../chat/Composer.tsx";
 import { Bubble, MessageActions, Run } from "../chat/Feed.tsx";
-import { Header, workingWords } from "../chat/Header.tsx";
+import { HEADER_CLEARANCE, Header, workingWords } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { ChatLoading, GroupEmpty } from "../chat/Loading.tsx";
 import { GroupPanel, Panel } from "../chat/Panel.tsx";
@@ -155,7 +155,7 @@ export function GroupChat({
 	if (phone && panel) return panelView;
 	return (
 		<>
-			<div className="flex min-w-0 flex-1 flex-col bg-paper">
+			<div className="relative flex min-w-0 flex-1 flex-col bg-paper">
 				<Header
 					name={name}
 					faces={all}
@@ -182,7 +182,7 @@ export function GroupChat({
 				<Conversation className="flex flex-col">
 					<ConversationContent
 						scrollClassName="min-h-0 flex-1 overflow-y-auto"
-						className="mx-auto w-full max-w-[44rem] px-4 py-5"
+						className={`mx-auto w-full max-w-[44rem] px-4 pb-5 ${HEADER_CLEARANCE}`}
 					>
 						{group === undefined && unread ? (
 							<Line

@@ -20,7 +20,7 @@ import { Line } from "../chat/Line.tsx";
 import { Panel, PanelSection } from "../chat/Panel.tsx";
 import type { FolderListing, HarnessSessionView as SessionApiView } from "../lib/api.ts";
 import { MARA } from "./fixtures.ts";
-import { Section } from "./stage.tsx";
+import { HeaderStage, Section } from "./stage.tsx";
 
 const HARNESS = "Claude Code";
 const FOLDER = "~/sancho";
@@ -357,38 +357,46 @@ export function HarnessSection() {
 	return (
 		<>
 			<Section id="harness-header" title="Delegated activity in the header">
-				<Header
-					name={MARA.name}
-					faces={[MARA]}
-					state="working"
-					doing="Claude Code is running a command…"
-					onActivity={() => {}}
-				/>
-				<Header
-					name={MARA.name}
-					faces={[MARA]}
-					state="waiting"
-					doing="Waiting on you · Claude Code"
-					attention
-					onActivity={() => {}}
-				/>
-				<Header
-					name={MARA.name}
-					faces={[MARA]}
-					state="working"
-					doing="2 coding sessions running"
-					onActivity={() => {}}
-				/>
-				<Header
-					name={MARA.name}
-					faces={[MARA]}
-					state="working"
-					doing="Thinking…"
-					attention
-					delegated={{ count: 2, waiting: true, onOpen: () => {} }}
-					phone
-					onActivity={() => {}}
-				/>
+				<HeaderStage>
+					<Header
+						name={MARA.name}
+						faces={[MARA]}
+						state="working"
+						doing="Claude Code is running a command…"
+						onActivity={() => {}}
+					/>
+				</HeaderStage>
+				<HeaderStage>
+					<Header
+						name={MARA.name}
+						faces={[MARA]}
+						state="waiting"
+						doing="Waiting on you · Claude Code"
+						attention
+						onActivity={() => {}}
+					/>
+				</HeaderStage>
+				<HeaderStage>
+					<Header
+						name={MARA.name}
+						faces={[MARA]}
+						state="working"
+						doing="2 coding sessions running"
+						onActivity={() => {}}
+					/>
+				</HeaderStage>
+				<HeaderStage>
+					<Header
+						name={MARA.name}
+						faces={[MARA]}
+						state="working"
+						doing="Thinking…"
+						attention
+						delegated={{ count: 2, waiting: true, onOpen: () => {} }}
+						phone
+						onActivity={() => {}}
+					/>
+				</HeaderStage>
 			</Section>
 
 			<Section

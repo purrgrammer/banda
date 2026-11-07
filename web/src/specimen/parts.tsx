@@ -33,7 +33,7 @@ import { RoutineProposal } from "../chat/Routine.tsx";
 import { VoiceMessage } from "../chat/Voice.tsx";
 import { Markdown } from "../components/Markdown.tsx";
 import { ATLAS, ATTACHED, MARA, OCTO, PAGE, PHOTO, POSTER, PR, REPLY_VOICE, SANCHO, VOICE } from "./fixtures.ts";
-import { Group, Section } from "./stage.tsx";
+import { Group, HeaderStage, Section } from "./stage.tsx";
 
 export function Parts() {
 	return (
@@ -360,24 +360,30 @@ export function Parts() {
 			<Section
 				id="working"
 				title="Working"
-				note="In the header while an agent works: its face with the ring, and what it does now, shimmering. The feed has no working line."
+				note="Under the floating face while an agent works: what it does now, shimmering. The feed has no working line."
 			>
 				<Group label="A chat with one agent">
-					<Header name="Octo" faces={[OCTO]} state="working" doing="Reading the checks on #34…" />
+					<HeaderStage>
+						<Header name="Octo" faces={[OCTO]} state="working" doing="Reading the checks on #34…" />
+					</HeaderStage>
 				</Group>
 				<Group label="Working, nothing more said">
-					<Header name="Octo" faces={[OCTO]} state="working" />
+					<HeaderStage>
+						<Header name="Octo" faces={[OCTO]} state="working" />
+					</HeaderStage>
 				</Group>
 				<Group label="A group: who is at work">
-					<Header
-						name="Trip"
-						faces={[
-							{ ...MARA, state: "working" },
-							{ ...SANCHO, state: "working" },
-						]}
-						state="working"
-						doing={workingWords(["Mara", "Sancho"])}
-					/>
+					<HeaderStage>
+						<Header
+							name="Trip"
+							faces={[
+								{ ...MARA, state: "working" },
+								{ ...SANCHO, state: "working" },
+							]}
+							state="working"
+							doing={workingWords(["Mara", "Sancho"])}
+						/>
+					</HeaderStage>
 				</Group>
 			</Section>
 			<Section
