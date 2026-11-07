@@ -718,6 +718,10 @@ function Main() {
 			<SearchDialog
 				open={searching}
 				onOpenChange={setSearching}
+				rows={rows}
+				agents={agents}
+				skills={skillSummaries}
+				phone={phone}
 				whoOf={(agent) => whoOf(agents, agent)}
 				groupName={(room) => shell.groups?.find((group) => group.room === room)?.name ?? "a group"}
 				onGo={go}
