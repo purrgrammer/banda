@@ -59,6 +59,9 @@ export function SkillsPage({
 }) {
 	const { list, reload } = useSkills();
 	const [editing, setEditing] = useState(false);
+	// an editor left open belongs to the page it was opened on, not the next one
+	// biome-ignore lint/correctness/useExhaustiveDependencies: name is the page
+	useEffect(() => setEditing(false), [name]);
 	const [shipped, setShipped] = useState<readonly ShippedSkillView[]>();
 	useEffect(() => {
 		void shippedSkills()
@@ -289,6 +292,10 @@ export function SkillForm({
 	const [saving, setSaving] = useState(false);
 	const target = name ?? typed;
 	const state = skillFormState({ name: target, text, existing: create ? existing : [] });
+	// the name's own verdicts show at the name field; down here only the file's
+	const fileProblems = state.problems.filter(
+		(problem) => problem !== NAME_RULE && problem !== `A skill called /${target} already exists.`,
+	);
 	return (
 		<section className="flex flex-col gap-3">
 			<h2 className="text-ui font-semibold">{heading}</h2>
@@ -333,9 +340,9 @@ export function SkillForm({
 				{state.size === undefined ? null : (
 					<p className={`text-meta ${state.overSize ? "text-danger" : "text-ink-2"}`}>{state.size}</p>
 				)}
-				{target !== "" && !state.valid ? (
+				{fileProblems.length > 0 ? (
 					<p role="alert" className="text-meta text-danger">
-						{state.problems.join(" ")}
+						{fileProblems.join(" ")}
 					</p>
 				) : null}
 			</div>

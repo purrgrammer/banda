@@ -210,7 +210,7 @@ export function SkillsSection() {
 					<PageState label="Three skills: one changed, one only you">
 						<SkillList skills={PAGE_ROWS} hrefFor={skillHref} />
 					</PageState>
-					<PageState label="Ten skills: type in the filter; 'deployer' or 'Déploy' both match">
+					<PageState label="Ten skills: type in the filter; 'PDF' matches case aside, 'deplacer' accents aside">
 						<SkillList skills={MANY_ROWS} hrefFor={skillHref} />
 					</PageState>
 					<PageState label="Changes wait: the review block sits above the list">
