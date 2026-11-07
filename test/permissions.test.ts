@@ -237,6 +237,42 @@ describe("permissions", () => {
 		await harness.close(context);
 	});
 
+	it("each effect's result says first what let it run: an approval, an edit, a scope given, or a permission", async () => {
+		const s = setup();
+		const harness = await s.open(await tempHome());
+		const said = async (chat: number) =>
+			(await entries(harness, chat)).flatMap((entry) => {
+				const message = entry.model?.[0] as { role?: string; content?: { type: string; text?: string }[] } | undefined;
+				return message?.role === "toolResult" ? [message.content?.[0]?.text ?? ""] : [];
+			});
+		const once = await s.say(harness, [{ tool: "send", to: "ana", body: "1" }]);
+		await approve(harness, (await nextAsk(harness, once.turn)).wait!.key);
+		await until(() => done(harness, once.turn));
+		const edited = await s.say(harness, [{ tool: "send", to: "ana", body: "2" }]);
+		await approve(harness, (await nextAsk(harness, edited.turn)).wait!.key, { edits: { body: "two" } });
+		await until(() => done(harness, edited.turn));
+		const task = await s.say(harness, [
+			{ tool: "send", to: "ana", body: "3" },
+			{ tool: "send", to: "ana", body: "4" },
+		]);
+		await approve(harness, (await nextAsk(harness, task.turn)).wait!.key, { permission: { scope: "task" } });
+		await until(() => done(harness, task.turn));
+		const always = await s.say(harness, [{ tool: "send", to: "bob", body: "5" }]);
+		await approve(harness, (await nextAsk(harness, always.turn)).wait!.key, { permission: { scope: "always" } });
+		await until(() => done(harness, always.turn));
+		const within = await s.say(harness, [{ tool: "send", to: "bob", body: "6" }]);
+		await until(() => done(harness, within.turn));
+		expect(await said(once.chat)).toEqual([
+			"The owner approved this.\nsend done",
+			"The owner approved this. They edited it before approving.\nsend done",
+			"The owner approved this. They also allowed you to send messages to ana without asking, for this task.\nsend done",
+			"Ran without asking, within your permission to send messages to ana, for this task.\nsend done",
+			"The owner approved this. They also allowed you to send messages to bob without asking, always.\nsend done",
+			"Ran without asking, within your permission to send messages to bob, always.\nsend done",
+		]);
+		await harness.close(context);
+	});
+
 	it("this once is no permission; a permission for the task covers the rest of that run and ends at the next message", async () => {
 		const s = setup();
 		const harness = await s.open(await tempHome());

@@ -432,12 +432,18 @@ export async function give(
 }
 
 /** For how long, in the daemon's words: the time in its own zone, which is the owner's machine's. */
-export const permissionWhen = (scope: PermissionScope) =>
+export const permissionWhen = (scope: PermissionScope | Pick<Permission, "scope" | "until">) =>
 	scope.scope === "always" || scope.scope === "host"
 		? "always"
 		: scope.scope === "task"
 			? "for this task"
-			: `until ${new Date(scope.until).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}`;
+			: `until ${new Date(scope.until ?? 0).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}`;
+
+/** What a permission lets its agent do, to follow "permission to": a host's without the agent's name it starts with. */
+export function permissionTo(permission: Pick<Permission, "scope" | "what">): string {
+	const may = permission.scope === "host" ? permission.what.lastIndexOf(" may ") : -1;
+	return may === -1 ? permission.what : permission.what.slice(may + " may ".length);
+}
 
 /** Call `listener` whenever the permissions, or the agent a chat runs, change (and at the start); the stop. */
 export async function onPermissions(

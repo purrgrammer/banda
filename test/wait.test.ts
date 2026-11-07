@@ -305,7 +305,7 @@ describe("Wait", () => {
 		});
 		await harness.waitForTask(id as never, context);
 		expect(s.runs.map((r) => [r.tool, r.target])).toEqual([["deploy", "prod"]]);
-		expect(await toolResults(harness, chat)).toEqual(["deployed prod"]);
+		expect(await toolResults(harness, chat)).toEqual(["The owner approved this.\ndeployed prod"]);
 		await harness.close(context);
 	});
 
@@ -396,7 +396,7 @@ describe("Wait", () => {
 		await answer(harness, again!.key, "approve", { gateway: "web", peer: OWNER }, "bearer");
 		await harness.waitForTask(id as never, context);
 		expect(s.runs.map((r) => r.target)).toEqual(["prod", "prod"]);
-		expect(await toolResults(harness, chat)).toEqual(["deployed prod"]);
+		expect(await toolResults(harness, chat)).toEqual(["The owner approved this.\ndeployed prod"]);
 		await harness.close(context);
 	});
 
