@@ -726,11 +726,16 @@ it.skipIf(!hasChrome())(
 				{ width: 390, height: 900 },
 				async (page) => {
 					await page.until(
-						`Array.from(document.querySelectorAll('button')).some(b => b.textContent === 'Allow')`,
+						`Array.from(document.querySelectorAll('[data-object="connect:github"] button')).some(b => b.textContent === 'Connect GitHub')`,
 						30_000,
 					);
 					expect(await page.run(`document.querySelectorAll('[data-object="connect:github"]').length`)).toBe(1);
 					expect(requests).toHaveLength(1);
+					// the card opens the connect dialog, which asks to share the account banda has
+					await page.run(
+						`Array.from(document.querySelectorAll('[data-object="connect:github"] button')).find(b => b.textContent === 'Connect GitHub').click()`,
+					);
+					await page.until(`document.querySelector('[role="dialog"][data-connect-step="share"]') !== null`);
 					await page.run(
 						`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Allow').click()`,
 					);

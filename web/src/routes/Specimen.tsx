@@ -4,19 +4,10 @@
  */
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/cn";
 import { EmailDraftPreview } from "../app/EmailDraftPreview.tsx";
-import { ConnectCard, ConnectionPermissions } from "../chat/Connect.tsx";
+import { ConnectCard, ConnectDialog } from "../chat/Connect.tsx";
 import { EmailCard } from "../chat/Object.tsx";
 import { ActivityPreview, ActivitySection } from "../specimen/activity.tsx";
 import { AvatarCandidateSpecimen } from "../specimen/avatar-candidate.tsx";
@@ -241,29 +232,22 @@ export function Specimen() {
 												<ConnectCard
 													agent="Sancho"
 													connection="Gmail"
+													id="gmail"
 													state={{ kind: "connect", why: "Choose access, then sign in to Gmail." }}
 													onConnect={() => setPermissionDialog(true)}
-													onPermissions={() => setPermissionDialog(true)}
 												/>
-												<Dialog open={permissionDialog} onOpenChange={setPermissionDialog}>
-													<DialogContent>
-														<DialogHeader>
-															<DialogTitle>Gmail access</DialogTitle>
-															<DialogDescription>Choose what Banda can access before signing in.</DialogDescription>
-														</DialogHeader>
-														<ConnectionPermissions
-															connection="gmail"
-															scopes={gmailScopes}
-															onScopes={(scopes) => setGmailScopes([...scopes])}
-														/>
-														<DialogFooter>
-															<Button variant="ghost" onClick={() => setPermissionDialog(false)}>
-																Cancel
-															</Button>
-															<Button onClick={() => setPermissionDialog(false)}>Save and sign in</Button>
-														</DialogFooter>
-													</DialogContent>
-												</Dialog>
+												<ConnectDialog
+													open={permissionDialog}
+													onOpenChange={setPermissionDialog}
+													agent="Sancho"
+													connection="Gmail"
+													id="gmail"
+													step={{ kind: "permissions" }}
+													scopes={gmailScopes}
+													onScopes={(scopes) => setGmailScopes([...scopes])}
+													scopesChanged={gmailScopes.length > 1}
+													onSignIn={() => setPermissionDialog(false)}
+												/>
 											</div>
 										</div>
 									</Section>

@@ -20,7 +20,7 @@ import {
 import { Markdown, MarkdownLinks } from "../components/Markdown.tsx";
 import { api, gmailAttachment, sizeOf } from "../lib/api.ts";
 import { githubKey, objectAsks } from "../lib/objects.ts";
-import { ConnectFlow } from "./ConnectFlow.tsx";
+import { ConnectFlowCard } from "./ConnectFlow.tsx";
 import { FilePart } from "./FilePart.tsx";
 
 export function MessageObjects({
@@ -237,7 +237,7 @@ export function ObjectReading({
 	busy?: boolean | undefined;
 }) {
 	if (shown.shown === "link") return null;
-	if (shown.shown === "connect") return <ConnectFlow connection={shown.connection} agent={agent} />;
+	if (shown.shown === "connect") return <ConnectFlowCard connection={shown.connection} agent={agent} />;
 	if (shown.shown === "failed")
 		return (
 			<ObjectUnavailable

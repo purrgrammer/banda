@@ -35,7 +35,7 @@ import { changeNoun, changeWords } from "../lib/segments/changes.ts";
 import { showAgents, showCapabilities, showControl, useShell } from "../lib/shell.ts";
 import { AgentPreview } from "./AgentPreview.tsx";
 import { kindWords } from "./ArtifactPage.tsx";
-import { ConnectFlow } from "./ConnectFlow.tsx";
+import { ConnectFlowCard } from "./ConnectFlow.tsx";
 import { DraftApproval } from "./DraftApproval.tsx";
 import { FilePart } from "./FilePart.tsx";
 import { HarnessSessionPart } from "./HarnessSession.tsx";
@@ -770,7 +770,7 @@ function partOf(
 			return <HarnessSessionPart chat={chat} call={segment.call} />;
 		case "connect":
 			return agent === undefined ? null : (
-				<ConnectFlow connection={segment.connection} agent={{ id: agent, name: who.name }} />
+				<ConnectFlowCard connection={segment.connection} agent={{ id: agent, name: who.name }} />
 			);
 		case "browsed":
 			return <Browsed pages={segment.pages} />;

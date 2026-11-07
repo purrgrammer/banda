@@ -1,14 +1,24 @@
 /**
- * The connect card: the one flow for every connection, in the chat where it was needed, in an agent's Access tab, in
- * Settings and on the Connections page. Connect, sign in at the service (a code to enter on its page, or its own page
- * in another tab), done once banda sees the grant. Asked once more only when an account already signed in is to be
- * shared with another agent. Without an agent (from Settings or the Connections page) it signs an account in for none.
+ * Connecting, the one flow for every connection: in the chat where it was needed, in an agent's Access tab, in Settings
+ * and on the Connections page. Where an agent asks, a compact card says why and offers Connect; the tile or row of a
+ * page offers it as its own button. Either opens the connect dialog, where every step of signing in happens: the
+ * access to grant, the service's page (and a code to enter on it), what failed, and an account banda already has.
+ * Without an agent (from Settings or the Connections page) it signs an account in for none.
  */
 import { CheckIcon, ChevronDownIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
-import { useState } from "react";
+import { type CSSProperties, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import type { ConnectionToolView } from "../../../src/server/api.ts";
 import { scopeChoicesOf } from "../lib/connect.ts";
 import { Tile } from "./Cards.tsx";
@@ -25,60 +35,59 @@ export type ConnectState =
 	| { readonly kind: "known"; readonly logins: readonly string[] }
 	| { readonly kind: "share"; readonly login: string; readonly why?: string | undefined };
 
-export type ConnectActions = {
-	/** Start signing in: Connect, Try again, Sign in another. */
-	readonly onConnect?: (() => void) | undefined;
-	/** Let the agent use an account already signed in. */
-	readonly onUse?: ((login: string) => void) | undefined;
-	/** Not now, Don't: the card steps back. */
-	readonly onDismiss?: (() => void) | undefined;
-	/** A control is waiting on banda. */
-	readonly busy?: boolean | undefined;
-	/** Opens the provider permission picker without changing the card's size. */
-	readonly onPermissions?: (() => void) | undefined;
-};
+/**
+ * A step of the connect dialog: a connection's state, the access chosen before signing in, a sign-in starting, or,
+ * once one made for no agent finished, the agents that may use the account.
+ */
+export type ConnectStep =
+	| ConnectState
+	| { readonly kind: "permissions" }
+	| { readonly kind: "starting" }
+	| {
+			readonly kind: "agents";
+			readonly login: string;
+			readonly agents: readonly { readonly id: string; readonly name: string; readonly on: boolean }[];
+	  };
 
+/** The card where an agent asks: why, and Connect, until it is connected; then one line. */
 export function ConnectCard({
 	agent,
 	connection,
+	id,
 	connectionUrl,
 	state,
 	onConnect,
-	onUse,
 	onDismiss,
-	onPermissions,
 	busy = false,
 }: {
-	/** The agent it connects for; none from Settings or the Connections page. */
+	/** The agent it connects for. */
 	agent?: string | undefined;
+	/** The service, in words ("Google Calendar"). */
 	connection: string;
+	/** Its name in the daemon ("calendar"), for its mark. */
+	id: string;
 	connectionUrl?: string | undefined;
-	state: ConnectState;
-} & ConnectActions) {
-	const [copied, setCopied] = useState(false);
-	const copy = (code: string) => {
-		void navigator.clipboard?.writeText(code).then(
-			() => setCopied(true),
-			() => {},
-		);
-	};
+	state: Extract<ConnectState, { kind: "connect" | "done" | "already" }>;
+	/** Opens the connect dialog. */
+	onConnect?: (() => void) | undefined;
+	/** Not now: the card steps back. */
+	onDismiss?: (() => void) | undefined;
+	busy?: boolean | undefined;
+}) {
+	const connected = state.kind !== "connect";
 	return (
-		<Tile className={`flex flex-col ${state.kind === "done" || state.kind === "already" ? "gap-0 p-3" : "gap-3 p-4"}`}>
+		<Tile className={`flex flex-col ${connected ? "gap-0 p-3" : "gap-3 p-4"}`}>
 			<span className="flex items-center gap-3">
-				<span className="flex size-9 shrink-0 items-center justify-center rounded-field bg-paper-3">
-					<ConnectionIcon connection={connection} url={connectionUrl} className="size-5" />
-				</span>
+				<ConnectionMark id={id} url={connectionUrl} />
 				<span className="flex min-w-0 flex-col">
 					<span className="flex items-center gap-1.5 text-ui font-semibold text-ink">
-						{state.kind === "done" || state.kind === "already" ? <CheckIcon className="size-4 text-ink-2" /> : null}
+						{connected ? <CheckIcon className="size-4 text-ink-2" /> : null}
 						{title(agent, connection, state)}
 					</span>
-					{state.kind === "done" || state.kind === "already" ? null : (
-						<span className="text-meta text-ink-2">{detail(agent, connection, state)}</span>
-					)}
+					{connected ? null : <span className="text-meta text-ink-2">{detail(agent, connection, state)}</span>}
 				</span>
 			</span>
-			{state.kind === "connect" ? (
+			{connected ? null : (
 				<span className="flex flex-wrap gap-2">
 					<Button disabled={busy} onClick={onConnect}>
 						{busy ? <Spinner className="size-3.5" /> : null}
@@ -90,87 +99,254 @@ export function ConnectCard({
 						</Button>
 					)}
 				</span>
-			) : state.kind === "code" ? (
-				<>
-					{state.code === undefined ? null : (
-						<span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-field bg-paper-2 px-4 py-3">
-							<span className="font-code text-heading font-semibold tracking-[0.12em] whitespace-nowrap text-ink">
-								{state.code}
-							</span>
-							<Button variant="ghost" size="sm" onClick={() => copy(state.code as string)}>
-								{copied ? <CheckIcon /> : <CopyIcon />}
-								{copied ? "Copied" : "Copy code"}
-							</Button>
-						</span>
-					)}
-					<span className="flex flex-wrap items-center gap-3">
-						<Button asChild>
-							<a href={state.url} target="_blank" rel="noreferrer noopener">
-								Open {connection}
-								<ExternalLinkIcon />
-							</a>
-						</Button>
-						<span className="flex items-center gap-1.5 text-meta text-ink-2">
-							<Spinner className="size-3.5" />
-							Waiting for {connection}…
-						</span>
-					</span>
-				</>
-			) : state.kind === "done" || state.kind === "already" ? null : state.kind === "failed" ? (
-				<span className="flex flex-wrap gap-2">
-					<Button disabled={busy} onClick={onConnect}>
-						Try again
-					</Button>
-					{onDismiss === undefined ? null : (
-						<Button variant="ghost" onClick={onDismiss}>
-							Not now
-						</Button>
-					)}
-				</span>
-			) : state.kind === "known" ? (
-				<span className="flex flex-wrap gap-2">
-					{state.logins.map((login) => (
-						<Button key={login} variant="outline" disabled={busy} onClick={() => onUse?.(login)}>
-							Use {login}
-						</Button>
-					))}
-					<Button variant="ghost" disabled={busy} onClick={onConnect}>
-						Sign in another
-					</Button>
-				</span>
-			) : (
-				<span className="flex flex-wrap gap-2">
-					<Button disabled={busy} onClick={() => onUse?.(state.login)}>
-						Allow
-					</Button>
-					<Button variant="ghost" disabled={busy} onClick={onConnect}>
-						Sign in another
-					</Button>
-					{onDismiss === undefined ? null : (
-						<Button variant="ghost" onClick={onDismiss}>
-							Don't
-						</Button>
-					)}
-				</span>
-			)}
-			{onPermissions === undefined ? null : (
-				<Button variant="outline" size="sm" disabled={busy} onClick={onPermissions}>
-					Change permissions
-				</Button>
 			)}
 		</Tile>
 	);
 }
 
-/** OAuth permissions chosen before sign-in; the dialog keeps provider details off the connection card. */
+/** Every step of connecting, in one dialog: what the step says and the controls that move it on. */
+export function ConnectDialog({
+	open,
+	onOpenChange,
+	agent,
+	connection,
+	id,
+	connectionUrl,
+	step,
+	busy = false,
+	scopes = [],
+	onScopes,
+	scopesChanged = false,
+	scopesReadonly = false,
+	onSignIn,
+	onPermissions,
+	onUse,
+	onAgent,
+	style,
+}: {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	agent?: string | undefined;
+	connection: string;
+	id: string;
+	connectionUrl?: string | undefined;
+	step: ConnectStep;
+	/** A control is waiting on banda. */
+	busy?: boolean | undefined;
+	/** The access chosen on the permissions step. */
+	scopes?: readonly string[] | undefined;
+	onScopes?: ((scopes: readonly string[]) => void) | undefined;
+	scopesChanged?: boolean | undefined;
+	/** The access can be changed only on the computer banda runs on. */
+	scopesReadonly?: boolean | undefined;
+	/** Start signing in: Sign in, Save and sign in, Try again, Sign in another. */
+	onSignIn?: (() => void) | undefined;
+	/** Back to the access to grant; none for a connection without choices. */
+	onPermissions?: (() => void) | undefined;
+	/** Let the agent use an account already signed in. */
+	onUse?: ((login: string) => void) | undefined;
+	/** Switch the account just signed in on or off for an agent. */
+	onAgent?: ((agent: string, on: boolean) => void) | undefined;
+	/** The specimen's frame passes its colour scheme to the dialog, which opens outside the frame. */
+	style?: CSSProperties | undefined;
+}) {
+	const [copied, setCopied] = useState(false);
+	const close = () => onOpenChange(false);
+	const copy = (code: string) => {
+		void navigator.clipboard?.writeText(code).then(
+			() => setCopied(true),
+			() => {},
+		);
+	};
+	const heading =
+		step.kind === "permissions"
+			? {
+					title: `${connection} access`,
+					detail: "Choose what Banda can access. You can change this later by signing in again.",
+				}
+			: step.kind === "starting"
+				? { title: `Sign in on ${connection}`, detail: `Waiting for ${connection}…` }
+				: step.kind === "agents"
+					? {
+							title: `Use ${connection} with`,
+							detail: `Signed in as ${step.login}. The agents switched on may read with it; they ask before anything they write.`,
+						}
+					: { title: title(agent, connection, step), detail: detail(agent, connection, step) };
+	// a sign-in again starts where the first did: on the access to grant, when the connection has choices
+	const again = onPermissions ?? onSignIn;
+	const signInAnother = (
+		<Button variant="ghost" disabled={busy} onClick={again}>
+			Sign in another
+		</Button>
+	);
+	return (
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			<DialogContent
+				data-connect-step={step.kind}
+				style={style}
+				className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md"
+			>
+				<DialogHeader>
+					<span className="flex items-center gap-3 pr-8">
+						<ConnectionMark id={id} url={connectionUrl} />
+						<DialogTitle className="min-w-0 leading-snug">{heading.title}</DialogTitle>
+					</span>
+					<DialogDescription className="break-words">{heading.detail}</DialogDescription>
+				</DialogHeader>
+				{step.kind === "permissions" ? (
+					<ConnectionPermissions
+						connection={id}
+						service={connection}
+						scopes={scopes}
+						onScopes={onScopes ?? (() => {})}
+						busy={busy}
+						readonly={scopesReadonly}
+					/>
+				) : step.kind === "starting" ? (
+					<span className="flex items-center gap-1.5 text-meta text-ink-2">
+						<Spinner className="size-3.5" />
+						Starting…
+					</span>
+				) : step.kind === "agents" ? (
+					<span className="flex flex-col">
+						{step.agents.map((each) => (
+							// biome-ignore lint/a11y/noLabelWithoutControl: the switch inside is the control
+							<label
+								key={each.id}
+								className="flex min-h-11 items-center gap-3 border-t border-line-soft pr-2 text-ui text-ink first:border-t-0"
+							>
+								<span className="min-w-0 flex-1 truncate">{each.name}</span>
+								<Switch
+									checked={each.on}
+									disabled={busy}
+									onCheckedChange={(on: boolean) => onAgent?.(each.id, on)}
+									aria-label={`${each.name} may use ${connection} as ${step.login}`}
+								/>
+							</label>
+						))}
+					</span>
+				) : step.kind === "code" ? (
+					<>
+						{step.code === undefined ? null : (
+							<span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-field bg-paper-2 px-4 py-3">
+								<span className="font-code text-heading font-semibold tracking-[0.12em] whitespace-nowrap text-ink">
+									{step.code}
+								</span>
+								<Button variant="ghost" size="sm" onClick={() => copy(step.code as string)}>
+									{copied ? <CheckIcon /> : <CopyIcon />}
+									{copied ? "Copied" : "Copy code"}
+								</Button>
+							</span>
+						)}
+						<span className="flex flex-wrap items-center gap-3">
+							<Button asChild>
+								<a href={step.url} target="_blank" rel="noreferrer noopener">
+									Open {connection}
+									<ExternalLinkIcon />
+								</a>
+							</Button>
+							<span className="flex items-center gap-1.5 text-meta text-ink-2">
+								<Spinner className="size-3.5" />
+								Waiting for {connection}…
+							</span>
+						</span>
+					</>
+				) : null}
+				<DialogFooter>
+					{step.kind === "permissions" ? (
+						<>
+							<Button variant="ghost" disabled={busy} onClick={close}>
+								Cancel
+							</Button>
+							<Button disabled={busy || scopesReadonly} onClick={onSignIn}>
+								{busy ? <Spinner className="size-3.5" /> : null}
+								{scopesChanged ? "Save and sign in" : "Sign in"}
+							</Button>
+						</>
+					) : step.kind === "connect" ? (
+						<>
+							<Button variant="ghost" disabled={busy} onClick={close}>
+								Cancel
+							</Button>
+							<Button disabled={busy} onClick={onSignIn}>
+								{busy ? <Spinner className="size-3.5" /> : null}
+								Sign in
+							</Button>
+						</>
+					) : step.kind === "starting" || step.kind === "code" ? (
+						<>
+							{onPermissions === undefined ? null : (
+								<Button variant="ghost" disabled={busy} onClick={onPermissions}>
+									Change permissions
+								</Button>
+							)}
+							<Button variant="outline" onClick={close}>
+								Close
+							</Button>
+						</>
+					) : step.kind === "agents" ? (
+						<Button onClick={close}>Done</Button>
+					) : step.kind === "failed" ? (
+						<>
+							<Button variant="ghost" onClick={close}>
+								Not now
+							</Button>
+							<Button disabled={busy} onClick={again}>
+								Try again
+							</Button>
+						</>
+					) : step.kind === "known" ? (
+						<>
+							{signInAnother}
+							{step.logins.map((login) => (
+								<Button key={login} variant="outline" disabled={busy} onClick={() => onUse?.(login)}>
+									Use {login}
+								</Button>
+							))}
+						</>
+					) : step.kind === "share" ? (
+						<>
+							<Button variant="ghost" onClick={close}>
+								Don't
+							</Button>
+							{signInAnother}
+							<Button disabled={busy} onClick={() => onUse?.(step.login)}>
+								Allow
+							</Button>
+						</>
+					) : (
+						<>
+							{signInAnother}
+							<Button onClick={close}>Done</Button>
+						</>
+					)}
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+function ConnectionMark({ id, url }: { id: string; url?: string | undefined }) {
+	return (
+		<span className="flex size-9 shrink-0 items-center justify-center rounded-field bg-paper-3">
+			<ConnectionIcon connection={id} url={url} className="size-5" />
+		</span>
+	);
+}
+
+/** OAuth permissions chosen before sign-in, on the connect dialog's first step. */
 export function ConnectionPermissions({
 	connection,
+	service,
 	scopes,
 	onScopes,
 	busy = false,
 	readonly = false,
 }: {
+	/** Its name in the daemon ("gmail"). */
 	connection: string;
+	/** The service, in words ("Gmail"). */
+	service: string;
 	scopes: readonly string[];
 	onScopes: (scopes: readonly string[]) => void;
 	busy?: boolean;
@@ -202,7 +378,7 @@ export function ConnectionPermissions({
 			))}
 			<p className="text-ink-3">
 				{readonly
-					? `Change access and sign in again on the computer Banda runs on. Connected ${connection} accounts are available on this device.`
+					? `Change access and sign in again on the computer Banda runs on. Connected ${service} accounts are available on this device.`
 					: note}
 			</p>
 		</fieldset>
@@ -292,7 +468,7 @@ function detail(agent: string | undefined, connection: string, state: ConnectSta
 			return state.why;
 		case "code":
 			return state.code === undefined
-				? `Finish signing in on ${connection}'s page; this card follows it.`
+				? `Finish signing in on ${connection}'s page; this closes once you have.`
 				: `${connection} asks for it after you sign in. It works once, for 15 minutes.`;
 		case "done":
 		case "already":

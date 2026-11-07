@@ -628,7 +628,7 @@ function Main() {
 								.then(showCapabilities)
 								.catch(() => {});
 						}}
-						connect={(name, close) => <ConnectFlow connection={name} onDismiss={close} />}
+						connect={(name, close) => <ConnectFlow connection={name} onClose={close} />}
 						onRestore={(who) => (who.id === undefined ? undefined : restore(who.id))}
 						onRestoreGroup={(room) => archiveGroup(room, false)}
 						onGroupLimits={(limits) => setGroupLimits(limits)}
@@ -689,20 +689,7 @@ function Main() {
 								: services),
 							...SERVICES.filter((service) => !services.some((existing) => existing.id === service.id)),
 						]}
-						connect={(service, close) =>
-							service.accounts === undefined ? null : capabilities?.connections.find((each) => each.name === service.id)
-									?.agents !== undefined ? (
-								<Button
-									variant="outline"
-									className="self-start"
-									onClick={() => go({ name: "connections", connection: service.id })}
-								>
-									Manage connection
-								</Button>
-							) : (
-								<ConnectFlow connection={service.id} onDismiss={close} />
-							)
-						}
+						connect={(service, close) => <ConnectFlow connection={service.id} onClose={close} />}
 					/>
 				</SettingsPage>
 			);

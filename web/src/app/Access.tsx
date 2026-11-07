@@ -77,6 +77,8 @@ export function AccessTab({
 	const [pick, setPick] = useState<string>();
 	const rows = connectionRows(capabilities, agent.id);
 	const used = rows.filter((row) => row.accounts.length > 0);
+	const shipped = (name: string | undefined) =>
+		name !== undefined && name !== "" && capabilities?.shipped?.some((view) => view.name === name) === true;
 	const theirs = (control?.permissions ?? []).filter((permission) => permission.agent === agent.id);
 	// a host allowed is listed with Allow a host, not among the other permissions
 	const hosts = theirs.flatMap((permission) =>
@@ -125,7 +127,15 @@ export function AccessTab({
 						{pick === undefined ? (
 							<>
 								{rows.map((row) => (
-									<Button key={row.id} variant="outline" onClick={() => setPick(row.id)}>
+									<Button
+										key={row.id}
+										variant="outline"
+										onClick={() => {
+											// a shipped connection signs in in its own dialog, never one inside this one
+											if (shipped(row.id)) setAdding(false);
+											setPick(row.id);
+										}}
+									>
 										{row.connection}
 									</Button>
 								))}
@@ -133,19 +143,20 @@ export function AccessTab({
 									Add MCP server
 								</Button>
 							</>
-						) : pick === "" || !capabilities?.shipped?.some((view) => view.name === pick) ? (
+						) : shipped(pick) ? null : (
 							<McpSetup
 								key={pick}
 								{...(pick === "" ? {} : { connection: pick })}
 								agent={agent}
 								onClose={() => setPick(undefined)}
 							/>
-						) : (
-							<ConnectFlow key={pick} connection={pick} agent={agent} onDismiss={() => setPick(undefined)} />
 						)}
 					</div>
 				</DialogContent>
 			</Dialog>
+			{pick !== undefined && shipped(pick) && !adding ? (
+				<ConnectFlow key={pick} connection={pick} agent={agent} onClose={() => setPick(undefined)} />
+			) : null}
 			{error === undefined ? null : <p className="-mt-5 text-meta text-danger">{error}</p>}
 			<HarnessAccess agent={agent} />
 			<Permissions

@@ -275,7 +275,7 @@ export type ConnectionRow = {
 
 /**
  * The connections an agent may use: one row per connection, one switch per account; Connect when none is signed in,
- * and Another account when some are. Either opens the connect card under the row (`connect`), where it signs in.
+ * and Another account when some are. Either opens the connect dialog (`connect`), where it signs in.
  */
 export function Connections({
 	agent,
@@ -292,7 +292,7 @@ export function Connections({
 	empty?: string | undefined;
 	/** The owner switched an account on or off for the agent. */
 	onSwitch?: ((row: ConnectionRow, account: ConnectionRow["accounts"][number], on: boolean) => void) | undefined;
-	/** The connect card for a row, opened under it. */
+	/** The connect dialog for a row. */
 	connect?: ((row: ConnectionRow, close: () => void) => ReactNode) | undefined;
 }) {
 	const [open, setOpen] = useState<string | undefined>(undefined);
@@ -338,16 +338,11 @@ export function Connections({
 								detail={row.accounts.length === 0 ? "Not connected" : undefined}
 								end={
 									row.accounts.length === 0 ? (
-										<Button size="sm" onClick={() => setOpen(open === row.connection ? undefined : row.connection)}>
+										<Button size="sm" onClick={() => setOpen(row.connection)}>
 											Connect
 										</Button>
 									) : (
-										<Button
-											variant="ghost"
-											size="xs"
-											className="text-ink-2"
-											onClick={() => setOpen(open === row.connection ? undefined : row.connection)}
-										>
+										<Button variant="ghost" size="xs" className="text-ink-2" onClick={() => setOpen(row.connection)}>
 											{scopeChoicesOf(row.id) !== undefined ? (
 												<>Manage access</>
 											) : (
@@ -383,9 +378,7 @@ export function Connections({
 									<ConnectionTools connection={row.connection} tools={row.tools} />
 								</div>
 							)}
-							{open === row.connection && connect !== undefined ? (
-								<div className="border-t border-line-soft p-3">{connect(row, () => setOpen(undefined))}</div>
-							) : null}
+							{open === row.connection && connect !== undefined ? connect(row, () => setOpen(undefined)) : null}
 						</div>
 					))}
 				</Rows>
@@ -800,7 +793,7 @@ export type SettingsActions = {
 	readonly onSignOut?: (agent: string, site: string) => void;
 	/** Sign an account of a connection out: off for every agent, its permissions taken back. */
 	readonly onAccountSignOut?: (account: Account) => void;
-	/** The connect card for connection `name`, signing in another account for no agent. */
+	/** The connect dialog for connection `name`, signing in another account for no agent. */
 	readonly connect?: (name: string, close: () => void) => ReactNode;
 	/** Restore an archived agent; a refusal rejects with why. */
 	readonly onRestore?: (who: Who & { readonly id?: string }) => Promise<unknown> | undefined;
@@ -1362,7 +1355,7 @@ export function ModelProviders({
 
 /**
  * Every account across services: who it is, which agents use it, Sign out (asked first); per connection, Sign in
- * another, which opens its connect card in place; and Connect a service, the Connections page.
+ * another, which opens its connect dialog; and Connect a service, the Connections page.
  */
 function Accounts({ accounts, act }: { accounts: readonly Account[]; act: SettingsActions }) {
 	const [open, setOpen] = useState<string | undefined>(undefined);
@@ -1418,15 +1411,13 @@ function Accounts({ accounts, act }: { accounts: readonly Account[]; act: Settin
 						<RowOf
 							title={<span className="text-ink-2">Another {connection} account</span>}
 							end={
-								<Button variant="ghost" size="xs" onClick={() => setOpen(open === name ? undefined : name)}>
+								<Button variant="ghost" size="xs" onClick={() => setOpen(name)}>
 									<PlusIcon />
 									Sign in another
 								</Button>
 							}
 						/>
-						{open === name && act.connect !== undefined ? (
-							<div className="border-t border-line-soft p-3">{act.connect(name, () => setOpen(undefined))}</div>
-						) : null}
+						{open === name && act.connect !== undefined ? act.connect(name, () => setOpen(undefined)) : null}
 					</div>
 				))}
 				<RowOf
