@@ -54,7 +54,9 @@ describe("Google Contacts REST connection", () => {
 		};
 		const google = "https://www.googleapis.com/auth/";
 		const scopes = /scopes: \[.*\]/.exec(FILE())?.[0] ?? "";
-		expect(errors(scopes, `scopes: [${google}contacts.readonly]`)).toBe("");
+		expect(errors(scopes, `scopes: [${google}contacts.readonly, ${google}userinfo.email]`)).toBe("");
+		// the address that names the account is read under its own scope, so every file asks for it
+		expect(errors(scopes, `scopes: [${google}contacts.readonly]`)).toContain("Google Contacts uses OAuth client");
 		expect(errors(scopes, `scopes: [${google}contacts.readonly, ${google}contacts]`)).toContain(
 			"Google Contacts uses OAuth client",
 		);

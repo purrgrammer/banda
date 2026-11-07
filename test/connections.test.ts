@@ -1172,7 +1172,7 @@ describe("Google accounts", () => {
 		const second = await signInAs(s, g, "bob@example.test", { scopes: [READ, SEND] });
 		expect(second.page.searchParams.get("scope")).toBe(`${READ} ${SEND}`);
 		const gmail = async () => (await s.capabilities.view()).connections.find((c) => c.name === "gmail");
-		expect((await gmail())?.accepted?.connection).toMatchObject({ required: READ });
+		expect((await gmail())?.accepted?.connection).toMatchObject({ required: [READ] });
 		expect((await gmail())?.accounts).toEqual([
 			expect.objectContaining({
 				account: "alice@example.test",
@@ -1185,10 +1185,10 @@ describe("Google accounts", () => {
 				missing: ["https://www.googleapis.com/auth/gmail.modify"],
 			}),
 		]);
-		// every Google account asks for read-only Gmail; nothing beyond what the file names
-		await expect(s.capabilities.signIn("gmail", context, undefined, { scopes: [SEND] })).rejects.toThrow(
-			`every Gmail account asks for ${READ}`,
-		);
+		// every Google account asks for read-only Gmail, whatever was picked; nothing beyond what the file names
+		const picked = await s.capabilities.signIn("gmail", context, undefined, { scopes: [SEND] });
+		if (!("url" in picked)) throw new Error("expected Google's page");
+		expect(new URL(picked.url).searchParams.get("scope")).toBe(`${READ} ${SEND}`);
 		await expect(
 			s.capabilities.signIn("gmail", context, undefined, {
 				scopes: [READ, "https://www.googleapis.com/auth/gmail.compose"],

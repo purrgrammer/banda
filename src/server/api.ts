@@ -620,7 +620,7 @@ export type ConnectionSummary = {
 	 */
 	readonly ceiling?: readonly string[];
 	/** The scope every account asks for (a built-in API's base): always among a sign-in's `scopes`. */
-	readonly required?: string;
+	readonly required?: readonly string[];
 	/** How many of its tools need each scope, as its file says: what the owner weighs picking one. */
 	readonly needs?: { readonly [scope: string]: number };
 };

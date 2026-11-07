@@ -25,8 +25,11 @@ export type RestApi = {
 	readonly service: string;
 	/** The one address a connection file naming this API must give. */
 	readonly url: string;
-	/** The scope every sign-in asks for; the others in `scopes` are added by choice. */
-	readonly base: string;
+	/**
+	 * The scopes every sign-in asks for, whatever the owner picks: what reads, and what names the account (Contacts
+	 * reads its address under its own scope). The others in `scopes` are added by choice.
+	 */
+	readonly required: readonly string[];
 	readonly scopes: readonly string[];
 	readonly tools: readonly McpTool[];
 	/** The read and the field of its answer that name the account, when the file's `account:` does not. */
@@ -65,7 +68,7 @@ export const REST_APIS = {
 	gmail: {
 		service: "Gmail",
 		url: "https://gmail.googleapis.com/gmail/v1/users/me",
-		base: "https://www.googleapis.com/auth/gmail.readonly",
+		required: ["https://www.googleapis.com/auth/gmail.readonly"],
 		scopes: [
 			"https://www.googleapis.com/auth/gmail.readonly",
 			"https://www.googleapis.com/auth/gmail.send",
@@ -79,7 +82,7 @@ export const REST_APIS = {
 	calendar: {
 		service: "Google Calendar",
 		url: "https://www.googleapis.com/calendar/v3",
-		base: "https://www.googleapis.com/auth/calendar.readonly",
+		required: ["https://www.googleapis.com/auth/calendar.readonly"],
 		scopes: ["https://www.googleapis.com/auth/calendar.readonly", "https://www.googleapis.com/auth/calendar.events"],
 		tools: CALENDAR_TOOLS,
 		account: { tool: "get_profile", field: "email" },
@@ -92,7 +95,7 @@ export const REST_APIS = {
 	contacts: {
 		service: "Google Contacts",
 		url: "https://people.googleapis.com/v1",
-		base: "https://www.googleapis.com/auth/contacts.readonly",
+		required: ["https://www.googleapis.com/auth/contacts.readonly", "https://www.googleapis.com/auth/userinfo.email"],
 		scopes: [
 			"https://www.googleapis.com/auth/contacts.readonly",
 			"https://www.googleapis.com/auth/contacts.other.readonly",
@@ -106,7 +109,7 @@ export const REST_APIS = {
 	drive: {
 		service: "Google Drive",
 		url: "https://www.googleapis.com/drive/v3",
-		base: "https://www.googleapis.com/auth/drive.readonly",
+		required: ["https://www.googleapis.com/auth/drive.readonly"],
 		scopes: ["https://www.googleapis.com/auth/drive.readonly"],
 		tools: DRIVE_TOOLS,
 		account: { tool: "get_profile", field: "email" },

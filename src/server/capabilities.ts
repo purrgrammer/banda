@@ -253,7 +253,7 @@ const summaryOf = (connection: Connection): ConnectionSummary => ({
 		const required = requiredOf(connection);
 		return {
 			...(ceiling === undefined ? {} : { ceiling: [...ceiling] }),
-			...(required === undefined ? {} : { required }),
+			...(required.length === 0 ? {} : { required: [...required] }),
 		};
 	})(),
 	...(connection.needs === undefined
@@ -2235,7 +2235,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			const before = held !== undefined && "oauth" in held ? (held.oauth.server.scopes ?? []) : [];
 			const kept = before.filter((scope) => ceiling.includes(scope));
 			if (kept.length === 0) return connection.scopes;
-			return required === undefined || kept.includes(required) ? kept : [required, ...kept];
+			return [...new Set([...required, ...kept])];
 		}
 		if (
 			!Array.isArray(picked) ||
@@ -2254,9 +2254,8 @@ export function openCapabilities(options: CapabilityOptions) {
 			throw new BadRequest(
 				`${connection.service} may not ask for ${beyond.join(", ")}: an account asks for some of ${ceiling.join(", ")}`,
 			);
-		if (required !== undefined && !scopes.includes(required))
-			throw new BadRequest(`every ${connection.service} account asks for ${required}`);
-		return scopes;
+		// what every account asks for is asked whatever was picked: a choice adds to it, never drops it
+		return [...new Set([...required, ...scopes])];
 	}
 
 	/** Whether the server at `url` lists its tools with no credentials at all. */

@@ -180,13 +180,13 @@ export function parseConnection(
 		(auth !== "oauth" ||
 			client !== "google" ||
 			scopes === undefined ||
-			!scopes.includes(builtIn.base) ||
+			!builtIn.required.every((scope) => scopes.includes(scope)) ||
 			!scopes.every((scope) => (builtIn.scopes as readonly string[]).includes(scope)) ||
 			new Set(scopes).size !== scopes.length)
 	)
 		errors.push(
-			`${builtIn.service} uses OAuth client "google", asks for ${builtIn.base}, and may add ${builtIn.scopes
-				.filter((scope) => scope !== builtIn.base)
+			`${builtIn.service} uses OAuth client "google", asks for ${builtIn.required.join(" and ")}, and may add ${builtIn.scopes
+				.filter((scope) => !(builtIn.required as readonly string[]).includes(scope))
 				.join(" or ")}`,
 		);
 	if (auth !== "oauth" && (client !== undefined || scopes !== undefined))
@@ -699,9 +699,9 @@ export function ceilingOf(connection: Pick<Connection, "scopes" | "needs">): rea
 	return [...new Set([...connection.scopes, ...Object.values(connection.needs ?? {}).flat()])];
 }
 
-/** The scope every account of `connection` asks for: a built-in API's base; none otherwise. */
-export const requiredOf = (connection: Pick<Connection, "api">): string | undefined =>
-	connection.api === undefined ? undefined : REST_APIS[connection.api].base;
+/** The scopes every account of `connection` asks for: a built-in API's required ones; none otherwise. */
+export const requiredOf = (connection: Pick<Connection, "api">): readonly string[] =>
+	connection.api === undefined ? [] : REST_APIS[connection.api].required;
 
 /**
  * Whether `credentials` were given for `connection` as its accepted file says it now: the same URL, and for a sign-in,
@@ -721,8 +721,7 @@ export function fits(credentials: Credentials | undefined, connection: Connectio
 	const ceiling = ceilingOf(connection);
 	// a sign-in that asked for nothing was given the server's default, which a file naming scopes does not allow
 	if (ceiling !== undefined && (asked.length === 0 || !asked.every((scope) => ceiling.includes(scope)))) return false;
-	const required = requiredOf(connection);
-	return required === undefined || asked.includes(required);
+	return requiredOf(connection).every((scope) => asked.includes(scope));
 }
 
 /** The scopes a sign-in was given: as the server said when it granted them, else as they were asked for. */
