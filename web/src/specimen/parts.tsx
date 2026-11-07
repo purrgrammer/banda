@@ -10,6 +10,7 @@ import {
 	ShieldCheckIcon,
 	SquareIcon,
 } from "lucide-react";
+import { useState } from "react";
 import { ApprovalCard, ChangeCard, Details, Facts, WaitingPill } from "../chat/Approval.tsx";
 import { ArtifactCard, Browsed, QuestionCard, SignInCard, ViewCard } from "../chat/Cards.tsx";
 import { Composer } from "../chat/Composer.tsx";
@@ -454,17 +455,19 @@ export function Parts() {
 			<Section
 				id="composer"
 				title="Composer"
-				note="Words, files, a voice message (transcribed here, sent with its audio); Stop while the agent works."
+				note="Words, files, a voice message (transcribed here, sent with its audio). While the agent works: Stop when empty, Send once something is written, which steers the turn. The last one is live: its draft, words and files, survives a reload."
 			>
 				<div className="flex max-w-2xl flex-col gap-5">
 					<Composer to="Mara" />
 					<Composer to="Mara" files={ATTACHED} draft="Here are the photos and the terms. Which hotel is closer?" />
 					<Composer to="Octo" state="working" />
+					<Composer to="Octo" state="working" draft="Also check the 10:40, it might be cheaper." />
 					<Composer to="Mara" state="recording" />
 					<Composer to="Trip" group />
 					<div className="flex justify-center">
 						<WaitingPill ask="book the 9:15 to Lisbon?" />
 					</div>
+					<SteerComposer />
 				</div>
 			</Section>
 			<Section
@@ -480,5 +483,33 @@ export function Parts() {
 				</div>
 			</Section>
 		</>
+	);
+}
+
+/** A composer while Octo works, live: what is sent steers (listed under it), Stop stops, and its draft is kept. */
+function SteerComposer() {
+	const [sent, setSent] = useState<readonly string[]>([]);
+	const [stopped, setStopped] = useState(false);
+	return (
+		<div id="composer-steer" className="flex flex-col gap-2">
+			<Composer
+				to="Octo"
+				state={stopped ? "ready" : "working"}
+				keep="specimen:steer"
+				onSend={async (text, files) => {
+					// on its way a moment, as over a network: words written meanwhile stay in the composer
+					await new Promise((resolve) => setTimeout(resolve, 600));
+					setSent((was) => [...was, [text, ...files.map((file) => file.name)].filter(Boolean).join(" + ")]);
+				}}
+				onStop={() => setStopped(true)}
+			/>
+			<ul data-sent className="px-3 text-meta text-ink-2">
+				{sent.map((each, index) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: a fixture's log, appended only
+					<li key={index}>Steered: {each}</li>
+				))}
+				{stopped ? <li>Stopped</li> : null}
+			</ul>
+		</div>
 	);
 }

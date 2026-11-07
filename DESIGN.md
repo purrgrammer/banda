@@ -155,10 +155,13 @@ one that gives them one more thing to manage stays out.
   paged, the image zoomed, text and code readable, a sheet as a table, with Download and Open in the device's apps.
   Previews are drawn by the daemon from the bytes, never by code the box wrote; a file the daemon cannot preview
   shows its card.
-- **The composer** is ai-elements' `prompt-input`: text, attachments (previewed as above), send; Stop while the agent
-  works; `@` autocomplete everywhere. In a direct chat it inserts a reference to an agent; in a group it targets
-  members for work. Its draft survives navigation. Enter sends and Shift+Enter breaks a line. No transcript mode,
-  model or tier choice lives here.
+- **The composer** is ai-elements' `prompt-input`: text, attachments (previewed as above), send. While the agent
+  works it offers Stop only when empty; with words or files it offers Send, and what is sent steers the turn under way
+  (see Queue), so writing never waits on the agent or stops it. `@` autocomplete everywhere. In a direct chat it inserts
+  a reference to an agent; in a group it targets members for work. Its draft, words and files, is kept per chat on
+  the device until sent, through navigation and reloads; a send takes back only what it sent, so whatever is written
+  or attached while it is on its way stays. Enter sends and Shift+Enter breaks a line. No transcript mode, model or
+  tier choice lives here.
 - **The approval card** is the daemon's, plain, identical whoever the agent is: what will happen, on its object where
   it has one, the account it acts as ("as @bandarra on GitHub"), its text editable where the owner may edit it; an
   action with money or no way back lists its facts (what, when, how much, paid how, the way back); one primary button
