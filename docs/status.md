@@ -58,13 +58,12 @@ palette checks pass; the running app was exercised at both widths, including dra
 concurrency and provenance work remains in [Memory](memory.md); this is not release qualification.
 The Library and panel redesign is a separate slice.
 
-Watches, slice 1, landed in code on the `watches` branch ([Watches](watches.md)): a watch file in `watches/`, its task
+Watches, slice 1, is in code on the `watches` branch ([Watches](watches.md)): a watch file in `watches/`, its task
 that looks, diffs and wakes its agent's chat, the `watch` tool's card, Follow on a pull request's card, the Watching
-list with Check now, Pause and Stop, the object drawn as the owner's references wherever a watch names it, and the
-fault sweep. Driven against a real pull request in a forked home at desktop width: the agent wrote the watch, the owner
-allowed it, the first look read GitHub as the owner's account, Check now looked again. The phone pass, a real wake in
-the app and owner review remain open; a home that connected GitHub before this build must re-accept the shipped file
-([Connections](connections.md)).
+list with Add (a link), Check now, Pause and Stop, the detail's editor for what ends it and what matters, and the fault
+sweep. A connection banda ships offers Update when this banda ships a newer file, so a home that connected GitHub
+before `follow` can follow ([Connections](connections.md)). Driven against a real pull request in a forked home at
+desktop width. A browser test at both widths, a real wake in the app and owner review remain open.
 
 Bringing your own is in code ([Chat](chat.md)): at first run on the desktop, the skills and agents of Claude Code,
 Codex and pi on this computer, in place of banda's skills, and again from Settings; the band's menu with Skills and a

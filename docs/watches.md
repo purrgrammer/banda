@@ -55,9 +55,10 @@ returned to and merged, at desktop and phone width.
 - [ ] Slice 1 through the app at phone width (the desktop pass is done; the phone pass needs a resizable browser)
 - [ ] A real wake seen in the app: the followed pull request must change by another hand (a review, a failed check);
   the fake GitHub's wakes are covered by the suites
-- [ ] Add in the panel takes a link (today Follow is on the object's card, and in the agent's words)
-- [ ] An editor for a watch's words (`until`, what matters); today the detail shows them and the file is edited in
-  the box
+- [x] Add in the panel takes a link; the Watching section shows even when empty
+- [x] An editor for a watch's words: `until` from the kind's ends, and what matters, bound to the version shown
+- [ ] A wake's key is the transition (the watch's `since`, its cursor, the changes), so the same change later wakes
+  again; the fault sweep has not run on it yet (CI)
 - [ ] Slice 2, health and gaps: can't reach and behind in the row; the error line after an hour; resume reconciles
   into one marked wake; the account's switch, sign-out and removal end watches in the same commit; no wake after done
   or paused; scenarios: a revoked credential, days offline, a cancel while a wake is pending, duplicate and
