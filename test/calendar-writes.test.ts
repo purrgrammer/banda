@@ -5,7 +5,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
-import type { TaskId } from "@earendil-works/pi-durable";
+import type { JsonObject, TaskId } from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
 import { LEAD } from "../src/core/agents.ts";
 import { createdEventId, eventRef } from "../src/core/calendar-rest.ts";
@@ -29,7 +29,7 @@ afterEach(async () => {
 });
 
 /** A daemon whose lead may change Alice's calendar, and whose model makes `call` once, then says it is done. */
-async function connectedWith(call: { tool: string; args: Record<string, unknown> }) {
+async function connectedWith(call: { tool: string; args: JsonObject }) {
 	const home = await tempHome();
 	const shipped = join(home, "shipped");
 	mkdirSync(shipped, { recursive: true });
