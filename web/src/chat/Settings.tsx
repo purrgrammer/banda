@@ -988,16 +988,16 @@ export function AppSettings({
 	memory,
 	providers,
 	devices,
+	bring,
 	...act
 }: {
-	bring,
 	data: SettingsData;
 	tab?: SettingsTab;
 	memory?: ReactNode;
-	/** The phones paired, and pairing one (`DevicesSettings`). */
-	devices?: ReactNode;
 	/** Bringing skills and agents from the other harnesses on this computer, on the desktop (`BringSettings`). */
 	bring?: ReactNode;
+	/** The phones paired, and pairing one (`DevicesSettings`). */
+	devices?: ReactNode;
 	/** Every provider the band may think with, to connect, use or sign out of (`ModelProviders`). */
 	providers?: ReactNode;
 } & SettingsActions) {
@@ -1100,9 +1100,9 @@ export function AppSettings({
 				<SignedIn sites={data.signedIn ?? []} onSignOut={act.onSignOut} />
 			</TabsContent>
 			<TabsContent value="agents" className="flex flex-col gap-8">
+				{bring}
 				{data.groupLimits === undefined ? null : (
 					<GroupLimitsBlock limits={data.groupLimits} onChange={act.onGroupLimits} />
-				{bring}
 				)}
 				<ArchivedAgents archived={data.archived} onRestore={act.onRestore} />
 				<ArchivedGroups groups={data.archivedGroups ?? []} onRestore={act.onRestoreGroup} />
