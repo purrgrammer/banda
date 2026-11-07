@@ -197,9 +197,10 @@ jsonLines(process.stdin, (line) => {
 	const reply = (result: unknown) => send({ id: message.id, result });
 	switch (message.method) {
 		case "initialize":
+			// close is offered: a closed session's pi ends at once, not only when banda's stdin goes
 			return reply({
 				protocolVersion: 1,
-				agentCapabilities: { loadSession: false },
+				agentCapabilities: { loadSession: false, sessionCapabilities: { close: {} } },
 				agentInfo: { name: "pi (banda)" },
 			});
 		case "session/new": {
@@ -223,6 +224,18 @@ jsonLines(process.stdin, (line) => {
 			);
 			session.running = true;
 			return;
+		}
+		case "session/close": {
+			const sessionId = String(params.sessionId);
+			const session = sessions.get(sessionId);
+			if (session === undefined) return send({ id: message.id, error: { code: -32002, message: "no such session" } });
+			// as the spec asks: ongoing work cancelled first, then the session's resources (its pi) freed
+			session.cancelled = true;
+			session.pi.stdin?.write(`${JSON.stringify({ type: "abort" })}\n`);
+			settle(session);
+			session.pi.kill("SIGTERM");
+			sessions.delete(sessionId);
+			return reply({});
 		}
 		case "session/cancel": {
 			const session = sessions.get(String(params.sessionId));

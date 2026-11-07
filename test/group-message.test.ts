@@ -66,7 +66,9 @@ describe("message_group", () => {
 		const faux = fauxProvider();
 		const models = createModels();
 		models.setProvider(faux.provider);
-		const requests: { agent: string; text: string; tools: string[]; ask: string[] | undefined }[] = [];
+		// `results` is how many tool results had come back when the request was made: an agent runs one turn at a time,
+		// so the first of its results after that is this request's
+		const requests: { agent: string; text: string; tools: string[]; ask: string[] | undefined; results: number }[] = [];
 		const results: { agent: string; text: string; error: boolean }[] = [];
 		const respond = (ctx: ModelContext) => {
 			const prompt = JSON.stringify(ctx.messages.filter((m) => m.role === "system"));
@@ -79,7 +81,13 @@ describe("message_group", () => {
 			}
 			const text = textOf(last?.content);
 			const tools = offered(ctx);
-			requests.push({ agent: who, text, tools: tools.map((tool) => tool.name), ask: askable(tools) });
+			requests.push({
+				agent: who,
+				text,
+				tools: tools.map((tool) => tool.name),
+				ask: askable(tools),
+				results: results.length,
+			});
 			if (text.includes("SPEAK AS USER"))
 				return fauxAssistantMessage([fauxToolCall("message_user", { text: "to the owner?" })], {
 					stopReason: "toolUse",
@@ -110,7 +118,11 @@ describe("message_group", () => {
 			if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
 			return (await response.json()) as T;
 		};
-		/** Ask `agent` with `text`, and wait for its turn's first request. */
+		/**
+		 * Ask `agent` with `text`, and wait for its turn's first request and for that request's tool call to have run.
+		 * Waiting for the request alone left its tool call (the post to the group, the result) still to come, so a count
+		 * read after a turn could miss that turn's message or result, and a later check matched the wrong turn.
+		 */
 		const turn = async (room: number, agent: string, text: string) => {
 			const before = requests.length;
 			const response = await call(`/groups/${room}/messages`, {
@@ -118,7 +130,9 @@ describe("message_group", () => {
 				body: JSON.stringify({ key: randomUUID(), text, mentions: [agent] }),
 			});
 			expect(response.status).toBe(200);
-			return until(async () => requests.slice(before).find((request) => request.agent === agent));
+			const request = await until(async () => requests.slice(before).find((each) => each.agent === agent));
+			await until(async () => results.slice(request.results).find((result) => result.agent === agent));
+			return request;
 		};
 		const put = (room: number, body: object) =>
 			api<GroupView>(`/groups/${room}`, { method: "PUT", body: JSON.stringify(body) });
