@@ -323,7 +323,13 @@ export function handler(
 			if (!(await remote.paired(device))) return reply(res, 403, { error: "this device is not paired" });
 			remote.heard?.(device, req.method ?? "GET", url.pathname);
 		}
-		if (url.pathname === "/oauth/callback" && req.method === "GET") {
+		if (
+			req.method === "GET" &&
+			(url.pathname === "/oauth/callback" ||
+				(url.pathname === "/" &&
+					url.searchParams.has("state") &&
+					(url.searchParams.has("code") || url.searchParams.has("error"))))
+		) {
 			// a sign-in coming back: no token (a browser redirect carries none), its state names the sign-in, once
 			const param = (name: string) => url.searchParams.get(name) ?? undefined;
 			const state = param("state");

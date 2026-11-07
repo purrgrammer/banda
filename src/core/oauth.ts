@@ -29,11 +29,14 @@ export type OAuthClient = { readonly id: string; readonly secret?: string };
 
 /** Banda's public Google OAuth client id; it identifies the app and is safe to ship with the daemon. */
 export const DEFAULT_GOOGLE_CLIENT_ID = "199878157109-ge1kebauu0ec88f69ksn1skpacf8l7q1.apps.googleusercontent.com";
+/** A desktop OAuth client is public: Google cannot rely on this value being confidential. */
+export const DEFAULT_GOOGLE_CLIENT_SECRET = "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";
 
 /** The installed Google client is public: desktop OAuth uses PKCE and cannot keep a client secret confidential. */
 export function googleOAuthClient(id: string | undefined, secret: string | undefined): OAuthClient {
 	const clientId = id || DEFAULT_GOOGLE_CLIENT_ID;
-	return { id: clientId, ...(secret === undefined || secret === "" ? {} : { secret }) };
+	const clientSecret = secret || DEFAULT_GOOGLE_CLIENT_SECRET;
+	return { id: clientId, ...(clientSecret === "" ? {} : { secret: clientSecret }) };
 }
 
 export type Tokens = {
@@ -66,8 +69,19 @@ function responseProblem(url: string, status: number, body: unknown): Error {
 		typeof body === "object" && body !== null && "error" in body && typeof body.error === "string"
 			? body.error
 			: undefined;
+	const description =
+		typeof body === "object" &&
+		body !== null &&
+		"error_description" in body &&
+		typeof body.error_description === "string"
+			? body.error_description
+					.replace(/[\r\n\t]+/g, " ")
+					.replace(/\b(code|client_secret|refresh_token|access_token)=([^&\s]+)/gi, "$1=[redacted]")
+					.slice(0, 180)
+			: undefined;
 	const safeCode = code !== undefined && /^[a-zA-Z0-9_-]{1,80}$/.test(code) ? ` (${code})` : "";
-	return new Error(`${new URL(url).host} answered ${status}${safeCode}`);
+	const safeDescription = description === undefined || description === "" ? "" : `: ${description}`;
+	return new Error(`${new URL(url).host} answered ${status}${safeCode}${safeDescription}`);
 }
 
 /** A fetch that never follows a redirect, and an answer read as JSON, or why not. */

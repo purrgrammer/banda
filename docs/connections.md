@@ -8,9 +8,9 @@ connect flow and daemon-read objects; DESIGN.md "Watches" follows an object thro
 card. Agent-built connections and `propose_connection` are out of scope.
 
 Gmail is a built-in daemon REST adapter: the accepted file declares scoped reads and approval-required writes, while
-the adapter calls Gmail's API directly. Its public OAuth client id ships with Banda; `BANDA_GOOGLE_CLIENT_ID` can
-override it for development, and an optional daemon-only secret can be set with `BANDA_GOOGLE_CLIENT_SECRET`. A public
-Google OAuth client relies on PKCE, so no secret ships with the app. The first sign-in asks for read-only access; send and mailbox changes have separate scope
+the adapter calls Gmail's API directly. Its public desktop OAuth client id and client secret ship with Banda; both can be
+overridden with `BANDA_GOOGLE_CLIENT_ID` and `BANDA_GOOGLE_CLIENT_SECRET` for development. Desktop clients cannot keep
+their secret confidential, and the flow still uses PKCE. The first sign-in asks for read-only access; send and mailbox changes have separate scope
 choices and always use account-bound approval drafts. Email cards render sanitized plain text and retrieve attachments
 through the daemon into the chat's blob store.
 

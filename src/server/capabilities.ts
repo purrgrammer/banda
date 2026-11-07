@@ -475,7 +475,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		}
 	}
 
-	/** Resolve a shipped Google OAuth client from daemon-only configuration. Its secret is kept only with credentials. */
+	/** Resolve Banda's shipped Google desktop client, with daemon environment overrides for development. */
 	function oauthClient(connection: Connection): OAuthClient {
 		if (connection.client !== "google") return { id: connection.client as string };
 		return googleOAuthClient(process.env.BANDA_GOOGLE_CLIENT_ID, process.env.BANDA_GOOGLE_CLIENT_SECRET);
@@ -2093,11 +2093,10 @@ export function openCapabilities(options: CapabilityOptions) {
 				throw new BadRequest(
 					"Start sign-in on the computer Banda runs on; accounts connected there are available on this device.",
 				);
-			const redirect = options.redirect();
+			const redirect = connection.client === "google" ? new URL(options.redirect()).origin : options.redirect();
 			const client =
 				connection.client !== undefined ? oauthClient(connection) : await register(server, redirect, fetcher);
-			const pendingClient = connection.client === "google" ? { id: client.id } : client;
-			const started = begin(name, connection.url, server, pendingClient, redirect, now(), agent);
+			const started = begin(name, connection.url, server, client, redirect, now(), agent);
 			await keepPending(home, started.pending);
 			return { url: started.url };
 		} catch (error) {

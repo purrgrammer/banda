@@ -2,7 +2,14 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { parseConnection } from "../src/core/connections.ts";
 import { GMAIL_TOOLS, gmailAttachment, gmailCall, gmailWriteCall } from "../src/core/gmail-rest.ts";
-import { begin, DEFAULT_GOOGLE_CLIENT_ID, discover, exchange, googleOAuthClient } from "../src/core/oauth.ts";
+import {
+	begin,
+	DEFAULT_GOOGLE_CLIENT_ID,
+	DEFAULT_GOOGLE_CLIENT_SECRET,
+	discover,
+	exchange,
+	googleOAuthClient,
+} from "../src/core/oauth.ts";
 import { cardOf } from "../src/core/objects.ts";
 
 const response = (body: unknown, status = 200) =>
@@ -137,9 +144,15 @@ describe("Gmail REST connection", () => {
 		expect(writing).toHaveBeenCalledTimes(1);
 	});
 
-	it("accepts a public installed-app client without treating its secret as confidential", () => {
-		expect(googleOAuthClient("desktop-client", undefined)).toEqual({ id: "desktop-client" });
-		expect(googleOAuthClient(undefined, undefined)).toEqual({ id: DEFAULT_GOOGLE_CLIENT_ID });
+	it("uses Banda's bundled public installed-app credentials by default", () => {
+		expect(googleOAuthClient("desktop-client", undefined)).toEqual({
+			id: "desktop-client",
+			secret: DEFAULT_GOOGLE_CLIENT_SECRET,
+		});
+		expect(googleOAuthClient(undefined, undefined)).toEqual({
+			id: DEFAULT_GOOGLE_CLIENT_ID,
+			secret: DEFAULT_GOOGLE_CLIENT_SECRET,
+		});
 		expect(googleOAuthClient("web-client", "configured-secret")).toEqual({
 			id: "web-client",
 			secret: "configured-secret",
