@@ -100,3 +100,63 @@ export function Row({
 		</button>
 	);
 }
+
+/**
+ * A pinned agent or group at the top of the band: its face large over its name, every tile the same size. What it
+ * wants of the owner rides on the face: the waiting dot, the unread count.
+ */
+export function PinnedTile({
+	row,
+	selected = false,
+	onSelect,
+}: {
+	row: RowView;
+	selected?: boolean;
+	onSelect?: () => void;
+}) {
+	const [first] = row.faces;
+	const unread = (row.unread ?? 0) > 0;
+	const state: FaceState = row.ask !== undefined ? "waiting" : (row.state ?? "idle");
+	const label = [
+		row.name,
+		"pinned",
+		row.ask === undefined ? undefined : `waiting on you: ${row.ask}`,
+		unread ? `${row.unread} unread` : undefined,
+	]
+		.filter(Boolean)
+		.join(", ");
+	return (
+		<button
+			type="button"
+			aria-label={label}
+			aria-current={selected ? "page" : undefined}
+			onClick={onSelect}
+			className={cn(
+				"flex w-full snap-start flex-col items-center gap-1 rounded-tile px-1 pt-2 pb-1.5",
+				"transition-colors duration-[var(--duration-fast)] hover:bg-paper-3",
+				selected && "bg-paper-3",
+			)}
+		>
+			<span className="relative inline-flex">
+				{row.faces.length > 1 || first === undefined ? (
+					<FaceStack faces={row.faces} name={row.name} size="panel" waiting={state === "waiting"} />
+				) : (
+					<Face face={first.face} name={row.name} size="panel" state={state} paused={row.paused ?? false} />
+				)}
+				{unread ? (
+					<span className="absolute -top-0.5 -right-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-ink px-1.5 text-meta font-semibold text-paper ring-2 ring-paper-2">
+						{row.unread}
+					</span>
+				) : null}
+			</span>
+			<span
+				className={cn(
+					"max-w-full truncate text-meta",
+					unread || row.ask !== undefined ? "font-semibold text-ink" : "font-medium text-ink-2",
+				)}
+			>
+				{row.name}
+			</span>
+		</button>
+	);
+}

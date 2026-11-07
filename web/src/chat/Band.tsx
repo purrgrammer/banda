@@ -1,7 +1,8 @@
 /**
  * The band: the sidebar, and the whole of the app's navigation. Its name, search, "+" and the menu (Skills, Connections,
  * Settings; a dot on it, and on each, while something there waits on the owner) at the top; one row per agent and
- * group, by their latest message; the daemon's notices at the foot. Collapsed, the rail of faces, the menu below.
+ * group, by their latest message, under the pinned ones: tiles of the same size, three to a row, the rest a scroll
+ * away; the daemon's notices at the foot. Collapsed, the rail of faces, pinned first, the menu below.
  */
 import { BlocksIcon, BookOpenIcon, PanelLeftIcon, PlugIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
 import { MotionConfig, motion } from "motion/react";
@@ -15,10 +16,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
 import { RowsLoading } from "./Loading.tsx";
-import { Row, type RowView } from "./Row.tsx";
+import { PinnedTile, Row, type RowView } from "./Row.tsx";
 
 export function Band({
 	rows,
+	pinned = [],
 	selected,
 	collapsed = false,
 	notice,
@@ -35,6 +37,8 @@ export function Band({
 }: {
 	brand?: ReactNode;
 	rows: readonly RowView[];
+	/** The rows pinned to the top, by id, in the owner's order. */
+	pinned?: readonly string[];
 	selected?: string | undefined;
 	collapsed?: boolean;
 	/** A daemon's notice at the foot: offline, the computer off. */
@@ -51,6 +55,8 @@ export function Band({
 	onSettings?: () => void;
 	className?: string;
 }) {
+	const tiles = pinned.flatMap((id) => rows.filter((row) => row.id === id));
+	const rest = rows.filter((row) => !pinned.includes(row.id));
 	return (
 		<nav
 			aria-label="Your band"
@@ -99,9 +105,29 @@ export function Band({
 				{rows.length === 0 && !collapsed && !loading ? (
 					<p className="px-3 py-6 text-ui text-ink-2">Your band is empty. Make an agent with +.</p>
 				) : null}
+				{tiles.length === 0 || collapsed ? null : (
+					<ul
+						aria-label="Pinned"
+						className={cn(
+							"grid shrink-0 snap-x snap-mandatory grid-flow-col gap-1 overflow-x-auto pb-2 [scrollbar-width:none]",
+							// three to a row; past three, the next one peeks in so the row reads as one that scrolls
+							tiles.length > 3 ? "auto-cols-[calc((100%-0.5rem)/3.4)]" : "auto-cols-[calc((100%-0.5rem)/3)]",
+						)}
+					>
+						{tiles.map((row) => (
+							<li key={row.id} className="flex">
+								<PinnedTile
+									row={row}
+									selected={row.id === selected}
+									{...(onSelect === undefined ? {} : { onSelect: () => onSelect(row.id) })}
+								/>
+							</li>
+						))}
+					</ul>
+				)}
 				{/* a row that moves up slides to its place rather than jumping; reduced motion keeps it still */}
 				<MotionConfig reducedMotion="user" transition={{ type: "spring", stiffness: 520, damping: 42, mass: 0.8 }}>
-					{rows.map((row) => (
+					{(collapsed ? [...tiles, ...rest] : rest).map((row) => (
 						<motion.div key={row.id} layout="position" className={cn(collapsed && "flex justify-center")}>
 							<Row
 								row={row}

@@ -2,11 +2,12 @@
  * The chat's header: the agent's face and name, centred and floating over the feed, and under them what it does now
  * ("Using its browser…", "Thinking…"; in a group, "Mara and Sancho are working…"), shimmering while it works, or its
  * presence (waiting on you, routines paused). Said here once: the feed has no working line. It has no bar and no
- * border: the paper fades out under it, so the conversation scrolls beneath and keeps the screen. The face and the
+ * border: they sit on one small frosted shape, so the conversation scrolls around and beneath it and keeps the screen. The face and the
  * name open the panel; on the phone a back control leads to the band. Its parent is `relative`, and the feed clears
  * it with `HEADER_CLEARANCE`.
  */
 import { ChevronLeftIcon, PanelRightIcon, TerminalIcon } from "lucide-react";
+import { useId } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -49,17 +50,12 @@ export function Header({
 		: (doing ?? (state === "working" ? "Working…" : state === "waiting" ? "Waiting on you" : undefined));
 	const face =
 		faces.length > 1 || first === undefined ? (
-			<FaceStack faces={faces} name={name} size="header" waiting={attention || state === "waiting"} />
+			<FaceStack faces={faces} name={name} size="panel" waiting={attention || state === "waiting"} />
 		) : (
-			<Face face={first.face} name={name} size="header" state={attention ? "waiting" : state} paused={paused} />
+			<Face face={first.face} name={name} size="panel" state={attention ? "waiting" : state} paused={paused} />
 		);
 	return (
-		<header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center px-2.5 pt-2 pb-10">
-			{/* frosted paper behind the face and the name, fading out so the feed shows through beneath them */}
-			<div
-				aria-hidden="true"
-				className="absolute inset-0 bg-paper/90 backdrop-blur-md [mask-image:linear-gradient(to_bottom,black_70%,transparent)]"
-			/>
+		<header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center px-2.5 pt-2">
 			{phone ? (
 				<Button
 					variant="ghost"
@@ -71,15 +67,18 @@ export function Header({
 					<ChevronLeftIcon className="size-5" />
 				</Button>
 			) : null}
-			<div className="relative flex max-w-[min(28rem,calc(100%-6rem))] min-w-0 flex-col items-center">
+			<div className="pointer-events-auto relative isolate flex max-w-[min(20rem,calc(100%-6rem))] min-w-0 flex-col items-center">
+				<Contour name={name} line={line} />
 				<button
 					type="button"
-					className="pointer-events-auto flex min-w-0 max-w-full flex-col items-center gap-1 rounded-card px-2 pt-0.5 text-ink outline-none focus-visible:ring-2 focus-visible:ring-line"
+					className="flex min-w-0 max-w-full flex-col items-center text-ink outline-none focus-visible:[&>span:first-child]:ring-2 focus-visible:[&>span:first-child]:ring-line rounded-full"
 					aria-label={`${name}: open its panel`}
 					onClick={onPanel}
 				>
-					{face}
-					<span className="max-w-full truncate text-heading font-semibold">{name}</span>
+					<span className="inline-flex rounded-full p-1">{face}</span>
+					<span className={cn("max-w-full truncate px-2.5 text-ui font-semibold", line === undefined && "pb-1")}>
+						{name}
+					</span>
 				</button>
 				{line === undefined ? null : (
 					<button
@@ -87,7 +86,7 @@ export function Header({
 						onClick={onActivity}
 						disabled={onActivity === undefined || paused}
 						aria-label={onActivity === undefined || paused ? undefined : `Activity: ${line}`}
-						className="pointer-events-auto max-w-full min-w-0 truncate rounded-field px-2 text-center text-meta text-ink-2 enabled:hover:text-ink"
+						className="max-w-full min-w-0 truncate px-2.5 pb-1 text-center text-meta text-ink-2 enabled:hover:text-ink"
 					>
 						{state === "working" && !paused ? (
 							<Shimmer as="span" aria-live="polite" duration={2.4}>
@@ -130,8 +129,38 @@ export function Header({
 	);
 }
 
+/**
+ * The shape behind the face and the name, following their outline: a circle round the face and a pill round the
+ * words, melted into one where they meet (blurred, then cut at half its alpha), lifted like the composer. It lays out
+ * the same boxes as what it sits behind, words hidden, so it fits any name without measuring.
+ */
+function Contour({ name, line }: { name: string; line: string | undefined }) {
+	const id = useId();
+	return (
+		<div
+			aria-hidden="true"
+			className="pointer-events-none absolute inset-0 -z-10 flex flex-col items-center"
+			style={{
+				filter: `url(#${CSS.escape(id)}) drop-shadow(0 0 0.5px var(--line)) drop-shadow(0 6px 14px light-dark(oklch(0 0 0 / 7%), oklch(0 0 0 / 35%)))`,
+			}}
+		>
+			<svg width="0" height="0" className="absolute" aria-hidden="true">
+				<filter id={id} x="-20%" y="-20%" width="140%" height="140%">
+					<feGaussianBlur in="SourceGraphic" stdDeviation="5" />
+					<feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -10" />
+				</filter>
+			</svg>
+			<span className="size-[4.5rem] shrink-0 rounded-full bg-paper" />
+			<span className="-mt-1.5 flex max-w-full flex-col items-center rounded-full bg-paper px-2.5 pt-1.5 pb-1 text-transparent select-none">
+				<span className="max-w-full truncate text-ui font-semibold">{name}</span>
+				{line === undefined ? null : <span className="max-w-full truncate text-meta">{line}</span>}
+			</span>
+		</div>
+	);
+}
+
 /** How far the feed starts below the top, so its first message clears the floating header. */
-export const HEADER_CLEARANCE = "pt-28";
+export const HEADER_CLEARANCE = "pt-30";
 
 /** What the header says while a group works: who, in words. */
 export function workingWords(names: readonly string[]): string | undefined {

@@ -38,6 +38,7 @@ const CONTENTS = [
 	{ id: "skill-activity", label: "Skill in Activity" },
 	{ id: "skills-about", label: "Skills in About" },
 	{ id: "app", label: "The app" },
+	{ id: "pinned", label: "Pinned" },
 	{ id: "agent-meta-tools", label: "Agent-to-agent tools in a chat" },
 	{ id: "working-chat", label: "A chat at work" },
 	{ id: "first-run", label: "First run" },

@@ -264,6 +264,24 @@ export function Screens() {
 				{phone ? <Band rows={ROWS} className="w-full" /> : <Band rows={ROWS} selected="mara" />}
 				{phone ? null : <MaraChat />}
 			</Section>
+			<Section
+				id="pinned"
+				title="Pinned"
+				note="Pinned agents and groups sit above every conversation as tiles of the same size, three to a row. Past three the row scrolls sideways, the next tile peeking in. A tile carries what the row would: the waiting dot, the unread count, a face at work."
+				bleed
+			>
+				<Band
+					rows={ROWS}
+					pinned={["mara", "octo", "trip"]}
+					selected="mara"
+					{...(phone ? { className: "w-full" } : {})}
+				/>
+				<Band
+					rows={ROWS}
+					pinned={["mara", "octo", "trip", "sancho", "atlas"]}
+					{...(phone ? { className: "w-full" } : {})}
+				/>
+			</Section>
 			{phone ? (
 				<Section id="app-chat" title="A chat on the phone" bleed>
 					<MaraChat />
