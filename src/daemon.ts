@@ -51,6 +51,7 @@ import { allowGrain } from "./core/grains.ts";
 import { guardImages } from "./core/images.ts";
 import { MemoryLock, memoryExtension } from "./core/memory.ts";
 import { nowExtension } from "./core/now.ts";
+import { permissionsExtension } from "./core/permission-prompt.ts";
 import { allowHost, onPermissions, Permissions, revoke } from "./core/permissions.ts";
 import { FileCredentialStore } from "./core/provider-credentials.ts";
 import { Control, RoutineRefused, Routines } from "./core/routines.ts";
@@ -386,6 +387,8 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		);
 		// the date and the hour, for every agent, as a status line beside the prompt's fixed start
 		registry.install(nowExtension());
+		// how each agent asks, and what it may do without asking: its own permissions alone
+		registry.install(permissionsExtension());
 		// each area's extensions, before the store opens: what it installs is there when anything resumes
 		const boot: Boot = { core, blobs, config, home, root: agentBox.workspace, log };
 		for (const area of AREAS) for (const extension of area.install?.(boot) ?? []) registry.install(extension);
