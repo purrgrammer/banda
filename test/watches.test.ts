@@ -78,4 +78,21 @@ describe("a watch on a pull request", () => {
 			expect.stringContaining("merged"),
 		]);
 	}, 60_000);
+
+	it("a done watch never wakes again, even when the owner checks it after it ended", async () => {
+		// merged at step 3, as the pull request's life goes; at step 4 bob reviews the merged pull request
+		const after = (step: number): World => {
+			const at = structuredClone(world(Math.min(step, 3))) as { get_reviews: unknown[] };
+			if (step >= 4) at.get_reviews.push({ id: 2, user: { login: "bob" }, state: "COMMENTED" });
+			return at as unknown as World;
+		};
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: after,
+			clicks: ["k1", "k2", "k3", "k4"],
+		});
+		expect(summary.record.done?.why).toBe("merged");
+		expect(summary.wakes).toHaveLength(2);
+		expect(summary.wakes.flatMap((wake) => wake.changes).some((change) => change.includes("bob"))).toBe(false);
+	}, 60_000);
 });
+

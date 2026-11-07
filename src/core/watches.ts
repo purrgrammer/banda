@@ -423,9 +423,10 @@ export type Looked =
 	| { readonly outcome: "baseline" }
 	| { readonly outcome: "failed"; readonly why: string }
 	| { readonly outcome: "gone" }
-	| { readonly outcome: "raced" };
+	| { readonly outcome: "raced" }
+	/** It kept nothing: the watch is done, or was paused while the task looked. */
+	| { readonly outcome: "held"; readonly why: "done" | "paused" };
 
-/** The hash that keys a wake: the changes themselves, and what ended the watch. */
 /**
  * A wake's key: the transition it is, from the watch's cursor (since it began) to the reading it saw. The chat keeps
  * every key it was given, so a key of the changes alone would swallow the same change happening again later.
@@ -560,6 +561,16 @@ export function defineWatches(options: WatchesOptions) {
 			if ((await objectAccess(tx, chat, ref, account))?.stamp !== stamp) {
 				outcome = { outcome: "failed", why: `${connection.service} is no longer connected as that account` };
 				record.failed = { at: now, why: outcome.why };
+				return;
+			}
+			// a done watch never wakes again; a pause that came while the task read holds what it saw for the resume,
+			// though the owner's own Check now looks while paused, as they asked
+			if (record.done !== undefined) {
+				outcome = { outcome: "held", why: "done" };
+				return;
+			}
+			if (click === undefined && (record.paused !== undefined || (await tx.doc(Control)).paused !== undefined)) {
+				outcome = { outcome: "held", why: "paused" };
 				return;
 			}
 			// another look of this watch moved its cursor meanwhile: it read against an older cursor, so keep nothing
