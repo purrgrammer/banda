@@ -719,7 +719,8 @@ export function fits(credentials: Credentials | undefined, connection: Connectio
 	// what was asked, not what was granted: a scope the owner left out at the consent screen is theirs to add again
 	const asked = credentials.oauth.server.scopes ?? [];
 	const ceiling = ceilingOf(connection);
-	if (ceiling !== undefined && !asked.every((scope) => ceiling.includes(scope))) return false;
+	// a sign-in that asked for nothing was given the server's default, which a file naming scopes does not allow
+	if (ceiling !== undefined && (asked.length === 0 || !asked.every((scope) => ceiling.includes(scope)))) return false;
 	const required = requiredOf(connection);
 	return required === undefined || asked.includes(required);
 }

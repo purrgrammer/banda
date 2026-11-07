@@ -1020,7 +1020,10 @@ export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as
 				plainLine(Array.isArray(value) ? value.filter((each) => typeof each === "string").join(", ") : value, max);
 			const emails = joined(field("emails"), 300);
 			const other = field("other") === true;
-			const photo = webUrl(field("photo"));
+			// a photo is fetched as the card draws it: only Google's own photo host
+			const given = webUrl(field("photo"));
+			const photo =
+				given !== undefined && /(^|\.)googleusercontent\.com$/.test(new URL(given).hostname) ? given : undefined;
 			return {
 				card: "contact",
 				name: plainLine(field("name")) || plainLine(emails.split(",")[0]) || "(No name)",

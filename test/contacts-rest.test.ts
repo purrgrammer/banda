@@ -259,6 +259,9 @@ describe("Google Contacts REST connection", () => {
 			photo: "https://lh3.googleusercontent.com/a",
 			url: "https://contacts.google.com/person/c1",
 		});
+		// a photo on any other host is fetched by the card, so it is dropped
+		expect(card({ name: "Eve", photo: "https://tracker.example/pixel.png" })).not.toHaveProperty("photo");
+		expect(card({ name: "Eve", photo: "https://googleusercontent.com.evil.example/a" })).not.toHaveProperty("photo");
 		expect(card({ name: "", emails: ["bo@example.test"], other: true, url: "https://contacts.google.com/x" })).toEqual({
 			card: "contact",
 			name: "bo@example.test",

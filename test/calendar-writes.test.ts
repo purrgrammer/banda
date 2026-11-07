@@ -9,7 +9,9 @@ import type { JsonObject, TaskId } from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
 import { LEAD } from "../src/core/agents.ts";
 import { createdEventId, eventRef } from "../src/core/calendar-rest.ts";
+import { parseConnection } from "../src/core/connections.ts";
 import { OWNER } from "../src/core/gateway.ts";
+import { REST_APIS, type RestApi } from "../src/core/rest.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context } from "../src/core/store.ts";
 import type { TurnResult } from "../src/core/turn.ts";
@@ -100,6 +102,9 @@ describe("Calendar changes as drafts", () => {
 		expect([...(wait.ask.editable ?? [])].sort()).toEqual(
 			["attendees", "description", "end", "location", "start", "title"].sort(),
 		);
+		// it invites people: on the private floor, so no permission is offered and it asks every time
+		expect(wait.ask.floor).toBe("private");
+		expect(wait.ask).not.toHaveProperty("permission");
 		expect(google.writes).toEqual([]);
 		const filled = await answer(s.harness, wait.key, "approve", web, "bearer", {
 			type: "approval",
@@ -164,5 +169,26 @@ describe("Calendar changes as drafts", () => {
 		await answer(s.harness, wait.key, "deny", web, "bearer", { type: "approval" });
 		await s.harness.waitForTask(turn, context);
 		expect(google.writes).toEqual([]);
+	});
+});
+
+describe("what a built-in change never gets ahead", () => {
+	it("a change whose content the owner edits, so no permission can bind it, is on a floor in its shipped file", () => {
+		const shippedFile = (name: string) => {
+			const parsed = parseConnection(
+				name,
+				readFileSync(new URL(`../shipped/connections/${name}.md`, import.meta.url), "utf8"),
+			);
+			if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
+			return parsed.connection;
+		};
+		const edited = Object.entries(REST_APIS as Record<string, RestApi>).flatMap(([name, api]) =>
+			api.tools.flatMap((tool) =>
+				(api.drafts?.editable(tool.name).length ?? 0) > 0 ? [[name, tool.name] as const] : [],
+			),
+		);
+		expect(edited.length).toBeGreaterThan(0);
+		for (const [name, tool] of [...edited, ["gmail", "send_message"] as const])
+			expect([name, tool, shippedFile(name).floors[tool]]).toEqual([name, tool, "private"]);
 	});
 });

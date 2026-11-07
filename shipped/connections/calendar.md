@@ -6,6 +6,7 @@ auth: oauth
 client: google
 scopes: [https://www.googleapis.com/auth/calendar.readonly]
 ask: always
+private: [create_event, update_event]
 account: get_profile.email
 reads: [get_profile, list_calendars, list_events, get_event, free_busy]
 ---
