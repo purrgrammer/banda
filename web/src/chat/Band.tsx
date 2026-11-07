@@ -4,7 +4,7 @@
  * group, by their latest message, under the pinned ones: tiles of the same size, three to a row, the rest a scroll
  * away; the daemon's notices at the foot. Collapsed, the rail of faces, pinned first, the menu below.
  */
-import { BlocksIcon, BookOpenIcon, PanelLeftIcon, PlugIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
+import { BookOpenIcon, EllipsisIcon, PanelLeftIcon, PlugIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
 import { LayoutGroup, MotionConfig, motion } from "motion/react";
 import type { ReactNode } from "react";
 import { useId, useLayoutEffect, useRef, useState } from "react";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/cn";
+import { withMod } from "@/lib/keys";
 import { RowsLoading } from "./Loading.tsx";
 import { PinnedTile, Row, RowActions, type RowView } from "./Row.tsx";
 
@@ -117,7 +118,7 @@ export function Band({
 							variant="ghost"
 							size="icon-sm"
 							className="ml-auto text-ink-2"
-							aria-label="Search, ⌘K"
+							aria-label={`Search, ${withMod("K")}`}
 							onClick={onSearch}
 						>
 							<SearchIcon />
@@ -247,7 +248,7 @@ function Menu({
 					className="relative text-ink-2"
 					aria-label={any ? "Menu, something waits on you" : "Menu"}
 				>
-					<BlocksIcon />
+					<EllipsisIcon />
 					{any ? <span aria-hidden="true" className="absolute top-1 right-1 size-1.5 rounded-full bg-ink" /> : null}
 				</Button>
 			</DropdownMenuTrigger>
