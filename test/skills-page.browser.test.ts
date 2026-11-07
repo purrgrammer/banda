@@ -34,12 +34,17 @@ async function click(page: Page, target: ClickTarget) {
 		`(() => { const el = ${expression}; el.scrollIntoView({block:'nearest'}); el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:0})); el.click(); })()`,
 	);
 }
-async function fill(page: Page, selector: string, value: string) {
-	const expression = `document.querySelector(${JSON.stringify(selector)})`;
+async function fill(page: Page, field: "Filter skills" | "Skill name", value: string) {
+	const expression =
+		field === "Filter skills"
+			? `document.querySelector('input[aria-label="Filter skills"]')`
+			: `document.querySelector('input[aria-label="Skill name"]')`;
+	const clear =
+		field === "Filter skills"
+			? `(() => { const el = document.querySelector('input[aria-label="Filter skills"]'); el.focus(); el.select(); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,''); el.dispatchEvent(new Event('input',{bubbles:true})); })()`
+			: `(() => { const el = document.querySelector('input[aria-label="Skill name"]'); el.focus(); el.select(); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,''); el.dispatchEvent(new Event('input',{bubbles:true})); })()`;
 	await page.until(expression);
-	await page.run(
-		`(() => { const el = ${expression}; el.focus(); el.select(); const type = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement : HTMLInputElement; Object.getOwnPropertyDescriptor(type.prototype,'value').set.call(el,''); el.dispatchEvent(new Event('input',{bubbles:true})); })()`,
-	);
+	await page.run(clear);
 	if (value !== "") await page.input("Input.insertText", { text: value });
 }
 
@@ -132,11 +137,11 @@ for (const width of [390, 1440])
 					),
 				).toBe(true);
 				// nine accepted skills: the filter appears, matches case aside, and says when nothing does
-				await fill(page, 'input[aria-label="Filter skills"]', "PDF");
+				await fill(page, "Filter skills", "PDF");
 				await page.until(`document.querySelectorAll('[data-skill-list] a').length === 1`);
-				await fill(page, 'input[aria-label="Filter skills"]', "zzz");
+				await fill(page, "Filter skills", "zzz");
 				await page.until(`document.body.textContent.includes('No skill matches \u201czzz\u201d.')`);
-				await fill(page, 'input[aria-label="Filter skills"]', "");
+				await fill(page, "Filter skills", "");
 				await page.until(`document.querySelectorAll('[data-skill-list] a').length >= 9`);
 				// the axe pass over the full page
 				expect(await axeFindings(page)).toEqual([]);
@@ -175,16 +180,16 @@ for (const width of [390, 1440])
 				}
 				// the form refuses a bad name and a taken name in words, and saves a good one at once
 				await click(page, { button: "Create a skill" });
-				await fill(page, 'input[aria-label="Skill name"]', "My Skill");
+				await fill(page, "Skill name", "My Skill");
 				await page.until(`document.querySelector('input[aria-label="Skill name"]')?.value === 'my skill'`);
 				await page.until(`${button("Save and use")}?.disabled === true`);
 				expect(
 					await page.run(`document.body.textContent.includes('Names use lowercase letters, digits and hyphens.')`),
 				).toBe(true);
-				await fill(page, 'input[aria-label="Skill name"]', "pdf");
+				await fill(page, "Skill name", "pdf");
 				await page.until(`document.body.textContent.includes('A skill called /pdf already exists.')`);
 				expect(await page.run(`${button("Save and use")}?.disabled`)).toBe(true);
-				await fill(page, 'input[aria-label="Skill name"]', "release-notes");
+				await fill(page, "Skill name", "release-notes");
 				await page.until(`${button("Save and use")}?.disabled === false`);
 				await click(page, { button: "Save and use" });
 				await page.until(`location.hash === '#/skills/release-notes'`);
