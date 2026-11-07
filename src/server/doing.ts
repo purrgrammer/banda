@@ -45,6 +45,8 @@ export function doing(tool: string, args: unknown): string | undefined {
 		case "message_user":
 		case "message_group":
 			return undefined;
+		case "tool_search":
+			return "finding a tool";
 		case "bash":
 			return "running a command";
 		case "read": {

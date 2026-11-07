@@ -33,8 +33,11 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/cn";
+import type { ConnectionToolView } from "../../../src/server/api.ts";
 import { AvatarChoices } from "../avatar/Choices.tsx";
 import { Confirm } from "./Confirm.tsx";
+import { ConnectionTools } from "./Connect.tsx";
+import { ConnectionIcon } from "./ConnectionIcon.tsx";
 import { Face, FaceStack } from "./Face.tsx";
 import { GitHubMark } from "./Object.tsx";
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
@@ -260,10 +263,13 @@ export function Personality({
 
 export type ConnectionRow = {
 	readonly connection: string;
+	readonly icon?: ReactNode;
 	/** Its name in the daemon ("github"), when it has one: what `connect` and the switches are for. */
 	readonly id?: string | undefined;
+	readonly url?: string | undefined;
 	/** Every account signed in to it, and whether this agent may use each. */
 	readonly accounts: readonly { readonly login: string; readonly on: boolean; readonly account?: string }[];
+	readonly tools?: readonly ConnectionToolView[] | undefined;
 };
 
 /**
@@ -302,11 +308,7 @@ export function Connections({
 								className="flex min-h-11 items-center gap-3 py-1.5"
 							>
 								<span title={row.connection} className="flex size-5 shrink-0 items-center justify-center">
-									{row.connection === "GitHub" ? (
-										<GitHubMark />
-									) : (
-										<span className="text-meta font-semibold text-ink-2">{row.connection.slice(0, 1)}</span>
-									)}
+									{row.icon ?? <ConnectionIcon connection={row.id ?? row.connection} url={row.url} />}
 								</span>
 								<span className="min-w-0 flex-1 truncate text-ui text-ink">
 									{account.account === undefined ? row.connection : account.login}
@@ -328,11 +330,7 @@ export function Connections({
 							<RowOf
 								lead={
 									<span className="flex size-8 shrink-0 items-center justify-center rounded-field bg-paper-3">
-										{row.connection === "GitHub" ? (
-											<GitHubMark />
-										) : (
-											<span className="text-meta font-semibold text-ink-2">{row.connection.slice(0, 1)}</span>
-										)}
+										{row.icon ?? <ConnectionIcon connection={row.id ?? row.connection} url={row.url} />}
 									</span>
 								}
 								title={<span className="font-medium">{row.connection}</span>}
@@ -349,8 +347,14 @@ export function Connections({
 											className="text-ink-2"
 											onClick={() => setOpen(open === row.connection ? undefined : row.connection)}
 										>
-											<PlusIcon />
-											Another account
+											{row.id === "gmail" || row.connection === "Gmail" || row.id === "github" ? (
+												<>Manage access</>
+											) : (
+												<>
+													<PlusIcon />
+													Another account
+												</>
+											)}
 										</Button>
 									)
 								}
@@ -370,6 +374,14 @@ export function Connections({
 									/>
 								</label>
 							))}
+							{row.id === "gmail" ||
+							row.connection === "Gmail" ||
+							row.tools === undefined ||
+							row.tools.length === 0 ? null : (
+								<div className="px-3.5 pb-3 pl-[3.75rem]">
+									<ConnectionTools connection={row.connection} tools={row.tools} />
+								</div>
+							)}
 							{open === row.connection && connect !== undefined ? (
 								<div className="border-t border-line-soft p-3">{connect(row, () => setOpen(undefined))}</div>
 							) : null}
@@ -753,6 +765,8 @@ export type SettingsData = {
 	/** The owner's limits on every group; undefined until the daemon said. */
 	readonly groupLimits?: GroupLimits | undefined;
 	readonly theme: "system" | "light" | "dark";
+	/** The pinned agents' tiles sit in the middle of the band's top row while they fit in one; left-aligned otherwise. */
+	readonly centred?: boolean;
 	/** Every routine is paused. */
 	readonly paused: boolean;
 	/** This device notifies when an agent asks: on, off, or blocked by the browser. */
@@ -777,6 +791,7 @@ export type SettingsData = {
 
 export type SettingsActions = {
 	readonly onTheme?: (theme: SettingsData["theme"]) => void;
+	readonly onCentred?: (centred: boolean) => void;
 	readonly onPause?: (paused: boolean) => void;
 	readonly onConnect?: () => void;
 	readonly onNotify?: (on: boolean) => void;
@@ -1018,11 +1033,14 @@ export function AppSettings({
 	memory,
 	providers,
 	devices,
+	bring,
 	...act
 }: {
 	data: SettingsData;
 	tab?: SettingsTab;
 	memory?: ReactNode;
+	/** Bringing skills and agents from the other harnesses on this computer, on the desktop (`BringSettings`). */
+	bring?: ReactNode;
 	/** The phones paired, and pairing one (`DevicesSettings`). */
 	devices?: ReactNode;
 	/** Every provider the band may think with, to connect, use or sign out of (`ModelProviders`). */
@@ -1057,6 +1075,16 @@ export function AppSettings({
 							</button>
 						))}
 					</div>
+					<Rows>
+						{/* biome-ignore lint/a11y/noLabelWithoutControl: the switch inside is the control */}
+						<label className="flex min-h-12 items-center gap-3 px-3.5 py-2.5">
+							<span className="flex flex-1 flex-col">
+								<span className="text-ui text-ink">Centre pinned agents</span>
+								<span className="text-meta text-ink-2">While they fit in one row at the top of the band.</span>
+							</span>
+							<Switch checked={data.centred === true} onCheckedChange={(on) => act.onCentred?.(on)} />
+						</label>
+					</Rows>
 				</Block>
 				{data.notify === undefined ? null : (
 					<Block title="Notifications" note="On this device, when an agent waits on you and banda is not in front.">
@@ -1127,6 +1155,7 @@ export function AppSettings({
 				<SignedIn sites={data.signedIn ?? []} onSignOut={act.onSignOut} />
 			</TabsContent>
 			<TabsContent value="agents" className="flex flex-col gap-8">
+				{bring}
 				{data.groupLimits === undefined ? null : (
 					<GroupLimitsBlock limits={data.groupLimits} onChange={act.onGroupLimits} />
 				)}

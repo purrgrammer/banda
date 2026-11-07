@@ -33,6 +33,15 @@ changes.
 
 ## Open work
 
+- [ ] Review the tool-access specimen: built-in toolsets, shipped GitHub inventory, individual and whole-set switches,
+  partial selections, account access, per-agent choices and save failure. Keep it specimen-only until owner feedback.
+- [ ] After specimen acceptance, wire tool choices to accepted agent files and enforce them in direct and group chats,
+  search, already-loaded tools and retries. Reconcile the existing always-granted memory/routine/meta tools and first
+  agent special case with owner-controlled choices; replying and discovery stay available. A tool switch controls
+  that tool, not equivalent capabilities reachable through shell or browser access.
+- [ ] Qualify pi-durable tool search through the app: initial core exposure, discovery, historical schemas, restart,
+  compaction and revocation; search uses pi’s query/limit contract, with no namespace parameter or custom loader.
+
 - [x] Replace emoji identity end to end with accepted avatar faces, defaulting to the chat bubble; choose shape and colour, and review generated candidates before accepting them
 - [ ] Make owner definition saves and box publication crash-safe and concurrency-safe across all publishers before accepting avatar identity changes
 - [x] Draw favicon, manifest icons and iOS touch icon from the first agent's accepted face; account for maskable safe area and icon caching

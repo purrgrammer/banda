@@ -4,6 +4,7 @@
  */
 import type { ShellHandlers } from "../lib/shell.ts";
 import { shell as artifacts } from "./artifacts.ts";
+import { shell as band } from "./band.ts";
 import { shell as devices } from "./devices.ts";
 import { shell as groups } from "./groups.ts";
 import { shell as harnesses } from "./harnesses.ts";
@@ -19,4 +20,5 @@ export const AREA_HANDLERS: ShellHandlers = {
 	...groups,
 	...harnesses,
 	...devices,
+	...band,
 };

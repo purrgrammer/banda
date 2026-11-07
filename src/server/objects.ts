@@ -1,6 +1,8 @@
 import type { Context } from "@earendil-works/chord";
 import type { Harness } from "@earendil-works/pi-durable";
 import { Accepted, acceptedAgent } from "../core/agents.ts";
+import type { BlobStore } from "../core/blobs.ts";
+import { type Attachment, hold, safeName } from "../core/blobs.ts";
 import {
 	acceptedConnection,
 	accountLabel,
@@ -10,6 +12,7 @@ import {
 	mayUse,
 	signsIn,
 } from "../core/connections.ts";
+import { mimeOf } from "../core/gateway.ts";
 import { Groups } from "../core/groups.ts";
 import { objectAccess } from "../core/object-access.ts";
 import {
@@ -28,6 +31,7 @@ import {
 import { agentOfChat } from "../core/permissions.ts";
 import { context } from "../core/store.ts";
 import type { Capabilities } from "./capabilities.ts";
+import { BadRequest } from "./http.ts";
 
 export const PER_MESSAGE = 3;
 export const OLD = 60 * 60_000;
@@ -45,6 +49,10 @@ export type ObjectShown =
 			readonly connection: string;
 			readonly service: string;
 			readonly account?: string;
+			/** Opaque account key for owner-only follow-up reads, never rendered. */
+			readonly accountKey?: string;
+			/** Execution chat for an owner-only follow-up read; the endpoint rechecks it before acting. */
+			readonly authorityChat?: number;
 			readonly name: string;
 			readonly at: number;
 			readonly old: boolean;
@@ -74,11 +82,14 @@ type Attempt = {
 export function openObjects({
 	harness,
 	capabilities,
+	blobs,
 	now = Date.now,
 	fault = () => {},
 }: {
 	harness: Harness;
-	capabilities: Pick<Capabilities, "readFor" | "listedSchema" | "shipped">;
+	capabilities: Pick<Capabilities, "readFor" | "listedSchema" | "shipped"> &
+		Partial<Pick<Capabilities, "readAttachment">>;
+	blobs?: BlobStore;
 	now?: () => number;
 	fault?: (point: string) => void;
 }) {
@@ -219,6 +230,8 @@ export function openObjects({
 			connection: connection.name,
 			service: connection.service,
 			...(label === undefined ? {} : { account: label }),
+			...(account === "" ? {} : { accountKey: account }),
+			authorityChat: chat,
 			name: nameOf(ref, kinds),
 			at: found.at,
 		};
@@ -329,6 +342,120 @@ export function openObjects({
 		}, ctx);
 		return valid ? out : out.map(() => ({ shown: "link" }));
 	}
-	return { show };
+	async function attachment(
+		chat: number,
+		refText: string,
+		attachmentId: string,
+		agent?: string,
+		account?: string,
+		ctx: Context = context,
+	): Promise<Attachment | undefined> {
+		const connections = await known(ctx);
+		const refs = recognise(refText, connections);
+		const ref = refs.find((candidate) => candidate.connection === "gmail" && candidate.kind === "email");
+		if (ref === undefined) return undefined;
+		const displayed = (
+			await show(
+				chat,
+				[{ refs: [refText], ...(agent === undefined ? {} : { agent }), ...(account === undefined ? {} : { account }) }],
+				false,
+				ctx,
+			)
+		)[0];
+		if (
+			displayed?.shown !== "card" ||
+			displayed.card.card !== "email" ||
+			displayed.authorityChat === undefined ||
+			displayed.accountKey === undefined
+		)
+			return undefined;
+		if (blobs === undefined || capabilities.readAttachment === undefined)
+			throw new BadRequest("Gmail attachment storage is unavailable.", 503);
+		let metadata: { id: string; name: string; mimeType: string; size: number; sha?: string } | undefined;
+		try {
+			const parsed: unknown = JSON.parse(displayed.card.attachmentManifest);
+			if (Array.isArray(parsed))
+				metadata = parsed.find(
+					(each) =>
+						typeof each === "object" && each !== null && "id" in each && (each as { id?: unknown }).id === attachmentId,
+				) as typeof metadata;
+		} catch {
+			return undefined;
+		}
+		if (metadata === undefined) return undefined;
+		if (metadata.size > 10 * 1024 * 1024) throw new BadRequest("That attachment is larger than 10 MB.");
+		const authorityChat = displayed.authorityChat;
+		const accountKey = displayed.accountKey;
+		const access = await harness.commit((tx) => objectAccess(tx, authorityChat, ref, accountKey), ctx);
+		if (access === undefined) return undefined;
+		const key = readingKey(accountKey, displayed.key);
+		const reading = (await harness.snapshot(Readings, ctx))?.readings[key];
+		if (
+			reading?.source !== access.source ||
+			reading.card?.card !== "email" ||
+			reading.card.attachmentManifest !== displayed.card.attachmentManifest
+		)
+			return undefined;
+		const name = safeName(metadata.name);
+		const mimeType = mimeOf(name);
+		if (metadata.sha !== undefined) {
+			const bytes = await blobs.read(metadata.sha).catch(() => undefined);
+			if (
+				bytes !== undefined &&
+				(await harness.commit((tx) => objectAccess(tx, authorityChat, ref, accountKey), ctx))?.stamp === access.stamp
+			)
+				return { sha: metadata.sha, name, mimeType, size: bytes.length };
+		}
+		fault("object:attachment:read");
+		const fetched = await capabilities.readAttachment(
+			"gmail",
+			accountKey,
+			ref.values.id ?? "",
+			attachmentId,
+			{ chat: authorityChat, ref, stamp: access.stamp },
+			ctx,
+		);
+		if ("failed" in fetched) throw new BadRequest(`Gmail could not open that attachment: ${fetched.failed}`, 502);
+		if (metadata.size > 0 && metadata.size !== fetched.bytes.length)
+			throw new BadRequest("Gmail returned an attachment with a different size.", 502);
+		fault("object:attachment:received");
+		return blobs.exclusive(async () => {
+			const sha = await blobs.put(fetched.bytes);
+			const file = { sha, name, mimeType, size: fetched.bytes.length };
+			fault("object:attachment:stored");
+			const kept = await harness.commit(async (tx) => {
+				if ((await objectAccess(tx, authorityChat, ref, accountKey))?.stamp !== access.stamp) return false;
+				const doc = await tx.doc(Readings);
+				const current = doc.readings[key];
+				if (current?.source !== access.source || current.card?.card !== "email") return false;
+				let manifest: unknown;
+				try {
+					manifest = JSON.parse(current.card.attachmentManifest);
+				} catch {
+					return false;
+				}
+				if (!Array.isArray(manifest)) return false;
+				let matched = false;
+				const updated = manifest.map((each) => {
+					if (typeof each !== "object" || each === null || !("id" in each) || each.id !== attachmentId) return each;
+					matched = true;
+					return { ...each, sha };
+				});
+				if (!matched) return false;
+				doc.readings[key] = {
+					...current,
+					card: { ...current.card, attachmentManifest: JSON.stringify(updated) },
+				};
+				await hold(tx, authorityChat, file, "connection", now(), { connection: "gmail", account: accountKey });
+				return true;
+			}, ctx);
+			if (!kept) return undefined;
+			fault("object:attachment:kept");
+			if ((await harness.commit((tx) => objectAccess(tx, authorityChat, ref, accountKey), ctx))?.stamp !== access.stamp)
+				return undefined;
+			return file;
+		});
+	}
+	return { show, attachment };
 }
 export type Objects = ReturnType<typeof openObjects>;

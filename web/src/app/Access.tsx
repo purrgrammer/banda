@@ -7,6 +7,7 @@ import type { CapabilitiesView, ControlView, PermissionView } from "../../../src
 import { Confirm } from "../chat/Confirm.tsx";
 import { Block, type ConnectionRow, Connections, Permissions, RowOf, Rows } from "../chat/Settings.tsx";
 import { allowHost, revokePermission, switchAccount, switchPublicConnection } from "../lib/api.ts";
+import { useReturnFocus } from "../lib/return-focus.ts";
 import { showCapabilities, showControl, useShell } from "../lib/shell.ts";
 import { ConnectFlow } from "./ConnectFlow.tsx";
 import { AddHarnessButton, HarnessAccessTile } from "./HarnessConnections.tsx";
@@ -24,6 +25,8 @@ export function connectionRows(capabilities: CapabilitiesView | undefined, agent
 		.map((view) => ({
 			connection: view.accepted?.connection?.service ?? view.name,
 			id: view.name,
+			url: view.accepted?.connection?.url,
+			tools: view.tools,
 			accounts:
 				view.accepted?.connection?.auth === "none" && view.agents !== undefined
 					? [{ login: "No sign-in needed", on: view.agents.includes(agent) }]
@@ -34,8 +37,13 @@ export function connectionRows(capabilities: CapabilitiesView | undefined, agent
 						})),
 		}));
 	for (const shipped of capabilities?.shipped ?? [])
-		if (!shipped.added && shipped.connection.auth !== "none")
-			rows.push({ connection: shipped.connection.service, id: shipped.name, accounts: [] });
+		if (!shipped.added && shipped.connection.auth !== "none" && !rows.some((row) => row.id === shipped.name))
+			rows.push({
+				connection: shipped.connection.service,
+				id: shipped.name,
+				url: shipped.connection.url,
+				accounts: [],
+			});
 	return rows;
 }
 
@@ -67,6 +75,8 @@ export function AccessTab({
 }) {
 	const [error, setError] = useState<string | undefined>(undefined);
 	const [adding, setAdding] = useState(false);
+	// opened from state (the Add button), with no Radix trigger: closed, focus returns to that button
+	const returnFocus = useReturnFocus(adding);
 	const [pick, setPick] = useState<string>();
 	const rows = connectionRows(capabilities, agent.id);
 	const used = rows.filter((row) => row.accounts.length > 0);
@@ -109,7 +119,7 @@ export function AccessTab({
 				Add
 			</Button>
 			<Dialog open={adding} onOpenChange={setAdding}>
-				<DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-lg">
+				<DialogContent onCloseAutoFocus={returnFocus} className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-lg">
 					<DialogHeader>
 						<DialogTitle>Add a connection</DialogTitle>
 						<DialogDescription>Choose a connection for {agent.name}.</DialogDescription>

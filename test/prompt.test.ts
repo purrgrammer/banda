@@ -5,7 +5,13 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getCurrentSystemPrompt, getCurrentTools, type Message } from "@earendil-works/pi-ai";
+import {
+	fauxAssistantMessage,
+	fauxToolCall,
+	getCurrentSystemPrompt,
+	getCurrentTools,
+	type Message,
+} from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import { MAIN_THREAD } from "../src/core/gateway.ts";
 import { startDaemon } from "../src/daemon.ts";
@@ -21,7 +27,7 @@ describe("a chat's prompt", () => {
 		const web = join(home, "web");
 		await mkdir(web, { recursive: true });
 		await writeFile(join(web, "index.html"), "<!doctype html><title>banda</title>");
-		const { models } = echoModels();
+		const { models, faux } = echoModels();
 		// what each request sends, as the provider receives it
 		const sent: (readonly Message[])[] = [];
 		const stream = models.streamSimple.bind(models);
@@ -63,9 +69,52 @@ describe("a chat's prompt", () => {
 				})),
 			);
 			expect(body.tools.map((tool) => tool.name)).toContain("message_user");
+			expect(body.tools.map((tool) => tool.name).sort()).toEqual([
+				"bash",
+				"edit",
+				"message_user",
+				"read",
+				"tool_search",
+				"write",
+			]);
+			const discovery = body.tools.find((tool) => tool.name === "tool_search")!;
+			expect(Object.keys(discovery.parameters.properties ?? {}).sort()).toEqual(["limit", "query"]);
+			expect(body.system).toContain("When an instruction names a tool that is not offered yet, search for it first.");
 			// the daemon's own credential never reaches the model
 			expect(JSON.stringify(body)).not.toContain(token);
 			expect((await api(`/chats/999999/prompt`)).status).toBe(404);
+			faux.setResponses([
+				fauxAssistantMessage([fauxToolCall("tool_search", { query: "read_avatar_instructions", limit: 1 })], {
+					stopReason: "toolUse",
+				}),
+				fauxAssistantMessage([fauxToolCall("read_avatar_instructions", {})], { stopReason: "toolUse" }),
+				fauxAssistantMessage([fauxToolCall("message_user", { text: "Found the face instructions." })], {
+					stopReason: "toolUse",
+				}),
+				fauxAssistantMessage("Discovery finished."),
+			]);
+			await api("/messages", {
+				method: "POST",
+				body: JSON.stringify({ id: randomUUID(), text: "Find face instructions", thread: MAIN_THREAD }),
+			});
+			await until(async () =>
+				(await api<ItemPage>(`/chats/${chat}/items`)).body.items.some(
+					(item) => item.role === "assistant" && item.text === "Discovery finished.",
+				),
+			);
+			const entries = (await api<ItemPage>(`/chats/${chat}/items`)).body.items;
+			const search = entries.find(
+				(item) => item.role === "assistant" && item.calls?.some((call) => call.name === "tool_search"),
+			)!;
+			const loaded = entries.find(
+				(item) => item.role === "assistant" && item.calls?.some((call) => call.name === "read_avatar_instructions"),
+			)!;
+			const before = (await api<ChatPrompt>(`/chats/${chat}/prompt?at=${search.id}`)).body;
+			const after = (await api<ChatPrompt>(`/chats/${chat}/prompt?at=${loaded.id}`)).body;
+			expect(before.tools.map((tool) => tool.name)).not.toContain("read_avatar_instructions");
+			expect(after.tools.map((tool) => tool.name)).toContain("read_avatar_instructions");
+			expect(after.system).not.toContain("avatar: 1 tools on demand");
+			expect(entries.filter((item) => item.role === "tool" && item.error)).toEqual([]);
 		} finally {
 			await daemon.close();
 		}

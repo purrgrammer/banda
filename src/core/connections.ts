@@ -23,7 +23,7 @@ import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable"
 import { Accepted, AGENT_NAME, type Agent, agentPath, frontmatter, LEAD, parseAgent } from "./agents.ts";
 import { FLOORS, type Floor } from "./floor.ts";
 import { harnessToolsOf } from "./harness.ts";
-import type { OAuthClient, OAuthServer, Pending, Tokens } from "./oauth.ts";
+import { DEFAULT_GOOGLE_CLIENT_ID, type OAuthClient, type OAuthServer, type Pending, type Tokens } from "./oauth.ts";
 import { type ObjectKinds, parseObjects } from "./objects.ts";
 
 export const connectionPath = (name: string) => `connections/${name}.md`;
@@ -43,6 +43,8 @@ export type Connection = {
 	/** A remote server's URL; or `command`, a server the agent built, run in its box. */
 	readonly url?: string;
 	readonly command?: string;
+	/** A built-in daemon REST adapter, whose API does not speak MCP. */
+	readonly api?: "gmail";
 	readonly auth: AuthKind;
 	/** Uncurated remote tools ask every time; only owner-declared reads bypass approval. */
 	readonly ask?: "always";
@@ -104,6 +106,7 @@ const CONNECTION_FIELDS = [
 	"service",
 	"url",
 	"command",
+	"api",
 	"auth",
 	"ask",
 	"client",
@@ -146,9 +149,15 @@ export function parseConnection(
 	if (service === "") errors.push(`add "service:", the service as the owner calls it, such as "your calendar"`);
 	const url = read.one("url");
 	const command = read.one("command");
+	const api = read.one("api");
 	if ((url === undefined) === (command === undefined))
 		errors.push(`give "url:" for a server elsewhere, or "command:" for one you run in your computer, not both`);
 	if (url !== undefined && !remoteUrl(url)) errors.push(`"url: ${url}" is not an https address`);
+	if (
+		api !== undefined &&
+		(command !== undefined || api !== "gmail" || url !== "https://gmail.googleapis.com/gmail/v1/users/me")
+	)
+		errors.push('the built-in API is "gmail" at https://gmail.googleapis.com/gmail/v1/users/me');
 	const auth = read.one("auth") ?? "none";
 	if (auth !== "none" && auth !== "key" && auth !== "oauth")
 		errors.push(`"auth: ${auth}": use none, key (the owner types one in) or oauth (the owner signs in)`);
@@ -159,9 +168,25 @@ export function parseConnection(
 		errors.push('"ask: always" is for a remote connection whose non-read tools must ask every time');
 	const client = read.one("client");
 	const scopes = read.values.has("scopes") ? read.list("scopes") : undefined;
+	if (
+		api === "gmail" &&
+		(auth !== "oauth" ||
+			client !== "google" ||
+			scopes === undefined ||
+			!scopes.includes("https://www.googleapis.com/auth/gmail.readonly") ||
+			!scopes.every((scope) =>
+				[
+					"https://www.googleapis.com/auth/gmail.readonly",
+					"https://www.googleapis.com/auth/gmail.send",
+					"https://www.googleapis.com/auth/gmail.modify",
+				].includes(scope),
+			) ||
+			new Set(scopes).size !== scopes.length)
+	)
+		errors.push('Gmail uses OAuth client "google", includes gmail.readonly, and may add gmail.send or gmail.modify');
 	if (auth !== "oauth" && (client !== undefined || scopes !== undefined))
 		errors.push(`"client" and "scopes" are for a server the owner signs in to: add "auth: oauth" or drop them`);
-	if (client !== undefined && !/^[\w.-]{1,200}$/.test(client))
+	if (client !== undefined && client !== "google" && !/^[\w.-]{1,200}$/.test(client))
 		errors.push(`"client: ${client}" is not a client id: letters, digits, dots, dashes and underscores`);
 	for (const scope of scopes ?? [])
 		if (!/^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/.test(scope)) errors.push(`"${scope}" is not a scope`);
@@ -257,6 +282,7 @@ export function parseConnection(
 			service,
 			...(url === undefined ? {} : { url }),
 			...(command === undefined ? {} : { command }),
+			...(api === undefined ? {} : { api: api as NonNullable<Connection["api"]> }),
 			auth: auth as AuthKind,
 			...(ask === "always" ? { ask: "always" as const } : {}),
 			...(client === undefined ? {} : { client }),
@@ -675,7 +701,9 @@ export function fits(credentials: Credentials | undefined, connection: Connectio
 	if (credentials === undefined || credentials.url !== connection.url) return false;
 	if (!("oauth" in credentials)) return connection.auth === "key";
 	if (connection.auth !== "oauth") return false;
-	if (connection.client !== undefined && credentials.oauth.client.id !== connection.client) return false;
+	if (connection.client === "google") {
+		if (credentials.oauth.client.id !== (process.env.BANDA_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID)) return false;
+	} else if (connection.client !== undefined && credentials.oauth.client.id !== connection.client) return false;
 	// what was asked, not what was granted: a scope the owner left out at the consent screen is theirs to add again
 	const asked = credentials.oauth.server.scopes ?? [];
 	return (connection.scopes ?? []).every((scope) => asked.includes(scope));

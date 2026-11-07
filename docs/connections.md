@@ -7,8 +7,16 @@ GitHub ships as a file with its reads, scopes and object definitions. DESIGN.md 
 connect flow and daemon-read objects; DESIGN.md "Watches" follows an object through the same declaration, reading and
 card. Agent-built connections and `propose_connection` are out of scope.
 
+Gmail is a built-in daemon REST adapter: the accepted file declares scoped reads and approval-required writes, while
+the adapter calls Gmail's API directly. Its public desktop OAuth client id and client secret ship with Banda; both can be
+overridden with `BANDA_GOOGLE_CLIENT_ID` and `BANDA_GOOGLE_CLIENT_SECRET` for development. Desktop clients cannot keep
+their secret confidential, and the flow still uses PKCE. The first sign-in asks for read-only access; send and mailbox changes have separate scope
+choices and always use account-bound approval drafts. Email cards render sanitized plain text and retrieve attachments
+through the daemon into the chat's blob store.
+
 Entry points: ../src/core/connections.ts, ../src/core/mcp.ts, ../src/core/mcp-remote.ts, ../src/core/oauth.ts,
-../src/server/capabilities.ts, ../shipped/connections/github.md and ../scripts/shipped-github.ts. Harnesses:
+../src/core/gmail-rest.ts, ../src/server/capabilities.ts, ../shipped/connections/ and
+../scripts/shipped-github.ts. Harnesses:
 ../src/core/acp.ts, ../src/core/harness.ts, ../src/core/harness-files.ts, ../src/server/routes/harnesses.ts,
 ../shipped/harnesses/, ../web/src/chat/Harness.tsx and ../web/src/app/HarnessSession.tsx.
 
@@ -58,6 +66,7 @@ in a throwaway home, at desktop and phone width.
 
 - [x] Accounts: credentials, Settings, switches, the `account` parameter, bindings
 - [x] The connect card by code and by redirect; the callback page for a failed sign-in is plain HTML
+- [x] GitHub and Gmail scope choices live in a dialog; the card stays compact while the owner changes scopes and re-consents
 - [x] Agents using a real GitHub account, read-only in an isolated home
 - [ ] Slice 8's owner review
 - [ ] The `account` parameter is offered to every agent once one has two accounts of a connection: the registry has
@@ -89,13 +98,30 @@ in a throwaway home, at desktop and phone width.
 - [ ] The event line's words from the kind's rules over the reading, the object card beneath, in the specimen
 - [ ] A feed with a cursor (mail's history id) and a service's own subscription with its renewal, declared as data;
   GitHub has neither, so they wait for the mail connection
-- [ ] No built-in email or calendar yet: they follow GitHub as shipped connections
+- [x] Gmail REST: OAuth sign-in, profile, labels, search, message and thread reads; account-bound email objects and cards
+- [x] Gmail chat connection action: on the running throwaway app, Connect Gmail changed to Open Gmail / Waiting for Gmail; this verifies the chat action starts OAuth
+- [x] Gmail OAuth callback and account grant: the owner connected a real Google account and verified Gmail reads through the app
+- [ ] Gmail: complete the app walkthrough at desktop and phone widths, including the connection success toast and compact card; owner acceptance
+- [x] Gmail reads: bounded page tokens and canonical `gmail/<id>` references from search and thread reads; Banda email cards are the canonical view
+- [x] Gmail hardening: text attachment parts stay out of message bodies; long Unicode subjects use folded RFC 2047 words; redirect OAuth sign-in starts on the computer and connected accounts remain usable on paired devices
+- [ ] Gmail reads: try search pagination and thread cards through the running app; owner acceptance
+- [x] Gmail attachments: list metadata and retrieve bounded bytes through the daemon; never render HTML or expose credentials to the box
+- [x] Gmail send: show recipient, subject, body and held attachments in the existing approval draft; send only the approved content and account
+- [x] Gmail mailbox actions: archive, trash, read/unread and label changes as individually named, account-bound approvals
+- [ ] Gmail onboarding: Google OAuth verification and production publication for restricted/sensitive scopes remain external; the public client id ships with the adapter, least-privilege scope bundles and re-consent are wired
+- [ ] Gmail hardening: pagination limits, revoked/expired grants, and approved attachment content-hash verification are covered; bounded retry behavior, additional write/attachment fault coverage and review remain
+- [ ] Gmail: adversarial review and owner walkthrough of every shipped slice, including a throwaway account for send and mailbox changes
+- [ ] Files: Drive and Docs adapters with scoped reads, rich file objects/previews, and approval-backed writes; no Google Workspace MCP token store
 - [x] Harnesses: ACP client, sessions, asks, notes, Stop, the wake; shipped files, banda's adapters and the owner's own; the fault sweep (detached commands included)
 - [x] Harnesses: Claude Code, Codex and pi each fixed a scratch repository through the app; Claude Code's background command was killed with its session
 - [x] Harnesses: an adversarial review (store growth, the home as a project, Stop before open, several asks, detached commands, blind asks) triaged and fixed
 - [x] Harnesses: desktop and phone app walkthrough of delegated status, concurrent sessions, approvals and Stop
 - [x] Harnesses: starts need no extra draft; enablement states host access and the harness's own permissions
 - [x] Harnesses: continuation and revocation regressions, native versus summary mode disclosure, real Codex native resumption through the app; owner authorized landing after final checks
+- [x] Harnesses: the session card, asks and steps sheet in the owner's words (DESIGN.md "Harnesses"): humanized step
+  lines, project name on the card, state in words and announced, folded steps sheet that follows the end, one ask
+  whole at a time with kind verbs and bounded "Show all", quiet ask notification; verified in the real app against a
+  throwaway daemon at desktop and phone width, with axe clean on every screen
 - [ ] Harnesses: Windows process supervision before offering execution on Windows
 - [ ] Harnesses: Gemini CLI, OpenCode, Cursor and Goose are not shipped: each failed or was missing here; they need a spike and a sign-in each
 - [ ] Harnesses: their asks reach the owner only in the web app, not on other gateways; the agent still hears the end

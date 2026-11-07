@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FACE } from "../../../src/core/choices.ts";
 import type { CompanionView } from "../../../src/server/api.ts";
+import { centreBand, pinRow, useBand } from "../areas/band.ts";
 import { archiveGroup, setGroupLimits } from "../areas/groups.ts";
 import { actOnRoutine, clickKey } from "../areas/routines.ts";
 import { useTiers } from "../areas/tiers.ts";
@@ -27,6 +28,7 @@ import { showAgents, showCapabilities, showControl, showMemory, useShell } from 
 import { AccessTab, reachesSomething } from "./Access.tsx";
 import { AgentChat } from "./AgentChat.tsx";
 import { ArtifactPage } from "./ArtifactPage.tsx";
+import { BringOnboarding, BringSettings, useBring } from "./Bring.tsx";
 import { bandRows, titleOf, whoOf } from "./band.ts";
 import { ConnectFlow, freshAccounts } from "./ConnectFlow.tsx";
 import { saveEdit, setAgentState } from "./edits.ts";
@@ -43,7 +45,7 @@ import { SearchDialog } from "./SearchDialog.tsx";
 import { SettingsDevices } from "./SettingsDevices.tsx";
 import { SettingsProviders } from "./SettingsProviders.tsx";
 import { ShortcutsDialog, typing as typingIn } from "./Shortcuts.tsx";
-import { SkillsPage, useSkills } from "./Skills.tsx";
+import { SkillsPage, useSkills, waitsOnOwner } from "./Skills.tsx";
 import { routineTitle } from "./titles.ts";
 import { hrefOf, lastOf, parse, type Where } from "./where.ts";
 
@@ -79,7 +81,6 @@ function usePhone(): boolean {
 
 const SERVICES = [
 	{ id: "gmail", name: "Gmail", does: "Read and draft email" },
-	{ id: "calendar", name: "Google Calendar", does: "Your days and invites" },
 	{ id: "linear", name: "Linear", does: "Issues and cycles" },
 	{ id: "slack", name: "Slack", does: "Channels and messages" },
 	{ id: "notion", name: "Notion", does: "Pages and databases" },
@@ -88,6 +89,7 @@ const SERVICES = [
 export function Shell() {
 	const tiers = useTiers();
 	const [shipped, setShipped] = useShippedSkills();
+	const [brought, setBrought] = useBring();
 	// first run until the band can think: a provider with a credential, and not one from outside banda that the owner
 	// never picked (a stale ANTHROPIC_API_KEY would otherwise skip this screen and fail every answer)
 	const current = tiers?.providers.find((provider) => provider.id === tiers.provider.id);
@@ -97,8 +99,22 @@ export function Shell() {
 				<Onboarding />
 			</div>
 		);
-	// right after the provider, once: the skills banda ships
-	if (shipped === undefined) return <div className="h-svh bg-paper" />;
+	// right after the provider, once: in the desktop app, what the other harnesses on this computer have; when the owner
+	// brings nothing from them (or there are none), the skills banda ships
+	if (brought === undefined || shipped === undefined) return <div className="h-svh bg-paper" />;
+	if (!brought.view.chosen)
+		return (
+			<div className="h-svh bg-paper">
+				<BringOnboarding
+					view={brought.view}
+					harnesses={brought.harnesses}
+					onChosen={(next, brought) => {
+						if (brought) setShipped({ ...shipped, chosen: true });
+						setBrought({ view: next });
+					}}
+				/>
+			</div>
+		);
 	if (!shipped.chosen)
 		return (
 			<div className="h-svh bg-paper">
@@ -141,7 +157,9 @@ function Main() {
 	};
 	const where = useWhere();
 	const phone = usePhone();
-	const [panel, setPanel] = useState(true);
+	const { pinned, centred } = useBand();
+	// closed by default, so the screen is the conversation; it opens for what needs room (a routine, the face tapped)
+	const [panel, setPanel] = useState(false);
 	const [sheet, setSheet] = useState(false);
 	const [searching, setSearching] = useState(false);
 	const [shortcuts, setShortcuts] = useState(false);
@@ -212,6 +230,9 @@ function Main() {
 			return;
 		}
 		if (phone || !shell.loaded) return;
+		// `where` is the render's; the address may have moved on since (a link followed, a hash set before its
+		// hashchange arrived). Only home goes to the last chat: never overwrite where the owner already went.
+		if (parse(location.hash).name !== "home") return;
 		let stored: string | null = null;
 		try {
 			stored = localStorage.getItem(LAST);
@@ -282,6 +303,10 @@ function Main() {
 	const band = (
 		<Band
 			rows={rows}
+			pinned={pinned}
+			centred={centred}
+			onPin={pinRow}
+			phone={phone}
 			selected={selected}
 			loading={!shell.loaded}
 			{...(phone ? { className: "w-full" } : {})}
@@ -292,6 +317,14 @@ function Main() {
 			}}
 			onSearch={() => setSearching(true)}
 			onNew={() => setMaking(true)}
+			onSkills={() => go({ name: "skills" })}
+			waiting={{
+				skills: skillViews.some(waitsOnOwner),
+				// a problem, or an account to sign in to again; a change to a connection's file is answered in the chat
+				connections: (shell.capabilities?.connections ?? []).some(
+					(view) => view.state === "problem" || (view.accounts ?? []).some((account) => account.stale === true),
+				),
+			}}
 			onConnections={() => go({ name: "connections" })}
 			onSettings={() => go({ name: "settings" })}
 		/>
@@ -515,6 +548,7 @@ function Main() {
 			return (
 				<SettingsPage title="Settings" phone={phone} onBack={back}>
 					<AppSettings
+						bring={<BringSettings />}
 						memory={
 							<MemorySettings
 								memory={shell.memory}
@@ -569,6 +603,7 @@ function Main() {
 										: new Date(each.at).toLocaleDateString([], { day: "numeric", month: "short" }),
 							})),
 							theme,
+							centred,
 							paused: shell.control?.paused !== undefined,
 							...(shell.computer === undefined ? {} : { computer: shell.computer }),
 							signedIn: (shell.capabilities?.signedIn ?? []).map(({ agent, site, at }) => ({
@@ -582,6 +617,7 @@ function Main() {
 						providers={<SettingsProviders current={tiers?.provider.id ?? ""} />}
 						devices={<SettingsDevices />}
 						onTheme={setTheme}
+						onCentred={centreBand}
 						onPause={(paused) => void setPaused(paused)}
 						onConnect={() => go({ name: "connections" })}
 						onSignOut={(agent, site) => void signOutSite(agent, site).then(showCapabilities)}
@@ -625,9 +661,12 @@ function Main() {
 				return {
 					id: name,
 					name: view?.accepted?.connection?.service ?? shipped?.connection.service ?? name,
+					url: view?.accepted?.connection?.url ?? shipped?.connection.url,
 					does: name === "github" ? "Pull requests, issues, checks" : (view?.accepted?.connection?.where ?? ""),
 					accounts: freshAccounts(view).map((account) => account.label),
 					managed: view?.agents !== undefined,
+					stale: (view?.accounts ?? []).filter((account) => account.stale === true).map((account) => account.label),
+					problem: view?.state === "problem" ? (view.problem ?? "Not reached") : undefined,
 				};
 			});
 			return (
@@ -647,7 +686,7 @@ function Main() {
 							...(services.length === 0
 								? [{ id: "github", name: "GitHub", does: "Pull requests, issues, checks", accounts: [] }]
 								: services),
-							...SERVICES,
+							...SERVICES.filter((service) => !services.some((existing) => existing.id === service.id)),
 						]}
 						connect={(service, close) =>
 							service.accounts === undefined ? null : capabilities?.connections.find((each) => each.name === service.id)
@@ -674,11 +713,16 @@ function Main() {
 		<div className="flex h-svh bg-paper text-ink">
 			{showBand ? band : null}
 			{phone && where.name === "home" ? null : <main className="flex min-w-0 flex-1">{main}</main>}
-			{making ? <NewSheet open={making} onOpenChange={setMaking} agents={agents} onGo={go} /> : null}
+			{/* mounted while closed, so Esc or a click outside keeps a half-written agent */}
+			<NewSheet open={making} onOpenChange={setMaking} agents={agents} onGo={go} />
 			<BrowserDialog who={(chat) => whoOf(agents, shell.rows.find((each) => each.chat === chat)?.agent ?? "sancho")} />
 			<SearchDialog
 				open={searching}
 				onOpenChange={setSearching}
+				rows={rows}
+				agents={agents}
+				skills={skillSummaries}
+				phone={phone}
 				whoOf={(agent) => whoOf(agents, agent)}
 				groupName={(room) => shell.groups?.find((group) => group.room === room)?.name ?? "a group"}
 				onGo={go}

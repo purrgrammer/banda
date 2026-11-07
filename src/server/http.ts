@@ -42,6 +42,7 @@ import type {
 	ShellEvent,
 	ViewEvent,
 } from "./api.ts";
+import type { BringPick, BringView } from "./bring.ts";
 import type { ObjectAsk, ObjectShown } from "./objects.ts";
 import { SERVED_POLICY } from "./policy.ts";
 import { endpointOf } from "./remote.ts";
@@ -116,6 +117,13 @@ export type Routes = {
 	readonly shippedSkills: () => Promise<ShippedSkillsView>;
 	/** Add the shipped skills picked, accepted; none skips. Either way they are not offered again. */
 	readonly chooseShippedSkills: (names: readonly string[]) => Promise<ShippedSkillsView>;
+	/** What the other harnesses on this computer have to import, and whether the owner chose at first run. */
+	readonly bringable: () => Promise<BringView>;
+	/** Import the skills and agents picked; none skips. Either way the step is not offered again. */
+	readonly chooseBring: (picks: {
+		readonly skills: readonly BringPick[];
+		readonly agents: readonly BringPick[];
+	}) => Promise<BringView>;
 	/** Throws `BadRequest` when the file changed since `sha` was shown, or does not parse. */
 	readonly accept: (name: string, sha: string | null) => Promise<AgentView[]>;
 	readonly decline: (name: string) => Promise<AgentView[]>;
@@ -145,6 +153,7 @@ export type Routes = {
 	readonly signIn: (
 		name: string,
 		agent?: string,
+		onDevice?: boolean,
 	) => Promise<
 		| { readonly url: string }
 		| { readonly code: string; readonly page: string; readonly expires: number }
@@ -162,6 +171,14 @@ export type Routes = {
 	 * as the account its agent uses, the connect card, or a plain link; `refresh`, the owner tapped one.
 	 */
 	readonly objects?: (chat: number, asks: readonly ObjectAsk[], refresh: boolean) => Promise<ObjectShown[]>;
+	/** Fetch an attachment named by an authorized Gmail object; bytes are stored as a held blob before publishing. */
+	readonly objectAttachment?: (
+		chat: number,
+		ref: string,
+		attachmentId: string,
+		agent?: string,
+		account?: string,
+	) => Promise<Attachment | undefined>;
 	/** Chat `chat`'s tab as the owner sees it: its state, and its frames while they watch, until `signal` aborts. */
 	readonly browser?: (chat: number, write: (event: ViewEvent) => void, signal: AbortSignal) => Promise<void>;
 	/** The owner takes chat `chat`'s tab, or gives it back; throws `BadRequest` with why not. */
@@ -306,7 +323,13 @@ export function handler(
 			if (!(await remote.paired(device))) return reply(res, 403, { error: "this device is not paired" });
 			remote.heard?.(device, req.method ?? "GET", url.pathname);
 		}
-		if (url.pathname === "/oauth/callback" && req.method === "GET") {
+		if (
+			req.method === "GET" &&
+			(url.pathname === "/oauth/callback" ||
+				(url.pathname === "/" &&
+					url.searchParams.has("state") &&
+					(url.searchParams.has("code") || url.searchParams.has("error"))))
+		) {
 			// a sign-in coming back: no token (a browser redirect carries none), its state names the sign-in, once
 			const param = (name: string) => url.searchParams.get(name) ?? undefined;
 			const state = param("state");
@@ -551,6 +574,25 @@ export function handler(
 				return reply(res, 400, { error: "add is the names of the shipped skills picked; none skips" });
 			return reply(res, 200, await routes.chooseShippedSkills(add));
 		}
+		if (route === "GET /bring") return reply(res, 200, await routes.bringable());
+		if (route === "POST /bring") {
+			const { skills, agents } = await json(req);
+			const picks = (list: unknown): BringPick[] | undefined =>
+				Array.isArray(list) &&
+				list.every(
+					(pick) =>
+						typeof pick === "object" &&
+						pick !== null &&
+						typeof pick.harness === "string" &&
+						typeof pick.name === "string",
+				)
+					? list.map(({ harness, name }: BringPick) => ({ harness, name }))
+					: undefined;
+			const wanted = { skills: picks(skills), agents: picks(agents) };
+			if (wanted.skills === undefined || wanted.agents === undefined)
+				return reply(res, 400, { error: "skills and agents are lists of { harness, name } picked; none skips" });
+			return reply(res, 200, await routes.chooseBring({ skills: wanted.skills, agents: wanted.agents }));
+		}
 		const skill = /^\/skills\/([a-z0-9-]+)(?:\/(accept))?$/.exec(path);
 		if (skill !== null) {
 			const [, name = "", action] = skill;
@@ -661,6 +703,29 @@ export function handler(
 			});
 			return reply(res, 200, await routes.objects(chat, checked, refresh === true));
 		}
+		if (route === "POST /objects/attachment" && routes.objectAttachment !== undefined) {
+			const { chat, ref, attachmentId, agent, account } = await json(req);
+			if (typeof chat !== "number" || !Number.isSafeInteger(chat) || chat <= 0)
+				throw new BadRequest("chat is a chat's number");
+			if (typeof ref !== "string" || ref.length === 0 || ref.length > 500)
+				throw new BadRequest("ref names a Gmail message");
+			if (typeof attachmentId !== "string" || attachmentId.length === 0 || attachmentId.length > 500)
+				throw new BadRequest("attachmentId names an attachment on that message");
+			if (agent !== undefined && (typeof agent !== "string" || agent.length > 100))
+				throw new BadRequest("agent is a member's name");
+			if (account !== undefined && (typeof account !== "string" || account.length > 100))
+				throw new BadRequest("account is a connection account");
+			const file = await routes.objectAttachment(
+				chat,
+				ref,
+				attachmentId,
+				agent as string | undefined,
+				account as string | undefined,
+			);
+			return file === undefined
+				? reply(res, 404, { error: "no such authorized Gmail attachment" })
+				: reply(res, 200, file);
+		}
 		if (route === "GET /capabilities") return reply(res, 200, await routes.capabilities());
 		if (route === "POST /capabilities/mcp" && routes.addMcp !== undefined)
 			return reply(res, 200, await routes.addMcp(await json(req)));
@@ -678,7 +743,7 @@ export function handler(
 				const { agent } = await json(req);
 				if (agent !== undefined && (typeof agent !== "string" || !/^[a-z0-9-]{1,64}$/.test(agent)))
 					throw new BadRequest("agent names an agent");
-				return reply(res, 200, await routes.signIn(name, agent as string | undefined));
+				return reply(res, 200, await routes.signIn(name, agent as string | undefined, device !== undefined));
 			}
 			if (action === "accept") {
 				const { sha } = await json(req);
@@ -730,10 +795,19 @@ export function handler(
 			return reply(res, 404, { error: "not found" });
 		}
 		// an account of a connection: switched on or off for an agent, or signed out
-		const account =
-			/^\/capabilities\/connections\/([a-z0-9-]{1,64})\/accounts\/([a-z0-9._@+-]{1,100})\/(switch|signout)$/.exec(path);
+		const account = /^\/capabilities\/connections\/([a-z0-9-]{1,64})\/accounts\/([^/]{1,300})\/(switch|signout)$/.exec(
+			path,
+		);
 		if (account !== null && req.method === "POST") {
-			const [, name = "", key = "", action] = account;
+			const [, name = "", encodedKey = "", action] = account;
+			let key: string;
+			try {
+				key = decodeURIComponent(encodedKey);
+			} catch {
+				throw new BadRequest("account key is not valid URL encoding");
+			}
+			if (!/^[a-z0-9][a-z0-9._@+-]{0,99}$/.test(key) || key.includes(".."))
+				throw new BadRequest("account key is invalid");
 			if (action === "signout")
 				return reply(res, 200, await routes.capability({ action: "signout", name, account: key }));
 			const { agent, on, sha } = await json(req);

@@ -19,7 +19,7 @@ import { type Daemon, startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { ChatRow, GroupView, Item, ItemPage, Posted } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, until } from "./helpers.ts";
+import { freePort, skipShippedSkills, tempHome, until, viteCacheDir } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 let daemon: Daemon;
@@ -161,9 +161,11 @@ beforeAll(async () => {
 	}
 	web = await createServer({
 		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
+		cacheDir: await viteCacheDir(),
 		server: {
 			host: "127.0.0.1",
-			port: 0,
+			port: await freePort(),
+			strictPort: true,
 			open: false,
 			proxy: {
 				"/api": {
@@ -411,6 +413,104 @@ it.skipIf(!hasChrome())(
 			await noOverflow(page);
 			expect(page.errors()).toEqual([]);
 		});
+	},
+	30000,
+);
+
+it.skipIf(!hasChrome())(
+	"a message sent while the agent works shows dimmed as waiting its turn, then as sent once the agent takes it",
+	async () => {
+		gate = new Promise((resolve) => {
+			release = resolve;
+		});
+		entered = false;
+		const write = (value: string) =>
+			`(()=>{const el=document.querySelector('textarea[name="message"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));})()`;
+		const button = (label: string) => `document.querySelector('form button[aria-label="${label}"]')`;
+		const waiting = `[...document.querySelectorAll('.opacity-60')].some(el => el.textContent.includes('BROWSER_STEER_NOTE') && el.textContent.includes('Waiting its turn'))`;
+		try {
+			await withPage(`${base}/#token=${token}`, { width: 1440, height: 900 }, async (page) => {
+				await open(page, "#/a/sancho");
+				await page.until(`document.querySelector('textarea[name="message"]')`);
+				await page.run(write("BROWSER_STEER_LIVE"));
+				await page.run(`document.querySelector('textarea[name="message"]').closest('form').requestSubmit()`);
+				await until(() => Promise.resolve(entered));
+				// working with nothing written: Stop; with words: Send
+				await page.until(`${button("Stop")} && !${button("Send")}`);
+				await page.run(write("BROWSER_STEER_NOTE"));
+				await page.until(`${button("Send")} && !${button("Stop")}`);
+				await page.run(`${button("Send")}.click()`);
+				// queued behind the run: dimmed, waiting its turn, and the composer empty again
+				await page.until(waiting);
+				await page.until(`document.querySelector('textarea[name="message"]').value === '' && ${button("Stop")}`);
+				release();
+				gate = undefined;
+				await idle();
+				// taken by the agent: shown as sent, no longer waiting
+				await page.until(
+					`!document.body.textContent.includes('Waiting its turn') && [...document.querySelectorAll('[data-slot]'), ...document.querySelectorAll('div')].some(el => el.textContent === 'BROWSER_STEER_NOTE')`,
+				);
+				expect(await page.run(waiting)).toBe(false);
+				expect(page.errors()).toEqual([]);
+			});
+		} finally {
+			release();
+			gate = undefined;
+		}
+	},
+	30000,
+);
+
+it.skipIf(!hasChrome())(
+	"in a group while a member works: Send shows once written, the message joins the room at once, and the draft keeps its file",
+	async () => {
+		gate = new Promise((resolve) => {
+			release = resolve;
+		});
+		entered = false;
+		const field = `document.querySelector('textarea[name="message"]')`;
+		const write = (value: string) =>
+			`(()=>{const el=${field};Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));})()`;
+		const button = (label: string) => `document.querySelector('form button[aria-label="${label}"]')`;
+		const attached = `[...document.querySelectorAll('[data-attachment]')].map(el => el.dataset.attachment)`;
+		try {
+			await withPage(`${base}/#token=${token}`, { width: 390, height: 900 }, async (page) => {
+				await open(page, `#/g/${room}`);
+				await page.until(field);
+				await api(`/groups/${room}/messages`, { key: randomUUID(), text: "GROUP_STEER_LIVE", mentions: ["sancho"] });
+				await until(() => Promise.resolve(entered));
+				// a member at work, nothing written: Stop; words: Send
+				await page.until(`${button("Stop")} && !${button("Send")}`);
+				await page.run(write("GROUP_STEER_NOTE"));
+				await page.until(`${button("Send")} && !${button("Stop")}`);
+				// the draft, words and a file, survives a reload
+				await page.run(`(() => {
+					const input = document.querySelector('input[type="file"]');
+					const files = new DataTransfer();
+					files.items.add(new File(["seat 12A"], "group-notes.txt", { type: "text/plain" }));
+					input.files = files.files;
+					input.dispatchEvent(new Event("change", { bubbles: true }));
+				})()`);
+				await page.until(`${attached}.includes('group-notes.txt')`);
+				await new Promise((resolve) => setTimeout(resolve, 500));
+				await page.run(`location.reload()`);
+				await page.until(`${field}?.value === 'GROUP_STEER_NOTE'`);
+				await page.until(`${attached}.includes('group-notes.txt')`);
+				// sent while the member works: in the room at once, the composer empty, Stop back
+				await page.run(`${button("Send")}.click()`);
+				await page.until(
+					`[...document.querySelectorAll('[data-entry]')].some(el => el.textContent.includes('GROUP_STEER_NOTE'))`,
+				);
+				await page.until(`${field}.value === '' && ${attached}.length === 0 && ${button("Stop")}`);
+				release();
+				gate = undefined;
+				expect(await page.run(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
+				expect(page.errors()).toEqual([]);
+			});
+		} finally {
+			release();
+			gate = undefined;
+		}
 	},
 	30000,
 );

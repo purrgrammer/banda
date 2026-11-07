@@ -9,12 +9,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 import { expect, it } from "vitest";
+import { INVITE_MS } from "../src/core/devices.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { DevicesView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { testDevice } from "./fixtures/iroh-client.ts";
-import { echoModels, skipShippedSkills, tempHome } from "./helpers.ts";
+import { echoModels, freePort, skipShippedSkills, tempHome, viteCacheDir } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const labelled = (label: string) =>
@@ -65,9 +66,11 @@ for (const width of [390, 1280])
 			const phone = await testDevice();
 			const server = await createServer({
 				configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
+				cacheDir: await viteCacheDir(),
 				server: {
 					host: "127.0.0.1",
-					port: 0,
+					port: await freePort(),
+					strictPort: true,
 					open: false,
 					proxy: { "/api": { target: base, changeOrigin: true, headers: { origin: base } } },
 				},
@@ -77,16 +80,25 @@ for (const width of [390, 1280])
 				const address = server.httpServer!.address();
 				if (!address || typeof address === "string") throw new Error("No app port");
 				await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
-					await page.until(`document.body.textContent.includes('Sancho')`, 30000);
+					await page.until(`document.body.textContent.includes('Sancho')`);
 					await page.until(
 						`(location.hash.startsWith('#/settings') || (location.hash='#/settings', false)) && ${tab("Devices")}`,
 					);
 					await click(page, tab("Devices"));
 					await page.until(`${text}.includes('No phone paired yet')`);
 
+					// the code lives ten minutes from when it was made: what the countdown shows is bounded by the time that
+					// really passed around the click, not by a guess at how fast this machine is
+					const before = Date.now();
 					await click(page, button("Pair a phone"));
 					await page.until(labelled("Code to scan with banda on your phone"));
-					expect(await page.run<string>(text)).toMatch(/Works for 10:00|Works for 9:5\d/);
+					await page.until(`${text}.includes('Works for ')`);
+					const countdownShown = /Works for (\d+):(\d\d)/.exec(await page.run<string>(text));
+					const passed = Math.ceil((Date.now() - before) / 1000);
+					expect(countdownShown).not.toBeNull();
+					const left = Number(countdownShown![1]) * 60 + Number(countdownShown![2]);
+					expect(left).toBeLessThanOrEqual(INVITE_MS / 1000);
+					expect(left).toBeGreaterThanOrEqual(INVITE_MS / 1000 - passed - 1);
 					const endpoint = (await devices()).endpoint!.id;
 					// the code the phone shows for this computer while it asks
 					expect(await page.run<string>(text)).toContain(
@@ -99,10 +111,13 @@ for (const width of [390, 1280])
 
 					await click(page, button("Details"));
 					await page.until(`${text}.includes('Pairing link')`);
+					// the link and the ids stay out of the text, short; Copy carries them whole
 					const pairing = await page.run<string>(
-						`[...document.querySelectorAll('dt')].find(el => el.textContent === 'Pairing link').nextElementSibling.textContent`,
+						`[...document.querySelectorAll('dt')].find(el => el.textContent === 'Pairing link').nextElementSibling.querySelector('[data-copy]').dataset.copy`,
 					);
-					expect(await page.run<string>(text)).toContain(endpoint);
+					expect(await page.run<string>(text)).not.toContain(pairing);
+					expect(await page.run<string>(text)).toContain(`${endpoint.slice(0, 8)}…${endpoint.slice(-8)}`);
+					expect(await page.run<boolean>(`!!document.querySelector('[data-copy="${endpoint}"]')`)).toBe(true);
 					const link = new URL(pairing);
 					await phone.dial(link.searchParams.get("ticket")!);
 					expect(

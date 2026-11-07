@@ -3,13 +3,24 @@
  * blob and the commit that refers to it leaves a file nothing refers to, never a reference to nothing; the sweep takes
  * what no chat holds and what a crash left, and nothing else.
  */
+
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
 import { utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createRegistry, type Harness } from "@earendil-works/pi-durable";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Attachment, BlobStore, Blobs, hold, release, safeName } from "../src/core/blobs.ts";
+import {
+	type Attachment,
+	BlobStore,
+	Blobs,
+	blobHash,
+	hasBlobHash,
+	hold,
+	release,
+	safeName,
+} from "../src/core/blobs.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { echoModels, tempHome } from "./helpers.ts";
 import { pbtRuns } from "./pbt.ts";
@@ -80,6 +91,14 @@ describe("blobs", () => {
 		expect(safeName('re"port\n.pdf')).toBe("re_port_.pdf");
 		expect(safeName("..")).toBe("file");
 		expect(safeName("")).toBe("file");
+	});
+
+	it("uses the stored hash to detect bytes that changed after they were approved", async () => {
+		const bytes = Buffer.from("approved contents");
+		const sha = blobHash(bytes);
+		expect(createHash("sha256").update(bytes).digest("hex")).toBe(sha);
+		expect(hasBlobHash(sha, bytes)).toBe(true);
+		expect(hasBlobHash(sha, Buffer.from("changed contents"))).toBe(false);
 	});
 
 	it("property: whatever crashes and sweeps happen, no row refers to a missing file, and a held blob stays", async () => {

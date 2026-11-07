@@ -26,20 +26,35 @@ export const ConversationContent = ({ className, ...props }: ConversationContent
 );
 
 /** Back to the newest, while the reader is scrolled up: how many arrived meanwhile, when known. */
-export const ConversationScrollButton = ({ className, count }: { className?: string; count?: number }) => {
+export const ConversationScrollButton = ({
+	className,
+	count,
+	label = "Latest",
+}: {
+	className?: string;
+	count?: number;
+	label?: string;
+}) => {
 	const { isAtBottom, scrollToBottom } = useStickToBottomContext();
 	if (isAtBottom) return null;
+	// a reader who asked for reduced motion gets there at once, not by a spring
+	const jump = () =>
+		void scrollToBottom(
+			typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches
+				? "instant"
+				: undefined,
+		);
 	return (
 		<button
 			type="button"
-			onClick={() => void scrollToBottom()}
+			onClick={jump}
 			className={cn(
 				"absolute bottom-3 left-1/2 inline-flex h-8 -translate-x-1/2 items-center gap-1.5 rounded-full bg-paper px-3 text-meta font-medium text-ink shadow-composer",
 				className,
 			)}
 		>
 			<ArrowDownIcon className="size-3.5" />
-			{count === undefined || count === 0 ? "Latest" : `${count} new`}
+			{count === undefined || count === 0 ? label : `${count} new`}
 		</button>
 	);
 };

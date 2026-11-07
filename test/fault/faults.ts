@@ -52,6 +52,10 @@ export type FaultPoint =
 	| "oauth:kept"
 	| "oauth:device"
 	| "shipped:written"
+	/** Bringing from the other harnesses: the skills written, then accepted, then each agent saved. */
+	| "bring:written"
+	| "bring:accepted"
+	| "bring:agent"
 	| "address:written"
 	| "trust:written"
 	| "nosignin:written"
@@ -75,6 +79,11 @@ export type FaultPoint =
 	| "object:read"
 	| "object:answered"
 	| "object:kept"
+	/** A Gmail attachment: read, bytes received, blob put, and object/blob hold committed. */
+	| "object:attachment:read"
+	| "object:attachment:received"
+	| "object:attachment:stored"
+	| "object:attachment:kept"
 	/** A web_fetch read: before its request goes, and once it answered, before the read is taken into the store. */
 	| "fetch"
 	| "fetch:answered"

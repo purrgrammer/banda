@@ -17,7 +17,7 @@ import { WaitingPill } from "../chat/Approval.tsx";
 import { Composer } from "../chat/Composer.tsx";
 import { Bubble, Run } from "../chat/Feed.tsx";
 import { Starters } from "../chat/FirstRun.tsx";
-import { Header } from "../chat/Header.tsx";
+import { HEADER_CLEARANCE, Header } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { ChatLoading } from "../chat/Loading.tsx";
 import type { Who } from "../chat/Row.tsx";
@@ -119,7 +119,7 @@ export function AgentChat({
 			: [];
 	});
 	return (
-		<div className="flex min-w-0 flex-1 flex-col bg-paper">
+		<div className="feed-scope relative flex min-w-0 flex-1 flex-col bg-paper">
 			<Header
 				name={who.name}
 				faces={[who]}
@@ -142,8 +142,8 @@ export function AgentChat({
 			)}
 			{row === undefined ? (
 				<>
-					<div className="min-h-0 flex-1 overflow-y-auto">
-						<div className="mx-auto flex w-full max-w-[44rem] flex-col gap-3 px-4 py-5">
+					<div className="feed-scroll min-h-0 flex-1 overflow-y-auto">
+						<div className={`mx-auto flex w-full max-w-[44rem] flex-col gap-3 px-4 pb-5 ${HEADER_CLEARANCE}`}>
 							<Run who={who} compact>
 								<Bubble>{firstWords(who.name, tools)}</Bubble>
 							</Run>
@@ -252,10 +252,24 @@ function Timeline({
 			view(
 				linkedItems,
 				transcript.waits,
-				{ busy: transcript.busy, running: transcript.running, thinking: transcript.thinking },
+				{
+					busy: transcript.busy,
+					running: transcript.running,
+					thinking: transcript.thinking,
+					// the owner's messages waiting for the run (a steer, or a follow-up), dimmed until the agent takes them
+					queued: transcript.queued,
+				},
 				context,
 			),
-		[linkedItems, transcript.waits, transcript.busy, transcript.running, transcript.thinking, context],
+		[
+			linkedItems,
+			transcript.waits,
+			transcript.busy,
+			transcript.running,
+			transcript.thinking,
+			transcript.queued,
+			context,
+		],
 	);
 	// the divider sits after the last segment from an entry the owner had read when the chat opened, and only when
 	// something unread was already there then: what arrives while the owner watches is not unread
@@ -311,8 +325,8 @@ function Timeline({
 	return (
 		<Conversation className="flex flex-col">
 			<ConversationContent
-				scrollClassName="min-h-0 flex-1 overflow-y-auto"
-				className="mx-auto w-full max-w-[44rem] px-4 py-5"
+				scrollClassName="feed-scroll min-h-0 flex-1 overflow-y-auto"
+				className={`mx-auto w-full max-w-[44rem] px-4 pb-5 ${HEADER_CLEARANCE}`}
 			>
 				{transcript.older ? (
 					<button

@@ -1,7 +1,9 @@
 /** The panel, settings and connections: the agent beside its chat, what opens there, and the pages behind the gear. */
 import { isValidElement, type ReactNode, useContext } from "react";
 import { Button } from "@/components/ui/button";
+import { Tabs } from "@/components/ui/tabs";
 import { DraftApproval } from "../app/DraftApproval.tsx";
+import { MakeTabsList } from "../app/NewSheet.tsx";
 import { ObjectReading } from "../app/Objects.tsx";
 import { ApprovalCard } from "../chat/Approval.tsx";
 import { BrowserWindow } from "../chat/Browser.tsx";
@@ -167,13 +169,37 @@ export function PanelSections() {
 			<Section
 				id="panel-app"
 				title="A chat and its panel"
-				note="On wide screens the panel is open by default; on the phone the header's name opens it as a sheet."
+				note="The panel is closed by default, so the screen is the conversation. It opens for what needs room: a routine's line, a new routine, the face or the name tapped. Here a routine's line opened it on Routines. On the phone it is a sheet."
 				bleed
 				wide
 			>
 				{phone ? null : <Band rows={ROWS} selected="mara" />}
-				{phone ? null : <MaraChat />}
-				<AgentPanelOf who={MARA} state="waiting" phone={phone} />
+				{phone ? null : <MaraChat panelOpen />}
+				<AgentPanelOf who={MARA} state="waiting" phone={phone} tab="routines" />
+			</Section>
+			<Section
+				id="connections-signed-in"
+				title="Connections after sign-in"
+				note="The account row and switch confirm sign-in. When a service gives no account name, use the connection's name. A supplied icon replaces the initial; the initial remains the fallback."
+			>
+				<div className="max-w-md">
+					<Connections
+						agent="Sancho"
+						rows={[
+							{ connection: "GitHub", accounts: [{ login: "@purrgrammer", on: true }] },
+							{
+								connection: "Vercel",
+								icon: (
+									<svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
+										<path d="M12 3 24 23H0Z" fill="currentColor" />
+									</svg>
+								),
+								accounts: [{ login: "Vercel", on: true }],
+							},
+							{ connection: "My workspace", accounts: [{ login: "My workspace", on: true }] },
+						]}
+					/>
+				</div>
 			</Section>
 			<Section
 				id="panel"
@@ -415,6 +441,17 @@ export function PanelSections() {
 				bleed
 			>
 				<SettingsPage title="New agent" phone footer={<Button className="flex-1">Add to the band</Button>}>
+					<div className="flex flex-col gap-2">
+						<p className="text-meta font-medium text-ink-2">Agent or group: tabs, so the arrow keys switch</p>
+						<span className="flex gap-3">
+							<Tabs defaultValue="agent">
+								<MakeTabsList />
+							</Tabs>
+							<Tabs defaultValue="group">
+								<MakeTabsList />
+							</Tabs>
+						</span>
+					</div>
 					<FaceAndName who={{ ...OTTO, name: "" }} autoFocus={false} />
 					<Personality starters />
 				</SettingsPage>
@@ -577,6 +614,7 @@ export function PanelSections() {
 				<div className="grid gap-6 lg:grid-cols-2">
 					<Specimen label="Quiet actions and details · long metadata">
 						<ObjectReading
+							chat={1}
 							onRefresh={() => {}}
 							shown={{
 								shown: "card",

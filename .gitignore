@@ -12,3 +12,6 @@ dist/
 __pycache__/
 
 release/
+
+# git worktrees of feature branches
+.worktrees/

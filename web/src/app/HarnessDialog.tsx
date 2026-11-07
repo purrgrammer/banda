@@ -24,6 +24,7 @@ import { FolderBrowser, folderName, projectsIn, projectsWord } from "../chat/Fol
 import { HarnessMark } from "../chat/Harness.tsx";
 import type { FolderListing } from "../lib/api.ts";
 import { chatAgents } from "../lib/navigation.ts";
+import { useReturnFocus } from "../lib/return-focus.ts";
 import { useShell } from "../lib/shell.ts";
 
 type Step = "pick" | "own" | "folder" | "review";
@@ -45,6 +46,8 @@ export function HarnessDialog({
 	agent?: { readonly id: string; readonly name: string } | undefined;
 }) {
 	const shell = useShell();
+	// opened from state (Connect, Edit, an agent's Access), with no Radix trigger: closed, focus returns to the opener
+	const returnFocus = useReturnFocus(open);
 	const view = shell.harnesses;
 	const current = useRef(view);
 	current.current = view;
@@ -120,7 +123,10 @@ export function HarnessDialog({
 	const asksNothing = chosen?.custom === true || ASKS_NOTHING.test(chosen?.asks ?? "");
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[min(44rem,calc(100dvh-2rem))] flex-col gap-4 sm:max-w-lg">
+			<DialogContent
+				onCloseAutoFocus={returnFocus}
+				className="flex max-h-[min(44rem,calc(100dvh-2rem))] flex-col gap-4 sm:max-w-lg"
+			>
 				<DialogHeader>
 					<DialogTitle>
 						{step === "pick" || step === "own"

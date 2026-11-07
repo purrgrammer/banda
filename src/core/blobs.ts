@@ -23,6 +23,12 @@ export type Attachment = {
 /** The scheme a blob is linked by in text, `[name](sha256:<hex>)`: a digest, as OCI and subresource integrity write one. */
 export const BLOB_SCHEME = "sha256:";
 
+/** The content address for bytes stored beside the store. */
+export const blobHash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+
+/** Whether bytes still match the content address recorded in an approval or hold. */
+export const hasBlobHash = (sha: string, bytes: Uint8Array) => blobHash(bytes) === sha;
+
 /** An attachment as a link in markdown, which clients show as the file itself. */
 export const blobLink = ({ name, sha }: Pick<Attachment, "name" | "sha">) =>
 	`[${name.replace(/[[\]]/g, "_")}](${BLOB_SCHEME}${sha})`;
@@ -46,10 +52,16 @@ export const tooBig = (name: string, size: number, limit: number) =>
 export const attachmentLine = (file: Attachment) => `${blobLink(file)} (${file.mimeType}, ${sizeOf(file.size)})`;
 
 /** Who put an attachment into a chat: the owner sent it, or an agent did. */
-export type From = "owner" | "agent";
+export type From = "owner" | "agent" | "connection";
 
 /** A hold on a blob, a chat's or an artifact's: the name it knows it by, who brought it, and when. */
-export type Hold = { readonly name: string; readonly from: From; readonly at: number };
+export type Hold = {
+	readonly name: string;
+	readonly from: From;
+	readonly at: number;
+	readonly connection?: string;
+	readonly account?: string;
+};
 
 /** What holds a blob besides a chat (whose key is its number): an artifact, by its id. */
 export const artifactHolder = (id: string) => `artifact:${id}`;
@@ -105,7 +117,7 @@ export class BlobStore {
 
 	/** Store `bytes` (a no-op when they are stored already) and resolve with their sha. Call inside `exclusive`. */
 	async put(bytes: Uint8Array): Promise<string> {
-		const sha = createHash("sha256").update(bytes).digest("hex");
+		const sha = blobHash(bytes);
 		const final = this.path(sha);
 		if (
 			await stat(final).then(
@@ -170,15 +182,31 @@ export class BlobStore {
  * Record that `holder` (a chat, or `artifactHolder(id)`) holds `attachment`, brought by `from`, in the commit that
  * refers to it.
  */
-export async function hold(tx: Tx, holder: number | string, attachment: Attachment, from: From, at: number) {
+export async function hold(
+	tx: Tx,
+	holder: number | string,
+	attachment: Attachment,
+	from: From,
+	at: number,
+	source?: { readonly connection: string; readonly account: string },
+) {
 	const { blobs } = await tx.doc(Blobs);
 	blobs[attachment.sha] ??= { size: attachment.size, mimeType: attachment.mimeType, at, holders: {} };
 	const blob = blobs[attachment.sha];
-	if (blob !== undefined) blob.holders[holder] = { name: attachment.name, from, at };
+	if (blob !== undefined) blob.holders[holder] = { name: attachment.name, from, at, ...(source ?? {}) };
 }
 
 /** Release every blob `holder` holds, as its removal does; the sweep deletes those nothing else holds. */
 export async function release(tx: Tx, holder: number | string) {
 	const { blobs } = await tx.doc(Blobs);
 	for (const blob of Object.values(blobs)) delete blob.holders[holder];
+}
+
+/** Release connection-sourced files when that account is removed; their bytes no longer belong to an active account. */
+export async function releaseConnection(tx: Tx, connection: string, account: string) {
+	const { blobs } = await tx.doc(Blobs);
+	for (const blob of Object.values(blobs))
+		for (const [holder, hold] of Object.entries(blob.holders))
+			if (hold.from === "connection" && hold.connection === connection && hold.account === account)
+				delete blob.holders[holder];
 }

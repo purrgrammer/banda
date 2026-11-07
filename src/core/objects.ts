@@ -16,7 +16,7 @@ import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable"
 type JsonValue = JsonObject[string];
 
 /** The cards the daemon draws. */
-export const CARDS = ["pull-request", "issue", "check-run", "notification"] as const;
+export const CARDS = ["pull-request", "issue", "check-run", "notification", "email"] as const;
 export type CardKind = (typeof CARDS)[number];
 
 /** A read that fetches an object: a tool, and its arguments, each a value or a `{placeholder}` the match fills. */
@@ -95,8 +95,8 @@ export type ObjectRef = {
 };
 
 const PLACEHOLDER = /\{([a-z_]{1,32})\}/g;
-/** What a placeholder matches: a name, a number; never a path's separator, a space or `..`. */
-const VALUE = "([A-Za-z0-9_][A-Za-z0-9_.-]{0,99})";
+/** A bounded identity segment, never separators, spaces or `..`. */
+const VALUE = "([A-Za-z0-9_][A-Za-z0-9_.-]{0,399})";
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const TOOL = /^[A-Za-z0-9_.-]{1,64}$/;
 const PATH = /^[A-Za-z0-9_+-]{1,64}(?:\.[A-Za-z0-9_+-]{1,64}){0,7}$/;
@@ -114,7 +114,7 @@ const escapePattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\
 function patternOf(template: string, url: boolean): RegExp {
 	let source = "";
 	let last = 0;
-	const literal = (text: string) => escapePattern(text).replaceAll("\\*", "[A-Za-z0-9_.-]{1,100}");
+	const literal = (text: string) => escapePattern(text).replaceAll("\\*", "[A-Za-z0-9_.%=-]{1,500}");
 	for (const match of template.matchAll(PLACEHOLDER)) {
 		source += literal(template.slice(last, match.index)) + VALUE;
 		last = (match.index ?? 0) + match[0].length;
@@ -645,7 +645,21 @@ export type NotificationCard = {
 	readonly subject?: string;
 };
 
-export type ObjectCard = PullRequestCard | IssueCard | CheckRunCard | NotificationCard;
+export type EmailCard = {
+	readonly card: "email";
+	readonly from: string;
+	readonly to: string;
+	readonly subject: string;
+	readonly date: string;
+	readonly snippet: string;
+	readonly body: string;
+	/** JSON-encoded flat attachment metadata, kept scalar to respect the store's bounded JSON shape. */
+	readonly attachmentManifest: string;
+	readonly unread: boolean;
+	readonly url?: string;
+};
+
+export type ObjectCard = PullRequestCard | IssueCard | CheckRunCard | NotificationCard | EmailCard;
 
 /** A plain line: no control or invisible characters, one space for each run of spaces, bounded. */
 export function plainLine(value: unknown, max = 200): string {
@@ -658,6 +672,18 @@ export function plainLine(value: unknown, max = 200): string {
 		.trim();
 	const characters = [...visible];
 	return characters.length <= max ? visible : `${characters.slice(0, max - 1).join("")}…`;
+}
+
+/** Plain email body, keeping paragraph breaks while stripping invisible and control characters. */
+function plainBody(value: unknown, max = 2000): string {
+	if (typeof value !== "string") return "";
+	return [
+		...value
+			.normalize("NFKC")
+			.replace(/[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}]/gu, (char) => ("\n\r\t".includes(char) ? char : " ")),
+	]
+		.slice(0, max)
+		.join("");
 }
 
 const count = (value: unknown) =>
@@ -746,10 +772,8 @@ const REASONS: { readonly [reason: string]: Reason } = {
  */
 export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as: string]: unknown }): ObjectCard {
 	const field = (name: string) => at(answers, kind.fields[name]);
-	if (
-		typeof field(kind.card === "check-run" ? "name" : "title") !== "string" ||
-		plainLine(field(kind.card === "check-run" ? "name" : "title")) === ""
-	)
+	const titleField = kind.card === "check-run" ? "name" : kind.card === "email" ? "subject" : "title";
+	if (typeof field(titleField) !== "string" || plainLine(field(titleField)) === "")
 		throw new Error("Incomplete object");
 	const repo = plainLine(field("repo"), 100) || plainLine(`${ref.values.owner ?? ""}/${ref.values.repo ?? ""}`, 100);
 	const number = count(field("number")) || Number(ref.values.number ?? 0) || 0;
@@ -862,6 +886,37 @@ export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as
 				...(subject === undefined || subject.length > 500 ? {} : { subject }),
 			};
 		}
+		case "email":
+			return {
+				card: "email",
+				from: plainLine(field("from"), 250),
+				to: plainLine(field("to"), 250),
+				subject: plainLine(field("subject"), 300),
+				date: plainLine(field("date"), 100),
+				snippet: plainLine(field("snippet"), 300),
+				body: plainBody(field("body")),
+				attachmentManifest: JSON.stringify(
+					(Array.isArray(field("attachments")) ? (field("attachments") as unknown[]) : [])
+						.slice(0, 20)
+						.flatMap((item) => {
+							if (!plain(item) || typeof item.id !== "string" || item.id.length > 500 || typeof item.name !== "string")
+								return [];
+							const name = plainLine(item.name, 120);
+							const size = count(item.size);
+							if (name === "" || size === null) return [];
+							return [
+								{
+									id: item.id,
+									name,
+									mimeType: plainLine(item.mimeType, 120) || "application/octet-stream",
+									size,
+								},
+							];
+						}),
+				),
+				unread: field("unread") === true,
+				...withUrl,
+			};
 	}
 }
 

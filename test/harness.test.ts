@@ -13,6 +13,7 @@ import {
 	disconnectHarness,
 	folderPath,
 	foldersIn,
+	HARNESS_SYSTEM,
 	Harnesses,
 	type HarnessSession,
 	type HarnessStep,
@@ -20,9 +21,11 @@ import {
 	harnessTool,
 	harnessToolsOf,
 	isHarnessTool,
+	keepUpdate,
 	projectOf,
 	resultOf,
 	SESSIONS_TOOL,
+	type SessionUpdates,
 	STOP_TOOL,
 	sessionOf,
 	sessionsOf,
@@ -105,6 +108,45 @@ describe("applyUpdate", () => {
 			{ kind: "edit", path: "/w/auth.js", added: 1, removed: 1, diff: "-a\n+b", call: "t3" },
 			{ kind: "said", text: "done" },
 		]);
+	});
+});
+
+describe("keepUpdate", () => {
+	it("keeps the latest of each useful kind, never message or thought chunks", () => {
+		const kept: SessionUpdates = {};
+		expect(keepUpdate(kept, { sessionUpdate: "usage_update", used: 10, size: 100 })).toBe(true);
+		expect(keepUpdate(kept, { sessionUpdate: "usage_update", used: 20, size: 100 })).toBe(true);
+		expect(keepUpdate(kept, { sessionUpdate: "session_info_update", title: "Fixing" })).toBe(true);
+		expect(
+			keepUpdate(kept, { sessionUpdate: "plan", entries: [{ content: "a", priority: "medium", status: "pending" }] }),
+		).toBe(true);
+		expect(keepUpdate(kept, { sessionUpdate: "available_commands_update", availableCommands: [] })).toBe(true);
+		expect(keepUpdate(kept, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "hi" } })).toBe(
+			false,
+		);
+		expect(keepUpdate(kept, { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "hm" } })).toBe(
+			false,
+		);
+		expect(kept).toEqual({
+			usage: { used: 20, size: 100 },
+			info: { title: "Fixing" },
+			plan: { entries: [{ content: "a", priority: "medium", status: "pending" }] },
+			commands: { availableCommands: [] },
+		});
+	});
+
+	it("drops an oversized update, or one that would put the whole over the bound, keeping the earlier one", () => {
+		const kept: SessionUpdates = { info: { title: "before" } };
+		expect(keepUpdate(kept, { sessionUpdate: "session_info_update", title: "x".repeat(5000) })).toBe(false);
+		expect(kept.info).toEqual({ title: "before" });
+		// each under the per-kind bound; the last would put all of them over the total
+		expect(keepUpdate(kept, { sessionUpdate: "plan", entries: [{ content: "y".repeat(3900) }] })).toBe(true);
+		expect(keepUpdate(kept, { sessionUpdate: "usage_update", used: 1, size: 2, note: "z".repeat(3900) })).toBe(true);
+		expect(
+			keepUpdate(kept, { sessionUpdate: "available_commands_update", availableCommands: [{ name: "c".repeat(3900) }] }),
+		).toBe(false);
+		expect(kept.commands).toBeUndefined();
+		expect(kept.usage).toMatchObject({ used: 1, size: 2 });
 	});
 });
 
@@ -251,6 +293,8 @@ describe("a harness session", () => {
 		expect(ended?.state).toBe("done");
 		expect(ended?.call).toBe("c1");
 		expect(ended?.steps.map((step) => step.kind)).toEqual(["asked", "edit", "run", "steered", "decided", "said"]);
+		// the decided step keeps the ask's kind: the folded row says "You allowed: run a command", never the command
+		expect(ended?.steps.find((step) => step.kind === "decided")).toMatchObject({ command: "npm test", ask: "execute" });
 		// the wake carries what the owner decided and told it, not only its last words
 		const result = JSON.parse(
 			/<harness-result[^>]*>\n(.*)\n<\/harness-result>/s.exec(s.woke[0]?.text ?? "")?.[1] ?? "{}",
@@ -263,6 +307,61 @@ describe("a harness session", () => {
 		});
 		expect(s.woke[0]?.text).toContain(`call harness__fake with session ${task}`);
 		expect(s.woke).toEqual([expect.objectContaining({ chat: s.chat, key: `harness:${task}`, state: "done" })]);
+		await s.harness.close(context);
+	});
+
+	it("keeps the latest useful updates (usage, info, plan, commands), never the chunks", async () => {
+		const s = await setup();
+		const task = await s.harness.commit(
+			(tx) =>
+				s.made.begin(tx, {
+					chat: s.chat,
+					agent: "sancho",
+					harness: "fake",
+					folder: s.folder,
+					ask: "usage 10 100\nusage 20 100\ntitle Fixing the tests\nplan tidy the suite\ncommands lint test\nsay done",
+				}),
+			context,
+		);
+		await until(() => s.woke.length === 1);
+		const ended = (await s.session())[task];
+		// the latest of each kind, apart from the steps; what it said stays a step, never an update kept here
+		expect(ended?.updates).toEqual({
+			usage: { used: 20, size: 100 },
+			info: { title: "Fixing the tests" },
+			plan: { entries: [{ content: "tidy the suite", priority: "medium", status: "pending" }] },
+			commands: {
+				availableCommands: [
+					{ name: "lint", description: "lint" },
+					{ name: "test", description: "test" },
+				],
+			},
+		});
+		expect(ended?.steps.map((step) => step.kind)).toEqual(["asked", "said"]);
+		await s.harness.close(context);
+	});
+
+	it("tells a harness that announces close that its session is over, before its process ends", async () => {
+		const s = await setup();
+		const log = join(s.folder, "close.jsonl");
+		vi.stubEnv("FAKE_ACP_LOG", log);
+		vi.stubEnv("FAKE_ACP_CLOSE", "1");
+		onTestFinished(() => {
+			vi.unstubAllEnvs();
+		});
+		const task = await s.harness.commit(
+			(tx) => s.made.begin(tx, { chat: s.chat, agent: "sancho", harness: "fake", folder: s.folder, ask: "say hi" }),
+			context,
+		);
+		await until(() => s.woke.length === 1);
+		const sessionId = (await s.session())[task]?.sessionId;
+		expect(sessionId).toBeDefined();
+		const entries = (await readFile(log, "utf8"))
+			.trim()
+			.split("\n")
+			.map((line) => JSON.parse(line) as { [key: string]: unknown });
+		expect(entries).toContainEqual(expect.objectContaining({ closed: sessionId }));
+		expect((await s.session())[task]?.state).toBe("done");
 		await s.harness.close(context);
 	});
 
@@ -563,7 +662,17 @@ describe("following up on a session", () => {
 			(await readFile(log, "utf8").catch(() => ""))
 				.split("\n")
 				.filter((line) => line !== "")
-				.map((line) => JSON.parse(line) as { prompt?: string; loaded?: string; sessionId?: string });
+				.map(
+					(line) =>
+						JSON.parse(line) as {
+							prompt?: string;
+							loaded?: string;
+							resumed?: string;
+							made?: string;
+							systemPrompt?: unknown;
+							sessionId?: string;
+						},
+				);
 		const begin = (ask: string, continues?: number) =>
 			harness.commit(
 				(tx) =>
@@ -601,6 +710,44 @@ describe("following up on a session", () => {
 		await s.harness.close(context);
 	});
 
+	it("reopens by session/resume, with no replay, when the harness cannot load but announces resume", async () => {
+		vi.stubEnv("FAKE_ACP_NO_LOAD", "1");
+		vi.stubEnv("FAKE_ACP_RESUME", "1");
+		const s = await setup();
+		const first = await s.begin("say first");
+		await until(() => s.woke.length === 1);
+		const opened = (await s.sessions())[first]?.sessionId;
+		const second = await s.begin("say second", first);
+		await until(() => s.woke.length === 2);
+		const after = (await s.sessions())[second];
+		expect(after).toMatchObject({ continues: first, resume: opened, state: "done", continuation: "native" });
+		// nothing replayed: the second session's steps are its own
+		expect(after?.steps.map((step) => step.kind)).toEqual(["asked", "said"]);
+		const log = await s.logged();
+		expect(log.find((entry) => entry.resumed !== undefined)?.resumed).toBe(opened);
+		// it remembers, so it is sent the follow-up alone, with no recap
+		expect(log.filter((entry) => entry.prompt !== undefined).map((entry) => entry.prompt)).toEqual([
+			"say first",
+			"say second",
+		]);
+		await s.harness.close(context);
+	});
+
+	it("sends banda's instructions as an appended system prompt, apart from the ask, when announced", async () => {
+		vi.stubEnv("FAKE_ACP_SYSTEM", "1");
+		const s = await setup();
+		await s.begin("say hi");
+		await until(() => s.woke.length === 1);
+		const log = await s.logged();
+		expect(log.find((entry) => entry.made !== undefined)?.systemPrompt).toEqual({
+			mode: "append",
+			content: [{ type: "text", text: HARNESS_SYSTEM }],
+		});
+		// the owner's ask goes as the prompt, alone
+		expect(log.filter((entry) => entry.prompt !== undefined).map((entry) => entry.prompt)).toEqual(["say hi"]);
+		await s.harness.close(context);
+	});
+
 	it("tells a harness that cannot reopen its session what it did before", async () => {
 		vi.stubEnv("FAKE_ACP_NO_LOAD", "1");
 		const s = await setup();
@@ -633,6 +780,24 @@ describe("following up on a session", () => {
 		expect(ended?.notes).toHaveLength(1);
 		expect(ended?.steps.find((step) => step.kind === "steered")).toMatchObject({ from: "agent", taken: true });
 		expect(s.woke[0]?.text).toContain('"from":"agent"');
+		await s.harness.close(context);
+	});
+
+	it("names at most 30 changed files when its agent looks at a session", async () => {
+		const s = await setup();
+		const edits = Array.from({ length: 40 }, (_, i) => `edit src/f${i}.ts +1 -0`).join("\n");
+		const task = await s.begin(`${edits}\nsleep 5000\nsay late`);
+		await until(
+			async () => ((await s.sessions())[task]?.steps.filter((step) => step.kind === "edit").length ?? 0) === 40,
+		);
+		await s.harness.commit(async (tx) => {
+			const shown = (await sessionOf(tx, "sancho", task, () => "Fake Code", Date.now())) ?? "";
+			const line = shown.split("\n").find((one) => one.startsWith("Files changed")) ?? "";
+			expect(line.match(/src\/f\d+\.ts/g)).toHaveLength(30);
+			expect(line).toContain("and 10 more");
+			await stopOwnSession(tx, "sancho", task);
+		}, context);
+		await until(() => s.woke.length === 1);
 		await s.harness.close(context);
 	});
 

@@ -20,6 +20,7 @@ import {
 	type AcpPermissionRequest,
 	type AcpUpdate,
 	cancel,
+	closeSession,
 	openSession,
 	prompt,
 	startAcp,
@@ -79,12 +80,45 @@ export type HarnessStep =
 			readonly running?: boolean;
 			readonly call?: string;
 	  }
-	| { readonly kind: "waiting"; readonly command: string }
-	/** The owner's answer to one of its asks. */
-	| { readonly kind: "decided"; readonly command: string; readonly allowed: boolean }
+	| { readonly kind: "waiting"; readonly command: string; readonly ask?: string }
+	/** The owner's answer to one of its asks; `ask` is the ask's kind, so the folded row says it in words. */
+	| { readonly kind: "decided"; readonly command: string; readonly allowed: boolean; readonly ask?: string }
 	| { readonly kind: "said"; readonly text: string };
 
 export type HarnessState = "starting" | "working" | "waiting" | "done" | "stopped" | "interrupted" | "failed";
+
+/** The latest useful update of each kind a session keeps; message and thought chunks are steps, never kept here. */
+export type SessionUpdates = {
+	/** ACP `usage_update`: tokens in context, the window's size, cost. */
+	usage?: JsonObject;
+	/** ACP `session_info_update`: the session's title and such. */
+	info?: JsonObject;
+	/** ACP `plan`: the harness's plan entries. */
+	plan?: JsonObject;
+	/** ACP `available_commands_update`: the commands it offers. */
+	commands?: JsonObject;
+};
+
+const KEPT_UPDATES: { readonly [sessionUpdate: string]: keyof SessionUpdates } = {
+	usage_update: "usage",
+	session_info_update: "info",
+	plan: "plan",
+	available_commands_update: "commands",
+};
+
+/**
+ * Keep the latest update of a useful kind, in place: one per kind, never a chunk. One over UPDATE_MAX_BYTES, or one
+ * that would put the whole over UPDATES_MAX_BYTES, is dropped and the earlier one stays. Whether anything changed.
+ */
+export function keepUpdate(kept: SessionUpdates, update: AcpUpdate): boolean {
+	const field = KEPT_UPDATES[update.sessionUpdate];
+	if (field === undefined) return false;
+	const { sessionUpdate: _kind, ...value } = update;
+	if (Buffer.byteLength(JSON.stringify(value)) > UPDATE_MAX_BYTES) return false;
+	if (Buffer.byteLength(JSON.stringify({ ...kept, [field]: value })) > UPDATES_MAX_BYTES) return false;
+	kept[field] = value as JsonObject;
+	return true;
+}
 
 /** The harness's ask of the owner, open while its process waits: what kind of thing, and all of it the owner must see. */
 export type HarnessAsk = {
@@ -116,6 +150,8 @@ export type HarnessSession = {
 	steps: HarnessStep[];
 	/** Steps left out past the bound, oldest first. */
 	dropped: number;
+	/** The latest useful updates it sent (usage, info, plan, commands), one of each, bounded. */
+	updates?: SessionUpdates;
 	/** Notes to it in order, the owner's or (`from`) its agent's follow-ups; `sent` once handed to the harness. */
 	notes: { text: string; at: number; sent?: true; from?: "agent"; call?: string }[];
 	/** The session it continues, by task: the harness reopens that one's own session, else is told what it did. */
@@ -168,9 +204,16 @@ export const MAX_STEPS = 200;
 const MAX_TEXT = 4000;
 /** Sessions kept once ended, newest first. */
 const KEPT_ENDED = 20;
+/** What one kept session update may weigh as JSON, and what all of them together may. */
+export const UPDATE_MAX_BYTES = 4_000;
+export const UPDATES_MAX_BYTES = 10_000;
+/** How long a closing session's `session/close` gets before its process is ended anyway. */
+const CLOSE_MS = 2_000;
 /** Steps an ended session keeps, and how much text each: the ask, its edits, the owner's notes and its last words first. */
 const ENDED_STEPS = 40;
 const ENDED_TEXT = 1000;
+/** Changed files its agent sees named when it looks at a session; the rest are counted. */
+const SHOWN_FILES = 30;
 /** Notes the owner may send one session. */
 export const MAX_NOTES = 50;
 /** How long a harness gets to start a session (initialize, session/new, its mode) before it ends as failed. */
@@ -625,6 +668,16 @@ export function recapOf(session: HarnessSession): string {
 		.join("\n");
 }
 
+/**
+ * What a harness is told it runs under, apart from the owner's ask: sent as a system prompt in `append` mode when the
+ * agent announces `sessionCapabilities.systemPrompt`, never replacing its own instructions; otherwise not sent at all.
+ */
+export const HARNESS_SYSTEM =
+	"You are run by banda, an assistant app on its owner's computer, for one task in the folder your session opened in. " +
+	"The prompt and any follow-up notes come from the owner or their agent. Permission requests are answered by the " +
+	"owner, one at a time; no persistent permission is ever granted. When the task ends, everything you started (servers, " +
+	"watchers, background commands) is stopped, so leave nothing meant to keep running. Work only in that folder.";
+
 export type HarnessOptions = {
 	readonly definitions: () => ReadonlyMap<string, HarnessDefinition>;
 	readonly followUp: (
@@ -787,6 +840,7 @@ export function defineHarnesses(options: HarnessOptions) {
 				}
 				// the local copy of the steps, bounded as the stored one is: a chatty harness costs memory, not without end
 				const steps: HarnessStep[] = copy(start.steps);
+				const latest: SessionUpdates = copy(start.updates ?? {});
 				let dropped = 0;
 				const bound = () => {
 					const over = steps.length - MAX_STEPS;
@@ -802,6 +856,7 @@ export function defineHarnesses(options: HarnessOptions) {
 					if (!dirty) return;
 					dirty = false;
 					const kept = copy(steps);
+					const infos = copy(latest);
 					const lost = dropped;
 					dropped = 0;
 					// the groups its tree is in, every couple of seconds: what a later daemon kills if this one dies
@@ -818,6 +873,7 @@ export function defineHarnesses(options: HarnessOptions) {
 						const pending = session.steps.filter((step) => step.kind === "steered" && !step.taken);
 						session.steps = [...kept, ...pending];
 						session.dropped += lost;
+						if (Object.keys(infos).length > 0) session.updates = infos;
 						bounded(session);
 						return undefined;
 					}, ctx);
@@ -873,6 +929,18 @@ export function defineHarnesses(options: HarnessOptions) {
 				};
 				let connection: AcpConnection | undefined;
 				let sessionId: string | undefined;
+				let canClose = false;
+				// the session told goodbye (session/close) when the agent takes it: best effort, its group is killed either way
+				const closeOpened = async () => {
+					if (connection === undefined || sessionId === undefined || !canClose) return;
+					let wait: NodeJS.Timeout | undefined;
+					await Promise.race([
+						closeSession(connection, sessionId).catch(() => {}),
+						new Promise<void>((resolve) => {
+							wait = setTimeout(resolve, CLOSE_MS);
+						}),
+					]).finally(() => clearTimeout(wait));
+				};
 				// a reopened session replays its history as updates: none is this run's until its session is open
 				let live = false;
 				let outstanding = 0;
@@ -973,7 +1041,8 @@ export function defineHarnesses(options: HarnessOptions) {
 							}
 							for (const [ask, { request, resolve: answer }] of answered) {
 								const allowed = accepted.decisions.find((decision) => decision.ask === ask)?.allowed === true;
-								steps.push({ kind: "decided", command: askOf(request).command, allowed });
+								const asked = askOf(request);
+								steps.push({ kind: "decided", command: asked.command, ask: asked.kind, allowed });
 								const option = request.options.find((each) => each.kind === (allowed ? "allow_once" : "reject_once"));
 								answer(
 									option === undefined ? { outcome: "cancelled" } : { outcome: "selected", optionId: option.optionId },
@@ -1002,6 +1071,11 @@ export function defineHarnesses(options: HarnessOptions) {
 							update: (_session, update) => {
 								fault("harness:update");
 								if (!live || update.sessionUpdate === "user_message_chunk") return;
+								// the latest useful update of each kind is kept apart from the steps
+								if (keepUpdate(latest, update)) {
+									schedule();
+									return;
+								}
 								applyUpdate(steps, update);
 								bound();
 								schedule();
@@ -1024,7 +1098,7 @@ export function defineHarnesses(options: HarnessOptions) {
 					const opening = connection;
 					let wait: NodeJS.Timeout | undefined;
 					const opened = await Promise.race([
-						openSession(opening, { cwd, mode: definition.mode, resume: start.resume }),
+						openSession(opening, { cwd, mode: definition.mode, resume: start.resume, system: HARNESS_SYSTEM }),
 						new Promise<never>((_, reject) => {
 							wait = setTimeout(
 								() => reject(new Error("it did not start a session in time")),
@@ -1048,6 +1122,7 @@ export function defineHarnesses(options: HarnessOptions) {
 					}, ctx);
 					if (!go) throw new Stopped();
 					sessionId = opened.sessionId;
+					canClose = opened.canClose;
 					live = true;
 					fault("harness:prompted");
 					// a harness that reopened its session remembers; one that could not is told what it did
@@ -1059,6 +1134,7 @@ export function defineHarnesses(options: HarnessOptions) {
 					await flushing;
 					dirty = true;
 					await flush();
+					await closeOpened();
 					// the harness, and all it started, gone before the session ends: an ended session is never reconciled; its
 					// tree is read before it closes, since what it started detached loses its parent then
 					const tree = treeGroups(connection.pid);
@@ -1078,6 +1154,7 @@ export function defineHarnesses(options: HarnessOptions) {
 					if (!wasStopped) why ??= (error as Error).message;
 					closing = true;
 					cancelAsks();
+					await closeOpened();
 					const tree = treeGroups(connection?.pid);
 					await connection?.close();
 					killGroups(tree);
@@ -1356,9 +1433,13 @@ export async function sessionOf(
 		(file) => `${file.path}${file.added === undefined ? "" : ` +${file.added} -${file.removed ?? 0}`}`,
 	);
 	const recent = session.steps.slice(-20).map((step) => `- ${stepLine(step)}`);
+	const named =
+		files.length > SHOWN_FILES
+			? `${files.slice(0, SHOWN_FILES).join(", ")}, and ${files.length - SHOWN_FILES} more`
+			: files.join(", ");
 	const body = [
 		waiting.length === 0 ? "" : `Waiting for the owner to answer:\n${waiting.join("\n")}`,
-		files.length === 0 ? "" : `Files changed: ${files.join(", ")}`,
+		files.length === 0 ? "" : `Files changed: ${named}`,
 		`Latest steps${session.dropped + Math.max(0, session.steps.length - 20) > 0 ? " (earlier ones left out)" : ""}:\n${recent.join("\n")}`,
 	]
 		.filter((part) => part !== "")

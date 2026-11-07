@@ -189,8 +189,11 @@ it("reopens current harness authority, continuation and process identities uncha
 		prompt: "fix",
 		state: "working" as const,
 		at: 1,
-		steps: [],
+		// a decided step keeps the ask's kind, so a folded row can say it in words after a reopen
+		steps: [{ kind: "decided" as const, command: "make deploy", ask: "execute", allowed: true }],
 		dropped: 0,
+		// the latest useful session/update of each kind, one each
+		updates: { usage: { used: 20, size: 100 }, info: { title: "Fixing" } },
 		notes: [{ text: "check", at: 2, from: "agent" as const, call: "n1", sent: true as const }],
 		continues: 9,
 		continuation: "native" as const,

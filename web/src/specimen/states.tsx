@@ -64,8 +64,8 @@ export function States() {
 			</Section>
 			<Section id="states" title="Empty and loading, part by part">
 				<Group label="Search: searching · nothing found · failed, with Try again" className="items-start">
-					<Search query="lisbon" />
-					<Search query="kyoto" hits={[]} />
+					<Search query="lisbon" searching />
+					<Search query="kyoto" />
 					<Search query="porto" onRetry={() => {}} />
 				</Group>
 				<Group label="A new group: nothing said yet">

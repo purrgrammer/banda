@@ -55,7 +55,7 @@
 	--row-height: 56px;
 	--measure: 36rem;
 
-	/* the composer is the one thing that floats */
+	/* what floats over the chat: the composer, and the face and the name at its top */
 	--shadow-composer:
 		0 0 0 1px var(--line), 0 1px 2px light-dark(oklch(0 0 0 / 4%), oklch(0 0 0 / 30%)),
 		0 6px 20px light-dark(oklch(0 0 0 / 5%), oklch(0 0 0 / 30%));

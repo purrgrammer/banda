@@ -9,7 +9,7 @@ import type { FaceState, RowView, Who } from "../chat/types.ts";
 import { agentMainOf } from "../lib/chats.ts";
 import type { ChatAgent } from "../lib/navigation.ts";
 import { firstWords } from "./first-words.ts";
-import { harnessActivity } from "./harness-activity.ts";
+import { askNotice, harnessActivity } from "./harness-activity.ts";
 
 /** The time at a row's right: the hour today, the weekday this week, else the day and month. */
 export function rowTime(at: number | undefined, now: number): string {
@@ -35,6 +35,8 @@ export const whoOf = (agents: readonly ChatAgent[], id: string): Who & { readonl
 export type BandRow = RowView & {
 	readonly at: number;
 	readonly to: { name: "agent"; id: string } | { name: "group"; room: number };
+	/** The device notification's body, when the ask needs different words there (a harness's: no command, no path). */
+	readonly notice?: string;
 };
 
 /** A change an agent made that waits for the owner, as its row says it: its own file, or a routine it wrote. */
@@ -72,10 +74,13 @@ export function bandRows(
 			...(main?.ask !== undefined
 				? { ask: main.ask }
 				: (() => {
-						if (delegated.waiting)
+						if (delegated.waiting) {
+							const notice = askNotice(delegated.sessions);
 							return {
 								ask: `${delegated.sessions.length} coding session${delegated.sessions.length === 1 ? "" : "s"}`,
+								...(notice === undefined ? {} : { notice }),
 							};
+						}
 						const change = waiting.find((each) => each.agent === agent.id);
 						return change === undefined ? {} : { ask: change.words };
 					})()),
@@ -119,7 +124,13 @@ export function bandRows(
 				unread: group.unread,
 				...(group.asking.length === 0
 					? delegated.waiting
-						? { ask: `${delegated.sessions.length} coding session${delegated.sessions.length === 1 ? "" : "s"}` }
+						? {
+								ask: `${delegated.sessions.length} coding session${delegated.sessions.length === 1 ? "" : "s"}`,
+								...(() => {
+									const notice = askNotice(delegated.sessions);
+									return notice === undefined ? {} : { notice };
+								})(),
+							}
 						: {}
 					: { ask: `${group.asking.length === 1 ? "a member asks" : `${group.asking.length} asks`}` }),
 			};
