@@ -621,6 +621,44 @@ describe("a host the owner allowed", () => {
 			await close();
 		}
 	});
+	it("a write sent under a host permission counts as one it let run, once, and only for its own agent's", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			await harness.commit(async (tx) => {
+				(await tx.doc(AgentChats)).chats[41] = LEAD;
+				(await tx.doc(AgentChats)).chats[42] = "ledger";
+				const doc = await tx.doc(Permissions);
+				const base = { tool: "propose_send", scope: "host" as const, at: 1, wait: 1 };
+				doc.permissions["1"] = { ...base, match: { _host: "*.github.com" }, what: "lead", agent: LEAD };
+				doc.permissions["2"] = { ...base, match: { _host: "api.github.com" }, what: "ledger", agent: "ledger" };
+				doc.next = 3;
+			}, context);
+			const sent: SentRequest = {
+				id: "s0000000001",
+				chat: 41,
+				at: 5_000,
+				method: "POST",
+				scheme: "https",
+				host: "api.github.com",
+				port: 443,
+				path: "/repos/a/b/issues",
+				hash: "ef".repeat(32),
+				bytes: 9,
+				status: 201,
+			};
+			s.proxy.sentOut.set(41, [sent]);
+			const egress = Object.assign(s.proxy, { sentChats: async () => [...s.proxy.sentOut.keys()] });
+			expect(await sweepSent(egress, harness, Date.now)).toBe(1);
+			s.proxy.sentOut.set(41, [sent]);
+			await sweepSent(egress, harness, Date.now);
+			const { permissions } = (await harness.snapshot(Permissions, context))!;
+			expect(permissions["1"]?.ran).toEqual({ count: 1, last: 5_000 });
+			expect(permissions["2"]?.ran).toBeUndefined();
+		} finally {
+			await close();
+		}
+	});
 });
 
 describe("what the proxy was told", () => {

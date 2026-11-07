@@ -292,6 +292,19 @@ export async function countRan(tx: Tx, id: string, now: number, count = 1): Prom
 	doc.permissions[id] = { ...permission, ran: { count: (permission.ran?.count ?? 0) + count, last: now } };
 }
 
+/** Count a write the proxy sent to `host` for `agent` as one its host permission covering that host let run. */
+export async function countSent(tx: Tx, agent: string, host: string, at: number): Promise<void> {
+	const { permissions } = await tx.doc(Permissions);
+	const found = Object.entries(permissions).find(
+		([, permission]) =>
+			permission.scope === "host" &&
+			permission.agent === agent &&
+			typeof permission.match[HOST_ARG] === "string" &&
+			hostCovers(permission.match[HOST_ARG] as string, host),
+	);
+	if (found !== undefined) await countRan(tx, found[0], at);
+}
+
 /**
  * The scopes an ask may offer, in order: the task's first, the primary choice; a host's last, only with a host shape.
  * "This once" is no scope, always offered.

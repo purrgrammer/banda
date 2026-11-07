@@ -22,7 +22,7 @@ import { defineDoc, type Tx } from "@earendil-works/pi-durable";
 import { log } from "./activity.ts";
 import { AgentChats } from "./agents.ts";
 import type { EffectTool } from "./ask.ts";
-import { Permissions } from "./permissions.ts";
+import { agentOfChat, countSent, Permissions } from "./permissions.ts";
 import { addressWords, bodyWords, headersWords } from "./request-words.ts";
 import { context } from "./store.ts";
 
@@ -339,6 +339,8 @@ async function keepSent(
 	const done = forgettable(sent, now);
 	if (sent.length === 0) return { logged: 0, done };
 	let logged = 0;
+	// reads first: the chat's agent, before the commit's first write
+	const agent = await agentOfChat(tx, chat);
 	const kept = await tx.doc(Sent);
 	// pruned by when the store kept it, never by when the proxy sent it: a record taken again is still known
 	for (const [id, one] of Object.entries(kept.sent)) if (one.kept < now - TICKET_KEPT_MS) delete kept.sent[id];
@@ -348,6 +350,7 @@ async function keepSent(
 		if (before !== undefined && (ended(before) || !ended(one))) continue;
 		kept.sent[one.id] = { ...(JSON.parse(JSON.stringify(one)) as SentRequest), kept: before?.kept ?? now };
 		const tried = one.failed !== undefined && one.reached !== true;
+		if (before === undefined && !tried && agent !== undefined) await countSent(tx, agent, permittedHost(one), one.at);
 		await log(tx, {
 			at: before === undefined ? one.at : now,
 			what: before === undefined ? sentWords(one, "log") : `${sentWords(one, "log")}, its answer late`,
