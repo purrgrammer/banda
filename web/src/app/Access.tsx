@@ -7,6 +7,7 @@ import type { CapabilitiesView, ControlView, PermissionView } from "../../../src
 import { Confirm } from "../chat/Confirm.tsx";
 import { Block, type ConnectionRow, Connections, Permissions, RowOf, Rows } from "../chat/Settings.tsx";
 import { allowHost, revokePermission, switchAccount, switchPublicConnection } from "../lib/api.ts";
+import { useReturnFocus } from "../lib/return-focus.ts";
 import { showCapabilities, showControl, useShell } from "../lib/shell.ts";
 import { ConnectFlow } from "./ConnectFlow.tsx";
 import { AddHarnessButton, HarnessAccessTile } from "./HarnessConnections.tsx";
@@ -68,6 +69,8 @@ export function AccessTab({
 }) {
 	const [error, setError] = useState<string | undefined>(undefined);
 	const [adding, setAdding] = useState(false);
+	// opened from state (the Add button), with no Radix trigger: closed, focus returns to that button
+	const returnFocus = useReturnFocus(adding);
 	const [pick, setPick] = useState<string>();
 	const rows = connectionRows(capabilities, agent.id);
 	const used = rows.filter((row) => row.accounts.length > 0);
@@ -110,7 +113,7 @@ export function AccessTab({
 				Add
 			</Button>
 			<Dialog open={adding} onOpenChange={setAdding}>
-				<DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-lg">
+				<DialogContent onCloseAutoFocus={returnFocus} className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-lg">
 					<DialogHeader>
 						<DialogTitle>Add a connection</DialogTitle>
 						<DialogDescription>Choose a connection for {agent.name}.</DialogDescription>

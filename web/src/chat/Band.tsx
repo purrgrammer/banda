@@ -18,6 +18,7 @@ import {
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/cn";
 import { withMod } from "@/lib/keys";
+import { useReturnFocus } from "../lib/return-focus.ts";
 import { RowsLoading } from "./Loading.tsx";
 import { PinnedTile, Row, RowActions, type RowView } from "./Row.tsx";
 
@@ -87,6 +88,8 @@ export function Band({
 	}, [pinned]);
 	const [heldId, setHeld] = useState<string>();
 	const held = rows.find((row) => row.id === heldId);
+	// opened from state (a row long-pressed), with no Radix trigger: closed, focus returns to the row
+	const returnFocus = useReturnFocus(held !== undefined);
 	const hold = (id: string) => (phone && onPin !== undefined ? () => setHeld(id) : undefined);
 	// the row or tile that just moved: its words arrive after its face, which flies there
 	const [moved, setMoved] = useState<string>();
@@ -196,7 +199,12 @@ export function Band({
 				</LayoutGroup>
 			</MotionConfig>
 			<Sheet open={held !== undefined} onOpenChange={(open) => (open ? undefined : setHeld(undefined))}>
-				<SheetContent side="bottom" showCloseButton={false} className="gap-0 rounded-t-tile bg-paper p-0">
+				<SheetContent
+					side="bottom"
+					showCloseButton={false}
+					onCloseAutoFocus={returnFocus}
+					className="gap-0 rounded-t-tile bg-paper p-0"
+				>
 					<SheetTitle className="sr-only">{held?.name ?? ""}</SheetTitle>
 					<SheetDescription className="sr-only">Pin it to the top, or unpin it</SheetDescription>
 					{held === undefined ? null : (
