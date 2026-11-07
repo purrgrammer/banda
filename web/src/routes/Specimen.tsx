@@ -15,6 +15,7 @@ import { BandSection } from "../specimen/band.tsx";
 import { Controls } from "../specimen/controls.tsx";
 import { Copy } from "../specimen/copy.tsx";
 import { DevicesSection } from "../specimen/devices.tsx";
+import { DoneSection } from "../specimen/done.tsx";
 import { Faces } from "../specimen/faces.tsx";
 import { Foundation } from "../specimen/foundation.tsx";
 import { HarnessSection } from "../specimen/harness.tsx";
@@ -81,6 +82,7 @@ const CONTENTS = [
 	{ id: "feed-lines", label: "What else the chat says" },
 	{ id: "composer", label: "Composer" },
 	{ id: "object-in-chat", label: "An object in the chat" },
+	{ id: "done", label: "Done, folded" },
 	{ id: "colour", label: "Colour" },
 	{ id: "type", label: "Type" },
 	{ id: "shape", label: "Shape" },
@@ -184,6 +186,7 @@ export function Specimen() {
 									<States />
 									<BandSection />
 									<Parts />
+									<DoneSection />
 									<Foundation />
 									<Faces />
 									<AvatarSpike />
