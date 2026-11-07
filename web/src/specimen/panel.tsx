@@ -815,9 +815,9 @@ const CONNECT_STEPS: readonly {
 			kind: "agents",
 			login: "bandarra@example.com",
 			agents: [
-				{ id: "sancho", name: "Sancho", on: true },
-				{ id: "mara", name: "Mara", on: false },
-				{ id: "octo", name: "Octo", on: false },
+				{ id: "sancho", name: "Sancho", face: SANCHO.face, on: true },
+				{ id: "mara", name: "Mara", face: MARA.face, on: false },
+				{ id: "octo", name: "Octo", face: OCTO.face, on: false },
 			],
 		},
 	},

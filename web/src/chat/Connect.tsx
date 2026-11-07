@@ -19,10 +19,12 @@ import {
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import type { AvatarFace } from "../../../src/core/avatar-face.ts";
 import type { ConnectionToolView } from "../../../src/server/api.ts";
 import { scopeChoicesOf } from "../lib/connect.ts";
 import { Tile } from "./Cards.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
+import { Face } from "./Face.tsx";
 
 export type ConnectState =
 	| { readonly kind: "connect"; readonly why: string }
@@ -46,7 +48,12 @@ export type ConnectStep =
 	| {
 			readonly kind: "agents";
 			readonly login: string;
-			readonly agents: readonly { readonly id: string; readonly name: string; readonly on: boolean }[];
+			readonly agents: readonly {
+				readonly id: string;
+				readonly name: string;
+				readonly face: AvatarFace;
+				readonly on: boolean;
+			}[];
 	  };
 
 /** The card where an agent asks: why, and Connect, until it is connected; then one line. */
@@ -215,6 +222,7 @@ export function ConnectDialog({
 								key={each.id}
 								className="flex min-h-11 items-center gap-3 border-t border-line-soft pr-2 text-ui text-ink first:border-t-0"
 							>
+								<Face face={each.face} name={each.name} size="message" />
 								<span className="min-w-0 flex-1 truncate">{each.name}</span>
 								<Switch
 									checked={each.on}

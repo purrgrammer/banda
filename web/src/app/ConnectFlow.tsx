@@ -171,7 +171,12 @@ export function ConnectFlow({
 			? {
 					kind: "agents",
 					login,
-					agents: band.map((each) => ({ id: each.id, name: each.name, on: account.agents.includes(each.id) })),
+					agents: band.map((each) => ({
+						id: each.id,
+						name: each.name,
+						face: each.face,
+						on: account.agents.includes(each.id),
+					})),
 				}
 			: choosing
 				? { kind: "permissions" }
