@@ -25,6 +25,7 @@ import { FLOORS, type Floor } from "./floor.ts";
 import { harnessToolsOf } from "./harness.ts";
 import { DEFAULT_GOOGLE_CLIENT_ID, type OAuthClient, type OAuthServer, type Pending, type Tokens } from "./oauth.ts";
 import { type ObjectKinds, parseObjects } from "./objects.ts";
+import { REST_APIS, type RestApiName, restApiNamed } from "./rest.ts";
 
 export const connectionPath = (name: string) => `connections/${name}.md`;
 export const toolPath = (name: string) => `tools/${name}.md`;
@@ -44,7 +45,7 @@ export type Connection = {
 	readonly url?: string;
 	readonly command?: string;
 	/** A built-in daemon REST adapter, whose API does not speak MCP. */
-	readonly api?: "gmail";
+	readonly api?: RestApiName;
 	readonly auth: AuthKind;
 	/** Uncurated remote tools ask every time; only owner-declared reads bypass approval. */
 	readonly ask?: "always";
@@ -149,15 +150,18 @@ export function parseConnection(
 	if (service === "") errors.push(`add "service:", the service as the owner calls it, such as "your calendar"`);
 	const url = read.one("url");
 	const command = read.one("command");
-	const api = read.one("api");
+	const apiName = read.one("api");
+	const api = apiName === undefined ? undefined : restApiNamed(apiName);
+	const builtIn = api === undefined ? undefined : REST_APIS[api];
 	if ((url === undefined) === (command === undefined))
 		errors.push(`give "url:" for a server elsewhere, or "command:" for one you run in your computer, not both`);
 	if (url !== undefined && !remoteUrl(url)) errors.push(`"url: ${url}" is not an https address`);
-	if (
-		api !== undefined &&
-		(command !== undefined || api !== "gmail" || url !== "https://gmail.googleapis.com/gmail/v1/users/me")
-	)
-		errors.push('the built-in API is "gmail" at https://gmail.googleapis.com/gmail/v1/users/me');
+	if (apiName !== undefined && (command !== undefined || builtIn === undefined || url !== builtIn.url))
+		errors.push(
+			`a built-in API is one of ${Object.entries(REST_APIS)
+				.map(([name, { url }]) => `"${name}" at ${url}`)
+				.join(", ")}`,
+		);
 	const auth = read.one("auth") ?? "none";
 	if (auth !== "none" && auth !== "key" && auth !== "oauth")
 		errors.push(`"auth: ${auth}": use none, key (the owner types one in) or oauth (the owner signs in)`);
@@ -169,21 +173,19 @@ export function parseConnection(
 	const client = read.one("client");
 	const scopes = read.values.has("scopes") ? read.list("scopes") : undefined;
 	if (
-		api === "gmail" &&
+		builtIn !== undefined &&
 		(auth !== "oauth" ||
 			client !== "google" ||
 			scopes === undefined ||
-			!scopes.includes("https://www.googleapis.com/auth/gmail.readonly") ||
-			!scopes.every((scope) =>
-				[
-					"https://www.googleapis.com/auth/gmail.readonly",
-					"https://www.googleapis.com/auth/gmail.send",
-					"https://www.googleapis.com/auth/gmail.modify",
-				].includes(scope),
-			) ||
+			!scopes.includes(builtIn.base) ||
+			!scopes.every((scope) => (builtIn.scopes as readonly string[]).includes(scope)) ||
 			new Set(scopes).size !== scopes.length)
 	)
-		errors.push('Gmail uses OAuth client "google", includes gmail.readonly, and may add gmail.send or gmail.modify');
+		errors.push(
+			`${builtIn.service} uses OAuth client "google", asks for ${builtIn.base}, and may add ${builtIn.scopes
+				.filter((scope) => scope !== builtIn.base)
+				.join(" or ")}`,
+		);
 	if (auth !== "oauth" && (client !== undefined || scopes !== undefined))
 		errors.push(`"client" and "scopes" are for a server the owner signs in to: add "auth: oauth" or drop them`);
 	if (client !== undefined && client !== "google" && !/^[\w.-]{1,200}$/.test(client))
@@ -282,7 +284,7 @@ export function parseConnection(
 			service,
 			...(url === undefined ? {} : { url }),
 			...(command === undefined ? {} : { command }),
-			...(api === undefined ? {} : { api: api as NonNullable<Connection["api"]> }),
+			...(api === undefined ? {} : { api }),
 			auth: auth as AuthKind,
 			...(ask === "always" ? { ask: "always" as const } : {}),
 			...(client === undefined ? {} : { client }),

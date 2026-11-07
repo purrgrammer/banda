@@ -88,14 +88,7 @@ import {
 	withScopes,
 } from "../core/connections.ts";
 import { type EgressControl, intake } from "../core/egress.ts";
-import {
-	GMAIL_TOOLS,
-	gmailAttachment,
-	gmailCall,
-	gmailWriteCall,
-	MAX_GMAIL_ATTACHMENT_BYTES,
-	MAX_GMAIL_SEND_ATTACHMENT_BYTES,
-} from "../core/gmail-rest.ts";
+import { gmailAttachment, MAX_GMAIL_ATTACHMENT_BYTES, MAX_GMAIL_SEND_ATTACHMENT_BYTES } from "../core/gmail-rest.ts";
 import {
 	boxSession,
 	callTool,
@@ -134,6 +127,7 @@ import {
 } from "../core/objects.ts";
 import { agentOfChat, canonical, Permissions } from "../core/permissions.ts";
 import { publicFetch } from "../core/public-fetch.ts";
+import { REST_APIS } from "../core/rest.ts";
 import { context } from "../core/store.ts";
 import { liveWaits } from "../core/wait.ts";
 import { type AgentChanged, boxFiles, type Workspace, write } from "./agents.ts";
@@ -425,7 +419,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			});
 			const header = await authorize();
 			if (header?.startsWith("Bearer ")) usedSecrets?.add(header.slice(7));
-			if (connection.api === "gmail") {
+			if (connection.api !== undefined) {
 				if (header === undefined || !header.startsWith("Bearer "))
 					throw new Error(`${connection.service} is not signed in`);
 				return exchange(undefined, header.slice(7));
@@ -670,8 +664,14 @@ export function openCapabilities(options: CapabilityOptions) {
 						account,
 						ctx,
 						(client, bearer) =>
-							tool.connection.api === "gmail"
-								? gmailCall(bearer ?? "", tool.tool, sent as Record<string, unknown>, ctx.abortSignal, fetcher)
+							tool.connection.api !== undefined
+								? REST_APIS[tool.connection.api].read(
+										bearer ?? "",
+										tool.tool,
+										sent as Record<string, unknown>,
+										ctx.abortSignal,
+										fetcher,
+									)
 								: remoteCall(client as McpClient, tool.tool, sent, ctx.abortSignal),
 						async () => {
 							const refused = await api.commit(
@@ -828,8 +828,15 @@ export function openCapabilities(options: CapabilityOptions) {
 						account,
 						ctx,
 						(client, bearer) =>
-							tool.connection.api === "gmail"
-								? gmailWriteCall(bearer ?? "", tool.tool, approved, ctx.abortSignal, fetcher, files)
+							tool.connection.api !== undefined
+								? REST_APIS[tool.connection.api].write(
+										bearer ?? "",
+										tool.tool,
+										approved,
+										ctx.abortSignal,
+										fetcher,
+										files,
+									)
 								: remoteCall(
 										client as McpClient,
 										tool.tool,
@@ -1150,9 +1157,9 @@ export function openCapabilities(options: CapabilityOptions) {
 		if (connection === undefined || connection.url === undefined) return;
 		const account = await listingAccount(connection, ctx);
 		if (signsIn(connection) && account === undefined) return;
-		if (connection.api === "gmail") {
+		if (connection.api !== undefined) {
 			fault("connect:listed");
-			await keepListing(name, connection.sha, GMAIL_TOOLS, ctx);
+			await keepListing(name, connection.sha, REST_APIS[connection.api].tools, ctx);
 			problems.delete(name);
 			options.changed?.();
 			return;
@@ -1895,12 +1902,14 @@ export function openCapabilities(options: CapabilityOptions) {
 		const read = connection.account;
 		const url = connection.url as string;
 		const bearer = "key" in credentials ? credentials.key : credentials.oauth.tokens.access;
-		if (connection.api === "gmail") {
-			const answer = await gmailCall(bearer, read?.tool ?? "get_profile", {}, ctx.abortSignal, fetcher);
+		if (connection.api !== undefined) {
+			const builtIn = REST_APIS[connection.api];
+			const { tool, field } = read ?? builtIn.account;
+			const answer = await builtIn.read(bearer, tool, {}, ctx.abortSignal, fetcher);
 			let id = "";
 			try {
 				const parsed = JSON.parse(answer.text) as { [field: string]: unknown };
-				id = plainId(parsed[read?.field ?? "emailAddress"]);
+				id = plainId(parsed[field]);
 			} catch {}
 			if (answer.isError || id === "") throw new Error(`${connection.service} did not say who you are`);
 			return id;
@@ -2701,8 +2710,8 @@ export function openCapabilities(options: CapabilityOptions) {
 				async (client, bearer) => {
 					await check();
 					const result =
-						found.connection.api === "gmail"
-							? await gmailCall(bearer ?? "", tool, args, ctx.abortSignal, fetcher)
+						found.connection.api !== undefined
+							? await REST_APIS[found.connection.api].read(bearer ?? "", tool, args, ctx.abortSignal, fetcher)
 							: await remoteCall(client as McpClient, tool, args, ctx.abortSignal);
 					await check();
 					return result;

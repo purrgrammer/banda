@@ -8,6 +8,7 @@
  * credentials: they live in `auth/` with the rest, never in the store, the box, a prompt or a log.
  */
 import { createHash, randomBytes } from "node:crypto";
+import { REST_APIS } from "./rest.ts";
 
 /** Where the daemon signs in, as discovered: the authorization server's endpoints and the scopes the resource wants. */
 export type OAuthServer = {
@@ -141,14 +142,9 @@ async function resourceMetadata(fetcher: typeof fetch, resource: string): Promis
 
 /** Find where to sign in for `resource` (an MCP server's URL). */
 export async function discover(resource: string, fetcher: typeof fetch = fetch): Promise<OAuthServer> {
-	// Gmail's API is a first-party Google resource, not an RFC 9728 MCP server. Its user consent and token
+	// A built-in API is a first-party Google resource, not an RFC 9728 MCP server. Its user consent and token
 	// endpoints are fixed by Google; tool access remains restricted to the scopes in the shipped connection file.
-	const google = new URL(resource);
-	if (
-		google.protocol === "https:" &&
-		google.hostname === "gmail.googleapis.com" &&
-		google.pathname === "/gmail/v1/users/me"
-	)
+	if (Object.values(REST_APIS).some((api) => api.url === resource))
 		return {
 			issuer: "https://accounts.google.com",
 			authorize: "https://accounts.google.com/o/oauth2/v2/auth",

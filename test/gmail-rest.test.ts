@@ -45,6 +45,49 @@ describe("Gmail REST connection", () => {
 		expect("connection" in definition && definition.connection.api).toBe("gmail");
 	});
 
+	it("accepts a built-in API only at its own address, as Google, with scopes it allows", () => {
+		const file = (lines: Record<string, string>) =>
+			`---\n${Object.entries({
+				service: "Gmail",
+				url: "https://gmail.googleapis.com/gmail/v1/users/me",
+				api: "gmail",
+				auth: "oauth",
+				client: "google",
+				scopes: "[https://www.googleapis.com/auth/gmail.readonly]",
+				...lines,
+			})
+				.filter(([, value]) => value !== "")
+				.map(([key, value]) => `${key}: ${value}`)
+				.join("\n")}\n---\nRead mail.`;
+		const errors = (lines: Record<string, string>) => {
+			const parsed = parseConnection("gmail", file(lines));
+			return "errors" in parsed ? parsed.errors : [];
+		};
+		expect(errors({})).toEqual([]);
+		expect(
+			errors({
+				scopes:
+					"[https://www.googleapis.com/auth/gmail.readonly, https://www.googleapis.com/auth/gmail.send, https://www.googleapis.com/auth/gmail.modify]",
+			}),
+		).toEqual([]);
+		expect(errors({ api: "drive" }).join()).toContain("built-in API");
+		expect(errors({ url: "https://gmail.googleapis.com/gmail/v1/users/other" }).join()).toContain("built-in API");
+		expect(errors({ client: "someone-else" }).join()).toContain("Gmail uses OAuth client");
+		expect(errors({ scopes: "[https://www.googleapis.com/auth/gmail.send]" }).join()).toContain(
+			"Gmail uses OAuth client",
+		);
+		expect(
+			errors({
+				scopes: "[https://www.googleapis.com/auth/gmail.readonly, https://www.googleapis.com/auth/drive]",
+			}).join(),
+		).toContain("Gmail uses OAuth client");
+		expect(
+			errors({
+				scopes: "[https://www.googleapis.com/auth/gmail.readonly, https://www.googleapis.com/auth/gmail.readonly]",
+			}).join(),
+		).toContain("Gmail uses OAuth client");
+	});
+
 	it("sends the approved recipient, subject and body as a Gmail MIME message", async () => {
 		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ id: "sent_1", threadId: "thread_1" }));
 		const result = await gmailWriteCall(
