@@ -1,10 +1,10 @@
 /** A bounded Gmail REST surface. Tokens are supplied per call by the daemon and never enter a box. */
 import { randomUUID } from "node:crypto";
+import { googleRequest, MAX_RESPONSE_BYTES } from "./google-rest.ts";
 import { type McpResult, type McpTool, Unauthorized } from "./mcp.ts";
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 const LIMIT = 1_000_000;
-const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 export const MAX_GMAIL_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 export const MAX_GMAIL_SEND_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 
@@ -290,7 +290,8 @@ export async function gmailAttachment(
 	return bytes;
 }
 
-async function request(
+const GMAIL = { service: "Gmail", base: API };
+const request = (
 	fetcher: typeof fetch,
 	token: string,
 	path: string,
@@ -298,65 +299,7 @@ async function request(
 	limit = MAX_RESPONSE_BYTES,
 	method: "GET" | "POST" = "GET",
 	body?: unknown,
-): Promise<unknown> {
-	let response: Response;
-	for (let attempt = 0; ; attempt++) {
-		response = await fetcher(`${API}/${path}`, {
-			method,
-			redirect: "error",
-			headers: {
-				authorization: `Bearer ${token}`,
-				accept: "application/json",
-				...(body === undefined ? {} : { "content-type": "application/json" }),
-			},
-			...(body === undefined ? {} : { body: JSON.stringify(body) }),
-			...(signal === undefined ? {} : { signal }),
-		});
-		// GET retries are safe; a send or mailbox mutation never retries because Google may have applied it.
-		if (method !== "GET" || attempt >= 2 || ![429, 500, 502, 503, 504].includes(response.status)) break;
-		await response.body?.cancel();
-		const retryAfter = Number(response.headers.get("retry-after"));
-		const wait =
-			Number.isFinite(retryAfter) && retryAfter >= 0 ? Math.min(2000, retryAfter * 1000) : 200 * (attempt + 1);
-		if (signal?.aborted) throw signal.reason ?? new Error("Gmail request was cancelled.");
-		if (wait > 0)
-			await new Promise<void>((resolve, reject) => {
-				const finish = () => {
-					signal?.removeEventListener("abort", abort);
-					resolve();
-				};
-				const timer = setTimeout(finish, wait);
-				const abort = () => {
-					clearTimeout(timer);
-					signal?.removeEventListener("abort", abort);
-					reject(signal?.reason ?? new Error("Gmail request was cancelled."));
-				};
-				signal?.addEventListener("abort", abort, { once: true });
-			});
-	}
-	if (response.status === 401) throw new Unauthorized("Gmail did not take the credentials");
-	if (!response.ok) throw new Error(`Gmail answered ${response.status}`);
-	if (Number(response.headers.get("content-length")) > limit) {
-		await response.body?.cancel();
-		throw new Error("Gmail's answer was too large");
-	}
-	if (response.body === null) throw new Error("Gmail answered no data");
-	const reader = response.body.getReader();
-	const chunks: Uint8Array[] = [];
-	let size = 0;
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		size += value.byteLength;
-		if (size > limit) {
-			await reader.cancel();
-			throw new Error("Gmail's answer was too large");
-		}
-		chunks.push(value);
-	}
-	const text = new TextDecoder().decode(Buffer.concat(chunks));
-	return JSON.parse(text) as unknown;
-}
+) => googleRequest(GMAIL, fetcher, token, path, signal, limit, method, body);
 
 /** Execute a Gmail write already approved by the owner. */
 export async function gmailWriteCall(
