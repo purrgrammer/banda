@@ -304,7 +304,7 @@ export function Screens() {
 						<Band rows={ROWS} pinned={["sancho"]} className="w-full" />
 						<div aria-hidden="true" className="absolute inset-0 bg-black/40" />
 						<div className="absolute inset-x-0 bottom-0 rounded-t-tile bg-paper shadow-lg">
-							<RowActions row={ROWS[1] ?? ROWS[0]!} pinned={false} />
+							{ROWS[1] === undefined ? null : <RowActions row={ROWS[1]} pinned={false} />}
 						</div>
 					</div>
 				</Section>
