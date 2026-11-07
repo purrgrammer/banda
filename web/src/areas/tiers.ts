@@ -49,11 +49,11 @@ export async function changeModels(change: TiersChange): Promise<void> {
 	show(await api<TiersView>("/tiers", { method: "PUT", body: JSON.stringify(change) }));
 }
 
-export type ProviderView = {
+/** One account of a provider: its first is the provider's own id, another `<provider>@<account>`. */
+export type ProviderAccountView = {
 	readonly id: string;
-	readonly name: string;
-	readonly apiKey: boolean;
-	readonly oauth: boolean;
+	/** The owner's name for it; the provider's name for its first, until the owner names that one. */
+	readonly label: string;
 	readonly connected: boolean;
 	/** Connected by a credential from around the daemon, not one connected here: unverified, and not ours to forget. */
 	readonly ambient?: boolean;
@@ -68,6 +68,22 @@ export type ProviderView = {
 	readonly error?: string;
 };
 
+/** A provider (`GET /api/providers`): how it connects, and its accounts, its first always listed. */
+export type ProviderView = {
+	readonly id: string;
+	readonly name: string;
+	readonly apiKey: boolean;
+	readonly oauth: boolean;
+	readonly accounts: readonly ProviderAccountView[];
+};
+
+/** The account `id` and the provider it belongs to. */
+export function accountIn(providers: readonly ProviderView[], id: string | undefined) {
+	for (const provider of providers)
+		for (const account of provider.accounts) if (account.id === id) return { provider, account };
+	return undefined;
+}
+
 export const readProviders = () => api<ProviderView[]>("/providers");
 
 /** Connect with a key, or start a sign-in (`method` one of the provider's ways); a sign-in replaces one under way. */
@@ -75,6 +91,13 @@ export const connectProvider = (id: string, type: "oauth" | "api_key", key?: str
 	api<{ url?: string }>(`/providers/${encodeURIComponent(id)}`, {
 		method: "POST",
 		body: JSON.stringify({ type, ...(key === undefined ? {} : { key }), ...(method === undefined ? {} : { method }) }),
+	});
+
+/** Add another account to `provider`, named `label`: with a key, or a sign-in whose link comes back. */
+export const addProviderAccount = (provider: string, label: string, type: "oauth" | "api_key", key?: string) =>
+	api<{ id: string; url?: string }>(`/providers/${encodeURIComponent(provider)}/accounts`, {
+		method: "POST",
+		body: JSON.stringify({ label, type, ...(key === undefined ? {} : { key }) }),
 	});
 
 /** End a sign-in under way; its link no longer finishes anything. */
@@ -92,7 +115,10 @@ export const answerSignIn = (id: string, value: string) =>
 const WAYS: Readonly<Record<string, string>> = { browser: "Sign in in the browser", copy_code: "Sign in with a code" };
 export const wayLabel = (way: { readonly id: string; readonly label: string }) => WAYS[way.id] ?? way.label;
 
-/** Sign out of a provider; the daemon moves the band to another still connected if it thought with this one. */
+/**
+ * Sign out of a provider account (an added one is forgotten with it); the daemon moves the band to another still
+ * connected if it thought with this one.
+ */
 export const disconnectProvider = (id: string) =>
 	api<Record<string, never>>(`/providers/${encodeURIComponent(id)}`, { method: "DELETE" });
 
@@ -101,7 +127,8 @@ export const disconnectProvider = (id: string) =>
  * seconds while shown, so a sign-in finished in another tab shows); `pick` opens a provider's sign-in in a tab of its
  * own (opened from the tap, so it is not blocked; picked again, or another `method`, it replaces the one under way) or
  * toggles its key form; `answer` finishes a sign-in with a pasted code; `cancel` ends one; `key` connects with a key;
- * `use` thinks with a connected one; `signOut` forgets one. A connected provider becomes the band's.
+ * `use` thinks with a connected one; `signOut` forgets one; `add` adds another account to a provider, named by the
+ * owner, with a key or a sign-in. Each takes an account's id. A connected account becomes the band's.
  */
 export function useProviderConnect() {
 	const [providers, setProviders] = useState<readonly ProviderView[]>([]);
@@ -118,13 +145,13 @@ export function useProviderConnect() {
 			.then(async (next) => {
 				setProviders(next);
 				if (read <= started.current) return;
-				const id = pending.current;
-				const picked = next.find((provider) => provider.id === id);
-				if (picked === undefined) return;
+				const found = accountIn(next, pending.current);
+				if (found === undefined) return;
+				const picked = found.account;
 				if (picked.error !== undefined) {
 					pending.current = undefined;
 					setWaiting(undefined);
-					setError(`${picked.name} didn't finish: ${picked.error}. Try again.`);
+					setError(`${found.provider.name} didn't finish: ${picked.error}. Try again.`);
 				} else if (picked.connected && !picked.connecting) {
 					pending.current = undefined;
 					setWaiting(undefined);
@@ -149,23 +176,30 @@ export function useProviderConnect() {
 		await changeModels({ provider: id }).catch(failed);
 		await readTiers();
 	};
+	/** A sign-in's tab, opened from the tap so it is not blocked; undefined, said why, when the browser blocked it. */
+	const signInTab = () => {
+		const tab = window.open("about:blank", "_blank");
+		if (tab === null) {
+			setError("Your browser blocked the sign-in tab. Allow pop-ups for banda, then pick again.");
+			return undefined;
+		}
+		tab.opener = null;
+		return tab;
+	};
 	const pick = async (id: string, method?: string) => {
-		const provider = providers.find((each) => each.id === id);
-		if (provider === undefined) return;
+		const found = accountIn(providers, id);
+		if (found === undefined) return;
+		const { provider, account } = found;
 		setError(undefined);
 		// an ambient credential is already usable, so Use still works; Connect means connect over it, and must not
 		// fall through to using the very credential the owner is trying to replace
-		if (provider.connected && provider.ambient !== true) return use(id);
+		if (account.connected && account.ambient !== true) return use(id);
 		if (!provider.oauth) {
 			setOpen((was) => (was === id ? undefined : id));
 			return;
 		}
-		const tab = window.open("about:blank", "_blank");
-		if (tab === null) {
-			setError("Your browser blocked the sign-in tab. Allow pop-ups for banda, then pick again.");
-			return;
-		}
-		tab.opener = null;
+		const tab = signInTab();
+		if (tab === undefined) return;
 		setWaiting(id);
 		try {
 			const link = await connectProvider(id, "oauth", undefined, method);
@@ -213,7 +247,43 @@ export function useProviderConnect() {
 		await readTiers();
 		await refresh();
 	};
-	return { providers, open, waiting, error, pick, answer, cancel, key, use, signOut };
+	const add = async (provider: string, label: string, value?: string) => {
+		const found = providers.find((each) => each.id === provider);
+		if (found === undefined) return;
+		setError(undefined);
+		if (value !== undefined) {
+			setWaiting(provider);
+			try {
+				const { id } = await addProviderAccount(provider, label, "api_key", value);
+				await changeModels({ provider: id });
+				await readTiers();
+				await refresh();
+			} catch (reason) {
+				failed(reason);
+				await refresh();
+			} finally {
+				setWaiting(undefined);
+			}
+			return;
+		}
+		const tab = signInTab();
+		if (tab === undefined) return;
+		setWaiting(provider);
+		try {
+			const link = await addProviderAccount(provider, label, "oauth");
+			if (link.url === undefined) throw new Error(`${found.name} sent no sign-in link. Try again.`);
+			pending.current = link.id;
+			started.current = reads.current;
+			setWaiting(link.id);
+			tab.location.replace(link.url);
+			await refresh();
+		} catch (reason) {
+			tab.close();
+			setWaiting(undefined);
+			failed(reason);
+		}
+	};
+	return { providers, open, waiting, error, pick, answer, cancel, key, use, signOut, add };
 }
 
 /** Put a chat on `tier`, from its next run on; rejects with why not. */

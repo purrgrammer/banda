@@ -6,11 +6,27 @@
  * `ambient` with the `source` pi-ai names them by: the owner did not connect them here, signing out cannot remove
  * them, and nothing has tried them, so the app offers to connect over them rather than calling them good.
  *
- * A sign-in is one attempt per provider, held in memory and ended through pi-ai's own signal: the latest attempt
+ * A backend may have several accounts (`../../core/provider-accounts.ts`): the first is its plain id, another is added
+ * with a label the owner types and signs in under an id of its own. An account being added is registered from then on,
+ * a failed sign-in included, so the owner sees why and may try again or remove it (it resolves no ambient credential,
+ * so it is harmless meanwhile); it outlives the daemon only once a credential is stored for it. Signing out of an
+ * account forgets it, label and all.
+ *
+ * A sign-in is one attempt per account, held in memory and ended through pi-ai's own signal: the latest attempt
  * replaces an earlier one, the owner may cancel it, it times out, and the daemon stopping ends it. Ending it closes
  * what the provider's flow opened (a loopback callback server among them), so nothing outlives the attempt.
  */
 import type { AuthPrompt } from "@earendil-works/pi-ai";
+import { accountsOf, registerAccount } from "../../core/account-provider.ts";
+import {
+	accountSlug,
+	backendOf,
+	formatAccount,
+	isClone,
+	MAX_LABEL,
+	parseAccount,
+} from "../../core/provider-accounts.ts";
+import { FileCredentialStore } from "../../core/provider-credentials.ts";
 import { PRESETS } from "../../core/tiers.ts";
 import { deviceId } from "../../home.ts";
 import { BadRequest } from "../http.ts";
@@ -34,6 +50,9 @@ type Attempt = {
 	question?: string;
 	answer?: (value: string) => void;
 };
+
+/** An account the owner is adding: its label, until its credential is stored. */
+type Adding = ReadonlyMap<string, string>;
 const supported = [...new Set(PRESETS.map((preset) => preset.provider).filter((id) => id !== "openai-codex"))];
 
 /**
@@ -62,34 +81,79 @@ export async function credentialOf(
 	return { connected: true, ambient: true, ...(check.source === undefined ? {} : { source: check.source }) };
 }
 
-async function view(deps: Deps, pending: ReadonlyMap<string, Attempt>, failures: ReadonlyMap<string, string>) {
+async function view(
+	deps: Deps,
+	pending: ReadonlyMap<string, Attempt>,
+	failures: ReadonlyMap<string, string>,
+	adding: Adding,
+) {
+	const labels = await new FileCredentialStore(deps.home).labels();
 	return (
 		await Promise.all(
-			supported.flatMap(async (id) => {
-				const provider = deps.models.getProvider(id);
+			supported.flatMap(async (backend) => {
+				const provider = deps.models.getProvider(backend);
 				if (provider === undefined) return [];
 				const auth = provider.auth;
-				const { connected, ambient, source } = await credentialOf(deps.models, id);
-				const attempt = pending.get(id);
+				const accounts = await Promise.all(
+					accountsOf(deps.models, backend).map(async (id) => {
+						const { connected, ambient, source } = await credentialOf(deps.models, id);
+						const attempt = pending.get(id);
+						return {
+							id,
+							label: labels[id] ?? adding.get(id) ?? parseAccount(id).account ?? provider.name,
+							connected,
+							...(ambient ? { ambient } : {}),
+							...(source === undefined ? {} : { source }),
+							connecting: attempt !== undefined,
+							...(attempt?.question === undefined ? {} : { question: attempt.question }),
+							...(attempt?.methods === undefined ? {} : { methods: attempt.methods }),
+							...(attempt?.method === undefined ? {} : { method: attempt.method }),
+							...(failures.get(id) === undefined ? {} : { error: failures.get(id) }),
+						};
+					}),
+				);
 				return [
 					{
-						id,
+						id: backend,
 						name: provider.name,
 						apiKey: auth.apiKey?.login !== undefined,
 						oauth: auth.oauth !== undefined,
-						connected,
-						...(ambient ? { ambient } : {}),
-						...(source === undefined ? {} : { source }),
-						connecting: attempt !== undefined,
-						...(attempt?.question === undefined ? {} : { question: attempt.question }),
-						...(attempt?.methods === undefined ? {} : { methods: attempt.methods }),
-						...(attempt?.method === undefined ? {} : { method: attempt.method }),
-						...(failures.get(id) === undefined ? {} : { error: failures.get(id) }),
+						accounts,
 					},
 				];
 			}),
 		)
 	).flat();
+}
+
+/** The label the owner typed, checked: words of their own, unique among the backend's accounts. */
+async function labelOf(deps: Deps, backend: string, value: unknown, adding: Adding, except?: string): Promise<string> {
+	if (typeof value !== "string" || value.trim() === "") throw new BadRequest("label is the account's name, as text");
+	const label = value.trim();
+	if (label.length > MAX_LABEL) throw new BadRequest(`label is at most ${MAX_LABEL} characters`);
+	const labels = await new FileCredentialStore(deps.home).labels();
+	const clash = accountsOf(deps.models, backend).some(
+		(id) => id !== except && (labels[id] ?? adding.get(id))?.toLowerCase() === label.toLowerCase(),
+	);
+	if (clash) throw new BadRequest(`there is an account called ${label} already: name this one differently`);
+	return label;
+}
+
+/** The label of another account of the same backend that holds `key` already, if any. */
+async function holding(deps: Deps, id: string, key: string): Promise<string | undefined> {
+	const backend = backendOf(id);
+	for (const other of accountsOf(deps.models, backend)) {
+		if (other === id || (await deps.models.checkAuth(other).catch(() => undefined))?.type !== "api_key") continue;
+		const auth = await deps.models.getAuth(other).catch(() => undefined);
+		if (auth?.auth.apiKey === key)
+			return (
+				(await new FileCredentialStore(deps.home).labels())[other] ??
+				parseAccount(other).account ??
+				deps.models.getProvider(backend)?.name ??
+				backend
+			);
+	}
+	return undefined;
 }
 
 export function providersArea(options: { readonly timeoutMs?: number } = {}): AreaModule {
@@ -98,6 +162,8 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 		start: (deps) => {
 			const pending = new Map<string, Attempt>();
 			const failures = new Map<string, string>();
+			const adding = new Map<string, string>();
+			const store = new FileCredentialStore(deps.home);
 			/** End `id`'s attempt, if any, quietly, and wait until its flow has let go of what it opened. */
 			const end = async (id: string, why: string) => {
 				const attempt = pending.get(id);
@@ -110,9 +176,15 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 				// done before the next turn of the event loop
 				await new Promise((resolve) => setImmediate(resolve));
 			};
+			/** Forget an account being added that never got a credential: it leaves the view and the models. */
+			const drop = (id: string) => {
+				if (!adding.has(id)) return;
+				adding.delete(id);
+				if (isClone(id)) deps.models.deleteProvider(id);
+			};
 			const connect = async (id: string, body: Record<string, unknown>) => {
 				const provider = deps.models.getProvider(id);
-				if (provider === undefined || !supported.includes(id))
+				if (provider === undefined || !supported.includes(backendOf(id)))
 					throw new BadRequest("that provider is not available in banda");
 				const type = body.type;
 				if (type !== "api_key" && type !== "oauth") throw new BadRequest("type is api_key or oauth");
@@ -122,6 +194,10 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 					throw new BadRequest(`${provider.name} does not support sign-in`);
 				const key = body.key;
 				if (type === "api_key" && (typeof key !== "string" || key === "")) throw new BadRequest("key is required");
+				if (type === "api_key") {
+					const already = await holding(deps, id, key as string);
+					if (already !== undefined) throw new BadRequest(`that key is connected already, as ${already}`, 409);
+				}
 				const method = typeof body.method === "string" ? body.method : undefined;
 				// the latest attempt wins: the earlier one ends, and its callback server with it, before this one binds
 				await end(id, "a newer sign-in replaced this one");
@@ -181,6 +257,11 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 					)
 					.then(async () => {
 						settle();
+						const label = adding.get(id);
+						if (label !== undefined) {
+							await store.label(id, label);
+							adding.delete(id);
+						}
 						if (attempt.quiet !== true) await selectConnectedProvider(deps, id);
 					})
 					.then(
@@ -200,24 +281,63 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 				}
 				return { url: await link };
 			};
+			/**
+			 * Add an account to `backend` labelled as the owner says: the plain id while it has no credential at all,
+			 * else an id of its own. It signs in as `connect` does.
+			 */
+			const add = async (backend: string, body: Record<string, unknown>) => {
+				if (!supported.includes(backend) || deps.models.getProvider(backend) === undefined)
+					throw new BadRequest("that provider is not available in banda");
+				const label = await labelOf(deps, backend, body.label, adding);
+				const accounts = accountsOf(deps.models, backend);
+				const id =
+					(await deps.models.checkAuth(backend).catch(() => undefined)) === undefined
+						? backend
+						: formatAccount({
+								provider: backend,
+								account: accountSlug(label, new Set(accounts.flatMap((each) => parseAccount(each).account ?? []))),
+							});
+				if (isClone(id)) registerAccount(deps.models, id);
+				adding.set(id, label);
+				try {
+					return { id, ...(await connect(id, body)) };
+				} catch (error) {
+					if (!pending.has(id)) drop(id);
+					throw error;
+				}
+			};
 			return {
 				route: async (request) => {
 					if (request.path === "/providers" && request.method === "GET")
-						return { body: await view(deps, pending, failures) };
-					const matched = /^\/providers\/([^/]+)(?:\/(answer|sign-in))?$/.exec(request.path);
+						return { body: await view(deps, pending, failures, adding) };
+					const matched = /^\/providers\/([^/]+)(?:\/(answer|sign-in|accounts|label))?$/.exec(request.path);
 					if (matched === null) return undefined;
 					const id = decodeURIComponent(matched[1] ?? "");
 					if (request.method === "DELETE" && matched[2] === "sign-in") {
 						await end(id, "the sign-in was cancelled");
 						failures.delete(id);
+						drop(id);
 						deps.changed();
 						return { body: {} };
 					}
 					if (request.method === "DELETE" && matched[2] === undefined) {
 						await end(id, "signed out");
 						await deps.models.logout(id);
+						// the label goes with the credential; an account of its own goes from the models too
+						await store.delete(id);
+						adding.delete(id);
+						if (isClone(id)) deps.models.deleteProvider(id);
 						await leaveProvider(deps, id);
 						failures.delete(id);
+						deps.changed();
+						return { body: {} };
+					}
+					if (request.method === "PUT" && matched[2] === "label") {
+						if (deps.models.getProvider(id) === undefined || !supported.includes(backendOf(id)))
+							throw new BadRequest("there is no such account", 404);
+						const label = await labelOf(deps, backendOf(id), (await request.json()).label, adding, id);
+						if (adding.has(id)) adding.set(id, label);
+						else await store.label(id, label);
 						deps.changed();
 						return { body: {} };
 					}
@@ -229,6 +349,7 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 						answer(value);
 						return { body: {} };
 					}
+					if (matched[2] === "accounts") return { body: await add(id, await request.json()) };
 					if (matched[2] !== undefined) return undefined;
 					return { body: await connect(id, await request.json()) };
 				},
