@@ -809,9 +809,14 @@ A skill is one shared prompt file, not an agent's private copy. Agents may load 
 `/name` invokes a known skill. The accepted instructions are loaded before that message's first model request, as
 one recorded tool call and result; an earlier running request must not see the load without the owner's message. The
 chat names only what loaded; Activity holds the exact result. Other files in a skill's folder remain box data, never
-instructions the daemon loads from an unaccepted change. banda ships a few skills; first run offers them once, right
-after the provider, and the ones the owner keeps are written into the workspace and accepted in that step, since banda
-wrote them and the owner chose them. A skill of that name already accepted is never replaced.
+instructions the daemon loads from an unaccepted change. A skill may be owner-only (`disable-model-invocation: true`):
+only the owner's /name loads it, agents never see it, and the app says so wherever the skill shows. banda ships a few
+skills; first run offers them once, right after the provider, and the ones the owner keeps are written into the
+workspace and accepted in that step, since banda wrote them and the owner chose them. The Skills page offers the
+shipped skills the workspace lacks the same way, any time: adding one is the same choice, accepted by the hash of the
+bytes banda wrote. A skill of that name already accepted is never replaced. The Skills page puts what waits on the
+owner first, then every accepted skill in one flat list, marked where owner-only or where a change waits; nothing the
+page is for hides behind a disclosure.
 
 **Bringing your own.** An owner who already works with another harness on this computer (Claude Code, Codex, pi) has
 skills and agents there. In the desktop app, first run offers those in place of banda's own: the owner picks harnesses,

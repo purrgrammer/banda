@@ -1,13 +1,18 @@
 /** A skill in chat is one quiet feed item; its files and instructions belong to the detail page and Activity. */
 
 import { BookOpenIcon, ChevronDownIcon, FileTextIcon } from "lucide-react";
+import { useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
 import { Markdown } from "../components/Markdown.tsx";
+import { FILTER_FROM, filterSkills } from "../lib/skill-page.ts";
 import { Line } from "./Line.tsx";
 
 export type SkillSummary = {
 	readonly name: string;
 	readonly description: string;
+	/** Only the owner's /name loads it; agents never see it. */
+	readonly ownerOnly?: boolean;
 };
 
 export type SkillInfo = SkillSummary & {
@@ -16,6 +21,60 @@ export type SkillInfo = SkillSummary & {
 	readonly body: string;
 	readonly files?: readonly string[];
 };
+
+export type SkillRow = SkillSummary & {
+	/** An agent's change waits on the owner. */
+	readonly changed?: boolean;
+};
+
+/** A quiet marker on a row: what sets this skill apart, in two words. */
+function RowMark({ children }: { children: string }) {
+	return (
+		<span className="shrink-0 rounded-full border border-line-soft px-1.5 py-px text-meta text-ink-2">{children}</span>
+	);
+}
+
+/** The Skills page's list: every accepted skill, flat and visible, a filter once it grows. */
+export function SkillList({ skills, hrefFor }: { skills: readonly SkillRow[]; hrefFor: (name: string) => string }) {
+	const [query, setQuery] = useState("");
+	const shown = filterSkills(skills, query);
+	return (
+		<div className="flex min-w-0 flex-col gap-2" data-skill-list="">
+			{skills.length >= FILTER_FROM ? (
+				<Input
+					type="search"
+					aria-label="Filter skills"
+					placeholder="Filter skills"
+					value={query}
+					onChange={(event) => setQuery(event.target.value)}
+				/>
+			) : null}
+			{skills.length === 0 ? (
+				<p className="text-ui text-ink-2">No skills yet.</p>
+			) : shown.length === 0 ? (
+				<p className="text-ui text-ink-2">No skill matches “{query.trim()}”.</p>
+			) : (
+				<ul className="flex min-w-0 flex-col gap-0.5">
+					{shown.map((skill) => (
+						<li key={skill.name} className="min-w-0">
+							<a
+								href={hrefFor(skill.name)}
+								className="flex min-w-0 flex-col gap-0.5 rounded-field px-2 py-1.5 text-left hover:bg-paper-3 focus-visible:bg-paper-3"
+							>
+								<span className="flex min-w-0 items-center gap-2">
+									<span className="truncate font-mono text-ui font-medium text-ink">/{skill.name}</span>
+									{skill.ownerOnly === true ? <RowMark>Only you</RowMark> : null}
+									{skill.changed === true ? <RowMark>Changed</RowMark> : null}
+								</span>
+								<span className="line-clamp-2 text-meta text-ink-2">{skill.description}</span>
+							</a>
+						</li>
+					))}
+				</ul>
+			)}
+		</div>
+	);
+}
 
 /** The feed records the load, not the skill's instructions. Its name opens the current skill's detail page. */
 export function SkillFeedItem({ name, href, agent }: { name: string; href: string; agent?: string }) {
@@ -43,7 +102,13 @@ export function SkillDetail({ skill }: { skill: SkillInfo }) {
 				<div className="flex min-w-0 flex-col gap-1">
 					<h1 className="break-words font-mono text-heading font-semibold text-ink">/{skill.name}</h1>
 					<p className="text-body text-ink-2">{skill.description}</p>
-					<p className="text-meta text-ink-2">Shared with the band · a file in the workspace</p>
+					{skill.ownerOnly === true ? (
+						<p className="text-meta text-ink-2">
+							Only you can run this, with <span className="font-mono">/{skill.name}</span>. Agents don't see it.
+						</p>
+					) : (
+						<p className="text-meta text-ink-2">Shared with the band</p>
+					)}
 				</div>
 			</header>
 			<section className="flex min-w-0 flex-col gap-2">
@@ -63,7 +128,7 @@ export function SkillDetail({ skill }: { skill: SkillInfo }) {
 			<section className="flex min-w-0 flex-col gap-2">
 				<h2 className="text-ui font-semibold text-ink">Files</h2>
 				<p className="text-meta text-ink-2">
-					Other files are data in the box. Only the accepted SKILL.md is loaded as instructions.
+					Other files in this skill are only data. Agents follow just its main instructions.
 				</p>
 				{skill.files === undefined || skill.files.length === 0 ? (
 					<p className="text-ui text-ink-2">No other files.</p>

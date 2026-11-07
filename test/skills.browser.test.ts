@@ -77,9 +77,13 @@ for (const width of [390, 1440])
 				await click(page, button("Add 5 skills"));
 				await page.until(`!document.body.textContent.includes('Skills to start with')`);
 				await page.run(`location.hash='#/skills'`);
-				await click(page, `[...document.querySelectorAll('button')].find(el => el.textContent.includes('5 shared'))`);
-				await page.until(`document.body.textContent.includes('/catch-me-up')`);
-				expect(await page.run(`document.body.textContent.includes('/unslop')`)).toBe(false);
+				// the list is flat and visible: no disclosure to open
+				await page.until(`document.querySelector('[data-skill-list]')?.textContent.includes('/catch-me-up')`);
+				expect(await page.run(`document.querySelector('[data-skill-list]')?.textContent.includes('/unslop')`)).toBe(
+					false,
+				);
+				// the one left off at first run is offered again, from banda
+				await page.until(`document.querySelector('[aria-label="Skills from banda"]')?.textContent.includes('/unslop')`);
 				await page.run(`location.hash='#/a/sancho'`);
 				await page.until(`document.querySelector('textarea[placeholder^="Message "]')`);
 				await page.run(`location.hash='#/skills'`);
@@ -126,7 +130,7 @@ for (const width of [390, 1440])
 					"---\nname: research\ndescription: Gather sources\n---\n\n# Research\nCheck every source.",
 				);
 				await page.run(`dispatchEvent(new Event('banda.skills-changed'))`);
-				await page.until(`document.body.textContent.includes('A change in the box needs your review')`);
+				await page.until(`document.body.textContent.includes('An agent changed this skill')`);
 				expect(
 					await page.run(`document.querySelector('[data-skill-detail]')?.textContent.includes('Cite your sources.')`),
 				).toBe(true);

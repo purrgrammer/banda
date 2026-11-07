@@ -4,9 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SettingsPage } from "../chat/Settings.tsx";
-import { SkillCatalogue, SkillDetail } from "../chat/Skill.tsx";
-import { acceptSkill, acceptSkills, type SkillView, saveSkill, skills } from "../lib/api.ts";
+import { SkillDetail, SkillList } from "../chat/Skill.tsx";
+import {
+	acceptSkill,
+	acceptSkills,
+	chooseShippedSkills,
+	type ShippedSkillView,
+	type SkillView,
+	saveSkill,
+	shippedSkills,
+	skills,
+} from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
+import { NAME_RULE, offersLeft, skillFormState } from "../lib/skill-page.ts";
 
 const CHANGED = "banda.skills-changed";
 
@@ -48,54 +58,86 @@ export function SkillsPage({
 	onOpen: (name: string) => void;
 }) {
 	const { list, reload } = useSkills();
-	const [newName, setNewName] = useState("");
-	const [draft, setDraft] = useState("");
 	const [editing, setEditing] = useState(false);
+	// an editor left open belongs to the page it was opened on, not the next one
+	// biome-ignore lint/correctness/useExhaustiveDependencies: name is the page
+	useEffect(() => {
+		setEditing(false);
+	}, [name]);
+	const [shipped, setShipped] = useState<readonly ShippedSkillView[]>();
+	useEffect(() => {
+		void shippedSkills()
+			.then((view) => setShipped(view.skills))
+			.catch(() => {});
+	}, []);
 	const selected = list.find((item) => item.name === name);
 	const accepted = selected?.accepted;
-	const base = accepted?.sha ?? null;
-	const create = name === undefined && editing;
-	const edit = name !== undefined && editing;
-	const target = create ? newName : (name ?? "");
-	const save = () =>
-		void attempt("save the skill", async () => {
-			await saveSkill(target, draft, base);
+	const present = new Set(list.map((item) => item.name));
+	const existing = list.flatMap((item) => (item.accepted === undefined ? [] : [item.name]));
+	const save = (target: string, text: string, base: string | null) =>
+		attempt("save the skill", async () => {
+			await saveSkill(target, text, base);
 			setEditing(false);
-			setDraft("");
 			await reload();
 			changed();
-			if (create) onOpen(target);
+			if (name === undefined) onOpen(target);
 		});
 	return (
 		<SettingsPage
-			title={name === undefined ? "Skills" : `/${name}`}
+			title={name === undefined || accepted !== undefined ? "Skills" : `/${name}`}
 			phone={phone}
 			onBack={onBack}
 			wide={name !== undefined}
 		>
 			{name === undefined ? (
 				<>
-					<p className="text-ui text-ink-2">
-						Shared with every agent. Use /name in a message, or let an agent load one when its work fits.
-					</p>
-					<SkillCatalogue
-						skills={list.flatMap(({ accepted }) =>
-							accepted === undefined ? [] : [{ name: accepted.name, description: accepted.description }],
-						)}
-						hrefFor={(value) => `#/skills/${value}`}
-					/>
 					<Waiting list={list} onOpen={onOpen} reload={reload} />
+					<section className="flex flex-col gap-3">
+						<p className="text-ui text-ink-2">
+							Shared with every agent. Use /name in a message, or let an agent load one when its work fits.
+						</p>
+						<SkillList
+							skills={list.flatMap(({ accepted, change }) =>
+								accepted === undefined
+									? []
+									: [
+											{
+												name: accepted.name,
+												description: accepted.description,
+												...(accepted.ownerOnly === true ? { ownerOnly: true } : {}),
+												...(change !== undefined && change.kind !== "removed" ? { changed: true } : {}),
+											},
+										],
+							)}
+							hrefFor={(value) => `#/skills/${value}`}
+						/>
+					</section>
+					{shipped === undefined ? null : (
+						<FromBanda
+							offers={offersLeft(shipped).filter(({ name: offer }) => !present.has(offer))}
+							onAdd={(offer) =>
+								void attempt("add the skill", async () => {
+									setShipped((await chooseShippedSkills([offer])).skills);
+									await reload();
+									changed();
+								})
+							}
+						/>
+					)}
 					{!editing ? (
-						<Button
-							variant="outline"
-							onClick={() => {
-								setDraft("");
-								setEditing(true);
-							}}
-						>
-							Create a skill
-						</Button>
-					) : null}
+						<div>
+							<Button variant="outline" onClick={() => setEditing(true)}>
+								Create a skill
+							</Button>
+						</div>
+					) : (
+						<SkillForm
+							heading="New skill"
+							existing={existing}
+							onSave={(target, text) => save(target, text, null)}
+							onCancel={() => setEditing(false)}
+						/>
+					)}
 				</>
 			) : accepted === undefined ? (
 				<p className="text-ui text-ink-2">
@@ -104,82 +146,223 @@ export function SkillsPage({
 			) : (
 				<SkillDetail skill={accepted} />
 			)}
-			{selected?.change !== undefined ? (
-				<section className="flex flex-col gap-3 rounded-field border border-line-soft bg-paper-2 p-4">
-					<h2 className="text-ui font-semibold">A change in the box needs your review</h2>
-					{selected.change.kind === "removed" ? (
-						<p className="text-ui text-ink-2">
-							The file was removed in the box. The accepted instructions remain available.
-						</p>
-					) : (
-						<>
-							<p className="text-meta text-ink-2">Proposed SKILL.md · {selected.change.kind} · not used by agents</p>
-							<pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-field bg-paper p-3 font-mono text-meta">
-								{selected.change.text ?? selected.change.errors?.join("\n")}
-							</pre>
-							{selected.change.errors !== undefined ? (
-								<p className="text-ui text-danger">{selected.change.errors.join("\n")}</p>
-							) : null}
-							{selected.change.sha !== undefined && selected.change.errors === undefined ? (
-								<Button
-									onClick={() =>
-										void attempt("accept the skill", async () => {
-											await acceptSkill(name ?? "", selected.change?.sha ?? "");
-											await reload();
-											changed();
-										})
-									}
-								>
-									Accept this version
-								</Button>
-							) : null}
-						</>
-					)}
-				</section>
+			{name !== undefined && selected?.change !== undefined ? (
+				<ChangeReview
+					isNew={accepted === undefined}
+					change={selected.change}
+					onAccept={(sha) =>
+						void attempt("accept the skill", async () => {
+							await acceptSkill(name, sha);
+							await reload();
+							changed();
+						})
+					}
+				/>
 			) : null}
-			{(create || (name !== undefined && !editing)) && name !== undefined && accepted !== undefined ? (
-				<Button
-					variant="outline"
-					onClick={() => {
-						setDraft(accepted.text);
-						setEditing(true);
-					}}
-				>
-					Edit instructions
-				</Button>
+			{name !== undefined && accepted !== undefined && !editing ? (
+				<div>
+					<Button variant="outline" onClick={() => setEditing(true)}>
+						Edit instructions
+					</Button>
+				</div>
 			) : null}
-			{create || edit ? (
-				<section className="flex flex-col gap-3">
-					<h2 className="text-ui font-semibold">{create ? "New skill" : `Edit /${name}`}</h2>
-					{create ? (
-						<Input
-							aria-label="Skill name"
-							placeholder="name"
-							value={newName}
-							onChange={(event) => {
-								const value = event.target.value.toLowerCase();
-								setNewName(value);
-								setDraft(`---\nname: ${value}\ndescription: What this skill helps with\n---\n\n# Instructions\n`);
-							}}
-						/>
-					) : null}
-					<Textarea
-						aria-label="SKILL.md"
-						className="min-h-64 font-mono"
-						value={draft}
-						onChange={(event) => setDraft(event.target.value)}
-					/>
-					<div className="flex gap-2">
-						<Button onClick={save} disabled={!target || !draft}>
-							Save and use
-						</Button>
-						<Button variant="ghost" onClick={() => setEditing(false)}>
-							Cancel
-						</Button>
-					</div>
-				</section>
+			{name !== undefined && accepted !== undefined && editing ? (
+				<SkillForm
+					heading={`Edit /${name}`}
+					name={name}
+					initialText={accepted.text}
+					existing={[]}
+					onSave={(target, text) => save(target, text, accepted.sha)}
+					onCancel={() => setEditing(false)}
+				/>
 			) : null}
 		</SettingsPage>
+	);
+}
+
+/** An agent's proposed version: shown, never loaded, until the owner accepts it. */
+function ChangeReview({
+	isNew,
+	change,
+	onAccept,
+}: {
+	isNew: boolean;
+	change: NonNullable<SkillView["change"]>;
+	onAccept: (sha: string) => void;
+}) {
+	return (
+		<section className="flex flex-col gap-3 rounded-field border border-line-soft bg-paper-2 p-4">
+			<h2 className="text-ui font-semibold">
+				{change.kind === "removed"
+					? "An agent removed this skill's file"
+					: isNew
+						? "An agent wrote this skill"
+						: "An agent changed this skill"}
+			</h2>
+			{change.kind === "removed" ? (
+				<p className="text-ui text-ink-2">The version you accepted still works. There is nothing to allow.</p>
+			) : (
+				<>
+					<p className="text-ui text-ink-2">Review it before agents use it.</p>
+					<p className="text-meta text-ink-2">
+						{isNew ? "New skill · agents don't use it yet" : "Proposed version · agents don't use it yet"}
+					</p>
+					<pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-field bg-paper p-3 font-mono text-meta">
+						{change.text ?? change.errors?.join("\n")}
+					</pre>
+					{change.errors !== undefined ? <p className="text-ui text-danger">{change.errors.join("\n")}</p> : null}
+					{change.sha !== undefined && change.errors === undefined ? (
+						<Button onClick={() => onAccept(change.sha ?? "")}>Accept this version</Button>
+					) : null}
+				</>
+			)}
+		</section>
+	);
+}
+
+/** The skills banda ships and the workspace lacks: one tap writes and accepts one, as at first run. */
+export function FromBanda({
+	offers,
+	busy,
+	onAdd,
+}: {
+	offers: readonly { readonly name: string; readonly about: string; readonly note?: string }[];
+	busy?: string;
+	onAdd: (name: string) => void;
+}) {
+	if (offers.length === 0) return null;
+	return (
+		<section aria-label="Skills from banda" className="flex flex-col gap-3">
+			<header className="flex flex-col gap-0.5">
+				<h2 className="text-ui font-semibold text-ink">From banda</h2>
+				<p className="text-meta text-ink-2">Ready-made skills. Add one and agents can use it right away.</p>
+			</header>
+			<ul className="flex min-w-0 flex-col divide-y divide-line-soft rounded-tile border border-line-soft">
+				{offers.map((offer) => (
+					<li key={offer.name} className="flex min-w-0 items-center gap-3 px-3 py-2.5">
+						<span className="flex min-w-0 flex-1 flex-col">
+							<span className="truncate font-mono text-ui font-medium text-ink">/{offer.name}</span>
+							<span className="text-meta text-ink-2">{offer.about}</span>
+							{offer.note === undefined ? null : <span className="text-meta text-ink-2">{offer.note}</span>}
+						</span>
+						<Button
+							variant="outline"
+							size="sm"
+							disabled={busy !== undefined}
+							aria-label={`Add /${offer.name}`}
+							onClick={() => onAdd(offer.name)}
+						>
+							{busy === offer.name ? "Adding…" : "Add"}
+						</Button>
+					</li>
+				))}
+			</ul>
+		</section>
+	);
+}
+
+const TEMPLATE = (name: string) =>
+	`---\nname: ${name}\ndescription: What this skill helps with\n---\n\n# Instructions\n`;
+
+/**
+ * The SKILL.md editor, for a new skill or an accepted one. It says what the daemon would refuse while the owner
+ * types, and "Save and use" stays off until the file would be taken: the owner's own save is accepted at once.
+ */
+export function SkillForm({
+	heading,
+	name,
+	initialName,
+	initialText,
+	existing,
+	onSave,
+	onCancel,
+}: {
+	heading: string;
+	/** Set on an edit: the name is fixed. */
+	name?: string;
+	/** A create's starting name, for a prefilled form. */
+	initialName?: string;
+	initialText?: string;
+	/** Names already in the workspace: a new skill cannot take one. */
+	existing: readonly string[];
+	onSave: (name: string, text: string) => Promise<unknown>;
+	onCancel: () => void;
+}) {
+	const create = name === undefined;
+	const [typed, setTyped] = useState(initialName ?? "");
+	const [text, setText] = useState(initialText ?? "");
+	const [saving, setSaving] = useState(false);
+	const target = name ?? typed;
+	const state = skillFormState({ name: target, text, existing: create ? existing : [] });
+	// the name's own verdicts show at the name field; down here only the file's
+	const fileProblems = state.problems.filter(
+		(problem) => problem !== NAME_RULE && problem !== `A skill called /${target} already exists.`,
+	);
+	return (
+		<section className="flex flex-col gap-3">
+			<h2 className="text-ui font-semibold">{heading}</h2>
+			{create ? (
+				<div className="flex flex-col gap-1">
+					<Input
+						aria-label="Skill name"
+						aria-invalid={state.badName || state.taken}
+						placeholder="name"
+						value={typed}
+						onChange={(event) => {
+							const value = event.target.value.toLowerCase();
+							const fresh = text === "" || text === TEMPLATE(typed);
+							setTyped(value);
+							if (fresh) setText(TEMPLATE(value));
+						}}
+					/>
+					<p className={`text-meta ${state.badName ? "text-danger" : "text-ink-2"}`}>{NAME_RULE}</p>
+					{state.taken ? (
+						<p role="alert" className="text-meta text-danger">
+							A skill called /{target} already exists.
+						</p>
+					) : typed === "" ? null : state.badName ? null : (
+						<p className="text-meta text-ink-2">
+							In a chat: <span className="font-mono text-ink">/{target}</span>
+						</p>
+					)}
+				</div>
+			) : null}
+			<Textarea
+				aria-label="SKILL.md"
+				className="min-h-64 font-mono"
+				value={text}
+				onChange={(event) => setText(event.target.value)}
+			/>
+			<div className="flex flex-col gap-1">
+				<p className="text-meta text-ink-2">
+					{state.description === ""
+						? "The description tells agents when this skill fits. 1 to 1,024 characters."
+						: `Description · ${state.description.length} of 1,024 characters`}
+				</p>
+				{state.size === undefined ? null : (
+					<p className={`text-meta ${state.overSize ? "text-danger" : "text-ink-2"}`}>{state.size}</p>
+				)}
+				{fileProblems.length > 0 ? (
+					<p role="alert" className="text-meta text-danger">
+						{fileProblems.join(" ")}
+					</p>
+				) : null}
+			</div>
+			<div className="flex gap-2">
+				<Button
+					disabled={!state.valid || saving}
+					onClick={() => {
+						setSaving(true);
+						void onSave(target, text).finally(() => setSaving(false));
+					}}
+				>
+					Save and use
+				</Button>
+				<Button variant="ghost" onClick={onCancel}>
+					Cancel
+				</Button>
+			</div>
+		</section>
 	);
 }
 
@@ -187,7 +370,7 @@ export function SkillsPage({
  * Proposed skills the owner has not accepted: each opens to its review, and the ones that parse are accepted together,
  * at exactly the versions listed here.
  */
-function Waiting({
+export function Waiting({
 	list,
 	onOpen,
 	reload,

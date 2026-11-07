@@ -112,6 +112,23 @@ describe("choosing the shipped skills at first run", () => {
 		}
 	});
 
+	it("adds one after first run the same way: written as shipped, accepted, the rest untouched", async () => {
+		const { box, harness, workspace, accepted, close } = await setup();
+		try {
+			await chooseShippedSkills(harness, workspace, ["bro"]);
+			expect((await shippedSkills(harness, workspace)).chosen).toBe(true);
+			// the Skills page's "From banda": one name, any time after first run
+			const view = await chooseShippedSkills(harness, workspace, ["unslop"]);
+			expect(view.skills.filter(({ added }) => added).map(({ name }) => name)).toEqual(["bro", "unslop"]);
+			expect((await accepted()).map(({ name }) => name)).toEqual(["bro", "unslop"]);
+			expect(await readFile(join(box.workspace, "skills/unslop/SKILL.md"), "utf8")).toBe(
+				await readFile(join(SHIPPED_SKILLS, "unslop/SKILL.md"), "utf8"),
+			);
+		} finally {
+			await close();
+		}
+	});
+
 	it("refuses a name banda does not ship, or one listed twice, and changes nothing", async () => {
 		const { harness, workspace, accepted, close } = await setup();
 		try {
