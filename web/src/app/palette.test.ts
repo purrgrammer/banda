@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchAgents, matches, matchPages, matchSkills } from "./palette.ts";
+import { firstLiveValue, matchAgents, matches, matchPages, matchSkills } from "./palette.ts";
 
 describe("matches", () => {
 	it("matches a word prefix, whatever the case", () => {
@@ -54,5 +54,21 @@ describe("local sections", () => {
 		expect(matchPages("sett").map((page) => page.id)).toEqual(["settings"]);
 		expect(matchPages("s").map((page) => page.id)).toEqual(["skills", "settings"]);
 		expect(matchPages("")).toEqual([]);
+	});
+});
+
+describe("firstLiveValue", () => {
+	const agents = [{ id: "mara" }, { id: "sancho" }];
+	const skills = [{ name: "pdf" }, { name: "xlsx" }];
+	const pages = [{ id: "settings" }];
+
+	it("moves the active row to the first live section, in the list's order", () => {
+		expect(firstLiveValue(agents, skills, pages)).toBe("agent:mara");
+		expect(firstLiveValue([], skills, pages)).toBe("skill:pdf");
+		expect(firstLiveValue([], [], pages)).toBe("page:settings");
+	});
+
+	it("moves it to none when no local row is live", () => {
+		expect(firstLiveValue([], [], [])).toBe("");
 	});
 });

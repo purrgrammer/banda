@@ -41,3 +41,21 @@ export const matchSkills = <S extends { readonly name: string; readonly descript
 ): S[] => skills.filter((skill) => matches(query, skill.name) || matches(query, skill.description));
 
 export const matchPages = (query: string): Page[] => PAGES.filter((page) => matches(query, page.label));
+
+/**
+ * Where the active row moves when the chat hits go stale (a new search is running and they answer an older query):
+ * the first live local row's value, in the list's order (agents, skills, pages), or none at all.
+ */
+export const firstLiveValue = (
+	agents: readonly { readonly id: string }[],
+	skills: readonly { readonly name: string }[],
+	pages: readonly { readonly id: string }[],
+): string => {
+	const [agent] = agents;
+	if (agent !== undefined) return `agent:${agent.id}`;
+	const [skill] = skills;
+	if (skill !== undefined) return `skill:${skill.name}`;
+	const [page] = pages;
+	if (page !== undefined) return `page:${page.id}`;
+	return "";
+};

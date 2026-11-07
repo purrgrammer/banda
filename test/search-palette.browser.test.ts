@@ -31,6 +31,21 @@ function json(res: ServerResponse, body: unknown) {
 	res.end(JSON.stringify(body));
 }
 
+/** Searches held open by the test, so it controls when the daemon "answers": the stale window stays open meanwhile. */
+let holding = false;
+const held: { res: ServerResponse; q: string }[] = [];
+const answer = (q: string) => (/lisbon|mara/i.test(q) ? [HIT] : []);
+const release = () => {
+	for (const one of held.splice(0)) json(one.res, answer(one.q));
+};
+async function heldSearch() {
+	const started = Date.now();
+	while (held.length === 0) {
+		if (Date.now() - started > 5000) throw new Error("no search reached the fixture to hold");
+		await new Promise((resolve) => setTimeout(resolve, 25));
+	}
+}
+
 beforeAll(async () => {
 	if (!hasChrome()) return;
 	server = await createServer({
@@ -105,8 +120,12 @@ beforeAll(async () => {
 						}
 						if (path === "/api/search") {
 							const q = new URLSearchParams((req.url ?? "").split("?")[1] ?? "").get("q") ?? "";
+							if (holding) {
+								held.push({ res, q });
+								return;
+							}
 							// a slow daemon, so the kept-hits state is visible
-							setTimeout(() => json(res, /lisbon/i.test(q) ? [HIT] : []), 250);
+							setTimeout(() => json(res, answer(q)), 250);
 							return;
 						}
 						json(res, {});
@@ -211,9 +230,10 @@ it.skipIf(!hasChrome())("a chat hit opens its chat at the message, and hits stay
 		await page.until(`${SELECTED} && ${SELECTED}.textContent.includes('Lisbon')`);
 		// more typed: the previous hits stay, dimmed, and no "Searching…" line replaces them
 		await type(page, " under");
-		expect(await page.run(`${SELECTED}.textContent.includes('Lisbon')`)).toBe(true);
+		expect(await page.run(`document.querySelector('[cmdk-list]').textContent.includes('Lisbon')`)).toBe(true);
 		expect(await page.run(`document.body.textContent.includes('Searching…')`)).toBe(false);
 		await page.until(`!document.querySelector('[cmdk-list] .opacity-60')`);
+		await page.until(`${SELECTED} && ${SELECTED}.textContent.includes('Lisbon')`);
 		await enter(page);
 		await page.until(`document.querySelector('[data-went]').textContent !== ''`);
 		expect(await page.run<string>(`document.querySelector('[data-went]').textContent`)).toBe(
@@ -226,6 +246,83 @@ it.skipIf(!hasChrome())("a chat hit opens its chat at the message, and hits stay
 		expect(page.errors()).toEqual([]);
 	});
 });
+
+it.skipIf(!hasChrome())(
+	"stale hits are inert while a search runs: Enter and clicks open nothing from them",
+	async () => {
+		await withPage(base, { width: 1280, height: 900 }, async (page) => {
+			try {
+				await openSearch(page);
+				await type(page, "lisbon");
+				await page.until(`${SELECTED} && ${SELECTED}.textContent.includes('Lisbon')`);
+				// a new search starts, its answer held by the test: the kept hits dim, the group says busy, they go inert
+				holding = true;
+				await type(page, " porto");
+				await page.until(`!!document.querySelector('[cmdk-group][aria-busy="true"]')`);
+				await page.until(`!!document.querySelector('[cmdk-item][aria-disabled="true"]')`);
+				// no live row matches "lisbon porto": the active row moved to none
+				await page.until(`!${SELECTED}`);
+				// Enter and a click on the dimmed hit open nothing
+				await enter(page);
+				await page.run(`document.querySelector('[cmdk-item][aria-disabled="true"]').click()`);
+				expect(await page.run<string>(`document.querySelector('[data-went]').textContent`)).toBe("");
+				expect(await page.run(`!!document.querySelector('[cmdk-input]')`)).toBe(true);
+				// the answer arrives: the hits are live again, and Enter opens the right result
+				await heldSearch();
+				release();
+				await page.until(`!document.querySelector('[cmdk-item][aria-disabled="true"]')`);
+				await page.until(`document.querySelector('[cmdk-group][aria-busy="true"]') === null`);
+				await page.until(`${SELECTED} && ${SELECTED}.textContent.includes('Lisbon')`);
+				await enter(page);
+				await page.until(`document.querySelector('[data-went]').textContent !== ''`);
+				expect(await page.run<string>(`document.querySelector('[data-went]').textContent`)).toBe(
+					JSON.stringify({ name: "agent", id: "mara", at: 7 }),
+				);
+				expect(page.errors()).toEqual([]);
+			} finally {
+				holding = false;
+				release();
+			}
+		});
+	},
+);
+
+it.skipIf(!hasChrome())(
+	"when a search starts over a dimmed active row, the selection moves to the first live row",
+	async () => {
+		await withPage(base, { width: 1280, height: 900 }, async (page) => {
+			try {
+				await openSearch(page);
+				await type(page, "mara");
+				// the agent matches at once; the daemon's hit arrives after, and the arrow moves onto it
+				await page.until(`document.querySelector('[cmdk-list]').textContent.includes('Lisbon')`);
+				await press(page, "ArrowDown", "ArrowDown", 40);
+				await page.until(`${SELECTED} && ${SELECTED}.textContent.includes('Lisbon')`);
+				// the query shrinks to "mar": the hits go stale, and the active row leaves them for the live agent
+				holding = true;
+				await page.run(`(() => {
+				const input = ${INPUT};
+				Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, 'mar');
+				input.dispatchEvent(new Event('input', { bubbles: true }));
+			})()`);
+				await page.until(`!!document.querySelector('[cmdk-item][aria-disabled="true"]')`);
+				await page.until(
+					`${SELECTED} && ${SELECTED}.textContent.includes('Mara') && !${SELECTED}.textContent.includes('Lisbon')`,
+				);
+				// Enter opens the live agent, not the stale hit
+				await enter(page);
+				await page.until(`document.querySelector('[data-went]').textContent !== ''`);
+				expect(await page.run<string>(`document.querySelector('[data-went]').textContent`)).toBe(
+					JSON.stringify({ name: "agent", id: "mara" }),
+				);
+				expect(page.errors()).toEqual([]);
+			} finally {
+				holding = false;
+				release();
+			}
+		});
+	},
+);
 
 it.skipIf(!hasChrome())("the open dialog passes axe, and announces a listbox", async () => {
 	await withPage(base, { width: 1280, height: 900 }, async (page) => {

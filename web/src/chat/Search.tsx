@@ -2,14 +2,16 @@
  * Search (Cmd/Ctrl+K), on cmdk's listbox: with nothing typed, the band's rows to switch to; with a query, agents,
  * skills and pages found in the app, then the chats the daemon found, each hit opening its chat at that message.
  * Arrows move the active row, Home and End jump, Enter opens, Esc closes; while a new search runs the previous hits
- * stay, dimmed, so the list never collapses.
+ * stay, dimmed, so the list never collapses — but they are inert (Enter, clicks and the arrows skip them) until the
+ * new answer makes them live again; the local sections always answer the query as typed, so they stay live.
  */
 import { Command as CommandPrimitive } from "cmdk";
 import { BookOpenIcon, FileTextIcon, PlugIcon, SearchIcon, SettingsIcon, UserIcon } from "lucide-react";
-import type { ComponentType, ReactNode } from "react";
+import { type ComponentType, type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CommandEmpty, CommandGroup, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/cn";
+import { firstLiveValue } from "../app/palette.ts";
 import { Face, FaceStack } from "./Face.tsx";
 import type { Who } from "./Row.tsx";
 
@@ -55,10 +57,21 @@ function Chip({ icon: Icon }: { icon: ComponentType<{ className?: string }> }) {
 	);
 }
 
-function Item({ value, onSelect, children }: { value: string; onSelect?: () => void; children: ReactNode }) {
+function Item({
+	value,
+	disabled = false,
+	onSelect,
+	children,
+}: {
+	value: string;
+	disabled?: boolean;
+	onSelect?: () => void;
+	children: ReactNode;
+}) {
 	return (
 		<CommandPrimitive.Item
 			value={value}
+			disabled={disabled}
 			{...(onSelect === undefined ? {} : { onSelect })}
 			className="flex w-full cursor-default items-center gap-3 rounded-field px-2.5 py-2 text-left select-none data-[selected=true]:bg-paper-3"
 		>
@@ -105,10 +118,23 @@ export function Search({
 }) {
 	const typed = query.trim() !== "";
 	const pick = (value: string) => () => onPick?.(value);
+	// the active row, controlled: stale hits are inert, so the selection must be able to leave them
+	const [active, setActive] = useState("");
+	// a search starts over kept hits: the active row leaves them for the first live local row, or none
+	useEffect(() => {
+		if (stale && active.startsWith("hit:")) setActive(firstLiveValue(agents, skills, pages));
+	}, [stale, active, agents, skills, pages]);
+	// the answer in: the hits are live again, and with nothing active the first of them takes the selection
+	useEffect(() => {
+		const [first] = hits;
+		if (!stale && active === "" && first !== undefined) setActive(`hit:${first.id}`);
+	}, [stale, active, hits]);
 	return (
 		<CommandPrimitive
 			label="Search banda"
 			shouldFilter={false}
+			value={active}
+			onValueChange={setActive}
 			className="flex w-full max-w-lg flex-col overflow-hidden rounded-tile border border-line bg-paper shadow-composer"
 		>
 			<div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-line-soft px-3.5">
@@ -187,9 +213,9 @@ export function Search({
 					</CommandGroup>
 				) : null}
 				{typed && hits.length > 0 ? (
-					<CommandGroup heading={heading("Chats")} className={cn("p-0", stale && "opacity-60")}>
+					<CommandGroup heading={heading("Chats")} aria-busy={searching} className={cn("p-0", stale && "opacity-60")}>
 						{hits.map((hit) => (
-							<Item key={hit.id} value={`hit:${hit.id}`} onSelect={pick(`hit:${hit.id}`)}>
+							<Item key={hit.id} value={`hit:${hit.id}`} disabled={stale} onSelect={pick(`hit:${hit.id}`)}>
 								{"face" in hit.who ? (
 									<Face face={hit.who.face} name={hit.who.name} size="message" />
 								) : (
