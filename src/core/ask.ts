@@ -520,9 +520,13 @@ export const EffectRun = defineDoc<Run>({
 
 type Draft = Extract<Ask, { type: "approval" }>;
 
+/** How long a permission lasts, for the model: a task's ends with the owner's next message, which it cannot see coming. */
+const lasting = (permission: Permission) =>
+	permission.scope === "task" ? "for this task, until the owner next writes to you" : permissionWhen(permission);
+
 /** What let an effect run, as the first line of its result, so the agent never guesses whether the next one asks. */
 const ranWithin = (permission: Permission) =>
-	`Ran without asking, within your permission to ${permissionTo(permission)}, ${permissionWhen(permission)}.`;
+	`Ran without asking, within your permission to ${permissionTo(permission)}, ${lasting(permission)}.`;
 
 /**
  * The first line for an effect the owner's answer let run (`wait`): a permission given before that answer, or with
@@ -533,7 +537,7 @@ function approvedLine(wait: number, edited: boolean, permission: Permission | un
 	const also =
 		permission === undefined
 			? ""
-			: ` They also allowed you to ${permissionTo(permission)} without asking, ${permissionWhen(permission)}.`;
+			: ` They also allowed you to ${permissionTo(permission)} without asking, ${lasting(permission)}.`;
 	return `The owner approved this.${edited ? " They edited it before approving." : ""}${also}`;
 }
 

@@ -98,8 +98,8 @@ in a throwaway home, at desktop and phone width.
   banda still asks
 - [ ] A connection banda ships is never updated in a home that added it (`addShipped` never replaces), so a home made
   before grains never gets them; the forked home also had no connections/github.md in its workspace, a pending removal
-- [ ] Access says Revoke where DESIGN.md says Take back
-- [ ] "For this task" in an effect's result does not say the task ends with the owner's next message, so an agent
+- [x] Access says Revoke where DESIGN.md says Take back
+- [x] "For this task" in an effect's result does not say the task ends with the owner's next message, so an agent
   still counted a task's permission after it ended
 - [ ] Agent trust, slice 3: the card offers the earned place after three clean approvals, a foreign-content chat
   only that; the widest grain of a tool with no way back from Access only

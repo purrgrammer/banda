@@ -265,8 +265,8 @@ describe("permissions", () => {
 		expect(await said(once.chat)).toEqual([
 			"The owner approved this.\nsend done",
 			"The owner approved this. They edited it before approving.\nsend done",
-			"The owner approved this. They also allowed you to send messages to ana without asking, for this task.\nsend done",
-			"Ran without asking, within your permission to send messages to ana, for this task.\nsend done",
+			"The owner approved this. They also allowed you to send messages to ana without asking, for this task, until the owner next writes to you.\nsend done",
+			"Ran without asking, within your permission to send messages to ana, for this task, until the owner next writes to you.\nsend done",
 			"The owner approved this. They also allowed you to send messages to bob without asking, always.\nsend done",
 			"Ran without asking, within your permission to send messages to bob, always.\nsend done",
 		]);

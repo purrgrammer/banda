@@ -642,7 +642,7 @@ export function Permissions({
 						<Confirm
 							title="Take this back?"
 							body={`${agent} will ask you again before it does this: ${permission.what}.`}
-							action="Revoke"
+							action="Take back"
 							keep="Keep it"
 							onConfirm={
 								permission.id === undefined || onRevoke === undefined

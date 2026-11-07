@@ -328,7 +328,7 @@ function AllowHost({
 								<Confirm
 									title="Take this back?"
 									body={`${agent.name} will ask you again before sending to ${allowed === "*" ? "any host" : allowed}.`}
-									action="Revoke"
+									action="Take back"
 									keep="Keep it"
 									onConfirm={() =>
 										void revokePermission(id)
