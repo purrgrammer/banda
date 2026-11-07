@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Spinner } from "@/components/ui/spinner";
 import type { ConnectionToolView } from "../../../src/server/api.ts";
+import { scopeChoicesOf } from "../lib/connect.ts";
 import { Tile } from "./Cards.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
 
@@ -175,36 +176,18 @@ export function ConnectionPermissions({
 	busy?: boolean;
 	readonly?: boolean;
 }) {
-	const google = connection.toLowerCase() === "gmail";
-	const required = google ? "https://www.googleapis.com/auth/gmail.readonly" : undefined;
-	const choices = google
-		? ([
-				["https://www.googleapis.com/auth/gmail.send", "Send email"],
-				["https://www.googleapis.com/auth/gmail.modify", "Archive, trash, mark read and manage labels"],
-			] as const)
-		: ([
-				["repo", "Repositories, including private repositories"],
-				["read:org", "Organization and team information"],
-				["notifications", "Read and manage notifications"],
-				["gist", "Read and manage gists"],
-				["security_events", "Repository security alerts"],
-				["project", "Read and manage projects"],
-				["read:project", "Read projects"],
-				["admin:org", "Administer organizations"],
-				["write:org", "Manage organization membership and teams"],
-				["delete_repo", "Delete repositories"],
-			] as const);
+	const { required, choices, note } = scopeChoicesOf(connection) ?? { choices: [], note: "" };
 	return (
 		<fieldset className="flex flex-col gap-3 text-meta" disabled={busy || readonly}>
 			{required === undefined ? null : (
 				<label className="flex items-start gap-2 text-ink-2">
-					<input type="checkbox" checked={scopes.includes(required)} disabled readOnly className="mt-0.5" />
+					<input type="checkbox" checked={scopes.includes(required.scope)} disabled readOnly className="mt-0.5" />
 					<span>
-						Read email <span className="text-ink-3">· required</span>
+						{required.label} <span className="text-ink-3">· required</span>
 					</span>
 				</label>
 			)}
-			{choices.map(([scope, label]) => (
+			{choices.map(({ scope, label }) => (
 				<label key={scope} className="flex items-start gap-2 text-ink-2">
 					<input
 						type="checkbox"
@@ -220,9 +203,7 @@ export function ConnectionPermissions({
 			<p className="text-ink-3">
 				{readonly
 					? `Change access and sign in again on the computer Banda runs on. Connected ${connection} accounts are available on this device.`
-					: google
-						? "Changing access signs in again. Sending and mailbox changes still ask you to approve each action."
-						: "Changing access signs in again. Actions that change GitHub still ask you to approve them."}
+					: note}
 			</p>
 		</fieldset>
 	);

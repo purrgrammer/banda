@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/cn";
 import type { ConnectionToolView } from "../../../src/server/api.ts";
 import { AvatarChoices } from "../avatar/Choices.tsx";
+import { scopeChoicesOf } from "../lib/connect.ts";
 import { Confirm } from "./Confirm.tsx";
 import { ConnectionTools } from "./Connect.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
@@ -347,7 +348,7 @@ export function Connections({
 											className="text-ink-2"
 											onClick={() => setOpen(open === row.connection ? undefined : row.connection)}
 										>
-											{row.id === "gmail" || row.connection === "Gmail" || row.id === "github" ? (
+											{scopeChoicesOf(row.id) !== undefined ? (
 												<>Manage access</>
 											) : (
 												<>

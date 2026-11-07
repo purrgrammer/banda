@@ -7,6 +7,7 @@
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import { scopeChoicesOf } from "../lib/connect.ts";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
 
 export type Service = {
@@ -106,7 +107,7 @@ export function Catalogue({
 								>
 									{stale.length > 0
 										? "Sign in again"
-										: service.id === "github" || service.id === "gmail"
+										: scopeChoicesOf(service.id) !== undefined
 											? "Manage access"
 											: "Add account"}
 								</Button>

@@ -52,3 +52,48 @@ export function connectState(
 	}
 	return { kind: "connect", why };
 }
+
+/** The access an owner chooses for a connection before signing in: one row per scope, the required one fixed. */
+export type ScopeChoices = {
+	readonly required?: { readonly scope: string; readonly label: string };
+	readonly choices: readonly { readonly scope: string; readonly label: string }[];
+	/** What changing access means, said under the choices. */
+	readonly note: string;
+};
+
+const GOOGLE = "https://www.googleapis.com/auth/";
+
+/** The connections whose access the owner manages in the permissions dialog, by their name in the daemon. */
+export const SCOPE_CHOICES: { readonly [connection: string]: ScopeChoices } = {
+	gmail: {
+		required: { scope: `${GOOGLE}gmail.readonly`, label: "Read email" },
+		choices: [
+			{ scope: `${GOOGLE}gmail.send`, label: "Send email" },
+			{ scope: `${GOOGLE}gmail.modify`, label: "Archive, trash, mark read and manage labels" },
+		],
+		note: "Changing access signs in again. Sending and mailbox changes still ask you to approve each action.",
+	},
+	calendar: {
+		required: { scope: `${GOOGLE}calendar.readonly`, label: "Read your calendars and events" },
+		choices: [],
+		note: "Changing access signs in again. Banda only reads your calendar for now.",
+	},
+	github: {
+		choices: [
+			{ scope: "repo", label: "Repositories, including private repositories" },
+			{ scope: "read:org", label: "Organization and team information" },
+			{ scope: "notifications", label: "Read and manage notifications" },
+			{ scope: "gist", label: "Read and manage gists" },
+			{ scope: "security_events", label: "Repository security alerts" },
+			{ scope: "project", label: "Read and manage projects" },
+			{ scope: "read:project", label: "Read projects" },
+			{ scope: "admin:org", label: "Administer organizations" },
+			{ scope: "write:org", label: "Manage organization membership and teams" },
+			{ scope: "delete_repo", label: "Delete repositories" },
+		],
+		note: "Changing access signs in again. Actions that change GitHub still ask you to approve them.",
+	},
+};
+
+export const scopeChoicesOf = (connection: string | undefined): ScopeChoices | undefined =>
+	connection !== undefined && Object.hasOwn(SCOPE_CHOICES, connection) ? SCOPE_CHOICES[connection] : undefined;

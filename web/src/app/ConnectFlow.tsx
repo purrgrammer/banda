@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { ConnectCard, ConnectionPermissions } from "../chat/Connect.tsx";
 import { actOnCapability, runsOnDevice, signIn, switchAccount } from "../lib/api.ts";
-import { connectState, freshAccounts, type Phase } from "../lib/connect.ts";
+import { connectState, freshAccounts, type Phase, scopeChoicesOf } from "../lib/connect.ts";
 import { showCapabilities, useShell } from "../lib/shell.ts";
 
 export { freshAccounts };
@@ -61,14 +61,16 @@ export function ConnectFlow({
 	const service = serviceOf(connection, capabilities);
 	const connectionUrl = view?.accepted?.connection?.url ?? shipped?.connection.url;
 	const currentScopes = view?.accepted?.connection?.scopes ?? shipped?.connection.scopes ?? [];
-	const supportsPermissionPicker = connection === "gmail" || connection === "github";
+	// Google signs in through the computer banda runs on: its redirect is that computer's loopback address.
+	const google = currentScopes.some((scope) => scope.startsWith("https://www.googleapis.com/auth/"));
+	const supportsPermissionPicker = scopeChoicesOf(connection) !== undefined;
 	const reason = [
 		why ??
 			(agent === undefined
 				? "Sign in once; then switch it on for the agents that may use it."
 				: `${agent.name} reads with it and asks before anything it writes.`),
-		runsOnDevice && connection === "gmail"
-			? "Sign in and change Gmail access on the computer Banda runs on. Connected accounts are available on this device."
+		runsOnDevice && google
+			? `Sign in${connection === "gmail" ? " and change Gmail access" : ` to ${service}`} on the computer Banda runs on. Connected accounts are available on this device.`
 			: undefined,
 	]
 		.filter(Boolean)
@@ -168,16 +170,13 @@ export function ConnectFlow({
 						scopes={pickedScopes}
 						onScopes={setPickedScopes}
 						busy={busy}
-						readonly={runsOnDevice && connection === "gmail"}
+						readonly={runsOnDevice && google}
 					/>
 					<DialogFooter>
 						<Button variant="ghost" disabled={busy} onClick={() => setPermissionsOpen(false)}>
 							Cancel
 						</Button>
-						<Button
-							disabled={busy || (runsOnDevice && connection === "gmail")}
-							onClick={() => void connectWithScopes()}
-						>
+						<Button disabled={busy || (runsOnDevice && google)} onClick={() => void connectWithScopes()}>
 							{busy ? "Starting…" : "Save and sign in"}
 						</Button>
 					</DialogFooter>

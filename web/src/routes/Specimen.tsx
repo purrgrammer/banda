@@ -24,6 +24,7 @@ import { AvatarCreator, AvatarIcon } from "../specimen/avatar-creator.tsx";
 import { AvatarColorsContext, AvatarSpecimenContext } from "../specimen/avatar-face.tsx";
 import { AvatarSpike } from "../specimen/avatar-spike.tsx";
 import { BandSection } from "../specimen/band.tsx";
+import { CalendarSection } from "../specimen/calendar.tsx";
 import { Controls } from "../specimen/controls.tsx";
 import { Copy } from "../specimen/copy.tsx";
 import { DevicesSection } from "../specimen/devices.tsx";
@@ -81,6 +82,7 @@ const CONTENTS = [
 	{ id: "mcp", label: "Add MCP server" },
 	{ id: "github", label: "GitHub" },
 	{ id: "gmail", label: "Gmail" },
+	{ id: "calendar", label: "Google Calendar" },
 	{ id: "loading-app", label: "Opening the app" },
 	{ id: "empty-chat", label: "A new agent's chat" },
 	{ id: "states", label: "Empty and loading" },
@@ -265,6 +267,7 @@ export function Specimen() {
 											</div>
 										</div>
 									</Section>
+									<CalendarSection />
 									<PanelSections />
 									<MemorySection />
 									<DevicesSection />
