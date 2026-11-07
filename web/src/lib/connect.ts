@@ -75,8 +75,8 @@ export const SCOPE_CHOICES: { readonly [connection: string]: ScopeChoices } = {
 	},
 	calendar: {
 		required: { scope: `${GOOGLE}calendar.readonly`, label: "Read your calendars and events" },
-		choices: [],
-		note: "Changing access signs in again. Banda only reads your calendar for now.",
+		choices: [{ scope: `${GOOGLE}calendar.events`, label: "Create, change and answer events" }],
+		note: "Changing access signs in again. Creating, changing, answering and deleting events still ask you to approve each one.",
 	},
 	github: {
 		choices: [
