@@ -74,24 +74,27 @@ describe("Google Contacts REST connection", () => {
 		expect(fetcher).not.toHaveBeenCalled();
 	});
 
-	it("names the account by its primary address, and says so when Google shares none", async () => {
-		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-			response({
-				resourceName: "people/1",
-				emailAddresses: [{ value: "old@example.test" }, { value: "me@example.test", metadata: { primary: true } }],
-			}),
-		);
+	it("names the account by the address Google's sign-in gives, and says so when it gives none", async () => {
+		// the People API refuses people/me's address to a contacts sign-in: the account is read from OpenID's userinfo
+		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ sub: "1", email: "me@example.test" }));
 		expect(JSON.parse((await call(fetcher, "get_profile")).text)).toEqual({ email: "me@example.test" });
-		expect(fetcher.mock.calls[0]?.[0]).toBe("https://people.googleapis.com/v1/people/me?personFields=emailAddresses");
+		expect(fetcher.mock.calls[0]?.[0]).toBe("https://openidconnect.googleapis.com/v1/userinfo");
 		expect(REST_APIS.contacts.account).toEqual({ tool: "get_profile", field: "email" });
-		const none = await call(
-			vi.fn<typeof fetch>().mockResolvedValue(response({ resourceName: "people/1" })),
-			"get_profile",
-		);
+		const none = await call(vi.fn<typeof fetch>().mockResolvedValue(response({ sub: "1" })), "get_profile");
 		expect(none).toEqual({
 			text: "Google did not share the account's address; sign in again and allow it.",
 			isError: true,
 		});
+		// a refusal with no reason code still says Google's status word
+		const denied = await call(
+			vi
+				.fn<typeof fetch>()
+				.mockResolvedValue(
+					response({ error: { code: 403, message: "x https://a.example", status: "PERMISSION_DENIED" } }, 403),
+				),
+			"get_profile",
+		);
+		expect(denied.text).toBe("Google Contacts answered 403 (PERMISSION_DENIED)");
 	});
 
 	it("warms Google's search cache before each search, then returns compact people whose refs read them back", async () => {

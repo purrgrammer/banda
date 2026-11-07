@@ -30,10 +30,12 @@ async function reasonOf(response: Response): Promise<string | undefined> {
 		const error = (JSON.parse(text) as { error?: { details?: unknown; errors?: unknown } }).error;
 		const details = Array.isArray(error?.details) ? error.details : [];
 		const errors = Array.isArray(error?.errors) ? error.errors : [];
-		for (const entry of [...details, ...errors]) {
-			const reason = (entry as { reason?: unknown } | null)?.reason;
+		const status = (error as { status?: unknown } | undefined)?.status;
+		for (const reason of [
+			...[...details, ...errors].map((entry) => (entry as { reason?: unknown } | null)?.reason),
+			status,
+		])
 			if (typeof reason === "string" && /^[A-Za-z_]{1,64}$/.test(reason)) return reason;
-		}
 	} catch {}
 	return undefined;
 }

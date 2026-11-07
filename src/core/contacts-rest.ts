@@ -3,6 +3,8 @@ import { googleRequest } from "./google-rest.ts";
 import { type McpResult, type McpTool, Unauthorized } from "./mcp.ts";
 
 const PEOPLE = { service: "Google Contacts", base: "https://people.googleapis.com/v1" };
+/** Who signed in: the People API refuses people/me's address to a contacts sign-in; OpenID's userinfo gives it. */
+const OPENID = { service: "Google Contacts", base: "https://openidconnect.googleapis.com/v1" };
 const LIMIT = 1_000_000;
 /** Other contacts have no read of one: get_contact pages through them, at most this many pages of 1000. */
 const OTHER_PAGES = 5;
@@ -161,8 +163,8 @@ export async function contactsCall(
 		let answer: unknown;
 		switch (name) {
 			case "get_profile": {
-				const me = object(await request("people/me?personFields=emailAddresses"));
-				const email = emailsOf(me)[0];
+				const me = object(await googleRequest(OPENID, fetcher, token, "userinfo", signal));
+				const email = typeof me.email === "string" && me.email !== "" ? me.email.slice(0, 254) : undefined;
 				if (email === undefined)
 					throw new Error("Google did not share the account's address; sign in again and allow it.");
 				answer = { email };
