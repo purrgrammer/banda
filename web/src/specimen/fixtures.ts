@@ -318,11 +318,12 @@ export const SIGN_IN_WAYS = [
 ] as const;
 
 /**
- * Settings' providers, one of each state: in use, connected, set from outside banda, connecting, failed, by sign-in
- * and by key.
+ * Settings' providers, one of each state: in use, connected, two accounts of one provider, set from outside banda,
+ * connecting, failed, by sign-in and by key.
  */
 export const SETTINGS_PROVIDERS: readonly import("../chat/Settings.tsx").ProviderRow[] = [
-	{ id: "anthropic", name: "Anthropic", by: "sign-in", connected: true },
+	{ id: "anthropic", name: "Anthropic", provider: "anthropic", label: "Personal", by: "sign-in", connected: true },
+	{ id: "anthropic@work", name: "Anthropic", provider: "anthropic", label: "Work", by: "sign-in", connected: true },
 	{ id: "openai", name: "OpenAI", by: "sign-in", connected: true },
 	// a key from around the daemon: usable, never tried, and not ours to forget, so it offers to connect over it
 	{

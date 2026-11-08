@@ -63,7 +63,10 @@ faux.setResponses(
 		faults.hit("model");
 		if (ctx.messages.at(-1)?.role !== "user") return fauxAssistantMessage("done");
 		return fauxAssistantMessage(
-			[fauxToolCall("message_user", { text: "Here is the plan.", artifact: { path: "plan.md", title: "Plan" } })],
+			[
+				fauxToolCall("message_user", { text: "Here is the plan." }, { id: "said" }),
+				fauxToolCall("publish", { path: "plan.md", title: "Plan" }, { id: "published" }),
+			],
 			{ stopReason: "toolUse" },
 		);
 	}) as never,

@@ -149,11 +149,18 @@ export type Routes = {
 	/** The owner acts on a connection or a tool; throws `BadRequest` with why not; the capabilities as they are after. */
 	readonly capability: (action: CapabilityAction) => Promise<CapabilitiesView>;
 	readonly addMcp?: (config: unknown) => Promise<{ name: string; capabilities: CapabilitiesView }>;
-	/** Start signing in to a connection: the page the owner's browser opens, or the code they type on the server's page. */
+	/**
+	 * Start signing in to a connection: the page the owner's browser opens, or the code they type on the server's page.
+	 * `scopes`, what the account asks for (else the file's default); `account`, a known account signed in again.
+	 */
 	readonly signIn: (
 		name: string,
-		agent?: string,
-		onDevice?: boolean,
+		choice: {
+			readonly agent?: string;
+			readonly onDevice?: boolean;
+			readonly scopes?: unknown;
+			readonly account?: unknown;
+		},
 	) => Promise<
 		| { readonly url: string }
 		| { readonly code: string; readonly page: string; readonly expires: number }
@@ -209,7 +216,6 @@ export type CapabilityAction =
 			readonly on: boolean;
 	  }
 	| { readonly action: "signout"; readonly name: string; readonly account: string }
-	| { readonly action: "scopes"; readonly name: string; readonly scopes: unknown }
 	| { readonly action: "add"; readonly name: string }
 	/** Update a shipped connection to the version this banda ships; `sha` is the version in effect the owner saw. */
 	| { readonly action: "update"; readonly name: string; readonly sha: string }
@@ -735,17 +741,28 @@ export function handler(
 		if (route === "POST /capabilities/connections")
 			return reply(res, 200, await routes.capability({ action: "address", url: (await json(req)).url }));
 		const capability =
-			/^\/capabilities\/(connections|tools)\/([a-z0-9-]{1,64})\/(accept|decline|remove|signin|key|scopes|add|update|trust|disconnect|public|refresh|reads)$/.exec(
+			/^\/capabilities\/(connections|tools)\/([a-z0-9-]{1,64})\/(accept|decline|remove|signin|key|add|update|trust|disconnect|public|refresh|reads)$/.exec(
 				path,
 			);
 		if (capability !== null && req.method === "POST") {
 			const [, folder = "", name = "", action = ""] = capability;
 			const kind = folder as "connections" | "tools";
 			if (action === "signin" && kind === "connections") {
-				const { agent } = await json(req);
+				const { agent, scopes, account } = await json(req);
 				if (agent !== undefined && (typeof agent !== "string" || !/^[a-z0-9-]{1,64}$/.test(agent)))
 					throw new BadRequest("agent names an agent");
-				return reply(res, 200, await routes.signIn(name, agent as string | undefined, device !== undefined));
+				if (account !== undefined && (typeof account !== "string" || account.length > 300))
+					throw new BadRequest("account names an account");
+				return reply(
+					res,
+					200,
+					await routes.signIn(name, {
+						...(agent === undefined ? {} : { agent: agent as string }),
+						...(device === undefined ? {} : { onDevice: true }),
+						...(scopes === undefined ? {} : { scopes }),
+						...(account === undefined ? {} : { account }),
+					}),
+				);
 			}
 			if (action === "accept") {
 				const { sha } = await json(req);
@@ -795,8 +812,6 @@ export function handler(
 			}
 			if (action === "refresh" && kind === "connections")
 				return reply(res, 200, await routes.capability({ action, name }));
-			if (action === "scopes" && kind === "connections")
-				return reply(res, 200, await routes.capability({ action, name, scopes: (await json(req)).scopes }));
 			if (action === "disconnect" && kind === "connections")
 				return reply(res, 200, await routes.capability({ action, name }));
 			return reply(res, 404, { error: "not found" });

@@ -1,8 +1,9 @@
 /**
- * The tools that reach the owner (DESIGN.md "Messages"): `message_user`, the only way an agent speaks in its own chats,
- * which sends a message and, for a question, blocks until it is answered; `message_group`, its one way in a group; and `effect()`, which wraps a tool whose effect leaves the
- * box so it runs only once the owner approved it. Both find their messages and Waits by the tool task, so a rerun after
- * a restart waits on the same ones instead of sending or asking again.
+ * The tools that reach the owner (DESIGN.md "Messages"): the speaking tools, `message_user` for an agent's words in its
+ * own chats (`message_group` in a group's room), `ask_user`, which blocks until its question is answered, `react`,
+ * `publish`, `connect` and `propose_avatar`; and `effect()`, which wraps a tool whose effect leaves the box so it runs only
+ * once the owner approved it. They find their messages and Waits by the tool task, so a rerun after a restart waits on
+ * the same ones instead of sending or asking again.
  */
 import type { Context } from "@earendil-works/chord";
 import { type Static, type TSchema, Type } from "@earendil-works/pi-ai";
@@ -17,13 +18,26 @@ import {
 	type Tx,
 } from "@earendil-works/pi-durable";
 import { log } from "./activity.ts";
+import { publishedBy } from "./artifacts.ts";
 import { type Attachment, attachmentLine, type BlobStore, safeName, sizeOf, tooBig } from "./blobs.ts";
 import { oneEmoji } from "./choices.ts";
 import { mimeOf } from "./gateway.ts";
-import { MESSAGE_PARTS } from "./parts/index.ts";
+import { AVATAR_GEOMETRY } from "./parts/avatar.ts";
+import { artifact, avatar, connect, MESSAGE_PARTS, reaction } from "./parts/index.ts";
 import type { MessagePart } from "./parts/part.ts";
 import { covering, type Floor, offering, type PermissionScope, type ScopeKind } from "./permissions.ts";
-import { MESSAGE_AGENT, MESSAGE_GROUP, MESSAGE_USER, READ_AGENT_CHAT } from "./toolsets.ts";
+import {
+	ASK_USER,
+	CONNECT,
+	MESSAGE_AGENT,
+	MESSAGE_GROUP,
+	MESSAGE_USER,
+	messageArgs,
+	PROPOSE_AVATAR,
+	PUBLISH,
+	REACT,
+	READ_AGENT_CHAT,
+} from "./toolsets.ts";
 import { type Answer, type Ask, TasksOf, type WaitResult } from "./wait.ts";
 
 /** Open (or find) the Wait named `name` of the calling tool task, for the owner, and resolve with its id. */
@@ -156,6 +170,8 @@ export type Sending = (
 		readonly ask?: readonly string[];
 		/** To the group: one emoji on the owner's message the run answers. */
 		readonly reaction?: string;
+		/** Artifacts it shows again, each at the version current when it was sent. */
+		readonly artifacts?: readonly { readonly id: string; readonly n: number }[];
 	},
 	ctx: Context,
 ) => Promise<number | { readonly refused: string } | { readonly posted: number; readonly note?: string }>;
@@ -199,7 +215,10 @@ const questionParameters = {
 	),
 };
 
-/** What a call of a speaking tool may give; each tool's schema says which of these it takes. */
+/** Where a speaking call goes: the owner in the agent's own chat, or the room of the group the chat is a member's. */
+export type Venue = (api: ToolExecutionApi, ctx: Context) => Promise<"owner" | "group">;
+
+/** What a call of a speaking tool may give, as `messageArgs` reads it; each tool's schema says which it takes. */
 type Said = {
 	readonly text?: string;
 	readonly files?: readonly string[];
@@ -221,11 +240,14 @@ function speak(
 	sending: Sending,
 	blobs: BlobStore,
 	limit: number,
-	to: "owner" | "group",
+	venue: "owner" | "group" | Venue,
 	parts: readonly MessagePart[],
 ) {
 	return async (args: Said, api: ToolExecutionApi, ctx: Context): Promise<ToolExecutionResult> => {
 		const raw = args as unknown as JsonObject;
+		const to = typeof venue === "function" ? await venue(api, ctx) : venue;
+		if (to === "group" && [args.multiple, args.fields, args.minutes].some((value) => value !== undefined))
+			return text("Not sent: in a group, a question takes options alone.", true);
 		if (to === "group" && raw.avatar !== undefined)
 			return text("Not sent: offer a face preview in your direct chat with the owner, not a group.", true);
 		// a live view in the app, or a part of its own; elsewhere, their words
@@ -237,15 +259,8 @@ function speak(
 		const carried = parts.some((part) => part.present?.(raw) === true);
 		const refused = parts.map((part) => part.refuse?.(raw)).find((why) => why !== undefined);
 		if (refused !== undefined) return text(`Not sent: ${refused}.`, true);
-		if (args.question === undefined) {
-			if (said === "" && paths.length === 0 && !carried)
-				return text("Not sent: give text, files, a question, or any of them.", true);
-			if ([args.options, args.multiple, args.fields, args.minutes].some((value) => value !== undefined))
-				return text(
-					`Not sent: ${to === "owner" ? "options, multiple, fields and minutes go" : "options go"} with a question.`,
-					true,
-				);
-		}
+		if (args.question === undefined && said === "" && paths.length === 0 && !carried)
+			return text("Not sent: give text, files or a part to show.", true);
 		const ask: Ask | undefined =
 			args.question === undefined
 				? undefined
@@ -286,6 +301,7 @@ function speak(
 						...(files.length === 0 ? {} : { files }),
 						...(args.ask === undefined ? {} : { ask: args.ask }),
 						...(reaction === undefined ? {} : { reaction }),
+						...(receipt?.kind === "artifacts" ? { artifacts: receipt.artifacts as { id: string; n: number }[] } : {}),
 					},
 					ctx,
 				);
@@ -320,9 +336,6 @@ function speak(
 	};
 }
 
-/** Face previews address the direct chat's identity, never a group; a reaction goes on the owner's message there too. */
-const GROUP_PARTS: readonly MessagePart[] = MESSAGE_PARTS.filter((part) => !("avatar" in part.parameters));
-
 /** What `message_group` says of `ask`, which a member alone in its group is not told: it has nobody to ask. */
 export const ASK_WORDS =
 	"`ask` names the members whose work is needed on it, each starting a turn of its own; leave it out when you " +
@@ -331,26 +344,98 @@ export const ASK_WORDS =
 /** The members a group message may ask, at most: everyone else in the largest group. */
 const MAX_ASKED = 8;
 
-/** `message_user`: the one way an agent reaches the person it works for, in its own chats (DESIGN.md "Messages"). */
-export function messageTool(asking: Asking, sending: Sending, blobs: BlobStore, limit: number): ToolRegistration {
+/** The tools that speak, with what they share: how a message is sent, its files stored, a question asked. */
+export type Speaking = {
+	readonly asking: Asking;
+	readonly sending: Sending;
+	readonly blobs: BlobStore;
+	/** How much one file may weigh. */
+	readonly limit: number;
+	readonly venue: Venue;
+};
+
+const filesParameter = Type.Optional(Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 5 }));
+const partsWords = (parts: readonly MessagePart[]) =>
+	parts.map((part) => (part.describe === undefined ? "" : ` ${part.describe}`)).join("");
+const partsParameters = (parts: readonly MessagePart[]) =>
+	Object.assign({}, ...parts.map((part) => part.parameters)) as Record<never, TSchema>;
+
+/** `message_user`: the one way an agent's words reach the person it works for, in its own chats (DESIGN.md "Messages"). */
+export function messageTool({ asking, sending, blobs, limit }: Speaking): ToolRegistration {
 	return defineTool({
 		name: MESSAGE_USER,
 		description:
-			"The only way to reach the owner: nothing else you write reaches them. Say what is worth their " +
-			"attention, and nothing when nothing is. `text` is markdown; `files` are paths in your box, sent with it as " +
-			`attachments (${sizeOf(limit)} at most each; images show inline). ` +
-			"In `text`, an attachment already sent or received is a link to its blob, `[name](sha256:<id>)`, which " +
-			"shows as the file itself. Give `question` to ask something and wait for the " +
-			`answer: \`options\` suggest answers, shown as buttons of a few words (${OPTION_CHARS} characters at most; ` +
-			"`multiple` lets them pick several), or `fields` make a " +
-			"form: each field text, a number, yes/no, or a choice of its own options, optional or not, with a hint. They may " +
-			"always answer in their own words instead. A question waits until they answer or until `minutes` pass (default " +
-			"a day); ask only when you cannot go on without them, one thing at a time." +
-			MESSAGE_PARTS.map((part) => (part.describe === undefined ? "" : ` ${part.describe}`)).join(""),
+			"The only way your words reach the owner: nothing else you write does. Say what is worth their attention, " +
+			"and nothing when nothing is. `text` is markdown; `files` are paths in your box, sent with it as attachments " +
+			`(${sizeOf(limit)} at most each; images show inline). In \`text\`, an attachment already sent or received is ` +
+			"a link to its blob, `[name](sha256:<id>)`, which shows as the file itself." +
+			partsWords(MESSAGE_PARTS) +
+			` To ask them something, use \`${ASK_USER}\`; to answer with an emoji alone, \`${REACT}\`.`,
 		parameters: Type.Object({
 			text: Type.Optional(Type.String()),
-			files: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 5 })),
-			...questionParameters,
+			files: filesParameter,
+			view: Type.Optional(
+				Type.Literal("browser", {
+					description:
+						"Show your browser with the message, live: they watch the page and can take it over. Use it when " +
+						"they would want to see what you are doing there.",
+				}),
+			),
+			...partsParameters(MESSAGE_PARTS),
+		}),
+		replay: "safe",
+		// messages go in the order the model wrote them
+		executionMode: "sequential",
+		execute: speak(asking, sending, blobs, limit, "owner", MESSAGE_PARTS),
+	});
+}
+
+/**
+ * `message_group`: how a group member speaks, posting to its group's room (DESIGN.md "Groups"). Its `ask` takes any
+ * words here; each member's chat selects its own extension (`groups.ts`), whose wrap narrows `ask` to the names of the
+ * other members it may ask, or takes it away when there are none.
+ */
+export function groupMessageTool({ asking, sending, blobs, limit }: Speaking): ToolRegistration {
+	return defineTool({
+		name: MESSAGE_GROUP,
+		description:
+			"Post to the group's room, where the owner and every member read it: the only way to speak here. `text` is " +
+			`markdown; \`files\` are paths in your box, posted with it (${sizeOf(limit)} at most each). ` +
+			ASK_WORDS +
+			partsWords(MESSAGE_PARTS).trim() +
+			` To ask the owner something in the room, use \`${ASK_USER}\`; to react to their message, \`${REACT}\`.`,
+		parameters: Type.Object({
+			text: Type.Optional(Type.String()),
+			files: filesParameter,
+			ask: Type.Optional(
+				Type.Array(Type.String({ minLength: 1, maxLength: 64 }), {
+					minItems: 1,
+					maxItems: MAX_ASKED,
+					description: "The other members asked to work on it, by their names.",
+				}),
+			),
+			...partsParameters(MESSAGE_PARTS),
+		}),
+		replay: "safe",
+		executionMode: "sequential",
+		execute: speak(asking, sending, blobs, limit, "group", MESSAGE_PARTS),
+	});
+}
+
+/** `ask_user`: ask the owner and wait for the answer, in the agent's own chat or in its group's room. */
+export function askUserTool({ asking, sending, blobs, limit, venue }: Speaking): ToolRegistration {
+	return defineTool({
+		name: ASK_USER,
+		description:
+			"Ask the owner something and wait for the answer, which this call returns. `options` suggest answers, shown " +
+			`as buttons of a few words (${OPTION_CHARS} characters at most; \`multiple\` lets them pick several), or ` +
+			"`fields` make a form: each field text, a number, yes/no, or a choice of its own options, optional or not, " +
+			"with a hint. They may always answer in their own words instead. It waits until they answer or until " +
+			"`minutes` pass (default a day). Ask only when you cannot go on without them, one thing at a time. In a " +
+			"group, it asks in the room, with `options` alone.",
+		parameters: Type.Object({
+			question: Type.String({ minLength: 1 }),
+			options: questionParameters.options,
 			multiple: Type.Optional(Type.Boolean()),
 			fields: Type.Optional(
 				Type.Array(
@@ -377,57 +462,92 @@ export function messageTool(asking: Asking, sending: Sending, blobs: BlobStore, 
 				),
 			),
 			minutes: Type.Optional(Type.Integer({ minimum: 1, maximum: 7 * 24 * 60 })),
-			view: Type.Optional(
-				Type.Literal("browser", {
-					description:
-						"Show your browser with the message, live: they watch the page and can take it over. Use it when " +
-						"they would want to see what you are doing there.",
-				}),
-			),
-
-			// each part's own, which its file reads back from the arguments
-			...(Object.assign({}, ...MESSAGE_PARTS.map((part) => part.parameters)) as Record<never, TSchema>),
 		}),
 		replay: "safe",
-		// messages go in the order the model wrote them
 		executionMode: "sequential",
-		execute: speak(asking, sending, blobs, limit, "owner", MESSAGE_PARTS),
+		execute: speak(asking, sending, blobs, limit, venue, []),
 	});
 }
 
-/**
- * `message_group`: how a group member speaks, posting to its group's room (DESIGN.md "Groups"). Its `ask` takes any
- * words here; each member's chat selects its own extension (`groups.ts`), whose wrap narrows `ask` to the names of the
- * other members it may ask, or takes it away when there are none.
- */
-export function groupMessageTool(asking: Asking, sending: Sending, blobs: BlobStore, limit: number): ToolRegistration {
+/** `react`: one emoji on the owner's message the run answers (DESIGN.md "Messages"). */
+export function reactTool({ asking, sending, blobs, limit, venue }: Speaking): ToolRegistration {
+	const send = speak(asking, sending, blobs, limit, venue, [reaction]);
 	return defineTool({
-		name: MESSAGE_GROUP,
+		name: REACT,
 		description:
-			"Post to the group's room, where the owner and every member read it: the only way to speak here. `text` is " +
-			`markdown; \`files\` are paths in your box, posted with it (${sizeOf(limit)} at most each). ` +
-			ASK_WORDS +
-			"Give `question` to " +
-			"ask the owner something in the room and wait for the answer, with `options` as suggested answers " +
-			`(${OPTION_CHARS} characters at most each); ask only when you cannot go on without them.` +
-			GROUP_PARTS.map((part) => (part.describe === undefined ? "" : ` ${part.describe}`)).join(""),
+			"Put one emoji on the owner's message you are answering. Alone, it is your whole reply, for when nothing " +
+			"needs saying (a thanks, an ok); beside a message, it goes on theirs. A routine's run answers no message, " +
+			"so it has none to react to.",
+		parameters: Type.Object({ reaction: Type.String({ minLength: 1, maxLength: 32, description: "One emoji." }) }),
+		replay: "safe",
+		executionMode: "sequential",
+		execute: (args, api, ctx) => send(args as Said, api, ctx),
+	});
+}
+
+/** `publish`: a file of the box into the owner's Library as its next version, shown as a card (DESIGN.md "The app"). */
+export function publishTool({ asking, sending, blobs, limit, venue }: Speaking): ToolRegistration {
+	const send = speak(asking, sending, blobs, limit, venue, [artifact]);
+	return defineTool({
+		name: PUBLISH,
+		description:
+			"Publish a file you made for the owner (a document in markdown, a table as CSV, a plan, a page as HTML, an " +
+			"image, a PDF) to their Library, beside the chat, as its next version; the chat shows it as a card. `path` is " +
+			"the file in your box, `title` its name in their words, `change` what changed since its last version, in " +
+			"one line. Publish the same path again when you change it; every version is kept. It returns the artifact's " +
+			"id, which a message's `artifacts` shows again. They may edit it: what they change reaches you as their words.",
 		parameters: Type.Object({
-			text: Type.Optional(Type.String()),
-			files: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 5 })),
-			ask: Type.Optional(
-				Type.Array(Type.String({ minLength: 1, maxLength: 64 }), {
-					minItems: 1,
-					maxItems: MAX_ASKED,
-					description: "The other members asked to work on it, by their names.",
-				}),
+			path: Type.String({ minLength: 1, description: "The file in your box." }),
+			title: Type.Optional(Type.String({ minLength: 1, maxLength: 80, description: "Its name, in their words." })),
+			change: Type.Optional(
+				Type.String({ minLength: 1, maxLength: 160, description: "What changed since its last version." }),
 			),
-			...questionParameters,
-			...(Object.assign({}, ...GROUP_PARTS.map((part) => part.parameters)) as Record<never, TSchema>),
 		}),
 		replay: "safe",
-		// messages go in the order the model wrote them
 		executionMode: "sequential",
-		execute: speak(asking, sending, blobs, limit, "group", GROUP_PARTS),
+		execute: async (args, api, ctx) => {
+			const result = await send(messageArgs(PUBLISH, args) as Said, api, ctx);
+			if (result.isError === true) return result;
+			const made = await api.commit((tx) => publishedBy(tx, Number(api.conversationId), api.callId), ctx);
+			return made === undefined
+				? result
+				: { ...result, output: [{ type: "text", text: `Published as version ${made.n}; its id is ${made.id}.` }] };
+		},
+	});
+}
+
+/** `connect`: the app's card that connects a service the agent has no account of (DESIGN.md "Connections"). */
+export function connectTool({ asking, sending, blobs, limit, venue }: Speaking): ToolRegistration {
+	const send = speak(asking, sending, blobs, limit, venue, [connect]);
+	return defineTool({
+		name: CONNECT,
+		description:
+			"When you need a service you were given no account of, offer the owner the card that connects it for you, " +
+			"here in the chat: `connection` is its name (such as github), `reason` one line saying why. Never ask for a " +
+			"password, a key or a code in words.",
+		parameters: Type.Object({
+			connection: Type.String({ minLength: 1, maxLength: 64 }),
+			reason: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+		}),
+		replay: "safe",
+		executionMode: "sequential",
+		execute: (args, api, ctx) => send(messageArgs(CONNECT, args) as Said, api, ctx),
+	});
+}
+
+/** `propose_avatar`: a generated face for the agent, as a preview card only the owner applies; direct chats only. */
+export function proposeAvatarTool({ asking, sending, blobs, limit }: Speaking): ToolRegistration {
+	const send = speak(asking, sending, blobs, limit, "owner", [avatar]);
+	return defineTool({
+		name: PROPOSE_AVATAR,
+		description:
+			"Offer a generated face for yourself as a preview card. First read `read_avatar_instructions`. Validation " +
+			"may refuse it with errors to correct. Only the owner's Use this face button applies it; proposing changes " +
+			"nothing.",
+		parameters: AVATAR_GEOMETRY,
+		replay: "safe",
+		executionMode: "sequential",
+		execute: (args, api, ctx) => send(messageArgs(PROPOSE_AVATAR, args) as Said, api, ctx),
 	});
 }
 

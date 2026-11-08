@@ -1,5 +1,5 @@
 /** The panel, settings and connections: the agent beside its chat, what opens there, and the pages behind the gear. */
-import { isValidElement, type ReactNode, useContext } from "react";
+import { isValidElement, type ReactNode, useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { DraftApproval } from "../app/DraftApproval.tsx";
@@ -9,7 +9,7 @@ import { WatchDetail } from "../app/watches.tsx";
 import { ApprovalCard } from "../chat/Approval.tsx";
 import { BrowserWindow } from "../chat/Browser.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
-import { ConnectCard } from "../chat/Connect.tsx";
+import { ConnectCard, ConnectDialog, type ConnectStep } from "../chat/Connect.tsx";
 import type { FaceState } from "../chat/Face.tsx";
 import { Bubble } from "../chat/Feed.tsx";
 import { ObjectUnavailable } from "../chat/Loading.tsx";
@@ -54,6 +54,7 @@ import {
 } from "../chat/Settings.tsx";
 import { SkillCatalogue } from "../chat/Skill.tsx";
 import { ArtifactViewer, FileViewer, Versions } from "../chat/Viewer.tsx";
+import { scopeChoicesOf } from "../lib/connect.ts";
 import { Band } from "./brand.tsx";
 import {
 	ATLAS,
@@ -155,7 +156,7 @@ function AgentPanelOf({
 				}
 				access={
 					<>
-						<Connections agent={who.name} rows={connections} compact />
+						<Connections agent={who.name} rows={connections} />
 						<Permissions agent={who.name} permissions={permissions} />
 					</>
 				}
@@ -204,13 +205,25 @@ export function PanelSections() {
 			<Section
 				id="connections-signed-in"
 				title="Connections after sign-in"
-				note="The account row and switch confirm sign-in. When a service gives no account name, use the connection's name. A supplied icon replaces the initial; the initial remains the fallback."
+				note="One row per account the agent uses: the service, the account under it, and Remove, asked first. When a service gives no account name, the row is the connection's name. A supplied icon replaces the initial; the initial remains the fallback."
 			>
 				<div className="max-w-md">
 					<Connections
 						agent="Sancho"
 						rows={[
-							{ connection: "GitHub", accounts: [{ login: "@purrgrammer", on: true }] },
+							{
+								connection: "GitHub",
+								id: "github",
+								accounts: [{ login: "@purrgrammer", account: "purrgrammer", on: true }],
+							},
+							{
+								connection: "Gmail",
+								id: "gmail",
+								accounts: [
+									{ login: "bandarra@example.com", account: "bandarra@example.com", on: true },
+									{ login: "work@example.com", account: "work@example.com", on: false },
+								],
+							},
 							{
 								connection: "Vercel",
 								icon: (
@@ -621,10 +634,28 @@ export function PanelSections() {
 			<Section
 				id="settings-providers"
 				title="Settings, providers"
-				note="Every provider the band may think with: in use, connected (Use, Sign out), connecting, failed, and a key form open; on a device, the connected ones alone."
+				note="Every provider account the band may think with: in use, connected (Use, Sign out), two of one provider by their names, another to add, connecting, failed, and a key form open; adding an account by name, by sign-in and by key; renaming one; on a device, the connected ones alone."
 			>
 				<SettingsPage title="Settings" phone={phone}>
 					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} open="mistral" />
+				</SettingsPage>
+				<SettingsPage title="Settings, adding an account" phone={phone}>
+					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} adding="anthropic" />
+				</SettingsPage>
+				<SettingsPage title="Settings, renaming an account" phone={phone}>
+					<ModelProviders
+						current="anthropic"
+						providers={SETTINGS_PROVIDERS}
+						onRename={() => {}}
+						renaming="anthropic@work"
+					/>
+				</SettingsPage>
+				<SettingsPage title="Settings, adding a keyed account" phone={phone}>
+					<ModelProviders
+						current="anthropic"
+						providers={[{ id: "mistral", name: "Mistral", by: "key", connected: true }]}
+						adding="mistral"
+					/>
 				</SettingsPage>
 				<SettingsPage title="Settings, on a device" phone={phone}>
 					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} here={false} />
@@ -647,55 +678,25 @@ export function PanelSections() {
 				note="One flow everywhere: Connect, sign in at the service, done. Asked again only to share an account."
 			>
 				<div className="grid gap-4 lg:grid-cols-2">
-					<Specimen label="Connect">
+					<Specimen label="An agent asks">
 						<ConnectCard
 							agent="Octo"
 							connection="GitHub"
+							id="github"
 							state={{
 								kind: "connect",
 								why: "Octo can read your pull requests and issues, and asks before it writes.",
 							}}
 						/>
 					</Specimen>
-					<Specimen label="A code to enter">
-						<ConnectCard
-							agent="Octo"
-							connection="GitHub"
-							state={{ kind: "code", code: "WDJB-MJHT", url: "https://github.com/login/device" }}
-						/>
-					</Specimen>
-					<Specimen label="Signing in on GitHub's own page, in another tab">
-						<ConnectCard
-							agent="Octo"
-							connection="GitHub"
-							state={{ kind: "code", url: "https://github.com/login/oauth/authorize" }}
-						/>
-					</Specimen>
 					<Specimen label="Signed in">
-						<ConnectCard agent="Octo" connection="GitHub" state={{ kind: "done", login: "@bandarra" }} />
+						<ConnectCard agent="Octo" connection="GitHub" id="github" state={{ kind: "done", login: "@bandarra" }} />
 					</Specimen>
 					<Specimen label="Signed in to an account already known">
-						<ConnectCard agent="Octo" connection="GitHub" state={{ kind: "already", login: "@bandarra" }} />
+						<ConnectCard agent="Octo" connection="GitHub" id="github" state={{ kind: "already", login: "@bandarra" }} />
 					</Specimen>
-					<Specimen label="From Settings: for no agent yet">
-						<ConnectCard connection="GitHub" state={{ kind: "done", login: "@purrgrammer" }} />
-					</Specimen>
-					<Specimen label="Failed">
-						<ConnectCard
-							agent="Octo"
-							connection="GitHub"
-							state={{ kind: "failed", why: "The code expired before you entered it." }}
-						/>
-					</Specimen>
-					<Specimen label="Already signed in">
-						<ConnectCard
-							agent="Mara"
-							connection="GitHub"
-							state={{ kind: "known", logins: ["@bandarra", "@purrgrammer"] }}
-						/>
-					</Specimen>
-					<Specimen label="Sharing an account with another agent">
-						<ConnectCard agent="Mara" connection="GitHub" state={{ kind: "share", login: "@bandarra" }} />
+					<Specimen label="The connect dialog, each step">
+						<ConnectSteps />
 					</Specimen>
 				</div>
 			</Section>
@@ -900,5 +901,129 @@ function Specimen({ label, children }: { label: string; children: ReactNode }) {
 				children
 			)}
 		</div>
+	);
+}
+
+const CONNECT_STEPS: readonly {
+	readonly label: string;
+	readonly agent?: string;
+	readonly connection: string;
+	readonly id: string;
+	readonly step: ConnectStep;
+}[] = [
+	{ label: "Access to grant", connection: "Google Calendar", id: "calendar", step: { kind: "permissions" } },
+	{ label: "GitHub's access", agent: "Octo", connection: "GitHub", id: "github", step: { kind: "permissions" } },
+	{ label: "Starting", connection: "GitHub", id: "github", step: { kind: "starting" } },
+	{
+		label: "Signing in on its page",
+		connection: "Google Calendar",
+		id: "calendar",
+		step: { kind: "code", url: "https://accounts.google.com/o/oauth2/v2/auth" },
+	},
+	{
+		label: "A code to enter",
+		agent: "Octo",
+		connection: "GitHub",
+		id: "github",
+		step: { kind: "code", code: "WDJB-MJHT", url: "https://github.com/login/device" },
+	},
+	{
+		label: "Failed",
+		connection: "Google Calendar",
+		id: "calendar",
+		step: {
+			kind: "failed",
+			why: "Google Calendar answered 403 (SERVICE_DISABLED): Google Calendar API has not been used in project 1234 before or it is disabled.",
+		},
+	},
+	{
+		label: "Already signed in",
+		agent: "Mara",
+		connection: "GitHub",
+		id: "github",
+		step: { kind: "known", logins: ["@bandarra", "@purrgrammer"] },
+	},
+	{
+		label: "Signed in for no agent",
+		connection: "Google Calendar",
+		id: "calendar",
+		step: {
+			kind: "agents",
+			login: "bandarra@example.com",
+			agents: [
+				{ id: "sancho", name: "Sancho", face: SANCHO.face, on: true },
+				{ id: "mara", name: "Mara", face: MARA.face, on: false },
+				{ id: "octo", name: "Octo", face: OCTO.face, on: false },
+			],
+		},
+	},
+	{
+		label: "Sharing an account",
+		agent: "Mara",
+		connection: "GitHub",
+		id: "github",
+		step: { kind: "share", login: "@bandarra" },
+	},
+];
+
+/** Each step of the connect dialog, opened by its button; the dialog takes the frame's colour scheme. */
+function ConnectSteps() {
+	const [open, setOpen] = useState<number | undefined>(undefined);
+	const [scheme, setScheme] = useState("light");
+	const [scopes, setScopes] = useState<readonly string[]>([]);
+	const [on, setOn] = useState<{ readonly [agent: string]: boolean }>({});
+	const listed = open === undefined ? undefined : CONNECT_STEPS[open];
+	const shown =
+		listed?.step.kind === "agents"
+			? {
+					...listed,
+					step: {
+						...listed.step,
+						agents: listed.step.agents.map((each) => ({ ...each, on: on[each.id] ?? each.on })),
+					},
+				}
+			: listed;
+	const show = (index: number) => {
+		const required = scopeChoicesOf(CONNECT_STEPS[index]?.id)?.required;
+		setScopes(required === undefined ? [] : [required.scope]);
+		setOn({});
+		setOpen(index);
+	};
+	return (
+		<span className="flex flex-wrap gap-2">
+			{CONNECT_STEPS.map((each, index) => (
+				<Button
+					key={each.label}
+					variant="outline"
+					size="sm"
+					data-connect-specimen={index}
+					onClick={(event) => {
+						setScheme(getComputedStyle(event.currentTarget).colorScheme);
+						show(index);
+					}}
+				>
+					{each.label}
+				</Button>
+			))}
+			{shown === undefined ? null : (
+				<ConnectDialog
+					open
+					onOpenChange={() => setOpen(undefined)}
+					agent={shown.agent}
+					connection={shown.connection}
+					id={shown.id}
+					step={shown.step}
+					scopes={scopes}
+					onScopes={setScopes}
+					scopesChanged={scopes.length > 1}
+					onSignIn={() => setOpen(undefined)}
+					onPermissions={() =>
+						show(CONNECT_STEPS.findIndex((each) => each.id === shown.id && each.step.kind === "permissions"))
+					}
+					onAgent={(agent, value) => setOn((was) => ({ ...was, [agent]: value }))}
+					style={{ colorScheme: scheme }}
+				/>
+			)}
+		</span>
 	);
 }

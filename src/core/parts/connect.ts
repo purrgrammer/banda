@@ -5,7 +5,6 @@
  * the connection alone; what the card says and does is the app's, so nothing the model writes reaches the owner as a
  * control.
  */
-import { Type } from "@earendil-works/pi-ai";
 import type { JsonObject } from "@earendil-works/pi-durable";
 import { AGENT_NAME } from "../agents.ts";
 import type { MessagePart } from "./part.ts";
@@ -13,21 +12,6 @@ import type { MessagePart } from "./part.ts";
 const named = (args: JsonObject) => (typeof args.connect === "string" ? args.connect : undefined);
 
 export const connect: MessagePart = {
-	parameters: {
-		connect: Type.Optional(
-			Type.String({
-				minLength: 1,
-				maxLength: 64,
-				description:
-					"A connection you need and have no account of, by its name (such as github): the owner gets a card to " +
-					"connect it for you, here in the chat.",
-			}),
-		),
-	},
-	describe:
-		"Give `connect` with a connection's name (such as github) when you need a service you were given no account of: " +
-		"the owner sees a card that connects it for you, with a line of `text` saying why. Never ask for a password, a " +
-		"key or a code in words.",
 	present: (args) => named(args) !== undefined,
 	refuse: (args) => {
 		const name = named(args);

@@ -18,31 +18,36 @@ const FIRST = ["anthropic", "openai", "github-copilot", "google"];
 export function Onboarding() {
 	const { providers, open, waiting, error, pick, answer, cancel, key, use } = useProviderConnect();
 	const sorted = [...providers].sort((a, b) => (FIRST.indexOf(a.id) + 1 || 99) - (FIRST.indexOf(b.id) + 1 || 99));
+	// first run connects a provider's first account alone; more come later, in Settings
+	const first = sorted.flatMap((provider) => {
+		const account = provider.accounts.find((each) => each.id === provider.id);
+		return account === undefined ? [] : [{ provider, account }];
+	});
 	return (
 		<FirstRun
-			providers={sorted.map((provider) => ({
+			providers={first.map(({ provider, account }) => ({
 				id: provider.id,
 				name: provider.name,
 				by: provider.oauth ? ("sign-in" as const) : ("key" as const),
-				...(provider.connected
+				...(account.connected
 					? {
 							note:
-								provider.ambient === true
-									? `From ${provider.source ?? "your environment"}, outside banda · use it`
+								account.ambient === true
+									? `From ${account.source ?? "your environment"}, outside banda · use it`
 									: "Connected · use it",
 						}
 					: {}),
-				connecting: provider.connecting,
-				asks: provider.question !== undefined,
-				ways: provider.methods?.map((way) => ({ id: way.id, label: wayLabel(way) })),
-				way: provider.method,
+				connecting: account.connecting,
+				asks: account.question !== undefined,
+				ways: account.methods?.map((way) => ({ id: way.id, label: wayLabel(way) })),
+				way: account.method,
 			}))}
 			open={open}
 			waiting={waiting}
 			error={error}
 			onPick={(id) =>
 				// an ambient key is usable as it is: the tap is the owner's pick of it (Settings connects over it)
-				void (providers.find((each) => each.id === id)?.ambient === true ? use(id) : pick(id))
+				void (first.find((each) => each.account.id === id)?.account.ambient === true ? use(id) : pick(id))
 			}
 			onKey={(id, value) => void key(id, value)}
 			onAnswer={(id, value) => void answer(id, value)}

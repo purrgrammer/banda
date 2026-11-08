@@ -3,6 +3,8 @@
  * definition's version, never read as missing. Each case writes the earlier shape with that version's definition,
  * closes the store, and reads it back through today's.
  */
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createModels } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc } from "@earendil-works/pi-durable";
 import { expect, it } from "vitest";
@@ -12,6 +14,7 @@ import { Devices, INVITE_MS, pairingState } from "../src/core/devices.ts";
 import { Harnesses } from "../src/core/harness.ts";
 import { keepReading, Readings } from "../src/core/objects.ts";
 import { Permissions } from "../src/core/permissions.ts";
+import { FileCredentialStore } from "../src/core/provider-credentials.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { tempHome } from "./helpers.ts";
 
@@ -84,6 +87,63 @@ it("reopens current account authority and object readings without a migration", 
 				comments: null,
 			},
 		});
+		await keepReading(tx, "calendar/me@example.test/event:calendar/cHJpbWFyeSBlMQ", {
+			connection: "calendar",
+			account: "me@example.test",
+			kind: "event",
+			source: "accepted-definition-and-account-generation",
+			at: 789,
+			card: {
+				card: "event",
+				title: "Planning",
+				start: "2026-11-09T10:00:00+01:00",
+				end: "2026-11-09T11:00:00+01:00",
+				allDay: false,
+				timeZone: "Europe/Madrid",
+				location: "",
+				organizer: "me@example.test",
+				who: "Ana +2",
+				attendees: null,
+				response: "accepted",
+				status: "confirmed",
+				description: "",
+				url: "https://www.google.com/calendar/event?eid=x",
+			},
+		});
+		await keepReading(tx, "contacts/me@example.test/contact:contacts/oc1", {
+			connection: "contacts",
+			account: "me@example.test",
+			kind: "contact",
+			source: "accepted-definition-and-account-generation",
+			at: 790,
+			card: {
+				card: "contact",
+				name: "Bo",
+				emails: "bo@example.test",
+				phones: "",
+				organization: "",
+				title: "",
+				other: true,
+			},
+		});
+		await keepReading(tx, "drive/me@example.test/file:drive/1aBcD", {
+			connection: "drive",
+			account: "me@example.test",
+			kind: "file",
+			source: "accepted-definition-and-account-generation",
+			at: 790,
+			card: {
+				card: "file",
+				name: "Q1 rollout plan",
+				kind: "doc",
+				mimeType: "application/vnd.google-apps.document",
+				owner: "Ana",
+				modified: "2026-11-05T16:42:10.000Z",
+				size: null,
+				description: "",
+				url: "https://docs.google.com/document/d/1aBcD/edit",
+			},
+		});
 	}, context);
 	await before.close(context);
 	const after = await open(home);
@@ -100,6 +160,17 @@ it("reopens current account authority and object readings without a migration", 
 			at: 456,
 			card: { title: "Readings survive a restart", state: "unknown", comments: null },
 		});
+		expect(
+			(await after.snapshot(Readings, context))?.readings["calendar/me@example.test/event:calendar/cHJpbWFyeSBlMQ"],
+		).toMatchObject({ card: { card: "event", attendees: null, allDay: false, who: "Ana +2" } });
+		expect(
+			(await after.snapshot(Readings, context))?.readings["contacts/me@example.test/contact:contacts/oc1"],
+		).toMatchObject({ card: { card: "contact", other: true, emails: "bo@example.test" } });
+		expect((await after.snapshot(Readings, context))?.readings["drive/me@example.test/file:drive/1aBcD"]).toMatchObject(
+			{
+				card: { card: "file", kind: "doc", size: null, name: "Q1 rollout plan" },
+			},
+		);
 	} finally {
 		await after.close(context);
 	}
@@ -211,4 +282,23 @@ it("reopens current harness authority, continuation and process identities uncha
 	} finally {
 		await after.close(context);
 	}
+});
+
+it("reads auth/providers.json as stored: credentials by account, and the labels the owner gave accounts", async () => {
+	const home = await tempHome();
+	const shape = {
+		credentials: {
+			anthropic: { type: "api_key", key: "sk-personal" },
+			"anthropic@work": { type: "oauth", access: "a", refresh: "r", expires: 1 },
+		},
+		accounts: { anthropic: { label: "Personal" }, "anthropic@work": { label: "Work" } },
+	};
+	await mkdir(join(home, "auth"), { recursive: true });
+	await writeFile(join(home, "auth", "providers.json"), JSON.stringify(shape));
+	const credentials = new FileCredentialStore(home);
+	expect(await credentials.read("anthropic@work")).toEqual(shape.credentials["anthropic@work"]);
+	expect(await credentials.labels()).toEqual({ anthropic: "Personal", "anthropic@work": "Work" });
+	// a file that does not fit its schema is refused, never read as no credentials
+	await writeFile(join(home, "auth", "providers.json"), JSON.stringify({ credentials: { anthropic: { key: "x" } } }));
+	await expect(credentials.read("anthropic")).rejects.toThrow(/schema/);
 });

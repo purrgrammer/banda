@@ -3,7 +3,15 @@
  * owner's words, its connections, permissions, memory, thinking tier and archive. A new agent is a short sheet with the
  * face defaulted: naming a friend, not filling a form. And Settings, one page. Every change is in effect at once.
  */
-import { ArchiveIcon, ArchiveRestoreIcon, ChevronLeftIcon, PencilIcon, PlusIcon, XIcon } from "lucide-react";
+import {
+	ArchiveIcon,
+	ArchiveRestoreIcon,
+	ChevronLeftIcon,
+	EllipsisIcon,
+	PencilIcon,
+	PlusIcon,
+	XIcon,
+} from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import {
 	AlertDialog,
@@ -17,6 +25,12 @@ import {
 	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -24,13 +38,12 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/cn";
-import type { ConnectionToolView } from "../../../src/server/api.ts";
+import { accountTitle, backendOf } from "../../../src/core/provider-accounts.ts";
 import { AvatarChoices } from "../avatar/Choices.tsx";
 import { Confirm } from "./Confirm.tsx";
-import { ConnectionTools } from "./Connect.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
 import { Face, FaceStack } from "./Face.tsx";
-import { GitHubMark } from "./Object.tsx";
+import { ProviderAccountForm, ProviderAccountRename } from "./ProviderAccountForm.tsx";
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
 import { ProviderSignIn, type SignInWay } from "./ProviderSignIn.tsx";
 import type { Who } from "./Row.tsx";
@@ -260,125 +273,62 @@ export type ConnectionRow = {
 	readonly url?: string | undefined;
 	/** Every account signed in to it, and whether this agent may use each. */
 	readonly accounts: readonly { readonly login: string; readonly on: boolean; readonly account?: string }[];
-	readonly tools?: readonly ConnectionToolView[] | undefined;
 };
 
 /**
- * The connections an agent may use: one row per connection, one switch per account; Connect when none is signed in,
- * and Another account when some are. Either opens the connect card under the row (`connect`), where it signs in.
+ * The connections an agent uses: one row per account switched on for it, Remove asked first. Managing access and
+ * accounts lives on the Connections page; adding one is the caller's (Add opens its dialog).
  */
 export function Connections({
 	agent,
 	rows,
 	onSwitch,
-	connect,
 	empty = "Nothing to connect yet.",
-	compact = false,
 }: {
 	agent: string;
 	rows: readonly ConnectionRow[];
-	compact?: boolean;
-	/** What it says with no rows. */
+	/** What it says with no account on for the agent. */
 	empty?: string | undefined;
-	/** The owner switched an account on or off for the agent. */
+	/** The owner took an account away from the agent (or gave it back). */
 	onSwitch?: ((row: ConnectionRow, account: ConnectionRow["accounts"][number], on: boolean) => void) | undefined;
-	/** The connect card for a row, opened under it. */
-	connect?: ((row: ConnectionRow, close: () => void) => ReactNode) | undefined;
 }) {
-	const [open, setOpen] = useState<string | undefined>(undefined);
+	const used = rows.flatMap((row) => row.accounts.filter((account) => account.on).map((account) => ({ row, account })));
 	return (
 		<Block title="Connections" note={`What ${agent} may read. It asks before anything it writes.`}>
-			{rows.length === 0 ? (
+			{used.length === 0 ? (
 				<p className="rounded-field bg-paper-2 px-3.5 py-3 text-ui text-ink-2">{empty}</p>
-			) : compact ? (
+			) : (
 				<div className="flex flex-col">
-					{rows.flatMap((row) =>
-						row.accounts.map((account) => (
+					{used.map(({ row, account }) => {
+						const as = account.account === undefined ? undefined : account.login;
+						const what = as === undefined ? row.connection : `${row.connection} as ${as}`;
+						return (
 							<div
 								key={`${row.id ?? row.connection}/${account.account ?? account.login}`}
 								className="flex min-h-11 items-center gap-3 py-1.5"
 							>
-								<span title={row.connection} className="flex size-5 shrink-0 items-center justify-center">
+								<span className="flex size-5 shrink-0 items-center justify-center">
 									{row.icon ?? <ConnectionIcon connection={row.id ?? row.connection} url={row.url} />}
 								</span>
-								<span className="min-w-0 flex-1 truncate text-ui text-ink">
-									{account.account === undefined ? row.connection : account.login}
+								<span className="flex min-w-0 flex-1 flex-col">
+									<span className="truncate text-ui text-ink">{row.connection}</span>
+									{as === undefined ? null : <span className="truncate text-meta text-ink-2">{as}</span>}
 								</span>
-								<Switch
-									{...(onSwitch === undefined
-										? { defaultChecked: account.on }
-										: { checked: account.on, onCheckedChange: (on: boolean) => onSwitch(row, account, on) })}
-									aria-label={`${agent} may use ${row.connection} as ${account.login}`}
-								/>
-							</div>
-						)),
-					)}
-				</div>
-			) : (
-				<Rows>
-					{rows.map((row) => (
-						<div key={row.connection} className="flex flex-col">
-							<RowOf
-								lead={
-									<span className="flex size-8 shrink-0 items-center justify-center rounded-field bg-paper-3">
-										{row.icon ?? <ConnectionIcon connection={row.id ?? row.connection} url={row.url} />}
-									</span>
-								}
-								title={<span className="font-medium">{row.connection}</span>}
-								detail={row.accounts.length === 0 ? "Not connected" : undefined}
-								end={
-									row.accounts.length === 0 ? (
-										<Button size="sm" onClick={() => setOpen(open === row.connection ? undefined : row.connection)}>
-											Connect
-										</Button>
-									) : (
-										<Button
-											variant="ghost"
-											size="xs"
-											className="text-ink-2"
-											onClick={() => setOpen(open === row.connection ? undefined : row.connection)}
-										>
-											{row.id === "gmail" || row.connection === "Gmail" || row.id === "github" ? (
-												<>Manage access</>
-											) : (
-												<>
-													<PlusIcon />
-													Another account
-												</>
-											)}
-										</Button>
-									)
-								}
-							/>
-							{row.accounts.map((account) => (
-								// biome-ignore lint/a11y/noLabelWithoutControl: the switch inside is the control
-								<label
-									key={account.login}
-									className="flex h-10 items-center gap-3 border-t border-line-soft pr-3.5 pl-[3.75rem] text-ui text-ink"
+								<Confirm
+									title={`Remove ${row.connection}?`}
+									body={`${agent} stops using ${what}. The account stays signed in for the others; add it back at any time.`}
+									action="Remove"
+									keep="Keep it"
+									onConfirm={() => onSwitch?.(row, account, false)}
 								>
-									<span className="flex-1">{account.login}</span>
-									<Switch
-										{...(onSwitch === undefined
-											? { defaultChecked: account.on }
-											: { checked: account.on, onCheckedChange: (on: boolean) => onSwitch(row, account, on) })}
-										aria-label={`${agent} may use ${account.login}`}
-									/>
-								</label>
-							))}
-							{row.id === "gmail" ||
-							row.connection === "Gmail" ||
-							row.tools === undefined ||
-							row.tools.length === 0 ? null : (
-								<div className="px-3.5 pb-3 pl-[3.75rem]">
-									<ConnectionTools connection={row.connection} tools={row.tools} />
-								</div>
-							)}
-							{open === row.connection && connect !== undefined ? (
-								<div className="border-t border-line-soft p-3">{connect(row, () => setOpen(undefined))}</div>
-							) : null}
-						</div>
-					))}
-				</Rows>
+									<Button variant="ghost" size="icon-xs" className="text-ink-2" aria-label={`Remove ${what}`}>
+										<XIcon />
+									</Button>
+								</Confirm>
+							</div>
+						);
+					})}
+				</div>
 			)}
 		</Block>
 	);
@@ -621,8 +571,6 @@ export type SettingsActions = {
 	readonly onSignOut?: (agent: string, site: string) => void;
 	/** Sign an account of a connection out: off for every agent, its permissions taken back. */
 	readonly onAccountSignOut?: (account: Account) => void;
-	/** The connect card for connection `name`, signing in another account for no agent. */
-	readonly connect?: (name: string, close: () => void) => ReactNode;
 	/** Restore an archived agent; a refusal rejects with why. */
 	readonly onRestore?: (who: Who & { readonly id?: string }) => Promise<unknown> | undefined;
 	/** Restore an archived group; a refusal rejects with why. */
@@ -955,7 +903,7 @@ export function AppSettings({
 				<Block title="Model provider" note="Who thinks for the band. Your provider sees what you ask.">
 					<Rows>
 						<RowOf
-							lead={<img src={`/providers/${data.provider.id}.svg`} alt="" className="size-5 dark:invert" />}
+							lead={<img src={`/providers/${backendOf(data.provider.id)}.svg`} alt="" className="size-5 dark:invert" />}
 							title={data.provider.name}
 							detail="Thinks for every agent of the band"
 						/>
@@ -999,10 +947,16 @@ export function AppSettings({
 	);
 }
 
-/** A model provider in Settings: how it connects, and where it stands. */
+/**
+ * A provider account in Settings: how it connects, and where it stands. `id` is the account's; `name` its provider's,
+ * which `provider` names by id when the account is not the provider's first (`anthropic@work`), with the owner's
+ * `label` for it.
+ */
 export type ProviderRow = {
 	readonly id: string;
 	readonly name: string;
+	readonly provider?: string | undefined;
+	readonly label?: string | undefined;
 	/** Signs in, or takes a key. */
 	readonly by: "sign-in" | "key";
 	readonly connected: boolean;
@@ -1041,16 +995,20 @@ export function ModelProviders({
 	onAnswer,
 	onWay,
 	onCancel,
+	onAdd,
+	onRename,
+	adding: openAdding,
+	renaming: openRenaming,
 	here = true,
 }: {
-	/** The provider the band thinks with. */
+	/** The provider account the band thinks with. */
 	current: string;
 	/** On the computer banda runs on, where providers are connected; false on a device. */
 	here?: boolean;
 	providers: readonly ProviderRow[];
-	/** The provider whose key form is open. */
+	/** The account whose key form is open. */
 	open?: string | undefined;
-	/** The provider connecting now. */
+	/** The account, or the provider adding one, connecting now. */
 	waiting?: string | undefined;
 	/** What went wrong, who, what and the fix, in words. */
 	error?: string | undefined;
@@ -1062,8 +1020,24 @@ export function ModelProviders({
 	onAnswer?: ((id: string, value: string) => void) | undefined;
 	onWay?: ((id: string, way: string) => void) | undefined;
 	onCancel?: ((id: string) => void) | undefined;
+	/** Another account of a provider: its name, and its key for one that takes a key. */
+	onAdd?: ((provider: string, label: string, key?: string) => void) | undefined;
+	/** A new name for an account, in the owner's words. */
+	onRename?: ((id: string, label: string) => void) | undefined;
+	/** The provider whose "Add another account" form shows at first. */
+	adding?: string | undefined;
+	/** The account whose rename form shows at first. */
+	renaming?: string | undefined;
 }) {
+	const [adding, setAdding] = useState<string | undefined>(openAdding);
+	const [renaming, setRenaming] = useState<string | undefined>(openRenaming);
+	const [leaving, setLeaving] = useState<string | undefined>(undefined);
 	const connected = providers.filter((each) => each.connected);
+	const backend = (row: ProviderRow) => row.provider ?? row.id;
+	const many = (row: ProviderRow) =>
+		(here ? providers : connected).filter((each) => backend(each) === backend(row)).length > 1;
+	const title = (row: ProviderRow) => accountTitle(row.name, row.label, many(row));
+	const shown = here ? providers : connected;
 	return (
 		<Block
 			title="Providers"
@@ -1074,16 +1048,31 @@ export function ModelProviders({
 			}
 		>
 			<Rows className="max-h-[min(24rem,50dvh)] overflow-y-auto overscroll-contain">
-				{(here ? providers : connected).map((provider) => {
+				{shown.map((provider, n) => {
+					const name = title(provider);
 					const using = provider.id === current;
 					const next = connected.find((each) => each.id !== provider.id);
 					// an ambient credential is connected but never ours: connecting over it is still a sign-in
 					const ambient = provider.ambient === true;
+					// an account beyond the provider's first, not connected: added and failed, or signed out of elsewhere
+					const extra = provider.provider !== undefined && provider.provider !== provider.id;
 					const signing =
 						provider.by === "sign-in" &&
 						(!provider.connected || ambient) &&
 						(provider.id === waiting || provider.connecting === true);
 					const from = ambient ? (provider.source ?? "your environment") : undefined;
+					const renamable = provider.connected && !ambient && many(provider) && onRename !== undefined;
+					const leave = !using
+						? "Its sign-in is forgotten. You can connect it again any time."
+						: next === undefined
+							? "It is the only provider connected: the band stops thinking until you connect one."
+							: `The band thinks with ${title(next)} from its next answer on.`;
+					const last = shown[n + 1] === undefined || backend(shown[n + 1] as ProviderRow) !== backend(provider);
+					const addable =
+						here &&
+						last &&
+						onAdd !== undefined &&
+						shown.some((each) => backend(each) === backend(provider) && each.connected);
 					const detail =
 						provider.id === waiting || provider.connecting === true
 							? provider.by === "sign-in"
@@ -1105,8 +1094,8 @@ export function ModelProviders({
 					return (
 						<div key={provider.id} className="flex flex-col">
 							<RowOf
-								lead={<img src={`/providers/${provider.id}.svg`} alt="" className="size-5 dark:invert" />}
-								title={provider.name}
+								lead={<img src={`/providers/${backend(provider)}.svg`} alt="" className="size-5 dark:invert" />}
+								title={name}
 								detail={detail}
 								end={
 									<span className="flex shrink-0 gap-1.5">
@@ -1114,48 +1103,112 @@ export function ModelProviders({
 											<Button
 												variant="outline"
 												size="xs"
-												aria-label={`Use ${provider.name}`}
+												aria-label={`Use ${name}`}
 												onClick={() => onUse?.(provider.id)}
 											>
 												Use
 											</Button>
 										) : null}
 										{provider.connected && !ambient ? (
-											<Confirm
-												title={`Sign out of ${provider.name}?`}
-												body={
-													!using
-														? "Its sign-in is forgotten. You can connect it again any time."
-														: next === undefined
-															? "It is the only provider connected: the band stops thinking until you connect one."
-															: `The band thinks with ${next.name} from its next answer on.`
-												}
-												action="Sign out"
-												keep="Stay signed in"
-												onConfirm={onSignOut === undefined ? undefined : () => onSignOut(provider.id)}
-											>
-												<Button variant="ghost" size="xs" aria-label={`Sign out of ${provider.name}`}>
-													Sign out
-												</Button>
-											</Confirm>
+											<>
+												{renamable ? (
+													<DropdownMenu>
+														<DropdownMenuTrigger asChild>
+															<Button
+																variant="ghost"
+																size="icon-xs"
+																className="sm:hidden"
+																aria-label={`More for ${name}`}
+															>
+																<EllipsisIcon />
+															</Button>
+														</DropdownMenuTrigger>
+														<DropdownMenuContent align="end">
+															<DropdownMenuItem onSelect={() => setRenaming(provider.id)}>Rename</DropdownMenuItem>
+															<DropdownMenuItem variant="destructive" onSelect={() => setLeaving(provider.id)}>
+																Sign out
+															</DropdownMenuItem>
+														</DropdownMenuContent>
+													</DropdownMenu>
+												) : null}
+												{renamable ? (
+													<Button
+														variant="ghost"
+														size="xs"
+														className="hidden sm:inline-flex"
+														aria-label={`Rename ${name}`}
+														aria-expanded={renaming === provider.id}
+														onClick={() => setRenaming((was) => (was === provider.id ? undefined : provider.id))}
+													>
+														Rename
+													</Button>
+												) : null}
+												<Confirm
+													title={`Sign out of ${name}?`}
+													body={leave}
+													action="Sign out"
+													keep="Stay signed in"
+													onConfirm={onSignOut === undefined ? undefined : () => onSignOut(provider.id)}
+												>
+													<Button
+														variant="ghost"
+														size="xs"
+														className={renamable ? "hidden sm:inline-flex" : undefined}
+														aria-label={`Sign out of ${name}`}
+													>
+														Sign out
+													</Button>
+												</Confirm>
+												{renamable ? (
+													<Confirm
+														title={`Sign out of ${name}?`}
+														body={leave}
+														action="Sign out"
+														keep="Stay signed in"
+														onConfirm={onSignOut === undefined ? undefined : () => onSignOut(provider.id)}
+														open={leaving === provider.id}
+														onOpenChange={(open) => setLeaving(open ? provider.id : undefined)}
+													/>
+												) : null}
+											</>
 										) : !here ? null : (
-											<Button
-												variant="outline"
-												size="xs"
-												aria-label={`Connect ${provider.name}`}
-												aria-expanded={provider.by === "key" ? provider.id === open : undefined}
-												disabled={provider.by === "key" && provider.id === waiting}
-												onClick={() => onConnect?.(provider.id)}
-											>
-												Connect
-											</Button>
+											<>
+												<Button
+													variant="outline"
+													size="xs"
+													aria-label={`Connect ${name}`}
+													aria-expanded={provider.by === "key" ? provider.id === open : undefined}
+													disabled={provider.by === "key" && provider.id === waiting}
+													onClick={() => onConnect?.(provider.id)}
+												>
+													Connect
+												</Button>
+												{extra && !signing ? (
+													<Button
+														variant="ghost"
+														size="xs"
+														aria-label={`Remove ${name}`}
+														onClick={() => onSignOut?.(provider.id)}
+													>
+														Remove
+													</Button>
+												) : null}
+											</>
 										)}
 									</span>
 								}
 							/>
+							{renaming === provider.id ? (
+								<ProviderAccountRename
+									account={{ id: provider.id, title: name, label: provider.label ?? provider.name }}
+									className="border-t border-line-soft p-3"
+									onRename={onRename}
+									onClose={() => setRenaming(undefined)}
+								/>
+							) : null}
 							{here && provider.id === open && (!provider.connected || ambient) ? (
 								<ProviderKeyForm
-									provider={provider}
+									provider={{ ...provider, name }}
 									action="Connect"
 									busy={provider.id === waiting}
 									className="border-t border-line-soft p-3"
@@ -1164,7 +1217,7 @@ export function ModelProviders({
 							) : null}
 							{here && signing ? (
 								<ProviderSignIn
-									provider={provider}
+									provider={{ ...provider, name }}
 									asks={provider.asks}
 									ways={provider.ways}
 									way={provider.way}
@@ -1173,6 +1226,37 @@ export function ModelProviders({
 									onWay={onWay}
 									onCancel={onCancel}
 								/>
+							) : null}
+							{addable ? (
+								adding === backend(provider) ? (
+									<ProviderAccountForm
+										provider={{ id: backend(provider), name: provider.name }}
+										by={provider.by}
+										busy={waiting === backend(provider)}
+										className="border-t border-line-soft p-3"
+										onAdd={(id, label, key) => {
+											setAdding(undefined);
+											onAdd?.(id, label, key);
+										}}
+										onClose={() => setAdding(undefined)}
+									/>
+								) : (
+									<RowOf
+										className="border-t border-line-soft pl-[2.875rem]"
+										title={<span className="text-ink-2">Another {provider.name} account</span>}
+										end={
+											<Button
+												variant="ghost"
+												size="xs"
+												aria-label={`Add another ${provider.name} account`}
+												onClick={() => setAdding(backend(provider))}
+											>
+												<PlusIcon />
+												{provider.by === "sign-in" ? "Sign in another" : "Add another"}
+											</Button>
+										}
+									/>
+								)
 							) : null}
 						</div>
 					);
@@ -1188,12 +1272,10 @@ export function ModelProviders({
 }
 
 /**
- * Every account across services: who it is, which agents use it, Sign out (asked first); per connection, Sign in
- * another, which opens its connect card in place; and Connect a service, the Connections page.
+ * Every account across services: who it is, which agents use it, Sign out (asked first); and Connect a service, the
+ * Connections page, where access and accounts are managed.
  */
 function Accounts({ accounts, act }: { accounts: readonly Account[]; act: SettingsActions }) {
-	const [open, setOpen] = useState<string | undefined>(undefined);
-	const names = [...new Map(accounts.flatMap((a) => (a.name === undefined ? [] : [[a.name, a.connection]]))).entries()];
 	return (
 		<Block title="Accounts" note="Every account you signed in to, and which agents use it.">
 			<Rows>
@@ -1202,11 +1284,7 @@ function Accounts({ accounts, act }: { accounts: readonly Account[]; act: Settin
 						key={account.id}
 						lead={
 							<span className="flex size-8 shrink-0 items-center justify-center rounded-field bg-paper-3">
-								{account.connection === "GitHub" ? (
-									<GitHubMark />
-								) : (
-									<span className="text-meta font-semibold text-ink-2">{account.connection.slice(0, 1)}</span>
-								)}
+								<ConnectionIcon connection={account.name ?? account.connection} />
 							</span>
 						}
 						title={
@@ -1239,22 +1317,6 @@ function Accounts({ accounts, act }: { accounts: readonly Account[]; act: Settin
 							</Confirm>
 						}
 					/>
-				))}
-				{names.map(([name, connection]) => (
-					<div key={name} className="flex flex-col">
-						<RowOf
-							title={<span className="text-ink-2">Another {connection} account</span>}
-							end={
-								<Button variant="ghost" size="xs" onClick={() => setOpen(open === name ? undefined : name)}>
-									<PlusIcon />
-									Sign in another
-								</Button>
-							}
-						/>
-						{open === name && act.connect !== undefined ? (
-							<div className="border-t border-line-soft p-3">{act.connect(name, () => setOpen(undefined))}</div>
-						) : null}
-					</div>
 				))}
 				<RowOf
 					title={<span className="text-ink-2">{accounts.length === 0 ? "No accounts yet" : "More services"}</span>}

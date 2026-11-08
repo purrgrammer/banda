@@ -32,8 +32,9 @@ code holds the details. If a sentence here only restates code, delete it.
 2. **What the agent is made of is files.** Agents, connections, routines, watches and memory are plain text files in the
    workspace, inspectable and editable by the owner or an agent. The store holds what runs and what is in effect, never
    a second copy of a definition.
-3. **An agent speaks through one tool.** The only way to reach the owner is `message_user`, with typed parts; in a
-   group, `message_group` posts to its room in its place. Proactive
+3. **An agent speaks only through its speaking tools.** The only way to reach the owner is a speaking tool, one per
+   act: `message_user` for words, `ask_user`, `react`, `publish`, …; in a group, `message_group` posts the words to its
+   room in `message_user`'s place. Proactive
    work with nothing worth saying says nothing, so the agent works in the background like a colleague, not a chatbot;
    but the owner who wrote is always answered, which the daemon enforces rather than trusting the model to.
 4. **Silence is the default.** Proactive work runs often and speaks rarely: a run decides whether anything is worth a
@@ -84,7 +85,7 @@ The words the rules lean on:
 | **Chat** | a conversation running one agent; a group presents its shared history as one chat |
 | **Queue** | a chat's inputs waiting for a run (pi-durable's inbox): the owner steers, everything else follows up |
 | **Turn** | a task per input: submits it, waits for the run to settle |
-| **Message** | what `message_user` sends to the Turn's `replyTo`: parts, at-least-once, in order per origin |
+| **Message** | what a speaking tool sends to the Turn's `replyTo`: parts, at-least-once, in order per origin |
 | **Wait** | a task a tool call blocks on, with an answer slot the owner fills: `ask`, `deadline` |
 | **Draft** | an effect leaving the box, stored whole and shown for approval; approved, it runs exactly as stored, once |
 | **Permission** | a stored approval with a scope; an effect within an open permission runs without asking |
@@ -208,8 +209,8 @@ one that gives them one more thing to manage stays out.
 - **Connections** is a page from the band's menu and from Settings: every service the band can work with, a tile each
   (its accounts, or Connect; one not shipped yet says so), so the owner connects before any agent needs it. A chat
   that needs a connection carries the connect card instead of pointing elsewhere.
-- **Settings** is one page: the model providers (connect another, switch the band to it, sign out; the models the
-  tiers use); connections (every account across
+- **Settings** is one page: the model providers (connect another, add another account of one by name, switch the
+  band to one account, sign out of each; the models the tiers use); connections (every account across
   services: sign in another, sign out, which agents use it); agents (the limits on groups; archived agents and groups,
   to restore); appearance; shared memory; Pause all
   routines; Advanced (show how the work is done on this device; the computer's state).
@@ -224,7 +225,7 @@ one that gives them one more thing to manage stays out.
   any version can be restored. The agent prefers a card or an artifact over prose when what it says has structure: an
   itinerary is an itinerary, not a long reply. An artifact the owner edits is the owner's version, and the agent reads
   what they changed as their words.
-  - The agent publishes a file of its box with `message_user`; each publish of the same path is its next version, and
+  - The agent publishes a file of its box with `publish`; each publish of the same path is its next version, and
     the same bytes make none. Every version's bytes are a blob the artifact holds, restorable byte for byte.
   - The owner edits (text) or restores (any version) on the newest version only, so nothing is lost to an edit made
     meanwhile. Their version is written back into the box only while the box's file holds the bytes it is known to
@@ -285,7 +286,7 @@ and face, never the id:
 | `connections` | the connections it may use, by name; which of their accounts is the owner's switch |
 
 The body is its personality, a prompt section. Every direct agent chat gets the same base tools: the box, its files,
-its browser, memory, routines, watches and `message_user`, plus `message_agent`, `read_agent_chat`, `propose_agent`,
+its browser, memory, routines, watches and the speaking tools, plus `message_agent`, `read_agent_chat`, `propose_agent`,
 `propose_group` and `propose_agent_change`. Group executions do not get these direct-chat tools.
 What distinguishes agents is personality, connections, routines, watches and memory. An agent never gets a connection's
 tools its file does not name. Enabled tools need not all be offered upfront: secondary tools are discovered on demand,
@@ -321,6 +322,12 @@ takes effect between runs, never inside one. When the owner starts to write in a
 provider's prompt cache to go cold, the daemon sends the provider what the chat's next request starts with, for one
 token, so the reply comes sooner; nothing is stored.
 
+**A provider has accounts.** The owner may connect several of one provider (two sign-ins, a personal key and a work
+one), each named by the owner, and picks one account for the whole band, as they pick a provider. A provider's first
+account is the provider itself; another thinks only with the credential connected for it, never with one from outside
+banda, and leaves with its sign-in. The tiers are the provider's whichever account runs them, and what a run spends is
+counted against the account it ran on. An account's name shows only once its provider has more than one.
+
 **The face is never the trust.** Personality makes an agent pleasant; it does not make it safe. Trust lives in the
 structural rules, and the warmth of an agent never softens an approval: the card that asks is the daemon's, plain, and
 identical whoever the agent is.
@@ -332,9 +339,10 @@ equal; there is no coordinator. A message asks everyone unless it mentions one o
 it to them; each starts independently against the same shared history, and the members limit bounds the cost. With
 nobody in it, a message asks nobody and stays for whoever joins. The composer
 says so beneath the field ("To everyone · @ to pick one"). A mention, in the composer and in any message, shows as the
-agent's face and name, a link that opens its chat. A member speaks only with `message_group`, which posts to the
-room (words, files, an artifact, a question the owner answers there, or a reaction on the owner's message its turn
-answers, shown on that message); `message_user` is not offered in a group, and
+agent's face and name, a link that opens its chat. A member speaks only in the room: `message_group` posts its
+words, files and artifacts (by id, each at its version then) there, and its other speaking tools act there (`ask_user` asks the owner in the room, `react` puts its
+emoji on the owner's message its turn answers, `publish` shows its card); `message_user` and `propose_avatar` are not
+offered in a group, and
 `message_group` nowhere else. Its `ask` names the members whose work is needed, each starting a turn: its schema is an
 enum of the group's other active members by the names the group shows, so a member can name nobody else, and with
 nobody else there it has no `ask`. The enum follows the group at each member's turn. A name written with an @ in the
@@ -360,7 +368,11 @@ is first class in the UI (a logo and a name on every card, event and draft of it
 lives inside agents' settings and the app's Settings, never as a screen of its own.
 - **Accounts.** An account is one sign-in: `auth/connections/<connection>/<account>/` holds its credentials, bound to
   the URL they were given for, so a changed URL never carries them along. Its id is what the service calls the owner,
-  read once after sign-in and shown ("@bandarra"). The owner signs in another at any time; signing out forgets the
+  read once after sign-in and shown ("@bandarra"). Each account has its own access: the file's scopes are what a new
+  account asks for, and the owner may pick others for one account from what the file allows (its scopes and every
+  scope its tools need), so a personal mailbox can read while a work one sends; what an account was given is what its
+  credentials record, and a tool it was not given access for is refused in words before any request. Narrowing what
+  the file allows makes the accounts beyond it sign in again. The owner signs in another at any time; signing out forgets the
   credentials and switches the account off for every agent. Credentials never reach the
   box, a prompt, an entry, the store or a log; what a server echoes of one is hidden.
 - **One flow everywhere: enable, sign in, done.** From an agent's panel (Permissions), from Settings, or from a card the agent
@@ -477,26 +489,33 @@ naming one that is not there answers with those that are.
   when the harness said, never a made-up zero. A disconnect stops the sessions running there.
 
 ## Messages
-`message_user(parts)` is the only path from an agent to a person in its own chats, and does that one thing; a group
-member posts with `message_group` instead ("Groups"). A run's final text is its working notes: kept in
-the chat, in the raw transcript, never sent. **The owner is always answered**: a run answering the owner (the newest
-input in its chat is theirs, a message or a steer) ends in an act toward them since they last acted there: a
-`message_user` call that went through (words, parts, a question, or a reaction when nothing needs saying). A run that
+The speaking tools are the only path from an agent to a person, one tool per act: `message_user` sends words in its
+own chats (a group member posts with `message_group` instead, "Groups"), `ask_user` asks and waits, `react` puts an
+emoji on the owner's message, `publish` puts a file in the Library, `connect` offers a connection's card, and
+`propose_avatar` offers a face (direct chats only). Each but the words works in both venues: in a group member's chat
+it acts in the room. Every chat gets them whatever its file lists; `connect` and `propose_avatar` load on demand. A
+run's final text is its working notes: kept in the chat, in the raw transcript, never sent. **The owner is always
+answered**: a run answering the owner (the newest input in its chat is theirs, a message or a steer) ends in an act
+toward them since they last acted there: a speaking call that went through (words, a question, a reaction when
+nothing needs saying, a publish). A run that
 settles without one is nudged: the daemon queues its own words into the chat ("you ended without answering the
 owner…"), part of the same task and not shown as the owner's, once; a run that still has not acted leaves a notice in
 the chat, "<name> didn't answer.", so the owner never meets silence. A run that failed or was stopped is told as such,
 never nudged; a newer input of the owner's already queued is the one the next run answers, so it is not nudged
-either. In a group the same holds for a member's turn that an owner's message asked for: it ends in a `message_group`
-call that went through (words, files, a question, or a reaction on that message), or it is nudged once in the group's
-words, and then the room says "<name> didn't answer". Routines' and watches' runs and a member's turn another member
-asked for may stay silent. Parts:
+either. In a group the same holds for a member's turn that an owner's message asked for: it ends in a speaking call
+that went through in the room, or it is nudged once in the group's words, and then the room says "<name> didn't
+answer". Routines' and watches' runs and a member's turn another member asked for may stay silent. What a message
+carries:
 - **text**, markdown; a link the daemon recognises as an object draws its card beneath;
 - **file**: a path in the box, sent as an attachment and shown inline where it can be;
-- **artifact**: a path in the box published as its next version (see "The app"), a card in the app;
-- **view**: a live view of something in the box (the browser's page);
-- **question**: choices, a form or free text; the call opens a Wait and returns its answer;
-- **reaction**: one emoji on the owner's message the run answers; alone, it is the whole reply ("got it"). A routine's
-  or a watch's run answers no one's message, so it has none.
+- **artifacts**: ids of artifacts in the Library (`publish` returns its id), each drawn as its card at the version
+  current when it was sent; an id the Library does not hold is refused before anything is sent;
+- **view**: a live view of something in the box (the browser's page).
+
+The other acts: **question** (`ask_user`): choices, a form or free text; the call opens a Wait and returns its answer;
+in a group, options alone. **reaction** (`react`): one emoji on the owner's message the run answers; alone, it is the
+whole reply ("got it"). A routine's or a watch's run answers no one's message, so it has none. **artifact**
+(`publish`): a path in the box published as its next version (see "The app"), a card in the app.
 
 A call returns once its message is delivered, or with why it was not; a question returns its answer. Calls in one
 round run one after another, so messages go in the order the model wrote them. A message is sent by the tool's own

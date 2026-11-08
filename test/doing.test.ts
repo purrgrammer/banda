@@ -39,7 +39,7 @@ describe("doing", () => {
 				fc.string(),
 				(tool, p, agent) => {
 					const label = doing(tool, { path: p, agent, command: p });
-					if (tool === "message_user" || tool === "message_group") {
+					if (tool === "message_user" || tool === "message_group" || tool === "ask_user") {
 						expect(label).toBeUndefined();
 						return;
 					}

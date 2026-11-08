@@ -1,7 +1,8 @@
 /**
  * The confirm every destructive action asks first (forgetting a fact, removing a member, taking back a permission,
  * archiving an agent): what it does in a title and a line, the action named by its verb, and a way to keep things as
- * they are. `children` is the control that opens it.
+ * they are. `children` is the control that opens it; without one, `open` and `onOpenChange` hold it, for a menu's item
+ * that opens it after the menu closes.
  */
 import type { ReactNode } from "react";
 import {
@@ -22,9 +23,9 @@ export function Confirm({
 	action,
 	keep = "Cancel",
 	onConfirm,
+	children,
 	open,
 	onOpenChange,
-	children,
 }: {
 	title: string;
 	body: string;
@@ -32,13 +33,12 @@ export function Confirm({
 	action: string;
 	keep?: string;
 	onConfirm?: (() => void) | undefined;
-	/** Opened by something that cannot be its trigger (a menu item, which closes its menu): controlled from outside. */
+	children?: ReactNode;
 	open?: boolean | undefined;
 	onOpenChange?: ((open: boolean) => void) | undefined;
-	children?: ReactNode;
 }) {
 	return (
-		<AlertDialog {...(open === undefined ? {} : { open, onOpenChange })}>
+		<AlertDialog {...(open === undefined ? {} : { open })} {...(onOpenChange === undefined ? {} : { onOpenChange })}>
 			{children === undefined ? null : <AlertDialogTrigger asChild>{children}</AlertDialogTrigger>}
 			<AlertDialogContent size="sm">
 				<AlertDialogHeader>

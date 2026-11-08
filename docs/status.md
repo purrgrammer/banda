@@ -8,6 +8,22 @@ owner acceptance remain pending; definition and attachment coverage is tracked i
 preview has owner review: Connections, Permissions, Tools, toolset icons and highlighted schemas in Details. Its switches
 remain local to the preview.
 
+Google Calendar, Contacts and Drive join Gmail as built-in connections, from one registry of Google APIs
+([Connections](connections.md)). Calendar reads events and free/busy and makes approved changes (create with guests
+and a Meet link, change, answer, delete), each made once across a crash and from the event's current version;
+Contacts finds saved people and people the owner has emailed; Drive finds files and reads Docs, Sheets and Slides as
+text. Access is per account: each account asks for its own scopes within what its file allows, and the required ones
+are always asked. Connecting happens in one dialog, which ends by choosing the agents that use the account; a shipped
+connection is on for the lead by default. An agent names objects in its prose as links that open their cards; cards
+appear only when it shows them. Sends to third parties (Gmail's send, Calendar's create and change) ask every time.
+The owner connected all four on a throwaway home and used them through the app; an adversarial review's findings are
+fixed. Google's verification for restricted scopes (Gmail, Drive) and the owner's acceptance remain.
+
+Provider accounts are on main: a model provider holds several accounts, each
+named by the owner, added, renamed, used and signed out of in Settings → Model; the band thinks with one at a time, and
+each account's usage is counted apart. Tests, static checks and a desktop/phone walkthrough in a throwaway home with
+keys pass. A real second OAuth sign-in and a paid run on a second account remain, then owner review.
+
 Gmail REST is implemented in a topic worktree with least-privilege sign-in, account-bound email cards and attachment
 reads, approval-required sending and mailbox actions, and separate OAuth scopes for reading, sending and modifying
 mail ([Connections](connections.md)). Redirect sign-in starts on the computer; paired devices can use accounts already
@@ -144,7 +160,7 @@ chat; a name, an avatar and a style the owner chooses; notifications only when s
 | Extensions, agent-built tools and connections, `propose_connection` | Removed | Deleted (DESIGN.md "Open") |
 | Avatar face and colour | Present | Accepted agent identity, generation preview and install icons; publication safety remains open |
 | Speak-up, companion summary | Removed | Deleted |
-| Box, proxy, browser per agent, artifacts, memory, compaction, provider setup | Present | Kept |
+| Box, proxy, browser per agent, artifacts, memory, compaction, provider setup | Present | Kept; a provider has accounts |
 
 These baselines describe code presence, not completed owner acceptance or production readiness.
 

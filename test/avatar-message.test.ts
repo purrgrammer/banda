@@ -9,8 +9,8 @@ import {
 import { getExample, validateAvatar } from "open-bot-avatar";
 import { describe, expect, it } from "vitest";
 import { openBox } from "../src/box/box.ts";
-import { Accepted, agentPath, shaOf } from "../src/core/agents.ts";
-import { groupMessageTool, messageTool } from "../src/core/ask.ts";
+import { Accepted, agentPath, chatTools, shaOf } from "../src/core/agents.ts";
+import { groupMessageTool, messageTool, proposeAvatarTool, type Speaking } from "../src/core/ask.ts";
 import { defaultAvatarFace, writeAvatarFace } from "../src/core/avatar-face.ts";
 import { AVATAR_INSTRUCTIONS } from "../src/core/avatar-instructions.ts";
 import { OWNER } from "../src/core/gateway.ts";
@@ -29,8 +29,11 @@ import { blobStore, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
 const checked = validateAvatar(getExample("mug"));
 if (!checked.ok) throw new Error("invalid shipped example");
 const definition = checked.value;
+/** What the part reads: the geometry under `avatar`, as `messageArgs` gives it. */
 const args = { avatar: definition } as unknown as JsonObject;
-const call: ToolCall = { id: "face", name: "message_user", args };
+/** What the model gives `propose_avatar`: the geometry itself. */
+const given = definition as unknown as JsonObject;
+const call: ToolCall = { id: "face", name: "propose_avatar", args };
 const occurrence = { assistant: 1, index: 0 };
 const receipt = { kind: "avatar" as const, ...occurrence, definition };
 const api = {
@@ -39,7 +42,7 @@ const api = {
 	commit: async (read: (tx: Tx) => unknown) =>
 		read({
 			task: async () => ({ input: { kind: "model", assistant: 1, callId: "face" } }),
-			entry: async () => ({ model: [fauxAssistantMessage([fauxToolCall("message_user", args, { id: "face" })])] }),
+			entry: async () => ({ model: [fauxAssistantMessage([fauxToolCall("propose_avatar", given, { id: "face" })])] }),
 		} as unknown as Tx),
 } as unknown as ToolExecutionApi;
 
@@ -53,23 +56,27 @@ const noAccess = new Proxy(
 );
 
 describe("generated face message parts", () => {
-	it("ships the typed direct-chat part, not an agent or group proposal or a user-facing JSON recipe", () => {
-		const direct = messageTool(noAccess as never, noAccess as never, blobStore(), 1000);
-		const group = groupMessageTool(noAccess as never, noAccess as never, blobStore(), 1000);
-		expect(direct.parameters).toHaveProperty("properties.avatar");
-		expect(group.parameters).not.toHaveProperty("properties.avatar");
-		expect(AVATAR_INSTRUCTIONS).toContain("message_user's avatar parameter");
+	it("ships a typed direct-chat tool, not a message part, a group's tool or a user-facing JSON recipe", () => {
+		const speaking = {
+			asking: noAccess,
+			sending: noAccess,
+			blobs: blobStore(),
+			limit: 1000,
+			venue: noAccess,
+		} as Speaking;
+		expect(proposeAvatarTool(speaking).parameters).toHaveProperty("properties.body");
+		expect(messageTool(speaking).parameters).not.toHaveProperty("properties.avatar");
+		expect(groupMessageTool(speaking).parameters).not.toHaveProperty("properties.avatar");
+		expect(chatTools({ id: "mira", tools: [] }, undefined, [], false)).toContain("propose_avatar");
+		expect(chatTools({ id: "mira", tools: [] }, undefined, [], true)).not.toContain("propose_avatar");
+		expect(AVATAR_INSTRUCTIONS).toContain("propose_avatar's arguments");
 		expect(AVATAR_INSTRUCTIONS).toContain("never as JSON in text");
 		expect(AVATAR_INSTRUCTIONS).not.toContain("as text or a JSON file");
 	});
 
-	it("validates without accessing identity or the box, including on replay; refuses questions and groups", async () => {
+	it("validates without accessing identity or the box, including on replay", async () => {
 		for (let replay = 0; replay < 2; replay++)
 			expect(await avatar.prepare?.(args, api, context, noAccess as never)).toEqual({ receipt });
-		expect(avatar.refuse?.({ ...args, question: "Use it?" })).toContain("separately");
-		const group = groupMessageTool(noAccess as never, noAccess as never, blobStore(), 1000);
-		const result = await group.execute(args, noAccess as never, context);
-		expect(result.isError).toBe(true);
 	});
 
 	it.each([
@@ -95,7 +102,7 @@ describe("generated face message parts", () => {
 			id: 2,
 			role: "tool" as const,
 			call: "face",
-			name: "message_user",
+			name: "propose_avatar",
 			text: "Sent.",
 			error: false,
 			receipt,
@@ -118,7 +125,7 @@ describe("generated face message parts", () => {
 		const models = createModels();
 		models.setProvider(faux.provider);
 		faux.setResponses([
-			fauxAssistantMessage([fauxToolCall("message_user", args, { id: "face" })], { stopReason: "toolUse" }),
+			fauxAssistantMessage([fauxToolCall("propose_avatar", given, { id: "face" })], { stopReason: "toolUse" }),
 			fauxAssistantMessage("done"),
 		]);
 		const gateway = new FakeGateway();

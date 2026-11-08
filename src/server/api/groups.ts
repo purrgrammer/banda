@@ -19,13 +19,16 @@ export type GroupMessageView = {
 	/** Skills actually loaded by a member for this owner's message, not just requested. */
 	readonly loaded?: readonly string[];
 	readonly at: number;
-	/** What a member's message published to the Library: the artifact and its version, opened beside the room. */
-	readonly artifact?: {
+	/**
+	 * A member's message's artifacts, each its card, opened beside the room: what its call published, then those it
+	 * showed again, each at its version then; one removed from the Library since is left out.
+	 */
+	readonly artifacts?: readonly {
 		readonly id: string;
 		readonly n: number;
 		readonly title: string;
 		readonly kind: import("../../core/artifacts.ts").ArtifactKind;
-	};
+	}[];
 	/** A member's emoji on the owner's message at entry `on`: shown on that message; alone, the whole answer. */
 	readonly reaction?: { readonly emoji: string; readonly on: number };
 	/** The files it carries, each a blob fetched by its `sha`. */

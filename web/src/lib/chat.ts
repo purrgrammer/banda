@@ -7,6 +7,7 @@
  * Pure, so it is unit-tested beside the server's tests; it imports types alone.
  */
 import type { TroubleData } from "../../../src/core/routines.ts";
+import { isOwnerMessage, messageArgs, PROPOSE_AVATAR } from "../../../src/core/toolsets.ts";
 import type { WatchTroubleData } from "../../../src/core/watches.ts";
 import type { Answer, Ask, Item, PermissionScope, Queued, RunningTool, ShownWait } from "../../../src/server/api.ts";
 import { routineTitle } from "../app/titles.ts";
@@ -339,11 +340,11 @@ function unansweredAfter(items: readonly Item[], segments: readonly Segment[], l
 			(item.role === "assistant" && item.error !== undefined) ||
 			(item.role === "tool" && (item.notes ?? []).some((note) => (note as { code?: string }).code === "aborted")),
 	);
-	// a message_user call that went through (a reaction alone included) answered them; a call with no result has not
+	// a speaking call that went through (a reaction alone included) answered them; a call with no result has not
 	// ended
 	const ended = new Map(after.flatMap((item) => (item.role === "tool" ? [[item.call, !item.error] as const] : [])));
 	const calls = after.flatMap((item) => (item.role === "assistant" ? (item.calls ?? []) : []));
-	if (calls.some((call) => !ended.has(call.id) || (call.name === "message_user" && ended.get(call.id) === true)))
+	if (calls.some((call) => !ended.has(call.id) || (isOwnerMessage(call.name) && ended.get(call.id) === true)))
 		return undefined;
 	// the newest shown must be that message itself, not an answer typed to a question after it
 	if (stopped || newest.key !== `${told.id}` || !after.some((item) => item.role === "assistant")) return undefined;
@@ -384,7 +385,7 @@ export function view(
 	for (const item of items) {
 		if (item.role === "tool") {
 			results.set(item.call, item);
-			if (item.name === "message_user" && !item.error && item.receipt?.kind === "avatar")
+			if (item.name === PROPOSE_AVATAR && !item.error && item.receipt?.kind === "avatar")
 				candidates.set(`${item.receipt.assistant}:${item.receipt.index}`, item);
 		}
 		if (item.role === "wait" && item.call !== undefined)
@@ -432,9 +433,11 @@ export function view(
 						? { kind: "notice", key: `${item.id}:stopped`, text: "Stopped" }
 						: { kind: "notice", key: `${item.id}:error`, text: `Couldn't get a reply: ${failureWords(item.error)}` },
 				);
-			for (const [index, call] of (item.calls ?? []).entries()) {
-				const key = `${item.id}:${call.id}`;
-				if (call.name !== "message_user") {
+			for (const [index, made] of (item.calls ?? []).entries()) {
+				const key = `${item.id}:${made.id}`;
+				// every speaking tool's call reads as one message's parts
+				const call = isOwnerMessage(made.name) ? { ...made, args: messageArgs(made.name, made.args) } : made;
+				if (!isOwnerMessage(call.name)) {
 					const at = { ...withResult(results.get(call.id)), asks: () => asks(key, call.id), context };
 					let own: Segment[] | undefined;
 					for (const segmenter of SEGMENTERS) {

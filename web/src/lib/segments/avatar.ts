@@ -1,5 +1,6 @@
 /** Only a completed, successful message call has passed isolated geometry validation. Never render raw pending args. */
 import type { AvatarDefinition } from "open-bot-avatar";
+import { PROPOSE_AVATAR } from "../../../../src/core/toolsets.ts";
 import type { Segmenter } from "./types.ts";
 
 declare module "./types.ts" {
@@ -17,8 +18,8 @@ export const avatar: Segmenter = {
 	message: (call, key, { result, occurrence }) => {
 		const receipt = result?.receipt;
 		if (
-			call.name !== "message_user" ||
-			result?.name !== "message_user" ||
+			call.name !== PROPOSE_AVATAR ||
+			result?.name !== PROPOSE_AVATAR ||
 			result.call !== call.id ||
 			result.error !== false ||
 			receipt?.kind !== "avatar" ||

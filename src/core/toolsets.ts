@@ -42,6 +42,46 @@ export const ALWAYS_TOOLSETS = ["routines", "watches", "memory"] as const;
 export const MESSAGE_USER = "message_user";
 /** How a group member speaks, in its room: in its chat for the group, in place of `message_user`. */
 export const MESSAGE_GROUP = "message_group";
+/** Ask the owner something and wait for the answer: in a direct chat, or in the room of a member's group. */
+export const ASK_USER = "ask_user";
+/** One emoji on the owner's message the run answers. */
+export const REACT = "react";
+/** Put a file of the box in the owner's Library as its next version. */
+export const PUBLISH = "publish";
+/** Offer the owner a card that connects a service the agent has no account of. */
+export const CONNECT = "connect";
+/** Offer a generated face for the agent, which only the owner's card applies; direct chats only. */
+export const PROPOSE_AVATAR = "propose_avatar";
+
+/**
+ * The acts toward the owner besides the words, which every chat gets whatever its file lists; `propose_avatar` only a
+ * direct chat. Together with `message_user` and `message_group` they are the speaking tools.
+ */
+export const OWNER_ACTS = [ASK_USER, REACT, PUBLISH, CONNECT, PROPOSE_AVATAR] as const;
+const SPEAKING: ReadonlySet<string> = new Set([MESSAGE_USER, MESSAGE_GROUP, ...OWNER_ACTS]);
+
+/** Whether a call of `name` is a message: something the owner (or the room) is shown, not a step of the work. */
+export const isMessageTool = (name: string): boolean => SPEAKING.has(name);
+
+/** Whether a call of `name` speaks in the agent's own chat: every speaking tool but `message_group`. */
+export const isOwnerMessage = (name: string): boolean => name !== MESSAGE_GROUP && SPEAKING.has(name);
+
+/**
+ * A speaking call's arguments as one message's parts (`text`, `files`, `question`, `reaction`, `artifact`, `connect`,
+ * `avatar`, …), whichever speaking tool made it, so what reads a message reads them in one shape.
+ */
+export function messageArgs(name: string, args: Readonly<Record<string, unknown>>): Record<string, unknown> {
+	switch (name) {
+		case PUBLISH:
+			return { artifact: { path: args.path, title: args.title, change: args.change } };
+		case CONNECT:
+			return { connect: args.connection, ...(args.reason === undefined ? {} : { text: args.reason }) };
+		case PROPOSE_AVATAR:
+			return { avatar: args };
+		default:
+			return { ...args };
+	}
+}
 /** Send a message to another agent's direct chat. */
 export const MESSAGE_AGENT = "message_agent";
 /** Read another agent's direct chat as untrusted, bounded data. */
@@ -74,6 +114,7 @@ export const isGroupTools = (name: string) => name === GROUP_TOOLS || name.start
 /** The tools every direct agent chat gets: speaking, meta tools, shipped avatar guidance and always-included toolsets. */
 export const EVERY_AGENT: readonly string[] = [
 	MESSAGE_USER,
+	...OWNER_ACTS,
 	"tool_search",
 	MESSAGE_AGENT,
 	READ_AGENT_CHAT,
