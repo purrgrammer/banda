@@ -17,6 +17,7 @@ import {
 	accountFor,
 	cannotFollow,
 	DEFAULT_WAKES_A_DAY,
+	Followed,
 	followed,
 	type Looked,
 	MAX_WATCH_BYTES,
@@ -74,6 +75,7 @@ function stateOf(view: Omit<WatchView, "state">, record: WatchRecord): WatchStat
 export async function watches(harness: Harness, workspace: Workspace, ctx: Context = context): Promise<WatchView[]> {
 	const accepted = (await harness.snapshot(Accepted, ctx))?.files ?? {};
 	const records = (await harness.snapshot(Watches, ctx))?.watches ?? {};
+	const readings = (await harness.snapshot(Followed, ctx))?.objects ?? {};
 	let boxed: Map<string, { text: string } | { unreadable: string }> | undefined;
 	try {
 		boxed = (await watchFiles(workspace, ctx)).files;
@@ -108,6 +110,7 @@ export async function watches(harness: Harness, workspace: Workspace, ctx: Conte
 				: `${record.key.split("/")[0] ?? ""}:${record.key.split("/").slice(2).join("/")}`);
 		const ends =
 			record.connection === undefined || ref === undefined ? undefined : endsOf(accepted, record.connection, ref);
+		const version = record.key === undefined ? undefined : readings[record.key]?.version;
 		const object =
 			record.key === undefined || ref === undefined || record.name === undefined || record.connection === undefined
 				? undefined
@@ -119,6 +122,7 @@ export async function watches(harness: Harness, workspace: Workspace, ctx: Conte
 						service: record.service ?? record.connection,
 						...(record.account === undefined ? {} : { account: record.account }),
 						...(ends === undefined ? {} : { ends }),
+						...(version === undefined ? {} : { version }),
 					};
 		const view = {
 			name,

@@ -28,12 +28,21 @@ import {
 } from "../chat/Object.tsx";
 import { Markdown, MarkdownLinks } from "../components/Markdown.tsx";
 import { api, gmailAttachment } from "../lib/api.ts";
+import { sharedReads } from "../lib/object-reads.ts";
 import { githubKey, idLinks, idOfLink, objectAsks } from "../lib/objects.ts";
 import { type Shell, useShellPick } from "../lib/shell.ts";
 import { sizeOf } from "../lib/size.ts";
 import { ConnectFlowCard } from "./ConnectFlow.tsx";
 import { FilePart } from "./FilePart.tsx";
 import { watchActions } from "./watches.tsx";
+
+/** Read an object's card from the daemon, once for every line that names it. */
+const readObject = sharedReads((chat, reference, agent) =>
+	api<ObjectShown[]>("/objects", {
+		method: "POST",
+		body: JSON.stringify({ chat, asks: [{ ref: reference, ...(agent === undefined ? {} : { agent }) }] }),
+	}).then((shown) => shown[0]),
+);
 
 /** The name of agent `id`, as the band shows it; the agent whose card it is by its given name. */
 function whoFollows(id: string, agent: { readonly id: string; readonly name: string } | undefined): string {
@@ -43,7 +52,8 @@ function whoFollows(id: string, agent: { readonly id: string; readonly name: str
 
 /**
  * An object named inline, as the owner's own references are drawn: the service's mark, its state and its linked
- * title, from the daemon's reading, read once; `fallback` (its name) until then, or when it cannot be read.
+ * title, from the daemon's reading, read once for every line that names it (`readObject`) and again when a watch saw
+ * it change; `fallback` (its name) until then, or when it cannot be read.
  */
 export function FollowedObject({
 	chat,
@@ -62,20 +72,20 @@ export function FollowedObject({
 }) {
 	const [shown, setShown] = useState<ObjectShown>();
 	const agentId = agent?.id;
+	const moved = useShellPick(watchesMoved);
 	useEffect(() => {
 		if (chat === undefined) return;
 		let gone = false;
-		const asks: ObjectAsk[] = [{ ref: reference, ...(agentId === undefined ? {} : { agent: agentId }) }];
-		void api<ObjectShown[]>("/objects", { method: "POST", body: JSON.stringify({ chat, asks }) }).then(
+		void readObject(chat, reference, agentId, moved).then(
 			(next) => {
-				if (!gone) setShown(next[0]);
+				if (!gone) setShown(next);
 			},
 			() => {},
 		);
 		return () => {
 			gone = true;
 		};
-	}, [chat, reference, agentId]);
+	}, [chat, reference, agentId, moved]);
 	const drawn =
 		shown?.shown === "card" && shown.card.card !== "notification" ? (
 			<ObjectLink object={shown.card} href={("url" in shown.card ? shown.card.url : undefined) ?? reference} />
@@ -190,15 +200,18 @@ export function ObjectPreviews({
 	);
 }
 
-/** What the watches have done, as one string: it changes when any of them looks, sees, ends, pauses, comes or goes. */
+/**
+ * What the watches have done, as one string: it changes when a followed object changed (the version of its reading,
+ * never a look that found it the same), and when a watch comes, goes, ends, pauses, fails or changes what ends it,
+ * which its card says. The cards named on screen are read again when it changes, and only then.
+ */
 const watchesMoved = (shell: Shell) =>
 	JSON.stringify(
 		(shell.control?.watches ?? []).map((watch) => [
 			watch.name,
-			watch.looked,
-			watch.sawAt,
+			watch.object?.version,
 			watch.accepted?.watch?.until,
-			watch.paused,
+			watch.state,
 			watch.done?.at,
 		]),
 	);
@@ -246,8 +259,8 @@ function ReadObjects({
 			gone = true;
 		};
 	}, [chat, request]);
-	// a card of a kind that can be followed shows its newest reading and who follows it: each look or change of a watch
-	// reads the kept reading again (from the daemon's store, not the service), so a card shown before never goes stale
+	// a card of a kind that can be followed shows its newest reading and who follows it: a change a watch saw reads the
+	// kept reading again (from the daemon's store, not the service), so a card shown before never goes stale
 	const moved = useShellPick(watchesMoved);
 	const followable = shown?.some((one) => one.shown === "card" && one.follow !== undefined) === true;
 	const seenMoved = useRef(moved);
@@ -561,15 +574,26 @@ function readingDetails(shown: Extract<ObjectShown, { shown: "card" }>): [string
 	return rows;
 }
 
-/** Age is display-only: one local wake at the boundary, never another service read. */
+/**
+ * Whether a card's reading is old: an hour and more since it was read. Age is display-only: one local timer at the
+ * boundary, never another service read. Never old while a watch looks at the object (one that is active, neither
+ * paused, done nor unable to look): the daemon keeps its reading current, and the card says "as of" only when nobody
+ * can look (DESIGN.md "Watches").
+ */
 function useOldReading(shown: Extract<ObjectShown, { shown: "card" }>) {
 	const [expiredAt, setExpiredAt] = useState<number>();
-	const old = shown.old || expiredAt === shown.at || Date.now() - shown.at > 3_600_000;
+	const looking =
+		useShellPick((shell) =>
+			(shell.control?.watches ?? []).some((watch) => watch.state === "active" && watch.object?.key === shown.key)
+				? "looking"
+				: "",
+		) === "looking";
+	const old = !looking && (shown.old || expiredAt === shown.at || Date.now() - shown.at > 3_600_000);
 	useEffect(() => {
-		if (shown.old || Date.now() - shown.at > 3_600_000) return;
+		if (looking || shown.old || Date.now() - shown.at > 3_600_000) return;
 		const timer = setTimeout(() => setExpiredAt(shown.at), shown.at + 3_600_001 - Date.now());
 		return () => clearTimeout(timer);
-	}, [shown.at, shown.old]);
+	}, [shown.at, shown.old, looking]);
 	return old;
 }
 

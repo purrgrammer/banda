@@ -668,6 +668,11 @@ export type WatchView = {
 		readonly account?: string;
 		/** The words that can end it, as its kind says: what `until` may be. */
 		readonly ends?: readonly string[];
+		/**
+		 * The version of the reading kept of it, which its card draws: it moves when the object changed, not when it was
+		 * only looked at, so a card read at one version is current until the next.
+		 */
+		readonly version?: number;
 	};
 	/** When it last looked, and when it looks next. */
 	readonly looked?: number;

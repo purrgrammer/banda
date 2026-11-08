@@ -6,7 +6,7 @@ import { openBox } from "../src/box/box.ts";
 import { Accepted, shaOf } from "../src/core/agents.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
-import { Watches, watchPath, withUntil } from "../src/core/watches.ts";
+import { Followed, Watches, watchPath, withUntil } from "../src/core/watches.ts";
 import type { Workspace } from "../src/server/agents.ts";
 import { changeWatch, watches } from "../src/server/watches.ts";
 import { githubObjectFile } from "./fixtures/github-objects.ts";
@@ -40,6 +40,13 @@ async function setUp() {
 			connection: "github",
 			service: "GitHub",
 		};
+		// the reading its looks kept, three versions in
+		(await tx.doc(Followed)).objects["github/bandarra/pull_request:acme/banda#142"] = {
+			answers: {},
+			at: NOW,
+			source: "github",
+			version: 3,
+		};
 	}, context);
 	await mkdir(join(box.workspace, "watches"), { recursive: true });
 	await writeFile(join(box.workspace, watchPath("banda-142")), WATCH);
@@ -68,6 +75,8 @@ describe("the owner's edit of a watch", () => {
 		try {
 			const [view] = await watches(harness, workspace);
 			expect(view?.object?.ends).toEqual(["merged", "closed"]);
+			// the version of the reading its card draws, which the app reads the card again by
+			expect(view?.object?.version).toBe(3);
 			await changeWatch(harness, workspace, reconcile, "banda-142", { until: "closed" }, shaOf(WATCH), NOW);
 			const closed = WATCH.replace("until: merged", "until: closed");
 			expect(await accepted()).toBe(closed);
