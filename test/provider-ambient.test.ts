@@ -47,7 +47,9 @@ async function start() {
 			signal: new AbortController().signal,
 		});
 		if (reply === undefined || !("body" in reply)) throw new Error("no answer for GET /providers");
-		return (reply.body as Row[]).find((row) => row.id === "anthropic")!;
+		return (reply.body as { id: string; accounts: Row[] }[])
+			.find((row) => row.id === "anthropic")!
+			.accounts.find((row) => row.id === "anthropic")!;
 	};
 	return { area, credentials, anthropic };
 }
@@ -130,7 +132,7 @@ describe("the tiers an owner picks from, with a key from outside banda", () => {
 		const home = await tempHome();
 		const credentials = new FileCredentialStore(home);
 		const models = builtinModels({ credentials });
-		return { credentials, deps: { models, seen: () => undefined } as unknown as Deps };
+		return { credentials, deps: { home, models, seen: () => undefined } as unknown as Deps };
 	};
 	const FALLBACK = { provider: "anthropic", modelId: "claude-sonnet-4-5" };
 

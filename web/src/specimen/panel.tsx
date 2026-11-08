@@ -553,10 +553,28 @@ export function PanelSections() {
 			<Section
 				id="settings-providers"
 				title="Settings, providers"
-				note="Every provider the band may think with: in use, connected (Use, Sign out), connecting, failed, and a key form open; on a device, the connected ones alone."
+				note="Every provider account the band may think with: in use, connected (Use, Sign out), two of one provider by their names, another to add, connecting, failed, and a key form open; adding an account by name, by sign-in and by key; renaming one; on a device, the connected ones alone."
 			>
 				<SettingsPage title="Settings" phone={phone}>
 					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} open="mistral" />
+				</SettingsPage>
+				<SettingsPage title="Settings, adding an account" phone={phone}>
+					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} adding="anthropic" />
+				</SettingsPage>
+				<SettingsPage title="Settings, renaming an account" phone={phone}>
+					<ModelProviders
+						current="anthropic"
+						providers={SETTINGS_PROVIDERS}
+						onRename={() => {}}
+						renaming="anthropic@work"
+					/>
+				</SettingsPage>
+				<SettingsPage title="Settings, adding a keyed account" phone={phone}>
+					<ModelProviders
+						current="anthropic"
+						providers={[{ id: "mistral", name: "Mistral", by: "key", connected: true }]}
+						adding="mistral"
+					/>
 				</SettingsPage>
 				<SettingsPage title="Settings, on a device" phone={phone}>
 					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} here={false} />

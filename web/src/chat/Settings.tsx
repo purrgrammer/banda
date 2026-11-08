@@ -3,7 +3,15 @@
  * owner's words, its connections, permissions, memory, thinking tier and archive. A new agent is a short sheet with the
  * face defaulted: naming a friend, not filling a form. And Settings, one page. Every change is in effect at once.
  */
-import { ArchiveIcon, ArchiveRestoreIcon, ChevronLeftIcon, PencilIcon, PlusIcon, XIcon } from "lucide-react";
+import {
+	ArchiveIcon,
+	ArchiveRestoreIcon,
+	ChevronLeftIcon,
+	EllipsisIcon,
+	PencilIcon,
+	PlusIcon,
+	XIcon,
+} from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import {
 	AlertDialog,
@@ -17,6 +25,12 @@ import {
 	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -24,10 +38,12 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/cn";
+import { accountTitle, backendOf } from "../../../src/core/provider-accounts.ts";
 import { AvatarChoices } from "../avatar/Choices.tsx";
 import { Confirm } from "./Confirm.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
 import { Face, FaceStack } from "./Face.tsx";
+import { ProviderAccountForm, ProviderAccountRename } from "./ProviderAccountForm.tsx";
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
 import { ProviderSignIn, type SignInWay } from "./ProviderSignIn.tsx";
 import type { Who } from "./Row.tsx";
@@ -887,7 +903,7 @@ export function AppSettings({
 				<Block title="Model provider" note="Who thinks for the band. Your provider sees what you ask.">
 					<Rows>
 						<RowOf
-							lead={<img src={`/providers/${data.provider.id}.svg`} alt="" className="size-5 dark:invert" />}
+							lead={<img src={`/providers/${backendOf(data.provider.id)}.svg`} alt="" className="size-5 dark:invert" />}
 							title={data.provider.name}
 							detail="Thinks for every agent of the band"
 						/>
@@ -931,10 +947,16 @@ export function AppSettings({
 	);
 }
 
-/** A model provider in Settings: how it connects, and where it stands. */
+/**
+ * A provider account in Settings: how it connects, and where it stands. `id` is the account's; `name` its provider's,
+ * which `provider` names by id when the account is not the provider's first (`anthropic@work`), with the owner's
+ * `label` for it.
+ */
 export type ProviderRow = {
 	readonly id: string;
 	readonly name: string;
+	readonly provider?: string | undefined;
+	readonly label?: string | undefined;
 	/** Signs in, or takes a key. */
 	readonly by: "sign-in" | "key";
 	readonly connected: boolean;
@@ -973,16 +995,20 @@ export function ModelProviders({
 	onAnswer,
 	onWay,
 	onCancel,
+	onAdd,
+	onRename,
+	adding: openAdding,
+	renaming: openRenaming,
 	here = true,
 }: {
-	/** The provider the band thinks with. */
+	/** The provider account the band thinks with. */
 	current: string;
 	/** On the computer banda runs on, where providers are connected; false on a device. */
 	here?: boolean;
 	providers: readonly ProviderRow[];
-	/** The provider whose key form is open. */
+	/** The account whose key form is open. */
 	open?: string | undefined;
-	/** The provider connecting now. */
+	/** The account, or the provider adding one, connecting now. */
 	waiting?: string | undefined;
 	/** What went wrong, who, what and the fix, in words. */
 	error?: string | undefined;
@@ -994,8 +1020,24 @@ export function ModelProviders({
 	onAnswer?: ((id: string, value: string) => void) | undefined;
 	onWay?: ((id: string, way: string) => void) | undefined;
 	onCancel?: ((id: string) => void) | undefined;
+	/** Another account of a provider: its name, and its key for one that takes a key. */
+	onAdd?: ((provider: string, label: string, key?: string) => void) | undefined;
+	/** A new name for an account, in the owner's words. */
+	onRename?: ((id: string, label: string) => void) | undefined;
+	/** The provider whose "Add another account" form shows at first. */
+	adding?: string | undefined;
+	/** The account whose rename form shows at first. */
+	renaming?: string | undefined;
 }) {
+	const [adding, setAdding] = useState<string | undefined>(openAdding);
+	const [renaming, setRenaming] = useState<string | undefined>(openRenaming);
+	const [leaving, setLeaving] = useState<string | undefined>(undefined);
 	const connected = providers.filter((each) => each.connected);
+	const backend = (row: ProviderRow) => row.provider ?? row.id;
+	const many = (row: ProviderRow) =>
+		(here ? providers : connected).filter((each) => backend(each) === backend(row)).length > 1;
+	const title = (row: ProviderRow) => accountTitle(row.name, row.label, many(row));
+	const shown = here ? providers : connected;
 	return (
 		<Block
 			title="Providers"
@@ -1006,16 +1048,31 @@ export function ModelProviders({
 			}
 		>
 			<Rows className="max-h-[min(24rem,50dvh)] overflow-y-auto overscroll-contain">
-				{(here ? providers : connected).map((provider) => {
+				{shown.map((provider, n) => {
+					const name = title(provider);
 					const using = provider.id === current;
 					const next = connected.find((each) => each.id !== provider.id);
 					// an ambient credential is connected but never ours: connecting over it is still a sign-in
 					const ambient = provider.ambient === true;
+					// an account beyond the provider's first, not connected: added and failed, or signed out of elsewhere
+					const extra = provider.provider !== undefined && provider.provider !== provider.id;
 					const signing =
 						provider.by === "sign-in" &&
 						(!provider.connected || ambient) &&
 						(provider.id === waiting || provider.connecting === true);
 					const from = ambient ? (provider.source ?? "your environment") : undefined;
+					const renamable = provider.connected && !ambient && many(provider) && onRename !== undefined;
+					const leave = !using
+						? "Its sign-in is forgotten. You can connect it again any time."
+						: next === undefined
+							? "It is the only provider connected: the band stops thinking until you connect one."
+							: `The band thinks with ${title(next)} from its next answer on.`;
+					const last = shown[n + 1] === undefined || backend(shown[n + 1] as ProviderRow) !== backend(provider);
+					const addable =
+						here &&
+						last &&
+						onAdd !== undefined &&
+						shown.some((each) => backend(each) === backend(provider) && each.connected);
 					const detail =
 						provider.id === waiting || provider.connecting === true
 							? provider.by === "sign-in"
@@ -1037,8 +1094,8 @@ export function ModelProviders({
 					return (
 						<div key={provider.id} className="flex flex-col">
 							<RowOf
-								lead={<img src={`/providers/${provider.id}.svg`} alt="" className="size-5 dark:invert" />}
-								title={provider.name}
+								lead={<img src={`/providers/${backend(provider)}.svg`} alt="" className="size-5 dark:invert" />}
+								title={name}
 								detail={detail}
 								end={
 									<span className="flex shrink-0 gap-1.5">
@@ -1046,48 +1103,112 @@ export function ModelProviders({
 											<Button
 												variant="outline"
 												size="xs"
-												aria-label={`Use ${provider.name}`}
+												aria-label={`Use ${name}`}
 												onClick={() => onUse?.(provider.id)}
 											>
 												Use
 											</Button>
 										) : null}
 										{provider.connected && !ambient ? (
-											<Confirm
-												title={`Sign out of ${provider.name}?`}
-												body={
-													!using
-														? "Its sign-in is forgotten. You can connect it again any time."
-														: next === undefined
-															? "It is the only provider connected: the band stops thinking until you connect one."
-															: `The band thinks with ${next.name} from its next answer on.`
-												}
-												action="Sign out"
-												keep="Stay signed in"
-												onConfirm={onSignOut === undefined ? undefined : () => onSignOut(provider.id)}
-											>
-												<Button variant="ghost" size="xs" aria-label={`Sign out of ${provider.name}`}>
-													Sign out
-												</Button>
-											</Confirm>
+											<>
+												{renamable ? (
+													<DropdownMenu>
+														<DropdownMenuTrigger asChild>
+															<Button
+																variant="ghost"
+																size="icon-xs"
+																className="sm:hidden"
+																aria-label={`More for ${name}`}
+															>
+																<EllipsisIcon />
+															</Button>
+														</DropdownMenuTrigger>
+														<DropdownMenuContent align="end">
+															<DropdownMenuItem onSelect={() => setRenaming(provider.id)}>Rename</DropdownMenuItem>
+															<DropdownMenuItem variant="destructive" onSelect={() => setLeaving(provider.id)}>
+																Sign out
+															</DropdownMenuItem>
+														</DropdownMenuContent>
+													</DropdownMenu>
+												) : null}
+												{renamable ? (
+													<Button
+														variant="ghost"
+														size="xs"
+														className="hidden sm:inline-flex"
+														aria-label={`Rename ${name}`}
+														aria-expanded={renaming === provider.id}
+														onClick={() => setRenaming((was) => (was === provider.id ? undefined : provider.id))}
+													>
+														Rename
+													</Button>
+												) : null}
+												<Confirm
+													title={`Sign out of ${name}?`}
+													body={leave}
+													action="Sign out"
+													keep="Stay signed in"
+													onConfirm={onSignOut === undefined ? undefined : () => onSignOut(provider.id)}
+												>
+													<Button
+														variant="ghost"
+														size="xs"
+														className={renamable ? "hidden sm:inline-flex" : undefined}
+														aria-label={`Sign out of ${name}`}
+													>
+														Sign out
+													</Button>
+												</Confirm>
+												{renamable ? (
+													<Confirm
+														title={`Sign out of ${name}?`}
+														body={leave}
+														action="Sign out"
+														keep="Stay signed in"
+														onConfirm={onSignOut === undefined ? undefined : () => onSignOut(provider.id)}
+														open={leaving === provider.id}
+														onOpenChange={(open) => setLeaving(open ? provider.id : undefined)}
+													/>
+												) : null}
+											</>
 										) : !here ? null : (
-											<Button
-												variant="outline"
-												size="xs"
-												aria-label={`Connect ${provider.name}`}
-												aria-expanded={provider.by === "key" ? provider.id === open : undefined}
-												disabled={provider.by === "key" && provider.id === waiting}
-												onClick={() => onConnect?.(provider.id)}
-											>
-												Connect
-											</Button>
+											<>
+												<Button
+													variant="outline"
+													size="xs"
+													aria-label={`Connect ${name}`}
+													aria-expanded={provider.by === "key" ? provider.id === open : undefined}
+													disabled={provider.by === "key" && provider.id === waiting}
+													onClick={() => onConnect?.(provider.id)}
+												>
+													Connect
+												</Button>
+												{extra && !signing ? (
+													<Button
+														variant="ghost"
+														size="xs"
+														aria-label={`Remove ${name}`}
+														onClick={() => onSignOut?.(provider.id)}
+													>
+														Remove
+													</Button>
+												) : null}
+											</>
 										)}
 									</span>
 								}
 							/>
+							{renaming === provider.id ? (
+								<ProviderAccountRename
+									account={{ id: provider.id, title: name, label: provider.label ?? provider.name }}
+									className="border-t border-line-soft p-3"
+									onRename={onRename}
+									onClose={() => setRenaming(undefined)}
+								/>
+							) : null}
 							{here && provider.id === open && (!provider.connected || ambient) ? (
 								<ProviderKeyForm
-									provider={provider}
+									provider={{ ...provider, name }}
 									action="Connect"
 									busy={provider.id === waiting}
 									className="border-t border-line-soft p-3"
@@ -1096,7 +1217,7 @@ export function ModelProviders({
 							) : null}
 							{here && signing ? (
 								<ProviderSignIn
-									provider={provider}
+									provider={{ ...provider, name }}
 									asks={provider.asks}
 									ways={provider.ways}
 									way={provider.way}
@@ -1105,6 +1226,37 @@ export function ModelProviders({
 									onWay={onWay}
 									onCancel={onCancel}
 								/>
+							) : null}
+							{addable ? (
+								adding === backend(provider) ? (
+									<ProviderAccountForm
+										provider={{ id: backend(provider), name: provider.name }}
+										by={provider.by}
+										busy={waiting === backend(provider)}
+										className="border-t border-line-soft p-3"
+										onAdd={(id, label, key) => {
+											setAdding(undefined);
+											onAdd?.(id, label, key);
+										}}
+										onClose={() => setAdding(undefined)}
+									/>
+								) : (
+									<RowOf
+										className="border-t border-line-soft pl-[2.875rem]"
+										title={<span className="text-ink-2">Another {provider.name} account</span>}
+										end={
+											<Button
+												variant="ghost"
+												size="xs"
+												aria-label={`Add another ${provider.name} account`}
+												onClick={() => setAdding(backend(provider))}
+											>
+												<PlusIcon />
+												{provider.by === "sign-in" ? "Sign in another" : "Add another"}
+											</Button>
+										}
+									/>
+								)
 							) : null}
 						</div>
 					);

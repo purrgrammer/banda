@@ -3,6 +3,8 @@
  * definition's version, never read as missing. Each case writes the earlier shape with that version's definition,
  * closes the store, and reads it back through today's.
  */
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createModels } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc } from "@earendil-works/pi-durable";
 import { expect, it } from "vitest";
@@ -12,6 +14,7 @@ import { Devices, INVITE_MS, pairingState } from "../src/core/devices.ts";
 import { Harnesses } from "../src/core/harness.ts";
 import { keepReading, Readings } from "../src/core/objects.ts";
 import { Permissions } from "../src/core/permissions.ts";
+import { FileCredentialStore } from "../src/core/provider-credentials.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { tempHome } from "./helpers.ts";
 
@@ -279,4 +282,23 @@ it("reopens current harness authority, continuation and process identities uncha
 	} finally {
 		await after.close(context);
 	}
+});
+
+it("reads auth/providers.json as stored: credentials by account, and the labels the owner gave accounts", async () => {
+	const home = await tempHome();
+	const shape = {
+		credentials: {
+			anthropic: { type: "api_key", key: "sk-personal" },
+			"anthropic@work": { type: "oauth", access: "a", refresh: "r", expires: 1 },
+		},
+		accounts: { anthropic: { label: "Personal" }, "anthropic@work": { label: "Work" } },
+	};
+	await mkdir(join(home, "auth"), { recursive: true });
+	await writeFile(join(home, "auth", "providers.json"), JSON.stringify(shape));
+	const credentials = new FileCredentialStore(home);
+	expect(await credentials.read("anthropic@work")).toEqual(shape.credentials["anthropic@work"]);
+	expect(await credentials.labels()).toEqual({ anthropic: "Personal", "anthropic@work": "Work" });
+	// a file that does not fit its schema is refused, never read as no credentials
+	await writeFile(join(home, "auth", "providers.json"), JSON.stringify({ credentials: { anthropic: { key: "x" } } }));
+	await expect(credentials.read("anthropic")).rejects.toThrow(/schema/);
 });

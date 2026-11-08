@@ -41,7 +41,10 @@ async function start(timeoutMs?: number) {
 		if (reply === undefined || !("body" in reply)) throw new Error(`no answer for ${method} ${path}`);
 		return reply.body as T;
 	};
-	const anthropic = async () => (await call<Row[]>("GET", "/providers")).find((row) => row.id === "anthropic")!;
+	const anthropic = async () =>
+		(await call<{ id: string; accounts: Row[] }[]>("GET", "/providers"))
+			.find((row) => row.id === "anthropic")!
+			.accounts.find((row) => row.id === "anthropic")!;
 	const signIn = async (method?: string) =>
 		new URL(
 			(

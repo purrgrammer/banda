@@ -19,6 +19,11 @@ appear only when it shows them. Sends to third parties (Gmail's send, Calendar's
 The owner connected all four on a throwaway home and used them through the app; an adversarial review's findings are
 fixed. Google's verification for restricted scopes (Gmail, Drive) and the owner's acceptance remain.
 
+Provider accounts are on main: a model provider holds several accounts, each
+named by the owner, added, renamed, used and signed out of in Settings → Model; the band thinks with one at a time, and
+each account's usage is counted apart. Tests, static checks and a desktop/phone walkthrough in a throwaway home with
+keys pass. A real second OAuth sign-in and a paid run on a second account remain, then owner review.
+
 Gmail REST is implemented in a topic worktree with least-privilege sign-in, account-bound email cards and attachment
 reads, approval-required sending and mailbox actions, and separate OAuth scopes for reading, sending and modifying
 mail ([Connections](connections.md)). Redirect sign-in starts on the computer; paired devices can use accounts already
@@ -148,7 +153,7 @@ chat; a name, an avatar and a style the owner chooses; notifications only when s
 | Extensions, agent-built tools and connections, `propose_connection` | Removed | Deleted (DESIGN.md "Open") |
 | Avatar face and colour | Present | Accepted agent identity, generation preview and install icons; publication safety remains open |
 | Speak-up, companion summary | Removed | Deleted |
-| Box, proxy, browser per agent, artifacts, memory, compaction, provider setup | Present | Kept |
+| Box, proxy, browser per agent, artifacts, memory, compaction, provider setup | Present | Kept; a provider has accounts |
 
 These baselines describe code presence, not completed owner acceptance or production readiness.
 

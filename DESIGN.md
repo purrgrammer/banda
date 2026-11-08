@@ -206,8 +206,8 @@ one that gives them one more thing to manage stays out.
 - **Connections** is a page from the band's menu and from Settings: every service the band can work with, a tile each
   (its accounts, or Connect; one not shipped yet says so), so the owner connects before any agent needs it. A chat
   that needs a connection carries the connect card instead of pointing elsewhere.
-- **Settings** is one page: the model providers (connect another, switch the band to it, sign out; the models the
-  tiers use); connections (every account across
+- **Settings** is one page: the model providers (connect another, add another account of one by name, switch the
+  band to one account, sign out of each; the models the tiers use); connections (every account across
   services: sign in another, sign out, which agents use it); agents (the limits on groups; archived agents and groups,
   to restore); appearance; shared memory; Pause all
   routines; Advanced (show how the work is done on this device; the computer's state).
@@ -318,6 +318,12 @@ nowhere in the chat: the owner who wants depth says so in words. A run asks for 
 takes effect between runs, never inside one. When the owner starts to write in a chat idle long enough for the
 provider's prompt cache to go cold, the daemon sends the provider what the chat's next request starts with, for one
 token, so the reply comes sooner; nothing is stored.
+
+**A provider has accounts.** The owner may connect several of one provider (two sign-ins, a personal key and a work
+one), each named by the owner, and picks one account for the whole band, as they pick a provider. A provider's first
+account is the provider itself; another thinks only with the credential connected for it, never with one from outside
+banda, and leaves with its sign-in. The tiers are the provider's whichever account runs them, and what a run spends is
+counted against the account it ran on. An account's name shows only once its provider has more than one.
 
 **The face is never the trust.** Personality makes an agent pleasant; it does not make it safe. Trust lives in the
 structural rules, and the warmth of an agent never softens an approval: the card that asks is the daemon's, plain, and

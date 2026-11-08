@@ -26,7 +26,7 @@ import { Permissions } from "../src/core/permissions.ts";
 import { publicAddress, publicFetch } from "../src/core/public-fetch.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context } from "../src/core/store.ts";
-import { toolDiscoveryExtension, toolRegistry } from "../src/core/tool-discovery.ts";
+import { toolDiscoveryExtension, toolRegistry, toolSearchExtension } from "../src/core/tool-discovery.ts";
 import type { TurnResult } from "../src/core/turn.ts";
 import { answer } from "../src/core/wait.ts";
 import { startDaemon } from "../src/daemon.ts";
@@ -86,6 +86,7 @@ async function open(fake?: FakeMcp, shipped?: string, discovery = false, fetcher
 	const home = await tempHome();
 	const model = scripted();
 	const registry = discovery ? toolRegistry() : undefined;
+	registry?.install(toolSearchExtension);
 	registry?.install(toolDiscoveryExtension);
 	const s = await openConnected({
 		...(registry === undefined ? {} : { registry }),
@@ -1835,7 +1836,7 @@ it("a connection installed after startup stays deferred until pi search loads it
 	await s.done(received.turn);
 	expect(fake.calls).toEqual([{ tool: "list_events", args: { day: "mon" } }]);
 	expect(getCurrentTools(s.model.requests[0]!.messages).map((tool) => tool.name)).not.toContain("cal__list_events");
-	expect(getCurrentSystemPrompt(s.model.requests[0]!.messages)).toContain("cal: 4 tools on demand");
+	expect(getCurrentSystemPrompt(s.model.requests[0]!.messages)).toMatch(/On demand: .*\bcal\b/);
 	expect(getCurrentTools(s.model.requests[1]!.messages).map((tool) => tool.name)).toContain("cal__list_events");
 	await s.capabilities.toggle("cal__list_events", false);
 	s.model.plan([{ tool: "tool_search", args: { query: "cal__list_events", limit: 1 } }]);

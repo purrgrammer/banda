@@ -452,7 +452,8 @@ describe("tiers in the app", () => {
 			await until(() => s.requests.length >= 2);
 			expect((await s.api<TiersView>("/tiers")).provider.id).toBe("anthropic");
 			expect(
-				(await s.api<{ id: string; connected: boolean }[]>("/providers")).find((p) => p.id === "openai")?.connected,
+				(await s.api<{ id: string; accounts: { connected: boolean }[] }[]>("/providers")).find((p) => p.id === "openai")
+					?.accounts[0]?.connected,
 			).toBe(false);
 			await s.api("/providers/openai", { method: "POST", body: JSON.stringify({ type: "api_key", key: "test-key" }) });
 			expect((await s.api<TiersView>("/tiers")).provider.id).toBe("openai");
@@ -501,7 +502,9 @@ describe("tiers in the app", () => {
 			expect((await s.api<TiersView>("/tiers")).provider.id).toBe("anthropic");
 			await s.api("/providers/openai/answer", { method: "POST", body: JSON.stringify({ value: "cancelled" }) });
 			await until(
-				async () => (await s.api<{ id: string; error?: string }[]>("/providers")).find((p) => p.id === "openai")?.error,
+				async () =>
+					(await s.api<{ id: string; accounts: { error?: string }[] }[]>("/providers")).find((p) => p.id === "openai")
+						?.accounts[0]?.error,
 			);
 			expect((await s.api<TiersView>("/tiers")).provider.id).toBe("anthropic");
 			expect(await s.api("/providers/openai", { method: "POST", body: JSON.stringify({ type: "oauth" }) })).toEqual({

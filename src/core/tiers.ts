@@ -3,6 +3,7 @@
  * provider banda has a preset for maps them to models of pi-ai's built-in catalog (`test/tiers.test.ts` fails when an
  * id leaves it); a provider without one runs the configured model on every tier. Plain data, shared with the web.
  */
+import { backendOf } from "./provider-accounts.ts";
 
 export const TIERS = ["quick", "balanced", "deep"] as const;
 export type Tier = (typeof TIERS)[number];
@@ -58,10 +59,11 @@ export const PRESETS: readonly Preset[] = [
 	by("meta", "muse-spark-1.3", "muse-spark-1.3", "muse-wonder-1.0"),
 ];
 
+/** The preset of `provider`'s backend: an account (`anthropic@work`) runs its backend's. */
 export const presetOf = (provider: string): Preset | undefined =>
-	PRESETS.find((preset) => preset.provider === provider);
+	PRESETS.find((preset) => preset.provider === backendOf(provider));
 
-/** What the owner chose of the models: a provider, and a model of its own for a tier, by provider. */
+/** What the owner chose of the models: a provider account, and a model of its own for a tier, by account. */
 export type ModelChoice = {
 	readonly provider?: string;
 	readonly overrides?: { readonly [provider: string]: { readonly [T in Tier]?: string } };
