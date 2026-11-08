@@ -6,8 +6,19 @@
  * short, so the box holds what the store accepted.
  */
 
+import { Followed, Watches } from "../../core/watches.ts";
 import { BadRequest } from "../http.ts";
-import { accept, changeWatch, checkNow, createWatch, decline, finishEdits, pause, remove } from "../watches.ts";
+import {
+	accept,
+	changeWatch,
+	checkNow,
+	createWatch,
+	decline,
+	finishEdits,
+	pause,
+	remove,
+	watches as views,
+} from "../watches.ts";
 import type { AreaModule } from "./area.ts";
 
 const PATH = /^\/watches\/([a-z0-9-]+)\/(accept|decline|edit|pause|resume|remove|check)$/;
@@ -28,6 +39,10 @@ export const watches: AreaModule = {
 			deps.log(`watches: an edit is not in the box yet: ${(error as Error).message}`),
 		);
 		return {
+			// the watches on the shell stream are the area's own event: a look, which moves their docs and nothing else the
+			// shell shows, pushes them alone
+			own: [Watches, Followed],
+			shell: async () => [{ type: "watches", watches: await views(deps.harness, deps.workspace) }],
 			route: async (request) => {
 				if (request.path === "/watches") {
 					if (request.method !== "POST") return { status: 405, body: { error: "method not allowed" } };

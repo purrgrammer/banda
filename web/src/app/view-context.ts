@@ -6,9 +6,8 @@ import { browserOf, useShell } from "../lib/shell.ts";
 /** A chat's view context; the same object while nothing it reads changed. */
 export function useViewContext(chat: number): ViewContext {
 	const shell = useShell();
-	const { capabilities, agents, control, artifacts: library, memory } = shell;
+	const { capabilities, agents, control, artifacts: library, memory, watches } = shell;
 	const routines = control?.routines;
-	const watches = control?.watches;
 	const removed = control?.removed;
 	// this chat's own tab, while it runs
 	const view = browserOf(shell, chat);

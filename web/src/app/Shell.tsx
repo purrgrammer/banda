@@ -173,9 +173,10 @@ function Main() {
 	// the routine open in the panel's editor (none: a new one), and a routine's line asking for the agent's routines
 	const [editing, setEditing] = useState<{ agent: string; routine?: string; watch?: string }>();
 	const [focus, setFocus] = useState<{ agent: string; n: number }>();
-	// when the daemon last pushed the routines: their next runs are read then, so they never tick on their own
+	// when the daemon last pushed the routines or the watches: their next runs and looks are read then, so they never
+	// tick on their own
 	// biome-ignore lint/correctness/useExhaustiveDependencies: a push is what moves it
-	const pushedAt = useMemo(() => Date.now(), [shell.control]);
+	const pushedAt = useMemo(() => Date.now(), [shell.control, shell.watches]);
 	const companion: CompanionView = shell.companion ?? { face: DEFAULT_FACE };
 	const agents = useMemo(() => chatAgents(shell.agents, companion), [shell.agents, companion]);
 	// archived agents leave the band, but a group's history and Settings still name them
@@ -404,14 +405,14 @@ function Main() {
 			if (agent === undefined) return chat;
 			// an agent's routines and watches wake in its chat; their times are read when the daemon last pushed them
 			const routines = routineRows(shell.control?.routines ?? [], where.id, pushedAt);
-			const watches = watchRows(shell.control?.watches ?? [], where.id, pushedAt);
+			const watches = watchRows(shell.watches ?? [], where.id, pushedAt);
 			// a routine's editor and a watch's detail are opened from the Routines tab, and closing one goes back to it
 			const backToRoutines = () => {
 				setEditing(undefined);
 				setFocus((was) => ({ agent: where.id, n: (was?.agent === where.id ? was.n : 0) + 1 }));
 			};
 			const openWatch =
-				editing?.watch === undefined ? undefined : shell.control?.watches.find((each) => each.name === editing.watch);
+				editing?.watch === undefined ? undefined : shell.watches?.find((each) => each.name === editing.watch);
 			const editor =
 				editing?.agent !== where.id ? undefined : openWatch !== undefined ? (
 					<WatchDetail

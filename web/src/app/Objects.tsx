@@ -207,7 +207,7 @@ export function ObjectPreviews({
  */
 const watchesMoved = (shell: Shell) =>
 	JSON.stringify(
-		(shell.control?.watches ?? []).map((watch) => [
+		(shell.watches ?? []).map((watch) => [
 			watch.name,
 			watch.object?.version,
 			watch.accepted?.watch?.until,
@@ -584,7 +584,7 @@ function useOldReading(shown: Extract<ObjectShown, { shown: "card" }>) {
 	const [expiredAt, setExpiredAt] = useState<number>();
 	const looking =
 		useShellPick((shell) =>
-			(shell.control?.watches ?? []).some((watch) => watch.state === "active" && watch.object?.key === shown.key)
+			(shell.watches ?? []).some((watch) => watch.state === "active" && watch.object?.key === shown.key)
 				? "looking"
 				: "",
 		) === "looking";

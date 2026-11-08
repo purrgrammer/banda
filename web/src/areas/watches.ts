@@ -4,10 +4,19 @@
  * an object from its card or the panel, as the owner, in effect at once.
  */
 import type { Looked } from "../../../src/core/watches.ts";
-import { api, type ControlView } from "../lib/api.ts";
+import { api, type ControlView, type WatchView } from "../lib/api.ts";
 import type { ShellHandlers } from "../lib/shell.ts";
 
-export const shell: ShellHandlers = {};
+declare module "../lib/shell.ts" {
+	interface Shell {
+		/** Every watch, as the daemon last pushed them; undefined until it said. */
+		readonly watches?: readonly WatchView[];
+	}
+}
+
+export const shell: ShellHandlers = {
+	watches: (event) => ({ watches: event.watches }),
+};
 
 /** What the owner does to a watch. */
 export type WatchAct =

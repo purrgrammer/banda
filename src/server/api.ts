@@ -515,6 +515,7 @@ export type ShellEvent =
 	| { readonly type: "computer"; readonly computer: ComputerView }
 	| { readonly type: "capabilities"; readonly capabilities: CapabilitiesView }
 	| { readonly type: "browsers"; readonly browsers: readonly AgentBrowserView[] }
+	| WatchesShellEvent
 	| ArtifactsShellEvent
 	| BandShellEvent
 	| DevicesShellEvent
@@ -698,6 +699,12 @@ export type WatchView = {
 };
 
 /**
+ * The watches, as the watches area pushes them on the shell stream: written when they changed (a look, a change seen,
+ * an end, a pause), never with the rest of the shell.
+ */
+export type WatchesShellEvent = { readonly type: "watches"; readonly watches: readonly WatchView[] };
+
+/**
  * The control room (`GET /api/control`), from the store alone: whether everything is paused (since when), the routines,
  * the tasks in progress (working, waiting on the owner, or paused), newest first, and the activity, newest first.
  * `POST /api/control/pause` and `/resume` flip it.
@@ -705,7 +712,6 @@ export type WatchView = {
 export type ControlView = {
 	readonly paused?: number;
 	readonly routines: readonly RoutineView[];
-	readonly watches: readonly WatchView[];
 	readonly activity: readonly ActivityView[];
 	/** The permissions open now, oldest first. */
 	readonly permissions: readonly PermissionView[];

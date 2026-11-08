@@ -11,11 +11,13 @@ import { shell as harnesses } from "./harnesses.ts";
 import { shell as permissions } from "./permissions.ts";
 import { shell as routines } from "./routines.ts";
 import { shell as tiers } from "./tiers.ts";
+import { shell as watches } from "./watches.ts";
 
 export const AREA_HANDLERS: ShellHandlers = {
 	...tiers,
 	...permissions,
 	...routines,
+	...watches,
 	...artifacts,
 	...groups,
 	...harnesses,
