@@ -1081,8 +1081,18 @@ export function defineWatches(options: WatchesOptions) {
 		let looked: Looked = { outcome: "raced" };
 		for (let attempt = 0; attempt < 3 && looked.outcome === "raced"; attempt++)
 			looked = await look(name, now(), (fn) => harness.commit(fn, ctx), ctx, key);
-		// a look that ended the watch leaves its task nothing to do
-		if (looked.outcome === "looked" && looked.ended !== undefined) await reconcile(harness, now(), ctx);
+		// a look moved when the watch looks next, but its task sleeps until the time it took before: a new task sleeps
+		// until the new one (and a look that ended the watch leaves it none)
+		if (looked.outcome === "looked" || looked.outcome === "baseline") {
+			const sleeping = await harness.commit(async (tx) => {
+				const record = (await tx.doc(Watches)).watches[name];
+				const task = record?.task;
+				if (record !== undefined) delete record.task;
+				return task;
+			}, ctx);
+			if (sleeping !== undefined) await harness.abortTask(sleeping as TaskId, ctx);
+			await reconcile(harness, now(), ctx);
+		}
 		return looked;
 	}
 

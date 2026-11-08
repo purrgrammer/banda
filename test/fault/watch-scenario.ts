@@ -125,7 +125,8 @@ export type WatchSummary = {
 	records: { [name: string]: WatchRecord };
 	/** The second watch's record, when the scenario had one. */
 	second?: WatchRecord;
-	task?: { status: string };
+	/** Mara's watch's live task: its status, and until when it sleeps when it does. */
+	task?: { status: string; until?: number };
 	followed?: { version: number; at: number };
 	card?: { state?: string; at: number };
 	wakes: WatchWakeData[];
@@ -383,7 +384,14 @@ export async function watchScenario(
 			record,
 			records,
 			...(second === undefined ? {} : { second }),
-			...(task === undefined ? {} : { task: { status: task.state.status } }),
+			...(task === undefined
+				? {}
+				: {
+						task: {
+							status: task.state.status,
+							...(task.state.status === "sleeping" ? { until: (task.state as { until: number }).until } : {}),
+						},
+					}),
 			...(followed === undefined ? {} : { followed: { version: followed.version, at: followed.at } }),
 			...(card === undefined || reading === undefined
 				? {}

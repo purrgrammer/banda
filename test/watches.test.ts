@@ -532,4 +532,15 @@ describe("a watch on a pull request", () => {
 		const otto = summary.wakes.filter((wake) => wake.watch === "banda-142-otto");
 		expect(otto.every((wake) => wake.gap === undefined)).toBe(true);
 	}, 60_000);
+
+	it("Check now moves the task's next look too: the row's next look is when the task looks", async () => {
+		// checks run throughout, so the watch is busy; the owner checks a minute after the baseline
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: () => world(0),
+			at: (step) => NOW + step * 60_000,
+			clicks: ["k1"],
+		});
+		expect(summary.record.next).toBe(NOW + 60_000 + BUSY_EVERY);
+		expect(summary.task).toEqual({ status: "sleeping", until: summary.record.next });
+	}, 60_000);
 });
