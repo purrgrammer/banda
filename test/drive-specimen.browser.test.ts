@@ -58,6 +58,15 @@ for (const width of [390, 1440])
 				expect(await text("Open in Google Drive")).toBe(true);
 				expect(await text("2.3 MB")).toBe(true);
 				expect(await text("application/zip")).toBe(true);
+				// the drafts of changes: read-only previews of exactly what was drafted
+				expect(await text("Create the Doc “Q1 plan”")).toBe(true);
+				expect(await text("Move this file to the trash")).toBe(true);
+				expect(await page.run(`${section}.querySelectorAll('[aria-label="File draft"]').length >= 5`)).toBe(true);
+				expect(
+					await page.run(
+						`${section}.querySelectorAll('[aria-label="File draft"] textarea, [aria-label="File draft"] input').length === 0`,
+					),
+				).toBe(true);
 				for (const kind of ["doc", "sheet", "slides", "pdf", "folder", "file"])
 					expect(await page.run(`${section}.querySelector('[data-file-kind="${kind}"]') !== null`)).toBe(true);
 				expect(

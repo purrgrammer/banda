@@ -10,6 +10,7 @@ import { attempt } from "../lib/attempt.ts";
 import { argList, draftParts, wildcardWarning } from "../lib/chat.ts";
 import { fileChanges } from "../lib/file-changes.ts";
 import { scopeOf, scopesOf } from "../lib/permissions.ts";
+import { DRIVE_DRAFT, DriveDraftPreview } from "./DriveDraftPreview.tsx";
 import { EmailDraftPreview } from "./EmailDraftPreview.tsx";
 import { CALENDAR_DRAFT, EventDraftPreview, eventDraftWhat } from "./EventDraftPreview.tsx";
 import { ObjectPreviews } from "./Objects.tsx";
@@ -53,6 +54,7 @@ function Draft({ chat, agent, ask, label, wait, state, drawn }: Props) {
 			: eventDraft && ask.tool.endsWith("__create_event")
 				? eventDraftWhat(ask.args, edits)
 				: label;
+	const driveDraft = DRIVE_DRAFT.test(ask.tool) && !interrupted;
 	const preview = emailDraft || eventDraft;
 	// the daemon's verb, where the effect has one of its own; never a word of the label, which may be a tool's name
 	const verb = interrupted ? "Retry" : (ask.verb ?? "Allow");
@@ -91,6 +93,8 @@ function Draft({ chat, agent, ask, label, wait, state, drawn }: Props) {
 							readOnly={readOnly || busy}
 							onEdit={(name, value) => setEdits((prior) => ({ ...prior, [name]: value }))}
 						/>
+					) : driveDraft ? (
+						<DriveDraftPreview tool={ask.tool} args={ask.args} />
 					) : facts.length === 0 ? null : (
 						<Facts rows={facts} />
 					)}

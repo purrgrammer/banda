@@ -1,4 +1,5 @@
 /** Google Drive's file cards: a Doc, a Sheet, Slides, a PDF, a folder, an image, and a very long name. */
+import { DraftApproval } from "../app/DraftApproval.tsx";
 import { Bubble } from "../chat/Feed.tsx";
 import { type DriveFile, FileCard, ObjectLink } from "../chat/Object.tsx";
 import { Section } from "./stage.tsx";
@@ -81,18 +82,104 @@ export const FILES: readonly (readonly [string, DriveFile])[] = [
 	],
 ];
 
+type Draft = Parameters<typeof DraftApproval>[0]["ask"];
+const AS = "alice@example.test on Google Drive";
+const ON = { refs: ["drive:file:MWFCY0RfZUZnSC1pams"], account: "alice" };
+const NOTES =
+	"# Q1 rollout\n\n## Order\n1. Platform\n2. Payments\n3. Growth\n\nOwners are listed below.\nAna: platform\nTeo: payments\nBo: growth";
+
+/** A draft of each change, as the daemon words them: no field is edited, the owner approves what was drafted. */
+const DRAFTS: readonly (readonly [string, Draft, string, boolean])[] = [
+	[
+		"Draft: create a Doc",
+		{
+			type: "approval",
+			tool: "drive__create_doc",
+			verb: "Create",
+			as: AS,
+			args: { title: "Q1 plan", markdown: NOTES, account: "alice" },
+		},
+		"Create the Doc “Q1 plan”",
+		false,
+	],
+	[
+		"Draft: create a Sheet",
+		{
+			type: "approval",
+			tool: "drive__create_sheet",
+			verb: "Create",
+			as: AS,
+			args: { title: "Budget", csv: "Team,Q1,Q2\nPlatform,120,140\nPayments,90,95", account: "alice" },
+		},
+		"Create the Sheet “Budget”",
+		false,
+	],
+	[
+		"Draft: replace a Doc's text",
+		{
+			type: "approval",
+			tool: "drive__replace_doc_text",
+			verb: "Replace",
+			as: AS,
+			on: ON,
+			args: { file_id: "1aBcD_eFgH-ijk", markdown: NOTES, account: "alice" },
+		},
+		"Replace the text of this Doc",
+		true,
+	],
+	[
+		"Draft: rename",
+		{
+			type: "approval",
+			tool: "drive__rename_file",
+			verb: "Rename",
+			as: AS,
+			on: ON,
+			args: { file_id: "1aBcD_eFgH-ijk", name: "Q1 rollout plan (final)", account: "alice" },
+		},
+		"Rename this file to “Q1 rollout plan (final)”",
+		true,
+	],
+	[
+		"Draft: trash",
+		{
+			type: "approval",
+			tool: "drive__trash_file",
+			verb: "Trash",
+			as: AS,
+			on: ON,
+			args: { file_id: "1aBcD_eFgH-ijk", account: "alice" },
+		},
+		"Move this file to the trash",
+		true,
+	],
+];
+
 export function DriveSection() {
 	return (
 		<Section
 			id="drive"
 			title="Google Drive"
-			note="Files an agent names, drawn from banda's own reading. Read-only: nothing here changes, moves or shares a file."
+			note="Files an agent names, drawn from banda's own reading. An agent's change is a draft the owner approves exactly as drafted: create a Doc or a Sheet, replace a Doc's text, rename, trash. Nothing shares a file."
 		>
 			<div className="grid gap-6 lg:grid-cols-2">
 				{FILES.map(([label, file]) => (
 					<div key={label} className="flex min-w-0 flex-col gap-1.5">
 						<span className="text-meta text-ink-2">{label}</span>
 						<FileCard file={file} />
+					</div>
+				))}
+				{DRAFTS.map(([label, ask, words, drawn]) => (
+					<div key={label} className="flex min-w-0 flex-col gap-1.5">
+						<span className="text-meta text-ink-2">{label}</span>
+						<DraftApproval
+							chat={0}
+							agent={{ name: "Iris" }}
+							label={words}
+							ask={ask}
+							wait={`specimen-${label}`}
+							drawn={drawn ? <FileCard file={PLAN} /> : undefined}
+						/>
 					</div>
 				))}
 				<div className="flex min-w-0 flex-col gap-1.5">
