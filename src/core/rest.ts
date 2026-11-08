@@ -30,6 +30,7 @@ import { GMAIL_TOOLS, gmailCall, gmailWriteCall } from "./gmail-rest.ts";
 import type { McpResult, McpTool } from "./mcp.ts";
 import type { ClientName } from "./oauth.ts";
 import {
+	SLACK_IDEMPOTENT,
 	SLACK_TOOLS,
 	slackCall,
 	slackDraft,
@@ -189,11 +190,13 @@ export const REST_APIS = {
 			"search:read",
 			"chat:write",
 			"reactions:write",
+			"files:read",
 		],
 		tools: SLACK_TOOLS,
 		account: { tool: "whoami", field: "handle" },
 		read: (token, tool, args, signal, fetcher) => slackCall(token, tool, args, signal, fetcher),
 		write: (token, tool, args, signal, fetcher) => slackWriteCall(token, tool, args, signal, fetcher),
+		idempotent: SLACK_IDEMPOTENT,
 		drafts: {
 			words: slackDraft,
 			editable: slackEditable,

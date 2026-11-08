@@ -49,6 +49,7 @@ describe("signing in by code, as a file's named client", () => {
 				"get_thread",
 				"search_messages",
 				"get_person",
+				"get_file",
 			],
 		});
 		expect(Object.keys(definition("slack").objects ?? {})).toEqual(["thread", "channel", "search", "person"]);

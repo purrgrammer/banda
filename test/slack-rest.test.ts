@@ -7,11 +7,13 @@ import { expect, it } from "vitest";
 import { Unauthorized } from "../src/core/mcp.ts";
 import { REST_APIS } from "../src/core/rest.ts";
 import {
+	MAX_SLACK_FILE_BYTES,
 	type SlackMessage,
 	slackBudget,
 	slackCall,
 	slackDraft,
 	slackExpand,
+	slackFile,
 	slackPermalink,
 	slackResolve,
 	slackWriteCall,
@@ -301,7 +303,7 @@ it("posts an approved message once, as a draft on the private floor whose words 
 	expect(connection.floors.post_message).toBe("private");
 	expect(connection.reads).not.toContain("post_message");
 	// Slack takes no idempotency key: a crash between approval and the send asks the owner again
-	expect("idempotent" in REST_APIS.slack).toBe(false);
+	expect(REST_APIS.slack.idempotent).not.toContain("post_message");
 
 	const planted = slackExpand("post_message", { channel: "C0GENERAL", text: "hi", _channel_name: "ceo-only" });
 	expect(planted).toEqual({ channel: "C0GENERAL", text: "hi" });
@@ -359,4 +361,120 @@ it("posts an approved message once, as a draft on the private floor whose words 
 	expect(slackPermalink("https://acme.slack.com/", "C1", "1700000000.000100")).toBe(
 		"https://acme.slack.com/archives/C1/p1700000000000100",
 	);
+});
+
+it("a search's matches carry what a followed search keys and says: author, channel name and permalink, one per link", async () => {
+	const { slack, read } = world();
+	// the same second in two channels is two messages
+	slack.history.G0DEPLOYS?.push({
+		type: "message",
+		ts: ROOT_TS,
+		user: "U0OLGA",
+		user_team: "T0OTHER",
+		text: "Release, the partner's",
+	});
+	const found = (await read("search_messages", { query: "release" })) as {
+		messages: (SlackMessage & { channel_name: string; permalink: string })[];
+	};
+	expect(found.messages.map((each) => [each.ts, each.author, each.channel_name, each.permalink])).toEqual([
+		[ROOT_TS, "@bob at Acme", "general", "https://acme.slack.com/archives/C0GENERAL/p1700000000000100"],
+		[ROOT_TS, "@olga at T0OTHER", "deploys", "https://acme.slack.com/archives/G0DEPLOYS/p1700000000000100"],
+	]);
+	// a message Slack has not indexed yet is not found
+	slack.unindexed.add(ROOT_TS);
+	expect(((await read("search_messages", { query: "release" })) as { messages: unknown[] }).messages).toEqual([]);
+});
+
+it("a message carries its reactions and its files by name, a malformed one left out", async () => {
+	const { slack, read } = world();
+	const root = slack.history.C0GENERAL?.find((each) => each.ts === ROOT_TS) as Record<string, unknown>;
+	root.reactions = [
+		{ name: "eyes", users: ["U0BOB"], count: 1 },
+		{ name: "wave::skin-tone-3", users: ["U0ANA", "U0BOB"], count: 2 },
+		{ name: "<script>", count: 1 },
+		{ name: "zero", count: 0 },
+	];
+	const thread = (await read("get_thread", { channel: "C0GENERAL", ts: ROOT_TS })) as { messages: SlackMessage[] };
+	expect(thread.messages[0]?.reactions).toEqual([
+		{ name: "eyes", count: 1 },
+		{ name: "wave::skin-tone-3", count: 2 },
+	]);
+	expect(thread.messages[1]?.reactions).toBeUndefined();
+	const deploys = (await read("channel_history", { channel: "G0DEPLOYS" })) as { messages: SlackMessage[] };
+	expect(deploys.messages[0]?.files).toEqual([
+		{ id: "F0LOG", name: "deploy-41.log", size: 2048, mimetype: "text/plain" },
+	]);
+});
+
+it("reads what a file is with the files choice, and says the choice without it", async () => {
+	const { slack, read } = world();
+	await expect(read("get_file", { file_id: "F0LOG" })).rejects.toThrow(/it needs files:read/);
+	slack.granted += ",files:read";
+	expect(await read("get_file", { file_id: "F0LOG" })).toEqual({
+		id: "F0LOG",
+		name: "deploy-41.log",
+		title: "Deploy 41",
+		mimetype: "text/plain",
+		size: 2048,
+		channel: "G0DEPLOYS",
+		ts: "1700000050.000050",
+		link: "https://acme.slack.com/archives/G0DEPLOYS/p1700000050000050",
+		too_large: false,
+	});
+	// the download address stays in the daemon
+	expect(JSON.stringify(await read("get_file", { file_id: "F0BIG" }))).not.toContain("files.slack.com");
+	await expect(read("get_file", { file_id: "../etc" })).rejects.toThrow(/file's id/);
+});
+
+it("fetches a file's bytes for the owner, at most 10 MB, and refuses Slack's sign-in page as the file", async () => {
+	const { slack, budget } = world();
+	slack.granted += ",files:read";
+	const got = await slackFile(slack.access, "F0LOG", undefined, slack.fetch, budget);
+	expect(got).toMatchObject({ name: "deploy-41.log", mimetype: "text/plain" });
+	expect(got.bytes.length).toBe(2048);
+	await expect(slackFile(slack.access, "F0BIG", undefined, slack.fetch, budget)).rejects.toThrow(
+		"dump.bin is larger than 10 MB.",
+	);
+	expect(slack.calls.filter((call) => call.method === "files.info")).toHaveLength(2);
+	// a file whose bytes come past the bound, whatever files.info said
+	const log = slack.files.F0LOG as Record<string, unknown>;
+	log.size = 10;
+	slack.bytes[String(log.url_private_download)] = new Uint8Array(MAX_SLACK_FILE_BYTES + 1);
+	await expect(slackFile(slack.access, "F0LOG", undefined, slack.fetch, budget)).rejects.toThrow(
+		"deploy-41.log is larger than 10 MB.",
+	);
+	slack.granted = slack.granted.replace(",files:read", "");
+	await expect(slackFile(slack.access, "F0LOG", undefined, slack.fetch, budget)).rejects.toThrow(/files:read/);
+	// a download address off Slack's file host is never fetched with the token
+	slack.granted += ",files:read";
+	log.url_private_download = "https://evil.test/f";
+	await expect(slackFile(slack.access, "F0LOG", undefined, slack.fetch, budget)).rejects.toThrow(/no way to download/);
+});
+
+it("adds a reaction once: an emoji by its name, already there is the same end state, a bad name refused", async () => {
+	const { slack, budget } = world();
+	const at = { channel: "C0GENERAL", ts: ROOT_TS };
+	const react = (name: unknown) =>
+		slackWriteCall(slack.access, "add_reaction", { ...at, name }, undefined, slack.fetch, budget);
+	expect(await react(":tada:")).toEqual({
+		text: JSON.stringify({ ok: true, channel: "C0GENERAL", ts: ROOT_TS, name: "tada" }),
+		isError: false,
+	});
+	expect((await react("tada")).isError).toBe(false);
+	expect((await react("wave::skin-tone-3")).isError).toBe(false);
+	expect(slack.reactions()).toEqual([
+		{ channel: "C0GENERAL", ts: ROOT_TS, name: "tada" },
+		{ channel: "C0GENERAL", ts: ROOT_TS, name: "wave::skin-tone-3" },
+	]);
+	for (const bad of ["Tada", "ta da", "<!here>", "x".repeat(101), "wave::skin-tone-x", 3])
+		expect((await react(bad)).text).toMatch(/emoji's name/);
+	expect(REST_APIS.slack.idempotent).toEqual(["add_reaction"]);
+	expect(slackDraft("add_reaction", { name: "tada", _channel_name: "general" })).toEqual({
+		what: "React :tada: to a message in #general",
+		verb: "React",
+	});
+	const resolve = (name: string) =>
+		slackResolve(slack.access, "add_reaction", { ...at, name }, undefined, slack.fetch, budget);
+	expect(await resolve("tada")).toEqual({ _channel_name: "general" });
+	await expect(resolve("No")).rejects.toThrow(/emoji's name/);
 });

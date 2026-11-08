@@ -728,7 +728,12 @@ describe("a paged list: a window of the newest, walked to by pages", () => {
 		);
 		if (!("connection" in parsed)) throw new Error(JSON.stringify(parsed));
 		const objects = parsed.connection.objects ?? {};
-		return { thread: objects.thread?.follow as Follow, channel: objects.channel?.follow as Follow };
+		return {
+			thread: objects.thread?.follow as Follow,
+			channel: objects.channel?.follow as Follow,
+			search: objects.search?.follow as Follow,
+			person: objects.person?.follow as Follow,
+		};
 	})();
 	const ME = "@ana at Acme";
 	const said = (n: number, author: string, text: string, extra: Item = {}): Item => ({
@@ -778,6 +783,120 @@ describe("a paged list: a window of the newest, walked to by pages", () => {
 			["added", "wake", "@bob mentioned you"],
 			["added", "tell", "@cy: line one line two"],
 			["removed", "nothing", expect.any(String)],
+		]);
+	});
+
+	it("a reaction on a message tells, on the owner's own too; one taken back is nothing", () => {
+		const before = { thread: { messages: [said(0, ME, "Release notes"), said(1, "@bob at Acme", "ok")] } };
+		const after = {
+			thread: {
+				messages: [
+					said(0, ME, "Release notes", { reactions: [{ name: "tada", count: 2 }] }),
+					said(1, "@bob at Acme", "ok", { reactions: [{ name: "eyes", count: 1 }] }),
+				],
+			},
+		};
+		expect(sort(slack.thread, ME, before, after).map((each) => [each.does, each.says])).toEqual([
+			["tell", "2 reacted :tada:"],
+			["tell", "1 reacted :eyes:"],
+		]);
+		// taken back, or more people giving the same one, is nothing; the owner's own edit beside it still is nothing
+		const later = {
+			thread: {
+				messages: [
+					said(0, ME, "Release notes, v2", { reactions: [{ name: "tada", count: 3 }] }),
+					said(1, "@bob at Acme", "ok"),
+				],
+			},
+		};
+		expect(sort(slack.thread, ME, after, later).map((each) => each.does)).toEqual(["nothing", "nothing", "nothing"]);
+	});
+
+	it("property: a list's author speaks for its items and their own fields, never for a list inside an item", () => {
+		const author = fc.constantFrom(ME, "@bob at Acme", "@deploybot [bot]");
+		const message = (n: number) =>
+			fc
+				.record({
+					author,
+					text: fc.constantFrom("a", "b"),
+					reactions: fc.uniqueArray(
+						// a field of the reaction named as the message's author field is not whose the reaction is
+						fc.record(
+							{ name: fc.constantFrom("tada", "eyes", "+1"), count: fc.integer({ min: 1, max: 3 }), author },
+							{ requiredKeys: ["name", "count"] },
+						),
+						{ selector: (each) => each.name, maxLength: 3 },
+					),
+				})
+				.map(({ author: by, text, reactions }) => said(n, by, text, reactions.length === 0 ? {} : { reactions }));
+		const messages = fc.tuple(message(0), message(1), message(2));
+		fc.assert(
+			fc.property(messages, messages, (was, now) => {
+				const before = { thread: { messages: was } };
+				const after = { thread: { messages: now.map((each, i): Item => ({ ...each, author: was[i]?.author ?? ME })) } };
+				for (const { change, does } of sort(slack.thread, ME, before, after)) {
+					const inReactions = change.path.length > 4;
+					const at = change.path[2];
+					const mine =
+						typeof at === "object" && after.thread.messages.find((each) => at.item === each.ts)?.author === ME;
+					if (inReactions) expect(does).toBe(change.kind === "added" ? "tell" : "nothing");
+					else if (mine) expect(does).toBe("nothing");
+				}
+			}),
+			{ numRuns: pbtRuns(200) },
+		);
+	});
+
+	it("a list inside an item is judged by its own authors entry when it has one", () => {
+		const follow: Follow = {
+			keys: { "thread.messages": "ts", "thread.messages[*].reactions": "name" },
+			authors: { "thread.messages": "author", "thread.messages[*].reactions": "by" },
+			rules: [{ on: "thread.messages[*].reactions[*]", kind: "added", does: "wake", says: "{by} reacted :{name}:" }],
+			ends: {},
+		};
+		const before = { thread: { messages: [said(0, "@bob at Acme", "hi")] } };
+		const reacted = (by: string) => ({
+			thread: { messages: [said(0, "@bob at Acme", "hi", { reactions: [{ name: "tada", by }] })] },
+		});
+		expect(sort(follow, ME, before, reacted(ME)).map((each) => each.does)).toEqual(["nothing"]);
+		expect(sort(follow, ME, before, reacted("@deploybot [bot]")).map((each) => [each.does, each.says])).toEqual([
+			["tell", "@deploybot [bot] reacted :tada:"],
+		]);
+	});
+
+	it("a search: a match newer than any wakes in its channel's words; the owner's own and one indexed late are nothing", () => {
+		const match = (n: number, author: string, text: string, channel = "deploys") =>
+			said(n, author, text, { channel_name: channel, permalink: `https://acme.slack.com/archives/C${channel}/p${n}` });
+		const before = { search: { messages: [match(10, "@bob at Acme", "deploy failed")], total: 1 } };
+		const after = {
+			search: {
+				messages: [
+					match(30, "@cy at Acme", "deploy failed again"),
+					match(20, ME, "deploy failed, looking"),
+					match(10, "@bob at Acme", "deploy failed"),
+					// the same second in another channel is another match, by its link
+					match(10, "@dee at Acme", "deploy failed too", "ops"),
+					match(5, "@eve at Acme", "deploy failed (indexed late)"),
+				],
+				total: 5,
+			},
+		};
+		expect(sort(slack.search, ME, before, after).map((each) => [each.does, each.says])).toEqual([
+			["wake", "@cy in #deploys: deploy failed again"],
+			["nothing", expect.stringContaining("new search.messages")],
+			["nothing", expect.stringContaining("new search.messages")],
+			["nothing", expect.stringContaining("new search.messages")],
+		]);
+	});
+
+	it("a person: a status or title changed tells, a face changed is nothing", () => {
+		const person = (status: string, title: string, avatar: string) => ({
+			person: { name: "bob", real_name: "Bob Stone", status_text: status, title, avatar },
+		});
+		const sorted = sort(slack.person, undefined, person("On call", "Engineer", "a"), person("", "Lead", "b"));
+		expect(sorted.map((each) => [each.does, each.says])).toEqual([
+			["tell", "status: cleared"],
+			["tell", "title: Lead"],
 		]);
 	});
 });

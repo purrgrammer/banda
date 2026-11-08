@@ -76,7 +76,8 @@ export type Follow = {
 	readonly ignore?: readonly string[];
 	/**
 	 * Who wrote an item of a list, by the list's pattern, or every change in an object, by the object's path (a file:
-	 * who changed it last): the account's own are nothing, a bot's only tell.
+	 * who changed it last): the account's own are nothing, a bot's only tell. A list's author speaks for its items and
+	 * their own fields, not for a list inside an item (a message's reactions), which has its own entry or none.
 	 */
 	readonly authors?: { readonly [list: string]: string };
 	/**
@@ -458,6 +459,25 @@ function inWindow(follow: Follow, before: Json, after: Json, change: Change): bo
 	return oldest === undefined || !later(oldest, change.item?.[by]);
 }
 
+/**
+ * Whose a change is, by the most specific `authors` entry it is at or under. A pattern may name one object rather than
+ * a list (a file, whose last change says whose it was): every change in it is that author's, and a change no list item
+ * holds is said from the object's fields (`whole`). An entry over a list speaks for an item's coming and going and its
+ * own fields; a change inside a list the item holds (a reaction on a message) is not the item author's, and is judged
+ * by that list's own entry if it has one, else by the rules alone.
+ */
+function authorOf(follow: Follow, after: Json, change: Change): { whole?: Item; author?: Json | undefined } {
+	const entry = Object.entries(follow.authors ?? {})
+		.filter(([each]) => matches(pattern(each), change.path.slice(0, pattern(each).length)))
+		.sort(([a], [b]) => pattern(b).length - pattern(a).length)[0];
+	if (entry === undefined) return {};
+	const depth = pattern(entry[0]).length;
+	const whole = objectAt(after, change.path.slice(0, depth));
+	if (whole !== undefined) return { whole, author: valuesAt(whole, pattern(entry[1]))[0] };
+	if (change.path.slice(depth + 1).some((segment) => typeof segment === "object")) return {};
+	return { author: valuesAt(change.item, pattern(entry[1]))[0] };
+}
+
 /** A change, and what it does: as a rule said, or by whose it is. */
 export type Sorted = { readonly change: Change; readonly does: Rule["does"]; readonly says: string };
 
@@ -541,13 +561,7 @@ export function sort(follow: Follow, me: string | undefined, before: Json, after
 			sorted.push({ change, does: "nothing", says: changeWords(change) });
 			continue;
 		}
-		const list = Object.entries(follow.authors ?? {}).find(([each]) =>
-			matches(pattern(each), change.path.slice(0, pattern(each).length)),
-		);
-		// a pattern may name one object rather than a list (a file, whose last change says whose it was): every change
-		// in it is that author's, and a change no list item holds is said from the object's fields
-		const whole = list === undefined ? undefined : objectAt(after, change.path.slice(0, pattern(list[0]).length));
-		const author = list === undefined ? undefined : valuesAt(whole ?? change.item, pattern(list[1]))[0];
+		const { whole, author } = authorOf(follow, after, change);
 		if (me !== undefined && author === me) {
 			sorted.push({ change, does: "nothing", says: changeWords(change) });
 			continue;

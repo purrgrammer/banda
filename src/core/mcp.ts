@@ -14,7 +14,12 @@ export type McpTool = {
 };
 
 /** What a call answered: its text (images and resources said in words), and whether the server called it an error. */
-export type McpResult = { readonly text: string; readonly isError: boolean };
+export type McpResult = {
+	readonly text: string;
+	readonly isError: boolean;
+	/** A refusal for now: when the service said to ask again (ms), so a caller waits rather than retries. */
+	readonly retryAt?: number;
+};
 
 /** The server refused the credentials (401): sign in again, or give another key. */
 export class Unauthorized extends Error {}

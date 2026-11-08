@@ -1,13 +1,15 @@
 /**
  * A fake Slack, as a `fetch`: the PKCE sign-in's token endpoint (a code traded without a secret, a refresh), and the Web
  * API's reads and `chat.postMessage` as a user token sees them, every answer 200 with `ok`, as Slack's are. `busy`
- * answers every API call 429 with that many seconds of `Retry-After`. With `file`, posts are kept there, written whole
+ * answers every API call 429 with that many seconds of `Retry-After`; `perMinute` answers a method's second call in a
+ * minute of `now` so, as Slack's clamp does. With `file`, posts and reactions are kept there, written whole
  * before it answers, so a process killed after Slack took a post and before banda recorded it leaves the post made. With `stable`, every sign-in and refresh issues the same tokens, so a process that starts again finds them still good.
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 
 export type FakeSlackMessage = { [key: string]: unknown };
 export type FakeSlackPost = { channel: string; text: string; thread_ts?: string; ts: string };
+export type FakeSlackReaction = { channel: string; ts: string; name: string };
 
 export type FakeSlack = {
 	readonly fetch: typeof fetch;
@@ -16,6 +18,16 @@ export type FakeSlack = {
 	/** The token endpoint's form bodies, in order. */
 	readonly tokenBodies: URLSearchParams[];
 	posts(): FakeSlackPost[];
+	/** The reactions the owner added through the API, each once. */
+	reactions(): FakeSlackReaction[];
+	/** Files by id, as `files.info` answers them, and their bytes at their `url_private_download`. */
+	readonly files: { [id: string]: { [key: string]: unknown } };
+	readonly bytes: { [url: string]: Uint8Array };
+	/** Messages search does not find yet, by `ts`: indexed late. */
+	readonly unindexed: Set<string>;
+	/** The methods answered at most once a minute of `now` (`conversations.history`), else 429 to the minute's end. */
+	readonly perMinute: Set<string>;
+	now: () => number;
 	/** The access token the API takes now; a refresh replaces it. */
 	access: string;
 	refreshToken: string;
@@ -155,9 +167,19 @@ function world() {
 				text: "Release notes draft",
 				thread_ts: ROOT_TS,
 				reply_count: 2,
+				reactions: [{ name: "eyes", users: ["U0BOB"], count: 1 }],
 			},
 		],
-		G0DEPLOYS: [{ type: "message", ts: "1700000050.000050", user: "U0BOB", team: "T0ACME", text: "deploy 41 green" }],
+		G0DEPLOYS: [
+			{
+				type: "message",
+				ts: "1700000050.000050",
+				user: "U0BOB",
+				team: "T0ACME",
+				text: "deploy 41 green",
+				files: [{ id: "F0LOG", name: "deploy-41.log", title: "Deploy 41", mimetype: "text/plain", size: 2048 }],
+			},
+		],
 		D0BOB: [],
 	};
 	const replies: FakeSlack["replies"] = {
@@ -180,7 +202,29 @@ function world() {
 			},
 		],
 	};
-	return { users, channels, history, replies };
+	const download = (id: string) => `https://files.slack.com/files-pri/T0ACME-${id}/download/${id.toLowerCase()}`;
+	const files: FakeSlack["files"] = {
+		F0LOG: {
+			id: "F0LOG",
+			name: "deploy-41.log",
+			title: "Deploy 41",
+			mimetype: "text/plain",
+			size: 2048,
+			url_private_download: download("F0LOG"),
+			shares: { private: { G0DEPLOYS: [{ ts: "1700000050.000050" }] } },
+		},
+		F0BIG: {
+			id: "F0BIG",
+			name: "dump.bin",
+			title: "Dump",
+			mimetype: "application/octet-stream",
+			size: 11 * 1024 * 1024,
+			url_private_download: download("F0BIG"),
+			shares: { public: { C0GENERAL: [{ ts: ROOT_TS }] } },
+		},
+	};
+	const bytes: FakeSlack["bytes"] = { [download("F0LOG")]: new Uint8Array(2048).fill(65) };
+	return { users, channels, history, replies, files, bytes };
 }
 
 export function fakeSlack({
@@ -192,17 +236,26 @@ export function fakeSlack({
 	code?: string;
 	stable?: boolean;
 } = {}): FakeSlack {
-	const { users, channels, history, replies } = world();
-	let memory: FakeSlackPost[] = [];
-	const load = (): FakeSlackPost[] =>
-		file === undefined ? memory : existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as FakeSlackPost[]) : [];
-	const save = (posts: FakeSlackPost[]) => {
-		if (file === undefined) memory = posts;
+	const { users, channels, history, replies, files, bytes } = world();
+	type Kept = { posts: FakeSlackPost[]; reactions: FakeSlackReaction[] };
+	let memory: Kept = { posts: [], reactions: [] };
+	const kept = (): Kept => {
+		if (file === undefined) return memory;
+		if (!existsSync(file)) return { posts: [], reactions: [] };
+		const read = JSON.parse(readFileSync(file, "utf8")) as Partial<Kept>;
+		return { posts: read.posts ?? [], reactions: read.reactions ?? [] };
+	};
+	const load = () => kept().posts;
+	const keep = (next: Kept) => {
+		if (file === undefined) memory = next;
 		else {
-			writeFileSync(`${file}.tmp`, JSON.stringify(posts));
+			writeFileSync(`${file}.tmp`, JSON.stringify(next));
 			renameSync(`${file}.tmp`, file);
 		}
 	};
+	const save = (posts: FakeSlackPost[]) => keep({ ...kept(), posts });
+	/** The minute of `now` each limited method was last answered in. */
+	const answered = new Map<string, number>();
 	/** One page of `messages` as `limit` and `cursor` ask, capped by `pageMax`, and the cursor of the next ("" none). */
 	const paged = (messages: FakeSlackMessage[], params: Record<string, unknown>) => {
 		const limit = Math.min(Number(params.limit ?? 100), fake.pageMax ?? Number.POSITIVE_INFINITY);
@@ -216,6 +269,12 @@ export function fakeSlack({
 		calls: [],
 		tokenBodies: [],
 		posts: load,
+		reactions: () => kept().reactions,
+		files,
+		bytes,
+		unindexed: new Set(),
+		perMinute: new Set(),
+		now: Date.now,
 		access: "xoxp-1",
 		refreshToken: "xoxe-1",
 		busy: undefined,
@@ -228,6 +287,14 @@ export function fakeSlack({
 		channels,
 		fetch: async (input, init) => {
 			const url = new URL(String(input));
+			if (url.origin === "https://files.slack.com") {
+				const bearer = new Headers(init?.headers).get("authorization");
+				// without the files scope, or the token, Slack answers its sign-in page
+				const body = bytes[url.toString()];
+				if (bearer !== `Bearer ${fake.access}` || !fake.granted.split(",").includes("files:read") || body === undefined)
+					return new Response("<html>sign in</html>", { status: 200, headers: { "content-type": "text/html" } });
+				return new Response(body, { status: 200, headers: { "content-type": "application/octet-stream" } });
+			}
 			if (url.origin !== "https://slack.com") return json({ ok: false, error: "not_slack" }, 404);
 			const method = url.pathname.replace(/^\/api\//, "");
 			if (method === "oauth.v2.access") {
@@ -281,6 +348,14 @@ export function fakeSlack({
 			if (fake.busy !== undefined)
 				return json({ ok: false, error: "ratelimited" }, 429, { "retry-after": String(fake.busy) });
 			if (token !== fake.access) return json({ ok: false, error: "invalid_auth" });
+			if (fake.perMinute.has(method)) {
+				const minute = Math.floor(fake.now() / 60_000);
+				if (answered.get(method) === minute) {
+					const seconds = String(Math.ceil(((minute + 1) * 60_000 - fake.now()) / 1000));
+					return json({ ok: false, error: "ratelimited" }, 429, { "retry-after": seconds });
+				}
+				answered.set(method, minute);
+			}
 			switch (method) {
 				case "auth.test":
 					return json({
@@ -340,11 +415,14 @@ export function fakeSlack({
 					const query = String(params.query ?? "").toLowerCase();
 					const matches = Object.entries(history)
 						.flatMap(([channel, messages]) => messages.map((message) => ({ channel, message })))
-						.filter(({ message }) =>
-							String(message.text ?? "")
-								.toLowerCase()
-								.includes(query),
+						.filter(
+							({ message }) =>
+								!fake.unindexed.has(String(message.ts)) &&
+								String(message.text ?? "")
+									.toLowerCase()
+									.includes(query),
 						)
+						.sort((a, b) => (later(a.message.ts, b.message.ts) ? -1 : 1))
 						.map(({ channel, message }) => ({
 							...message,
 							channel: { id: channel, name: String(channels[channel]?.name ?? channel) },
@@ -374,6 +452,26 @@ export function fakeSlack({
 						ts,
 						message: { user: SLACK_ME.id, text: post.text, bot_id: "B0BANDA", app_id: "A0BANDA" },
 					});
+				}
+				case "reactions.add": {
+					const channel = String(params.channel);
+					const ts = String(params.timestamp);
+					const name = String(params.name);
+					const message = [...(history[channel] ?? []), ...Object.values(replies).flat()].find(
+						(each) => each.ts === ts,
+					);
+					if (message === undefined) return json({ ok: false, error: "message_not_found" });
+					const now = kept();
+					if (now.reactions.some((each) => each.channel === channel && each.ts === ts && each.name === name))
+						return json({ ok: false, error: "already_reacted" });
+					keep({ ...now, reactions: [...now.reactions, { channel, ts, name }] });
+					return json({ ok: true });
+				}
+				case "files.info": {
+					if (!fake.granted.split(",").includes("files:read"))
+						return json({ ok: false, error: "missing_scope", needed: "files:read" });
+					const found = files[String(params.file)];
+					return found === undefined ? json({ ok: false, error: "file_not_found" }) : json({ ok: true, file: found });
 				}
 				default:
 					return json({ ok: false, error: "unknown_method" });

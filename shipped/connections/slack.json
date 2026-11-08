@@ -30,6 +30,18 @@
 				"scopes": [
 					"chat:write"
 				]
+			},
+			{
+				"label": "React as you",
+				"scopes": [
+					"reactions:write"
+				]
+			},
+			{
+				"label": "Read files you can see",
+				"scopes": [
+					"files:read"
+				]
 			}
 		],
 		"note": "Changing access signs in again. Every message banda sends as you still asks you to approve it, every time."
@@ -47,7 +59,8 @@
 		"channel_history",
 		"get_thread",
 		"search_messages",
-		"get_person"
+		"get_person",
+		"get_file"
 	],
 	"needs": {
 		"list_channels": [
@@ -79,6 +92,12 @@
 		],
 		"post_message": [
 			"chat:write"
+		],
+		"add_reaction": [
+			"reactions:write"
+		],
+		"get_file": [
+			"files:read"
 		]
 	},
 	"objects": {
@@ -117,7 +136,8 @@
 			},
 			"follow": {
 				"keys": {
-					"thread.messages": "ts"
+					"thread.messages": "ts",
+					"thread.messages[*].reactions": "name"
 				},
 				"authors": {
 					"thread.messages": "author"
@@ -129,6 +149,18 @@
 					"thread.messages[*].avatar"
 				],
 				"rules": [
+					{
+						"on": "thread.messages[*].reactions[*]",
+						"kind": "added",
+						"does": "tell",
+						"says": "{count} reacted :{name}:"
+					},
+					{
+						"on": "thread.messages[*].reactions[*]",
+						"kind": "removed",
+						"does": "nothing",
+						"says": "a reaction :{name}: was taken back"
+					},
 					{
 						"on": "thread.messages[*]",
 						"kind": "added",
@@ -164,6 +196,15 @@
 					"verb": "Send",
 					"what": "Reply in",
 					"text": "text"
+				},
+				{
+					"tool": "add_reaction",
+					"id": {
+						"channel": "channel",
+						"ts": "ts"
+					},
+					"verb": "React",
+					"what": "React in"
 				}
 			]
 		},
@@ -214,7 +255,8 @@
 					"history.active",
 					"channel.member_count",
 					"history.messages[*].reply_count",
-					"history.messages[*].avatar"
+					"history.messages[*].avatar",
+					"history.messages[*].reactions"
 				],
 				"rules": [
 					{
@@ -290,6 +332,34 @@
 			"fields": {
 				"messages": "search.messages",
 				"total": "search.total"
+			},
+			"follow": {
+				"keys": {
+					"search.messages": "permalink"
+				},
+				"newest": {
+					"search.messages": "ts"
+				},
+				"authors": {
+					"search.messages": "author"
+				},
+				"ignore": [
+					"search.total",
+					"search.messages[*].avatar",
+					"search.messages[*].reactions",
+					"search.messages[*].reply_count"
+				],
+				"rules": [
+					{
+						"on": "search.messages[*]",
+						"kind": "added",
+						"does": "wake",
+						"says": "{from} in #{channel_name}: {text}"
+					}
+				],
+				"ends": {},
+				"every": "5m",
+				"settle": "2m"
 			}
 		},
 		"person": {
@@ -319,6 +389,33 @@
 				"outside": "person.outside",
 				"photo": "person.avatar",
 				"url": "person.url"
+			},
+			"follow": {
+				"ignore": [
+					"person.avatar"
+				],
+				"rules": [
+					{
+						"on": "person.status_text",
+						"kind": "changed",
+						"does": "tell",
+						"says": "status: {to}",
+						"words": {
+							"": "cleared"
+						}
+					},
+					{
+						"on": "person.title",
+						"kind": "changed",
+						"does": "tell",
+						"says": "title: {to}",
+						"words": {
+							"": "cleared"
+						}
+					}
+				],
+				"ends": {},
+				"every": "30m"
 			}
 		}
 	}
