@@ -5,6 +5,8 @@
  * says where the link is. In the phone's native shell no token is kept: the shell's paired device identity is what
  * lets a request in.
  */
+
+import type { Setting } from "../../../src/core/tool-kinds.ts";
 import type {
 	AgentView,
 	Answer,
@@ -346,6 +348,24 @@ export const setConnectionReads = (name: string, tools: readonly string[], sha: 
 	api<CapabilitiesView>(`/capabilities/connections/${name}/reads`, {
 		method: "POST",
 		body: JSON.stringify({ tools, sha }),
+	});
+/** Set some of a connection's tools, each to Allow, Ask, Always ask or Off, for every agent, at once. */
+export const setToolSettings = (name: string, tools: { readonly [tool: string]: Setting }) =>
+	api<CapabilitiesView>(`/capabilities/connections/${name}/settings`, {
+		method: "POST",
+		body: JSON.stringify({ tools }),
+	});
+/** Set every tool in one of a connection's groups: each to `setting`, or the nearest it has. */
+export const setGroupSetting = (name: string, group: string, setting: Setting) =>
+	api<CapabilitiesView>(`/capabilities/connections/${name}/settings`, {
+		method: "POST",
+		body: JSON.stringify({ group, setting }),
+	});
+/** Accept what a connection's tools do, as reviewed after sign-in (`sha`, the file shown). */
+export const reviewTools = (name: string, sha: string, tools: { readonly [tool: string]: Setting }) =>
+	api<CapabilitiesView>(`/capabilities/connections/${name}/review`, {
+		method: "POST",
+		body: JSON.stringify({ sha, tools }),
 	});
 export const switchPublicConnection = (name: string, agent: string, on: boolean, sha?: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/public`, {

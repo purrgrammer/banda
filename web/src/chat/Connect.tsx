@@ -5,7 +5,7 @@
  * shared with another agent. Without an agent (from Settings or the Connections page) it signs an account in for none.
  */
 import { CheckIcon, ChevronDownIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Spinner } from "@/components/ui/spinner";
@@ -232,10 +232,13 @@ export function ConnectionPermissions({
 export function ConnectionTools({
 	connection,
 	tools,
+	settings,
 	defaultOpen = false,
 }: {
 	connection: string;
 	tools: readonly ConnectionToolView[];
+	/** Where each tool and group is set, for every agent; else the tools are only listed. */
+	settings?: ReactNode | undefined;
 	defaultOpen?: boolean | undefined;
 }) {
 	const [open, setOpen] = useState(defaultOpen);
@@ -251,35 +254,39 @@ export function ConnectionTools({
 				</Button>
 			</CollapsibleTrigger>
 			<CollapsibleContent className="border-t border-line-soft px-3.5 py-3">
-				<div className="flex flex-col gap-3">
-					{tools.map((tool) => (
-						<div key={tool.name} className="flex min-w-0 flex-col gap-1">
-							<p className="break-words font-medium text-ui text-ink">{tool.words}</p>
-							<p className="text-meta text-ink-2">
-								{!tool.on
-									? "Switched off"
-									: tool.kind === "read"
-										? "Reads without asking"
-										: tool.floor || tool.alwaysAsk
-											? "Asks every time"
-											: "Asks first"}
-							</p>
-							{tool.needs?.length ? (
-								<p className="text-meta text-ink-2">Needs Google access: {tool.needs.join(", ")}</p>
-							) : null}
-							<details>
-								<summary className="cursor-pointer text-meta text-ink-2">Tool details</summary>
-								<p className="mt-2 break-all font-mono text-meta">{tool.title}</p>
-								<p className="mt-2 whitespace-pre-wrap break-words text-meta text-ink-2">{tool.description}</p>
-								{tool.parameters ? (
-									<pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all font-mono text-meta">
-										{JSON.stringify(tool.parameters, null, 2)}
-									</pre>
+				{settings !== undefined ? (
+					settings
+				) : (
+					<div className="flex flex-col gap-3">
+						{tools.map((tool) => (
+							<div key={tool.name} className="flex min-w-0 flex-col gap-1">
+								<p className="break-words font-medium text-ui text-ink">{tool.words}</p>
+								<p className="text-meta text-ink-2">
+									{!tool.on
+										? "Switched off"
+										: tool.kind === "read"
+											? "Reads without asking"
+											: tool.floor || tool.alwaysAsk
+												? "Asks every time"
+												: "Asks first"}
+								</p>
+								{tool.needs?.length ? (
+									<p className="text-meta text-ink-2">Needs Google access: {tool.needs.join(", ")}</p>
 								) : null}
-							</details>
-						</div>
-					))}
-				</div>
+								<details>
+									<summary className="cursor-pointer text-meta text-ink-2">Tool details</summary>
+									<p className="mt-2 break-all font-mono text-meta">{tool.title}</p>
+									<p className="mt-2 whitespace-pre-wrap break-words text-meta text-ink-2">{tool.description}</p>
+									{tool.parameters ? (
+										<pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all font-mono text-meta">
+											{JSON.stringify(tool.parameters, null, 2)}
+										</pre>
+									) : null}
+								</details>
+							</div>
+						))}
+					</div>
+				)}
 			</CollapsibleContent>
 		</Collapsible>
 	);

@@ -40,6 +40,7 @@ import { Screens } from "../specimen/screens.tsx";
 import { SkillDetailPreview, SkillsSection } from "../specimen/skills.tsx";
 import { type Scheme, Section, StageContext, type Width } from "../specimen/stage.tsx";
 import { States } from "../specimen/states.tsx";
+import { ToolKindsSection } from "../specimen/tool-kinds.tsx";
 
 const CONTENTS = [
 	{ id: "activity", label: "Activity drill-down" },
@@ -269,6 +270,7 @@ export function Specimen() {
 									<MemorySection />
 									<DevicesSection />
 									<McpSection />
+									<ToolKindsSection />
 									<HarnessSection />
 									<States />
 									<BandSection />

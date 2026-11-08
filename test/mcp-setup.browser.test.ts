@@ -3,7 +3,13 @@ import { writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
+import {
+	createModels,
+	fauxAssistantMessage,
+	fauxProvider,
+	fauxToolCall,
+	getCurrentSystemPrompt,
+} from "@earendil-works/pi-ai";
 import { createServer as createViteServer } from "vite";
 import { expect, it } from "vitest";
 import { startDaemon } from "../src/daemon.ts";
@@ -65,14 +71,25 @@ for (const width of [390, 1440])
 			const models = createModels();
 			const faux = fauxProvider();
 			models.setProvider(faux.provider);
+			// banda's guess at what the server's tools do answers as the spike's prompts ask; a chat says it is ready
 			faux.setResponses(
-				Array.from(
-					{ length: 100 },
-					() => () =>
-						fauxAssistantMessage([
-							fauxToolCall("message_user", { parts: [{ type: "text", text: "Ready." }] } as never),
-						]),
-				),
+				Array.from({ length: 100 }, () => (context: { messages: Parameters<typeof getCurrentSystemPrompt>[0] }) => {
+					const system = getCurrentSystemPrompt(context.messages) ?? "";
+					if (system.includes("into groups an owner scans"))
+						return fauxAssistantMessage(JSON.stringify({ groups: ["Files", "Routes"] }));
+					if (system.includes("You sort the tools a service offers"))
+						return fauxAssistantMessage(
+							JSON.stringify({
+								tools: [
+									{ tool: "execute", kind: "write", group: "Routes" },
+									{ tool: "fs_read", kind: "read", group: "Files" },
+								],
+							}),
+						);
+					return fauxAssistantMessage([
+						fauxToolCall("message_user", { parts: [{ type: "text", text: "Ready." }] } as never),
+					]);
+				}) as never,
 			);
 			let daemon = await startDaemon({ home, port: 0, models, box: hostBox(home), log: () => {} });
 			const base = `http://127.0.0.1:${daemon.port}`;
@@ -130,16 +147,64 @@ for (const width of [390, 1440])
 					expect(connection.accounts).toEqual([expect.objectContaining({ id: "account 1", agents: [] })]);
 					expect(connection.tools.every((tool) => tool.kind === "write")).toBe(true);
 					expect(fake.calls).toEqual([]);
+					// what its tools may do opens by itself once they are listed and sorted: nothing runs before Accept
+					const dialog = `document.querySelector('[role="dialog"]')`;
+					await page.until(
+						`${dialog}?.querySelector('[data-tool-review]') && !${dialog}.querySelector('[role="status"]')`,
+					);
+					const review = await page.run<string>(`${dialog}.textContent`);
+					expect(review).toContain("Ernesto test's tools");
+					expect(review).toContain("1 read and run freely · 1 change something and ask first");
+					await click(
+						page,
+						`[...${dialog}.querySelectorAll('[data-group] button')].find(el => el.textContent.startsWith('Files'))`,
+					);
+					await click(
+						page,
+						`[...${dialog}.querySelectorAll('[data-group] button')].find(el => el.textContent.startsWith('Routes'))`,
+					);
+					const expanded = await page.run<string>(`${dialog}.textContent`);
+					expect(expanded).toContain("Ernesto test says · reads");
+					expect(expanded).toContain("banda's guess · changes something");
+					expect(await page.run(`${dialog}.scrollWidth <= ${dialog}.clientWidth + 1`)).toBe(true);
+					expect(await page.run("document.documentElement.scrollWidth <= innerWidth")).toBe(true);
+					const shots = process.env.BANDA_TOOL_REVIEW_SHOTS;
+					if (shots) await page.shoot(`${shots}/review-${width}.png`);
+					expect((await view()).connections.find((each) => each.name === "ernesto-test")?.review).toBe(true);
+					await click(page, `[...${dialog}.querySelectorAll('button')].find(el => el.textContent.trim() === 'Accept')`);
+					await page.until(
+						`!document.querySelector('[role="dialog"]') && document.querySelector('[data-tool-settings]')`,
+					);
+					const reviewed = (await view()).connections.find((each) => each.name === "ernesto-test")!;
+					expect(reviewed.review).toBeUndefined();
+					expect(reviewed.tools.map((tool) => [tool.title, tool.kind, tool.setting])).toEqual([
+						["execute", "write", "ask"],
+						["fs_read", "read", "allow"],
+					]);
+					// the same list in Settings: a change is at once, for every agent
+					await click(
+						page,
+						`[...document.querySelectorAll('[data-tool-settings] [data-group] button')].find(el => el.textContent.startsWith('Routes'))`,
+					);
+					await click(
+						page,
+						`[...document.querySelectorAll('[data-tool="execute"] button')].find(el => el.textContent.trim() === 'Always ask')`,
+					);
+					await page.until(
+						`[...document.querySelectorAll('[data-tool="execute"] button')].find(el => el.textContent.trim() === 'Always ask')?.getAttribute('data-state') === 'on'`,
+					);
+					expect(
+						(await view()).connections
+							.find((each) => each.name === "ernesto-test")
+							?.tools.find((tool) => tool.title === "execute")?.setting,
+					).toBe("always");
+					if (shots) await page.shoot(`${shots}/settings-${width}.png`);
+					expect(await page.run("document.documentElement.scrollWidth <= innerWidth")).toBe(true);
 					await click(
 						page,
 						`[...document.querySelectorAll('summary')].find(el => el.textContent === 'Introduction from the server')`,
 					);
 					expect(await page.run(`document.body.textContent.includes('Ernesto test introduction.')`)).toBe(true);
-					await click(
-						page,
-						`[...document.querySelectorAll('summary')].find(el => el.textContent === 'Read without asking')`,
-					);
-					await click(page, labelled("fs_read"));
 					await click(page, labelled("Sancho"));
 					await click(page, button("Save access"));
 					await phase(page, "done");

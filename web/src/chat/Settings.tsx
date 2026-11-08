@@ -270,6 +270,8 @@ export type ConnectionRow = {
 	/** Every account signed in to it, and whether this agent may use each. */
 	readonly accounts: readonly { readonly login: string; readonly on: boolean; readonly account?: string }[];
 	readonly tools?: readonly ConnectionToolView[] | undefined;
+	/** Where its tools are set, for every agent. */
+	readonly settings?: ReactNode | undefined;
 };
 
 /**
@@ -379,7 +381,7 @@ export function Connections({
 							row.tools === undefined ||
 							row.tools.length === 0 ? null : (
 								<div className="px-3.5 pb-3 pl-[3.75rem]">
-									<ConnectionTools connection={row.connection} tools={row.tools} />
+									<ConnectionTools connection={row.connection} tools={row.tools} settings={row.settings} />
 								</div>
 							)}
 							{open === row.connection && connect !== undefined ? (

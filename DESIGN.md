@@ -378,8 +378,10 @@ lives inside agents' settings and the app's Settings, never as a screen of its o
   class) and its group ("Issues", "Pull requests") come from the shipped file, else the server's annotations, else an
   inference over the listing framed as foreign data, else it is a write. The owner sees them grouped, a group
   collapsed to its count and one control, each tool saying where its kind came from ("GitHub says", "banda's guess"),
-  changes any of them, and accepts; only then are they the file's `reads`, floors and `groups`. A guess may make a tool
-  a write or put it on the floor; it only proposes a read, which the owner's acceptance makes one. A tool listed later
+  changes any of them, and accepts; only then are they the file's `reads` and `groups`, and each tool's setting the
+  owner's (a guessed floor is kept as Always ask, with its class). Until then every tool that is not the file's read
+  asks every time. A guess may make a tool a write or put it on the floor; it only proposes a read, which the owner's
+  acceptance makes one. A tool listed later
   is guessed the same way and waits switched off, marked new in its group.
 - **A read runs, a write is a draft.** A read runs when called, and its answer comes back framed as foreign data. A
   tool that runs many routes may read for some exact arguments only, `tool(arg=value)` in the file; any other call of

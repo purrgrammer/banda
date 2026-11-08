@@ -8,12 +8,12 @@ import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import type { CapabilitiesView, ConnectionView } from "../../../src/server/api.ts";
 import { Confirm } from "../chat/Confirm.tsx";
-import { McpAgents, McpDetails, McpReadChoices, McpServerForm } from "../chat/McpConnection.tsx";
+import { McpAgents, McpDetails, McpServerForm } from "../chat/McpConnection.tsx";
+import { toolTally } from "../chat/ToolKinds.tsx";
 import {
 	actOnCapability,
 	addMcp,
 	refreshConnection,
-	setConnectionReads,
 	signIn,
 	signOutAccount,
 	switchAccount,
@@ -22,6 +22,7 @@ import {
 import { freshAccounts } from "../lib/connect.ts";
 import { chatAgents } from "../lib/navigation.ts";
 import { showCapabilities, useShell } from "../lib/shell.ts";
+import { ConnectionToolReview, ConnectionToolSettings } from "./ConnectionToolSettings.tsx";
 
 type Phase = "setup" | "auth" | "waiting" | "review" | "done";
 export function McpSetup({
@@ -46,7 +47,8 @@ export function McpSetup({
 	const [credential, setCredential] = useState("");
 	const [account, setAccount] = useState("");
 	const [selected, setSelected] = useState<string[]>([]);
-	const [reads, setReads] = useState<string[]>([]);
+	const [reviewing, setReviewing] = useState(false);
+	const offered = useRef<string | undefined>(undefined);
 	const [link, setLink] = useState<string>();
 	const [before, setBefore] = useState<number>();
 	const heading = useRef<HTMLHeadingElement>(null);
@@ -93,8 +95,15 @@ export function McpSetup({
 		if (initialized.current === key) return;
 		initialized.current = key;
 		setSelected([...new Set([...active, ...(agent === undefined ? [] : [agent.id])])]);
-		setReads(view?.tools.filter((tool) => tool.kind === "read").map((tool) => tool.title) ?? []);
 	}, [name, account, view, active, agent]);
+	// once its tools are listed, a server the owner added opens on what they may do: once a file, never again by itself
+	useEffect(() => {
+		if (phase !== "review" || view?.review !== true || view.state !== "connected" || view.tools.length === 0) return;
+		const key = `${view.name}/${view.accepted?.sha}`;
+		if (offered.current === key) return;
+		offered.current = key;
+		setReviewing(true);
+	}, [phase, view]);
 	const update = (next: CapabilitiesView) => {
 		showCapabilities(next);
 		return next.connections.find((each) => each.name === name);
@@ -141,16 +150,7 @@ export function McpSetup({
 			if (!view?.accepted || !name) return;
 			if (view.state !== "connected") throw new Error("Finish connecting before giving access.");
 			if (!anonymous && !chosen) throw new Error("Choose a signed-in account first.");
-			let current: ConnectionView = view;
-			const old = view.tools
-				.filter((tool) => tool.kind === "read")
-				.map((tool) => tool.title)
-				.sort();
-			if (JSON.stringify(old) !== JSON.stringify([...reads].sort())) {
-				const next = update(await setConnectionReads(name, reads, view.accepted.sha));
-				if (!next) throw new Error("This connection was removed. Return to Connections.");
-				current = next;
-			}
+			const current: ConnectionView = view;
 			const allowed = anonymous
 				? (current.agents ?? [])
 				: (current.accounts?.find((each) => each.account === account)?.agents ?? []);
@@ -344,7 +344,22 @@ export function McpSetup({
 						</Field>
 					)}
 					<McpDetails view={view} />
-					{phase === "review" ? <McpReadChoices view={view} reads={reads} onChange={setReads} disabled={busy} /> : null}
+					{view.state === "connected" && view.review ? (
+						<div className="flex flex-col gap-2 rounded-field border border-line-soft p-3" data-tool-review-offer="">
+							<p className="font-medium text-ui">What its tools may do</p>
+							<p className="text-meta text-ink-2">
+								{view.classifying
+									? "banda is sorting its tools."
+									: `Until you accept, every tool asks first. ${toolTally(view.tools, (tool) => tool.proposed ?? "ask")}.`}
+							</p>
+							<Button variant="outline" size="sm" className="self-start" onClick={() => setReviewing(true)}>
+								Review its tools
+							</Button>
+						</div>
+					) : view.state === "connected" ? (
+						<ConnectionToolSettings view={view} service={service} />
+					) : null}
+					<ConnectionToolReview view={view} service={service} open={reviewing} onOpenChange={setReviewing} />
 					<Separator />
 					<McpAgents
 						agents={agents}
@@ -383,11 +398,10 @@ export function McpSetup({
 							className="self-start"
 							onClick={() => {
 								setSelected([...active]);
-								setReads(view.tools.filter((tool) => tool.kind === "read").map((tool) => tool.title));
 								setPhase("review");
 							}}
 						>
-							Review tool permissions
+							Review who can use it
 						</Button>
 					)}
 					<div className="flex flex-wrap gap-2">

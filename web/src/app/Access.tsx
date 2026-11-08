@@ -14,6 +14,7 @@ import { usedWords } from "../lib/permissions.ts";
 import { usePhone } from "../lib/phone.ts";
 import { showCapabilities, showControl, useShell } from "../lib/shell.ts";
 import { ConnectFlow } from "./ConnectFlow.tsx";
+import { ConnectionToolSettings } from "./ConnectionToolSettings.tsx";
 import { AddHarnessButton, HarnessAccessTile } from "./HarnessConnections.tsx";
 import { McpSetup } from "./McpSetup.tsx";
 
@@ -31,6 +32,11 @@ export function connectionRows(capabilities: CapabilitiesView | undefined, agent
 			id: view.name,
 			url: view.accepted?.connection?.url,
 			tools: view.tools,
+			...(view.review !== true && view.tools.some((tool) => tool.classed !== undefined)
+				? {
+						settings: <ConnectionToolSettings view={view} service={view.accepted?.connection?.service ?? view.name} />,
+					}
+				: {}),
 			accounts:
 				view.accepted?.connection?.auth === "none" && view.agents !== undefined
 					? [{ login: "No sign-in needed", on: view.agents.includes(agent) }]
