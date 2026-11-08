@@ -442,7 +442,11 @@ function messageOf(raw: Json, me: Identity, s: Session): SlackMessage | undefine
 		(user === undefined ? undefined : s.teamOf(user)) ??
 		(typeof raw.team === "string" ? raw.team : undefined);
 	const outside = !bot && team !== undefined && team !== "" && team !== me.teamId;
-	const handle = (user === undefined ? undefined : s.named("user", user)) ?? `@${text(raw.username, 80) || user}`;
+	// the owner's own handle is known without a lookup, so their posts are the account's whatever the names cache holds
+	const handle =
+		user === me.userId
+			? `@${me.user}`
+			: ((user === undefined ? undefined : s.named("user", user)) ?? `@${text(raw.username, 80) || user}`);
 	const from = bot ? `@${botName(raw)} [bot]` : `${handle}${outside ? " (outside)" : ""}`;
 	const author = bot ? from : `${handle} at ${outside ? team : me.team}`;
 	const said = typeof raw.text === "string" ? raw.text : "";
