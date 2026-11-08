@@ -68,11 +68,11 @@ describe("a permanent agent's routines", () => {
 			const last = ctx.messages.filter((m) => m.role !== "system").at(-1);
 			const text = textOf(last?.content);
 			requests.push({ prompt: promptOf(ctx), tools: toolsOf(ctx), text });
-			const react = fauxAssistantMessage([fauxToolCall("message_user", { reaction: "👍" })], {
+			const react = fauxAssistantMessage([fauxToolCall("react", { reaction: "👍" })], {
 				stopReason: "toolUse",
 			});
 			if (last?.role === "toolResult" && last.toolName !== "tool_search") {
-				if (last.toolName === "message_user") return fauxAssistantMessage("done");
+				if (last.toolName === "message_user" || last.toolName === "react") return fauxAssistantMessage("done");
 
 				return react;
 			}

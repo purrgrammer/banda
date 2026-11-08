@@ -1,6 +1,6 @@
 /**
  * Turn (DESIGN.md "Flows"): a task per input, which submits it and waits for its run to settle. The run's final text is
- * its notes, never sent: an agent speaks with `message_user`, whose messages a Message task delivers at least once and
+ * its notes, never sent: an agent speaks with its speaking tools (`message_user`, `ask_user`, `react`, …), whose messages a Message task delivers at least once and
  * in order per origin.
  */
 import type { Context } from "@earendil-works/chord";
@@ -49,14 +49,20 @@ import {
 	type AgentMessaging,
 	type Asking,
 	askOwner,
+	askUserTool,
+	connectTool,
 	type Delivered,
 	type EffectTool,
 	effect,
 	groupMessageTool,
 	messageAgentTool,
 	messageTool,
+	proposeAvatarTool,
+	publishTool,
+	reactTool,
 	readAgentChatTool,
 	type Sending,
+	type Speaking,
 } from "./ask.ts";
 import { type Attachment, attachmentLine, type BlobStore, hold } from "./blobs.ts";
 import { DEFAULT_NAME } from "./choices.ts";
@@ -84,7 +90,7 @@ import { defineRoutines, Routines, troubleIn, WAKE, type WakeData } from "./rout
 import { skillTokens } from "./skill-tokens.ts";
 import { acceptedSkills, ownerSkillEntry, type Skill } from "./skills.ts";
 import { context } from "./store.ts";
-import { GROUP_TOOLS, MESSAGE_USER } from "./toolsets.ts";
+import { GROUP_TOOLS, isMessageTool, messageArgs } from "./toolsets.ts";
 import { type Row, unanswered } from "./unanswered.ts";
 import {
 	type Answer,
@@ -134,7 +140,7 @@ export const NUDGES = 1;
 /** The nudge's words: fixed, the same whoever the companion is. */
 export const NUDGED =
 	"You ended your turn without answering the owner: your final text is your notes, which they never see. Answer " +
-	"them now with `message_user`, or, if nothing needs saying, react with its `reaction`. This reminder is automatic, not from the owner.";
+	"them now with `message_user`, or, if nothing needs saying, with `react`. This reminder is automatic, not from the owner.";
 
 /** Whether an input of `kind` goes on with the task before it, rather than starting one: a nudge. */
 export const goesOn = (kind: string | undefined) => kind === NUDGE;
@@ -595,8 +601,8 @@ const speaking: PromptSection = {
 	render: () =>
 		[
 			"You work for the owner, the person who set you up. The band is all of the owner's agents, you among them.",
-			"The owner sees only what you send with `message_user`. Everything else you write, a run's final text included, is your working notes: kept, never sent.",
-			"When the owner wrote to you or answered you, end only once you have answered with `message_user`: words, a file, a question, or a `reaction` when nothing needs saying. A turn that ends without it is sent back to you.",
+			"The owner sees only what you send them: words and files with `message_user`, a question with `ask_user`, an emoji with `react`, a document with `publish`. Everything else you write, a run's final text included, is your working notes: kept, never sent.",
+			"When the owner wrote to you or answered you, end only once you have answered them: words, a question, or a reaction when nothing needs saying. A turn that ends without it is sent back to you.",
 			"In a routine's run, send what is worth the owner's attention, and nothing when nothing is.",
 			"Say a thing once; once it is said, end your turn with a reply that calls no tool.",
 			"Do the work now rather than saying you will. On the third similar ask, offer a routine.",
@@ -1408,7 +1414,7 @@ export function defineCore(options: CoreOptions) {
 				for (const entry of page.items) {
 					scanned++;
 					const message = entry.model?.[0];
-					if (message?.role === "toolResult" && message.toolName === MESSAGE_USER && message.isError)
+					if (message?.role === "toolResult" && isMessageTool(message.toolName) && message.isError)
 						failedCalls.add(message.toolCallId);
 					if (message?.role !== "user" && message?.role !== "assistant") continue;
 					if (message.role === "user") {
@@ -1417,8 +1423,12 @@ export function defineCore(options: CoreOptions) {
 						selected.push({ entry: Number(entry.id), author: "owner", text: data.said ?? modelText(message.content) });
 					} else {
 						for (const block of message.content) {
-							if (block.type !== "toolCall" || block.name !== MESSAGE_USER || failedCalls.has(block.id)) continue;
-							const args = block.arguments as { text?: unknown; question?: unknown; files?: unknown };
+							if (block.type !== "toolCall" || !isMessageTool(block.name) || failedCalls.has(block.id)) continue;
+							const args = messageArgs(block.name, block.arguments) as {
+								text?: unknown;
+								question?: unknown;
+								files?: unknown;
+							};
 							const visible =
 								typeof args.text === "string" && args.text.trim() !== ""
 									? args.text
@@ -1562,12 +1572,26 @@ export function defineCore(options: CoreOptions) {
 		}
 	}
 
+	const speakingWith: Speaking = {
+		asking,
+		sending,
+		blobs: options.blobs,
+		limit: options.maxFileBytes ?? 50 * 1024 * 1024,
+		// a group member's chat speaks in its room
+		venue: async (api, ctx) =>
+			(await api.snapshot(Groups, ctx))?.byExecution[Number(api.conversationId)] === undefined ? "owner" : "group",
+	};
 	const extension = defineExtension({
 		name: "banda.core",
 		tasks: [Admit, Turn, Message, Wait, Settle, RefreshAgent, RefreshTools, routines.Routine, groups.GroupTurn],
 		sections: [speaking, groupSection],
 		tools: [
-			messageTool(asking, sending, options.blobs, options.maxFileBytes ?? 50 * 1024 * 1024),
+			messageTool(speakingWith),
+			askUserTool(speakingWith),
+			reactTool(speakingWith),
+			publishTool(speakingWith),
+			connectTool(speakingWith),
+			proposeAvatarTool(speakingWith),
 			messageAgentTool(messageAgent),
 			readAgentChatTool(readAgentChat),
 			...proposalTools(makeProposal),
@@ -1581,7 +1605,7 @@ export function defineCore(options: CoreOptions) {
 	 */
 	const groupExtension = defineExtension({
 		name: GROUP_TOOLS,
-		tools: [groupMessageTool(asking, sending, options.blobs, options.maxFileBytes ?? 50 * 1024 * 1024)],
+		tools: [groupMessageTool(speakingWith)],
 		wraps: [wrapSection(speaking.key, (section) => ({ ...section, render: () => undefined }))],
 	});
 	return {

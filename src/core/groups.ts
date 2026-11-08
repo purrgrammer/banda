@@ -51,8 +51,8 @@ export const GROUP_NUDGES = 1;
 /** The nudge's words: fixed, the same whoever the member is. */
 export const GROUP_NUDGED =
 	"You ended your turn without posting to the group: your final text is your notes, which nobody in the room sees. " +
-	"Answer there now with `message_group`, or, if nothing needs saying, react to the owner's message with its " +
-	"`reaction`. This reminder is automatic, not from the owner.";
+	"Answer there now with `message_group`, or, if nothing needs saying, `react` to the owner's message. This " +
+	"reminder is automatic, not from the owner.";
 
 /** What the daemon says in a room when a member's run there ended without its answer: failed, or stopped. */
 export const GROUP_NOTICE = "banda.group-notice";
@@ -347,10 +347,10 @@ export const groupSection: PromptSection = {
 					: " You ask another member to work by naming it in `message_group`'s `ask`: only when its work is " +
 						"needed, as how far agents ask each other is limited. ") +
 				"`message_group` posts to the group, where the owner and every member read it: answer there, briefly, " +
-				"and only for yourself; `files` go to the group too, and a `question` is asked there, of the owner. " +
+				"and only for yourself; `files` go to the group too, and `ask_user` asks the owner there. " +
 				"Your final text is your notes: nobody in the room reads it, so what the owner asked you is answered " +
-				"with `message_group`. Say a thing once: what you or another member already said in the room is not " +
-				"said again; when you have nothing new, react to the owner's message with its `reaction`, or, when " +
+				"in the room. Say a thing once: what you or another member already said in the room is not " +
+				"said again; when you have nothing new, `react` to the owner's message, or, when " +
 				"another member asked you, end your turn with a reply that calls no tool.",
 		].join("\n");
 	},

@@ -43,10 +43,19 @@ const items: Item[] = [
 		text: "",
 		at: 1,
 		calls: [
-			{ id: "c1", name: "message_user", args: { text: "Here it is.", artifact: { path: "plan.md", title: "Trip" } } },
+			{ id: "m1", name: "message_user", args: { text: "Here it is." } },
+			{ id: "c1", name: "publish", args: { path: "plan.md", title: "Trip" } },
 		],
 	},
-	{ id: 3, role: "tool", call: "c1", name: "message_user", text: "Sent.", error: false, at: 1 },
+	{
+		id: 3,
+		role: "tool",
+		call: "c1",
+		name: "publish",
+		text: "Published as version 1; its id is a1.",
+		error: false,
+		at: 1,
+	},
 	{ id: 4, role: "user", text: "Edited “Lisbon trip plan” (v2)", at: 2, artifact: { id: "a1", n: 2 } },
 ];
 
@@ -70,6 +79,41 @@ describe("artifacts in the app", () => {
 		expect(elsewhere[2]).toMatchObject({ title: "Trip" });
 		expect(elsewhere[2]).not.toHaveProperty("id");
 		expect(view(items, [], live)[2]).not.toHaveProperty("id");
+	});
+
+	it("a message showing an artifact again draws its card at the version its receipt names, and none once removed", () => {
+		const again: Item[] = [
+			{ id: 1, role: "user", text: "the plan again?", at: 1 },
+			{
+				id: 2,
+				role: "assistant",
+				text: "",
+				at: 1,
+				calls: [{ id: "s1", name: "message_user", args: { text: "Here it is.", artifacts: ["a1"] } }],
+			},
+			{
+				id: 3,
+				role: "tool",
+				call: "s1",
+				name: "message_user",
+				text: "Sent.",
+				error: false,
+				at: 1,
+				receipt: { kind: "artifacts", artifacts: [{ id: "a1", n: 1 }] },
+			},
+		];
+		const segments = view(again, [], live, { artifacts: { chat: 3, library } });
+		expect(segments.map((segment) => segment.kind)).toEqual(["owner-message", "companion", "artifact"]);
+		// the version it showed, though the Library's newest is 2
+		expect(segments[2]).toMatchObject({ by: "companion", id: "a1", n: 1, title: "Lisbon trip plan", shown: true });
+		const removed = view(again, [], live, { artifacts: { chat: 3, library: [] } })[2];
+		expect(removed).toMatchObject({ kind: "artifact", removed: true });
+		expect(removed).not.toHaveProperty("id");
+		// not sent: no card
+		const refused = again.map((item) => (item.role === "tool" ? { ...item, error: true } : item));
+		expect(view(refused, [], live, { artifacts: { chat: 3, library } }).map((segment) => segment.kind)).not.toContain(
+			"artifact",
+		);
 	});
 
 	it("the owner's card is matched to its version by the entry's {id, n}, never by its words", () => {

@@ -61,10 +61,9 @@ describe("groups", () => {
 			// reads every message since it last worked, an earlier FAIL ME among them)
 			// publishing to the Library from the room (first, like a file: a turn reads every message since it last worked)
 			if (text.includes("PUBLISH IT"))
-				return fauxAssistantMessage(
-					[fauxToolCall("message_group", { artifact: { path: "draft.md", title: "Launch post" } })],
-					{ stopReason: "toolUse" },
-				);
+				return fauxAssistantMessage([fauxToolCall("publish", { path: "draft.md", title: "Launch post" })], {
+					stopReason: "toolUse",
+				});
 			const path = /"path":"([^"]+notes\.txt)"/.exec(text)?.[1];
 			if (path !== undefined)
 				return fauxAssistantMessage([fauxToolCall("message_group", { text: "Read it.", files: [path] })], {

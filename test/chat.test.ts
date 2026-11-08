@@ -127,7 +127,8 @@ describe("the chat, derived", () => {
 		const items: Item[] = [
 			user(1, "drink?"),
 			said(2, [
-				{ id: "q1", name: "message_user", args: { text: "Let me ask.", question: ask.question, options: ask.options } },
+				{ id: "m1", name: "message_user", args: { text: "Let me ask." } },
+				{ id: "q1", name: "ask_user", args: { question: ask.question, options: ask.options } },
 			]),
 		];
 		const open: ShownWait = { key: "k2345678ab", chat: 1, ask, deadline: 9, call: "q1" };
@@ -147,7 +148,7 @@ describe("the chat, derived", () => {
 		const form = { type: "question" as const, question: "Where?", fields: [{ name: "days", type: "number" as const }] };
 		const filled = view(
 			[
-				said(1, [{ id: "f", name: "message_user", args: { question: "Where?" } }]),
+				said(1, [{ id: "f", name: "ask_user", args: { question: "Where?" } }]),
 				{ id: 2, role: "wait", ask: form, call: "f", outcome: "answered", answer: { days: 3, public: true }, at: 1 },
 			],
 			[],
@@ -160,7 +161,7 @@ describe("the chat, derived", () => {
 		const ask = { type: "question" as const, question: "What matters most?", options: ["time", "cost"] };
 		const items: Item[] = [
 			user(1, "Help me choose"),
-			said(2, [{ id: "q1", name: "message_user", args: { question: ask.question, options: ask.options } }]),
+			said(2, [{ id: "q1", name: "ask_user", args: { question: ask.question, options: ask.options } }]),
 			{ id: 3, role: "wait", ask, call: "q1", outcome: "answered", answer: "A relaxed trip", message: "m1", at: 4 },
 		];
 		const segments = view(items, [], IDLE);

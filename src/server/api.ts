@@ -68,6 +68,8 @@ export type Receipt =
 			/** The owner's input this pre-request load belongs to; absent for an agent's own load. */
 			readonly invocation?: { readonly gateway: string; readonly message: string };
 	  }
+	/** Artifacts a message showed again, each at the version current when it was sent. */
+	| { readonly kind: "artifacts"; readonly artifacts: readonly { readonly id: string; readonly n: number }[] }
 	/** A `schedule` call's file: the routine, its hash, and whether it made, changed or kept one. */
 	| {
 			readonly kind: "routine";

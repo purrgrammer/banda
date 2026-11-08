@@ -69,7 +69,7 @@ describe("Try again", () => {
 				id: 2,
 				role: "assistant",
 				text: "",
-				calls: [{ id: "q1", name: "message_user", args: { question: "Which day?" } }],
+				calls: [{ id: "q1", name: "ask_user", args: { question: "Which day?" } }],
 			},
 			{ id: 3, role: "wait", ask, call: "q1", outcome: "answered", answer: "Friday", message: "m1", at: 4 },
 		];

@@ -7,9 +7,32 @@ import {
 	type ToolRegistration,
 } from "@earendil-works/pi-durable";
 import { createToolSearchExtension, TOOL_SEARCH_TOOL_NAME } from "@earendil-works/pi-durable/tool-search";
-import { MESSAGE_GROUP, MESSAGE_USER, TOOLSETS } from "./toolsets.ts";
+import {
+	ASK_USER,
+	CONNECT,
+	MESSAGE_GROUP,
+	MESSAGE_USER,
+	PROPOSE_AVATAR,
+	PUBLISH,
+	REACT,
+	TOOLSETS,
+} from "./toolsets.ts";
 
-const CORE = new Set([MESSAGE_USER, MESSAGE_GROUP, TOOL_SEARCH_TOOL_NAME, "read", "write", "edit", "bash"]);
+const CORE = new Set([
+	MESSAGE_USER,
+	MESSAGE_GROUP,
+	ASK_USER,
+	REACT,
+	PUBLISH,
+	TOOL_SEARCH_TOOL_NAME,
+	"read",
+	"write",
+	"edit",
+	"bash",
+]);
+
+/** The rarer speaking tools, loaded on demand, by the group search finds them in. */
+const SPEAKING_GROUPS: { readonly [name: string]: string } = { [CONNECT]: "connections", [PROPOSE_AVATAR]: "avatar" };
 
 /** Apply the same exposure policy to startup extensions and later connection registrations. */
 export function deferredTools(extension: Extension): Extension {
@@ -22,6 +45,8 @@ export function deferredTools(extension: Extension): Extension {
 
 function namespace(name: string): string {
 	if (name.includes("__")) return name.slice(0, name.indexOf("__"));
+	const speaking = SPEAKING_GROUPS[name];
+	if (speaking !== undefined) return speaking;
 	for (const [label, tools] of Object.entries(TOOLSETS)) if (tools.includes(name)) return label;
 	return "other";
 }

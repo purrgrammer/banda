@@ -91,8 +91,8 @@ export async function chatReadScenario(home: string, faults: Faults, replies: re
 							...replies.map((reply) => fauxToolCall("message_user", argsOf(reply))),
 							fauxToolCall("bash", { command: "private work" }),
 							fauxToolCall("message_user", {}),
-							fauxToolCall("message_user", { reaction: "invalid" }, { id: "refused-reaction" }),
-							fauxToolCall("message_user", { question: "Not delivered?" }, { id: "refused-question" }),
+							fauxToolCall("react", { reaction: "invalid" }, { id: "refused-reaction" }),
+							fauxToolCall("ask_user", { question: "Not delivered?" }, { id: "refused-question" }),
 						]),
 					],
 				});

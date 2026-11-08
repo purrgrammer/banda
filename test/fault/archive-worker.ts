@@ -47,7 +47,7 @@ const respond = async (request: { messages: readonly { role: string }[] }) => {
 	}, context);
 	void stopArchived(harness).catch(() => undefined);
 	if (request.messages.at(-1)?.role === "user")
-		return fauxAssistantMessage([fauxToolCall("message_user", { reaction: "👍" })], { stopReason: "toolUse" });
+		return fauxAssistantMessage([fauxToolCall("react", { reaction: "👍" })], { stopReason: "toolUse" });
 	return fauxAssistantMessage("done");
 };
 faux.setResponses(Array.from({ length: 500 }, () => respond as never));

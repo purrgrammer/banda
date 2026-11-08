@@ -62,7 +62,7 @@ import { status } from "./core/status.ts";
 import { context, openStore } from "./core/store.ts";
 import { timeThinking } from "./core/timing.ts";
 import { toolDiscoveryExtension, toolRegistry, toolSearchExtension } from "./core/tool-discovery.ts";
-import { MESSAGE_GROUP, MESSAGE_USER } from "./core/toolsets.ts";
+import { isMessageTool } from "./core/toolsets.ts";
 import { defineCore, Routes, stop as stopChat, type TurnResult } from "./core/turn.ts";
 import { answer, dismissQuestion, revive } from "./core/wait.ts";
 import { CliGateway } from "./gateways/cli.ts";
@@ -504,12 +504,12 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		const workspace: Workspace = {
 			env: () => agentBox.env(),
 			root: agentBox.workspace,
-			// message_user comes with every agent, so a file need not name it; message_group with every group, so none may
+			// the speaking tools come with every chat, so a file need not name them; message_group with every group, so none may
 			tools: () =>
 				registry
 					.snapshot()
 					.tools()
-					.flatMap(({ tool }) => (tool.name === MESSAGE_USER || tool.name === MESSAGE_GROUP ? [] : [tool.name])),
+					.flatMap(({ tool }) => (isMessageTool(tool.name) ? [] : [tool.name])),
 			known: (model) => models.getModel(model.provider, model.modelId) !== undefined,
 		};
 		let capabilitiesChanged = () => {};
