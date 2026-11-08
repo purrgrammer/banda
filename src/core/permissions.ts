@@ -13,8 +13,10 @@
  *
  * Which scopes an ask offers is the daemon's to say (`offeredScopes`), each worded as its consequence, the task's
  * first: none on the floor, none for an interrupted run, none in a chat that read foreign content (its sends ask
- * whatever was allowed); an answer giving a scope that was not offered is refused. One exception, the owner's to take:
- * a held request offers its host (`host`), a permission for anything sent there, always, which holds even in a chat
+ * whatever was allowed); an answer giving a scope that was not offered is refused. Trust is earned from the owner's
+ * answers (`Earned`): after three clean approvals of one write in one place, the scope offered is that place's alone,
+ * given as a permission at its grain, always, and a chat that read foreign content is offered that too. One exception,
+ * the owner's to take: a held request offers its host (`host`), a permission for anything sent there, always, which holds even in a chat
  * that read foreign content. It binds a second shape the tool declares, never a wider value of the first.
  */
 import type { Context } from "@earendil-works/chord";
@@ -46,7 +48,9 @@ export type PermissionScope =
 	| { readonly scope: "task" }
 	| { readonly scope: "until"; readonly until: number }
 	| { readonly scope: "always" }
-	| { readonly scope: "host" };
+	| { readonly scope: "host" }
+	/** Always, at the place's grain the ask offers: stored as an "always" permission of grain "place". */
+	| { readonly scope: "place" };
 
 /** The task a chat works on: the chat and the input it is answering. */
 export type Errand = { readonly chat: number; readonly input: number };
@@ -70,9 +74,9 @@ export type Serves =
 
 /**
  * A scope an ask offers: "hour" and "today" are windows, timed when the owner answers; "host" is always, over the ask's
- * host shape, for the chats of the agent that asked.
+ * host shape, for the chats of the agent that asked; "place" is always, over the ask's place, once earned.
  */
-export type ScopeKind = "task" | "hour" | "today" | "always" | "host";
+export type ScopeKind = "place" | "task" | "hour" | "today" | "always" | "host";
 
 /**
  * A scope an ask offers, and what it would let happen, in words: "Send messages to ana without asking until …"; a
@@ -86,7 +90,7 @@ export type Permission = {
 	/** The effects it covers, in the daemon's words: "send an email to ana@example.com". */
 	readonly what: string;
 	/** "host": always, but only the chats of its agent. */
-	readonly scope: PermissionScope["scope"];
+	readonly scope: StoredScope;
 	readonly until?: number;
 	readonly task?: Errand;
 	/** The task it was given in, whatever its scope: what it serves. */
@@ -101,6 +105,9 @@ export type Permission = {
 	readonly at: number;
 	readonly wait: number;
 };
+
+/** A scope as a permission stores it: one given at a place is always, its grain saying the rest. */
+export type StoredScope = Exclude<PermissionScope["scope"], "place">;
 
 type PermissionsValue = { permissions: { [id: string]: Permission }; next: number };
 
@@ -306,13 +313,13 @@ export async function countSent(tx: Tx, agent: string, host: string, at: number)
 }
 
 /**
- * The scopes an ask may offer, in order: the task's first, the primary choice; a host's last, only with a host shape.
- * "This once" is no scope, always offered.
+ * The scopes an ask may offer, in order: an earned place's alone, when earned; else the task's first, the primary
+ * choice; a host's last, only with a host shape. "This once" is no scope, always offered.
  */
-export const SCOPE_KINDS: readonly ScopeKind[] = ["task", "hour", "today", "always", "host"];
+export const SCOPE_KINDS: readonly ScopeKind[] = ["place", "task", "hour", "today", "always", "host"];
 
 /** How long each scope lasts, as the end of a sentence. */
-const LASTS: { readonly [kind in ScopeKind]: string } = {
+const LASTS: { readonly [kind in Exclude<ScopeKind, "place">]: string } = {
 	task: "until this task is done",
 	hour: "for the next hour",
 	today: "until midnight",
@@ -324,48 +331,157 @@ const LASTS: { readonly [kind in ScopeKind]: string } = {
 };
 
 /** What a permission of `kind` for effects `what` lets happen: "Send messages to ana without asking until …". */
-export function scopeWords(what: string, kind: ScopeKind): string {
+export function scopeWords(what: string, kind: Exclude<ScopeKind, "place">): string {
 	return `${what.charAt(0).toUpperCase()}${what.slice(1)} without asking ${LASTS[kind]}`;
 }
 
+/** Words that start with a verb, as they read after "before": "merge …" is "merging …", "comment on" "commenting on". */
+function gerund(words: string): string {
+	const space = words.indexOf(" ");
+	const verb = space === -1 ? words : words.slice(0, space);
+	const rest = space === -1 ? "" : words.slice(space);
+	const lower = verb.toLowerCase();
+	const ing = lower.endsWith("ie")
+		? `${verb.slice(0, -2)}ying`
+		: /[^aeiouy]e$/.test(lower)
+			? `${verb.slice(0, -1)}ing`
+			: // one short syllable ending consonant, vowel, consonant doubles its last: "tag", "tagging"
+				/^[^aeiou]*[aeiou][^aeiouwxy]$/.test(lower)
+				? `${verb}${verb.slice(-1)}ing`
+				: `${verb}ing`;
+	return `${ing}${rest}`;
+}
+
 /**
- * What decides the scopes an approval offers: its floor, its shape (and its host shape), and a restart.
+ * An earned place's row, as its consequence: "Don't ask again before merging pull requests in purrgrammer/banda",
+ * from its grain's words with the place filled.
+ */
+export const placeWords = (words: string) => `Don't ask again before ${gerund(words)}`;
+
+/**
+ * Where a write acts, as a permission at its place's grain would bind it: the account and the place's arguments, the
+ * permission's words ("merge pull requests in purrgrammer/banda as @bandarra"), and the grain's alone.
+ */
+export type PlaceShape = PermissionShape & {
+	readonly words: string;
+	/** Three clean approvals there (`Earned`): it is offered. */
+	readonly earned?: true;
+};
+
+/** How many approvals of one place, each unedited and none declined between, earn it. */
+export const EARN_AFTER = 3;
+/** How many places a streak is kept for: the least recently answered goes first. */
+const MAX_STREAKS = 500;
+
+/**
+ * The owner's answers to one agent's write in one place as one account, by `streakKey`: how many approvals in a row,
+ * as drafted, since the last decline, and when the last counted. An ask a permission answered never counts.
+ */
+export const Earned = defineDoc<{ streaks: { [key: string]: { count: number; at: number } } }>({
+	kind: "banda.earned",
+	version: 1,
+	scope: "session",
+	initial: () => ({ streaks: {} }),
+	checkpointWhen: (_value, _ops, info) => info.deltasSinceBase >= 64,
+});
+
+/** An agent's tool in one place: the place's match holds the account and the place's arguments. */
+const streakKey = (agent: string, tool: string, place: JsonObject) => `${agent}|${tool}|${canonical(place)}`;
+
+/** Whether `agent`'s `tool` has earned `place`. Reads only. */
+export async function isEarned(tx: Tx, agent: string, tool: string, place: JsonObject): Promise<boolean> {
+	return ((await tx.doc(Earned)).streaks[streakKey(agent, tool, place)]?.count ?? 0) >= EARN_AFTER;
+}
+
+/**
+ * Count the owner's answer to an ask of `agent`'s `tool` in `place`, in the commit that records it: an approval as
+ * drafted adds one, a decline starts again, an edited approval changes nothing.
+ */
+export async function countAnswer(
+	tx: Tx,
+	{
+		agent,
+		tool,
+		place,
+		answer,
+		now,
+	}: {
+		agent: string;
+		tool: string;
+		place: JsonObject;
+		answer: "approved" | "edited" | "declined";
+		now: number;
+	},
+): Promise<void> {
+	if (answer === "edited") return;
+	const doc = await tx.doc(Earned);
+	const key = streakKey(agent, tool, place);
+	if (answer === "declined") {
+		if (doc.streaks[key] !== undefined) delete doc.streaks[key];
+		return;
+	}
+	doc.streaks[key] = { count: Math.min(EARN_AFTER, (doc.streaks[key]?.count ?? 0) + 1), at: now };
+	const keys = Object.keys(doc.streaks);
+	if (keys.length <= MAX_STREAKS) return;
+	keys.sort((a, b) => (doc.streaks[a]?.at ?? 0) - (doc.streaks[b]?.at ?? 0));
+	for (const gone of keys.slice(0, keys.length - MAX_STREAKS)) delete doc.streaks[gone];
+}
+
+/**
+ * What decides the scopes an approval offers: its floor, its shape (and its host shape, its place), what its chat
+ * read, and a restart.
  */
 export type Offering = {
 	readonly floor?: Floor | undefined;
 	readonly permission?: PermissionShape | undefined;
 	/** What a permission for anything sent to the draft's host would cover: a held request's alone. */
 	readonly host?: (PermissionShape & { readonly host: string }) | undefined;
+	/** Where it acts, at its place's grain: a connection's write that declares one. */
+	readonly place?: PlaceShape | undefined;
+	/** Its chat read foreign content before it asked: only an earned place, or a host, is offered. */
+	readonly foreign?: boolean | undefined;
 	readonly interrupted?: boolean | undefined;
 };
 
 /**
  * The scopes an approval offers, in order, each in words: none on the floor, none without a shape, none for a run a
- * restart interrupted (it runs again once, as it was); the host's only with a host shape.
+ * restart interrupted (it runs again once, as it was); an earned place's alone; the host's only with a host shape; in
+ * a chat that read foreign content, nothing else. Never the action anywhere: that is granted from Access alone.
  */
 export function offeredScopes(ask: Offering): OfferedScope[] {
 	if (ask.floor !== undefined || ask.permission === undefined || ask.interrupted === true) return [];
+	if (ask.place?.earned === true) return [{ scope: "place", words: placeWords(ask.place.words) }];
 	const { what } = ask.permission;
 	const host =
 		ask.host === undefined
 			? []
 			: [{ scope: "host" as const, words: scopeWords(ask.host.what, "host"), host: ask.host.host }];
+	if (ask.foreign === true) return host;
 	const lasts = ask.permission.lasts;
 	return [
-		...SCOPE_KINDS.filter((scope) => scope !== "host" && (lasts === undefined || lasts.includes(scope))).map(
-			(scope) => ({ scope, words: scopeWords(what, scope) }),
-		),
+		...SCOPE_KINDS.filter(
+			(scope): scope is Exclude<ScopeKind, "place" | "host"> =>
+				scope !== "place" && scope !== "host" && (lasts === undefined || lasts.includes(scope)),
+		).map((scope) => ({ scope, words: scopeWords(what, scope) })),
 		...host,
 	];
 }
 
-/** The shape a permission of `scope` binds for an ask: its host shape for a host's, else its own. */
+/** The shape a permission of `scope` binds for an ask: its host's, its place's, or else its own. */
 export const shapeFor = (scope: PermissionScope, ask: Offering): PermissionShape | undefined =>
 	scope.scope === "host"
 		? ask.host === undefined
 			? undefined
 			: { match: ask.host.match, what: ask.host.what }
-		: ask.permission;
+		: scope.scope === "place"
+			? ask.place === undefined
+				? undefined
+				: { match: ask.place.match, what: ask.place.what }
+			: ask.permission;
+
+/** How a permission given with `scope` is stored: a place's is always, at the place's grain. */
+export const storedScope = (scope: PermissionScope): Exclude<PermissionScope, { scope: "place" }> =>
+	scope.scope === "place" ? { scope: "always" } : scope;
 
 /** The offered scopes that `scope`, as an answer gives it, may be: a window is an hour's or today's. */
 export const kindsOf = (scope: PermissionScope): readonly ScopeKind[] =>
@@ -423,30 +539,34 @@ export async function give(
 		if (permission.scope === "until" && !isOpen(permission, now)) delete doc.permissions[id];
 	const id = String(doc.next);
 	doc.next += 1;
+	const stored = storedScope(scope);
 	doc.permissions[id] = {
 		tool,
 		match: JSON.parse(JSON.stringify(shape.match)) as JsonObject,
 		what: shape.what,
-		scope: scope.scope,
-		...(scope.scope === "until" ? { until: scope.until } : {}),
-		...(scope.scope === "task" ? { task: { ...errand } } : {}),
+		scope: stored.scope,
+		...(stored.scope === "until" ? { until: stored.until } : {}),
+		...(stored.scope === "task" ? { task: { ...errand } } : {}),
 		...(errand.input === 0 ? {} : { from: { ...errand } }),
 		...(agent === undefined ? {} : { agent }),
+		...(scope.scope === "place" ? { grain: "place" as const } : {}),
 		at: now,
 		wait,
 	};
-	// a host's words name the agent it is for: "Ledger may send anything to github.com"
+	// a host's words name the agent it is for: "Ledger may send anything to github.com"; a place's, as Access says it
 	const said =
 		scope.scope === "host"
-			? `You said ${shape.what}, ${permissionWhen(scope)}`
-			: `You allowed ${shape.what}, ${permissionWhen(scope)}`;
+			? `You said ${shape.what}, ${permissionWhen(stored)}`
+			: scope.scope === "place" && agent !== undefined
+				? `You allowed ${await agentWords(tx, agent)} to ${shape.what}, ${permissionWhen(stored)}`
+				: `You allowed ${shape.what}, ${permissionWhen(stored)}`;
 	await log(tx, { at: now, what: said });
 	return id;
 }
 
 /** For how long, in the daemon's words: the time in its own zone, which is the owner's machine's. */
 export const permissionWhen = (scope: PermissionScope | Pick<Permission, "scope" | "until">) =>
-	scope.scope === "always" || scope.scope === "host"
+	scope.scope === "always" || scope.scope === "host" || scope.scope === "place"
 		? "always"
 		: scope.scope === "task"
 			? "for this task"

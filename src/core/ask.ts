@@ -20,6 +20,7 @@ import { log } from "./activity.ts";
 import { type Attachment, attachmentLine, type BlobStore, safeName, sizeOf, tooBig } from "./blobs.ts";
 import { oneEmoji } from "./choices.ts";
 import { mimeOf } from "./gateway.ts";
+import { withPlace } from "./grains.ts";
 import { MESSAGE_PARTS } from "./parts/index.ts";
 import type { MessagePart } from "./parts/part.ts";
 import {
@@ -718,8 +719,9 @@ export function effect<P extends TSchema>(asking: Asking, tool: EffectTool<P>): 
 				const permitted = await withinPermission(api, 1, draft, ctx);
 				if (permitted !== undefined && "refused" in permitted) return notAllowed(permitted.refused);
 				if (permitted !== undefined) return run(draft.args, permitted);
-				// the ask names its task and offers the scopes the daemon allows
-				const asked = await api.commit((tx) => offering(tx, Number(api.conversationId), draft), ctx);
+				// the ask names its task and the place it acts in, and offers the scopes the daemon allows
+				const chat = Number(api.conversationId);
+				const asked = await api.commit(async (tx) => offering(tx, chat, await withPlace(tx, chat, draft)), ctx);
 				const answer = await approved(api, "approval", asked, ctx);
 				if (typeof answer === "string") return text(`${tool.name} did not run: ${answer}.`, true);
 				const final = answer.draft ?? draft.args;

@@ -453,7 +453,8 @@ export function handler(
 			const scope = permissionOf(permission);
 			if (scope === null)
 				return reply(res, 400, {
-					error: 'permission is {scope: "task"}, {scope: "until", until: <ms>}, {scope: "always"} or {scope: "host"}',
+					error:
+						'permission is {scope: "task"}, {scope: "until", until: <ms>}, {scope: "always"}, {scope: "host"} or {scope: "place"}',
 				});
 			const approving: Approving = {
 				...(edits === undefined ? {} : { edits: edits as { [arg: string]: string } }),
@@ -1192,7 +1193,7 @@ function filePreview(file: Omit<FilePreview, "preview">, bytes: Uint8Array, whol
 function permissionOf(value: unknown): PermissionScope | undefined | null {
 	if (value === undefined) return undefined;
 	const { scope, until } = (value ?? {}) as { scope?: unknown; until?: unknown };
-	if (scope === "task" || scope === "always" || scope === "host") return { scope };
+	if (scope === "task" || scope === "always" || scope === "host" || scope === "place") return { scope };
 	if (scope === "until" && typeof until === "number" && Number.isSafeInteger(until)) return { scope, until };
 	return null;
 }

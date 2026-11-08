@@ -420,11 +420,59 @@ describe("the scopes an ask offers", () => {
 			{ scope: "always", words: "Send messages to ana without asking until you take it back in Permissions" },
 		]);
 		for (const kind of SCOPE_KINDS)
-			expect(scopeWords(shape.what, kind)).toMatch(/^Send messages to ana without asking /);
+			if (kind !== "place") expect(scopeWords(shape.what, kind)).toMatch(/^Send messages to ana without asking /);
 		expect(offeredScopes({ floor: "money" })).toEqual([]);
 		expect(offeredScopes({ floor: "private", permission: shape })).toEqual([]);
 		expect(offeredScopes({})).toEqual([]);
 		expect(offeredScopes({ permission: shape, interrupted: true })).toEqual([]);
+	});
+
+	it("an earned place alone, worded as what it covers; in a chat that read foreign content, nothing else", () => {
+		const merge = {
+			match: { account: "alice", owner: "acme", repo: "banda", pullNumber: 4 },
+			what: "merge acme/banda #4",
+		};
+		const place = {
+			match: { account: "alice", owner: "acme", repo: "banda" },
+			what: "merge pull requests in acme/banda as @alice",
+			words: "merge pull requests in acme/banda",
+		};
+		const offered = (ask: Parameters<typeof offeredScopes>[0]) => offeredScopes(ask).map((one) => one.scope);
+		expect(offered({ permission: merge, place })).toEqual(["task", "hour", "today", "always"]);
+		const earned = { ...place, earned: true } as const;
+		expect(offeredScopes({ permission: merge, place: earned })).toEqual([
+			{ scope: "place", words: "Don't ask again before merging pull requests in acme/banda" },
+		]);
+		expect(offered({ permission: merge, place: earned, foreign: true })).toEqual(["place"]);
+		expect(offered({ permission: merge, place, foreign: true })).toEqual([]);
+		expect(offered({ permission: merge, foreign: true })).toEqual([]);
+		expect(offered({ permission: merge, place: earned, interrupted: true })).toEqual([]);
+		expect(offered({ floor: "money", permission: merge, place: earned })).toEqual([]);
+		// the place's own words, filled from the connection's data: a comment's too
+		expect(
+			offeredScopes({
+				permission: merge,
+				place: { ...earned, words: "comment on pull requests and issues in acme/banda" },
+			})[0]?.words,
+		).toBe("Don't ask again before commenting on pull requests and issues in acme/banda");
+		// never the action anywhere, whatever the ask carries
+		for (const ask of [{ permission: merge, place }, { permission: merge, place: earned }, { permission: merge }])
+			expect(offeredScopes(ask).some((one) => /anywhere/.test(one.words))).toBe(false);
+		// given, the place's shape; refused where it was not offered
+		const now = Date.now();
+		expect(shapeFor({ scope: "place" }, { permission: merge, place: earned })).toEqual({
+			match: place.match,
+			what: place.what,
+		});
+		expect(refusal({ scope: "place" }, merge, undefined, now, offeredScopes({ permission: merge, place }))).toBe(
+			"that was not offered",
+		);
+		expect(
+			refusal({ scope: "always" }, merge, undefined, now, offeredScopes({ permission: merge, place: earned })),
+		).toBe("that was not offered");
+		expect(
+			refusal({ scope: "place" }, place, undefined, now, offeredScopes({ permission: merge, place: earned })),
+		).toBeUndefined();
 	});
 
 	it("a host shape adds the host's, last, and never on the floor or run again", () => {
@@ -545,7 +593,8 @@ describe("the scopes an ask offers", () => {
 							"today",
 							"always",
 						]);
-						for (const one of offered) if (one.scope !== "host") expect(one.words).toBe(scopeWords(what, one.scope));
+						for (const one of offered)
+							if (one.scope !== "host" && one.scope !== "place") expect(one.words).toBe(scopeWords(what, one.scope));
 						expect(offered[0]?.words.toLowerCase()).toContain(what.slice(1).toLowerCase());
 					}
 				},

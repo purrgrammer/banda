@@ -22,7 +22,7 @@ export function permissionWhen(
 	permission: { readonly scope: PermissionScope["scope"]; readonly until?: number },
 	now = Date.now(),
 ) {
-	if (permission.scope === "always" || permission.scope === "host") return "always";
+	if (permission.scope === "always" || permission.scope === "host" || permission.scope === "place") return "always";
 	if (permission.scope === "task") return "for this task";
 	return `until ${untilWords(permission.until ?? now, now)}`;
 }
@@ -32,7 +32,7 @@ export function lastsWords(
 	permission: { readonly scope: PermissionScope["scope"]; readonly until?: number },
 	now = Date.now(),
 ) {
-	if (permission.scope === "always") return "until you take it back";
+	if (permission.scope === "always" || permission.scope === "place") return "until you take it back";
 	if (permission.scope === "host")
 		return "from any of its chats, until you take it back; while your agents share one computer, any of them could use it";
 	if (permission.scope === "task") return "until this task is done";
@@ -47,6 +47,7 @@ export function endOfToday(now = Date.now()): number {
 
 /** Each scope's button. "This once" is no scope: every approval offers it. */
 export const SCOPE_BUTTONS: { readonly [kind in ScopeKind]: string } = {
+	place: "Always allow here",
 	task: "Allow for this task",
 	hour: "Allow for an hour",
 	today: "Allow for today",

@@ -18,6 +18,7 @@ import {
 import { type Origin, OWNER, type Strength } from "./gateway.ts";
 import {
 	agentOfChat,
+	countAnswer,
 	countRan,
 	covering,
 	type Errand,
@@ -31,8 +32,10 @@ import {
 	type Permission,
 	type PermissionScope,
 	type PermissionShape,
+	type PlaceShape,
 	refusal,
 	shapeFor,
+	storedScope,
 } from "./permissions.ts";
 import { context } from "./store.ts";
 
@@ -98,6 +101,13 @@ export type Ask =
 			 * floor): offered as "host", it holds for the chats of the agent that asked.
 			 */
 			readonly host?: PermissionShape & { readonly host: string };
+			/**
+			 * Where it acts, at its place's grain (a connection's write that declares one): what the owner's answers
+			 * earn, and once earned the one scope offered.
+			 */
+			readonly place?: PlaceShape;
+			/** Its chat read foreign content before it asked: no scope but an earned place, or a host, is offered. */
+			readonly foreign?: boolean;
 			/** The effect started before a restart and may have partly run: approving runs it again. */
 			readonly interrupted?: boolean;
 			/** The task it is for: related asks of one task show together. */
@@ -361,23 +371,39 @@ export async function fill(
 	if (slot.answer !== undefined || slot.dismissed === true) return { refused: "this ask was already answered" };
 	// reads first: a transaction reads tables only until its first write
 	const giving = permission !== undefined && ask.type === "approval" ? shapeFor(permission, ask) : undefined;
+	const place = ask.type === "approval" && ask.interrupted !== true ? ask.place : undefined;
 	const errand = giving === undefined ? { chat, input: 0 } : await errandOf(tx, chat);
-	const agent = giving === undefined ? undefined : await agentOfChat(tx, chat);
+	const agent = giving === undefined && place === undefined ? undefined : await agentOfChat(tx, chat);
 	const covered =
 		giving === undefined || permission === undefined || ask.type !== "approval"
 			? []
-			: await coveredAsks(tx, id, { tool: ask.tool, shape: giving, scope: permission, errand, agent }, now);
+			: await coveredAsks(
+					tx,
+					id,
+					{ tool: ask.tool, shape: giving, scope: storedScope(permission), errand, agent },
+					now,
+				);
 	slot.answer = normal.answer;
 	if (message !== undefined && ask.type === "question") slot.message = message;
 	slot.by = sender;
 	slot.at = now;
 	if (draft !== undefined) slot.draft = draft;
+	// trust is earned from the owner's own answers: this one, in the commit that records it
+	if (place !== undefined && agent !== undefined && ask.type === "approval")
+		await countAnswer(tx, {
+			agent,
+			tool: ask.tool,
+			place: place.match,
+			answer: normal.answer === "deny" ? "declined" : draft === undefined ? "approved" : "edited",
+			now,
+		});
 	if (giving !== undefined && permission !== undefined && ask.type === "approval") {
 		const given = await give(tx, { tool: ask.tool, shape: giving, scope: permission, wait: id, errand, agent, now });
+		const stored = storedScope(permission);
 		const permitted = {
 			id: given,
-			scope: permission.scope,
-			...(permission.scope === "until" ? { until: permission.until } : {}),
+			scope: stored.scope,
+			...(stored.scope === "until" ? { until: stored.until } : {}),
 		};
 		slot.permission = permitted;
 		await answerCovered(tx, covered, permitted, sender, now);
@@ -439,7 +465,13 @@ export async function dismissQuestion(
 export async function coveredAsks(
 	tx: Tx,
 	id: number,
-	given: { tool: string; shape: PermissionShape; scope: PermissionScope; errand: Errand; agent: string | undefined },
+	given: {
+		tool: string;
+		shape: PermissionShape;
+		scope: Exclude<PermissionScope, { scope: "place" }>;
+		errand: Errand;
+		agent: string | undefined;
+	},
 	now: number,
 ): Promise<number[]> {
 	const permission: Permission = {

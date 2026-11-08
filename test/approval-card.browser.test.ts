@@ -19,6 +19,17 @@ const ask = (title: string) => ({
 	args: { method: "update", owner: "purrgrammer", repo: "banda", title, account: "purrgrammer" },
 	scopes: [{ scope: "task", words: "Use GitHub's issue_write as @purrgrammer without asking until this task is done" }],
 });
+/** A merge in a place the owner approved three times: its one row is the place's. */
+const EARNED = "Don't ask again before merging pull requests in purrgrammer/banda";
+const earned = {
+	type: "approval",
+	tool: "github__merge_pull_request",
+	label: "Merge purrgrammer/banda #35 as @purrgrammer",
+	as: "@purrgrammer on GitHub",
+	verb: "Merge",
+	args: { owner: "purrgrammer", repo: "banda", pullNumber: 35, account: "purrgrammer" },
+	scopes: [{ scope: "place", words: EARNED }],
+};
 
 let server: ViteDevServer;
 let base = "";
@@ -53,9 +64,9 @@ beforeAll(async () => {
 					import { createRoot } from 'react-dom/client';
 					import { DraftApproval } from '/src/app/DraftApproval.tsx';
 					import '/src/styles/globals.css';
-					const asks = { first: ${JSON.stringify(ask("First"))}, next: ${JSON.stringify(ask("Next"))} };
+					const asks = { first: ${JSON.stringify(ask("First"))}, next: ${JSON.stringify(ask("Next"))}, earned: ${JSON.stringify(earned)} };
 					function Fixture() {
-					 const [wait, setWait] = useState('first');
+					 const [wait, setWait] = useState(location.search.includes('earned') ? 'earned' : 'first');
 					 return <main style={{maxWidth:700,margin:'auto',padding:16}}>
 					  <button onClick={() => setWait('next')}>Next ask</button>
 					  <DraftApproval chat={1} agent={{ id: 'sancho', name: 'Sancho' }} ask={asks[wait]} label={asks[wait].label} wait={wait} />
@@ -141,5 +152,30 @@ for (const width of [390, 1280])
 			});
 			expect(answers.map((one) => one.path)).toEqual(["/api/waits/first", "/api/waits/next"]);
 			expect(answers[1]?.body).not.toHaveProperty("permission");
+		},
+	);
+
+for (const width of [390, 1280])
+	it.skipIf(!hasChrome())(
+		`an earned place's row says what it covers, and ticked gives the place, at ${width}px`,
+		async () => {
+			answers = [];
+			await withPage(
+				`${base}/approval-card-fixture?earned#token=approval-test`,
+				{ width, height: 900 },
+				async (page) => {
+					await page.until(`document.querySelector('[role="checkbox"]')`);
+					expect(await page.run<string>(`document.querySelector('label').textContent`)).toBe(EARNED);
+					expect(await page.run(ticked)).toBe("false");
+					expect(await page.run(`document.documentElement.scrollWidth <= ${width}`)).toBe(true);
+					await page.run(`document.querySelector('[role="checkbox"]').click()`);
+					await page.until(`${ticked} === 'true'`);
+					await page.run(`${button("Merge")}.click()`);
+					await until(() => answers.length === 1);
+					expect(page.errors()).toEqual([]);
+				},
+			);
+			expect(answers[0]?.path).toBe("/api/waits/earned");
+			expect(answers[0]?.body).toMatchObject({ answer: "approve", type: "approval", permission: { scope: "place" } });
 		},
 	);

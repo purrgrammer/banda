@@ -242,6 +242,16 @@ export function Parts() {
 						as="@bandarra on GitHub"
 						state={{ kind: "done", words: "Merged · 10:52" }}
 					/>
+					<Group label="Earned: three merges approved here, the row is the place's" className="flex-col items-stretch">
+						<ApprovalCard
+							agent="Octo"
+							what="Merge purrgrammer/banda #35"
+							verb="Merge"
+							as="@bandarra on GitHub"
+							object={<PullRequestCard pr={{ ...PR, number: 35 }} />}
+							scope="Don't ask again before merging pull requests in purrgrammer/banda"
+						/>
+					</Group>
 					<ApprovalCard
 						agent="Mara"
 						what="Book TP 1351 for €214"

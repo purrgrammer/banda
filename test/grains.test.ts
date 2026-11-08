@@ -9,10 +9,10 @@ import { ActivityLog } from "../src/core/activity.ts";
 import { Accepted, AgentChats, shaOf } from "../src/core/agents.ts";
 import { OWNER } from "../src/core/gateway.ts";
 import { allowGrain, type GrainAsked } from "../src/core/grains.ts";
-import { covering, Permissions } from "../src/core/permissions.ts";
+import { covering, Permissions, revoke } from "../src/core/permissions.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context } from "../src/core/store.ts";
-import { answer } from "../src/core/wait.ts";
+import { type Approving, answer } from "../src/core/wait.ts";
 import { handler, type Routes } from "../src/server/http.ts";
 import { control } from "../src/server/routines.ts";
 import { openConnected, signInAsOwner } from "./fixtures/connected.ts";
@@ -24,7 +24,18 @@ afterEach(async () => {
 	for (const close of cleanup.splice(0).reverse()) await close();
 });
 
-type Merge = { readonly owner: string; readonly repo: string; readonly pullNumber: number; readonly account?: string };
+type Merge = {
+	readonly owner: string;
+	readonly repo: string;
+	readonly pullNumber?: number;
+	readonly account?: string;
+	/** Another write than a merge: `github__add_issue_comment`, with its `issue_number` and `body`. */
+	readonly tool?: string;
+	readonly issue_number?: number;
+	readonly body?: string;
+	/** The agent the owner writes to: Reader, unless said. */
+	readonly agent?: string;
+};
 
 /**
  * GitHub connected for agent Reader, as @alice and @bob (alice switched on for Reader, bob for nobody), with
@@ -36,11 +47,14 @@ async function setup() {
 	cleanup.push(() => fake.close());
 	const s = await openConnected({
 		home: await tempHome(),
-		respond: () => {
-			if (pending === undefined) return fauxAssistantMessage("done");
-			const merge = pending;
+		respond: (asked) => {
+			// only the owner's newest message is answered with the call: another chat's run may still be ending
+			const last = asked.messages.at(-1);
+			const theirs = last?.role === "user" && typeof last.content === "string" && last.content.startsWith("merge ");
+			if (pending === undefined || !theirs) return fauxAssistantMessage("done");
+			const { tool = "github__merge_pull_request", agent: _agent, ...merge } = pending;
 			pending = undefined;
-			return fauxAssistantMessage([fauxToolCall("github__merge_pull_request", { ...merge })], {
+			return fauxAssistantMessage([fauxToolCall(tool, { ...merge })], {
 				stopReason: "toolUse",
 			});
 		},
@@ -66,9 +80,9 @@ async function setup() {
 		pending = call;
 		const received = await s.core.receive(s.harness, {
 			id: crypto.randomUUID(),
-			origin: { gateway: "fake", peer: OWNER, thread: "reader" },
-			agent: "reader",
-			text: `merge ${call.owner}/${call.repo}#${call.pullNumber}`,
+			origin: { gateway: "fake", peer: OWNER, thread: call.agent ?? "reader" },
+			agent: call.agent ?? "reader",
+			text: `merge ${call.owner}/${call.repo}#${call.pullNumber ?? call.issue_number}`,
 		});
 		if (!("turn" in received)) throw new Error("no turn");
 		const asked = await until(async () => {
@@ -88,7 +102,27 @@ async function setup() {
 	};
 	const merged = () => fake.calls.filter((call) => call.tool === "merge_pull_request").map((call) => call.args);
 	const ran = async (id: string) => (await s.harness.snapshot(Permissions, context))?.permissions[id]?.ran;
-	return { ...s, fake, start, merge, merged, ran };
+	/**
+	 * Have the model make `call` and the owner answer its ask `verdict`, with `approving`: the scopes it offered, or
+	 * undefined when it did not ask; and why the answer was refused, if it was (then it is declined).
+	 */
+	const answered = async (call: Merge, verdict: "approve" | "deny" = "approve", approving?: Approving) => {
+		const { turn, wait } = await start(call);
+		if (wait === undefined) {
+			await s.harness.waitForTask(turn as TaskId, context);
+			return { scopes: undefined };
+		}
+		const scopes = wait.ask.type === "approval" ? wait.ask.scopes : undefined;
+		const owner = { gateway: "web", peer: OWNER };
+		const filled = await answer(s.harness, wait.key, verdict, owner, "bearer", {
+			...(approving === undefined ? {} : { approving }),
+		});
+		const refused = "refused" in filled ? filled.refused : undefined;
+		if (refused !== undefined) await answer(s.harness, wait.key, "deny", owner, "bearer");
+		await s.harness.waitForTask(turn as TaskId, context);
+		return { scopes, ...(refused === undefined ? {} : { refused }) };
+	};
+	return { ...s, fake, start, merge, merged, ran, answered };
 }
 
 const place = (more: Partial<GrainAsked> = {}): GrainAsked => ({
@@ -271,4 +305,107 @@ it("the owner's route takes a grain's permission as given, and says what is miss
 	])
 		expect((await post(bad)).status, JSON.stringify(bad)).toBe(400);
 	expect(seen).toHaveLength(1);
+});
+
+const MERGE_HERE = "Don't ask again before merging pull requests in acme/banda";
+const banda = (pullNumber: number, more: Partial<Merge> = {}): Merge => ({
+	owner: "acme",
+	repo: "banda",
+	pullNumber,
+	...more,
+});
+
+it("three clean approvals in one place earn it: the fourth card offers it alone, and giving it covers the place", async () => {
+	const s = await setup();
+	// not offered yet, so refused (and then declined)
+	expect(await s.answered(banda(1), "approve", { permission: { scope: "place" } })).toMatchObject({
+		refused: "that was not offered",
+	});
+	for (const pull of [2, 3, 4]) {
+		const { scopes } = await s.answered(banda(pull));
+		expect(scopes?.[0]?.scope).toBe("task");
+		expect(scopes?.some((one) => one.scope === "place")).toBe(false);
+	}
+	const { turn, wait } = await s.start(banda(5));
+	if (wait?.ask.type !== "approval") throw new Error("no ask");
+	expect(wait.ask.scopes).toEqual([{ scope: "place", words: MERGE_HERE }]);
+	const owner = { gateway: "web", peer: OWNER };
+	expect(
+		await answer(s.harness, wait.key, "approve", owner, "bearer", { approving: { permission: { scope: "always" } } }),
+	).toEqual({ refused: "that was not offered" });
+	expect(
+		await answer(s.harness, wait.key, "approve", owner, "bearer", { approving: { permission: { scope: "place" } } }),
+	).toMatchObject({ answered: expect.any(Number) });
+	await s.harness.waitForTask(turn as TaskId, context);
+	const permissions = Object.values((await s.harness.snapshot(Permissions, context))?.permissions ?? {});
+	expect(permissions).toEqual([
+		expect.objectContaining({
+			tool: "github__merge_pull_request",
+			match: { account: "alice", owner: "acme", repo: "banda" },
+			what: "merge pull requests in acme/banda as @alice",
+			scope: "always",
+			grain: "place",
+			agent: "reader",
+		}),
+	]);
+	const events = (await s.harness.snapshot(ActivityLog, context))?.events.map((event) => event.what);
+	expect(events).toContain("You allowed Reader to merge pull requests in acme/banda as @alice, always");
+	expect(await s.merge(banda(6))).toMatchObject({ asked: false });
+	expect(await s.merge({ owner: "acme", repo: "other", pullNumber: 1 })).toMatchObject({ asked: true });
+	expect(s.merged().map((args) => (args as { pullNumber?: number }).pullNumber)).toEqual([2, 3, 4, 5, 6]);
+});
+
+it("a decline starts the count again, an edited approval does not count, and what a permission let run never counts", async () => {
+	const s = await setup();
+	await s.answered(banda(1));
+	await s.answered(banda(2));
+	await s.answered(banda(3), "deny");
+	await s.answered(banda(4));
+	await s.answered(banda(5));
+	expect((await s.answered(banda(6))).scopes?.[0]?.scope).toBe("task");
+	expect((await s.answered(banda(7))).scopes).toEqual([{ scope: "place", words: MERGE_HERE }]);
+	// a comment: edited, it neither counts nor starts again
+	const comment = (n: number): Merge => ({
+		tool: "github__add_issue_comment",
+		owner: "acme",
+		repo: "banda",
+		issue_number: n,
+		body: "Looks good",
+	});
+	await s.answered(comment(1));
+	await s.answered(comment(2), "approve", { edits: { body: "Looks good to me" } });
+	await s.answered(comment(3));
+	expect((await s.answered(comment(4))).scopes?.[0]?.scope).toBe("task");
+	expect((await s.answered(comment(5))).scopes).toEqual([
+		{ scope: "place", words: "Don't ask again before commenting on pull requests and issues in acme/banda" },
+	]);
+	// approved for an hour, then runs within it ask nothing and count nothing
+	const hour = { permission: { scope: "until", until: Date.now() + 3_600_000 } } as const;
+	await s.answered({ owner: "acme", repo: "later", pullNumber: 1 }, "approve", hour);
+	const [given] = Object.entries((await s.harness.snapshot(Permissions, context))?.permissions ?? {}).find(
+		([, permission]) => permission.match.repo === "later",
+	) ?? [""];
+	expect(await s.answered({ owner: "acme", repo: "later", pullNumber: 1 })).toEqual({ scopes: undefined });
+	expect(await s.answered({ owner: "acme", repo: "later", pullNumber: 1 })).toEqual({ scopes: undefined });
+	await revoke(s.harness, given, Date.now());
+	expect((await s.answered({ owner: "acme", repo: "later", pullNumber: 1 })).scopes?.[0]?.scope).toBe("task");
+	expect((await s.answered({ owner: "acme", repo: "later", pullNumber: 1 })).scopes?.[0]?.scope).toBe("task");
+	expect((await s.answered({ owner: "acme", repo: "later", pullNumber: 1 })).scopes?.[0]?.scope).toBe("place");
+});
+
+it("another place, account or agent earns its own", async () => {
+	const s = await setup();
+	const writer = "---\nname: Writer\ndescription: Merges too\nconnections: [github]\n---\nMerge.";
+	await s.harness.commit(async (tx) => {
+		(await tx.doc(Accepted)).files["agents/writer.md"] = { text: writer, sha: shaOf(writer), at: 1 };
+	}, context);
+	await s.capabilities.switchAccount("writer", "github", "alice", true);
+	await s.capabilities.switchAccount("reader", "github", "bob", true);
+	for (const pull of [1, 2, 3]) await s.answered(banda(pull, { account: "alice" }));
+	expect((await s.answered(banda(4, { account: "alice" }))).scopes?.[0]?.scope).toBe("place");
+	expect((await s.answered({ owner: "acme", repo: "other", pullNumber: 1, account: "alice" })).scopes?.[0]).toEqual(
+		expect.objectContaining({ scope: "task" }),
+	);
+	expect((await s.answered(banda(5, { account: "bob" }))).scopes?.[0]?.scope).toBe("task");
+	expect((await s.answered(banda(6, { agent: "writer" }))).scopes?.[0]?.scope).toBe("task");
 });
