@@ -23,6 +23,7 @@ export const CARDS = [
 	"check-run",
 	"notification",
 	"email",
+	"messages",
 	"event",
 	"contact",
 	"file",
@@ -87,8 +88,12 @@ export type ObjectKind = {
 	readonly urls: readonly string[];
 	/** Shorter ids that name it, as templates, matched whole. */
 	readonly ids: readonly string[];
-	/** Provider identity rules, by placeholder; omitted placeholders keep their spelling. */
-	readonly normalize?: { readonly [placeholder: string]: "lowercase" | "integer" };
+	/**
+	 * Provider identity rules, by placeholder; omitted placeholders keep their spelling. `text` is words, not an
+	 * identity (a search's query, `from:boss is:unread`): percent-encoded in a URL or id, where it is the last token,
+	 * and said decoded, its spaces collapsed, in the object's name and its reads' arguments.
+	 */
+	readonly normalize?: { readonly [placeholder: string]: Normalize };
 	/** The reads that fetch it, by the name its fields use. */
 	readonly reads: { readonly [as: string]: ObjectRead };
 	/** The card's fields, each a dotted path into what the reads answered (`pr.user.login`). */
@@ -100,6 +105,7 @@ export type ObjectKind = {
 };
 
 export type ObjectKinds = { readonly [kind: string]: ObjectKind };
+type Normalize = "lowercase" | "integer" | "text";
 
 /** One thing named: of which connection and kind, and the values its template matched. */
 export type ObjectRef = {
@@ -111,6 +117,20 @@ export type ObjectRef = {
 const PLACEHOLDER = /\{([a-z_]{1,32})\}/g;
 /** A bounded identity segment, never separators, spaces or `..`. */
 const VALUE = "([A-Za-z0-9_][A-Za-z0-9_.-]{0,399})";
+/**
+ * Words percent-encoded (a space as `+` or `%20`), never `/`, `?` or `#`: what a `text` placeholder captures; in an id,
+ * matched whole, a space may stand as itself (`gmail/search/from:boss is:unread`).
+ */
+const TEXT = (url: boolean) => `([A-Za-z0-9_.~!*'()%+:@$,;=${url ? "" : " "}-]{1,1500})`;
+/** Words a `text` placeholder holds, decoded: plain, one line, bounded. */
+const TEXT_VALUE = /^[^\p{Cc}\p{Cf}]{1,500}$/u;
+const textOf = (raw: string): string | undefined => {
+	try {
+		return decodeURIComponent(raw.replaceAll("+", " "));
+	} catch {
+		return undefined;
+	}
+};
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const TOOL = /^[A-Za-z0-9_.-]{1,64}$/;
 const PATH = /^[A-Za-z0-9_+-]{1,64}(?:\.[A-Za-z0-9_+-]{1,64}){0,7}$/;
@@ -124,13 +144,13 @@ const reserved = (key: string) => ["__proto__", "prototype", "constructor"].incl
 const placeholders = (template: string) => [...template.matchAll(PLACEHOLDER)].map((m) => m[1] as string);
 const escapePattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
-/** A template as a pattern: its placeholders captured, in order. */
-function patternOf(template: string, url: boolean): RegExp {
+/** A template as a pattern: its placeholders captured, in order; a `text` one as words percent-encoded. */
+function patternOf(template: string, url: boolean, normalize?: ObjectKind["normalize"]): RegExp {
 	let source = "";
 	let last = 0;
 	const literal = (text: string) => escapePattern(text).replaceAll("\\*", "[A-Za-z0-9_.%=-]{1,500}");
 	for (const match of template.matchAll(PLACEHOLDER)) {
-		source += literal(template.slice(last, match.index)) + VALUE;
+		source += literal(template.slice(last, match.index)) + (normalize?.[match[1] ?? ""] === "text" ? TEXT(url) : VALUE);
 		last = (match.index ?? 0) + match[0].length;
 	}
 	source += literal(template.slice(last));
@@ -210,17 +230,26 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 				errors.push(`${where}: "${shape}" names other placeholders than "${shapes[0]}"`);
 			if (/\}\{/.test(shape)) errors.push(`${where}: "${shape}" puts two placeholders together`);
 		}
-		const normalize: { [placeholder: string]: "lowercase" | "integer" } = {};
+		const normalize: { [placeholder: string]: Normalize } = {};
 		if (given.normalize !== undefined) {
 			if (typeof given.normalize !== "object" || given.normalize === null || Array.isArray(given.normalize))
-				errors.push(`${where}.normalize maps placeholders to lowercase or integer`);
+				errors.push(`${where}.normalize maps placeholders to lowercase, integer or text`);
 			else
 				for (const [placeholder, rule] of Object.entries(given.normalize)) {
-					if (!named.has(placeholder) || reserved(placeholder) || (rule !== "lowercase" && rule !== "integer"))
-						errors.push(`${where}.normalize.${placeholder} must name a placeholder and use lowercase or integer`);
+					if (
+						!named.has(placeholder) ||
+						reserved(placeholder) ||
+						(rule !== "lowercase" && rule !== "integer" && rule !== "text")
+					)
+						errors.push(`${where}.normalize.${placeholder} must name a placeholder and use lowercase, integer or text`);
 					else normalize[placeholder] = rule;
 				}
 		}
+		// words take any character but a separator: only a template's end tells where they stop
+		for (const shape of shapes)
+			for (const [placeholder, rule] of Object.entries(normalize))
+				if (rule === "text" && !shape.endsWith(`{${placeholder}}`))
+					errors.push(`${where}: "${shape}" must end with {${placeholder}}, which is words`);
 		const name = given.name;
 		if (typeof name !== "string" || name.length > 100 || placeholders(name).some((each) => !named.has(each)))
 			errors.push(`${where}.name is how the owner reads its name, from its placeholders`);
@@ -435,11 +464,18 @@ export function refKey(ref: ObjectRef, kinds: ObjectKinds): string {
 	const shape = kind?.ids[0] ?? kind?.urls[0] ?? "";
 	const values = normalizeValues(ref.values, kind?.normalize);
 	if (values === undefined) throw new Error("Invalid object identity");
-	return `${ref.connection}:${ref.kind}:${fill(shape, values)}`;
+	return `${ref.connection}:${ref.kind}:${fill(shape, values, kind?.normalize)}`;
 }
 
-const fill = (template: string, values: { readonly [placeholder: string]: string }) =>
-	template.replace(PLACEHOLDER, (_, name: string) => values[name] ?? "");
+/** A template filled; in a URL or id (`normalize` given), words are percent-encoded. */
+const fill = (
+	template: string,
+	values: { readonly [placeholder: string]: string },
+	normalize?: ObjectKind["normalize"],
+) =>
+	template.replace(PLACEHOLDER, (_, name: string) =>
+		normalize?.[name] === "text" ? encodeURIComponent(values[name] ?? "") : (values[name] ?? ""),
+	);
 
 /** How the owner reads an object's name: "purrgrammer/banda #34". */
 export const nameOf = (ref: ObjectRef, kinds: ObjectKinds) => fill(kinds[ref.kind]?.name ?? ref.kind, ref.values);
@@ -486,13 +522,15 @@ function matchOne(
 	// WHATWG parsing matches navigation semantics, including encoded dot segments and backslashes.
 	const input = url ? webUrl(text) : text;
 	if (input === undefined) return undefined;
-	const match = patternOf(template, url).exec(input);
+	const match = patternOf(template, url, kind.normalize).exec(input);
 	if (match === null) return undefined;
 	const names = placeholders(template);
 	const values: { [placeholder: string]: string } = {};
 	for (const [i, name] of names.entries()) {
 		const value = match[i + 1] ?? "";
-		values[name] = value;
+		const decoded = kind.normalize?.[name] === "text" ? textOf(value) : value;
+		if (decoded === undefined) return undefined;
+		values[name] = decoded;
 	}
 	return normalizeValues(values, kind.normalize);
 }
@@ -503,7 +541,14 @@ function normalizeValues(
 ): { [placeholder: string]: string } | undefined {
 	const normalized: { [placeholder: string]: string } = {};
 	for (const [name, value] of Object.entries(values)) {
-		if (!new RegExp(`^${VALUE}$`).test(value) || value.includes("..") || reserved(name)) return undefined;
+		if (reserved(name)) return undefined;
+		if (rules?.[name] === "text") {
+			const words = value.replace(/\s+/g, " ").trim();
+			if (!TEXT_VALUE.test(words)) return undefined;
+			normalized[name] = words;
+			continue;
+		}
+		if (!new RegExp(`^${VALUE}$`).test(value) || value.includes("..")) return undefined;
 		switch (rules?.[name]) {
 			case "integer":
 				if (!/^\d+$/.test(value) || /^0+$/.test(value)) return undefined;
@@ -686,6 +731,29 @@ export type EmailCard = {
 	readonly url?: string;
 };
 
+/** One email of a list, as a list says it. */
+export type MessageLine = {
+	readonly id: string;
+	readonly from: string;
+	readonly subject: string;
+	readonly date: string;
+};
+
+/** Emails together: a conversation's (titled by its subject) or a search's (titled by its query), the newest first. */
+export type MessagesCard = {
+	readonly card: "messages";
+	readonly title: string;
+	/** A search's: its title is the query. */
+	readonly search: boolean;
+	/** The newest few. */
+	readonly messages: MessageLine[];
+	/** How many there are in all, as the service says (a search's is its estimate). */
+	readonly total: number | null;
+};
+
+/** How many emails a list's card shows. */
+export const MESSAGES_SHOWN = 5;
+
 /** A calendar event, every value scalar so the store's bounded JSON shape holds. */
 export type EventCard = {
 	readonly card: "event";
@@ -744,6 +812,7 @@ export type ObjectCard =
 	| CheckRunCard
 	| NotificationCard
 	| EmailCard
+	| MessagesCard
 	| EventCard
 	| ContactCard
 	| FileCard;
@@ -844,6 +913,45 @@ function reviewWords(value: unknown): string {
 	return "None yet";
 }
 
+/**
+ * A list of emails as its card says it: titled by the `title` field (a conversation's subject) or, without one, by the
+ * kind's name (a search's query); the newest few by date first.
+ */
+function messagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: string) => unknown): MessagesCard {
+	const list = field("messages");
+	if (!Array.isArray(list)) throw new Error("Incomplete object");
+	const search = kind.fields.title === undefined;
+	const title = search ? plainLine(fill(kind.name, ref.values), 300) : plainLine(field("title"), 300);
+	const when = (date: string) => {
+		const ms = Date.parse(date);
+		return Number.isFinite(ms) ? ms : Number.NEGATIVE_INFINITY;
+	};
+	const messages = list
+		.flatMap((each): MessageLine[] => {
+			if (!plain(each) || typeof each.id !== "string" || each.id.length > 200) return [];
+			return [
+				{
+					id: each.id,
+					from: plainLine(each.from, 250),
+					subject: plainLine(each.subject, 300),
+					date: plainLine(each.date, 100),
+				},
+			];
+		})
+		.map((each, i) => ({ each, i }))
+		// newest first by date; one without a date keeps its place among those that have none
+		.sort((a, b) => when(b.each.date) - when(a.each.date) || (search ? a.i - b.i : b.i - a.i))
+		.slice(0, MESSAGES_SHOWN)
+		.map(({ each }) => each);
+	return {
+		card: "messages",
+		title: title || (search ? "Search" : "(No subject)"),
+		search,
+		messages,
+		total: count(field("total")),
+	};
+}
+
 const REASONS: { readonly [reason: string]: Reason } = {
 	review_requested: "review-requested",
 	mention: "mention",
@@ -859,6 +967,7 @@ const REASONS: { readonly [reason: string]: Reason } = {
  */
 export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as: string]: unknown }): ObjectCard {
 	const field = (name: string) => at(answers, kind.fields[name]);
+	if (kind.card === "messages") return messagesCard(kind, ref, field);
 	const titleField =
 		kind.card === "check-run" || kind.card === "contact" || kind.card === "file"
 			? "name"

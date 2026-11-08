@@ -41,6 +41,8 @@ export type Rule = {
 	readonly kind?: Change["kind"];
 	/** Only a change to this value. */
 	readonly to?: Json;
+	/** Only a change from this value: a label gone from a set is a change from it, to nothing. */
+	readonly from?: Json;
 	readonly does: "wake" | "tell" | "nothing";
 	/**
 	 * The change in words, from the item's fields and the values (`{user.login} {state}`, `{to}`); a value a `words`
@@ -74,7 +76,7 @@ export type Follow = {
 	readonly otherwise?: Rule["does"];
 	/**
 	 * What ends a watch, by the word the watch says (`until: merged`); without one, any of them. None (`{}`): nothing
-	 * ends it (a contact), and it follows until the owner stops it.
+	 * ends it (a contact, a search), and it follows until the owner stops it.
 	 */
 	readonly ends: { readonly [name: string]: string };
 	/** While it holds, the daemon looks every `busy_every` instead of `every`. */
@@ -349,10 +351,14 @@ export function plainWords(text: string, max = SAID): string {
 	return characters.length <= max ? visible : `${characters.slice(0, max - 1).join("")}…`;
 }
 
-/** A rule's words for a change: each `{path}` from the item (or `{to}`, `{from}`), said as `words` say, plain. */
+/**
+ * A rule's words for a change: each `{path}` from the item (or `{to}`, `{from}`: the value it changed to or from), said
+ * as `words` say, plain. A list's item added or gone is the item itself, so its own `to` and `from` (an email's) stay.
+ */
 export function saysOf(rule: Pick<Rule, "says" | "words">, change: Change): string {
-	const scope: Item = { ...(change.item ?? {}), ...(change.to === undefined ? {} : { to: change.to }) };
-	if (change.from !== undefined) scope.from = change.from;
+	const scope: Item = { ...(change.item ?? {}) };
+	if (change.to !== undefined && change.to !== change.item) scope.to = change.to;
+	if (change.from !== undefined && change.from !== change.item) scope.from = change.from;
 	return plainWords(
 		rule.says.replace(/\{([\w.]+)\}/g, (_, path: string) => {
 			const value = at(scope, path);
@@ -385,7 +391,8 @@ export function sort(follow: Follow, me: string | undefined, before: Json, after
 			(each) =>
 				matches(pattern(each.on), change.path) &&
 				(each.kind === undefined || each.kind === change.kind) &&
-				(each.to === undefined || canonical(each.to) === canonical(change.to)),
+				(each.to === undefined || canonical(each.to) === canonical(change.to)) &&
+				(each.from === undefined || canonical(each.from) === canonical(change.from)),
 		);
 		const says =
 			rule === undefined
@@ -457,7 +464,9 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 				(r.kind !== undefined && !KINDS.has(r.kind)) ||
 				(r.words !== undefined && !stringMap(r.words))
 			)
-				problem(`a rule is {"on": "path", "kind"?, "to"?, "does": "wake" | "tell" | "nothing", "says", "words"?}`);
+				problem(
+					`a rule is {"on": "path", "kind"?, "to"?, "from"?, "does": "wake" | "tell" | "nothing", "says", "words"?}`,
+				);
 		}
 	if (follow.otherwise !== undefined && !DOES.has(follow.otherwise as string))
 		problem(`"otherwise" is wake, tell or nothing`);
@@ -466,7 +475,7 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 		problem(`"ends" names what ends a watch: {"merged": "pr.merged = true"}, or {} when nothing does`);
 	for (const name of Object.keys(ends)) if (!NAME.test(name)) problem(`"${name}" is not a word for an end`);
 	const conditions = [
-		...Object.values(ends),
+		...Object.values(ends ?? {}),
 		...(derivedOk ? Object.values((follow.derived ?? {}) as { [name: string]: Derived }).map(whenOf) : []),
 	];
 	if (typeof follow.busy === "string") conditions.push(follow.busy);
@@ -488,7 +497,7 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 			...(f.derived === undefined ? {} : { derived: f.derived }),
 			rules: f.rules,
 			...(f.otherwise === undefined ? {} : { otherwise: f.otherwise }),
-			ends,
+			ends: ends ?? {},
 			...(f.busy === undefined ? {} : { busy: f.busy }),
 			...(f.every === undefined ? {} : { every: f.every }),
 			...(f.busy_every === undefined ? {} : { busy_every: f.busy_every }),

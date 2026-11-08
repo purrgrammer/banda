@@ -144,6 +144,20 @@ it("reopens current account authority and object readings without a migration", 
 				url: "https://docs.google.com/document/d/1aBcD/edit",
 			},
 		});
+		await keepReading(tx, "gmail/me@example.test/search:gmail/search/from%3Aboss", {
+			connection: "gmail",
+			account: "me@example.test",
+			kind: "search",
+			source: "accepted-definition-and-account-generation",
+			at: 791,
+			card: {
+				card: "messages",
+				title: "mail matching from:boss",
+				search: true,
+				messages: [{ id: "m1", from: "Boss <boss@example.test>", subject: "Numbers", date: "Mon, 2 Nov 2026" }],
+				total: 1,
+			},
+		});
 	}, context);
 	await before.close(context);
 	const after = await open(home);
@@ -171,6 +185,9 @@ it("reopens current account authority and object readings without a migration", 
 				card: { card: "file", kind: "doc", size: null, name: "Q1 rollout plan" },
 			},
 		);
+		expect(
+			(await after.snapshot(Readings, context))?.readings["gmail/me@example.test/search:gmail/search/from%3Aboss"],
+		).toMatchObject({ card: { card: "messages", search: true, messages: [{ id: "m1", subject: "Numbers" }] } });
 	} finally {
 		await after.close(context);
 	}

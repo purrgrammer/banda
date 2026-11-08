@@ -62,7 +62,8 @@ export function githubKey(ref: string): string | undefined {
 	return keys.size > 1 ? JSON.stringify([...keys]) : keys.values().next().value;
 }
 
-const ID_LINK = /\]\(([a-z][a-z0-9-]{0,63}\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,399})\)/g;
+/** `calendar/<id>`, or of a kind named after the connection (`gmail/thread/<id>`, `gmail/search/<query, encoded>`). */
+const ID_LINK = /\]\(([a-z][a-z0-9-]{0,63}\/(?:[a-z]{1,32}\/)?[A-Za-z0-9_%][A-Za-z0-9_.%:+@-]{0,399})\)/g;
 
 /**
  * Prose whose links to an object's id ([Team offsite](calendar/<id>)) are given the `object:` scheme: the renderer

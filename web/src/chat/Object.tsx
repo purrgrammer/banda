@@ -23,8 +23,10 @@ import {
 	GitPullRequestIcon,
 	ImageIcon,
 	MailIcon,
+	MailsIcon,
 	PhoneIcon,
 	PresentationIcon,
+	SearchIcon,
 	SheetIcon,
 	UserRoundIcon,
 	VideoIcon,
@@ -190,6 +192,7 @@ function Where({
  * nothing ends (a contact), followed until the owner stops it.
  */
 export type FollowOffer = {
+	/** None: it never ends (a search), and is followed until the owner stops it. */
 	readonly ends: readonly string[];
 	/** Follow it, until the end named, or any of them. */
 	readonly onFollow: (until?: string) => void;
@@ -291,11 +294,23 @@ export function ObjectLink({
 		| (Issue & { card: "issue" })
 		| (CheckRun & { card: "check-run" })
 		| (EmailMessage & { card: "email" })
+		| (Messages & { card: "messages" })
 		| (CalendarEvent & { card: "event" })
 		| (Person & { card: "contact" })
 		| (DriveFile & { card: "file" });
 	href: string;
 }) {
+	if (object.card === "messages") {
+		const Icon = object.search ? SearchIcon : MailsIcon;
+		return (
+			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
+				<Icon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
+				<span className="min-w-0 truncate" title={object.title}>
+					{object.title}
+				</span>
+			</span>
+		);
+	}
 	if (object.card === "file") {
 		const Icon = FILE_KIND[object.kind].icon;
 		const url = driveUrl(href) ?? driveUrl(object.url);
@@ -479,6 +494,67 @@ export function EmailCard({
 				{message.body || message.snippet || "No plain text body"}
 			</p>
 			{attachments}
+		</Tile>
+	);
+}
+
+export type Messages = {
+	readonly title: string;
+	/** A search's: its title is the query. */
+	readonly search: boolean;
+	/** The newest few, newest first. */
+	readonly messages: readonly {
+		readonly id: string;
+		readonly from: string;
+		readonly subject: string;
+		readonly date: string;
+	}[];
+	readonly total: number | null;
+	readonly asOf?: string | undefined;
+};
+
+/** Emails together, read-only: a conversation under its subject, or a search under its query, the newest few first. */
+export function MessagesCard({ list, actions }: { list: Messages; actions?: ReactNode }) {
+	const Icon = list.search ? SearchIcon : MailsIcon;
+	const more = list.total === null ? 0 : list.total - list.messages.length;
+	return (
+		<Tile className="flex flex-col gap-2.5 p-3.5">
+			<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-ink-2">
+				<Icon aria-hidden="true" className="size-3.5 shrink-0" />
+				<span className="min-w-0 flex-1 truncate">{list.search ? "Mail matching" : "Conversation"}</span>
+				{list.asOf === undefined ? null : <span>as of {list.asOf}</span>}
+				<span className="ml-auto shrink-0">{actions}</span>
+			</div>
+			<h3
+				className={cn(
+					"min-w-0 text-body font-semibold text-ink [overflow-wrap:anywhere]",
+					list.search && "font-mono font-normal",
+				)}
+			>
+				{list.title}
+			</h3>
+			{list.messages.length === 0 ? (
+				<p className="text-meta text-ink-2">{list.search ? "No mail matches yet" : "No messages"}</p>
+			) : (
+				<ul className="flex flex-col divide-y divide-border">
+					{list.messages.map((message) => (
+						<li key={message.id} className="flex min-w-0 flex-col gap-0.5 py-1.5 first:pt-0 last:pb-0">
+							<span className="flex min-w-0 items-baseline gap-2 text-meta text-ink-2">
+								<span className="min-w-0 flex-1 truncate" title={message.from}>
+									{message.from || "Sender unavailable"}
+								</span>
+								<span className="shrink-0">{message.date}</span>
+							</span>
+							<span className="min-w-0 truncate text-body text-ink" title={message.subject}>
+								{message.subject || "(No subject)"}
+							</span>
+						</li>
+					))}
+				</ul>
+			)}
+			{more > 0 ? (
+				<span className="text-meta text-ink-2">{list.search ? `About ${more} more` : `${more} earlier`}</span>
+			) : null}
 		</Tile>
 	);
 }

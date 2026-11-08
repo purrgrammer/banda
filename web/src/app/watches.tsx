@@ -113,7 +113,7 @@ export function WatchDetail({
 											(watch.object?.ends === undefined
 												? "at any of its ends"
 												: watch.object.ends.length === 0
-													? "never: it follows until you stop it"
+													? "when you stop it"
 													: `when it is ${watch.object.ends.join(" or ")}`),
 									],
 								] as const)),
@@ -133,7 +133,7 @@ export function WatchDetail({
 							if (edit.ask.trim() !== "") save(edit);
 						}}
 					>
-						{watch.object?.ends?.length === 0 ? null : (
+						{ends.length === 0 ? null : (
 							<Field label="Ends">
 								<Select
 									value={edit.until ?? ANY}

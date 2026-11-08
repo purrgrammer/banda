@@ -115,5 +115,5 @@ export function AskRef({
 		};
 	}, [chat, request]);
 	if (card === undefined || card.card === "notification") return null;
-	return <ObjectLink object={card} href={card.url ?? ""} />;
+	return <ObjectLink object={card} href={("url" in card ? card.url : undefined) ?? ""} />;
 }

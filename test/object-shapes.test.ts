@@ -240,3 +240,70 @@ it("draft data names exact effect verbs and editable fields, never caller card p
 	expect(objects.refuse?.({ objects: ["a/b#1", "a/b#2", "a/b#3", "a/b#4"] })).toMatch(/at most/);
 	expect(plainLine("hello\u202e\nworld")).toBe("hello world");
 });
+
+/** A kind named by words: a mail search, by its query. */
+const SEARCH = {
+	search: {
+		card: "email",
+		normalize: { query: "text" },
+		name: "mail matching {query}",
+		urls: ["https://mail.google.com/mail/u/*/#search/{query}"],
+		ids: ["mail/search/{query}"],
+		reads: { found: { tool: "search", args: { query: "{query}", max_results: 25 } } },
+		fields: { subject: "found.subject" },
+	},
+};
+
+it("a text placeholder names an object by words: encoded in its ids and URLs, said decoded", () => {
+	const parsed = parseObjects(SEARCH, () => true);
+	if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
+	const mail = { name: "mail", objects: parsed.objects };
+	const query = { connection: "mail", kind: "search", values: { query: "from:boss is:unread" } };
+	// a browser's address, an id with its words encoded, as written, or the ref's own key: one search
+	for (const text of [
+		"https://mail.google.com/mail/u/0/#search/from%3Aboss+is%3Aunread",
+		"mail/search/from%3Aboss%20is%3Aunread",
+		"mail/search/from:boss is:unread",
+		"mail/search/from:boss   is:unread",
+		"mail:search:mail/search/from%3Aboss%20is%3Aunread",
+	])
+		expect(recognise(text, [mail])).toEqual([query]);
+	expect(refKey(query, parsed.objects)).toBe("mail:search:mail/search/from%3Aboss%20is%3Aunread");
+	expect(recognise(refKey(query, parsed.objects), [mail])).toEqual([query]);
+	expect(readArgs(parsed.objects.search!.reads.found!, query, undefined)).toEqual({
+		query: "from:boss is:unread",
+		max_results: 25,
+	});
+	// a literal plus is %2B; a bad escape, a control character or nothing at all names nothing
+	expect(recognise("mail/search/a%2Bb", [mail])[0]?.values.query).toBe("a+b");
+	for (const text of [
+		"mail/search/%E0%A4%A",
+		"mail/search/a%00b",
+		"mail/search/",
+		"mail/search/a/b",
+		"mail/search/a?b",
+	])
+		expect(recognise(text, [mail])).toEqual([]);
+});
+
+it("words go last in a template: only its end tells where they stop", () => {
+	const parsed = parseObjects({ search: { ...SEARCH.search, urls: [], ids: ["mail/search/{query}/x"] } }, () => true);
+	expect("errors" in parsed ? parsed.errors : []).toContainEqual(expect.stringContaining("must end with {query}"));
+	const rule = parseObjects({ search: { ...SEARCH.search, normalize: { query: "words" } } }, () => true);
+	expect("errors" in rule ? rule.errors : []).toContainEqual(expect.stringContaining("lowercase, integer or text"));
+});
+
+it("any words survive a round trip through a ref's key", () => {
+	const parsed = parseObjects(SEARCH, () => true);
+	if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
+	const mail = { name: "mail", objects: parsed.objects };
+	fc.assert(
+		fc.property(fc.string({ minLength: 1, maxLength: 40, unit: "binary" }), (words) => {
+			const query = words.replace(/\s+/g, " ").trim();
+			fc.pre(query !== "" && !/[\p{Cc}\p{Cf}]/u.test(query) && encodeURIComponent(query).length < 450);
+			const ref = { connection: "mail", kind: "search", values: { query } };
+			expect(recognise(refKey(ref, parsed.objects), [mail])).toEqual([ref]);
+		}),
+		{ numRuns: pbtRuns(100) },
+	);
+});

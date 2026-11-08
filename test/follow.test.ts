@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
+import { parseConnection } from "../src/core/connections.ts";
 import {
 	BUSY_EVERY,
 	canonical,
@@ -221,6 +223,21 @@ describe("following an object", () => {
 			"retitled: New",
 		);
 		expect(holds("pr.state = closed or pr.merged = true", { pr: { state: "open", merged: true } })).toBe(true);
+		// an email gone from a list is said by its own fields: its `from` is whose it is, not the change's value
+		const email = { id: "m1", from: "Bob <bob@example.com>", to: "ana@example.com", subject: "Lunch?" };
+		const gone = {
+			id: "z",
+			path: ["messages", { item: "m1" }] as const,
+			kind: "removed" as const,
+			from: email,
+			item: email,
+		};
+		expect(saysOf({ says: "{from} to {to}: {subject} is gone" }, gone)).toBe(
+			"Bob <bob@example.com> to ana@example.com: Lunch? is gone",
+		);
+		expect(
+			saysOf({ says: "unlabelled {from}" }, { id: "w", path: ["labels", { item: "x" }], kind: "removed", from: "x" }),
+		).toBe("unlabelled x");
 		expect(holds("all checks[*].ok = true", { checks: [] })).toBe(false);
 	});
 
@@ -248,6 +265,7 @@ describe("following an object", () => {
 		// a kind nothing ends (a contact) says so: no end ever holds, and a watch on it follows until stopped
 		const never = parseFollow({ rules: [], ends: {} }, "objects.x");
 		expect("follow" in never ? endedBy(never.follow, undefined, { a: 1 }) : "refused").toBeUndefined();
+		expect(problems({ rules: [], ends: "never" })).toContainEqual(expect.stringContaining("ends"));
 		expect(problems({ rules: [{ on: "a", does: "ring", says: "x" }], ends: { a: "a = 1" } })).toContainEqual(
 			expect.stringContaining("a rule is"),
 		);
@@ -261,6 +279,106 @@ describe("following an object", () => {
 		);
 		const ok = parseFollow({ rules: [], ends: { a: "a = 1" } }, "objects.x");
 		expect("follow" in ok ? ok.follow.ends : undefined).toEqual({ a: "a = 1" });
+	});
+
+	it("a kind that never ends says so with no ends: a watch on it lasts until the owner stops it", () => {
+		const parsed = parseFollow({ rules: [], ends: {} }, "objects.x");
+		expect("follow" in parsed ? parsed.follow.ends : parsed.errors).toEqual({});
+		expect(endedBy({ ends: {} }, undefined, { anything: true })).toBeUndefined();
+	});
+
+	it("a rule may say the value a change is from: a label gone from a set is a change from it", () => {
+		const follow: Follow = {
+			rules: [
+				{ on: "labels[*]", kind: "removed", from: "UNREAD", does: "nothing", says: "read" },
+				{ on: "labels[*]", kind: "removed", from: "INBOX", does: "tell", says: "archived" },
+				{ on: "labels[*]", kind: "removed", does: "tell", says: "unlabelled {from}" },
+			],
+			ends: {},
+		};
+		const sorted = sort(follow, undefined, { labels: ["INBOX", "UNREAD", "Label_1"] }, { labels: [] });
+		expect(sorted.map((each) => [each.says, each.does])).toEqual([
+			["archived", "tell"],
+			["read", "nothing"],
+			["unlabelled Label_1", "tell"],
+		]);
+	});
+
+	/** Gmail's kinds, as the shipped file declares them. */
+	const gmail = (() => {
+		const parsed = parseConnection(
+			"gmail",
+			readFileSync(new URL("../shipped/connections/gmail.md", import.meta.url), "utf8"),
+		);
+		if (!("connection" in parsed)) throw new Error(JSON.stringify(parsed));
+		const objects = parsed.connection.objects ?? {};
+		const follow = (kind: string) => {
+			const found = objects[kind]?.follow;
+			if (found === undefined) throw new Error(`gmail's ${kind} is not followed`);
+			return found;
+		};
+		return { email: follow("email"), thread: follow("thread"), search: follow("search") };
+	})();
+	const mail = (id: string, from: string, subject: string) => ({
+		id,
+		from: `${from} <${from.toLowerCase()}@example.com>`,
+		fromAddress: `${from.toLowerCase()}@example.com`,
+		subject,
+		labels: ["INBOX"],
+	});
+
+	it("the shipped Gmail email: labels tell in words, reading it is nothing, and it ends when read or trashed", () => {
+		expect(gmail.email.ends).toEqual({ read: "message.unread = false", trashed: "message.labels[*] = TRASH" });
+		const before = {
+			message: { ...mail("m1", "Bob", "Lunch?"), labels: ["INBOX", "UNREAD", "Label_7"], unread: true },
+		};
+		const after = { message: { ...before.message, labels: ["STARRED", "UNREAD", "Label_9"], unread: true } };
+		const said = sort(gmail.email, "ana@example.com", before, after).map((each) => [each.says, each.does]);
+		expect(said).toEqual([
+			["starred", "tell"],
+			["labelled Label_9", "tell"],
+			["archived", "tell"],
+			["unlabelled Label_7", "tell"],
+		]);
+		const read = { message: { ...before.message, labels: ["INBOX", "Label_7"], unread: false } };
+		expect(sort(gmail.email, "ana@example.com", before, read).map((each) => each.does)).toEqual(["nothing"]);
+		expect(endedBy(gmail.email, undefined, read)).toBe("read");
+		expect(endedBy(gmail.email, "trashed", read)).toBeUndefined();
+	});
+
+	it("the shipped Gmail conversation: another's reply wakes, the owner's is nothing, a label put on it tells once", () => {
+		expect(gmail.thread.ends).toEqual({});
+		const thread = (messages: Json[], labels: string[]): Json => ({
+			thread: { id: "t1", subject: "Lunch?", total: messages.length, labels, messages },
+		});
+		const before = thread([mail("m1", "Bob", "Lunch?")], ["INBOX", "UNREAD"]);
+		const after = thread(
+			[mail("m1", "Bob", "Lunch?"), mail("m2", "Ana", "Re: Lunch?"), mail("m3", "Carol", "Re: Lunch?")],
+			["INBOX", "SENT", "IMPORTANT"],
+		);
+		const said = sort(gmail.thread, "ana@example.com", before, after).map((each) => [each.says, each.does]);
+		expect(said).toEqual([
+			["sent", "nothing"],
+			["marked important", "tell"],
+			["read", "nothing"],
+			["new thread.messages[m2]", "nothing"],
+			["Carol <carol@example.com> replied", "wake"],
+		]);
+	});
+
+	it("the shipped Gmail search: new mail wakes in from: subject words; mail that no longer matches is nothing", () => {
+		expect(gmail.search.ends).toEqual({});
+		expect(gmail.search.every).toBe("5m");
+		const search = (...messages: Json[]): Json => ({ search: { resultSizeEstimate: messages.length, messages } });
+		const before = search(mail("m1", "Boss", "Budget"));
+		const after = search(mail("m3", "Ana", "Re: Budget"), mail("m2", "Boss", "Numbers"));
+		const said = sort(gmail.search, "ana@example.com", before, after).map((each) => [each.says, each.does]);
+		expect(said).toEqual([
+			["new search.messages[m3]", "nothing"],
+			["Boss <boss@example.com>: Numbers", "wake"],
+			["Boss <boss@example.com>: Budget no longer matches", "nothing"],
+		]);
+		expect(sort(gmail.search, "ana@example.com", after, after)).toEqual([]);
 	});
 
 	const anyJson: fc.Arbitrary<Json> = fc.letrec<{ json: Json }>((tie) => ({
