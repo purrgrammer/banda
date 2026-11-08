@@ -614,11 +614,19 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	// ---- what is in effect, as tools
 
-	/** The commit check every call makes: the tool is in effect now. */
-	const allowed = (name: string, connection?: Connection & { sha: string }) => async (tx: Tx) => {
-		if (!(await inEffect(tx, name))) return "the owner switched it off or took it back";
-		if (connection !== undefined && (await acceptedConnection(tx, connection.name))?.sha !== connection.sha)
+	/**
+	 * The commit check every call makes: the tool is in effect now, and a connection's tool `offered` as a read still is
+	 * one. The owner's Ask on a read is kept beside its switch, not in its file, so the file's hash does not say it.
+	 */
+	const allowed = (name: string, offered?: InEffect) => async (tx: Tx) => {
+		if (offered === undefined)
+			return (await inEffect(tx, name)) ? undefined : "the owner switched it off or took it back";
+		const now = (await connectionTools(tx)).find((tool) => tool.name === name);
+		if (now === undefined) return "the owner switched it off or took it back";
+		if (now.connection.sha !== offered.connection.sha)
 			return "the connection changed since this tool was offered; use its current tools";
+		if ((offered.read && !now.read) || (offered.readsWhen !== undefined && now.readsWhen === undefined))
+			return "the owner set it to ask first since it was offered; use its current tools";
 		return undefined;
 	};
 
@@ -626,7 +634,7 @@ export function openCapabilities(options: CapabilityOptions) {
 	const allowedAs =
 		(tool: InEffect, arg: string) =>
 		async (tx: Tx, args: JsonObject, chat: number): Promise<string | undefined> => {
-			const off = await allowed(tool.name, tool.connection)(tx);
+			const off = await allowed(tool.name, tool)(tx);
 			if (off !== undefined) return off;
 			const resolved = await accountFor(tx, tool.connection, chat, args[arg], tool.tool);
 			return "refused" in resolved ? resolved.refused : undefined;
@@ -727,7 +735,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			execute: async (args, api, ctx) => {
 				const chat = Number(api.conversationId);
 				const resolved = await api.commit(async (tx) => {
-					const off = await allowed(tool.name, tool.connection)(tx);
+					const off = await allowed(tool.name, tool)(tx);
 					if (off !== undefined) return { refused: off };
 					return accountFor(tx, tool.connection, chat, (args as JsonObject)[arg], tool.tool);
 				}, ctx);

@@ -9,7 +9,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type AssistantMessage, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
-import type { TaskId } from "@earendil-works/pi-durable";
+import type { TaskId, ToolExecutionApi } from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
 import { Accepted } from "../src/core/agents.ts";
 import { Classified, connectionTools, parseConnection, ToolSettings, withGroups } from "../src/core/connections.ts";
@@ -198,6 +198,28 @@ describe("a tool's setting", () => {
 			list_events: { read: false, floor: "owner" },
 		});
 		expect((await s.cal())?.tools.filter((t) => t.group === "Events").map((t) => t.setting)).toEqual(["always", "ask"]);
+	});
+
+	it("Ask on a read refuses a call of it already under way as a read", async () => {
+		const fake = await startFakeMcp();
+		fakes.push(fake);
+		const s = await open(await tempHome());
+		await proposed(s, fake);
+		const warm = await s.say("hello");
+		await s.done(warm.turn);
+		const old = s.registry
+			.snapshot()
+			.tools()
+			.find(({ tool }) => tool.name === "cal__list_events")!.tool;
+		await s.capabilities.setTools("cal", { list_events: "ask" });
+		// the registration a call already under way holds; its admission reads the real store
+		const api = { conversationId: warm.chat, commit: s.harness.commit.bind(s.harness) } as unknown as ToolExecutionApi;
+		const result = await old.execute({ day: "mon" }, api, context);
+		expect(result.isError).toBe(true);
+		expect(JSON.stringify(result.output)).toContain("the owner set it to ask first");
+		expect(fake.calls).toEqual([]);
+		// called again, as offered now, it asks every time, offering no scope
+		expect(offeredScopes(await asked(s, "cal__list_events", { day: "mon" }))).toEqual([]);
 	});
 
 	it("outlasts a restart, and banda's next version of a file it ships", async () => {
