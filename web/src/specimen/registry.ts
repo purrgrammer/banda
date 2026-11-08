@@ -346,7 +346,7 @@ export const SECTIONS: readonly Entry[] = [
 		sources: [OBJECT, "web/src/app/EmailDraftPreview.tsx", CONNECT],
 	},
 	{ id: "calendar", title: "Google Calendar", group: "connections", status: "app", sources: [OBJECT, DRAFT] },
-	{ id: "contacts", title: "Google Contacts", group: "connections", status: "app", sources: [OBJECT] },
+	{ id: "contacts", title: "Google Contacts", group: "connections", status: "app", sources: [OBJECT, DRAFT] },
 	{ id: "drive", title: "Google Drive", group: "connections", status: "app", sources: [OBJECT, DRAFT] },
 	{
 		id: "mcp",
