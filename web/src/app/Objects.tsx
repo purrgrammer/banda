@@ -10,6 +10,7 @@ import { ObjectLoading, ObjectUnavailable } from "../chat/Loading.tsx";
 import {
 	CheckRunCard,
 	ContactCard,
+	DiscussionCard,
 	EmailCard,
 	EventCard,
 	eventWhen,
@@ -536,8 +537,15 @@ function readingDetails(shown: Extract<ObjectShown, { shown: "card" }>): [string
 		if (subject.account !== shown.account || subject.connection !== shown.connection)
 			rows.push(["Subject read as", `${subject.account ?? "No account"} on ${subject.service}`]);
 	}
-	if (card.card === "pull-request" || card.card === "issue" || card.card === "check-run" || card.card === "repository")
+	if (
+		card.card === "pull-request" ||
+		card.card === "issue" ||
+		card.card === "check-run" ||
+		card.card === "discussion" ||
+		card.card === "repository"
+	)
 		rows.push(["Repository", card.repo]);
+	if (card.card === "discussion") rows.push(["Title", card.title], ["Category", card.category]);
 	if (card.card === "repository") rows.push(["Latest release", card.release ?? ""], ["Head", card.sha ?? ""]);
 	if (card.card === "pull-request" || card.card === "issue") rows.push(["Title", card.title], ["Author", card.author]);
 	if (card.card === "pull-request") rows.push(["Branch", card.branch]);
@@ -621,6 +629,11 @@ function ReadingCard({
 				</>
 			) : card.card === "check-run" ? (
 				<CheckRunCard run={{ ...card, asOf }} actions={actions} />
+			) : card.card === "discussion" ? (
+				<>
+					<DiscussionCard discussion={{ ...card, asOf }} actions={actions} />
+					{following}
+				</>
 			) : card.card === "repository" ? (
 				<>
 					<RepositoryCard repository={{ ...card, asOf }} actions={actions} />

@@ -22,6 +22,7 @@ export const CARDS = [
 	"issue",
 	"check-run",
 	"notification",
+	"discussion",
 	"repository",
 	"email",
 	"event",
@@ -689,6 +690,18 @@ export type NotificationCard = {
 	readonly subject?: string;
 };
 
+/** A discussion: open, answered or closed, in its category, with how many comments when they were read. */
+export type DiscussionCard = {
+	readonly card: "discussion";
+	readonly repo: string;
+	readonly number: number;
+	readonly title: string;
+	readonly state: "open" | "answered" | "closed" | "unknown";
+	readonly category: string;
+	readonly comments: number | null;
+	readonly url?: string;
+};
+
 /** One pull request or issue as a repository's card names it: its number, title, author and state. */
 export type Opened = {
 	readonly number: number;
@@ -786,6 +799,7 @@ export type ObjectCard =
 	| IssueCard
 	| CheckRunCard
 	| NotificationCard
+	| DiscussionCard
 	| RepositoryCard
 	| EmailCard
 	| EventCard
@@ -1026,6 +1040,24 @@ export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as
 				...(subject === undefined || subject.length > 500 ? {} : { subject }),
 			};
 		}
+		case "discussion":
+			return {
+				card: "discussion",
+				repo,
+				number,
+				title: plainLine(field("title")),
+				state:
+					field("closed") === true
+						? "closed"
+						: field("answered") === true
+							? "answered"
+							: field("closed") === false
+								? "open"
+								: "unknown",
+				category: plainLine(field("category"), 60),
+				comments: count(field("comments")),
+				...withUrl,
+			};
 		case "repository": {
 			// its pull requests are the read every repository answers: without them it was not read
 			if (!Array.isArray(field("pulls"))) throw new Error("Incomplete object");

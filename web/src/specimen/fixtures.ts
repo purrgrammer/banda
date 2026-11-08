@@ -4,7 +4,7 @@ import type { FileUIPart } from "@/components/ai-elements/types";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import type { WatchView } from "../../../src/server/api.ts";
 import type { Service } from "../chat/Catalogue.tsx";
-import type { CheckRun, Issue, PullRequest, Repository } from "../chat/Object.tsx";
+import type { CheckRun, Discussion, Issue, PullRequest, Repository } from "../chat/Object.tsx";
 import type { RoutineRowView, WatchRowView } from "../chat/Panel.tsx";
 import type { RowView, Who } from "../chat/Row.tsx";
 
@@ -284,6 +284,16 @@ export const CHECK_RUN: CheckRun = {
 		"  expected 0 runs, got 1",
 		"    at test/routines.test.ts:88:21",
 	],
+};
+
+export const DISCUSSION: Discussion = {
+	repo: "purrgrammer/banda",
+	number: 52,
+	title: "How should a watch say what it saw while paused?",
+	state: "open",
+	category: "Q&A",
+	comments: 4,
+	url: "https://github.com/purrgrammer/banda/discussions/52",
 };
 
 export const REPOSITORY: Repository = {

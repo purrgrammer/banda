@@ -1,6 +1,6 @@
 /**
  * GitHub's objects (DESIGN.md "Connections"), as `scripts/shipped-github.ts` writes them into the file banda ships: a
- * pull request, an issue, a check run, a notification and a repository, each with the URLs and ids that name it, the reads (of
+ * pull request, an issue, a check run, a notification, a discussion and a repository, each with the URLs and ids that name it, the reads (of
  * github-mcp-server's own read tools, its minimal answers) that fetch it, the fields its card shows and the writes that
  * act on it. Data, never code: the daemon draws each card.
  */
@@ -394,6 +394,77 @@ export const GITHUB_OBJECTS = {
 				id: { thread: "threadID" },
 				verb: "Mark read",
 				verbs: [{ when: { state: "done" }, verb: "Mark done" }],
+			},
+		],
+	},
+	discussion: {
+		card: "discussion",
+		normalize: { owner: "lowercase", repo: "lowercase", number: "integer" },
+		name: "{owner}/{repo} · discussion #{number}",
+		urls: ["https://github.com/{owner}/{repo}/discussions/{number}"],
+		// not `{owner}/{repo}#{number}`: that names a pull request or an issue first, and a discussion shares their numbers
+		ids: ["{owner}/{repo}/discussions/{number}"],
+		reads: {
+			discussion: {
+				tool: "get_discussion",
+				args: { owner: "{owner}", repo: "{repo}", discussionNumber: "{number}" },
+			},
+			// oldest first, a hundred, each with its replies: a comment past the hundredth is not seen, and the count beside
+			// the page says when it is short, so none counts as gone
+			comments: {
+				optional: true,
+				follow: true,
+				tool: "get_discussion_comments",
+				args: { owner: "{owner}", repo: "{repo}", discussionNumber: "{number}", perPage: 100, includeReplies: true },
+			},
+		},
+		// how a watch follows it: new comments and replies wake, answered or closed wakes and ends it, a new title tells.
+		// GitHub's answer names no comment's author, so the account's own comments wake too
+		follow: {
+			totals: { "comments.comments": "comments.totalCount" },
+			ignore: [
+				"discussion.body",
+				"comments.totalCount",
+				"comments.pageInfo",
+				"comments.comments[*].body",
+				"comments.comments[*].replyTotalCount",
+				"comments.comments[*].replies[*].body",
+			],
+			rules: [
+				{ on: "discussion.isAnswered", to: true, does: "wake", says: "answered" },
+				{ on: "discussion.closed", to: true, does: "wake", says: "closed" },
+				{ on: "discussion.closed", to: false, does: "wake", says: "reopened" },
+				{ on: "discussion.title", does: "tell", says: "retitled: {to}" },
+				{ on: "comments.comments[*]", kind: "added", does: "wake", says: "new comment" },
+				{ on: "comments.comments[*].replies[*]", kind: "added", does: "wake", says: "new reply" },
+			],
+			ends: { answered: "discussion.isAnswered = true", closed: "discussion.closed = true" },
+			every: "10m",
+			settle: "1m",
+		},
+		fields: {
+			number: "discussion.number",
+			title: "discussion.title",
+			closed: "discussion.closed",
+			answered: "discussion.isAnswered",
+			category: "discussion.category.name",
+			comments: "comments.totalCount",
+			url: "discussion.url",
+		},
+		writes: [
+			{
+				tool: "discussion_comment_write",
+				id: { owner: "owner", repo: "repo", number: "discussionNumber" },
+				verb: "Comment",
+				what: "Comment on",
+				text: "body",
+				verbs: [
+					{ when: { method: "reply" }, verb: "Reply", what: "Reply on" },
+					{ when: { method: "update" }, verb: "Edit", what: "Edit a comment on" },
+					{ when: { method: "delete" }, verb: "Delete", what: "Delete a comment on" },
+					{ when: { method: "mark_answer" }, verb: "Mark answer", what: "Mark an answer on" },
+					{ when: { method: "unmark_answer" }, verb: "Unmark answer", what: "Unmark the answer on" },
+				],
 			},
 		],
 	},

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
 import { endedBy, type Json, sort } from "../src/core/follow.ts";
-import { cardOf, parseObjects, recognise, refKey } from "../src/core/objects.ts";
+import { cardOf, draftedOn, parseObjects, recognise, refKey } from "../src/core/objects.ts";
 import { Faults } from "./fault/faults.ts";
 import { type Answer, failure, GITHUB, watchInvariants, watchScenario } from "./fault/watch-scenario.ts";
 import { githubObjectTools } from "./fixtures/github-objects.ts";
@@ -264,5 +264,122 @@ describe("a repository as an object", () => {
 			["tell", "new commits on the default branch"],
 			["tell", "renovate[bot] opened #13: Bump"],
 		]);
+	});
+});
+
+/**
+ * A discussion's life, as `get_discussion` and `get_discussion_comments` (with replies) answer it: open with one
+ * comment; a second comment and a new title; a reply to the first; then answered.
+ */
+const discussion: Answer = (tool, args, step) => {
+	if (args.owner !== "acme" || args.repo !== "banda" || Number(args.discussionNumber) !== 52)
+		return failure("Not Found");
+	if (tool === "get_discussion") {
+		const found: Item = {
+			number: 52,
+			title: step >= 1 ? "How should a paused watch report?" : "Paused watches",
+			body: "What should it say?",
+			url: "https://github.com/acme/banda/discussions/52",
+			closed: false,
+			isAnswered: step >= 3,
+			createdAt: "2026-11-01T09:00:00Z",
+			category: { name: "Q&A" },
+		};
+		if (step >= 3) found.answerChosenAt = "2026-11-02T10:00:00Z";
+		return found;
+	}
+	if (tool === "get_discussion_comments") {
+		const comments: Item[] = [
+			{
+				id: "DC_1",
+				body: "One wake, marked",
+				isAnswer: step >= 3,
+				...(step >= 2 ? { replies: [{ id: "DC_3", body: "Agreed" }], replyTotalCount: 1 } : {}),
+			},
+			...(step >= 1 ? [{ id: "DC_2", body: "Or a line per change" }] : []),
+		];
+		return {
+			comments,
+			pageInfo: { hasNextPage: false, hasPreviousPage: false, startCursor: "a", endCursor: `e${step}` },
+			totalCount: comments.length,
+		};
+	}
+	return failure(`no ${tool}`);
+};
+
+describe("a watch on a discussion", () => {
+	it("a new comment and a reply wake, a new title tells; answered wakes and ends it", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: await github(),
+			object: "https://github.com/acme/banda/discussions/52",
+			answer: discussion,
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes.map((wake) => [[...wake.changes].sort(), wake.ended ?? null])).toEqual([
+			[["new comment", "retitled: How should a paused watch report?"], null],
+			[["new reply"], null],
+			[["answered"], "answered"],
+		]);
+		expect(summary.wakes[0]?.object).toMatchObject({ name: "acme/banda · discussion #52", service: "GitHub" });
+		expect(summary.record.done?.why).toBe("answered");
+		expect(summary.turns.every((turn) => turn?.status === "completed")).toBe(true);
+	}, 60_000);
+
+	it("closed wakes and ends it; a short page of comments says none is gone", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: await github(),
+			object: "acme/banda/discussions/52",
+			answer: (tool, args, step) => {
+				const answer = discussion(tool, args, 0);
+				if (tool === "get_discussion") return { ...(answer as Item), closed: step >= 2 };
+				// a page short of the count: the first comment fell off it, which is no removal
+				if (step >= 1) return { comments: [], pageInfo: {}, totalCount: 1 };
+				return answer;
+			},
+			clicks: ["k1", "k2"],
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.tells).toEqual([]);
+		expect(summary.wakes.map((wake) => [wake.changes, wake.ended ?? null])).toEqual([[["closed"], "closed"]]);
+	}, 60_000);
+});
+
+describe("a discussion as an object", () => {
+	it("its URL and id name it, a pull request's never; its card says its state, category and comments", () => {
+		const found = recognise("https://github.com/Acme/Banda/discussions/052#discussioncomment-1", hub);
+		expect(found.map((ref) => ref.kind)).toEqual(["discussion"]);
+		expect(refKey(found[0]!, kinds)).toBe("github:discussion:acme/banda/discussions/52");
+		expect(recognise("acme/banda#52", hub).map((ref) => ref.kind)).toEqual(["pull_request", "issue"]);
+		const answers = {
+			discussion: discussion("get_discussion", { owner: "acme", repo: "banda", discussionNumber: 52 }, 3),
+		};
+		expect(cardOf(kinds.discussion!, found[0]!, answers)).toEqual({
+			card: "discussion",
+			repo: "acme/banda",
+			number: 52,
+			title: "How should a paused watch report?",
+			state: "answered",
+			category: "Q&A",
+			comments: null,
+			url: "https://github.com/acme/banda/discussions/52",
+		});
+	});
+
+	it("a comment on it is a draft on it", () => {
+		const drafted = draftedOn(
+			"github",
+			"discussion_comment_write",
+			{ method: "add", owner: "acme", repo: "banda", discussionNumber: 52, body: "One wake" },
+			kinds,
+		);
+		expect(drafted).toEqual({
+			refs: [{ connection: "github", kind: "discussion", values: { owner: "acme", repo: "banda", number: "52" } }],
+			verb: "Comment",
+			what: "Comment on",
+			text: "body",
+		});
+		expect(
+			draftedOn("github", "discussion_comment_write", { method: "delete", commentNodeID: "DC_1" }, kinds),
+		).toBeUndefined();
 	});
 });

@@ -1,6 +1,6 @@
 /**
  * Objects: things in a connection the owner recognises, drawn by the daemon from its own reading. GitHub's: a pull
- * request, an issue, a check run, a repository, and a notification drawn as its subject with why it came.
+ * request, an issue, a check run, a discussion, a repository, and a notification drawn as its subject with why it came.
  */
 
 import type { LucideIcon } from "lucide-react";
@@ -25,6 +25,7 @@ import {
 	GitPullRequestIcon,
 	ImageIcon,
 	MailIcon,
+	MessagesSquareIcon,
 	PhoneIcon,
 	PresentationIcon,
 	SheetIcon,
@@ -418,6 +419,7 @@ export function ObjectLink({
 		| (PullRequest & { card: "pull-request" })
 		| (Issue & { card: "issue" })
 		| (CheckRun & { card: "check-run" })
+		| (Discussion & { card: "discussion" })
 		| (Repository & { card: "repository" })
 		| (EmailMessage & { card: "email" })
 		| (CalendarEvent & { card: "event" })
@@ -527,7 +529,9 @@ export function ObjectLink({
 				? STATE[object.state]
 				: object.card === "issue"
 					? ISSUE_STATE[object.state]
-					: CHECK_STATE[object.state];
+					: object.card === "discussion"
+						? DISCUSSION_STATE[object.state]
+						: CHECK_STATE[object.state];
 	const name = object.card === "check-run" ? object.name : object.card === "repository" ? object.repo : object.title;
 	const location =
 		object.card === "check-run" || object.card === "repository" ? object.repo : `${object.repo} #${object.number}`;
@@ -1000,6 +1004,68 @@ export function IssueCard({ issue, actions }: { issue: Issue; actions?: ReactNod
 						? "Comments unavailable"
 						: `${issue.comments} ${issue.comments === 1 ? "comment" : "comments"}`}
 				</span>
+			</span>
+		</Tile>
+	);
+}
+
+export type Discussion = {
+	readonly repo: string;
+	readonly number: number;
+	readonly title: string;
+	readonly state: "open" | "answered" | "closed" | "unknown";
+	readonly category: string;
+	/** Known once its comments were read: when it is followed. */
+	readonly comments: number | null;
+	readonly url?: string | undefined;
+	readonly asOf?: string | undefined;
+};
+
+const DISCUSSION_STATE = {
+	unknown: { icon: CircleDashedIcon, word: "State unavailable", live: false },
+	open: { icon: MessagesSquareIcon, word: "Open", live: true },
+	answered: { icon: CircleCheckIcon, word: "Answered", live: true },
+	closed: { icon: CircleSlashIcon, word: "Closed", live: false },
+} as const;
+
+export function DiscussionCard({ discussion, actions }: { discussion: Discussion; actions?: ReactNode }) {
+	const state = DISCUSSION_STATE[discussion.state];
+	return (
+		<Tile className="flex flex-col gap-2.5 p-3.5">
+			<Where
+				asOf={discussion.asOf}
+				url={discussion.url}
+				actions={
+					actions === undefined ? (
+						<ObjectMenu
+							name={`${discussion.repo} discussion #${discussion.number}`}
+							details={[
+								["Repository", discussion.repo],
+								["Category", discussion.category],
+							]}
+						/>
+					) : (
+						actions
+					)
+				}
+			>
+				{discussion.repo} · discussion #{discussion.number}
+			</Where>
+			<span className="text-body font-semibold text-ink [overflow-wrap:anywhere]">
+				{discussion.title || "Title unavailable"}
+			</span>
+			<span className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-meta text-ink-2">
+				<StatePill {...state} />
+				{discussion.category === "" ? null : (
+					<span className="min-w-0 max-w-full truncate rounded-full border border-line px-2 py-px">
+						{discussion.category}
+					</span>
+				)}
+				{discussion.comments === null ? null : (
+					<span className="tabular-nums">
+						{discussion.comments} {discussion.comments === 1 ? "comment" : "comments"}
+					</span>
+				)}
 			</span>
 		</Tile>
 	);
