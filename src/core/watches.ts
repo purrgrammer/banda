@@ -64,6 +64,8 @@ import { context } from "./store.ts";
 
 /** A watch's name, which is its file's: lowercase words joined by `-`, as an agent's. */
 export const WATCH_NAME = AGENT_NAME;
+/** The kind of a watch's task: a timer over its record, whose waking and sleeping is no news to anyone. */
+export const WATCH_TASK = "banda.watch";
 export const watchPath = (name: string) => `watches/${name}.md`;
 export const MAX_WATCH_BYTES = 16 * 1024;
 /** The most bytes one reading of a followed object may hold, every read's answer together. */
@@ -1012,7 +1014,7 @@ export function defineWatches(options: WatchesOptions) {
 	};
 
 	const WatchTask = defineTask<{ name: string }, WatchState, WatchEnd>({
-		name: "banda.watch",
+		name: WATCH_TASK,
 		version: 1,
 		initial: () => ({ phase: "wait" }),
 		phases: {

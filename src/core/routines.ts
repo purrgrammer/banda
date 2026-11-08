@@ -48,6 +48,8 @@ import { context } from "./store.ts";
 
 /** A routine's name, which is its file's: lowercase words joined by `-`, as an agent's. */
 export const ROUTINE_NAME = AGENT_NAME;
+/** The kind of a routine's task: a timer over its record, whose waking and sleeping is no news to anyone. */
+export const ROUTINE_TASK = "banda.routine";
 export const routinePath = (name: string) => `routines/${name}.md`;
 export const MAX_ROUTINE_BYTES = 16 * 1024;
 
@@ -364,7 +366,7 @@ export function defineRoutines(options: RoutinesOptions) {
 	};
 
 	const Routine = defineTask<{ name: string }, RoutineState, RoutineEnd>({
-		name: "banda.routine",
+		name: ROUTINE_TASK,
 		version: 1,
 		initial: () => ({ phase: "wait" }),
 		phases: {
