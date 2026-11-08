@@ -28,7 +28,27 @@ afterEach(async () => {
 	for (const connected of opened.splice(0)) await connected.close();
 });
 
-async function connectedWith(call: { tool: string; args: JsonObject }, scopes = [READ, FILE]) {
+const CELLS = "https://www.googleapis.com/auth/spreadsheets";
+/** A Sheet the owner already has, with a budget tab: the fake Google starts with it. */
+const BUDGET = {
+	s1: {
+		id: "s1",
+		name: "Economía",
+		mimeType: "application/vnd.google-apps.spreadsheet",
+		trashed: false,
+		modifiedTime: "2026-11-01T09:47:37.699Z",
+		tabs: ["🏠", "2027"],
+		cells: {
+			"🏠": [
+				["ingresos", "", "gastos"],
+				["6385", "", "30"],
+			],
+			"2027": [],
+		},
+	},
+};
+
+async function connectedWith(call: { tool: string; args: JsonObject }, scopes = [READ, FILE], seed?: typeof BUDGET) {
 	const home = await tempHome();
 	const shipped = join(home, "shipped");
 	mkdirSync(shipped, { recursive: true });
@@ -36,7 +56,7 @@ async function connectedWith(call: { tool: string; args: JsonObject }, scopes = 
 		join(shipped, "drive.md"),
 		readFileSync(new URL("../shipped/connections/drive.md", import.meta.url), "utf8"),
 	);
-	const google = fakeDrive();
+	const google = fakeDrive(seed === undefined ? {} : { seed });
 	const s = await openConnected({
 		home,
 		shipped,
@@ -125,6 +145,54 @@ describe("Drive changes as drafts", () => {
 		await answer(s.harness, wait.key, "approve", web, "bearer", { type: "approval" });
 		await s.harness.waitForTask(turn, context);
 		expect(Object.values(google.files()).map((file) => [file.name, file.text])).toEqual([["Budget", "a,b\n1,2"]]);
+	});
+
+	it("cells written into a Sheet are a draft naming the tab and range; approved with Change your spreadsheets alone, they land once", async () => {
+		const connected = await connectedWith(
+			{ tool: "update_range", args: { file_id: "drive/s1", range: "🏠!C2", rows: "95" } },
+			[READ, CELLS],
+			BUDGET,
+		);
+		const { s, google } = connected;
+		const { wait, turn } = await drafted(connected);
+		if (wait.ask.type !== "approval") throw new Error("not an approval");
+		expect(wait.ask).toMatchObject({
+			tool: "drive__update_range",
+			label: "Write “🏠!C2” of this Sheet",
+			verb: "Write",
+			// the draft shows the file's id as its card names it, without the reference's drive/
+			args: { file_id: "s1", range: "🏠!C2", rows: "95" },
+		});
+		expect(wait.ask.editable ?? []).toEqual([]);
+		await answer(s.harness, wait.key, "approve", web, "bearer", { type: "approval" });
+		await s.harness.waitForTask(turn, context);
+		expect(google.writes).toEqual([{ method: "PUT", path: "sheets/s1/values/🏠!C2", body: [["95"]] }]);
+		expect(google.files().s1?.cells).toEqual({
+			"🏠": [
+				["ingresos", "", "gastos"],
+				["6385", "", "95"],
+			],
+			"2027": [],
+		});
+	});
+
+	it("rows added to a tab are a draft; approved, they follow the last row", async () => {
+		const connected = await connectedWith(
+			{ tool: "append_rows", args: { file_id: "drive/s1", sheet: "2027", rows: "a,b\n1,2" } },
+			[READ, CELLS],
+			BUDGET,
+		);
+		const { s, google } = connected;
+		const { wait, turn } = await drafted(connected);
+		expect(wait.ask).toMatchObject({ label: "Add 2 rows to the tab “2027” of this Sheet", verb: "Add" });
+		await answer(s.harness, wait.key, "approve", web, "bearer", { type: "approval" });
+		await s.harness.waitForTask(turn, context);
+		expect(google.files().s1?.cells).toMatchObject({
+			"2027": [
+				["a", "b"],
+				["1", "2"],
+			],
+		});
 	});
 
 	it("a denied trash runs nothing", async () => {

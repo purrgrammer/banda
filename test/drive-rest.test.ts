@@ -40,6 +40,9 @@ describe("Google Drive REST connection", () => {
 			"replace_doc_text",
 			"rename_file",
 			"trash_file",
+			"append_rows",
+			"update_range",
+			"add_sheet",
 		]);
 		expect(DRIVE_TOOLS.filter((tool) => tool.readOnlyHint === true).map((tool) => tool.name)).toEqual([
 			"get_profile",

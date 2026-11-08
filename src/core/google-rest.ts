@@ -51,7 +51,7 @@ export class GoogleError extends Error {
 	}
 }
 
-export type GoogleMethod = "GET" | "POST" | "PATCH" | "DELETE";
+export type GoogleMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 /** The answer to one request, once it is a success: retried while Google is busy, refused in words otherwise. */
 async function googleResponse(

@@ -1,12 +1,23 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { type Credentials, givenFor, parseConnection } from "../src/core/connections.ts";
-import { DRIVE_TOOLS, DRIVE_WRITES, driveDraft, driveExpand, driveWriteCall, keyHash } from "../src/core/drive-rest.ts";
+import {
+	DRIVE_TOOLS,
+	DRIVE_WRITES,
+	driveDraft,
+	driveExpand,
+	driveWriteCall,
+	keyHash,
+	rangeArg,
+	rowsOf,
+} from "../src/core/drive-rest.ts";
 import { REST_APIS, type RestApi } from "../src/core/rest.ts";
 import { fakeDrive } from "./fixtures/google-drive.ts";
 
 const FILE = "https://www.googleapis.com/auth/drive.file";
 const ALL = "https://www.googleapis.com/auth/drive";
+const CELLS = "https://www.googleapis.com/auth/spreadsheets";
+const SHEET_WRITES = ["append_rows", "update_range", "add_sheet"];
 const KEY = "8a7f0c1e-2b3d-4e5f-8a9b-0c1d2e3f4a5b";
 const write = (fetcher: typeof fetch, name: string, args: Record<string, unknown>, key: string | undefined = KEY) =>
 	driveWriteCall("t", name, args, undefined, fetcher, key);
@@ -33,12 +44,13 @@ const called = (fetcher: ReturnType<typeof vi.fn<typeof fetch>>, n: number) => {
 };
 
 describe("Drive changes: what the registry and the shipped file say", () => {
-	it("each write needs drive.file or drive (any one); reads stay on drive.readonly", () => {
+	it("each write needs drive.file or drive (any one), a Sheet's cells also take spreadsheets; reads stay on drive.readonly", () => {
 		const connection = shipped();
 		expect(connection.scopes).toEqual(["https://www.googleapis.com/auth/drive.readonly"]);
 		expect(Object.keys(connection.needs ?? {}).sort()).toEqual([...DRIVE_WRITES].sort());
-		for (const anyOf of Object.values(connection.needs ?? {})) expect(anyOf).toEqual([FILE, ALL]);
-		expect(REST_APIS.drive.scopes).toEqual(["https://www.googleapis.com/auth/drive.readonly", FILE, ALL]);
+		for (const [tool, anyOf] of Object.entries(connection.needs ?? {}))
+			expect(anyOf, tool).toEqual(SHEET_WRITES.includes(tool) ? [CELLS, FILE, ALL] : [FILE, ALL]);
+		expect(REST_APIS.drive.scopes).toEqual(["https://www.googleapis.com/auth/drive.readonly", FILE, CELLS, ALL]);
 		expect(REST_APIS.drive.required).toEqual(["https://www.googleapis.com/auth/drive.readonly"]);
 		for (const tool of DRIVE_WRITES) expect(DRIVE_TOOLS.find((each) => each.name === tool)?.readOnlyHint).toBe(false);
 		expect(connection.ask).toBeUndefined();
@@ -47,11 +59,21 @@ describe("Drive changes: what the registry and the shipped file say", () => {
 			expect(REST_APIS.drive.drafts.editable(tool)).toEqual([]);
 			expect(connection.floors[tool]).toBeUndefined();
 		}
-		expect(REST_APIS.drive.idempotent).toEqual(["create_doc", "create_sheet", "rename_file", "trash_file"]);
+		expect(REST_APIS.drive.idempotent).toEqual([
+			"create_doc",
+			"create_sheet",
+			"rename_file",
+			"trash_file",
+			"update_range",
+			"add_sheet",
+		]);
 		expect(connection.objects?.file?.writes?.map((write) => write.tool)).toEqual([
 			"replace_doc_text",
 			"rename_file",
 			"trash_file",
+			"append_rows",
+			"update_range",
+			"add_sheet",
 		]);
 	});
 
@@ -62,6 +84,8 @@ describe("Drive changes: what the registry and the shipped file say", () => {
 			expect(givenFor(granted([READ]), shipped(), tool)).toBe(false);
 			expect(givenFor(granted([READ, FILE]), shipped(), tool)).toBe(true);
 			expect(givenFor(granted([READ, ALL]), shipped(), tool)).toBe(true);
+			// Change your spreadsheets alone reaches a Sheet's cells and tabs, and no other change
+			expect(givenFor(granted([READ, CELLS]), shipped(), tool), tool).toBe(SHEET_WRITES.includes(tool));
 		}
 		expect(givenFor(granted([READ]), shipped(), "read_file")).toBe(true);
 	});
@@ -78,6 +102,18 @@ describe("Drive changes: what the registry and the shipped file say", () => {
 		expect(driveDraft("replace_doc_text", {})?.what).toBe("Replace the text of this Doc");
 		expect(driveDraft("rename_file", { name: "Plan v2" })?.what).toBe("Rename this file to “Plan v2”");
 		expect(driveDraft("trash_file", {})?.what).toBe("Move this file to the trash");
+		expect(driveDraft("append_rows", { sheet: "ops", rows: "a,b\n1,2\n" })?.what).toBe(
+			"Add 2 rows to the tab “ops” of this Sheet",
+		);
+		expect(driveDraft("append_rows", { rows: "a,b" })).toEqual({ what: "Add a row to this Sheet", verb: "Add" });
+		expect(driveDraft("update_range", { range: "'Budget 2027'!G4", rows: "95" })).toEqual({
+			what: "Write “'Budget 2027'!G4” of this Sheet",
+			verb: "Write",
+		});
+		expect(driveDraft("add_sheet", { title: "2028" })).toEqual({
+			what: "Add the tab “2028” to this Sheet",
+			verb: "Add",
+		});
 		expect(driveDraft("share_file", {})).toBeUndefined();
 		expect(driveExpand("rename_file", { file_id: "drive/abc", name: "x" })).toEqual({ file_id: "abc", name: "x" });
 	});
@@ -313,5 +349,139 @@ describe("Drive changes", () => {
 		const api = REST_APIS.drive as RestApi;
 		const result = await api.write("t", "create_doc", { title: "T", markdown: "m" }, undefined, drive.fetch, [], KEY);
 		expect(JSON.parse(result.text).ref).toMatch(/^drive\//);
+	});
+});
+
+describe("A Sheet's cells", () => {
+	it("reads rows from CSV as Sheets takes them: quotes, commas and line breaks inside, formulas as text", () => {
+		expect(rowsOf('a,b\n"x, y","say ""hi"""\n=SUM(A1:A2),\n')).toEqual([
+			["a", "b"],
+			["x, y", 'say "hi"'],
+			["=SUM(A1:A2)", ""],
+		]);
+		expect(rowsOf("one\r\ntwo")).toEqual([["one"], ["two"]]);
+		expect(rowsOf('"multi\nline",2')).toEqual([["multi\nline", "2"]]);
+		expect(rowsOf("")).toEqual([]);
+		expect(() => rowsOf('"open')).toThrow(/quotes close/);
+	});
+
+	it("takes a range in A1 notation with its tab quoted as Sheets wants, and refuses a whole tab or nonsense", () => {
+		expect(rangeArg({ range: "G4" })).toBe("G4");
+		expect(rangeArg({ range: "ops!A2:H2" })).toBe("'ops'!A2:H2");
+		expect(rangeArg({ range: "'Budget 2027'!G4" })).toBe("'Budget 2027'!G4");
+		expect(rangeArg({ range: "'Ana''s'!B:B" })).toBe("'Ana''s'!B:B");
+		expect(rangeArg({ range: "🏠!G4" })).toBe("'🏠'!G4");
+		for (const bad of ["ops", "ops!", "!A1", "ops!A", "ops!1", "a".repeat(301), 3])
+			expect(() => rangeArg({ range: bad }), String(bad)).toThrow(/A1 notation|tab's name/);
+	});
+
+	const sheetMeta = {
+		id: "s1",
+		mimeType: "application/vnd.google-apps.spreadsheet",
+		modifiedTime: "2026-11-01T09:47:37.699Z",
+	};
+
+	it("appends rows to the named tab, or the first, after checking the Sheet and its modified time", async () => {
+		const fetcher = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(json(sheetMeta))
+			.mockResolvedValueOnce(json({ updates: { updatedRange: "'ops'!A175:H175", updatedRows: 1 } }));
+		const result = await write(fetcher, "append_rows", {
+			file_id: "drive/s1",
+			sheet: "ops",
+			rows: '2026-11-08,MSFT,BUY - MARKET,2,$530.61,"$1,061.22",USD,1.1552',
+			modified: "2026-11-01T09:47:37.699Z",
+		});
+		expect(JSON.parse(result.text)).toEqual({
+			ok: true,
+			ref: "drive/s1",
+			sheet: "ops",
+			rows: 1,
+			range: "'ops'!A175:H175",
+		});
+		const appended = called(fetcher, 1);
+		expect(appended).toMatchObject({ method: "POST", path: "/v4/spreadsheets/s1/values/'ops':append" });
+		expect(appended.params).toMatchObject({ valueInputOption: "USER_ENTERED", insertDataOption: "INSERT_ROWS" });
+		expect(JSON.parse(appended.body ?? "")).toEqual({
+			majorDimension: "ROWS",
+			values: [["2026-11-08", "MSFT", "BUY - MARKET", "2", "$530.61", "$1,061.22", "USD", "1.1552"]],
+		});
+		expect(new URL(String(fetcher.mock.calls[1]?.[0])).origin).toBe("https://sheets.googleapis.com");
+
+		const first = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(json(sheetMeta))
+			.mockResolvedValueOnce(json({ sheets: [{ properties: { title: "🏠" } }, { properties: { title: "2027" } }] }))
+			.mockResolvedValueOnce(json({ updates: {} }));
+		expect(JSON.parse((await write(first, "append_rows", { file_id: "s1", rows: "a" })).text)).toEqual({
+			ok: true,
+			ref: "drive/s1",
+			sheet: "🏠",
+			rows: 1,
+		});
+		expect(called(first, 2).path).toBe(`/v4/spreadsheets/s1/values/${encodeURIComponent("'🏠'")}:append`);
+
+		const changed = vi.fn<typeof fetch>().mockResolvedValueOnce(json(sheetMeta));
+		expect(
+			await write(changed, "append_rows", { file_id: "s1", rows: "a", modified: "2026-11-02T00:00:00.000Z" }),
+		).toEqual({
+			text: "The Sheet changed since you read it: read it again, then draft the change anew.",
+			isError: true,
+		});
+		expect(changed).toHaveBeenCalledTimes(1);
+		const doc = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(json({ ...sheetMeta, mimeType: "application/vnd.google-apps.document" }));
+		expect((await write(doc, "append_rows", { file_id: "s1", rows: "a" })).text).toBe("Only a Google Sheet has cells.");
+	});
+
+	it("writes cells of a range with one PUT, the same when run again", async () => {
+		const fetcher = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(json(sheetMeta))
+			.mockResolvedValueOnce(json({ updatedRange: "'🏠'!G4", updatedCells: 1 }));
+		const result = await write(fetcher, "update_range", { file_id: "s1", range: "🏠!G4", rows: "95" });
+		expect(JSON.parse(result.text)).toEqual({ ok: true, ref: "drive/s1", range: "'🏠'!G4", cells: 1 });
+		const put = called(fetcher, 1);
+		expect(put).toMatchObject({ method: "PUT", path: `/v4/spreadsheets/s1/values/${encodeURIComponent("'🏠'!G4")}` });
+		expect(put.params).toMatchObject({ valueInputOption: "USER_ENTERED" });
+		expect(JSON.parse(put.body ?? "")).toEqual({ majorDimension: "ROWS", values: [["95"]] });
+		expect(
+			(await write(vi.fn<typeof fetch>(), "update_range", { file_id: "s1", range: "ops", rows: "1" })).isError,
+		).toBe(true);
+	});
+
+	it("adds a tab once: a tab of that name already there is left as it is", async () => {
+		const fetcher = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(json(sheetMeta))
+			.mockResolvedValueOnce(json({ sheets: [{ properties: { title: "🏠" } }] }))
+			.mockResolvedValueOnce(json({ spreadsheetId: "s1" }));
+		expect(JSON.parse((await write(fetcher, "add_sheet", { file_id: "s1", title: " 2028 " })).text)).toEqual({
+			ok: true,
+			ref: "drive/s1",
+			sheet: "2028",
+		});
+		const added = called(fetcher, 2);
+		expect(added).toMatchObject({ method: "POST", path: "/v4/spreadsheets/s1:batchUpdate" });
+		expect(JSON.parse(added.body ?? "")).toEqual({ requests: [{ addSheet: { properties: { title: "2028" } } }] });
+		const there = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(json(sheetMeta))
+			.mockResolvedValueOnce(json({ sheets: [{ properties: { title: "2028" } }] }));
+		expect(JSON.parse((await write(there, "add_sheet", { file_id: "s1", title: "2028" })).text)).toEqual({
+			ok: true,
+			ref: "drive/s1",
+			sheet: "2028",
+		});
+		expect(there).toHaveBeenCalledTimes(2);
+	});
+
+	it("a Sheet Google does not find, or the sign-in may not change, is said so without its URL", async () => {
+		const gone = vi.fn<typeof fetch>().mockResolvedValueOnce(json({ error: { code: 404, status: "NOT_FOUND" } }, 404));
+		const result = await write(gone, "update_range", { file_id: "s9", range: "A1", rows: "1" });
+		expect(result.isError).toBe(true);
+		expect(result.text).toContain("Change your spreadsheets");
+		expect(result.text).not.toContain("http");
 	});
 });

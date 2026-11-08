@@ -24,8 +24,18 @@ const UPLOAD = { service: "Google Drive", base: "https://www.googleapis.com/uplo
 const ALL_DRIVES = { supportsAllDrives: "true" };
 
 /** The changes: each asks the owner, and runs as approved. None shares a file or deletes one for good. */
-export const DRIVE_WRITES = ["create_doc", "create_sheet", "replace_doc_text", "rename_file", "trash_file"] as const;
-const IDEMPOTENT = ["create_doc", "create_sheet", "rename_file", "trash_file"] as const;
+export const DRIVE_WRITES = [
+	"create_doc",
+	"create_sheet",
+	"replace_doc_text",
+	"rename_file",
+	"trash_file",
+	"append_rows",
+	"update_range",
+	"add_sheet",
+] as const;
+/** The same change when run again with its key: appending rows is not (a repeat would add them twice). */
+const IDEMPOTENT = ["create_doc", "create_sheet", "rename_file", "trash_file", "update_range", "add_sheet"] as const;
 export const DRIVE_IDEMPOTENT: readonly string[] = IDEMPOTENT;
 
 const MAX_NAME = 500;
@@ -152,6 +162,61 @@ export const DRIVE_TOOLS: McpTool[] = [
 		"Draft moving a file to the trash (Drive keeps it there for 30 days; nothing is deleted for good). The owner approves it first.",
 		{ file_id: fileId },
 		["file_id"],
+	),
+	tool(
+		"append_rows",
+		"Draft adding rows after the last row of a tab of a Google Sheet, given as CSV (one row a line; a cell that starts with = is a formula). The owner sees the rows and approves them before anything is written. Pass modified, as get_file or search_files gave it, to refuse if the Sheet changed since you read it.",
+		{
+			file_id: fileId,
+			rows: {
+				type: "string",
+				minLength: 1,
+				maxLength: MAX_TEXT,
+				description: `The rows as CSV, at most ${MAX_TEXT} characters`,
+			},
+			sheet: {
+				type: "string",
+				minLength: 1,
+				maxLength: 200,
+				description: "The tab's name, as read_file lists them in sheets; the first tab by default",
+			},
+			modified: {
+				type: "string",
+				maxLength: 40,
+				description: "The Sheet's modified time as you read it; the change is refused in words if it differs now",
+			},
+		},
+		["file_id", "rows"],
+	),
+	tool(
+		"update_range",
+		"Draft writing cells of a Google Sheet: the rows, as CSV, go into the range from its top left cell (a cell that starts with = is a formula; an empty cell clears nothing and keeps what is there). The owner sees the cells and approves them before anything is written. Writing the same cells again changes nothing more.",
+		{
+			file_id: fileId,
+			range: {
+				type: "string",
+				minLength: 2,
+				maxLength: 300,
+				description:
+					"Where to write, in A1 notation with the tab's name: 'Budget 2027'!G4, or ops!A2:H2; the first tab when no tab is named",
+			},
+			rows: {
+				type: "string",
+				minLength: 1,
+				maxLength: MAX_TEXT,
+				description: `The rows as CSV, at most ${MAX_TEXT} characters`,
+			},
+		},
+		["file_id", "range", "rows"],
+	),
+	tool(
+		"add_sheet",
+		"Draft adding an empty tab to a Google Sheet. The owner approves it first. A tab of that name already there is left as it is.",
+		{
+			file_id: fileId,
+			title: { type: "string", minLength: 1, maxLength: 100, description: "The new tab's name" },
+		},
+		["file_id", "title"],
 	),
 ];
 
@@ -530,7 +595,7 @@ export async function driveCall(
 export const keyHash = (key: string) => createHash("sha256").update(key).digest("hex");
 
 const GONE =
-	"Drive could not find that file, or banda's sign-in is not allowed to change it: with only the Create files access banda changes the files it made; sign in with Change any of your files for the others.";
+	"Drive could not find that file, or banda's sign-in is not allowed to change it: with only the Create files access banda changes the files it made; sign in with Change any of your files for the others, or with Change your spreadsheets for a Sheet's cells and tabs.";
 
 function textArg(args: Record<string, unknown>, name: string, what: string): string {
 	const value = args[name];
@@ -569,6 +634,89 @@ function multipart(metadata: Json, contentType: string, content: string): { type
 	};
 }
 
+/** At most this many rows in one change, and this many cells across them. */
+const MAX_ROWS = 5000;
+const MAX_CELLS = 100_000;
+
+/**
+ * Rows from CSV (RFC 4180: a quoted field may hold commas, line breaks and doubled quotes), as the strings Google is
+ * given with USER_ENTERED, so "1,5" stays text until a sheet's locale reads it and =SUM(A1:A3) is a formula. A blank
+ * last line is no row.
+ */
+export function rowsOf(csv: string): string[][] {
+	const rows: string[][] = [];
+	let row: string[] = [];
+	let field = "";
+	let quoted = false;
+	let cells = 0;
+	const endField = () => {
+		row.push(field);
+		field = "";
+		if (++cells > MAX_CELLS) throw new Error(`Give at most ${MAX_CELLS} cells in one change.`);
+	};
+	const endRow = () => {
+		endField();
+		rows.push(row);
+		row = [];
+		if (rows.length > MAX_ROWS) throw new Error(`Give at most ${MAX_ROWS} rows in one change.`);
+	};
+	for (let i = 0; i < csv.length; i++) {
+		const c = csv[i] as string;
+		if (quoted) {
+			if (c !== '"') field += c;
+			else if (csv[i + 1] === '"') {
+				field += '"';
+				i++;
+			} else quoted = false;
+		} else if (c === '"' && field === "") quoted = true;
+		else if (c === ",") endField();
+		else if (c === "\n" || c === "\r") {
+			if (c === "\r" && csv[i + 1] === "\n") i++;
+			endRow();
+		} else field += c;
+	}
+	if (quoted) throw new Error("Give CSV whose quotes close.");
+	if (field !== "" || row.length > 0) endRow();
+	return rows;
+}
+
+function rowsArg(args: Record<string, unknown>): string[][] {
+	const rows = rowsOf(textArg(args, "rows", "the rows as CSV"));
+	if (rows.length === 0) throw new Error("Give at least one row.");
+	return rows;
+}
+
+/** A tab's name as an argument: one line, as read_file lists them. */
+function sheetArg(args: Record<string, unknown>, field: string): string | undefined {
+	const value = args[field];
+	if (value === undefined) return undefined;
+	const title = typeof value === "string" ? value.replace(/\p{Cc}/gu, " ").trim() : "";
+	if (title === "" || title.length > 200) throw new Error("Give the tab's name, of at most 200 characters.");
+	return title;
+}
+
+/** A cell or a block of cells in A1 notation: A1, G4, A2:H2, A2:H, B:B, 3:3; a bare column or a word is not one. */
+const A1 =
+	/^\$?[A-Za-z]{1,3}\$?\d{1,7}(?::\$?[A-Za-z]{1,3}\$?\d{0,7})?$|^\$?[A-Za-z]{1,3}:\$?[A-Za-z]{1,3}$|^\$?\d{1,7}:\$?\d{1,7}$/;
+
+/**
+ * Where to write, as given: cells in A1 notation, with a tab's name before `!` (quoted when it holds spaces or
+ * punctuation, as Sheets wants it; quoted here when it was not). The whole tab alone is refused: the cells are named.
+ */
+export function rangeArg(args: Record<string, unknown>): string {
+	const value = args.range;
+	const given = typeof value === "string" ? value.replace(/\p{Cc}/gu, " ").trim() : "";
+	if (given === "" || given.length > 300) throw new Error("Give the range in A1 notation, such as 'Budget 2027'!G4.");
+	const at = given.lastIndexOf("!");
+	const cells = at === -1 ? given : given.slice(at + 1);
+	if (!A1.test(cells)) throw new Error("Give the range in A1 notation, such as 'Budget 2027'!G4 or ops!A2:H2.");
+	if (at === -1) return cells;
+	const tab = given.slice(0, at);
+	const bare = /^'(.*)'$/s.exec(tab)?.[1]?.replaceAll("''", "'") ?? tab;
+	if (bare.trim() === "") throw new Error("Give the tab's name before the ! of the range.");
+	return `${tabRange(bare)}!${cells}`;
+}
+
 /**
  * Execute one approved Drive change, exactly as drafted: the upload is built here from the approved arguments only.
  * `key` is the approved effect's own, the same in a run repeated after a crash: a created file carries a hash of it, so
@@ -585,10 +733,32 @@ export async function driveWriteCall(
 ): Promise<McpResult> {
 	const request = (path: string, method: GoogleMethod = "GET", body?: unknown) =>
 		googleRequest(DRIVE, fetcher, token, path, signal, undefined, method, body);
+	const sheets = (path: string, method: GoogleMethod = "GET", body?: unknown) =>
+		googleRequest(SHEETS, fetcher, token, path, signal, undefined, method, body);
 	const upload = (path: string, method: "POST" | "PATCH", sent: { type: string; body: string }) =>
 		googleUpload(UPLOAD, fetcher, token, path, method, sent.type, sent.body, signal);
 	const meta = (id: string, fields: string) =>
 		request(`files/${id}?${new URLSearchParams({ ...ALL_DRIVES, fields })}`).then(object);
+	/** The Sheet a change acts on, checked to be one, in Drive and not in the trash; `since` as the agent read it. */
+	const spreadsheet = async (id: string, since: unknown) => {
+		if (since !== undefined && (typeof since !== "string" || !Number.isFinite(Date.parse(since))))
+			throw new Error("Give modified as the time get_file or search_files gave.");
+		const file = await meta(id, "id,mimeType,modifiedTime,trashed");
+		if (file.trashed === true) throw new Error("That file is in the trash.");
+		if (text(file.mimeType, 100) !== `${GOOGLE_APPS}spreadsheet`) throw new Error("Only a Google Sheet has cells.");
+		// Sheets offers no precondition on a write, so this checks just before it writes
+		if (typeof since === "string" && Date.parse(text(file.modifiedTime, 40)) !== Date.parse(since))
+			throw new Error("The Sheet changed since you read it: read it again, then draft the change anew.");
+	};
+	/** The tabs of a Sheet, in order. */
+	const tabsOf = async (id: string) => {
+		const book = object(
+			await sheets(`spreadsheets/${id}?${new URLSearchParams({ fields: "sheets.properties.title" })}`),
+		);
+		return (Array.isArray(book.sheets) ? book.sheets : []).map((each) =>
+			text(object(object(each).properties).title, 200),
+		);
+	};
 	/** Create a file from content Drive converts, or answer the one this effect made before a crash cut it short. */
 	const create = async (kind: "doc" | "sheet") => {
 		if (key === undefined || key === "") throw new Error("A Drive change runs only as the owner approved it.");
@@ -683,6 +853,71 @@ export async function driveWriteCall(
 				answer = { ok: true, ...refOf(id) };
 				break;
 			}
+			case "append_rows": {
+				const id = idArg(args, "file_id");
+				const rows = rowsArg(args);
+				const sheet = sheetArg(args, "sheet");
+				await spreadsheet(id, args.modified);
+				const tab = sheet ?? (await tabsOf(id))[0];
+				if (tab === undefined || tab === "") throw new Error("That Sheet has no tab to add rows to.");
+				const added = object(
+					await sheets(
+						`spreadsheets/${id}/values/${encodeURIComponent(tabRange(tab))}:append?${new URLSearchParams({
+							valueInputOption: "USER_ENTERED",
+							insertDataOption: "INSERT_ROWS",
+							fields: "updates(updatedRange,updatedRows)",
+						})}`,
+						"POST",
+						{ majorDimension: "ROWS", values: rows },
+					),
+				);
+				const updates = object(added.updates);
+				answer = {
+					ok: true,
+					...refOf(id),
+					sheet: tab,
+					rows: rows.length,
+					...(typeof updates.updatedRange === "string" ? { range: text(updates.updatedRange, 300) } : {}),
+				};
+				break;
+			}
+			case "update_range": {
+				const id = idArg(args, "file_id");
+				const range = rangeArg(args);
+				const rows = rowsArg(args);
+				await spreadsheet(id, undefined);
+				const written = object(
+					await sheets(
+						`spreadsheets/${id}/values/${encodeURIComponent(range)}?${new URLSearchParams({
+							valueInputOption: "USER_ENTERED",
+							fields: "updatedRange,updatedCells",
+						})}`,
+						"PUT",
+						{ majorDimension: "ROWS", values: rows },
+					),
+				);
+				answer = {
+					ok: true,
+					...refOf(id),
+					range: text(written.updatedRange, 300) || range,
+					...(typeof written.updatedCells === "number" ? { cells: written.updatedCells } : {}),
+				};
+				break;
+			}
+			case "add_sheet": {
+				const id = idArg(args, "file_id");
+				const title = sheetArg(args, "title");
+				if (title === undefined) throw new Error("Give the new tab's name.");
+				if (title.length > 100) throw new Error("Give a tab name of at most 100 characters.");
+				await spreadsheet(id, undefined);
+				// the same change run again after a crash finds its tab and adds no second
+				if (!(await tabsOf(id)).includes(title))
+					await sheets(`spreadsheets/${id}:batchUpdate`, "POST", {
+						requests: [{ addSheet: { properties: { title } } }],
+					});
+				answer = { ok: true, ...refOf(id), sheet: title };
+				break;
+			}
 			default:
 				throw new Error("That Drive change is not available.");
 		}
@@ -722,6 +957,29 @@ export function driveDraft(name: string, args: Record<string, unknown>): { what:
 		}
 		case "trash_file":
 			return { what: "Move this file to the trash", verb: "Trash" };
+		case "append_rows": {
+			const count = typeof args.rows === "string" ? rowsOf(args.rows).length : 0;
+			const rows = count === 1 ? "a row" : `${count} rows`;
+			const tab = titled(args.sheet);
+			return {
+				what: tab === undefined ? `Add ${rows} to this Sheet` : `Add ${rows} to the tab ${tab} of this Sheet`,
+				verb: "Add",
+			};
+		}
+		case "update_range": {
+			const range = typeof args.range === "string" ? titled(args.range) : undefined;
+			return {
+				what: range === undefined ? "Write cells of this Sheet" : `Write ${range} of this Sheet`,
+				verb: "Write",
+			};
+		}
+		case "add_sheet": {
+			const title = titled(args.title);
+			return {
+				what: title === undefined ? "Add a tab to this Sheet" : `Add the tab ${title} to this Sheet`,
+				verb: "Add",
+			};
+		}
 		default:
 			return undefined;
 	}

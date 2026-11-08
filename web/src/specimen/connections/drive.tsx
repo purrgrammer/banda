@@ -153,6 +153,50 @@ const DRAFTS: readonly (readonly [string, Draft, string, boolean])[] = [
 		"Move this file to the trash",
 		true,
 	],
+	[
+		"Draft: add rows to a tab",
+		{
+			type: "approval",
+			tool: "drive__append_rows",
+			verb: "Add",
+			as: AS,
+			on: ON,
+			args: {
+				file_id: "1sHeEt",
+				sheet: "ops",
+				rows: '2026-11-08,MSFT,BUY - MARKET,2,$530.61,"$1,061.22",USD,1.1552',
+				account: "alice",
+			},
+		},
+		"Add a row to the tab “ops” of this Sheet",
+		true,
+	],
+	[
+		"Draft: write cells",
+		{
+			type: "approval",
+			tool: "drive__update_range",
+			verb: "Write",
+			as: AS,
+			on: ON,
+			args: { file_id: "1sHeEt", range: "'Budget 2027'!G4", rows: "95", account: "alice" },
+		},
+		"Write “'Budget 2027'!G4” of this Sheet",
+		true,
+	],
+	[
+		"Draft: add a tab",
+		{
+			type: "approval",
+			tool: "drive__add_sheet",
+			verb: "Add",
+			as: AS,
+			on: ON,
+			args: { file_id: "1sHeEt", title: "2028", account: "alice" },
+		},
+		"Add the tab “2028” to this Sheet",
+		true,
+	],
 ];
 
 export function DriveSection() {
