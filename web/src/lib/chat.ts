@@ -155,6 +155,7 @@ type CoreSegment =
 			readonly changes: readonly string[];
 			readonly tell?: true;
 			readonly ended?: string;
+			readonly resumed?: true;
 			readonly at: number;
 	  }
 	| { readonly kind: "working"; readonly key: "working"; readonly text: string };
@@ -582,6 +583,7 @@ export function view(
 				changes: item.changes,
 				...(item.tell === true ? { tell: true as const } : {}),
 				...(item.ended === undefined ? {} : { ended: item.ended }),
+				...(item.resumed === true ? { resumed: true as const } : {}),
 				at: item.at,
 			});
 	}
@@ -640,11 +642,14 @@ export function quietRuns(segments: readonly Segment[]): Segment[] {
 
 /**
  * A watch's line, in the owner's words: the object and what changed ("acme/banda #142 · ana approved, lint failed"),
- * and what ended it ("… · done: merged").
+ * said to come from a pause ("… · while paused: lint failed, merged"), and what ended it ("… · done: merged").
  */
-export function watchWords(item: Pick<Extract<Item, { role: "watch" }>, "object" | "changes" | "ended">): string {
+export function watchWords(
+	item: Pick<Extract<Item, { role: "watch" }>, "object" | "changes" | "ended" | "resumed">,
+): string {
 	const changes = item.changes.filter((change) => change !== item.ended);
-	const words = [item.object.name, ...(changes.length === 0 ? [] : [changes.join(", ")])];
+	const said = changes.join(", ");
+	const words = [item.object.name, ...(said === "" ? [] : [item.resumed === true ? `while paused: ${said}` : said])];
 	if (item.ended !== undefined) words.push(`done: ${item.ended}`);
 	return words.join(" · ");
 }

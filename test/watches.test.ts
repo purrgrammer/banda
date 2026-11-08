@@ -3,8 +3,17 @@ import { Accepted } from "../src/core/agents.ts";
 import { Connected } from "../src/core/connections.ts";
 import { context } from "../src/core/store.ts";
 import { endWatches, parseWatch, watchPath, watchText } from "../src/core/watches.ts";
+import { pause } from "../src/server/watches.ts";
 import { Faults } from "./fault/faults.ts";
-import { NOW, type World, watchInvariants, watchProblems, watchScenario, world } from "./fault/watch-scenario.ts";
+import {
+	NOW,
+	type Scene,
+	type World,
+	watchInvariants,
+	watchProblems,
+	watchScenario,
+	world,
+} from "./fault/watch-scenario.ts";
 import { tempHome } from "./helpers.ts";
 
 const MINUTE = 60_000;
@@ -21,6 +30,10 @@ const changed = (step: number, change: (at: Reads) => void): World => {
 	change(at);
 	return at as unknown as World;
 };
+
+/** Pause watch banda-142, or resume it, as the owner. */
+const hold = (scene: Scene, paused: boolean) =>
+	pause(scene.harness, (harness, ctx) => scene.core.reconcile(harness, ctx), "banda-142", paused, scene.now);
 
 describe("a watch file", () => {
 	it("says what it follows, as whom and until what, and what matters below; each problem says what to write", () => {
@@ -157,6 +170,38 @@ describe("a watch on a pull request", () => {
 		expect(summary.wakes).toHaveLength(1);
 		expect(summary.wakes[0]).toMatchObject({ ended: "merged" });
 		expect(summary.wakes[0]?.changes).toEqual(expect.arrayContaining(["ana approved", "lint failed", "merged"]));
+	}, 60_000);
+
+	it("paused while the world changes, resumed: exactly one wake, which says it comes from the pause", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: (step) => world(step === 2 ? 1 : step),
+			clicks: [undefined, undefined, "k3"],
+			at: (step) => NOW + step * 10 * MINUTE,
+			act: async (step, scene) => {
+				if (step === 1) await hold(scene, true);
+				if (step === 3) await hold(scene, false);
+			},
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes).toHaveLength(1);
+		expect(summary.wakes[0]).toMatchObject({ resumed: true, ended: "merged" });
+		expect(summary.wakes[0]?.changes).toEqual(expect.arrayContaining(["ana approved", "lint failed", "merged"]));
+		expect(summary.record.resumed).toBeUndefined();
+	}, 60_000);
+
+	it("resumed with nothing changed: no wake, and nothing left marked for the next one", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: (step) => world(step < 3 ? 0 : 1),
+			clicks: [undefined, "k2", "k3"],
+			at: (step) => NOW + step * 10 * MINUTE,
+			act: async (step, scene) => {
+				if (step === 1) await hold(scene, true);
+				if (step === 2) await hold(scene, false);
+			},
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes).toHaveLength(1);
+		expect(summary.wakes[0]?.resumed).toBeUndefined();
 	}, 60_000);
 
 	it("stopped while its wake is pending: no further wake", async () => {

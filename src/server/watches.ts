@@ -239,10 +239,11 @@ export async function pause(
 		watches[name] ??= {};
 		const record = watches[name] as WatchRecord;
 		if (paused) record.paused = "owner";
-		else {
+		else if (record.paused !== undefined) {
 			delete record.paused;
-			// it looks again at once, and what changed meanwhile comes as one wake
+			// it looks again at once, and what changed meanwhile comes as one wake that says so
 			delete record.next;
+			record.resumed = now;
 		}
 		await log(tx, { at: now, watch: name, what: paused ? "You paused it" : "You resumed it" });
 		return true;

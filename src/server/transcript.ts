@@ -313,6 +313,7 @@ export function itemOf(entry: EntryRecord): Item | undefined {
 			text: `${data.object.name}: ${data.changes.join(", ")}`,
 			...(entry.kind === WATCH_TELL ? { tell: true as const } : {}),
 			...(data.ended === undefined ? {} : { ended: data.ended }),
+			...(data.resumed === true ? { resumed: true as const } : {}),
 			at: data.at,
 		};
 	}
