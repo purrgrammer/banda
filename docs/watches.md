@@ -59,10 +59,14 @@ returned to and merged, at desktop and phone width.
 - [x] An editor for a watch's words: `until` from the kind's ends, and what matters, bound to the version shown
 - [ ] A wake's key is the transition (the watch's `since`, its cursor, the changes), so the same change later wakes
   again; the fault sweep has not run on it yet (CI)
-- [ ] Slice 2, health and gaps: can't reach and behind in the row; the error line after an hour; resume reconciles
-  into one marked wake; the account's switch, sign-out and removal end watches in the same commit; no wake after done
-  or paused; scenarios: a revoked credential, days offline, a cancel while a wake is pending, duplicate and
-  out-of-order readings
+- [x] Slice 2, health and gaps: can't reach (since when) in the row; the error line after an hour, once per run of
+  failures, unread; resume reconciles into one marked wake; a gap in the readings kept says changes may be missing;
+  the account's switch, sign-out and removal end watches in the same commit; no wake after done or paused; scenarios:
+  a revoked account, days offline, a cancel (Stop) while a wake is pending, duplicate and out-of-order readings; the
+  scenario's invariants (`watchInvariants`); every state in the specimen
+- [ ] Slice 2's rest: "behind" in the row (the gap is said in the wake only); resuming after Pause all routines marks
+  no wake as from the pause; the fault sweep over the new acts (pause, resume, the account's switch) has not run (CI);
+  slice 2 through the app against a daemon at desktop and phone width
 - [ ] Slice 3, volume: bursts as one wake; busy cadence; wakes a day; tell-only changes; the issue kind; a thousand
   changes in one look
 - [ ] Spike before slice 2: the readings doc keeps 300 and evicts the oldest first, so a held reading must be

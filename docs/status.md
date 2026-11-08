@@ -132,7 +132,7 @@ chat; a name, an avatar and a style the owner chooses; notifications only when s
 | Hand-offs, helpers, side chats, errands and tasks areas | Removed | Agent-to-agent messages are a narrow direct-chat tool; groups keep their existing mention behavior |
 | Goals, Inbox, Library, Routines and Connections pages | Removed | Deleted; routines in the panel, connections in settings, artifacts in the chat |
 | Routines, schedule | Present | Wake in the agent's chat as events |
-| Watches, `follow` in an object kind, `watches.ts` | Present on the `watches` branch | Slice 1: a pull request followed until merged; owner review pending ([Watches](watches.md)) |
+| Watches, `follow` in an object kind, `watches.ts` | Present on the `watches` branch | Slices 1 and 2: a pull request followed until merged; health, gaps, resume and authority; owner review pending ([Watches](watches.md)) |
 | Skills, `skill` | Wired in a separate worktree, owner review pending | Accepted shared prompt files, owner and agent loads; supporting files remain data |
 | Memory's accepted core, learned cards, `propose_preference`, `used` | Removed | Deleted; facts in effect at once |
 | Connections, OAuth, GitHub by code, shipped file | Present, per-account credentials and object readings | Accounts; one connect flow; objects |
