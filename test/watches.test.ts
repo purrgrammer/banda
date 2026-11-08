@@ -6,13 +6,14 @@ import { Connected } from "../src/core/connections.ts";
 import { pause as pauseAll, resume as resumeAll } from "../src/core/control.ts";
 import { BUSY_EVERY, EVERY } from "../src/core/follow.ts";
 import { context } from "../src/core/store.ts";
-import { endWatches, parseWatch, Watches, watchPath, watchText } from "../src/core/watches.ts";
+import { endWatches, parseWatch, Watches, type WatchRecord, watchPath, watchText } from "../src/core/watches.ts";
 import { pause } from "../src/server/watches.ts";
 import { Faults } from "./fault/faults.ts";
 import {
 	NOW,
 	SCENARIOS,
 	type Scene,
+	WATCH,
 	type World,
 	watchInvariants,
 	watchProblems,
@@ -68,6 +69,12 @@ describe("a watch file", () => {
 		expect(errors("x", "---\nuntil: merged\n---\nwords\n")).toContainEqual(expect.stringContaining("object:"));
 		expect(errors("x", "---\nobject: a\nuntil: Soon!\n---\nwords\n")).toContainEqual(expect.stringContaining("until"));
 		expect(errors("x", "---\nobject: a\n---\n")).toContainEqual(expect.stringContaining("what matters"));
+		expect(errors("x", "---\nobject: a\nwakes_a_day: 0\n---\nwords\n")).toContainEqual(
+			expect.stringContaining("wakes_a_day"),
+		);
+		const limited = watchText({ object: "a", wakesADay: 6, ask: "words" });
+		expect(limited).toBe("---\nobject: a\nwakes_a_day: 6\n---\nwords\n");
+		expect(parseWatch("x", limited)).toEqual({ watch: { name: "x", object: "a", wakesADay: 6, ask: "words" } });
 	});
 });
 
@@ -344,6 +351,41 @@ describe("a watch on a pull request", () => {
 		]);
 		expect(summary.wakes.map((wake) => wake.burst)).toEqual([NOW + 10 * MINUTE, NOW + 30 * MINUTE]);
 		expect(summary.wakes[1]?.ended).toBe("merged");
+	}, 60_000);
+
+	it("past its wakes a day it pauses alone and says so once; resumed, what came meanwhile is one wake", async () => {
+		// bob's comments, one more each step; the watch looks on its own (here, the act's look), its run ended first
+		const comments = (step: number): World =>
+			changed(0, (at) => {
+				at.get_comments.push(...Array.from({ length: step }, (_, n) => ({ id: 50 + n, user: { login: `bob${n}` } })));
+			});
+		let limited: WatchRecord | undefined;
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			watch: WATCH.replace("account: bandarra\n", "account: bandarra\nwakes_a_day: 2\n"),
+			world: comments,
+			clicks: Array.from({ length: 7 }, () => undefined),
+			at: (step) => NOW + step * 10 * MINUTE,
+			act: async (step, scene) => {
+				const record = async () => (await scene.harness.snapshot(Watches, context))?.watches["banda-142"];
+				const turn = (await record())?.turn;
+				while (turn !== undefined && (await scene.harness.getTask(turn as never, context))?.state.status !== "terminal")
+					await new Promise((resolve) => setTimeout(resolve, 5));
+				if (step === 7) {
+					limited = await record();
+					await hold(scene, false);
+				}
+				await scene.core.lookWatch(scene.harness, "banda-142");
+			},
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		// settling holds each change one look: woken at steps 2 and 4, paused at 6, resumed at 7
+		expect(limited?.paused).toBe("limit");
+		expect(summary.troubles).toEqual([expect.objectContaining({ watch: "banda-142", wakesADay: 2 })]);
+		expect(summary.wakes.map((wake) => wake.resumed ?? false)).toEqual([false, false, true]);
+		expect(summary.wakes[2]?.changes).toEqual(["bob4 commented", "bob5 commented", "bob6 commented"]);
+		expect(summary.record.paused).toBeUndefined();
+		// its line counts as unread, as each reply does
+		expect(summary.unread).toBe(summary.wakes.length + 1);
 	}, 60_000);
 
 	it("an hour unable to look draws one error line; a good look clears it, and the next hour draws one again", async () => {

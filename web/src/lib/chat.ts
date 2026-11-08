@@ -667,8 +667,13 @@ export function watchWords(
 	return words.join(" · ");
 }
 
-/** A watch unable to look for an hour, in the owner's words: what it follows, where, since when, and why. */
+/**
+ * A watch in trouble, in the owner's words: unable to look for an hour (what it follows, where, since when, and why),
+ * or paused alone at its wakes a day.
+ */
 export function watchTroubleWords(data: WatchTroubleData): string {
+	if (data.wakesADay !== undefined)
+		return `${data.name} · paused: it woke ${data.wakesADay} times today, the most it may. Resume it in the panel`;
 	const time = new Date(data.since).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 	return `${data.name} · can't reach ${data.service ?? "it"} since ${time} · ${data.why}`;
 }

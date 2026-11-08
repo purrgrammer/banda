@@ -144,6 +144,8 @@ export type ScenarioOptions = {
 	readonly act?: (step: number, scene: Scene) => Promise<void>;
 	/** Whether watch `name` is clicked at step `step`; every watch at every step by default. */
 	readonly only?: (name: string, step: number) => boolean;
+	/** Mara's watch file; `WATCH` by default. */
+	readonly watch?: string;
 	/** What each model request waits for first: a run held going until it opens. */
 	readonly gate?: () => Promise<void>;
 };
@@ -242,7 +244,8 @@ export async function watchScenario(
 			};
 			connected.accounts.github = { bandarra: { id: "bandarra", at: NOW } };
 			connected.on.mara = { github: ["bandarra"] };
-			accepted.files[watchPath("banda-142")] = { sha: shaOf(WATCH), text: WATCH, at: NOW };
+			const text = options.watch ?? WATCH;
+			accepted.files[watchPath("banda-142")] = { sha: shaOf(text), text, at: NOW };
 			(await tx.doc(Watches)).watches["banda-142"] = { agent: "mara", since: NOW };
 			if (options.second) {
 				// a second agent follows the same pull request as the same account: one reading, two watches

@@ -67,6 +67,10 @@ export const MAX_WATCH_BYTES = 16 * 1024;
 /** The most bytes one reading of a followed object may hold, every read's answer together. */
 export const MAX_READING_BYTES = 512 * 1024;
 const DAY = 24 * 60 * 60_000;
+/** Wakes a day a watch may have unless its file says otherwise (`wakes_a_day`). */
+export const DEFAULT_WAKES_A_DAY = 24;
+/** The most `wakes_a_day` a watch file may give. */
+export const MAX_WAKES_A_DAY = 1000;
 
 /** A watch as its accepted file says. */
 export type Watch = {
@@ -77,11 +81,13 @@ export type Watch = {
 	readonly account?: string;
 	/** What ends it, by the word the kind's `ends` gives; unset, any of them. */
 	readonly until?: string;
+	/** The most times it may wake its agent in a day before it pauses itself; unset, `DEFAULT_WAKES_A_DAY`. */
+	readonly wakesADay?: number;
 	/** What matters and what to do about it: what the agent reads at every wake. */
 	readonly ask: string;
 };
 
-const FIELDS = ["object", "account", "until"] as const;
+const FIELDS = ["object", "account", "until", "wakes_a_day"] as const;
 const UNTIL = /^[a-z][a-z0-9_-]{0,31}$/;
 
 /** Parse a watch file, each problem saying what to write instead. */
@@ -103,6 +109,12 @@ export function parseWatch(
 	const until = read.one("until")?.trim();
 	if (until !== undefined && !UNTIL.test(until))
 		errors.push(`"until: ${until}" is not a word for an end, such as merged`);
+	const wakesText = read.one("wakes_a_day")?.trim();
+	const wakesADay = wakesText === undefined ? undefined : Number(wakesText);
+	if (wakesADay !== undefined && (!Number.isInteger(wakesADay) || wakesADay < 1 || wakesADay > MAX_WAKES_A_DAY))
+		errors.push(
+			`"wakes_a_day: ${wakesText}" is the most times it may wake in one day: a whole number from 1 to ${MAX_WAKES_A_DAY}`,
+		);
 	if (read.body === "") errors.push("below the frontmatter, write what matters and what to do about it");
 	if (errors.length > 0) return { errors };
 	return {
@@ -111,6 +123,7 @@ export function parseWatch(
 			object,
 			...(account === undefined ? {} : { account }),
 			...(until === undefined ? {} : { until }),
+			...(wakesADay === undefined ? {} : { wakesADay }),
 			ask: read.body,
 		},
 	};
@@ -121,6 +134,7 @@ export function watchText(watch: Omit<Watch, "name">): string {
 	const lines = [`object: ${watch.object}`];
 	if (watch.account !== undefined) lines.push(`account: ${watch.account}`);
 	if (watch.until !== undefined) lines.push(`until: ${watch.until}`);
+	if (watch.wakesADay !== undefined) lines.push(`wakes_a_day: ${watch.wakesADay}`);
 	return `---\n${lines.join("\n")}\n---\n${watch.ask.trim()}\n`;
 }
 
@@ -202,8 +216,8 @@ export type WatchRecord = {
 	 * change first; until the box holds it too, this says to write it there (again, after a restart).
 	 */
 	edit?: { sha: string; base: string | null };
-	/** Paused by the owner. */
-	paused?: "owner";
+	/** Paused alone: by the owner, or by reaching its wakes a day (`limit`). */
+	paused?: "owner" | "limit";
 	/** When the owner resumed it, until the next good look: what changed meanwhile wakes once, said to come from the pause. */
 	resumed?: number;
 	/**
@@ -332,7 +346,10 @@ export const WAKE = "banda.watch-wake";
 /** Changes that only tell: the line and the card in the chat, no run. */
 export const TELL = "banda.watch-tell";
 
-/** A watch unable to look for an hour, as its chat's error line says it: what it follows, why, and since when. */
+/**
+ * A watch in trouble, as its chat's error line says it: unable to look for an hour (what it follows, why, and since
+ * when), or, with `wakesADay`, paused alone because it woke the most times a day it may.
+ */
 export type WatchTroubleData = {
 	readonly watch: string;
 	/** What it follows, once resolved; else the watch's own name. */
@@ -341,6 +358,8 @@ export type WatchTroubleData = {
 	readonly why: string;
 	readonly since: number;
 	readonly at: number;
+	/** It woke this many times in a day, the most it may, and paused itself. */
+	readonly wakesADay?: number;
 };
 export const TROUBLE = "banda.watch-trouble";
 
@@ -800,6 +819,27 @@ export function defineWatches(options: WatchesOptions) {
 					record.burst = first;
 					record.next = running ? now + Math.min(every, BUSY_EVERY) : Math.min(settled, now + every);
 					outcome = { outcome: "held", why: "burst" };
+					return;
+				}
+			}
+			// past its wakes a day it pauses alone and says so; its cursor stays, so the resume wakes once with what came
+			if (wake.length > 0 && ended === undefined && click === undefined) {
+				const limit = watch.wakesADay ?? DEFAULT_WAKES_A_DAY;
+				record.wakes = (record.wakes ?? []).filter((at) => at > now - DAY);
+				if (record.wakes.length >= limit) {
+					record.paused = "limit";
+					await log(tx, { at: now, watch: name, what: "paused: it woke the most times a day it may" });
+					const data: WatchTroubleData = {
+						watch: name,
+						name: nameOf(ref, connection.objects ?? {}),
+						service: connection.service,
+						why: `it woke ${limit} times today, the most it may`,
+						since: now,
+						at: now,
+						wakesADay: limit,
+					};
+					await tx.appendEntry(chat as ConversationId, { kind: TROUBLE, data: data as unknown as JsonObject });
+					outcome = { outcome: "held", why: "paused" };
 					return;
 				}
 			}

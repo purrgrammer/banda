@@ -92,6 +92,22 @@ describe("watches in the app", () => {
 		);
 	});
 
+	it("a watch paused at its wakes a day is an error line that says so", () => {
+		const items: Item[] = [
+			{
+				id: 4,
+				role: "notice",
+				text: "",
+				watch: { watch: "banda-142", name: "acme/banda #142", why: "", since: NOW, at: NOW, wakesADay: 24 },
+				at: NOW,
+			},
+		];
+		const [line] = view(items, [], idle, {});
+		expect(shown(line as Parameters<typeof shown>[0])[0]).toBe(
+			"acme/banda #142 · paused: it woke 24 times today, the most it may. Resume it in the panel",
+		);
+	});
+
 	it("a watch unable to look for an hour is an error line that opens the watch", () => {
 		const items: Item[] = [
 			{
@@ -188,6 +204,21 @@ describe("watches in the app", () => {
 		// ended by authority: it says why, and no longer says it fails
 		expect(rows[4]).toMatchObject({ done: true, ended: true, failing: false });
 		expect(rows[4]?.saw).toMatch(/^Ended today 09:00.*: GitHub as @bandarra was switched off for Mara$/);
+		// paused alone at its wakes a day, it says so
+		expect(
+			sawWords(
+				{
+					agent: "mara",
+					name: "x",
+					state: "paused",
+					accepted: { sha: SHA, watch: { ...summary, wakesADay: 24 } },
+					paused: "limit",
+					saw: ["lint failed"],
+					sawAt: NOW,
+				},
+				NOW,
+			),
+		).toBe("Paused itself: it woke 24 times today, the most it may");
 		// behind: its newest wake had a gap, and the row says so until one without
 		expect(rows[0]?.behind).toBe(false);
 		expect(rows[5]?.behind).toBe(true);

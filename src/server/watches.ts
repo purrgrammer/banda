@@ -16,6 +16,7 @@ import {
 	acceptedWatch,
 	accountFor,
 	cannotFollow,
+	DEFAULT_WAKES_A_DAY,
 	followed,
 	type Looked,
 	MAX_WATCH_BYTES,
@@ -40,6 +41,7 @@ const summary = (watch: Watch): WatchSummary => ({
 	object: watch.object,
 	...(watch.account === undefined ? {} : { account: watch.account }),
 	...(watch.until === undefined ? {} : { until: watch.until }),
+	wakesADay: watch.wakesADay ?? DEFAULT_WAKES_A_DAY,
 	ask: watch.ask,
 });
 
@@ -63,7 +65,7 @@ function endsOf(accepted: { readonly [path: string]: { readonly text: string } }
 function stateOf(view: Omit<WatchView, "state">, record: WatchRecord): WatchState {
 	if (view.change !== undefined) return "allow";
 	if (record.done !== undefined) return "done";
-	if (record.paused === "owner") return "paused";
+	if (record.paused !== undefined) return "paused";
 	if (record.failed !== undefined) return "failing";
 	return "active";
 }
@@ -257,9 +259,11 @@ export async function pause(
 		if (paused) record.paused = "owner";
 		else if (record.paused !== undefined) {
 			delete record.paused;
-			// it looks again at once, and what changed meanwhile comes as one wake that says so
+			// it looks again at once, and what changed meanwhile comes as one wake that says so; its wakes a day count
+			// from the resume
 			delete record.next;
 			record.resumed = now;
+			record.wakes = [];
 		}
 		await log(tx, { at: now, watch: name, what: paused ? "You paused it" : "You resumed it" });
 		return true;

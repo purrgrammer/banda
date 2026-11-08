@@ -626,6 +626,8 @@ export type WatchSummary = {
 	readonly object: string;
 	readonly account?: string;
 	readonly until?: string;
+	/** The most times it may wake in a day before it pauses itself. */
+	readonly wakesADay?: number;
 	readonly ask: string;
 };
 
@@ -680,7 +682,8 @@ export type WatchView = {
 	readonly lastRun?: number;
 	/** Behind since then: its newest wake said some changes may be missing, until a later one without a gap. */
 	readonly behind?: number;
-	readonly paused?: "owner";
+	/** Paused alone: by the owner, or by waking the most times a day it may (`limit`). */
+	readonly paused?: "owner" | "limit";
 	/** Done: when, and what ended it; `authority` when it was its account or connection taken away. */
 	readonly done?: { readonly at: number; readonly why: string; readonly authority?: true };
 	/** The hashes of the box's versions the owner allowed, newest last: a chat that wrote one of them says so. */

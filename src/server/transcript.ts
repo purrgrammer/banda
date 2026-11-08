@@ -439,8 +439,10 @@ export function troubleText(data: TroubleData): string {
 	return `${what} paused: it ran ${data.runsADay} times today, the most it may`;
 }
 
-/** A watch unable to look for an hour, in the daemon's words. */
+/** A watch unable to look for an hour, or paused alone at its wakes a day, in the daemon's words. */
 export function watchTroubleText(data: WatchTroubleData): string {
+	if (data.wakesADay !== undefined)
+		return `${data.name}: paused: it woke ${data.wakesADay} times today, the most it may`;
 	return `${data.name}: can't reach ${data.service ?? "it"} since ${localTime(data.since)}: ${data.why}`;
 }
 
