@@ -18,6 +18,7 @@ import {
 	shellEvents,
 	takeReopen,
 	Unauthorized,
+	type WatchView,
 } from "./api.ts";
 import { checkForUpdate } from "./worker.ts";
 
@@ -123,6 +124,9 @@ function subscribe(listener: () => void) {
 
 /** Take what an action answered at once, before the stream says it too. */
 export const showControl = (control: ControlView) => set({ control });
+/** What a watch's action answered: the control room and the watches as they are after. */
+export const showWatching = (answer: { readonly control: ControlView; readonly watches: readonly WatchView[] }) =>
+	set({ control: answer.control, watches: answer.watches });
 export const showMemory = (memory: MemoryView) => set({ memory });
 export const showAgents = (agents: readonly AgentView[]) => set({ agents });
 export const showCapabilities = (capabilities: CapabilitiesView) => set({ capabilities });

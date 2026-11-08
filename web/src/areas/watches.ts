@@ -27,19 +27,22 @@ export type WatchAct =
 	/** Look now; `key` names the click, so a click sent twice looks once. */
 	| { readonly action: "check"; readonly key: string };
 
+/** What every watch action answers: the control room and the watches as they are after. */
+export type Watching = { readonly control: ControlView; readonly watches: readonly WatchView[] };
+
 /** Do `act` to watch `name`; rejects with why when the daemon refuses. */
-export async function actOnWatch(name: string, act: WatchAct): Promise<ControlView> {
+export async function actOnWatch(name: string, act: WatchAct): Promise<Watching> {
 	const { action, ...body } = act;
-	const answer = await api<ControlView | { looked: Looked; control: ControlView }>(`/watches/${name}/${action}`, {
+	const { control, watches } = await api<Watching & { looked?: Looked }>(`/watches/${name}/${action}`, {
 		method: "POST",
 		body: JSON.stringify(body),
 	});
-	return "control" in answer ? answer.control : answer;
+	return { control, watches };
 }
 
 /**
  * Follow an object as the owner, for agent `agent` (its id): a watch in effect at once, its first look made before it
- * is. Its name, and the control view after.
+ * is. Its name, and the control room and the watches after.
  */
 export const follow = (made: {
 	readonly agent: string;
@@ -47,4 +50,4 @@ export const follow = (made: {
 	readonly object: string;
 	readonly until?: string;
 	readonly ask?: string;
-}) => api<{ name: string; control: ControlView }>("/watches", { method: "POST", body: JSON.stringify(made) });
+}) => api<Watching & { name: string }>("/watches", { method: "POST", body: JSON.stringify(made) });

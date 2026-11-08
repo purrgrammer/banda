@@ -15,20 +15,22 @@ import { Facts } from "../chat/Approval.tsx";
 import { Confirm } from "../chat/Confirm.tsx";
 import { PanelBar, type WatchRowView } from "../chat/Panel.tsx";
 import { Field } from "../chat/RoutineEditor.tsx";
-import { showControl } from "../lib/shell.ts";
+import { showWatching } from "../lib/shell.ts";
 import { near, watchRows as rows, sawWords, untilWords, watchTitle } from "../lib/watches.ts";
 import { ObjectPreviews } from "./Objects.tsx";
 
-/** The owner's actions on a watch, wired to the daemon: each in effect at once. */
+/** The owner's actions on a watch, wired to the daemon: each in effect at once, the panel drawn from its answer. */
 export const watchActions = {
-	allow: (name: string, sha: string | null) => actOnWatch(name, { action: "accept", sha }).then(showControl),
-	decline: (name: string) => actOnWatch(name, { action: "decline" }).then(showControl),
-	check: (name: string) => actOnWatch(name, { action: "check", key: clickKey() }).then(showControl),
-	pause: (name: string, paused: boolean) => actOnWatch(name, { action: paused ? "pause" : "resume" }).then(showControl),
-	remove: (name: string) => actOnWatch(name, { action: "remove" }).then(showControl),
+	allow: (name: string, sha: string | null) => actOnWatch(name, { action: "accept", sha }).then(showWatching),
+	decline: (name: string) => actOnWatch(name, { action: "decline" }).then(showWatching),
+	check: (name: string) => actOnWatch(name, { action: "check", key: clickKey() }).then(showWatching),
+	pause: (name: string, paused: boolean) =>
+		actOnWatch(name, { action: paused ? "pause" : "resume" }).then(showWatching),
+	remove: (name: string) => actOnWatch(name, { action: "remove" }).then(showWatching),
 	edit: (name: string, sha: string, change: { readonly until?: string | null; readonly ask?: string }) =>
-		actOnWatch(name, { action: "edit", sha, ...change }).then(showControl),
-	follow: (made: Parameters<typeof follow>[0]) => follow(made).then(({ control }) => showControl(control)),
+		actOnWatch(name, { action: "edit", sha, ...change }).then(showWatching),
+	follow: (made: Parameters<typeof follow>[0]) =>
+		follow(made).then(({ control, watches }) => showWatching({ control, watches })),
 };
 
 /** Agent `agent`'s watches as its panel's rows, each answer wired to the daemon. */

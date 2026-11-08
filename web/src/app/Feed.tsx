@@ -37,7 +37,7 @@ import { attempt } from "../lib/attempt.ts";
 import { type Segment, tryAgainAfter } from "../lib/chat.ts";
 import { changeNoun, changeWords } from "../lib/segments/changes.ts";
 import { watchCallWords, watchObject } from "../lib/segments/watches.ts";
-import { showAgents, showCapabilities, showControl, useShell } from "../lib/shell.ts";
+import { showAgents, showCapabilities, showControl, showWatching, useShell } from "../lib/shell.ts";
 import { AgentPreview } from "./AgentPreview.tsx";
 import { kindWords } from "./ArtifactPage.tsx";
 import { ConnectFlowCard } from "./ConnectFlow.tsx";
@@ -326,9 +326,9 @@ function WatchLine({
 					void actOnWatch(name, {
 						action: "accept",
 						sha: change.kind === "removed" ? null : (change.sha ?? null),
-					}).then(showControl)
+					}).then(showWatching)
 				}
-				onDecline={() => void actOnWatch(name, { action: "decline" }).then(showControl)}
+				onDecline={() => void actOnWatch(name, { action: "decline" }).then(showWatching)}
 			/>
 		);
 	}

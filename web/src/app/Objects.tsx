@@ -200,21 +200,37 @@ export function ObjectPreviews({
 	);
 }
 
+/** A number for each value the shell held, so a string can say which one a reader saw without spelling it out. */
+const generations = new WeakMap<object, number>();
+let generation = 0;
+const generationOf = (value: object | undefined) => {
+	if (value === undefined) return 0;
+	const known = generations.get(value);
+	if (known !== undefined) return known;
+	generation++;
+	generations.set(value, generation);
+	return generation;
+};
+
 /**
  * What the watches have done, as one string: it changes when a followed object changed (the version of its reading,
- * never a look that found it the same), and when a watch comes, goes, ends, pauses, fails or changes what ends it,
- * which its card says. The cards named on screen are read again when it changes, and only then.
+ * never a look that found it the same), and when a watch comes, goes, ends, pauses, fails, changes what ends it or
+ * what it follows, which its card says; and when the connections or the agents changed, since what a card may show
+ * depends on who may read it. The cards named on screen are read again when it changes, and only then.
  */
 const watchesMoved = (shell: Shell) =>
-	JSON.stringify(
+	JSON.stringify([
+		generationOf(shell.capabilities),
+		generationOf(shell.agents),
 		(shell.watches ?? []).map((watch) => [
 			watch.name,
+			watch.object?.ref,
 			watch.object?.version,
 			watch.accepted?.watch?.until,
 			watch.state,
 			watch.done?.at,
 		]),
-	);
+	]);
 
 function ReadObjects({
 	chat,
@@ -577,14 +593,16 @@ function readingDetails(shown: Extract<ObjectShown, { shown: "card" }>): [string
 /**
  * Whether a card's reading is old: an hour and more since it was read. Age is display-only: one local timer at the
  * boundary, never another service read. Never old while a watch looks at the object (one that is active, neither
- * paused, done nor unable to look): the daemon keeps its reading current, and the card says "as of" only when nobody
- * can look (DESIGN.md "Watches").
+ * paused, done nor unable to look, while nothing is paused and the daemon is reached): the daemon keeps its reading
+ * current, and the card says "as of" only when nobody can look (DESIGN.md "Watches").
  */
 function useOldReading(shown: Extract<ObjectShown, { shown: "card" }>) {
 	const [expiredAt, setExpiredAt] = useState<number>();
 	const looking =
 		useShellPick((shell) =>
-			(shell.watches ?? []).some((watch) => watch.state === "active" && watch.object?.key === shown.key)
+			!shell.offline &&
+			shell.control?.paused === undefined &&
+			(shell.watches ?? []).some((watch) => watch.state === "active" && watch.object?.ref === shown.key)
 				? "looking"
 				: "",
 		) === "looking";
