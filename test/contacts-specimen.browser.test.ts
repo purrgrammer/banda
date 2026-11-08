@@ -56,6 +56,14 @@ for (const width of [390, 1440])
 				expect(await text("Head of Design · Northstar")).toBe(true);
 				expect(await text("From people you've emailed")).toBe(true);
 				expect(await text("Open in Google Contacts")).toBe(true);
+				expect(await text("Add “Bo Lindqvist” to your contacts")).toBe(true);
+				expect(await text("Delete this contact from your contacts")).toBe(true);
+				expect(await page.run(`${section}.querySelector('[aria-label="Contact draft"]') !== null`)).toBe(true);
+				expect(
+					await page.run(
+						`${section}.querySelector('[aria-label="Contact draft"] textarea, [aria-label="Contact draft"] input') === null`,
+					),
+				).toBe(true);
 				expect(await page.run(`${section}.querySelector('a[href="mailto:ana@northstar.example"]') !== null`)).toBe(
 					true,
 				);

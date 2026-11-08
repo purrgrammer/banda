@@ -10,6 +10,7 @@ import { attempt } from "../lib/attempt.ts";
 import { argList, draftParts, wildcardWarning } from "../lib/chat.ts";
 import { fileChanges } from "../lib/file-changes.ts";
 import { scopeOf, scopesOf } from "../lib/permissions.ts";
+import { CONTACT_DRAFT, ContactDraftPreview } from "./ContactDraftPreview.tsx";
 import { DRIVE_DRAFT, DriveDraftPreview } from "./DriveDraftPreview.tsx";
 import { EmailDraftPreview } from "./EmailDraftPreview.tsx";
 import { CALENDAR_DRAFT, EventDraftPreview, eventDraftWhat } from "./EventDraftPreview.tsx";
@@ -48,6 +49,7 @@ function Draft({ chat, agent, ask, label, wait, state, drawn }: Props) {
 		? (edits.to ?? (typeof ask.args.to === "string" ? ask.args.to : "the chosen recipient"))
 		: undefined;
 	const eventDraft = CALENDAR_DRAFT.test(ask.tool) && !interrupted;
+	const contactDraft = CONTACT_DRAFT.test(ask.tool) && !interrupted;
 	const what =
 		emailRecipient !== undefined
 			? `Send email to ${emailRecipient}`
@@ -55,7 +57,7 @@ function Draft({ chat, agent, ask, label, wait, state, drawn }: Props) {
 				? eventDraftWhat(ask.args, edits)
 				: label;
 	const driveDraft = DRIVE_DRAFT.test(ask.tool) && !interrupted;
-	const preview = emailDraft || eventDraft;
+	const preview = emailDraft || eventDraft || contactDraft;
 	// the daemon's verb, where the effect has one of its own; never a word of the label, which may be a tool's name
 	const verb = interrupted ? "Retry" : (ask.verb ?? "Allow");
 	const scope = !interrupted && ask.floor === undefined ? scopesOf(ask)[0] : undefined;
@@ -93,6 +95,8 @@ function Draft({ chat, agent, ask, label, wait, state, drawn }: Props) {
 							readOnly={readOnly || busy}
 							onEdit={(name, value) => setEdits((prior) => ({ ...prior, [name]: value }))}
 						/>
+					) : contactDraft ? (
+						<ContactDraftPreview tool={ask.tool} args={ask.args} />
 					) : driveDraft ? (
 						<DriveDraftPreview tool={ask.tool} args={ask.args} />
 					) : facts.length === 0 ? null : (
