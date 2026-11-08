@@ -30,7 +30,7 @@ import {
 } from "../core/objects.ts";
 import { agentOfChat } from "../core/permissions.ts";
 import { context } from "../core/store.ts";
-import { Watches, watchAgent } from "../core/watches.ts";
+import { parseWatch, Watches, watchAgent, watchPath } from "../core/watches.ts";
 import type { Capabilities } from "./capabilities.ts";
 import { BadRequest } from "./http.ts";
 
@@ -263,15 +263,19 @@ export function openObjects({
 		if (kind?.follow !== undefined) {
 			const key = readingKey(account, base.key);
 			const records = (await harness.snapshot(Watches, ctx))?.watches ?? {};
+			// what ends each watch comes from its accepted file, which the owner's edit changes at once; the record's copy
+			// follows at its next look
+			const files = (await harness.snapshot(Accepted, ctx))?.files ?? {};
 			follow = {
 				ends: Object.keys(kind.follow.ends),
 				by: Object.entries(records)
 					.filter(([, record]) => record.key === key && record.done === undefined)
-					.map(([watch, record]) => ({
-						watch,
-						agent: watchAgent(record),
-						...(record.until === undefined ? {} : { until: record.until }),
-					})),
+					.map(([watch, record]) => {
+						const file = files[watchPath(watch)];
+						const parsed = file === undefined ? undefined : parseWatch(watch, file.text);
+						const until = parsed !== undefined && "watch" in parsed ? parsed.watch.until : record.until;
+						return { watch, agent: watchAgent(record), ...(until === undefined ? {} : { until }) };
+					}),
 			};
 		}
 		return {

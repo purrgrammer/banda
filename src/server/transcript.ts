@@ -871,11 +871,15 @@ export async function shell(
 	const unsubscribe = subscribe(() => void changed());
 	await pushed();
 	try {
-		await new Promise<void>((resolve) => {
-			signal.addEventListener("abort", () => resolve(), { once: true });
-			// a doc not made yet has no watch, and nothing to close
-			void Promise.race(watches.flatMap((watch) => (watch === undefined ? [] : [watch.closed]))).then(() => resolve());
-		});
+		// a client gone during the first push has aborted already: a listener would wait for nothing, forever
+		if (!signal.aborted)
+			await new Promise<void>((resolve) => {
+				signal.addEventListener("abort", () => resolve(), { once: true });
+				// a doc not made yet has no watch, and nothing to close
+				void Promise.race(watches.flatMap((watch) => (watch === undefined ? [] : [watch.closed]))).then(() =>
+					resolve(),
+				);
+			});
 	} finally {
 		unsubscribe();
 		clearTimeout(timer);

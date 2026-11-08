@@ -145,8 +145,10 @@ describe("a watch on a pull request", () => {
 				made.push({ mara: counts["banda-142"] ?? -1, otto: counts["banda-142-otto"] ?? -1 });
 			},
 		});
+		// step 1 is each watch's baseline, which says how the object stands now, so Otto reads too; at step 5 Otto's
+		// hold from step 4 wants a reading from after the settling time, and Mara's step-4 reading is from before it
 		expect(made).toEqual([
-			{ mara: 4, otto: 0 },
+			{ mara: 4, otto: 4 },
 			{ mara: 4, otto: 0 },
 			{ mara: 4, otto: 0 },
 			{ mara: 4, otto: 0 },
@@ -165,6 +167,43 @@ describe("a watch on a pull request", () => {
 		// the card is the newest look's that read it: Otto's at step 5; both watches are done, so the reading is gone
 		expect(summary.card?.at).toBe(NOW + 50 * MINUTE);
 		expect(summary.followed).toBeUndefined();
+	}, 60_000);
+
+	it("the first look after a resume reads the object itself, and its wake says it comes from the pause", async () => {
+		// Otto is paused after the baseline; the pull request changes and Mara reads it; Otto is resumed in the same
+		// minute: his look takes no reading from before his resume, reads, and wakes with what changed while paused
+		const home = await tempHome();
+		const reads = () =>
+			readFileSync(join(home, "reads.jsonl"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean).length;
+		const still = async () => {};
+		const ottos: number[] = [];
+		const summary = await watchScenario(home, new Faults(), {
+			second: true,
+			tasks: false,
+			world: (step) => world(Math.max(0, step - 1)),
+			clicks: [undefined, undefined, undefined],
+			at: (step) => NOW + step * 10 * MINUTE,
+			act: async (step, { harness, core, now }) => {
+				await core.lookWatch(harness, "banda-142");
+				if (step === 1) {
+					await core.lookWatch(harness, "banda-142-otto");
+					await pause(harness, still, "banda-142-otto", true, now);
+					return;
+				}
+				if (step === 2) await pause(harness, still, "banda-142-otto", false, now);
+				const before = reads();
+				await core.lookWatch(harness, "banda-142-otto");
+				ottos.push(reads() - before);
+			},
+		});
+		expect(ottos).toEqual([4, 4]);
+		expect(watchInvariants(summary)).toEqual([]);
+		const otto = summary.wakes.filter((wake) => wake.watch === "banda-142-otto");
+		expect(otto.map((wake) => wake.resumed)).toEqual([true]);
+		expect([...(otto[0]?.changes ?? [])].sort()).toEqual(["ana approved", "checks finished", "lint failed"]);
+		expect(summary.wakes.filter((wake) => wake.watch === "banda-142").every((wake) => wake.resumed === undefined)).toBe(
+			true,
+		);
 	}, 60_000);
 
 	it("a change that happens again later wakes again: lint fails, goes green, then fails on the next push", async () => {

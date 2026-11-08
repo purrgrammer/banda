@@ -416,10 +416,12 @@ export async function endWatches(tx: Tx, authority: Authority, why: string, now:
 		await log(tx, { at: now, watch: name, what: `ended: ${why}` });
 	}
 	// what they followed goes with them, unless a live watch shares a reading
-	const followedDoc = await tx.doc(Followed);
-	for (const name of ended) {
-		const key = watches[name]?.key;
-		if (key !== undefined) await dropUnheld(tx, followedDoc, key);
+	if (ended.length > 0) {
+		const followedDoc = await tx.doc(Followed);
+		for (const name of ended) {
+			const key = watches[name]?.key;
+			if (key !== undefined) await dropUnheld(tx, followedDoc, key);
+		}
 	}
 	return ended;
 }
@@ -663,7 +665,13 @@ export function defineWatches(options: WatchesOptions) {
 			stamp: access.stamp,
 			source: access.source,
 			reads: access.reads,
-			schemas: access.schemas,
+			// copies of the doc's values: the reads happen outside this commit
+			schemas: Object.fromEntries(
+				Object.entries(access.schemas).map(([as, schema]) => [
+					as,
+					schema === undefined ? undefined : (JSON.parse(JSON.stringify(schema)) as JsonObject),
+				]),
+			),
 			seen,
 		};
 	}
@@ -689,6 +697,14 @@ export function defineWatches(options: WatchesOptions) {
 					at: now,
 				};
 				await tx.appendEntry(target as ConversationId, { kind: TROUBLE, data: data as unknown as JsonObject });
+				// the line counts as unread, and the app learns of it through the activity: a chat's entry moves no doc
+				// the shell stream watches, and a timer's task waking is no news to it
+				await log(tx, {
+					at: now,
+					watch: name,
+					what: `can't reach ${record.service ?? "it"} since ${localTime(since)}: ${why}`,
+					chat: target,
+				});
 				told = now;
 			}
 		}
@@ -726,14 +742,20 @@ export function defineWatches(options: WatchesOptions) {
 			resolved = found;
 			// one reading per object: a reading another watch's look took since this one last looked, within the cadence
 			// this watch would look at, is this look's too, and the service is asked once per object, not once per watch.
-			// Its own newest reading never is: a look that waits for the object to settle must look again. The owner's
-			// Check now always asks, as they asked.
+			// Never when the look must say how the object stands now: its own newest reading (a look that waits for the
+			// object to settle must look again, and one that holds a wake takes only a reading from after the settling
+			// time), its baseline (only what changes after it is a change), the first look after a resume (what changed
+			// while paused is diffed, not an older reading), and the owner's Check now, as they asked.
 			const kept = (await tx.doc(Followed)).objects[found.key];
+			const settled = record?.burst === undefined ? undefined : record.burst + settleOf(found.kind.follow);
 			if (
 				click === undefined &&
+				record?.seen !== undefined &&
+				record.resumed === undefined &&
 				kept !== undefined &&
 				kept.source === found.source &&
-				kept.at > (record?.looked ?? Number.NEGATIVE_INFINITY) &&
+				kept.at > (record.looked ?? Number.NEGATIVE_INFINITY) &&
+				(settled === undefined || kept.at >= settled) &&
 				now - kept.at < lookEvery(found.kind.follow, kept.answers)
 			)
 				shared = { version: kept.version };
@@ -1113,9 +1135,11 @@ export function defineWatches(options: WatchesOptions) {
 					continue;
 				}
 				if (record.sha !== watch.sha) {
-					// a changed file follows from now: what it already saw stays seen
+					// a changed file follows from now: what it already saw stays seen, unless the watch was done, whose
+					// cursor would replay what the object did since its end from a reading another watch kept
 					if (record.sha !== undefined) record.since = now;
 					record.sha = watch.sha;
+					if (record.done !== undefined) delete record.seen;
 					delete record.done;
 					delete record.next;
 					drop(name, record);
@@ -1168,7 +1192,8 @@ export function defineWatches(options: WatchesOptions) {
 		for (let attempt = 0; attempt < 3 && looked.outcome === "raced"; attempt++)
 			looked = await look(name, now(), (fn) => harness.commit(fn, ctx), ctx, key);
 		// a look moved when the watch looks next, but its task sleeps until the time the look before set. A sleep that
-		// ends by the new time stays: the task wakes then, finds no look due and sleeps until it (one commit, no read).
+		// ends by the new time stays: the task wakes then, finds no look due and sleeps until it (three small commits,
+		// no read).
 		// Only a sleep past the new time (the look found the object busy) is ended and made again, so the watch looks
 		// when it should; a look that ended the watch leaves it no task.
 		if (looked.outcome === "looked" || looked.outcome === "baseline") {

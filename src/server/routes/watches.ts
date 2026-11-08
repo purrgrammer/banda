@@ -38,6 +38,8 @@ export const watches: AreaModule = {
 		void finishEdits(deps.harness, deps.workspace).catch((error: unknown) =>
 			deps.log(`watches: an edit is not in the box yet: ${(error as Error).message}`),
 		);
+		/** What every answer carries: the control room and the watches as they are after, so the app draws them at once. */
+		const answer = async () => ({ control: await deps.control(), watches: await views(deps.harness, deps.workspace) });
 		return {
 			// the watches on the shell stream are the area's own event: a look, which moves their docs and nothing else the
 			// shell shows, pushes them alone
@@ -69,7 +71,7 @@ export const watches: AreaModule = {
 						Date.now(),
 					);
 					deps.changed();
-					return { body: { name, control: await deps.control() } };
+					return { body: { name, ...(await answer()) } };
 				}
 				const match = PATH.exec(request.path);
 				if (match === null) return undefined;
@@ -118,10 +120,10 @@ export const watches: AreaModule = {
 					if (typeof key !== "string") throw new BadRequest("key names the click");
 					const looked = await checkNow((watch, click) => deps.core.checkWatch(deps.harness, watch, click), name, key);
 					deps.changed();
-					return { body: { looked, control: await deps.control() } };
+					return { body: { looked, ...(await answer()) } };
 				}
 				deps.changed();
-				return { body: await deps.control() };
+				return { body: await answer() };
 			},
 		};
 	},

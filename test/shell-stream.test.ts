@@ -138,4 +138,46 @@ describe("the shell stream", () => {
 			await harness.close(context);
 		}
 	}, 30_000);
+
+	it("a client gone during the first push ends the stream, which reads nothing more", async () => {
+		const home = await tempHome();
+		const core = defineCore({ blobs: blobStore(), gateway: () => new FakeGateway(), model: () => FAUX_MODEL });
+		const registry = createRegistry();
+		registry.install(core.extension);
+		const harness = await openStore(home, { models: echoModels().models, registry });
+		await harness.commit(async (tx) => {
+			(await tx.doc(Routines)).routines.evening = { agent: "mara" };
+		}, context);
+		const stop = new AbortController();
+		let controls = 0;
+		const streaming = shell(
+			harness,
+			{
+				agents: async () => [],
+				memory: async () => ({ facts: [] }) as unknown as MemoryView,
+				control: async () => {
+					controls++;
+					// the client leaves while the first push reads
+					stop.abort();
+					return { routines: [], activity: [], permissions: [], removed: {} };
+				},
+			},
+			() => () => {},
+			() => {},
+			stop.signal,
+		);
+		try {
+			await Promise.race([
+				streaming,
+				new Promise((_, reject) => setTimeout(() => reject(new Error("the stream did not end")), 5_000)),
+			]);
+			await harness.commit(async (tx) => {
+				(await tx.doc(Routines)).routines.morning = { agent: "mara" };
+			}, context);
+			await new Promise((r) => setTimeout(r, 250));
+			expect(controls).toBe(1);
+		} finally {
+			await harness.close(context);
+		}
+	}, 30_000);
 });
