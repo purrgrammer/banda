@@ -124,6 +124,22 @@ it("recognises the object a browser opens, not the raw path before URL normalisa
 	])
 		expect(recognise(url, [github])).toEqual([]);
 });
+it("a URL names its object with a tab, a query or a fragment after it, never a deeper path", () => {
+	for (const url of [
+		"https://github.com/o/r/pull/34",
+		"https://github.com/o/r/pull/34/",
+		"https://github.com/o/r/pull/34/files",
+		"https://github.com/o/r/pull/34/files/?w=1#diff",
+		"https://github.com/o/r/pull/34#issuecomment-1",
+	])
+		expect(
+			recognise(url, [github]).map((r) => r.kind),
+			url,
+		).toEqual(["pull_request"]);
+	// a commit of a pull request, a path below a tab: something inside it, not the object
+	for (const url of ["https://github.com/o/r/pull/34/commits/a1b2c3", "https://github.com/o/r/pull/34/files/a/b"])
+		expect(recognise(url, [github]), url).toEqual([]);
+});
 it("URL recognition is invariant under browser parsing for generated dot segments and separators", () => {
 	fc.assert(
 		fc.property(

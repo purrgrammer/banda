@@ -81,8 +81,9 @@ export type ObjectKind = {
 	/** How the owner reads its name: "{owner}/{repo} #{number}". */
 	readonly name: string;
 	/**
-	 * Web addresses that name it, as templates: anything after the template's end (a tab, a query) still names it, and
-	 * a `*` stands for one part of the path that does not matter.
+	 * Web addresses that name it, as templates: a tab (one more part of the path), a query or a fragment after the
+	 * template's end still names it, a deeper path does not (it opens something inside: a commit of a pull request, a
+	 * file of a repository); and a `*` stands for one part of the path that does not matter.
 	 */
 	readonly urls: readonly string[];
 	/** Shorter ids that name it, as templates, matched whole. */
@@ -124,6 +125,13 @@ const reserved = (key: string) => ["__proto__", "prototype", "constructor"].incl
 const placeholders = (template: string) => [...template.matchAll(PLACEHOLDER)].map((m) => m[1] as string);
 const escapePattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
+/**
+ * What may follow a URL template and still name its object: a tab (one more part of the path), then a query or a
+ * fragment. A deeper path opens something inside the object, so `https://github.com/{owner}/{repo}` never takes a
+ * pull request's URL, whatever order the kinds are declared in.
+ */
+export const TAB = "(?:/[^/?#\\s]+)?/?(?:[?#][^\\s]*)?";
+
 /** A template as a pattern: its placeholders captured, in order. */
 function patternOf(template: string, url: boolean): RegExp {
 	let source = "";
@@ -134,7 +142,7 @@ function patternOf(template: string, url: boolean): RegExp {
 		last = (match.index ?? 0) + match[0].length;
 	}
 	source += literal(template.slice(last));
-	return new RegExp(url ? `^${source}(?:[/?#][^\\s]*)?$` : `^${source}$`);
+	return new RegExp(url ? `^${source}${TAB}$` : `^${source}$`);
 }
 
 /** Whether the read `read` only reads, as the file says: a tool in its `reads`, or matching one of its rules. */
