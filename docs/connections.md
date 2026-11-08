@@ -113,7 +113,9 @@ in a throwaway home, at desktop and phone width.
 - [x] Agent trust, slice 4: a connection's tools and groups set to Allow, Ask, Always ask or Off in Settings. Walked
   in a forked home at desktop width, after the review below: each remote connection's tools in their groups on its Connections page (and in an
   agent's Access), set at once for every agent; Ask on a read and Always ask on a write put it on the floor ("you
-  asked to be asked every time"), Off is the tool's switch; a connection banda ships only narrows
+  asked to be asked every time"), Off is the tool's switch; a connection only narrows, whether banda ships it or not:
+  a write is Ask, Always ask or Off, the floor (a guessed one too) Always ask or Off, and Allow on a read the server or
+  banda's guess proposed writes it into the file's reads
 - [x] Classifying a new connection: spike first. scripts/spike-classify.ts runs the inference (Balanced, Sonnet 5.5)
   over 340 listed tools of five services whose kind is known (GitHub and Gmail by their files, Vercel, ClickUp and
   Bitrefill by their servers' hints), without the hints: 2 of 127 writes guessed as reads (GitHub's
