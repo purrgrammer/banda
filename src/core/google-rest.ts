@@ -64,6 +64,8 @@ async function googleResponse(
 	body: unknown,
 	accept: string,
 	ifMatch?: string,
+	/** A body that is not JSON (an upload), with its own content type; used instead of `body`. */
+	raw?: { readonly type: string; readonly body: string },
 ): Promise<Response> {
 	const { service } = api;
 	let response: Response;
@@ -75,9 +77,13 @@ async function googleResponse(
 				authorization: `Bearer ${token}`,
 				accept,
 				...(ifMatch === undefined ? {} : { "if-match": ifMatch }),
-				...(body === undefined ? {} : { "content-type": "application/json" }),
+				...(raw !== undefined
+					? { "content-type": raw.type }
+					: body === undefined
+						? {}
+						: { "content-type": "application/json" }),
 			},
-			...(body === undefined ? {} : { body: JSON.stringify(body) }),
+			...(raw !== undefined ? { body: raw.body } : body === undefined ? {} : { body: JSON.stringify(body) }),
 			...(signal === undefined ? {} : { signal }),
 		});
 		// A GET retries safely; a change never does, because Google may have applied it (a free/busy query is a POST that
@@ -188,4 +194,41 @@ export async function googleText(
 	const response = await googleResponse(api, fetcher, token, path, signal, "GET", undefined, "*/*");
 	const { bytes, truncated } = await boundedBytes(response, api.service, limit, true);
 	return { text: new TextDecoder().decode(bytes, { stream: truncated }), truncated };
+}
+
+/**
+ * A change whose body is text of its own type (an upload), answered in JSON. Never retried: Google may have applied
+ * it. The same bounds and refusals as `googleRequest`.
+ */
+export async function googleUpload(
+	api: GoogleApi,
+	fetcher: typeof fetch,
+	token: string,
+	path: string,
+	method: "POST" | "PATCH",
+	contentType: string,
+	body: string,
+	signal?: AbortSignal,
+): Promise<unknown> {
+	const response = await googleResponse(
+		api,
+		fetcher,
+		token,
+		path,
+		signal,
+		method,
+		undefined,
+		"application/json",
+		undefined,
+		{
+			type: contentType,
+			body,
+		},
+	);
+	const { bytes } = await boundedBytes(response, api.service, MAX_RESPONSE_BYTES, false);
+	try {
+		return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+	} catch {
+		throw new Error(`${api.service} answered something that is not JSON`);
+	}
 }

@@ -1,13 +1,31 @@
 /**
- * A bounded, read-only Google Drive REST surface: find the owner's files and read their text. Tokens are supplied per
- * call by the daemon and never enter a box. A file's text is data handed to the model, bounded, never run or rendered.
+ * A bounded Google Drive REST surface: find the owner's files and read their text, and the changes the owner approves
+ * (create a Doc or a Sheet, replace a Doc's text, rename, trash). Tokens are supplied per call by the daemon and never
+ * enter a box. A file's text is data handed to the model, bounded, never run or rendered.
  */
-import { GoogleError, googleRequest, googleText, MAX_RESPONSE_BYTES } from "./google-rest.ts";
+import { createHash, randomBytes } from "node:crypto";
+import {
+	GoogleError,
+	type GoogleMethod,
+	googleRequest,
+	googleText,
+	googleUpload,
+	MAX_RESPONSE_BYTES,
+} from "./google-rest.ts";
 import { type McpResult, type McpTool, Unauthorized } from "./mcp.ts";
 
 const DRIVE = { service: "Google Drive", base: "https://www.googleapis.com/drive/v3" };
 const LIMIT = 1_000_000;
+const UPLOAD = { service: "Google Drive", base: "https://www.googleapis.com/upload/drive/v3" };
 const ALL_DRIVES = { supportsAllDrives: "true" };
+
+/** The changes: each asks the owner, and runs as approved. None shares a file or deletes one for good. */
+export const DRIVE_WRITES = ["create_doc", "create_sheet", "replace_doc_text", "rename_file", "trash_file"] as const;
+const IDEMPOTENT = ["create_doc", "create_sheet", "rename_file", "trash_file"] as const;
+export const DRIVE_IDEMPOTENT: readonly string[] = IDEMPOTENT;
+
+const MAX_NAME = 500;
+const MAX_TEXT = 200_000;
 
 const tool = (
 	name: string,
@@ -18,7 +36,7 @@ const tool = (
 	name,
 	description,
 	inputSchema: { type: "object", properties, ...(required.length ? { required } : {}) },
-	readOnlyHint: true,
+	readOnlyHint: !(DRIVE_WRITES as readonly string[]).includes(name),
 });
 
 const fileId = {
@@ -27,6 +45,8 @@ const fileId = {
 	maxLength: 205,
 	description: "The id of a drive/<id> reference, as search_files returns it",
 };
+
+const folderId = () => ({ type: "string", minLength: 1, maxLength: 205 });
 
 export const DRIVE_TOOLS: McpTool[] = [
 	tool("get_profile", "Read the signed-in Google account's address.", {}),
@@ -69,6 +89,70 @@ export const DRIVE_TOOLS: McpTool[] = [
 				description: "At most this many characters; 20000 by default",
 			},
 		},
+		["file_id"],
+	),
+	tool(
+		"create_doc",
+		"Draft a new Google Doc from Markdown. The owner sees the title and the text and approves it before anything is made. Returns its ref, drive/<id>.",
+		{
+			title: { type: "string", minLength: 1, maxLength: MAX_NAME, description: "The Doc's name" },
+			markdown: {
+				type: "string",
+				maxLength: MAX_TEXT,
+				description: `The Doc's text as Markdown, at most ${MAX_TEXT} characters`,
+			},
+			folder_id: {
+				...folderId(),
+				description: "A folder to make it in, as a drive/<id> reference; My Drive by default",
+			},
+		},
+		["title", "markdown"],
+	),
+	tool(
+		"create_sheet",
+		"Draft a new Google Sheet from CSV. The owner sees the title and the rows and approves it before anything is made. Returns its ref, drive/<id>.",
+		{
+			title: { type: "string", minLength: 1, maxLength: MAX_NAME, description: "The Sheet's name" },
+			csv: {
+				type: "string",
+				maxLength: MAX_TEXT,
+				description: `The first sheet as CSV, at most ${MAX_TEXT} characters`,
+			},
+			folder_id: {
+				...folderId(),
+				description: "A folder to make it in, as a drive/<id> reference; My Drive by default",
+			},
+		},
+		["title", "csv"],
+	),
+	tool(
+		"replace_doc_text",
+		"Draft replacing the whole text of an existing Google Doc with Markdown (what was there is replaced, though the Doc's history keeps it). The owner approves it first. Pass modified, as get_file or search_files gave it, to refuse if the Doc changed since you read it.",
+		{
+			file_id: fileId,
+			markdown: {
+				type: "string",
+				maxLength: MAX_TEXT,
+				description: `The Doc's new text as Markdown, at most ${MAX_TEXT} characters`,
+			},
+			modified: {
+				type: "string",
+				maxLength: 40,
+				description: "The Doc's modified time as you read it; the change is refused in words if it differs now",
+			},
+		},
+		["file_id", "markdown"],
+	),
+	tool(
+		"rename_file",
+		"Draft renaming a file. The owner approves it first.",
+		{ file_id: fileId, name: { type: "string", minLength: 1, maxLength: MAX_NAME, description: "The new name" } },
+		["file_id", "name"],
+	),
+	tool(
+		"trash_file",
+		"Draft moving a file to the trash (Drive keeps it there for 30 days; nothing is deleted for good). The owner approves it first.",
+		{ file_id: fileId },
 		["file_id"],
 	),
 ];
@@ -404,7 +488,217 @@ export async function driveCall(
 	}
 }
 
-/** Drive changes are not offered: every tool reads. */
-export async function driveWriteCall(): Promise<McpResult> {
-	return { text: "That Drive change is not available.", isError: true };
+// ---- the changes
+
+/** What a created file carries, so a run again after a crash finds it: a hash of the approved effect's own key. */
+export const keyHash = (key: string) => createHash("sha256").update(key).digest("hex");
+
+const GONE =
+	"Drive could not find that file, or banda's sign-in is not allowed to change it: with only the Create files access banda changes the files it made; sign in with Change any of your files for the others.";
+
+function textArg(args: Record<string, unknown>, name: string, what: string): string {
+	const value = args[name];
+	if (typeof value !== "string") throw new Error(`Give ${what}.`);
+	if (value.length > MAX_TEXT) throw new Error(`Give ${what} of at most ${MAX_TEXT} characters.`);
+	return value;
+}
+
+function nameArg(args: Record<string, unknown>, field: string): string {
+	const value = args[field];
+	// a name is one line
+	const name = typeof value === "string" ? value.replace(/\p{Cc}/gu, " ").trim() : "";
+	if (name === "") throw new Error(`Give a ${field === "title" ? "title" : "name"}.`);
+	if (name.length > MAX_NAME)
+		throw new Error(`Give a ${field === "title" ? "title" : "name"} of at most ${MAX_NAME} characters.`);
+	return name;
+}
+
+function idArg(args: Record<string, unknown>, field: string): string {
+	const id = fileOfRef(args[field]);
+	if (id === undefined) throw new Error("Give the id of a drive/<id> reference that search_files returned.");
+	return id;
+}
+
+/** The body of a multipart upload: the file's metadata as JSON, then its content, under a boundary neither holds. */
+function multipart(metadata: Json, contentType: string, content: string): { type: string; body: string } {
+	const meta = JSON.stringify(metadata);
+	let boundary: string;
+	do boundary = `banda${randomBytes(12).toString("hex")}`;
+	while (meta.includes(boundary) || content.includes(boundary));
+	return {
+		type: `multipart/related; boundary=${boundary}`,
+		body:
+			`--${boundary}\r\ncontent-type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n` +
+			`--${boundary}\r\ncontent-type: ${contentType}; charset=UTF-8\r\n\r\n${content}\r\n--${boundary}--`,
+	};
+}
+
+/**
+ * Execute one approved Drive change, exactly as drafted: the upload is built here from the approved arguments only.
+ * `key` is the approved effect's own, the same in a run repeated after a crash: a created file carries a hash of it, so
+ * a repeat finds the file made and makes no second. A rename and a trash that already hold change nothing. Never
+ * retried here: Google may have applied it. Error text never contains a URL, response body, or token.
+ */
+export async function driveWriteCall(
+	token: string,
+	name: string,
+	args: Record<string, unknown>,
+	signal?: AbortSignal,
+	fetcher: typeof fetch = fetch,
+	key?: string,
+): Promise<McpResult> {
+	const request = (path: string, method: GoogleMethod = "GET", body?: unknown) =>
+		googleRequest(DRIVE, fetcher, token, path, signal, undefined, method, body);
+	const upload = (path: string, method: "POST" | "PATCH", sent: { type: string; body: string }) =>
+		googleUpload(UPLOAD, fetcher, token, path, method, sent.type, sent.body, signal);
+	const meta = (id: string, fields: string) =>
+		request(`files/${id}?${new URLSearchParams({ ...ALL_DRIVES, fields })}`).then(object);
+	/** Create a file from content Drive converts, or answer the one this effect made before a crash cut it short. */
+	const create = async (kind: "doc" | "sheet") => {
+		if (key === undefined || key === "") throw new Error("A Drive change runs only as the owner approved it.");
+		const title = nameArg(args, "title");
+		const content = textArg(
+			args,
+			kind === "doc" ? "markdown" : "csv",
+			kind === "doc" ? "the Doc's Markdown" : "the Sheet's CSV",
+		);
+		const folder = args.folder_id === undefined ? undefined : idArg(args, "folder_id");
+		const hash = keyHash(key);
+		const found = object(
+			await request(
+				`files?${new URLSearchParams({
+					q: `appProperties has { key='bandaKey' and value='${hash}' } and trashed = false`,
+					fields: "files(id)",
+					pageSize: "2",
+					...ALL_DRIVES,
+					includeItemsFromAllDrives: "true",
+				})}`,
+			),
+		);
+		const existing = object(Array.isArray(found.files) ? found.files[0] : undefined).id;
+		if (typeof existing === "string") return { ok: true, ...refOf(existing) };
+		const made = object(
+			await upload(
+				`files?${new URLSearchParams({ uploadType: "multipart", fields: "id", ...ALL_DRIVES })}`,
+				"POST",
+				multipart(
+					{
+						name: title,
+						mimeType: `${GOOGLE_APPS}${kind === "doc" ? "document" : "spreadsheet"}`,
+						appProperties: { bandaKey: hash },
+						...(folder === undefined ? {} : { parents: [folder] }),
+					},
+					kind === "doc" ? "text/markdown" : "text/csv",
+					content,
+				),
+			),
+		);
+		if (typeof made.id !== "string") throw new Error("Google Drive did not say which file it made.");
+		return { ok: true, ...refOf(made.id) };
+	};
+	try {
+		let answer: unknown;
+		switch (name) {
+			case "create_doc":
+				answer = await create("doc");
+				break;
+			case "create_sheet":
+				answer = await create("sheet");
+				break;
+			case "replace_doc_text": {
+				const id = idArg(args, "file_id");
+				const markdown = textArg(args, "markdown", "the Doc's new Markdown");
+				const since = args.modified;
+				if (since !== undefined && (typeof since !== "string" || !Number.isFinite(Date.parse(since))))
+					throw new Error("Give modified as the time get_file or search_files gave.");
+				const file = await meta(id, "id,mimeType,modifiedTime,trashed");
+				if (file.trashed === true) throw new Error("That file is in the trash.");
+				if (text(file.mimeType, 100) !== `${GOOGLE_APPS}document`)
+					throw new Error("Only a Google Doc's text can be replaced.");
+				// Drive offers no precondition on an update, so this checks just before it writes
+				if (typeof since === "string" && Date.parse(text(file.modifiedTime, 40)) !== Date.parse(since))
+					throw new Error("The Doc changed since you read it: read it again, then draft the change anew.");
+				await upload(
+					`files/${id}?${new URLSearchParams({ uploadType: "media", fields: "id", ...ALL_DRIVES })}`,
+					"PATCH",
+					{ type: "text/markdown; charset=UTF-8", body: markdown },
+				);
+				answer = { ok: true, ...refOf(id) };
+				break;
+			}
+			case "rename_file": {
+				const id = idArg(args, "file_id");
+				const wanted = nameArg(args, "name");
+				const file = await meta(id, "id,name,trashed");
+				if (file.name !== wanted)
+					await request(`files/${id}?${new URLSearchParams({ ...ALL_DRIVES, fields: "id" })}`, "PATCH", {
+						name: wanted,
+					});
+				answer = { ok: true, ...refOf(id) };
+				break;
+			}
+			case "trash_file": {
+				const id = idArg(args, "file_id");
+				const file = await meta(id, "id,trashed");
+				if (file.trashed !== true)
+					await request(`files/${id}?${new URLSearchParams({ ...ALL_DRIVES, fields: "id" })}`, "PATCH", {
+						trashed: true,
+					});
+				answer = { ok: true, ...refOf(id) };
+				break;
+			}
+			default:
+				throw new Error("That Drive change is not available.");
+		}
+		return { text: JSON.stringify(answer), isError: false };
+	} catch (error) {
+		if (error instanceof Unauthorized) throw error;
+		if (error instanceof GoogleError && error.status === 404) return { text: GONE, isError: true };
+		return { text: error instanceof Error ? error.message : "Google Drive could not apply the change.", isError: true };
+	}
+}
+
+// ---- the owner's words for a change
+
+const quoted = (value: string) =>
+	`“${value
+		.replace(/\p{Cc}/gu, " ")
+		.trim()
+		.slice(0, 200)}”`;
+const titled = (value: unknown) => (typeof value === "string" && value.trim() !== "" ? quoted(value) : undefined);
+
+/** What a change does, in the owner's words, and its button. The file's card, drawn above, names the file it acts on. */
+export function driveDraft(name: string, args: Record<string, unknown>): { what: string; verb: string } | undefined {
+	switch (name) {
+		case "create_doc": {
+			const title = titled(args.title);
+			return { what: title === undefined ? "Create a Doc" : `Create the Doc ${title}`, verb: "Create" };
+		}
+		case "create_sheet": {
+			const title = titled(args.title);
+			return { what: title === undefined ? "Create a Sheet" : `Create the Sheet ${title}`, verb: "Create" };
+		}
+		case "replace_doc_text":
+			return { what: "Replace the text of this Doc", verb: "Replace" };
+		case "rename_file": {
+			const to = titled(args.name);
+			return { what: to === undefined ? "Rename this file" : `Rename this file to ${to}`, verb: "Rename" };
+		}
+		case "trash_file":
+			return { what: "Move this file to the trash", verb: "Trash" };
+		default:
+			return undefined;
+	}
+}
+
+/** No argument of a Drive draft is edited: the owner approves exactly what was drafted. */
+export const driveEditable = (_tool: string): readonly string[] => [];
+
+/** A draft as the owner sees it: the file as its card is named, its id without the reference's `drive/`. */
+export function driveExpand(_name: string, args: Record<string, unknown>): Record<string, unknown> {
+	const expanded: Record<string, unknown> = { ...args };
+	for (const field of ["file_id", "folder_id"])
+		if (typeof args[field] === "string" && args[field].startsWith("drive/"))
+			expanded[field] = args[field].slice("drive/".length);
+	return expanded;
 }

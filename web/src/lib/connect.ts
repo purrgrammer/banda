@@ -85,8 +85,11 @@ export const SCOPE_CHOICES: { readonly [connection: string]: ScopeChoices } = {
 	},
 	drive: {
 		required: { scope: `${GOOGLE}drive.readonly`, label: "Find and read your files, including Docs and Sheets" },
-		choices: [],
-		note: "Changing access signs in again. Banda only reads your files: it never changes, moves or shares them.",
+		choices: [
+			{ scope: `${GOOGLE}drive.file`, label: "Create files" },
+			{ scope: `${GOOGLE}drive`, label: "Change any of your files" },
+		],
+		note: "Changing access signs in again. Creating, replacing a Doc's text, renaming and trashing files still ask you to approve each one; banda never shares a file or deletes one for good.",
 	},
 	github: {
 		choices: [
