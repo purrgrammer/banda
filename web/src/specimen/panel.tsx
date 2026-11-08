@@ -74,6 +74,7 @@ import {
 	SERVICES,
 	SETTINGS,
 	SETTINGS_PROVIDERS,
+	WATCH_CONTACT_VIEW,
 	WATCH_VIEW,
 	WATCHES,
 } from "./fixtures.ts";
@@ -488,6 +489,29 @@ export function PanelSections() {
 								watch={WATCH_VIEW}
 								now={SPECIMEN_NOW}
 								edit={{ step: "editing", until: null, ask: WATCH_VIEW.accepted?.watch?.ask ?? "" }}
+								onDone={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="A watch nothing ends: a contact">
+						<Panel name="Mara">
+							<WatchDetail
+								agent={{ id: "mara", name: "Mara" }}
+								chat={undefined}
+								watch={WATCH_CONTACT_VIEW}
+								now={SPECIMEN_NOW}
+								onDone={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="Editing it: no end to pick">
+						<Panel name="Mara">
+							<WatchDetail
+								agent={{ id: "mara", name: "Mara" }}
+								chat={undefined}
+								watch={WATCH_CONTACT_VIEW}
+								now={SPECIMEN_NOW}
+								edit={{ step: "editing", until: null, ask: WATCH_CONTACT_VIEW.accepted?.watch?.ask ?? "" }}
 								onDone={() => {}}
 							/>
 						</Panel>

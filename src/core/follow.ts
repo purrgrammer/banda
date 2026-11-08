@@ -72,7 +72,10 @@ export type Follow = {
 	readonly rules: readonly Rule[];
 	/** What a change no rule matches does: nothing unless said. */
 	readonly otherwise?: Rule["does"];
-	/** What ends a watch, by the word the watch says (`until: merged`); without one, any of them. */
+	/**
+	 * What ends a watch, by the word the watch says (`until: merged`); without one, any of them. None (`{}`): nothing
+	 * ends it (a contact), and it follows until the owner stops it.
+	 */
 	readonly ends: { readonly [name: string]: string };
 	/** While it holds, the daemon looks every `busy_every` instead of `every`. */
 	readonly busy?: string;
@@ -459,7 +462,8 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 	if (follow.otherwise !== undefined && !DOES.has(follow.otherwise as string))
 		problem(`"otherwise" is wake, tell or nothing`);
 	const ends = stringMap(follow.ends) ? (follow.ends as { [name: string]: string }) : {};
-	if (Object.keys(ends).length === 0) problem(`"ends" names what ends a watch: {"merged": "pr.merged = true"}`);
+	if (!stringMap(follow.ends))
+		problem(`"ends" names what ends a watch: {"merged": "pr.merged = true"}, or {} when nothing does`);
 	for (const name of Object.keys(ends)) if (!NAME.test(name)) problem(`"${name}" is not a word for an end`);
 	const conditions = [
 		...Object.values(ends),

@@ -243,7 +243,11 @@ describe("following an object", () => {
 			const parsed = parseFollow(value, "objects.x");
 			return "errors" in parsed ? parsed.errors : [];
 		};
-		expect(problems({ rules: [], ends: {} })).toContainEqual(expect.stringContaining("ends"));
+		expect(problems({ rules: [] })).toContainEqual(expect.stringContaining("ends"));
+		expect(problems({ rules: [], ends: { a: 1 } })).toContainEqual(expect.stringContaining("ends"));
+		// a kind nothing ends (a contact) says so: no end ever holds, and a watch on it follows until stopped
+		const never = parseFollow({ rules: [], ends: {} }, "objects.x");
+		expect("follow" in never ? endedBy(never.follow, undefined, { a: 1 }) : "refused").toBeUndefined();
 		expect(problems({ rules: [{ on: "a", does: "ring", says: "x" }], ends: { a: "a = 1" } })).toContainEqual(
 			expect.stringContaining("a rule is"),
 		);
