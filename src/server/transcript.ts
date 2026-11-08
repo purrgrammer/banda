@@ -4,6 +4,7 @@
  */
 
 import type { Context } from "@earendil-works/chord";
+import type { Op } from "@earendil-works/chord/delta";
 import {
 	type AssistantMessage,
 	getCurrentSystemPrompt,
@@ -22,6 +23,8 @@ import {
 	LiveDoc,
 	type MessageChange,
 	type SubmissionId,
+	type TaskGraph,
+	type TaskGraphNode,
 	UsageDoc,
 	watchEvents,
 } from "@earendil-works/pi-durable";
@@ -39,7 +42,7 @@ import { type Origin, type Outbound, OWNER } from "../core/gateway.ts";
 import { HARNESS_ENDED } from "../core/harness.ts";
 import { Permissions } from "../core/permissions.ts";
 import { PROPOSAL_ENTRY, PROPOSAL_RESULT, type Proposal } from "../core/proposals.ts";
-import { Control, Routines, TROUBLE, type TroubleData, WAKE, type WakeData } from "../core/routines.ts";
+import { Control, ROUTINE_TASK, Routines, TROUBLE, type TroubleData, WAKE, type WakeData } from "../core/routines.ts";
 import { localTime } from "../core/schedule.ts";
 import { openWaits, status } from "../core/status.ts";
 import { context } from "../core/store.ts";
@@ -55,6 +58,14 @@ import {
 	undeliveredText,
 } from "../core/turn.ts";
 import { type Ask, WAIT, type WaitEnded } from "../core/wait.ts";
+import {
+	WATCH_TASK,
+	TELL as WATCH_TELL,
+	TROUBLE as WATCH_TROUBLE,
+	WAKE as WATCH_WAKE,
+	type WatchTroubleData,
+	type WatchWakeData,
+} from "../core/watches.ts";
 import type {
 	AgentView,
 	Block,
@@ -122,6 +133,7 @@ const RECEIPTS: { readonly [tool: string]: Receipt["kind"] } = {
 	remember: "fact",
 	forget: "fact",
 	schedule: "routine",
+	watch: "watch",
 	propose_avatar: "avatar",
 	message_user: "artifacts",
 	message_group: "artifacts",
@@ -192,7 +204,7 @@ export function receiptOf(tool: string, isError: boolean, details: unknown): Rec
 	if (kind === "fact" && typeof receipt.id === "string" && typeof receipt.text === "string")
 		return { kind, id: receipt.id, text: receipt.text };
 	if (
-		kind === "routine" &&
+		(kind === "routine" || kind === "watch") &&
 		typeof receipt.name === "string" &&
 		typeof receipt.sha === "string" &&
 		(receipt.change === "added" || receipt.change === "changed" || receipt.change === "same")
@@ -305,6 +317,27 @@ export function itemOf(entry: EntryRecord): Item | undefined {
 	if (entry.kind === TROUBLE) {
 		const data = entry.data as unknown as TroubleData;
 		return { id, role: "notice", text: troubleText(data), routine: data, at: data.at };
+	}
+	if (entry.kind === WATCH_TROUBLE) {
+		const data = entry.data as unknown as WatchTroubleData;
+		return { id, role: "notice", text: watchTroubleText(data), watch: data, at: data.at };
+	}
+	if (entry.kind === WATCH_WAKE || entry.kind === WATCH_TELL) {
+		const data = entry.data as unknown as WatchWakeData;
+		return {
+			id,
+			role: "watch",
+			watch: data.watch,
+			object: data.object,
+			changes: data.changes,
+			text: `${data.object.name}: ${data.changes.join(", ")}`,
+			...(entry.kind === WATCH_TELL ? { tell: true as const } : {}),
+			...(data.ended === undefined ? {} : { ended: data.ended }),
+			...(data.resumed === true ? { resumed: true as const } : {}),
+			...(data.gap === true ? { gap: true as const } : {}),
+			...(data.burst === undefined ? {} : { burst: data.burst }),
+			at: data.at,
+		};
 	}
 	if (message?.role === "user") {
 		const data = entry.data as { origin?: Origin; message?: string; files?: Attachment[]; said?: string } | undefined;
@@ -426,7 +459,17 @@ export function troubleText(data: TroubleData): string {
 	return `${what} paused: it ran ${data.runsADay} times today, the most it may`;
 }
 
-/** Count what reached the owner: speaking calls that show a reply and a routine's trouble, never the model's notes or tool results. */
+/** A watch unable to look for an hour, or paused alone at its wakes a day, in the daemon's words. */
+export function watchTroubleText(data: WatchTroubleData): string {
+	if (data.wakesADay !== undefined)
+		return `${data.name}: paused: it woke ${data.wakesADay} times today, the most it may`;
+	return `${data.name}: can't reach ${data.service ?? "it"} since ${localTime(data.since)}: ${data.why}`;
+}
+
+/**
+ * Count what reached the owner: speaking calls that show a reply, a routine's trouble and a watch's, never the
+ * model's notes or tool results.
+ */
 async function unread(harness: Harness, id: number, after: number, ctx: Context): Promise<number> {
 	const chat = await harness.conversation(id as ConversationId, ctx);
 	if (chat === undefined) return 0;
@@ -438,7 +481,7 @@ async function unread(harness: Harness, id: number, after: number, ctx: Context)
 		const page = await chat.entries({ minEntryId: (after + 1) as EntryId, order: "ascending" }, PAGE, cursor, ctx);
 		for (const entry of page.items) {
 			const item = itemOf(entry);
-			if (item?.role === "notice" && item.routine !== undefined) troubles++;
+			if (item?.role === "notice" && (item.routine !== undefined || item.watch !== undefined)) troubles++;
 			if (item?.role === "tool") results.set(item.call, item);
 			if (item?.role === "assistant")
 				calls.push(
@@ -534,7 +577,8 @@ async function title(harness: Harness, id: number, ctx: Context): Promise<string
 	const page = await chat?.entries({ order: "ascending" }, 10, undefined, ctx);
 	for (const entry of page?.items ?? []) {
 		const item = itemOf(entry);
-		if (item?.role === "user" || item?.role === "wake") return plain(item.text).slice(0, 120);
+		if (item?.role === "user" || item?.role === "wake" || (item?.role === "watch" && item.tell === undefined))
+			return plain(item.text).slice(0, 120);
 	}
 	return `chat ${id}`;
 }
@@ -622,11 +666,25 @@ export async function image(
 	return found === undefined ? undefined : { data: Buffer.from(found.data, "base64"), mimeType: found.mimeType };
 }
 
+/** The tasks that are timers over their own docs: their waking and sleeping is no news, what they did is in the docs. */
+const TIMERS: ReadonlySet<string> = new Set([ROUTINE_TASK, WATCH_TASK]);
+
 /**
- * Write the chat list, the agents and the companion to `write`, then again whenever the task graph, the routes,
- * the accepted files or the companion change, or `subscribe` says something else did (the agents folder), until `signal`
- * aborts. Changes in a burst are written once.
+ * Whether a task graph frame is news to the shell: a routine's or a watch's task waking, sleeping or ending is not
+ * (their docs say what they did, and those push what reads them); any other task's change is, as is one of theirs
+ * blocked, a change to a task's conversations, or the graph replaced whole. `before` is the graph the frame moved from,
+ * which names a task the frame deleted.
  */
+export function graphNews(ops: readonly Op[], before: TaskGraph | undefined): boolean {
+	return ops.some((op) => {
+		if (op[0] === "r") return true;
+		const path = op[1];
+		if (path.length !== 2 || path[0] !== "tasks") return true;
+		const node = op[0] === "s" ? (op[2] as TaskGraphNode | null) : before?.tasks[String(path[1])];
+		return node === undefined || node === null || !TIMERS.has(node.kind) || node.blocked !== undefined;
+	});
+}
+
 /** What the shell stream pushes besides the chats and the companion. */
 export type ShellSources = {
 	readonly agents: () => Promise<AgentView[]>;
@@ -642,6 +700,13 @@ export type ShellSources = {
 	readonly areas?: readonly Area[];
 };
 
+/**
+ * Write the shell to `write`: the chat list, the companion, the control room, the agents, memory, the computer, the
+ * capabilities, the browsers and each area's events, each when it changed since last written; then again whenever the
+ * task graph (a task that is not a timer), the docs the shell reads or `subscribe` (the agents folder) say something
+ * changed, until `signal` aborts. A change to a doc an area owns (`Area.own`) writes that area's events alone. Changes
+ * in a burst are written once.
+ */
 export async function shell(
 	harness: Harness,
 	{ agents, control, memory, computer, capabilities, browsers, areas = [] }: ShellSources,
@@ -651,7 +716,12 @@ export async function shell(
 	ctx: Context = context,
 ): Promise<void> {
 	let timer: NodeJS.Timeout | undefined;
+	/** The push a permission's expiry owes, armed by the push that saw the permission. */
+	let expiry: NodeJS.Timeout | undefined;
+	let listed = "";
 	let said = "";
+	let room = "";
+	let staff = "";
 	let known = "";
 	let offered = "";
 	let machine = "";
@@ -666,12 +736,28 @@ export async function shell(
 			write({ type: "companion", companion: now });
 		}
 	};
-	const push = async () => {
-		timer = undefined;
-		let rows: ChatRow[];
+	/** `area`'s events, each written when it changed since last written. */
+	const pushArea = async (area: Area) => {
+		if (area.shell === undefined) return;
 		try {
-			rows = await chats(harness, ctx);
-			write({ type: "chats", rows });
+			for (const event of await area.shell()) {
+				const now = JSON.stringify(event);
+				if (told.get(event.type) === now) continue;
+				told.set(event.type, now);
+				write(event);
+			}
+		} catch {
+			// the store closed, or what the area reads is not up: a later change tries again
+		}
+	};
+	/** The whole shell, each part written when it changed. */
+	const push = async () => {
+		try {
+			const rows = await chats(harness, ctx);
+			if (JSON.stringify(rows) !== listed) {
+				listed = JSON.stringify(rows);
+				write({ type: "chats", rows });
+			}
 		} catch {
 			// the store closed under the stream, which ends with it
 			return;
@@ -692,14 +778,28 @@ export async function shell(
 			}
 		}
 		try {
-			write({ type: "control", control: await control() });
+			const now = await control();
+			if (JSON.stringify(now) !== room) {
+				room = JSON.stringify(now);
+				write({ type: "control", control: now });
+			}
+			// a permission's `until` passing changes the control room with no doc moving: the shell is pushed again then
+			const soonest = Math.min(...now.permissions.flatMap((each) => (each.until === undefined ? [] : [each.until])));
+			clearTimeout(expiry);
+			expiry = undefined;
+			if (Number.isFinite(soonest) && soonest > Date.now())
+				expiry = setTimeout(() => void changed(), Math.min(soonest - Date.now() + 1, 2_147_483_647));
 			await tell();
 		} catch {
 			// the store closed under the stream, which ends with it
 			return;
 		}
 		try {
-			write({ type: "agents", agents: await agents() });
+			const now = await agents();
+			if (JSON.stringify(now) !== staff) {
+				staff = JSON.stringify(now);
+				write({ type: "agents", agents: now });
+			}
 		} catch {
 			// the box is not up; a later change tries again
 		}
@@ -713,19 +813,7 @@ export async function shell(
 		} catch {
 			// the store closed under the stream, which ends with it
 		}
-		for (const area of areas) {
-			if (area.shell === undefined) continue;
-			try {
-				for (const event of await area.shell()) {
-					const now = JSON.stringify(event);
-					if (told.get(event.type) === now) continue;
-					told.set(event.type, now);
-					write(event);
-				}
-			} catch {
-				// the store closed, or what the area reads is not up: a later change tries again
-			}
-		}
+		for (const area of areas) await pushArea(area);
 		if (capabilities === undefined) return;
 		try {
 			const usable = await capabilities();
@@ -738,19 +826,33 @@ export async function shell(
 			// the box is not up, or the store closed: a later change tries again
 		}
 	};
+	// what changed since the last push: the whole shell, or some areas' own docs alone
+	let whole = true;
+	const partial = new Set<Area>();
 	// pushes in flight, so the stream ends only after them: none writes into a response that ended
 	const pushing = new Set<Promise<void>>();
 	const pushed = () => {
-		const running = push().finally(() => pushing.delete(running));
+		timer = undefined;
+		const all = whole;
+		const some = [...partial];
+		whole = false;
+		partial.clear();
+		const running = (all ? push() : Promise.all(some.map(pushArea)).then(() => undefined)).finally(() =>
+			pushing.delete(running),
+		);
 		pushing.add(running);
 		return running;
 	};
-	const changed = async () => {
+	const changed = async (area?: Area) => {
+		if (area === undefined) whole = true;
+		else partial.add(area);
 		timer ??= setTimeout(() => void pushed(), 100);
 	};
 	// watching before the first push, so a change while it reads is pushed after it
+	const graph = await harness.watchTaskGraph(ctx);
+	let before = graph?.value;
 	const watches = [
-		await harness.watchTaskGraph(ctx),
+		graph,
 		await harness.watchDoc(Routes, ctx),
 		await harness.watchDoc(ChatReads, ctx),
 		await harness.watchDoc(Accepted, ctx),
@@ -762,18 +864,34 @@ export async function shell(
 		await harness.watchDoc(Connected, ctx),
 		...(await Promise.all(areas.flatMap((area) => area.watch ?? []).map((doc) => harness.watchDoc(doc, ctx)))),
 	];
-	for (const watch of watches) watch?.start(changed);
+	// a timer's task waking and sleeping is not news: its doc says what it did, and pushes what reads it
+	graph?.start(async (value, ops) => {
+		if (graphNews(ops, before)) await changed();
+		before = value;
+	});
+	for (const watch of watches.slice(1)) watch?.start(() => changed());
+	for (const area of areas)
+		for (const doc of area.own ?? []) {
+			const own = await harness.watchDoc(doc, ctx);
+			own?.start(() => changed(area));
+			watches.push(own);
+		}
 	const unsubscribe = subscribe(() => void changed());
 	await pushed();
 	try {
-		await new Promise<void>((resolve) => {
-			signal.addEventListener("abort", () => resolve(), { once: true });
-			// a doc not made yet has no watch, and nothing to close
-			void Promise.race(watches.flatMap((watch) => (watch === undefined ? [] : [watch.closed]))).then(() => resolve());
-		});
+		// a client gone during the first push has aborted already: a listener would wait for nothing, forever
+		if (!signal.aborted)
+			await new Promise<void>((resolve) => {
+				signal.addEventListener("abort", () => resolve(), { once: true });
+				// a doc not made yet has no watch, and nothing to close
+				void Promise.race(watches.flatMap((watch) => (watch === undefined ? [] : [watch.closed]))).then(() =>
+					resolve(),
+				);
+			});
 	} finally {
 		unsubscribe();
 		clearTimeout(timer);
+		clearTimeout(expiry);
 		for (const watch of watches) await watch?.stop();
 		await Promise.all(pushing);
 	}

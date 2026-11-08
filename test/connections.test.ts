@@ -5,7 +5,7 @@
  * write is a draft that runs once, approved; a tool switched off is refused even mid-run; credentials reach nothing
  * but the server they were given for.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	type AssistantMessage,
@@ -29,6 +29,7 @@ import { context } from "../src/core/store.ts";
 import { toolDiscoveryExtension, toolRegistry, toolSearchExtension } from "../src/core/tool-discovery.ts";
 import type { TurnResult } from "../src/core/turn.ts";
 import { answer } from "../src/core/wait.ts";
+import { Watches } from "../src/core/watches.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import { SHIPPED } from "../src/server/capabilities.ts";
@@ -1359,6 +1360,34 @@ describe("connections banda ships", () => {
 		expect((await accounts())?.[0]?.agents).toEqual([]);
 	});
 
+	it("a newer shipped file is offered as an update that keeps the sign-in", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		const shipped = await shipping(fake);
+		const s = await open(fake, shipped);
+		await s.capabilities.addShipped("cal");
+		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
+		const before = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.state;
+		// the file as shipped is no update
+		expect((await s.capabilities.view()).shipped?.[0]?.update).toBeUndefined();
+		// this banda ships a newer file
+		const newer = `${readFileSync(join(shipped, "cal.md"), "utf8")}\nIt can now be followed.\n`;
+		writeFileSync(join(shipped, "cal.md"), newer);
+		const offered = (await s.capabilities.view()).shipped?.[0]?.update;
+		expect(offered).toMatch(/^[0-9a-f]{64}$/);
+		await expect(s.capabilities.updateShipped("cal", "0".repeat(64))).rejects.toThrow(/changed since you saw it/);
+		// the box lost the file (it reads as a removal waiting): updating writes it again
+		rmSync(join(s.box.workspace, "connections/cal.md"));
+		await s.capabilities.updateShipped("cal", offered as string);
+		const view = await s.capabilities.view();
+		expect(view.shipped?.[0]?.update).toBeUndefined();
+		const cal = view.connections.find((c) => c.name === "cal");
+		expect(cal?.accepted?.sha).not.toBe(offered);
+		expect(readFileSync(join(s.box.workspace, "connections/cal.md"), "utf8")).toContain("It can now be followed.");
+		expect([before, cal?.state]).toEqual(["connected", "connected"]);
+		expect(cal?.change).toBeUndefined();
+	});
+
 	it("recovers a shipped definition left in the box before it was allowed", async () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
 		fakes.push(fake);
@@ -1859,6 +1888,46 @@ describe("accounts", () => {
 		await s.capabilities.reconcile();
 		expect(existsSync(join(s.home, "auth/connections/cal/ghost"))).toBe(false);
 		expect(existsSync(join(s.home, "auth/connections/cal/bea"))).toBe(true);
+	});
+
+	it("switching an account off, signing it out and disconnecting end the watches looking with it, saying why", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const s = await withMara(fake);
+		fake.user = "ana";
+		await signInAsOwner(s.capabilities, "cal");
+		await s.capabilities.switchAccount("mara", "cal", "ana", true);
+		fake.user = "bea";
+		await signInAsOwner(s.capabilities, "cal");
+		const seeded = { "mara-ana": ["mara", "ana"], "sancho-ana": ["sancho", "ana"], "sancho-bea": ["sancho", "bea"] };
+		await s.harness.commit(async (tx) => {
+			const files = (await tx.doc(Accepted)).files;
+			const { watches } = await tx.doc(Watches);
+			for (const [name, [agent, account]] of Object.entries(seeded)) {
+				const text = `---\nobject: cal:event:${name}\n---\nTell me.\n`;
+				files[`watches/${name}.md`] = { sha: shaOf(text), text, at: 1 };
+				watches[name] = { agent, since: 1, connection: "cal", key: `cal/${account}/event:${name}` };
+			}
+		}, context);
+		const done = async () => {
+			const { watches } = (await s.harness.snapshot(Watches, context))!;
+			return Object.fromEntries(Object.entries(watches).map(([name, record]) => [name, record.done?.why]));
+		};
+		await s.capabilities.switchAccount("mara", "cal", "ana", false);
+		expect(await done()).toEqual({
+			"mara-ana": "Calendar as @ana was switched off for Mara",
+			"sancho-ana": undefined,
+			"sancho-bea": undefined,
+		});
+		await s.capabilities.signOut("cal", "bea");
+		expect((await done())["sancho-bea"]).toBe("you signed out of Calendar as @bea");
+		expect((await done())["sancho-ana"]).toBeUndefined();
+		await s.capabilities.disconnect("cal");
+		expect(await done()).toEqual({
+			"mara-ana": "Calendar as @ana was switched off for Mara",
+			"sancho-ana": "you disconnected Calendar",
+			"sancho-bea": "you signed out of Calendar as @bea",
+		});
 	});
 });
 

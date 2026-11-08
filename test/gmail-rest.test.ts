@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { parseConnection } from "../src/core/connections.ts";
-import { GMAIL_TOOLS, gmailAttachment, gmailCall, gmailWriteCall } from "../src/core/gmail-rest.ts";
+import { addressOf, GMAIL_TOOLS, gmailAttachment, gmailCall, gmailWriteCall } from "../src/core/gmail-rest.ts";
 import {
 	begin,
 	DEFAULT_GOOGLE_CLIENT_ID,
@@ -240,6 +240,58 @@ describe("Gmail REST connection", () => {
 		});
 	});
 
+	it("draws a conversation and a search as lists of emails, the newest first, titled by subject and query", () => {
+		const text = readFileSync(new URL("../shipped/connections/gmail.md", import.meta.url), "utf8");
+		const parsed = parseConnection("gmail", text);
+		if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
+		const objects = parsed.connection.objects ?? {};
+		const line = (id: string, date: string) => ({
+			id,
+			from: `Bob\u0007 <bob@example.test>`,
+			subject: `About ${id}`,
+			date,
+		});
+		const thread = cardOf(
+			objects.thread!,
+			{ connection: "gmail", kind: "thread", values: { id: "t1" } },
+			{
+				thread: {
+					id: "t1",
+					subject: "Lunch?",
+					total: 7,
+					labels: ["INBOX"],
+					messages: ["m1", "m2", "m3", "m4", "m5", "m6", "m7"].map((id, n) =>
+						line(id, `Mon, ${n + 2} Nov 2026 09:00:00 +0100`),
+					),
+				},
+			},
+		);
+		expect(thread).toMatchObject({ card: "messages", title: "Lunch?", search: false, total: 7 });
+		expect(thread.card === "messages" && thread.messages.map((each) => each.id)).toEqual([
+			"m7",
+			"m6",
+			"m5",
+			"m4",
+			"m3",
+		]);
+		expect(thread.card === "messages" && thread.messages[0]?.from).toBe("Bob <bob@example.test>");
+		const search = cardOf(
+			objects.search!,
+			{ connection: "gmail", kind: "search", values: { query: "from:bob is:unread" } },
+			{ search: { resultSizeEstimate: 40, messages: [line("m9", "Tue, 3 Nov 2026"), line("m8", "")] } },
+		);
+		expect(search).toMatchObject({
+			card: "messages",
+			title: "mail matching from:bob is:unread",
+			search: true,
+			total: 40,
+		});
+		expect(search.card === "messages" && search.messages.map((each) => each.id)).toEqual(["m9", "m8"]);
+		expect(() =>
+			cardOf(objects.search!, { connection: "gmail", kind: "search", values: { query: "x" } }, { search: {} }),
+		).toThrow();
+	});
+
 	it("requests offline Google access without persisting a client secret in pending sign-in", async () => {
 		const server = {
 			issuer: "https://accounts.google.com",
@@ -319,6 +371,7 @@ describe("Gmail REST connection", () => {
 					id: "m_1",
 					threadId: "t_1",
 					from: "Ana <ana@example.test>",
+					fromAddress: "ana@example.test",
 					subject: "Hi",
 				},
 			],
@@ -377,6 +430,43 @@ describe("Gmail REST connection", () => {
 			messages: [{ id: "m_1" }],
 		});
 		expect(JSON.parse(result.text)).not.toHaveProperty("messages.0.url");
+	});
+
+	it("says whose a message is by its address alone, as the account is named", () => {
+		expect(addressOf("Ana García <Ana@Example.test>")).toBe("ana@example.test");
+		expect(addressOf('"Bob, the builder" <bob@example.test>')).toBe("bob@example.test");
+		expect(addressOf("carol@example.test")).toBe("carol@example.test");
+		expect(addressOf("Mailer Daemon")).toBe("");
+	});
+
+	it("a thread says its labels, any of its messages', and how many messages it has beyond the newest 25", async () => {
+		const message = (n: number, labels: string[], from = "Bob <bob@example.test>") => ({
+			id: `m_${n}`,
+			threadId: "t_1",
+			labelIds: labels,
+			payload: {
+				headers: [
+					{ name: "From", value: from },
+					{ name: "Subject", value: n === 0 ? "Lunch?" : "Re: Lunch?" },
+				],
+			},
+		});
+		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+			response({
+				id: "t_1",
+				messages: [
+					...Array.from({ length: 28 }, (_, n) => message(n, ["INBOX"])),
+					message(28, ["SENT"], "Ana <ana@example.test>"),
+					message(29, ["INBOX", "UNREAD", "STARRED"]),
+				],
+			}),
+		);
+		const thread = JSON.parse((await gmailCall("t", "get_thread", { thread_id: "t_1" }, undefined, fetcher)).text);
+		expect(thread.total).toBe(30);
+		expect(thread.subject).toBe("Lunch?");
+		expect(thread.messages).toHaveLength(25);
+		expect(thread.labels).toEqual(["INBOX", "SENT", "UNREAD", "STARRED"]);
+		expect(thread.messages.at(-2)).toMatchObject({ id: "m_28", fromAddress: "ana@example.test" });
 	});
 
 	it("fetches external and inline attachment bytes only from their Gmail message", async () => {

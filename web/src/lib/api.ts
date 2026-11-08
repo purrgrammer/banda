@@ -332,6 +332,9 @@ export const addMcp = (config: import("../../../src/core/mcp-config.ts").McpConf
 		method: "POST",
 		body: JSON.stringify(config),
 	});
+/** Update a connection banda ships to the version it ships now; `sha` is the version in effect the owner saw. */
+export const updateConnection = (name: string, sha: string) =>
+	api<CapabilitiesView>(`/capabilities/connections/${name}/update`, { method: "POST", body: JSON.stringify({ sha }) });
 export const refreshConnection = (name: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/refresh`, { method: "POST", body: "{}" });
 export const setConnectionReads = (name: string, tools: readonly string[], sha: string) =>

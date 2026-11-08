@@ -73,7 +73,7 @@ import { accept, agents, decline, save, seed, seedUntilDone, type Workspace, wat
 import type { ComputerView, OwnerInput, Posted, PostMessage, ViewEvent } from "./server/api.ts";
 import { acceptedIconFace } from "./server/avatar-icon-face.ts";
 import { bringable, chooseBring } from "./server/bring.ts";
-import { openCapabilities } from "./server/capabilities.ts";
+import { type Capabilities, openCapabilities } from "./server/capabilities.ts";
 import { change, companion, validPicks } from "./server/companion.ts";
 import { openDevices } from "./server/devices.ts";
 import { BadRequest, handler } from "./server/http.ts";
@@ -121,6 +121,8 @@ export type DaemonOptions = {
 	readonly effects?: readonly EffectTool<any>[];
 	/** Where devices reach it over Iroh; default the config's `remote`, and `BANDA_REMOTE`. */
 	readonly remote?: RemoteSettings;
+	/** Where the connections banda ships are; default `shipped/connections/` of its install. */
+	readonly shipped?: string;
 };
 
 export type Daemon = {
@@ -259,9 +261,15 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		}
 		const registry = toolRegistry();
 		registry.install(toolSearchExtension);
+		// what a watch looks with: the connections' reads, once they are open below
+		let reader: Pick<Capabilities, "readFor"> | undefined;
 		const core = defineCore({
 			blobs,
 			registry,
+			read: (connection, account, tool, args, authority, ctx) =>
+				reader === undefined
+					? Promise.resolve({ failed: "banda is still starting" })
+					: reader.readFor(connection, account, tool, args, authority, ctx),
 			writeSkill: async (chat, requestId, entry, ctx) => {
 				const conversation = await harness?.conversation(chat as ConversationId, ctx);
 				if (conversation === undefined) throw new Error(`chat ${chat} is gone`);
@@ -528,8 +536,10 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			log,
 			changed: () => capabilitiesChanged(),
 			agentChanged: core.agentChanged,
+			...(options.shipped === undefined ? {} : { shipped: options.shipped }),
 		});
 		await capabilities.install();
+		reader = capabilities;
 		const objects = openObjects({ harness: open, capabilities, blobs });
 		// the lead proposes a new agent by writing its before-file into the box; the owner reviews and accepts it in Agents
 
@@ -880,6 +890,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 							await capabilities.switchAccount(act.agent, act.name, act.account, act.on, context, act.sha);
 						else if (act.action === "signout") await capabilities.signOut(act.name, act.account);
 						else if (act.action === "add") await capabilities.addShipped(act.name);
+						else if (act.action === "update") await capabilities.updateShipped(act.name, act.sha);
 						else if (act.action === "address") await capabilities.addByAddress(act.url);
 						else if (act.action === "trust" || act.action === "reads")
 							await capabilities.trustReads(act.name, act.tools, context, act.sha, act.action === "reads");

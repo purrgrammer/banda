@@ -4,13 +4,15 @@ import {
 	CalendarClockIcon,
 	CalendarXIcon,
 	CircleAlertIcon,
+	EyeIcon,
+	EyeOffIcon,
 	FilePenIcon,
 	FileXIcon,
 	KeyRoundIcon,
 	ShieldCheckIcon,
 	SquareIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { ApprovalCard, ChangeCard, Details, Facts, WaitingPill } from "../../chat/Approval.tsx";
 import { ArtifactCard, Browsed, QuestionCard, SignInCard, ViewCard } from "../../chat/Cards.tsx";
 import { Composer } from "../../chat/Composer.tsx";
@@ -28,13 +30,151 @@ import {
 } from "../../chat/Files.tsx";
 import { Header, workingWords } from "../../chat/Header.tsx";
 import { Line } from "../../chat/Line.tsx";
-import { PullRequestCard } from "../../chat/Object.tsx";
+import {
+	type CheckRun,
+	type DriveFile,
+	type EmailMessage,
+	type Messages,
+	ObjectLink,
+	PullRequestCard,
+} from "../../chat/Object.tsx";
 import { RoutineProposal } from "../../chat/Routine.tsx";
 import { VoiceMessage } from "../../chat/Voice.tsx";
+import { Named, WatchLine, WatchProposal } from "../../chat/Watch.tsx";
 import { Markdown } from "../../components/Markdown.tsx";
 import { SourceLabels } from "../../components/SourceLink.tsx";
-import { ATLAS, ATTACHED, MARA, OCTO, PAGE, PHOTO, POSTER, PR, REPLY_VOICE, SANCHO, VOICE } from "../fixtures.ts";
+import { watchWords } from "../../lib/chat.ts";
+import { PLANNING } from "../connections/calendar.tsx";
+import { ANA } from "../connections/contacts.tsx";
+import { PLAN } from "../connections/drive.tsx";
+import {
+	ATLAS,
+	ATTACHED,
+	CHECK_RUN,
+	DISCUSSION,
+	ISSUE,
+	MARA,
+	OCTO,
+	PAGE,
+	PHOTO,
+	POSTER,
+	PR,
+	REPLY_VOICE,
+	REPOSITORY,
+	SANCHO,
+	VOICE,
+} from "../fixtures.ts";
 import { Group, HeaderStage, Section } from "../stage.tsx";
+
+/** The objects a watch's lines name, one of each kind banda ships can follow, drawn as the owner's references are. */
+const EMAIL: EmailMessage = {
+	from: "Ana García <ana@example.com>",
+	to: "bandarra@example.com",
+	subject: "The launch checklist",
+	date: "Today · 10:24",
+	snippet: "Three things before Friday…",
+	body: "",
+	unread: true,
+	url: "https://mail.google.com/mail/u/0/#inbox/18f2a",
+};
+const THREAD: Messages = {
+	title: "Re: quarterly planning",
+	search: false,
+	total: 3,
+	messages: [],
+	url: "https://mail.google.com/mail/u/0/#all/18e9c",
+};
+const SEARCH: Messages = {
+	title: "from:boss is:unread",
+	search: true,
+	total: 14,
+	messages: [],
+	url: "https://mail.google.com/mail/u/0/#search/from%3Aboss%20is%3Aunread",
+};
+const RUN: CheckRun = {
+	...CHECK_RUN,
+	name: "ci",
+	state: "running",
+	step: undefined,
+	took: undefined,
+	log: undefined,
+	url: "https://github.com/purrgrammer/banda/actions/runs/9921",
+};
+const FOLDER: DriveFile = {
+	...PLAN,
+	name: "Northstar",
+	kind: "folder",
+	mimeType: "application/vnd.google-apps.folder",
+	description: "",
+	url: "https://drive.google.com/drive/folders/1fOlDeR",
+};
+/** Each object by the name the daemon gives it (a Google object's is its id) and as it is drawn inline. */
+const FOLLOWED = {
+	pr: {
+		name: "purrgrammer/banda #142",
+		object: <ObjectLink object={{ ...PR, card: "pull-request" }} href={PR.url ?? ""} />,
+	},
+	issue: {
+		name: "purrgrammer/banda #41",
+		object: <ObjectLink object={{ ...ISSUE, card: "issue" }} href={ISSUE.url ?? ""} />,
+	},
+	check: {
+		name: "purrgrammer/banda · check 7781",
+		object: <ObjectLink object={{ ...CHECK_RUN, card: "check-run" }} href={CHECK_RUN.url ?? ""} />,
+	},
+	run: {
+		name: "purrgrammer/banda · run 9921",
+		object: <ObjectLink object={{ ...RUN, card: "check-run" }} href={RUN.url ?? ""} />,
+	},
+	// a notification is drawn as the thing it is about, never inline: its line names it
+	notification: { name: "notification 2048" },
+	repository: {
+		name: "purrgrammer/banda",
+		object: <ObjectLink object={{ ...REPOSITORY, card: "repository" }} href={REPOSITORY.url ?? ""} />,
+	},
+	discussion: {
+		name: "purrgrammer/banda · discussion #52",
+		object: <ObjectLink object={{ ...DISCUSSION, card: "discussion" }} href={DISCUSSION.url ?? ""} />,
+	},
+	email: { name: "18f2a", object: <ObjectLink object={{ ...EMAIL, card: "email" }} href={EMAIL.url ?? ""} /> },
+	thread: {
+		name: "conversation 18e9c",
+		object: <ObjectLink object={{ ...THREAD, card: "messages" }} href={THREAD.url ?? ""} />,
+	},
+	search: {
+		name: "mail matching from:boss is:unread",
+		object: <ObjectLink object={{ ...SEARCH, card: "messages" }} href={SEARCH.url ?? ""} />,
+	},
+	event: {
+		name: "cGxhbm5pbmc",
+		object: <ObjectLink object={{ ...PLANNING, card: "event" }} href={PLANNING.url ?? ""} />,
+	},
+	file: { name: "1aBcD_eFgH-ijk", object: <ObjectLink object={{ ...PLAN, card: "file" }} href={PLAN.url ?? ""} /> },
+	folder: {
+		name: "folder 1fOlDeR",
+		object: <ObjectLink object={{ ...FOLDER, card: "file" }} href={FOLDER.url ?? ""} />,
+	},
+	contact: { name: "c1234567890", object: <ObjectLink object={{ ...ANA, card: "contact" }} href={ANA.url ?? ""} /> },
+};
+const AT = (hour: number, minute: number) => new Date(2026, 10, 8, hour, minute).getTime();
+
+/** A watch's line as the chat draws it: `changes` on `of`, with the words `watchWords` gives them. */
+function saw(
+	of: { readonly name: string; readonly object?: ReactNode },
+	changes: readonly string[],
+	time: string,
+	more: { ended?: string; resumed?: true; gap?: true; burst?: number } = {},
+) {
+	return (
+		<WatchLine
+			name={of.name}
+			object={of.object}
+			ended={more.ended !== undefined}
+			time={time}
+			text={watchWords({ object: { key: "", ref: "", connection: "", service: "", name: of.name }, changes, ...more })}
+		/>
+	);
+}
 
 export function Parts() {
 	return (
@@ -445,6 +585,89 @@ export function Parts() {
 					<Line icon={CalendarClockIcon} time="08:00">
 						Morning brief ran
 					</Line>
+				</div>
+			</Section>
+			<Section
+				id="watch-items"
+				note="Each change a kind's rules say matters is a line in the chat's own voice, the object drawn as your own references are; the eyes mark following and its end, nothing else. One line of each kind banda ships can follow."
+			>
+				<div className="flex max-w-2xl flex-col gap-5">
+					<div className="flex flex-col gap-3">
+						<WatchProposal
+							watch={{
+								agent: "Mara",
+								title: "purrgrammer/banda #142",
+								object: <Named>{FOLLOWED.pr.object}</Named>,
+								kind: "new",
+								until: "merged",
+								account: "@bandarra",
+								ask: "Tell me when it is approved or a check fails. If Ana asks for changes, summarise what she wants.",
+							}}
+						/>
+						<Line icon={EyeIcon}>
+							Mara followed <Named>{FOLLOWED.pr.object}</Named>
+						</Line>
+						<Line icon={EyeOffIcon}>Mara isn't following purrgrammer/banda #150</Line>
+						<Line icon={EyeIcon} tone="danger">
+							Mara couldn't follow it: no connection you have recognises that link
+						</Line>
+					</div>
+					<Group label="GitHub" className="flex-col items-stretch">
+						{saw(FOLLOWED.pr, ["ana approved", "lint failed"], "09:10")}
+						<PullRequestCard pr={{ ...PR, checks: { passed: 2, failed: 1, running: 0 }, reviews: "Approved by ana" }} />
+						{saw(FOLLOWED.pr, ["ana requested changes", "bob commented", "lint failed"], "10:02", {
+							burst: AT(9, 58),
+						})}
+						{saw(FOLLOWED.pr, ["checks finished"], "10:40")}
+						{saw(FOLLOWED.pr, ["lint failed", "ana commented"], "11:30", { resumed: true })}
+						{saw(FOLLOWED.pr, ["lint failed"], "12:05", { gap: true })}
+						{saw(FOLLOWED.pr, ["merged"], "17:02", { ended: "merged" })}
+						{saw(FOLLOWED.issue, ["bob commented", "labelled bug"], "11:15")}
+						{saw(FOLLOWED.issue, ["assigned to bandarra"], "11:20")}
+						{saw(FOLLOWED.issue, ["closed"], "16:48", { ended: "closed" })}
+						{saw(FOLLOWED.check, ["failed"], "09:31", { ended: "completed" })}
+						{saw(FOLLOWED.run, ["a job failed"], "09:33")}
+						{saw(FOLLOWED.run, ["succeeded"], "09:52", { ended: "completed" })}
+						{saw(FOLLOWED.notification, ["new comment"], "10:05")}
+						{saw(FOLLOWED.notification, [], "10:30", { ended: "read" })}
+						{saw(
+							FOLLOWED.repository,
+							["ana-k opened #143: Follow a repository's releases", "released v0.1.0-alpha.6"],
+							"08:40",
+						)}
+						{saw(FOLLOWED.repository, ["new commits on the default branch"], "09:05")}
+						{saw(FOLLOWED.discussion, ["new reply"], "14:12")}
+						{saw(FOLLOWED.discussion, ["answered"], "15:30", { ended: "answered" })}
+					</Group>
+					<Group label="Gmail" className="flex-col items-stretch">
+						{saw(FOLLOWED.email, ["starred"], "10:26")}
+						{saw(FOLLOWED.email, [], "10:41", { ended: "read" })}
+						{saw(FOLLOWED.thread, ["Mira from Northstar <mira@northstar.example> replied"], "16:42")}
+						{saw(FOLLOWED.thread, ["archived"], "17:10")}
+						{saw(FOLLOWED.search, ["Inês Duarte <ines@example.com>: Numbers for Thursday's review"], "11:02")}
+					</Group>
+					<Group label="Calendar" className="flex-col items-stretch">
+						{saw(FOLLOWED.event, ["Mira accepted", "Teo declined"], "09:20")}
+						{saw(FOLLOWED.event, ["location: Northstar HQ, 4th floor", "Bo Lindqvist invited"], "12:00")}
+						{saw(FOLLOWED.event, ["cancelled"], "18:05", { ended: "cancelled" })}
+					</Group>
+					<Group label="Drive" className="flex-col items-stretch">
+						{saw(FOLLOWED.file, ["Ana García edited it"], "16:42")}
+						{saw(FOLLOWED.file, ["renamed: Q1 rollout plan v2", "shared with Teo Ruiz"], "16:50")}
+						{saw(FOLLOWED.file, ["trashed"], "18:30", { ended: "trashed" })}
+						{saw(FOLLOWED.folder, ["new file: Q1 budget"], "13:15")}
+					</Group>
+					<Group label="Contacts" className="flex-col items-stretch">
+						{saw(FOLLOWED.contact, ["new phone +34 611 111 111", "now at Aurora", "title: Lead"], "08:02")}
+					</Group>
+					<Group label="Health" className="flex-col items-stretch">
+						<Line icon={CircleAlertIcon} tone="danger" time="13:10">
+							purrgrammer/banda #98 · can't reach GitHub since 12:10 · GitHub did not answer
+						</Line>
+						<Line icon={CircleAlertIcon} tone="danger" time="15:40">
+							purrgrammer/banda #120 · paused: it woke 24 times today, the most it may. Resume it in the panel
+						</Line>
+					</Group>
 				</div>
 			</Section>
 			<Section

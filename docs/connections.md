@@ -37,7 +37,8 @@ read that fetches it, the fields the card shows and the writes that act on it. A
 by (connection, account, object), with its time. Links in agent messages unfurl to cards, few per message, never retried
 in a loop; owner references stay compact inside their words (service icon, object-type icon, linked title), without
 metadata or another card.
-A draft on an object shows it. GitHub first: pull request, issue, Actions job, and notification as its subject.
+A draft on an object shows it. GitHub first: pull request, issue, Actions job and workflow run, discussion, repository, and notification as its
+subject.
 PR cards summarize checks; arbitrary standalone Checks API IDs are not Actions job IDs. Missing or partial facts stay
 unknown. Fake OAuth and MCP services cover automated tests and write approvals; manual app acceptance uses an isolated
 home at desktop and phone widths. Real-account reads require the owner's authorization; real writes use a disposable
@@ -131,3 +132,7 @@ in a throwaway home, at desktop and phone width.
 - [ ] Harnesses: their asks reach the owner only in the web app, not on other gateways; the agent still hears the end
 - [ ] Harnesses: a step may flicker between flushes (a note the harness has not taken yet); sessions are keyed by the model's call id, as artifacts and groups are
 - [ ] Harnesses: the adapters are not in a release (Claude Code's SDK is Anthropic's, all rights reserved); Connections says how to install them
+- [x] A shipped file newer than the accepted one is offered as Update on its tile, keeping the owner's scopes and
+  accounts; refused over a box change waiting to be allowed
+- [ ] Updating a shipped file the owner never edited is still a tap: the store does not know which shipped version a
+  file came from

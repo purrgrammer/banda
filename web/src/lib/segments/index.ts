@@ -10,12 +10,14 @@ import { reactions } from "./reactions.ts";
 import { refusals } from "./refusals.ts";
 import { routines } from "./routines.ts";
 import type { Segmenter } from "./types.ts";
+import { watches } from "./watches.ts";
 import { web } from "./web.ts";
 
 export const SEGMENTERS: readonly Segmenter[] = [
 	refusals,
 	reactions,
 	routines,
+	watches,
 	artifacts,
 	avatar,
 	connect,

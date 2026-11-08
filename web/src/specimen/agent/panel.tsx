@@ -3,6 +3,7 @@ import { isValidElement, type ReactNode, useContext } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { MakeTabsList } from "../../app/NewSheet.tsx";
+import { WatchDetail } from "../../app/watches.tsx";
 import { Band } from "../../chat/Band.tsx";
 import { BrowserWindow } from "../../chat/Browser.tsx";
 import type { FaceState } from "../../chat/Face.tsx";
@@ -15,6 +16,8 @@ import {
 	type PanelTab,
 	type RoutineRowView,
 	Routines,
+	Watching,
+	type WatchRowView,
 } from "../../chat/Panel.tsx";
 import { RoutineEditor } from "../../chat/RoutineEditor.tsx";
 import type { Who } from "../../chat/Row.tsx";
@@ -35,7 +38,22 @@ import {
 } from "../../chat/Settings.tsx";
 import { SkillCatalogue } from "../../chat/Skill.tsx";
 import { ArtifactViewer, FileViewer, Versions } from "../../chat/Viewer.tsx";
-import { ATLAS, FACTS, MARA, OCTO, OTTO, PAGE, PERMISSIONS, PHOTO, ROUTINES, ROWS, SANCHO } from "../fixtures.ts";
+import {
+	ATLAS,
+	FACTS,
+	MARA,
+	OCTO,
+	OTTO,
+	PAGE,
+	PERMISSIONS,
+	PHOTO,
+	ROUTINES,
+	ROWS,
+	SANCHO,
+	WATCH_CONTACT_VIEW,
+	WATCH_VIEW,
+	WATCHES,
+} from "../fixtures.ts";
 import { MaraChat } from "../screens/screens.tsx";
 import { Group, Labelled, Section, StageContext } from "../stage.tsx";
 import { SKILLS, skillHref } from "./skills.tsx";
@@ -80,6 +98,7 @@ function AgentPanelOf({
 	tab,
 	state,
 	routines = ROUTINES,
+	watches = WATCHES,
 	paused = false,
 	facts = FACTS,
 	permissions = PERMISSIONS,
@@ -90,6 +109,7 @@ function AgentPanelOf({
 	tab?: PanelTab;
 	state?: FaceState;
 	routines?: readonly RoutineRowView[];
+	watches?: readonly WatchRowView[];
 	paused?: boolean;
 	facts?: readonly { id: string; text: string }[];
 	permissions?: readonly { what: string; scope: string }[];
@@ -105,7 +125,12 @@ function AgentPanelOf({
 					tab ?? firstTab({ routines: routines.length, connected: connections.some((row) => row.accounts.length > 0) })
 				}
 				{...(state === undefined ? {} : { state })}
-				routines={<Routines agent={who.name} routines={routines} allPaused={paused} />}
+				routines={
+					<>
+						<Routines agent={who.name} routines={routines} allPaused={paused} />
+						<Watching agent={who.name} watches={watches} allPaused={paused} onFollow={async () => {}} />
+					</>
+				}
 				access={
 					<>
 						<Connections agent={who.name} rows={connections} />
@@ -214,8 +239,37 @@ export function PanelSections() {
 					<Specimen label="Connected, no routines: it opens on About">
 						<AgentPanelOf who={SANCHO} routines={[]} facts={[]} permissions={[]} />
 					</Specimen>
-					<Specimen label="No routines yet">
-						<AgentPanelOf who={OCTO} tab="routines" routines={[]} />
+					<Specimen label="No routines or watches yet: Add takes a link">
+						<AgentPanelOf who={OCTO} tab="routines" routines={[]} watches={[]} />
+					</Specimen>
+					<Specimen label="Every watch's state: looking, waiting for you, can't reach, behind, paused at its wakes a day, done, ended by authority">
+						<Panel name="Mara">
+							<Watching agent="Mara" watches={WATCHES} onFollow={async () => {}} />
+						</Panel>
+					</Specimen>
+					<Specimen label="Add, its first look running">
+						<Panel name="Octo">
+							<Watching
+								agent="Octo"
+								watches={[]}
+								form={{ step: "looking", link: "https://github.com/purrgrammer/banda/pull/142" }}
+								onFollow={() => new Promise(() => {})}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="Add, refused in the daemon's words">
+						<Panel name="Octo">
+							<Watching
+								agent="Octo"
+								watches={WATCHES.slice(0, 1)}
+								form={{
+									step: "refused",
+									link: "https://gitlab.com/acme/banda/-/merge_requests/7",
+									why: "no connection you have can follow that link",
+								}}
+								onFollow={async () => {}}
+							/>
+						</Panel>
 					</Specimen>
 					<Specimen label="Nothing remembered yet">
 						<AgentPanelOf who={OCTO} tab="memory" facts={[]} />
@@ -245,7 +299,10 @@ export function PanelSections() {
 					</Specimen>
 				</div>
 			</Section>
-			<Section id="open-file" note="A file in full, an artifact and its versions, a routine's editor.">
+			<Section
+				id="open-file"
+				note="A file in full, an artifact and its versions, a routine's editor, a watch's detail and its editor."
+			>
 				<div className="flex flex-wrap items-start gap-4">
 					<Specimen label="A PDF, its first page">
 						<Panel name="Mara">
@@ -380,6 +437,69 @@ export function PanelSections() {
 					<Specimen label="+, a new routine">
 						<Panel name="Octo">
 							<RoutineEditor agent="Octo" now={SPECIMEN_NOW} onSave={async () => {}} />
+						</Panel>
+					</Specimen>
+					<Specimen label="A watch's detail">
+						<Panel name="Mara">
+							<WatchDetail
+								agent={{ id: "mara", name: "Mara" }}
+								chat={undefined}
+								watch={WATCH_VIEW}
+								now={SPECIMEN_NOW}
+								onDone={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="Editing what ends it and what matters">
+						<Panel name="Mara">
+							<WatchDetail
+								agent={{ id: "mara", name: "Mara" }}
+								chat={undefined}
+								watch={WATCH_VIEW}
+								now={SPECIMEN_NOW}
+								edit={{ step: "editing", until: null, ask: WATCH_VIEW.accepted?.watch?.ask ?? "" }}
+								onDone={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="A watch nothing ends: a contact">
+						<Panel name="Mara">
+							<WatchDetail
+								agent={{ id: "mara", name: "Mara" }}
+								chat={undefined}
+								watch={WATCH_CONTACT_VIEW}
+								now={SPECIMEN_NOW}
+								onDone={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="Editing it: no end to pick">
+						<Panel name="Mara">
+							<WatchDetail
+								agent={{ id: "mara", name: "Mara" }}
+								chat={undefined}
+								watch={WATCH_CONTACT_VIEW}
+								now={SPECIMEN_NOW}
+								edit={{ step: "editing", until: null, ask: WATCH_CONTACT_VIEW.accepted?.watch?.ask ?? "" }}
+								onDone={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="An edit refused in the daemon's words">
+						<Panel name="Mara">
+							<WatchDetail
+								agent={{ id: "mara", name: "Mara" }}
+								chat={undefined}
+								watch={WATCH_VIEW}
+								now={SPECIMEN_NOW}
+								edit={{
+									step: "refused",
+									until: "closed",
+									ask: WATCH_VIEW.accepted?.watch?.ask ?? "",
+									why: "it changed since you saw it: look again",
+								}}
+								onDone={() => {}}
+							/>
 						</Panel>
 					</Specimen>
 				</div>

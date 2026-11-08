@@ -11,6 +11,7 @@ export const TOOLSETS: { readonly [name: string]: readonly string[] } = {
 	avatar: ["read_avatar_instructions"],
 	requests: ["propose_send", "ask_hosts"],
 	routines: ["schedule"],
+	watches: ["watch"],
 	memory: ["remember", "recall", "forget"],
 	web: ["web_fetch"],
 	browser: [

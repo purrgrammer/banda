@@ -501,6 +501,481 @@
 				"readOnlyHint": false,
 				"title": "Dismiss notification"
 			}
+		},
+		{
+			"name": "list_pull_requests",
+			"inputSchema": {
+				"properties": {
+					"base": {
+						"description": "Filter by base branch",
+						"type": "string"
+					},
+					"direction": {
+						"description": "Sort direction",
+						"enum": ["asc", "desc"],
+						"type": "string"
+					},
+					"fields": {
+						"description": "Subset of fields to return for each pull request. If omitted, all fields are returned. Use this to reduce response size when you only need specific fields; omitting 'body' in particular drops the largest per-result data.",
+						"items": {
+							"enum": [
+								"number",
+								"title",
+								"body",
+								"state",
+								"draft",
+								"merged",
+								"mergeable_state",
+								"html_url",
+								"user",
+								"labels",
+								"assignees",
+								"requested_reviewers",
+								"merged_by",
+								"head",
+								"base",
+								"additions",
+								"deletions",
+								"changed_files",
+								"commits",
+								"comments",
+								"created_at",
+								"updated_at",
+								"closed_at",
+								"merged_at",
+								"milestone"
+							],
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"head": {
+						"description": "Filter by head user/org and branch",
+						"type": "string"
+					},
+					"owner": {
+						"description": "Repository owner",
+						"type": "string"
+					},
+					"page": {
+						"description": "Page number for pagination (min 1)",
+						"minimum": 1,
+						"type": "number"
+					},
+					"perPage": {
+						"description": "Results per page for pagination (min 1, max 100)",
+						"maximum": 100,
+						"minimum": 1,
+						"type": "number"
+					},
+					"repo": {
+						"description": "Repository name",
+						"type": "string"
+					},
+					"sort": {
+						"description": "Sort by",
+						"enum": ["created", "updated", "popularity", "long-running"],
+						"type": "string"
+					},
+					"state": {
+						"description": "Filter by state",
+						"enum": ["open", "closed", "all"],
+						"type": "string"
+					}
+				},
+				"required": ["owner", "repo"],
+				"type": "object"
+			},
+			"description": "List pull requests in a GitHub repository. If the user specifies an author, then DO NOT use this tool and use the search_pull_requests tool instead.",
+			"annotations": {
+				"idempotentHint": false,
+				"readOnlyHint": true,
+				"title": "List pull requests"
+			}
+		},
+		{
+			"name": "list_issues",
+			"inputSchema": {
+				"properties": {
+					"after": {
+						"description": "Cursor for pagination. Use the cursor from the previous response.",
+						"type": "string"
+					},
+					"direction": {
+						"description": "Order direction. If provided, the 'orderBy' also needs to be provided.",
+						"enum": ["ASC", "DESC"],
+						"type": "string"
+					},
+					"field_filters": {
+						"description": "Filter by custom issue field values. Each entry takes a field_name and a value; the server looks up the field and coerces the value to its type (single-select option name, text, number, or YYYY-MM-DD date).",
+						"items": {
+							"properties": {
+								"field_name": {
+									"description": "Name of the custom field (e.g. \"Priority\"). Case-insensitive.",
+									"type": "string"
+								},
+								"value": {
+									"description": "Value to filter on. For single-select fields, the option name (e.g. \"P1\"). For dates, YYYY-MM-DD. For numbers, the numeric value as a string. For text, the text value.",
+									"type": "string"
+								}
+							},
+							"required": ["field_name", "value"],
+							"type": "object"
+						},
+						"type": "array"
+					},
+					"fields": {
+						"description": "Subset of fields to return for each issue. If omitted, all fields are returned. Use this to reduce response size when you only need specific fields; omitting 'body' and 'field_values' in particular drops the largest per-result data.",
+						"items": {
+							"enum": [
+								"number",
+								"title",
+								"body",
+								"state",
+								"user",
+								"labels",
+								"assignees",
+								"comments",
+								"created_at",
+								"updated_at",
+								"field_values"
+							],
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"labels": {
+						"description": "Filter by labels",
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"orderBy": {
+						"description": "Order issues by field. If provided, the 'direction' also needs to be provided.",
+						"enum": ["CREATED_AT", "UPDATED_AT", "COMMENTS"],
+						"type": "string"
+					},
+					"owner": {
+						"description": "Repository owner",
+						"type": "string"
+					},
+					"perPage": {
+						"description": "Results per page for pagination (min 1, max 100)",
+						"maximum": 100,
+						"minimum": 1,
+						"type": "number"
+					},
+					"repo": {
+						"description": "Repository name",
+						"type": "string"
+					},
+					"since": {
+						"description": "Filter by date (ISO 8601 timestamp)",
+						"type": "string"
+					},
+					"state": {
+						"description": "Filter by state, by default both open and closed issues are returned when not provided",
+						"enum": ["OPEN", "CLOSED"],
+						"type": "string"
+					}
+				},
+				"required": ["owner", "repo"],
+				"type": "object"
+			},
+			"description": "List issues in a GitHub repository. For pagination, use the 'endCursor' from the previous response's 'pageInfo' in the 'after' parameter.",
+			"annotations": {
+				"idempotentHint": false,
+				"readOnlyHint": true,
+				"title": "List issues"
+			}
+		},
+		{
+			"name": "list_releases",
+			"inputSchema": {
+				"properties": {
+					"fields": {
+						"description": "Subset of fields to return for each release. If omitted, all fields are returned. Use this to reduce response size when you only need specific fields; omitting 'body' in particular drops the largest per-release data.",
+						"items": {
+							"enum": ["id", "tag_name", "name", "body", "html_url", "published_at", "prerelease", "draft", "author"],
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"owner": {
+						"description": "Repository owner",
+						"type": "string",
+						"x-mcp-header": "owner"
+					},
+					"page": {
+						"description": "Page number for pagination (min 1)",
+						"minimum": 1,
+						"type": "number"
+					},
+					"perPage": {
+						"description": "Results per page for pagination (min 1, max 100)",
+						"maximum": 100,
+						"minimum": 1,
+						"type": "number"
+					},
+					"repo": {
+						"description": "Repository name",
+						"type": "string",
+						"x-mcp-header": "repo"
+					}
+				},
+				"required": ["owner", "repo"],
+				"type": "object"
+			},
+			"description": "List releases in a GitHub repository",
+			"annotations": {
+				"idempotentHint": false,
+				"readOnlyHint": true,
+				"title": "List releases"
+			}
+		},
+		{
+			"name": "list_commits",
+			"inputSchema": {
+				"properties": {
+					"author": {
+						"description": "Author username or email address to filter commits by",
+						"type": "string"
+					},
+					"fields": {
+						"description": "Subset of fields to return for each commit. If omitted, all fields are returned. Use this to reduce response size when you only need specific fields, e.g. just 'sha' and 'html_url'.",
+						"items": {
+							"enum": ["sha", "html_url", "commit", "author", "committer"],
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"owner": {
+						"description": "Repository owner",
+						"type": "string",
+						"x-mcp-header": "owner"
+					},
+					"page": {
+						"description": "Page number for pagination (min 1)",
+						"minimum": 1,
+						"type": "number"
+					},
+					"path": {
+						"description": "Only commits containing this file path will be returned",
+						"type": "string"
+					},
+					"perPage": {
+						"description": "Results per page for pagination (min 1, max 100)",
+						"maximum": 100,
+						"minimum": 1,
+						"type": "number"
+					},
+					"repo": {
+						"description": "Repository name",
+						"type": "string",
+						"x-mcp-header": "repo"
+					},
+					"sha": {
+						"description": "Commit SHA, branch or tag name to list commits of. If not provided, uses the default branch of the repository. If a commit SHA is provided, will list commits up to that SHA.",
+						"type": "string"
+					},
+					"since": {
+						"description": "Only commits after this date will be returned (ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DD)",
+						"type": "string"
+					},
+					"until": {
+						"description": "Only commits before this date will be returned (ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DD)",
+						"type": "string"
+					}
+				},
+				"required": ["owner", "repo"],
+				"type": "object"
+			},
+			"description": "Get list of commits of a branch in a GitHub repository. Returns at least 30 results per page by default, but can return more if specified using the perPage parameter (up to 100).",
+			"annotations": {
+				"idempotentHint": false,
+				"readOnlyHint": true,
+				"title": "List commits"
+			}
+		},
+		{
+			"name": "get_discussion",
+			"inputSchema": {
+				"properties": {
+					"discussionNumber": {
+						"description": "Discussion Number",
+						"type": "number"
+					},
+					"owner": {
+						"description": "Repository owner",
+						"type": "string"
+					},
+					"repo": {
+						"description": "Repository name",
+						"type": "string"
+					}
+				},
+				"required": ["owner", "repo", "discussionNumber"],
+				"type": "object"
+			},
+			"description": "Get a specific discussion by ID",
+			"annotations": {
+				"idempotentHint": false,
+				"readOnlyHint": true,
+				"title": "Get discussion"
+			}
+		},
+		{
+			"name": "get_discussion_comments",
+			"inputSchema": {
+				"properties": {
+					"after": {
+						"description": "Cursor for pagination. Use the cursor from the previous response.",
+						"type": "string"
+					},
+					"discussionNumber": {
+						"description": "Discussion Number",
+						"type": "number"
+					},
+					"includeReplies": {
+						"description": "When true, each top-level comment will include its replies nested within it (up to 100 replies per comment, which is the GitHub API maximum). Defaults to false.",
+						"type": "boolean"
+					},
+					"owner": {
+						"description": "Repository owner",
+						"type": "string"
+					},
+					"perPage": {
+						"description": "Results per page for pagination (min 1, max 100)",
+						"maximum": 100,
+						"minimum": 1,
+						"type": "number"
+					},
+					"repo": {
+						"description": "Repository name",
+						"type": "string"
+					}
+				},
+				"required": ["owner", "repo", "discussionNumber"],
+				"type": "object"
+			},
+			"description": "Get comments from a discussion",
+			"annotations": {
+				"idempotentHint": false,
+				"readOnlyHint": true,
+				"title": "Get discussion comments"
+			}
+		},
+		{
+			"name": "actions_list",
+			"inputSchema": {
+				"properties": {
+					"method": {
+						"description": "The action to perform",
+						"enum": ["list_workflows", "list_workflow_runs", "list_workflow_jobs", "list_workflow_run_artifacts"],
+						"type": "string"
+					},
+					"owner": {
+						"description": "Repository owner",
+						"type": "string"
+					},
+					"page": {
+						"description": "Page number for pagination (default: 1)",
+						"minimum": 1,
+						"type": "number"
+					},
+					"perPage": {
+						"description": "Results per page for pagination (default: 30, max: 100)",
+						"maximum": 100,
+						"minimum": 1,
+						"type": "number"
+					},
+					"repo": {
+						"description": "Repository name",
+						"type": "string"
+					},
+					"resource_id": {
+						"description": "The unique identifier of the resource. This will vary based on the \"method\" provided, so ensure you provide the correct ID:\n- Do not provide any resource ID for 'list_workflows' method.\n- Provide a workflow ID or workflow file name (e.g. ci.yaml) for 'list_workflow_runs' method, or omit to list all workflow runs in the repository.\n- Provide a workflow run ID for 'list_workflow_jobs' and 'list_workflow_run_artifacts' methods.\n",
+						"type": "string"
+					},
+					"workflow_jobs_filter": {
+						"description": "Filters for workflow jobs. **ONLY** used when method is 'list_workflow_jobs'",
+						"properties": {
+							"filter": {
+								"description": "Filters jobs by their completed_at timestamp",
+								"enum": ["latest", "all"],
+								"type": "string"
+							}
+						},
+						"type": "object"
+					},
+					"workflow_runs_filter": {
+						"description": "Filters for workflow runs. **ONLY** used when method is 'list_workflow_runs'",
+						"properties": {
+							"actor": {
+								"description": "Filter to a specific GitHub user's workflow runs.",
+								"type": "string"
+							},
+							"branch": {
+								"description": "Filter workflow runs to a specific Git branch. Use the name of the branch.",
+								"type": "string"
+							},
+							"event": {
+								"description": "Filter workflow runs to a specific event type",
+								"enum": [
+									"branch_protection_rule",
+									"check_run",
+									"check_suite",
+									"create",
+									"delete",
+									"deployment",
+									"deployment_status",
+									"discussion",
+									"discussion_comment",
+									"fork",
+									"gollum",
+									"issue_comment",
+									"issues",
+									"label",
+									"merge_group",
+									"milestone",
+									"page_build",
+									"public",
+									"pull_request",
+									"pull_request_review",
+									"pull_request_review_comment",
+									"pull_request_target",
+									"push",
+									"registry_package",
+									"release",
+									"repository_dispatch",
+									"schedule",
+									"status",
+									"watch",
+									"workflow_call",
+									"workflow_dispatch",
+									"workflow_run"
+								],
+								"type": "string"
+							},
+							"status": {
+								"description": "Filter workflow runs to only runs with a specific status",
+								"enum": ["queued", "in_progress", "completed", "requested", "waiting"],
+								"type": "string"
+							}
+						},
+						"type": "object"
+					}
+				},
+				"required": ["method", "owner", "repo"],
+				"type": "object"
+			},
+			"description": "Tools for listing GitHub Actions resources.\nUse this tool to list workflows in a repository, or list workflow runs, jobs, and artifacts for a specific workflow or workflow run.\n",
+			"annotations": {
+				"idempotentHint": false,
+				"readOnlyHint": true,
+				"title": "List GitHub Actions workflows in a repository"
+			}
 		}
 	]
 }

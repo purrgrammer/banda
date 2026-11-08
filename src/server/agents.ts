@@ -337,7 +337,7 @@ export function watchAgents(
 	changed: () => void,
 	log: (line: string) => void,
 	ctx: Context = context,
-	folders: readonly string[] = ["agents", "routines", "connections", "tools", "memory", "memory/agents"],
+	folders: readonly string[] = ["agents", "routines", "watches", "connections", "tools", "memory", "memory/agents"],
 ): () => Promise<void> {
 	let closed = false;
 	let watcher: FileWatcher | undefined;

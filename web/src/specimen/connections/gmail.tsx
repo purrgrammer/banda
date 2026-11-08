@@ -1,8 +1,8 @@
-/** Gmail: an email as a card, a draft to send, and the access to choose before connecting. */
+/** Gmail: an email as a card, a search and a conversation as lists, a draft to send, and the access to choose before connecting. */
 import { useState } from "react";
 import { EmailDraftPreview } from "../../app/EmailDraftPreview.tsx";
 import { ConnectCard, ConnectDialog } from "../../chat/Connect.tsx";
-import { EmailCard } from "../../chat/Object.tsx";
+import { EmailCard, MessagesCard } from "../../chat/Object.tsx";
 import { Section } from "../stage.tsx";
 
 const READ_ONLY = "https://www.googleapis.com/auth/gmail.readonly";
@@ -49,6 +49,56 @@ export function GmailSection() {
 						unread: false,
 					}}
 				/>
+				<MessagesCard
+					list={{
+						title: "from:boss is:unread",
+						search: true,
+						total: 14,
+						messages: [
+							{
+								id: "m3",
+								from: "Inês Duarte <ines@example.com>",
+								subject: "Numbers for Thursday's review",
+								date: "Today · 11:02",
+							},
+							{
+								id: "m2",
+								from: "Inês Duarte <ines@example.com>",
+								subject: "A very long subject that a forwarded thread might carry, naming every team and the quarter",
+								date: "Today · 08:47",
+							},
+							{ id: "m1", from: "Inês Duarte <ines@example.com>", subject: "", date: "Yesterday · 19:30" },
+						],
+					}}
+				/>
+				<MessagesCard
+					list={{
+						title: "Re: quarterly planning",
+						search: false,
+						total: 3,
+						messages: [
+							{
+								id: "m6",
+								from: "Mira from Northstar <mira@northstar.example>",
+								subject: "Re: quarterly planning",
+								date: "Yesterday · 16:42",
+							},
+							{
+								id: "m5",
+								from: "Ana García <ana@example.com>",
+								subject: "Re: quarterly planning",
+								date: "Yesterday · 12:10",
+							},
+							{
+								id: "m4",
+								from: "Mira from Northstar <mira@northstar.example>",
+								subject: "Quarterly planning",
+								date: "Mon · 09:15",
+							},
+						],
+					}}
+				/>
+				<MessagesCard list={{ title: "label:invoices after:2026/11/01", search: true, total: 0, messages: [] }} />
 				<div className="lg:col-span-2">
 					<ConnectCard
 						agent="Sancho"

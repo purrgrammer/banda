@@ -54,6 +54,23 @@ it("accepts curated data, rejects reads that can write and unbounded overlapping
 	if ("objects" in safe)
 		expect(recognise(`${"a-".repeat(90)}wrong`, [{ name: "example", objects: safe.objects }])).toEqual([]);
 });
+it("a read's argument may be a list of words, the fields a list read asks for; nothing else that is not a scalar", () => {
+	const withArgs = (args: unknown) =>
+		parseObjects({ issue: { ...GITHUB_OBJECTS.issue, reads: { issue: { tool: "issue_read", args } } } }, () => true);
+	const parsed = withArgs({ owner: "{owner}", fields: ["number", "user", "created_at"] });
+	expect(parsed).toHaveProperty("objects");
+	if ("objects" in parsed) {
+		const found = recognise("https://github.com/acme/banda/issues/12", [
+			{ name: "github", objects: parsed.objects },
+		])[0]!;
+		expect(readArgs(parsed.objects.issue!.reads.issue!, found, undefined)).toEqual({
+			owner: "acme",
+			fields: ["number", "user", "created_at"],
+		});
+	}
+	for (const fields of [["{owner}"], [1], [["a"]], { a: "b" }, Array.from({ length: 33 }, () => "a"), ["a b"]])
+		expect(withArgs({ fields }), JSON.stringify(fields)).toHaveProperty("errors");
+});
 it("validates identity metadata and leaves other providers' identities case-sensitive by default", () => {
 	for (const normalize of [
 		null,
@@ -123,6 +140,22 @@ it("recognises the object a browser opens, not the raw path before URL normalisa
 		"https://github.com/o/r/pull/34/../../../../elsewhere",
 	])
 		expect(recognise(url, [github])).toEqual([]);
+});
+it("a URL names its object with a tab, a query or a fragment after it, never a deeper path", () => {
+	for (const url of [
+		"https://github.com/o/r/pull/34",
+		"https://github.com/o/r/pull/34/",
+		"https://github.com/o/r/pull/34/files",
+		"https://github.com/o/r/pull/34/files/?w=1#diff",
+		"https://github.com/o/r/pull/34#issuecomment-1",
+	])
+		expect(
+			recognise(url, [github]).map((r) => r.kind),
+			url,
+		).toEqual(["pull_request"]);
+	// a commit of a pull request, a path below a tab: something inside it, not the object
+	for (const url of ["https://github.com/o/r/pull/34/commits/a1b2c3", "https://github.com/o/r/pull/34/files/a/b"])
+		expect(recognise(url, [github]), url).toEqual([]);
 });
 it("URL recognition is invariant under browser parsing for generated dot segments and separators", () => {
 	fc.assert(
@@ -210,12 +243,22 @@ it("rejects absent primary data and preserves unavailable, incomplete and skippe
 			),
 		).toMatchObject({ state: conclusion === "new_unknown_value" ? "unknown" : conclusion });
 	}
-	expect(
+	// a skipped or neutral run counts for nothing, as GitHub counts it, and leaves the summary whole; a cancelled one
+	// did not pass; only a conclusion banda has no word for leaves the summary unsaid
+	const summary = (...conclusions: string[]) =>
 		cardOf(GITHUB_OBJECTS.pull_request, ref, {
 			pr: primary,
-			checks: { total_count: 1, check_runs: [{ status: "completed", conclusion: "skipped" }] },
-		}),
-	).toMatchObject({ checks: null });
+			checks: {
+				total_count: conclusions.length,
+				check_runs: conclusions.map((conclusion) => ({ status: "completed", conclusion })),
+			},
+		});
+	expect(summary("skipped")).toMatchObject({ checks: { passed: 0, failed: 0, running: 0 } });
+	expect(summary("success", "skipped", "neutral", "success")).toMatchObject({
+		checks: { passed: 2, failed: 0, running: 0 },
+	});
+	expect(summary("success", "cancelled")).toMatchObject({ checks: { passed: 1, failed: 1, running: 0 } });
+	expect(summary("success", "new_unknown_value")).toMatchObject({ checks: null });
 });
 it("draft data names exact effect verbs and editable fields, never caller card prose", () => {
 	expect(
@@ -239,4 +282,71 @@ it("draft data names exact effect verbs and editable fields, never caller card p
 	).toMatchObject({ verb: "Close", what: "Close as not planned" });
 	expect(objects.refuse?.({ objects: ["a/b#1", "a/b#2", "a/b#3", "a/b#4"] })).toMatch(/at most/);
 	expect(plainLine("hello\u202e\nworld")).toBe("hello world");
+});
+
+/** A kind named by words: a mail search, by its query. */
+const SEARCH = {
+	search: {
+		card: "email",
+		normalize: { query: "text" },
+		name: "mail matching {query}",
+		urls: ["https://mail.google.com/mail/u/*/#search/{query}"],
+		ids: ["mail/search/{query}"],
+		reads: { found: { tool: "search", args: { query: "{query}", max_results: 25 } } },
+		fields: { subject: "found.subject" },
+	},
+};
+
+it("a text placeholder names an object by words: encoded in its ids and URLs, said decoded", () => {
+	const parsed = parseObjects(SEARCH, () => true);
+	if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
+	const mail = { name: "mail", objects: parsed.objects };
+	const query = { connection: "mail", kind: "search", values: { query: "from:boss is:unread" } };
+	// a browser's address, an id with its words encoded, as written, or the ref's own key: one search
+	for (const text of [
+		"https://mail.google.com/mail/u/0/#search/from%3Aboss+is%3Aunread",
+		"mail/search/from%3Aboss%20is%3Aunread",
+		"mail/search/from:boss is:unread",
+		"mail/search/from:boss   is:unread",
+		"mail:search:mail/search/from%3Aboss%20is%3Aunread",
+	])
+		expect(recognise(text, [mail])).toEqual([query]);
+	expect(refKey(query, parsed.objects)).toBe("mail:search:mail/search/from%3Aboss%20is%3Aunread");
+	expect(recognise(refKey(query, parsed.objects), [mail])).toEqual([query]);
+	expect(readArgs(parsed.objects.search!.reads.found!, query, undefined)).toEqual({
+		query: "from:boss is:unread",
+		max_results: 25,
+	});
+	// a literal plus is %2B; a bad escape, a control character or nothing at all names nothing
+	expect(recognise("mail/search/a%2Bb", [mail])[0]?.values.query).toBe("a+b");
+	for (const text of [
+		"mail/search/%E0%A4%A",
+		"mail/search/a%00b",
+		"mail/search/",
+		"mail/search/a/b",
+		"mail/search/a?b",
+	])
+		expect(recognise(text, [mail])).toEqual([]);
+});
+
+it("words go last in a template: only its end tells where they stop", () => {
+	const parsed = parseObjects({ search: { ...SEARCH.search, urls: [], ids: ["mail/search/{query}/x"] } }, () => true);
+	expect("errors" in parsed ? parsed.errors : []).toContainEqual(expect.stringContaining("must end with {query}"));
+	const rule = parseObjects({ search: { ...SEARCH.search, normalize: { query: "words" } } }, () => true);
+	expect("errors" in rule ? rule.errors : []).toContainEqual(expect.stringContaining("lowercase, integer or text"));
+});
+
+it("any words survive a round trip through a ref's key", () => {
+	const parsed = parseObjects(SEARCH, () => true);
+	if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
+	const mail = { name: "mail", objects: parsed.objects };
+	fc.assert(
+		fc.property(fc.string({ minLength: 1, maxLength: 40, unit: "binary" }), (words) => {
+			const query = words.replace(/\s+/g, " ").trim();
+			fc.pre(query !== "" && !/[\p{Cc}\p{Cf}]/u.test(query) && encodeURIComponent(query).length < 450);
+			const ref = { connection: "mail", kind: "search", values: { query } };
+			expect(recognise(refKey(ref, parsed.objects), [mail])).toEqual([ref]);
+		}),
+		{ numRuns: pbtRuns(100) },
+	);
 });

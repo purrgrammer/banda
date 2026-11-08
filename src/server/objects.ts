@@ -30,6 +30,7 @@ import {
 } from "../core/objects.ts";
 import { agentOfChat } from "../core/permissions.ts";
 import { context } from "../core/store.ts";
+import { parseWatch, Watches, watchAgent, watchPath } from "../core/watches.ts";
 import type { Capabilities } from "./capabilities.ts";
 import { BadRequest } from "./http.ts";
 
@@ -58,6 +59,14 @@ export type ObjectShown =
 			readonly old: boolean;
 			readonly card: ObjectCard;
 			readonly subject?: ObjectShown;
+			/**
+			 * Its kind can be followed (DESIGN.md "Watches"): the words for what ends a watch, and the watches on it now,
+			 * each with the agent it wakes.
+			 */
+			readonly follow?: {
+				readonly ends: readonly string[];
+				readonly by: readonly { readonly watch: string; readonly agent: string; readonly until?: string }[];
+			};
 	  }
 	| {
 			readonly shown: "failed";
@@ -133,6 +142,8 @@ export function openObjects({
 			const answers: Record<string, unknown> = {};
 			let failed: string | undefined;
 			for (const [as, each] of Object.entries(access.reads)) {
+				// a read made only when the object is followed: the card does without it
+				if (each.follow === true) continue;
 				const current = await harness.commit((tx) => objectAccess(tx, chat, ref, account), ctx);
 				if (current?.stamp !== access.stamp) return undefined;
 				const schema = await capabilities.listedSchema(ref.connection, each.tool, ctx);
@@ -247,12 +258,37 @@ export function openObjects({
 		// A revocation during the subject read must also hide the notification.
 		if ((await harness.commit((tx) => objectAccess(tx, chat, ref, account), ctx))?.stamp !== stamp)
 			return { shown: "link" };
+		const kind = kinds[ref.kind];
+		let follow: Extract<ObjectShown, { shown: "card" }>["follow"];
+		if (kind?.follow !== undefined) {
+			const key = readingKey(account, base.key);
+			const records = (await harness.snapshot(Watches, ctx))?.watches ?? {};
+			// what ends each watch comes from its accepted file, which the owner's edit changes at once; the record's copy
+			// follows at its next look
+			const files = (await harness.snapshot(Accepted, ctx))?.files ?? {};
+			follow = {
+				ends: Object.keys(kind.follow.ends),
+				// a watch is its accepted file: one stopped (its file gone) follows nothing, whatever record it left
+				by: Object.entries(records)
+					.filter(
+						([watch, record]) =>
+							record.key === key && record.done === undefined && files[watchPath(watch)] !== undefined,
+					)
+					.map(([watch, record]) => {
+						const file = files[watchPath(watch)] as (typeof files)[string];
+						const parsed = parseWatch(watch, file.text);
+						const until = "watch" in parsed ? parsed.watch.until : record.until;
+						return { watch, agent: watchAgent(record), ...(until === undefined ? {} : { until }) };
+					}),
+			};
+		}
 		return {
 			shown: "card",
 			...base,
 			old: now() - found.at > OLD,
 			card: found.card,
 			...(subject === undefined ? {} : { subject }),
+			...(follow === undefined ? {} : { follow }),
 		};
 	}
 	async function show(

@@ -32,6 +32,33 @@ credentials outside the store and the agent's computer.
 			"reads": {
 				"event": { "tool": "get_event", "args": { "event_id": "{id}" } }
 			},
+			"follow": {
+				"keys": { "event.guests": "email" },
+				"totals": { "event.guests": "event.guestTotal" },
+				"ignore": ["event.who", "event.attendees", "event.guestTotal", "event.url", "event.guests[*].name"],
+				"rules": [
+					{ "on": "event.status", "to": "cancelled", "does": "wake", "says": "cancelled" },
+					{ "on": "event.start", "does": "wake", "says": "moved to {to}" },
+					{ "on": "event.end", "does": "wake", "says": "now ends {to}" },
+					{ "on": "event.response", "does": "nothing", "says": "you answered {to}" },
+					{ "on": "event.guests[*].response", "to": "accepted", "does": "wake", "says": "{name} accepted" },
+					{ "on": "event.guests[*].response", "to": "declined", "does": "wake", "says": "{name} declined" },
+					{ "on": "event.guests[*].response", "to": "tentative", "does": "wake", "says": "{name} said maybe" },
+					{ "on": "event.guests[*].comment", "to": "", "does": "nothing", "says": "{name}'s note gone" },
+					{ "on": "event.guests[*].comment", "does": "wake", "says": "{name}: {to}" },
+					{ "on": "event.guests[*]", "kind": "added", "does": "tell", "says": "{name} invited" },
+					{ "on": "event.guests[*]", "kind": "removed", "does": "tell", "says": "{name} no longer invited" },
+					{ "on": "event.location", "to": "", "does": "tell", "says": "no location now" },
+					{ "on": "event.location", "does": "tell", "says": "location: {to}" },
+					{ "on": "event.title", "does": "tell", "says": "retitled: {to}" },
+					{ "on": "event.description", "does": "tell", "says": "description changed" },
+					{ "on": "event.meet", "to": "", "does": "tell", "says": "no video call now" },
+					{ "on": "event.meet", "does": "tell", "says": "video call: {to}" }
+				],
+				"ends": { "cancelled": "event.status = cancelled" },
+				"every": "10m",
+				"settle": "1m"
+			},
 			"fields": {
 				"title": "event.title",
 				"start": "event.start",

@@ -12,6 +12,7 @@ import { Accepted, AgentChats, agentPath, agentWords, archivedFile } from "./age
 import { Permissions } from "./permissions.ts";
 import { Routines, routineAgent } from "./routines.ts";
 import { context } from "./store.ts";
+import { Watches, watchAgent } from "./watches.ts";
 
 /**
  * In the commit that archives agent `id`: its routines paused as the owner's own pause (which restoring leaves as it
@@ -36,6 +37,13 @@ export async function retire(tx: Tx, id: string, now: number): Promise<void> {
 		delete doc.permissions[key];
 		await log(tx, { at: now, what: `You took back: ${permission.what} (you archived ${name})` });
 	}
+	// its watches too: paused as the owner's own pause, so restoring brings none back unasked
+	const { watches } = await tx.doc(Watches);
+	for (const [watch, record] of Object.entries(watches))
+		if (record.paused === undefined && record.done === undefined && watchAgent(record) === id) {
+			record.paused = "owner";
+			await log(tx, { at: now, watch, what: `paused: you archived ${name}` });
+		}
 }
 
 /**

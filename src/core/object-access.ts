@@ -1,4 +1,4 @@
-import type { Tx } from "@earendil-works/pi-durable";
+import type { JsonObject, Tx } from "@earendil-works/pi-durable";
 import { acceptedAgent } from "./agents.ts";
 import { acceptedConnection, accountsOn, Connected, mayUse, readsFor, signsIn, toolName } from "./connections.ts";
 import { Groups } from "./groups.ts";
@@ -24,6 +24,8 @@ export async function objectAccess(tx: Tx, chat: number, ref: ObjectRef, account
 	if (!signsIn(connection) && account !== "") return undefined;
 	const schemas = [];
 	const reads: Record<string, ObjectRead> = {};
+	/** The schema each read's tool was listed with, as the doc holds it: what a read's arguments are shaped by. */
+	const listedWith: Record<string, JsonObject | undefined> = {};
 	for (const [as, read] of Object.entries(kind.reads)) {
 		const tool = listed.tools[read.tool];
 		const enabled =
@@ -37,7 +39,8 @@ export async function objectAccess(tx: Tx, chat: number, ref: ObjectRef, account
 			continue;
 		}
 		reads[as] = read;
+		listedWith[as] = tool.schema;
 	}
 	const source = JSON.stringify([connection.sha, doc.accounts[ref.connection]?.[account], schemas]);
-	return { connection, kind, reads, source, stamp: JSON.stringify([source, agent, doc.epoch]) };
+	return { connection, kind, reads, schemas: listedWith, source, stamp: JSON.stringify([source, agent, doc.epoch]) };
 }

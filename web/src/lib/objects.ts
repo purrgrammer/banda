@@ -6,6 +6,8 @@ import type { ObjectAsk } from "../../../src/server/objects.ts";
 const placeholder = /\{([a-z_]{1,32})\}/g;
 const literal = (text: string) =>
 	text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&").replaceAll("\\*", "[A-Za-z0-9_.-]{1,100}");
+/** What may follow a URL template and still name its object, as the daemon's `TAB` says: a tab, a query, a fragment. */
+const TAB = "(?:/[^/?#\\s]+)?/?(?:[?#][^\\s]*)?";
 const githubShapes = Object.entries(GITHUB_OBJECTS as ObjectKinds).flatMap(([kind, shape]) =>
 	[
 		...shape.ids.map((template) => ({ template, url: false })),
@@ -20,7 +22,7 @@ const githubShapes = Object.entries(GITHUB_OBJECTS as ObjectKinds).flatMap(([kin
 			names,
 			url,
 			canonical: index === 0,
-			pattern: new RegExp(`^${source}${url ? "(?:[/?#][^\\s]*)?" : ""}$`),
+			pattern: new RegExp(`^${source}${url ? TAB : ""}$`),
 		};
 	}),
 );
@@ -62,7 +64,8 @@ export function githubKey(ref: string): string | undefined {
 	return keys.size > 1 ? JSON.stringify([...keys]) : keys.values().next().value;
 }
 
-const ID_LINK = /\]\(([a-z][a-z0-9-]{0,63}\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,399})\)/g;
+/** `calendar/<id>`, or of a kind named after the connection (`gmail/thread/<id>`, `gmail/search/<query, encoded>`). */
+const ID_LINK = /\]\(([a-z][a-z0-9-]{0,63}\/(?:[a-z]{1,32}\/)?[A-Za-z0-9_%][A-Za-z0-9_.%:+@-]{0,399})\)/g;
 
 /**
  * Prose whose links to an object's id ([Team offsite](calendar/<id>)) are given the `object:` scheme: the renderer

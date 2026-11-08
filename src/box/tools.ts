@@ -132,7 +132,7 @@ function taking(
 }
 
 /** The folders of the workspace whose files take effect only once the owner accepts them ("before" files). */
-const BEFORE = ["agents", "routines", "tools", "connections"];
+const BEFORE = ["agents", "routines", "watches", "tools", "connections"];
 
 /** The "before" file at `at` (absolute), relative to the workspace; undefined for any other file. */
 function beforeFile(workspace: string, at: string): string | undefined {

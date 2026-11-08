@@ -155,6 +155,13 @@ export const SECTIONS: readonly Entry[] = [
 		status: "app",
 		sources: ["web/src/chat/Routine.tsx", LINE],
 	},
+	{
+		id: "watch-items",
+		title: "Watches in the chat",
+		group: "chat",
+		status: "app",
+		sources: ["web/src/chat/Watch.tsx", "web/src/lib/chat.ts", LINE],
+	},
 	{ id: "feed-lines", title: "What else the chat says", group: "chat", status: "app", sources: [LINE] },
 	{ id: "composer", title: "Composer", group: "chat", status: "app", sources: [COMPOSER] },
 	{ id: "object-in-chat", title: "An object in the chat", group: "chat", status: "app", sources: [OBJECT, FEED] },
@@ -244,7 +251,7 @@ export const SECTIONS: readonly Entry[] = [
 		title: "What opens in the panel",
 		group: "agent",
 		status: "app",
-		sources: ["web/src/chat/Viewer.tsx", "web/src/chat/RoutineEditor.tsx", PANEL],
+		sources: ["web/src/chat/Viewer.tsx", "web/src/chat/RoutineEditor.tsx", "web/src/app/watches.tsx", PANEL],
 	},
 	{
 		id: "browser",

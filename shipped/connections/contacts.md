@@ -29,6 +29,23 @@ again. The daemon keeps credentials outside the store and the agent's computer.
 			"reads": {
 				"contact": { "tool": "get_contact", "args": { "contact_id": "{id}" } }
 			},
+			"follow": {
+				"rules": [
+					{ "on": "contact.emails[*]", "kind": "added", "does": "tell", "says": "new email {to}" },
+					{ "on": "contact.emails[*]", "kind": "removed", "does": "tell", "says": "email {from} removed" },
+					{ "on": "contact.phones[*]", "kind": "added", "does": "tell", "says": "new phone {to}" },
+					{ "on": "contact.phones[*]", "kind": "removed", "does": "tell", "says": "phone {from} removed" },
+					{ "on": "contact.addresses[*]", "kind": "added", "does": "tell", "says": "new address: {to}" },
+					{ "on": "contact.addresses[*]", "kind": "removed", "does": "tell", "says": "address removed: {from}" },
+					{ "on": "contact.organization", "to": "", "does": "tell", "says": "no longer at {from}" },
+					{ "on": "contact.organization", "does": "tell", "says": "now at {to}" },
+					{ "on": "contact.title", "to": "", "does": "nothing", "says": "no title" },
+					{ "on": "contact.title", "does": "tell", "says": "title: {to}" },
+					{ "on": "contact.name", "does": "tell", "says": "renamed: {to}" }
+				],
+				"ends": {},
+				"every": "6h"
+			},
 			"fields": {
 				"name": "contact.name",
 				"emails": "contact.emails",

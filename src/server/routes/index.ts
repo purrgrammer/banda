@@ -14,12 +14,14 @@ import { providers } from "./providers.ts";
 import { routines } from "./routines.ts";
 import { search } from "./search.ts";
 import { tiers } from "./tiers.ts";
+import { watches } from "./watches.ts";
 
 export const AREAS: readonly AreaModule[] = [
 	tiers,
 	providers,
 	permissions,
 	routines,
+	watches,
 	artifacts,
 	groups,
 	proposals,

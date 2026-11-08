@@ -8,6 +8,7 @@
  */
 import type { TroubleData } from "../../../src/core/routines.ts";
 import { isOwnerMessage, messageArgs, PROPOSE_AVATAR } from "../../../src/core/toolsets.ts";
+import type { WatchTroubleData } from "../../../src/core/watches.ts";
 import type { Answer, Ask, Item, PermissionScope, Queued, RunningTool, ShownWait } from "../../../src/server/api.ts";
 import { routineTitle } from "../app/titles.ts";
 import { permissionWhen } from "./permissions.ts";
@@ -89,12 +90,16 @@ type CoreSegment =
 			readonly open?: { readonly wait: string; readonly deadline: number };
 			readonly ended?: Ended;
 	  }
-	/** A notice: something went wrong. One about a routine names it, and taps open the agent's routines. */
+	/**
+	 * A notice: something went wrong. One about a routine names it, as one about a watch unable to look for an hour does
+	 * (`watch`); a tap opens it in the agent's panel.
+	 */
 	| {
 			readonly kind: "notice";
 			readonly key: string;
 			readonly text: string;
 			readonly routine?: string;
+			readonly watch?: string;
 			readonly at?: number;
 	  }
 	| {
@@ -137,6 +142,24 @@ type CoreSegment =
 			readonly routine?: string;
 			readonly owner?: true;
 			readonly at?: number;
+	  }
+	/**
+	 * A followed object changed (DESIGN.md "Watches"): the line's words, the watch, the object (its key draws its card
+	 * beneath), the changes; `tell` when the chat was only told and no run followed; `ended` on the watch's last wake.
+	 */
+	| {
+			readonly kind: "watch";
+			readonly key: string;
+			readonly text: string;
+			readonly watch: string;
+			readonly object: Extract<Item, { role: "watch" }>["object"];
+			readonly changes: readonly string[];
+			readonly tell?: true;
+			readonly ended?: string;
+			readonly resumed?: true;
+			readonly gap?: true;
+			readonly burst?: number;
+			readonly at: number;
 	  }
 	| { readonly kind: "working"; readonly key: "working"; readonly text: string };
 
@@ -531,8 +554,14 @@ export function view(
 			segments.push({
 				kind: "notice",
 				key: `${item.id}`,
-				text: item.routine === undefined ? item.text : troubleWords(item.routine),
+				text:
+					item.routine !== undefined
+						? troubleWords(item.routine)
+						: item.watch !== undefined
+							? watchTroubleWords(item.watch)
+							: item.text,
 				...(item.routine === undefined ? {} : { routine: item.routine.routine }),
+				...(item.watch === undefined ? {} : { watch: item.watch.watch }),
 				...(item.at === undefined ? {} : { at: item.at }),
 			});
 		else if (item.role === "effect")
@@ -548,6 +577,21 @@ export function view(
 				routine: item.routine,
 				...(item.owner === true ? { owner: true as const } : {}),
 				...(item.at === undefined ? {} : { at: item.at }),
+			});
+		else if (item.role === "watch")
+			segments.push({
+				kind: "watch",
+				key: `${item.id}`,
+				text: watchWords(item),
+				watch: item.watch,
+				object: item.object,
+				changes: item.changes,
+				...(item.tell === true ? { tell: true as const } : {}),
+				...(item.ended === undefined ? {} : { ended: item.ended }),
+				...(item.resumed === true ? { resumed: true as const } : {}),
+				...(item.gap === true ? { gap: true as const } : {}),
+				...(item.burst === undefined ? {} : { burst: item.burst }),
+				at: item.at,
 			});
 	}
 	// asks whose call is not in the items read so far: still answerable
@@ -587,7 +631,10 @@ export function quietRuns(segments: readonly Segment[]): Segment[] {
 			continue;
 		}
 		let end = i + 1;
-		while (end < segments.length && !["owner", "owner-message", "wake"].includes((segments[end] as Segment).kind))
+		while (
+			end < segments.length &&
+			!["owner", "owner-message", "wake", "watch"].includes((segments[end] as Segment).kind)
+		)
 			end++;
 		const run = segments.slice(i + 1, end);
 		const said = run.some((each) => !QUIET.has(each.kind));
@@ -598,6 +645,40 @@ export function quietRuns(segments: readonly Segment[]): Segment[] {
 		i = end;
 	}
 	return out;
+}
+
+/**
+ * A watch's line, in the owner's words: the object and what changed ("acme/banda #142 · ana approved, lint failed"),
+ * said to come from a pause ("… · while paused: lint failed, merged"), come together since the first of them ("… ·
+ * since 09:03: ana approved, bob commented"), what ended it ("… · done: merged"), and, when its cursor fell off the
+ * readings kept, that it may not be all ("… · some changes may be missing").
+ */
+export function watchWords(
+	item: Pick<Extract<Item, { role: "watch" }>, "object" | "changes" | "ended" | "resumed" | "gap" | "burst">,
+): string {
+	const changes = item.changes.filter((change) => change !== item.ended);
+	const said = changes.join(", ");
+	const when =
+		item.resumed === true
+			? "while paused"
+			: item.burst === undefined
+				? undefined
+				: `since ${new Date(item.burst).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+	const words = [item.object.name, ...(said === "" ? [] : [when === undefined ? said : `${when}: ${said}`])];
+	if (item.ended !== undefined) words.push(`done: ${item.ended}`);
+	if (item.gap === true) words.push("some changes may be missing");
+	return words.join(" · ");
+}
+
+/**
+ * A watch in trouble, in the owner's words: unable to look for an hour (what it follows, where, since when, and why),
+ * or paused alone at its wakes a day.
+ */
+export function watchTroubleWords(data: WatchTroubleData): string {
+	if (data.wakesADay !== undefined)
+		return `${data.name} · paused: it woke ${data.wakesADay} times today, the most it may. Resume it in the panel`;
+	const time = new Date(data.since).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+	return `${data.name} · can't reach ${data.service ?? "it"} since ${time} · ${data.why}`;
 }
 
 /** A routine in trouble, in the owner's words: which, and what went wrong. */
@@ -697,6 +778,8 @@ export function shown(segment: Segment): string[] {
 		case "wake":
 		case "working":
 			return [segment.text];
+		case "watch":
+			return [segment.text, segment.object.name, ...segment.changes];
 	}
 }
 
@@ -711,6 +794,7 @@ const CORE_KINDS: ReadonlySet<string> = new Set<CoreSegment["kind"]>([
 	"proposal",
 	"agentMessage",
 	"wake",
+	"watch",
 	"working",
 ]);
 
