@@ -1020,19 +1020,30 @@ export async function slackWriteCall(
 // ---- the owner's words for a post
 
 /** What a post or a reaction does, in the owner's words, and its button: where, by the channel's name the draft read. */
-export function slackDraft(name: string, args: Record<string, unknown>): { what: string; verb: string } | undefined {
+export function slackDraft(
+	name: string,
+	args: Record<string, unknown>,
+): { what: string; verb: string; permit?: string } | undefined {
 	if (name !== "post_message" && name !== "add_reaction") return undefined;
 	const said = typeof args._channel_name === "string" && args._channel_name !== "" ? args._channel_name : undefined;
 	const where = said === undefined ? "this channel" : said.startsWith("@") ? said : `#${said}`;
 	if (name === "add_reaction") {
 		const emoji = emojiOf(args.name);
-		return { what: `React${SLACK_EMOJI.test(emoji) ? ` :${emoji}:` : ""} to a message in ${where}`, verb: "React" };
+		return {
+			what: `React${SLACK_EMOJI.test(emoji) ? ` :${emoji}:` : ""} to a message in ${where}`,
+			verb: "React",
+			permit: `React to messages in ${where}`,
+		};
 	}
 	return {
 		what: typeof args.thread_ts === "string" ? `Reply in thread in ${where}` : `Post in ${where}`,
 		verb: "Send",
 	};
 }
+
+/** A permission from a reaction's draft covers reactions in its channel, any emoji on any message there. */
+export const slackBinds = (name: string): readonly string[] | undefined =>
+	name === "add_reaction" ? ["channel"] : undefined;
 
 /** The owner may edit a post's text before approving it, never where it goes. */
 export const slackEditable = (name: string): readonly string[] => (name === "post_message" ? ["text"] : []);

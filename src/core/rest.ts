@@ -32,6 +32,7 @@ import type { ClientName } from "./oauth.ts";
 import {
 	SLACK_IDEMPOTENT,
 	SLACK_TOOLS,
+	slackBinds,
 	slackCall,
 	slackDraft,
 	slackEditable,
@@ -87,8 +88,14 @@ export type RestApi = {
 	readonly idempotent?: readonly string[];
 	/** A write's draft in the owner's words: what it does, its button, what they may edit, and the draft they see. */
 	readonly drafts?: {
-		readonly words: (tool: string, args: Record<string, unknown>) => { what: string; verb: string } | undefined;
+		/** `permit`: what a permission from the draft covers, when it binds fewer arguments than the call (`binds`). */
+		readonly words: (
+			tool: string,
+			args: Record<string, unknown>,
+		) => { what: string; verb: string; permit?: string } | undefined;
 		readonly editable: (tool: string) => readonly string[];
+		/** The arguments a permission from a write's draft binds, when not every one: a reaction's channel. */
+		readonly binds?: (tool: string) => readonly string[] | undefined;
 		readonly expand: (tool: string, args: Record<string, unknown>) => Record<string, unknown>;
 		/**
 		 * What the draft shows that the call does not say, read from the service once, as the account it acts as, when it
@@ -200,6 +207,7 @@ export const REST_APIS = {
 		drafts: {
 			words: slackDraft,
 			editable: slackEditable,
+			binds: slackBinds,
 			expand: slackExpand,
 			resolve: (token, tool, args, signal, fetcher) => slackResolve(token, tool, args, signal, fetcher),
 		},

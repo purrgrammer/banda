@@ -879,9 +879,13 @@ export function openCapabilities(options: CapabilityOptions) {
 			...(tool.floor === undefined ? {} : { floor: tool.floor }),
 			permission: {
 				...(signed ? { bind: [arg] } : {}),
+				...(() => {
+					const binds = builtIn?.drafts?.binds?.(tool.tool);
+					return binds === undefined ? {} : { args: binds };
+				})(),
 				what: (args) => {
 					const given = args as JsonObject;
-					const said = words(given);
+					const said = own(given)?.permit ?? words(given);
 					// the neutral words say the account already
 					const full =
 						made(given) !== undefined || on(given) !== undefined || own(given) !== undefined

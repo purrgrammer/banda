@@ -1,5 +1,5 @@
 /**
- * A Slack post under kills (principle 10): Slack added as shipped and signed in with "Send messages as you", then one
+ * A Slack post and a reaction under kills (principle 10): Slack added as shipped and signed in with "Send messages as you", then one
  * approved reply in a thread, with one kill at every commit and at each effect boundary of the post (the call before
  * it goes, and once Slack answered, before banda recorded it), the owner's answer and each model request.
  *
@@ -72,6 +72,41 @@ describe("a Slack post under faults", () => {
 			2,
 			faults.map((fault) => async () => {
 				const recovered = await run([[fault]]);
+				expect(recovered.kills, JSON.stringify(fault)).toBe(1);
+			}),
+		);
+	}, 1_800_000);
+});
+
+/**
+ * A reaction under kills: it is idempotent (Slack answers `already_reacted` to a second), so a run a kill cut short runs
+ * again unasked, and whatever was killed and when, the message ends with the one reaction, the owner asked once.
+ */
+async function react(schedules: readonly (readonly Fault[])[] = []) {
+	const { last, kills } = await runWorker("test/fault/slack-post-worker.ts", [await tempHome(), "react"], schedules);
+	const summary = last as Summary & { reactions: { channel: string; ts: string; name: string }[] };
+	expect(summary.outcome.status).toBe("completed");
+	expect(summary.parked).toEqual([]);
+	expect(summary.open).toBe(0);
+	expect(summary.posts).toEqual([]);
+	expect(summary.reactions).toEqual([{ channel: "C0GENERAL", ts: ROOT_TS, name: "eyes" }]);
+	expect(summary.answers.filter((answer) => answer === "asked-again")).toEqual([]);
+	return { ...summary, kills };
+}
+
+describe("a Slack reaction under faults", () => {
+	it("sweeps one SIGKILL across every commit and every boundary, and ends with one reaction", async () => {
+		const clean = await react();
+		expect(clean.answers).toEqual(["approve"]);
+		const faults: Fault[] = [];
+		for (const point of effects)
+			for (let hit = 1; hit <= clean.points[point]; hit++) faults.push({ point, hit, kind: "kill" });
+		for (const point of ["commit:before", "commit:after"] as const satisfies readonly FaultPoint[])
+			for (let hit = 1; hit <= clean.commits; hit++) faults.push({ point, hit, kind: "kill" });
+		await pool(
+			2,
+			faults.map((fault) => async () => {
+				const recovered = await react([[fault]]);
 				expect(recovered.kills, JSON.stringify(fault)).toBe(1);
 			}),
 		);

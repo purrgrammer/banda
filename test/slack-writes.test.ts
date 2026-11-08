@@ -30,8 +30,9 @@ afterEach(async () => {
 	for (const connected of opened.splice(0)) await connected.close();
 });
 
-/** A daemon with Slack shipped and added, whose lead makes `call` once (when given), then says it is done. */
-async function connectedWith(call?: { tool: string; args: JsonObject }) {
+/** A daemon with Slack shipped and added, whose lead makes each call in turn (when given), then says it is done. */
+async function connectedWith(call?: { tool: string; args: JsonObject } | { tool: string; args: JsonObject }[]) {
+	const calls = call === undefined ? [] : Array.isArray(call) ? call : [call];
 	const home = await tempHome();
 	const shipped = join(home, "shipped");
 	mkdirSync(shipped, { recursive: true });
@@ -48,9 +49,10 @@ async function connectedWith(call?: { tool: string; args: JsonObject }) {
 			const heed = answerNudge(ctx.messages);
 			if (heed !== undefined) return heed;
 			const after = ctx.messages.length - [...ctx.messages].reverse().findIndex((m) => m.role === "user");
-			if (call === undefined || ctx.messages.slice(after).some((m) => m.role === "toolResult"))
-				return fauxAssistantMessage("Done.");
-			return fauxAssistantMessage([fauxToolCall(`slack__${call.tool}`, call.args, { id: "c1" })], {
+			const made = ctx.messages.slice(after).filter((m) => m.role === "toolResult").length;
+			const next = calls[made];
+			if (next === undefined) return fauxAssistantMessage("Done.");
+			return fauxAssistantMessage([fauxToolCall(`slack__${next.tool}`, next.args, { id: `c${made + 1}` })], {
 				stopReason: "toolUse",
 			});
 		}) as never,
@@ -162,6 +164,38 @@ describe("Slack through the daemon", () => {
 			{ channel: "C0GENERAL", text: "I'll look after lunch", thread_ts: ROOT_TS, ts: "1700001000.000000" },
 		]);
 		expect(slack.calls.filter((each) => each.method === "chat.postMessage")).toHaveLength(1);
+	});
+
+	it("a reaction is a draft on the message's thread, not on the floor: allowed for the task, a second one asks nothing", async () => {
+		const { s, slack } = await connectedWith([
+			{ tool: "add_reaction", args: { channel: "C0GENERAL", ts: ROOT_TS, name: "tada" } },
+			{ tool: "add_reaction", args: { channel: "C0GENERAL", ts: "1700000160.000160", name: "eyes" } },
+		]);
+		slack.granted += ",reactions:write";
+		await signedIn(s, ["reactions:write"]);
+		const { turn, wait } = await run(s);
+		if (wait.ask.type !== "approval") throw new Error("not an approval");
+		expect(wait.ask).toMatchObject({
+			tool: "slack__add_reaction",
+			label: "React :tada: to a message in #general",
+			verb: "React",
+			args: { channel: "C0GENERAL", ts: ROOT_TS, name: "tada", _channel_name: "general" },
+			on: { refs: ["slack:thread:slack/C0GENERAL/p1700000000.000100"] },
+			permission: { match: { channel: "C0GENERAL" }, what: "react to messages in #general as @ana at Acme" },
+		});
+		expect(wait.ask).not.toHaveProperty("floor");
+		expect(wait.ask).toHaveProperty("permission");
+		expect(wait.ask).not.toHaveProperty("editable");
+		await answer(s.harness, wait.key, "approve", web, "bearer", {
+			type: "approval",
+			approving: { permission: { scope: "task" } },
+		});
+		await s.harness.waitForTask(turn, context);
+		expect(slack.reactions()).toEqual([
+			{ channel: "C0GENERAL", ts: ROOT_TS, name: "tada" },
+			{ channel: "C0GENERAL", ts: "1700000160.000160", name: "eyes" },
+		]);
+		expect((await openWaits(s.harness)).filter((each) => each.ask.type === "approval")).toEqual([]);
 	});
 
 	it("a declined post sends nothing, and a post to a channel the owner cannot see is refused before it asks", async () => {

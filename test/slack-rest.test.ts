@@ -469,9 +469,11 @@ it("adds a reaction once: an emoji by its name, already there is the same end st
 	for (const bad of ["Tada", "ta da", "<!here>", "x".repeat(101), "wave::skin-tone-x", 3])
 		expect((await react(bad)).text).toMatch(/emoji's name/);
 	expect(REST_APIS.slack.idempotent).toEqual(["add_reaction"]);
+	expect(REST_APIS.slack.drafts.binds("add_reaction")).toEqual(["channel"]);
 	expect(slackDraft("add_reaction", { name: "tada", _channel_name: "general" })).toEqual({
 		what: "React :tada: to a message in #general",
 		verb: "React",
+		permit: "React to messages in #general",
 	});
 	const resolve = (name: string) =>
 		slackResolve(slack.access, "add_reaction", { ...at, name }, undefined, slack.fetch, budget);
