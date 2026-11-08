@@ -53,7 +53,7 @@ export function BandSection() {
 			</Section>
 			<Section
 				id="sidebar"
-				note="The band, search, + and the menu (Skills, Connections, Settings; a dot while something there waits on you); the daemon's notices at the foot."
+				note="The band, search, + and the menu (Skills, Connections, Settings; a dot while something there waits on you); the daemon's notices at the foot. The collapsed rail in the middle is drawn by Band but nothing in the app opens it yet."
 			>
 				<div className="flex h-[560px] gap-4 overflow-x-auto">
 					<Band

@@ -268,8 +268,10 @@ answered by a control, never by typing its id.
   what and the fix ("Mara's computer is off · Start it"), never the daemon's words. A tap always says in words what
   it will do. The agent says when it is unsure, in words.
 - shadcn and ai-elements first (`prompt-input`, `attachments`, `web-preview`, `avatar`, `command`, `sheet`, `drawer`,
-  `sonner`), each taking the app's tokens and joining the specimen. Everything the app needs ships with it: fonts,
-  icons and logos load from the daemon, never a third party, so opening the app tells no one anything.
+  `sonner`), each taking the app's tokens and joining the specimen. The specimen is the app's index: each section says
+  whether it is in the app, a proposal or an exploration, and which component it shows; it never shows a copy of one.
+  Everything the app needs ships with it: fonts, icons and logos load from the daemon, never a third party, so opening
+  the app tells no one anything.
 
 ## Agents
 An agent file is frontmatter plus its personality. Its filename is its stable id; the owner sees its editable name
