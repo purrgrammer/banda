@@ -1363,6 +1363,9 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	/** Every connection and tool, accepted or only in the box, with the change the box holds, and how each stands. */
 	async function view(ctx: Context = context): Promise<CapabilitiesView> {
+		// taken before the store is read: a sign-in leaves this map only after its account is stored, so one gone from
+		// here has its account in what is read next, and one that ends while this view runs still reads as signing in
+		const signing = new Map(devices);
 		const { accepted, connected, inEffectNow, own } = await harness.commit(
 			async (tx) => ({
 				accepted: JSON.parse(JSON.stringify((await tx.doc(Accepted)).files)) as {
@@ -1470,10 +1473,10 @@ export function openCapabilities(options: CapabilityOptions) {
 				if (signed && fresh.length === 0) state = connection.auth === "oauth" ? "sign-in" : "key";
 				else if (listed !== undefined && listed.sha === file?.sha) state = "connected";
 				else state = "connecting";
-				if (devices.has(name)) state = "signing-in";
+				if (signing.has(name)) state = "signing-in";
 				if (problems.has(name) && state !== "connected" && state !== "signing-in") state = "problem";
 			}
-			const device = state === "signing-in" ? devices.get(name)?.device : undefined;
+			const device = state === "signing-in" ? signing.get(name)?.device : undefined;
 			if (connection !== undefined) learnOffered(connection);
 			// only a sign-in that is this file's says what it was given: the first account's
 			const first = fresh[0];
@@ -1546,7 +1549,7 @@ export function openCapabilities(options: CapabilityOptions) {
 								code: device.code,
 								page: device.page,
 								expires: device.expires,
-								...(devices.get(name)?.agent === undefined ? {} : { agent: devices.get(name)?.agent as string }),
+								...(signing.get(name)?.agent === undefined ? {} : { agent: signing.get(name)?.agent as string }),
 							},
 						}),
 				...(finished.has(name) ? { finished: finished.get(name) as Finished } : {}),
