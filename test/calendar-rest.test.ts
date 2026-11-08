@@ -282,9 +282,9 @@ describe("Google Calendar REST connection", () => {
 			// each guest but the account and rooms, by address, with their reply
 			guests: [
 				{ email: "ana@example.test", name: "Ana", response: "accepted", comment: "See you there" },
-				{ email: "b@example.test", name: "b@example.test", response: "declined" },
-				{ email: "c@example.test", name: "c@example.test", response: "tentative" },
-				{ email: "d@example.test", name: "d@example.test", response: "needs-action" },
+				{ email: "b@example.test", name: "b@example.test", response: "declined", comment: "" },
+				{ email: "c@example.test", name: "c@example.test", response: "tentative", comment: "" },
+				{ email: "d@example.test", name: "d@example.test", response: "needs-action", comment: "" },
 			],
 		});
 	});

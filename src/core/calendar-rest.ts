@@ -324,13 +324,12 @@ export function eventAnswer(event: Json) {
 		guests: others.slice(0, MAX_LISTED).flatMap((each) => {
 			const email = text(each.email, 250).toLowerCase();
 			if (email === "") return [];
-			const comment = text(each.comment, 500);
 			return [
 				{
 					email,
 					name: text(each.displayName, 100) || email,
 					response: RESPONSES[String(each.responseStatus)] ?? "needs-action",
-					...(comment === "" ? {} : { comment }),
+					comment: text(each.comment, 500),
 				},
 			];
 		}),
