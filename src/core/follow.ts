@@ -41,6 +41,8 @@ export type Rule = {
 	readonly kind?: Change["kind"];
 	/** Only a change to this value. */
 	readonly to?: Json;
+	/** Only a change from this value: a label gone from a set is a change from it, to nothing. */
+	readonly from?: Json;
 	readonly does: "wake" | "tell" | "nothing";
 	/**
 	 * The change in words, from the item's fields and the values (`{user.login} {state}`, `{to}`); a value a `words`
@@ -69,7 +71,10 @@ export type Follow = {
 	readonly rules: readonly Rule[];
 	/** What a change no rule matches does: nothing unless said. */
 	readonly otherwise?: Rule["does"];
-	/** What ends a watch, by the word the watch says (`until: merged`); without one, any of them. */
+	/**
+	 * What ends a watch, by the word the watch says (`until: merged`); without one, any of them. None (`{}`): a kind that
+	 * never ends (a search), followed until the owner stops it.
+	 */
 	readonly ends: { readonly [name: string]: string };
 	/** While it holds, the daemon looks every `busy_every` instead of `every`. */
 	readonly busy?: string;
@@ -366,7 +371,8 @@ export function sort(follow: Follow, me: string | undefined, before: Json, after
 			(each) =>
 				matches(pattern(each.on), change.path) &&
 				(each.kind === undefined || each.kind === change.kind) &&
-				(each.to === undefined || canonical(each.to) === canonical(change.to)),
+				(each.to === undefined || canonical(each.to) === canonical(change.to)) &&
+				(each.from === undefined || canonical(each.from) === canonical(change.from)),
 		);
 		const says = rule === undefined ? changeWords(change) : saysOf(rule, change);
 		const does = rule?.does ?? follow.otherwise ?? "nothing";
@@ -435,15 +441,19 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 				(r.kind !== undefined && !KINDS.has(r.kind)) ||
 				(r.words !== undefined && !stringMap(r.words))
 			)
-				problem(`a rule is {"on": "path", "kind"?, "to"?, "does": "wake" | "tell" | "nothing", "says", "words"?}`);
+				problem(
+					`a rule is {"on": "path", "kind"?, "to"?, "from"?, "does": "wake" | "tell" | "nothing", "says", "words"?}`,
+				);
 		}
 	if (follow.otherwise !== undefined && !DOES.has(follow.otherwise as string))
 		problem(`"otherwise" is wake, tell or nothing`);
-	const ends = stringMap(follow.ends) ? (follow.ends as { [name: string]: string }) : {};
-	if (Object.keys(ends).length === 0) problem(`"ends" names what ends a watch: {"merged": "pr.merged = true"}`);
-	for (const name of Object.keys(ends)) if (!NAME.test(name)) problem(`"${name}" is not a word for an end`);
+	// `{}` is a kind that never ends, said so; left out, it is a mistake
+	const ends = stringMap(follow.ends) ? (follow.ends as { [name: string]: string }) : undefined;
+	if (ends === undefined)
+		problem(`"ends" names what ends a watch: {"merged": "pr.merged = true"}, or {} when nothing does`);
+	for (const name of Object.keys(ends ?? {})) if (!NAME.test(name)) problem(`"${name}" is not a word for an end`);
 	const conditions = [
-		...Object.values(ends),
+		...Object.values(ends ?? {}),
 		...(derivedOk ? Object.values((follow.derived ?? {}) as { [name: string]: Derived }).map(whenOf) : []),
 	];
 	if (typeof follow.busy === "string") conditions.push(follow.busy);
@@ -465,7 +475,7 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 			...(f.derived === undefined ? {} : { derived: f.derived }),
 			rules: f.rules,
 			...(f.otherwise === undefined ? {} : { otherwise: f.otherwise }),
-			ends,
+			ends: ends ?? {},
 			...(f.busy === undefined ? {} : { busy: f.busy }),
 			...(f.every === undefined ? {} : { every: f.every }),
 			...(f.busy_every === undefined ? {} : { busy_every: f.busy_every }),

@@ -221,7 +221,8 @@ describe("following an object", () => {
 			const parsed = parseFollow(value, "objects.x");
 			return "errors" in parsed ? parsed.errors : [];
 		};
-		expect(problems({ rules: [], ends: {} })).toContainEqual(expect.stringContaining("ends"));
+		expect(problems({ rules: [] })).toContainEqual(expect.stringContaining("ends"));
+		expect(problems({ rules: [], ends: "never" })).toContainEqual(expect.stringContaining("ends"));
 		expect(problems({ rules: [{ on: "a", does: "ring", says: "x" }], ends: { a: "a = 1" } })).toContainEqual(
 			expect.stringContaining("a rule is"),
 		);
@@ -235,6 +236,29 @@ describe("following an object", () => {
 		);
 		const ok = parseFollow({ rules: [], ends: { a: "a = 1" } }, "objects.x");
 		expect("follow" in ok ? ok.follow.ends : undefined).toEqual({ a: "a = 1" });
+	});
+
+	it("a kind that never ends says so with no ends: a watch on it lasts until the owner stops it", () => {
+		const parsed = parseFollow({ rules: [], ends: {} }, "objects.x");
+		expect("follow" in parsed ? parsed.follow.ends : parsed.errors).toEqual({});
+		expect(endedBy({ ends: {} }, undefined, { anything: true })).toBeUndefined();
+	});
+
+	it("a rule may say the value a change is from: a label gone from a set is a change from it", () => {
+		const follow: Follow = {
+			rules: [
+				{ on: "labels[*]", kind: "removed", from: "UNREAD", does: "nothing", says: "read" },
+				{ on: "labels[*]", kind: "removed", from: "INBOX", does: "tell", says: "archived" },
+				{ on: "labels[*]", kind: "removed", does: "tell", says: "unlabelled {from}" },
+			],
+			ends: {},
+		};
+		const sorted = sort(follow, undefined, { labels: ["INBOX", "UNREAD", "Label_1"] }, { labels: [] });
+		expect(sorted.map((each) => [each.says, each.does])).toEqual([
+			["archived", "tell"],
+			["read", "nothing"],
+			["unlabelled Label_1", "tell"],
+		]);
 	});
 
 	const anyJson: fc.Arbitrary<Json> = fc.letrec<{ json: Json }>((tie) => ({
