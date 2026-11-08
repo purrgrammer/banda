@@ -86,6 +86,13 @@ definition is the one this banda ships, and it takes effect at its first start (
 purrgrammer/banda#24's pushes and green checks, each seen on time. The fault sweeps over the new scenarios, the Google
 kinds against real accounts, the phone pass of slices 2 and 3 and owner review remain open.
 
+Slack is designed ([Slack](slack.md)), under owner review: a built-in connection whose account is the owner in one Slack
+team, signed in by PKCE on the daemon's loopback with user scopes only; threads, channels, searches and people as
+objects on the cards that exist; posting as the owner on the floor; channels and threads followed as paged lists under
+a per-account request budget, both connection data, since Slack allows such apps one history request a minute. An
+adversarial review of the design is folded in; four spikes against a throwaway Slack app come before slice 1.
+
+
 Bringing your own is in code ([Chat](chat.md)): at first run on the desktop, the skills and agents of Claude Code,
 Codex and pi on this computer, in place of banda's skills, and again from Settings; the band's menu with Skills and a
 dot while something waits. Unit and fault tests pass; the real desktop app on a fresh home, phone width and owner
