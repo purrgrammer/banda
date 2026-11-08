@@ -435,7 +435,7 @@ it("draws Slack's thread, channel, search and person from the adapter's readings
 	);
 	expect(thread).toEqual({
 		card: "messages",
-		title: "#general",
+		title: "Release notes",
 		search: false,
 		messages: [
 			{
@@ -451,6 +451,7 @@ it("draws Slack's thread, channel, search and person from the adapter's readings
 		url: "https://acme.slack.com/archives/C0GENERAL/p1700000000000100",
 		service: "slack",
 		place: "thread",
+		channel: "#general",
 	});
 	const dm = cardOf(
 		kinds.channel!,

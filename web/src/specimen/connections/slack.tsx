@@ -20,10 +20,11 @@ const at = (hours: number, minutes: number) => {
 };
 
 export const SLACK_THREAD: Messages = {
-	title: "#general",
+	title: "Release notes draft for Thursday",
 	search: false,
 	service: "slack",
 	place: "thread",
+	channel: "#general",
 	total: 6,
 	url: "https://acme.slack.com/archives/C0GENERAL/p1700000000000100",
 	messages: [
@@ -256,6 +257,14 @@ export function SlackSection() {
 					<Bubble mine>
 						What did <ObjectLink object={{ ...BOB, card: "contact" }} href="https://acme.slack.com/team/U0BOB" /> say in{" "}
 						<ObjectLink object={{ ...SLACK_THREAD, card: "messages" }} href={SLACK_THREAD.url ?? ""} />?
+					</Bubble>
+					<Bubble mine>
+						Reply to{" "}
+						<ObjectLink
+							object={{ ...SLACK_THREAD, card: "messages" }}
+							href="https://acme.slack.com/archives/C0GENERAL/p1700000300000400?thread_ts=1700000000.000100&cid=C0GENERAL"
+						/>{" "}
+						please
 					</Bubble>
 				</div>
 			</div>

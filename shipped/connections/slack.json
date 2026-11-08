@@ -104,7 +104,8 @@
 				}
 			},
 			"fields": {
-				"title": "thread.channel_name",
+				"channel": "thread.channel_name",
+				"root": "thread.root",
 				"messages": "thread.messages",
 				"total": "thread.total",
 				"url": "thread.url"

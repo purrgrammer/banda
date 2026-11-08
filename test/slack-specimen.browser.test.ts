@@ -52,9 +52,10 @@ for (const width of [390, 1440])
 				await page.run(`${section}.scrollIntoView({block:'center'})`);
 				const text = (words: string) => page.run(`${section}.innerText.includes(${JSON.stringify(words)})`);
 				for (const words of [
-					"Slack thread",
-					"Slack channel",
-					"Slack messages matching",
+					"Thread in #general",
+					"Release notes draft for Thursday",
+					"Channel",
+					"Messages matching",
 					"@deploybot [bot]",
 					"@olga (outside)",
 					"Every deploy, green or red. Ping #oncall when red. · 14 members",
@@ -74,6 +75,15 @@ for (const width of [390, 1440])
 				// a post is on the floor: no permission is offered on its card
 				expect(await text("Don't ask again")).toBe(false);
 				expect(await page.run(`${section}.querySelector('[aria-label="Slack message"]') !== null`)).toBe(true);
+				// a link to a reply reads as the reply, in its words; a link to the thread's first message as the thread
+				expect(await page.run<string>(`${section}.querySelector('[data-slack-reply]')?.innerText ?? ""`)).toContain(
+					"can you check #deploys before we ship?",
+				);
+				expect(
+					await page.run<string>(
+						`${section}.querySelector('[data-object-inline]:not([data-slack-reply]) a[href*="/archives/"]')?.innerText ?? ""`,
+					),
+				).toContain("Release notes draft for Thursday");
 				expect(
 					await page.run(
 						`${section}.querySelector('[data-object-inline] a[href^="https://acme.slack.com/"]') !== null`,

@@ -13,6 +13,7 @@ import {
 	CircleDotIcon,
 	CircleSlashIcon,
 	CircleXIcon,
+	CornerDownRightIcon,
 	EllipsisIcon,
 	ExternalLinkIcon,
 	FileIcon,
@@ -23,6 +24,7 @@ import {
 	GitMergeIcon,
 	GitPullRequestDraftIcon,
 	GitPullRequestIcon,
+	HashIcon,
 	ImageIcon,
 	MailIcon,
 	MailsIcon,
@@ -475,18 +477,33 @@ export function ObjectLink({
 }) {
 	if (object.card === "messages") {
 		const slack = object.service === "slack";
-		const Icon = object.search ? SearchIcon : slack ? MessagesSquareIcon : MailsIcon;
+		// a link to a reply names its thread (one object, one card), but the reference says the reply, in its own words
+		const linked = slack && object.place === "thread" ? slackLinked(href) : undefined;
+		const reply = linked?.reply ? object.messages.find((each) => each.id === linked.ts) : undefined;
+		const Icon = slack
+			? linked?.reply
+				? CornerDownRightIcon
+				: slackListIcon(object)
+			: object.search
+				? SearchIcon
+				: MailsIcon;
+		const title = linked?.reply ? reply?.text || `Reply in ${object.channel ?? "a thread"}` : object.title;
 		const url = slack ? (slackUrl(href) ?? slackUrl(object.url)) : (gmailUrl(href) ?? gmailUrl(object.url));
 		return (
-			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
+			<span
+				data-object-inline=""
+				{...(linked?.reply ? { "data-slack-reply": "" } : {})}
+				className="inline-flex max-w-full items-baseline gap-1 align-baseline"
+			>
+				{slack ? <SlackMark className="self-center" /> : null}
 				<Icon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
 				{url === undefined ? (
-					<span className={INLINE_TEXT} title={object.title}>
-						{object.title}
+					<span className={INLINE_TEXT} title={title}>
+						{title}
 					</span>
 				) : (
-					<a href={url} target="_blank" rel="noopener noreferrer" className={INLINE_LINK} title={object.title}>
-						{object.title}
+					<a href={url} target="_blank" rel="noopener noreferrer" className={INLINE_LINK} title={title}>
+						{title}
 					</a>
 				)}
 			</span>
@@ -518,6 +535,7 @@ export function ObjectLink({
 				: (contactsUrl(href) ?? contactsUrl(object.url));
 		return (
 			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
+				{object.service === "slack" ? <SlackMark className="self-center" /> : null}
 				<UserRoundIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
 				{url === undefined ? (
 					<span className={INLINE_TEXT} title={object.name}>
@@ -689,6 +707,8 @@ export type Messages = {
 	/** A Slack thread, channel (its topic and members) or search. */
 	readonly service?: "slack" | undefined;
 	readonly place?: "thread" | "channel" | undefined;
+	/** A thread's channel, `#general`, when the title is the thread's first message. */
+	readonly channel?: string | undefined;
 	readonly topic?: string | undefined;
 	readonly members?: number | null | undefined;
 };
@@ -703,12 +723,40 @@ export function slackWhen(iso: string, now = new Date()): string {
 		: at.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-/** Slack's messages together, read-only: a thread under its channel, a channel with its topic, a search under its query. */
+/**
+ * The message a Slack link points at, and whether it is a reply: a reply's link carries its thread's first message as
+ * `thread_ts`, and names a message other than it.
+ */
+function slackLinked(href: string): { readonly ts: string; readonly reply: boolean } | undefined {
+	const url = slackUrl(href);
+	if (url === undefined) return undefined;
+	const parsed = new URL(url);
+	const packed = /\/p(\d{9,11})(\d{6})$/.exec(parsed.pathname);
+	if (packed === null) return undefined;
+	const ts = `${packed[1]}.${packed[2]}`;
+	const root = parsed.searchParams.get("thread_ts");
+	return { ts, reply: root !== null && root !== ts };
+}
+
+/** Slack's own mark, beside a type icon, so a reference or a card reads as Slack's at a glance. */
+export function SlackMark({ className }: { className?: string }) {
+	return <img src="/connections/slack.svg" alt="" aria-hidden="true" className={cn("size-3.5 shrink-0", className)} />;
+}
+
+/** The icon of a Slack list's kind: a channel by its hash, a thread by its bubbles, a search by its glass. */
+const slackListIcon = (list: Pick<Messages, "search" | "place">) =>
+	list.search ? SearchIcon : list.place === "channel" ? HashIcon : MessagesSquareIcon;
+
+/** Slack's messages together, read-only: a thread under its first words in its channel, a channel with its topic, a search under its query. */
 function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactNode }) {
-	const Icon = list.search ? SearchIcon : MessagesSquareIcon;
+	const Icon = slackListIcon(list);
 	const more = list.total === null ? 0 : list.total - list.messages.length;
 	const url = slackUrl(list.url);
-	const where = list.search ? "Slack messages matching" : list.place === "channel" ? "Slack channel" : "Slack thread";
+	const where = list.search
+		? "Messages matching"
+		: list.place === "channel"
+			? "Channel"
+			: `Thread${list.channel ? ` in ${list.channel}` : ""}`;
 	const about = [
 		list.topic,
 		list.members === null || list.members === undefined
@@ -720,6 +768,7 @@ function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactN
 	return (
 		<Tile className="flex flex-col gap-2.5 p-3.5" data-slack-card={list.search ? "search" : (list.place ?? "thread")}>
 			<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-ink-2">
+				<SlackMark />
 				<Icon aria-hidden="true" className="size-3.5 shrink-0" />
 				<span className="min-w-0 flex-1 truncate">{where}</span>
 				{list.asOf === undefined ? null : <span>as of {list.asOf}</span>}
@@ -729,6 +778,7 @@ function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactN
 				className={cn(
 					"min-w-0 text-body font-semibold text-ink [overflow-wrap:anywhere]",
 					list.search && "font-mono font-normal",
+					list.place === "thread" && "line-clamp-2",
 				)}
 			>
 				{list.title}

@@ -861,9 +861,10 @@ export type MessagesCard = {
 	readonly total: number | null;
 	/** Where it opens: in Gmail, the conversation by its id or the search by its query; in Slack, the thread or channel. */
 	readonly url?: string;
-	/** A Slack list's: a thread, a channel (with its topic and how many members) or a search. */
+	/** A Slack list's: a thread (titled by its first message, in its channel), a channel (its topic, its members) or a search. */
 	readonly service?: "slack";
 	readonly place?: "thread" | "channel";
+	readonly channel?: string;
 	readonly topic?: string;
 	readonly members?: number | null;
 };
@@ -1097,21 +1098,15 @@ const channelTitle = (name: string) => (name === "" || name.startsWith("@") ? na
 
 /**
  * A Slack thread, channel or search as its card says it: the newest few messages first, each its author's handle and its
- * text as one plain line; a thread titled by its channel, a channel by its name with its topic, a search by its query.
+ * text as one plain line. A thread (a kind with a `root`) is titled by its first message's words, in its channel; a
+ * channel (a kind with a `title`) by its name, with its topic and members; a search by its query.
  */
 function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: string) => unknown): MessagesCard {
 	const list = field("messages");
 	if (!Array.isArray(list)) throw new Error("Incomplete object");
-	const search = kind.fields.title === undefined;
-	const place = search
-		? undefined
-		: kind.fields.topic !== undefined || kind.fields.members !== undefined
-			? "channel"
-			: "thread";
-	const title = search
-		? plainLine(ref.values.query ?? fill(kind.name, ref.values), 300)
-		: channelTitle(plainLine(field("title"), 200) || plainLine(ref.values.channel, 60));
-	const messages = list
+	const place = kind.fields.root !== undefined ? "thread" : kind.fields.title !== undefined ? "channel" : undefined;
+	const search = place === undefined;
+	const all = list
 		.flatMap((each): MessageLine[] => {
 			if (!plain(each) || typeof each.ts !== "string" || !/^\d{9,11}\.\d{6}$/.test(each.ts)) return [];
 			return [
@@ -1124,18 +1119,28 @@ function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: strin
 				},
 			];
 		})
-		.sort((a, b) => Number(b.id) - Number(a.id))
-		.slice(0, MESSAGES_SHOWN);
+		.sort((a, b) => Number(b.id) - Number(a.id));
+	const root = field("root");
+	const first = all.find((each) => each.id === root) ?? all.at(-1);
+	const channel = channelTitle(
+		plainLine(place === "thread" ? field("channel") : field("title"), 200) || plainLine(ref.values.channel, 60),
+	);
+	const title = search
+		? plainLine(ref.values.query ?? fill(kind.name, ref.values), 300)
+		: place === "thread"
+			? plainLine(first?.text, 120)
+			: channel;
 	const url = slackUrl(field("url"));
 	return {
 		card: "messages",
-		title: title || (search ? "Search" : "Slack"),
+		title: title || (search ? "Search" : place === "thread" ? "Thread" : "Slack"),
 		search,
-		messages,
+		messages: all.slice(0, MESSAGES_SHOWN),
 		total: count(field("total")),
 		...(url === undefined ? {} : { url }),
 		service: "slack",
 		...(place === undefined ? {} : { place }),
+		...(place === "thread" ? { channel } : {}),
 		...(place === "channel" ? { topic: plainLine(field("topic"), 300), members: count(field("members")) } : {}),
 	};
 }
