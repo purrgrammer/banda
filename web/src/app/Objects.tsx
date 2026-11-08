@@ -39,12 +39,15 @@ export function InlineObject({
 	agent,
 	reference,
 	fallback,
+	strong = false,
 }: {
 	chat: number | undefined;
 	agent?: { readonly id: string; readonly name: string } | undefined;
 	/** The object: a link, or its canonical key as a card names it. */
 	reference: string;
 	fallback: string;
+	/** In a quiet line (a watch's), the object stands out: primary text, its title a link. */
+	strong?: boolean;
 }) {
 	const [shown, setShown] = useState<ObjectShown>();
 	const agentId = agent?.id;
@@ -62,9 +65,18 @@ export function InlineObject({
 			gone = true;
 		};
 	}, [chat, reference, agentId]);
-	if (shown?.shown === "card" && shown.card.card !== "notification")
-		return <ObjectLink object={shown.card} href={shown.card.url ?? reference} />;
-	return <span data-object-inline="">{fallback}</span>;
+	const drawn =
+		shown?.shown === "card" && shown.card.card !== "notification" ? (
+			<ObjectLink object={shown.card} href={shown.card.url ?? reference} />
+		) : (
+			<span data-object-inline="">{fallback}</span>
+		);
+	if (!strong) return drawn;
+	return (
+		<span className="font-medium text-ink [&_a]:underline [&_a]:decoration-line [&_a]:underline-offset-2 [&_a:hover]:decoration-ink">
+			{drawn}
+		</span>
+	);
 }
 
 export function MessageObjects({

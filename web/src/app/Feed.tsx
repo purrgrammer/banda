@@ -303,7 +303,9 @@ function WatchLine({
 	const change = watch?.change;
 	// the object as the owner's references draw it: by its key once the daemon resolved it, else by the file's link
 	const what = watchObject(segment);
-	const inline = <InlineObject chat={chat} agent={agent} reference={watch?.object?.ref ?? what} fallback={what} />;
+	const inline = (
+		<InlineObject chat={chat} agent={agent} reference={watch?.object?.ref ?? what} fallback={what} strong />
+	);
 	if (state === "pending" && watch !== undefined && name !== undefined && change !== undefined) {
 		const shown = change.kind === "removed" ? watch.accepted?.watch : change.watch;
 		return (
@@ -822,6 +824,7 @@ function partOf(
 							agent={objectAgent}
 							reference={segment.object.ref}
 							fallback={segment.object.name}
+							strong
 						/>
 						{rest}
 					</Line>
