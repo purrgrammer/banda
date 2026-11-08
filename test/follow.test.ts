@@ -143,6 +143,19 @@ describe("following an object", () => {
 		);
 	});
 
+	it("a condition's value may name alternatives: checks skipped or neutral are green, as GitHub counts them", () => {
+		const runs = (...conclusions: string[]) => ({
+			checks: { check_runs: conclusions.map((conclusion) => ({ status: "completed", conclusion })) },
+		});
+		const green = "all checks.check_runs[*].conclusion = success|skipped|neutral";
+		expect(holds(green, runs("success", "skipped", "neutral"))).toBe(true);
+		expect(holds(green, runs("success", "failure"))).toBe(false);
+		expect(holds("state != open|draft", { state: "closed" })).toBe(true);
+		expect(holds("state != open|draft", { state: "draft" })).toBe(false);
+		const shipped = reading(PR, { pr: { head: { sha: "a" } }, ...runs("success", "skipped") });
+		expect((shipped.derived as { checks_green: boolean }).checks_green).toBe(true);
+	});
+
 	it("a short page never says an item is gone", () => {
 		const before = open() as { [key: string]: Json };
 		const after = open() as { [key: string]: Json };

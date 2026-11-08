@@ -94,7 +94,7 @@ export const GITHUB_OBJECTS = {
 			// "all" holds only once the head is the one the reading before saw
 			derived: {
 				checks_done: { when: "all checks.check_runs[*].status = completed", steady: "pr.head.sha" },
-				checks_green: { when: "all checks.check_runs[*].conclusion = success", steady: "pr.head.sha" },
+				checks_green: { when: "all checks.check_runs[*].conclusion = success|skipped|neutral", steady: "pr.head.sha" },
 			},
 			rules: [
 				{ on: "pr.merged", to: true, does: "wake", says: "merged" },

@@ -412,7 +412,7 @@ draws as cards, from scripts/github-objects.ts.
 						"steady": "pr.head.sha"
 					},
 					"checks_green": {
-						"when": "all checks.check_runs[*].conclusion = success",
+						"when": "all checks.check_runs[*].conclusion = success|skipped|neutral",
 						"steady": "pr.head.sha"
 					}
 				},

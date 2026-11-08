@@ -188,19 +188,27 @@ function valuesAt(value: Json | undefined, p: Pattern): Json[] {
  * A condition: terms joined by ` or `, each `path = value` or `path != value` (a JSON value, else plain words), which
  * holds when any value at the path matches, or, written `all path …`, when every one does and there is one at least.
  */
-type Term = { readonly all: boolean; readonly path: Pattern; readonly equal: boolean; readonly value: Json };
+/** One `path = value` of a condition; its values are alternatives, any of which is the value. */
+type Term = {
+	readonly all: boolean;
+	readonly path: Pattern;
+	readonly equal: boolean;
+	readonly values: readonly Json[];
+};
 export function parseCondition(text: string): readonly Term[] | { readonly error: string } {
 	const terms = text.split(/\s+or\s+/).map((term) => /^(all\s+)?([\w.[\]*-]+)\s*(!=|=)\s*(.+)$/.exec(term.trim()));
 	if (terms.some((term) => term === null)) return { error: `"${text}" is not a condition: write it as state = closed` };
 	return terms.map((term) => {
 		const [, all, path = "", op, raw = ""] = term as RegExpExecArray;
-		let value: Json;
-		try {
-			value = JSON.parse(raw) as Json;
-		} catch {
-			value = raw.trim();
-		}
-		return { all: all !== undefined, path: pattern(path), equal: op === "=", value };
+		// `a|b|c` is any of them: GitHub counts a skipped or neutral check as passing
+		const values = raw.split("|").map((each): Json => {
+			try {
+				return JSON.parse(each) as Json;
+			} catch {
+				return each.trim();
+			}
+		});
+		return { all: all !== undefined, path: pattern(path), equal: op === "=", values };
 	});
 }
 
@@ -210,7 +218,7 @@ export function holds(text: string, reading: Json): boolean {
 	if ("error" in terms) return false;
 	return terms.some((term) => {
 		const values = valuesAt(reading, term.path);
-		const ok = (value: Json) => (canonical(value) === canonical(term.value)) === term.equal;
+		const ok = (value: Json) => term.values.some((each) => canonical(value) === canonical(each)) === term.equal;
 		return term.all ? values.length > 0 && values.every(ok) : values.some(ok);
 	});
 }
