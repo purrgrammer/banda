@@ -43,11 +43,16 @@ export function WatchLine({
 	/** Opens the watch in the agent's panel. */
 	onClick?: (() => void) | undefined;
 }) {
-	const rest = text.startsWith(name) ? text.slice(name.length) : ` · ${text}`;
+	const rest = (text.startsWith(name) ? text.slice(name.length) : ` · ${text}`).replace(/^ · /, ": ");
+	// the colon stays with the object, so a line that wraps after the link never begins with it
+	const colon = rest.startsWith(":") ? ":" : "";
 	return (
 		<Line icon={ended ? EyeOffIcon : undefined} time={time} onClick={onClick}>
-			<Named>{object ?? <span data-object-inline="">{name}</span>}</Named>
-			{rest.replace(/^ · /, ": ")}
+			<Named>
+				{object ?? <span data-object-inline="">{name}</span>}
+				{colon}
+			</Named>
+			{rest.slice(colon.length)}
 		</Line>
 	);
 }

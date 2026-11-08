@@ -52,7 +52,8 @@ returned to and merged, at desktop and phone width.
   `routines/`; the task (first look, look, diff, wake, until); the `watch` tool's card and Follow on the card; the
   event line with the card; the Watching list with Check now, Pause and Stop; the fault sweep at look, diff, wake
   and end; a real pull request in a forked home at desktop width
-- [ ] Slice 1 through the app at phone width (the desktop pass is done; the phone pass needs a resizable browser)
+- [x] Slice 1 through the app at phone width: the Watching list in the panel's sheet, a watch's detail with Check
+  now, and the lines in the chat, in a forked home against real GitHub
 - [x] A real wake seen in the app: purrgrammer/banda#24 followed in a forked home; its pushes told, its checks
   finishing woke the agent as "all checks green, checks finished", each on the right look
 - [x] Add in the panel takes a link; the Watching section shows even when empty
@@ -69,14 +70,16 @@ returned to and merged, at desktop and phone width.
   once without faults in the unit suite
 - [x] The fault sweep and property over every scenario (pause, Pause all, the account's switch, the new burst and
   limit paths, a held failure a later push undid) ran in CI
-- [ ] Slice 2 through the app against a daemon at desktop and phone width
+- [x] Slice 2 through the app against a daemon at desktop and phone width: Pause, Resume and Stop from a row's menu,
+  Check now from the detail, a second Follow refused, a push told and the checks finishing told, in a forked home
 - [x] Slice 3, volume: a burst is one wake (held while the last wake's run goes or within the kind's `settle`, the
   cursor kept, the held reading never evicted); busy cadence (`lookEvery`, tested end to end); `wakes_a_day` (pauses
   alone, an error line, unread; resume wakes once); tell-only changes run no model and are not unread; the issue kind
   followed until closed (labels and assignees as sets, told); a thousand changes in one look name twenty and count
   the rest; a derived "all …" condition may be `steady` over a path, so a push's first look never says all checks
   green; the new rows and lines in the specimen
-- [ ] Slice 3 through the app against a daemon; a burst, a limit and an issue against real GitHub
+- [ ] Slice 3 through the app against a daemon: a burst, a limit and an issue against real GitHub (the pass followed
+  a pull request alone)
 - [x] GitHub's repository-level kinds: a repository (a release, others' new pull requests and issues wake; a push to
   the default branch tells; never ends), a discussion (comments and replies wake; until answered or closed) and a
   workflow run (a job failing wakes; until completed), each with its card in the specimen
@@ -89,9 +92,19 @@ returned to and merged, at desktop and phone width.
   and search (new matches wake; never ends); Calendar's event (moved, cancelled, a guest's reply); Drive's file
   (another's edit, trashed) and folder (a new file); Contacts' contact (told only; never ends). Each with scenario
   tests through the harness, which fakes any connection's reads by tool name
-- [ ] The Google kinds against real accounts and through the app: whether a rename or a share moves Drive's
-  `modifiedTime`, whether a deleted (not cancelled) event ends its watch, label names for user labels, a calendar's
-  upcoming events (needs a sync token, not a moving window)
+- [x] The pass on a forked home, this pull request the object followed, found and fixed: a Drive file's link was not
+  recognised (the kind named no URL; it names Docs, Sheets, Slides and Drive file links now); Follow twice made two
+  watches for one agent on one object (refused while the first lives); "all checks green" held while a check still
+  ran (GitHub's server leaves `conclusion` out of a run going, and `all` counted only the values present); a watch
+  made under Pause all took its baseline at the resume, losing what changed between; the pull request card said
+  "Checks: Unavailable" whenever a run was skipped
+- [x] The Google kinds followed through the app against real accounts, in a forked home: a mail search from Add, a
+  Sheet from its Docs link, a calendar event from the card Cervantes drew (Follow until cancelled); each took its
+  baseline and looks on its cadence
+- [ ] The Google kinds' changes against real accounts: whether a rename or a share moves Drive's `modifiedTime`,
+  whether a deleted (not cancelled) event ends its watch, label names for user labels, a calendar's upcoming events
+  (needs a sync token, not a moving window); a contact followed (the pass's account had no saved contacts); a
+  calendar event's link carries its id encoded, so an event is followed from its card alone
 - [ ] A watch's file has no editor field and the `watch` tool no parameter for `wakes_a_day`; an issue's and a pull
   request's comments are read one page of a hundred, so comments past the hundredth are never seen
 - [x] **A look pushes the whole shell.** A watch's task waking and sleeping was a task-graph change the shell stream
