@@ -383,3 +383,123 @@ describe("a discussion as an object", () => {
 		).toBeUndefined();
 	});
 });
+
+/**
+ * A workflow run's life, as `actions_get`'s get_workflow_run and `actions_list`'s list_workflow_jobs answer it:
+ * queued; in progress, lint failed while unit runs; then completed as `conclusion`.
+ */
+const run =
+	(conclusion: string): Answer =>
+	(tool, args, step) => {
+		if (args.owner !== "acme" || args.repo !== "banda" || args.resource_id !== "20") return failure("Not Found");
+		const status = step === 0 ? "queued" : step === 1 ? "in_progress" : "completed";
+		if (tool === "actions_get" && args.method === "get_workflow_run") {
+			const found: Item = {
+				id: 20,
+				name: "CI",
+				display_title: "Keep objects as data",
+				workflow_id: 3,
+				run_number: 812,
+				run_attempt: 1,
+				event: "push",
+				status,
+				head_branch: "main",
+				head_sha: "a1",
+				html_url: "https://github.com/acme/banda/actions/runs/20",
+				created_at: "2026-11-02T09:00:00Z",
+				updated_at: `2026-11-02T09:0${step}:00Z`,
+				run_started_at: "2026-11-02T09:00:30Z",
+			};
+			if (step >= 2) found.conclusion = conclusion;
+			return found;
+		}
+		if (tool === "actions_list" && args.method === "list_workflow_jobs") {
+			const job = (id: number, name: string, done: string | undefined): Item => ({
+				id,
+				run_id: 20,
+				name,
+				status: done === undefined ? "in_progress" : "completed",
+				...(done === undefined ? {} : { conclusion: done, completed_at: "2026-11-02T09:03:00Z" }),
+				runner_name: `runner-${step}`,
+				steps: [{ name: "Set up job", status: "completed", conclusion: "success", number: 1 }],
+			});
+			const jobs =
+				step === 0
+					? []
+					: [
+							job(77, "unit", step >= 2 ? (conclusion === "success" ? "success" : "failure") : undefined),
+							job(78, "lint", conclusion === "success" ? "success" : "failure"),
+						];
+			return { jobs: { total_count: jobs.length, jobs } };
+		}
+		return failure(`no ${tool}`);
+	};
+
+describe("a watch on a workflow run", () => {
+	it("a job that fails wakes at once, though it came already failed; the run failing wakes and ends it", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: await github(),
+			object: "https://github.com/acme/banda/actions/runs/20",
+			answer: run("failure"),
+			clicks: ["k1", "k2"],
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.tells).toEqual([]);
+		expect(summary.wakes.map((wake) => [[...wake.changes].sort(), wake.ended ?? null])).toEqual([
+			[["a job failed"], null],
+			[["failed"], "completed"],
+		]);
+		expect(summary.wakes[0]?.object).toMatchObject({ name: "acme/banda · run 20", service: "GitHub" });
+		expect(summary.record.done?.why).toBe("completed");
+	}, 60_000);
+
+	it("a run that succeeds says so as it ends; one cancelled or timed out wakes in those words", async () => {
+		for (const [conclusion, words] of [
+			["success", "succeeded"],
+			["cancelled", "cancelled"],
+			["timed_out", "timed out"],
+		] as const) {
+			const summary = await watchScenario(await tempHome(), new Faults(), {
+				connection: await github(),
+				object: "acme/banda/actions/runs/20",
+				answer: (tool, args, step) =>
+					tool === "actions_list" ? { jobs: { total_count: 0, jobs: [] } } : run(conclusion)(tool, args, step),
+				clicks: ["k1", "k2"],
+			});
+			expect(watchInvariants(summary)).toEqual([]);
+			expect(summary.wakes.map((wake) => [wake.changes, wake.ended])).toEqual([[[words], "completed"]]);
+		}
+	}, 60_000);
+});
+
+describe("a workflow run as an object", () => {
+	it("its URL names it, a job's never; it is drawn as a check, its failing job as its step", () => {
+		const found = recognise("https://github.com/acme/banda/actions/runs/0020?pr=142", hub);
+		expect(found.map((ref) => ref.kind)).toEqual(["workflow_run"]);
+		expect(refKey(found[0]!, kinds)).toBe("github:workflow_run:acme/banda/actions/runs/20");
+		expect(recognise("https://github.com/acme/banda/actions/runs/20/job/77", hub).map((ref) => ref.kind)).toEqual([
+			"check_run",
+		]);
+		const answers = {
+			run: run("failure")(
+				"actions_get",
+				{ method: "get_workflow_run", owner: "acme", repo: "banda", resource_id: "20" },
+				1,
+			),
+			jobs: run("failure")(
+				"actions_list",
+				{ method: "list_workflow_jobs", owner: "acme", repo: "banda", resource_id: "20" },
+				1,
+			),
+		};
+		expect(cardOf(kinds.workflow_run!, found[0]!, answers)).toEqual({
+			card: "check-run",
+			repo: "acme/banda",
+			name: "CI",
+			state: "running",
+			where: "main",
+			step: "unit",
+			url: "https://github.com/acme/banda/actions/runs/20",
+		});
+	});
+});

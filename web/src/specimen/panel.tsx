@@ -797,6 +797,23 @@ export function PanelSections() {
 							/>
 						</div>
 					</Specimen>
+					<Specimen label="A workflow run, drawn as a check: running with a job failed · passed">
+						<div className="flex flex-col gap-3">
+							<CheckRunCard
+								run={{
+									repo: "purrgrammer/banda",
+									name: "CI",
+									where: "main",
+									state: "running",
+									step: "test (node 26)",
+									url: "https://github.com/purrgrammer/banda/actions/runs/20",
+								}}
+							/>
+							<CheckRunCard
+								run={{ repo: "purrgrammer/banda", name: "Release", where: "v0.1.0-alpha.5", state: "passed" }}
+							/>
+						</div>
+					</Specimen>
 					<Specimen label="Repositories: the newest of each · a merged pull request and a closed issue · empty · long names, an old reading">
 						<div className="flex flex-col gap-3">
 							<RepositoryCard repository={REPOSITORY} />

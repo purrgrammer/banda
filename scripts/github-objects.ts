@@ -1,6 +1,6 @@
 /**
  * GitHub's objects (DESIGN.md "Connections"), as `scripts/shipped-github.ts` writes them into the file banda ships: a
- * pull request, an issue, a check run, a notification, a discussion and a repository, each with the URLs and ids that name it, the reads (of
+ * pull request, an issue, a check run, a workflow run, a notification, a discussion and a repository, each with the URLs and ids that name it, the reads (of
  * github-mcp-server's own read tools, its minimal answers) that fetch it, the fields its card shows and the writes that
  * act on it. Data, never code: the daemon draws each card.
  */
@@ -338,6 +338,78 @@ export const GITHUB_OBJECTS = {
 			completed: "job.completed_at",
 			where: "job.head_branch",
 			url: "job.html_url",
+		},
+	},
+	// a workflow run is the page a push or a pull request's checks link to: drawn as a check, its jobs as its steps
+	workflow_run: {
+		card: "check-run",
+		normalize: { owner: "lowercase", repo: "lowercase", run: "integer" },
+		name: "{owner}/{repo} · run {run}",
+		urls: [
+			"https://github.com/{owner}/{repo}/actions/runs/{run}",
+			"https://api.github.com/repos/{owner}/{repo}/actions/runs/{run}",
+		],
+		ids: ["{owner}/{repo}/actions/runs/{run}"],
+		reads: {
+			run: {
+				tool: "actions_get",
+				args: { method: "get_workflow_run", owner: "{owner}", repo: "{repo}", resource_id: "{run}" },
+			},
+			// its latest attempt's jobs: the one that fails is named before the run completes
+			jobs: {
+				optional: true,
+				tool: "actions_list",
+				args: { method: "list_workflow_jobs", owner: "{owner}", repo: "{repo}", resource_id: "{run}", perPage: 50 },
+			},
+		},
+		// how a watch follows it: a job that fails wakes at once (the card names it); the run failing, timing out or cancelled
+		// wakes, succeeding tells, and it ends when completed. Its jobs' steps, runners and times are nothing
+		follow: {
+			totals: { "jobs.jobs.jobs": "jobs.jobs.total_count" },
+			derived: { job_failed: "jobs.jobs.jobs[*].conclusion = failure|timed_out" },
+			ignore: [
+				"run.updated_at",
+				"run.run_started_at",
+				"run.head_commit",
+				"jobs.jobs.total_count",
+				"jobs.jobs.jobs[*].steps",
+				"jobs.jobs.jobs[*].started_at",
+				"jobs.jobs.jobs[*].completed_at",
+				"jobs.jobs.jobs[*].runner_id",
+				"jobs.jobs.jobs[*].runner_name",
+				"jobs.jobs.jobs[*].runner_group_id",
+				"jobs.jobs.jobs[*].runner_group_name",
+			],
+			rules: [
+				{ on: "run.conclusion", to: "failure", does: "wake", says: "failed" },
+				{ on: "run.conclusion", to: "startup_failure", does: "wake", says: "failed to start" },
+				{ on: "run.conclusion", to: "timed_out", does: "wake", says: "timed out" },
+				{ on: "run.conclusion", to: "cancelled", does: "wake", says: "cancelled" },
+				{ on: "run.conclusion", to: "success", does: "tell", says: "succeeded" },
+				{
+					on: "run.conclusion",
+					does: "tell",
+					says: "{to}",
+					words: { action_required: "needs action", neutral: "finished neutral", skipped: "skipped", stale: "stale" },
+				},
+				// a job may come into the list already failed (it failed between two looks): a condition over the jobs
+				// sees that, where a rule on a job's conclusion would see only an item added
+				{ on: "derived.job_failed", to: true, does: "wake", says: "a job failed" },
+			],
+			ends: { completed: "run.status = completed" },
+			// a run takes minutes: looked at often until it completes, a failing job's siblings joining its wake
+			every: "2m",
+			settle: "1m",
+		},
+		// no `completed`: a run has no completion time of its own, only when it last changed
+		fields: {
+			name: "run.name",
+			status: "run.status",
+			conclusion: "run.conclusion",
+			steps: "jobs.jobs.jobs",
+			started: "run.run_started_at",
+			where: "run.head_branch",
+			url: "run.html_url",
 		},
 	},
 	notification: {

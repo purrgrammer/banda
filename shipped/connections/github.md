@@ -873,6 +873,128 @@ draws as cards, from scripts/github-objects.ts.
 				"url": "job.html_url"
 			}
 		},
+		"workflow_run": {
+			"card": "check-run",
+			"normalize": {
+				"owner": "lowercase",
+				"repo": "lowercase",
+				"run": "integer"
+			},
+			"name": "{owner}/{repo} · run {run}",
+			"urls": [
+				"https://github.com/{owner}/{repo}/actions/runs/{run}",
+				"https://api.github.com/repos/{owner}/{repo}/actions/runs/{run}"
+			],
+			"ids": [
+				"{owner}/{repo}/actions/runs/{run}"
+			],
+			"reads": {
+				"run": {
+					"tool": "actions_get",
+					"args": {
+						"method": "get_workflow_run",
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"resource_id": "{run}"
+					}
+				},
+				"jobs": {
+					"optional": true,
+					"tool": "actions_list",
+					"args": {
+						"method": "list_workflow_jobs",
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"resource_id": "{run}",
+						"perPage": 50
+					}
+				}
+			},
+			"follow": {
+				"totals": {
+					"jobs.jobs.jobs": "jobs.jobs.total_count"
+				},
+				"derived": {
+					"job_failed": "jobs.jobs.jobs[*].conclusion = failure|timed_out"
+				},
+				"ignore": [
+					"run.updated_at",
+					"run.run_started_at",
+					"run.head_commit",
+					"jobs.jobs.total_count",
+					"jobs.jobs.jobs[*].steps",
+					"jobs.jobs.jobs[*].started_at",
+					"jobs.jobs.jobs[*].completed_at",
+					"jobs.jobs.jobs[*].runner_id",
+					"jobs.jobs.jobs[*].runner_name",
+					"jobs.jobs.jobs[*].runner_group_id",
+					"jobs.jobs.jobs[*].runner_group_name"
+				],
+				"rules": [
+					{
+						"on": "run.conclusion",
+						"to": "failure",
+						"does": "wake",
+						"says": "failed"
+					},
+					{
+						"on": "run.conclusion",
+						"to": "startup_failure",
+						"does": "wake",
+						"says": "failed to start"
+					},
+					{
+						"on": "run.conclusion",
+						"to": "timed_out",
+						"does": "wake",
+						"says": "timed out"
+					},
+					{
+						"on": "run.conclusion",
+						"to": "cancelled",
+						"does": "wake",
+						"says": "cancelled"
+					},
+					{
+						"on": "run.conclusion",
+						"to": "success",
+						"does": "tell",
+						"says": "succeeded"
+					},
+					{
+						"on": "run.conclusion",
+						"does": "tell",
+						"says": "{to}",
+						"words": {
+							"action_required": "needs action",
+							"neutral": "finished neutral",
+							"skipped": "skipped",
+							"stale": "stale"
+						}
+					},
+					{
+						"on": "derived.job_failed",
+						"to": true,
+						"does": "wake",
+						"says": "a job failed"
+					}
+				],
+				"ends": {
+					"completed": "run.status = completed"
+				},
+				"every": "2m",
+				"settle": "1m"
+			},
+			"fields": {
+				"name": "run.name",
+				"status": "run.status",
+				"conclusion": "run.conclusion",
+				"steps": "jobs.jobs.jobs",
+				"started": "run.run_started_at",
+				"where": "run.head_branch",
+				"url": "run.html_url"
+			}
+		},
 		"notification": {
 			"card": "notification",
 			"normalize": {
