@@ -441,7 +441,7 @@ describe("the scopes an ask offers", () => {
 		expect(offered({ permission: merge, place })).toEqual(["task", "hour", "today", "always"]);
 		const earned = { ...place, earned: true } as const;
 		expect(offeredScopes({ permission: merge, place: earned })).toEqual([
-			{ scope: "place", words: "Don't ask again before merging pull requests in acme/banda" },
+			{ scope: "place", words: "Merge pull requests in acme/banda without asking until you take it back in Permissions" },
 		]);
 		expect(offered({ permission: merge, place: earned, foreign: true })).toEqual(["place"]);
 		expect(offered({ permission: merge, place, foreign: true })).toEqual([]);
@@ -454,7 +454,7 @@ describe("the scopes an ask offers", () => {
 				permission: merge,
 				place: { ...earned, words: "comment on pull requests and issues in acme/banda" },
 			})[0]?.words,
-		).toBe("Don't ask again before commenting on pull requests and issues in acme/banda");
+		).toBe("Comment on pull requests and issues in acme/banda without asking until you take it back in Permissions");
 		// never the action anywhere, whatever the ask carries
 		for (const ask of [{ permission: merge, place }, { permission: merge, place: earned }, { permission: merge }])
 			expect(offeredScopes(ask).some((one) => /anywhere/.test(one.words))).toBe(false);

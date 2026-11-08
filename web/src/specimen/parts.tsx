@@ -249,7 +249,7 @@ export function Parts() {
 							verb="Merge"
 							as="@bandarra on GitHub"
 							object={<PullRequestCard pr={{ ...PR, number: 35 }} />}
-							scope="Don't ask again before merging pull requests in purrgrammer/banda"
+							scope="Merge pull requests in purrgrammer/banda without asking until you take it back in Permissions"
 						/>
 					</Group>
 					<ApprovalCard

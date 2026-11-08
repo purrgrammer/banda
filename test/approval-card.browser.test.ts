@@ -20,7 +20,7 @@ const ask = (title: string) => ({
 	scopes: [{ scope: "task", words: "Use GitHub's issue_write as @purrgrammer without asking until this task is done" }],
 });
 /** A merge in a place the owner approved three times: its one row is the place's. */
-const EARNED = "Don't ask again before merging pull requests in purrgrammer/banda";
+const EARNED = "Merge pull requests in purrgrammer/banda without asking until you take it back in Permissions";
 const earned = {
 	type: "approval",
 	tool: "github__merge_pull_request",

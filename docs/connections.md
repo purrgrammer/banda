@@ -105,6 +105,8 @@ in a throwaway home, at desktop and phone width.
   only that; the widest grain of a tool with no way back from Access only. Built, not yet walked in the app: the
   streak, the place's row and its permission; nothing yet marks a chat as having read foreign content, so that rule
   holds only for an ask that says so
+- [ ] A chat that read foreign content is told apart from one that did not: nothing sets the ask's `foreign` flag yet,
+  so every chat is offered the task's scope (and an earned place) as if it read nothing foreign
 - [ ] Agent trust, slice 4: a connection's tools and groups set to Allow, Ask, Always ask or Off in Settings
 - [x] Classifying a new connection: spike first. scripts/spike-classify.ts runs the inference (Balanced, Sonnet 5.5)
   over 340 listed tools of five services whose kind is known (GitHub and Gmail by their files, Vercel, ClickUp and

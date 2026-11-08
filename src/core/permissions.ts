@@ -335,28 +335,11 @@ export function scopeWords(what: string, kind: Exclude<ScopeKind, "place">): str
 	return `${what.charAt(0).toUpperCase()}${what.slice(1)} without asking ${LASTS[kind]}`;
 }
 
-/** Words that start with a verb, as they read after "before": "merge …" is "merging …", "comment on" "commenting on". */
-function gerund(words: string): string {
-	const space = words.indexOf(" ");
-	const verb = space === -1 ? words : words.slice(0, space);
-	const rest = space === -1 ? "" : words.slice(space);
-	const lower = verb.toLowerCase();
-	const ing = lower.endsWith("ie")
-		? `${verb.slice(0, -2)}ying`
-		: /[^aeiouy]e$/.test(lower)
-			? `${verb.slice(0, -1)}ing`
-			: // one short syllable ending consonant, vowel, consonant doubles its last: "tag", "tagging"
-				/^[^aeiou]*[aeiou][^aeiouwxy]$/.test(lower)
-				? `${verb}${verb.slice(-1)}ing`
-				: `${verb}ing`;
-	return `${ing}${rest}`;
-}
-
 /**
- * An earned place's row, as its consequence: "Don't ask again before merging pull requests in purrgrammer/banda",
- * from its grain's words with the place filled.
+ * An earned place's row, as its consequence, worded like every other scope ("Merge pull requests in purrgrammer/banda
+ * without asking until you take it back in Permissions"): the grain's words never need bending into another verb form.
  */
-export const placeWords = (words: string) => `Don't ask again before ${gerund(words)}`;
+export const placeWords = (words: string) => scopeWords(words, "always");
 
 /**
  * Where a write acts, as a permission at its place's grain would bind it: the account and the place's arguments, the
