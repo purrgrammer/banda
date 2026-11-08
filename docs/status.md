@@ -86,11 +86,14 @@ definition is the one this banda ships, and it takes effect at its first start (
 purrgrammer/banda#24's pushes and green checks, each seen on time. The fault sweeps over the new scenarios, the Google
 kinds against real accounts, the phone pass of slices 2 and 3 and owner review remain open.
 
-Slack is designed ([Slack](slack.md)), under owner review: a built-in connection whose account is the owner in one Slack
-team, signed in by PKCE on the daemon's loopback with user scopes only; threads, channels, searches and people as
-objects on the cards that exist; posting as the owner on the floor; channels and threads followed as paged lists under
-a per-account request budget, both connection data, since Slack allows such apps one history request a minute. An
-adversarial review of the design is folded in; four spikes against a throwaway Slack app come before slice 1.
+Slack is built on the `slack` branch, one PR on main in stages ([Slack](slack.md), [the plan](slack-plan.md)): a
+built-in connection whose account is the owner in one Slack team, signed in by PKCE on the daemon's loopback with user
+scopes only; threads, channels, searches and people as objects on the cards that exist, with faces; posting as the
+owner on the floor, reacting as an approved draft whose permission covers a channel for the task; a thread and a
+channel followed through a paged window under a per-account queue, a search and a person followed; files read through
+the daemon into the chat's blobs. The spikes ran against the owner's team; each stage had an adversarial review. The
+fault sweep in CI, `files:read` on the shipped app, the owner's UI pass over the specimen and the walkthrough at both
+widths, and owner acceptance remain.
 
 
 Bringing your own is in code ([Chat](chat.md)): at first run on the desktop, the skills and agents of Claude Code,
