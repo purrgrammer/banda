@@ -5,8 +5,11 @@
  * prompt cache as the owner starts to write (`POST /api/chats/:id/warm`, `../warm.ts`).
  */
 import type { ModelRef } from "@earendil-works/pi-durable";
+import { accountsOf } from "../../core/account-provider.ts";
 import { ChatTier, defineTierSwitch } from "../../core/agents.ts";
 import { Companion, type CompanionDoc, setModels } from "../../core/companion.ts";
+import { accountTitle, backendOf, parseAccount } from "../../core/provider-accounts.ts";
+import { FileCredentialStore } from "../../core/provider-credentials.ts";
 import { context } from "../../core/store.ts";
 import { isTier, modelFor, PRESETS, presetOf, providerOf, TIERS, type Tier } from "../../core/tiers.ts";
 import { DEFAULT_MODEL } from "../../home.ts";
@@ -23,11 +26,18 @@ const switches = new WeakMap<object, ReturnType<typeof defineTierSwitch>>();
 const providerName = (deps: Deps, provider: string) => deps.seen({ provider, modelId: "" })?.name ?? provider;
 
 /**
- * The providers the owner may pick: those with presets that have credentials, and the configured model's; each
- * `ambient` with its `source` when its credential came from outside banda.
+ * The provider accounts the owner may pick: those of backends with presets that have credentials, and the configured
+ * model's; each named by its backend, with its label once the backend has more than one, and `ambient` with its
+ * `source` when its credential came from outside banda.
  */
 export async function offered(deps: Deps, fallback: ModelRef): Promise<TiersView["providers"][number][]> {
-	const candidates = [...new Set([...PRESETS.map((preset) => preset.provider), fallback.provider])];
+	const candidates = [
+		...new Set([
+			...PRESETS.flatMap((preset) => accountsOf(deps.models, preset.provider)),
+			...accountsOf(deps.models, backendOf(fallback.provider)),
+			fallback.provider,
+		]),
+	];
 	const usable = await Promise.all(
 		candidates.map(async (id) => {
 			try {
@@ -37,18 +47,19 @@ export async function offered(deps: Deps, fallback: ModelRef): Promise<TiersView
 			}
 		}),
 	);
+	const kept = candidates.filter((_, n) => usable[n]);
+	const labels = await new FileCredentialStore(deps.home).labels();
 	return Promise.all(
-		candidates
-			.filter((_, n) => usable[n])
-			.map(async (id) => {
-				const { ambient, source } = await credentialOf(deps.models, id);
-				return {
-					id,
-					name: providerName(deps, id),
-					...(ambient ? { ambient } : {}),
-					...(source === undefined ? {} : { source }),
-				};
-			}),
+		kept.map(async (id) => {
+			const { ambient, source } = await credentialOf(deps.models, id);
+			const many = kept.filter((each) => backendOf(each) === backendOf(id)).length > 1;
+			return {
+				id,
+				name: accountTitle(providerName(deps, id), labels[id] ?? parseAccount(id).account, many),
+				...(ambient ? { ambient } : {}),
+				...(source === undefined ? {} : { source }),
+			};
+		}),
 	);
 }
 
@@ -67,11 +78,16 @@ async function view(deps: Deps): Promise<TiersView> {
 			...(own ? { own: true as const } : {}),
 		};
 	};
+	const providers = await offered(deps, fallback);
 	return {
-		provider: { id, name: seen?.name ?? id, local: seen?.local ?? false },
+		provider: {
+			id,
+			name: providers.find((each) => each.id === id)?.name ?? seen?.name ?? id,
+			local: seen?.local ?? false,
+		},
 		presets,
 		models: { quick: model("quick"), balanced: model("balanced"), deep: model("deep") },
-		providers: await offered(deps, fallback),
+		providers,
 		// the owner's pick: one made in the app, or a model config.json names; never the default alone
 		chosen:
 			choice.provider !== undefined ||
@@ -116,13 +132,13 @@ async function change(deps: Deps, body: Record<string, unknown>): Promise<void> 
 	}, context);
 }
 
-/** A completed sign-in selects its provider in the daemon, even if the settings view was closed meanwhile. */
+/** A completed sign-in selects its account in the daemon, even if the settings view was closed meanwhile. */
 export async function selectConnectedProvider(deps: Deps, provider: string): Promise<void> {
 	await change(deps, { provider });
 }
 
 /**
- * After signing out of `provider`: if the band thought with it, it moves to the first provider still usable, so it never
+ * After signing out of `provider` (an account): if the band thought with it, it moves to the first account still usable, so it never
  * stays on one it cannot reach. With none left the choice stays, and the app asks for a provider again.
  */
 export async function leaveProvider(deps: Deps, provider: string): Promise<void> {

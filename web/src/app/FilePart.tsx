@@ -25,10 +25,11 @@ import {
 	type Preview,
 	sentFile,
 	sentPreview,
-	sizeOf,
 	typedUrl,
 } from "../lib/api.ts";
 import type { SegmentFile } from "../lib/chat.ts";
+import { useReturnFocus } from "../lib/return-focus.ts";
+import { sizeOf } from "../lib/size.ts";
 
 /** A language as people name it, by the highlighter's id. */
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -254,6 +255,8 @@ function FileSheet({
 	size: string;
 	onDownload: () => void;
 }) {
+	// opened from state (the file's card), with no Radix trigger: closed, focus returns to the card
+	const returnFocus = useReturnFocus(open);
 	const whole = useLoad(open ? `${keyOf(chat, file)}:full` : undefined, () => previewOf(chat, file, true));
 	const shown: OpenFile =
 		whole.state === "ready"
@@ -266,6 +269,7 @@ function FileSheet({
 			<SheetContent
 				side="right"
 				showCloseButton={false}
+				onCloseAutoFocus={returnFocus}
 				className="w-full gap-0 bg-paper p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl"
 			>
 				<SheetTitle className="sr-only">{file.name}</SheetTitle>

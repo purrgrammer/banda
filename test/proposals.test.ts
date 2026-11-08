@@ -102,7 +102,7 @@ describe("agent proposals", () => {
 			}
 			if (!answered) {
 				answered = true;
-				return fauxAssistantMessage([fauxToolCall("message_user", { reaction: "👍" })], { stopReason: "toolUse" });
+				return fauxAssistantMessage([fauxToolCall("react", { reaction: "👍" })], { stopReason: "toolUse" });
 			}
 			return fauxAssistantMessage("done");
 		};

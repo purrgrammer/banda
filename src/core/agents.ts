@@ -32,6 +32,7 @@ import {
 	groupToolsName,
 	MESSAGE_GROUP,
 	MESSAGE_USER,
+	PROPOSE_AVATAR,
 } from "./toolsets.ts";
 import { hiddenError, nfc } from "./visible.ts";
 
@@ -389,7 +390,7 @@ export function chatTools(
 		(tool) =>
 			tool !== MESSAGE_USER &&
 			tool !== MESSAGE_GROUP &&
-			(!group || !DIRECT_META_TOOLS.includes(tool as (typeof DIRECT_META_TOOLS)[number])),
+			(!group || (tool !== PROPOSE_AVATAR && !DIRECT_META_TOOLS.includes(tool as (typeof DIRECT_META_TOOLS)[number]))),
 	);
 	return group ? [MESSAGE_GROUP, ...speaking] : [MESSAGE_USER, ...speaking];
 }
@@ -409,8 +410,8 @@ export async function asMember(tx: Tx, chat: ConversationId): Promise<void> {
 	const state = await tx.doc(AgentDoc, chat);
 	if (inGroup(state)) return;
 	state.extensions = { add: [GROUP_TOOLS, groupToolsName(Number(chat))] };
-	// the lead's chat may offer every tool installed: message_user is taken out by name
-	state.modelTools = { remove: [MESSAGE_USER] };
+	// the lead's chat may offer every tool installed: what speaks only in a direct chat is taken out by name
+	state.modelTools = { remove: [MESSAGE_USER, PROPOSE_AVATAR] };
 }
 
 /**

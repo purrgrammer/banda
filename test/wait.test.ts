@@ -192,7 +192,7 @@ describe("answers", () => {
 		const s = setup();
 		const harness = await s.open(await tempHome());
 		s.script(
-			s.call("message_user", { question: "Pick", fields: [{ name: "size", type: "choice" }] }),
+			s.call("ask_user", { question: "Pick", fields: [{ name: "size", type: "choice" }] }),
 			fauxAssistantMessage("ok"),
 		);
 		const { turn: id, chat } = turn(await s.core.receive(harness, msg("m1", "go")));
@@ -208,7 +208,7 @@ describe("Wait", () => {
 		const harness = await s.open(await tempHome());
 		try {
 			s.script(
-				s.call("message_user", { question: "Which colour?", options: ["red", "blue"] }),
+				s.call("ask_user", { question: "Which colour?", options: ["red", "blue"] }),
 				fauxAssistantMessage("Noted."),
 			);
 			const { turn: id, chat } = turn(await s.core.receive(harness, msg("dismiss-ask", "pick a colour")));
@@ -241,7 +241,7 @@ describe("Wait", () => {
 		const s = setup();
 		const harness = await s.open(await tempHome());
 		s.script(
-			s.call("message_user", { question: "Which colour?", options: ["red", "blue"] }),
+			s.call("ask_user", { question: "Which colour?", options: ["red", "blue"] }),
 			fauxAssistantMessage("Blue it is."),
 			fauxAssistantMessage("Noted, red."),
 		);
@@ -469,7 +469,7 @@ describe("Wait", () => {
 	it("cancel while asking: the ask ends cancelled, and the chat is idle", async () => {
 		const s = setup();
 		const harness = await s.open(await tempHome());
-		s.script(s.call("message_user", { question: "Colour?" }));
+		s.script(s.call("ask_user", { question: "Colour?" }));
 		const { chat } = turn(await s.core.receive(harness, msg("m1", "pick")));
 		await asked(harness);
 		await (await harness.conversation(chat as ConversationId, context))!.abort(context);
@@ -484,11 +484,7 @@ describe("Wait", () => {
 		const s = setup();
 		s.gateway.fail = (_attempt, out) => (out.ask === undefined ? undefined : "transient");
 		const harness = await s.open(await tempHome());
-		s.script(
-			s.call("message_user", { question: "Which env?" }),
-			fauxAssistantMessage("ok"),
-			fauxAssistantMessage("ok"),
-		);
+		s.script(s.call("ask_user", { question: "Which env?" }), fauxAssistantMessage("ok"), fauxAssistantMessage("ok"));
 		const { chat } = turn(await s.core.receive(harness, msg("m1", "deploy")));
 		const [wait] = await asked(harness);
 		// typed before the ask could be seen: a message, queued behind it
@@ -521,11 +517,7 @@ describe("Wait", () => {
 	it("stop: the run and its ask end, the queued input is withdrawn, and each Turn ends stopped", async () => {
 		const s = setup();
 		const harness = await s.open(await tempHome());
-		s.script(
-			s.call("message_user", { question: "Colour?" }),
-			fauxAssistantMessage("never"),
-			fauxAssistantMessage("never"),
-		);
+		s.script(s.call("ask_user", { question: "Colour?" }), fauxAssistantMessage("never"), fauxAssistantMessage("never"));
 		const first = turn(await s.core.receive(harness, msg("m1", "pick")));
 		await asked(harness);
 		const queued = turn(await s.core.receive(harness, msg("m2", "and this", owner, { forwarded: true })));
@@ -566,7 +558,7 @@ describe("Wait", () => {
 	it("a message that carries an open ask's id is not sent", async () => {
 		const s = setup();
 		const harness = await s.open(await tempHome());
-		s.script(s.call("message_user", { question: "Colour?" }));
+		s.script(s.call("ask_user", { question: "Colour?" }));
 		turn(await s.core.receive(harness, msg("m1", "pick")));
 		const [wait] = await asked(harness);
 		// a second chat, whose model somehow names the ask

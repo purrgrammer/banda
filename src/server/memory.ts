@@ -12,8 +12,10 @@ import {
 	FACT_ID,
 	type Fact,
 	factId,
+	factLine,
 	GLOBAL_MEMORY,
 	MAX_MEMORY_BYTES,
+	MAX_MEMORY_CHARS,
 	type MemoryFiles,
 	type MemoryLock,
 	memoryWords,
@@ -72,10 +74,11 @@ export function boxMemory(workspace: Pick<Workspace, "env" | "root">): MemoryFil
 	};
 }
 
-export function factView({ path, ...fact }: Fact): FactView {
+export function factView(fact: Fact): FactView {
+	const { path, ...rest } = fact;
 	const audience = audienceOf(path);
 	if (audience === undefined) throw new Error("Not a memory path");
-	return { ...fact, ...audience };
+	return { ...rest, ...audience, size: [...factLine(fact)].length };
 }
 
 export type MemoryDesk = {
@@ -88,9 +91,9 @@ export type MemoryDesk = {
 /** The authenticated owner may see every scope. Models receive only their own audience. */
 export async function memory({ files }: MemoryDesk, _now: number, ctx: Context = context): Promise<MemoryView> {
 	try {
-		return { facts: (await allFacts(files, ctx)).map(factView) };
+		return { facts: (await allFacts(files, ctx)).map(factView), budget: MAX_MEMORY_CHARS };
 	} catch {
-		return { facts: [], unavailable: true };
+		return { facts: [], budget: MAX_MEMORY_CHARS, unavailable: true };
 	}
 }
 
@@ -118,12 +121,23 @@ async function changing<T>(run: () => Promise<T>): Promise<T> {
 
 export async function add(
 	desk: MemoryDesk,
-	body: { text?: unknown; scope?: unknown; agent?: unknown },
+	body: { text?: unknown; scope?: unknown; agent?: unknown; about?: unknown; task?: unknown },
 	now: number,
 	ctx: Context = context,
 ): Promise<FactView> {
 	const text = words(body.text);
 	if (body.scope !== "global" && body.scope !== "agent") throw new BadRequest("Choose global or agent memory");
+	// Whom a fact is about is declared by the owner here, never detected from the words.
+	const about = body.about === undefined ? undefined : words(body.about);
+	const task = body.task === undefined ? undefined : words(body.task);
+	const others = about !== undefined && !/^(the )?owner$/i.test(about);
+	if (others) {
+		if (body.scope === "global")
+			throw new BadRequest(
+				"A fact about someone else stays with an agent, never in the band's shared memory. Add it under that agent instead.",
+			);
+		if (task === undefined) throw new BadRequest("A fact about someone else names the task of yours it serves");
+	}
 	let path = GLOBAL_MEMORY;
 	if (body.scope === "agent") {
 		const agent = body.agent;
@@ -132,7 +146,12 @@ export async function add(
 			throw new BadRequest("That agent is unavailable", 404);
 		path = agentMemoryPath(agent);
 	} else if (body.agent !== undefined) throw new BadRequest("Global memory has no agent");
-	const fact: NewFact = { text, from: { owner: true }, at: now };
+	const fact: NewFact = {
+		text,
+		from: { owner: true },
+		at: now,
+		...(others && about !== undefined && task !== undefined ? { about, for: task } : {}),
+	};
 	const written = await changing(() => desk.lock.exclusive(() => addFact(desk.files, path, fact, ctx)));
 	await desk.search.memory(desk.files, ctx);
 	return factView(written.fact);

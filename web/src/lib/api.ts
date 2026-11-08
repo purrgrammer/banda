@@ -244,9 +244,6 @@ export function limits(): Promise<{ fileBytes: number }> {
 }
 
 /** A size as people read it. */
-export const sizeOf = (size: number) =>
-	size < 1024 * 1024 ? `${Math.ceil(size / 1024)} KB` : `${(size / 1024 / 1024).toFixed(1).replace(/\.0$/, "")} MB`;
-
 /** Upload a file as a blob for a message to name; resolves with what the message names it by. */
 export async function upload(
 	file: File,
@@ -299,7 +296,16 @@ export const setPaused = (paused: boolean) =>
 
 /** What the owner does to memory: add a fact, change its words, or delete it. */
 export type FactAct =
-	| { readonly action: "add"; readonly text: string; readonly scope: "global" | "agent"; readonly agent?: string }
+	| {
+			readonly action: "add";
+			readonly text: string;
+			readonly scope: "global" | "agent";
+			readonly agent?: string;
+			/** Whom it is about, when not the owner: declared by the owner, never detected. */
+			readonly about?: string;
+			/** For a fact about someone else: the owner's task it serves. */
+			readonly task?: string;
+	  }
 	| { readonly action: "edit"; readonly id: string; readonly text: string }
 	| { readonly action: "delete"; readonly id: string };
 
@@ -312,6 +318,8 @@ export const actOnFact = (act: FactAct) =>
 					text: act.text,
 					scope: act.scope,
 					...(act.agent === undefined ? {} : { agent: act.agent }),
+					...(act.about === undefined ? {} : { about: act.about }),
+					...(act.task === undefined ? {} : { task: act.task }),
 				}),
 			})
 		: act.action === "edit"
@@ -404,7 +412,6 @@ export type CapabilityAct =
 	| { readonly action: "decline" | "remove"; readonly folder: "connections" | "tools"; readonly name: string }
 	| { readonly action: "disconnect"; readonly name: string }
 	| { readonly action: "key"; readonly name: string; readonly key: string }
-	| { readonly action: "scopes"; readonly name: string; readonly scopes: readonly string[] }
 	| { readonly action: "add"; readonly name: string }
 	| { readonly action: "address"; readonly url: string }
 	| { readonly action: "trust"; readonly name: string; readonly tools: readonly string[] }
@@ -419,21 +426,11 @@ export const actOnCapability = (act: CapabilityAct) =>
 			})
 		: act.action === "address"
 			? api<CapabilitiesView>("/capabilities/connections", { method: "POST", body: JSON.stringify({ url: act.url }) })
-			: act.action === "disconnect" ||
-					act.action === "key" ||
-					act.action === "scopes" ||
-					act.action === "add" ||
-					act.action === "trust"
+			: act.action === "disconnect" || act.action === "key" || act.action === "add" || act.action === "trust"
 				? api<CapabilitiesView>(`/capabilities/connections/${act.name}/${act.action}`, {
 						method: "POST",
 						body: JSON.stringify(
-							act.action === "key"
-								? { key: act.key }
-								: act.action === "scopes"
-									? { scopes: act.scopes }
-									: act.action === "trust"
-										? { tools: act.tools }
-										: {},
+							act.action === "key" ? { key: act.key } : act.action === "trust" ? { tools: act.tools } : {},
 						),
 					})
 				: api<CapabilitiesView>(`/capabilities/${act.folder}/${act.name}/${act.action}`, {
@@ -445,12 +442,17 @@ export const actOnCapability = (act: CapabilityAct) =>
  * Start signing in to a connection: the page to send the browser to, which comes back to banda; or the code the owner
  * types on the service's own page, which the connection then shows until it is typed.
  */
-export const signIn = (name: string, agent?: string) =>
+/** Sign an account of connection `name` in, asking for `scopes` (else the file's default); `account` signs that one in again. */
+export const signIn = (
+	name: string,
+	agent?: string,
+	choice: { readonly scopes?: readonly string[]; readonly account?: string } = {},
+) =>
 	api<{ url: string } | { code: string; page: string; expires: number } | { connected: true }>(
 		`/capabilities/connections/${name}/signin`,
 		{
 			method: "POST",
-			body: JSON.stringify(agent === undefined ? {} : { agent }),
+			body: JSON.stringify({ ...(agent === undefined ? {} : { agent }), ...choice }),
 		},
 	);
 

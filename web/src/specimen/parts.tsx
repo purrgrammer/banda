@@ -32,6 +32,7 @@ import { PullRequestCard } from "../chat/Object.tsx";
 import { RoutineProposal } from "../chat/Routine.tsx";
 import { VoiceMessage } from "../chat/Voice.tsx";
 import { Markdown } from "../components/Markdown.tsx";
+import { SourceLabels } from "../components/SourceLink.tsx";
 import { ATLAS, ATTACHED, MARA, OCTO, PAGE, PHOTO, POSTER, PR, REPLY_VOICE, SANCHO, VOICE } from "./fixtures.ts";
 import { Group, HeaderStage, Section } from "./stage.tsx";
 
@@ -63,6 +64,27 @@ export function Parts() {
 						<JumpToLatest count={3} />
 					</div>
 				</div>
+			</Section>
+			<Section
+				id="source-links"
+				title="Source links"
+				note="An icon identifies the source. An empty label uses its message or name."
+			>
+				<SourceLabels.Provider
+					value={async (href) => ({
+						label: href.includes("/artifact/")
+							? "Lisbon itinerary"
+							: href.includes("/g/")
+								? "Morning train confirmed"
+								: "Take the 09:15 train",
+					})}
+				>
+					<Markdown>
+						{
+							"[Our decision](#/a/mara?at=42) · [Group discussion](#/g/7?at=12) · [Itinerary](#/artifact/abcdef0123456789)\n\n[](#/a/mara?at=42) · [](#/g/7?at=12) · [](#/artifact/abcdef0123456789)"
+						}
+					</Markdown>
+				</SourceLabels.Provider>
 			</Section>
 			<Section
 				id="message-layout"

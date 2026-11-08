@@ -475,6 +475,7 @@ export function Screens() {
 						<ConnectCard
 							agent="Sancho"
 							connection="GitHub"
+							id="github"
 							state={{
 								kind: "connect",
 								why: "Sancho can read your pull requests and issues, and asks before it writes.",

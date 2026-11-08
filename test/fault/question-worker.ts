@@ -37,7 +37,7 @@ const respond = (ctx: { messages: readonly { role: string; content: unknown }[] 
 	const last = ctx.messages.at(-1);
 	if (last?.role === "user")
 		return fauxAssistantMessage(
-			[fauxToolCall("message_user", { question: "Which day?", options: ["Monday", "Tuesday"] })],
+			[fauxToolCall("ask_user", { question: "Which day?", options: ["Monday", "Tuesday"] })],
 			{ stopReason: "toolUse" },
 		);
 	if (last?.role === "toolResult" && JSON.stringify(last.content).includes("dismissed this question"))

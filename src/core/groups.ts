@@ -51,8 +51,8 @@ export const GROUP_NUDGES = 1;
 /** The nudge's words: fixed, the same whoever the member is. */
 export const GROUP_NUDGED =
 	"You ended your turn without posting to the group: your final text is your notes, which nobody in the room sees. " +
-	"Answer there now with `message_group`, or, if nothing needs saying, react to the owner's message with its " +
-	"`reaction`. This reminder is automatic, not from the owner.";
+	"Answer there now with `message_group`, or, if nothing needs saying, `react` to the owner's message. This " +
+	"reminder is automatic, not from the owner.";
 
 /** What the daemon says in a room when a member's run there ended without its answer: failed, or stopped. */
 export const GROUP_NOTICE = "banda.group-notice";
@@ -121,6 +121,8 @@ export type GroupMessage = {
 	readonly call?: string;
 	/** A member's: one emoji on the owner's message its run answered (`on`, its entry); alone, its whole answer. */
 	readonly reaction?: { readonly emoji: string; readonly on: number };
+	/** A member's: artifacts it showed again, each at the version current when it was posted. */
+	readonly artifacts?: readonly { readonly id: string; readonly n: number }[];
 };
 
 type Execution = { chat: number; cursor?: number; lastTurn?: number };
@@ -347,10 +349,10 @@ export const groupSection: PromptSection = {
 					: " You ask another member to work by naming it in `message_group`'s `ask`: only when its work is " +
 						"needed, as how far agents ask each other is limited. ") +
 				"`message_group` posts to the group, where the owner and every member read it: answer there, briefly, " +
-				"and only for yourself; `files` go to the group too, and a `question` is asked there, of the owner. " +
+				"and only for yourself; `files` go to the group too, and `ask_user` asks the owner there. " +
 				"Your final text is your notes: nobody in the room reads it, so what the owner asked you is answered " +
-				"with `message_group`. Say a thing once: what you or another member already said in the room is not " +
-				"said again; when you have nothing new, react to the owner's message with its `reaction`, or, when " +
+				"in the room. Say a thing once: what you or another member already said in the room is not " +
+				"said again; when you have nothing new, `react` to the owner's message, or, when " +
 				"another member asked you, end your turn with a reply that calls no tool.",
 		].join("\n");
 	},
@@ -702,6 +704,7 @@ export function defineGroups(options: GroupOptions) {
 				...(message.call === undefined ? {} : { call: message.call }),
 				...(message.objects === undefined ? {} : { objects: [...message.objects] }),
 				...(message.reaction === undefined ? {} : { reaction: { ...message.reaction } }),
+				...(message.artifacts === undefined ? {} : { artifacts: message.artifacts.map(({ id, n }) => ({ id, n })) }),
 			} as unknown as JsonObject,
 		});
 		// its place in its chain: an owner's message begins one; a member's is one deeper than what it answers
@@ -941,6 +944,7 @@ export function defineGroups(options: GroupOptions) {
 		ask: readonly string[] = [],
 		objects: readonly string[] = [],
 		reaction?: string,
+		artifacts: readonly { readonly id: string; readonly n: number }[] = [],
 	): Promise<{ readonly entry: number; readonly note?: string } | { readonly refused: string } | undefined> {
 		const doc = await tx.doc(Groups);
 		const at = doc.byExecution[chat];
@@ -996,6 +1000,7 @@ export function defineGroups(options: GroupOptions) {
 					...(files.length === 0 ? {} : { files }),
 					...(call === undefined ? {} : { call }),
 					...(reaction === undefined || on === undefined ? {} : { reaction: { emoji: reaction, on } }),
+					...(artifacts.length === 0 ? {} : { artifacts: artifacts.map(({ id, n }) => ({ id, n })) }),
 				},
 				from === undefined ? undefined : { ...from },
 			);

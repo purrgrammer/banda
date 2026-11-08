@@ -11,6 +11,8 @@ import { createRegistry, type TaskId } from "@earendil-works/pi-durable";
 import { expect, it, onTestFinished, vi } from "vitest";
 import { OWNER } from "../src/core/gateway.ts";
 import { connectHarness, Harnesses } from "../src/core/harness.ts";
+import { Search } from "../src/core/search.ts";
+import { searchService } from "../src/core/search-service.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore, type TurnResult } from "../src/core/turn.ts";
 import { harnessesArea } from "../src/server/routes/harnesses.ts";
@@ -68,6 +70,12 @@ it("refuses to resume a session outside the harness's newly connected folder", a
 		blobs,
 		config: { model: FAUX_MODEL },
 		home,
+		retrieval: searchService({
+			index: new Search(join(home, "search.db")),
+			blobs,
+			groups: core.groups,
+			harness: () => harness,
+		}),
 		root: home,
 		log: () => {},
 	}))

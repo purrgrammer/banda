@@ -16,7 +16,16 @@ import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable"
 type JsonValue = JsonObject[string];
 
 /** The cards the daemon draws. */
-export const CARDS = ["pull-request", "issue", "check-run", "notification", "email"] as const;
+export const CARDS = [
+	"pull-request",
+	"issue",
+	"check-run",
+	"notification",
+	"email",
+	"event",
+	"contact",
+	"file",
+] as const;
 export type CardKind = (typeof CARDS)[number];
 
 /** A read that fetches an object: a tool, and its arguments, each a value or a `{placeholder}` the match fills. */
@@ -772,7 +781,67 @@ export type EmailCard = {
 	readonly url?: string;
 };
 
-export type ObjectCard = PullRequestCard | IssueCard | CheckRunCard | NotificationCard | EmailCard;
+/** A calendar event, every value scalar so the store's bounded JSON shape holds. */
+export type EventCard = {
+	readonly card: "event";
+	readonly title: string;
+	/** As the calendar gives it: a date for an all-day event, else a date-time. */
+	readonly start: string;
+	readonly end: string;
+	readonly allDay: boolean;
+	readonly timeZone: string;
+	readonly location: string;
+	readonly organizer: string;
+	/** The first few guests and how many more: "Ana, Mira +3". */
+	readonly who: string;
+	readonly attendees: number | null;
+	readonly response: "accepted" | "declined" | "tentative" | "needs-action" | "none";
+	readonly status: "confirmed" | "tentative" | "cancelled";
+	readonly description: string;
+	readonly meet?: string;
+	readonly url?: string;
+};
+
+/** A person from the owner's contacts, or from the people they have emailed (`other`). */
+export type ContactCard = {
+	readonly card: "contact";
+	readonly name: string;
+	/** Comma-separated, the primary first. */
+	readonly emails: string;
+	readonly phones: string;
+	readonly organization: string;
+	/** Their job title. */
+	readonly title: string;
+	readonly other: boolean;
+	readonly photo?: string;
+	readonly url?: string;
+};
+
+/** A file in a drive, every value scalar so the store's bounded JSON shape holds. */
+export type FileCard = {
+	readonly card: "file";
+	readonly name: string;
+	readonly kind: "doc" | "sheet" | "slides" | "pdf" | "folder" | "image" | "file";
+	readonly mimeType: string;
+	readonly owner: string;
+	/** When it last changed, as the drive gives it. */
+	readonly modified: string;
+	/** Its bytes; null for a Google Doc, Sheet or Slides deck, which have none of their own. */
+	readonly size: number | null;
+	readonly description: string;
+	/** Only the drive's own page for it (docs.google.com or drive.google.com). */
+	readonly url?: string;
+};
+
+export type ObjectCard =
+	| PullRequestCard
+	| IssueCard
+	| CheckRunCard
+	| NotificationCard
+	| EmailCard
+	| EventCard
+	| ContactCard
+	| FileCard;
 
 /** A plain line: no control or invisible characters, one space for each run of spaces, bounded. */
 export function plainLine(value: unknown, max = 200): string {
@@ -885,8 +954,14 @@ const REASONS: { readonly [reason: string]: Reason } = {
  */
 export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as: string]: unknown }): ObjectCard {
 	const field = (name: string) => at(answers, kind.fields[name]);
-	const titleField = kind.card === "check-run" ? "name" : kind.card === "email" ? "subject" : "title";
-	if (typeof field(titleField) !== "string" || plainLine(field(titleField)) === "")
+	const titleField =
+		kind.card === "check-run" || kind.card === "contact" || kind.card === "file"
+			? "name"
+			: kind.card === "email"
+				? "subject"
+				: "title";
+	// a person may have no name: the card names them by address
+	if (typeof field(titleField) !== "string" || (kind.card !== "contact" && plainLine(field(titleField)) === ""))
 		throw new Error("Incomplete object");
 	const repo = plainLine(field("repo"), 100) || plainLine(`${ref.values.owner ?? ""}/${ref.values.repo ?? ""}`, 100);
 	const number = count(field("number")) || Number(ref.values.number ?? 0) || 0;
@@ -1030,6 +1105,67 @@ export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as
 				unread: field("unread") === true,
 				...withUrl,
 			};
+		case "event": {
+			const response = String(field("response") ?? "");
+			const status = String(field("status") ?? "");
+			const meet = webUrl(field("meet"));
+			return {
+				card: "event",
+				title: plainLine(field("title"), 300),
+				start: plainLine(field("start"), 40),
+				end: plainLine(field("end"), 40),
+				allDay: field("all_day") === true,
+				timeZone: plainLine(field("time_zone"), 100),
+				location: plainLine(field("location"), 300),
+				organizer: plainLine(field("organizer"), 250),
+				who: plainLine(field("who"), 250),
+				attendees: count(field("attendees")),
+				response:
+					(["accepted", "declined", "tentative", "needs-action"] as const).find((each) => each === response) ?? "none",
+				status: (["tentative", "cancelled"] as const).find((each) => each === status) ?? "confirmed",
+				description: plainBody(field("description"), 1000),
+				...(meet === undefined ? {} : { meet }),
+				...withUrl,
+			};
+		}
+		case "contact": {
+			const joined = (value: unknown, max: number) =>
+				plainLine(Array.isArray(value) ? value.filter((each) => typeof each === "string").join(", ") : value, max);
+			const emails = joined(field("emails"), 300);
+			const other = field("other") === true;
+			// a photo is fetched as the card draws it: only Google's own photo host
+			const given = webUrl(field("photo"));
+			const photo =
+				given !== undefined && /(^|\.)googleusercontent\.com$/.test(new URL(given).hostname) ? given : undefined;
+			return {
+				card: "contact",
+				name: plainLine(field("name")) || plainLine(emails.split(",")[0]) || "(No name)",
+				emails,
+				phones: joined(field("phones"), 200),
+				organization: plainLine(field("organization"), 200),
+				title: plainLine(field("title"), 200),
+				other,
+				...(photo === undefined ? {} : { photo }),
+				...(other ? {} : withUrl),
+			};
+		}
+		case "file": {
+			const kindWord = String(field("kind") ?? "");
+			const page = url === undefined ? undefined : new URL(url);
+			const own = page?.port === "" && (page.hostname === "docs.google.com" || page.hostname === "drive.google.com");
+			return {
+				card: "file",
+				name: plainLine(field("name"), 300),
+				kind:
+					(["doc", "sheet", "slides", "pdf", "folder", "image"] as const).find((each) => each === kindWord) ?? "file",
+				mimeType: plainLine(field("mime_type"), 100),
+				owner: plainLine(field("owner"), 200),
+				modified: plainLine(field("modified"), 40),
+				size: count(field("size")),
+				description: plainBody(field("description"), 500),
+				...(own ? withUrl : {}),
+			};
+		}
 	}
 }
 

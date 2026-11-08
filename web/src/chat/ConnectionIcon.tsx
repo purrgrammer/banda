@@ -2,12 +2,8 @@ import { useState } from "react";
 import { cn } from "@/lib/cn";
 import { GitHubMark } from "./Object.tsx";
 
-const OFFICIAL_FAVICONS: Record<string, string> = {
-	gmail: "https://mail.google.com/favicon.ico",
-	calendar: "https://calendar.google.com/favicon.ico",
-	drive: "https://drive.google.com/favicon.ico",
-	docs: "https://docs.google.com/favicon.ico",
-};
+/** Marks banda ships for the services it knows: a service's own favicon address needs its sign-in and is no image. */
+const SHIPPED_MARKS = new Set(["gmail", "calendar", "contacts", "drive", "docs"]);
 
 function serverFavicon(url: string | undefined): string | undefined {
 	if (!url) return undefined;
@@ -31,7 +27,7 @@ export function ConnectionIcon({
 	className?: string | undefined;
 }) {
 	const name = connection.toLowerCase();
-	const src = OFFICIAL_FAVICONS[name] ?? serverFavicon(url);
+	const src = SHIPPED_MARKS.has(name) ? `/connections/${name}.png` : serverFavicon(url);
 	const [failedSrc, setFailedSrc] = useState<string | undefined>();
 	if (name === "github") return <GitHubMark {...(className === undefined ? {} : { className })} />;
 	return (

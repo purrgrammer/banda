@@ -37,8 +37,9 @@ describe("agent meta tools", () => {
 					{ stopReason: "toolUse" },
 				);
 			}
+			if (last?.role === "toolResult" && last.toolName === "react") return fauxAssistantMessage("done");
 			if (last?.role === "toolResult")
-				return fauxAssistantMessage([fauxToolCall("message_user", { reaction: "👍" })], { stopReason: "toolUse" });
+				return fauxAssistantMessage([fauxToolCall("react", { reaction: "👍" })], { stopReason: "toolUse" });
 			return fauxAssistantMessage("I will decide what to do with that message.");
 		};
 		faux.setResponses(Array.from({ length: 30 }, () => respond as never));

@@ -4,7 +4,7 @@
  * group, by their latest message, under the pinned ones: tiles of the same size, three to a row, the rest a scroll
  * away; the daemon's notices at the foot. Collapsed, the rail of faces, pinned first, the menu below.
  */
-import { BlocksIcon, BookOpenIcon, PanelLeftIcon, PlugIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
+import { BookOpenIcon, EllipsisIcon, PanelLeftIcon, PlugIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
 import { LayoutGroup, MotionConfig, motion } from "motion/react";
 import type { ReactNode } from "react";
 import { useId, useLayoutEffect, useRef, useState } from "react";
@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/cn";
+import { withMod } from "@/lib/keys";
+import { useReturnFocus } from "../lib/return-focus.ts";
 import { RowsLoading } from "./Loading.tsx";
 import { PinnedTile, Row, RowActions, type RowView } from "./Row.tsx";
 
@@ -86,6 +88,8 @@ export function Band({
 	}, [pinned]);
 	const [heldId, setHeld] = useState<string>();
 	const held = rows.find((row) => row.id === heldId);
+	// opened from state (a row long-pressed), with no Radix trigger: closed, focus returns to the row
+	const returnFocus = useReturnFocus(held !== undefined);
 	const hold = (id: string) => (phone && onPin !== undefined ? () => setHeld(id) : undefined);
 	// the row or tile that just moved: its words arrive after its face, which flies there
 	const [moved, setMoved] = useState<string>();
@@ -117,7 +121,7 @@ export function Band({
 							variant="ghost"
 							size="icon-sm"
 							className="ml-auto text-ink-2"
-							aria-label="Search, ⌘K"
+							aria-label={`Search, ${withMod("K")}`}
 							onClick={onSearch}
 						>
 							<SearchIcon />
@@ -195,7 +199,12 @@ export function Band({
 				</LayoutGroup>
 			</MotionConfig>
 			<Sheet open={held !== undefined} onOpenChange={(open) => (open ? undefined : setHeld(undefined))}>
-				<SheetContent side="bottom" showCloseButton={false} className="gap-0 rounded-t-tile bg-paper p-0">
+				<SheetContent
+					side="bottom"
+					showCloseButton={false}
+					onCloseAutoFocus={returnFocus}
+					className="gap-0 rounded-t-tile bg-paper p-0"
+				>
 					<SheetTitle className="sr-only">{held?.name ?? ""}</SheetTitle>
 					<SheetDescription className="sr-only">Pin it to the top, or unpin it</SheetDescription>
 					{held === undefined ? null : (
@@ -247,7 +256,7 @@ function Menu({
 					className="relative text-ink-2"
 					aria-label={any ? "Menu, something waits on you" : "Menu"}
 				>
-					<BlocksIcon />
+					<EllipsisIcon />
 					{any ? <span aria-hidden="true" className="absolute top-1 right-1 size-1.5 rounded-full bg-ink" /> : null}
 				</Button>
 			</DropdownMenuTrigger>

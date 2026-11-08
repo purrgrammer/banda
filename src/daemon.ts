@@ -32,6 +32,7 @@ import {
 import { type Browsers, openBrowsers } from "./box/browsers.ts";
 import { attachmentsIn, boxEnv, boxTools } from "./box/tools.ts";
 import { webFetchTool } from "./box/web-fetch.ts";
+import { registerAccount } from "./core/account-provider.ts";
 import { ActivityLog } from "./core/activity.ts";
 import { Accepted, AgentChats, agentPath } from "./core/agents.ts";
 import { stopArchived } from "./core/archive.ts";
@@ -56,12 +57,14 @@ import { allowHost, onPermissions, Permissions, revoke } from "./core/permission
 import { FileCredentialStore } from "./core/provider-credentials.ts";
 import { Control, RoutineRefused, Routines } from "./core/routines.ts";
 import { Search } from "./core/search.ts";
+import { searchService } from "./core/search-service.ts";
+import { searchExtension } from "./core/search-tools.ts";
 import { skillsExtension } from "./core/skills.ts";
 import { status } from "./core/status.ts";
 import { context, openStore } from "./core/store.ts";
 import { timeThinking } from "./core/timing.ts";
-import { toolDiscoveryExtension, toolRegistry } from "./core/tool-discovery.ts";
-import { MESSAGE_GROUP, MESSAGE_USER } from "./core/toolsets.ts";
+import { toolDiscoveryExtension, toolRegistry, toolSearchExtension } from "./core/tool-discovery.ts";
+import { isMessageTool } from "./core/toolsets.ts";
 import { defineCore, Routes, stop as stopChat, type TurnResult } from "./core/turn.ts";
 import { answer, dismissQuestion, revive } from "./core/wait.ts";
 import { CliGateway } from "./gateways/cli.ts";
@@ -259,7 +262,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 				);
 		}
 		const registry = toolRegistry();
-		registry.install(toolDiscoveryExtension);
+		registry.install(toolSearchExtension);
 		const core = defineCore({
 			blobs,
 			registry,
@@ -383,20 +386,36 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		const memoryLock = new MemoryLock();
 		const index = new Search(join(home, "search.db"));
 		search = index;
+		const retrieval = searchService({
+			index,
+			groups: core.groups,
+			blobs,
+			harness: () => {
+				if (harness === undefined) throw new Error("the store is not open");
+				return harness;
+			},
+		});
+		registry.install(searchExtension(retrieval));
 		let memoryChanged = () => {};
 		registry.install(
 			memoryExtension({ files: memoryFiles, search: index, lock: memoryLock, changed: () => memoryChanged() }),
 		);
-		// the date and the hour, for every agent, as a status line beside the prompt's fixed start
-		registry.install(nowExtension());
+		// the date, the hour and how full memory is, for every agent, as a status line beside the prompt's fixed start
+		registry.install(nowExtension(Date.now, memoryFiles));
+		registry.install(toolDiscoveryExtension);
 		// how each agent asks, and what it may do without asking: its own permissions alone
 		registry.install(permissionsExtension());
 		// each area's extensions, before the store opens: what it installs is there when anything resumes
-		const boot: Boot = { core, blobs, config, home, root: agentBox.workspace, log };
+		const boot: Boot = { core, blobs, config, home, retrieval, root: agentBox.workspace, log };
 		for (const area of AREAS) for (const extension of area.install?.(boot) ?? []) registry.install(extension);
-		const models = timeThinking(
-			dropEmptyReplies(options.models ?? builtinModels({ credentials: new FileCredentialStore(home) })),
-		);
+		const credentials = new FileCredentialStore(home);
+		const models = timeThinking(dropEmptyReplies(options.models ?? builtinModels({ credentials })));
+		// each account beyond a backend's first, cloned from the wrapped backend so it is wrapped the same
+		const stored = await credentials.list().catch((error: unknown) => {
+			log(`provider accounts: ${error instanceof Error ? error.message : String(error)}`);
+			return [];
+		});
+		for (const { providerId } of stored) registerAccount(models, providerId);
 		const seen = (model: ModelRef) => seenBy(model, models.getModel(model.provider, model.modelId)?.baseUrl);
 		harness = await openStore(home, {
 			models,
@@ -491,12 +510,12 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		const workspace: Workspace = {
 			env: () => agentBox.env(),
 			root: agentBox.workspace,
-			// message_user comes with every agent, so a file need not name it; message_group with every group, so none may
+			// the speaking tools come with every chat, so a file need not name them; message_group with every group, so none may
 			tools: () =>
 				registry
 					.snapshot()
 					.tools()
-					.flatMap(({ tool }) => (tool.name === MESSAGE_USER || tool.name === MESSAGE_GROUP ? [] : [tool.name])),
+					.flatMap(({ tool }) => (isMessageTool(tool.name) ? [] : [tool.name])),
 			known: (model) => models.getModel(model.provider, model.modelId) !== undefined,
 		};
 		let capabilitiesChanged = () => {};
@@ -878,7 +897,6 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						else if (act.action === "account")
 							await capabilities.switchAccount(act.agent, act.name, act.account, act.on, context, act.sha);
 						else if (act.action === "signout") await capabilities.signOut(act.name, act.account);
-						else if (act.action === "scopes") await capabilities.setScopes(act.name, act.scopes);
 						else if (act.action === "add") await capabilities.addShipped(act.name);
 						else if (act.action === "address") await capabilities.addByAddress(act.url);
 						else if (act.action === "trust" || act.action === "reads")
@@ -895,7 +913,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						changed();
 						return capabilitiesView();
 					},
-					signIn: (name, agent, onDevice) => capabilities.signIn(name, context, agent, onDevice),
+					signIn: (name, { agent, ...choice }) => capabilities.signIn(name, context, agent, choice),
 					objects: (chat, asks, refresh) => objects.show(chat, asks, refresh),
 					objectAttachment: (chat, ref, attachmentId, agent, account) =>
 						objects.attachment(chat, ref, attachmentId, agent, account),

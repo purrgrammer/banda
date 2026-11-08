@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { safeObjectUrl } from "./Object.tsx";
+import { callUrl, fileType, safeObjectUrl } from "./Object.tsx";
 
 describe("connection object links", () => {
 	it("accepts the declared Gmail message URL and GitHub object URLs", () => {
@@ -16,5 +16,25 @@ describe("connection object links", () => {
 			"http://mail.google.com/mail/u/0/#all/id",
 		])
 			expect(safeObjectUrl(value)).toBeUndefined();
+	});
+});
+
+describe("a Drive file's type in words", () => {
+	it("names Google's own kinds, never their raw type, and keeps an ordinary file's type", () => {
+		expect(fileType({ kind: "file", mimeType: "application/vnd.google-apps.drawing" })).toBe("Google Drawing");
+		expect(fileType({ kind: "file", mimeType: "application/vnd.google-apps.shortcut" })).toBe("Shortcut");
+		expect(fileType({ kind: "file", mimeType: "application/vnd.google-apps.unheardof" })).toBe("Google file");
+		expect(fileType({ kind: "file", mimeType: "text/csv" })).toBe("text/csv");
+		expect(fileType({ kind: "sheet", mimeType: "application/vnd.google-apps.spreadsheet" })).toBe("Google Sheet");
+	});
+});
+
+describe("an event's Join button", () => {
+	it("opens only a known video call service, never a link an invitation sets to any other host", () => {
+		expect(callUrl("https://meet.google.com/abc-defg-hij")?.hostname).toBe("meet.google.com");
+		expect(callUrl("https://acme.zoom.us/j/123")?.hostname).toBe("acme.zoom.us");
+		expect(callUrl("https://meet.google.com.evil.example/x")).toBeUndefined();
+		expect(callUrl("https://evil.example/zoom.us")).toBeUndefined();
+		expect(callUrl("http://meet.google.com/abc")).toBeUndefined();
 	});
 });

@@ -44,4 +44,64 @@ describe("Settings' providers", () => {
 		expect(page).toContain('aria-label="Sign out of OpenAI"');
 		expect(page).toContain("on the computer banda runs on");
 	});
+
+	it("names a provider's accounts by their labels once it has more than one, and offers another", () => {
+		const accounts: readonly ProviderRow[] = [
+			{ id: "anthropic", name: "Anthropic", provider: "anthropic", label: "Personal", by: "sign-in", connected: true },
+			{ id: "anthropic@work", name: "Anthropic", provider: "anthropic", label: "Work", by: "sign-in", connected: true },
+			{ id: "openai", name: "OpenAI", provider: "openai", label: "OpenAI", by: "sign-in", connected: true },
+		];
+		const page = renderToStaticMarkup(
+			createElement(ModelProviders, { current: "anthropic@work", providers: accounts, onAdd: () => {} }),
+		);
+		expect(page).toContain('aria-label="Use Anthropic · Personal"');
+		expect(page).toContain('aria-label="Sign out of Anthropic · Work"');
+		// one account of a provider is named by the provider alone
+		expect(page).toContain('aria-label="Use OpenAI"');
+		expect(page).toContain('aria-label="Add another Anthropic account"');
+		expect(page).toContain('aria-label="Add another OpenAI account"');
+		expect(page).toContain('src="/providers/anthropic.svg"');
+		expect(page).not.toContain("anthropic@work.svg");
+		const adding = renderToStaticMarkup(
+			createElement(ModelProviders, {
+				current: "anthropic",
+				providers: accounts,
+				onAdd: () => {},
+				adding: "anthropic",
+			}),
+		);
+		expect(adding).toContain('aria-label="Name of the new Anthropic account"');
+		// a device adds nothing: a sign-in comes back to the computer banda runs on
+		const device = renderToStaticMarkup(
+			createElement(ModelProviders, { current: "anthropic", providers: accounts, onAdd: () => {}, here: false }),
+		);
+		expect(device).not.toContain("Add another");
+	});
+
+	it("renames an account only where a provider has more than one, starting from its name", () => {
+		const accounts: readonly ProviderRow[] = [
+			{ id: "anthropic", name: "Anthropic", provider: "anthropic", label: "Anthropic", by: "sign-in", connected: true },
+			{ id: "anthropic@work", name: "Anthropic", provider: "anthropic", label: "Work", by: "sign-in", connected: true },
+			{ id: "openai", name: "OpenAI", provider: "openai", label: "OpenAI", by: "sign-in", connected: true },
+		];
+		const page = renderToStaticMarkup(
+			createElement(ModelProviders, { current: "anthropic", providers: accounts, onRename: () => {} }),
+		);
+		expect(page).toContain('aria-label="Rename Anthropic"');
+		expect(page).toContain('aria-label="Rename Anthropic · Work"');
+		expect(page).not.toContain('aria-label="Rename OpenAI"');
+		// a phone gathers Rename and Sign out under one menu, where a label makes the row long
+		expect(page).toContain('aria-label="More for Anthropic · Work"');
+		expect(page).not.toContain('aria-label="More for OpenAI"');
+		const renaming = renderToStaticMarkup(
+			createElement(ModelProviders, {
+				current: "anthropic",
+				providers: accounts,
+				onRename: () => {},
+				renaming: "anthropic@work",
+			}),
+		);
+		expect(renaming).toContain('aria-label="New name for Anthropic · Work"');
+		expect(renaming).toContain('value="Work"');
+	});
 });

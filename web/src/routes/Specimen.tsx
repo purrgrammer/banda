@@ -4,19 +4,10 @@
  */
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/cn";
 import { EmailDraftPreview } from "../app/EmailDraftPreview.tsx";
-import { ConnectCard, ConnectionPermissions } from "../chat/Connect.tsx";
+import { ConnectCard, ConnectDialog } from "../chat/Connect.tsx";
 import { EmailCard } from "../chat/Object.tsx";
 import { ActivityPreview, ActivitySection } from "../specimen/activity.tsx";
 import { AvatarCandidateSpecimen } from "../specimen/avatar-candidate.tsx";
@@ -24,10 +15,13 @@ import { AvatarCreator, AvatarIcon } from "../specimen/avatar-creator.tsx";
 import { AvatarColorsContext, AvatarSpecimenContext } from "../specimen/avatar-face.tsx";
 import { AvatarSpike } from "../specimen/avatar-spike.tsx";
 import { BandSection } from "../specimen/band.tsx";
+import { CalendarSection } from "../specimen/calendar.tsx";
+import { ContactsSection } from "../specimen/contacts.tsx";
 import { Controls } from "../specimen/controls.tsx";
 import { Copy } from "../specimen/copy.tsx";
 import { DevicesSection } from "../specimen/devices.tsx";
 import { DoneSection } from "../specimen/done.tsx";
+import { DriveSection } from "../specimen/drive.tsx";
 import { Faces } from "../specimen/faces.tsx";
 import { Foundation } from "../specimen/foundation.tsx";
 import { HarnessSection } from "../specimen/harness.tsx";
@@ -42,7 +36,10 @@ import { type Scheme, Section, StageContext, type Width } from "../specimen/stag
 import { States } from "../specimen/states.tsx";
 import { ToolKindsSection } from "../specimen/tool-kinds.tsx";
 
+import { ToolsetsPreview, ToolsetsSection } from "../specimen/toolsets.tsx";
+
 const CONTENTS = [
+	{ id: "toolsets", label: "Agent tools" },
 	{ id: "activity", label: "Activity drill-down" },
 	{ id: "skills", label: "Skills" },
 	{ id: "skill-activity", label: "Skill in Activity" },
@@ -82,6 +79,9 @@ const CONTENTS = [
 	{ id: "mcp", label: "Add MCP server" },
 	{ id: "github", label: "GitHub" },
 	{ id: "gmail", label: "Gmail" },
+	{ id: "calendar", label: "Google Calendar" },
+	{ id: "contacts", label: "Google Contacts" },
+	{ id: "drive", label: "Google Drive" },
 	{ id: "loading-app", label: "Opening the app" },
 	{ id: "empty-chat", label: "A new agent's chat" },
 	{ id: "states", label: "Empty and loading" },
@@ -135,6 +135,7 @@ export function Specimen() {
 			removeEventListener("hashchange", scrollToSection);
 		};
 	}, []);
+	if (location.hash === "#/specimen/toolsets") return <ToolsetsPreview />;
 	if (location.hash === "#/specimen/mcp") return <McpPreview />;
 	const skill = /^#\/specimen\/skills\/([a-z0-9-]+)$/.exec(location.hash);
 	if (skill !== null) return <SkillDetailPreview name={skill[1] ?? ""} />;
@@ -196,6 +197,7 @@ export function Specimen() {
 								<div className="mx-auto flex max-w-[110rem] flex-col gap-12 p-4 pb-24 md:p-6">
 									<ActivitySection />
 									<SkillsSection />
+									<ToolsetsSection />
 									<Screens />
 									<Section
 										id="gmail"
@@ -240,32 +242,28 @@ export function Specimen() {
 												<ConnectCard
 													agent="Sancho"
 													connection="Gmail"
+													id="gmail"
 													state={{ kind: "connect", why: "Choose access, then sign in to Gmail." }}
 													onConnect={() => setPermissionDialog(true)}
-													onPermissions={() => setPermissionDialog(true)}
 												/>
-												<Dialog open={permissionDialog} onOpenChange={setPermissionDialog}>
-													<DialogContent>
-														<DialogHeader>
-															<DialogTitle>Gmail access</DialogTitle>
-															<DialogDescription>Choose what Banda can access before signing in.</DialogDescription>
-														</DialogHeader>
-														<ConnectionPermissions
-															connection="gmail"
-															scopes={gmailScopes}
-															onScopes={(scopes) => setGmailScopes([...scopes])}
-														/>
-														<DialogFooter>
-															<Button variant="ghost" onClick={() => setPermissionDialog(false)}>
-																Cancel
-															</Button>
-															<Button onClick={() => setPermissionDialog(false)}>Save and sign in</Button>
-														</DialogFooter>
-													</DialogContent>
-												</Dialog>
+												<ConnectDialog
+													open={permissionDialog}
+													onOpenChange={setPermissionDialog}
+													agent="Sancho"
+													connection="Gmail"
+													id="gmail"
+													step={{ kind: "permissions" }}
+													scopes={gmailScopes}
+													onScopes={(scopes) => setGmailScopes([...scopes])}
+													scopesChanged={gmailScopes.length > 1}
+													onSignIn={() => setPermissionDialog(false)}
+												/>
 											</div>
 										</div>
 									</Section>
+									<CalendarSection />
+									<ContactsSection />
+									<DriveSection />
 									<PanelSections />
 									<MemorySection />
 									<DevicesSection />

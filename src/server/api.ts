@@ -70,6 +70,8 @@ export type Receipt =
 			/** The owner's input this pre-request load belongs to; absent for an agent's own load. */
 			readonly invocation?: { readonly gateway: string; readonly message: string };
 	  }
+	/** Artifacts a message showed again, each at the version current when it was sent. */
+	| { readonly kind: "artifacts"; readonly artifacts: readonly { readonly id: string; readonly n: number }[] }
 	/** A `schedule` call's file: the routine, its hash, and whether it made, changed or kept one. */
 	| {
 			readonly kind: "routine";
@@ -250,7 +252,8 @@ export type Item =
 
 /**
  * `GET /api/search?q=`: the best matches, best first: a message in an agent's chat or in a group, each at its entry
- * (the chat opens there), or an artifact by its title and words.
+ * (the chat opens there), or an artifact by its title and words. Text is a bounded matching excerpt; open the source
+ * for its full context.
  */
 export type SearchHit =
 	| {
@@ -487,12 +490,18 @@ export type ShellEvent =
 	| GroupsShellEvent
 	| HarnessesShellEvent;
 
-/** A saved fact and its audience; no workspace path on consumer screens. */
-export type FactView = Omit<Fact, "path"> & Audience;
+/**
+ * A saved fact and its audience; no workspace path on consumer screens. `from` is the owner's metadata alone:
+ * the prompt section never carries it, so an agent cannot read who wrote a fact. `size` is the characters the
+ * fact takes of its scope's budget, as the daemon counts them.
+ */
+export type FactView = Omit<Fact, "path"> & Audience & { readonly size?: number };
 
 /** The owner's view of all scopes. An unavailable box is not empty memory. */
 export type MemoryView = {
 	readonly facts: readonly FactView[];
+	/** Each scope's budget, in the characters `size` counts. */
+	readonly budget?: number;
 	readonly unavailable?: true;
 };
 
@@ -620,8 +629,15 @@ export type ConnectionSummary = {
 	readonly floors: { readonly [tool: string]: Floor };
 	readonly why: string;
 	readonly command?: string;
-	/** The scopes a sign-in asks for, when the file names them. */
+	/** The scopes a new account asks for unless the owner chooses others, when the file names them. */
 	readonly scopes?: readonly string[];
+	/**
+	 * What an account may ask for: `scopes` and every scope a tool needs (`POST …/signin` with `scopes` picks from it).
+	 * Absent when the file names no scopes: its sign-in asks for what the server offers, with no choice.
+	 */
+	readonly ceiling?: readonly string[];
+	/** The scope every account asks for (a built-in API's base): always among a sign-in's `scopes`. */
+	readonly required?: readonly string[];
 	/** How many of its tools need each scope, as its file says: what the owner weighs picking one. */
 	readonly needs?: { readonly [scope: string]: number };
 };
@@ -726,8 +742,6 @@ export type ConnectionView = {
 	readonly unguessed?: string;
 	/** The scopes the server says it can grant, once known: what the owner picks from. */
 	readonly offered?: readonly string[];
-	/** Scopes some of its tools turned out to need that the sign-in was not given (from the server's challenges). */
-	readonly missing?: readonly string[];
 	/**
 	 * While signing in by code: what the owner types, the server's page to type it at, when it stops working, and the
 	 * agent it was started for.
@@ -735,7 +749,8 @@ export type ConnectionView = {
 	readonly code?: { readonly code: string; readonly page: string; readonly expires: number; readonly agent?: string };
 	/**
 	 * Its accounts, for a connection signed in to (`POST …/signin` with `agent` signs one in and switches it on for that
-	 * agent; `POST …/accounts/:account/switch` with `agent` and `on`; `POST …/accounts/:account/signout`).
+	 * agent, with `scopes` asks for those instead of the file's default, and with `account` signs that account in
+	 * again; `POST …/accounts/:account/switch` with `agent` and `on`; `POST …/accounts/:account/signout`).
 	 */
 	readonly accounts?: readonly AccountView[];
 	/** The last sign-in that finished: whom as, for which agent, and whether that account was known already. */
@@ -746,6 +761,8 @@ export type ConnectionView = {
 		readonly enabled?: boolean;
 		readonly problem?: string;
 		readonly known: boolean;
+		/** The account the owner was signing in again, when the sign-in came back as `account` instead. */
+		readonly expected?: string;
 		readonly at: number;
 	};
 	readonly problem?: string;
@@ -764,6 +781,10 @@ export type AccountView = {
 	readonly at: number;
 	readonly agents: readonly string[];
 	readonly stale?: boolean;
+	/** The scopes this account was given (as the service said, else as it asked): its own, whatever the others'. */
+	readonly scopes?: readonly string[];
+	/** Scopes it may ask for that a tool needs and it was not given, one per tool: "needs Send email". */
+	readonly missing?: readonly string[];
 };
 
 /** A tool the companion made, as the owner reads it: what it is for, the command it runs, what it takes. */

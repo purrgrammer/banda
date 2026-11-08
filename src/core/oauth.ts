@@ -8,6 +8,7 @@
  * credentials: they live in `auth/` with the rest, never in the store, the box, a prompt or a log.
  */
 import { createHash, randomBytes } from "node:crypto";
+import { REST_APIS } from "./rest.ts";
 
 /** Where the daemon signs in, as discovered: the authorization server's endpoints and the scopes the resource wants. */
 export type OAuthServer = {
@@ -60,6 +61,8 @@ export type Pending = {
 	readonly at: number;
 	/** The agent the sign-in is for: the account is switched on for it once signed in. */
 	readonly agent?: string;
+	/** The account the owner signs in again, by its key: a sign-in that comes back as another says so. */
+	readonly account?: string;
 };
 
 const base64url = (bytes: Buffer) => bytes.toString("base64url");
@@ -141,14 +144,9 @@ async function resourceMetadata(fetcher: typeof fetch, resource: string): Promis
 
 /** Find where to sign in for `resource` (an MCP server's URL). */
 export async function discover(resource: string, fetcher: typeof fetch = fetch): Promise<OAuthServer> {
-	// Gmail's API is a first-party Google resource, not an RFC 9728 MCP server. Its user consent and token
+	// A built-in API is a first-party Google resource, not an RFC 9728 MCP server. Its user consent and token
 	// endpoints are fixed by Google; tool access remains restricted to the scopes in the shipped connection file.
-	const google = new URL(resource);
-	if (
-		google.protocol === "https:" &&
-		google.hostname === "gmail.googleapis.com" &&
-		google.pathname === "/gmail/v1/users/me"
-	)
+	if (Object.values(REST_APIS).some((api) => api.url === resource))
 		return {
 			issuer: "https://accounts.google.com",
 			authorize: "https://accounts.google.com/o/oauth2/v2/auth",
@@ -224,6 +222,7 @@ export function begin(
 	redirect: string,
 	now: number,
 	agent?: string,
+	again?: { readonly account: string; readonly id: string },
 ): { readonly pending: Pending; readonly url: string } {
 	const state = base64url(randomBytes(32));
 	const verifier = base64url(randomBytes(48));
@@ -239,6 +238,8 @@ export function begin(
 	if (server.issuer === "https://accounts.google.com") {
 		url.searchParams.set("access_type", "offline");
 		url.searchParams.set("prompt", "consent");
+		// signing an account in again: Google offers that account first (a hint, never a promise)
+		if (again !== undefined) url.searchParams.set("login_hint", again.id);
 	}
 	if (server.scopes !== undefined) url.searchParams.set("scope", server.scopes.join(" "));
 	return {
@@ -252,6 +253,7 @@ export function begin(
 			client,
 			at: now,
 			...(agent === undefined ? {} : { agent }),
+			...(again === undefined ? {} : { account: again.account }),
 		},
 		url: url.toString(),
 	};

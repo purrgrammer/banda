@@ -25,6 +25,7 @@ import { FLOORS, type Floor } from "./floor.ts";
 import { harnessToolsOf } from "./harness.ts";
 import { DEFAULT_GOOGLE_CLIENT_ID, type OAuthClient, type OAuthServer, type Pending, type Tokens } from "./oauth.ts";
 import { type ObjectKinds, parseObjects } from "./objects.ts";
+import { REST_APIS, type RestApiName, restApiNamed } from "./rest.ts";
 import { type Classed, classOf, defaultOf, type Guess, nameGroups, type Setting } from "./tool-kinds.ts";
 
 export const connectionPath = (name: string) => `connections/${name}.md`;
@@ -45,7 +46,7 @@ export type Connection = {
 	readonly url?: string;
 	readonly command?: string;
 	/** A built-in daemon REST adapter, whose API does not speak MCP. */
-	readonly api?: "gmail";
+	readonly api?: RestApiName;
 	readonly auth: AuthKind;
 	/** Uncurated remote tools ask every time; only owner-declared reads bypass approval. */
 	readonly ask?: "always";
@@ -54,7 +55,10 @@ export type Connection = {
 	 * id: it names the app, proves nothing alone, and a sign-in with it is by code when the server offers that.
 	 */
 	readonly client?: string;
-	/** The scopes a sign-in asks for, as the file says: never what the server advertises it could grant. */
+	/**
+	 * The scopes a new account asks for unless the owner chooses others, as the file says: never what the server
+	 * advertises it could grant. With every scope `needs` names, it is what an account may ask for (`ceilingOf`).
+	 */
 	readonly scopes?: readonly string[];
 	/**
 	 * The scope each tool always needs, as the file says (a ```json block, `{"needs": {tool: [scope, …]}}`): any one of
@@ -155,15 +159,18 @@ export function parseConnection(
 	if (service === "") errors.push(`add "service:", the service as the owner calls it, such as "your calendar"`);
 	const url = read.one("url");
 	const command = read.one("command");
-	const api = read.one("api");
+	const apiName = read.one("api");
+	const api = apiName === undefined ? undefined : restApiNamed(apiName);
+	const builtIn = api === undefined ? undefined : REST_APIS[api];
 	if ((url === undefined) === (command === undefined))
 		errors.push(`give "url:" for a server elsewhere, or "command:" for one you run in your computer, not both`);
 	if (url !== undefined && !remoteUrl(url)) errors.push(`"url: ${url}" is not an https address`);
-	if (
-		api !== undefined &&
-		(command !== undefined || api !== "gmail" || url !== "https://gmail.googleapis.com/gmail/v1/users/me")
-	)
-		errors.push('the built-in API is "gmail" at https://gmail.googleapis.com/gmail/v1/users/me');
+	if (apiName !== undefined && (command !== undefined || builtIn === undefined || url !== builtIn.url))
+		errors.push(
+			`a built-in API is one of ${Object.entries(REST_APIS)
+				.map(([name, { url }]) => `"${name}" at ${url}`)
+				.join(", ")}`,
+		);
 	const auth = read.one("auth") ?? "none";
 	if (auth !== "none" && auth !== "key" && auth !== "oauth")
 		errors.push(`"auth: ${auth}": use none, key (the owner types one in) or oauth (the owner signs in)`);
@@ -175,21 +182,19 @@ export function parseConnection(
 	const client = read.one("client");
 	const scopes = read.values.has("scopes") ? read.list("scopes") : undefined;
 	if (
-		api === "gmail" &&
+		builtIn !== undefined &&
 		(auth !== "oauth" ||
 			client !== "google" ||
 			scopes === undefined ||
-			!scopes.includes("https://www.googleapis.com/auth/gmail.readonly") ||
-			!scopes.every((scope) =>
-				[
-					"https://www.googleapis.com/auth/gmail.readonly",
-					"https://www.googleapis.com/auth/gmail.send",
-					"https://www.googleapis.com/auth/gmail.modify",
-				].includes(scope),
-			) ||
+			!builtIn.required.every((scope) => scopes.includes(scope)) ||
+			!scopes.every((scope) => (builtIn.scopes as readonly string[]).includes(scope)) ||
 			new Set(scopes).size !== scopes.length)
 	)
-		errors.push('Gmail uses OAuth client "google", includes gmail.readonly, and may add gmail.send or gmail.modify');
+		errors.push(
+			`${builtIn.service} uses OAuth client "google", asks for ${builtIn.required.join(" and ")}, and may add ${builtIn.scopes
+				.filter((scope) => !(builtIn.required as readonly string[]).includes(scope))
+				.join(" or ")}`,
+		);
 	if (auth !== "oauth" && (client !== undefined || scopes !== undefined))
 		errors.push(`"client" and "scopes" are for a server the owner signs in to: add "auth: oauth" or drop them`);
 	if (client !== undefined && client !== "google" && !/^[\w.-]{1,200}$/.test(client))
@@ -286,6 +291,12 @@ export function parseConnection(
 			}
 		}
 		if (needs !== undefined && auth !== "oauth") errors.push(`"needs" is for a server the owner signs in to`);
+		if (needs !== undefined && builtIn !== undefined) {
+			const allowed: readonly string[] = builtIn.scopes;
+			const beyond = [...new Set(Object.values(needs).flat())].filter((scope) => !allowed.includes(scope));
+			if (beyond.length > 0)
+				errors.push(`${builtIn.service}'s tools may need only ${allowed.join(", ")}: drop ${beyond.join(", ")}`);
+		}
 	}
 	if (why.length > 2000) errors.push("say why in a few lines");
 	if (errors.length > 0) return { errors };
@@ -295,7 +306,7 @@ export function parseConnection(
 			service,
 			...(url === undefined ? {} : { url }),
 			...(command === undefined ? {} : { command }),
-			...(api === undefined ? {} : { api: api as NonNullable<Connection["api"]> }),
+			...(api === undefined ? {} : { api }),
 			auth: auth as AuthKind,
 			...(ask === "always" ? { ask: "always" as const } : {}),
 			...(client === undefined ? {} : { client }),
@@ -312,19 +323,6 @@ export function parseConnection(
 			why,
 		},
 	};
-}
-
-/**
- * `text` (a connection file) asking for `scopes` instead: its `scopes:` line replaced, or added after `client:` (else
- * `auth:`), every other byte as it was. Undefined when the result would not read back as those scopes.
- */
-export function withScopes(name: string, text: string, scopes: readonly string[]): string | undefined {
-	const rewritten = withList(text, "scopes", scopes, ["client", "auth"]);
-	if (rewritten === undefined) return undefined;
-	const parsed = parseConnection(name, rewritten);
-	if ("errors" in parsed) return undefined;
-	const read = parsed.connection.scopes ?? [];
-	return read.length === scopes.length && read.every((scope, i) => scope === scopes[i]) ? rewritten : undefined;
 }
 
 /**
@@ -875,9 +873,23 @@ async function readPrivate<T>(path: string): Promise<T | undefined> {
 }
 
 /**
+ * What an account of `connection` may ask for: the scopes its file asks for by default and every scope its tools
+ * `needs`. Undefined for a file that names no scopes: its sign-in asks for what the server offers, and takes no choice.
+ */
+export function ceilingOf(connection: Pick<Connection, "scopes" | "needs">): readonly string[] | undefined {
+	if (connection.scopes === undefined) return undefined;
+	return [...new Set([...connection.scopes, ...Object.values(connection.needs ?? {}).flat()])];
+}
+
+/** The scopes every account of `connection` asks for: a built-in API's required ones; none otherwise. */
+export const requiredOf = (connection: Pick<Connection, "api">): readonly string[] =>
+	connection.api === undefined ? [] : REST_APIS[connection.api].required;
+
+/**
  * Whether `credentials` were given for `connection` as its accepted file says it now: the same URL, and for a sign-in,
- * the client it names and every scope it asks for, asked at that sign-in. A file that widens its scopes or changes its
- * client needs a new sign-in; the old token is never stretched to cover it.
+ * the client it names, the scope every account asks for, and nothing beyond what the file lets an account ask for.
+ * Each account asks for its own scopes: changing the file's default leaves them be, while narrowing what may be asked
+ * or changing the client needs a new sign-in; the old token is never stretched to cover it.
  */
 export function fits(credentials: Credentials | undefined, connection: Connection): credentials is Credentials {
 	if (credentials === undefined || credentials.url !== connection.url) return false;
@@ -888,12 +900,28 @@ export function fits(credentials: Credentials | undefined, connection: Connectio
 	} else if (connection.client !== undefined && credentials.oauth.client.id !== connection.client) return false;
 	// what was asked, not what was granted: a scope the owner left out at the consent screen is theirs to add again
 	const asked = credentials.oauth.server.scopes ?? [];
-	return (connection.scopes ?? []).every((scope) => asked.includes(scope));
+	const ceiling = ceilingOf(connection);
+	// a sign-in that asked for nothing was given the server's default, which a file naming scopes does not allow
+	if (ceiling !== undefined && (asked.length === 0 || !asked.every((scope) => ceiling.includes(scope)))) return false;
+	return requiredOf(connection).every((scope) => asked.includes(scope));
 }
 
 /** The scopes a sign-in was given: as the server said when it granted them, else as they were asked for. */
 export const grantedScopes = (credentials: Credentials): readonly string[] =>
 	"oauth" in credentials ? (credentials.oauth.tokens.scopes ?? credentials.oauth.server.scopes ?? []) : [];
+
+/**
+ * Whether `credentials` may call `tool` of `connection`, as far as the daemon can tell: the tool needs no scope, the
+ * sign-in records none, or it was given one of those the tool needs. The service's token stays what enforces it.
+ */
+export function givenFor(credentials: Credentials, connection: Pick<Connection, "needs">, tool: string): boolean {
+	const anyOf = connection.needs?.[tool];
+	if (anyOf === undefined || !("oauth" in credentials)) return true;
+	const { tokens, server } = credentials.oauth;
+	if (tokens.scopes === undefined && server.scopes === undefined) return true;
+	const given = grantedScopes(credentials);
+	return anyOf.some((scope) => given.includes(scope));
+}
 
 /** Account `account` of connection `name`: its credentials, if any. */
 export const credentialsOf = (home: string, name: string, account: string) =>

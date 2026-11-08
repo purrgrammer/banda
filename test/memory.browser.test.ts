@@ -1,4 +1,8 @@
-/** Real owner controls against a throwaway daemon: scope, persistence, and recoverable stale edits. */
+/**
+ * Real owner controls against a throwaway daemon: an agent's Memory tab holds only its facts, Settings holds every
+ * scope, drafts survive unavailability, and stale edits recover. On the phone a row's actions sit behind its menu
+ * and Edit is a drawer whose unsaved draft survives closing.
+ */
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,11 +19,22 @@ import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const button = (text: string) =>
 	`[...document.querySelectorAll('button')].find(el => el.getClientRects().length > 0 && el.textContent.trim() === ${JSON.stringify(text)})`;
+const labeled = (label: string) =>
+	`[...document.querySelectorAll('[aria-label]')].find(el => el.getClientRects().length > 0 && el.getAttribute('aria-label') === ${JSON.stringify(label)})`;
 const input = (label: string) => `document.querySelector('input[aria-label="${label}"]')`;
+const visible = (text: string) =>
+	`[...document.querySelectorAll('span,p')].some(el => el.getClientRects().length > 0 && el.textContent.trim() === ${JSON.stringify(text)})`;
 async function click(page: Page, selector: string) {
 	await page.until(selector);
 	await page.run(
 		`(() => {const el=${selector}; el.scrollIntoView({block:'nearest'}); el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:0})); el.click();})()`,
+	);
+}
+/** Radix menu triggers open on pointerdown, not click. */
+async function tap(page: Page, selector: string) {
+	await page.until(selector);
+	await page.run(
+		`(() => {const el=${selector}; el.scrollIntoView({block:'nearest'}); el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerId:1})); el.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,button:0,pointerId:1})); el.click();})()`,
 	);
 }
 async function fill(page: Page, label: string, value: string) {
@@ -33,6 +48,7 @@ for (const width of [390, 1440])
 	it.skipIf(!hasChrome())(
 		`memory scopes and errors work through the app at ${width}px`,
 		async () => {
+			const phone = width < 768;
 			const home = await tempHome();
 			await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
 			const models = createModels();
@@ -75,32 +91,61 @@ for (const width of [390, 1440])
 				const address = server.httpServer!.address();
 				if (!address || typeof address === "string") throw new Error("No app port");
 				await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
-					await page.until(`document.body.textContent.includes('Mara')`);
+					/** Open a fact's editor: in place on the desktop, behind the row's menu and a drawer on the phone. */
+					const edit = async (text: string) => {
+						if (phone) {
+							await tap(page, labeled(`More: ${text}`));
+							await click(page, labeled(`Edit: ${text}`));
+						} else await click(page, labeled(`Edit: ${text}`));
+					};
+					const forget = async (text: string) => {
+						if (phone) {
+							await tap(page, labeled(`More: ${text}`));
+							await click(page, labeled(`Forget: ${text}`));
+						} else await click(page, labeled(`Forget: ${text}`));
+					};
+					await page.until(`document.body.textContent.includes('Mara')`, 30000);
 					await page.run(`location.hash='#/a/mara'`);
 					// the panel starts closed at every width: the name opens it
 					await click(page, `document.querySelector('[aria-label="Mara: open its panel"]')`);
 					await click(page, button("Memory"));
+					// the agent's tab holds only its facts: one scope, no shared tab
+					await page.until(input("New agent fact"));
+					expect(await page.run(`!!(${button("Shared with the band")})`)).toBe(false);
 					await fill(page, "New agent fact", "Compare direct trains first");
-					await click(page, button("Shared with the band"));
-					await click(page, button("This agent"));
-					expect(await page.run(`${input("New agent fact")}.value`)).toBe("Compare direct trains first");
 					await click(page, button("Remember"));
 					await page.until(`document.body.textContent.includes('Compare direct trains first')`);
-					await click(page, button("Shared with the band"));
-					await fill(page, "New shared fact", "Use metric units");
-					await click(page, button("Remember"));
-					await page.until(`document.body.textContent.includes('Use metric units')`);
 					await page.run(`location.hash='#/a/atlas'`);
+					if (phone) await page.until(`!!(${button("Memory")})`);
 					await click(page, button("Memory"));
 					await page.until(input("New agent fact"));
 					expect(await page.run(`document.body.textContent.includes('Compare direct trains first')`)).toBe(false);
-					await click(page, button("Shared with the band"));
-					await page.until(`document.body.textContent.includes('Use metric units')`);
+					// Settings → Memory: the shared facts, then each agent as a section over the same set
 					await page.run(`location.hash='#/settings'`);
+					await click(page, button("Memory"));
 					await page.until(input("New shared fact"));
-					expect(await page.run(`document.body.textContent.includes('Compare direct trains first')`)).toBe(false);
-					await click(page, `document.querySelector('[aria-label="Edit: Use metric units"]')`);
+					await fill(page, "New shared fact", "Use metric units");
+					await click(page, button("Remember"));
+					await page.until(visible("Use metric units"));
+					// an agent's facts sit under its row, collapsed until opened
+					expect(await page.run(visible("Compare direct trains first"))).toBe(false);
+					await click(page, labeled("Mara's memory"));
+					await page.until(visible("Compare direct trains first"));
+					// a fact about someone else is declared, and shared memory refuses it toward an agent's own
+					await click(page, `document.querySelectorAll('[aria-label="About someone else"]')[0]`);
+					await page.until(
+						`document.body.textContent.includes(${JSON.stringify("never in the band's shared memory")})`,
+					);
+					await click(page, `document.querySelectorAll('[aria-label="About someone else"]')[0]`);
+					// drafts survive memory being unreachable
+					await edit("Use metric units");
 					await fill(page, "The fact", "Use kilometres");
+					if (phone) {
+						// the drawer's unsaved draft survives closing it
+						await click(page, button("Close"));
+						await edit("Use metric units");
+						expect(await page.run(`${input("The fact")}.value`)).toBe("Use kilometres");
+					}
 					await fill(page, "New shared fact", "Keep this unsaved draft");
 					const file = join(home, "workspace", "memory", "global.md");
 					const saved = await readFile(file, "utf8");
@@ -110,18 +155,19 @@ for (const width of [390, 1440])
 					await page.until(`!document.body.textContent.includes("Can't read memory")`);
 					expect(await page.run(`${input("The fact")}?.value`)).toBe("Use kilometres");
 					expect(await page.run(`${input("New shared fact")}?.value`)).toBe("Keep this unsaved draft");
+					// a stale edit reports the conflict and keeps the draft, never overwriting newer words
 					const shared = (await api<MemoryView>("/memory")).facts.find((fact) => fact.scope === "global")!;
 					await api(`/memory/${shared.id}`, "PUT", { text: "Use metres" });
 					await page.until(`document.body.textContent.includes('Use metres')`);
 					await click(page, button("Save"));
 					await page.until(`document.querySelector('[role="alert"]')?.textContent.includes('changed or was removed')`);
 					expect(await page.run(`${input("The fact")}.value`)).toBe("Use kilometres");
-					await click(page, button("Cancel"));
-					await click(page, `document.querySelector('[aria-label="Edit: Use metres"]')`);
+					await click(page, button(phone ? "Close" : "Cancel"));
+					await edit("Use metres");
 					await fill(page, "The fact", "Use kilometres");
 					await click(page, button("Save"));
-					await page.until(`document.body.textContent.includes('Use kilometres')`);
-					await click(page, `document.querySelector('[aria-label="Forget: Use kilometres"]')`);
+					await page.until(visible("Use kilometres"));
+					await forget("Use kilometres");
 					await page.until(`document.querySelector('[role="alertdialog"]')`);
 					expect(
 						await page.run(
@@ -141,5 +187,5 @@ for (const width of [390, 1440])
 				await daemon.close();
 			}
 		},
-		90000,
+		120000,
 	);

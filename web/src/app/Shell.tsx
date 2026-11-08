@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FACE } from "../../../src/core/choices.ts";
-import type { CompanionView } from "../../../src/server/api.ts";
+import type { CompanionView, FactView } from "../../../src/server/api.ts";
 import { centreBand, pinRow, useBand } from "../areas/band.ts";
 import { archiveGroup, setGroupLimits } from "../areas/groups.ts";
 import { actOnRoutine, clickKey } from "../areas/routines.ts";
@@ -15,7 +15,7 @@ import { useTiers } from "../areas/tiers.ts";
 import { Band, BandNotice } from "../chat/Band.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
 import { Face, FaceStack } from "../chat/Face.tsx";
-import { MemorySettings } from "../chat/MemorySettings.tsx";
+import { MemorySettings, type NewFactSpec } from "../chat/MemorySettings.tsx";
 import { AgentPanel, firstTab, Panel, Routines } from "../chat/Panel.tsx";
 import { AppSettings, Archive, Personality, SettingsPage, ThinkingTiers } from "../chat/Settings.tsx";
 import { SkillCatalogue } from "../chat/Skill.tsx";
@@ -69,7 +69,11 @@ const go = (where: Where) => {
 const openRow = (row: { to: Where }) => go(row.to);
 
 const SERVICES = [
-	{ id: "gmail", name: "Gmail", does: "Read and draft email" },
+	{ id: "github", name: "GitHub", does: "Pull requests, issues, checks" },
+	{ id: "gmail", name: "Gmail", does: "Read and send email" },
+	{ id: "calendar", name: "Google Calendar", does: "Read and change your events" },
+	{ id: "contacts", name: "Google Contacts", does: "Find people and their addresses" },
+	{ id: "drive", name: "Google Drive", does: "Find and read your files" },
 	{ id: "linear", name: "Linear", does: "Issues and cycles" },
 	{ id: "slack", name: "Slack", does: "Channels and messages" },
 	{ id: "notion", name: "Notion", does: "Pages and databases" },
@@ -163,6 +167,26 @@ function Main() {
 	const agents = useMemo(() => chatAgents(shell.agents, companion), [shell.agents, companion]);
 	// archived agents leave the band, but a group's history and Settings still name them
 	const archived = useMemo(() => archivedAgents(shell.agents, companion), [shell.agents, companion]);
+	// who wrote a fact, for the owner alone: the agent's context never carries it (DESIGN.md "Memory")
+	const originOf = (fact: FactView) => {
+		const from = fact.from;
+		if (from === undefined || "owner" in from) return undefined;
+		const wrote =
+			shell.rows.find((row) => row.chat === from.chat)?.agent ?? (fact.scope === "agent" ? fact.agent : undefined);
+		const name = wrote === undefined ? "an agent" : whoOf([...agents, ...archived], wrote).name;
+		return from.routine === undefined ? `Saved by ${name}` : `Saved by ${name}'s routine`;
+	};
+	const factActions = {
+		onAdd: async (fact: NewFactSpec) => {
+			showMemory(await actOnFact({ action: "add", ...fact }));
+		},
+		onEdit: async (id: string, text: string) => {
+			showMemory(await actOnFact({ action: "edit", id, text }));
+		},
+		onForget: async (id: string) => {
+			showMemory(await actOnFact({ action: "delete", id }));
+		},
+	};
 	const restore = (id: string) => setAgentState(id, "active", shell.agents).then(showAgents);
 	// what agents changed that waits for the owner: a routine one wrote, its own file
 	const waiting = useMemo(() => {
@@ -422,23 +446,10 @@ function Main() {
 							memory={
 								<MemorySettings
 									agent={{ id: where.id, name: who.name }}
+									phone={phone}
 									memory={shell.memory}
-									onAdd={async (text, scope) => {
-										showMemory(
-											await actOnFact({
-												action: "add",
-												text,
-												scope,
-												...(scope === "agent" ? { agent: where.id } : {}),
-											}),
-										);
-									}}
-									onEdit={async (id, text) => {
-										showMemory(await actOnFact({ action: "edit", id, text }));
-									}}
-									onForget={async (id) => {
-										showMemory(await actOnFact({ action: "delete", id }));
-									}}
+									originOf={originOf}
+									{...factActions}
 								/>
 							}
 							onIdentity={(next) =>
@@ -540,16 +551,14 @@ function Main() {
 						bring={<BringSettings />}
 						memory={
 							<MemorySettings
+								agents={[
+									...agents.map(({ id, name, face }) => ({ id, name, face })),
+									...archived.map(({ id, name, face }) => ({ id, name, face, archived: true })),
+								]}
+								phone={phone}
 								memory={shell.memory}
-								onAdd={async (text) => {
-									showMemory(await actOnFact({ action: "add", text, scope: "global" }));
-								}}
-								onEdit={async (id, text) => {
-									showMemory(await actOnFact({ action: "edit", id, text }));
-								}}
-								onForget={async (id) => {
-									showMemory(await actOnFact({ action: "delete", id }));
-								}}
+								originOf={originOf}
+								{...factActions}
 							/>
 						}
 						data={{
@@ -616,7 +625,6 @@ function Main() {
 								.then(showCapabilities)
 								.catch(() => {});
 						}}
-						connect={(name, close) => <ConnectFlow connection={name} onDismiss={close} />}
 						onRestore={(who) => (who.id === undefined ? undefined : restore(who.id))}
 						onRestoreGroup={(room) => archiveGroup(room, false)}
 						onGroupLimits={(limits) => setGroupLimits(limits)}
@@ -651,7 +659,8 @@ function Main() {
 					id: name,
 					name: view?.accepted?.connection?.service ?? shipped?.connection.service ?? name,
 					url: view?.accepted?.connection?.url ?? shipped?.connection.url,
-					does: name === "github" ? "Pull requests, issues, checks" : (view?.accepted?.connection?.where ?? ""),
+					// what banda says the service is for, else where an added server is
+					does: SERVICES.find((service) => service.id === name)?.does ?? view?.accepted?.connection?.where ?? "",
 					accounts: freshAccounts(view).map((account) => account.label),
 					managed: view?.agents !== undefined,
 					stale: (view?.accounts ?? []).filter((account) => account.stale === true).map((account) => account.label),
@@ -672,25 +681,10 @@ function Main() {
 							.map(({ name }) => ({ key: `harness:${name}`, card: <HarnessConnectionTile name={name} /> }))}
 						onManage={(connection) => go({ name: "connections", connection })}
 						services={[
-							...(services.length === 0
-								? [{ id: "github", name: "GitHub", does: "Pull requests, issues, checks", accounts: [] }]
-								: services),
+							...services,
 							...SERVICES.filter((service) => !services.some((existing) => existing.id === service.id)),
 						]}
-						connect={(service, close) =>
-							service.accounts === undefined ? null : capabilities?.connections.find((each) => each.name === service.id)
-									?.agents !== undefined ? (
-								<Button
-									variant="outline"
-									className="self-start"
-									onClick={() => go({ name: "connections", connection: service.id })}
-								>
-									Manage connection
-								</Button>
-							) : (
-								<ConnectFlow connection={service.id} onDismiss={close} />
-							)
-						}
+						connect={(service, close) => <ConnectFlow connection={service.id} onClose={close} />}
 					/>
 				</SettingsPage>
 			);
@@ -702,11 +696,16 @@ function Main() {
 		<div className="flex h-svh bg-paper text-ink">
 			{showBand ? band : null}
 			{phone && where.name === "home" ? null : <main className="flex min-w-0 flex-1">{main}</main>}
-			{making ? <NewSheet open={making} onOpenChange={setMaking} agents={agents} onGo={go} /> : null}
+			{/* mounted while closed, so Esc or a click outside keeps a half-written agent */}
+			<NewSheet open={making} onOpenChange={setMaking} agents={agents} onGo={go} />
 			<BrowserDialog who={(chat) => whoOf(agents, shell.rows.find((each) => each.chat === chat)?.agent ?? "sancho")} />
 			<SearchDialog
 				open={searching}
 				onOpenChange={setSearching}
+				rows={rows}
+				agents={agents}
+				skills={skillSummaries}
+				phone={phone}
 				whoOf={(agent) => whoOf(agents, agent)}
 				groupName={(room) => shell.groups?.find((group) => group.room === room)?.name ?? "a group"}
 				onGo={go}

@@ -2,10 +2,12 @@
  * Whether a run left the owner unanswered (DESIGN.md "Messages"): it answered the owner (the newest input in its chat is
  * theirs, a message or a steer, or a task of theirs going on: a nudge), and since the owner last
  * acted there (wrote, or answered an ask: a question, an approval, the browser handed back) no act of the run toward
- * them went through: a `message_user` call (text, parts, a question, a reaction). The final text is notes whatever this says: an unanswered run is nudged, never voiced.
+ * them went through: a speaking call (`message_user`, `ask_user`, `react`, `publish`, `connect`, …). The final text is notes whatever this says: an unanswered run is nudged, never voiced.
  *
  * Pure, over a chat's rows newest first, so the rule is tested on its own.
  */
+
+import { isMessageTool } from "./toolsets.ts";
 
 /** The owner's peer on every gateway (`gateway.ts`'s `OWNER`). */
 const OWNER = "owner";
@@ -21,9 +23,6 @@ export type Row =
 	| { readonly role: "assistant"; readonly calls: readonly { readonly id: string; readonly name: string }[] }
 	| { readonly role: "tool"; readonly call: string; readonly error: boolean }
 	| { readonly role: "wait"; readonly outcome: string; readonly by?: { readonly peer: string } };
-
-/** The tools whose call, once it went through, is an act toward the owner. */
-const ACTS: ReadonlySet<string> = new Set(["message_user", "message_group"]);
 
 /**
  * Undefined when the run that ended at the newest row acted toward the owner, or answered no one's input of theirs;
@@ -52,7 +51,7 @@ export function unanswered(newestFirst: Iterable<Row>): { readonly nudged: numbe
 			case "assistant":
 				if (answered) break;
 				for (const call of row.calls) {
-					if (ACTS.has(call.name) && through.get(call.id) === true) return undefined;
+					if (isMessageTool(call.name) && through.get(call.id) === true) return undefined;
 				}
 		}
 	}

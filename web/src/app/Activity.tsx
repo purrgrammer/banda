@@ -48,6 +48,7 @@ import {
 	type ToolCall,
 } from "../lib/api.ts";
 import { userFiles } from "../lib/chat.ts";
+import { useReturnFocus } from "../lib/return-focus.ts";
 import { type Transcript, useTranscript } from "../lib/transcript.ts";
 import { FilePart } from "./FilePart.tsx";
 
@@ -71,6 +72,8 @@ export function ActivitySheet({
 }) {
 	const [index, setIndex] = useState(0);
 	const [depth, setDepth] = useState<Depth>("activity");
+	// mounted open, from state, with no Radix trigger: closed, focus returns to what opened it
+	const returnFocus = useReturnFocus(true);
 	const heading = useRef<HTMLHeadingElement>(null);
 	const target = targets[index];
 	if (!target) return null;
@@ -92,6 +95,7 @@ export function ActivitySheet({
 					event.preventDefault();
 					heading.current?.focus();
 				}}
+				onCloseAutoFocus={returnFocus}
 			>
 				<SheetHeader className="gap-2 border-b border-line-soft pr-12">
 					{depth === "transcript" ? (

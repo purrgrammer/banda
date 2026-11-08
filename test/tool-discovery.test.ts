@@ -26,7 +26,7 @@ it("uses pi search, preserves loaded tools after reopen, and filters revoked aut
 		await fixture.setAllowed(false);
 		const revoked = await fixture.run("revoked");
 		expect(getCurrentTools(revoked.messages).map((tool) => tool.name)).not.toContain("lookup");
-		expect(getCurrentSystemPrompt(revoked.messages)).not.toContain("secondary: 1 tools on demand");
+		expect(getCurrentSystemPrompt(revoked.messages)).not.toMatch(/On demand: .*\bother\b/);
 		expect(
 			revoked.messages.filter((message) => message.role === "toolResult" && message.toolName === "lookup"),
 		).toHaveLength(2);

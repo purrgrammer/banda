@@ -6,6 +6,7 @@
 import type { MutableModels } from "@earendil-works/pi-ai";
 import type { Extension, Harness, ModelRef, Registry, SessionDocToken } from "@earendil-works/pi-durable";
 import type { BlobStore } from "../../core/blobs.ts";
+import type { searchService } from "../../core/search-service.ts";
 import type { defineCore } from "../../core/turn.ts";
 import type { Config } from "../../home.ts";
 import type { Workspace } from "../agents.ts";
@@ -25,6 +26,7 @@ import type { MemoryDesk } from "../memory.ts";
 
 /** What an area may use before the store opens. */
 export type Boot = {
+	readonly retrieval: ReturnType<typeof searchService>;
 	readonly core: ReturnType<typeof defineCore>;
 	readonly blobs: BlobStore;
 	readonly config: Config;

@@ -41,6 +41,7 @@ export async function openConnected({
 	install,
 	shipped,
 	classify,
+	fetch: fetcher,
 	registry = createRegistry(),
 }: {
 	home: string;
@@ -56,6 +57,8 @@ export async function openConnected({
 	shipped?: string;
 	/** How a listing's tools are guessed, for this test: none, unless it says. */
 	classify?: CapabilityOptions["classify"];
+	/** How the daemon reaches services, when a test fakes one that is not on this machine (Google's). */
+	fetch?: typeof fetch;
 }) {
 	const box = openBox(hostBox(home), () => {});
 	const faux = fauxProvider();
@@ -103,6 +106,7 @@ export async function openConnected({
 		...(fault === undefined ? {} : { fault }),
 		...(shipped === undefined ? {} : { shipped }),
 		...(classify === undefined ? {} : { classify }),
+		...(fetcher === undefined ? {} : { fetch: fetcher }),
 		// the fake servers are on this machine: the tests probe them as they are
 		probe: fetch,
 		agentChanged: core.agentChanged,
@@ -148,14 +152,17 @@ export async function signInAsOwner(
 		fake,
 		consent = true,
 		agent = LEAD,
+		choice = {},
 	}: {
+		/** What the account asks for, and the account signed in again. */
+		choice?: { readonly scopes?: readonly string[]; readonly account?: string };
 		fake?: { typeCode(code: string, consent?: boolean): void | Promise<void> };
 		consent?: boolean;
 		/** The agent the account is switched on for: the lead unless said; null for none (as from Settings). */
 		agent?: string | null;
 	} = {},
 ): Promise<{ readonly ok: boolean; readonly words: string }> {
-	const started = await capabilities.signIn(name, context, agent ?? undefined);
+	const started = await capabilities.signIn(name, context, agent ?? undefined, choice);
 	if ("code" in started) {
 		if (fake === undefined) throw new Error("a sign-in by code needs the fake server to type it on");
 		await fake.typeCode(started.code, consent);
@@ -189,6 +196,7 @@ export function connectionFile({
 	auth = "none",
 	client,
 	scopes,
+	account,
 	reads = [],
 	money = [],
 	why = "To see your day and put things in it.",
@@ -199,6 +207,8 @@ export function connectionFile({
 	auth?: "none" | "key" | "oauth";
 	client?: string;
 	scopes?: readonly string[];
+	/** The read and field that name the account, `get_me.login`. */
+	account?: string;
 	reads?: readonly string[];
 	money?: readonly string[];
 	why?: string;
@@ -211,6 +221,7 @@ export function connectionFile({
 		...(auth === "none" ? [] : [`auth: ${auth}`]),
 		...(client === undefined ? [] : [`client: ${client}`]),
 		...(scopes === undefined ? [] : [`scopes: [${scopes.join(", ")}]`]),
+		...(account === undefined ? [] : [`account: ${account}`]),
 		`reads: [${reads.join(", ")}]`,
 		...(money.length === 0 ? [] : [`money: [${money.join(", ")}]`]),
 		"---",

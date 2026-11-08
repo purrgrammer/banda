@@ -12,6 +12,7 @@ import { Block, type ConnectionRow, Connections, Permissions, RowOf, Rows } from
 import { allowGrain, allowHost, revokePermission, switchAccount, switchPublicConnection } from "../lib/api.ts";
 import { usedWords } from "../lib/permissions.ts";
 import { usePhone } from "../lib/phone.ts";
+import { useReturnFocus } from "../lib/return-focus.ts";
 import { showCapabilities, showControl, useShell } from "../lib/shell.ts";
 import { ConnectFlow } from "./ConnectFlow.tsx";
 import { ConnectionToolSettings } from "./ConnectionToolSettings.tsx";
@@ -31,12 +32,6 @@ export function connectionRows(capabilities: CapabilitiesView | undefined, agent
 			connection: view.accepted?.connection?.service ?? view.name,
 			id: view.name,
 			url: view.accepted?.connection?.url,
-			tools: view.tools,
-			...(view.review !== true && view.tools.some((tool) => tool.classed !== undefined)
-				? {
-						settings: <ConnectionToolSettings view={view} service={view.accepted?.connection?.service ?? view.name} />,
-					}
-				: {}),
 			accounts:
 				view.accepted?.connection?.auth === "none" && view.agents !== undefined
 					? [{ login: "No sign-in needed", on: view.agents.includes(agent) }]
@@ -85,11 +80,15 @@ export function AccessTab({
 }) {
 	const [error, setError] = useState<string | undefined>(undefined);
 	const [adding, setAdding] = useState(false);
+	// opened from state (the Add button), with no Radix trigger: closed, focus returns to that button
+	const returnFocus = useReturnFocus(adding);
 	const [pick, setPick] = useState<string>();
 	/** The connection whose Allow without asking is open. */
 	const [ahead, setAhead] = useState<string>();
 	const rows = connectionRows(capabilities, agent.id);
 	const used = rows.filter((row) => row.accounts.length > 0);
+	const shipped = (name: string | undefined) =>
+		name !== undefined && name !== "" && capabilities?.shipped?.some((view) => view.name === name) === true;
 	const theirs = (control?.permissions ?? []).filter((permission) => permission.agent === agent.id);
 	// a host allowed is listed with Allow a host, not among the other permissions
 	const hosts = theirs.flatMap((permission) =>
@@ -139,7 +138,6 @@ export function AccessTab({
 		<>
 			<Connections
 				agent={agent.name}
-				compact
 				rows={used}
 				empty={`${agent.name} reaches nothing yet.`}
 				onSwitch={(row, account, on) => {
@@ -166,7 +164,7 @@ export function AccessTab({
 				Add
 			</Button>
 			<Dialog open={adding} onOpenChange={setAdding}>
-				<DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-lg">
+				<DialogContent onCloseAutoFocus={returnFocus} className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-lg">
 					<DialogHeader>
 						<DialogTitle>Add a connection</DialogTitle>
 						<DialogDescription>Choose a connection for {agent.name}.</DialogDescription>
@@ -175,7 +173,15 @@ export function AccessTab({
 						{pick === undefined ? (
 							<>
 								{rows.map((row) => (
-									<Button key={row.id} variant="outline" onClick={() => setPick(row.id)}>
+									<Button
+										key={row.id}
+										variant="outline"
+										onClick={() => {
+											// a shipped connection signs in in its own dialog, never one inside this one
+											if (shipped(row.id)) setAdding(false);
+											setPick(row.id);
+										}}
+									>
 										{row.connection}
 									</Button>
 								))}
@@ -183,19 +189,20 @@ export function AccessTab({
 									Add MCP server
 								</Button>
 							</>
-						) : pick === "" || !capabilities?.shipped?.some((view) => view.name === pick) ? (
+						) : shipped(pick) ? null : (
 							<McpSetup
 								key={pick}
 								{...(pick === "" ? {} : { connection: pick })}
 								agent={agent}
 								onClose={() => setPick(undefined)}
 							/>
-						) : (
-							<ConnectFlow key={pick} connection={pick} agent={agent} onDismiss={() => setPick(undefined)} />
 						)}
 					</div>
 				</DialogContent>
 			</Dialog>
+			{pick !== undefined && shipped(pick) && !adding ? (
+				<ConnectFlow key={pick} connection={pick} agent={agent} onClose={() => setPick(undefined)} />
+			) : null}
 			{error === undefined ? null : <p className="-mt-5 text-meta text-danger">{error}</p>}
 			<HarnessAccess agent={agent} />
 			<Permissions

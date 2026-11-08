@@ -7,7 +7,17 @@ import type { OpenWait } from "../core/status.ts";
 import type { ShownWait } from "./api.ts";
 
 /** The tools whose names a label must never say: every tool the daemon has, and the words they are known by. */
-export const TOOL_NAMES = ["bash", "read", "write", "edit", "message_user", "message_group", "schedule"] as const;
+export const TOOL_NAMES = [
+	"bash",
+	"read",
+	"write",
+	"edit",
+	"message_user",
+	"message_group",
+	"ask_user",
+	"propose_avatar",
+	"schedule",
+] as const;
 
 /** Whether `text` holds a tool's name as a word of its own (so `readme.md` is fine, `notes.read` is not). */
 export function namesTool(text: string): boolean {
@@ -36,15 +46,25 @@ function hostOf(url: unknown): string | undefined {
 }
 
 /**
- * The line for a call of `tool` with `args`; undefined for `message_user` and `message_group`, whose message shows itself. Anything
+ * The line for a call of `tool` with `args`; undefined for a speaking tool whose message shows itself at once. Anything
  * unknown is `working`.
  */
 export function doing(tool: string, args: unknown): string | undefined {
 	const given = typeof args === "object" && args !== null ? (args as Record<string, unknown>) : {};
 	switch (tool) {
+		// what shows itself at once says nothing while it runs
 		case "message_user":
 		case "message_group":
+		case "ask_user":
+		case "react":
+		case "connect":
 			return undefined;
+		case "publish": {
+			const name = basename(given.path);
+			return name === undefined ? "publishing a document" : `publishing ${name}`;
+		}
+		case "propose_avatar":
+			return "drawing a face";
 		case "tool_search":
 			return "finding a tool";
 		case "bash":
@@ -59,6 +79,10 @@ export function doing(tool: string, args: unknown): string | undefined {
 			return name === undefined ? "writing a file" : `writing ${name}`;
 		}
 
+		case "search":
+			return "searching conversations and artifacts";
+		case "read_search_result":
+			return "reading a source";
 		case "schedule":
 			return "setting up a routine";
 		case "web_fetch": {

@@ -20,7 +20,7 @@ export const SAY = "say ";
 /**
  * pi-ai models whose faux provider answers each input it has not answered yet (the user messages at the end of the
  * context: one, or several that steered in together) by sending `re: <its text>` with `message_user` (or, for one
- * starting with `REACT`, the reaction `REACTION` alone), then ends the run with the notes `sent: <what it sent>`. When
+ * starting with `REACT`, the reaction `REACTION` alone, with `react`), then ends the run with the notes `sent: <what it sent>`. When
  * every one starts with `SAY`, it ends the run at once with `said: <its text>` for each in its notes, a line each; nudged
  * for that, it sends `re: <its text>` for each line, or, with none, the reaction alone. Each request passes the `model`
  * point.
@@ -56,10 +56,14 @@ export function echoModels(faults?: Faults, options?: RegisterFauxProviderOption
 		const calls = texts.flatMap((text) => {
 			if (text === NUDGED)
 				return meant.length === 0
-					? [fauxToolCall("message_user", { reaction: REACTION })]
+					? [fauxToolCall("react", { reaction: REACTION })]
 					: meant.map((said) => fauxToolCall("message_user", { text: `re: ${said}` }));
 			// `react …` is answered with a reaction alone
-			return [fauxToolCall("message_user", text.startsWith(REACT) ? { reaction: REACTION } : { text: `re: ${text}` })];
+			return [
+				text.startsWith(REACT)
+					? fauxToolCall("react", { reaction: REACTION })
+					: fauxToolCall("message_user", { text: `re: ${text}` }),
+			];
 		});
 		return fauxAssistantMessage(calls, { stopReason: "toolUse" });
 	};
@@ -88,7 +92,7 @@ export const nudged = (messages: readonly { role: string; content: unknown }[]):
 
 /** What a model that heeds the nudge does when nothing more needs saying: a reaction. */
 export const heedNudge = () =>
-	fauxAssistantMessage([fauxToolCall("message_user", { reaction: REACTION })], { stopReason: "toolUse" });
+	fauxAssistantMessage([fauxToolCall("react", { reaction: REACTION })], { stopReason: "toolUse" });
 
 /**
  * How a scripted model that heeds the daemon's nudge goes on, when the newest input is one: a reaction, then its

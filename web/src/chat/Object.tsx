@@ -5,6 +5,8 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
+	CalendarIcon,
+	ChevronDownIcon,
 	CircleCheckIcon,
 	CircleDashedIcon,
 	CircleDotIcon,
@@ -12,13 +14,25 @@ import {
 	CircleXIcon,
 	EllipsisIcon,
 	ExternalLinkIcon,
+	FileIcon,
+	FileTextIcon,
+	FileTypeIcon,
+	FolderIcon,
 	GitMergeIcon,
 	GitPullRequestDraftIcon,
 	GitPullRequestIcon,
+	ImageIcon,
 	MailIcon,
+	PhoneIcon,
+	PresentationIcon,
+	SheetIcon,
+	UserRoundIcon,
+	VideoIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -29,6 +43,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
+import { sizeOf } from "../lib/size.ts";
 import { Tile } from "./Cards.tsx";
 
 export type PullRequest = {
@@ -238,9 +253,86 @@ export function ObjectLink({
 		| (PullRequest & { card: "pull-request" })
 		| (Issue & { card: "issue" })
 		| (CheckRun & { card: "check-run" })
-		| (EmailMessage & { card: "email" });
+		| (EmailMessage & { card: "email" })
+		| (CalendarEvent & { card: "event" })
+		| (Person & { card: "contact" })
+		| (DriveFile & { card: "file" });
 	href: string;
 }) {
+	if (object.card === "file") {
+		const Icon = FILE_KIND[object.kind].icon;
+		const url = driveUrl(href) ?? driveUrl(object.url);
+		const name = object.name || "File";
+		return (
+			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
+				<Icon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
+				{url === undefined ? (
+					<span className="min-w-0 truncate" title={name}>
+						{name}
+					</span>
+				) : (
+					<a
+						href={url}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="min-w-0 max-w-80 truncate underline"
+						title={name}
+					>
+						{name}
+					</a>
+				)}
+			</span>
+		);
+	}
+	if (object.card === "contact") {
+		const url = contactsUrl(href) ?? contactsUrl(object.url);
+		return (
+			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
+				<UserRoundIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
+				{url === undefined ? (
+					<span className="min-w-0 truncate" title={object.name}>
+						{object.name}
+					</span>
+				) : (
+					<a
+						href={url}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="min-w-0 max-w-80 truncate underline"
+						title={object.name}
+					>
+						{object.name}
+					</a>
+				)}
+			</span>
+		);
+	}
+	if (object.card === "event") {
+		const url = calendarUrl(href) ?? calendarUrl(object.url);
+		return (
+			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
+				<CalendarIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
+				{url === undefined ? (
+					<span
+						className={cn("min-w-0 truncate", object.status === "cancelled" && "line-through")}
+						title={object.title}
+					>
+						{object.title || "Event"}
+					</span>
+				) : (
+					<a
+						href={url}
+						target="_blank"
+						rel="noopener noreferrer"
+						className={cn("min-w-0 max-w-80 truncate underline", object.status === "cancelled" && "line-through")}
+						title={object.title}
+					>
+						{object.title || "Event"}
+					</a>
+				)}
+			</span>
+		);
+	}
 	if (object.card === "email") {
 		const url = safeObjectUrl(href);
 		return (
@@ -350,6 +442,297 @@ export function EmailCard({
 				{message.body || message.snippet || "No plain text body"}
 			</p>
 			{attachments}
+		</Tile>
+	);
+}
+
+export type CalendarEvent = {
+	readonly title: string;
+	readonly start: string;
+	readonly end: string;
+	readonly allDay: boolean;
+	readonly timeZone: string;
+	readonly location: string;
+	readonly organizer: string;
+	readonly who: string;
+	readonly attendees: number | null;
+	readonly response: "accepted" | "declined" | "tentative" | "needs-action" | "none";
+	readonly status: "confirmed" | "tentative" | "cancelled";
+	readonly description: string;
+	readonly meet?: string | undefined;
+	readonly url?: string | undefined;
+	readonly asOf?: string | undefined;
+};
+
+/** Only Google Calendar's own pages open from an event; the daemon already kept them https. */
+function calendarUrl(value: string | undefined): string | undefined {
+	try {
+		const url = new URL(value ?? "");
+		return url.protocol === "https:" &&
+			url.port === "" &&
+			url.username === "" &&
+			url.password === "" &&
+			(url.hostname === "www.google.com" || url.hostname === "calendar.google.com")
+			? url.href
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** A call's address may be any https host a calendar names; the link says which, so a lookalike is visible. */
+/** The video call services a Join button may open; a link from an invitation to any other host is not one. */
+const CALL_HOSTS = ["meet.google.com", "zoom.us", "teams.microsoft.com", "teams.live.com", "webex.com", "whereby.com"];
+
+export function callUrl(value: string | undefined): URL | undefined {
+	try {
+		const url = new URL(value ?? "");
+		const known = CALL_HOSTS.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
+		return url.protocol === "https:" && url.port === "" && url.username === "" && url.password === "" && known
+			? url
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+const RESPONSE: Record<CalendarEvent["response"], string | undefined> = {
+	accepted: "Going",
+	declined: "Declined",
+	tentative: "Maybe",
+	"needs-action": "Not answered",
+	none: undefined,
+};
+
+/** A date the calendar gives without a time is a day where the owner is, not a UTC midnight. */
+function dayOf(value: string): Date | undefined {
+	const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+	if (match === null) return undefined;
+	const day = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+	return Number.isNaN(day.getTime()) ? undefined : day;
+}
+
+/** When an event is, in the owner's own time: "Mon, Nov 9 · 10:00 – 11:30", or its days for an all-day event. */
+export function eventWhen(event: Pick<CalendarEvent, "start" | "end" | "allDay">): string {
+	const day = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" });
+	if (event.allDay) {
+		const start = dayOf(event.start);
+		const after = dayOf(event.end);
+		if (start === undefined) return event.start;
+		const last = after === undefined ? start : new Date(after.getFullYear(), after.getMonth(), after.getDate() - 1);
+		return last.getTime() <= start.getTime()
+			? `${day.format(start)} · All day`
+			: `${day.format(start)} – ${day.format(last)} · All day`;
+	}
+	const start = new Date(event.start);
+	const end = new Date(event.end);
+	if (Number.isNaN(start.getTime())) return event.start;
+	const hour = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+	if (Number.isNaN(end.getTime())) return `${day.format(start)} · ${hour.format(start)}`;
+	return start.toDateString() === end.toDateString()
+		? `${day.format(start)} · ${hour.format(start)} – ${hour.format(end)}`
+		: `${day.format(start)} ${hour.format(start)} – ${day.format(end)} ${hour.format(end)}`;
+}
+
+/** A read-only event card: when, where, who, and the owner's answer. The description is plain text the daemon bounded. */
+export function EventCard({ event, actions }: { event: CalendarEvent; actions?: ReactNode }) {
+	const cancelled = event.status === "cancelled";
+	const declined = event.response === "declined";
+	const answer = cancelled ? undefined : RESPONSE[event.response];
+	const open = calendarUrl(event.url);
+	const call = callUrl(event.meet);
+	return (
+		<Tile className={cn("flex flex-col gap-2.5 p-3.5", (cancelled || declined) && "bg-paper-2")}>
+			<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-ink-2">
+				<CalendarIcon aria-hidden="true" className="size-3.5 shrink-0" />
+				<span data-event-when="" className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+					{eventWhen(event)}
+				</span>
+				{event.asOf === undefined ? null : <span>as of {event.asOf}</span>}
+				<span className="ml-auto shrink-0">{actions}</span>
+			</div>
+			<h3
+				className={cn(
+					"text-body font-semibold [overflow-wrap:anywhere]",
+					cancelled || declined ? "text-ink-2" : "text-ink",
+					cancelled && "line-through",
+				)}
+			>
+				{event.title || "(No title)"}
+			</h3>
+			{cancelled || answer !== undefined || event.status === "tentative" ? (
+				<span className="flex flex-wrap items-center gap-2 text-meta">
+					{cancelled ? <StatePill icon={CircleSlashIcon} word="Cancelled" live={false} /> : null}
+					{!cancelled && event.status === "tentative" ? (
+						<StatePill icon={CircleDashedIcon} word="Tentative" live={false} />
+					) : null}
+					{answer === undefined ? null : (
+						<span data-event-response={event.response} className={cn(declined ? "text-ink-2" : "text-ink")}>
+							{answer}
+						</span>
+					)}
+				</span>
+			) : null}
+			{event.location || event.organizer || event.who ? (
+				<dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-meta">
+					{(
+						[
+							["Where", event.location],
+							["Organizer", event.organizer],
+							["Guests", event.who],
+						] as const
+					)
+						.filter(([, value]) => value !== "")
+						.map(([label, value]) => (
+							<div key={label} className="contents">
+								<dt className="text-ink-2">{label}</dt>
+								<dd className="text-ink [overflow-wrap:anywhere]">{value}</dd>
+							</div>
+						))}
+				</dl>
+			) : null}
+			{event.description === "" ? null : (
+				<Collapsible className="border-t border-line-soft pt-2">
+					<CollapsibleTrigger asChild>
+						<Button variant="ghost" size="xs" className="group -ml-2 text-ink-2">
+							Description
+							<ChevronDownIcon className="group-data-[state=open]:rotate-180" data-icon="inline-end" />
+						</Button>
+					</CollapsibleTrigger>
+					<CollapsibleContent>
+						<p className="whitespace-pre-wrap pt-1 text-body text-ink [overflow-wrap:anywhere]">{event.description}</p>
+					</CollapsibleContent>
+				</Collapsible>
+			)}
+			{call === undefined && open === undefined ? null : (
+				<span className="flex flex-wrap items-center gap-2">
+					{call === undefined || cancelled ? null : (
+						<Button asChild size="sm">
+							<a href={call.href} target="_blank" rel="noopener noreferrer" title={call.href}>
+								<VideoIcon />
+								Join{call.hostname === "meet.google.com" ? "" : ` on ${call.hostname}`}
+							</a>
+						</Button>
+					)}
+					{open === undefined ? null : (
+						<Button asChild size="sm" variant="ghost">
+							<a href={open} target="_blank" rel="noopener noreferrer">
+								<ExternalLinkIcon />
+								Open in Google Calendar
+							</a>
+						</Button>
+					)}
+				</span>
+			)}
+		</Tile>
+	);
+}
+
+export type Person = {
+	readonly name: string;
+	/** Comma-separated, the primary first. */
+	readonly emails: string;
+	readonly phones: string;
+	readonly organization: string;
+	readonly title: string;
+	/** From the people the owner has emailed, not a saved contact. */
+	readonly other: boolean;
+	readonly photo?: string | undefined;
+	readonly url?: string | undefined;
+	readonly asOf?: string | undefined;
+};
+
+/** Only Google Contacts' own pages open from a person. */
+function contactsUrl(value: string | undefined): string | undefined {
+	try {
+		const url = new URL(value ?? "");
+		return url.protocol === "https:" &&
+			url.port === "" &&
+			url.username === "" &&
+			url.password === "" &&
+			url.hostname === "contacts.google.com"
+			? url.href
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+const initialsOf = (name: string) =>
+	(name.split("@")[0] ?? "")
+		.split(/[\s._-]+/)
+		.filter((word) => /^\p{L}/u.test(word))
+		.slice(0, 2)
+		.map((word) => [...word][0]?.toUpperCase())
+		.join("");
+
+const listOf = (value: string) =>
+	value
+		.split(",")
+		.map((each) => each.trim())
+		.filter(Boolean);
+
+/** A read-only person card: who, where they work, and their addresses and numbers as links that start an email or call. */
+export function ContactCard({ person, actions }: { person: Person; actions?: ReactNode }) {
+	const open = contactsUrl(person.url);
+	const work = [person.title, person.organization].filter(Boolean).join(" · ");
+	const initials = initialsOf(person.name);
+	return (
+		<Tile className="flex flex-col gap-2.5 p-3.5">
+			<div className="flex min-w-0 items-center gap-3">
+				<Avatar size="lg">
+					{person.photo === undefined ? null : <AvatarImage src={person.photo} alt="" referrerPolicy="no-referrer" />}
+					<AvatarFallback>{initials || <UserRoundIcon aria-hidden="true" className="size-4" />}</AvatarFallback>
+				</Avatar>
+				<div className="flex min-w-0 flex-1 flex-col">
+					<h3 className="text-body font-semibold text-ink [overflow-wrap:anywhere]">{person.name}</h3>
+					{work === "" ? null : <span className="text-meta text-ink-2 [overflow-wrap:anywhere]">{work}</span>}
+				</div>
+				{person.asOf === undefined ? null : <span className="text-meta text-ink-2">as of {person.asOf}</span>}
+				<span className="shrink-0 self-start">{actions}</span>
+			</div>
+			{person.emails || person.phones ? (
+				<ul className="flex flex-col gap-1 text-meta">
+					{listOf(person.emails).map((email) => (
+						<li key={email} className="flex min-w-0 items-center gap-2">
+							<MailIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-2" />
+							{/^[^\s@,;?&#/]+@[^\s@,;?&#/]+$/.test(email) ? (
+								<a href={`mailto:${email}`} className="min-w-0 text-ink underline [overflow-wrap:anywhere]">
+									{email}
+								</a>
+							) : (
+								<span className="min-w-0 text-ink [overflow-wrap:anywhere]">{email}</span>
+							)}
+						</li>
+					))}
+					{listOf(person.phones).map((phone) => (
+						<li key={phone} className="flex min-w-0 items-center gap-2">
+							<PhoneIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-2" />
+							<a
+								href={`tel:${phone.replace(/[^\d+*#]/g, "")}`}
+								className="min-w-0 text-ink underline [overflow-wrap:anywhere]"
+							>
+								{phone}
+							</a>
+						</li>
+					))}
+				</ul>
+			) : null}
+			{person.other ? (
+				<span data-contact-other="" className="text-meta text-ink-2">
+					From people you've emailed
+				</span>
+			) : null}
+			{open === undefined ? null : (
+				<span className="flex flex-wrap items-center gap-2">
+					<Button asChild size="sm" variant="ghost">
+						<a href={open} target="_blank" rel="noopener noreferrer">
+							<ExternalLinkIcon />
+							Open in Google Contacts
+						</a>
+					</Button>
+				</span>
+			)}
 		</Tile>
 	);
 }
@@ -567,5 +950,113 @@ export function NotificationCard({
 			</span>
 			{children}
 		</div>
+	);
+}
+
+export type DriveFile = {
+	readonly name: string;
+	readonly kind: "doc" | "sheet" | "slides" | "pdf" | "folder" | "image" | "file";
+	readonly mimeType: string;
+	readonly owner: string;
+	readonly modified: string;
+	readonly size: number | null;
+	readonly description: string;
+	readonly url?: string | undefined;
+	readonly asOf?: string | undefined;
+};
+
+const FILE_KIND: Record<DriveFile["kind"], { readonly icon: LucideIcon; readonly word: string; readonly app: string }> =
+	{
+		doc: { icon: FileTextIcon, word: "Google Doc", app: "Google Docs" },
+		sheet: { icon: SheetIcon, word: "Google Sheet", app: "Google Sheets" },
+		slides: { icon: PresentationIcon, word: "Google Slides", app: "Google Slides" },
+		pdf: { icon: FileTypeIcon, word: "PDF", app: "Google Drive" },
+		folder: { icon: FolderIcon, word: "Folder", app: "Google Drive" },
+		image: { icon: ImageIcon, word: "Image", app: "Google Drive" },
+		file: { icon: FileIcon, word: "File", app: "Google Drive" },
+	};
+
+/** Only Google's own pages for a file open from it; the daemon already kept them https. */
+function driveUrl(value: string | undefined): string | undefined {
+	try {
+		const url = new URL(value ?? "");
+		return url.protocol === "https:" &&
+			url.port === "" &&
+			url.username === "" &&
+			url.password === "" &&
+			(url.hostname === "docs.google.com" || url.hostname === "drive.google.com")
+			? url.href
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** When a file changed, in the owner's own time: "Today, 10:32", "Nov 3" or "Nov 3, 2024". */
+export function fileModified(value: string, now = new Date()): string {
+	const at = new Date(value);
+	if (value === "" || Number.isNaN(at.getTime())) return value;
+	if (at.toDateString() === now.toDateString())
+		return `Today, ${new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(at)}`;
+	return new Intl.DateTimeFormat(undefined, {
+		month: "short",
+		day: "numeric",
+		...(at.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+	}).format(at);
+}
+
+/** What kind of file it is, in words: "Google Doc", "PDF", or a binary's own type. */
+/** Google's own file kinds without a card kind of their own, by the last part of their type. */
+const GOOGLE_KIND: { readonly [kind: string]: string } = {
+	drawing: "Google Drawing",
+	form: "Google Form",
+	site: "Google Site",
+	map: "Google My Map",
+	jam: "Jamboard",
+	script: "Apps Script",
+	shortcut: "Shortcut",
+};
+
+export const fileType = (file: Pick<DriveFile, "kind" | "mimeType">) => {
+	if (file.kind !== "file" || file.mimeType === "") return FILE_KIND[file.kind].word;
+	const google = /^application\/vnd\.google-apps\.([a-z]+)$/.exec(file.mimeType)?.[1];
+	return google === undefined ? file.mimeType : (GOOGLE_KIND[google] ?? "Google file");
+};
+
+/** A read-only file card: what it is, whose, when it changed. The description is plain text the daemon bounded. */
+export function FileCard({ file, actions }: { file: DriveFile; actions?: ReactNode }) {
+	const kind = FILE_KIND[file.kind];
+	const open = driveUrl(file.url);
+	const facts = [
+		fileType(file),
+		file.owner,
+		file.modified === "" ? "" : `Modified ${fileModified(file.modified)}`,
+		file.size === null || file.kind === "folder" ? "" : sizeOf(file.size),
+	].filter((each) => each !== "");
+	return (
+		<Tile className="flex flex-col gap-2.5 p-3.5">
+			<div className="flex min-w-0 items-start gap-2.5">
+				<kind.icon aria-hidden="true" data-file-kind={file.kind} className="mt-0.5 size-5 shrink-0 text-ink-2" />
+				<div className="flex min-w-0 flex-1 flex-col gap-1">
+					<h3 className="text-body font-semibold text-ink [overflow-wrap:anywhere]">{file.name || "(Untitled)"}</h3>
+					<span className="text-meta text-ink-2 [overflow-wrap:anywhere]">{facts.join(" · ")}</span>
+				</div>
+				{file.asOf === undefined ? null : <span className="shrink-0 text-meta text-ink-2">as of {file.asOf}</span>}
+				<span className="shrink-0">{actions}</span>
+			</div>
+			{file.description === "" ? null : (
+				<p className="whitespace-pre-wrap text-meta text-ink [overflow-wrap:anywhere]">{file.description}</p>
+			)}
+			{open === undefined ? null : (
+				<span className="flex flex-wrap items-center gap-2">
+					<Button asChild size="sm" variant="ghost" className="-ml-2">
+						<a href={open} target="_blank" rel="noopener noreferrer">
+							<ExternalLinkIcon />
+							Open in {kind.app}
+						</a>
+					</Button>
+				</span>
+			)}
+		</Tile>
 	);
 }
