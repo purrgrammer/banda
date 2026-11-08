@@ -28,20 +28,35 @@ const urlOf = (fetcher: ReturnType<typeof vi.fn<typeof fetch>>, index: number) =
 const DOC = "application/vnd.google-apps.document";
 
 describe("Google Drive REST connection", () => {
-	it("declares four reads and nothing that writes", () => {
-		expect(DRIVE_TOOLS.map((tool) => tool.name)).toEqual(["get_profile", "search_files", "get_file", "read_file"]);
-		expect(DRIVE_TOOLS.every((tool) => tool.readOnlyHint === true)).toBe(true);
+	it("declares four reads and, apart from them, only the changes that ask the owner", () => {
+		expect(DRIVE_TOOLS.map((tool) => tool.name)).toEqual([
+			"get_profile",
+			"search_files",
+			"get_file",
+			"read_file",
+			"create_doc",
+			"create_sheet",
+			"replace_doc_text",
+			"rename_file",
+			"trash_file",
+		]);
+		expect(DRIVE_TOOLS.filter((tool) => tool.readOnlyHint === true).map((tool) => tool.name)).toEqual([
+			"get_profile",
+			"search_files",
+			"get_file",
+			"read_file",
+		]);
 		expect(REST_APIS.drive.tools).toBe(DRIVE_TOOLS);
 	});
 
-	it("ships a file the registry accepts, with every tool a read, and refuses other scopes", () => {
+	it("ships a file the registry accepts, with the reads it names, and refuses other scopes", () => {
 		const connection = shipped();
 		expect(connection).toMatchObject({
 			api: "drive",
 			service: "Google Drive",
 			scopes: ["https://www.googleapis.com/auth/drive.readonly"],
 		});
-		expect(connection.reads).toEqual(DRIVE_TOOLS.map((tool) => tool.name));
+		expect(connection.reads).toEqual(["get_profile", "search_files", "get_file", "read_file"]);
 		expect(connection.objects?.file?.card).toBe("file");
 		const errors = (from: string, to: string) => {
 			const parsed = parseConnection("drive", source().replace(from, to));
@@ -49,9 +64,9 @@ describe("Google Drive REST connection", () => {
 		};
 		const scope = "https://www.googleapis.com/auth/drive.readonly";
 		for (const other of [
-			`${scope}, https://www.googleapis.com/auth/drive`,
-			"https://www.googleapis.com/auth/drive",
-			"https://www.googleapis.com/auth/drive.file",
+			`${scope}, https://www.googleapis.com/auth/drive.metadata`,
+			"https://www.googleapis.com/auth/drive.appdata",
+			"https://www.googleapis.com/auth/drive.metadata.readonly",
 		])
 			expect(errors(`scopes: [${scope}]`, `scopes: [${other}]`)).toContain("Google Drive uses OAuth client");
 		expect(errors("url: https://www.googleapis.com/drive/v3", "url: https://www.googleapis.com/drive/v2")).toContain(
