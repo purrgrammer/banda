@@ -12,7 +12,7 @@
  * what keeps a chatty chat from making the daemon read a service again and again.
  */
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
-import { type Follow, parseFollow } from "./follow.ts";
+import { type Follow, MAX_KEEP, type Pages, parseFollow } from "./follow.ts";
 import { slackTs } from "./slack-text.ts";
 
 type JsonValue = JsonObject[string];
@@ -43,6 +43,12 @@ export type ObjectRead = {
 	readonly optional?: boolean;
 	/** Made only when the object is followed (its comments): the card does without it. */
 	readonly follow?: boolean;
+	/**
+	 * One list in its answer is a page of more (a channel's history): a watch keeps the newest `keep` items by `by`,
+	 * walking the service's pages to them. Its tool takes `oldest` (items after that value of `by`) and `cursor`, and
+	 * answers `next_cursor` beside the list while it has more; the daemon fills both.
+	 */
+	readonly pages?: Pages;
 };
 
 /** A write that acts on an object: how its arguments name it, and the words its draft says. */
@@ -291,6 +297,14 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					errors.push(`${where}.reads.${as}.optional is a boolean`);
 				if (follow !== undefined && typeof follow !== "boolean")
 					errors.push(`${where}.reads.${as}.follow is a boolean`);
+				const paged = (read as { pages?: unknown } | null)?.pages;
+				const pages = paged === undefined ? undefined : parsePages(paged, as);
+				if (paged !== undefined && pages === undefined)
+					errors.push(
+						`${where}.reads.${as}.pages is {"list": "${as}.<list>", "by": "<field>", "keep": 1 to ${MAX_KEEP}}`,
+					);
+				if (pages !== undefined && ["oldest", "cursor"].some((arg) => arg in ((args as object | null) ?? {})))
+					errors.push(`${where}.reads.${as}: a read with pages leaves oldest and cursor to the daemon`);
 				if (
 					!NAME.test(as) ||
 					reserved(as) ||
@@ -329,6 +343,7 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					args: args as { [arg: string]: JsonValue },
 					...(optional === true ? { optional: true } : {}),
 					...(follow === true ? { follow: true } : {}),
+					...(pages === undefined ? {} : { pages }),
 				};
 			}
 		const fields: { [field: string]: string } = {};
@@ -465,6 +480,10 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 		}
 		if (follow === undefined && Object.values(reads).some((read) => read.follow === true))
 			errors.push(`${where}: a read made only when followed needs a "follow"`);
+		const windows = Object.values(reads).flatMap((read) => (read.pages === undefined ? [] : [read.pages]));
+		if (windows.length > 1) errors.push(`${where}: at most one read has pages`);
+		if (follow !== undefined && windows.length > 0)
+			follow = { ...follow, windows: Object.fromEntries(windows.map(({ list, by }) => [list, by])) };
 		objects[kind] = {
 			card: card as CardKind,
 			name: typeof name === "string" ? name : kind,
@@ -479,6 +498,18 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 		};
 	}
 	return errors.length > 0 ? { errors } : { objects };
+}
+
+/** A read's `pages`, or undefined when it is not one: a list inside the read's own answer, by plain keys. */
+function parsePages(value: unknown, as: string): Pages | undefined {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+	const { list, by, keep, ...rest } = value as { list?: unknown; by?: unknown; keep?: unknown };
+	if (Object.keys(rest).length > 0) return undefined;
+	if (typeof list !== "string" || !PATH.test(list) || !list.startsWith(`${as}.`) || list.split(".").some(reserved))
+		return undefined;
+	if (typeof by !== "string" || !/^[A-Za-z0-9_]{1,64}$/.test(by) || reserved(by)) return undefined;
+	if (typeof keep !== "number" || !Number.isInteger(keep) || keep < 1 || keep > MAX_KEEP) return undefined;
+	return { list, by, keep };
 }
 
 /** A ref's canonical words: `<connection>:<kind>:<its first id, filled>`, what the store and the app name it by. */

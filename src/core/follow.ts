@@ -66,6 +66,12 @@ export type Follow = {
 	 * only when that field is past every item's in the reading before; one that slid in as another left is nothing.
 	 */
 	readonly newest?: { readonly [list: string]: string };
+	/**
+	 * A list the reading keeps a window of (a read's `pages`, never written in `follow` itself), by the field that orders
+	 * it: an item older than the window's oldest that leaves it was pushed off, and one that comes back was there
+	 * before; within the window, an item gone was deleted.
+	 */
+	readonly windows?: { readonly [list: string]: string };
 	/** Paths (and all below them) that change without anything happening. */
 	readonly ignore?: readonly string[];
 	/**
@@ -433,6 +439,25 @@ function isNew(follow: Follow, before: Json, change: Change, field: string): boo
 	});
 }
 
+/**
+ * Whether a list item added or gone is inside its window: an item gone that is older than the oldest the window keeps
+ * now was pushed off, and one come that is older than the oldest it kept before is one that was there already.
+ */
+function inWindow(follow: Follow, before: Json, after: Json, change: Change): boolean {
+	if (change.kind === "changed") return true;
+	const list = change.path.slice(0, -1);
+	const by = Object.entries(follow.windows ?? {}).find(([each]) => matches(pattern(each), list))?.[1];
+	if (by === undefined) return true;
+	const items = atPath(follow, change.kind === "removed" ? after : before, list);
+	const oldest = (Array.isArray(items) ? items : [])
+		.map((item) => (object(item) ? item[by] : undefined))
+		.reduce<Json | undefined>(
+			(low, v) => (v === undefined || (low !== undefined && !later(low, v)) ? low : v),
+			undefined,
+		);
+	return oldest === undefined || !later(oldest, change.item?.[by]);
+}
+
 /** A change, and what it does: as a rule said, or by whose it is. */
 export type Sorted = { readonly change: Change; readonly does: Rule["does"]; readonly says: string };
 
@@ -481,12 +506,13 @@ export function plainWords(text: string, max = SAID): string {
 
 /**
  * A rule's words for a change: each `{path}` from the item (or `{to}`, `{from}`: the value it changed to or from), said
- * as `words` say, plain. A list's item added or gone is the item itself, so its own `to` and `from` (an email's) stay.
+ * as `words` say, plain. An item's own `to` and `from` (an email's, a Slack message's author) stay: a change inside it
+ * says who it is from, and the value it changed to or from is said only where the item has no field of that name.
  */
 export function saysOf(rule: Pick<Rule, "says" | "words">, change: Change): string {
 	const scope: Item = { ...(change.item ?? {}) };
-	if (change.to !== undefined && change.to !== change.item) scope.to = change.to;
-	if (change.from !== undefined && change.from !== change.item) scope.from = change.from;
+	if (change.to !== undefined && change.to !== change.item && !("to" in scope)) scope.to = change.to;
+	if (change.from !== undefined && change.from !== change.item && !("from" in scope)) scope.from = change.from;
 	return plainWords(
 		rule.says.replace(/\{([\w.]+)\}/g, (_, path: string) => {
 			const value = at(scope, path);
@@ -507,6 +533,10 @@ export function sort(follow: Follow, me: string | undefined, before: Json, after
 		// a page of the newest: what leaves it was pushed off, and what came into it is new only when it is newer
 		const newest = newestField(follow, change.path);
 		if (newest !== undefined && change.kind === "removed") continue;
+		if (!inWindow(follow, before, after, change)) {
+			sorted.push({ change, does: "nothing", says: changeWords(change) });
+			continue;
+		}
 		if (newest !== undefined && change.kind === "added" && !isNew(follow, before, change, newest)) {
 			sorted.push({ change, does: "nothing", says: changeWords(change) });
 			continue;
@@ -642,5 +672,198 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 			...(f.busy_every === undefined ? {} : { busy_every: f.busy_every }),
 			...(f.settle === undefined ? {} : { settle: f.settle }),
 		},
+	};
+}
+
+/**
+ * A list a read answers one page of (DESIGN.md "Watches"): the path of the list in the reading, the field that orders
+ * it, and how many of its newest items the reading keeps, its window.
+ */
+export type Pages = { readonly list: string; readonly by: string; readonly keep: number };
+
+/** The most items a window may keep. */
+export const MAX_KEEP = 500;
+
+/** Whether `a` orders after `b`: a decimal (Slack's `1700000000.000100`) by its value, else as `past` says. */
+export function later(a: Json | undefined, b: Json | undefined): boolean {
+	const decimal = /^(\d{1,20})(?:\.(\d{1,20}))?$/;
+	const x = typeof a === "string" ? decimal.exec(a) : null;
+	const y = typeof b === "string" ? decimal.exec(b) : null;
+	if (x === null || y === null) return past(a, b);
+	const [whole, part] = [x[1] ?? "", x[2] ?? ""];
+	const [otherWhole, otherPart] = [y[1] ?? "", y[2] ?? ""];
+	const width = Math.max(part.length, otherPart.length);
+	const left = `${whole.padStart(20, "0")}.${part.padEnd(width, "0")}`;
+	const right = `${otherWhole.padStart(20, "0")}.${otherPart.padEnd(width, "0")}`;
+	return left > right;
+}
+
+const orderable = (value: Json | undefined) => typeof value === "string" || typeof value === "number";
+
+/** The newest value of `by` among `items`, or undefined when none has one. */
+export function newestOf(items: readonly Item[], by: string): Json | undefined {
+	let newest: Json | undefined;
+	for (const item of items)
+		if (orderable(item[by]) && (newest === undefined || later(item[by], newest))) newest = item[by];
+	return newest;
+}
+
+/**
+ * Whether a page runs newest first: its first item orders after its last (Slack's history); undefined when it cannot
+ * tell (fewer than two items, or all alike). A thread's replies run oldest first, its first message before them.
+ */
+export function descends(items: readonly Item[], by: string): boolean | undefined {
+	const values = items.map((item) => item[by]).filter(orderable);
+	const [first, last] = [values[0], values[values.length - 1]];
+	if (first === undefined || last === undefined) return undefined;
+	return later(first, last) ? true : later(last, first) ? false : undefined;
+}
+
+/**
+ * The part of a list a walk of pages read whole: past `from` (and at it, when `inclusive`), up to `to` (or the newest,
+ * unset). An item of the window in it that the pages did not bring was deleted; one outside it was not read again.
+ */
+export type Span = { readonly from?: Json; readonly inclusive?: boolean; readonly to?: Json };
+
+const inSpan = (value: Json | undefined, span: Span) =>
+	(span.from === undefined ||
+		later(value, span.from) ||
+		(span.inclusive === true && !later(span.from, value) && !later(value, span.from))) &&
+	(span.to === undefined || !later(value, span.to));
+
+/**
+ * `held` and `fetched` as one window: each item once by `key` (what was fetched wins, as it is now), an item `held` in
+ * the `span` the pages read whole left out unless they brought it again (it was deleted), ordered by `by` newest first
+ * or last as `descending` says, and only the newest `keep`. An item without a value of `by` cannot be placed in the
+ * window and is left out. Merging the same pages again changes nothing, and nothing newer than the `keep`-th newest
+ * that the pages did not find deleted is ever dropped.
+ */
+export function merge(
+	held: readonly Item[],
+	fetched: readonly Item[],
+	pages: Pick<Pages, "by" | "keep">,
+	key: string,
+	descending: boolean,
+	span?: Span,
+): Item[] {
+	const byKey = new Map<string, Item>();
+	const kept = span === undefined ? held : held.filter((item) => !inSpan(item[pages.by], span));
+	for (const item of [...kept, ...fetched])
+		if (orderable(item[key]) && orderable(item[pages.by])) byKey.set(String(item[key]), item);
+	const ascending = [...byKey.values()].sort((a, b) =>
+		later(a[pages.by], b[pages.by]) ? 1 : later(b[pages.by], a[pages.by]) ? -1 : 0,
+	);
+	const newest = ascending.slice(Math.max(0, ascending.length - pages.keep));
+	return descending ? newest.reverse() : newest;
+}
+
+/**
+ * A walk of a paged list's pages that has not reached the window yet: when it began, what it asked from (`oldest`),
+ * the service's cursor for the next page, the newest `keep` items it brought, the span of what it read, and which way
+ * the service hands the pages.
+ */
+export type Walk = {
+	since: number;
+	oldest?: string;
+	cursor: string;
+	items: Item[];
+	low?: Json;
+	high?: Json;
+	descending?: boolean;
+};
+
+/**
+ * What the next page of a paged list asks: the walk's own next page; else, newest first (or unknown), the newest page;
+ * oldest first, from the window's item one page (`size`, as a full page held) from its newest end, so the newest page
+ * is read again and an edit or a deletion in it is seen; the whole list from its start while no page was ever full.
+ */
+export function pageArgs(
+	walk: Walk | undefined,
+	window: readonly Item[] | undefined,
+	by: string,
+	size: number | undefined,
+): { readonly oldest?: string; readonly cursor?: string } {
+	if (walk !== undefined) return { ...(walk.oldest === undefined ? {} : { oldest: walk.oldest }), cursor: walk.cursor };
+	if (window === undefined || size === undefined || descends(window, by) !== false) return {};
+	const ascending = merge([], window, { by, keep: MAX_KEEP }, by, false);
+	const from = ascending[ascending.length - 1 - size]?.[by];
+	return from === undefined || from === null ? {} : { oldest: String(from) };
+}
+
+const lowest = (values: readonly (Json | undefined)[]) =>
+	values
+		.filter(orderable)
+		.reduce<Json | undefined>((low, v) => (low === undefined || later(low, v) ? v : low), undefined);
+const highest = (values: readonly (Json | undefined)[]) =>
+	values
+		.filter(orderable)
+		.reduce<Json | undefined>((high, v) => (high === undefined || later(v, high) ? v : high), undefined);
+
+/**
+ * One page more of a walk: still walking (the pages have not reached the window, and the service has more), or the
+ * window merged with what the walk read, each item of the window in the span the pages read whole and not brought
+ * again taken as deleted. Newest first, the walk reaches the window when a page brings an item at or before the
+ * window's newest; oldest first, when the service has no more. With no window yet (the first look), a newest page is
+ * the window by itself. A walk older than `expire` merges what it read, never deleting what it did not reach, and says
+ * so (`gap`): changes between may be missing. `size` is how many items a full page held, when this one was full.
+ */
+export function walkOn(look: {
+	readonly walk: Walk | undefined;
+	readonly asked: { readonly oldest?: string; readonly cursor?: string };
+	readonly page: readonly Item[];
+	readonly next: string | undefined;
+	readonly window: readonly Item[] | undefined;
+	readonly pages: Pages;
+	readonly key: string;
+	readonly now: number;
+	readonly expire: number;
+}): ({ readonly walk: Walk } | { readonly list: Item[]; readonly gap: boolean }) & { readonly size?: number } {
+	const { walk, asked, page, next, window, pages, key } = look;
+	const by = pages.by;
+	const descending =
+		descends(page, by) ?? walk?.descending ?? (window === undefined ? undefined : descends(window, by));
+	const desc = descending !== false;
+	const items = merge(walk?.items ?? [], page, pages, key, desc);
+	const values = page.map((item) => item[by]);
+	const low = lowest([walk?.low, ...values]);
+	const high = highest([walk?.high, ...values]);
+	const size =
+		next === undefined
+			? undefined
+			: page.filter((item) => asked.oldest === undefined || later(item[by], asked.oldest)).length;
+	const sized = size === undefined || size === 0 ? {} : { size };
+	const newest = window === undefined ? undefined : newestOf(window, by);
+	const reaches = desc && newest !== undefined && page.some((item) => orderable(item[by]) && !later(item[by], newest));
+	if (next === undefined || reaches || (desc && window === undefined)) {
+		const span: Span | undefined =
+			window === undefined
+				? undefined
+				: asked.oldest !== undefined
+					? { from: asked.oldest }
+					: next === undefined
+						? {}
+						: low === undefined
+							? undefined
+							: { from: low, inclusive: true };
+		return { list: merge(window ?? [], items, pages, key, desc, span), gap: false, ...sized };
+	}
+	if (walk !== undefined && look.now - walk.since >= look.expire) {
+		const span: Span | undefined =
+			low === undefined
+				? undefined
+				: { from: low, inclusive: true, ...(desc || high === undefined ? {} : { to: high }) };
+		return { list: merge(window ?? [], items, pages, key, desc, span), gap: true, ...sized };
+	}
+	return {
+		walk: {
+			since: walk?.since ?? look.now,
+			...(asked.oldest === undefined ? {} : { oldest: asked.oldest }),
+			cursor: next,
+			items,
+			...(low === undefined ? {} : { low }),
+			...(high === undefined ? {} : { high }),
+			...(descending === undefined ? {} : { descending }),
+		},
+		...sized,
 	};
 }

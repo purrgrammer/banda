@@ -78,12 +78,24 @@ it("says each message's author as a handle: the owner's own post is theirs, a bo
 	expect(history.channel).toBe("C0GENERAL");
 	const [own, bot, outside, mention, root] = history.messages;
 	// the owner's post through banda carries bot_id and bot_profile, and is still the owner's
-	expect(own).toMatchObject({ from: "@ana", user: "U0ANA", text: "Shipping today", mentions_me: false });
-	expect(bot).toMatchObject({ from: "@deploybot [bot]", text: "Deploy finished & healthy" });
-	expect(outside).toMatchObject({ from: "@olga (outside)", user: "U0OLGA" });
+	// `author` is in the account's own form, so the owner's post is the account's own (whoami's handle)
+	expect(own).toMatchObject({
+		from: "@ana",
+		author: "@ana at Acme",
+		user: "U0ANA",
+		text: "Shipping today",
+		mentions_me: false,
+	});
+	expect(bot).toMatchObject({
+		from: "@deploybot [bot]",
+		author: "@deploybot [bot]",
+		text: "Deploy finished & healthy",
+	});
+	expect(outside).toMatchObject({ from: "@olga (outside)", author: "@olga at T0OTHER", user: "U0OLGA" });
 	expect(mention).toEqual({
 		ts: "1700000100.000200",
 		from: "@bob",
+		author: "@bob at Acme",
 		user: "U0BOB",
 		text: "@ana can you check #deploys? See the log (https://example.test/log)",
 		date: "2023-11-14T22:15:00.000Z",
@@ -91,6 +103,36 @@ it("says each message's author as a handle: the owner's own post is theirs, a bo
 	});
 	expect(root).toMatchObject({ ts: ROOT_TS, thread_ts: ROOT_TS, reply_count: 2 });
 	expect(history.active).toBe(true);
+});
+
+it("pages a channel's history and a thread by oldest and cursor, saying the next cursor while Slack has more", async () => {
+	const { slack, read } = world();
+	slack.pageMax = 2;
+	const first = (await read("channel_history", { channel: "C0GENERAL", limit: 100 })) as {
+		messages: SlackMessage[];
+		next_cursor?: string;
+	};
+	expect(first.messages.map((each) => each.ts)).toEqual(["1700000400.000500", "1700000300.000400"]);
+	expect(first.next_cursor).toBeDefined();
+	const second = (await read("channel_history", { channel: "C0GENERAL", cursor: first.next_cursor })) as {
+		messages: SlackMessage[];
+		next_cursor?: string;
+	};
+	expect(second.messages.map((each) => each.ts)).toEqual(["1700000200.000300", "1700000100.000200"]);
+	const newer = (await read("channel_history", { channel: "C0GENERAL", oldest: "1700000200.000300" })) as {
+		messages: SlackMessage[];
+		next_cursor?: string;
+	};
+	expect(newer.messages.map((each) => each.ts)).toEqual(["1700000400.000500", "1700000300.000400"]);
+	expect(newer.next_cursor).toBeUndefined();
+	const thread = (await read("get_thread", { channel: "C0GENERAL", ts: ROOT_TS, oldest: "1700000150.000150" })) as {
+		messages: SlackMessage[];
+		next_cursor?: string;
+	};
+	// the thread's first message comes on every page, then the replies after `oldest`, oldest first
+	expect(thread.messages.map((each) => each.ts)).toEqual([ROOT_TS, "1700000160.000160"]);
+	expect(thread.next_cursor).toBeUndefined();
+	await expect(read("channel_history", { channel: "C0GENERAL", oldest: "yesterday" })).rejects.toThrow("timestamp");
 });
 
 it("reads a thread once per message, its first message first, even when Slack repeats it", async () => {

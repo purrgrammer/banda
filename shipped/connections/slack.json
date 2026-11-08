@@ -100,6 +100,11 @@
 					"args": {
 						"channel": "{channel}",
 						"ts": "{ts}"
+					},
+					"pages": {
+						"list": "thread.messages",
+						"by": "ts",
+						"keep": 200
 					}
 				}
 			},
@@ -109,6 +114,44 @@
 				"messages": "thread.messages",
 				"total": "thread.total",
 				"url": "thread.url"
+			},
+			"follow": {
+				"keys": {
+					"thread.messages": "ts"
+				},
+				"authors": {
+					"thread.messages": "author"
+				},
+				"ignore": [
+					"thread.active",
+					"thread.total",
+					"thread.messages[*].reply_count"
+				],
+				"rules": [
+					{
+						"on": "thread.messages[*]",
+						"kind": "added",
+						"does": "wake",
+						"says": "{from} replied"
+					},
+					{
+						"on": "thread.messages[*].text",
+						"kind": "changed",
+						"does": "tell",
+						"says": "{from} edited a message"
+					},
+					{
+						"on": "thread.messages[*]",
+						"kind": "removed",
+						"does": "tell",
+						"says": "a message from {from} was deleted"
+					}
+				],
+				"ends": {},
+				"every": "5m",
+				"busy": "thread.active = true",
+				"busy_every": "1m",
+				"settle": "2m"
 			},
 			"writes": [
 				{
@@ -142,7 +185,13 @@
 				"history": {
 					"tool": "channel_history",
 					"args": {
-						"channel": "{channel}"
+						"channel": "{channel}",
+						"limit": 100
+					},
+					"pages": {
+						"list": "history.messages",
+						"by": "ts",
+						"keep": 100
 					}
 				}
 			},
@@ -152,6 +201,57 @@
 				"members": "channel.member_count",
 				"messages": "history.messages",
 				"url": "history.url"
+			},
+			"follow": {
+				"keys": {
+					"history.messages": "ts"
+				},
+				"authors": {
+					"history.messages": "author"
+				},
+				"ignore": [
+					"history.active",
+					"channel.member_count",
+					"history.messages[*].reply_count"
+				],
+				"rules": [
+					{
+						"on": "history.messages[*]",
+						"kind": "added",
+						"where": "mentions_me = true",
+						"does": "wake",
+						"says": "{from} mentioned you"
+					},
+					{
+						"on": "history.messages[*]",
+						"kind": "added",
+						"does": "tell",
+						"says": "{from}: {text}"
+					},
+					{
+						"on": "history.messages[*].text",
+						"kind": "changed",
+						"does": "nothing",
+						"says": "{from} edited a message"
+					},
+					{
+						"on": "history.messages[*]",
+						"kind": "removed",
+						"does": "nothing",
+						"says": "a message from {from} was deleted"
+					},
+					{
+						"on": "channel.topic",
+						"kind": "changed",
+						"does": "tell",
+						"says": "topic: {to}"
+					}
+				],
+				"ends": {},
+				"every": "5m",
+				"busy": "history.active = true",
+				"busy_every": "1m",
+				"settle": "2m"
 			},
 			"writes": [
 				{

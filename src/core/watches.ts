@@ -50,10 +50,14 @@ import {
 	type Item,
 	type Json,
 	lookEvery,
+	type Pages,
+	pageArgs,
 	reading as readingOf,
 	settleOf,
 	sort,
 	withLastAnswers,
+	type Walk,
+	walkOn,
 } from "./follow.ts";
 import { fileNameFor } from "./names.ts";
 import { type OffRead, objectAccess, objectStanding, offWords } from "./object-access.ts";
@@ -72,7 +76,7 @@ import {
 	refKey,
 } from "./objects.ts";
 import { Control } from "./routines.ts";
-import { localTime } from "./schedule.ts";
+import { localTime, parseEvery } from "./schedule.ts";
 import { context } from "./store.ts";
 
 /** A watch's name, which is its file's: lowercase words joined by `-`, as an agent's. */
@@ -257,6 +261,11 @@ export type WatchRecord = {
 	held?: { wake: string[]; tell: string[]; ids: string[] };
 	/** Behind since then: its newest wake or tell had a gap (some changes may be missing), until one without a gap. */
 	behind?: number;
+	/**
+	 * A walk of a paged read's pages that has not reached its window yet (DESIGN.md "Watches"), by the read's name: the
+	 * pages it fetched, kept across a crash, merged once the walk reaches the window. While it walks, the watch is behind.
+	 */
+	pages?: { [read: string]: Walk };
 	/** Done: when, and by which of its ends, or, with `authority`, why its account or connection was taken away. */
 	done?: { at: number; why: string; authority?: true };
 	/** The hashes of the box's versions the owner allowed, newest last (at most `ALLOWED_KEPT`). */
@@ -276,6 +285,26 @@ export const Watches = defineDoc<{ watches: { [name: string]: WatchRecord } }>({
 	checkpointWhen: (_value, _ops, info) => info.deltasSinceBase >= 64,
 });
 
+/** The list at `path` (`history.messages`: the read's name, then plain keys) in a read's answer, when it is one. */
+function listIn(answer: Json | undefined, path: string): Item[] | undefined {
+	let here = answer;
+	for (const key of path.split(".").slice(1))
+		here = here !== null && typeof here === "object" && !Array.isArray(here) ? here[key] : undefined;
+	return Array.isArray(here) && here.every((each) => each !== null && typeof each === "object" && !Array.isArray(each))
+		? (here as Item[])
+		: undefined;
+}
+
+/** A read's answer with the list at `path` (the read's name, then plain keys) put in its place. */
+function withList(answer: Item, path: string, list: Item[]): Item {
+	const [key, ...rest] = path.split(".").slice(1);
+	if (key === undefined) return answer;
+	if (rest.length === 0) return { ...answer, [key]: list };
+	const inner = answer[key];
+	const object = inner !== null && typeof inner === "object" && !Array.isArray(inner) ? inner : {};
+	return { ...answer, [key]: withList(object, `_.${rest.join(".")}`, list) };
+}
+
 /** One followed object's reading: what each read answered, when, and for which accepted file and account generation. */
 export type FollowedReading = {
 	answers: Item;
@@ -288,6 +317,8 @@ export type FollowedReading = {
 	 * them diffs from. One that fell off diffs from the oldest kept, so it sees every change since, coarser.
 	 */
 	earlier?: { version: number; answers: Item }[];
+	/** How many items a full page of each paged read held, as the service answered: what a look reads again. */
+	page?: { [read: string]: number };
 };
 
 /** How many earlier readings of a followed object are kept beside the newest. */
@@ -613,7 +644,7 @@ export type Looked =
 	 * It kept no wake: the watch is done, or was paused while the task looked; or it holds its wake for a burst, the
 	 * reading kept and its cursor where it was.
 	 */
-	| { readonly outcome: "held"; readonly why: "done" | "paused" | "burst" };
+	| { readonly outcome: "held"; readonly why: "done" | "paused" | "burst" | "behind" };
 
 /**
  * A wake's key: the transition it is, from the watch's cursor (since it began) to the reading it saw. The chat keeps
@@ -710,6 +741,8 @@ export function decide(look: {
 	readonly running: boolean;
 	/** The cadence this look set: how far off the next look is. */
 	readonly every: number;
+	/** A walk of pages that could not reach the window in time was merged as far as it read: changes may be missing. */
+	readonly gapped?: boolean;
 }): Decision {
 	const { seen, record, kept, after, same, version, follow, now, click } = look;
 	// the first look back from the owner's Off: the object may have ended while it could not look. Its reading is no
@@ -771,7 +804,7 @@ export function decide(look: {
 		ids: held.ids,
 		...(ended === undefined ? {} : { ended }),
 		...(record.burst === undefined ? {} : { burst: record.burst }),
-		gap: seen !== undefined && kept !== undefined && fellOff(kept, seen),
+		gap: (seen !== undefined && kept !== undefined && fellOff(kept, seen)) || look.gapped === true,
 	};
 }
 
@@ -923,6 +956,8 @@ export function defineWatches(options: WatchesOptions) {
 		let done = false;
 		/** The reading another watch's look took, which this look diffs instead of asking the service: its version. */
 		let shared: { readonly version: number } | undefined;
+		/** The paged read's window as kept, the walk this watch holds on it, and how many items a full page held. */
+		let paging: { window: Item[] | undefined; walk: Walk | undefined; size: number | undefined } | undefined;
 		await commit(async (tx) => {
 			const record = (await tx.doc(Watches)).watches[name];
 			// a done watch never looks again, whatever its authority says now
@@ -969,10 +1004,23 @@ export function defineWatches(options: WatchesOptions) {
 				kept !== undefined &&
 				kept.source === found.source &&
 				kept.at > (record.looked ?? Number.NEGATIVE_INFINITY) &&
+				record.pages === undefined &&
 				(settled === undefined || kept.at >= settled) &&
 				now - kept.at < lookEvery(found.kind.follow, kept.answers)
 			)
 				shared = { version: kept.version };
+			const paged = Object.entries(found.reads).find(([, read]) => read.pages !== undefined);
+			if (paged !== undefined) {
+				const [as, read] = paged;
+				const list = listIn(kept?.answers[as], (read.pages as Pages).list);
+				const walk = record?.pages?.[as];
+				// copies of the doc's values: the reads happen outside this commit
+				paging = {
+					window: list === undefined ? undefined : (JSON.parse(JSON.stringify(list)) as Item[]),
+					walk: walk === undefined ? undefined : (JSON.parse(JSON.stringify(walk)) as Walk),
+					size: kept?.page?.[as],
+				};
+			}
 		});
 		if (done) return { outcome: "held", why: "done" };
 		if (resolved === undefined) return why === "gone" ? { outcome: "gone" } : { outcome: "failed", why: why ?? "" };
@@ -982,12 +1030,25 @@ export function defineWatches(options: WatchesOptions) {
 		const unanswered: string[] = [];
 		let failed: string | undefined;
 		let bytes = 0;
-		for (const [as, read] of Object.entries(shared === undefined ? reads : {})) {
+		/** A walk of pages still short of the window: the look keeps it and nothing else, and looks again soon. */
+		let walked: { readonly as: string; readonly walk: Walk } | undefined;
+		/** The walk was merged as far as it read, an hour on: changes between may be missing. */
+		let gapped = false;
+		/** How many items a full page of the paged read held, when this look's page was full. */
+		let learned: { readonly as: string; readonly size: number } | undefined;
+		// the paged read first: while its walk has not reached the window, the others wait for the look that merges
+		const order = Object.entries(shared === undefined ? reads : {}).sort(
+			([, a], [, b]) => Number(b.pages !== undefined) - Number(a.pages !== undefined),
+		);
+		for (const [as, read] of order) {
+			const pages = paging === undefined ? undefined : read.pages;
+			const asked =
+				pages === undefined || paging === undefined ? {} : pageArgs(paging.walk, paging.window, pages.by, paging.size);
 			const answer = await options.read(
 				connection.name,
 				account === "" ? undefined : account,
 				read.tool,
-				readArgs(read, ref, schemas[as]),
+				{ ...readArgs(read, ref, schemas[as]), ...asked },
 				{ chat, ref, stamp },
 				ctx,
 			);
@@ -1014,9 +1075,38 @@ export function defineWatches(options: WatchesOptions) {
 				failed = `${connection.service} did not return an object.`;
 				break;
 			}
+			if (pages === undefined || paging === undefined) continue;
+			const body = answers[as];
+			const page = listIn(body, pages.list);
+			if (page === undefined || typeof body !== "object" || body === null || Array.isArray(body)) {
+				failed = `${connection.service} did not return a list.`;
+				break;
+			}
+			const next = typeof body.next_cursor === "string" && body.next_cursor !== "" ? body.next_cursor : undefined;
+			const step = walkOn({
+				walk: paging.walk,
+				asked,
+				page,
+				next,
+				window: paging.window,
+				pages,
+				key: kind.follow.keys?.[pages.list] ?? "id",
+				now,
+				expire: TELL_AFTER,
+			});
+			if (step.size !== undefined) learned = { as, size: step.size };
+			if ("walk" in step) {
+				walked = { as, walk: step.walk };
+				if (canonical(step.walk as unknown as Json).length > MAX_READING_BYTES) failed = "The reading was too large.";
+				break;
+			}
+			gapped = step.gap;
+			const { next_cursor: _cursor, ...rest } = body;
+			answers[as] = withList(rest, pages.list, step.list);
 		}
 		options.fault?.("watch:read");
 		if (failed !== undefined) return await failing(failed);
+		if (walked !== undefined) return await walking(walked);
 		let outcome: Looked = { outcome: "raced" };
 		await commit(async (tx) => {
 			const record = (await tx.doc(Watches)).watches[name];
@@ -1082,6 +1172,9 @@ export function defineWatches(options: WatchesOptions) {
 			delete record.failed;
 			record.looked = now;
 			record.next = now + every;
+			// what a walk of pages fetched is in this reading now; one merged as far as it read leaves the watch behind
+			if (paging !== undefined && shared === undefined) delete record.pages;
+			if (gapped) record.behind = now;
 			// one reading per object, kept with the few before it; a reading the same as the newest is no new version, and
 			// one shared is the newest, as read when it was
 			const same = shared !== undefined || (kept !== undefined && canonical(kept.answers) === canonical(after));
@@ -1100,6 +1193,9 @@ export function defineWatches(options: WatchesOptions) {
 				const earlier = all.filter((each, i) => i >= all.length - EARLIER_KEPT || holding.has(each.version));
 				doc.objects[key] = { answers: after, at: now, source, version, earlier };
 			}
+			const page = { ...kept?.page, ...(learned === undefined ? {} : { [learned.as]: learned.size }) };
+			const stored = doc.objects[key];
+			if (stored !== undefined && Object.keys(page).length > 0) stored.page = page;
 			// the owner's click is taken in the commit that keeps what it looked at: a kill before leaves it to look again
 			const taken = async () => {
 				if (click === undefined) return;
@@ -1123,6 +1219,7 @@ export function defineWatches(options: WatchesOptions) {
 				click: click !== undefined,
 				running: last !== undefined && last.state.status !== "terminal",
 				every,
+				gapped,
 			});
 			const copy = (held: Held) => ({ wake: [...held.wake], tell: [...held.tell], ids: [...held.ids] });
 			switch (decision.does) {
@@ -1226,6 +1323,57 @@ export function defineWatches(options: WatchesOptions) {
 		async function switchedOff(tx: Tx): Promise<OffRead | undefined> {
 			const standing = await objectStanding(tx, chat, ref, account);
 			return standing === undefined ? undefined : (standing.off ?? standing.stopped);
+		}
+
+		/**
+		 * The look's walk of pages has not reached the window: keep it on the record (a crash goes on from its cursor),
+		 * the watch behind, and look again at the busy cadence; the reading and the cursor stay where they were.
+		 */
+		async function walking(step: { readonly as: string; readonly walk: Walk }): Promise<Looked> {
+			let outcome: Looked = { outcome: "raced" };
+			await commit(async (tx) => {
+				const record = (await tx.doc(Watches)).watches[name];
+				if (record === undefined || (await acceptedWatch(tx, name))?.sha !== watch.sha) {
+					outcome = { outcome: "gone" };
+					return;
+				}
+				if ((await objectAccess(tx, chat, ref, account))?.stamp !== stamp) {
+					const off = await switchedOff(tx);
+					outcome = {
+						outcome: "failed",
+						why: off === undefined ? `${connection.service} is no longer connected as that account` : offWords(off),
+					};
+					if (off === undefined) await unable(tx, name, record, outcome.why, now, chat);
+					else stop(record, off, now);
+					return;
+				}
+				if (record.done !== undefined) {
+					outcome = { outcome: "held", why: "done" };
+					return;
+				}
+				if (
+					click === undefined &&
+					seen !== undefined &&
+					(record.paused !== undefined || (await tx.doc(Control)).paused !== undefined)
+				) {
+					outcome = { outcome: "held", why: "paused" };
+					return;
+				}
+				if (record.seen !== seen) return;
+				record.pages = { ...record.pages, [step.as]: step.walk };
+				delete record.failed;
+				record.looked = now;
+				const hurry = kind.follow.busy_every === undefined ? undefined : parseEvery(kind.follow.busy_every);
+				record.next = now + (hurry ?? BUSY_EVERY);
+				const kept = (await tx.doc(Followed)).objects[key];
+				if (kept !== undefined && learned !== undefined) kept.page = { ...kept.page, [learned.as]: learned.size };
+				if (click !== undefined) {
+					record.checked = [...(record.checked ?? []).slice(-(CHECKED_KEPT - 1)), click];
+					await log(tx, { at: now, watch: name, what: "You checked it now" });
+				}
+				outcome = { outcome: "held", why: "behind" };
+			});
+			return outcome;
 		}
 
 		async function failing(reason: string): Promise<Looked> {
@@ -1414,7 +1562,11 @@ export function defineWatches(options: WatchesOptions) {
 		// no read).
 		// Only a sleep past the new time (the look found the object busy) is ended and made again, so the watch looks
 		// when it should; a look that ended the watch leaves it no task.
-		if (looked.outcome === "looked" || looked.outcome === "baseline") {
+		if (
+			looked.outcome === "looked" ||
+			looked.outcome === "baseline" ||
+			(looked.outcome === "held" && looked.why === "behind")
+		) {
 			const stale = await harness.commit(async (tx) => {
 				const record = (await tx.doc(Watches)).watches[name];
 				if (record?.task === undefined) return { task: undefined, settle: record?.done !== undefined };

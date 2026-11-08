@@ -13,6 +13,7 @@ import { Value } from "typebox/value";
 import { shaOf } from "./agents.ts";
 import { type Connection, connectionOf, MAX_DEFINITION_BYTES } from "./connections.ts";
 import { FLOORS } from "./floor.ts";
+import { MAX_KEEP } from "./follow.ts";
 import { CARDS, NORMALIZE } from "./objects.ts";
 import { REST_APIS } from "./rest.ts";
 import { hiddenError } from "./visible.ts";
@@ -46,6 +47,16 @@ const Read = Type.Object(
 		),
 		optional: Type.Optional(Type.Boolean()),
 		follow: Type.Optional(Type.Boolean()),
+		pages: Type.Optional(
+			Type.Object(
+				{
+					list: Type.String({ maxLength: 200 }),
+					by: Type.String({ pattern: "^[A-Za-z0-9_]{1,64}$" }),
+					keep: Type.Integer({ minimum: 1, maximum: MAX_KEEP }),
+				},
+				{ ...closed, description: "A list newest first, kept to `keep` items, its pages walked to them" },
+			),
+		),
 	},
 	closed,
 );

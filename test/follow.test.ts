@@ -11,15 +11,21 @@ import {
 	followWords,
 	heldBack,
 	holds,
+	type Item,
 	type Json,
+	later,
 	lookEvery,
+	merge,
 	observe,
+	pageArgs,
 	parseFollow,
 	plainWords,
 	reading,
 	SAID,
 	saysOf,
 	sort,
+	type Walk,
+	walkOn,
 } from "../src/core/follow.ts";
 import { parseObjects } from "../src/core/objects.ts";
 import { shippedText } from "./fixtures/shipped.ts";
@@ -548,5 +554,230 @@ describe("following an object", () => {
 			}),
 			{ numRuns: pbtRuns(200) },
 		);
+	});
+});
+
+describe("a paged list: a window of the newest, walked to by pages", () => {
+	const PAGES = { list: "history.messages", by: "ts", keep: 100 };
+	const ts = (n: number) => `${1700000000 + n}.000100`;
+	const msg = (n: number, text = `m${n}`): Item => ({ ts: ts(n), text });
+	const newestFirst = (items: Item[]) => [...items].sort((a, b) => (later(a.ts, b.ts) ? -1 : 1));
+
+	it("orders Slack's timestamps by their value, whatever their width", () => {
+		expect(later("1700000001.000001", "1700000000.999999")).toBe(true);
+		expect(later("999999999.000000", "1000000000.000000")).toBe(false);
+		expect(later("1700000000.0001", "1700000000.000099")).toBe(true);
+	});
+
+	const ids = fc.uniqueArray(fc.integer({ min: 0, max: 400 }), { maxLength: 60 });
+	const keeps = fc.integer({ min: 1, max: 80 });
+
+	it("property: merging the same pages twice is the same window, and nothing newer than the window's oldest is dropped", () => {
+		fc.assert(
+			fc.property(ids, ids, keeps, fc.boolean(), (held, fetched, keep, descending) => {
+				const pages = { by: "ts", keep };
+				const now = (n: number) => msg(n, `new ${n}`);
+				const window = merge(
+					[],
+					held.map((n) => msg(n)),
+					pages,
+					"ts",
+					descending,
+				);
+				const once = merge(window, fetched.map(now), pages, "ts", descending);
+				const twice = merge(once, fetched.map(now), pages, "ts", descending);
+				expect(twice).toEqual(once);
+				const all = [...new Set([...held.filter((n) => window.some((item) => item.ts === ts(n))), ...fetched])]
+					.sort((a, b) => b - a)
+					.slice(0, keep);
+				expect(new Set(once.map((item) => item.ts))).toEqual(new Set(all.map(ts)));
+				// what was fetched wins: it is the item as it is now
+				for (const n of fetched)
+					if (all.includes(n)) expect(once.find((item) => item.ts === ts(n))?.text).toBe(`new ${n}`);
+				const order = once.map((item) => Number(String(item.ts).split(".")[0]));
+				expect(order).toEqual([...order].sort((a, b) => (descending ? b - a : a - b)));
+			}),
+			{ numRuns: pbtRuns(200) },
+		);
+	});
+
+	it("a thread's first message, repeated on every page, is one item", () => {
+		const parent = msg(0, "Release notes");
+		const pages = [
+			[parent, msg(1), msg(2)],
+			[parent, msg(3), msg(4)],
+		];
+		const window = pages.reduce<Item[]>((held, page) => merge(held, page, { by: "ts", keep: 200 }, "ts", false), []);
+		expect(window.map((item) => item.text)).toEqual(["Release notes", "m1", "m2", "m3", "m4"]);
+	});
+
+	it("within the span the pages read whole, an item they did not bring was deleted; outside it, it stays", () => {
+		const window = [msg(5), msg(4), msg(3), msg(2)];
+		const merged = merge(window, [msg(6), msg(5, "edited"), msg(3)], { by: "ts", keep: 100 }, "ts", true, {
+			from: ts(3),
+			inclusive: true,
+		});
+		expect(merged.map((item) => [item.ts, item.text])).toEqual([
+			[ts(6), "m6"],
+			[ts(5), "edited"],
+			[ts(3), "m3"],
+			[ts(2), "m2"],
+		]);
+	});
+
+	/** A channel's messages, newest first, answered a page of `size` at a time as Slack does. */
+	const channel = (messages: Item[], size: number) => (asked: { oldest?: string; cursor?: string }) => {
+		const after = newestFirst(messages).filter((item) => asked.oldest === undefined || later(item.ts, asked.oldest));
+		const from = Number(asked.cursor ?? 0);
+		const page = after.slice(from, from + size);
+		return { page, next: from + size < after.length ? String(from + size) : undefined };
+	};
+
+	/** Walk until the pages reach the window, one page a look, as a watch does: the looks it took and what it merged. */
+	const walk = (window: Item[] | undefined, serve: ReturnType<typeof channel>, now = () => 0) => {
+		let held: Walk | undefined;
+		for (let look = 1; look <= 50; look++) {
+			const asked = pageArgs(held, window, "ts", undefined);
+			const { page, next } = serve(asked);
+			const step = walkOn({
+				walk: held,
+				asked,
+				page,
+				next,
+				window,
+				pages: PAGES,
+				key: "ts",
+				now: now(),
+				expire: 60 * 60_000,
+			});
+			if ("list" in step) return { looks: look, list: step.list, gap: step.gap };
+			held = step.walk;
+		}
+		throw new Error("the walk never reached the window");
+	};
+
+	it("the first look is one page, the newest, and it is the window", () => {
+		const messages = Array.from({ length: 40 }, (_, n) => msg(n));
+		const first = walk(undefined, channel(messages, 15));
+		expect(first.looks).toBe(1);
+		expect(first.list.map((item) => item.ts)).toEqual(
+			newestFirst(messages)
+				.slice(0, 15)
+				.map((item) => item.ts),
+		);
+	});
+
+	it("a burst of forty at fifteen a page reaches the window in three looks, all forty in it", () => {
+		const before = Array.from({ length: 5 }, (_, n) => msg(n));
+		const burst = Array.from({ length: 40 }, (_, n) => msg(100 + n));
+		const after = walk(newestFirst(before), channel([...before, ...burst], 15));
+		expect(after.looks).toBe(3);
+		expect(after.gap).toBe(false);
+		expect(after.list).toHaveLength(45);
+		expect(after.list[0]?.ts).toBe(ts(139));
+	});
+
+	it("property: a walk misses nothing newer than the window's newest, and deletes nothing still there", () => {
+		fc.assert(
+			fc.property(
+				fc.uniqueArray(fc.integer({ min: 0, max: 400 }), { minLength: 1, maxLength: 60 }),
+				fc.integer({ min: 0, max: 60 }),
+				fc.integer({ min: 2, max: 20 }),
+				(old, more, size) => {
+					const before = old.map((n) => msg(n));
+					const window = merge([], before, PAGES, "ts", true);
+					const added = Array.from({ length: more }, (_, n) => msg(1000 + n));
+					const { list, gap } = walk(window, channel([...before, ...added], size));
+					expect(gap).toBe(false);
+					expect(list).toEqual(merge(window, added, PAGES, "ts", true));
+				},
+			),
+			{ numRuns: pbtRuns(100) },
+		);
+	});
+
+	it("a walk an hour old merges what it read and says changes may be missing, never deleting what it did not reach", () => {
+		const window = newestFirst([msg(1), msg(2)]);
+		let clock = 0;
+		const serve = channel([msg(1), msg(2), ...Array.from({ length: 30 }, (_, n) => msg(100 + n))], 5);
+		const result = walk(window, serve, () => {
+			clock += 30 * 60_000;
+			return clock;
+		});
+		expect(result.gap).toBe(true);
+		const kept = result.list.map((item) => item.ts);
+		expect(kept).toContain(ts(1));
+		expect(kept).toContain(ts(129));
+		expect(kept).not.toContain(ts(100));
+	});
+
+	it("oldest first, a look asks from one full page back from the window's newest, so the newest page is read again", () => {
+		const thread = [msg(0), msg(1), msg(2), msg(3), msg(4), msg(5)];
+		expect(pageArgs(undefined, thread, "ts", undefined)).toEqual({});
+		expect(pageArgs(undefined, thread, "ts", 2)).toEqual({ oldest: ts(3) });
+		expect(pageArgs(undefined, newestFirst(thread), "ts", 2)).toEqual({});
+		const held: Walk = { since: 0, oldest: ts(3), cursor: "c2", items: [] };
+		expect(pageArgs(held, thread, "ts", 2)).toEqual({ oldest: ts(3), cursor: "c2" });
+	});
+
+	/** Slack's thread and channel kinds, as the shipped file declares them. */
+	const slack = (() => {
+		const parsed = parseConnection(
+			"slack",
+			readFileSync(new URL("../shipped/connections/slack.md", import.meta.url), "utf8"),
+		);
+		if (!("connection" in parsed)) throw new Error(JSON.stringify(parsed));
+		const objects = parsed.connection.objects ?? {};
+		return { thread: objects.thread?.follow as Follow, channel: objects.channel?.follow as Follow };
+	})();
+	const ME = "@ana at Acme";
+	const said = (n: number, author: string, text: string, extra: Item = {}): Item => ({
+		ts: ts(n),
+		from: author.split(" at ")[0] as string,
+		author,
+		text,
+		mentions_me: false,
+		...extra,
+	});
+
+	it("a thread: a reply wakes, the owner's own is nothing, a bot's only tells, an edit and a deletion tell", () => {
+		const before = { thread: { messages: [said(0, "@bob at Acme", "Release notes"), said(1, "@cy at Acme", "ok")] } };
+		const after = {
+			thread: {
+				messages: [
+					said(0, "@bob at Acme", "Release notes, v2"),
+					said(2, ME, "I'll look"),
+					said(3, "@cy at Acme", "thanks"),
+					said(4, "@deploybot [bot]", "deployed"),
+				],
+			},
+		};
+		const sorted = sort(slack.thread, ME, before, after).map((each) => [each.does, each.says]);
+		expect(sorted).toEqual([
+			["tell", "@bob edited a message"],
+			["nothing", expect.stringContaining("new thread.messages")],
+			["wake", "@cy replied"],
+			["tell", "@deploybot [bot] replied"],
+			["tell", "a message from @cy was deleted"],
+		]);
+	});
+
+	it("a channel: a mention wakes, another message tells in one line, one pushed off the window is nothing", () => {
+		const before = { history: { messages: [said(2, "@bob at Acme", "hi"), said(1, "@bob at Acme", "old")] } };
+		const after = {
+			history: {
+				messages: [
+					said(4, "@bob at Acme", "<@U0ANA> look", { mentions_me: true }),
+					said(3, "@cy at Acme", "line one\nline two"),
+					said(2, "@bob at Acme", "hi"),
+				],
+			},
+		};
+		const sorted = sort(slack.channel, ME, before, after).map((each) => [each.change.kind, each.does, each.says]);
+		expect(sorted).toEqual([
+			["added", "wake", "@bob mentioned you"],
+			["added", "tell", "@cy: line one line two"],
+			["removed", "nothing", expect.any(String)],
+		]);
 	});
 });

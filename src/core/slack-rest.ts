@@ -76,10 +76,17 @@ export const SLACK_TOOLS: McpTool[] = [
 		},
 		["channel"],
 	),
-	tool("get_thread", `Read a message and the replies under it, oldest first. ${naming}`, { channel, ts }, [
-		"channel",
-		"ts",
-	]),
+	tool(
+		"get_thread",
+		`Read a message and the replies under it, oldest first. ${naming}`,
+		{
+			channel,
+			ts,
+			limit: { type: "integer", minimum: 1, maximum: 100, description: "How many replies; default 100" },
+			cursor: { type: "string", maxLength: 500, description: "The next_cursor of the previous page" },
+		},
+		["channel", "ts"],
+	),
 	tool(
 		"search_messages",
 		`Search every message the owner can see, as Slack's own search does (in:#channel, from:@name, words), newest first. Needs the owner to allow direct messages and search. ${naming}`,
@@ -390,6 +397,11 @@ function session(token: string, signal: AbortSignal | undefined, fetcher: typeof
 export type SlackMessage = {
 	readonly ts: string;
 	readonly from: string;
+	/**
+	 * Who wrote it in the account's own form, `@ana at Acme`, so the owner's own posts are the account's: someone of
+	 * another team by that team's id (never equal to an account), a bot `@deploybot [bot]`.
+	 */
+	readonly author: string;
 	readonly user: string;
 	readonly text: string;
 	readonly date: string;
@@ -430,15 +442,16 @@ function messageOf(raw: Json, me: Identity, s: Session): SlackMessage | undefine
 		(user === undefined ? undefined : s.teamOf(user)) ??
 		(typeof raw.team === "string" ? raw.team : undefined);
 	const outside = !bot && team !== undefined && team !== "" && team !== me.teamId;
-	const from = bot
-		? `@${botName(raw)} [bot]`
-		: `${s.named("user", user) ?? `@${text(raw.username, 80) || user}`}${outside ? " (outside)" : ""}`;
+	const handle = (user === undefined ? undefined : s.named("user", user)) ?? `@${text(raw.username, 80) || user}`;
+	const from = bot ? `@${botName(raw)} [bot]` : `${handle}${outside ? " (outside)" : ""}`;
+	const author = bot ? from : `${handle} at ${outside ? team : me.team}`;
 	const said = typeof raw.text === "string" ? raw.text : "";
 	const thread = typeof raw.thread_ts === "string" ? slackTs(raw.thread_ts) : undefined;
 	const replies = count(raw.reply_count);
 	return {
 		ts: stamp,
 		from,
+		author,
 		user: user ?? text(raw.bot_id, 41),
 		text: slackPlain(said, s.named).slice(0, MAX_TEXT),
 		date: dateOf(stamp),
@@ -586,6 +599,7 @@ export async function slackCall(
 					channel: id,
 					limit: intArg(args.limit, 20, 100, "limit"),
 					cursor: cursorArg(args.cursor),
+					oldest: args.oldest === undefined ? undefined : tsArg(args.oldest, "oldest message"),
 				});
 				const messages = await messagesOf(list(body.messages), me, s);
 				answer = {
@@ -601,7 +615,13 @@ export async function slackCall(
 				const id = channelArg(args.channel);
 				const root = tsArg(args.ts);
 				const me = await s.me();
-				const body = await s.call("conversations.replies", { channel: id, ts: root, limit: 100 });
+				const body = await s.call("conversations.replies", {
+					channel: id,
+					ts: root,
+					limit: intArg(args.limit, 100, 100, "limit"),
+					cursor: cursorArg(args.cursor),
+					oldest: args.oldest === undefined ? undefined : tsArg(args.oldest, "oldest message"),
+				});
 				// every page of replies repeats the thread's first message: keep each message once, by its timestamp
 				const seen = new Set<string>();
 				const raws = list(body.messages).filter((raw) => {
@@ -624,6 +644,7 @@ export async function slackCall(
 					total: replies === undefined ? messages.length : replies + 1,
 					active: activeOf(messages, now()),
 					...(me.url === "" ? {} : { url: slackPermalink(me.url, id, start) }),
+					...nextOf(body),
 				};
 				break;
 			}

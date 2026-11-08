@@ -199,6 +199,17 @@ const without = (args: unknown, arg: string): JsonObject => {
 	return rest;
 };
 
+/**
+ * A paged read's arguments without the page a watch's walk asks for (`oldest`, `cursor`), which the daemon fills; a
+ * page argument that is not a short plain string leaves an argument that matches no read.
+ */
+const unpaged = (args: JsonObject): JsonObject => {
+	const { oldest, cursor, ...rest } = args;
+	const plain = (value: unknown) =>
+		value === undefined || (typeof value === "string" && /^[\w.=+/-]{1,500}$/.test(value));
+	return plain(oldest) && plain(cursor) ? rest : args;
+};
+
 /** What a server says names the owner, as one plain line: no control or invisible characters, a hundred at most. */
 const plainId = (value: unknown) =>
 	(typeof value === "string" || typeof value === "number" ? String(value) : "")
@@ -2672,7 +2683,8 @@ export function openCapabilities(options: CapabilityOptions) {
 				!Object.values(access.reads).some(
 					(read) =>
 						read.tool === tool &&
-						canonical(readArgs(read, authority.ref, doc.connections[name]?.tools[tool]?.schema)) === canonical(args),
+						canonical(readArgs(read, authority.ref, doc.connections[name]?.tools[tool]?.schema)) ===
+							canonical(read.pages === undefined ? args : unpaged(args)),
 				)
 			)
 				return undefined;

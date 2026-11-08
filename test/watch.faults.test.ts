@@ -2,7 +2,12 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type { Fault, FaultPoint } from "./fault/faults.ts";
 import { pool, runWorker } from "./fault/kill.ts";
-import { SCENARIOS, type WatchSummary } from "./fault/watch-scenario.ts";
+import { SLACK_SCENARIOS } from "./fault/slack-world.ts";
+import { SCENARIOS as WATCH_SCENARIOS, type WatchSummary } from "./fault/watch-scenario.ts";
+
+/** The pull request's scenarios and Slack's paged ones, by the name the worker runs them by. */
+const SCENARIOS = { ...WATCH_SCENARIOS, ...SLACK_SCENARIOS };
+
 import { tempHome } from "./helpers.ts";
 import { pbtFaultRuns } from "./pbt.ts";
 
@@ -13,7 +18,7 @@ const run = async (scenario: string, schedules: readonly (readonly Fault[])[]) =
 
 const POINTS: FaultPoint[] = ["commit:before", "commit:after", "model", "watch:read", "send:before", "send:after"];
 
-describe.each(Object.keys(SCENARIOS))("a watch on a pull request under faults: %s", (scenario) => {
+describe.each(Object.keys(SCENARIOS))("a watch under faults: %s", (scenario) => {
 	const problems = (SCENARIOS[scenario] as (typeof SCENARIOS)[string]).problems;
 
 	it("sweep: one kill at every commit, read, model request and send; what must hold holds", async () => {

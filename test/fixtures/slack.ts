@@ -21,6 +21,11 @@ export type FakeSlack = {
 	refreshToken: string;
 	/** Seconds of `Retry-After` to answer every API call with 429; undefined to answer. */
 	busy: number | undefined;
+	/**
+	 * The most messages one page of history or replies holds, whatever `limit` asks: 15 for a team Slack clamps, as for
+	 * apps outside its Marketplace; unset, `limit` is honoured.
+	 */
+	pageMax: number | undefined;
 	/** The scopes a sign-in or a refresh says it granted, comma-separated as Slack writes them. */
 	granted: string;
 	/** Messages by channel, newest first, as `conversations.history` answers them. */
@@ -34,6 +39,9 @@ export type FakeSlack = {
 export const SLACK_TEAM = { id: "T0ACME", name: "Acme", domain: "acme" };
 export const SLACK_ME = { id: "U0ANA", name: "ana" };
 export const ROOT_TS = "1700000000.000100";
+
+/** Whether Slack timestamp `a` is after `b`. */
+const later = (a: unknown, b: unknown) => Number(a) > Number(b);
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
 	new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
@@ -177,6 +185,13 @@ export function fakeSlack({
 			renameSync(`${file}.tmp`, file);
 		}
 	};
+	/** One page of `messages` as `limit` and `cursor` ask, capped by `pageMax`, and the cursor of the next ("" none). */
+	const paged = (messages: FakeSlackMessage[], params: Record<string, unknown>) => {
+		const limit = Math.min(Number(params.limit ?? 100), fake.pageMax ?? Number.POSITIVE_INFINITY);
+		const from = typeof params.cursor === "string" ? Number(/^c(\d+)$/.exec(params.cursor)?.[1] ?? 0) : 0;
+		const page = messages.slice(from, from + limit);
+		return { page, next: from + limit < messages.length ? `c${from + limit}` : "" };
+	};
 	let issued = 0;
 	let clock = 1700001000;
 	const fake: FakeSlack = {
@@ -186,6 +201,7 @@ export function fakeSlack({
 		access: "xoxp-1",
 		refreshToken: "xoxe-1",
 		busy: undefined,
+		pageMax: undefined,
 		granted:
 			"channels:read,groups:read,channels:history,groups:history,users:read,im:read,mpim:read,im:history,mpim:history,search:read,chat:write",
 		history,
@@ -281,20 +297,26 @@ export function fakeSlack({
 				case "conversations.history": {
 					const messages = history[String(params.channel)];
 					if (messages === undefined) return json({ ok: false, error: "channel_not_found" });
-					const limit = Number(params.limit ?? 100);
-					return json({
-						ok: true,
-						messages: messages.slice(0, limit),
-						has_more: messages.length > limit,
-						response_metadata: { next_cursor: "" },
-					});
+					// newest first, with `oldest` too; the cursor walks back
+					const after = messages.filter((each) => params.oldest === undefined || later(each.ts, params.oldest));
+					const { page, next } = paged(after, params);
+					return json({ ok: true, messages: page, has_more: next !== "", response_metadata: { next_cursor: next } });
 				}
 				case "conversations.replies": {
 					const channel = String(params.channel);
 					const root = (history[channel] ?? []).find((each) => each.ts === params.ts);
 					if (root === undefined) return json({ ok: false, error: "thread_not_found" });
-					const under = replies[`${channel}/${String(params.ts)}`] ?? [];
-					return json({ ok: true, messages: [root, ...under], has_more: false });
+					// the thread's first message on every page, then the replies oldest first; `limit` counts replies
+					const under = (replies[`${channel}/${String(params.ts)}`] ?? []).filter(
+						(each) => params.oldest === undefined || later(each.ts, params.oldest),
+					);
+					const { page, next } = paged(under, params);
+					return json({
+						ok: true,
+						messages: [root, ...page],
+						has_more: next !== "",
+						response_metadata: { next_cursor: next },
+					});
 				}
 				case "search.messages": {
 					const query = String(params.query ?? "").toLowerCase();
