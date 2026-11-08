@@ -918,23 +918,27 @@ function SlackMessagesCard({
 			{rows.length === 0 ? (
 				<p className="text-meta text-ink-2">{list.search ? "No messages match yet" : "No replies yet"}</p>
 			) : (
-				<ul className="flex flex-col divide-y divide-border">
+				<ul className="flex flex-col gap-1.5">
 					{rows.map((message) => (
-						<li key={message.id} className="flex min-w-0 items-start gap-2 py-1.5 first:pt-0 last:pb-0">
-							<Avatar size="sm" className="mt-0.5">
+						<li key={message.id} className="flex min-w-0 items-end gap-2">
+							<Avatar size="sm" className="mb-0.5">
 								{message.avatar === undefined ? null : (
 									<AvatarImage src={message.avatar} alt="" referrerPolicy="no-referrer" />
 								)}
 								<AvatarFallback>{handleInitial(message.from)}</AvatarFallback>
 							</Avatar>
-							<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+							{/* a quoted bubble: Slack's words beside their face, in neither the owner's nor the agent's dress */}
+							<span
+								data-slack-bubble=""
+								className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-bubble border border-line-soft bg-paper-2 px-3 py-1.5"
+							>
 								<span className="flex min-w-0 items-baseline gap-2 text-meta text-ink-2">
 									<span className="min-w-0 flex-1 truncate" title={message.from}>
 										{message.from || "Someone"}
 									</span>
 									<span className="shrink-0">{slackWhen(message.date)}</span>
 								</span>
-								<span className="min-w-0 truncate text-body text-ink" title={message.text}>
+								<span className="min-w-0 text-body text-ink line-clamp-2 [overflow-wrap:anywhere]" title={message.text}>
 									{message.text || "(No text)"}
 								</span>
 								{(message.files ?? []).map((each) => (
