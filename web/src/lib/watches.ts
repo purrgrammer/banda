@@ -26,6 +26,8 @@ export type WatchRowView = {
 	/** Done because its account or connection was taken away, not by one of its ends. */
 	readonly ended?: boolean | undefined;
 	readonly failing?: boolean | undefined;
+	/** Its newest wake said some changes may be missing: it is behind until one without a gap. */
+	readonly behind?: boolean | undefined;
 	/** A change the agent asked for, waiting for the owner: what allowing it does. */
 	readonly waiting?: "set up" | "change" | "stop" | undefined;
 	readonly onAllow?: (() => void) | undefined;
@@ -57,7 +59,8 @@ export function untilWords(watch: WatchView): string | undefined {
 /**
  * What the watch last saw, in words: "Saw today 09:10: ana approved"; "Looked today 09:10, nothing new"; what ended it
  * ("Done Fri 17:02: merged", "Ended today 09:10: you signed out of GitHub as @bandarra"); and, while it cannot look,
- * since when, never "nothing new" ("Can't reach GitHub since today 09:10: …").
+ * since when, never "nothing new" ("Can't reach GitHub since today 09:10: …"); behind, that some may be missing
+ * ("Saw today 09:10: lint failed; some changes may be missing").
  */
 export function sawWords(watch: WatchView, now: number): string | undefined {
 	if (watch.done !== undefined)
@@ -66,7 +69,7 @@ export function sawWords(watch: WatchView, now: number): string | undefined {
 	if (watch.failed !== undefined)
 		return `Can't reach ${watch.object?.service ?? "it"} since ${near(watch.failed.since, now)}: ${watch.failed.why}`;
 	if (watch.saw !== undefined && watch.sawAt !== undefined)
-		return `Saw ${near(watch.sawAt, now)}: ${watch.saw.join(", ")}`;
+		return `Saw ${near(watch.sawAt, now)}: ${watch.saw.join(", ")}${watch.behind === undefined ? "" : "; some changes may be missing"}`;
 	if (watch.looked !== undefined) return `Looked ${near(watch.looked, now)}, nothing new`;
 	return undefined;
 }
@@ -111,6 +114,7 @@ export function watchRows(
 					done: watch.done !== undefined,
 					ended: watch.done?.authority === true,
 					failing: watch.done === undefined && watch.failed !== undefined,
+					behind: watch.done === undefined && watch.behind !== undefined,
 					...(change === undefined
 						? {}
 						: {

@@ -160,8 +160,8 @@ export const ROUTINES: readonly RoutineRowView[] = [
 ];
 
 /**
- * What Mara watches: a pull request until it merges, one waiting for the owner, one it cannot reach, one done, and one
- * ended when its account was switched off.
+ * What Mara watches: a pull request until it merges, one waiting for the owner, one it cannot reach, one behind (its
+ * newest wake had a gap), one done, and one ended when its account was switched off.
  */
 export const WATCHES: readonly WatchRowView[] = [
 	{
@@ -181,6 +181,15 @@ export const WATCHES: readonly WatchRowView[] = [
 		next: "today 09:40",
 		saw: "Can't reach GitHub since today 08:10: GitHub did not answer",
 		failing: true,
+	},
+	{
+		id: "banda-131",
+		name: "purrgrammer/banda #131",
+		service: "GitHub",
+		until: "until merged",
+		next: "today 09:40",
+		saw: "Saw today 09:05: lint failed; some changes may be missing",
+		behind: true,
 	},
 	{
 		id: "banda-77",

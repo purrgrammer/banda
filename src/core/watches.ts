@@ -203,6 +203,8 @@ export type WatchRecord = {
 	paused?: "owner";
 	/** When the owner resumed it, until the next good look: what changed meanwhile wakes once, said to come from the pause. */
 	resumed?: number;
+	/** Behind since then: its newest wake or tell had a gap (some changes may be missing), until one without a gap. */
+	behind?: number;
 	/** Done: when, and by which of its ends, or, with `authority`, why its account or connection was taken away. */
 	done?: { at: number; why: string; authority?: true };
 	/** The hashes of the box's versions the owner allowed, newest last (at most `ALLOWED_KEPT`). */
@@ -757,6 +759,8 @@ export function defineWatches(options: WatchesOptions) {
 				...(resumed ? { resumed: true as const } : {}),
 				...(gap ? { gap: true as const } : {}),
 			};
+			if (gap) record.behind = now;
+			else if (changes.length > 0) delete record.behind;
 			if (wake.length > 0 || ended !== undefined) {
 				record.turn = await options.followUp(tx, chat, {
 					key: wakeKey(

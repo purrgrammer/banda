@@ -140,6 +140,7 @@ export async function watches(harness: Harness, workspace: Workspace, ctx: Conte
 						},
 					}),
 			...(record.last === undefined ? {} : { lastRun: record.last }),
+			...(record.behind === undefined || record.done !== undefined ? {} : { behind: record.behind }),
 			...(record.paused === undefined ? {} : { paused: record.paused }),
 			...(record.done === undefined ? {} : { done: { ...record.done } }),
 			...(record.allowed?.length ? { allowed: [...record.allowed] } : {}),

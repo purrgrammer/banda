@@ -606,9 +606,9 @@ function WatchRow({
 				: "Done"
 			: paused
 				? "Paused"
-				: watch.next === undefined
-					? null
-					: `Next look ${watch.next}`;
+				: [watch.behind === true ? "Behind" : null, watch.next === undefined ? null : `Next look ${watch.next}`]
+						.filter((part) => part !== null)
+						.join(" · ") || null;
 	return (
 		<li className="group/watch relative flex items-start gap-2 rounded-field px-2 py-2 hover:bg-paper-3">
 			<button

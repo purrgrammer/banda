@@ -148,11 +148,28 @@ describe("watches in the app", () => {
 					done: { at: NOW, why: "GitHub as @bandarra was switched off for Mara", authority: true },
 				},
 				{ agent: "otto", name: "other", state: "active", accepted, object },
+				{
+					agent: "mara",
+					name: "banda-150b",
+					state: "active",
+					accepted,
+					object,
+					saw: ["lint failed"],
+					sawAt: NOW,
+					behind: NOW,
+				},
 			],
 			"mara",
 			NOW,
 		);
-		expect(rows.map((row) => row.id)).toEqual(["banda-142", "banda-150", "banda-98", "banda-77", "banda-60"]);
+		expect(rows.map((row) => row.id)).toEqual([
+			"banda-142",
+			"banda-150",
+			"banda-98",
+			"banda-77",
+			"banda-60",
+			"banda-150b",
+		]);
 		expect(rows[0]).toMatchObject({ name: "acme/banda #142", service: "GitHub", until: "until merged", paused: false });
 		// the clock's words are the locale's: "today 09:29", or "today 09:29 AM"
 		expect(rows[0]?.next).toMatch(/^today 09:29/);
@@ -167,6 +184,10 @@ describe("watches in the app", () => {
 		// ended by authority: it says why, and no longer says it fails
 		expect(rows[4]).toMatchObject({ done: true, ended: true, failing: false });
 		expect(rows[4]?.saw).toMatch(/^Ended today 09:00.*: GitHub as @bandarra was switched off for Mara$/);
+		// behind: its newest wake had a gap, and the row says so until one without
+		expect(rows[0]?.behind).toBe(false);
+		expect(rows[5]?.behind).toBe(true);
+		expect(rows[5]?.saw).toMatch(/^Saw today 09:00.*: lint failed; some changes may be missing$/);
 		expect(sawWords({ agent: "mara", name: "x", state: "active", looked: NOW }, NOW)).toMatch(
 			/^Looked today 09:00.*, nothing new$/,
 		);

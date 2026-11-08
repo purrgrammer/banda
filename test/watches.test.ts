@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Accepted } from "../src/core/agents.ts";
 import { Connected } from "../src/core/connections.ts";
 import { context } from "../src/core/store.ts";
-import { endWatches, parseWatch, watchPath, watchText } from "../src/core/watches.ts";
+import { endWatches, parseWatch, Watches, watchPath, watchText } from "../src/core/watches.ts";
 import { pause } from "../src/server/watches.ts";
 import { Faults } from "./fault/faults.ts";
 import {
@@ -245,8 +245,8 @@ describe("a watch on a pull request", () => {
 		expect(summary.wakes).toHaveLength(0);
 	}, 60_000);
 
-	it("a cursor that fell off the kept readings wakes once, saying changes may be missing", async () => {
-		// Otto looks at every step; Mara only at the last, when her cursor fell off the readings kept
+	it("a cursor that fell off the kept readings wakes once, saying changes may be missing; it is behind until a wake without a gap", async () => {
+		// Otto looks at every step; Mara only at the last two, when her cursor fell off the readings kept, then once more
 		const lint = (conclusion: string, id: number) => (at: Reads) => {
 			Object.assign(at.get_check_runs.check_runs[1] ?? {}, { status: "completed", conclusion, id });
 		};
@@ -258,17 +258,23 @@ describe("a watch on a pull request", () => {
 			changed(1, lint("success", 102)),
 			changed(1, lint("failure", 103)),
 			changed(1, lint("failure", 103)),
+			changed(1, lint("success", 104)),
 		];
+		let behind: number | undefined;
 		const summary = await watchScenario(await tempHome(), new Faults(), {
 			second: true,
 			world: (step) => steps[step] ?? world(1),
-			clicks: ["k1", "k2", "k3", "k4", "k5", "k6"],
-			only: (name, step) => name === "banda-142-otto" || step === 6,
+			clicks: ["k1", "k2", "k3", "k4", "k5", "k6", "k7"],
+			only: (name, step) => name === "banda-142-otto" || step >= 6,
+			act: async (step, { harness }) => {
+				if (step === 7) behind = (await harness.snapshot(Watches, context))?.watches["banda-142"]?.behind;
+			},
 		});
 		expect(watchInvariants(summary)).toEqual([]);
 		const mara = summary.wakes.filter((wake) => wake.watch === "banda-142");
-		expect(mara).toHaveLength(1);
-		expect(mara[0]?.gap).toBe(true);
+		expect(mara.map((wake) => wake.gap)).toEqual([true, undefined]);
+		expect(behind).toBe(NOW);
+		expect(summary.record.behind).toBeUndefined();
 		const otto = summary.wakes.filter((wake) => wake.watch === "banda-142-otto");
 		expect(otto.every((wake) => wake.gap === undefined)).toBe(true);
 	}, 60_000);

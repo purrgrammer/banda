@@ -676,6 +676,8 @@ export type WatchView = {
 	readonly failed?: { readonly at: number; readonly why: string; readonly since: number; readonly run?: true };
 	/** When it last woke its agent. */
 	readonly lastRun?: number;
+	/** Behind since then: its newest wake said some changes may be missing, until a later one without a gap. */
+	readonly behind?: number;
 	readonly paused?: "owner";
 	/** Done: when, and what ended it; `authority` when it was its account or connection taken away. */
 	readonly done?: { readonly at: number; readonly why: string; readonly authority?: true };
