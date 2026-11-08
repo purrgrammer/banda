@@ -62,13 +62,16 @@ export const ISSUE_WATCH =
 export type World = { [read: string]: Json };
 
 /** A read the service could not answer, in its words: what `answer` gives, by `failure(why)`, for a read that fails. */
-export type Failure = { readonly failed: string };
-export const failure = (why: string): Failure => ({ failed: why });
+export type Failure = { readonly failed: string; readonly until?: number };
+export const failure = (why: string, until?: number): Failure => ({
+	failed: why,
+	...(until === undefined ? {} : { until }),
+});
 const isFailure = (value: Json | Failure): value is Failure =>
 	value !== null &&
 	typeof value === "object" &&
 	!Array.isArray(value) &&
-	Object.keys(value).length === 1 &&
+	Object.keys(value).every((key) => key === "failed" || key === "until") &&
 	typeof (value as { failed?: unknown }).failed === "string";
 
 /** What the service answers read `tool` with `args` at step `step` of the world: JSON, or a failure. */
@@ -221,6 +224,8 @@ export type Scene = {
 /** How a scenario differs from the pull request's life. */
 export type ScenarioOptions = {
 	readonly second?: boolean;
+	/** More objects Mara follows as the same account, a watch each: `banda-142-2`, `banda-142-3`, … */
+	readonly more?: readonly string[];
 	/** What GitHub answers at each step, and the owner's clicks, one per step; the pull request's life by default. */
 	readonly world?: (step: number) => World;
 	/** The connection Mara's watch follows through; GitHub (`GITHUB`) by default. */
@@ -260,7 +265,8 @@ export async function watchScenario(
 	const accountAs = accountKey(connection.account);
 	const clicks = options.clicks ?? CLICKS;
 	const clockAt = options.at ?? (() => NOW);
-	const names = options.second ? WATCHES : WATCHES.slice(0, 1);
+	const extra = (options.more ?? []).map((object, i) => ({ name: `banda-142-${i + 2}`, object }));
+	const names = [...(options.second ? WATCHES : WATCHES.slice(0, 1)), ...extra.map((each) => each.name)];
 	const worldFile = join(home, "world.json");
 	const stepOf = () => {
 		try {
@@ -353,6 +359,11 @@ export async function watchScenario(
 						: WATCH);
 			accepted.files[watchPath("banda-142")] = { sha: shaOf(text), text, at: NOW };
 			(await tx.doc(Watches)).watches["banda-142"] = { agent: "mara", since: NOW };
+			for (const { name, object } of extra) {
+				const more = watchFile(object, connection.account);
+				accepted.files[watchPath(name)] = { sha: shaOf(more), text: more, at: NOW };
+				(await tx.doc(Watches)).watches[name] = { agent: "mara", since: NOW };
+			}
 			if (options.second) {
 				// a second agent follows the same pull request as the same account: one reading, two watches
 				const otto = `---\nname: Otto\ndescription: Also follows\nconnections: [${via}]\n---\nFollow things too.`;

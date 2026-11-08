@@ -51,7 +51,19 @@ export type SlackStep = {
 	readonly replies?: readonly Said[];
 	readonly topic?: string;
 	readonly busy?: string;
+	/** What a search finds, each with its `channel_name` and `permalink` (`match`). */
+	readonly search?: readonly Said[];
+	/** Who `slack/user/U0BOB` is, as `get_person` says. */
+	readonly person?: Said;
 };
+
+/** A search's match, as banda's read says it: a message with its channel's name and its own link. */
+export const match = (n: number, author: string, text: string, channel = "deploys"): Said => ({
+	...said(n, author, text),
+	channel_id: `C0${channel.toUpperCase()}`,
+	channel_name: channel,
+	permalink: `https://acme.slack.com/archives/C0${channel.toUpperCase()}/p${1700000000 + n}000100`,
+});
 
 const later = (a: Json | undefined, b: Json | undefined) => Number(a) > Number(b);
 
@@ -79,6 +91,11 @@ export function slackWorld(
 		if (at.busy !== undefined && (tool === "channel_history" || tool === "get_thread")) return failure(at.busy);
 		const newestFirst = [...(at.channel ?? [])].sort((a, b) => (later(a.ts, b.ts) ? -1 : 1));
 		const active = newestFirst.some((each) => NOW - Number(each.ts) * 1000 < 10 * 60_000);
+		if (tool === "search_messages") {
+			const found = [...(at.search ?? [])].sort((a, b) => (later(a.ts, b.ts) ? -1 : 1));
+			return { query: String(args.query), messages: found, total: found.length };
+		}
+		if (tool === "get_person" && args.user === "U0BOB" && at.person !== undefined) return at.person;
 		if (tool === "get_channel" && args.channel === CHANNEL)
 			return { id: CHANNEL, name: "general", topic: at.topic ?? "", member_count: 12, private: false, is_member: true };
 		if (tool === "channel_history" && args.channel === CHANNEL) {

@@ -2673,7 +2673,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		args: JsonObject,
 		authority: { readonly chat: number; readonly ref: ObjectRef; readonly stamp: string },
 		ctx: Context = context,
-	): Promise<{ readonly text: string } | { readonly failed: string }> {
+	): Promise<{ readonly text: string } | { readonly failed: string; readonly until?: number }> {
 		const found = await harness.commit(async (tx) => {
 			const access = await objectAccess(tx, authority.chat, authority.ref, account ?? "");
 			if (access?.stamp !== authority.stamp || access.connection.name !== name) return undefined;
@@ -2728,7 +2728,12 @@ export function openCapabilities(options: CapabilityOptions) {
 				usedSecrets,
 			);
 			const said = scrub(answer.text, [...usedSecrets, ...(await secrets(home))]);
-			return answer.isError ? { failed: `${found.connection.service} said: ${said.slice(0, 300)}` } : { text: said };
+			return answer.isError
+				? {
+						failed: `${found.connection.service} said: ${said.slice(0, 300)}`,
+						...(answer.retryAt === undefined ? {} : { until: answer.retryAt }),
+					}
+				: { text: said };
 		} catch (error) {
 			return {
 				failed: scrub(error instanceof Error ? error.message : String(error), [

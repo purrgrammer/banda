@@ -1,9 +1,23 @@
 import { describe, expect, it } from "vitest";
+import type { Json } from "../src/core/follow.ts";
+import { type SlackBudget, slackBudget, slackCall } from "../src/core/slack-rest.ts";
 import { context } from "../src/core/store.ts";
 import { Watches, type WatchRecord } from "../src/core/watches.ts";
 import { Faults } from "./fault/faults.ts";
-import { CHANNEL, ME, ROOT, SLACK, SLACK_SCENARIOS, type SlackStep, said, slackWorld } from "./fault/slack-world.ts";
-import { NOW, type ScenarioOptions, watchInvariants, watchScenario } from "./fault/watch-scenario.ts";
+import {
+	CHANNEL,
+	ME,
+	match,
+	ROOT,
+	type Said,
+	SLACK,
+	SLACK_SCENARIOS,
+	type SlackStep,
+	said,
+	slackWorld,
+} from "./fault/slack-world.ts";
+import { failure, NOW, type ScenarioOptions, watchInvariants, watchScenario } from "./fault/watch-scenario.ts";
+import { fakeSlack } from "./fixtures/slack.ts";
 import { tempHome } from "./helpers.ts";
 
 const THREAD = `slack/${CHANNEL}/p${ROOT.replace(".", "")}`;
@@ -187,4 +201,140 @@ describe("the fault worker's Slack scenarios", () => {
 		},
 		60_000,
 	);
+});
+
+describe("three channel watches on one account, Slack answering history once a minute", () => {
+	it("look in turn as the queue opens: none retries in a loop, the rows say since when, the queue stays shallow", async () => {
+		const slack = fakeSlack();
+		slack.access = "xoxp-three-watches";
+		slack.perMinute.add("conversations.history");
+		const at = (step: number) => NOW + step * 60_000;
+		let clock = at(0);
+		slack.now = () => clock;
+		const budget = slackBudget(() => clock);
+		// the budget as every caller meets it, measured: how many calls of one method wait in its queue at once
+		let deepest = 0;
+		const waiting = new Map<string, number>();
+		const measured: SlackBudget = {
+			run: (key, call) => {
+				waiting.set(key, (waiting.get(key) ?? 0) + 1);
+				deepest = Math.max(deepest, waiting.get(key) ?? 0);
+				const ran = budget.run(key, call);
+				const done = () => waiting.set(key, (waiting.get(key) ?? 1) - 1);
+				ran.then(done, done);
+				return ran;
+			},
+		};
+		const answer = async (tool: string, args: { readonly [key: string]: unknown }, step: number) => {
+			clock = at(step);
+			const result = await slackCall(slack.access, tool, { ...args }, undefined, slack.fetch, measured, () => clock);
+			return result.isError ? failure(result.text, result.retryAt) : (JSON.parse(result.text) as Json);
+		};
+		const records: { [name: string]: WatchRecord }[] = [];
+		const names = ["banda-142", "banda-142-2", "banda-142-3"];
+		const settled = async (harness: Parameters<NonNullable<ScenarioOptions["act"]>>[1]["harness"], now: number) => {
+			for (let i = 0; i < 400; i++) {
+				const watches = (await harness.snapshot(Watches, context))?.watches ?? {};
+				if (names.every((name) => (watches[name]?.next ?? 0) > now)) return structuredClone(watches);
+				await new Promise((resolve) => setTimeout(resolve, 5));
+			}
+			throw new Error("the watches never looked");
+		};
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: SLACK,
+			object: "slack/C0GENERAL",
+			more: ["slack/G0DEPLOYS", "slack/D0BOB"],
+			answer,
+			clicks: [undefined, undefined, undefined],
+			at,
+			act: async (_step, { harness, now }) => {
+				records.push(await settled(harness, now));
+			},
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		const history = slack.calls.filter((call) => call.method === "conversations.history");
+		// one good read a minute, and at most one refusal beside it: the held queue answered the rest itself
+		expect(history).toHaveLength(5);
+		// a minute on, two have looked; the third's row says since when Slack has been busy, and when it looks again
+		const second = records[0] ?? {};
+		const failing = names.filter((name) => second[name]?.failed !== undefined);
+		expect(failing).toHaveLength(1);
+		expect(second[failing[0] as string]?.failed).toMatchObject({
+			since: at(0),
+			why: "Slack is busy, back at 09:02",
+		});
+		expect(second[failing[0] as string]?.next).toBe(at(2));
+		// another minute, the last: each in turn, and then none failing
+		for (const each of records.slice(1)) expect(names.filter((name) => each[name]?.failed !== undefined)).toEqual([]);
+		expect(new Set(names.map((name) => records[2]?.[name]?.looked))).toEqual(new Set([at(0), at(1), at(2)]));
+		expect(deepest).toBeLessThanOrEqual(3);
+	}, 60_000);
+});
+
+describe("a watch on a Slack search, a person and a thread's reactions", () => {
+	it("a search: a new match wakes in its channel's words; the owner's own and one indexed late are nothing", async () => {
+		const summary = await follow(
+			"slack/search/deploy",
+			(step) => ({
+				search: [
+					match(10, "@bob at Acme", "deploy 41 failed"),
+					...(step >= 1 ? [match(30, "@cy at Acme", "deploy 42 failed")] : []),
+					...(step >= 2 ? [match(40, ME, "deploy 42 fixed")] : []),
+					// Slack indexed it late: older than the newest match the watch had
+					...(step >= 3 ? [match(20, "@dee at Acme", "deploy 41 rolled back")] : []),
+				],
+			}),
+			["k1", "k2", "k3"],
+		);
+		expect(summary.record.failed).toBeUndefined();
+		expect(summary.wakes.map((wake) => wake.changes)).toEqual([["@cy in #deploys: deploy 42 failed"]]);
+		expect(summary.tells).toEqual([]);
+	}, 60_000);
+
+	it("a person: a status changed tells, cleared tells, a face changed is nothing", async () => {
+		const bob = (status: string, avatar = "https://avatars.slack-edge.com/bob_72.png") => ({
+			id: "U0BOB",
+			name: "bob",
+			real_name: "Bob Stone",
+			title: "Engineer",
+			tz: "America/New_York",
+			status_text: status,
+			outside: false,
+			avatar,
+		});
+		const summary = await follow(
+			"slack/user/U0BOB",
+			(step) => ({
+				person:
+					step === 0
+						? bob("On call")
+						: step === 1
+							? bob("At lunch")
+							: bob("", "https://avatars.slack-edge.com/bob_new.png"),
+			}),
+			["k1", "k2"],
+		);
+		expect(summary.record.failed).toBeUndefined();
+		expect(summary.tells.map((tell) => tell.changes)).toEqual([["status: At lunch"], ["status: cleared"]]);
+		expect(summary.wakes).toEqual([]);
+	}, 60_000);
+
+	it("a reaction on the owner's own reply tells; the owner's own edit beside it is nothing", async () => {
+		const mine = (text: string, reactions?: Said[]) => ({
+			...said(20, ME, text),
+			...(reactions === undefined ? {} : { reactions }),
+		});
+		const summary = await follow(
+			THREAD,
+			(step) => ({
+				replies: [
+					said(5, "@cy at Acme", "first look"),
+					step === 0 ? mine("I'll look") : mine("I'll look today", [{ name: "tada", count: 2 }]),
+				],
+			}),
+			["k1"],
+		);
+		expect(summary.tells.map((tell) => tell.changes)).toEqual([["2 reacted :tada:"]]);
+		expect(summary.wakes).toEqual([]);
+	}, 60_000);
 });

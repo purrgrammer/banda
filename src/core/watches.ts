@@ -622,7 +622,7 @@ export type WatchesOptions = {
 		args: JsonObject,
 		authority: { readonly chat: number; readonly ref: ObjectRef; readonly stamp: string },
 		ctx: Context,
-	) => Promise<{ readonly text: string } | { readonly failed: string }>;
+	) => Promise<{ readonly text: string } | { readonly failed: string; readonly until?: number }>;
 	/** A fault point, for the fault suites. */
 	readonly fault?: (point: string) => void;
 };
@@ -1029,6 +1029,8 @@ export function defineWatches(options: WatchesOptions) {
 		const answers: Item = {};
 		const unanswered: string[] = [];
 		let failed: string | undefined;
+		/** When the service said to ask again, when it refused for now (Slack's `Retry-After`). */
+		let retry: number | undefined;
 		let bytes = 0;
 		/** A walk of pages still short of the window: the look keeps it and nothing else, and looks again soon. */
 		let walked: { readonly as: string; readonly walk: Walk } | undefined;
@@ -1058,6 +1060,7 @@ export function defineWatches(options: WatchesOptions) {
 					continue;
 				}
 				failed = answer.failed;
+				retry = "until" in answer ? answer.until : undefined;
 				break;
 			}
 			bytes += answer.text.length;
@@ -1105,7 +1108,7 @@ export function defineWatches(options: WatchesOptions) {
 			answers[as] = withList(rest, pages.list, step.list);
 		}
 		options.fault?.("watch:read");
-		if (failed !== undefined) return await failing(failed);
+		if (failed !== undefined) return await failing(failed, retry);
 		if (walked !== undefined) return await walking(walked);
 		let outcome: Looked = { outcome: "raced" };
 		await commit(async (tx) => {
@@ -1376,7 +1379,11 @@ export function defineWatches(options: WatchesOptions) {
 			return outcome;
 		}
 
-		async function failing(reason: string): Promise<Looked> {
+		/**
+		 * The look could not read. It looks again at its quiet cadence, or once the service said it may be asked again
+		 * when that is sooner: watches that share a refusing account's queue then take turns as it opens, never a loop.
+		 */
+		async function failing(reason: string, until?: number): Promise<Looked> {
 			await commit(async (tx) => {
 				const record = (await tx.doc(Watches)).watches[name];
 				if (record !== undefined && record.done === undefined) {
@@ -1387,7 +1394,8 @@ export function defineWatches(options: WatchesOptions) {
 					}
 					await unable(tx, name, record, reason, now, chat);
 					record.looked = now;
-					record.next = now + lookEvery(kind.follow, {});
+					const quiet = now + lookEvery(kind.follow, {});
+					record.next = until !== undefined && until > now ? Math.min(until, quiet) : quiet;
 				}
 			});
 			return { outcome: "failed", why: reason };
