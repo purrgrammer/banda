@@ -101,11 +101,12 @@ in a throwaway home, at desktop and phone width.
 - [x] Access says Revoke where DESIGN.md says Take back
 - [x] "For this task" in an effect's result does not say the task ends with the owner's next message, so an agent
   still counted a task's permission after it ended
-- [ ] Agent trust, slice 3: the card offers the earned place after three clean approvals, a foreign-content chat
-  only that; the widest grain of a tool with no way back from Access only. Built and covered by
-  test/approval-card.browser.test.ts at both widths; not walked in the app, which needs three real approved writes
-  on a disposable repository: the
-  streak, the place's row and its permission
+- [x] Agent trust, slice 3: the card offers the earned place after three clean approvals, a foreign-content task
+  only that; the widest grain of a tool with no way back from Access only. Walked in a forked home against a local
+  Forge server (test key, its own connection file with a pull request kind whose merge has place and anywhere
+  grains): merges 1-3 in acme/demo offered the task's scope; the fourth offered "Merge pull requests in acme/demo
+  without asking until you take it back in Permissions", ticked; the fifth merged with no card; acme/other was
+  offered only its task's scope; reading a pull request first left no scope offered (desktop and phone)
 - [x] A chat that read foreign content is told apart from one that did not: a read from outside (a connection's, a
   page's, a command's through the proxy, the browser's), another agent's chat or message, or a harness's work marks the
   task it came into (`foreign.ts`), and its asks offer only an earned place or a host until the owner's next message
