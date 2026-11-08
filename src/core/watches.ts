@@ -67,6 +67,8 @@ export const MAX_WATCH_BYTES = 16 * 1024;
 /** The most bytes one reading of a followed object may hold, every read's answer together. */
 export const MAX_READING_BYTES = 512 * 1024;
 const DAY = 24 * 60 * 60_000;
+/** The most changes one wake or tell names, in its line and the model's text; the rest are counted. */
+export const CHANGES_SAID = 20;
 /** Wakes a day a watch may have unless its file says otherwise (`wakes_a_day`). */
 export const DEFAULT_WAKES_A_DAY = 24;
 /** The most `wakes_a_day` a watch file may give. */
@@ -847,8 +849,11 @@ export function defineWatches(options: WatchesOptions) {
 			delete record.resumed;
 			const burst = record.burst;
 			delete record.burst;
-			const changes = [...new Set([...wake, ...tell].map((each) => each.says))];
-			if (ended !== undefined && changes.length === 0) changes.push(ended);
+			const said = [...new Set([...wake, ...tell].map((each) => each.says))];
+			if (ended !== undefined && said.length === 0) said.push(ended);
+			// however much changed in one look, the line and the model's text name a bounded few and count the rest
+			const changes =
+				said.length <= CHANGES_SAID ? said : [...said.slice(0, CHANGES_SAID), `and ${said.length - CHANGES_SAID} more`];
 			const gap = fellOff(kept, seen);
 			const label = (await tx.doc(Connected)).accounts[connection.name]?.[account]?.id;
 			const data: WatchWakeData = {

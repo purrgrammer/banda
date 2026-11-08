@@ -422,6 +422,35 @@ describe("a watch on a pull request", () => {
 		expect(summary.turns.every((turn) => turn?.status === "completed")).toBe(true);
 	}, 60_000);
 
+	it("a thousand changes in one look are one wake, its words bounded, in bounded time", async () => {
+		const flood = (step: number): World =>
+			changed(Math.min(step, 1), (at) => {
+				if (step >= 1)
+					at.get_comments.push(
+						...Array.from({ length: 1000 }, (_, n) => ({ id: 1000 + n, user: { login: `bob${n}` }, body: "+1" })),
+					);
+			});
+		let took = 0;
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: flood,
+			clicks: [undefined],
+			act: async (_step, { harness, core }) => {
+				const start = performance.now();
+				await core.checkWatch(harness, "banda-142", "k1");
+				took = performance.now() - start;
+			},
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes).toHaveLength(1);
+		const changes = summary.wakes[0]?.changes ?? [];
+		// ana's approval, lint failing and the checks finishing, and a thousand comments: twenty named, the rest counted
+		expect(changes).toHaveLength(21);
+		expect(changes.at(-1)).toBe("and 983 more");
+		expect(changes.join(", ").length).toBeLessThan(2000);
+		expect(summary.sent.every((text) => text.length < 4000)).toBe(true);
+		expect(took).toBeLessThan(5000);
+	}, 60_000);
+
 	it("an hour unable to look draws one error line; a good look clears it, and the next hour draws one again", async () => {
 		const down = new Set([1, 2, 3, 4, 5, 7, 8, 9, 10, 11]);
 		const summary = await watchScenario(await tempHome(), new Faults(), {
