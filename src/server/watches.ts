@@ -15,6 +15,7 @@ import {
 	ALLOWED_KEPT,
 	acceptedWatch,
 	accountFor,
+	cannotFollow,
 	followed,
 	type Looked,
 	MAX_WATCH_BYTES,
@@ -307,7 +308,7 @@ export async function changeWatch(
 			const ends = found === undefined ? [] : Object.keys(found.kind.follow.ends);
 			if (!ends.includes(until))
 				throw new BadRequest(
-					ends.length === 0 ? "no connection you have can follow its link" : `until is one of ${ends.join(", ")}`,
+					found === undefined ? await cannotFollow(tx, parsed.watch.object) : `until is one of ${ends.join(", ")}`,
 				);
 		}
 		files[watchPath(name)] = { sha: changed, text: edited, at: now };
@@ -401,7 +402,7 @@ export async function createWatch(
 		if (await isArchived(tx, made.agent))
 			throw new BadRequest(`${await agentWords(tx, made.agent)} is archived: restore it first`, 409);
 		const found = await followed(tx, object);
-		if (found === undefined) throw new BadRequest("no connection you have can follow that link", 404);
+		if (found === undefined) throw new BadRequest(await cannotFollow(tx, object), 404);
 		const ends = Object.keys(found.kind.follow.ends);
 		if (made.until !== undefined && !ends.includes(made.until))
 			throw new BadRequest(`until is one of ${ends.join(", ")}`);

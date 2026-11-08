@@ -424,6 +424,19 @@ export async function followed(
 }
 
 /**
+ * Why `object` cannot be followed, in words: no connection recognises the link, or one does but its file in effect
+ * declares no `follow` for that kind, which a newer file banda ships may have (Update on its Connections tile).
+ */
+export async function cannotFollow(tx: Tx, object: string): Promise<string> {
+	const connections = await acceptedConnections(tx);
+	const [ref] = recognise(object, connections);
+	const connection = connections.find((each) => each.name === ref?.connection);
+	if (ref === undefined || connection === undefined) return "no connection you have recognises that link";
+	const kind = ref.kind.replaceAll("_", " ");
+	return `${connection.service} here cannot follow a ${kind} yet: update ${connection.service} on the Connections page`;
+}
+
+/**
  * The account a watch looks with, among those agent `agent` has of `connection`: the one the watch names (by what the
  * service calls the owner), or the agent's one account; "" for a connection nobody signs in to.
  */
@@ -543,7 +556,7 @@ export function defineWatches(options: WatchesOptions) {
 		const chat = await options.agentChat(tx, agent);
 		if (chat === undefined) return { why: `${agent} is not active` };
 		const found = await followed(tx, watch.object);
-		if (found === undefined) return { why: "no connection follows that link" };
+		if (found === undefined) return { why: await cannotFollow(tx, watch.object) };
 		const { ref, kind, connection } = found;
 		// a file's `until` the kind has no end for would never end: said, not waited on
 		if (watch.until !== undefined && kind.follow.ends[watch.until] === undefined)
@@ -996,10 +1009,7 @@ export function defineWatches(options: WatchesOptions) {
 		const made = await api.commit(async (tx) => {
 			const agent = await agentOf(tx, Number(api.conversationId));
 			const found = await followed(tx, object);
-			if (found === undefined)
-				throw new WatchRefused(
-					"Not written: no connection the owner has can follow that link. Give the link of a pull request or an issue.",
-				);
+			if (found === undefined) throw new WatchRefused(`Not written: ${await cannotFollow(tx, object)}.`);
 			const { ref, kind, connection } = found;
 			const ends = Object.keys(kind.follow.ends);
 			if (args.until !== undefined && !ends.includes(args.until))

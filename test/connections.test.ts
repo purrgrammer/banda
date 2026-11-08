@@ -5,7 +5,7 @@
  * write is a draft that runs once, approved; a tool switched off is refused even mid-run; credentials reach nothing
  * but the server they were given for.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	type AssistantMessage,
@@ -1070,6 +1070,8 @@ describe("connections banda ships", () => {
 		const offered = (await s.capabilities.view()).shipped?.[0]?.update;
 		expect(offered).toMatch(/^[0-9a-f]{64}$/);
 		await expect(s.capabilities.updateShipped("cal", "0".repeat(64))).rejects.toThrow(/changed since you saw it/);
+		// the box lost the file (it reads as a removal waiting): updating writes it again
+		rmSync(join(s.box.workspace, "connections/cal.md"));
 		await s.capabilities.updateShipped("cal", offered as string);
 		const view = await s.capabilities.view();
 		expect(view.shipped?.[0]?.update).toBeUndefined();

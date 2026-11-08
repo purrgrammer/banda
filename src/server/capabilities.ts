@@ -2360,7 +2360,7 @@ export function openCapabilities(options: CapabilityOptions) {
 	/**
 	 * The owner updates a connection banda ships to the version this banda ships: its file rewritten in the workspace
 	 * and allowed at once, as adding it was, the owner's scopes kept. `sha` is the version in effect they saw; refused
-	 * when it changed since, or while the box holds a change of its own to the file waiting to be allowed.
+	 * when it changed since, or while the box holds a change of its own to the file waiting to be allowed; a box that lost the file gets it again.
 	 */
 	async function updateShipped(name: string, sha: string, ctx: Context = context): Promise<void> {
 		const shipped = (await shippedFiles()).get(name);
@@ -2372,7 +2372,8 @@ export function openCapabilities(options: CapabilityOptions) {
 			| { text: string }
 			| { unreadable: string }
 			| undefined;
-		if (box === undefined || "unreadable" in box || box.text !== file.text)
+		// a box that lost the file is written again, as adding one writes it; a box that changed it waits on the owner
+		if (box !== undefined && ("unreadable" in box || box.text !== file.text))
 			throw new BadRequest("it proposes a change to this connection: allow or decline that first", 409);
 		const next = shippedUpdate(name, shipped.text, file.text);
 		if (next === undefined) return;
