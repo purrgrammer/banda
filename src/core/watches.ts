@@ -9,7 +9,8 @@
  * once. When what ends it holds, the last wake says so and the watch is done.
  *
  * One reading per (connection, account, object) serves every watch on it and the object's card (`Followed`, with the
- * card kept in `Readings`): five watches on one object read it once. The facts a watch's file cannot hold live in the
+ * card kept in `Readings`): five watches on one object read it once, a look taking the reading another's look took
+ * within its cadence instead of asking the service. The facts a watch's file cannot hold live in the
  * `Watches` doc, written in the commits that make them: whose it is, when it last looked and what it saw, its newest
  * wake, whether the owner paused it, and what ended it. Its task is only a timer over them, so a task can be dropped
  * and made again and the watch goes on where it was.
@@ -683,6 +684,8 @@ export function defineWatches(options: WatchesOptions) {
 		let resolved: Resolved | undefined;
 		let why: string | undefined;
 		let done = false;
+		/** The reading another watch's look took, which this look diffs instead of asking the service: its version. */
+		let shared: { readonly version: number } | undefined;
 		await commit(async (tx) => {
 			const record = (await tx.doc(Watches)).watches[name];
 			// a done watch never looks again, whatever its authority says now
@@ -701,6 +704,19 @@ export function defineWatches(options: WatchesOptions) {
 				return;
 			}
 			resolved = found;
+			// one reading per object: a reading another watch's look took since this one last looked, within the cadence
+			// this watch would look at, is this look's too, and the service is asked once per object, not once per watch.
+			// Its own newest reading never is: a look that waits for the object to settle must look again. The owner's
+			// Check now always asks, as they asked.
+			const kept = (await tx.doc(Followed)).objects[found.key];
+			if (
+				click === undefined &&
+				kept !== undefined &&
+				kept.source === found.source &&
+				kept.at > (record?.looked ?? Number.NEGATIVE_INFINITY) &&
+				now - kept.at < lookEvery(found.kind.follow, kept.answers)
+			)
+				shared = { version: kept.version };
 		});
 		if (done) return { outcome: "held", why: "done" };
 		if (resolved === undefined) return why === "gone" ? { outcome: "gone" } : { outcome: "failed", why: why ?? "" };
@@ -709,7 +725,7 @@ export function defineWatches(options: WatchesOptions) {
 		const answers: Item = {};
 		let failed: string | undefined;
 		let bytes = 0;
-		for (const [as, read] of Object.entries(reads)) {
+		for (const [as, read] of Object.entries(shared === undefined ? reads : {})) {
 			const answer = await options.read(
 				connection.name,
 				account === "" ? undefined : account,
@@ -767,28 +783,37 @@ export function defineWatches(options: WatchesOptions) {
 			const resumed = record.resumed !== undefined;
 			const doc = await tx.doc(Followed);
 			const kept = doc.objects[key];
-			const after = readingOf(kind.follow, answers, kept?.answers);
+			// the reading it shares moved on meanwhile: this look is stale, and the next diffs what is kept then
+			if (shared !== undefined && kept?.version !== shared.version) return;
+			// a shared reading is taken as it was kept, its derived conditions with it: deriving them again over itself
+			// would call a condition steady that the look which read it held back
+			const after = shared === undefined ? readingOf(kind.follow, answers, kept?.answers) : (kept?.answers ?? answers);
 			// a condition held back until its steady path stays is looked at again soon, not at the quiet cadence
-			const every = heldBack(kind.follow, answers, kept?.answers)
-				? Math.min(lookEvery(kind.follow, after), BUSY_EVERY)
-				: lookEvery(kind.follow, after);
-			let card: ReturnType<typeof cardOf> | undefined;
-			try {
-				card = cardOf(kind, ref, answers);
-			} catch {
-				card = undefined;
+			const every =
+				shared === undefined && heldBack(kind.follow, answers, kept?.answers)
+					? Math.min(lookEvery(kind.follow, after), BUSY_EVERY)
+					: lookEvery(kind.follow, after);
+			if (shared === undefined) {
+				let card: ReturnType<typeof cardOf> | undefined;
+				try {
+					card = cardOf(kind, ref, answers);
+				} catch {
+					card = undefined;
+				}
+				if (card !== undefined)
+					await keepReading(tx, key, { connection: connection.name, account, kind: ref.kind, source, at: now, card });
 			}
-			if (card !== undefined)
-				await keepReading(tx, key, { connection: connection.name, account, kind: ref.kind, source, at: now, card });
 			delete record.failed;
 			record.looked = now;
 			record.next = now + every;
-			// one reading per object, kept with the few before it; a reading the same as the newest is no new version
-			const same = kept !== undefined && canonical(kept.answers) === canonical(after);
+			// one reading per object, kept with the few before it; a reading the same as the newest is no new version, and
+			// one shared is the newest, as read when it was
+			const same = shared !== undefined || (kept !== undefined && canonical(kept.answers) === canonical(after));
 			const version = kept === undefined ? 1 : same ? kept.version : kept.version + 1;
 			if (kept === undefined) doc.objects[key] = { answers: after, at: now, source, version };
-			else if (same) Object.assign(kept, { at: now, source });
-			else {
+			else if (same) {
+				if (shared === undefined) Object.assign(kept, { at: now, source });
+			} else {
 				// a reading a watch holds its wake on stays kept, however many come after it, so its wake misses nothing
 				const holding = new Set(
 					Object.values((await tx.doc(Watches)).watches).flatMap((each) =>

@@ -237,6 +237,11 @@ export type ScenarioOptions = {
 	readonly watch?: string;
 	/** What each model request waits for first: a run held going until it opens. */
 	readonly gate?: () => Promise<void>;
+	/**
+	 * No task is made for the watches (`false`): the act makes every look, the first (each watch's baseline) included,
+	 * so no look happens but the act's, whatever the clock does. Clicks make tasks, so a scenario without tasks has none.
+	 */
+	readonly tasks?: false;
 };
 
 export async function watchScenario(
@@ -352,7 +357,7 @@ export async function watchScenario(
 		}, context);
 		// as the daemon does on start: the task, whose first look is the baseline; a watch that cannot even resolve what
 		// it follows (no connection recognises it, or the kind has no `follow`) says why and is waited on no longer
-		await core.reconcile(harness);
+		if (options.tasks !== false) await core.reconcile(harness);
 		const looked = async () => {
 			const records = (await harness.snapshot(Watches, context))?.watches ?? {};
 			return names.every(
@@ -361,7 +366,7 @@ export async function watchScenario(
 					(records[name]?.failed !== undefined && records[name]?.key === undefined),
 			);
 		};
-		while (!(await looked())) await new Promise((r) => setTimeout(r, 5));
+		while (options.tasks !== false && !(await looked())) await new Promise((r) => setTimeout(r, 5));
 		// the world moves on, and the owner checks now at each step: the same click, sent again after a kill; a step's
 		// act is done again only in the step a kill cut short, the steps before it were done
 		const heldFile = join(home, "held.json");

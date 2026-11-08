@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Context } from "@earendil-works/chord";
 import type { Harness } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
@@ -104,6 +106,62 @@ describe("a watch on a pull request", () => {
 	it("two watches on one object, as one account, each see every change: one reading, a cursor per watch", async () => {
 		const summary = await watchScenario(await tempHome(), new Faults(), { second: true });
 		expect(watchProblems(summary)).toEqual([]);
+	}, 60_000);
+
+	it("a look within another watch's reading of the object diffs that reading and asks the service nothing", async () => {
+		// no tasks: the act looks for both, ten minutes a step, Mara first (her own newest reading is never shared, so
+		// she reads), then Otto, whose look takes the reading Mara's just kept and reads nothing. At step 5 Otto looks
+		// first, so he reads and Mara shares. The world runs a step behind, so step 1 is the baseline.
+		const home = await tempHome();
+		const reads = () =>
+			readFileSync(join(home, "reads.jsonl"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean).length;
+		// a look while its last wake's run still goes holds what it sees for that run: wait for the runs first
+		const settled = async (harness: Harness) => {
+			for (;;) {
+				const graph = await harness.taskGraph(context);
+				const busy = Object.values(graph.value.tasks).some(
+					(task) => task.kind !== "banda.watch" && task.kind !== "banda.routine",
+				);
+				graph.dispose();
+				if (!busy) return;
+				await new Promise((r) => setTimeout(r, 5));
+			}
+		};
+		const made: { mara: number; otto: number }[] = [];
+		const summary = await watchScenario(home, new Faults(), {
+			second: true,
+			tasks: false,
+			world: (step) => world(Math.max(0, step - 1)),
+			clicks: [undefined, undefined, undefined, undefined, undefined],
+			at: (step) => NOW + step * 10 * MINUTE,
+			act: async (step, { harness, core }) => {
+				await settled(harness);
+				const counts: { [name: string]: number } = {};
+				for (const name of step <= 4 ? ["banda-142", "banda-142-otto"] : ["banda-142-otto", "banda-142"]) {
+					const before = reads();
+					await core.lookWatch(harness, name);
+					counts[name] = reads() - before;
+				}
+				made.push({ mara: counts["banda-142"] ?? -1, otto: counts["banda-142-otto"] ?? -1 });
+			},
+		});
+		expect(made).toEqual([
+			{ mara: 4, otto: 0 },
+			{ mara: 4, otto: 0 },
+			{ mara: 4, otto: 0 },
+			{ mara: 4, otto: 0 },
+			{ mara: 0, otto: 4 },
+		]);
+		expect(watchInvariants(summary)).toEqual([]);
+		for (const name of ["banda-142", "banda-142-otto"]) {
+			const wakes = summary.wakes.filter((wake) => wake.watch === name);
+			expect(wakes.map((wake) => wake.ended)).toEqual([undefined, "merged"]);
+			expect([...(wakes[0]?.changes ?? [])].sort()).toEqual(["ana approved", "checks finished", "lint failed"]);
+		}
+		expect(summary.second?.done?.why).toBe("merged");
+		expect(summary.second?.seen).toBe(summary.followed?.version);
+		// the reading kept is the newest look's that read it: Mara's at step 4, which Otto's look at step 5 confirmed
+		expect(summary.followed?.at).toBe(NOW + 50 * MINUTE);
 	}, 60_000);
 
 	it("a change that happens again later wakes again: lint fails, goes green, then fails on the next push", async () => {
