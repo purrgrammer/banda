@@ -113,18 +113,23 @@ async function say(...ns: number[]) {
 	return chats;
 }
 
-const revokeAll = async () => {
-	for (const { id } of await openPermissions(harness, Date.now())) {
+/**
+ * Take back the permissions given in `chats`, as the owner does after their sends: those alone, so that a process
+ * repeating this step after a kill does not take back one a later step gave while that step's runs still go on.
+ */
+const revokeAll = async (chats: readonly number[]) => {
+	for (const { id, permission } of await openPermissions(harness, Date.now())) {
+		if (permission.from === undefined || !chats.includes(permission.from.chat)) continue;
 		faults.hit("revoke");
 		await revoke(harness, id, Date.now());
 	}
 };
 const [chat] = await say(1);
 await say(2);
-await revokeAll();
+await revokeAll([chat]);
 await say(3);
 const others = await say(4, 5);
-await revokeAll();
+await revokeAll(others);
 
 const items = [];
 for (const id of [chat, ...others])

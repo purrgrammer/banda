@@ -514,7 +514,7 @@ describe.skipIf(!docker)("the browser", { timeout: 300_000 }, () => {
 		expect(JSON.stringify(keep.ask)).not.toContain(siteKey());
 		await api(`/waits/${keep.key}`, { method: "POST", body: JSON.stringify({ answer: "approve" }) });
 		await until(() => ended(chat));
-		expect((await results(chat, "propose_key")).at(-1)?.text).toMatch(/^Kept/);
+		expect((await results(chat, "propose_key")).at(-1)?.text).toMatch(/^The owner approved this\.\nKept/);
 		const credentials = JSON.parse(readFileSync(join(home, "auth", "egress.json"), "utf8"));
 		expect(credentials.credentials).toContainEqual({
 			host: "api.shop.example",
