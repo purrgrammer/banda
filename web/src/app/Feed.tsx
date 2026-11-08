@@ -30,7 +30,7 @@ import { ProposalCard } from "../chat/Proposal.tsx";
 import { RoutineProposal } from "../chat/Routine.tsx";
 import type { Who } from "../chat/Row.tsx";
 import { SkillFeedItem } from "../chat/Skill.tsx";
-import { WatchProposal } from "../chat/Watch.tsx";
+import { WatchLine, WatchProposal } from "../chat/Watch.tsx";
 import { Markdown } from "../components/Markdown.tsx";
 import { actOnCapability, actOnProposal, answerAgent, answerWait, dismissQuestion } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
@@ -288,7 +288,7 @@ function RoutineLine({
 }
 
 /** A `watch` call's line: the proposal card while the owner's answer waits, else one line saying how it stands. */
-function WatchLine({
+function WatchCallLine({
 	chat,
 	who,
 	agent,
@@ -790,7 +790,7 @@ function partOf(
 			const watch = segment.watch;
 			return (
 				<Line
-					icon={watch !== undefined ? EyeOffIcon : segment.routine === undefined ? CircleAlertIcon : CalendarXIcon}
+					icon={segment.routine === undefined ? CircleAlertIcon : CalendarXIcon}
 					tone="danger"
 					time={time(segment.at)}
 					onClick={watch === undefined || onRoutine === undefined ? openRoutine : () => onRoutine(watch)}
@@ -813,30 +813,27 @@ function partOf(
 					{segment.text}
 				</Line>
 			);
-		case "watch": {
-			// a feed item like any other: who, what they saw, on what; the object is a link, never a card
-			const openWatch = onRoutine === undefined ? undefined : () => onRoutine(segment.watch);
-			const rest = segment.text.startsWith(segment.object.name)
-				? segment.text.slice(segment.object.name.length)
-				: ` · ${segment.text}`;
+		case "watch":
+			// a feed item like any other: the object, then what changed on it; the object is a link, never a card
 			return (
-				<Line icon={segment.ended === undefined ? EyeIcon : EyeOffIcon} time={time(segment.at)} onClick={openWatch}>
-					{who.name} saw
-					<span className="ml-1">
+				<WatchLine
+					name={segment.object.name}
+					text={segment.text}
+					ended={segment.ended !== undefined}
+					time={time(segment.at)}
+					onClick={onRoutine === undefined ? undefined : () => onRoutine(segment.watch)}
+					object={
 						<FollowedObject
 							chat={chat}
 							agent={objectAgent}
 							reference={segment.object.ref}
 							fallback={segment.object.name}
-							strong
 						/>
-					</span>
-					{rest.replace(/^ · /, ": ")}
-				</Line>
+					}
+				/>
 			);
-		}
 		case "watchCall":
-			return <WatchLine chat={chat} who={who} agent={objectAgent} segment={segment} />;
+			return <WatchCallLine chat={chat} who={who} agent={objectAgent} segment={segment} />;
 		case "change":
 			return <ChangeLine who={who} segment={segment} />;
 		case "browser":

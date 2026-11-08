@@ -201,7 +201,11 @@ for (const width of [390, 1440])
 					await click(page, button("Check now"));
 					if (phone) await click(page, named("Close the panel"));
 					await page.until(shows("lint failed"));
-					await page.until(shows("Mara saw"));
+					// the wake's line: the pull request drawn as a reference (a link in a flex box, which innerText breaks
+					// a line at), then the change in the kind's words
+					await page.until(
+						`[...document.querySelectorAll('p')].some(el => el.textContent.includes('Keep objects as data: ') && el.textContent.includes('lint failed'))`,
+					);
 					await page.until(shows(REPLY));
 					await shot("8-woken");
 

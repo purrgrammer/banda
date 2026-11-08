@@ -26,6 +26,7 @@ import {
 	PullRequestCard,
 	RepositoryCard,
 } from "../chat/Object.tsx";
+import { Named } from "../chat/Watch.tsx";
 import { Markdown, MarkdownLinks } from "../components/Markdown.tsx";
 import { api, gmailAttachment } from "../lib/api.ts";
 import { sharedReads } from "../lib/object-reads.ts";
@@ -92,12 +93,7 @@ export function FollowedObject({
 		) : (
 			<span data-object-inline="">{fallback}</span>
 		);
-	if (!strong) return drawn;
-	return (
-		<span className="font-medium text-ink [&_a]:underline [&_a]:decoration-line [&_a]:underline-offset-2 [&_a:hover]:decoration-ink">
-			{drawn}
-		</span>
-	);
+	return strong ? <Named>{drawn}</Named> : drawn;
 }
 
 export function MessageObjects({

@@ -414,6 +414,29 @@ export function safeObjectUrl(value: string | undefined): string | undefined {
 	}
 }
 
+/** A Gmail address worth linking: `mail.google.com` over https, nothing else. */
+function gmailUrl(value: string | undefined): string | undefined {
+	try {
+		const url = new URL(value ?? "");
+		return url.protocol === "https:" &&
+			url.port === "" &&
+			url.username === "" &&
+			url.password === "" &&
+			url.hostname === "mail.google.com"
+			? url.href
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * An object named inline is a link wherever it has an address, drawn the same whatever the service: the words, a
+ * subtle underline that darkens on hover; without an address, the words alone.
+ */
+const INLINE_LINK = "min-w-0 max-w-80 truncate underline decoration-line underline-offset-2 hover:decoration-ink";
+const INLINE_TEXT = "min-w-0 truncate";
+
 /** A reference in the owner's words, not another card. Inherit the bubble's ink in either theme. */
 export function ObjectLink({
 	object,
@@ -434,12 +457,19 @@ export function ObjectLink({
 }) {
 	if (object.card === "messages") {
 		const Icon = object.search ? SearchIcon : MailsIcon;
+		const url = gmailUrl(href) ?? gmailUrl(object.url);
 		return (
 			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
 				<Icon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
-				<span className="min-w-0 truncate" title={object.title}>
-					{object.title}
-				</span>
+				{url === undefined ? (
+					<span className={INLINE_TEXT} title={object.title}>
+						{object.title}
+					</span>
+				) : (
+					<a href={url} target="_blank" rel="noopener noreferrer" className={INLINE_LINK} title={object.title}>
+						{object.title}
+					</a>
+				)}
 			</span>
 		);
 	}
@@ -451,17 +481,11 @@ export function ObjectLink({
 			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
 				<Icon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
 				{url === undefined ? (
-					<span className="min-w-0 truncate" title={name}>
+					<span className={INLINE_TEXT} title={name}>
 						{name}
 					</span>
 				) : (
-					<a
-						href={url}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="min-w-0 max-w-80 truncate underline"
-						title={name}
-					>
+					<a href={url} target="_blank" rel="noopener noreferrer" className={INLINE_LINK} title={name}>
 						{name}
 					</a>
 				)}
@@ -474,17 +498,11 @@ export function ObjectLink({
 			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
 				<UserRoundIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
 				{url === undefined ? (
-					<span className="min-w-0 truncate" title={object.name}>
+					<span className={INLINE_TEXT} title={object.name}>
 						{object.name}
 					</span>
 				) : (
-					<a
-						href={url}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="min-w-0 max-w-80 truncate underline"
-						title={object.name}
-					>
+					<a href={url} target="_blank" rel="noopener noreferrer" className={INLINE_LINK} title={object.name}>
 						{object.name}
 					</a>
 				)}
@@ -493,14 +511,12 @@ export function ObjectLink({
 	}
 	if (object.card === "event") {
 		const url = calendarUrl(href) ?? calendarUrl(object.url);
+		const struck = object.status === "cancelled" && "line-through";
 		return (
 			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
 				<CalendarIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
 				{url === undefined ? (
-					<span
-						className={cn("min-w-0 truncate", object.status === "cancelled" && "line-through")}
-						title={object.title}
-					>
+					<span className={cn(INLINE_TEXT, struck)} title={object.title}>
 						{object.title || "Event"}
 					</span>
 				) : (
@@ -508,7 +524,7 @@ export function ObjectLink({
 						href={url}
 						target="_blank"
 						rel="noopener noreferrer"
-						className={cn("min-w-0 max-w-80 truncate underline", object.status === "cancelled" && "line-through")}
+						className={cn(INLINE_LINK, struck)}
 						title={object.title}
 					>
 						{object.title || "Event"}
@@ -518,20 +534,16 @@ export function ObjectLink({
 		);
 	}
 	if (object.card === "email") {
-		const url = safeObjectUrl(href);
+		const url = gmailUrl(href) ?? gmailUrl(object.url);
 		return (
 			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
 				<MailIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
 				{url === undefined ? (
-					<span className="min-w-0 truncate">{object.subject || "Email"}</span>
+					<span className={INLINE_TEXT} title={object.subject}>
+						{object.subject || "Email"}
+					</span>
 				) : (
-					<a
-						href={url}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="min-w-0 max-w-80 truncate underline"
-						title={object.subject}
-					>
+					<a href={url} target="_blank" rel="noopener noreferrer" className={INLINE_LINK} title={object.subject}>
 						{object.subject || "Email"}
 					</a>
 				)}
@@ -558,7 +570,7 @@ export function ObjectLink({
 			<GitHubMark className="size-3.5 shrink-0 self-center fill-current" />
 			<state.icon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
 			{url === undefined ? (
-				<span className="min-w-0 truncate" title={label}>
+				<span className={INLINE_TEXT} title={label}>
 					{label}
 				</span>
 			) : (
@@ -566,7 +578,7 @@ export function ObjectLink({
 					href={url}
 					target="_blank"
 					rel="noopener noreferrer"
-					className="min-w-0 max-w-80 truncate"
+					className={INLINE_LINK}
 					title={label}
 					aria-label={`${label} on GitHub`}
 				>
@@ -600,7 +612,7 @@ export function EmailCard({
 	actions?: ReactNode;
 	attachments?: ReactNode;
 }) {
-	const url = safeObjectUrl(message.url);
+	const url = gmailUrl(message.url);
 	return (
 		<Tile className="flex flex-col gap-2.5 p-3.5">
 			<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-ink-2">
@@ -647,6 +659,8 @@ export type Messages = {
 		readonly date: string;
 	}[];
 	readonly total: number | null;
+	/** Where it opens in Gmail: the conversation, or the search. */
+	readonly url?: string | undefined;
 	readonly asOf?: string | undefined;
 };
 

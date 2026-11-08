@@ -1,12 +1,56 @@
 /**
- * A watch an agent proposes, in the chat where it asked: the same card as any approval (who asks, what, its facts,
- * one verb and a quiet no), since a watch looks on its own once allowed. A change shows what it becomes; a removal
- * asks to stop following.
+ * A watch in the chat (DESIGN.md "Watches"). The card an agent's proposal waits as: the same card as any approval
+ * (who asks, what, its facts, one verb and a quiet no), since a watch looks on its own once allowed; a change shows
+ * what it becomes, a removal asks to stop following. And the line each change the kind's rules say matters draws:
+ * who saw what, on which object, as every feed item reads.
  */
+import { EyeOffIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Facts } from "./Approval.tsx";
 import { Tile } from "./Cards.tsx";
+import { Line } from "./Line.tsx";
+
+/** An object named in a quiet line, standing out: primary text; its title is the link the object draws itself. */
+export function Named({ children }: { children: ReactNode }) {
+	return <span className="font-medium text-ink">{children}</span>;
+}
+
+/**
+ * A watch's line in the chat: the object, then what changed on it, narrated with no icon, as the chat's own voice. The
+ * object is drawn as the owner's references are (`object`: the service's mark, its state, its linked title; the app
+ * reads it from the daemon, the specimen gives it), in primary text, its name until then; the words that follow are
+ * the changes in the kind's words, with what came together since when, what came from a pause, what ended it, and
+ * whether some changes may be missing (`text`, as `watchWords` says it, which begins with the object's name). A change
+ * that only tells draws the same line and runs nothing. The last line, the one that ended the watch, carries the
+ * closed eye: the eyes mark following and its end, nothing else.
+ */
+export function WatchLine({
+	name,
+	text,
+	object,
+	ended = false,
+	time,
+	onClick,
+}: {
+	/** The object's name, as the daemon names it. */
+	name: string;
+	/** The line's words: the name, then the changes. */
+	text: string;
+	object?: ReactNode;
+	ended?: boolean;
+	time?: string | undefined;
+	/** Opens the watch in the agent's panel. */
+	onClick?: (() => void) | undefined;
+}) {
+	const rest = text.startsWith(name) ? text.slice(name.length) : ` · ${text}`;
+	return (
+		<Line icon={ended ? EyeOffIcon : undefined} time={time} onClick={onClick}>
+			<Named>{object ?? <span data-object-inline="">{name}</span>}</Named>
+			{rest.replace(/^ · /, ": ")}
+		</Line>
+	);
+}
 
 export type WatchProposalView = {
 	readonly agent: string;

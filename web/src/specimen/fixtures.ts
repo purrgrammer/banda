@@ -303,6 +303,7 @@ export const CHECK_RUN: CheckRun = {
 	state: "failed",
 	step: "npm test",
 	took: "3m 12s",
+	url: "https://github.com/purrgrammer/banda/actions/runs/9921/job/7781",
 	log: [
 		"FAIL test/routines.test.ts > a paused routine never fires",
 		"  expected 0 runs, got 1",

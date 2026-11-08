@@ -4,7 +4,7 @@ import { Bubble } from "../chat/Feed.tsx";
 import { type DriveFile, FileCard, ObjectLink } from "../chat/Object.tsx";
 import { Section } from "./stage.tsx";
 
-const PLAN: DriveFile = {
+export const PLAN: DriveFile = {
 	name: "Q1 rollout plan",
 	kind: "doc",
 	mimeType: "application/vnd.google-apps.document",

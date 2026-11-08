@@ -4,7 +4,7 @@ import { Bubble } from "../chat/Feed.tsx";
 import { type CalendarEvent, EventCard, ObjectLink } from "../chat/Object.tsx";
 import { Section } from "./stage.tsx";
 
-const PLANNING: CalendarEvent = {
+export const PLANNING: CalendarEvent = {
 	title: "Quarterly planning with Northstar",
 	start: "2026-11-09T10:00:00+01:00",
 	end: "2026-11-09T11:30:00+01:00",

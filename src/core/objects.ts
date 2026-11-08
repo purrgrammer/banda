@@ -805,6 +805,8 @@ export type MessagesCard = {
 	readonly messages: MessageLine[];
 	/** How many there are in all, as the service says (a search's is its estimate). */
 	readonly total: number | null;
+	/** Where it opens in Gmail: the conversation by its id, or the search by its query. */
+	readonly url?: string;
 };
 
 /** How many emails a list's card shows. */
@@ -1001,12 +1003,19 @@ function messagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: string) =>
 		.sort((a, b) => when(b.each.date) - when(a.each.date) || (search ? a.i - b.i : b.i - a.i))
 		.slice(0, MESSAGES_SHOWN)
 		.map(({ each }) => each);
+	// Gmail opens a conversation by its id and a search by its query, both from the first account's mailbox
+	const url = webUrl(
+		search
+			? `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(ref.values.query ?? "")}`
+			: `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(ref.values.id ?? "")}`,
+	);
 	return {
 		card: "messages",
 		title: title || (search ? "Search" : "(No subject)"),
 		search,
 		messages,
 		total: count(field("total")),
+		...(url === undefined ? {} : { url }),
 	};
 }
 

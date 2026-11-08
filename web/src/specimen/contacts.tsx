@@ -3,7 +3,7 @@ import { Bubble } from "../chat/Feed.tsx";
 import { ContactCard, ObjectLink, type Person } from "../chat/Object.tsx";
 import { Section } from "./stage.tsx";
 
-const ANA: Person = {
+export const ANA: Person = {
 	name: "Ana García",
 	emails: "ana@northstar.example, ana.garcia@home.example",
 	phones: "+34 600 123 456",
