@@ -1016,7 +1016,12 @@ export function defineWatches(options: WatchesOptions) {
 				let mine = true;
 				await runtime.commit(async (tx) => {
 					const record = (await tx.doc(Watches)).watches[name];
-					mine = record?.task === id && record.paused === undefined && (await tx.doc(Control)).paused === undefined;
+					// a task woken before its look is due (the owner's Check now moved it later) looks at nothing and sleeps on
+					mine =
+						record?.task === id &&
+						record.paused === undefined &&
+						(record.next ?? 0) <= runtime.now() &&
+						(await tx.doc(Control)).paused === undefined;
 					return undefined;
 				}, ctx);
 				if (mine)
@@ -1136,17 +1141,25 @@ export function defineWatches(options: WatchesOptions) {
 		let looked: Looked = { outcome: "raced" };
 		for (let attempt = 0; attempt < 3 && looked.outcome === "raced"; attempt++)
 			looked = await look(name, now(), (fn) => harness.commit(fn, ctx), ctx, key);
-		// a look moved when the watch looks next, but its task sleeps until the time it took before: a new task sleeps
-		// until the new one (and a look that ended the watch leaves it none)
+		// a look moved when the watch looks next, but its task sleeps until the time the look before set. A sleep that
+		// ends by the new time stays: the task wakes then, finds no look due and sleeps until it (one commit, no read).
+		// Only a sleep past the new time (the look found the object busy) is ended and made again, so the watch looks
+		// when it should; a look that ended the watch leaves it no task.
 		if (looked.outcome === "looked" || looked.outcome === "baseline") {
-			const sleeping = await harness.commit(async (tx) => {
+			const stale = await harness.commit(async (tx) => {
 				const record = (await tx.doc(Watches)).watches[name];
-				const task = record?.task;
-				if (record !== undefined) delete record.task;
-				return task;
+				if (record?.task === undefined) return { task: undefined, settle: record?.done !== undefined };
+				const task = await tx.task(record.task as TaskId);
+				const live = task !== undefined && task.state.status !== "terminal";
+				const until = task?.state.status === "sleeping" ? (task.state as { until: number }).until : undefined;
+				if (record.done === undefined && live && (until === undefined || until <= (record.next ?? 0)))
+					return { task: undefined, settle: false };
+				const id = record.task;
+				delete record.task;
+				return { task: live ? id : undefined, settle: true };
 			}, ctx);
-			if (sleeping !== undefined) await harness.abortTask(sleeping as TaskId, ctx);
-			await reconcile(harness, now(), ctx);
+			if (stale.task !== undefined) await harness.abortTask(stale.task as TaskId, ctx);
+			if (stale.settle) await reconcile(harness, now(), ctx);
 		}
 		return looked;
 	}

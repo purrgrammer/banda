@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Context } from "@earendil-works/chord";
-import type { Harness } from "@earendil-works/pi-durable";
+import type { Harness, TaskId } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
 import { Accepted } from "../src/core/agents.ts";
 import { Connected } from "../src/core/connections.ts";
@@ -600,15 +600,56 @@ describe("a watch on a pull request", () => {
 		expect(otto.every((wake) => wake.gap === undefined)).toBe(true);
 	}, 60_000);
 
-	it("Check now moves the task's next look too: the row's next look is when the task looks", async () => {
-		// checks run throughout, so the watch is busy; the owner checks a minute after the baseline
+	it("Check now moves the task's next look too: the task keeps its sleep, wakes, and sleeps on until the new time", async () => {
+		// checks run throughout, so the watch is busy; the owner checks a minute after the baseline, which moves the next
+		// look from +2m to +3m; the task still sleeps until +2m, wakes then (the clock at +2.5m), reads nothing and
+		// sleeps until +3m: the same task throughout
+		const ids: (number | undefined)[] = [];
 		const summary = await watchScenario(await tempHome(), new Faults(), {
 			world: () => world(0),
-			at: (step) => NOW + step * 60_000,
-			clicks: ["k1"],
+			at: (step) => NOW + [0, 60_000, 150_000][step]!,
+			clicks: ["k1", undefined],
+			act: async (step, { harness }) => {
+				const record = (await harness.snapshot(Watches, context))?.watches["banda-142"];
+				ids.push(record?.task);
+				if (step !== 2 || record?.task === undefined) return;
+				// the task wakes at +2m and, with no look due, sleeps until the new time
+				for (;;) {
+					const task = await harness.getTask(record.task as TaskId, context);
+					if (
+						task?.state.status === "sleeping" &&
+						(task.state as { until: number }).until === NOW + 60_000 + BUSY_EVERY
+					)
+						return;
+					await new Promise((r) => setTimeout(r, 5));
+				}
+			},
 		});
 		expect(summary.record.next).toBe(NOW + 60_000 + BUSY_EVERY);
 		expect(summary.task).toEqual({ status: "sleeping", until: summary.record.next });
+		expect(ids[0]).toBeDefined();
+		expect(ids).toEqual([ids[0], ids[0]]);
+		// the baseline's read and the click's: the early wake read nothing
+		expect(summary.looks).toBe(2);
+	}, 60_000);
+
+	it("Check now remakes the task only when the look found the object busy: its sleep would end too late", async () => {
+		// quiet at the baseline (every check completed: the task sleeps five minutes); the first click finds it the
+		// same, so the task stays; the second finds checks running, so the watch should look in two minutes: a new task
+		const ids: (number | undefined)[] = [];
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: (step) => (step <= 1 ? world(1) : world(0)),
+			clicks: ["k1", "k2"],
+			act: async (_step, { harness }) => {
+				ids.push((await harness.snapshot(Watches, context))?.watches["banda-142"]?.task);
+			},
+		});
+		// ids: before each click; the task after the last is the summary's
+		expect(ids[0]).toBeDefined();
+		expect(ids[1]).toBe(ids[0]);
+		expect(summary.record.task).toBeDefined();
+		expect(summary.record.task).not.toBe(ids[0]);
+		expect(summary.task).toEqual({ status: "sleeping", until: NOW + BUSY_EVERY });
 	}, 60_000);
 
 	it("a check that first appears already failed wakes, in its own words", async () => {
