@@ -19,11 +19,11 @@ import { type Origin, OWNER, type Strength } from "./gateway.ts";
 import {
 	agentOfChat,
 	countAnswer,
-	countRan,
 	covering,
 	type Errand,
 	errandOf,
 	type Floor,
+	floorNow,
 	give,
 	isOpen,
 	matches,
@@ -363,7 +363,7 @@ export async function fill(
 			draft = edited.draft;
 		}
 		if (permission !== undefined) {
-			const why = refusal(permission, shapeFor(permission, ask), ask.floor, now, offeredScopes(ask));
+			const why = refusal(permission, shapeFor(permission, ask), await floorNow(tx, ask), now, offeredScopes(ask));
 			if (why !== undefined) return { refused: why };
 		}
 	}
@@ -406,30 +406,29 @@ export async function fill(
 			...(stored.scope === "until" ? { until: stored.until } : {}),
 		};
 		slot.permission = permitted;
-		await answerCovered(tx, covered, permitted, sender, now);
+		await answerCovered(tx, covered, permitted, now);
 	}
 	return { answered: id, chat };
 }
 
 /**
  * Never ask twice: answer the open asks `covered` (`coveredAsks`, read before the commit's first write) with the
- * permission just given, `permitted`, in the commit that gives it; each counts as an effect it let run.
+ * permission just given, `permitted`, in the commit that gives it: answered by that permission, which checks it again,
+ * and counts it, in the commit that starts each effect.
  */
 export async function answerCovered(
 	tx: Tx,
 	covered: readonly number[],
 	permitted: { readonly id: string; readonly scope: PermissionScope["scope"]; readonly until?: number },
-	sender: Sender,
 	now: number,
 ): Promise<void> {
 	for (const other of covered) {
 		const answers = await tx.doc(Answers, other as TaskId);
 		answers.answer = "approve";
-		answers.by = sender;
+		answers.by = BY_PERMISSION;
 		answers.at = now;
 		answers.permission = { ...permitted };
 	}
-	await countRan(tx, permitted.id, now, covered.length);
 }
 
 /** Close an unanswered question without inventing an answer; only the owner can dismiss it. */
@@ -660,8 +659,8 @@ export const BY_PERMISSION: Sender = { gateway: "permission", peer: OWNER };
 
 /**
  * Never ask twice: an approval that a permission given since its tool last looked now covers is answered by that
- * permission as the Wait starts, as the effect would have run within it. Not a run again, never the floor (`covering`
- * says so). Reads before it writes.
+ * permission as the Wait starts, as the effect would have run within it; the effect counts it as it starts. Not a run
+ * again, never the floor (`covering` says so). Reads before it writes.
  */
 async function coveredAtStart(tx: Tx, ask: Ask, chat: number, id: TaskId, now: number): Promise<void> {
 	if (ask.type !== "approval" || ask.interrupted === true) return;
@@ -677,7 +676,6 @@ async function coveredAtStart(tx: Tx, ask: Ask, chat: number, id: TaskId, now: n
 		scope: found.permission.scope,
 		...(found.permission.until === undefined ? {} : { until: found.permission.until }),
 	};
-	await countRan(tx, found.id, now);
 }
 
 /**

@@ -31,11 +31,12 @@ import {
 import { log } from "./activity.ts";
 import { AgentChats, acceptedAgent, agentWords, ChatAgent, LEAD } from "./agents.ts";
 import { Companion } from "./companion.ts";
+import { accountArg, connectionTool } from "./connections.ts";
 
 import { FLOOR_WORDS, type Floor } from "./floor.ts";
 import { readForeign } from "./foreign.ts";
 import { allowedHost, hostCovers } from "./hosts.ts";
-import type { Grain } from "./objects.ts";
+import { type Grain, grainsOf } from "./objects.ts";
 import { WAKE, type WakeData } from "./routines.ts";
 import { context } from "./store.ts";
 
@@ -264,8 +265,45 @@ export async function allowHostIn(
 }
 
 /**
- * The open permission covering a call of `tool` with `args` from `chat`, if any: never one for a draft on the floor,
- * and only one given to the agent `chat` runs, so a chat of no agent the store knows is covered by none. Reads only.
+ * The floor a draft of `tool` is on now: the one its tool gave it when drafted, else the one the store puts its tool on
+ * in this commit (its connection's file, or the owner's Always ask on a write and Ask on a read), so a draft made before
+ * the owner changed a setting never runs under one. Reads only.
+ */
+export async function floorNow(
+	tx: Tx,
+	draft: { readonly tool: string; readonly floor?: Floor | undefined },
+): Promise<Floor | undefined> {
+	return draft.floor ?? (await connectionTool(tx, draft.tool))?.floor;
+}
+
+/**
+ * Whether a permission given at a grain binds what its tool's grain binds now: its connection's current version still
+ * declares that grain for the tool, from the same arguments (the account's, and a place's own). One given under a
+ * version that declared it otherwise covers nothing, however its stored values match. Reads only.
+ */
+async function grainHolds(tx: Tx, permission: Permission): Promise<boolean> {
+	if (permission.grain === undefined) return true;
+	const tool = await connectionTool(tx, permission.tool);
+	if (tool === undefined) return false;
+	const grains = grainsOf(tool.tool, tool.connection.objects);
+	const named =
+		permission.grain === "place"
+			? grains?.place === undefined
+				? undefined
+				: Object.values(grains.place.args)
+			: grains?.action === undefined
+				? undefined
+				: [];
+	if (named === undefined) return false;
+	return (
+		canonical(Object.keys(permission.match).sort()) === canonical([accountArg(tool.listed.schema), ...named].sort())
+	);
+}
+
+/**
+ * The open permission covering a call of `tool` with `args` from `chat`, if any: never one for a draft on the floor
+ * now, never one at a grain its tool no longer declares, and only one given to the agent `chat` runs, so a chat of no
+ * agent the store knows is covered by none. Reads only.
  */
 export async function covering(
 	tx: Tx,
@@ -273,7 +311,7 @@ export async function covering(
 	chat: number,
 	now: number,
 ): Promise<{ readonly id: string; readonly permission: Permission } | undefined> {
-	if (draft.floor !== undefined) return undefined;
+	if ((await floorNow(tx, draft)) !== undefined) return undefined;
 	const agent = await agentOfChat(tx, chat);
 	if (agent === undefined) return undefined;
 	const { permissions } = await tx.doc(Permissions);
@@ -284,8 +322,9 @@ export async function covering(
 	const errand = candidates.some(([, permission]) => permission.scope === "task")
 		? await errandOf(tx, chat)
 		: undefined;
-	const found = candidates.find(([, permission]) => isOpen(permission, now, errand));
-	return found === undefined ? undefined : { id: found[0], permission: found[1] };
+	for (const [id, permission] of candidates)
+		if (isOpen(permission, now, errand) && (await grainHolds(tx, permission))) return { id, permission };
+	return undefined;
 }
 
 /**

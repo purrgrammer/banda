@@ -33,7 +33,7 @@ import {
 	refusal,
 } from "./permissions.ts";
 import { context } from "./store.ts";
-import { answerCovered, BY_PERMISSION, coveredAsks } from "./wait.ts";
+import { answerCovered, coveredAsks } from "./wait.ts";
 
 /** What the owner allows from Access: which agent may run which write, as which account, at which grain, how long. */
 export type GrainAsked = {
@@ -133,7 +133,6 @@ export async function allowGrain(
 			tx,
 			covered,
 			{ id: id, scope: scope.scope, ...(scope.scope === "until" ? { until: scope.until } : {}) },
-			BY_PERMISSION,
 			now,
 		);
 		return { id: id, what };

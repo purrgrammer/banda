@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { TaskId } from "@earendil-works/pi-durable";
 import { afterEach, expect, it } from "vitest";
+import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
 import { ActivityLog } from "../src/core/activity.ts";
 import { Accepted, AgentChats, shaOf } from "../src/core/agents.ts";
 import { OWNER } from "../src/core/gateway.ts";
@@ -215,6 +216,44 @@ it("a place's permission covers no other account, agent or floor draft; an actio
 	expect(await s.merge({ owner: "someone", repo: "else", pullNumber: 2 })).toMatchObject({ asked: false });
 	expect(await s.ran("2")).toMatchObject({ count: 1 });
 	expect(await s.ran("1")).toBeUndefined();
+});
+
+it("a grain's permission covers only while its connection's version still declares that grain", async () => {
+	const s = await setup();
+	const now = Date.now();
+	const inPlace = await allowGrain(s.harness, place(), now);
+	const anywhere = await allowGrain(s.harness, place({ grain: "action", place: undefined }), now);
+	if (!("id" in inPlace) || !("id" in anywhere)) throw new Error("not given");
+	/** A new version of the connection's file whose merge declares `grains`, accepted. */
+	const declaring = async (grains: readonly string[] | undefined) => {
+		const objects = JSON.parse(JSON.stringify(GITHUB_OBJECTS)) as typeof GITHUB_OBJECTS;
+		for (const kind of Object.values(objects) as { writes?: { tool: string; grains?: readonly string[] }[] }[])
+			for (const write of kind.writes ?? [])
+				if (write.tool === "merge_pull_request")
+					if (grains === undefined) delete write.grains;
+					else write.grains = grains;
+		const file = githubObjectFile(s.fake.url)
+			.replace("reads: [", "money: [update_pull_request]\nreads: [")
+			.replace(JSON.stringify({ objects: GITHUB_OBJECTS }, null, 2), JSON.stringify({ objects }, null, 2));
+		await writeFile(join(s.box.workspace, "connections/github.md"), file);
+		const change = (await s.capabilities.view()).connections.find((c) => c.name === "github")?.change;
+		if (change === undefined || !("sha" in change) || change.sha === undefined) throw new Error("no change");
+		await s.capabilities.acceptConnection("github", change.sha);
+	};
+	const covers = (owner: string) =>
+		s.harness.commit(async (tx) => {
+			const chat = Number((await tx.createConversation({ ownership: { kind: "ownerless" } })).id);
+			(await tx.doc(AgentChats)).chats[chat] = "reader";
+			const args = { owner, repo: "banda", pullNumber: 9, account: "alice" };
+			return (await covering(tx, { tool: "github__merge_pull_request", args }, chat, now))?.id;
+		}, context);
+	expect(await covers("acme")).toBe(inPlace.id);
+	await declaring(["action"]);
+	expect(await covers("acme")).toBe(anywhere.id);
+	await declaring(undefined);
+	expect(await covers("acme")).toBeUndefined();
+	expect(await s.merge({ owner: "acme", repo: "banda", pullNumber: 41 })).toMatchObject({ asked: true });
+	expect(s.merged()).toEqual([]);
 });
 
 it("a permission given from Access answers the agent's open asks it covers, and counts them", async () => {

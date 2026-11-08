@@ -30,6 +30,7 @@ import {
 	countRan,
 	covering,
 	type Floor,
+	floorNow,
 	offering,
 	type Permission,
 	type PermissionScope,
@@ -50,7 +51,7 @@ import {
 	REACT,
 	READ_AGENT_CHAT,
 } from "./toolsets.ts";
-import { type Answer, type Ask, TasksOf, type WaitResult } from "./wait.ts";
+import { type Answer, type Ask, BY_PERMISSION, TasksOf, type WaitResult } from "./wait.ts";
 
 /** Open (or find) the Wait named `name` of the calling tool task, for the owner, and resolve with its id. */
 export type Asking = (api: ToolExecutionApi, name: string, ask: Ask, deadline: number, ctx: Context) => Promise<number>;
@@ -641,6 +642,15 @@ export const EffectRun = defineDoc<Run>({
 
 type Draft = Extract<Ask, { type: "approval" }>;
 
+/** An approval as the owner gave it: its Wait, the draft as edited, the permission given with it or that answered it. */
+type Approved = {
+	readonly wait: number;
+	readonly draft?: JsonObject;
+	readonly permission?: string;
+	/** A permission answered it (`coveredAtStart`, `answerCovered`), not the owner's own approval. */
+	readonly covered?: true;
+};
+
 /** How long a permission lasts, for the model: a task's ends with the owner's next message, which it cannot see coming. */
 const lasting = (permission: Permission) =>
 	permission.scope === "task" ? "for this task, until the owner next writes to you" : permissionWhen(permission);
@@ -728,6 +738,14 @@ export function draftOf<P extends TSchema>(tool: EffectTool<P>, args: JsonObject
 	};
 }
 
+/** `draft` on the floor its tool is on now (`floorNow`): one the store put there since it was drafted offers no scope. */
+async function onFloorNow(tx: Tx, draft: Draft): Promise<Draft> {
+	const floor = await floorNow(tx, draft);
+	if (floor === undefined || floor === draft.floor) return draft;
+	const { permission: _permission, host: _host, ...rest } = draft;
+	return { ...rest, floor };
+}
+
 /**
  * The tool for `tool`: it runs only as a draft the owner approved, or within a permission they gave that is open in the
  * commit recording the run's start (law 2). A denied or expired approval returns an error to the model, which never
@@ -739,13 +757,11 @@ export function effect<P extends TSchema>(asking: Asking, tool: EffectTool<P>): 
 	);
 	if (overlap.length > 0)
 		throw new Error(`${tool.name}: a permission cannot bind what the owner may edit (${overlap.join(", ")})`);
-	/** The owner's answer to the ask named `name`: the draft as approved, or why it may not run. */
-	const approved = async (
-		api: ToolExecutionApi,
-		name: string,
-		ask: Ask,
-		ctx: Context,
-	): Promise<{ readonly wait: number; readonly draft?: JsonObject; readonly permission?: string } | string> => {
+	/**
+	 * The owner's answer to the ask named `name`: the draft as approved, and whether a permission answered it (`covered`),
+	 * or why it may not run.
+	 */
+	const approved = async (api: ToolExecutionApi, name: string, ask: Ask, ctx: Context): Promise<Approved | string> => {
 		const id = await asking(api, name, ask, api.now() + DEFAULT_DEADLINE, ctx);
 		const result = await settle(api, id, ctx);
 		if (result === undefined) return "the approval was cancelled";
@@ -756,27 +772,32 @@ export function effect<P extends TSchema>(asking: Asking, tool: EffectTool<P>): 
 			wait: id,
 			...(result.draft === undefined ? {} : { draft: result.draft }),
 			...(result.permission === undefined ? {} : { permission: result.permission }),
+			...(result.by.gateway === BY_PERMISSION.gateway ? { covered: true as const } : {}),
 		};
 	};
 	/**
 	 * Record attempt `attempt` started, with the answer that let it, and the draft it runs; what let it, as its result's
-	 * first line; or why it may not start.
+	 * first line; or why it may not start. An ask a permission answered runs only while one still covers it, in this
+	 * commit, which counts it as one that permission let run.
 	 */
-	const start = (
-		api: ToolExecutionApi,
-		attempt: number,
-		answer: { readonly wait: number; readonly draft?: JsonObject; readonly permission?: string },
-		draft: JsonObject,
-		ctx: Context,
-	) =>
+	const start = (api: ToolExecutionApi, attempt: number, answer: Approved, draft: JsonObject, ctx: Context) =>
 		api.commit(async (tx): Promise<{ readonly refused: string } | { readonly line: string }> => {
-			const refused = await tool.allowed?.(tx, draft, Number(api.conversationId));
+			const chat = Number(api.conversationId);
+			const refused = await tool.allowed?.(tx, draft, chat);
 			if (refused !== undefined) return { refused };
-			const given =
-				answer.permission === undefined ? undefined : (await tx.doc(Permissions)).permissions[answer.permission];
+			const now = api.now();
+			const within = answer.covered === true ? await covering(tx, draftOf(tool, draft), chat, now) : undefined;
+			if (answer.covered === true && within === undefined)
+				return { refused: "the permission that answered it no longer covers it: call it again to ask the owner" };
 			const run = await tx.doc(EffectRun, api.taskId);
 			run.draft = JSON.parse(JSON.stringify(draft)) as JsonObject;
 			run.started[attempt] = { wait: answer.wait };
+			if (within !== undefined) {
+				await countRan(tx, within.id, now);
+				return { line: ranWithin(within.permission) };
+			}
+			const given =
+				answer.permission === undefined ? undefined : (await tx.doc(Permissions)).permissions[answer.permission];
 			return { line: approvedLine(answer.wait, answer.draft !== undefined, given) };
 		}, ctx);
 	/**
@@ -841,7 +862,10 @@ export function effect<P extends TSchema>(asking: Asking, tool: EffectTool<P>): 
 				if (permitted !== undefined) return run(draft.args, permitted);
 				// the ask names its task and the place it acts in, and offers the scopes the daemon allows
 				const chat = Number(api.conversationId);
-				const asked = await api.commit(async (tx) => offering(tx, chat, await withPlace(tx, chat, draft)), ctx);
+				const asked = await api.commit(
+					async (tx) => offering(tx, chat, await withPlace(tx, chat, await onFloorNow(tx, draft))),
+					ctx,
+				);
 				const answer = await approved(api, "approval", asked, ctx);
 				if (typeof answer === "string") return text(`${tool.name} did not run: ${answer}.`, true);
 				const final = answer.draft ?? draft.args;

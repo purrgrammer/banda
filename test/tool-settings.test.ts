@@ -222,6 +222,57 @@ describe("a tool's setting", () => {
 		expect(offeredScopes(await asked(s, "cal__list_events", { day: "mon" }))).toEqual([]);
 	});
 
+	it("is read in the commit that starts a call and answers an ask: one offered before it changed obeys it", async () => {
+		const fake = await startFakeMcp();
+		fakes.push(fake);
+		const s = await open(await tempHome());
+		await proposed(s, fake);
+		/** The approval a call of `tool` opens, or what ran when it opened none. */
+		const ask = async (tool: string, args: Record<string, unknown>) => {
+			s.model.plan([{ tool, args }]);
+			const { turn } = await s.say(`${tool} ${JSON.stringify(args)}`);
+			const opened = await until(async () => {
+				const wait = (await openWaits(s.harness)).find((w) => w.ask.type === "approval");
+				if (wait !== undefined) return wait;
+				return (await s.harness.getTask(turn as TaskId, context))?.state.status === "terminal"
+					? { key: "", ask: { ran: fake.calls.map((call) => call.tool) } }
+					: undefined;
+			});
+			return { turn, key: opened.key, ask: opened.ask as Parameters<typeof offeredScopes>[0] };
+		};
+		const tea = { title: "Tea", day: "mon" };
+		const first = await ask("cal__create_event", tea);
+		await answer(s.harness, first.key, "approve", web, "bearer", { approving: { permission: { scope: "always" } } });
+		await s.done(first.turn);
+		const lunch = await ask("cal__create_event", { title: "Lunch", day: "mon" });
+		expect(offeredScopes(lunch.ask).length).toBeGreaterThan(0);
+
+		// the owner's settings, committed before the tools the model is offered are installed again
+		await s.harness.commit(async (tx) => {
+			const kept = await tx.doc(ToolSettings);
+			kept.set.cal__create_event = "always";
+			kept.set.cal__list_events = "ask";
+		}, context);
+		// always asked now: a scope picked on the card it showed before is refused
+		expect(
+			await answer(s.harness, lunch.key, "approve", web, "bearer", { approving: { permission: { scope: "always" } } }),
+		).toMatchObject({ refused: expect.stringContaining("never allowed ahead") });
+		await answer(s.harness, lunch.key, "deny", web, "bearer");
+		await s.done(lunch.turn);
+		// the permission for it covers it no more: it asks, on the floor
+		const again = await ask("cal__create_event", tea);
+		expect(again.ask).toMatchObject({ floor: "owner" });
+		expect(offeredScopes(again.ask)).toEqual([]);
+		await answer(s.harness, again.key, "deny", web, "bearer");
+		await s.done(again.turn);
+
+		// a read set to Ask does not run as one
+		s.model.plan([{ tool: "cal__list_events", args: { day: "mon" } }]);
+		const read = await s.say("my day");
+		await s.done(read.turn);
+		expect(fake.calls.map((call) => call.tool)).toEqual(["create_event"]);
+	});
+
 	it("outlasts a restart, and banda's next version of a file it ships", async () => {
 		const fake = await startFakeMcp();
 		fakes.push(fake);

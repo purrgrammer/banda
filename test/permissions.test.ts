@@ -70,6 +70,8 @@ function setup() {
 		now,
 	});
 	const runs: Call[] = [];
+	/** The recipients the owner switched sending to off for: a send to one is refused as it starts. */
+	const off = new Set<string>();
 	let hold: (() => void) | undefined;
 	const record = async (call: Call, ctx: Context) => {
 		runs.push(call);
@@ -89,6 +91,7 @@ function setup() {
 			describe: (args) => `send a message to ${args.to}`,
 			editable: ["body"],
 			permission: { args: ["to"], what: (args) => `send messages to ${args.to}` },
+			allowed: async (_tx, draft) => (off.has(String(draft.to)) ? "the owner switched it off" : undefined),
 			run: (args, _effect, ctx) => record({ tool: "send", to: args.to, body: args.body }, ctx),
 		}),
 		core.effect({
@@ -154,6 +157,7 @@ function setup() {
 		open,
 		say,
 		runs,
+		off,
 		clock,
 		now,
 		holding: () => new Promise<void>((resolve) => (hold = resolve)),
@@ -663,6 +667,46 @@ describe("the scopes an ask offers", () => {
 		await until(() => done(harness, three.turn));
 		await harness.close(context);
 	});
+	it("what a permission let run counts as each effect starts: an ask it answered that is refused then does not", async () => {
+		const s = setup();
+		const harness = await s.open(await tempHome());
+		const one = await s.say(harness, [{ tool: "send", to: "ana", body: "1" }], "a");
+		const two = await s.say(harness, [{ tool: "send", to: "ana", body: "2" }], "b");
+		const open = await until(async () => {
+			const waits = await openWaits(harness);
+			return waits.length === 2 ? waits : undefined;
+		});
+		s.off.add("ana");
+		const first = open.find((wait) => wait.chat === one.chat)!;
+		await approve(harness, first.key, { permission: { scope: "always" } });
+		await until(() => done(harness, one.turn));
+		await until(() => done(harness, two.turn));
+		expect(s.runs).toEqual([]);
+		expect((await openPermissions(harness, s.now()))[0]?.permission.ran).toBeUndefined();
+		await harness.close(context);
+	});
+
+	it("an ask a permission answered checks it again as it starts: one closed since lets nothing run", async () => {
+		const s = setup();
+		const harness = await s.open(await tempHome());
+		const one = await s.say(harness, [{ tool: "send", to: "ana", body: "1" }], "a");
+		const two = await s.say(harness, [{ tool: "send", to: "ana", body: "2" }], "b");
+		const open = await until(async () => {
+			const waits = await openWaits(harness);
+			return waits.length === 2 ? waits : undefined;
+		});
+		const answered = Date.now();
+		// the window is open as the owner answers, and closed by the time the effects start
+		s.clock.skew = 2 * HOUR;
+		const first = open.find((wait) => wait.chat === one.chat)!;
+		await approve(harness, first.key, { permission: { scope: "until", until: answered + HOUR } }, answered);
+		await until(() => done(harness, one.turn));
+		await until(() => done(harness, two.turn));
+		// the owner's own approval runs; the ask the permission answered does not
+		expect(s.runs.map((run) => run.body)).toEqual(["1"]);
+		await harness.close(context);
+	});
+
 	it("a permission given answers only its own agent's open asks, never another agent's of the same shape", async () => {
 		const s = setup();
 		const harness = await s.open(await tempHome());
