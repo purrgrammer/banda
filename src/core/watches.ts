@@ -32,6 +32,7 @@ import { log } from "./activity.ts";
 import { Accepted, AGENT_NAME, agentWords, ChatAgent, frontmatter, isArchived, LEAD, shaOf } from "./agents.ts";
 import { acceptedConnection, accountsOn, Connected, type Connection, signsIn } from "./connections.ts";
 import {
+	BUSY_EVERY,
 	canonical,
 	endedBy,
 	type Follow,
@@ -39,6 +40,7 @@ import {
 	type Json,
 	lookEvery,
 	reading as readingOf,
+	settleOf,
 	sort,
 } from "./follow.ts";
 import { objectAccess } from "./object-access.ts";
@@ -55,6 +57,7 @@ import {
 	refKey,
 } from "./objects.ts";
 import { Control } from "./routines.ts";
+import { localTime } from "./schedule.ts";
 import { context } from "./store.ts";
 
 /** A watch's name, which is its file's: lowercase words joined by `-`, as an agent's. */
@@ -203,6 +206,11 @@ export type WatchRecord = {
 	paused?: "owner";
 	/** When the owner resumed it, until the next good look: what changed meanwhile wakes once, said to come from the pause. */
 	resumed?: number;
+	/**
+	 * Holding a wake since then: a change came while its last wake's run still went, or before the kind's settling time
+	 * passed, so its cursor stays and what changes meanwhile joins that wake.
+	 */
+	burst?: number;
 	/** Behind since then: its newest wake or tell had a gap (some changes may be missing), until one without a gap. */
 	behind?: number;
 	/** Done: when, and by which of its ends, or, with `authority`, why its account or connection was taken away. */
@@ -314,6 +322,11 @@ export type WatchWakeData = {
 	readonly resumed?: true;
 	/** The cursor's reading fell off those kept: diffed from the oldest kept, some changes may be missing. */
 	readonly gap?: true;
+	/**
+	 * When the first of the changes that came together was seen: they were held while the watch's last wake's run
+	 * still went, or until the kind's settling time passed, and wake as one.
+	 */
+	readonly burst?: number;
 };
 export const WAKE = "banda.watch-wake";
 /** Changes that only tell: the line and the card in the chat, no run. */
@@ -383,11 +396,12 @@ function wakeText(
 	name: string,
 	service: string,
 	changes: readonly string[],
-	{ ended, resumed, gap }: { ended?: string; resumed?: boolean; gap?: boolean },
+	{ ended, resumed, gap, burst }: { ended?: string; resumed?: boolean; gap?: boolean; burst?: number },
 ): string {
 	return (
 		`${service}: ${name}, which you follow${watch.until === undefined ? "" : ` until ${watch.until}`}, changed` +
-		`${resumed ? " while the owner had the watch paused" : ""}:\n` +
+		`${resumed ? " while the owner had the watch paused" : ""}` +
+		`${burst === undefined ? "" : ` (these came together since ${localTime(burst)})`}:\n` +
 		`${changes.map((change) => `- ${change}`).join("\n")}\n\n` +
 		(gap ? "Some changes may be missing: this is the difference since the oldest reading banda kept.\n\n" : "") +
 		(ended === undefined ? "" : `This ends the watch (${ended}): it will not look again.\n\n`) +
@@ -524,8 +538,11 @@ export type Looked =
 	| { readonly outcome: "failed"; readonly why: string }
 	| { readonly outcome: "gone" }
 	| { readonly outcome: "raced" }
-	/** It kept nothing: the watch is done, or was paused while the task looked. */
-	| { readonly outcome: "held"; readonly why: "done" | "paused" };
+	/**
+	 * It kept no wake: the watch is done, or was paused while the task looked; or it holds its wake for a burst, the
+	 * reading kept and its cursor where it was.
+	 */
+	| { readonly outcome: "held"; readonly why: "done" | "paused" | "burst" };
 
 /**
  * A wake's key: the transition it is, from the watch's cursor (since it began) to the reading it saw. The chat keeps
@@ -713,9 +730,8 @@ export function defineWatches(options: WatchesOptions) {
 			}
 			// another look of this watch moved its cursor meanwhile: it read against an older cursor, so keep nothing
 			if (record.seen !== seen) return;
-			// the first good look after a resume diffs across the pause: what it finds is said to come from it
+			// the first look after a resume that moves the cursor diffs across the pause: what it finds is said to come from it
 			const resumed = record.resumed !== undefined;
-			delete record.resumed;
 			const doc = await tx.doc(Followed);
 			const kept = doc.objects[key];
 			const after = readingOf(kind.follow, answers);
@@ -737,9 +753,14 @@ export function defineWatches(options: WatchesOptions) {
 			if (kept === undefined) doc.objects[key] = { answers: after, at: now, source, version };
 			else if (same) Object.assign(kept, { at: now, source });
 			else {
-				const earlier = [...(kept.earlier ?? []), { version: kept.version, answers: kept.answers }].slice(
-					-EARLIER_KEPT,
+				// a reading a watch holds its wake on stays kept, however many come after it, so its wake misses nothing
+				const holding = new Set(
+					Object.values((await tx.doc(Watches)).watches).flatMap((each) =>
+						each.key === key && each.burst !== undefined && each.seen !== undefined ? [each.seen] : [],
+					),
 				);
+				const all = [...(kept.earlier ?? []), { version: kept.version, answers: kept.answers }];
+				const earlier = all.filter((each, i) => i >= all.length - EARLIER_KEPT || holding.has(each.version));
 				doc.objects[key] = { answers: after, at: now, source, version, earlier };
 			}
 			// the owner's click is taken in the commit that keeps what it looked at: a kill before leaves it to look again
@@ -751,12 +772,14 @@ export function defineWatches(options: WatchesOptions) {
 			if (seen === undefined) {
 				// the watch's first look is its baseline: only what changes after it is a change, whoever else follows
 				record.seen = version;
+				delete record.resumed;
 				await taken();
 				outcome = { outcome: "baseline" };
 				return;
 			}
-			record.seen = version;
 			if (kept === undefined || (same && seen === version)) {
+				record.seen = version;
+				delete record.resumed;
 				await taken();
 				outcome = { outcome: "looked", changes: [] };
 				return;
@@ -765,6 +788,25 @@ export function defineWatches(options: WatchesOptions) {
 			const wake = sorted.filter((each) => each.does === "wake");
 			const tell = sorted.filter((each) => each.does === "tell");
 			const ended = endedBy(kind.follow, watch.until, after);
+			// a burst is one wake: while its last wake's run still goes, or until the kind's settling time has passed
+			// since the first change, the cursor stays and what changes meanwhile joins the wake; the owner's Check now
+			// wakes at once, as they asked
+			if ((wake.length > 0 || ended !== undefined) && click === undefined) {
+				const last = record.turn === undefined ? undefined : await tx.task(record.turn as TaskId);
+				const running = last !== undefined && last.state.status !== "terminal";
+				const first = record.burst ?? now;
+				const settled = first + settleOf(kind.follow);
+				if (running || now < settled) {
+					record.burst = first;
+					record.next = running ? now + Math.min(every, BUSY_EVERY) : Math.min(settled, now + every);
+					outcome = { outcome: "held", why: "burst" };
+					return;
+				}
+			}
+			record.seen = version;
+			delete record.resumed;
+			const burst = record.burst;
+			delete record.burst;
 			const changes = [...new Set([...wake, ...tell].map((each) => each.says))];
 			if (ended !== undefined && changes.length === 0) changes.push(ended);
 			const gap = fellOff(kept, seen);
@@ -786,6 +828,7 @@ export function defineWatches(options: WatchesOptions) {
 				...(ended === undefined ? {} : { ended }),
 				...(resumed ? { resumed: true as const } : {}),
 				...(gap ? { gap: true as const } : {}),
+				...(burst === undefined ? {} : { burst }),
 			};
 			if (gap) record.behind = now;
 			else if (changes.length > 0) delete record.behind;
@@ -802,6 +845,7 @@ export function defineWatches(options: WatchesOptions) {
 						...(ended === undefined ? {} : { ended }),
 						resumed,
 						gap,
+						...(burst === undefined ? {} : { burst }),
 					}),
 					entry: { kind: WAKE, data: data as unknown as JsonObject },
 				});

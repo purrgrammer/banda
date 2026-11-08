@@ -272,6 +272,8 @@ export type Item =
 			readonly resumed?: true;
 			/** Some changes may be missing: its cursor fell off the readings kept. */
 			readonly gap?: true;
+			/** When the first of the changes that came together was seen: held while a run went, or until they settled. */
+			readonly burst?: number;
 			readonly at: number;
 	  }
 	/** An ask that ended: what was asked, and how it ended; an approval with what it would run, in words. */

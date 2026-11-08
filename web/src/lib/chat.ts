@@ -157,6 +157,7 @@ type CoreSegment =
 			readonly ended?: string;
 			readonly resumed?: true;
 			readonly gap?: true;
+			readonly burst?: number;
 			readonly at: number;
 	  }
 	| { readonly kind: "working"; readonly key: "working"; readonly text: string };
@@ -586,6 +587,7 @@ export function view(
 				...(item.ended === undefined ? {} : { ended: item.ended }),
 				...(item.resumed === true ? { resumed: true as const } : {}),
 				...(item.gap === true ? { gap: true as const } : {}),
+				...(item.burst === undefined ? {} : { burst: item.burst }),
 				at: item.at,
 			});
 	}
@@ -644,15 +646,22 @@ export function quietRuns(segments: readonly Segment[]): Segment[] {
 
 /**
  * A watch's line, in the owner's words: the object and what changed ("acme/banda #142 · ana approved, lint failed"),
- * said to come from a pause ("… · while paused: lint failed, merged"), what ended it ("… · done: merged"), and, when
- * its cursor fell off the readings kept, that it may not be all ("… · some changes may be missing").
+ * said to come from a pause ("… · while paused: lint failed, merged"), come together since the first of them ("… ·
+ * since 09:03: ana approved, bob commented"), what ended it ("… · done: merged"), and, when its cursor fell off the
+ * readings kept, that it may not be all ("… · some changes may be missing").
  */
 export function watchWords(
-	item: Pick<Extract<Item, { role: "watch" }>, "object" | "changes" | "ended" | "resumed" | "gap">,
+	item: Pick<Extract<Item, { role: "watch" }>, "object" | "changes" | "ended" | "resumed" | "gap" | "burst">,
 ): string {
 	const changes = item.changes.filter((change) => change !== item.ended);
 	const said = changes.join(", ");
-	const words = [item.object.name, ...(said === "" ? [] : [item.resumed === true ? `while paused: ${said}` : said])];
+	const when =
+		item.resumed === true
+			? "while paused"
+			: item.burst === undefined
+				? undefined
+				: `since ${new Date(item.burst).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+	const words = [item.object.name, ...(said === "" ? [] : [when === undefined ? said : `${when}: ${said}`])];
 	if (item.ended !== undefined) words.push(`done: ${item.ended}`);
 	if (item.gap === true) words.push("some changes may be missing");
 	return words.join(" · ");

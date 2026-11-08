@@ -144,6 +144,8 @@ export type ScenarioOptions = {
 	readonly act?: (step: number, scene: Scene) => Promise<void>;
 	/** Whether watch `name` is clicked at step `step`; every watch at every step by default. */
 	readonly only?: (name: string, step: number) => boolean;
+	/** What each model request waits for first: a run held going until it opens. */
+	readonly gate?: () => Promise<void>;
 };
 
 export async function watchScenario(
@@ -201,7 +203,7 @@ export async function watchScenario(
 		},
 		fault: (point) => faults.hit(point as "watch:read"),
 	});
-	const { models } = echoModels(faults);
+	const { models } = echoModels(faults, undefined, options.gate);
 	const registry = createRegistry();
 	registry.install(core.extension);
 	registry.install(boxTools({ workspace: box.workspace }));
@@ -385,7 +387,11 @@ export function watchInvariants(summary: WatchSummary): string[] {
 	};
 	for (const [name, record] of Object.entries(summary.records)) {
 		const wakes = summary.wakes.filter((wake) => wake.watch === name);
-		const quiet = record.done !== undefined || record.paused !== undefined || record.failed !== undefined;
+		const quiet =
+			record.done !== undefined ||
+			record.paused !== undefined ||
+			record.failed !== undefined ||
+			record.burst !== undefined;
 		if (summary.live.includes(name) && !quiet && summary.followed !== undefined)
 			say(`${name}: its cursor is on the newest reading`, record.seen === summary.followed.version);
 		const transitions = wakes.map((wake) => `${wake.seen}>${wake.version}`);

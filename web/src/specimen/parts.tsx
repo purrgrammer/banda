@@ -476,7 +476,7 @@ export function Parts() {
 			<Section
 				id="watch-items"
 				title="Watches in the chat"
-				note="An agent's watch waits for you as its card; each change the kind's rules say matters is a line, the object's card beneath it as the daemon reads it now; the last one says what ended it. What changed while paused comes as one line that says so; one whose readings fell off says changes may be missing; an hour unable to look is an error line, unread."
+				note="An agent's watch waits for you as its card; each change the kind's rules say matters is a line, the object's card beneath it as the daemon reads it now; the last one says what ended it. What came together while its last run went, or before it settled, is one line that says since when; what changed while paused comes as one line that says so; one whose readings fell off says changes may be missing; an hour unable to look is an error line, unread."
 			>
 				<div className="flex max-w-2xl flex-col gap-3">
 					<WatchProposal
@@ -494,6 +494,9 @@ export function Parts() {
 						purrgrammer/banda #142 · ana approved, lint failed
 					</Line>
 					<PullRequestCard pr={{ ...PR, checks: { passed: 2, failed: 1, running: 0 }, reviews: "Approved by ana" }} />
+					<Line icon={EyeIcon} time="10:02">
+						purrgrammer/banda #142 · since 09:58: ana requested changes, bob commented, lint failed
+					</Line>
 					<Line icon={EyeIcon} time="11:30">
 						purrgrammer/banda #142 · while paused: lint failed, ana commented
 					</Line>

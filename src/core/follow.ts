@@ -72,6 +72,8 @@ export type Follow = {
 	/** How often the daemon looks, as a period (`30m`); and while busy (`2m`). */
 	readonly every?: string;
 	readonly busy_every?: string;
+	/** How long after a change what changes next still joins its wake, as a period (`1m`); none, it wakes at once. */
+	readonly settle?: string;
 };
 
 /** How often a followed object is looked at unless its kind says: quiet, and while it is busy. */
@@ -203,6 +205,11 @@ export function lookEvery(follow: Pick<Follow, "busy" | "every" | "busy_every">,
 	return ms ?? (busy ? BUSY_EVERY : EVERY);
 }
 
+/** How long a change waits for others to join its wake, as the kind says: none unless said. */
+export function settleOf(follow: Pick<Follow, "settle">): number {
+	return follow.settle === undefined ? 0 : (parseEvery(follow.settle) ?? 0);
+}
+
 /** A list's items gone from a short page are not gone: only a complete list can say one was removed. */
 function complete(follow: Follow, after: Json, change: Change): boolean {
 	if (change.kind !== "removed") return true;
@@ -320,6 +327,7 @@ const FIELDS = [
 	"busy",
 	"every",
 	"busy_every",
+	"settle",
 ];
 const stringMap = (value: unknown) =>
 	object(value as Json) && Object.values(value as object).every((each) => typeof each === "string");
@@ -368,7 +376,7 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 		const parsed = parseCondition(text);
 		if ("error" in parsed) problem(parsed.error);
 	}
-	for (const key of ["every", "busy_every"] as const)
+	for (const key of ["every", "busy_every", "settle"] as const)
 		if (follow[key] !== undefined && (typeof follow[key] !== "string" || parseEvery(follow[key]) === undefined))
 			problem(`"${key}" is a period, such as 30m`);
 	if (errors.length > 0) return { errors };
@@ -386,6 +394,7 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 			...(f.busy === undefined ? {} : { busy: f.busy }),
 			...(f.every === undefined ? {} : { every: f.every }),
 			...(f.busy_every === undefined ? {} : { busy_every: f.busy_every }),
+			...(f.settle === undefined ? {} : { settle: f.settle }),
 		},
 	};
 }

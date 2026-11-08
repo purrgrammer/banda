@@ -499,7 +499,8 @@ draws as cards, from scripts/github-objects.ts.
 					"merged": "pr.merged = true",
 					"closed": "pr.state = closed"
 				},
-				"busy": "checks.check_runs[*].status != completed"
+				"busy": "checks.check_runs[*].status != completed",
+				"settle": "1m"
 			},
 			"fields": {
 				"number": "pr.number",

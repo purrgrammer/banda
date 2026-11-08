@@ -262,6 +262,64 @@ describe("a watch on a pull request", () => {
 		expect(summary.wakes[0]?.changes).toEqual(expect.arrayContaining(["ana approved", "lint failed"]));
 	}, 60_000);
 
+	it("a burst is one wake: what comes within the kind's settling time joins the first change's wake", async () => {
+		// no clicks: the watch looks on its own (here, the act's look); the pull request settles in a minute
+		const steps: World[] = [
+			world(0),
+			world(1),
+			changed(1, (at) => {
+				at.get_comments.push({ id: 6, user: { login: "bob" } });
+			}),
+		];
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: (step) => steps[Math.min(step, 2)] as World,
+			clicks: [undefined, undefined, undefined],
+			at: (step) => NOW + [0, 3 * MINUTE, 3.5 * MINUTE, 5 * MINUTE][step]!,
+			act: async (_step, { harness, core }) => {
+				await core.lookWatch(harness, "banda-142");
+			},
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes).toHaveLength(1);
+		expect(summary.wakes[0]?.changes).toEqual(expect.arrayContaining(["ana approved", "lint failed", "bob commented"]));
+		expect(summary.wakes[0]?.burst).toBe(NOW + 3 * MINUTE);
+		expect(summary.record.burst).toBeUndefined();
+	}, 60_000);
+
+	it("a burst is one wake: what comes while the last wake's run still goes wakes once, after it", async () => {
+		let open = () => {};
+		const gate = new Promise<void>((resolve) => {
+			open = resolve;
+		});
+		const bob = (at: Reads) => {
+			at.get_comments.push({ id: 6, user: { login: "bob" } });
+		};
+		const steps: World[] = [world(0), world(1), world(1), changed(1, bob), changed(1, bob), changed(3, bob)];
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: (step) => steps[Math.min(step, 5)] as World,
+			clicks: [undefined, undefined, undefined, undefined, undefined, undefined],
+			at: (step) => NOW + step * 10 * MINUTE,
+			gate: () => gate,
+			act: async (step, { harness, core }) => {
+				if (step === 6) {
+					open();
+					const turn = (await harness.snapshot(Watches, context))?.watches["banda-142"]?.turn;
+					while ((await harness.getTask(turn as never, context))?.state.status !== "terminal")
+						await new Promise((resolve) => setTimeout(resolve, 5));
+				}
+				await core.lookWatch(harness, "banda-142");
+			},
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		// settled at step 2; bob's comment at step 3 and the merge at 5 came while its run went, and wake once after it
+		expect(summary.wakes.map((wake) => [...wake.changes].sort())).toEqual([
+			["ana approved", "checks finished", "lint failed"],
+			["bob commented", "closed", "merged"],
+		]);
+		expect(summary.wakes.map((wake) => wake.burst)).toEqual([NOW + 10 * MINUTE, NOW + 30 * MINUTE]);
+		expect(summary.wakes[1]?.ended).toBe("merged");
+	}, 60_000);
+
 	it("an hour unable to look draws one error line; a good look clears it, and the next hour draws one again", async () => {
 		const down = new Set([1, 2, 3, 4, 5, 7, 8, 9, 10, 11]);
 		const summary = await watchScenario(await tempHome(), new Faults(), {

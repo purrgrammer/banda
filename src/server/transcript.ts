@@ -315,6 +315,7 @@ export function itemOf(entry: EntryRecord): Item | undefined {
 			...(data.ended === undefined ? {} : { ended: data.ended }),
 			...(data.resumed === true ? { resumed: true as const } : {}),
 			...(data.gap === true ? { gap: true as const } : {}),
+			...(data.burst === undefined ? {} : { burst: data.burst }),
 			at: data.at,
 		};
 	}

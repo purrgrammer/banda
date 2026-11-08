@@ -83,6 +83,10 @@ describe("watches in the app", () => {
 		expect(watchWords({ object, changes: ["lint failed", "merged"], resumed: true })).toBe(
 			"acme/banda #142 · while paused: lint failed, merged",
 		);
+		// what came together while its last run went names when the first of it came
+		expect(watchWords({ object, changes: ["ana approved", "bob commented"], burst: NOW })).toMatch(
+			/^acme\/banda #142 · since 09:00.*: ana approved, bob commented$/,
+		);
 		expect(watchWords({ object, changes: ["lint failed"], gap: true })).toBe(
 			"acme/banda #142 · lint failed · some changes may be missing",
 		);

@@ -123,6 +123,8 @@ export const GITHUB_OBJECTS = {
 			],
 			ends: { merged: "pr.merged = true", closed: "pr.state = closed" },
 			busy: "checks.check_runs[*].status != completed",
+			// a review's comments, a push's checks: what comes within a minute of a change wakes with it
+			settle: "1m",
 		},
 		fields: {
 			number: "pr.number",
