@@ -2994,23 +2994,26 @@ export function openCapabilities(options: CapabilityOptions) {
 	/** Guess what connection `name`'s listed tools do, in the background, when its listing has no guess yet. */
 	function classifyLater(name: string, ctx: Context): void {
 		if (options.classify === undefined || classifying.has(name)) return;
-		const run = (guessing = guessing.then(async () => {
-			// a listing that changed while it was guessed is guessed again, for its new tools alone; one refused as busy
-			// (another inference held every place) waits and goes again, never kept as failed
-			for (let round = 0, busy = 0; round < 3 && busy < BUSY_TRIES; ) {
-				const went = await classifyNow(name, ctx);
-				if (went === "busy") {
-					busy++;
-					await new Promise((resolve) => setTimeout(resolve, BUSY_WAIT_MS));
-				} else if (went === "again") round++;
-				else break;
-			}
-		}))
+		const run = guessing
+			.then(async () => {
+				// a listing that changed while it was guessed is guessed again, for its new tools alone; one refused as busy
+				// (another inference held every place) waits and goes again, never kept as failed
+				for (let round = 0, busy = 0; round < 3 && busy < BUSY_TRIES; ) {
+					const went = await classifyNow(name, ctx);
+					if (went === "busy") {
+						busy++;
+						await new Promise((resolve) => setTimeout(resolve, BUSY_WAIT_MS));
+					} else if (went === "again") round++;
+					else break;
+				}
+			})
 			.catch((error: unknown) => say(`capabilities: guessing ${name}'s tools: ${(error as Error).message}`))
 			.finally(() => {
 				classifying.delete(name);
 				options.changed?.();
 			});
+		// the queue holds each guess with its failure handled, so one that throws never stops the ones after it
+		guessing = run;
 		classifying.set(name, run);
 		options.changed?.();
 	}
