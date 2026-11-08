@@ -5,7 +5,6 @@ api: contacts
 auth: oauth
 client: google
 scopes: [https://www.googleapis.com/auth/contacts.readonly, https://www.googleapis.com/auth/contacts.other.readonly, https://www.googleapis.com/auth/userinfo.email]
-ask: always
 account: get_profile.email
 reads: [get_profile, search_contacts, search_other_contacts, get_contact]
 ---
