@@ -8,8 +8,9 @@ import { rmSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, type Context as ModelContext } from "@earendil-works/pi-ai";
-import { createRegistry } from "@earendil-works/pi-durable";
+import { createRegistry, defineExtension, defineTool } from "@earendil-works/pi-durable";
 import fc from "fast-check";
+import { Type } from "typebox";
 import { afterAll, describe, expect, it } from "vitest";
 import { type Box, openBox } from "../src/box/box.ts";
 import { BOX_TOOLS, boxEnv, boxTools } from "../src/box/tools.ts";
@@ -29,6 +30,10 @@ afterAll(() => {
 	for (const box of boxes) box.close();
 });
 
+/** A tool outside the base: only an accepted file can give it, so it is what a box-written file tries to grant itself. */
+const NAMED_ONLY = "named_only";
+const NAMEABLE = [...BOX_TOOLS, NAMED_ONLY];
+
 /** An agent file: a marker only it holds as instructions, the tools it names; or one that does not parse. */
 const fileOf = (marker: string, tools: readonly string[], malformed: boolean) =>
 	malformed
@@ -37,7 +42,7 @@ const fileOf = (marker: string, tools: readonly string[], malformed: boolean) =>
 
 // mostly files that parse, so most runs reach a chat
 const text = fc.record({
-	tools: fc.subarray([...BOX_TOOLS]),
+	tools: fc.subarray(NAMEABLE),
 	malformed: fc.integer({ min: 0, max: 3 }).map((n) => n === 0),
 });
 
@@ -93,12 +98,25 @@ async function open() {
 	const registry = createRegistry();
 	registry.install(core.extension);
 	registry.install(boxTools({ workspace: box.workspace }));
+	registry.install(
+		defineExtension({
+			name: "accepted.test",
+			tools: [
+				defineTool({
+					name: NAMED_ONLY,
+					description: NAMED_ONLY,
+					parameters: Type.Object({}),
+					execute: async () => ({ output: [] }),
+				}),
+			],
+		}),
+	);
 	const harness = await openStore(home, { models, registry, env: boxEnv(box) });
 	harness.resume();
 	const workspace: Workspace = {
 		env: () => box.env(),
 		root: box.workspace,
-		tools: () => [...BOX_TOOLS],
+		tools: () => NAMEABLE,
 		known: () => true,
 	};
 	// as the daemon does at start: until the box is seeded, no removal is offered or accepted
@@ -134,7 +152,7 @@ describe("before files", () => {
 					markers.push(marker);
 					return fileOf(marker, tools, malformed);
 				};
-				const parses = (t: string) => "agent" in parseAgent(name, t, { tools: [...BOX_TOOLS] });
+				const parses = (t: string) => "agent" in parseAgent(name, t, { tools: NAMEABLE });
 				for (const step of steps) {
 					switch (step.op) {
 						case "write":
@@ -191,8 +209,9 @@ describe("before files", () => {
 							if (!("agent" in agent)) throw new Error("unreachable");
 							for (const marker of markers)
 								expect(request.prompt.includes(marker), marker).toBe(accepted.includes(marker));
-							const offered = request.tools.filter((tool) => (BOX_TOOLS as readonly string[]).includes(tool));
-							expect(new Set(offered)).toEqual(new Set(agent.agent.tools));
+							// the box's tools are every agent's; a tool outside the base comes from the accepted file alone
+							const offered = request.tools.filter((tool) => NAMEABLE.includes(tool));
+							expect(new Set(offered)).toEqual(new Set([...BOX_TOOLS, ...agent.agent.tools]));
 							break;
 						}
 					}

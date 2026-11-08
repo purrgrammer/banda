@@ -7,29 +7,10 @@ import {
 	type ToolRegistration,
 } from "@earendil-works/pi-durable";
 import { createToolSearchExtension, TOOL_SEARCH_TOOL_NAME } from "@earendil-works/pi-durable/tool-search";
-import {
-	ASK_USER,
-	CONNECT,
-	MESSAGE_GROUP,
-	MESSAGE_USER,
-	PROPOSE_AVATAR,
-	PUBLISH,
-	REACT,
-	TOOLSETS,
-} from "./toolsets.ts";
+import { CONNECT, EVERY_AGENT, MESSAGE_GROUP, PROPOSE_AVATAR, TOOLSETS } from "./toolsets.ts";
 
-const CORE = new Set([
-	MESSAGE_USER,
-	MESSAGE_GROUP,
-	ASK_USER,
-	REACT,
-	PUBLISH,
-	TOOL_SEARCH_TOOL_NAME,
-	"read",
-	"write",
-	"edit",
-	"bash",
-]);
+/** Sent from the first step: banda's own base, but the rarer speaking tools. A connection's tools load on demand. */
+const CORE = new Set([MESSAGE_GROUP, ...EVERY_AGENT.filter((tool) => tool !== CONNECT && tool !== PROPOSE_AVATAR)]);
 
 /** The rarer speaking tools, loaded on demand, by the group search finds them in. */
 const SPEAKING_GROUPS: { readonly [name: string]: string } = { [CONNECT]: "connections", [PROPOSE_AVATAR]: "avatar" };
