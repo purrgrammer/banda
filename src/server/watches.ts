@@ -9,6 +9,7 @@ import type { Harness } from "@earendil-works/pi-durable";
 import { log } from "../core/activity.ts";
 import { Accepted, activeAgents, agentWords, isArchived, shaOf, unaccept } from "../core/agents.ts";
 import { connectionPath, parseConnection } from "../core/connections.ts";
+import { refKey } from "../core/objects.ts";
 import { withAsk } from "../core/routines.ts";
 import { context } from "../core/store.ts";
 import {
@@ -434,12 +435,19 @@ export async function createWatch(
 			throw new BadRequest(
 				ends.length === 0 ? "nothing ends it: leave until out" : `until is one of ${ends.join(", ")}`,
 			);
+		const { watches } = await tx.doc(Watches);
+		// one agent follows an object once while that watch lives: following it again starts afresh once it ended
+		const ref = refKey(found.ref, found.connection.objects ?? {});
+		const live = Object.entries(watches).find(
+			([, record]) => watchAgent(record) === made.agent && record.ref === ref && record.done === undefined,
+		);
+		if (live !== undefined)
+			throw new BadRequest(`${await agentWords(tx, made.agent)} already follows it (${watchPath(live[0])})`, 409);
 		const picked = await accountFor(tx, made.agent, found.connection, made.account);
 		if ("refused" in picked) throw new BadRequest(picked.refused, 409);
 		const objectName = `${found.ref.connection}:${found.ref.kind}:${Object.values(found.ref.values).join("-")}`;
 		const base = nameFor(objectName.replace(/^[a-z0-9_-]+:[a-z0-9_]+:/, ""));
 		const files = (await tx.doc(Accepted)).files;
-		const { watches } = await tx.doc(Watches);
 		let name = base;
 		for (let n = 2; files[watchPath(name)] !== undefined || boxed.has(name) || watches[name] !== undefined; n++)
 			name = `${base}-${n}`;

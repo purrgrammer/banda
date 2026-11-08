@@ -39,6 +39,16 @@ access. Nothing here shares a file or deletes one for good. The daemon keeps cre
 		"file": {
 			"card": "file",
 			"name": "{id}",
+			"urls": [
+				"https://docs.google.com/document/d/{id}",
+				"https://docs.google.com/spreadsheets/d/{id}",
+				"https://docs.google.com/presentation/d/{id}",
+				"https://docs.google.com/document/u/*/d/{id}",
+				"https://docs.google.com/spreadsheets/u/*/d/{id}",
+				"https://docs.google.com/presentation/u/*/d/{id}",
+				"https://drive.google.com/file/d/{id}",
+				"https://drive.google.com/file/u/*/d/{id}"
+			],
 			"ids": ["drive/{id}"],
 			"reads": {
 				"file": { "tool": "get_file", "args": { "file_id": "{id}" } }

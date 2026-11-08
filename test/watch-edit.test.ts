@@ -6,9 +6,9 @@ import { openBox } from "../src/box/box.ts";
 import { Accepted, shaOf } from "../src/core/agents.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
-import { Followed, Watches, watchPath, withUntil } from "../src/core/watches.ts";
+import { Followed, type Looked, Watches, watchPath, withUntil } from "../src/core/watches.ts";
 import type { Workspace } from "../src/server/agents.ts";
-import { changeWatch, watches } from "../src/server/watches.ts";
+import { changeWatch, createWatch, watches } from "../src/server/watches.ts";
 import { githubObjectFile } from "./fixtures/github-objects.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { blobStore, echoModels, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
@@ -60,6 +60,27 @@ async function setUp() {
 }
 
 const reconcile = async () => {};
+/** A first look that must never come: the watch is refused before it. */
+const never = (): Promise<Looked> => Promise.reject(new Error("looked"));
+
+describe("the owner's follow of an object", () => {
+	it("is refused while a watch of the agent's on that object lives, naming it; the file and the store unchanged", async () => {
+		const { harness, workspace, close } = await setUp();
+		try {
+			const made = { agent: "sancho", object: "https://github.com/acme/banda/pull/142" };
+			await expect(createWatch(harness, workspace, reconcile, never, made, NOW)).rejects.toMatchObject({
+				status: 409,
+				message: "Sancho already follows it (watches/banda-142.md)",
+			});
+			const store = await harness.snapshot(Watches, context);
+			expect(Object.keys(store?.watches ?? {})).toEqual(["banda-142"]);
+			const accepted = (await harness.snapshot(Accepted, context))?.files ?? {};
+			expect(Object.keys(accepted).filter((path) => path.startsWith("watches/"))).toEqual([watchPath("banda-142")]);
+		} finally {
+			await close();
+		}
+	});
+});
 
 describe("the owner's edit of a watch", () => {
 	it("sets, replaces or drops the until line alone, every other byte kept", () => {

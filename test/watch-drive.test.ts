@@ -73,6 +73,16 @@ describe("a watch on a Drive file", () => {
 		expect(summary.record.done).toBeUndefined();
 	}, 60_000);
 
+	it("its link names it as its ref does: a Doc's, with the tab and the query a browser adds", async () => {
+		const summary = await follow(
+			life((file) => Object.assign(file, { modified: "2026-11-02T09:10:00.000Z", modifier: ana, size: null })),
+			["k1"],
+			"https://docs.google.com/document/d/1aBc/edit?usp=sharing",
+		);
+		expect(summary.wakes.map((wake) => wake.changes)).toEqual([["Ana edited it"]]);
+		expect(summary.wakes[0]?.object).toMatchObject({ name: "1aBc", service: "Google Drive" });
+	}, 60_000);
+
 	it("renamed, moved and shared with someone new each only tell", async () => {
 		const summary = await follow(
 			life(
