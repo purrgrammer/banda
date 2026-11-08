@@ -18,6 +18,7 @@ import { type Gateway, OWNER } from "../../src/core/gateway.ts";
 import { openPermissions, Permissions, revoke } from "../../src/core/permissions.ts";
 import { openWaits, status } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
+import { isMessageTool } from "../../src/core/toolsets.ts";
 import { defineCore, type TurnResult } from "../../src/core/turn.ts";
 import { revive, WAIT, type WaitEnded } from "../../src/core/wait.ts";
 import { answerNudge, FAUX_MODEL } from "../fixtures/models.ts";
@@ -144,10 +145,10 @@ const runs = readFileSync(join(home, "runs.jsonl"), { encoding: "utf8", flag: "a
 	.split("\n")
 	.filter(Boolean)
 	.map((line) => (JSON.parse(line) as { body: string }).body);
-// the send's results: a reaction the nudge asked for is not one
+// the send's results: a speaking tool's (a reaction the nudge asked for, a message) is not one
 const results = page.items.filter(
 	(e) =>
-		e.kind === "pi.tool-result" && (e.model?.[0] as { toolName?: string } | undefined)?.toolName !== "message_user",
+		e.kind === "pi.tool-result" && !isMessageTool((e.model?.[0] as { toolName?: string } | undefined)?.toolName ?? ""),
 ).length;
 const { parked } = await status(harness);
 const activity = (await harness.snapshot(ActivityLog, context))?.events.map((event) => event.what) ?? [];
