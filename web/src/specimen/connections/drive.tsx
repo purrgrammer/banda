@@ -157,10 +157,7 @@ const DRAFTS: readonly (readonly [string, Draft, string, boolean])[] = [
 
 export function DriveSection() {
 	return (
-		<Section
-			id="drive"
-			note="Files an agent names, drawn from banda's own reading. An agent's change is a draft the owner approves exactly as drafted: create a Doc or a Sheet, replace a Doc's text, rename, trash. Nothing shares a file."
-		>
+		<Section id="drive" note="Files an agent names, as cards; an agent's change is a draft you approve as drafted.">
 			<div className="grid gap-6 lg:grid-cols-2">
 				{FILES.map(([label, file]) => (
 					<div key={label} className="flex min-w-0 flex-col gap-1.5">

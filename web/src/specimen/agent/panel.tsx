@@ -145,7 +145,7 @@ export function PanelSections() {
 		<>
 			<Section
 				id="panel-app"
-				note="The panel is closed by default, so the screen is the conversation. It opens for what needs room: a routine's line, a new routine, the face or the name tapped. Here a routine's line opened it on Routines. On the phone it is a sheet."
+				note="The panel opens beside the chat for what needs room; here a routine's line opened it. On the phone it is a sheet."
 				bleed
 				wide
 			>
@@ -155,7 +155,7 @@ export function PanelSections() {
 			</Section>
 			<Section
 				id="connections-signed-in"
-				note="One row per account the agent uses: the service, the account under it, and Remove, asked first. When a service gives no account name, the row is the connection's name. A supplied icon replaces the initial; the initial remains the fallback."
+				note="One row per account the agent uses, with Remove; a connection with no account name is its own row."
 			>
 				<div className="max-w-md">
 					<Connections
@@ -188,10 +188,7 @@ export function PanelSections() {
 					/>
 				</div>
 			</Section>
-			<Section
-				id="panel"
-				note="The agent's whole home: routines, what it can reach and do, what it remembers, and who it is. It opens on Routines when there are some; else Access when nothing is connected; else About."
-			>
+			<Section id="panel" note="The agent's home: routines, access, memory and who it is.">
 				<div className="flex flex-wrap items-start gap-4">
 					<Specimen label="Routines">
 						<AgentPanelOf who={MARA} state="waiting" />
@@ -248,10 +245,7 @@ export function PanelSections() {
 					</Specimen>
 				</div>
 			</Section>
-			<Section
-				id="open-file"
-				note="A file in full (full screen on the phone), an artifact and its versions, a routine's editor."
-			>
+			<Section id="open-file" note="A file in full, an artifact and its versions, a routine's editor.">
 				<div className="flex flex-wrap items-start gap-4">
 					<Specimen label="A PDF, its first page">
 						<Panel name="Mara">
@@ -418,11 +412,7 @@ export function PanelSections() {
 					</div>
 				</Group>
 			</Section>
-			<Section
-				id="new-agent"
-				note="A short sheet with the face picked for you: naming a friend, not filling a form. The rest is in its panel."
-				bleed
-			>
+			<Section id="new-agent" note="A short sheet with the face picked for you; the rest is in its panel." bleed>
 				<SettingsPage title="New agent" phone footer={<Button className="flex-1">Add to the band</Button>}>
 					<div className="flex flex-col gap-2">
 						<p className="text-meta font-medium text-ink-2">Agent or group: tabs, so the arrow keys switch</p>
@@ -453,7 +443,7 @@ export function PanelSections() {
 			</Section>
 			<Section
 				id="archive"
-				note="The foot of an agent's About: a quiet destructive button, then a short confirm. The last active agent cannot be archived."
+				note="A quiet destructive button, then a short confirm; the last active agent cannot be archived."
 			>
 				<Group label="Archive, and its confirm" className="items-start">
 					<div className="w-[20rem] max-w-full">

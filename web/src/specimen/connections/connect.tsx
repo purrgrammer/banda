@@ -14,20 +14,13 @@ export function ConnectSections() {
 	const phone = width === "phone";
 	return (
 		<>
-			<Section
-				id="connections"
-				note="Everything the band can work with, from the band's foot or Settings: connect before an agent needs it."
-				bleed
-			>
+			<Section id="connections" note="Everything the band can work with, from the band's foot or Settings." bleed>
 				{phone ? null : <Band rows={ROWS} />}
 				<SettingsPage title="Connections" phone={phone}>
 					<Catalogue services={SERVICES} />
 				</SettingsPage>
 			</Section>
-			<Section
-				id="connect"
-				note="One flow everywhere: Connect, sign in at the service, done. Asked again only to share an account."
-			>
+			<Section id="connect" note="One flow everywhere: Connect, sign in at the service, done.">
 				<div className="grid gap-4 lg:grid-cols-2">
 					<Labelled label="An agent asks">
 						<ConnectCard

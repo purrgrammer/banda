@@ -160,10 +160,7 @@ const DRAFTS: readonly (readonly [string, Draft, string, boolean])[] = [
 
 export function CalendarSection() {
 	return (
-		<Section
-			id="calendar"
-			note="Events an agent names, drawn from banda's own reading. An agent's change to one is a draft the owner approves: create, change, answer, delete."
-		>
+		<Section id="calendar" note="Events an agent names, as cards; an agent's change is a draft you approve.">
 			<div className="grid gap-6 lg:grid-cols-2">
 				{EVENTS.map(([label, event]) => (
 					<div key={label} className="flex min-w-0 flex-col gap-1.5">

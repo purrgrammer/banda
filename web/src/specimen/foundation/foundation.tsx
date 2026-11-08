@@ -22,7 +22,7 @@ export function Foundation() {
 		<>
 			<Section
 				id="colour"
-				note="Neutrals at chroma 0. One colour means alive, one means a failure; the faces bring the rest."
+				note="Neutrals at chroma 0; one colour means alive, one a failure; the faces bring the rest."
 			>
 				<div className="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-3">
 					{COLOURS.map(([name, role]) => (
@@ -68,7 +68,7 @@ export function Foundation() {
 			</Section>
 			<Section
 				id="motion"
-				note="Motion only says something changed or something is alive: a slow ring while an agent works. Under reduced motion the ring stands still."
+				note="Motion says something changed or something is alive: a slow ring while an agent works, still under reduced motion."
 			>
 				<Group label="Alive">
 					<Face {...MARA} size="panel" state="working" />

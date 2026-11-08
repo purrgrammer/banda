@@ -92,10 +92,7 @@ function Fold() {
 
 export function DoneSection() {
 	return (
-		<Section
-			id="done"
-			note="A dialog with nothing left to do folds into one row, so the chat stays words: icon, what was done, what to. As on messages, who did it is said only in a group. A GitHub object is its rich reference: mark, state, link. The chevron opens the card it was."
-		>
+		<Section id="done" note="A card with nothing left to do folds into one row; the chevron opens the card it was.">
 			<div className="flex max-w-2xl flex-col gap-6">
 				<Group label="Allow it: the card folds (a chat with Octo)" className="flex-col flex-nowrap items-stretch">
 					<Fold />

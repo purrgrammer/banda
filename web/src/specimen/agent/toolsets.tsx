@@ -132,7 +132,7 @@ export function ToolsetsSection() {
 	return (
 		<Section
 			id="toolsets"
-			note="Interactive Access proposal: switch a whole toolset or expand it to choose individual tools. Uses the built-in inventory and shipped GitHub tool names. Changes stay in this preview."
+			note="A proposal: switch a whole toolset or pick tools one by one. Changes stay in this preview."
 		>
 			<Button variant="outline" asChild>
 				<a href="#/specimen/toolsets">Open tool access preview</a>

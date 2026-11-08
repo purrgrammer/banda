@@ -358,15 +358,12 @@ export function HarnessSection() {
 		<>
 			<Section
 				id="harness"
-				note="An agent hands coding work to a harness (here Claude Code) on the owner's computer. Connecting picks the folder; the agent starts it without asking; the card follows the work in one line; what reaches the owner is the harness's own asks; the owner steers it in their own words or stops it. Open shows every step."
+				note="An agent hands coding work to Claude Code on your computer: connecting, the card following the work, its asks, steering and stopping."
 				wide
 			>
 				<Flow />
 			</Section>
-			<Section
-				id="harness-states"
-				note="Working and waiting can be steered and stopped. A note waits for the current step, then is taken. A restart never sends the ask again: it says so."
-			>
+			<Section id="harness-states" note="A session as it works, waits, is steered, stopped or restarted.">
 				<div className="flex max-w-2xl flex-col gap-3">
 					{(["working", "waiting", "done", "stopped", "interrupted", "failed"] as const).map((state) => {
 						const view = sessionAt(
@@ -426,7 +423,7 @@ export function HarnessSection() {
 			</Section>
 			<Section
 				id="harness-headlines"
-				note="The card speaks each step in the owner's words: a long command loses its cd prefix and truncates in the middle; a read names the file."
+				note="Each step in the owner's words: a long command shortened in the middle, a read naming its file."
 			>
 				<div className="flex max-w-2xl flex-col gap-3">
 					<HarnessCard
@@ -452,7 +449,7 @@ export function HarnessSection() {
 			</Section>
 			<Section
 				id="harness-asks"
-				note="The oldest ask shows whole; a long command or diff scrolls in a bounded window with Show all; the rest fold to one line until each is reviewed. There is no approve-all."
+				note="Asks reviewed one at a time: the oldest whole, the rest folded until opened; no approve-all."
 			>
 				<div className="flex max-w-2xl flex-col gap-3">
 					<HarnessAsks session={askSession([EXECUTE_ASK])} agentName="Mara" />
@@ -505,7 +502,7 @@ export function HarnessSection() {
 			</Section>
 			<Section
 				id="harness-panel"
-				note="Every step, compact: reads as one line, thoughts folded, edits as diffs, commands as terminals, the owner's notes where they went in."
+				note="Every step, compact: reads as a line, thoughts folded, edits as diffs, commands as terminals."
 			>
 				<div className="flex max-w-md flex-col gap-3">
 					<HarnessTranscript
@@ -530,7 +527,7 @@ export function HarnessSection() {
 			</Section>
 			<Section
 				id="harness-sheet"
-				note="Every step folds to one line; a row opens to the raw command, the diff or the whole text. The sheet opens at the newest step and follows it; scrolling up shows the chat's way back down."
+				note="Every step folded to one line; a row opens to the command, the diff or the text."
 			>
 				<div className="flex max-w-md flex-col gap-6">
 					<div className="flex flex-col gap-2">

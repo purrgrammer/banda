@@ -44,7 +44,7 @@ const LOCALS = {
 export function BandSection() {
 	return (
 		<>
-			<Section id="rows" note="Unread is ink; an open ask reads as the ask; the face says working, waiting or resting.">
+			<Section id="rows" note="Unread is ink; an open ask reads as the ask; the face says what the agent is doing.">
 				<div className="flex max-w-[var(--sidebar-width)] flex-col gap-0.5 rounded-tile bg-paper-2 p-2">
 					{ROWS.map((row, i) => (
 						<Row key={row.id} row={row} selected={i === 1} />
@@ -53,7 +53,7 @@ export function BandSection() {
 			</Section>
 			<Section
 				id="sidebar"
-				note="The band, search, + and the menu (Skills, Connections, Settings; a dot while something there waits on you); the daemon's notices at the foot. The collapsed rail in the middle is drawn by Band but nothing in the app opens it yet."
+				note="The band, search, + and the menu; the daemon's notices at the foot. The collapsed rail is drawn by Band but nothing in the app opens it yet."
 			>
 				<div className="flex h-[560px] gap-4 overflow-x-auto">
 					<Band
@@ -69,7 +69,7 @@ export function BandSection() {
 			</Section>
 			<Section
 				id="search"
-				note="⌘K: with nothing typed, the band to switch to; typed, agents, skills and pages found at once, then the chats. A hit opens its chat at that message."
+				note="⌘K: the band with nothing typed; agents, skills, pages and then the chats as you type."
 			>
 				<Group label="Nothing typed: the band's rows, in the band's order">
 					<Search autoFocus={false} query="" recent={ROWS} />

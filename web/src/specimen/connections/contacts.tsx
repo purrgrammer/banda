@@ -103,7 +103,7 @@ export function ContactsSection() {
 	return (
 		<Section
 			id="contacts"
-			note="People an agent names, drawn from banda's own reading. An agent's change to one is a draft the owner approves, with nothing to edit: add, change, delete."
+			note="People an agent names, as cards; an agent's change is a draft you approve, with nothing to edit."
 		>
 			<div className="grid gap-6 lg:grid-cols-2">
 				{PEOPLE.map(([label, person]) => (

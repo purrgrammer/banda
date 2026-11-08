@@ -184,21 +184,18 @@ export function SkillsSection() {
 	const { width } = useContext(StageContext);
 	return (
 		<>
-			<Section
-				id="skills"
-				note="One quiet item in the chat when a skill loads. Tap its name for the skill's detail page; Activity keeps the exact instructions returned by the tool."
-			>
+			<Section id="skills" note="A quiet line in the chat when a skill loads; its name opens the skill's page.">
 				<SkillDemo />
 			</Section>
 			<Section
 				id="skill-activity"
-				note="The skill tool's arguments and the exact instructions returned are inspectable here, not repeated in the chat."
+				note="The skill tool's arguments and the instructions it returned, inspectable here."
 			>
 				<SkillActivity />
 			</Section>
 			<Section
 				id="skills-page"
-				note="What waits on the owner first, then every accepted skill, flat; a filter appears from nine skills. 'Only you' marks an owner-only skill, 'Changed' a row whose change waits."
+				note="What waits on you first, then every accepted skill; owner-only and changed skills are marked."
 			>
 				<div className="flex min-w-0 flex-col gap-6 p-4">
 					<PageState label="Nothing yet">
@@ -222,7 +219,7 @@ export function SkillsSection() {
 			</Section>
 			<Section
 				id="skill-form"
-				note="The form says what the daemon would refuse while the owner types; Save and use stays off until the file would be taken."
+				note="The form says what would be refused as you type; Save and use waits until the file would be taken."
 			>
 				<div className="flex min-w-0 flex-col gap-6 p-4">
 					<PageState label="Valid">
@@ -298,10 +295,7 @@ export function SkillsSection() {
 					</PageState>
 				</div>
 			</Section>
-			<Section
-				id="skills-about"
-				note="The shared catalogue lists skills in About. A name opens the same detail page as the chat feed item."
-			>
+			<Section id="skills-about" note="The shared catalogue in About; a name opens the skill's page.">
 				<div className="flex flex-wrap items-start gap-4">
 					<div className="w-80 max-w-full" style={{ "--panel-width": "20rem" } as CSSProperties}>
 						<Panel name="Mara" phone={width === "phone"} className="h-96">

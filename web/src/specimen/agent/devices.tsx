@@ -128,13 +128,13 @@ export function DevicesSection() {
 		<>
 			<Section
 				id="devices"
-				note="Interactive: Pair a phone shows a code; a phone asks a moment later; Approve pairs it. Rename in place; Revoke asks first. Endpoint ids and the link stay behind Details."
+				note="Pair a phone, approve its ask, rename or revoke it. Endpoint ids stay behind Details."
 			>
 				{frame(<Example />)}
 			</Section>
 			<Section
 				id="devices-states"
-				note="Nothing paired; the code, live and counting down; a phone asking; the code expired; devices connected, idle and revoked; the same on a phone, the list alone; reach off on this computer; Details open."
+				note="Devices, each state: nothing paired, a code counting down, a phone asking, expired, connected, revoked, reach off."
 			>
 				{frame(<DevicesSettings devices={NONE} now={NOW} />)}
 				{frame(<DevicesSettings devices={NONE} invite={INVITE} now={NOW} />)}
@@ -154,7 +154,7 @@ export function DevicesSection() {
 			</Section>
 			<Section
 				id="pair-phone"
-				note="The phone app before it is a device: interactive first (Scan pairs, then waits; the computer approves a moment later). Then each state: scan; a link opened; a note after a refusal; asking; waiting; the computer away."
+				note="The phone app before it is a device: scan, ask, wait, approved; then each state on its own."
 			>
 				<PhoneFrame>
 					<PairExample />

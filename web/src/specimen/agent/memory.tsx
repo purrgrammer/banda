@@ -71,10 +71,7 @@ function Example({ phone = false }: { phone?: boolean }) {
 export function MemorySection() {
 	const inactive = { onAdd: async () => {}, onEdit: async () => {}, onForget: async () => {} };
 	return (
-		<Section
-			id="scoped-memory"
-			note="Interactive: left, Mara's Memory tab (her facts alone); right, Settings' Memory (the shared facts, then each agent as a section, archived ones read-only apart from Forget). One set of facts, never copies. Whom a fact is about is declared when adding, and a fact about someone else stays with its agent. Who wrote a fact is the owner's metadata; the agent never reads it. The narrow pair uses the phone's rows: actions behind a menu, Edit in a drawer whose unsaved draft survives closing."
-		>
+		<Section id="scoped-memory" note="Mara's Memory tab beside Settings' Memory: the same facts, never a copy.">
 			<Example />
 			<div className="grid w-full max-w-[52rem] gap-8 md:grid-cols-2">
 				<Example phone />

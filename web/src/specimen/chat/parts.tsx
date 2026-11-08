@@ -82,10 +82,7 @@ export function Parts() {
 					</Markdown>
 				</SourceLabels.Provider>
 			</Section>
-			<Section
-				id="message-layout"
-				note="Copy keeps its own space beside the words; the time stays below. A leading heading uses the bubble's inset, later headings keep their separation."
-			>
+			<Section id="message-layout" note="Copy keeps its own space beside the words; headings keep theirs.">
 				<Run time="10:42">
 					<Bubble copy="Hi">Hi</Bubble>
 				</Run>
@@ -100,10 +97,7 @@ export function Parts() {
 					);
 				})}
 			</Section>
-			<Section
-				id="files"
-				note="Sent by you or made by an agent, every file previews: images zoom, a PDF shows its first page, a sheet its rows."
-			>
+			<Section id="files" note="Every file previews: images zoom, a PDF shows its first page, a sheet its rows.">
 				<Group label="Image · PDF · video" className="items-start">
 					<ImageFile src={PHOTO} alt="coast.jpg" width={260} />
 					<PdfFile
@@ -157,7 +151,7 @@ export function Parts() {
 			</Section>
 			<Section
 				id="voice"
-				note="A voice message either way: the owner's is transcribed on their side and goes as words with its audio; an agent may answer aloud."
+				note="A voice message either way: yours transcribed and sent with its audio, an agent's answered aloud."
 			>
 				<div className="flex max-w-2xl flex-col gap-4">
 					<Run time="10:20">
@@ -218,7 +212,7 @@ export function Parts() {
 			</Section>
 			<Section
 				id="approvals"
-				note="The daemon's card, the same for every agent: who it acts as, the verb is the button, the quiet one says what it won't do, at most one scope, never ticked until the owner ticks it. Money gets its facts. A service's tool with no words of its own is named as it is, with Allow."
+				note="The approval card, the same for every agent: what will happen, as whom, the verb as the button, at most one scope."
 			>
 				<div className="flex max-w-2xl flex-col gap-3">
 					<Group label="Allow → Approved · same card height" className="flex-col items-start">
@@ -371,10 +365,7 @@ export function Parts() {
 					/>
 				</div>
 			</Section>
-			<Section
-				id="working"
-				note="Under the floating face while an agent works: what it does now, shimmering. The feed has no working line."
-			>
+			<Section id="working" note="Under the floating face while an agent works: what it does now.">
 				<Group label="A chat with one agent">
 					<HeaderStage>
 						<Header name="Octo" faces={[OCTO]} state="working" doing="Reading the checks on #34…" />
@@ -479,7 +470,7 @@ export function Parts() {
 			</Section>
 			<Section
 				id="composer"
-				note="Words, files, a voice message (transcribed here, sent with its audio). While the agent works: Stop when empty, Send once something is written, which steers the turn. The last one is live: its draft, words and files, survives a reload."
+				note="Words, files and a voice message. While the agent works, Stop when empty and Send once something is written; the last one keeps its draft across a reload."
 			>
 				<div className="flex max-w-2xl flex-col gap-5">
 					<Composer to="Mara" />

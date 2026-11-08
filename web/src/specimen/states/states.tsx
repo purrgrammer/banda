@@ -26,7 +26,7 @@ export function States() {
 		<>
 			<Section
 				id="loading-app"
-				note="Before the daemon answers: the shapes of the band, the chat and the panel, so nothing jumps when they land."
+				note="Before the daemon answers: the shapes of the band, the chat and the panel."
 				bleed
 				wide
 			>

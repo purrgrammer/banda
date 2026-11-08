@@ -300,7 +300,7 @@ export function Screens() {
 		<>
 			<Section
 				id="app"
-				note="The band and a chat, the panel closed: the face and the name float centred over the feed, which scrolls beneath them. On the phone, the band is the first screen and a chat opens over it."
+				note="The band and a chat, the panel closed; on the phone, the band first and the chat over it."
 				bleed
 			>
 				{phone ? (
@@ -312,7 +312,7 @@ export function Screens() {
 			</Section>
 			<Section
 				id="pinned"
-				note="Pinned agents and groups sit above every conversation as tiles of the same size, three to a row, and leave the list. Past three the row scrolls sideways, the next tile peeking in. What a tile wants of you shows in one place, at its face's foot: the unread count, or a dot while it waits on you. Sancho is pinned from the start. Pins are kept in band.json at the workspace root, typed by its schema. Try it: pin a row and its face grows and flies to the top row, which scrolls to it; unpin and it flies back. Hover a row or a tile for its pin, at the top right; on the phone, long-press."
+				note="Pinned agents and groups sit above the list as tiles. Pin a row to see it fly up; hover a row or a tile for its pin."
 				bleed
 			>
 				<PinnableBand phone={phone} />
@@ -321,11 +321,7 @@ export function Screens() {
 					<Band rows={ROWS} pinned={["sancho", "mara", "octo", "trip", "atlas"]} revealed="mara" onPin={() => {}} />
 				)}
 			</Section>
-			<Section
-				id="pinned-alignment"
-				note="The same band with one, two and three pins: left-aligned (the default) on the left, centred on the right. From three on they are the same."
-				bleed
-			>
+			<Section id="pinned-alignment" note="One, two and three pins, left-aligned (the default) and centred." bleed>
 				<div className="flex w-full flex-col gap-3">
 					{[["sancho"], ["sancho", "mara"], ["sancho", "mara", "octo"]].map((pins) => (
 						<div key={pins.length} className="flex gap-3">
@@ -340,11 +336,7 @@ export function Screens() {
 				</div>
 			</Section>
 			{phone ? (
-				<Section
-					id="pinned-hold"
-					note="A long press on a row or a tile opens a sheet with its face, its name and the one thing to do."
-					bleed
-				>
+				<Section id="pinned-hold" note="A long press on a row or a tile opens a sheet with the one thing to do." bleed>
 					<div className="relative flex w-full flex-col">
 						<Band rows={ROWS} pinned={["sancho"]} className="w-full" />
 						<div aria-hidden="true" className="absolute inset-0 bg-black/40" />
@@ -360,19 +352,11 @@ export function Screens() {
 				</Section>
 			) : null}
 			{phone ? (
-				<Section
-					id="app-keyboard"
-					note="The keyboard takes the bottom; the composer and the pill ride on it, the chat shrinks above."
-					bleed
-				>
+				<Section id="app-keyboard" note="The keyboard takes the bottom; the composer and the pill ride on it." bleed>
 					<MaraChat keyboard />
 				</Section>
 			) : null}
-			<Section
-				id="working-chat"
-				note="One agent at work: the header says it works; the foot of the chat says what it does, and opens its steps."
-				bleed
-			>
+			<Section id="working-chat" note="One agent at work: the header says so, the foot says what it does." bleed>
 				{phone ? null : <Band rows={ROWS} selected="octo" />}
 				<ChatScreen name="Octo" faces={[OCTO]} state="working" doing="Reading the checks on #34…">
 					<Line icon={CalendarClockIcon} time="8:00">
@@ -394,7 +378,7 @@ export function Screens() {
 			</Section>
 			<Section
 				id="first-run-signing-in"
-				note="A sign-in under way in its own tab: the code its page shows pasted here, another way to sign in, or Cancel."
+				note="A sign-in under way: paste its code here, pick another way, or Cancel."
 				bleed
 			>
 				<div className="flex-1">
@@ -409,7 +393,7 @@ export function Screens() {
 			</Section>
 			<Section
 				id="first-skills"
-				note="Right after the provider, once, when the owner brought nothing of their own: the skills banda ships, each with a switch. One already there stays."
+				note="Right after the provider, once: the skills banda ships, each with a switch."
 				bleed
 			>
 				<div className="flex-1">
@@ -418,7 +402,7 @@ export function Screens() {
 			</Section>
 			<Section
 				id="first-bring"
-				note="In the desktop app, in place of banda's skills when other harnesses are here: pick harnesses, see what comes along, leave any of it behind. Start fresh goes to banda's skills."
+				note="In the desktop app, when other harnesses are here: pick what to bring along, or start fresh with banda's skills."
 				bleed
 			>
 				<div className="flex-1">
@@ -429,10 +413,7 @@ export function Screens() {
 					/>
 				</div>
 			</Section>
-			<Section
-				id="bring-settings"
-				note="Settings → Agents, on the desktop: the same picker, any time; what came in last under the button."
-			>
+			<Section id="bring-settings" note="Settings → Agents, on the desktop: the same picker, any time.">
 				<BringBlock
 					harnesses={BRING_HARNESSES}
 					picked={new Set(["codex"])}
@@ -501,7 +482,7 @@ export function Screens() {
 			</Section>
 			<Section
 				id="agent-meta-tools"
-				note="Messages appear as feed lines; proposals are owner-review cards. read_agent_chat returns bounded, untrusted context to the caller and adds no feed item."
+				note="Messages between agents as feed lines; proposals as cards for your review."
 				bleed
 			>
 				<AgentToolsChat />

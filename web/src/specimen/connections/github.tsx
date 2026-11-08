@@ -22,7 +22,7 @@ export function GithubSection() {
 	return (
 		<Section
 			id="github"
-			note="A pull request, an issue, a check run, and a notification as its subject; each in its states, and with a draft."
+			note="A pull request, an issue, a check run and a notification, in each state, with a draft on each."
 		>
 			<div className="grid gap-6 lg:grid-cols-2">
 				<Labelled label="Quiet actions and details · long metadata">
@@ -50,7 +50,7 @@ export function GithubSection() {
 						}}
 					/>
 				</Labelled>
-				<Labelled label="Owner reference: source icon, object-type icon and linked title; aligned with the words, no metadata or card">
+				<Labelled label="A reference in your words: icon and linked title, no card">
 					<Bubble mine>
 						Approve and merge{" "}
 						<ObjectLink object={{ ...PR, card: "pull-request" }} href="https://github.com/purrgrammer/banda/pull/34" />

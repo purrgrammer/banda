@@ -35,7 +35,7 @@ export function SettingsSections() {
 			</Section>
 			<Section
 				id="settings-providers"
-				note="Every provider account the band may think with: in use, connected (Use, Sign out), two of one provider by their names, another to add, connecting, failed, and a key form open; adding an account by name, by sign-in and by key; renaming one; on a device, the connected ones alone."
+				note="Every provider account the band may think with, in each state; adding, renaming and signing out."
 			>
 				<SettingsPage title="Settings" phone={phone}>
 					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} open="mistral" />
