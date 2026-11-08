@@ -23,7 +23,6 @@ import {
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { log } from "../core/activity.ts";
 import { type EgressControl, intake } from "../core/egress.ts";
-import { markForeign } from "../core/foreign.ts";
 import { htmlToText } from "../core/html-text.ts";
 import { MAX_RESULT_CHARS } from "../core/mcp.ts";
 import { publicAddress } from "../core/public-fetch.ts";
@@ -264,8 +263,7 @@ export function webFetchTool(options: WebFetchOptions = {}): ToolRegistration {
 				try {
 					return await intake(options.egress, api, ctx, fault);
 				} catch (error) {
-					// the proxy's reads go unlogged now, and their log is what marks the chat: the page read still marks it
-					if (hosts.length > 0) await api.commit((tx) => markForeign(tx, Number(api.conversationId)), ctx);
+					// the reads go unlogged now; `intake` marked the chat for them
 					return (
 						"\n\n[banda] The egress proxy did not answer, so what this read sent out is not known yet: " +
 						`${error instanceof Error ? error.message : String(error)}`

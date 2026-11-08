@@ -8,7 +8,7 @@
  * carries no permission shape, a permission for it is refused, and no permission ever covers it, whatever the store holds.
  *
  * Scopes: once (no permission at all); the task, which is the input the chat is answering, so a permission for the task
- * ends when the owner writes to the chat again or a routine wakes it; a time window, until a moment within a week; always, until revoked. Revoking deletes the permission in one commit, and an
+ * ends when the owner writes to the chat again (in a group, asks the member again) or a routine wakes it; a time window, until a moment within a week; always, until revoked. Revoking deletes the permission in one commit, and an
  * effect checks its permission in the commit that records it starting, so a revoked permission covers nothing after it.
  *
  * Which scopes an ask offers is the daemon's to say (`offeredScopes`), each worded as its consequence, the task's
@@ -21,11 +21,14 @@
  */
 import type { Context } from "@earendil-works/chord";
 import {
+	AssistantEntry,
 	type ConversationId,
 	defineDoc,
 	type EntryId,
+	type EntryRecord,
 	type Harness,
 	type JsonObject,
+	ResetEntry,
 	type Tx,
 } from "@earendil-works/pi-durable";
 import { log } from "./activity.ts";
@@ -34,7 +37,7 @@ import { Companion } from "./companion.ts";
 import { accountArg, connectionTool } from "./connections.ts";
 
 import { FLOOR_WORDS, type Floor } from "./floor.ts";
-import { readForeign } from "./foreign.ts";
+import { GROUP_INPUT, type GroupInput, readForeign } from "./foreign.ts";
 import { allowedHost, hostCovers } from "./hosts.ts";
 import { type Grain, grainsOf } from "./objects.ts";
 import { WAKE, type WakeData } from "./routines.ts";
@@ -161,19 +164,52 @@ export function canonical(value: unknown): string {
 	return JSON.stringify(value ?? null);
 }
 
-/** The task `chat` works on now. Reads only. */
+/**
+ * Whether `entry` is an input that starts a task when it starts a run: the owner's message or a routine's wake; in a
+ * group member's chat, an input with a message of the owner's that asks the member.
+ */
+const startsTask = (entry: EntryRecord) =>
+	entry.model?.[0]?.role === "user" &&
+	(entry.kind === "banda.inbound" ||
+		entry.kind === WAKE ||
+		(entry.kind === GROUP_INPUT && (entry.data as GroupInput | undefined)?.asked === true));
+
+/**
+ * The task `chat` works on now: the newest input that starts a task and started a run. The owner's message while a run
+ * works steers it (DESIGN.md "Flows"): pi-durable places it after the run's tool round, in the commit of the generation
+ * that made that round, and the run goes on, so it joins the task under way. Any other placement starts a run: into an
+ * idle chat (no task's commit), after a final answer, or after a reset. Reads only.
+ */
 export async function errandOf(tx: Tx, chat: number): Promise<Errand> {
+	// an input a generation placed, until the answer before it says whether that generation's run went on
+	let placed: EntryRecord | undefined;
 	let cursor: Parameters<Tx["scanEntries"]>[2];
 	do {
 		const page = await tx.scanEntries({ conversationId: chat as ConversationId }, 50, cursor);
-		// what the chat answers: the owner's newest message, or a routine's wake
-		const input = page.items.find(
-			(item) => item.model?.[0]?.role === "user" && (item.kind === "banda.inbound" || item.kind === WAKE),
-		);
-		if (input !== undefined) return { chat, input: Number(input.id) };
+		for (const entry of page.items) {
+			if (placed !== undefined) {
+				const message = entry.model?.[0];
+				if (entry.kind === AssistantEntry.kind && message?.role === "assistant") {
+					const steered =
+						entry.byTaskId === placed.byTaskId && message.content.some((part) => part.type === "toolCall");
+					if (!steered) return { chat, input: Number(placed.id) };
+					placed = undefined;
+					continue;
+				}
+				if (entry.kind === ResetEntry.kind) return { chat, input: Number(placed.id) };
+				if (!startsTask(entry)) continue;
+				// placed in the same commit, it shares the newer one's run; otherwise no round lies between
+				if (entry.byTaskId !== placed.byTaskId) return { chat, input: Number(placed.id) };
+				placed = entry;
+				continue;
+			}
+			if (!startsTask(entry)) continue;
+			if (entry.byTaskId === undefined) return { chat, input: Number(entry.id) };
+			placed = entry;
+		}
 		cursor = page.next;
 	} while (cursor !== undefined);
-	return { chat, input: 0 };
+	return { chat, input: placed === undefined ? 0 : Number(placed.id) };
 }
 
 /** Whether `permission` is open at `now` for an effect working on `errand`. */
@@ -663,7 +699,15 @@ export async function servesOf(tx: Tx, errand: Errand): Promise<Serves | undefin
 		const wake = entry.data as unknown as WakeData;
 		return { kind: "routine", routine: wake.routine, title: wake.description || wake.routine };
 	}
-	const content = entry.model?.[0]?.content;
+	// in a group, the owner's words are the room's message the member's input reads through
+	const through = entry.kind === GROUP_INPUT ? (entry.data as GroupInput).through : undefined;
+	const words = through === undefined ? undefined : (await tx.entry(through as EntryId))?.data;
+	const content =
+		through === undefined
+			? entry.model?.[0]?.content
+			: typeof (words as { text?: unknown } | undefined)?.text === "string"
+				? (words as { text: string }).text
+				: "";
 	const said =
 		typeof content === "string"
 			? content

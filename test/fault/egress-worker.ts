@@ -1,9 +1,9 @@
 /**
  * The process the egress fault suite kills. The owner says "send" twice in one chat. Each run calls `bash`,
  * after which the daemon takes what the proxy held: the first time, one POST (and the chat's first read). The
- * model asks with `propose_send`, and the owner approves it, allowing its route always. The second run holds the same
- * route again: it runs within that permission, unasked, though the chat read from outside; had a kill kept the
- * permission from being given, it asks, and the owner approves. A run interrupted by a kill asks to run again, and the
+ * model asks with `propose_send`; the chat read from outside, so the ask offers only its host, and the owner approves it,
+ * allowing the host. The second run holds the same route again: it runs within that permission, unasked; had a kill
+ * kept the permission from being given, it asks, and the owner approves. A run interrupted by a kill asks to run again, and the
  * owner says yes. Every step is safe to repeat, as the worker
  * does it again from the start in each process; it prints a summary as its last line.
  *
@@ -177,19 +177,19 @@ async function say(id: string) {
 		for (const wait of await openWaits(harness)) {
 			if (wait.ask.type !== "approval") continue;
 			faults.hit("answer");
-			// the owner allows the first request's route always where the ask offers it (a run again offers nothing),
-			// and approves anything else once
+			// the owner allows the first request's host where the ask offers it (a run again offers nothing), and
+			// approves anything else once
 			const first =
 				wait.ask.interrupted !== true &&
 				wait.ask.args._ticket === request(1).ticket &&
-				(wait.ask.scopes ?? []).some((offered) => offered.scope === "always");
+				(wait.ask.scopes ?? []).some((offered) => offered.scope === "host");
 			await ownerAnswer(
 				harness,
 				wait.key,
 				"approve",
 				web,
 				"bearer",
-				first ? { approving: { permission: { scope: "always" } } } : {},
+				first ? { approving: { permission: { scope: "host" } } } : {},
 			);
 		}
 	}

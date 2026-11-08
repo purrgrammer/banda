@@ -22,6 +22,7 @@ import { defineDoc, type Tx } from "@earendil-works/pi-durable";
 import { log } from "./activity.ts";
 import { AgentChats } from "./agents.ts";
 import type { EffectTool } from "./ask.ts";
+import { markForeign } from "./foreign.ts";
 import { agentOfChat, countSent, Permissions } from "./permissions.ts";
 import { addressWords, bodyWords, headersWords } from "./request-words.ts";
 import { context } from "./store.ts";
@@ -390,7 +391,8 @@ export async function sweepSent(
 /**
  * Take what the proxy holds for `chat` into the store, in one commit (tickets and the activity), then let
  * the proxy forget it; a kill between the two takes the same tickets again, which change nothing. What the command's
- * result says about it, or nothing.
+ * result says about it, or nothing. It fails closed: until the reads are logged (which marks the chat), a failure leaves
+ * what the call read unknown, so it marks the chat as having read foreign content before it throws.
  */
 export async function intake(
 	egress: EgressControl,
@@ -399,22 +401,12 @@ export async function intake(
 	fault: (point: string) => void = () => {},
 ): Promise<string> {
 	const chat = Number(api.conversationId);
-	const taken = await egress.take(chat, ctx);
-	// what the proxy holds under this chat's login is its own; anything else is not taken
-	const own = taken.held.filter((held) => held.chat === chat);
-	const now = api.now();
-	const sent = settled(taken.sent ?? [], chat, now);
-	if (taken.held.length === 0 && sent.length === 0 && taken.reads.length === 0) return "";
-	fault("intake");
-	if (sent.length > 0) fault("intake:sent");
-	await api.commit(async (tx) => {
-		const doc = await tx.doc(Tickets);
-		for (const [id, held] of Object.entries(doc.tickets)) if (held.at < now - TICKET_KEPT_MS) delete doc.tickets[id];
-		for (const held of own) doc.tickets[held.ticket] ??= JSON.parse(JSON.stringify(held));
-		await keepSent(tx, chat, sent, now);
-		if (taken.reads.length > 0)
-			await log(tx, { at: now, what: `Read from ${taken.reads.join(", ")}`, chat, outside: "read" });
-	}, ctx);
+	const stored = await store(egress, api, chat, ctx, fault).catch(async (error: unknown) => {
+		await api.commit((tx) => markForeign(tx, chat), ctx);
+		throw error;
+	});
+	if (stored === undefined) return "";
+	const { taken, own, sent, now } = stored;
 	fault("intake:stored");
 	await egress.ack(
 		chat,
@@ -440,6 +432,35 @@ export async function intake(
 		);
 	}
 	return lines.length === 0 ? "" : `\n\n[banda] ${lines.join("\n[banda] ")}`;
+}
+
+/** `intake`'s take and its commit: what was taken, or undefined when the proxy held nothing for `chat`. */
+async function store(
+	egress: EgressControl,
+	api: Pick<ToolExecutionApi, "commit" | "now">,
+	chat: number,
+	ctx: Context,
+	fault: (point: string) => void,
+) {
+	const taken = await egress.take(chat, ctx);
+	// what the proxy holds under this chat's login is its own; anything else is not taken
+	const own = taken.held.filter((held) => held.chat === chat);
+	const now = api.now();
+	const sent = settled(taken.sent ?? [], chat, now);
+	if (taken.held.length === 0 && sent.length === 0 && taken.reads.length === 0) return undefined;
+	fault("intake");
+	if (sent.length > 0) fault("intake:sent");
+	await api.commit(async (tx) => {
+		// a write the proxy sent straight through answered the command that sent it, as a read does
+		if (sent.some((one) => one.failed === undefined || one.reached === true)) await markForeign(tx, chat);
+		const doc = await tx.doc(Tickets);
+		for (const [id, held] of Object.entries(doc.tickets)) if (held.at < now - TICKET_KEPT_MS) delete doc.tickets[id];
+		for (const held of own) doc.tickets[held.ticket] ??= JSON.parse(JSON.stringify(held));
+		await keepSent(tx, chat, sent, now);
+		if (taken.reads.length > 0)
+			await log(tx, { at: now, what: `Read from ${taken.reads.join(", ")}`, chat, outside: "read" });
+	}, ctx);
+	return { taken, own, sent, now };
 }
 
 const parameters = Type.Object({
@@ -521,6 +542,8 @@ export function proposeSendTool(
 					? `Sent ${held.method} ${addressWords(addressOf(held))}: it answered ${replayed.status}`
 					: `Did not send ${held.method} ${addressWords(addressOf(held))}: ${"refused" in replayed ? replayed.refused : replayed.failed}`;
 			await api.commit(async (tx) => {
+				// what the server answered comes back to the model: foreign content
+				if ("status" in replayed) await markForeign(tx, chat);
 				await log(tx, {
 					at: now,
 					what: said,

@@ -8,9 +8,10 @@ import { afterEach, expect, it } from "vitest";
 import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
 import { ActivityLog } from "../src/core/activity.ts";
 import { Accepted, AgentChats, shaOf } from "../src/core/agents.ts";
+import { readForeign } from "../src/core/foreign.ts";
 import { OWNER } from "../src/core/gateway.ts";
 import { allowGrain, type GrainAsked } from "../src/core/grains.ts";
-import { covering, Permissions, revoke } from "../src/core/permissions.ts";
+import { covering, errandOf, Permissions, revoke } from "../src/core/permissions.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context } from "../src/core/store.ts";
 import { type Approving, answer } from "../src/core/wait.ts";
@@ -484,6 +485,22 @@ it("a task that read a connection's answer is offered no scope; the owner's next
 	if (next.wait?.ask.type !== "approval") throw new Error("no ask");
 	expect(next.wait.ask.foreign).toBeUndefined();
 	expect(next.wait.ask.scopes?.map((one) => one.scope)).toEqual(["task", "hour", "today", "always"]);
+});
+
+it("a write's answer is from outside too: the task it answered read foreign content", async () => {
+	const s = await setup();
+	const { turn, wait } = await s.start(banda(1));
+	if (wait?.ask.type !== "approval") throw new Error("no ask");
+	expect(wait.ask.foreign).toBeUndefined();
+	await answer(s.harness, wait.key, "approve", { gateway: "web", peer: OWNER }, "bearer");
+	await s.harness.waitForTask(turn as TaskId, context);
+	expect(s.merged()).toHaveLength(1);
+	const chat = wait.ask.errand?.chat as number;
+	const foreign = await s.harness.commit(
+		async (tx) => readForeign(tx, chat, (await errandOf(tx, chat)).input),
+		context,
+	);
+	expect(foreign).toBe(true);
 });
 
 it("an earned place is still offered in a task that read foreign content", async () => {
