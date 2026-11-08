@@ -210,7 +210,7 @@ for (const width of [390, 1440])
 					await page.until(`!${row}`);
 					// back where the owner was: the Routines tab, its Watching empty again
 					await page.until(`${button("Routines")}?.getAttribute('aria-selected') === 'true'`);
-					await page.until(shows("Follow a pull request: paste its link"));
+					await page.until(shows("Follow a pull request or an issue: paste its link"));
 					await shot("12-stopped");
 				});
 			} finally {

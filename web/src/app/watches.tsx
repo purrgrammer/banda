@@ -106,7 +106,15 @@ export function WatchDetail({
 						["Follows", title],
 						...(edit.step !== "closed"
 							? []
-							: ([["Ends", untilWords(watch)?.replace(/^until /, "") ?? "when it is merged or closed"]] as const)),
+							: ([
+									[
+										"Ends",
+										untilWords(watch)?.replace(/^until /, "") ??
+											(watch.object?.ends === undefined
+												? "at any of its ends"
+												: `when it is ${watch.object.ends.join(" or ")}`),
+									],
+								] as const)),
 						...(watch.object?.account === undefined ? [] : ([["As", watch.object.account]] as const)),
 						...(saw === undefined ? [] : ([["Last", saw]] as const)),
 						...(watch.next === undefined || paused || watch.done !== undefined

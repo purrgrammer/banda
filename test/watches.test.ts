@@ -407,6 +407,21 @@ describe("a watch on a pull request", () => {
 		expect(summary.card?.at).toBe(summary.followed?.at);
 	}, 60_000);
 
+	it("a watch on an issue: others' comments wake with the labels and assignees told beside, and it ends when closed", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), { issue: true, clicks: ["k1", "k2"] });
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes.map((wake) => [...wake.changes].sort())).toEqual([
+			["assigned to bandarra", "bob commented", "labelled bug", "unassigned ana"],
+			["closed"],
+		]);
+		expect(summary.wakes[0]?.object).toMatchObject({ name: "acme/banda #41", service: "GitHub" });
+		expect(summary.wakes[1]?.ended).toBe("closed");
+		expect(summary.record.done?.why).toBe("closed");
+		// the card is the newest reading: closed as completed
+		expect(summary.card?.state).toBe("completed");
+		expect(summary.turns.every((turn) => turn?.status === "completed")).toBe(true);
+	}, 60_000);
+
 	it("an hour unable to look draws one error line; a good look clears it, and the next hour draws one again", async () => {
 		const down = new Set([1, 2, 3, 4, 5, 7, 8, 9, 10, 11]);
 		const summary = await watchScenario(await tempHome(), new Faults(), {

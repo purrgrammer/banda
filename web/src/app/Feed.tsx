@@ -315,7 +315,7 @@ function WatchLine({
 					title: what,
 					object: inline,
 					kind: change.kind === "added" ? "new" : change.kind,
-					until: shown?.until ?? "merged or closed",
+					until: shown?.until ?? watch.object?.ends?.join(" or ") ?? "any of its ends",
 					...(shown?.account === undefined ? {} : { account: shown.account }),
 					ask: shown?.ask ?? "",
 				}}

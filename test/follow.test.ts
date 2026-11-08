@@ -49,7 +49,47 @@ describe("following an object", () => {
 		const parsed = parseObjects(GITHUB_OBJECTS, () => true);
 		if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
 		expect(parsed.objects.pull_request?.reads.comments?.follow).toBe(true);
-		expect(parsed.objects.issue?.follow).toBeUndefined();
+		expect(parsed.objects.check_run?.follow).toBeUndefined();
+	});
+
+	it("the shipped issue kind follows: closed, reopened and others' comments wake; labels and assignees tell", () => {
+		const parsed = parseObjects(GITHUB_OBJECTS, () => true);
+		if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
+		const issue = parsed.objects.issue?.follow as Follow;
+		expect(parsed.objects.issue?.reads.comments?.follow).toBe(true);
+		expect(Object.keys(issue.ends)).toEqual(["closed"]);
+		// GitHub leaves labels out when there are none: an empty list, so the first one is a label added
+		const before: Json = {
+			issue: { number: 41, title: "The panel loses the open file", state: "open", assignees: ["ana"] },
+			comments: [{ id: 1, user: { login: "ana" }, body: "seen it" }],
+		};
+		const after: Json = {
+			issue: {
+				number: 41,
+				title: "The panel loses the open file",
+				state: "closed",
+				labels: ["bug", "web"],
+				assignees: ["bandarra"],
+				updated_at: "2026-11-02T09:00:00Z",
+			},
+			comments: [
+				{ id: 1, user: { login: "ana" }, body: "seen it" },
+				{ id: 2, user: { login: "bob" }, body: "fixed in #142" },
+				{ id: 3, user: { login: "bandarra" }, body: "thanks" },
+			],
+		};
+		const said = sort(issue, "bandarra", before, after).map((each) => `${each.does}: ${each.says}`);
+		expect(said.sort()).toEqual([
+			"nothing: new comments[3]",
+			"tell: assigned to bandarra",
+			"tell: labelled bug",
+			"tell: labelled web",
+			"tell: unassigned ana",
+			"wake: bob commented",
+			"wake: closed",
+		]);
+		expect(endedBy(issue, undefined, after)).toBe("closed");
+		expect(observe(issue, after, after)).toEqual([]);
 	});
 
 	it("the changes between two readings are the differences, keyed lists by their key, and the same twice", () => {

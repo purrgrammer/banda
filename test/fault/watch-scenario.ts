@@ -52,6 +52,8 @@ export const NOW = new Date(2026, 10, 2, 9, 0).getTime();
 export const WATCH =
 	"---\nobject: https://github.com/acme/banda/pull/142\naccount: bandarra\n---\nTell me when it is approved or a check fails.\n";
 export const CLICKS = ["k1", "k2", "k3"];
+export const ISSUE_WATCH =
+	"---\nobject: https://github.com/acme/banda/issues/41\naccount: bandarra\n---\nTell me when someone answers or it closes.\n";
 
 export type World = { [read: string]: Json };
 
@@ -91,6 +93,30 @@ export function world(step: number): World {
 		pr.state = "closed";
 	}
 	return { get: pr, get_check_runs: checks, get_reviews: reviews, get_comments: comments };
+}
+
+/**
+ * An issue's life, as GitHub answers `issue_read`: open, assigned to ana; then bob comments, the account comments,
+ * it is labelled bug and assigned to bandarra instead; then it is closed.
+ */
+export function issueWorld(step: number): World {
+	const issue: { [key: string]: Json } = {
+		number: 41,
+		title: "The panel loses the open file on reload",
+		state: "open",
+		user: { login: "ana" },
+		assignees: ["ana"],
+		comments: 0,
+		html_url: "https://github.com/acme/banda/issues/41",
+	};
+	const comments: Json[] = [];
+	if (step >= 1) {
+		comments.push({ id: 7, user: { login: "bob" }, body: "I see it too" });
+		comments.push({ id: 8, user: { login: "bandarra" }, body: "on it" });
+		Object.assign(issue, { labels: ["bug"], assignees: ["bandarra"], comments: 2 });
+	}
+	if (step >= 2) Object.assign(issue, { state: "closed", state_reason: "completed" });
+	return { get: issue, get_comments: comments };
 }
 
 export type WatchSummary = {
@@ -144,6 +170,8 @@ export type ScenarioOptions = {
 	readonly act?: (step: number, scene: Scene) => Promise<void>;
 	/** Whether watch `name` is clicked at step `step`; every watch at every step by default. */
 	readonly only?: (name: string, step: number) => boolean;
+	/** Mara's watch follows an issue (`ISSUE_WATCH`, its world `issueWorld`), not the pull request. */
+	readonly issue?: boolean;
 	/** Mara's watch file; `WATCH` by default. */
 	readonly watch?: string;
 	/** What each model request waits for first: a run held going until it opens. */
@@ -155,7 +183,7 @@ export async function watchScenario(
 	faults: Faults,
 	options: ScenarioOptions = {},
 ): Promise<WatchSummary> {
-	const worldAt = options.world ?? world;
+	const worldAt = options.world ?? (options.issue ? issueWorld : world);
 	const clicks = options.clicks ?? CLICKS;
 	const clockAt = options.at ?? (() => NOW);
 	const names = options.second ? WATCHES : WATCHES.slice(0, 1);
@@ -199,7 +227,7 @@ export async function watchScenario(
 		// GitHub, as the world stands: the reads of the followed pull request, each counted
 		read: async (_connection, account, tool, args) => {
 			appendFileSync(join(home, "reads.jsonl"), `${JSON.stringify({ tool, account, method: args.method })}\n`);
-			if (tool !== "pull_request_read" || account !== "bandarra") return { failed: "not that" };
+			if (!["pull_request_read", "issue_read"].includes(tool) || account !== "bandarra") return { failed: "not that" };
 			const answer = worldAt(step)[String(args.method)];
 			return answer === undefined ? { failed: `no ${String(args.method)}` } : { text: JSON.stringify(answer) };
 		},
@@ -240,11 +268,18 @@ export async function watchScenario(
 							properties: { method: { type: "string" }, pullNumber: { type: "integer" } },
 						},
 					},
+					issue_read: {
+						description: "read",
+						schema: {
+							type: "object",
+							properties: { method: { type: "string" }, issue_number: { type: "integer" } },
+						},
+					},
 				},
 			};
 			connected.accounts.github = { bandarra: { id: "bandarra", at: NOW } };
 			connected.on.mara = { github: ["bandarra"] };
-			const text = options.watch ?? WATCH;
+			const text = options.watch ?? (options.issue ? ISSUE_WATCH : WATCH);
 			accepted.files[watchPath("banda-142")] = { sha: shaOf(text), text, at: NOW };
 			(await tx.doc(Watches)).watches["banda-142"] = { agent: "mara", since: NOW };
 			if (options.second) {
@@ -340,12 +375,9 @@ export async function watchScenario(
 		const live = names.filter((name) => accepted[watchPath(name)] !== undefined);
 		const task = record.task === undefined ? undefined : await harness.getTask(record.task as TaskId, context);
 		const second = records["banda-142-otto"];
-		const followed = (await harness.snapshot(Followed, context))?.objects[
-			"github/bandarra/pull_request:acme/banda#142"
-		];
-		const reading = (await harness.snapshot(Readings, context))?.readings[
-			"github/bandarra/pull_request:acme/banda#142"
-		];
+		const key = `github/bandarra/${options.issue ? "issue:acme/banda#41" : "pull_request:acme/banda#142"}`;
+		const followed = (await harness.snapshot(Followed, context))?.objects[key];
+		const reading = (await harness.snapshot(Readings, context))?.readings[key];
 		const card = reading?.card as { state?: string } | undefined;
 		return {
 			record,

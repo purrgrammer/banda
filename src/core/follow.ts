@@ -132,6 +132,30 @@ export function observe(
 			}
 		return changes;
 	}
+	// a list of plain values (an issue's labels, its assignees) is a set: each value added or gone is a change of its
+	// own, and a list the service leaves out when empty is empty
+	const values = (value: Json | undefined) =>
+		value === undefined
+			? []
+			: Array.isArray(value) && value.every((each) => typeof each === "string" || typeof each === "number")
+				? (value as (string | number)[])
+				: undefined;
+	const had = values(before);
+	const has = values(after);
+	if (had !== undefined && has !== undefined && (Array.isArray(before) || Array.isArray(after))) {
+		const changes: Change[] = [];
+		for (const value of new Set(has))
+			if (!had.includes(value)) {
+				const at = [...path, { item: String(value) }];
+				changes.push({ id: `${JSON.stringify(at)}+`, path: at, kind: "added", to: value });
+			}
+		for (const value of new Set(had))
+			if (!has.includes(value)) {
+				const at = [...path, { item: String(value) }];
+				changes.push({ id: `${JSON.stringify(at)}-`, path: at, kind: "removed", from: value });
+			}
+		return changes;
+	}
 	return [
 		{
 			id: `${JSON.stringify(path)}=${canonical(after)}`,

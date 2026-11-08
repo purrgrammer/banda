@@ -612,7 +612,92 @@ draws as cards, from scripts/github-objects.ts.
 						"repo": "{repo}",
 						"issue_number": "{number}"
 					}
+				},
+				"comments": {
+					"optional": true,
+					"follow": true,
+					"tool": "issue_read",
+					"args": {
+						"method": "get_comments",
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"issue_number": "{number}",
+						"perPage": 100,
+						"page": 1
+					}
 				}
+			},
+			"follow": {
+				"ignore": [
+					"issue.updated_at",
+					"issue.comments",
+					"issue.reactions",
+					"issue.closed_at",
+					"issue.closed_by",
+					"issue.user.avatar_url",
+					"issue.user.profile_url",
+					"comments[*].html_url",
+					"comments[*].user.avatar_url",
+					"comments[*].user.profile_url",
+					"comments[*].reactions",
+					"comments[*].updated_at"
+				],
+				"authors": {
+					"comments": "user.login"
+				},
+				"rules": [
+					{
+						"on": "issue.state",
+						"to": "closed",
+						"does": "wake",
+						"says": "closed"
+					},
+					{
+						"on": "issue.state",
+						"to": "open",
+						"does": "wake",
+						"says": "reopened"
+					},
+					{
+						"on": "comments[*]",
+						"kind": "added",
+						"does": "wake",
+						"says": "{user.login} commented"
+					},
+					{
+						"on": "issue.labels[*]",
+						"kind": "added",
+						"does": "tell",
+						"says": "labelled {to}"
+					},
+					{
+						"on": "issue.labels[*]",
+						"kind": "removed",
+						"does": "tell",
+						"says": "unlabelled {from}"
+					},
+					{
+						"on": "issue.assignees[*]",
+						"kind": "added",
+						"does": "tell",
+						"says": "assigned to {to}"
+					},
+					{
+						"on": "issue.assignees[*]",
+						"kind": "removed",
+						"does": "tell",
+						"says": "unassigned {from}"
+					},
+					{
+						"on": "issue.title",
+						"does": "tell",
+						"says": "retitled: {to}"
+					}
+				],
+				"ends": {
+					"closed": "issue.state = closed"
+				},
+				"settle": "1m"
 			},
 			"fields": {
 				"number": "issue.number",
