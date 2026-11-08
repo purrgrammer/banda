@@ -549,6 +549,23 @@ export function watchInvariants(summary: WatchSummary): string[] {
 	);
 	if (summary.record.done !== undefined && !shared)
 		say("a done watch holds no reading unless a live watch shares it", summary.followed === undefined);
+	// a reading kept never falls behind a wake: one lost and read again would start over at version 1
+	if (summary.followed !== undefined) {
+		const kept = summary.followed.version;
+		say(
+			"the reading kept is at or past every wake's version",
+			summary.wakes.every((wake) => wake.version <= kept),
+		);
+	}
+	// a live watch with a cursor on the object has its reading kept, whatever ended beside it
+	const holder = Object.entries(summary.records).some(
+		([name, record]) =>
+			summary.live.includes(name) &&
+			record.done === undefined &&
+			record.seen !== undefined &&
+			record.key === summary.record.key,
+	);
+	if (holder) say("a live watch's reading is kept", summary.followed !== undefined);
 	return errors;
 }
 
@@ -604,6 +621,49 @@ export function watchProblems(summary: WatchSummary): string[] {
 		"the last wake reached the owner",
 		summary.sent.some((text) => text.includes("merged")),
 	);
+	say("nothing is parked", summary.parked.length === 0);
+	return errors;
+}
+
+/** Until no run (a turn, a send) is live: a look made while its watch's last run goes holds what it sees for it. */
+export async function runsEnded(harness: Harness): Promise<void> {
+	for (;;) {
+		const graph = await harness.taskGraph(context);
+		const busy = Object.values(graph.value.tasks).some(
+			(task) => task.kind !== "banda.watch" && task.kind !== "banda.routine",
+		);
+		graph.dispose();
+		if (!busy) return;
+		await new Promise((r) => setTimeout(r, 5));
+	}
+}
+
+/**
+ * What must hold of two watches on one pull request looked at in turn, each look free to take the other's reading:
+ * both see every change (the approval and the failed check as one wake, the merge as the last), and the reading is
+ * gone with the two of them done.
+ */
+function sharedProblems(summary: WatchSummary): string[] {
+	const errors = watchInvariants(summary);
+	const say = (what: string, ok: boolean) => {
+		if (!ok) errors.push(what);
+	};
+	const watches = [summary.record, summary.second];
+	for (const [i, name] of WATCHES.entries()) {
+		const record = watches[i];
+		const wakes = summary.wakes.filter((wake) => wake.watch === name);
+		say(`${name}: two wakes, got ${wakes.length}`, wakes.length === 2);
+		say(
+			`${name}: the first wake says what changed`,
+			[...(wakes[0]?.changes ?? [])].sort().join(", ") === "ana approved, checks finished, lint failed",
+		);
+		say(`${name}: the last wake says merged and ends the watch`, wakes[1]?.ended === "merged");
+		say(`${name}: the watch is done: merged`, record?.done?.why === "merged");
+	}
+	say("no tell beside the wakes", summary.tells.length === 0);
+	say("both done, the reading is gone", summary.followed === undefined);
+	say("four runs", summary.turns.length === 4);
+	for (const turn of summary.turns) say("a run ended", turn?.status === "completed");
 	say("nothing is parked", summary.parked.length === 0);
 	return errors;
 }
@@ -676,6 +736,23 @@ export const SCENARIOS: {
 	};
 } = {
 	life: { options: {}, problems: watchProblems },
+	// two watches on one object and no tasks: the act looks for both, ten minutes a step, Mara first (she reads) then
+	// Otto (he takes her reading), the world a step behind so step 1 is the baseline; at step 5 Otto looks first. A
+	// look waits for the runs to end, or it would hold what it sees for the run still going
+	shared: {
+		options: {
+			second: true,
+			tasks: false,
+			world: (step) => world(Math.max(0, step - 1)),
+			clicks: [undefined, undefined, undefined, undefined, undefined],
+			at: (step) => NOW + step * 10 * 60_000,
+			act: async (step, { harness, core }) => {
+				await runsEnded(harness);
+				for (const name of step <= 4 ? WATCHES : [...WATCHES].reverse()) await core.lookWatch(harness, name);
+			},
+		},
+		problems: sharedProblems,
+	},
 	pause: {
 		options: {
 			world: heldWorld,
