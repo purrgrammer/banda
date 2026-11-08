@@ -24,7 +24,6 @@ import {
 	GitMergeIcon,
 	GitPullRequestDraftIcon,
 	GitPullRequestIcon,
-	HashIcon,
 	ImageIcon,
 	MailIcon,
 	MailsIcon,
@@ -496,7 +495,7 @@ export function ObjectLink({
 				className="inline-flex max-w-full items-baseline gap-1 align-baseline"
 			>
 				{slack ? <SlackMark className="self-center" /> : null}
-				<Icon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
+				{Icon === undefined ? null : <Icon aria-hidden="true" className="size-3.5 shrink-0 self-center" />}
 				{url === undefined ? (
 					<span className={INLINE_TEXT} title={title}>
 						{title}
@@ -743,9 +742,12 @@ export function SlackMark({ className }: { className?: string }) {
 	return <img src="/connections/slack.svg" alt="" aria-hidden="true" className={cn("size-3.5 shrink-0", className)} />;
 }
 
-/** The icon of a Slack list's kind: a channel by its hash, a thread by its bubbles, a search by its glass. */
-const slackListIcon = (list: Pick<Messages, "search" | "place">) =>
-	list.search ? SearchIcon : list.place === "channel" ? HashIcon : MessagesSquareIcon;
+/**
+ * The icon beside Slack's mark for a list's kind: a thread's bubbles, a search's glass; a channel has none, since its
+ * name carries its hash.
+ */
+const slackListIcon = (list: Pick<Messages, "search" | "place">): LucideIcon | undefined =>
+	list.search ? SearchIcon : list.place === "channel" ? undefined : MessagesSquareIcon;
 
 /** Slack's messages together, read-only: a thread under its first words in its channel, a channel with its topic, a search under its query. */
 function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactNode }) {
@@ -769,7 +771,7 @@ function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactN
 		<Tile className="flex flex-col gap-2.5 p-3.5" data-slack-card={list.search ? "search" : (list.place ?? "thread")}>
 			<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-ink-2">
 				<SlackMark />
-				<Icon aria-hidden="true" className="size-3.5 shrink-0" />
+				{Icon === undefined ? null : <Icon aria-hidden="true" className="size-3.5 shrink-0" />}
 				<span className="min-w-0 flex-1 truncate">{where}</span>
 				{list.asOf === undefined ? null : <span>as of {list.asOf}</span>}
 				<span className="ml-auto shrink-0">{actions}</span>
