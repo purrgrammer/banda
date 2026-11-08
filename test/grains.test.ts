@@ -377,7 +377,10 @@ it("a decline starts the count again, an edited approval does not count, and wha
 	await s.answered(comment(3));
 	expect((await s.answered(comment(4))).scopes?.[0]?.scope).toBe("task");
 	expect((await s.answered(comment(5))).scopes).toEqual([
-		{ scope: "place", words: "Comment on pull requests and issues in acme/banda without asking until you take it back in Permissions" },
+		{
+			scope: "place",
+			words: "Comment on pull requests and issues in acme/banda without asking until you take it back in Permissions",
+		},
 	]);
 	// approved for an hour, then runs within it ask nothing and count nothing
 	const hour = { permission: { scope: "until", until: Date.now() + 3_600_000 } } as const;

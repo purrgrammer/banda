@@ -441,7 +441,10 @@ describe("the scopes an ask offers", () => {
 		expect(offered({ permission: merge, place })).toEqual(["task", "hour", "today", "always"]);
 		const earned = { ...place, earned: true } as const;
 		expect(offeredScopes({ permission: merge, place: earned })).toEqual([
-			{ scope: "place", words: "Merge pull requests in acme/banda without asking until you take it back in Permissions" },
+			{
+				scope: "place",
+				words: "Merge pull requests in acme/banda without asking until you take it back in Permissions",
+			},
 		]);
 		expect(offered({ permission: merge, place: earned, foreign: true })).toEqual(["place"]);
 		expect(offered({ permission: merge, place, foreign: true })).toEqual([]);
