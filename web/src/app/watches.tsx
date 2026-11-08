@@ -112,7 +112,9 @@ export function WatchDetail({
 										untilWords(watch)?.replace(/^until /, "") ??
 											(watch.object?.ends === undefined
 												? "at any of its ends"
-												: `when it is ${watch.object.ends.join(" or ")}`),
+												: watch.object.ends.length === 0
+													? "when you remove it"
+													: `when it is ${watch.object.ends.join(" or ")}`),
 									],
 								] as const)),
 						...(watch.object?.account === undefined ? [] : ([["As", watch.object.account]] as const)),
@@ -131,25 +133,27 @@ export function WatchDetail({
 							if (edit.ask.trim() !== "") save(edit);
 						}}
 					>
-						<Field label="Ends">
-							<Select
-								value={edit.until ?? ANY}
-								disabled={edit.step === "saving"}
-								onValueChange={(until) => setEdit({ ...edit, step: "editing", until: until === ANY ? null : until })}
-							>
-								<SelectTrigger aria-label="Ends" className="w-full">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									{ends.map((end) => (
-										<SelectItem key={end} value={end}>
-											When {end}
-										</SelectItem>
-									))}
-									<SelectItem value={ANY}>Any end</SelectItem>
-								</SelectContent>
-							</Select>
-						</Field>
+						{ends.length === 0 ? null : (
+							<Field label="Ends">
+								<Select
+									value={edit.until ?? ANY}
+									disabled={edit.step === "saving"}
+									onValueChange={(until) => setEdit({ ...edit, step: "editing", until: until === ANY ? null : until })}
+								>
+									<SelectTrigger aria-label="Ends" className="w-full">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										{ends.map((end) => (
+											<SelectItem key={end} value={end}>
+												When {end}
+											</SelectItem>
+										))}
+										<SelectItem value={ANY}>Any end</SelectItem>
+									</SelectContent>
+								</Select>
+							</Field>
+						)}
 						<Field label="What matters" hint={`${agent.name} reads this at every wake.`}>
 							<Textarea
 								value={edit.ask}

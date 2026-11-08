@@ -226,6 +226,14 @@ export function ObjectMenu({
 							{follow === undefined
 								? null
 								: [
+										// nothing ends it (a repository): followed until the owner removes the watch
+										...(follow.ends.length === 0
+											? [
+													<DropdownMenuItem key="follow" disabled={busy} onSelect={() => follow.onFollow()}>
+														Follow
+													</DropdownMenuItem>,
+												]
+											: []),
 										...follow.ends.map((end) => (
 											<DropdownMenuItem key={end} disabled={busy} onSelect={() => follow.onFollow(end)}>
 												Follow until {end}

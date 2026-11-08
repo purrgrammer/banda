@@ -170,6 +170,49 @@ describe("following an object", () => {
 		);
 	});
 
+	it("a page of the newest: what leaves it was pushed off, what slid in is nothing, only what is newer is new", () => {
+		const newest: Follow = {
+			newest: { releases: "published_at", "issues.issues": "number" },
+			keys: { "issues.issues": "number" },
+			rules: [
+				{ on: "releases[*]", kind: "added", does: "wake", says: "released {tag_name}" },
+				{ on: "releases[*]", kind: "removed", does: "wake", says: "gone {tag_name}" },
+				{ on: "issues.issues[*]", kind: "added", does: "wake", says: "opened #{number}" },
+			],
+			ends: {},
+		};
+		const release = (id: number, day: number | undefined) => ({
+			id,
+			tag_name: `v${id}`,
+			...(day === undefined ? {} : { published_at: `2026-11-0${day}T09:00:00Z` }),
+		});
+		const before: Json = {
+			releases: [release(3, 3), release(2, 2)],
+			issues: { totalCount: 9, issues: [{ number: 9 }, { number: 8 }] },
+		};
+		const said = (after: Json) =>
+			sort(newest, undefined, before, after)
+				.filter((each) => each.does !== "nothing")
+				.map((each) => each.says);
+		// a new release pushes the oldest off the page: it is new, the one pushed off is not gone
+		expect(said({ ...(before as object), releases: [release(4, 4), release(3, 3)] })).toEqual(["released v4"]);
+		// v3 deleted: v1 slides into the page, older than any seen, so nothing
+		expect(said({ ...(before as object), releases: [release(2, 2), release(1, 1)] })).toEqual([]);
+		// a draft has no published_at: not new until it is published
+		expect(said({ ...(before as object), releases: [release(5, undefined), release(3, 3)] })).toEqual([]);
+		// a list inside an answer, by number
+		expect(
+			said({ ...(before as object), issues: { totalCount: 10, issues: [{ number: 10 }, { number: 9 }] } }),
+		).toEqual(["opened #10"]);
+		expect(said({ ...(before as object), issues: { totalCount: 8, issues: [{ number: 8 }, { number: 7 }] } })).toEqual(
+			[],
+		);
+		// the first page there was: everything in it is newer than nothing
+		expect(
+			sort(newest, undefined, { releases: [] }, { releases: [release(1, 1)] }).map((each) => [each.does, each.says]),
+		).toEqual([["wake", "released v1"]]);
+	});
+
 	it("what ends a watch: the end the watch names, or any; and how often to look, more while busy", () => {
 		const merged = open() as { [key: string]: Json };
 		(merged.pr as { [key: string]: Json }).merged = true;
@@ -221,7 +264,11 @@ describe("following an object", () => {
 			const parsed = parseFollow(value, "objects.x");
 			return "errors" in parsed ? parsed.errors : [];
 		};
-		expect(problems({ rules: [], ends: {} })).toContainEqual(expect.stringContaining("ends"));
+		expect(problems({ rules: [] })).toContainEqual(expect.stringContaining("ends"));
+		expect(problems({ rules: [], ends: [] })).toContainEqual(expect.stringContaining("ends"));
+		// nothing ends a repository: `{}` says so, and a watch on it ends only when the owner removes it
+		expect(problems({ rules: [], ends: {} })).toEqual([]);
+		expect(endedBy({ ends: {} }, undefined, { anything: true })).toBeUndefined();
 		expect(problems({ rules: [{ on: "a", does: "ring", says: "x" }], ends: { a: "a = 1" } })).toContainEqual(
 			expect.stringContaining("a rule is"),
 		);

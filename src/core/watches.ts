@@ -599,7 +599,12 @@ export function defineWatches(options: WatchesOptions) {
 		const { ref, kind, connection } = found;
 		// a file's `until` the kind has no end for would never end: said, not waited on
 		if (watch.until !== undefined && kind.follow.ends[watch.until] === undefined)
-			return { why: `"until: ${watch.until}" is none of its ends: ${Object.keys(kind.follow.ends).join(", ")}` };
+			return {
+				why:
+					Object.keys(kind.follow.ends).length === 0
+						? `"until: ${watch.until}": nothing ends it, so leave "until" out`
+						: `"until: ${watch.until}" is none of its ends: ${Object.keys(kind.follow.ends).join(", ")}`,
+			};
 		const picked = await accountFor(tx, agent, connection, watch.account);
 		if ("refused" in picked) return { why: picked.refused };
 		const access = await objectAccess(tx, chat, ref, picked.account);
@@ -1116,7 +1121,11 @@ export function defineWatches(options: WatchesOptions) {
 			const { ref, kind, connection } = found;
 			const ends = Object.keys(kind.follow.ends);
 			if (args.until !== undefined && !ends.includes(args.until))
-				throw new WatchRefused(`Not written: "until" is one of ${ends.join(", ")}, or left out for any of them.`);
+				throw new WatchRefused(
+					ends.length === 0
+						? `Not written: nothing ends it, so leave "until" out.`
+						: `Not written: "until" is one of ${ends.join(", ")}, or left out for any of them.`,
+				);
 			const picked = await accountFor(tx, agent, connection, args.account);
 			if ("refused" in picked) throw new WatchRefused(`Not written: ${picked.refused}.`);
 			const objectName = nameOf(ref, connection.objects ?? {});

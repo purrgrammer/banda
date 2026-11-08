@@ -56,6 +56,12 @@ export type Follow = {
 	readonly keys?: { readonly [list: string]: string };
 	/** A list that may be one page of more: the field with its full count. Short, no item of it counts as gone. */
 	readonly totals?: { readonly [list: string]: string };
+	/**
+	 * A list that is the newest page of more, newest first, by the field that orders it (`{"releases": "published_at"}`,
+	 * a number or an ISO time): an item that leaves it was pushed off the page, never gone, and one that comes is new
+	 * only when that field is past every item's in the reading before; one that slid in as another left is nothing.
+	 */
+	readonly newest?: { readonly [list: string]: string };
 	/** Paths (and all below them) that change without anything happening. */
 	readonly ignore?: readonly string[];
 	/** Who wrote an item of a list, by the list's pattern: the account's own are nothing, a bot's only tell. */
@@ -69,7 +75,10 @@ export type Follow = {
 	readonly rules: readonly Rule[];
 	/** What a change no rule matches does: nothing unless said. */
 	readonly otherwise?: Rule["does"];
-	/** What ends a watch, by the word the watch says (`until: merged`); without one, any of them. */
+	/**
+	 * What ends a watch, by the word the watch says (`until: merged`); without one, any of them. None (`{}`): a watch
+	 * on it never ends of itself (a repository goes on), only when the owner removes it.
+	 */
 	readonly ends: { readonly [name: string]: string };
 	/** While it holds, the daemon looks every `busy_every` instead of `every`. */
 	readonly busy?: string;
@@ -287,6 +296,46 @@ function complete(follow: Follow, after: Json, change: Change): boolean {
 	return !(typeof total === "number" && Array.isArray(items) && items.length < total);
 }
 
+/** The `newest` field of the list `path` is an item of, or undefined when it is not such a list. */
+function newestField(follow: Pick<Follow, "newest">, path: Path): string | undefined {
+	const list = path.slice(0, -1);
+	return Object.entries(follow.newest ?? {}).find(([each]) => matches(pattern(each), list))?.[1];
+}
+
+/** The value at `path` of `value`, each item segment the item of that key (`id` unless `keys` says). */
+function atPath(follow: Pick<Follow, "keys">, value: Json | undefined, path: Path): Json | undefined {
+	let here = value;
+	for (const [i, segment] of path.entries()) {
+		if (typeof segment === "string") {
+			here = object(here) ? here[segment] : undefined;
+			continue;
+		}
+		const list = Object.keys(follow.keys ?? {}).find((each) => matches(pattern(each), path.slice(0, i)));
+		const field = list === undefined ? "id" : (follow.keys?.[list] ?? "id");
+		here = Array.isArray(here) ? here.find((each) => object(each) && String(each[field]) === segment.item) : undefined;
+	}
+	return here;
+}
+
+/** Whether `a` comes after `b`: numbers by size, ISO times and other strings by their order. */
+const past = (a: Json | undefined, b: Json | undefined) =>
+	(typeof a === "number" && typeof b === "number") || (typeof a === "string" && typeof b === "string") ? a > b : false;
+
+/**
+ * Whether an item that came into a `newest` list is new: its field past every item's the reading before had. One that
+ * slid in as another left (a release deleted, a page's last item pushed off and back) is not.
+ */
+function isNew(follow: Follow, before: Json, change: Change, field: string): boolean {
+	const was = atPath(follow, before, change.path.slice(0, -1));
+	const at = (item: Json | undefined) => valuesAt(item, pattern(field))[0];
+	const mine = at(change.item);
+	if (mine === undefined || mine === null) return false;
+	return (Array.isArray(was) ? was : []).every((item) => {
+		const theirs = at(item);
+		return theirs === undefined || theirs === null || past(mine, theirs);
+	});
+}
+
 /** A change, and what it does: as a rule said, or by whose it is. */
 export type Sorted = { readonly change: Change; readonly does: Rule["does"]; readonly says: string };
 
@@ -354,6 +403,13 @@ export function sort(follow: Follow, me: string | undefined, before: Json, after
 	const sorted: Sorted[] = [];
 	for (const change of observe(follow, before, after)) {
 		if (!complete(follow, after, change)) continue;
+		// a page of the newest: what leaves it was pushed off, and what came into it is new only when it is newer
+		const newest = newestField(follow, change.path);
+		if (newest !== undefined && change.kind === "removed") continue;
+		if (newest !== undefined && change.kind === "added" && !isNew(follow, before, change, newest)) {
+			sorted.push({ change, does: "nothing", says: changeWords(change) });
+			continue;
+		}
 		const list = Object.entries(follow.authors ?? {}).find(([each]) =>
 			matches(pattern(each), change.path.slice(0, pattern(each).length)),
 		);
@@ -381,6 +437,7 @@ const KINDS = new Set(["added", "removed", "changed"]);
 const FIELDS = [
 	"keys",
 	"totals",
+	"newest",
 	"ignore",
 	"authors",
 	"derived",
@@ -403,7 +460,7 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 	if (!object(value as Json)) return { errors: [`${where}.follow is {"rules", "ends", …}`] };
 	const follow = value as { [key: string]: unknown };
 	for (const key of Object.keys(follow)) if (!FIELDS.includes(key)) problem(`"${key}" is not a field`);
-	for (const key of ["keys", "totals", "authors", "ends"] as const)
+	for (const key of ["keys", "totals", "newest", "authors", "ends"] as const)
 		if (follow[key] !== undefined && !stringMap(follow[key])) problem(`"${key}" is {"pattern": "path"}`);
 	if (
 		follow.ignore !== undefined &&
@@ -440,7 +497,8 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 	if (follow.otherwise !== undefined && !DOES.has(follow.otherwise as string))
 		problem(`"otherwise" is wake, tell or nothing`);
 	const ends = stringMap(follow.ends) ? (follow.ends as { [name: string]: string }) : {};
-	if (Object.keys(ends).length === 0) problem(`"ends" names what ends a watch: {"merged": "pr.merged = true"}`);
+	if (follow.ends === undefined)
+		problem(`"ends" names what ends a watch: {"merged": "pr.merged = true"}, or {} when nothing does`);
 	for (const name of Object.keys(ends)) if (!NAME.test(name)) problem(`"${name}" is not a word for an end`);
 	const conditions = [
 		...Object.values(ends),
@@ -460,6 +518,7 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 		follow: {
 			...(f.keys === undefined ? {} : { keys: f.keys }),
 			...(f.totals === undefined ? {} : { totals: f.totals }),
+			...(f.newest === undefined ? {} : { newest: f.newest }),
 			...(f.ignore === undefined ? {} : { ignore: f.ignore }),
 			...(f.authors === undefined ? {} : { authors: f.authors }),
 			...(f.derived === undefined ? {} : { derived: f.derived }),
