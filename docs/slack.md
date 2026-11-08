@@ -235,12 +235,14 @@ a minute with a hundred per page. Two things follow for the daemon, both new, bo
   first, so the daemon walks a page chain whichever way the service hands it and orders by the declared field. This
   is the "feed with a cursor" Watches left for the mail connection: Gmail's history id can take the same declaration
   later; Gmail's search and GitHub's releases stay `newest` pages, which fit them.
-- **A budget per account and method.** The file says `limits: { channel_history: "1/m", get_thread: "1/m" }`, and
-  the daemon spaces every call of that method on that account, from a watch's look, an agent's read or a card's
-  unfurl alike, so the method is called at most that often: three channel watches on one team look in turn, a
-  minute apart, and three thread unfurls in one reply draw from the readings held and queue what they must fetch.
-  A refusal with `Retry-After` is the row's "can't reach Slack, back at 10:43", not a retry loop. Whether Slack counts
-  the limit per team or per user token is the first spike.
+- **A budget per account and method.** Every call of a method on an account, from a watch's look, an agent's read
+  or a card's unfurl alike, goes through one queue for that (account, method): one call in flight at a time, and a
+  refusal with `Retry-After` holds the queue until it passes, said in words where the call came from ("Slack is
+  busy, back at 10:43" on a card, "can't reach Slack, back at 10:43" in a watch's row), never a retry loop. The
+  owner's own team was not clamped (stage 0), so no rate is declared for it; a team that is clamped is met by its
+  `Retry-After`, and a kind's `every` keeps looks apart. The file may still say `limits: { channel_history: "1/m" }`
+  when a number is known, and the queue then spaces calls to it before Slack has to refuse. Whether Slack counts a
+  limit per team or per user token is still open (no second team was available).
 
 What this means for the owner: a followed channel wakes within a minute or two while it is busy and within five when
 quiet; a channel busier than fifteen messages a minute is read behind, and the row says so until the daemon catches
