@@ -2624,30 +2624,12 @@ export function openCapabilities(options: CapabilityOptions) {
 	}
 
 	/**
-	 * Whether the accepted connection `name` (its `text`, and what the store says of it) is banda's: written from what
-	 * banda ships and changed since only by banda (its scopes, its next version). A home whose store says nothing of it
-	 * (made before the store kept it) counts one still the shipped service, at its address, signing in as its client.
-	 */
-	function bandas(name: string, ours: boolean | undefined, text: string, shipped: Connection): boolean {
-		if (ours !== undefined) return ours;
-		const parsed = parseConnection(name, text);
-		if ("errors" in parsed) return false;
-		const { connection } = parsed;
-		return (
-			connection.service === shipped.service &&
-			connection.url === shipped.url &&
-			connection.api === shipped.api &&
-			connection.command === shipped.command &&
-			connection.client === shipped.client
-		);
-	}
-
-	/**
-	 * At start: each connection the home added from what banda ships, and nobody but banda changed since, follows
-	 * banda's version: the shipped file (the scopes an account signed in with are the account's, not the file's), written into
-	 * the workspace (or back into it, if the box lost it) and allowed at once. Everything else the owner chose is kept by
-	 * its name. One the box changed and nobody accepted yet is left for the owner. A kill once the file is written
-	 * finds it written next time, and allows it.
+	 * At start: each connection the home added from what banda ships, and nobody but banda changed since (as the
+	 * store says, `Accepted.shipped`: one it says nothing of is the owner's), follows banda's version: the shipped file
+	 * (the scopes an account signed in with are the account's, not the file's), written into the workspace (or back into
+	 * it, if the box lost it) and allowed at once. Everything else the owner chose is kept by its name. One the box
+	 * changed and nobody accepted yet is left for the owner. A kill once the file is written finds it written next
+	 * time, and allows it.
 	 */
 	async function followShipped(ctx: Context): Promise<void> {
 		const files = await shippedFiles();
@@ -2659,7 +2641,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				const doc = await tx.doc(Accepted);
 				return { accepted: doc.files[path]?.text, ours: doc.shipped?.[path] };
 			}, ctx);
-			if (accepted === undefined || !bandas(name, ours, accepted, shipped.connection)) continue;
+			if (accepted === undefined || ours !== true) continue;
 			const text = shipped.text;
 			const box = boxed.get(name) as { text: string } | { unreadable: string } | undefined;
 			if (box !== undefined && ("unreadable" in box || (box.text !== accepted && box.text !== text))) continue;
