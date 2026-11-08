@@ -37,7 +37,8 @@ read that fetches it, the fields the card shows and the writes that act on it. A
 by (connection, account, object), with its time. Links in agent messages unfurl to cards, few per message, never retried
 in a loop; owner references stay compact inside their words (service icon, object-type icon, linked title), without
 metadata or another card.
-A draft on an object shows it. GitHub first: pull request, issue, Actions job, and notification as its subject.
+A draft on an object shows it. GitHub first: pull request, issue, Actions job and workflow run, discussion, repository, and notification as its
+subject.
 PR cards summarize checks; arbitrary standalone Checks API IDs are not Actions job IDs. Missing or partial facts stay
 unknown. Fake OAuth and MCP services cover automated tests and write approvals; manual app acceptance uses an isolated
 home at desktop and phone widths. Real-account reads require the owner's authorization; real writes use a disposable
