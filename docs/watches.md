@@ -107,17 +107,16 @@ returned to and merged, at desktop and phone width.
 - [x] **Check now remakes the task.** The look phase looks only when `record.next` is due and sleeps on otherwise, so
   `checkNow` keeps a task whose sleep ends by the new time (it wakes then, reads nothing, sleeps until the new one)
   and remakes it only when the look found the object busy, its sleep ending too late
-- [ ] The fault sweep over the shared reading, the dropped reading at the end, and Check now keeping the task has not
-  run in CI yet; and no fault scenario has two watches on one object (`second`) with a moving clock, so the shared
-  path (`watch:read` on a shared look, the exit when the shared reading moved on, `dropUnheld` keeping a reading a
-  live watch holds) runs under no kill yet. The invariants should also say a key's version never drops while a live
-  watch follows the object: a reading lost and read again at version 1 passes them today
+- [x] A fault scenario with two watches on one object (`shared`: the act looks for both in turn, so each look may take
+  the other's reading), and invariants that a kept reading is at or past every wake's version and that a live watch's
+  reading is kept
+- [ ] The fault sweep over the shared reading, the dropped reading at the end, Check now keeping the task and the
+  stream's routing has not run in CI yet (dispatched on this branch after these commits)
 - [ ] A watch that shares a reading whose derived condition was held back (`steady`) schedules its quiet cadence, so
   it hears the flip up to a cadence after the watch that read; a held-back flag on the reading would give it the busy
   one
-- [ ] Nothing refreshes time-derived state now that a timer's task is no news to the shell: a permission's `until`
-  expiring and the day words of the rows and the push clock moved with the pushes the tasks caused; a whole push at
-  the earliest expiry, and the day words ticking at local midnight, would
+- [x] Time-derived state refreshes though a timer's task is no news to the shell: the stream pushes again when the
+  earliest permission's `until` passes, and the app reads its day words again at local midnight
 - [ ] Spike before slice 2: the readings doc keeps 300 and evicts the oldest first, so a held reading must be
   skipped; GitHub's hosted MCP server still answers `pull_request_read`'s get, get_reviews, get_comments and
   get_check_runs
