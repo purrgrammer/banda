@@ -26,6 +26,19 @@ store and the agent's computer.
 			"reads": {
 				"file": { "tool": "get_file", "args": { "file_id": "{id}" } }
 			},
+			"follow": {
+				"authors": { "file": "modifier.email" },
+				"rules": [
+					{ "on": "file.trashed", "to": true, "does": "wake", "says": "trashed" },
+					{ "on": "file.modified", "does": "wake", "says": "{modifier.name} edited it" },
+					{ "on": "file.name", "does": "tell", "says": "renamed: {to}" },
+					{ "on": "file.parents[*]", "does": "tell", "says": "moved" },
+					{ "on": "file.shared[*]", "kind": "added", "does": "tell", "says": "shared with {who}" }
+				],
+				"ends": { "trashed": "file.trashed = true" },
+				"every": "10m",
+				"settle": "10m"
+			},
 			"fields": {
 				"name": "file.name",
 				"kind": "file.kind",
