@@ -44,7 +44,7 @@ export const CONTACTS_TOOLS: McpTool[] = [
 	),
 	tool(
 		"get_contact",
-		"Read one person in full: names, addresses, phone numbers, company and job title. Name them in your answer as a link, [its name](contacts/<id>); to show cards, give them in the message's objects.",
+		"Read one person in full: names, email addresses, phone numbers, postal addresses, company and job title. Name them in your answer as a link, [its name](contacts/<id>); to show cards, give them in the message's objects.",
 		{
 			contact_id: {
 				type: "string",
@@ -96,6 +96,15 @@ const phonesOf = (person: Json) =>
 		.map((each) => text(each.value, 60).trim())
 		.filter(Boolean)
 		.slice(0, 10);
+const addressesOf = (person: Json) =>
+	primaryFirst(list(person.addresses))
+		.map((each) =>
+			text(each.formattedValue, 300)
+				.replace(/\s*\n\s*/g, ", ")
+				.trim(),
+		)
+		.filter(Boolean)
+		.slice(0, 10);
 const nameOf = (person: Json) =>
 	text(primaryFirst(list(person.names))[0]?.displayName, 200).trim() || emailsOf(person)[0] || "(No name)";
 const organizationOf = (person: Json) => primaryFirst(list(person.organizations))[0] ?? {};
@@ -118,6 +127,7 @@ function full(person: Json, other: boolean, part: string) {
 		name: nameOf(person),
 		emails: emailsOf(person),
 		phones: phonesOf(person),
+		addresses: addressesOf(person),
 		organization: text(organization.name, 200),
 		title: text(organization.title, 200),
 		other,
@@ -180,7 +190,7 @@ export async function contactsCall(
 				const ref = typeof args.contact_id === "string" ? contactOfRef(args.contact_id) : undefined;
 				if (ref === undefined) throw new Error("Give the id of a contacts/<id> reference that a search returned.");
 				if (ref.kind === "people") {
-					const fields = "names,emailAddresses,phoneNumbers,organizations,photos";
+					const fields = "names,emailAddresses,phoneNumbers,addresses,organizations,photos";
 					answer = full(object(await request(`${ref.resourceName}?personFields=${fields}`)), false, ref.part);
 					break;
 				}

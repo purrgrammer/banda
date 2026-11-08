@@ -27,6 +27,7 @@ const ANA = {
 		{ value: "ana@home.example", metadata: { primary: true } },
 	],
 	phoneNumbers: [{ value: "+34 600 000 000" }],
+	addresses: [{ formattedValue: "Calle Mayor 1\n28013 Madrid", metadata: { primary: true } }, { formattedValue: " " }],
 	organizations: [{ name: "Northstar", title: "Head of Design" }],
 };
 
@@ -140,10 +141,12 @@ describe("Google Contacts REST connection", () => {
 		const args = readArgs(shipped().objects?.contact?.reads.contact ?? { tool: "", args: {} }, match!, undefined);
 		const person = JSON.parse((await call(fetcher, "get_contact", args)).text);
 		expect(urlOf(fetcher, 2).pathname).toBe("/v1/people/c111");
+		expect(urlOf(fetcher, 2).searchParams.get("personFields")).toContain("addresses");
 		expect(person).toEqual({
 			name: "Ana García",
 			emails: ["ana@home.example", "ana@work.example"],
 			phones: ["+34 600 000 000"],
+			addresses: ["Calle Mayor 1, 28013 Madrid"],
 			organization: "Northstar",
 			title: "Head of Design",
 			other: false,
