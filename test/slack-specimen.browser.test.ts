@@ -75,7 +75,9 @@ for (const width of [390, 1440])
 				expect(await text("Don't ask again")).toBe(false);
 				expect(await page.run(`${section}.querySelector('[aria-label="Slack message"]') !== null`)).toBe(true);
 				expect(
-					await page.run(`${section}.querySelector('[data-object-inline] a[href^="https://acme.slack.com/"]') !== null`),
+					await page.run(
+						`${section}.querySelector('[data-object-inline] a[href^="https://acme.slack.com/"]') !== null`,
+					),
 				).toBe(true);
 				expect(
 					await page.run(
@@ -92,4 +94,3 @@ for (const width of [390, 1440])
 		},
 		60_000,
 	);
-

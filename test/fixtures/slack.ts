@@ -2,7 +2,7 @@
  * A fake Slack, as a `fetch`: the PKCE sign-in's token endpoint (a code traded without a secret, a refresh), and the Web
  * API's reads and `chat.postMessage` as a user token sees them, every answer 200 with `ok`, as Slack's are. `busy`
  * answers every API call 429 with that many seconds of `Retry-After`. With `file`, posts are kept there, written whole
- * before it answers, so a process killed after Slack took a post and before banda recorded it leaves the post made.
+ * before it answers, so a process killed after Slack took a post and before banda recorded it leaves the post made. With `stable`, every sign-in and refresh issues the same tokens, so a process that starts again finds them still good.
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 
@@ -157,7 +157,15 @@ function world() {
 	return { users, channels, history, replies };
 }
 
-export function fakeSlack({ file, code = "one-use-code" }: { file?: string; code?: string } = {}): FakeSlack {
+export function fakeSlack({
+	file,
+	code = "one-use-code",
+	stable = false,
+}: {
+	file?: string;
+	code?: string;
+	stable?: boolean;
+} = {}): FakeSlack {
 	const { users, channels, history, replies } = world();
 	let memory: FakeSlackPost[] = [];
 	const load = (): FakeSlackPost[] =>
@@ -198,7 +206,7 @@ export function fakeSlack({ file, code = "one-use-code" }: { file?: string; code
 					return json({ ok: false, error: "invalid_refresh_token" });
 				if (!refreshing && (form.get("code") !== code || !form.get("code_verifier")))
 					return json({ ok: false, error: "invalid_code" });
-				issued++;
+				if (!stable) issued++;
 				fake.access = `xoxp-${issued + 1}`;
 				fake.refreshToken = `xoxe-${issued + 1}`;
 				if (refreshing)
