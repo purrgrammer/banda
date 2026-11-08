@@ -1,5 +1,5 @@
 /**
- * The connect card an agent sent: a `message_user` call naming a connection it needs, drawn after its message as the
+ * The connect card an agent sent: a `connect` call naming a connection it needs, drawn after its message as the
  * app's own card for that connection and this agent. Only a call that was sent draws one.
  */
 import type { Segmenter } from "./types.ts";

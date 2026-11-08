@@ -237,7 +237,9 @@ describe("Turn", () => {
 		await harness.waitForTask(turn, context);
 		const chat = (await harness.snapshot(Routes, context))!.routes[routeKey(alice)]!.chat;
 		const system = (await transcriptKinds(harness, chat)).find((e) => e.kind === "pi.system");
-		expect(JSON.stringify(system?.model)).toContain("sees only what you send with `message_user`");
+		expect(JSON.stringify(system?.model)).toContain(
+			"sees only what you send them: words and files with `message_user`",
+		);
 		await harness.close(context);
 	});
 });

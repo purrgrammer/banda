@@ -65,9 +65,9 @@ describe("a group member the owner asked", () => {
 			if (who === undefined) return fauxAssistantMessage("notes");
 			// a member's first turn reads the whole room: what asks it is the newest message
 			if (who === "researcher" && input.includes("REACT TO ME"))
-				return fauxAssistantMessage([fauxToolCall("message_group", { reaction: "👀" })], { stopReason: "toolUse" });
+				return fauxAssistantMessage([fauxToolCall("react", { reaction: "👀" })], { stopReason: "toolUse" });
 			if (input.includes("REACT WHEN NUDGED") && nudge)
-				return fauxAssistantMessage([fauxToolCall("message_group", { reaction: "👍" })], { stopReason: "toolUse" });
+				return fauxAssistantMessage([fauxToolCall("react", { reaction: "👍" })], { stopReason: "toolUse" });
 			if (input.includes("REACT WHEN NUDGED") || input.includes("STAY SILENT"))
 				return fauxAssistantMessage("I posted it above.");
 			if (who === "writer" && input.includes("HAND OVER"))

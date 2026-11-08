@@ -236,7 +236,7 @@ export function GroupChat({
 										? undefined
 										: () => setActivity([{ chat, name: member.name, anchor, heading: message.text || name }]);
 								// what the member's message published to the Library, opened at that version
-								const artifact = message.artifact;
+								const artifacts = message.artifacts ?? [];
 								const objects = (
 									<MessageObjects
 										chat={room}
@@ -269,8 +269,9 @@ export function GroupChat({
 										) : (
 											objects
 										)}
-										{artifact === undefined ? null : (
+										{artifacts.map((artifact) => (
 											<ArtifactCard
+												key={`${artifact.id}:${artifact.n}`}
 												title={artifact.title}
 												kind={kindWords(artifact.kind)}
 												version={`Version ${artifact.n}`}
@@ -278,7 +279,7 @@ export function GroupChat({
 													location.hash = `#/artifact/${artifact.id}?v=${artifact.n}`;
 												}}
 											/>
-										)}
+										))}
 									</Run>
 								);
 							})();
@@ -403,7 +404,7 @@ const reactionOnly = (message: GroupView["messages"][number]) =>
 	message.text.trim() === "" &&
 	(message.files ?? []).length === 0 &&
 	(message.objects ?? []).length === 0 &&
-	message.artifact === undefined;
+	(message.artifacts ?? []).length === 0;
 
 /** The members' emoji on the owner's message at `entry`, each once; undefined when none reacted. */
 function reactionsOn(group: GroupView | undefined, entry: number): string | undefined {

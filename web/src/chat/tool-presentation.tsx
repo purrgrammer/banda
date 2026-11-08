@@ -12,25 +12,35 @@ import {
 	GlobeIcon,
 	HandIcon,
 	KeyRoundIcon,
+	LibraryIcon,
 	ListFilterIcon,
 	type LucideIcon,
 	MemoryStickIcon,
 	MessageCircleIcon,
+	MessageCircleQuestionIcon,
 	MessagesSquareIcon,
 	MonitorIcon,
 	MousePointer2Icon,
 	NavigationIcon,
+	PlugIcon,
 	SearchIcon,
 	SendIcon,
+	SmileIcon,
 	TerminalIcon,
 	TextCursorInputIcon,
 	Trash2Icon,
+	UserRoundIcon,
 	WrenchIcon,
 } from "lucide-react";
 
 const ICONS: Record<string, LucideIcon> = {
 	message_user: MessageCircleIcon,
 	message_group: MessagesSquareIcon,
+	ask_user: MessageCircleQuestionIcon,
+	react: SmileIcon,
+	publish: LibraryIcon,
+	connect: PlugIcon,
+	propose_avatar: UserRoundIcon,
 	schedule: CalendarClockIcon,
 	skill: BookOpenIcon,
 	bash: TerminalIcon,
@@ -77,7 +87,19 @@ export function toolPreview(name: string, args: Readonly<Record<string, unknown>
 	switch (name) {
 		case "message_user":
 		case "message_group":
-			value = text("text", "question");
+			value = text("text");
+			break;
+		case "ask_user":
+			value = text("question");
+			break;
+		case "react":
+			value = text("reaction");
+			break;
+		case "publish":
+			value = text("title", "change") || text("path");
+			break;
+		case "connect":
+			value = text("connection", "reason");
 			break;
 		case "schedule":
 			value = text("name", "description", "cron", "at") || (args.every ? `Every ${args.every}s` : "");

@@ -43,13 +43,13 @@ describe("reactions in the chat", () => {
 	it("a reaction alone goes on the message its run answered and draws no bubble; a refused one is not shown", () => {
 		const items = [
 			user(1, "thanks!"),
-			call(2, "c1", "message_user", { reaction: "👍" }),
-			result(3, "c1", "message_user"),
+			call(2, "c1", "react", { reaction: "👍" }),
+			result(3, "c1", "react"),
 			user(4, "ok"),
-			call(5, "c2", "message_user", { reaction: "ok" }),
-			result(6, "c2", "message_user", true, "Not sent: a reaction is exactly one emoji."),
+			call(5, "c2", "react", { reaction: "ok" }),
+			result(6, "c2", "react", true, "Not sent: a reaction is exactly one emoji."),
 			user(7, "still there?"),
-			call(8, "c3", "message_user", { reaction: "👋" }),
+			call(8, "c3", "react", { reaction: "👋" }),
 		];
 		const segments = view(items, [], IDLE);
 		expect(kinds(segments)).toEqual(["owner-message", "owner-message", "owner-message"]);

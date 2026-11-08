@@ -33,14 +33,17 @@ const group = {
 	notices: [],
 	messages: [
 		...words.map((text, i) => ({ entry: i + 1, text, author: { owner: true }, mentions: [], at })),
-		// a member's message that published to the Library carries its card
+		// a member's message that published to the Library carries its card, then one it showed again by id
 		{
 			entry: words.length + 1,
 			text: "Here is the landing.",
 			author: { agent: "mara" },
 			mentions: [],
 			at,
-			artifact: { id: "a1b2c3d4e5f60718", n: 2, title: "banda landing", kind: "page" },
+			artifacts: [
+				{ id: "a1b2c3d4e5f60718", n: 2, title: "banda landing", kind: "page" },
+				{ id: "0f1e2d3c4b5a6978", n: 1, title: "Launch checklist", kind: "markdown" },
+			],
 		},
 	],
 };
@@ -204,7 +207,7 @@ async function withLayoutPage(width: number, use: (page: LayoutPage) => Promise<
 
 for (const width of [390, 1440])
 	it.skipIf(!hasChrome())(
-		`a member's published artifact shows as a card in the group and opens at its version at ${width}px`,
+		`a member's artifacts show as cards in the group, each opening at its version at ${width}px`,
 		async () => {
 			await withLayoutPage(width, async (page) => {
 				const entry = `#group [data-entry="${words.length + 1}"]`;
@@ -216,6 +219,17 @@ for (const width of [390, 1440])
 					`[...document.querySelectorAll(${JSON.stringify(`${entry} button`)})].find(b=>b.textContent.trim()==='Open').click()`,
 				);
 				expect(await page.run<string>("location.hash")).toBe("#/artifact/a1b2c3d4e5f60718?v=2");
+				// the one shown again: its own card, after the published one, fitting the width
+				const cards = await page.run<string[]>(
+					`[...document.querySelectorAll(${JSON.stringify(`${entry} button`)})].filter(b=>b.textContent.trim()==='Open').map(b=>b.closest('div').textContent)`,
+				);
+				expect(cards).toHaveLength(2);
+				expect(cards[1]).toContain("Launch checklist");
+				expect(await page.run<boolean>("document.documentElement.scrollWidth <= innerWidth")).toBe(true);
+				await page.run(
+					`[...document.querySelectorAll(${JSON.stringify(`${entry} button`)})].filter(b=>b.textContent.trim()==='Open')[1].click()`,
+				);
+				expect(await page.run<string>("location.hash")).toBe("#/artifact/0f1e2d3c4b5a6978?v=1");
 			});
 		},
 		60_000,

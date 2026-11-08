@@ -4,7 +4,6 @@
  * and committed as a version before the message is sent, under the blobs' lock; a rerun after a crash finds the version
  * its call published instead of adding one.
  */
-import { Type } from "@earendil-works/pi-ai";
 import type { JsonObject } from "@earendil-works/pi-durable";
 import { publish, publishedBy, quoted, readBoxFile, titleOf, unseen } from "../artifacts.ts";
 import type { MessagePart } from "./part.ts";
@@ -17,23 +16,6 @@ const given = (args: JsonObject): Given | undefined => {
 };
 
 export const artifact: MessagePart = {
-	parameters: {
-		artifact: Type.Optional(
-			Type.Object({
-				path: Type.String({ minLength: 1, description: "The file in your box." }),
-				title: Type.Optional(Type.String({ minLength: 1, maxLength: 80, description: "Its name, in their words." })),
-				change: Type.Optional(
-					Type.String({ minLength: 1, maxLength: 160, description: "What changed since its last version." }),
-				),
-			}),
-		),
-	},
-	describe:
-		"Give `artifact` to publish a file you made for them (a document in markdown, a table as CSV, a plan, a page as " +
-		"HTML, an image, a PDF) to their Library, beside the chat, as its next version: `path` is the file in your box, " +
-		"`title` its name in their words, `change` what changed since its last version, in one line. Publish the same " +
-		"path again when you change it; every version is kept. They may edit it: what they change reaches you as their " +
-		"words.",
 	present: (args) => given(args) !== undefined,
 	// a gateway that shows only words hears that it is there
 	said: (args) => {

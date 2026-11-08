@@ -11,6 +11,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { Context } from "@earendil-works/chord";
 import type { ConversationId, EntryId, Tx } from "@earendil-works/pi-durable";
 import { allFactsByFile, type Fact, type MemoryFiles, parseFacts } from "./memory.ts";
+import { isMessageTool, messageArgs } from "./toolsets.ts";
 import { Routes } from "./turn.ts";
 
 /** The schema's version: a database of another is rebuilt. */
@@ -209,8 +210,9 @@ export class Search {
 								});
 						} else if (message.role === "assistant")
 							for (const block of message.content) {
-								if (block.type !== "toolCall" || block.name !== "message_user") continue;
-								const text = (block.arguments as { text?: unknown }).text;
+								if (block.type !== "toolCall" || !isMessageTool(block.name)) continue;
+								const args = messageArgs(block.name, block.arguments);
+								const text = typeof args.text === "string" && args.text.trim() !== "" ? args.text : args.question;
 								if (typeof text === "string" && text.trim() !== "")
 									found.push({
 										chat,

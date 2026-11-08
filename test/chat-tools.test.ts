@@ -35,7 +35,7 @@ async function daemon(home: string, extra: readonly string[], sent: string[][]) 
 			}
 		sent.push([...offered]);
 		return request.messages.at(-1)?.role === "user"
-			? fauxAssistantMessage([fauxToolCall("message_user", { reaction: "👍" })], { stopReason: "toolUse" })
+			? fauxAssistantMessage([fauxToolCall("react", { reaction: "👍" })], { stopReason: "toolUse" })
 			: fauxAssistantMessage("done");
 	};
 	faux.setResponses(Array.from({ length: 20 }, () => respond as never));
@@ -102,6 +102,11 @@ describe("a chat's tools are what is in effect now", () => {
 		const installed = [
 			"message_user",
 			"message_agent",
+			"ask_user",
+			"react",
+			"publish",
+			"connect",
+			"propose_avatar",
 			"read_agent_chat",
 			"propose_agent",
 			"propose_group",
@@ -109,7 +114,7 @@ describe("a chat's tools are what is in effect now", () => {
 			"schedule",
 			"kept",
 		];
-		expect(EVERY_AGENT).toEqual(expect.arrayContaining(installed.slice(0, 2)));
+		expect(EVERY_AGENT).toEqual(expect.arrayContaining(installed.slice(0, 7)));
 		expect(new Set(tools)).toEqual(new Set(installed));
 		await after.harness.close(context);
 	});

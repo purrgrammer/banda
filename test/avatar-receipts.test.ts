@@ -4,7 +4,7 @@ import { createRegistry, Harness, type JsonObject, type ToolExecutionApi, type T
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { getExample } from "open-bot-avatar";
 import { describe, expect, it } from "vitest";
-import { messageTool, type Sending } from "../src/core/ask.ts";
+import { messageTool, proposeAvatarTool, type Sending, type Speaking } from "../src/core/ask.ts";
 import { avatar } from "../src/core/parts/avatar.ts";
 import { context } from "../src/core/store.ts";
 import type { Item } from "../src/server/api.ts";
@@ -15,11 +15,14 @@ import { blobStore, FAUX_MODEL, until } from "./helpers.ts";
 const definition = getExample("mug")!;
 const idle = { busy: false, running: [], thinking: false };
 const previews = (entries: readonly Item[]) => view(entries, [], idle).filter((segment) => segment.kind === "avatar");
-const candidate = (value: unknown = definition) => ({ avatar: value }) as JsonObject;
+/** A call the model makes: a face offered with `propose_avatar`, or words with `message_user`. */
+type Call = { readonly name: string; readonly args: JsonObject };
+const candidate = (value: unknown = definition): Call => ({ name: "propose_avatar", args: value as JsonObject });
+const words = (text: string): Call => ({ name: "message_user", args: { text } });
 const invalid = { ...definition, body: { path: "M10 10A.01 120 45 0 1 90 90Z" } };
-const round = (...args: JsonObject[]) =>
+const round = (...calls: Call[]) =>
 	fauxAssistantMessage(
-		args.map((args) => fauxToolCall("message_user", args, { id: "repeat" })),
+		calls.map((call) => fauxToolCall(call.name, call.args, { id: "repeat" })),
 		{ stopReason: "toolUse" },
 	);
 
@@ -29,6 +32,15 @@ async function run(
 	check: (harness: Harness, chat: number, entries: Item[]) => Promise<void> | void,
 	sending: Sending = async () => ({ posted: 1 }),
 ) {
+	const speaking: Speaking = {
+		asking: async () => {
+			throw new Error("no question");
+		},
+		sending,
+		blobs: blobStore(),
+		limit: 1000,
+		venue: async () => "owner",
+	};
 	const registry = createRegistry();
 	const faux = fauxProvider();
 	const models = createModels();
@@ -36,16 +48,7 @@ async function run(
 	faux.setResponses([...responses, fauxAssistantMessage("done")]);
 	registry.install({
 		name: "avatar-test",
-		tools: [
-			messageTool(
-				async () => {
-					throw new Error("no question");
-				},
-				sending,
-				blobStore(),
-				1000,
-			),
-		],
+		tools: [...[messageTool, proposeAvatarTool].map((tool) => tool(speaking))],
 	});
 	const harness = await Harness.open(await openNodeSqliteStorage(":memory:"), { models, registry }, context);
 	try {
@@ -64,7 +67,7 @@ async function run(
 
 describe("avatar validation receipts", () => {
 	it("does not let a later text-only success attest refused geometry with the same provider ID", async () => {
-		await run([round(candidate(invalid)), round({ text: "hello" })], (_harness, _chat, entries) => {
+		await run([round(candidate(invalid)), round(words("hello"))], (_harness, _chat, entries) => {
 			const results = entries.filter((item) => item.role === "tool");
 			expect(results.map((item) => item.error)).toEqual([true, false]);
 			expect(previews(entries)).toEqual([]);
@@ -78,7 +81,7 @@ describe("avatar validation receipts", () => {
 			const good = round(candidate(coerced));
 			const bad = round(candidate(invalid));
 			await run(
-				validFirst ? [good, bad, round({ text: "hello" })] : [bad, good, round({ text: "hello" })],
+				validFirst ? [good, bad, round(words("hello"))] : [bad, good, round(words("hello"))],
 				async (harness, chat, entries) => {
 					const cards = previews(entries);
 					expect(cards).toHaveLength(1);
@@ -89,7 +92,7 @@ describe("avatar validation receipts", () => {
 					const receipt = successful.receipt;
 					const assistant = entries.find((item) => item.id === receipt.assistant);
 					if (assistant?.role !== "assistant") throw new Error("no assistant");
-					expect(assistant.calls?.[0]?.args.avatar).toEqual(coerced);
+					expect(assistant.calls?.[0]?.args).toEqual(coerced);
 					// A split exactly between the call and receipt must not match a result to an earlier/later reused ID.
 					const older = (await items(harness, chat, { before: successful.id }))?.items ?? [];
 					const newer = (await items(harness, chat, { after: successful.id - 1 }))?.items ?? [];
@@ -117,9 +120,9 @@ describe("avatar validation receipts", () => {
 		const response = fauxAssistantMessage(
 			[
 				{ type: "text", text: "private notes" },
-				fauxToolCall("message_user", candidate({ ...definition, name: "First" }), { id: "one" }),
+				fauxToolCall("propose_avatar", candidate({ ...definition, name: "First" }).args, { id: "one" }),
 				{ type: "text", text: "more private notes" },
-				fauxToolCall("message_user", candidate({ ...definition, name: "Second" }), { id: "two" }),
+				fauxToolCall("propose_avatar", candidate({ ...definition, name: "Second" }).args, { id: "two" }),
 			],
 			{ stopReason: "toolUse" },
 		);
@@ -136,8 +139,8 @@ describe("avatar validation receipts", () => {
 	it.each([
 		[candidate(), candidate(invalid)],
 		[candidate(invalid), candidate()],
-		[candidate(), { text: "hello" }],
-		[{ text: "hello" }, candidate(invalid)],
+		[candidate(), words("hello")],
+		[words("hello"), candidate(invalid)],
 	])("fails closed for duplicate call IDs within one assistant entry: %j", async (first, second) => {
 		await run([round(first, second)], (_harness, _chat, entries) => {
 			expect(previews(entries)).toEqual([]);
@@ -169,7 +172,7 @@ describe("avatar validation receipts", () => {
 			])
 				expect(previews(entries.map((item) => (item.id === result.id ? changed : item)) as Item[])).toEqual([]);
 			expect(receiptOf("bash", false, { receipt: result.receipt })).toBeUndefined();
-			expect(receiptOf("message_user", true, { receipt: result.receipt })).toBeUndefined();
+			expect(receiptOf("propose_avatar", true, { receipt: result.receipt })).toBeUndefined();
 		});
 	});
 
@@ -195,18 +198,19 @@ describe("avatar validation receipts", () => {
 		registry.install({
 			name: "recovery",
 			tools: [
-				messageTool(
-					async () => {
+				proposeAvatarTool({
+					asking: async () => {
 						throw new Error("no question");
 					},
-					async (api, _name, _said, ctx) => {
+					sending: async (api, _name, _said, ctx) => {
 						attempts.push(Number(api.taskId));
 						if (attempts.length === 1) await awaitWithContext(new Promise<never>(() => {}), ctx);
 						return { posted: 1 };
 					},
-					blobStore(),
-					1000,
-				),
+					blobs: blobStore(),
+					limit: 1000,
+					venue: async () => "owner",
+				}),
 			],
 		});
 		let harness = await Harness.open(retained, { models, registry }, context);
@@ -245,10 +249,11 @@ describe("avatar validation receipts", () => {
 					entry: async () => ({ model: [round(raw)] }),
 				} as unknown as Tx),
 		} as unknown as ToolExecutionApi;
-		const first = await avatar.prepare?.(raw, api, context, { blobs: blobStore(), limit: 1000, to: "owner" });
+		const part = { avatar: raw.args };
+		const first = await avatar.prepare?.(part, api, context, { blobs: blobStore(), limit: 1000, to: "owner" });
 		expect(first).toMatchObject({
 			receipt: { kind: "avatar", assistant: 10, index: 0, definition: { name: "My mug" } },
 		});
-		expect(await avatar.prepare?.(raw, api, context, { blobs: blobStore(), limit: 1000, to: "owner" })).toEqual(first);
+		expect(await avatar.prepare?.(part, api, context, { blobs: blobStore(), limit: 1000, to: "owner" })).toEqual(first);
 	});
 });

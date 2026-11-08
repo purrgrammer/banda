@@ -31,7 +31,10 @@ const textOf = (content: unknown) =>
 			? content.map((part: { text?: string }) => part.text ?? "").join("")
 			: "";
 
-/** A daemon on a host box whose faux model publishes what each message names: `publish <path> [title] [| change]`. */
+/**
+ * A daemon on a host box whose faux model publishes what each message names, `publish <path> [title] [| change]`, or
+ * shows published artifacts again by id, `show <id> [<id>…]`.
+ */
 async function daemon() {
 	const home = await tempHome();
 	await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
@@ -49,18 +52,21 @@ async function daemon() {
 			const last = ctx.messages.at(-1);
 			if (last?.role !== "user") return fauxAssistantMessage("done");
 			const said = textOf(last.content);
+			const shown = /^show (.+)$/.exec(said);
+			if (shown !== null)
+				return fauxAssistantMessage(
+					[fauxToolCall("message_user", { text: "Here it is again.", artifacts: (shown[1] ?? "").split(" ") })],
+					{ stopReason: "toolUse" },
+				);
 			const published = /^publish (\S+)(?: ([^|]+))?(?: \| (.+))?$/.exec(said);
 			if (published === null) return fauxAssistantMessage("ok");
 			const [, path, title, change] = published;
 			return fauxAssistantMessage(
 				[
-					fauxToolCall("message_user", {
-						text: "Here it is.",
-						artifact: {
-							path: path ?? "",
-							...(title === undefined ? {} : { title: title.trim() }),
-							...(change === undefined ? {} : { change }),
-						},
+					fauxToolCall("publish", {
+						path: path ?? "",
+						...(title === undefined ? {} : { title: title.trim() }),
+						...(change === undefined ? {} : { change }),
 					}),
 				],
 				{ stopReason: "toolUse" },
@@ -102,6 +108,38 @@ async function daemon() {
 }
 
 describe("artifacts in the daemon", () => {
+	it("publish returns the id; a message shows it again at the version current then, and refuses an id not in the Library", async () => {
+		const d = await daemon();
+		try {
+			await mkdir(join(d.home, "workspace"), { recursive: true });
+			await writeFile(d.box("plan.md"), "# Friday\n");
+			await d.say("publish plan.md Trip");
+			const id = artifactId(d.box("plan.md"));
+			const result = (await d.items()).find((item) => item.role === "tool" && item.name === "publish");
+			expect(result).toMatchObject({ error: false, text: `Published as version 1; its id is ${id}.` });
+			await d.say(`show ${id}`);
+			const shownResult = () =>
+				d.items().then((items) => items.filter((item) => item.role === "tool" && item.name === "message_user"));
+			expect((await shownResult()).at(-1)).toMatchObject({
+				error: false,
+				receipt: { kind: "artifacts", artifacts: [{ id, n: 1 }] },
+			});
+			// a new version later: the old message still names the one it showed
+			await writeFile(d.box("plan.md"), "# Friday\n\nback at six\n");
+			await d.say("publish plan.md");
+			expect((await shownResult()).at(-1)).toMatchObject({ receipt: { artifacts: [{ id, n: 1 }] } });
+			// an id the Library does not hold is refused, naming the chat's own
+			await d.say("show 0123456789abcdef");
+			const refused = (await shownResult()).at(-1);
+			expect(refused).toMatchObject({ error: true });
+			expect(refused?.role === "tool" && refused.text).toMatch(
+				new RegExp(`^Not sent: no artifact 0123456789abcdef in the Library; this chat's are ${id} \\(Trip\\)`),
+			);
+		} finally {
+			await d.close();
+		}
+	});
+
 	it("publishes versions, keeps the same bytes as one, and the owner's edit and restore reach the box and the chat", async () => {
 		const d = await daemon();
 		try {
@@ -260,7 +298,7 @@ async function store(home?: string) {
 
 const PATH = "/workspace/plan.md";
 
-/** What a `message_user` call publishing `bytes` commits, as the part does: the blob first, then the version. */
+/** What a `publish` call of `bytes` commits, as the tool does: the blob first, then the version. */
 async function published(harness: Harness, blobs: BlobStore, bytes: Buffer, call: string, chat: number) {
 	return blobs.exclusive(async () => {
 		const stored = await blobs.put(bytes);

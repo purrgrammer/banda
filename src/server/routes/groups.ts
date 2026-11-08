@@ -132,17 +132,21 @@ export async function groupView(groups: GroupsApi, harness: Harness, room: numbe
 	const row = (await groups.rooms(harness)).find((each) => each.room === room);
 	if (row === undefined) throw new BadRequest("no such group", 404);
 	const log = await groups.log(harness, room);
-	// a member's message shows what its call published to the Library, found by its chat and that call
+	// a member's message shows what its call published to the Library, found by its chat and that call, then what it
+	// showed again by id; one the Library no longer holds is left out
 	const published = await harness.commit(async (tx) => {
-		const found = new Map<number, { id: string; n: number; title: string; kind: ArtifactKind }>();
+		const found = new Map<number, { id: string; n: number; title: string; kind: ArtifactKind }[]>();
 		const { artifacts } = await tx.doc(Artifacts);
 		for (const line of log) {
-			if (!("message" in line) || line.message.call === undefined || !("agent" in line.message.author)) continue;
+			if (!("message" in line) || !("agent" in line.message.author)) continue;
 			const chat = row.executions[line.message.author.agent];
-			const at = chat === undefined ? undefined : await publishedBy(tx, chat, line.message.call);
-			const artifact = at === undefined ? undefined : artifacts[at.id];
-			if (at !== undefined && artifact !== undefined)
-				found.set(line.entry, { ...at, title: artifact.title, kind: artifact.kind });
+			const call = line.message.call;
+			const made = chat === undefined || call === undefined ? undefined : await publishedBy(tx, chat, call);
+			const cards = [...(made === undefined ? [] : [made]), ...(line.message.artifacts ?? [])].flatMap(({ id, n }) => {
+				const artifact = artifacts[id];
+				return artifact === undefined ? [] : [{ id, n, title: artifact.title, kind: artifact.kind }];
+			});
+			if (cards.length > 0) found.set(line.entry, cards);
 		}
 		return found;
 	}, context);
@@ -150,13 +154,13 @@ export async function groupView(groups: GroupsApi, harness: Harness, room: numbe
 	const messages: GroupMessageView[] = [];
 	for (const line of log) {
 		if (!("message" in line)) continue;
-		const artifact = published.get(line.entry);
+		const artifacts = published.get(line.entry);
 		const chat = "agent" in line.message.author ? row.executions[line.message.author.agent] : undefined;
 		const activity = chat === undefined ? undefined : await activityOf(harness, line.message, chat);
 		messages.push({
 			...messageView(line),
 			...(loaded.has(line.message.key) ? { loaded: [...(loaded.get(line.message.key) ?? [])] } : {}),
-			...(artifact === undefined ? {} : { artifact }),
+			...(artifacts === undefined ? {} : { artifacts }),
 			...(activity === undefined ? {} : { activity }),
 		});
 	}
