@@ -48,7 +48,7 @@ export function Section({
 	if (only !== undefined && only !== id) return null;
 	const schemes: ("light" | "dark")[] = scheme === "both" ? ["light", "dark"] : [scheme];
 	return (
-		<section id={id} aria-labelledby={`${id}-title`} className="flex scroll-mt-4 flex-col gap-3">
+		<section id={id} aria-labelledby={`${id}-title`} className="flex flex-col gap-3">
 			<header className="flex flex-col gap-1">
 				<div className="flex flex-wrap items-center gap-x-3 gap-y-1">
 					<h2 id={`${id}-title`} className="text-heading font-semibold text-ink">
@@ -56,7 +56,7 @@ export function Section({
 							{entry.title}
 						</a>
 					</h2>
-					<Badge variant={entry.status === "app" ? "secondary" : "outline"}>{STATUS_WORDS[entry.status]}</Badge>
+					<Badge variant="outline">{STATUS_WORDS[entry.status]}</Badge>
 					{entry.only === undefined ? null : (
 						<Badge variant="outline">{entry.only === "phone" ? "Phone only" : "Desktop only"}</Badge>
 					)}

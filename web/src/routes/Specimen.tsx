@@ -27,6 +27,9 @@ import {
 import { StageContext } from "../specimen/stage.tsx";
 import { hrefOf, previewOf, type Scheme, type View, viewOf, type Width } from "../specimen/url.ts";
 
+/** The space above a section scrolled to, so its title does not touch the edge. */
+const GAP = 16;
+
 /** The hash, and a way to change it: pushed (a place to come back to) or replaced (the same place, described better). */
 function useHash() {
 	const [hash, setHash] = useState(location.hash);
@@ -83,7 +86,14 @@ function Page({ view, go }: { view: View; go: (href: string, how: "push" | "repl
 		const scroll = () => {
 			const element = document.getElementById(target.id ?? "");
 			if (element !== null) {
-				element.scrollIntoView();
+				// the page's own scroller alone: scrollIntoView would move the document too, and a sheet's closing
+				// focus would move it back, leaving the section short of the top
+				const root = main.current;
+				if (root === null) element.scrollIntoView();
+				else
+					root.scrollTo({
+						top: element.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop - GAP,
+					});
 				setCurrent(target.id);
 				frame = requestAnimationFrame(() => {
 					settling.current = false;
