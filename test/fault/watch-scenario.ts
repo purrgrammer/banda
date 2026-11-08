@@ -2,7 +2,8 @@
  * A watch on a pull request, driven through its life: the same scenario for the unit test (no faults) and the fault
  * worker (thrown faults and kills). GitHub is a double answering the reads from a scripted world the driver advances
  * (`world.json` in the home): open with checks running; then approved by ana, lint failed and a comment of the
- * account's own; then the same again; then merged. The watch is accepted as the owner's own, its task takes the first
+ * account's own; then the same again; then merged. Any other connection's object is driven the same way: its file, its
+ * listed tools, the account and an `answer` per read by tool name (`ScenarioOptions.connection`, `answer`). The watch is accepted as the owner's own, its task takes the first
  * look (the baseline), and the owner checks now at each step of the world. Every step is done only if the store does
  * not hold it yet, as the owner would look and click again after a kill. Prints what happened.
  */
@@ -12,6 +13,7 @@ import {
 	type ConversationId,
 	createRegistry,
 	type Harness,
+	type JsonObject,
 	type SetTimer,
 	type TaskId,
 } from "@earendil-works/pi-durable";
@@ -19,10 +21,11 @@ import { openBox } from "../../src/box/box.ts";
 import { boxEnv, boxTools } from "../../src/box/tools.ts";
 import { Accepted, shaOf } from "../../src/core/agents.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
-import { Connected } from "../../src/core/connections.ts";
+import { accountKey, Connected } from "../../src/core/connections.ts";
 import { pause as pauseAll, resume as resumeAll } from "../../src/core/control.ts";
 import type { Json } from "../../src/core/follow.ts";
 import { type Gateway, OWNER } from "../../src/core/gateway.ts";
+import type { McpTool } from "../../src/core/mcp.ts";
 import { Readings } from "../../src/core/objects.ts";
 import { Control } from "../../src/core/routines.ts";
 import { status } from "../../src/core/status.ts";
@@ -56,6 +59,56 @@ export const ISSUE_WATCH =
 	"---\nobject: https://github.com/acme/banda/issues/41\naccount: bandarra\n---\nTell me when someone answers or it closes.\n";
 
 export type World = { [read: string]: Json };
+
+/** A read the service could not answer, in its words: what `answer` gives for a read that fails. */
+export type Failure = { readonly failed: string };
+const isFailure = (value: Json | Failure): value is Failure =>
+	value !== null &&
+	typeof value === "object" &&
+	!Array.isArray(value) &&
+	Object.keys(value).length === 1 &&
+	typeof (value as { failed?: unknown }).failed === "string";
+
+/** What the service answers read `tool` with `args` at step `step` of the world: JSON, or a failure. */
+export type Answer = (tool: string, args: { readonly [key: string]: unknown }, step: number) => Json | Failure;
+
+/**
+ * The connection the watch follows through, as a signed-in one leaves the store: its name and accepted file, the tools
+ * its server listed (their names and schemas) and the account signed in to it, by what the service calls it.
+ */
+export type ScenarioConnection = {
+	readonly name: string;
+	readonly file: string;
+	readonly tools: readonly McpTool[];
+	readonly account: string;
+};
+
+const read = (name: string, key: string): McpTool => ({
+	name,
+	description: "read",
+	inputSchema: { type: "object", properties: { method: { type: "string" }, [key]: { type: "integer" } } },
+});
+
+/** GitHub as the pull request's life has it: its two reads of a pull request and an issue, signed in as bandarra. */
+export const GITHUB: ScenarioConnection = {
+	name: "github",
+	file: githubObjectFile("https://example.com/mcp"),
+	tools: [read("pull_request_read", "pullNumber"), read("issue_read", "issue_number")],
+	account: "bandarra",
+};
+
+/** A world by method, as GitHub's two reads answer it: `pull_request_read` and `issue_read` by `args.method`. */
+export const byMethod =
+	(worldAt: (step: number) => World): Answer =>
+	(tool, args, step) => {
+		if (!["pull_request_read", "issue_read"].includes(tool)) return { failed: "not that" };
+		const answer = worldAt(step)[String(args.method)];
+		return answer === undefined ? { failed: `no ${String(args.method)}` } : answer;
+	};
+
+/** A watch file on `object` as `account`, with `ask` below. */
+export const watchFile = (object: string, account: string, ask = "Tell me what changes.") =>
+	`---\nobject: ${object}\naccount: ${account}\n---\n${ask}\n`;
 
 /** The world at each step: what GitHub answers each read of the pull request. */
 export function world(step: number): World {
@@ -164,6 +217,12 @@ export type ScenarioOptions = {
 	readonly second?: boolean;
 	/** What GitHub answers at each step, and the owner's clicks, one per step; the pull request's life by default. */
 	readonly world?: (step: number) => World;
+	/** The connection Mara's watch follows through; GitHub (`GITHUB`) by default. */
+	readonly connection?: ScenarioConnection;
+	/** What each read answers, by tool name; `world` by method by default. Reads as another account fail. */
+	readonly answer?: Answer;
+	/** The link Mara's watch follows, with `connection`'s account; or `watch`, the whole file. */
+	readonly object?: string;
 	readonly clicks?: readonly (string | undefined)[];
 	/** The clock at each step; NOW throughout by default, so no task looks on its own after the baseline. */
 	readonly at?: (step: number) => number;
@@ -185,6 +244,9 @@ export async function watchScenario(
 	options: ScenarioOptions = {},
 ): Promise<WatchSummary> {
 	const worldAt = options.world ?? (options.issue ? issueWorld : world);
+	const connection = options.connection ?? GITHUB;
+	const answerOf = options.answer ?? byMethod(worldAt);
+	const accountAs = accountKey(connection.account);
 	const clicks = options.clicks ?? CLICKS;
 	const clockAt = options.at ?? (() => NOW);
 	const names = options.second ? WATCHES : WATCHES.slice(0, 1);
@@ -225,12 +287,12 @@ export async function watchScenario(
 		now,
 		agentOrigin: (agent) => ({ gateway: "fake", peer: OWNER, thread: `agent:${agent}` }),
 		workspace: () => box.workspace,
-		// GitHub, as the world stands: the reads of the followed pull request, each counted
+		// the service, as the world stands: the reads of the followed object, each counted
 		read: async (_connection, account, tool, args) => {
 			appendFileSync(join(home, "reads.jsonl"), `${JSON.stringify({ tool, account, method: args.method })}\n`);
-			if (!["pull_request_read", "issue_read"].includes(tool) || account !== "bandarra") return { failed: "not that" };
-			const answer = worldAt(step)[String(args.method)];
-			return answer === undefined ? { failed: `no ${String(args.method)}` } : { text: JSON.stringify(answer) };
+			if (account !== accountAs) return { failed: "not that" };
+			const answer = answerOf(tool, args, step);
+			return isFailure(answer) ? answer : { text: JSON.stringify(answer) };
 		},
 		fault: (point) => faults.hit(point as "watch:read"),
 	});
@@ -248,55 +310,55 @@ export async function watchScenario(
 	});
 	harness.resume();
 	try {
-		// the connection, the agent and the account, as a signed-in GitHub leaves them; the watch, allowed once
-		const file = githubObjectFile("https://example.com/mcp");
+		// the connection, the agent and the account, as a signed-in connection leaves them; the watch, allowed once
+		const { name: via, file } = connection;
 		await harness.commit(async (tx) => {
 			const accepted = await tx.doc(Accepted);
-			if (accepted.files["connections/github.md"] !== undefined) return;
-			accepted.files["connections/github.md"] = { sha: shaOf(file), text: file, at: NOW };
-			const agent =
-				"---\nname: Mara\ndescription: Follows things\nconnections: [github]\n---\nFollow things for the owner.";
+			if (accepted.files[`connections/${via}.md`] !== undefined) return;
+			accepted.files[`connections/${via}.md`] = { sha: shaOf(file), text: file, at: NOW };
+			const agent = `---\nname: Mara\ndescription: Follows things\nconnections: [${via}]\n---\nFollow things for the owner.`;
 			accepted.files["agents/mara.md"] = { sha: shaOf(agent), text: agent, at: NOW };
 			const connected = await tx.doc(Connected);
-			connected.connections.github = {
+			connected.connections[via] = {
 				sha: shaOf(file),
 				at: NOW,
-				tools: {
-					pull_request_read: {
-						description: "read",
-						schema: {
-							type: "object",
-							properties: { method: { type: "string" }, pullNumber: { type: "integer" } },
-						},
-					},
-					issue_read: {
-						description: "read",
-						schema: {
-							type: "object",
-							properties: { method: { type: "string" }, issue_number: { type: "integer" } },
-						},
-					},
-				},
+				tools: Object.fromEntries(
+					connection.tools.map((tool) => [
+						tool.name,
+						{ description: tool.description, schema: tool.inputSchema as JsonObject },
+					]),
+				),
 			};
-			connected.accounts.github = { bandarra: { id: "bandarra", at: NOW } };
-			connected.on.mara = { github: ["bandarra"] };
-			const text = options.watch ?? (options.issue ? ISSUE_WATCH : WATCH);
+			connected.accounts[via] = { [accountAs]: { id: connection.account, at: NOW } };
+			connected.on.mara = { [via]: [accountAs] };
+			const text =
+				options.watch ??
+				(options.object !== undefined
+					? watchFile(options.object, connection.account)
+					: options.issue
+						? ISSUE_WATCH
+						: WATCH);
 			accepted.files[watchPath("banda-142")] = { sha: shaOf(text), text, at: NOW };
 			(await tx.doc(Watches)).watches["banda-142"] = { agent: "mara", since: NOW };
 			if (options.second) {
 				// a second agent follows the same pull request as the same account: one reading, two watches
-				const otto = "---\nname: Otto\ndescription: Also follows\nconnections: [github]\n---\nFollow things too.";
+				const otto = `---\nname: Otto\ndescription: Also follows\nconnections: [${via}]\n---\nFollow things too.`;
 				accepted.files["agents/otto.md"] = { sha: shaOf(otto), text: otto, at: NOW };
-				connected.on.otto = { github: ["bandarra"] };
-				accepted.files[watchPath("banda-142-otto")] = { sha: shaOf(WATCH), text: WATCH, at: NOW };
+				connected.on.otto = { [via]: [accountAs] };
+				accepted.files[watchPath("banda-142-otto")] = { sha: shaOf(text), text, at: NOW };
 				(await tx.doc(Watches)).watches["banda-142-otto"] = { agent: "otto", since: NOW };
 			}
 		}, context);
-		// as the daemon does on start: the task, whose first look is the baseline
+		// as the daemon does on start: the task, whose first look is the baseline; a watch that cannot even resolve what
+		// it follows (no connection recognises it, or the kind has no `follow`) says why and is waited on no longer
 		await core.reconcile(harness);
 		const looked = async () => {
 			const records = (await harness.snapshot(Watches, context))?.watches ?? {};
-			return names.every((name) => records[name]?.looked !== undefined);
+			return names.every(
+				(name) =>
+					records[name]?.looked !== undefined ||
+					(records[name]?.failed !== undefined && records[name]?.key === undefined),
+			);
 		};
 		while (!(await looked())) await new Promise((r) => setTimeout(r, 5));
 		// the world moves on, and the owner checks now at each step: the same click, sent again after a kill; a step's
@@ -376,9 +438,9 @@ export async function watchScenario(
 		const live = names.filter((name) => accepted[watchPath(name)] !== undefined);
 		const task = record.task === undefined ? undefined : await harness.getTask(record.task as TaskId, context);
 		const second = records["banda-142-otto"];
-		const key = `github/bandarra/${options.issue ? "issue:acme/banda#41" : "pull_request:acme/banda#142"}`;
-		const followed = (await harness.snapshot(Followed, context))?.objects[key];
-		const reading = (await harness.snapshot(Readings, context))?.readings[key];
+		const key = record.key;
+		const followed = key === undefined ? undefined : (await harness.snapshot(Followed, context))?.objects[key];
+		const reading = key === undefined ? undefined : (await harness.snapshot(Readings, context))?.readings[key];
 		const card = reading?.card as { state?: string } | undefined;
 		return {
 			record,
