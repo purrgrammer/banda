@@ -94,6 +94,13 @@ returned to and merged, at desktop and phone width.
   upcoming events (needs a sync token, not a moving window)
 - [ ] A watch's file has no editor field and the `watch` tool no parameter for `wakes_a_day`; an issue's and a pull
   request's comments are read one page of a hundred, so comments past the hundredth are never seen
+- [ ] A look is a task-graph change, so each one has the shell stream rebuild every view (control with the box's
+  routines and watches folders, agents, memory, capabilities with the shipped files) and push it to every client, every
+  two to thirty minutes per watch; the stream could rebuild only the areas whose docs changed
+- [ ] A done watch's readings stay in `Followed` until the owner removes it (reconcile holds every accepted watch's
+  key): a done watch's could go with its end, its card staying in `Readings`
+- [ ] Check now ends the watch's sleeping task and makes another so the new sleep is the look's `next`: two commits
+  and an abort a task that could be woken early would spare
 - [ ] Spike before slice 2: the readings doc keeps 300 and evicts the oldest first, so a held reading must be
   skipped; GitHub's hosted MCP server still answers `pull_request_read`'s get, get_reviews, get_comments and
   get_check_runs
