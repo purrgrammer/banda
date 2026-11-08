@@ -348,8 +348,12 @@ export function withoutSignIn(name: string, text: string): string | undefined {
 	return "connection" in parsed && parsed.connection.auth === "none" ? rewritten : undefined;
 }
 
-/** A group's name: a few plain words on one line. */
-const GROUP = /^[\p{L}\p{N}][\p{L}\p{N} &'’,./-]{0,39}$/u;
+/** Whether `name` can name a group in a file: a few plain words on one line. */
+export const isGroupName = (name: string) => /^[\p{L}\p{N}][\p{L}\p{N} &'’,./-]{0,39}$/u.test(name);
+
+/** What a group's name may be, in words a model is told. */
+export const GROUP_NAME_RULE =
+	"at most 40 characters: letters, digits and spaces, with & ' , . / - between them; no brackets, colons or underscores";
 
 /** At most this many groups in a file: a few more than banda makes, for an owner who splits one. */
 const MAX_FILE_GROUPS = 12;
@@ -363,7 +367,7 @@ function parseGroups(value: unknown): { [group: string]: string[] } | string {
 	const seen = new Set<string>();
 	const groups: { [group: string]: string[] } = {};
 	for (const [group, tools] of entries) {
-		if (!GROUP.test(group) || !Array.isArray(tools)) return problem;
+		if (!isGroupName(group) || !Array.isArray(tools)) return problem;
 		for (const tool of tools) {
 			if (typeof tool !== "string" || !/^[A-Za-z0-9_.-]{1,64}$/.test(tool) || seen.has(tool)) return problem;
 			seen.add(tool);
@@ -619,10 +623,13 @@ export const listingSha = (tools: { readonly [tool: string]: Pick<Listed, "descr
 const shippedOf = (accepted: { readonly shipped?: { readonly [path: string]: boolean } }, name: string) =>
 	accepted.shipped?.[connectionPath(name)] === true;
 
+/** The group of the tools no other holds. */
+const OTHER = "Other";
+
 /**
  * What each listed tool of connection `name` does and which group it is in: as its file says, else its server's
- * annotations, else banda's guess, else a write; its group as the file says, else the guess, else by its name. Reads
- * only.
+ * annotations, else banda's guess, else a write; its group as the file says, else the guess, else by its name, in
+ * groups a file can hold (`fitted`). Reads only.
  */
 export async function classesOf(
 	tx: Tx,
@@ -635,18 +642,45 @@ export async function classesOf(
 	const fileGroup = new Map(
 		Object.entries(connection.groups ?? {}).flatMap(([group, tools]) => tools.map((tool) => [tool, group] as const)),
 	);
-	return Object.fromEntries(
-		Object.entries(listed).map(([tool, hints]) => {
-			const guess = guesses?.tools[tool];
-			return [
+	const groups = fitted(
+		Object.fromEntries(
+			Object.keys(listed).map((tool) => [
 				tool,
-				{
-					...classOf(connection, tool, hints, guess, shipped),
-					group: fileGroup.get(tool) ?? guess?.group ?? byName[tool] ?? "Other",
-				},
-			];
-		}),
+				fileGroup.get(tool) ?? guesses?.tools[tool]?.group ?? byName[tool] ?? OTHER,
+			]),
+		),
+		[...Object.keys(connection.groups ?? {}), ...(guesses?.groups ?? [])],
+		Object.keys(connection.groups ?? {}).length,
 	);
+	return Object.fromEntries(
+		Object.entries(listed).map(([tool, hints]) => [
+			tool,
+			{ ...classOf(connection, tool, hints, guesses?.tools[tool], shipped), group: groups[tool] ?? OTHER },
+		]),
+	);
+}
+
+/**
+ * Each tool's group (`wanted`, by tool) as a file can hold them: a name it cannot hold is "Other", and past
+ * `MAX_FILE_GROUPS` the groups `first` names stay, then the biggest, the rest together as "Other". The first `own`
+ * of `first` (the file's) always stay.
+ */
+function fitted(
+	wanted: { readonly [tool: string]: string },
+	first: readonly string[],
+	own: number,
+): { readonly [tool: string]: string } {
+	const named = Object.fromEntries(
+		Object.entries(wanted).map(([tool, group]) => [tool, isGroupName(group) ? group : OTHER]),
+	);
+	const sizes = new Map<string, number>();
+	for (const group of Object.values(named)) sizes.set(group, (sizes.get(group) ?? 0) + 1);
+	const ranked = [
+		...new Set([...first, ...[...sizes].sort(([a, x], [b, y]) => y - x || a.localeCompare(b)).map(([group]) => group)]),
+	].filter((group) => sizes.has(group));
+	if (ranked.length <= MAX_FILE_GROUPS) return named;
+	const kept = new Set(ranked.filter((group) => group !== OTHER).slice(0, Math.max(MAX_FILE_GROUPS - 1, own)));
+	return Object.fromEntries(Object.entries(named).map(([tool, group]) => [tool, kept.has(group) ? group : OTHER]));
 }
 
 /** An account's key, the folder its credentials are in: its id, lowercase, or a hash of it when it is not a name. */

@@ -254,6 +254,22 @@ const withRooms = (fake: FakeMcp) => {
 	];
 };
 
+/** 49 tools, more than one request sorts: 25 that sort first, then twelve pairs that share a name each. */
+const manyTools = (fake: FakeMcp) => {
+	const schema = { type: "object", properties: {} };
+	fake.tools = [
+		...Array.from({ length: 25 }, (_, i) => ({
+			name: `zone_thing_${i}`,
+			description: "A thing.",
+			inputSchema: schema,
+		})),
+		...Array.from({ length: 12 }, (_, i) => [
+			{ name: `zpart${i}_get`, description: "Get a part.", inputSchema: schema },
+			{ name: `zpart${i}_set`, description: "Set a part.", inputSchema: schema },
+		]).flat(),
+	];
+};
+
 describe("banda's guess at a new connection's tools", () => {
 	it("sorts what nobody said, never overrides a file or a server, and its reads run only once accepted", async () => {
 		const fake = await startFakeMcp();
@@ -440,6 +456,63 @@ describe("banda's guess at a new connection's tools", () => {
 		expect((await s.cal())?.tools.find((t) => t.title === "cancel_event")?.fresh).toBeUndefined();
 		expect((await s.harness.snapshot(ToolSettings, context))?.fresh).toEqual({});
 		expect(Object.keys((await s.harness.snapshot(Classified, context))?.connections.cal?.tools ?? {})).toHaveLength(5);
+	});
+
+	it("names only groups a file can hold, asking again for one it could not", async () => {
+		const fake = await startFakeMcp();
+		fakes.push(fake);
+		const guess = guessing(
+			groupsAnswer(["Events (all)", "Payments"]),
+			groupsAnswer(["Events", "Payments"]),
+			kindsAnswer([
+				{ tool: "create_event", kind: "write", group: "Events" },
+				{ tool: "list_events", kind: "read", group: "Events" },
+				{ tool: "send_payment", kind: "write", floor: "money", group: "Payments" },
+				{ tool: "whoami", kind: "read", group: "Events" },
+			]),
+		);
+		const s = await open(await tempHome(), { classify: guess.classify });
+		await s.capabilities.addMcp({ url: fake.url, service: "Cal" });
+		await s.capabilities.classified();
+		expect(guess.asked).toHaveLength(3);
+		expect(said(guess.asked[1])).toContain("Events (all)");
+		expect((await s.cal())?.groups).toEqual(["Events", "Payments"]);
+		await s.capabilities.review("cal", (await s.cal())?.accepted?.sha, {});
+		const text = (await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"]?.text ?? "";
+		expect(parseConnection("cal", text)).toMatchObject({
+			connection: { groups: { Events: ["create_event", "list_events", "whoami"], Payments: ["send_payment"] } },
+		});
+	});
+
+	it("with groups guessed and by name together, writes at most a file's twelve, the rest as Other", async () => {
+		const fake = await startFakeMcp();
+		fakes.push(fake);
+		manyTools(fake);
+		const guessed = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel"];
+		const guess = guessing(
+			groupsAnswer(guessed),
+			kindsAnswer(
+				Array.from({ length: 25 }, (_, i) => ({ tool: `zone_thing_${i}`, kind: "write", group: guessed[i % 8] ?? "" })),
+			),
+			// the second chunk is never sorted: its tools are grouped by name
+			fauxAssistantMessage("no"),
+			fauxAssistantMessage("still no"),
+		);
+		const s = await open(await tempHome(), { classify: guess.classify });
+		await s.capabilities.addMcp({ url: fake.url, service: "Cal" });
+		await s.capabilities.classified();
+		const view = await s.cal();
+		expect(view?.unguessed).toBeDefined();
+		expect(new Set(view?.tools.map((t) => t.group)).size).toBe(12);
+		await s.capabilities.review("cal", view?.accepted?.sha, {});
+		const text = (await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"]?.text ?? "";
+		const parsed = parseConnection("cal", text);
+		if (!("connection" in parsed)) throw new Error(JSON.stringify(parsed));
+		const groups = parsed.connection.groups ?? {};
+		expect(Object.keys(groups)).toHaveLength(12);
+		expect(Object.keys(groups).slice(0, 8)).toEqual(guessed);
+		expect(groups.Other?.length).toBeGreaterThan(0);
+		expect(Object.values(groups).flat().sort()).toEqual(fake.tools.map((t) => t.name).sort());
 	});
 });
 
