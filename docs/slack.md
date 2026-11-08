@@ -284,7 +284,7 @@ What the Slack app needs, for whoever configures it:
 
 ## Stages
 
-One PR, stacked on `watches` (PR #24) and landed after it, in ordered commits by stage, each with its own tests and
+One PR on `main` (begun on `watches`, PR #24, since merged), in ordered commits by stage, each with its own tests and
 app walkthrough ([the plan](slack-plan.md)). The spikes below are stage 0.
 
 1. **Connect and read.** The file, the adapter's reads behind the per-account budget (every caller), sign-in by PKCE

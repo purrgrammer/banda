@@ -3,7 +3,7 @@
 An agent works in the owner's Slack as it does in Gmail. It reads what the owner sees, follows threads and channels,
 and posts only as an approved draft ([Slack](slack.md)). The program enforces one rule. Nothing reaches DESIGN.md
 until a spike or a test proved it, and nothing is done until it was used through the app against a throwaway daemon
-at desktop and phone width. One PR, `slack`, stacked on `watches` (PR #24) and landed by the operator after it. Its
+at desktop and phone width. One PR, `slack`, on `main` (it began stacked on `watches`, PR #24, which has landed). Its
 commits come in four stages, spikes, then connect and read, then follow, then search, people, reactions and files.
 Decided by the owner. Direct messages and search stay a scope choice, and there is no Marketplace listing now.
 
@@ -28,7 +28,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] Read these from trunk at program start. Re-read them at every tick.
   - [ ] `git show origin/main:AGENTS.md`, `git show origin/main:DESIGN.md` ("Connections", "Watches", "Trust", "Messages"), `git show origin/watches:docs/watches.md`, `docs/slack.md`.
 - [ ] The operator has configured the Slack app as Appendix A lists and has given its client id. Without it the spike stage cannot run and the connect stage cannot be verified against Slack.
-- [ ] The base is `origin/watches` at the SHA the status message records. When PR #24 lands, rebase `slack` onto `origin/main` and record the new base.
+- [x] The base is `origin/watches` at the SHA the status message records. When PR #24 lands, rebase `slack` onto `origin/main` and record the new base. Done on 2026-11-08. PR #24 merged as c0641047, the branch rebased onto `origin/main` at 5a8a4977 with no conflicts, and the base is `origin/main` from here on.
 
 ### Spawn owners
 
@@ -62,7 +62,7 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or C
 
 ## Build the Slack connection (slack)
 
-**Depends on.** PR #24 (`watches`) as the base, and the operator's Slack app (Appendix A).
+**Depends on.** `origin/main` with PR #24 (`watches`) merged, and the operator's Slack app (Appendix A).
 
 **Files.**
 
