@@ -67,12 +67,12 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or C
 **Files.**
 
 - [ ] Create `scripts/spike-slack.ts`, the recorded run of the spike stage (AGENTS.md principle 6), kept.
-- [ ] Create `shipped/connections/slack.md` as `docs/slack.md` sketches it, fixed by the spikes.
-- [ ] Create `src/core/slack-rest.ts`. `SLACK_TOOLS`, `slackCall`, `slackWriteCall`, mrkdwn to plain text, names resolved through a per-account cache, authors as handles with `[bot]` and outside marked, `mentions_me`, `active`, and `slackBudget`.
+- [x] Create `shipped/connections/slack.md` as `docs/slack.md` sketches it, fixed by the spikes.
+- [x] Create `src/core/slack-rest.ts`. `SLACK_TOOLS`, `slackCall`, `slackWriteCall`, mrkdwn to plain text, names resolved through a per-account cache, authors as handles with `[bot]` and outside marked, `mentions_me`, `active`, and `slackBudget`.
 - [ ] Edit `src/core/rest.ts`. Register `slack` in `REST_APIS` with `required`, `scopes`, the account read (`whoami`, `handle`), `read`, `write`, `drafts` and `limits`.
-- [ ] Edit `src/core/oauth.ts` and `src/server/capabilities.ts`. A `CLIENTS` table over client names (`google`, `slack`) replaces the Google branches. Each row holds the public id and its environment override, the authorize parameters, the token body's shape and how the redirect is sent.
+- [x] Edit `src/core/oauth.ts` and `src/server/capabilities.ts`. A `CLIENTS` table over client names (`google`, `slack`) replaces the Google branches. Each row holds the public id and its environment override, the authorize parameters, the token body's shape and how the redirect is sent.
 - [ ] Edit `src/core/connections.ts`. `client: slack` accepted, `limits` parsed from the file.
-- [ ] Edit `src/core/objects.ts`. The Slack kinds' URL shapes and ids, the root taken from `thread_ts`, `p<digits>` turned into Slack's `ts`, the `messages` and `contact` cards fed from Slack readings.
+- [x] Edit `src/core/objects.ts`. The Slack kinds' URL shapes and ids, the root taken from `thread_ts`, `p<digits>` turned into Slack's `ts`, the `messages` and `contact` cards fed from Slack readings.
 - [ ] Edit `src/core/follow.ts`. A read's `pages` declaration (`list`, `by`, `keep`), the window and the merge, and `authors` scoped to additions where a kind says so.
 - [ ] Edit `src/core/watches.ts`. The paged look, pages held in the task's record across a crash, "behind" while a gap is open, a gap older than an hour closed by a fresh window with the marked wake, and the budget's spacing between looks on one account.
 - [ ] Edit `DESIGN.md` "Watches". The paged list and the per-account budget as rules, only after the unit boxes below are checked.
@@ -85,11 +85,11 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or C
 **Build.**
 
 - [ ] Stage 0, the spikes. `spikeSlack(port, clientId)` in `scripts/spike-slack.ts` runs the PKCE flow on a given loopback port through `authorizeUrl` and `exchange` with a Slack client row, then calls `auth.test`, `conversations.history` with a limit of 100 twice within a minute with and without `oldest`, `conversations.replies` on a thread of twenty replies, `search.messages` sorted by timestamp against a message it just posted, `conversations.info` on a shared channel, and a refresh after expiry. It prints each answer's shape, the limit honoured, `Retry-After`, page order and cursors, tokens redacted. Appendix A is filled and `docs/slack.md` fixed before stage 1 begins.
-- [ ] Stage 1, connect and read. `CLIENTS` in `src/core/oauth.ts` read by `authorizeUrl`, `exchange`, `refresh` and `oauthClient`, the Google branches in `src/server/capabilities.ts` become lookups.
+- [x] Stage 1, connect and read. `CLIENTS` in `src/core/oauth.ts` read by `authorizeUrl`, `exchange`, `refresh` and `oauthClient`, the Google branches in `src/server/capabilities.ts` become lookups.
   - [ ] `slackBudget` in `src/core/slack-rest.ts`, a per-(account, method) queue that spaces calls to the declared rate, honours `Retry-After`, and answers a caller past its depth with "Slack is busy, try again" in words.
-  - [ ] `SLACK_TOOLS` and `slackCall`, each read's answer shaped as the kinds' `fields` name it and bounded by `MAX_RESPONSE_BYTES`.
-  - [ ] `slackWriteCall` for `post_message`, `effect: "unsafe"`, on the `private` floor, its draft words "Post in #name" or "Reply in thread in #name" with the text shown as it will notify.
-  - [ ] The Slack kinds in `src/core/objects.ts` and the two cards reading them, with `follow` left out of the file until stage 2.
+  - [x] `SLACK_TOOLS` and `slackCall`, each read's answer shaped as the kinds' `fields` name it and bounded by `MAX_RESPONSE_BYTES`.
+  - [x] `slackWriteCall` for `post_message`, `effect: "unsafe"`, on the `private` floor, its draft words "Post in #name" or "Reply in thread in #name" with the text shown as it will notify.
+  - [x] The Slack kinds in `src/core/objects.ts` and the two cards reading them, with `follow` left out of the file until stage 2.
 - [ ] Stage 2, follow a thread and a channel. `pages` in `src/core/follow.ts`, `window(reading, pages)` keeping the newest `keep` by the ordering field, `merge(held, pages)` joining pages into the window.
   - [ ] `lookPaged` in `src/core/watches.ts`. Fetch the newest page, compare its oldest item to the window's newest, hold or merge, record "behind" with the gap's age, repeat on the next due look within the budget.
   - [ ] The thread and channel `follow` entries in `shipped/connections/slack.md`, as `docs/slack.md` has them. A mention wakes, a message tells, the owner's own are nothing.
@@ -107,7 +107,7 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or C
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `test/oauth.test.ts`. The `CLIENTS` table for Google and Slack, `user_scope` sent and `scope` not, `authed_user.access_token` as the token, no `client_secret`. Run `npm run test:fast -- test/oauth.test.ts`.
+- [x] `test/oauth.test.ts`. The `CLIENTS` table for Google and Slack, `user_scope` sent and `scope` not, `authed_user.access_token` as the token, no `client_secret`. Run `npm run test:fast -- test/oauth.test.ts`.
 - [ ] `test/slack-rest.test.ts`. Each read's shape against the fake, mrkdwn rendering, mention and bot marking, `whoami.handle`, the budget's spacing and `Retry-After`, `post_message` on the floor, `add_reaction` idempotent, `get_file` bounded. Run `npm run test:fast -- test/slack-rest.test.ts`.
 - [ ] `test/connections.test.ts`, `test/object-shapes.test.ts`, `test/stored-shapes.test.ts`. The file parses, the kinds' URLs and ids round-trip, a reply's link names its root, `limits` is stored. Run `npm run test:fast -- test/connections.test.ts test/object-shapes.test.ts test/stored-shapes.test.ts`.
 - [ ] `test/follow.test.ts`. `window` and `merge` properties. Merging the same pages twice is the same reading, and nothing newer than the window's newest is ever dropped. Run `npm run test:fast -- test/follow.test.ts`.
