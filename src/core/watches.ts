@@ -50,9 +50,11 @@ import {
 	cardOf,
 	keepReading,
 	nameOf,
+	type ObjectCard,
 	type ObjectKind,
 	type ObjectRead,
 	type ObjectRef,
+	Readings,
 	readArgs,
 	readingKey,
 	recognise,
@@ -612,6 +614,43 @@ const wakeKey = (
 		.update(JSON.stringify([since ?? null, seen, ids, ended ?? null]))
 		.digest("hex")
 		.slice(0, 24)}`;
+
+/**
+ * A watch's file name, from what it follows: the object's name in lowercase words joined by dashes ("acme/banda #142"
+ * is acme-banda-142); when that name is an opaque id (a Drive file's, an event's, a contact's), the words of the card
+ * kept for it ("Economía 🏠" is economia); else the id behind "watch-". Always a name `WATCH_NAME` takes, whichever
+ * path writes the file: the agent's tool, Follow on a card, or Add in the panel.
+ */
+export function watchNameFor(objectName: string, card?: ObjectCard): string {
+	const slug = (words: string) =>
+		words
+			.toLowerCase()
+			.normalize("NFKD")
+			// the accents off their letters: "Economía" is economia, not economi-a
+			.replace(/\p{M}/gu, "")
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-+|-+$/g, "")
+			.slice(0, 40)
+			.replace(/-+$/g, "");
+	const own = slug(objectName);
+	// an opaque id: one long run of letters and digits, or one that does not begin with a letter
+	const opaque = own === "" || !/^[a-z]/.test(own) || /^[a-z0-9]{10,}$/.test(own);
+	if (!opaque) return own;
+	const words =
+		card === undefined
+			? ""
+			: "title" in card
+				? card.title
+				: "name" in card
+					? card.name
+					: "subject" in card
+						? card.subject
+						: "";
+	const named = slug(words);
+	if (named !== "" && /^[a-z]/.test(named)) return named;
+	if (own === "") return "watch";
+	return /^[a-z]/.test(own) ? own : `watch-${own}`;
+}
 
 /** What the looks that held saw, with what this one sees: the wake's words, the tells', and the changes' ids. */
 export type Held = {
@@ -1345,14 +1384,12 @@ export function defineWatches(options: WatchesOptions) {
 			const picked = await accountFor(tx, agent, connection, args.account);
 			if ("refused" in picked) throw new WatchRefused(`Not written: ${picked.refused}.`);
 			const objectName = nameOf(ref, connection.objects ?? {});
-			const base = objectName
-				.toLowerCase()
-				.replace(/[^a-z0-9]+/g, "-")
-				.replace(/^-+|-+$/g, "")
-				.slice(0, 40);
+			// named by the object, or by the card the agent read when the object's own name is an id
+			const key = readingKey(picked.account, refKey(ref, connection.objects ?? {}));
+			const base = watchNameFor(objectName, (await tx.doc(Readings)).readings[key]?.card);
 			const { watches } = await tx.doc(Watches);
 			const files = (await tx.doc(Accepted)).files;
-			let name = base === "" ? "watch" : base;
+			let name = base;
 			for (let n = 2; files[watchPath(name)] !== undefined && watchAgent(watches[name] ?? {}) !== agent; n++)
 				name = `${base}-${n}`;
 			const text = watchText({

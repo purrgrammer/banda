@@ -9,7 +9,7 @@ import type { Harness } from "@earendil-works/pi-durable";
 import { log } from "../core/activity.ts";
 import { Accepted, activeAgents, agentWords, isArchived, shaOf, unaccept } from "../core/agents.ts";
 import { connectionPath, parseConnection } from "../core/connections.ts";
-import { refKey } from "../core/objects.ts";
+import { nameOf, Readings, readingKey, refKey } from "../core/objects.ts";
 import { withAsk } from "../core/routines.ts";
 import { context } from "../core/store.ts";
 import {
@@ -29,6 +29,7 @@ import {
 	type WatchRecord,
 	WatchRefused,
 	watchAgent,
+	watchNameFor,
 	watchPath,
 	watchText,
 	withUntil,
@@ -390,19 +391,6 @@ export type NewWatch = {
 	readonly ask?: string;
 };
 
-/** A watch's name from the object's: its words, lowercase, joined by `-` ("acme/banda #142" is acme-banda-142). */
-export function nameFor(object: string): string {
-	const name = object
-		.toLowerCase()
-		.normalize("NFKD")
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "")
-		.slice(0, 40)
-		.replace(/-+$/g, "");
-	if (name === "") return "watch";
-	return /^[a-z]/.test(name) ? name : `watch-${name}`;
-}
-
 /**
  * Follow an object as the owner, from its card or the panel: a file the daemon writes as the owner's own, in effect at
  * once, for agent `agent`, whose chat it wakes. The first look comes before the watch is live: it is the baseline,
@@ -445,8 +433,9 @@ export async function createWatch(
 			throw new BadRequest(`${await agentWords(tx, made.agent)} already follows it (${watchPath(live[0])})`, 409);
 		const picked = await accountFor(tx, made.agent, found.connection, made.account);
 		if ("refused" in picked) throw new BadRequest(picked.refused, 409);
-		const objectName = `${found.ref.connection}:${found.ref.kind}:${Object.values(found.ref.values).join("-")}`;
-		const base = nameFor(objectName.replace(/^[a-z0-9_-]+:[a-z0-9_]+:/, ""));
+		// named by the object, or by its card when the object's own name is an id, as the agent's tool names it
+		const card = (await tx.doc(Readings)).readings[readingKey(picked.account, ref)]?.card;
+		const base = watchNameFor(nameOf(found.ref, found.connection.objects ?? {}), card);
 		const files = (await tx.doc(Accepted)).files;
 		let name = base;
 		for (let n = 2; files[watchPath(name)] !== undefined || boxed.has(name) || watches[name] !== undefined; n++)
