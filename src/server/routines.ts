@@ -8,6 +8,7 @@ import type { Context } from "@earendil-works/chord";
 import type { Harness, TaskId } from "@earendil-works/pi-durable";
 import { ActivityLog, log } from "../core/activity.ts";
 import { Accepted, activeAgents, agentWords, isArchived, shaOf, unaccept } from "../core/agents.ts";
+import { fileNameFor } from "../core/names.ts";
 import { openPermissions } from "../core/permissions.ts";
 import {
 	ALLOWED_KEPT,
@@ -338,23 +339,7 @@ export const changeWhen = (
 ): Promise<void> => changeRoutine(harness, workspace, reconcile, name, { when }, sha, now, ctx);
 
 /** A routine's name from what it is for: its words, lowercase, joined by `-` ("Morning brief" is morning-brief). */
-export function nameFor(description: string): string {
-	const words = description
-		.toLowerCase()
-		.normalize("NFKD")
-		.replace(/[^a-z0-9]+/g, " ")
-		.trim()
-		.split(" ")
-		.filter((word) => word !== "");
-	let name = "";
-	for (const word of words) {
-		const next = name === "" ? word : `${name}-${word}`;
-		if (next.length > 40) break;
-		name = next;
-	}
-	if (name === "") return "routine";
-	return /^[a-z]/.test(name) ? name : `routine-${name}`;
-}
+export const nameFor = (description: string): string => fileNameFor(description, "routine");
 
 /** What the owner makes from the panel: whose it is, what it is for, when it runs (one schedule line), what it does. */
 export type NewRoutine = {

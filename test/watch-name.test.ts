@@ -28,7 +28,7 @@ describe("a watch's name", () => {
 	it("is the card's words when the object is named by an id, else the id behind watch-, and always a name", () => {
 		const id = "1e0DrWx78-yd70xjBA1H_LB-45SrxCrDIkq-PSRJ328Y";
 		expect(watchNameFor(id, SHEET)).toBe("economia");
-		expect(watchNameFor(id)).toBe("watch-1e0drwx78-yd70xjba1h-lb-45srxcrdikq-psrj");
+		expect(watchNameFor(id)).toBe("watch-1e0drwx78-yd70xjba1h-lb-45srxcrdikq");
 		// an id that begins with a letter stands as it is; one that does not goes behind watch-
 		expect(watchNameFor("cGxhbm5pbmcxMjM0NTY3OA")).toBe("cgxhbm5pbmcxmjm0nty3oa");
 		expect(

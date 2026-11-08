@@ -45,6 +45,7 @@ import {
 	settleOf,
 	sort,
 } from "./follow.ts";
+import { fileNameFor } from "./names.ts";
 import { objectAccess } from "./object-access.ts";
 import {
 	cardOf,
@@ -622,19 +623,9 @@ const wakeKey = (
  * path writes the file: the agent's tool, Follow on a card, or Add in the panel.
  */
 export function watchNameFor(objectName: string, card?: ObjectCard): string {
-	const slug = (words: string) =>
-		words
-			.toLowerCase()
-			.normalize("NFKD")
-			// the accents off their letters: "Economía" is economia, not economi-a
-			.replace(/\p{M}/gu, "")
-			.replace(/[^a-z0-9]+/g, "-")
-			.replace(/^-+|-+$/g, "")
-			.slice(0, 40)
-			.replace(/-+$/g, "");
-	const own = slug(objectName);
-	// an opaque id: one long run of letters and digits, or one that does not begin with a letter
-	const opaque = own === "" || !/^[a-z]/.test(own) || /^[a-z0-9]{10,}$/.test(own);
+	const own = fileNameFor(objectName, "watch");
+	// an opaque id: one long run of letters and digits, or one the maker had to put behind "watch-"
+	const opaque = own === "watch" || own.startsWith("watch-") || /^[a-z0-9]{10,}$/.test(own);
 	if (!opaque) return own;
 	const words =
 		card === undefined
@@ -646,10 +637,8 @@ export function watchNameFor(objectName: string, card?: ObjectCard): string {
 					: "subject" in card
 						? card.subject
 						: "";
-	const named = slug(words);
-	if (named !== "" && /^[a-z]/.test(named)) return named;
-	if (own === "") return "watch";
-	return /^[a-z]/.test(own) ? own : `watch-${own}`;
+	const named = fileNameFor(words, "watch");
+	return named === "watch" || named.startsWith("watch-") ? own : named;
 }
 
 /** What the looks that held saw, with what this one sees: the wake's words, the tells', and the changes' ids. */
