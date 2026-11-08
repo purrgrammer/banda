@@ -66,7 +66,15 @@ export const watches: AreaModule = {
 					const { sha } = body;
 					if (sha !== null && (typeof sha !== "string" || !SHA.test(sha)))
 						throw new BadRequest("sha is the hash of the version you saw, or null for a removal");
-					await accept(deps.harness, deps.workspace, reconcile, name, sha, now);
+					await accept(
+						deps.harness,
+						deps.workspace,
+						reconcile,
+						(harness, watch, ctx) => deps.core.lookWatch(harness, watch, ctx),
+						name,
+						sha,
+						now,
+					);
 				} else if (action === "edit") {
 					const { sha, until } = body;
 					if (typeof sha !== "string" || !SHA.test(sha)) throw new BadRequest("sha is the hash of the version you saw");

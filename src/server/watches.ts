@@ -164,6 +164,7 @@ export async function accept(
 	harness: Harness,
 	workspace: Workspace,
 	reconcile: Reconcile,
+	look: (harness: Harness, name: string, ctx: Context) => Promise<Looked>,
 	name: string,
 	sha: string | null,
 	now: number,
@@ -181,7 +182,7 @@ export async function accept(
 			throw new BadRequest(`${watchPath(name)} changed since you saw it: look again`, 409);
 		const parsed = parseWatch(name, box.text);
 		if ("errors" in parsed) throw new BadRequest(parsed.errors.join("\n"));
-		await harness.commit(async (tx) => {
+		const known = await harness.commit(async (tx) => {
 			const files = (await tx.doc(Accepted)).files;
 			const known = files[watchPath(name)] !== undefined;
 			files[watchPath(name)] = { sha, text: box.text, at: now };
@@ -190,7 +191,20 @@ export async function accept(
 			const record = watches[name] as WatchRecord;
 			record.allowed = [...(record.allowed ?? []).filter((each) => each !== sha), sha].slice(-ALLOWED_KEPT);
 			await log(tx, { at: now, watch: name, what: known ? "You allowed its change" : "You allowed it" });
+			return known;
 		}, ctx);
+		// a new watch's first look comes before it is live, as when the owner follows: its baseline, whatever holds
+		// the task back (Pause all), and a first look that fails makes no watch
+		if (!known) {
+			const first = await look(harness, name, ctx);
+			if (first.outcome === "failed" || first.outcome === "gone") {
+				await harness.commit(async (tx) => {
+					const files = (await tx.doc(Accepted)).files;
+					if (files[watchPath(name)]?.sha === sha) delete files[watchPath(name)];
+				}, ctx);
+				throw new BadRequest(first.outcome === "failed" ? `it could not be read: ${first.why}` : "it is gone", 502);
+			}
+		}
 	}
 	await reconcile(harness, ctx);
 }
