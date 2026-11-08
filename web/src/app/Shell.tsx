@@ -22,6 +22,7 @@ import { SkillCatalogue } from "../chat/Skill.tsx";
 import { actOnFact, setPaused, signOutAccount, signOutSite, updateConnection } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { agentMainOf } from "../lib/chats.ts";
+import { useMidnight } from "../lib/midnight.ts";
 import { type ArchivedAgent, archivedAgents, chatAgents } from "../lib/navigation.ts";
 import { setTheme, useTheme } from "../lib/prefs.ts";
 import { showAgents, showCapabilities, showControl, showMemory, useShell } from "../lib/shell.ts";
@@ -173,10 +174,11 @@ function Main() {
 	// the routine open in the panel's editor (none: a new one), and a routine's line asking for the agent's routines
 	const [editing, setEditing] = useState<{ agent: string; routine?: string; watch?: string }>();
 	const [focus, setFocus] = useState<{ agent: string; n: number }>();
-	// when the daemon last pushed the routines or the watches: their next runs and looks are read then, so they never
-	// tick on their own
-	// biome-ignore lint/correctness/useExhaustiveDependencies: a push is what moves it
-	const pushedAt = useMemo(() => Date.now(), [shell.control, shell.watches]);
+	// when the daemon last pushed the routines or the watches, or the day turned: their next runs and looks are read
+	// then, so they never tick on their own
+	const day = useMidnight();
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a push, or the day turning, is what moves it
+	const pushedAt = useMemo(() => Date.now(), [shell.control, shell.watches, day]);
 	const companion: CompanionView = shell.companion ?? { face: DEFAULT_FACE };
 	const agents = useMemo(() => chatAgents(shell.agents, companion), [shell.agents, companion]);
 	// archived agents leave the band, but a group's history and Settings still name them
@@ -228,6 +230,7 @@ function Main() {
 			),
 		];
 	}, [shell.control?.routines, shell.agents]);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the day turning re-reads the rows' day words
 	const rows = useMemo(
 		() =>
 			bandRows(
@@ -240,7 +243,7 @@ function Main() {
 				archived,
 				shell.harnesses?.sessions,
 			),
-		[agents, shell.rows, shell.groups, shell.control?.paused, waiting, archived, shell.harnesses?.sessions],
+		[agents, shell.rows, shell.groups, shell.control?.paused, waiting, archived, shell.harnesses?.sessions, day],
 	);
 
 	// `#/` opens the last chat shown here, else the first agent's

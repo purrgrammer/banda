@@ -716,6 +716,8 @@ export async function shell(
 	ctx: Context = context,
 ): Promise<void> {
 	let timer: NodeJS.Timeout | undefined;
+	/** The push a permission's expiry owes, armed by the push that saw the permission. */
+	let expiry: NodeJS.Timeout | undefined;
 	let listed = "";
 	let said = "";
 	let room = "";
@@ -781,6 +783,12 @@ export async function shell(
 				room = JSON.stringify(now);
 				write({ type: "control", control: now });
 			}
+			// a permission's `until` passing changes the control room with no doc moving: the shell is pushed again then
+			const soonest = Math.min(...now.permissions.flatMap((each) => (each.until === undefined ? [] : [each.until])));
+			clearTimeout(expiry);
+			expiry = undefined;
+			if (Number.isFinite(soonest) && soonest > Date.now())
+				expiry = setTimeout(() => void changed(), Math.min(soonest - Date.now() + 1, 2_147_483_647));
 			await tell();
 		} catch {
 			// the store closed under the stream, which ends with it
@@ -883,6 +891,7 @@ export async function shell(
 	} finally {
 		unsubscribe();
 		clearTimeout(timer);
+		clearTimeout(expiry);
 		for (const watch of watches) await watch?.stop();
 		await Promise.all(pushing);
 	}

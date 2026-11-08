@@ -139,6 +139,52 @@ describe("the shell stream", () => {
 		}
 	}, 30_000);
 
+	it("a permission's until passing pushes the shell again, though no doc moved", async () => {
+		const home = await tempHome();
+		const core = defineCore({ blobs: blobStore(), gateway: () => new FakeGateway(), model: () => FAUX_MODEL });
+		const registry = createRegistry();
+		registry.install(core.extension);
+		const harness = await openStore(home, { models: echoModels().models, registry });
+		const stop = new AbortController();
+		let controls = 0;
+		const until = Date.now() + 400;
+		const streaming = shell(
+			harness,
+			{
+				agents: async () => [],
+				memory: async () => ({ facts: [] }) as unknown as MemoryView,
+				// the permission is open on the first read and gone once its time passed
+				control: async () => {
+					controls++;
+					const open = Date.now() < until;
+					return {
+						routines: [],
+						activity: [],
+						permissions: open ? [{ id: "p1", what: "run npm test", scope: "until", until, at: 0 }] : [],
+						removed: {},
+					};
+				},
+			},
+			() => () => {},
+			() => {},
+			stop.signal,
+		);
+		try {
+			const deadline = Date.now() + 5_000;
+			while (controls < 2) {
+				if (Date.now() > deadline) throw new Error("no push followed the permission's expiry");
+				await new Promise((r) => setTimeout(r, 20));
+			}
+			await new Promise((r) => setTimeout(r, 300));
+			// one push for the expiry, none after: the control room has no permission left to wait for
+			expect(controls).toBe(2);
+		} finally {
+			stop.abort();
+			await streaming;
+			await harness.close(context);
+		}
+	}, 30_000);
+
 	it("a client gone during the first push ends the stream, which reads nothing more", async () => {
 		const home = await tempHome();
 		const core = defineCore({ blobs: blobStore(), gateway: () => new FakeGateway(), model: () => FAUX_MODEL });
