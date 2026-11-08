@@ -39,8 +39,10 @@ import {
 } from "../src/box/web-fetch.ts";
 import { ActivityLog } from "../src/core/activity.ts";
 import type { EgressControl, Taken } from "../src/core/egress.ts";
+import { readForeign } from "../src/core/foreign.ts";
 import { OWNER, type Received } from "../src/core/gateway.ts";
 import { htmlToText } from "../src/core/html-text.ts";
+import { errandOf } from "../src/core/permissions.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { TOOLSETS } from "../src/core/toolsets.ts";
@@ -257,7 +259,10 @@ function fake(pages: { [url: string]: Fetched }, options: { egress?: EgressContr
 		now: () => 1_000,
 		env: undefined,
 		commit: async (run: (tx: unknown) => Promise<unknown>) =>
-			run({ doc: async () => ({ events: { push: (event: { what: string }) => logged.push(event), length: 0 } }) }),
+			run({
+				scanEntries: async () => ({ items: [] }),
+				doc: async () => ({ events: { push: (event: { what: string }) => logged.push(event), length: 0 } }),
+			}),
 	} as unknown as ToolExecutionApi;
 	const call = async (url: string) => {
 		const result = (await tool.execute({ url }, api, context)) as ToolExecutionResult;
@@ -582,7 +587,7 @@ describe.skipIf(!curl)("the request, with the real curl", () => {
 });
 
 describe("a chat that reads the web", () => {
-	it("asks nothing; the model gets the page as data, and the read is logged", async () => {
+	it("asks nothing; the model gets the page as data, the read is logged, and its task read foreign content", async () => {
 		const gateway = new FakeGateway();
 		const faux = fauxProvider();
 		const models = createModels();
@@ -597,7 +602,8 @@ describe("a chat that reads the web", () => {
 			Array.from({ length: 20 }, () => (ctx: { messages: readonly { role: string; content: unknown }[] }) => {
 				const heed = answerNudge(ctx.messages);
 				if (heed !== undefined) return heed;
-				if (ctx.messages.at(-1)?.role === "user")
+				const last = ctx.messages.at(-1);
+				if (last?.role === "user" && JSON.stringify(last.content).includes("read it"))
 					return fauxAssistantMessage([fauxToolCall("web_fetch", { url: "https://example.com/a" }, { id: "w1" })], {
 						stopReason: "toolUse",
 					});
@@ -620,8 +626,10 @@ describe("a chat that reads the web", () => {
 				],
 			}),
 		);
-		const harness: Harness = await openStore(home, { models, registry });
+		let harness: Harness = await openStore(home, { models, registry });
 		harness.resume();
+		const foreign = (chat: number) =>
+			harness.commit(async (tx) => readForeign(tx, chat, (await errandOf(tx, chat)).input), context);
 		try {
 			const received: Received = await core.receive(harness, {
 				id: randomUUID(),
@@ -648,6 +656,21 @@ describe("a chat that reads the web", () => {
 			]);
 			const activity = (await harness.snapshot(ActivityLog, context))!.events;
 			expect(activity.filter((e) => e.outside === "read").map((e) => e.what)).toEqual(["Read from example.com"]);
+			expect(await foreign(received.chat)).toBe(true);
+			// a restart keeps the mark; the owner's next message starts a task that read nothing foreign
+			await harness.close(context);
+			harness = await openStore(home, { models, registry });
+			harness.resume();
+			expect(await foreign(received.chat)).toBe(true);
+			const next = await core.receive(harness, {
+				id: randomUUID(),
+				origin: { gateway: "fake", peer: OWNER, thread: "t" },
+				text: "thanks",
+			});
+			if (!("turn" in next)) throw new Error(JSON.stringify(next));
+			await until(async () => (await harness.getTask(next.turn as TaskId, context))?.state.status === "terminal");
+			expect(next.chat).toBe(received.chat);
+			expect(await foreign(received.chat)).toBe(false);
 		} finally {
 			await harness.close(context);
 		}

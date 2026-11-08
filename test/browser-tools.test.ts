@@ -359,6 +359,23 @@ describe("the browser, as the owner", () => {
 		}
 	});
 
+	it("a task that read a page first is offered no scope to open a signed-in site", async () => {
+		const s = await setup();
+		try {
+			await s.signIn("shop.example");
+			const run = await s.say([
+				["browser_navigate", { url: "https://elsewhere.example/" }],
+				["browser_navigate", { url: `${SITE}/orders?id=1` }],
+			]);
+			const { wait } = await s.nextAsk(run.turn);
+			expect(wait?.ask).toMatchObject({ tool: "browser_navigate", foreign: true, scopes: [] });
+			await answer(s.harness, wait!.key, "deny", web, "bearer");
+			await until(() => s.done(run.turn));
+		} finally {
+			await s.close();
+		}
+	});
+
 	it("approved once, the site opens for that navigation alone", async () => {
 		const s = await setup();
 		try {

@@ -35,8 +35,8 @@ import { ChatReads } from "../core/chat-reads.ts";
 import { budgetPolicy } from "../core/compaction.ts";
 import { Companion } from "../core/companion.ts";
 import { Connected } from "../core/connections.ts";
+import { AGENT_MESSAGE, HARNESS_ENDED } from "../core/foreign.ts";
 import { type Origin, type Outbound, OWNER } from "../core/gateway.ts";
-import { HARNESS_ENDED } from "../core/harness.ts";
 import { Permissions } from "../core/permissions.ts";
 import { PROPOSAL_ENTRY, PROPOSAL_RESULT, type Proposal } from "../core/proposals.ts";
 import { Control, Routines, TROUBLE, type TroubleData, WAKE, type WakeData } from "../core/routines.ts";
@@ -44,15 +44,7 @@ import { localTime } from "../core/schedule.ts";
 import { openWaits, status } from "../core/status.ts";
 import { context } from "../core/store.ts";
 import { thinkingMs, thinkingTimes } from "../core/timing.ts";
-import {
-	AGENT_MESSAGE,
-	goesOn,
-	Routes,
-	type Unanswered,
-	type Undelivered,
-	unansweredText,
-	undeliveredText,
-} from "../core/turn.ts";
+import { goesOn, Routes, type Unanswered, type Undelivered, unansweredText, undeliveredText } from "../core/turn.ts";
 import { type Ask, WAIT, type WaitEnded } from "../core/wait.ts";
 import type {
 	AgentView,

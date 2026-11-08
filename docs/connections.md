@@ -105,10 +105,10 @@ in a throwaway home, at desktop and phone width.
   only that; the widest grain of a tool with no way back from Access only. Built and covered by
   test/approval-card.browser.test.ts at both widths; not walked in the app, which needs three real approved writes
   on a disposable repository: the
-  streak, the place's row and its permission; nothing yet marks a chat as having read foreign content, so that rule
-  holds only for an ask that says so
-- [ ] A chat that read foreign content is told apart from one that did not: nothing sets the ask's `foreign` flag yet,
-  so every chat is offered the task's scope (and an earned place) as if it read nothing foreign
+  streak, the place's row and its permission
+- [x] A chat that read foreign content is told apart from one that did not: a read from outside (a connection's, a
+  page's, a command's through the proxy, the browser's), another agent's chat or message, or a harness's work marks the
+  task it came into (`foreign.ts`), and its asks offer only an earned place or a host until the owner's next message
 - [x] Agent trust, slice 4: a connection's tools and groups set to Allow, Ask, Always ask or Off in Settings. Walked
   in a forked home at desktop width, after the review below: each remote connection's tools in their groups on its Connections page (and in an
   agent's Access), set at once for every agent; Ask on a read and Always ask on a write put it on the floor ("you

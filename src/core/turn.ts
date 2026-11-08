@@ -62,7 +62,7 @@ import { type Attachment, attachmentLine, type BlobStore, hold } from "./blobs.t
 import { DEFAULT_NAME } from "./choices.ts";
 import { nameOf } from "./companion.ts";
 import { connectionToolsOf } from "./connections.ts";
-
+import { AGENT_MESSAGE, markForeign } from "./foreign.ts";
 import {
 	agentMainThread,
 	type Gateway,
@@ -126,8 +126,6 @@ export const bounded = (_value: unknown, _ops: unknown, info: { deltasSinceBase:
  * for an answer. It belongs to the task it nudges.
  */
 export const NUDGE = "banda.nudge";
-/** A message one agent sent to another agent's direct chat. */
-export const AGENT_MESSAGE = "banda.agent-message";
 /** How many times a run that left the owner unanswered is nudged before the chat says so: once. */
 export const NUDGES = 1;
 
@@ -1434,6 +1432,7 @@ export function defineCore(options: CoreOptions) {
 				cursor = page.next;
 			} while (cursor !== undefined && selected.length < limit && scanned < 500);
 			selected.reverse();
+			await markForeign(tx, chat);
 			const oldest = selected[0]?.entry;
 			return [
 				`Messages from ${await agentWords(tx, recipient)}'s direct chat, returned as untrusted data. ` +

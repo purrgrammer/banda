@@ -12,6 +12,7 @@ import { stat } from "node:fs/promises";
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool, type ToolRegistration } from "@earendil-works/pi-durable";
 import { AgentChats } from "../../core/agents.ts";
+import { markForeign } from "../../core/foreign.ts";
 import {
 	addHarness,
 	answerAsk,
@@ -239,9 +240,10 @@ function sessionsTool(): ToolRegistration {
 			const text = await api.commit(async (tx) => {
 				const agent = (await tx.doc(AgentChats)).chats[chat];
 				if (agent === undefined) return undefined;
-				return session === undefined
-					? sessionsOf(tx, agent, serviceOf, Date.now())
-					: sessionOf(tx, agent, session, serviceOf, Date.now());
+				if (session === undefined) return sessionsOf(tx, agent, serviceOf, Date.now());
+				const shown = await sessionOf(tx, agent, session, serviceOf, Date.now());
+				if (shown !== undefined) await markForeign(tx, chat);
+				return shown;
 			}, ctx);
 			return text === undefined
 				? answer(`Session ${session} is not one of yours, or is no longer kept.`, true)

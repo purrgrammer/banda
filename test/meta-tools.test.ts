@@ -5,13 +5,19 @@ import {
 	fauxToolCall,
 	type Context as ModelContext,
 } from "@earendil-works/pi-ai";
-import { type ConversationId, createRegistry, type TaskId } from "@earendil-works/pi-durable";
+import { type ConversationId, createRegistry, type Harness, type TaskId } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
 import { Accepted, AgentChats, agentPath, LEAD_TEXT, shaOf } from "../src/core/agents.ts";
+import { AGENT_MESSAGE, readForeign } from "../src/core/foreign.ts";
 import { OWNER } from "../src/core/gateway.ts";
+import { errandOf } from "../src/core/permissions.ts";
 import { context, openStore } from "../src/core/store.ts";
-import { AGENT_MESSAGE, defineCore, type TurnResult } from "../src/core/turn.ts";
+import { defineCore, type TurnResult } from "../src/core/turn.ts";
 import { blobStore, FAUX_MODEL, FakeGateway, tempHome, until } from "./helpers.ts";
+
+/** Whether `chat`'s task now read foreign content. */
+const foreign = (harness: Harness, chat: number) =>
+	harness.commit(async (tx) => readForeign(tx, chat, (await errandOf(tx, chat)).input), context);
 
 const asText = (content: ModelContext["messages"][number]["content"]): string =>
 	typeof content === "string" ? content : content.map((part) => (part.type === "text" ? part.text : "")).join("\n");
@@ -73,6 +79,9 @@ describe("agent meta tools", () => {
 		);
 		const message = delivered.items.find((item) => item.kind === AGENT_MESSAGE);
 		expect(message?.data).toMatchObject({ from: "sancho", text: "Please look into the issue." });
+		// another agent's message is foreign wherever it lands; sending one reads nothing
+		expect(await foreign(harness, readerChat)).toBe(true);
+		expect(await foreign(harness, started.chat)).toBe(false);
 		await harness.close(context);
 	});
 
@@ -143,6 +152,7 @@ describe("agent meta tools", () => {
 					entry.model[0].content.some((part) => part.type === "toolCall" && part.name === "message_user"),
 			);
 		});
+		expect(await foreign(harness, first.chat)).toBe(false);
 		const second = await core.receive(harness, {
 			id: "owner-2",
 			origin: { gateway: "fake", peer: OWNER, thread: "main" },
@@ -166,6 +176,7 @@ describe("agent meta tools", () => {
 		const words = asText(readResult.content);
 		expect(words).toContain("The report is ready.");
 		expect(words).not.toContain("PRIVATE MODEL NOTES");
+		expect(await foreign(harness, first.chat)).toBe(true);
 		await harness.close(context);
 	});
 });

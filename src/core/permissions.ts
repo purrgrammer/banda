@@ -33,6 +33,7 @@ import { AgentChats, acceptedAgent, agentWords, ChatAgent, LEAD } from "./agents
 import { Companion } from "./companion.ts";
 
 import { FLOOR_WORDS, type Floor } from "./floor.ts";
+import { readForeign } from "./foreign.ts";
 import { allowedHost, hostCovers } from "./hosts.ts";
 import type { Grain } from "./objects.ts";
 import { WAKE, type WakeData } from "./routines.ts";
@@ -592,8 +593,8 @@ export async function revoke(harness: Harness, id: string, now: number, ctx: Con
 }
 
 /**
- * An approval as its Wait asks it, in `chat`: the task it is for (so related asks of one task show together), and the
- * scopes it offers, in words. Reads only.
+ * An approval as its Wait asks it, in `chat`: the task it is for (so related asks of one task show together), whether
+ * that task read foreign content, and the scopes it offers, in words. Reads only.
  */
 export async function offering<A extends Offering & { readonly floor?: Floor }>(
 	tx: Tx,
@@ -609,7 +610,8 @@ export async function offering<A extends Offering & { readonly floor?: Floor }>(
 		host = name === undefined ? undefined : { ...host, what: `${name} may ${host.what}` };
 	}
 	const { host: _asked, ...rest } = ask;
-	const shown = { ...rest, ...(host === undefined ? {} : { host }) } as A;
+	const foreign = ask.foreign === true || (await readForeign(tx, chat, errand.input));
+	const shown = { ...rest, ...(host === undefined ? {} : { host }), ...(foreign ? { foreign } : {}) } as A;
 	return { ...shown, errand, scopes: offeredScopes(shown) };
 }
 

@@ -10,10 +10,11 @@ import {
 import { type ConversationId, createRegistry, type Storage, type TaskId } from "@earendil-works/pi-durable";
 import { Accepted, AgentChats, agentPath, shaOf } from "../../src/core/agents.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
+import { AGENT_MESSAGE } from "../../src/core/foreign.ts";
 import type { Gateway } from "../../src/core/gateway.ts";
 import { OWNER } from "../../src/core/gateway.ts";
 import { context, openStore } from "../../src/core/store.ts";
-import { AGENT_MESSAGE, defineCore, type TurnResult } from "../../src/core/turn.ts";
+import { defineCore, type TurnResult } from "../../src/core/turn.ts";
 import { FAUX_MODEL } from "../fixtures/models.ts";
 import { type Fault, Faults, InjectedFault } from "./faults.ts";
 

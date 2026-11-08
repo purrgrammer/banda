@@ -35,6 +35,8 @@ type Merge = {
 	readonly body?: string;
 	/** The agent the owner writes to: Reader, unless said. */
 	readonly agent?: string;
+	/** The model reads the pull request first, from the connection: its task has read foreign content. */
+	readonly read?: true;
 };
 
 /**
@@ -51,8 +53,21 @@ async function setup() {
 			// only the owner's newest message is answered with the call: another chat's run may still be ending
 			const last = asked.messages.at(-1);
 			const theirs = last?.role === "user" && typeof last.content === "string" && last.content.startsWith("merge ");
-			if (pending === undefined || !theirs) return fauxAssistantMessage("done");
-			const { tool = "github__merge_pull_request", agent: _agent, ...merge } = pending;
+			const readBack = last?.role === "toolResult" && last.toolName === "github__pull_request_read";
+			if (pending === undefined || !(theirs || readBack)) return fauxAssistantMessage("done");
+			const { tool = "github__merge_pull_request", agent: _agent, read, ...merge } = pending;
+			if (read === true && theirs)
+				return fauxAssistantMessage(
+					[
+						fauxToolCall("github__pull_request_read", {
+							method: "get",
+							owner: merge.owner,
+							repo: merge.repo,
+							pullNumber: merge.pullNumber ?? 0,
+						}),
+					],
+					{ stopReason: "toolUse" },
+				);
 			pending = undefined;
 			return fauxAssistantMessage([fauxToolCall(tool, { ...merge })], {
 				stopReason: "toolUse",
@@ -411,4 +426,29 @@ it("another place, account or agent earns its own", async () => {
 	);
 	expect((await s.answered(banda(5, { account: "bob" }))).scopes?.[0]?.scope).toBe("task");
 	expect((await s.answered(banda(6, { agent: "writer" }))).scopes?.[0]?.scope).toBe("task");
+});
+
+it("a task that read a connection's answer is offered no scope; the owner's next message offers the task's again", async () => {
+	const s = await setup();
+	const { turn, wait } = await s.start(banda(1, { read: true }));
+	if (wait?.ask.type !== "approval") throw new Error("no ask");
+	expect(s.fake.calls.map((call) => call.tool)).toContain("pull_request_read");
+	expect(wait.ask).toMatchObject({ foreign: true, scopes: [] });
+	const owner = { gateway: "web", peer: OWNER };
+	expect(
+		await answer(s.harness, wait.key, "approve", owner, "bearer", { approving: { permission: { scope: "task" } } }),
+	).toEqual({ refused: "this cannot be allowed ahead" });
+	await answer(s.harness, wait.key, "approve", owner, "bearer");
+	await s.harness.waitForTask(turn as TaskId, context);
+	// the owner's next message is a task that read nothing foreign
+	const next = await s.start(banda(2));
+	if (next.wait?.ask.type !== "approval") throw new Error("no ask");
+	expect(next.wait.ask.foreign).toBeUndefined();
+	expect(next.wait.ask.scopes?.map((one) => one.scope)).toEqual(["task", "hour", "today", "always"]);
+});
+
+it("an earned place is still offered in a task that read foreign content", async () => {
+	const s = await setup();
+	for (const pull of [1, 2, 3]) await s.answered(banda(pull));
+	expect((await s.answered(banda(4, { read: true }))).scopes).toEqual([{ scope: "place", words: MERGE_HERE }]);
 });

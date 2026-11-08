@@ -24,6 +24,7 @@ import {
 	prompt,
 	startAcp,
 } from "./acp.ts";
+import { HARNESS_ENDED } from "./foreign.ts";
 import { killGroups, killMarked, MARKER, type ProcessGroup, treeGroups } from "./processes.ts";
 
 /** Host supervision currently relies on POSIX process groups and the platform's process listing. */
@@ -158,9 +159,6 @@ export const Harnesses = defineDoc<{
 	// a base every 64 changes: a busy session's flushes would otherwise keep every revision, replayed on each read
 	checkpointWhen: (_value, _ops, info) => info.deltasSinceBase >= 64,
 });
-
-/** The entry a session's end leaves in its agent's chat. */
-export const HARNESS_ENDED = "banda.harness-ended";
 
 /** How many steps a session keeps; older ones are counted, not kept. */
 export const MAX_STEPS = 200;

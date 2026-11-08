@@ -33,6 +33,7 @@ import { log } from "../core/activity.ts";
 import { AgentChats } from "../core/agents.ts";
 import type { EffectTool } from "../core/ask.ts";
 import { type EgressControl, intake, ownCredential } from "../core/egress.ts";
+import { markForeign } from "../core/foreign.ts";
 import { OWNER } from "../core/gateway.ts";
 import { covering } from "../core/permissions.ts";
 import { addressWords, bodyFields, bodyWords, headersWords } from "../core/request-words.ts";
@@ -361,6 +362,7 @@ export function browserTools(options: BrowserToolOptions): ToolRegistration[] {
 					? error.message
 					: `The browser failed: ${error instanceof Error ? error.message : String(error)}`;
 		}
+		await api.commit((tx) => markForeign(tx, Number(api.conversationId)), ctx);
 		if (!failed && egress !== undefined) {
 			const freed = await releaseFree(api, ctx);
 			if (freed.lines.length > 0) said = `${freed.lines.join("\n")}\n\n${freed.page ?? said}`;

@@ -316,19 +316,15 @@ describe("a host the owner allowed", () => {
 		const s = setup();
 		const { harness, close } = await s.open(await tempHome());
 		try {
-			// the chat reads from outside in the same command that holds its write
+			// the chat reads from outside in the same command that holds its write: its task read foreign content, so
+			// the host is all it is offered
 			const first = await s.say(harness);
 			const request = held(first.chat);
 			s.proxy.pending.set(first.chat, [request]);
 			s.proxy.reads.set(first.chat, ["example.com"]);
 			const { wait } = await nextAsk(harness, first.turn);
-			expect(wait?.ask.type === "approval" && wait.ask.scopes?.map((one) => one.scope)).toEqual([
-				"task",
-				"hour",
-				"today",
-				"always",
-				"host",
-			]);
+			expect(wait?.ask).toMatchObject({ foreign: true });
+			expect(wait?.ask.type === "approval" && wait.ask.scopes?.map((one) => one.scope)).toEqual(["host"]);
 			expect(wait?.ask).toMatchObject({
 				args: { _host: "api.example.com" },
 				// allowed for the agent asking, by name: the lead, whose companion has no name yet
