@@ -94,35 +94,21 @@ returned to and merged, at desktop and phone width.
   upcoming events (needs a sync token, not a moving window)
 - [ ] A watch's file has no editor field and the `watch` tool no parameter for `wakes_a_day`; an issue's and a pull
   request's comments are read one page of a hundred, so comments past the hundredth are never seen
-- [ ] **A look pushes the whole shell.** A watch's task waking and sleeping is a task-graph change, which the shell
-  stream watches, so each look (every two to thirty minutes per watch) has every connected stream rebuild every view:
-  the chats; the control room (the box's routines and watches folders listed and read, the activity log's hundred
-  lines, the permissions); the agents (the agents folder); memory (its files); the capabilities (the shipped files
-  read from disk); the areas. `chats`, `control` and `agents` are then written to each client whether or not they
-  changed, tens of KB a push. The watches area declares no `watch`, so a look reaches the app by that coincidence
-  alone. Fix, in layers: the area owns its state (`watch: [Watches, Followed]`; a `watches` shell event in place of
-  `ControlView.watches`, kept on the shell by the app's `areas/watches.ts` handler, written when it changed as the
-  areas' events are); the stream writes `chats`, `control` and `agents` only when they changed, like the rest; then a
-  change rebuilds only the views its source feeds (each watched doc and the graph mapped to its events), so a quiet
-  look costs one `watches()` view and one small event per client. Acceptance: a test on `shell()` counts what a
-  quiet look writes: one event, no control view built.
-- [ ] **A done watch's readings stay kept.** Reconcile holds the `Followed` reading of every accepted watch's key, a
-  done watch's included, and nothing reads it again: a done watch never looks, and its card is `Readings`'s own
-  (bounded at 300). So up to four readings of 512 KB sit in the doc until the owner removes the watch, written into
-  every checkpoint of it (one per sixteen deltas, each delta a whole changed reading). Fix: the commit that ends a
-  watch (by its end, or by authority in `endWatches`) drops the key's reading when no live watch shares it, and
-  reconcile drops what a kill between left; `object.version` then leaves a done watch's row, which says Done. The
-  scenario's "three that differed" moves from the kept reading to the wakes' `version`s. Acceptance: the invariant "a
-  done watch holds no reading unless a live watch shares it", in `watchInvariants`.
-- [ ] **Check now remakes the task.** A look the owner asked for moves `next`, but the watch's task sleeps until the
-  time the look before set, so `checkNow` ends it (a commit and an abort) and reconcile makes another (a commit and a
-  task): pi-durable wakes a sleeping task only at its `until`, and the sleep's checkpoint is the look phase, so a task
-  left alone would wake at the old time and read the object again. The sleep is wrong only when the new `next` is
-  earlier (the look found the object busy, or came while a wake was held to settle). Fix: the look phase looks only
-  when `record.next` is due, else sleeps again (one commit, no read); and `checkNow` remakes the task only when
-  `record.next` is before the task's `until` (`tx.task(record.task).state`), else leaves it. Acceptance: Check now on
-  a quiet watch keeps its task (its id unchanged, one extra commit at the old time); on a busy one the sleep moves
-  earlier; the fault sweep over both.
+- [x] **A look pushes the whole shell.** A watch's task waking and sleeping was a task-graph change the shell stream
+  pushed everything for, every two to thirty minutes per watch and per client; `chats`, `control` and `agents` were
+  written whether or not they changed, and the watches area watched no doc of its own. Now the area owns its state
+  (`Area.own: [Watches, Followed]`, a `watches` shell event in place of `ControlView.watches`, on the shell as
+  `shell.watches`); a doc an area owns pushes that area's events alone; a timer's task (a watch's, a routine's)
+  waking, sleeping or ending is no news to the stream (`graphNews`); and every part of the shell is written only when
+  it changed. A quiet look costs one `watches()` view and one small event per client (test/shell-stream.test.ts)
+- [x] **A done watch's readings stay kept.** The commit that ends a watch (its end, or `endWatches`) drops the key's
+  `Followed` reading unless an accepted watch that is not done shares it (`dropUnheld`), and reconcile holds only such
+  watches' keys; the invariant "a done watch holds no reading unless a live watch shares it" is in `watchInvariants`
+- [x] **Check now remakes the task.** The look phase looks only when `record.next` is due and sleeps on otherwise, so
+  `checkNow` keeps a task whose sleep ends by the new time (it wakes then, reads nothing, sleeps until the new one)
+  and remakes it only when the look found the object busy, its sleep ending too late
+- [ ] The fault sweep over the shared reading, the dropped reading at the end, and Check now keeping the task has not
+  run in CI yet
 - [ ] Spike before slice 2: the readings doc keeps 300 and evicts the oldest first, so a held reading must be
   skipped; GitHub's hosted MCP server still answers `pull_request_read`'s get, get_reviews, get_comments and
   get_check_runs
