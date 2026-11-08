@@ -661,7 +661,7 @@ export async function classesOf(
 }
 
 /**
- * Each tool's group (`wanted`, by tool) as a file can hold them: a name it cannot hold is "Other", and past
+ * Each tool's group (`wanted`, by tool) in names a file can hold: a name it cannot hold is "Other", and past
  * `MAX_FILE_GROUPS` the groups `first` names stay, then the biggest, the rest together as "Other". The first `own`
  * of `first` (the file's) always stay.
  */

@@ -416,8 +416,9 @@ lives inside agents' settings and the app's Settings, never as a screen of its o
   tool is in effect is checked in the commit that starts each call, so one taken back is refused even mid-run, a write
   waiting for approval included.
 - **A connection only narrows.** In Settings each tool or group is a read (Allow, Ask, Off), a write (Ask, Always ask,
-  Off) or on the floor (Always ask, Off). Ask on a read, or Always ask on a write, puts it on the floor for every agent. Nothing set
-  on a connection lets a write run unasked: that is a permission, and a permission is one agent's.
+  Off) or on the floor (Always ask, Off). Ask on a read, or Always ask on a write, puts it on the floor for every agent. Allow on a
+  read the server or banda's guess proposed is the owner's acceptance: it joins the file's reads. Nothing set on a
+  connection lets a write run unasked: that is a permission, and a permission is one agent's.
 
 **Objects.** An object is a thing in a connection the owner recognises. In the owner's words, a recognised link is a
 compact inline reference: the service's icon, the object's type icon and its linked title, aligned with the owner's
@@ -566,7 +567,8 @@ the owner's answers, never the model's asking: after three approvals of one plac
 between, the card's offered row is that place's grain. The widest grain of a tool with no way back is never offered on
 a card; it is granted from the agent's permissions, its consequence in full. A task that read foreign content (a read
 from outside or a write's answer, another agent's message or chat, a group member's message, a harness's work) is
-offered no scope but an earned place, until the owner's next message starts another. An agent knows its own: a section of its prompt says how it asks (a write
+offered no scope but an earned place (or, for a message sent out, its host), until the owner's next message starts
+  another. An agent knows its own: a section of its prompt says how it asks (a write
 it proposes is the owner's review, never a way around it; the floor asks every time) and lists, in the daemon's
 words, what it may do without asking and until when, so a grant or a revocation reaches it at its next model
 boundary; and each effect's result says what let it run ("The owner approved this", "Ran without asking, within
