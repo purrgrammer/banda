@@ -68,6 +68,8 @@ function Page({ view, go }: { view: View; go: (href: string, how: "push" | "repl
 	// the hash's section is scrolled to when it was navigated to (a link, the nav), never when the scroll wrote it
 	const [target, setTarget] = useState<{ id: string | undefined; n: number }>({ id: view.section, n: 0 });
 	const written = useRef<string | undefined>(undefined);
+	// a scroll under way to the target: what the scroll finds in between is not the section in view
+	const settling = useRef(false);
 	useEffect(() => {
 		if (view.section === written.current) return;
 		written.current = undefined;
@@ -77,15 +79,23 @@ function Page({ view, go }: { view: View; go: (href: string, how: "push" | "repl
 		if (target.id === undefined) return;
 		let frame = 0;
 		let tries = 0;
+		settling.current = true;
 		const scroll = () => {
 			const element = document.getElementById(target.id ?? "");
 			if (element !== null) {
 				element.scrollIntoView();
 				setCurrent(target.id);
+				frame = requestAnimationFrame(() => {
+					settling.current = false;
+				});
 			} else if (tries++ < 30) frame = requestAnimationFrame(scroll);
+			else settling.current = false;
 		};
 		frame = requestAnimationFrame(scroll);
-		return () => cancelAnimationFrame(frame);
+		return () => {
+			cancelAnimationFrame(frame);
+			settling.current = false;
+		};
 	}, [target]);
 
 	// the section in view: the top-most one past the first third of the page, among those this width shows
@@ -97,6 +107,7 @@ function Page({ view, go }: { view: View; go: (href: string, how: "push" | "repl
 			.filter((element): element is HTMLElement => element !== null);
 		const observer = new IntersectionObserver(
 			() => {
+				if (settling.current) return;
 				const line = root.getBoundingClientRect().top + root.clientHeight / 3;
 				let seen: HTMLElement | undefined;
 				for (const section of sections) {

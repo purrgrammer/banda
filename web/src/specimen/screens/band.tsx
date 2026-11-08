@@ -72,22 +72,22 @@ export function BandSection() {
 				note="⌘K: with nothing typed, the band to switch to; typed, agents, skills and pages found at once, then the chats. A hit opens its chat at that message."
 			>
 				<Group label="Nothing typed: the band's rows, in the band's order">
-					<Search query="" recent={ROWS} />
+					<Search autoFocus={false} query="" recent={ROWS} />
 				</Group>
 				<Group label="A query: agents, skills, pages, then the chats">
-					<Search query="sa" {...LOCALS} hits={HITS} />
+					<Search autoFocus={false} query="sa" {...LOCALS} hits={HITS} />
 				</Group>
 				<Group label="A new search runs: the previous hits stay, dimmed">
-					<Search query="sat" {...LOCALS} hits={HITS} searching stale />
+					<Search autoFocus={false} query="sat" {...LOCALS} hits={HITS} searching stale />
 				</Group>
 				<Group label="Searching with nothing kept · nothing found · failed, with Try again" className="items-start">
-					<Search query="lisbon" searching />
-					<Search query="kyoto" />
-					<Search query="porto" onRetry={() => {}} />
+					<Search autoFocus={false} query="lisbon" searching />
+					<Search autoFocus={false} query="kyoto" />
+					<Search autoFocus={false} query="porto" onRetry={() => {}} />
 				</Group>
 				<Group label="The phone: Cancel closes it">
 					<div className="w-[390px] max-w-full">
-						<Search query="" recent={ROWS.slice(0, 3)} phone />
+						<Search autoFocus={false} query="" recent={ROWS.slice(0, 3)} phone />
 					</div>
 				</Group>
 				<Group label="Phone width: rows at full width">

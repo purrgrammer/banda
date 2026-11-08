@@ -56,9 +56,9 @@ export function States() {
 			</Section>
 			<Section id="states">
 				<Group label="Search: searching · nothing found · failed, with Try again" className="items-start">
-					<Search query="lisbon" searching />
-					<Search query="kyoto" />
-					<Search query="porto" onRetry={() => {}} />
+					<Search autoFocus={false} query="lisbon" searching />
+					<Search autoFocus={false} query="kyoto" />
+					<Search autoFocus={false} query="porto" onRetry={() => {}} />
 				</Group>
 				<Group label="A new group: nothing said yet">
 					<GroupEmpty name="Sancho & Mara" faces={[SANCHO, MARA]} />
