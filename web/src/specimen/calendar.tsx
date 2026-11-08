@@ -55,7 +55,7 @@ export const EVENTS: readonly (readonly [string, CalendarEvent])[] = [
 				"Northstar Headquarters, Building C, Conference Room Grand-Canal-Overlook-With-A-Name-That-Does-Not-Break, 1200 Market Street",
 			status: "tentative",
 			response: "tentative",
-			meet: "https://zoom.example/j/123456789",
+			meet: "https://acme.zoom.us/j/123456789",
 		},
 	],
 	[

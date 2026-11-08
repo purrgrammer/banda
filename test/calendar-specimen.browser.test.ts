@@ -57,7 +57,7 @@ for (const width of [390, 1440])
 				expect(await text("Cancelled")).toBe(true);
 				expect(await text("Declined")).toBe(true);
 				expect(await text("Open in Google Calendar")).toBe(true);
-				expect(await text("Join on zoom.example")).toBe(true);
+				expect(await text("Join on acme.zoom.us")).toBe(true);
 				expect(await page.run(`${section}.querySelector('[data-event-response="declined"]') !== null`)).toBe(true);
 				expect(await page.run(`${section}.querySelector('h3.line-through') !== null`)).toBe(true);
 				expect(await page.run(`${section}.querySelector('[data-object-inline]') !== null`)).toBe(true);

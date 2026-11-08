@@ -132,6 +132,22 @@ function pageToken(value: unknown): string | undefined {
 	return value;
 }
 
+/** Whether a Drive search's parentheses close within it, counting none inside its quoted strings. */
+function enclosed(query: string): boolean {
+	let depth = 0;
+	let quoted = false;
+	for (let i = 0; i < query.length; i++) {
+		const char = query[i];
+		if (quoted) {
+			if (char === "\\") i++;
+			else if (char === "'") quoted = false;
+		} else if (char === "'") quoted = true;
+		else if (char === "(") depth++;
+		else if (char === ")" && --depth < 0) return false;
+	}
+	return depth === 0 && !quoted;
+}
+
 /** Words searched for in names and contents, as one Drive `fullText contains '…'` term. */
 export function fullText(words: string): string {
 	return `fullText contains '${words.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
@@ -143,7 +159,14 @@ function searchOf(args: Record<string, unknown>): { q: string; ranked: boolean }
 	if (args.query !== undefined) {
 		if (typeof args.query !== "string" || args.query.length > 500)
 			throw new Error("Give a Drive search of at most 500 characters.");
-		if (args.query.trim() !== "") terms.push(`(${args.query})`);
+		if (args.query.trim() !== "") {
+			// the search stays inside its parentheses, so trashed files stay out
+			if (!enclosed(args.query) || /\btrashed\b/i.test(args.query))
+				throw new Error(
+					"Give a Drive search whose quotes and parentheses close, without trashed: trashed files are left out.",
+				);
+			terms.push(`(${args.query})`);
+		}
 	}
 	if (args.text !== undefined) {
 		if (typeof args.text !== "string" || args.text.length > 200)

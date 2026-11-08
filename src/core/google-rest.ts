@@ -63,6 +63,7 @@ async function googleResponse(
 	method: GoogleMethod,
 	body: unknown,
 	accept: string,
+	ifMatch?: string,
 ): Promise<Response> {
 	const { service } = api;
 	let response: Response;
@@ -73,6 +74,7 @@ async function googleResponse(
 			headers: {
 				authorization: `Bearer ${token}`,
 				accept,
+				...(ifMatch === undefined ? {} : { "if-match": ifMatch }),
 				...(body === undefined ? {} : { "content-type": "application/json" }),
 			},
 			...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -153,15 +155,22 @@ export async function googleRequest(
 	limit = MAX_RESPONSE_BYTES,
 	method: GoogleMethod = "GET",
 	body?: unknown,
+	/** The version the change was made from: Google refuses it (412) when the thing changed since. */
+	ifMatch?: string,
 ): Promise<unknown> {
-	const response = await googleResponse(api, fetcher, token, path, signal, method, body, "application/json");
+	const response = await googleResponse(api, fetcher, token, path, signal, method, body, "application/json", ifMatch);
 	// a deletion answers 204 with nothing to read
 	if (response.status === 204) {
 		await response.body?.cancel();
 		return {};
 	}
 	const { bytes } = await boundedBytes(response, api.service, limit, false);
-	return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+	try {
+		return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+	} catch {
+		// the parser's own words quote the answer
+		throw new Error(`${api.service} answered something that is not JSON`);
+	}
 }
 
 /**

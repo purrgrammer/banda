@@ -481,10 +481,16 @@ function calendarUrl(value: string | undefined): string | undefined {
 }
 
 /** A call's address may be any https host a calendar names; the link says which, so a lookalike is visible. */
-function callUrl(value: string | undefined): URL | undefined {
+/** The video call services a Join button may open; a link from an invitation to any other host is not one. */
+const CALL_HOSTS = ["meet.google.com", "zoom.us", "teams.microsoft.com", "teams.live.com", "webex.com", "whereby.com"];
+
+export function callUrl(value: string | undefined): URL | undefined {
 	try {
 		const url = new URL(value ?? "");
-		return url.protocol === "https:" && url.username === "" && url.password === "" ? url : undefined;
+		const known = CALL_HOSTS.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
+		return url.protocol === "https:" && url.port === "" && url.username === "" && url.password === "" && known
+			? url
+			: undefined;
 	} catch {
 		return undefined;
 	}

@@ -321,6 +321,12 @@ describe("Google Calendar REST connection", () => {
 		expect(refused).not.toHaveBeenCalled();
 	});
 
+	it("an answer that is not JSON is said in words, never with what it held", async () => {
+		const odd = vi.fn<typeof fetch>().mockResolvedValue(new Response("<html>secret page", { status: 200 }));
+		const said = await call(odd, "get_profile");
+		expect(said).toEqual({ text: "Google Calendar answered something that is not JSON", isError: true });
+	});
+
 	it("lets the shared OAuth path refresh a rejected token, and never puts the URL or token in an error", async () => {
 		await expect(
 			call(vi.fn<typeof fetch>().mockResolvedValue(new Response("", { status: 401 })), "get_profile"),
@@ -634,15 +640,35 @@ describe("Google Calendar changes", () => {
 				],
 			},
 		});
-		const titled = vi.fn<typeof fetch>().mockResolvedValue(response({ id: "evt1" }));
+		// the event is read first: the change is made from that version, and refused if the event changed since
+		const titled = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(response({ id: "evt1", etag: '"7"', description: "Old notes" }))
+			.mockResolvedValue(response({ id: "evt1" }));
 		await write(titled, "update_event", { event_id: `calendar/${event}`, description: "New notes" });
-		expect(titled).toHaveBeenCalledTimes(1);
-		expect(sent(titled)).toEqual({
+		expect(titled).toHaveBeenCalledTimes(2);
+		expect(sent(titled, 1)).toEqual({
 			method: "PATCH",
 			path: "calendars/primary/events/evt1",
 			params: { sendUpdates: "all" },
 			body: { description: "New notes" },
 		});
+		expect(new Headers(titled.mock.calls[1]?.[1]?.headers).get("if-match")).toBe('"7"');
+		const moved = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(response({ id: "evt1", etag: '"7"' }))
+			.mockResolvedValue(response({ error: { code: 412 } }, 412));
+		expect((await write(moved, "update_event", { event_id: `calendar/${event}`, description: "x" })).text).toContain(
+			"The event changed while this change waited",
+		);
+		// run again after a crash: the event holds the change already, so nothing is sent and no one is told twice
+		const again = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(response({ id: "evt1", etag: '"8"', description: "New notes" }));
+		expect(
+			(await write(again, "update_event", { event_id: `calendar/${event}`, description: "New notes" })).isError,
+		).toBe(false);
+		expect(again).toHaveBeenCalledTimes(1);
 	});
 
 	it("answers an invitation as the owner's attendee, telling the organizer, and refuses one not theirs", async () => {
@@ -697,7 +723,10 @@ describe("Google Calendar changes", () => {
 		});
 		for (const status of [404, 410]) {
 			const gone = vi.fn<typeof fetch>().mockResolvedValue(response({ error: { code: status } }, status));
-			expect((await write(gone, "delete_event", { event_id: event })).isError).toBe(false);
+			const said = await write(gone, "delete_event", { event_id: event });
+			expect(said.isError).toBe(false);
+			// it does not claim a deletion it may not have made
+			expect(JSON.parse(said.text).already).toContain("was not there");
 			expect(gone).toHaveBeenCalledTimes(1);
 		}
 		const other = vi.fn<typeof fetch>().mockResolvedValue(response({ error: { code: 403 } }, 403));

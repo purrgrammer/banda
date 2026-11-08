@@ -116,6 +116,14 @@ describe("Google Drive REST connection", () => {
 		});
 	});
 
+	it("keeps a Drive search inside its parentheses, so trashed files stay out", async () => {
+		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ files: [] }));
+		for (const query of ["x') or (trashed = true", "name = 'a') or (name = 'b'", "trashed = true", "name = 'open"])
+			expect((await call(fetcher, "search_files", { query })).isError).toBe(true);
+		expect(fetcher).not.toHaveBeenCalled();
+		expect((await call(fetcher, "search_files", { query: "name contains 'Q1 (draft)'" })).isError).toBe(false);
+	});
+
 	it("escapes words into one fullText term, ranked by relevance, beside a Drive query", async () => {
 		expect(fullText("it's a \\ test")).toBe("fullText contains 'it\\'s a \\\\ test'");
 		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ files: [] }));

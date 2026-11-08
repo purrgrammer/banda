@@ -576,6 +576,28 @@ function made(calendarId: string, event: Json, fallbackId: string) {
  * are the same request again, and an event already gone is deleted. Never retried here: Google may have applied it.
  * Error text never contains a URL, response body, or token.
  */
+/** Whether an event's field already holds what a change would set: a time by its instant or date, guests by address. */
+function holds(current: unknown, wanted: unknown): boolean {
+	if (Array.isArray(wanted)) {
+		if (!Array.isArray(current) || current.length !== wanted.length) return false;
+		const key = (each: unknown) => {
+			const one = object(each);
+			return `${String(one.email ?? "").toLowerCase()}|${String(one.responseStatus ?? "")}|${String(one.comment ?? "")}`;
+		};
+		const have = new Set(current.map(key));
+		return wanted.every((each) => have.has(key(each)));
+	}
+	if (typeof wanted === "object" && wanted !== null) {
+		const want = object(wanted);
+		const have = object(current);
+		if (typeof want.date === "string") return have.date === want.date;
+		if (typeof want.dateTime === "string")
+			return typeof have.dateTime === "string" && Date.parse(have.dateTime) === Date.parse(want.dateTime);
+		return false;
+	}
+	return current === wanted || ((current === undefined || current === "") && wanted === "");
+}
+
 export async function calendarWriteCall(
 	token: string,
 	name: string,
@@ -584,10 +606,37 @@ export async function calendarWriteCall(
 	fetcher: typeof fetch = fetch,
 	key?: string,
 ): Promise<McpResult> {
-	const request = (path: string, method: GoogleMethod = "GET", body?: unknown) =>
-		googleRequest(CALENDAR, fetcher, token, path, signal, undefined, method, body);
+	const request = (path: string, method: GoogleMethod = "GET", body?: unknown, ifMatch?: string) =>
+		googleRequest(CALENDAR, fetcher, token, path, signal, undefined, method, body, ifMatch);
 	const eventPath = (calendarId: string, id: string) =>
 		`calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`;
+	/**
+	 * A change to an event, made from the event as just read: nothing is sent when it holds the change already (a
+	 * change run again after a crash notifies no one twice), and Google refuses it if the event changed since.
+	 */
+	const changeEvent = async (
+		ref: { readonly calendarId: string; readonly eventId: string },
+		event: Json,
+		change: Json,
+		sendUpdates: string,
+	): Promise<Json> => {
+		if (Object.entries(change).every(([field, value]) => holds(event[field], value))) return event;
+		const etag = typeof event.etag === "string" ? event.etag : undefined;
+		try {
+			return object(
+				await request(
+					`${eventPath(ref.calendarId, ref.eventId)}?${new URLSearchParams({ sendUpdates })}`,
+					"PATCH",
+					change,
+					etag,
+				),
+			);
+		} catch (error) {
+			if (error instanceof GoogleError && error.status === 412)
+				throw new Error("The event changed while this change waited: read it again, then draft the change anew.");
+			throw error;
+		}
+	};
 	try {
 		let answer: unknown;
 		switch (name) {
@@ -638,10 +687,13 @@ export async function calendarWriteCall(
 				if (given(args, "location")) change.location = textArg(args, "location", MAX_LOCATION, "a location").trim();
 				if (given(args, "description"))
 					change.description = textArg(args, "description", MAX_DESCRIPTION, "a description");
-				if (given(args, "attendees")) {
-					const guests = guestsOf(args.attendees);
+				const guests = given(args, "attendees") ? guestsOf(args.attendees) : undefined;
+				if (Object.keys(change).length === 0 && guests === undefined) throw new Error("Say what to change.");
+				// every word is checked before Google is asked; the event is then read once, for its guests and its version
+				const event = object(await request(eventPath(ref.calendarId, ref.eventId)));
+				if (guests !== undefined) {
 					// the guests kept keep their answers; the owner, the organizer and rooms are never dropped
-					const current = attendeesOf(object(await request(eventPath(ref.calendarId, ref.eventId))));
+					const current = attendeesOf(event);
 					const kept = current.filter(
 						(each) => each.self === true || each.organizer === true || each.resource === true,
 					);
@@ -651,9 +703,7 @@ export async function calendarWriteCall(
 						.map((email) => byEmail.get(email.toLowerCase()) ?? { email });
 					change.attendees = [...kept, ...listed];
 				}
-				if (Object.keys(change).length === 0) throw new Error("Say what to change.");
-				const params = new URLSearchParams({ sendUpdates: sendUpdatesOf(args.send_updates) });
-				const changed = object(await request(`${eventPath(ref.calendarId, ref.eventId)}?${params}`, "PATCH", change));
+				const changed = await changeEvent(ref, event, change, sendUpdatesOf(args.send_updates));
 				answer = made(ref.calendarId, changed, ref.eventId);
 				break;
 			}
@@ -672,22 +722,26 @@ export async function calendarWriteCall(
 						: each,
 				);
 				// the organizer hears the answer
-				const answered = object(
-					await request(`${eventPath(ref.calendarId, ref.eventId)}?sendUpdates=all`, "PATCH", { attendees }),
-				);
+				const answered = await changeEvent(ref, event, { attendees }, "all");
 				answer = made(ref.calendarId, answered, ref.eventId);
 				break;
 			}
 			case "delete_event": {
 				const ref = refOf(args.event_id);
 				const params = new URLSearchParams({ sendUpdates: sendUpdatesOf(args.send_updates) });
+				let gone = false;
 				try {
 					await request(`${eventPath(ref.calendarId, ref.eventId)}?${params}`, "DELETE");
 				} catch (error) {
-					// gone already: deleted by this change before a crash cut its run short, or by someone else
+					// gone already: deleted by this change before a crash cut its run short, or by someone else; said so
 					if (!(error instanceof GoogleError) || (error.status !== 404 && error.status !== 410)) throw error;
+					gone = true;
 				}
-				answer = { ok: true, ref: `calendar/${eventRef(ref.calendarId, ref.eventId)}` };
+				answer = {
+					ok: true,
+					ref: `calendar/${eventRef(ref.calendarId, ref.eventId)}`,
+					...(gone ? { already: "The event was not there: it was deleted before, or never existed." } : {}),
+				};
 				break;
 			}
 			default:
