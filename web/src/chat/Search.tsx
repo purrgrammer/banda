@@ -101,6 +101,7 @@ export function Search({
 	onRetry,
 	phone = false,
 	onCancel,
+	autoFocus = true,
 }: {
 	query: string;
 	onQuery?: (query: string) => void;
@@ -115,6 +116,8 @@ export function Search({
 	onRetry?: (() => void) | undefined;
 	phone?: boolean;
 	onCancel?: () => void;
+	/** The field takes focus as it appears; off where several show at once and none is open (the specimen). */
+	autoFocus?: boolean;
 }) {
 	const typed = query.trim() !== "";
 	const pick = (value: string) => () => onPick?.(value);
@@ -140,7 +143,7 @@ export function Search({
 			<div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-line-soft px-3.5">
 				<SearchIcon className="size-4 shrink-0 text-ink-2" />
 				<CommandPrimitive.Input
-					autoFocus
+					autoFocus={autoFocus}
 					aria-label="Search banda"
 					placeholder="Search banda"
 					value={query}

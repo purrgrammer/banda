@@ -45,7 +45,7 @@ describe("shipped avatar instructions", () => {
 			for (const group of [false, true]) {
 				const tools = chatTools({ id, tools: [] }, [name, "message_user", "schedule"], [], group);
 				expect(tools).toContain(name);
-				expect(tools).not.toContain("write");
+				for (const tool of ["write", "bash"]) expect(tools).toContain(tool);
 				if (group) {
 					for (const tool of [
 						"message_agent",

@@ -26,7 +26,6 @@ import { context } from "./store.ts";
 import { DEFAULT_TIER, isTier, modelFor, TIERS, type Tier } from "./tiers.ts";
 import {
 	DIRECT_META_TOOLS,
-	EGRESS_TOOLS,
 	EVERY_AGENT,
 	GROUP_TOOLS,
 	groupToolsName,
@@ -45,7 +44,7 @@ export const AGENT_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 /** What an agent file may weigh. */
 export const MAX_AGENT_BYTES = 64 * 1024;
 
-export { ALWAYS_TOOLSETS, EVERY_AGENT, TOOLSETS } from "./toolsets.ts";
+export { EVERY_AGENT, TOOLSETS } from "./toolsets.ts";
 
 /** An agent as its accepted file says. */
 export type Agent = {
@@ -358,10 +357,7 @@ function unquote(value: string): string {
  * those its file names (the lead: `all`), once each.
  */
 export function toolsOf(agent: Pick<Agent, "id" | "tools">, all: readonly string[]): string[] {
-	const named = agent.id === LEAD ? all : agent.tools;
-	// its commands' writes are held: an agent that runs them may ask about them
-	const asking = agent.id !== LEAD && named.includes("bash") ? EGRESS_TOOLS : [];
-	return [...new Set([...EVERY_AGENT, ...named, ...asking])];
+	return [...new Set([...EVERY_AGENT, ...(agent.id === LEAD ? all : agent.tools)])];
 }
 
 /**
@@ -385,12 +381,12 @@ export function chatTools(
 					all.filter((tool) => !tool.includes("__") || connected.includes(tool)),
 				);
 	if (tools === undefined) return undefined;
+	// a group member's chat has the same base as its own, but the meta tools and the face
+	const inGroupChat = (tool: string) =>
+		tool !== PROPOSE_AVATAR && !DIRECT_META_TOOLS.includes(tool as (typeof DIRECT_META_TOOLS)[number]);
 	// a group member speaks to its room, and nowhere else does an agent post to one
 	const speaking = tools.filter(
-		(tool) =>
-			tool !== MESSAGE_USER &&
-			tool !== MESSAGE_GROUP &&
-			(!group || (tool !== PROPOSE_AVATAR && !DIRECT_META_TOOLS.includes(tool as (typeof DIRECT_META_TOOLS)[number]))),
+		(tool) => tool !== MESSAGE_USER && tool !== MESSAGE_GROUP && (!group || inGroupChat(tool)),
 	);
 	return group ? [MESSAGE_GROUP, ...speaking] : [MESSAGE_USER, ...speaking];
 }

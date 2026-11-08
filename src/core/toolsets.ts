@@ -28,15 +28,6 @@ export const TOOLSETS: { readonly [name: string]: readonly string[] } = {
 	],
 };
 
-/**
- * What an agent that runs commands may ask about what its proxy held: to send one request, or to be allowed hosts. Its
- * commands' writes are held whatever its file lists, so it gets both with `bash`.
- */
-export const EGRESS_TOOLS = ["propose_send", "ask_hosts"] as const;
-
-/** Every agent can keep a promise with routines and maintain its scoped memory, whatever its file lists. */
-export const ALWAYS_TOOLSETS = ["routines", "memory"] as const;
-
 /** How an agent speaks to the owner, in its own chats. */
 export const MESSAGE_USER = "message_user";
 /** How a group member speaks, in its room: in its chat for the group, in place of `message_user`. */
@@ -110,19 +101,16 @@ export const groupToolsName = (chat: number) => `${GROUP_TOOLS}:${chat}`;
 /** Whether extension `name` is a group's, which only its members' chats select. */
 export const isGroupTools = (name: string) => name === GROUP_TOOLS || name.startsWith(`${GROUP_TOOLS}:`);
 
-/** The tools every direct agent chat gets: speaking, meta tools, shipped avatar guidance and always-included toolsets. */
+/**
+ * The tools every agent chat gets, a group member's too: all of banda's own. Only a connection's tools stay outside, by
+ * account. What leaves the box is held whatever a chat may run: `requests` (`propose_send`, `ask_hosts`) is how the agent
+ * asks the owner about it, so being base, it widens nothing.
+ */
 export const EVERY_AGENT: readonly string[] = [
 	MESSAGE_USER,
 	...OWNER_ACTS,
 	"tool_search",
-	MESSAGE_AGENT,
-	READ_AGENT_CHAT,
-	PROPOSE_AGENT,
-	PROPOSE_GROUP,
-	PROPOSE_AGENT_CHANGE,
-	"read_avatar_instructions",
-	"skill",
 	"search",
 	"read_search_result",
-	...ALWAYS_TOOLSETS.flatMap((label) => TOOLSETS[label] ?? []),
+	...Object.values(TOOLSETS).flat(),
 ];

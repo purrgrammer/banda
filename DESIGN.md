@@ -118,7 +118,10 @@ one that gives them one more thing to manage stays out.
   ("Mara can't answer: your Anthropic sign-in expired · Sign in again").
 - **The sidebar** is the band: one row per agent and one per group, and nothing else. A row is the agent's face
   (40px) or the group's faces (two overlapping; more, a count), its name, one line of its last message ("You: " when
-  the owner wrote it), the time at the right and an unread count. Rows order by the latest message. Unread rows get a
+  the owner wrote it), the time at the right and an unread count. Rows order by the latest message. Pinned agents and
+  groups sit above the rows as tiles of one size, three to a row and scrolling sideways past that; a tile shows what it
+  wants of the owner at its face's foot, the unread count or a dot while it waits, and is pinned from its own corner
+  (on the phone, by a long press). Unread rows get a
   bold name, an ink excerpt and an ink count on a neutral pill; read rows are muted. When an ask is open in a chat,
   its excerpt reads the ask in ink ("Waiting: send the email to Ana?"), a dot marks its face, and
   the tab's title counts asks before unread; on the desktop an open ask also fires a local notification, which needs
@@ -172,7 +175,8 @@ one that gives them one more thing to manage stays out.
   task"). Every other permission is granted and revoked from the Access tab of the agent's panel. An agent's
   change to its own file is a card showing the resulting text in full, the old behind "What it was", with Allow and
   Keep as is. A "waiting on you" pill sits above the composer when an open ask is out of view; tapping it scrolls
-  there.
+  there. A card with nothing left to do folds into one row of the feed, what was done and to what, with the card
+  behind it; who did it is said only in a group, as on messages.
 - **Activity has three depths**: the quiet status in chat; a readable timeline opened from that status or a quiet
   action beside a message's Copy; the full transcript, opened by any timeline item in the same sheet, with a way back.
   Hover, focus or a phone's long press reveals a message's actions. The sheet is full-width on the phone. It inspects
@@ -268,8 +272,10 @@ answered by a control, never by typing its id.
   what and the fix ("Mara's computer is off · Start it"), never the daemon's words. A tap always says in words what
   it will do. The agent says when it is unsure, in words.
 - shadcn and ai-elements first (`prompt-input`, `attachments`, `web-preview`, `avatar`, `command`, `sheet`, `drawer`,
-  `sonner`), each taking the app's tokens and joining the specimen. Everything the app needs ships with it: fonts,
-  icons and logos load from the daemon, never a third party, so opening the app tells no one anything.
+  `sonner`), each taking the app's tokens and joining the specimen. The specimen is the app's index: each section says
+  whether it is in the app, a proposal or an exploration, and which component it shows; it never shows a copy of one.
+  Everything the app needs ships with it: fonts, icons and logos load from the daemon, never a third party, so opening
+  the app tells no one anything.
 
 ## Agents
 An agent file is frontmatter plus its personality. Its filename is its stable id; the owner sees its editable name
@@ -714,7 +720,8 @@ A fact is one line and may name its source in the line itself; a box-written sou
 Its id binds its file and words. Shared facts and the current agent's facts render into a prompt section; a change
 reaches every affected chat at its next model boundary without resetting the chat. Facts are context, never permission
 or an accepted change to personality. The owner reads, adds, edits and deletes facts in the agent's Memory controls;
-Settings shows the same shared facts, not a copy. A deletion removes the fact from its file and the derived search
+Settings shows the same shared facts, not a copy. Who wrote a fact is the owner's to see; the agent never reads it. A
+deletion removes the fact from its file and the derived search
 index, whose pages are scrubbed; what was said in chats stays.
 - **Other people.** A fact about someone else names them and the owner's task it serves and stays agent-scoped,
   never in the band's shared memory.

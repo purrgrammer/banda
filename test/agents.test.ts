@@ -16,10 +16,12 @@ import {
 	agentText,
 	ChatAgent,
 	ChatTier,
+	chatTools,
 	EVERY_AGENT,
 	LEAD_TEXT,
 	parseAgent,
 	shaOf,
+	TOOLSETS,
 	toolsOf,
 } from "../src/core/agents.ts";
 import { writeAvatarFace } from "../src/core/avatar-face.ts";
@@ -39,15 +41,14 @@ describe("agent files", () => {
 	it("the lead's file parses, and the lead gets every tool; another agent, what every agent gets and what it names", () => {
 		const parsed = parseAgent("sancho", LEAD_TEXT);
 		if (!("agent" in parsed)) throw new Error(parsed.errors.join("; "));
-		expect(toolsOf(parsed.agent, ["read", "bash", "message_user"])).toEqual([...EVERY_AGENT, "read", "bash"]);
+		expect(toolsOf(parsed.agent, ["read", "bash", "message_user"])).toEqual([...EVERY_AGENT]);
 		expect(parsed.agent.instructions).toMatch(/^You are the owner's lead agent\./);
 		expect(errorsOf("---\ndescription: x\ntools: [read]\n---\n", "sancho")).toEqual([
 			`the lead gets every tool: drop "tools"`,
 		]);
 		const helper = parseAgent("helper", "---\ndescription: x\ntools: [read, bash, read]\n---\n");
 		if (!("agent" in helper)) throw new Error(helper.errors.join("; "));
-		// it runs commands, so it may ask about what its proxy held
-		expect(toolsOf(helper.agent, ["write"])).toEqual([...EVERY_AGENT, "read", "bash", "propose_send", "ask_hosts"]);
+		expect(toolsOf(helper.agent, ["write"])).toEqual([...EVERY_AGENT]);
 		expect(toolsOf({ ...helper.agent, tools: [] }, [])).toEqual([...EVERY_AGENT]);
 	});
 
@@ -60,7 +61,44 @@ describe("agent files", () => {
 			tools: [...always, "read"],
 		});
 		if (!("agent" in listed)) throw new Error(listed.errors.join("; "));
-		expect(toolsOf(listed.agent, [])).toEqual([...EVERY_AGENT, "read"]);
+		expect(toolsOf(listed.agent, [])).toEqual([...EVERY_AGENT]);
+	});
+
+	it("a group member's chat has the same base as its own, speaking with message_group in place of message_user", () => {
+		const base = [
+			"read",
+			"write",
+			"edit",
+			"skill",
+			"bash",
+			"web_fetch",
+			"propose_send",
+			"ask_hosts",
+			...TOOLSETS.browser,
+			"schedule",
+			"remember",
+			"tool_search",
+			"search",
+		];
+		const group = chatTools({ id: "helper", tools: [] }, [], [], true) ?? [];
+		const direct = chatTools({ id: "helper", tools: [] }, [], [], false) ?? [];
+		for (const tool of base) expect(group, tool).toContain(tool);
+		expect(group).toContain("message_group");
+		expect(group).not.toContain("message_user");
+		expect(direct).toContain("message_user");
+		expect(direct).not.toContain("message_group");
+		// the meta tools and the face stay the agent's own chat's: the one difference besides how it speaks
+		const directOnly = [
+			"propose_avatar",
+			"message_agent",
+			"read_agent_chat",
+			"propose_agent",
+			"propose_group",
+			"propose_agent_change",
+		];
+		expect(new Set(direct.filter((tool) => !directOnly.includes(tool) && tool !== "message_user"))).toEqual(
+			new Set(group.filter((tool) => tool !== "message_group")),
+		);
 	});
 
 	it("takes lists both ways, quotes, a model, and keeps the body as instructions", () => {
@@ -227,14 +265,14 @@ describe("a chat runs its agent", () => {
 				const state = await tx.doc(AgentDoc, got.chat as ConversationId);
 				return { tools: [...(state.tools as string[])], model: { ...state.model } };
 			}, context);
-		expect(await agentOf()).toEqual({ tools: [...EVERY_AGENT, "read"], model: FAUX_MODEL });
+		expect(await agentOf()).toEqual({ tools: [...EVERY_AGENT], model: FAUX_MODEL });
 		expect((await harness.snapshot(Routes, context))?.chats[got.chat]?.agent).toBe("reader");
 		const changed = "---\ndescription: reader, changed\ntier: quick\ntools: [read, bash]\n---\nNew instructions.\n";
 		await harness.commit(async (tx) => {
 			(await tx.doc(Accepted)).files[agentPath("reader")] = { sha: shaOf(changed), text: changed, at: 1 };
 			await core.agentChanged(tx, "reader");
 		}, context);
-		expect((await agentOf()).tools).toEqual([...EVERY_AGENT, "read", "bash", "propose_send", "ask_hosts"]);
+		expect((await agentOf()).tools).toEqual([...EVERY_AGENT]);
 		expect((await harness.snapshot(ChatAgent, got.chat as ConversationId, context))?.agent?.instructions).toBe(
 			"New instructions.",
 		);

@@ -80,11 +80,25 @@ describe("a chat's prompt", () => {
 				"ask_user",
 				"bash",
 				"edit",
+				"forget",
+				"message_agent",
 				"message_user",
+				"propose_agent",
+				"propose_agent_change",
+				"propose_group",
 				"publish",
 				"react",
 				"read",
+				"read_agent_chat",
+				"read_avatar_instructions",
+				"read_search_result",
+				"recall",
+				"remember",
+				"schedule",
+				"search",
+				"skill",
 				"tool_search",
+				"web_fetch",
 				"write",
 			]);
 			const discovery = body.tools.find((tool) => tool.name === "tool_search")!;
@@ -94,10 +108,9 @@ describe("a chat's prompt", () => {
 			expect(JSON.stringify(body)).not.toContain(token);
 			expect((await api(`/chats/999999/prompt`)).status).toBe(404);
 			faux.setResponses([
-				fauxAssistantMessage([fauxToolCall("tool_search", { query: "read_avatar_instructions", limit: 1 })], {
+				fauxAssistantMessage([fauxToolCall("tool_search", { query: "propose_avatar", limit: 1 })], {
 					stopReason: "toolUse",
 				}),
-				fauxAssistantMessage([fauxToolCall("read_avatar_instructions", {})], { stopReason: "toolUse" }),
 				fauxAssistantMessage([fauxToolCall("message_user", { text: "Found the face instructions." })], {
 					stopReason: "toolUse",
 				}),
@@ -117,15 +130,17 @@ describe("a chat's prompt", () => {
 				(item) => item.role === "assistant" && item.calls?.some((call) => call.name === "tool_search"),
 			)!;
 			const loaded = entries.find(
-				(item) => item.role === "assistant" && item.calls?.some((call) => call.name === "read_avatar_instructions"),
+				(item) =>
+					item.role === "assistant" && item.id > search.id && item.calls?.some((call) => call.name === "message_user"),
 			)!;
 			const before = (await api<ChatPrompt>(`/chats/${chat}/prompt?at=${search.id}`)).body;
 			const after = (await api<ChatPrompt>(`/chats/${chat}/prompt?at=${loaded.id}`)).body;
-			expect(before.tools.map((tool) => tool.name)).not.toContain("read_avatar_instructions");
-			expect(after.tools.map((tool) => tool.name)).toContain("read_avatar_instructions");
-			// propose_avatar is still to load: the group stays until none of its tools is left
+			expect(before.tools.map((tool) => tool.name)).not.toContain("propose_avatar");
+			expect(after.tools.map((tool) => tool.name)).toContain("propose_avatar");
+			// its group leaves once none of its tools is left to load; connect is still to load
 			expect(before.system).toMatch(/On demand: .*\bavatar\b/);
-			expect(after.system).toMatch(/On demand: .*\bavatar\b/);
+			expect(after.system).not.toMatch(/On demand: .*\bavatar\b/);
+			expect(after.system).toMatch(/On demand: .*\bconnections\b/);
 			expect(entries.filter((item) => item.role === "tool" && item.error)).toEqual([]);
 		} finally {
 			await daemon.close();
