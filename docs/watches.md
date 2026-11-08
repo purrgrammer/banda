@@ -106,7 +106,14 @@ returned to and merged, at desktop and phone width.
   (needs a sync token, not a moving window); a contact followed (the pass's account had no saved contacts); a
   calendar event's link carries its id encoded, so an event is followed from its card alone
 - [ ] A watch's file has no editor field and the `watch` tool no parameter for `wakes_a_day`; an issue's and a pull
-  request's comments are read one page of a hundred, so comments past the hundredth are never seen
+  request's comments and reviews are read one page of a hundred, so what is past the hundredth is never seen (the
+  object's own counts are the totals for issue and pull request comments, so a comment off the page is never said
+  gone; reviews have no such count)
+- [ ] Reads cost: a pull request is four requests a look (pr, checks, reviews, comments), every two minutes while
+  busy, so twenty busy pull requests are ~2,400 requests an hour against GitHub's 5,000 per token, and sharing a
+  reading saves only on one object. Either a `when` on a read (checks only while a check runs or the head moved,
+  the answer before carried forward), a cadence per read, or one read of a fixed query (GitHub's MCP server lists no
+  GraphQL tool, so that is a Connections change). Decide by how many watches a home is expected to hold
 - [x] **A look pushes the whole shell.** A watch's task waking and sleeping was a task-graph change the shell stream
   pushed everything for, every two to thirty minutes per watch and per client; `chats`, `control` and `agents` were
   written whether or not they changed, and the watches area watched no doc of its own. Now the area owns its state

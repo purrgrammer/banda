@@ -373,7 +373,8 @@ draws as cards, from scripts/github-objects.ts.
 					"checks.check_runs": "name"
 				},
 				"totals": {
-					"checks.check_runs": "checks.total_count"
+					"checks.check_runs": "checks.total_count",
+					"comments": "pr.review_comments"
 				},
 				"ignore": [
 					"pr.updated_at",

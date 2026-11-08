@@ -61,7 +61,7 @@ export const GITHUB_OBJECTS = {
 		// is noise, whose items are the account's own, what wakes and what only tells, and what ends the watch
 		follow: {
 			keys: { "checks.check_runs": "name" },
-			totals: { "checks.check_runs": "checks.total_count" },
+			totals: { "checks.check_runs": "checks.total_count", comments: "pr.review_comments" },
 			ignore: [
 				"pr.updated_at",
 				"pr.comments",
