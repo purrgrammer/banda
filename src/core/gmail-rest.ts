@@ -189,6 +189,12 @@ function attachmentsOf(payload: unknown): GmailAttachment[] {
 	return found;
 }
 
+/** The address alone of a From header (`Ana <ana@example.com>`), lowercase: whose a message is, as the account says it. */
+export function addressOf(from: string): string {
+	const address = /<([^<>\s]+@[^<>\s]+)>\s*$/.exec(from)?.[1] ?? /^\s*([^<>\s"]+@[^<>\s"]+)\s*$/.exec(from)?.[1] ?? "";
+	return address.toLowerCase().slice(0, 320);
+}
+
 function messageOf(raw: unknown) {
 	const msg = object(raw);
 	const payload = object(msg.payload);
@@ -201,6 +207,7 @@ function messageOf(raw: unknown) {
 		id: typeof msg.id === "string" ? msg.id : "",
 		threadId: typeof msg.threadId === "string" ? msg.threadId : "",
 		from: header("From"),
+		fromAddress: addressOf(header("From")),
 		to: header("To"),
 		cc: header("Cc"),
 		subject: header("Subject"),
@@ -486,6 +493,7 @@ export async function gmailCall(
 								? { threadId: msg.threadId }
 								: {}),
 							from: get("From"),
+							fromAddress: addressOf(get("From")),
 							subject: get("Subject"),
 							date: get("Date"),
 							snippet: typeof msg.snippet === "string" ? msg.snippet.slice(0, 2000) : "",
@@ -513,9 +521,17 @@ export async function gmailCall(
 				if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,200}$/.test(id))
 					throw new Error("Give a valid conversation id.");
 				const thread = object(await request(fetcher, token, `threads/${encodeURIComponent(id)}?format=full`, signal));
+				const all = Array.isArray(thread.messages) ? thread.messages : [];
+				const messages = all.slice(-25).map(messageOf);
 				answer = {
 					id: thread.id,
-					messages: (Array.isArray(thread.messages) ? thread.messages : []).slice(-25).map(messageOf),
+					// the conversation's subject: its first message's, which may be older than the newest 25
+					subject: all.length === 0 ? "" : messageOf(all[0]).subject,
+					// how many it has, though only the newest 25 are given: an older one gone from them is not gone
+					total: all.length,
+					// the conversation's labels, as Gmail shows them on it: any of its messages'
+					labels: [...new Set(messages.flatMap((message) => message.labels))].slice(0, 50),
+					messages,
 				};
 				break;
 			}
