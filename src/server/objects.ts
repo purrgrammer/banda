@@ -268,12 +268,16 @@ export function openObjects({
 			const files = (await harness.snapshot(Accepted, ctx))?.files ?? {};
 			follow = {
 				ends: Object.keys(kind.follow.ends),
+				// a watch is its accepted file: one stopped (its file gone) follows nothing, whatever record it left
 				by: Object.entries(records)
-					.filter(([, record]) => record.key === key && record.done === undefined)
+					.filter(
+						([watch, record]) =>
+							record.key === key && record.done === undefined && files[watchPath(watch)] !== undefined,
+					)
 					.map(([watch, record]) => {
-						const file = files[watchPath(watch)];
-						const parsed = file === undefined ? undefined : parseWatch(watch, file.text);
-						const until = parsed !== undefined && "watch" in parsed ? parsed.watch.until : record.until;
+						const file = files[watchPath(watch)] as (typeof files)[string];
+						const parsed = parseWatch(watch, file.text);
+						const until = "watch" in parsed ? parsed.watch.until : record.until;
 						return { watch, agent: watchAgent(record), ...(until === undefined ? {} : { until }) };
 					}),
 			};

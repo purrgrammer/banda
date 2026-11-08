@@ -7,11 +7,12 @@ import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
 import { Accepted, AgentChats, shaOf } from "../src/core/agents.ts";
 import { Connected, credentialsOf, keepCredentials } from "../src/core/connections.ts";
 import { OWNER } from "../src/core/gateway.ts";
-import { Readings } from "../src/core/objects.ts";
+import { Readings, readingKey } from "../src/core/objects.ts";
 import { Permissions } from "../src/core/permissions.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context } from "../src/core/store.ts";
 import { answer } from "../src/core/wait.ts";
+import { Watches, watchPath } from "../src/core/watches.ts";
 import { openObjects } from "../src/server/objects.ts";
 import { openConnected, signInAsOwner } from "./fixtures/connected.ts";
 import { githubObjectFile, startGithubObjects } from "./fixtures/github-objects.ts";
@@ -496,4 +497,17 @@ it("scrubs the credential used by a response even if its file rotates mid-call",
 	expect(shown[0]).toMatchObject({ shown: "card", card: { title: "Bearer [a credential, hidden]" } });
 	for (const secret of s.fake.tokens)
 		expect(JSON.stringify(await s.harness.snapshot(Readings, context))).not.toContain(secret);
+});
+it("a card's follow line names the watches on it whose files stand: one stopped, its record left behind, is not following", async () => {
+	const s = await setup();
+	const key = readingKey("alice", "github:issue:acme/banda#35");
+	const text = "---\nobject: https://github.com/acme/banda/issues/35\naccount: alice\n---\nTell me.\n";
+	await s.harness.commit(async (tx) => {
+		(await tx.doc(Accepted)).files[watchPath("banda-35")] = { text, sha: shaOf(text), at: 1 };
+		const { watches } = await tx.doc(Watches);
+		for (const name of ["banda-35", "banda-35-2"])
+			watches[name] = { agent: "reader", since: 1, key, ref: "github:issue:acme/banda#35", sha: shaOf(text) };
+	}, context);
+	const shown = await s.service.show(s.chat, [{ ref: "https://github.com/acme/banda/issues/35" }]);
+	expect(shown[0]).toMatchObject({ shown: "card", follow: { by: [{ watch: "banda-35", agent: "reader" }] } });
 });

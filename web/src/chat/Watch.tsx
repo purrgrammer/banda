@@ -12,8 +12,9 @@ import { Tile } from "./Cards.tsx";
 import { Line } from "./Line.tsx";
 
 /** An object named in a quiet line, standing out: primary text; its title is the link the object draws itself. */
+/** The object a line names, with what sits right after it, never broken apart: the link truncates instead. */
 export function Named({ children }: { children: ReactNode }) {
-	return <span className="font-medium text-ink">{children}</span>;
+	return <span className="whitespace-nowrap font-medium text-ink">{children}</span>;
 }
 
 /**

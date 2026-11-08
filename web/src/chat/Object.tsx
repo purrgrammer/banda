@@ -434,8 +434,10 @@ function gmailUrl(value: string | undefined): string | undefined {
  * An object named inline is a link wherever it has an address, drawn the same whatever the service: the words, a
  * subtle underline that darkens on hover; without an address, the words alone.
  */
-const INLINE_LINK = "min-w-0 max-w-80 truncate underline decoration-line underline-offset-2 hover:decoration-ink";
-const INLINE_TEXT = "min-w-0 truncate";
+// a title's width is capped short of a phone's screen, so what follows it on a line (a colon, a time) stays beside it
+const INLINE_LINK =
+	"min-w-0 max-w-[min(20rem,calc(100vw-6rem))] truncate underline decoration-line underline-offset-2 hover:decoration-ink";
+const INLINE_TEXT = "min-w-0 max-w-[min(20rem,calc(100vw-6rem))] truncate";
 
 /** A reference in the owner's words, not another card. Inherit the bubble's ink in either theme. */
 export function ObjectLink({
