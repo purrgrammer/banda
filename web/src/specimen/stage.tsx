@@ -1,26 +1,41 @@
 /**
  * The specimen's stage: every section shows in light and dark side by side, or one of them, at desktop or phone width.
  * The theme resolves per frame (each frame sets its own `color-scheme`), so both show at once from the same tokens.
+ * A section's title, status and sources come from the registry; a section not registered there refuses to render.
  */
 
 import { createContext, type ReactNode, useContext } from "react";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
+import { type Entry, STATUS_WORDS, sectionOf } from "./registry.ts";
+import { hrefOf, type Scheme, type Width } from "./url.ts";
 
-export type Scheme = "both" | "light" | "dark";
-export type Width = "desktop" | "phone";
-export const StageContext = createContext<{ scheme: Scheme; width: Width }>({ scheme: "both", width: "desktop" });
+export type { Scheme, Width } from "./url.ts";
 
-/** One section: a title, a line saying what it is for, and its specimens in each frame. */
+export const StageContext = createContext<{
+	scheme: Scheme;
+	width: Width;
+	/** Set, only this section renders: the rest return nothing. */
+	only?: string;
+}>({ scheme: "both", width: "desktop" });
+
+/** The registered section, or an error naming the file to add it to. */
+function entryOf(id: string): Entry {
+	const entry = sectionOf(id);
+	if (entry === undefined)
+		throw new Error(`The specimen section "${id}" is not registered: add it to web/src/specimen/registry.ts`);
+	return entry;
+}
+
+/** One section: its title and badges from the registry, a line saying what it is for, and its specimens in each frame. */
 export function Section({
 	id,
-	title,
 	note,
 	bleed = false,
 	wide = false,
 	children,
 }: {
 	id: string;
-	title: string;
 	note?: string;
 	/** A whole screen: no padding, a fixed height. */
 	bleed?: boolean;
@@ -28,15 +43,39 @@ export function Section({
 	wide?: boolean;
 	children: ReactNode;
 }) {
-	const { scheme, width } = useContext(StageContext);
+	const entry = entryOf(id);
+	const { scheme, width, only } = useContext(StageContext);
+	if (only !== undefined && only !== id) return null;
 	const schemes: ("light" | "dark")[] = scheme === "both" ? ["light", "dark"] : [scheme];
 	return (
-		<section id={id} aria-labelledby={`${id}-title`} className="flex scroll-mt-16 flex-col gap-3">
-			<header className="flex flex-col gap-0.5">
-				<h2 id={`${id}-title`} className="text-heading font-semibold text-ink">
-					{title}
-				</h2>
+		<section id={id} aria-labelledby={`${id}-title`} className="flex scroll-mt-4 flex-col gap-3">
+			<header className="flex flex-col gap-1">
+				<div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+					<h2 id={`${id}-title`} className="text-heading font-semibold text-ink">
+						<a href={hrefOf({ section: id, scheme, width })} className="hover:underline">
+							{entry.title}
+						</a>
+					</h2>
+					<Badge variant={entry.status === "app" ? "secondary" : "outline"}>{STATUS_WORDS[entry.status]}</Badge>
+					{entry.only === undefined ? null : (
+						<Badge variant="outline">{entry.only === "phone" ? "Phone only" : "Desktop only"}</Badge>
+					)}
+					{only === undefined ? (
+						<a
+							href={hrefOf({ section: id, scheme, width, only: true })}
+							className="text-meta text-ink-2 hover:text-ink"
+							title="This section alone, with no header or contents"
+						>
+							Alone
+						</a>
+					) : null}
+				</div>
 				{note === undefined ? null : <p className="max-w-[var(--measure)] text-ui text-ink-2">{note}</p>}
+				<p className="flex flex-wrap gap-x-3 font-code text-meta text-ink-2">
+					{entry.sources.map((source) => (
+						<span key={source}>{source}</span>
+					))}
+				</p>
 			</header>
 			<div
 				className={cn(
@@ -85,12 +124,22 @@ function Frame({
 	);
 }
 
-/** A labelled group of specimens inside a frame. */
+/** A labelled group of specimens inside a frame, in a row that wraps. */
 export function Group({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
 	return (
 		<div className="flex flex-col gap-2.5">
 			<p className="text-meta font-medium text-ink-2">{label}</p>
 			<div className={cn("flex flex-wrap items-center gap-3", className)}>{children}</div>
+		</div>
+	);
+}
+
+/** One labelled specimen in a column: the label above, the thing below. */
+export function Labelled({ label, children }: { label: string; children: ReactNode }) {
+	return (
+		<div className="flex min-w-0 flex-col gap-2">
+			<p className="text-meta font-medium text-ink-2">{label}</p>
+			{children}
 		</div>
 	);
 }

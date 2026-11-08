@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import type { RecordedActivity } from "../web/src/specimen/recorded-types.ts";
+import type { RecordedActivity } from "../web/src/specimen/agent/recorded-types.ts";
 import { freePort, viteCacheDir } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
