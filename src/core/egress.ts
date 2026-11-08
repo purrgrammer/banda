@@ -451,6 +451,8 @@ async function store(
 	fault("intake");
 	if (sent.length > 0) fault("intake:sent");
 	await api.commit(async (tx) => {
+		// a write the proxy sent straight through answered the command that sent it, as a read does
+		if (sent.some((one) => one.failed === undefined || one.reached === true)) await markForeign(tx, chat);
 		const doc = await tx.doc(Tickets);
 		for (const [id, held] of Object.entries(doc.tickets)) if (held.at < now - TICKET_KEPT_MS) delete doc.tickets[id];
 		for (const held of own) doc.tickets[held.ticket] ??= JSON.parse(JSON.stringify(held));
@@ -540,6 +542,8 @@ export function proposeSendTool(
 					? `Sent ${held.method} ${addressWords(addressOf(held))}: it answered ${replayed.status}`
 					: `Did not send ${held.method} ${addressWords(addressOf(held))}: ${"refused" in replayed ? replayed.refused : replayed.failed}`;
 			await api.commit(async (tx) => {
+				// what the server answered comes back to the model: foreign content
+				if ("status" in replayed) await markForeign(tx, chat);
 				await log(tx, {
 					at: now,
 					what: said,

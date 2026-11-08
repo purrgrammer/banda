@@ -282,6 +282,45 @@ describe("a held write", () => {
 		}
 	});
 
+	it("what a sent request answered is from outside: the task that got it read foreign content", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		const foreign = (chat: number) =>
+			harness.commit(async (tx) => readForeign(tx, chat, (await errandOf(tx, chat)).input), context);
+		try {
+			const first = await s.say(harness);
+			s.proxy.pending.set(first.chat, [held(first.chat)]);
+			const { wait } = await nextAsk(harness, first.turn);
+			expect(wait?.ask).not.toHaveProperty("foreign");
+			await approve(harness, wait!.key);
+			await until(() => done(harness, first.turn));
+			expect((await results(harness, first.chat))[1]).toContain("Sent. The server answered 201 Created");
+			expect(await foreign(first.chat)).toBe(true);
+			// a write the proxy sent straight through answered the command that sent it
+			const other = await s.say(harness, "other");
+			s.proxy.sentOut.set(other.chat, [
+				{
+					id: "s00000000aa",
+					chat: other.chat,
+					at: Date.now(),
+					method: "POST",
+					scheme: "https",
+					host: "github.com",
+					port: 443,
+					path: "/me/repo.git/git-receive-pack",
+					hash: "cd".repeat(32),
+					bytes: 300,
+					status: 200,
+				},
+			]);
+			await until(() => done(harness, other.turn));
+			expect((await results(harness, other.chat)).join("\n")).toContain("under the owner's permission for github.com");
+			expect(await foreign(other.chat)).toBe(true);
+		} finally {
+			await close();
+		}
+	});
+
 	it("a ticket of another chat, or none, is refused before anything is asked", async () => {
 		const s = setup();
 		const { harness, close } = await s.open(await tempHome());

@@ -2,10 +2,12 @@
  * Foreign content (DESIGN.md "Trust" law 4): whether a chat's task has read what someone other than the owner and banda
  * could have written, which narrows what its approvals offer (`permissions.ts`). A tool whose result brings it in marks
  * the chat in a commit before that result is recorded: every read from outside the activity log records (a
- * connection's, a page's, a command's through the proxy), the browser's pages, another agent's chat. An input that
- * carries it (another agent's message, a harness's work, a group's messages another member wrote) marks the task it
- * lands in by being there. The mark is for the task (`errandOf`): the owner's next message that starts a run (in a
- * group, one that asks the member), or a routine's wake, starts one with none; a steer joins the task under way.
+ * connection's, a page's, a command's through the proxy), what a write sent out answered (a connection's write,
+ * `propose_send`, a command's write the proxy sent straight through), the browser's pages, another agent's chat, what
+ * search finds. An input that carries it (another agent's message, a harness's work, a group's messages another member
+ * wrote) marks the task it lands in by being there. The mark is for the task (`errandOf`): the owner's next message
+ * that starts a run (in a group, one that asks the member), or a routine's wake, starts one with none; a steer joins
+ * the task under way.
  */
 import { type ConversationId, defineDoc, type EntryId, type EntryRecord, type Tx } from "@earendil-works/pi-durable";
 

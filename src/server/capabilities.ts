@@ -97,6 +97,7 @@ import {
 	withReads,
 } from "../core/connections.ts";
 import { type EgressControl, intake } from "../core/egress.ts";
+import { markForeign } from "../core/foreign.ts";
 import { gmailAttachment, MAX_GMAIL_ATTACHMENT_BYTES, MAX_GMAIL_SEND_ATTACHMENT_BYTES } from "../core/gmail-rest.ts";
 import {
 	boxSession,
@@ -632,7 +633,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			return "refused" in resolved ? resolved.refused : undefined;
 		};
 
-	/** A read's answer, and a write's: from outside, data and not instructions. */
+	/** A read's answer, and a write's: from outside, data and not instructions, so either marks its chat. */
 	async function answered(
 		api: ToolExecutionApi,
 		tool: InEffect,
@@ -644,6 +645,8 @@ export function openCapabilities(options: CapabilityOptions) {
 		const chat = Number(api.conversationId);
 		// the service's tool by its own name: split into words, it reads as a verb it is not ("issue write")
 		await api.commit(async (tx) => {
+			// a read's log marks it; a write's answer (the issue it updated, with other people's comments) is as foreign
+			if (sent) await markForeign(tx, chat);
 			await log(tx, {
 				at,
 				what: `${sent ? "Sent to" : "Read from"} ${tool.connection.service}: ${tool.tool}`,

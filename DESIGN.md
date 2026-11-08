@@ -565,8 +565,8 @@ action ("Merge any pull request as @bandarra"); a permission at a grain binds on
 the owner's answers, never the model's asking: after three approvals of one place, unedited and with none declined in
 between, the card's offered row is that place's grain. The widest grain of a tool with no way back is never offered on
 a card; it is granted from the agent's permissions, its consequence in full. A task that read foreign content (a read
-from outside, another agent's message or chat, a group member's message, a harness's work) is offered no scope but an earned place, until the
-owner's next message starts another. An agent knows its own: a section of its prompt says how it asks (a write
+from outside or a write's answer, another agent's message or chat, a group member's message, a harness's work) is
+offered no scope but an earned place, until the owner's next message starts another. An agent knows its own: a section of its prompt says how it asks (a write
 it proposes is the owner's review, never a way around it; the floor asks every time) and lists, in the daemon's
 words, what it may do without asking and until when, so a grant or a revocation reaches it at its next model
 boundary; and each effect's result says what let it run ("The owner approved this", "Ran without asking, within
