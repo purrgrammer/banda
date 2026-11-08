@@ -17,7 +17,15 @@ import {
 	contactsExpand,
 	contactsWriteCall,
 } from "./contacts-rest.ts";
-import { DRIVE_TOOLS, driveCall, driveWriteCall } from "./drive-rest.ts";
+import {
+	DRIVE_IDEMPOTENT,
+	DRIVE_TOOLS,
+	driveCall,
+	driveDraft,
+	driveEditable,
+	driveExpand,
+	driveWriteCall,
+} from "./drive-rest.ts";
 import { GMAIL_TOOLS, gmailCall, gmailWriteCall } from "./gmail-rest.ts";
 import type { McpResult, McpTool } from "./mcp.ts";
 
@@ -121,11 +129,17 @@ export const REST_APIS = {
 		service: "Google Drive",
 		url: "https://www.googleapis.com/drive/v3",
 		required: ["https://www.googleapis.com/auth/drive.readonly"],
-		scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+		scopes: [
+			"https://www.googleapis.com/auth/drive.readonly",
+			"https://www.googleapis.com/auth/drive.file",
+			"https://www.googleapis.com/auth/drive",
+		],
 		tools: DRIVE_TOOLS,
 		account: { tool: "get_profile", field: "email" },
 		read: driveCall,
-		write: driveWriteCall,
+		write: (token, tool, args, signal, fetcher, _files, key) => driveWriteCall(token, tool, args, signal, fetcher, key),
+		idempotent: DRIVE_IDEMPOTENT,
+		drafts: { words: driveDraft, editable: driveEditable, expand: driveExpand },
 	},
 } as const satisfies Record<string, RestApi>;
 
