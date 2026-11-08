@@ -182,6 +182,7 @@ for (const width of [390, 1440])
 					await click(page, button("Check now"));
 					if (phone) await click(page, named("Close the panel"));
 					await page.until(shows("lint failed"));
+					await page.until(shows("Mara saw"));
 					await page.until(shows(REPLY));
 					await shot("8-woken");
 
@@ -190,9 +191,9 @@ for (const width of [390, 1440])
 						await page.until(`${button("Pause")} || ${row}`);
 						if (!(await page.run<boolean>(`Boolean(${button("Pause")})`))) await click(page, row);
 					}
-					// the watch's own card, drawn before the change, shows the newest reading too
+					// the wake is a feed item, no card beneath it; the watch's own card, drawn before the change, is current
 					await page.until(
-						`[...document.querySelectorAll('[data-object-previews]')].filter(el => ${visible} && el.innerText.includes('Approved by ana')).length === ${phone ? 1 : 2}`,
+						`[...document.querySelectorAll('[data-object-previews]')].filter(el => ${visible} && el.innerText.includes('Approved by ana')).length === 1`,
 					);
 					await shot("9-detail-current");
 					await click(page, button("Pause"));

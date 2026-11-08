@@ -45,7 +45,7 @@ import { DraftApproval } from "./DraftApproval.tsx";
 import { FilePart } from "./FilePart.tsx";
 import { HarnessSessionPart } from "./HarnessSession.tsx";
 import { LiveView } from "./LiveBrowser.tsx";
-import { FollowedObject, MessageObjects, MessageText, ObjectPreviews } from "./Objects.tsx";
+import { FollowedObject, MessageObjects, MessageText } from "./Objects.tsx";
 import { AskRef, approvalKind, didNotWords, didWords, sawOpen, wasOpen } from "./Settled.tsx";
 import { routineTitle } from "./titles.ts";
 
@@ -811,33 +811,25 @@ function partOf(
 				</Line>
 			);
 		case "watch": {
-			// the change in the kind's words, the object named as the owner's references are, and its card beneath
+			// a feed item like any other: who, what they saw, on what; the object is a link, never a card
 			const openWatch = onRoutine === undefined ? undefined : () => onRoutine(segment.watch);
 			const rest = segment.text.startsWith(segment.object.name)
 				? segment.text.slice(segment.object.name.length)
 				: ` · ${segment.text}`;
 			return (
-				<div className="flex w-full flex-col items-center gap-2">
-					<Line icon={segment.ended === undefined ? EyeIcon : EyeOffIcon} time={time(segment.at)} onClick={openWatch}>
-						{who.name} saw
-						<span className="ml-1">
-							<FollowedObject
-								chat={chat}
-								agent={objectAgent}
-								reference={segment.object.ref}
-								fallback={segment.object.name}
-								strong
-							/>
-						</span>
-						{rest.replace(/^ · /, ": ")}
-					</Line>
-					{objectAgent === undefined ? null : (
-						// the wake's line already says who follows it: the card beneath is the object alone
-						<div className="flex w-full justify-center [&_[data-following]]:hidden">
-							<ObjectPreviews chat={chat} asks={[{ ref: segment.object.ref }]} agent={objectAgent} />
-						</div>
-					)}
-				</div>
+				<Line icon={segment.ended === undefined ? EyeIcon : EyeOffIcon} time={time(segment.at)} onClick={openWatch}>
+					{who.name} saw
+					<span className="ml-1">
+						<FollowedObject
+							chat={chat}
+							agent={objectAgent}
+							reference={segment.object.ref}
+							fallback={segment.object.name}
+							strong
+						/>
+					</span>
+					{rest.replace(/^ · /, ": ")}
+				</Line>
 			);
 		}
 		case "watchCall":
