@@ -136,6 +136,7 @@ import { agentOfChat, canonical, Permissions } from "../core/permissions.ts";
 import { publicFetch } from "../core/public-fetch.ts";
 import { context } from "../core/store.ts";
 import { liveWaits } from "../core/wait.ts";
+import { endWatches } from "../core/watches.ts";
 import { type AgentChanged, boxFiles, type Workspace, write } from "./agents.ts";
 import type {
 	AccountView,
@@ -1236,12 +1237,17 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	/**
 	 * In `tx`: the accounts `keys` of connection `name` signed out: gone from the store, switched off for every agent,
-	 * and every permission bound to one of them taken back. The agents that had one, whose chats are told.
+	 * every permission bound to one of them taken back, and every watch looking with one of them ended. The agents that
+	 * had one, whose chats are told.
 	 */
 	async function endAccounts(tx: Tx, name: string, keys: readonly string[], why: string): Promise<void> {
 		const doc = await tx.doc(Connected);
 		doc.epoch++;
 		const affected = new Set<string>();
+		// every account of it going ends every watch on it, those not resolved to an account yet among them
+		if (keys.length === Object.keys(doc.accounts?.[name] ?? {}).length)
+			await endWatches(tx, { connection: name }, why, now());
+		else for (const key of keys) await endWatches(tx, { connection: name, account: key }, why, now());
 		for (const key of keys) {
 			delete doc.accounts?.[name]?.[key];
 			// what was read as it goes with it: no card is drawn from a sign-in that is gone
@@ -1796,6 +1802,13 @@ export function openCapabilities(options: CapabilityOptions) {
 			if (connection === undefined || signsIn(connection)) return "this connection needs an account";
 			const allowed = doc.public[name] ?? [];
 			doc.public[name] = on ? [...new Set([...allowed, agent])].sort() : allowed.filter((value) => value !== agent);
+			if (!on)
+				await endWatches(
+					tx,
+					{ connection: name, agent },
+					`${connection.service} was switched off for ${await agentWords(tx, agent)}`,
+					now(),
+				);
 			await log(tx, {
 				at: now(),
 				what: `You ${on ? "let" : "stopped"} ${await agentWords(tx, agent)} ${on ? "use" : "using"} ${connection.service}`,
@@ -1816,6 +1829,13 @@ export function openCapabilities(options: CapabilityOptions) {
 		if (Object.keys(mine).length === 0) delete doc.on[agent];
 		const connection = await acceptedConnection(tx, name);
 		const who = await agentWords(tx, agent);
+		if (!on)
+			await endWatches(
+				tx,
+				{ connection: name, account, agent },
+				`${connection?.service ?? name} as ${accountLabel(known.id)} was switched off for ${who}`,
+				now(),
+			);
 		await log(tx, {
 			at: now(),
 			what: `You ${on ? "let" : "stopped"} ${who} ${on ? "use" : "using"} ${connection?.service ?? name} as ${accountLabel(known.id)}`,

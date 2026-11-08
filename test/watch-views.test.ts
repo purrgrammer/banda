@@ -107,12 +107,21 @@ describe("watches in the app", () => {
 					failed: { at: NOW, why: "not connected" },
 				},
 				{ agent: "mara", name: "banda-77", state: "done", accepted, object, done: { at: NOW, why: "merged" } },
+				{
+					agent: "mara",
+					name: "banda-60",
+					state: "done",
+					accepted,
+					object,
+					failed: { at: NOW, why: "GitHub is not connected for Mara" },
+					done: { at: NOW, why: "GitHub as @bandarra was switched off for Mara", authority: true },
+				},
 				{ agent: "otto", name: "other", state: "active", accepted, object },
 			],
 			"mara",
 			NOW,
 		);
-		expect(rows.map((row) => row.id)).toEqual(["banda-142", "banda-150", "banda-98", "banda-77"]);
+		expect(rows.map((row) => row.id)).toEqual(["banda-142", "banda-150", "banda-98", "banda-77", "banda-60"]);
 		expect(rows[0]).toMatchObject({ name: "acme/banda #142", service: "GitHub", until: "until merged", paused: false });
 		// the clock's words are the locale's: "today 09:29", or "today 09:29 AM"
 		expect(rows[0]?.next).toMatch(/^today 09:29/);
@@ -120,7 +129,11 @@ describe("watches in the app", () => {
 		expect(rows[1]).toMatchObject({ waiting: "set up", name: summary.object });
 		expect(rows[2]).toMatchObject({ failing: true, saw: "Can't look: not connected" });
 		expect(rows[3]?.done).toBe(true);
+		expect(rows[3]?.ended).toBe(false);
 		expect(rows[3]?.saw).toMatch(/^Done today 09:00.*: merged$/);
+		// ended by authority: it says why, and no longer says it fails
+		expect(rows[4]).toMatchObject({ done: true, ended: true, failing: false });
+		expect(rows[4]?.saw).toMatch(/^Ended today 09:00.*: GitHub as @bandarra was switched off for Mara$/);
 		expect(sawWords({ agent: "mara", name: "x", state: "active", looked: NOW }, NOW)).toMatch(
 			/^Looked today 09:00.*, nothing new$/,
 		);

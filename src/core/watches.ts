@@ -197,8 +197,8 @@ export type WatchRecord = {
 	edit?: { sha: string; base: string | null };
 	/** Paused by the owner. */
 	paused?: "owner";
-	/** Done: when, and by which of its ends. */
-	done?: { at: number; why: string };
+	/** Done: when, and by which of its ends, or, with `authority`, why its account or connection was taken away. */
+	done?: { at: number; why: string; authority?: true };
 	/** The hashes of the box's versions the owner allowed, newest last (at most `ALLOWED_KEPT`). */
 	allowed?: string[];
 };
@@ -291,12 +291,45 @@ export type WatchWakeData = {
 	/** The changes, in the kind's words. */
 	readonly changes: string[];
 	readonly at: number;
+	/** The transition it is: the version of the reading the watch's cursor was on, and the one it diffed to. */
+	readonly seen: number;
+	readonly version: number;
 	/** What ended the watch, when this is its last wake. */
 	readonly ended?: string;
 };
 export const WAKE = "banda.watch-wake";
 /** Changes that only tell: the line and the card in the chat, no run. */
 export const TELL = "banda.watch-tell";
+
+/** Whose authority a watch looks with: a connection, one account of it (by its key), one agent given it. */
+export type Authority = { readonly connection: string; readonly account?: string; readonly agent?: string };
+
+/**
+ * In `tx`, the commit that takes `authority` away: every watch looking with it is done, `why` in the owner's words
+ * ("GitHub as @bandarra was switched off for Mara"), so it never looks or wakes again and its row says why. A watch
+ * not resolved yet names no account, so only a whole connection's end reaches it. The watches ended, by name.
+ */
+export async function endWatches(tx: Tx, authority: Authority, why: string, now: number): Promise<string[]> {
+	const { watches } = await tx.doc(Watches);
+	const ended: string[] = [];
+	for (const name of await acceptedWatches(tx)) {
+		const record = watches[name];
+		if (record === undefined || record.done !== undefined) continue;
+		if (authority.agent !== undefined && watchAgent(record) !== authority.agent) continue;
+		let connection = record.connection;
+		if (connection === undefined) {
+			const watch = await acceptedWatch(tx, name);
+			connection = watch === undefined ? undefined : (await followed(tx, watch.object))?.connection.name;
+		}
+		if (connection !== authority.connection) continue;
+		if (authority.account !== undefined && record.key?.split("/")[1] !== authority.account) continue;
+		record.done = { at: now, why, authority: true };
+		delete record.failed;
+		ended.push(name);
+		await log(tx, { at: now, watch: name, what: `ended: ${why}` });
+	}
+	return ended;
+}
 
 /** What the model reads when a watch wakes it. */
 function wakeText(watch: Watch, name: string, service: string, changes: readonly string[], ended?: string): string {
@@ -504,16 +537,23 @@ export function defineWatches(options: WatchesOptions) {
 	async function look(name: string, now: number, commit: Commit, ctx: Context, click?: string): Promise<Looked> {
 		let resolved: Resolved | undefined;
 		let why: string | undefined;
+		let done = false;
 		await commit(async (tx) => {
+			const record = (await tx.doc(Watches)).watches[name];
+			// a done watch never looks again, whatever its authority says now
+			if (record?.done !== undefined) {
+				done = true;
+				return;
+			}
 			const found = await resolve(tx, name);
 			if ("why" in found) {
 				why = found.why;
-				const record = (await tx.doc(Watches)).watches[name];
 				if (record !== undefined && found.why !== "gone") record.failed = { at: now, why: found.why };
 				return;
 			}
 			resolved = found;
 		});
+		if (done) return { outcome: "held", why: "done" };
 		if (resolved === undefined) return why === "gone" ? { outcome: "gone" } : { outcome: "failed", why: why ?? "" };
 		const { watch, chat, ref, kind, connection, account, me, key, stamp, source, reads, seen } = resolved;
 		if (options.read === undefined) return await failing("banda cannot read for a watch here");
@@ -639,6 +679,8 @@ export function defineWatches(options: WatchesOptions) {
 				},
 				changes,
 				at: now,
+				seen,
+				version,
 				...(ended === undefined ? {} : { ended }),
 			};
 			if (wake.length > 0 || ended !== undefined) {
@@ -675,7 +717,7 @@ export function defineWatches(options: WatchesOptions) {
 		async function failing(reason: string): Promise<Looked> {
 			await commit(async (tx) => {
 				const record = (await tx.doc(Watches)).watches[name];
-				if (record !== undefined) {
+				if (record !== undefined && record.done === undefined) {
 					record.failed = { at: now, why: reason };
 					record.looked = now;
 					record.next = now + lookEvery(kind.follow, {});

@@ -666,8 +666,8 @@ export type WatchView = {
 	/** When it last woke its agent. */
 	readonly lastRun?: number;
 	readonly paused?: "owner";
-	/** Done: when, and what ended it. */
-	readonly done?: { readonly at: number; readonly why: string };
+	/** Done: when, and what ended it; `authority` when it was its account or connection taken away. */
+	readonly done?: { readonly at: number; readonly why: string; readonly authority?: true };
 	/** The hashes of the box's versions the owner allowed, newest last: a chat that wrote one of them says so. */
 	readonly allowed?: readonly string[];
 };

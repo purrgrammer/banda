@@ -8,7 +8,13 @@
  */
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type ConversationId, createRegistry, type SetTimer, type TaskId } from "@earendil-works/pi-durable";
+import {
+	type ConversationId,
+	createRegistry,
+	type Harness,
+	type SetTimer,
+	type TaskId,
+} from "@earendil-works/pi-durable";
 import { openBox } from "../../src/box/box.ts";
 import { boxEnv, boxTools } from "../../src/box/tools.ts";
 import { Accepted, shaOf } from "../../src/core/agents.ts";
@@ -82,13 +88,19 @@ export function world(step: number): World {
 
 export type WatchSummary = {
 	record: WatchRecord;
+	/** Every watch's record, by name. */
+	records: { [name: string]: WatchRecord };
 	/** The second watch's record, when the scenario had one. */
 	second?: WatchRecord;
 	task?: { status: string };
 	followed?: { version: number; at: number };
-	card?: { state?: string };
+	card?: { state?: string; at: number };
 	wakes: WatchWakeData[];
 	tells: WatchWakeData[];
+	/** The watches accepted at the end. */
+	live: string[];
+	/** When each watch was paused, and resumed, by the scenario's acts. */
+	held: { watch: string; from: number; to?: number }[];
 	turns: ({ status: string } | undefined)[];
 	sent: string[];
 	parked: readonly unknown[];
@@ -102,6 +114,13 @@ export type WatchSummary = {
 /** The watches on the pull request: Mara's, and, with `second`, Otto's on the same object as the same account. */
 export const WATCHES = ["banda-142", "banda-142-otto"] as const;
 
+/** What a scenario's act may do between the world's steps: the store and the daemon's core, at the clock's time. */
+export type Scene = {
+	readonly harness: Harness;
+	readonly core: ReturnType<typeof defineCore>;
+	readonly now: number;
+};
+
 export async function watchScenario(
 	home: string,
 	faults: Faults,
@@ -109,11 +128,18 @@ export async function watchScenario(
 		readonly second?: boolean;
 		/** What GitHub answers at each step, and the owner's clicks, one per step; the pull request's life by default. */
 		readonly world?: (step: number) => World;
-		readonly clicks?: readonly string[];
+		readonly clicks?: readonly (string | undefined)[];
+		/** The clock at each step; NOW throughout by default, so no task looks on its own after the baseline. */
+		readonly at?: (step: number) => number;
+		/** What the owner does at a step, after the world moved and before the clicks: done again after a kill. */
+		readonly act?: (step: number, scene: Scene) => Promise<void>;
+		/** Whether watch `name` is clicked at step `step`; every watch at every step by default. */
+		readonly only?: (name: string, step: number) => boolean;
 	} = {},
 ): Promise<WatchSummary> {
 	const worldAt = options.world ?? world;
 	const clicks = options.clicks ?? CLICKS;
+	const clockAt = options.at ?? (() => NOW);
 	const names = options.second ? WATCHES : WATCHES.slice(0, 1);
 	const worldFile = join(home, "world.json");
 	const stepOf = () => {
@@ -123,6 +149,8 @@ export async function watchScenario(
 			return 0;
 		}
 	};
+	let step = stepOf();
+	const now = () => clockAt(step);
 	const setTimer: SetTimer = (callback, delay, { background }) => {
 		const timer = setTimeout(callback, Math.max(0, Math.min(delay, 5)));
 		if (background) timer.unref();
@@ -147,14 +175,14 @@ export async function watchScenario(
 		gateway: () => gateway,
 		model: () => FAUX_MODEL,
 		retryDelay: () => 5,
-		now: () => NOW,
+		now,
 		agentOrigin: (agent) => ({ gateway: "fake", peer: OWNER, thread: `agent:${agent}` }),
 		workspace: () => box.workspace,
 		// GitHub, as the world stands: the reads of the followed pull request, each counted
 		read: async (_connection, account, tool, args) => {
 			appendFileSync(join(home, "reads.jsonl"), `${JSON.stringify({ tool, account, method: args.method })}\n`);
 			if (tool !== "pull_request_read" || account !== "bandarra") return { failed: "not that" };
-			const answer = worldAt(stepOf())[String(args.method)];
+			const answer = worldAt(step)[String(args.method)];
 			return answer === undefined ? { failed: `no ${String(args.method)}` } : { text: JSON.stringify(answer) };
 		},
 		fault: (point) => faults.hit(point as "watch:read"),
@@ -167,7 +195,7 @@ export async function watchScenario(
 		models,
 		registry,
 		env: boxEnv(box),
-		now: () => NOW,
+		now,
 		setTimer,
 		wrapStorage: (storage) => faults.storage(storage),
 	});
@@ -217,10 +245,25 @@ export async function watchScenario(
 		};
 		while (!(await looked())) await new Promise((r) => setTimeout(r, 5));
 		// the world moves on, and the owner checks now at each step: the same click, sent again after a kill
+		const held: WatchSummary["held"] = [];
 		for (const [i, key] of clicks.entries()) {
-			const step = i + 1;
-			if (stepOf() < step) writeFileSync(worldFile, String(step));
-			for (const name of names) await core.checkWatch(harness, name, key);
+			if (step < i + 1) {
+				step = i + 1;
+				writeFileSync(worldFile, String(step));
+			}
+			if (options.act !== undefined) {
+				const before = (await harness.snapshot(Watches, context))?.watches ?? {};
+				await options.act(i + 1, { harness, core, now: now() });
+				const after = (await harness.snapshot(Watches, context))?.watches ?? {};
+				for (const name of names) {
+					if (before[name]?.paused === undefined && after[name]?.paused !== undefined)
+						held.push({ watch: name, from: now() });
+					const open = held.find((each) => each.watch === name && each.to === undefined);
+					if (open !== undefined && after[name]?.paused === undefined) open.to = now();
+				}
+			}
+			if (key === undefined) continue;
+			for (const name of names) if (options.only?.(name, i + 1) ?? true) await core.checkWatch(harness, name, key);
 		}
 		const idle = async () => {
 			const graph = await harness.taskGraph(context);
@@ -258,21 +301,30 @@ export async function watchScenario(
 		}, context);
 		const records = (await harness.snapshot(Watches, context))?.watches ?? {};
 		const record = records["banda-142"] ?? {};
+		const accepted = (await harness.snapshot(Accepted, context))?.files ?? {};
+		const live = names.filter((name) => accepted[watchPath(name)] !== undefined);
 		const task = record.task === undefined ? undefined : await harness.getTask(record.task as TaskId, context);
 		const second = records["banda-142-otto"];
 		const followed = (await harness.snapshot(Followed, context))?.objects[
 			"github/bandarra/pull_request:acme/banda#142"
 		];
-		const card = (await harness.snapshot(Readings, context))?.readings["github/bandarra/pull_request:acme/banda#142"]
-			?.card as { state?: string } | undefined;
+		const reading = (await harness.snapshot(Readings, context))?.readings[
+			"github/bandarra/pull_request:acme/banda#142"
+		];
+		const card = reading?.card as { state?: string } | undefined;
 		return {
 			record,
+			records,
 			...(second === undefined ? {} : { second }),
 			...(task === undefined ? {} : { task: { status: task.state.status } }),
 			...(followed === undefined ? {} : { followed: { version: followed.version, at: followed.at } }),
-			...(card === undefined ? {} : { card: { ...(card.state === undefined ? {} : { state: card.state }) } }),
+			...(card === undefined || reading === undefined
+				? {}
+				: { card: { ...(card.state === undefined ? {} : { state: card.state }), at: reading.at } }),
 			wakes,
 			tells,
+			live,
+			held,
 			turns,
 			sent: readFileSync(join(home, "sent.jsonl"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean),
 			parked: (await status(harness)).parked,
@@ -289,12 +341,54 @@ export async function watchScenario(
 }
 
 /**
- * What must hold however the process was killed: the baseline woke nobody; the approval and the failed check woke the
- * agent once, with the account's own comment unseen and the finished checks told beside; the same reading again woke
- * nobody; the merge woke once more and ended the watch; each wake's run ended and reached the owner; nothing is parked.
+ * What must hold in any scenario, however the process was killed (docs/watches.md "Verification"): every reading a
+ * live watch's look kept was diffed to a wake, a tell or nothing, its cursor on the newest; a transition (from the
+ * cursor to a reading) wakes at most once, and wakes never overlap; no wake after the watch was done or ended by
+ * authority, nor while the owner held it paused; the card's reading is the newest look's.
+ */
+export function watchInvariants(summary: WatchSummary): string[] {
+	const errors: string[] = [];
+	const say = (what: string, ok: boolean) => {
+		if (!ok) errors.push(what);
+	};
+	for (const [name, record] of Object.entries(summary.records)) {
+		const wakes = summary.wakes.filter((wake) => wake.watch === name);
+		const quiet = record.done !== undefined || record.paused !== undefined || record.failed !== undefined;
+		if (summary.live.includes(name) && !quiet && summary.followed !== undefined)
+			say(`${name}: its cursor is on the newest reading`, record.seen === summary.followed.version);
+		const transitions = wakes.map((wake) => `${wake.seen}>${wake.version}`);
+		say(`${name}: a transition woke once: ${transitions.join(" ")}`, new Set(transitions).size === transitions.length);
+		for (const [i, wake] of wakes.entries()) {
+			const before = wakes[i - 1];
+			say(`${name}: a wake replays none of the one before it`, before === undefined || wake.seen >= before.version);
+			say(`${name}: no wake past its cursor`, record.seen === undefined || wake.version <= record.seen);
+		}
+		if (record.done !== undefined) {
+			const done = record.done.at;
+			say(
+				`${name}: no wake after it was done`,
+				wakes.every((wake) => wake.at <= done),
+			);
+		}
+		for (const held of summary.held.filter((each) => each.watch === name))
+			say(
+				`${name}: no wake while paused`,
+				wakes.every((wake) => wake.at <= held.from || (held.to !== undefined && wake.at >= held.to)),
+			);
+	}
+	if (summary.card !== undefined && summary.followed !== undefined)
+		say("the card is the newest look's", summary.card.at === summary.followed.at);
+	return errors;
+}
+
+/**
+ * What must hold of the pull request's life however the process was killed: the invariants; the baseline woke nobody;
+ * the approval and the failed check woke the agent once, with the account's own comment unseen and the finished checks
+ * told beside; the same reading again woke nobody; the merge woke once more and ended the watch; each wake's run ended
+ * and reached the owner; nothing is parked.
  */
 export function watchProblems(summary: WatchSummary): string[] {
-	const errors: string[] = [];
+	const errors = watchInvariants(summary);
 	const say = (what: string, ok: boolean) => {
 		if (!ok) errors.push(what);
 	};

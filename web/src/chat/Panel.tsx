@@ -600,7 +600,15 @@ function WatchRow({
 		);
 	const quiet = paused || watch.done === true;
 	const state =
-		watch.done === true ? "Done" : paused ? "Paused" : watch.next === undefined ? null : `Next look ${watch.next}`;
+		watch.done === true
+			? watch.ended === true
+				? "Ended"
+				: "Done"
+			: paused
+				? "Paused"
+				: watch.next === undefined
+					? null
+					: `Next look ${watch.next}`;
 	return (
 		<li className="group/watch relative flex items-start gap-2 rounded-field px-2 py-2 hover:bg-paper-3">
 			<button

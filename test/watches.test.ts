@@ -1,8 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { parseWatch, watchText } from "../src/core/watches.ts";
+import { Accepted } from "../src/core/agents.ts";
+import { Connected } from "../src/core/connections.ts";
+import { context } from "../src/core/store.ts";
+import { endWatches, parseWatch, watchPath, watchText } from "../src/core/watches.ts";
 import { Faults } from "./fault/faults.ts";
-import { type World, watchProblems, watchScenario, world } from "./fault/watch-scenario.ts";
+import { NOW, type World, watchInvariants, watchProblems, watchScenario, world } from "./fault/watch-scenario.ts";
 import { tempHome } from "./helpers.ts";
+
+const MINUTE = 60_000;
+const DAY = 24 * 60 * MINUTE;
+
+type Reads = {
+	get_comments: unknown[];
+	get_check_runs: { check_runs: { [field: string]: unknown }[] };
+};
+
+/** The world at step `step` of the pull request's life, changed by `change`. */
+const changed = (step: number, change: (at: Reads) => void): World => {
+	const at = structuredClone(world(step)) as unknown as Reads;
+	change(at);
+	return at as unknown as World;
+};
 
 describe("a watch file", () => {
 	it("says what it follows, as whom and until what, and what matters below; each problem says what to write", () => {
@@ -93,5 +111,78 @@ describe("a watch on a pull request", () => {
 		expect(summary.record.done?.why).toBe("merged");
 		expect(summary.wakes).toHaveLength(2);
 		expect(summary.wakes.flatMap((wake) => wake.changes).some((change) => change.includes("bob"))).toBe(false);
+	}, 60_000);
+
+	it("an account switched off ends the watch in that commit, saying why; it never wakes after", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			act: async (step, { harness, now }) => {
+				if (step !== 2) return;
+				await harness.commit(async (tx) => {
+					const { on } = await tx.doc(Connected);
+					if (on.mara?.github === undefined) return;
+					delete on.mara.github;
+					await endWatches(
+						tx,
+						{ connection: "github", account: "bandarra", agent: "mara" },
+						"GitHub as @bandarra was switched off for Mara",
+						now,
+					);
+				}, context);
+			},
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes.map((wake) => wake.ended)).toEqual([undefined]);
+		expect(summary.record.done).toMatchObject({
+			why: "GitHub as @bandarra was switched off for Mara",
+			authority: true,
+		});
+		expect(summary.record.failed).toBeUndefined();
+		// the baseline's look and the first click's: none after it ended, neither the task's nor the owner's
+		expect(summary.looks).toBe(2);
+	}, 60_000);
+
+	it("days offline: the world moves many steps without a look, then one look is one wake with all of it", async () => {
+		const offline = (step: number): World =>
+			step >= 6
+				? world(3)
+				: changed(Math.min(step, 1), (at) => {
+						at.get_comments.push(...Array.from({ length: step }, (_, n) => ({ id: 50 + n, user: { login: "bob" } })));
+					});
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: offline,
+			clicks: [undefined, undefined, undefined, undefined, undefined, "k6"],
+			at: (step) => (step < 6 ? NOW : NOW + 3 * DAY),
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes).toHaveLength(1);
+		expect(summary.wakes[0]).toMatchObject({ ended: "merged" });
+		expect(summary.wakes[0]?.changes).toEqual(expect.arrayContaining(["ana approved", "lint failed", "merged"]));
+	}, 60_000);
+
+	it("stopped while its wake is pending: no further wake", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			act: async (step, { harness, core }) => {
+				if (step !== 2) return;
+				await harness.commit(async (tx) => {
+					delete (await tx.doc(Accepted)).files[watchPath("banda-142")];
+				}, context);
+				await core.reconcile(harness);
+			},
+			only: (_name, step) => step < 2,
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes).toHaveLength(1);
+		expect(summary.live).toEqual([]);
+	}, 60_000);
+
+	it("duplicate and out-of-order readings: at most one wake per transition", async () => {
+		const order = [0, 1, 1, 0, 1, 1];
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: (step) => world(order[step] ?? 1),
+			clicks: ["k1", "k2", "k3", "k4", "k4", "k5"],
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes.length).toBeLessThanOrEqual(3);
+		expect(summary.wakes[0]?.changes).toEqual(expect.arrayContaining(["ana approved", "lint failed"]));
 	}, 60_000);
 });

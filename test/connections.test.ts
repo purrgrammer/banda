@@ -36,6 +36,7 @@ import { context } from "../src/core/store.ts";
 import { toolDiscoveryExtension, toolRegistry } from "../src/core/tool-discovery.ts";
 import type { TurnResult } from "../src/core/turn.ts";
 import { answer } from "../src/core/wait.ts";
+import { Watches } from "../src/core/watches.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import { SHIPPED } from "../src/server/capabilities.ts";
@@ -1580,6 +1581,46 @@ describe("accounts", () => {
 		await s.capabilities.reconcile();
 		expect(existsSync(join(s.home, "auth/connections/cal/ghost"))).toBe(false);
 		expect(existsSync(join(s.home, "auth/connections/cal/bea"))).toBe(true);
+	});
+
+	it("switching an account off, signing it out and disconnecting end the watches looking with it, saying why", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const s = await withMara(fake);
+		fake.user = "ana";
+		await signInAsOwner(s.capabilities, "cal");
+		await s.capabilities.switchAccount("mara", "cal", "ana", true);
+		fake.user = "bea";
+		await signInAsOwner(s.capabilities, "cal");
+		const seeded = { "mara-ana": ["mara", "ana"], "sancho-ana": ["sancho", "ana"], "sancho-bea": ["sancho", "bea"] };
+		await s.harness.commit(async (tx) => {
+			const files = (await tx.doc(Accepted)).files;
+			const { watches } = await tx.doc(Watches);
+			for (const [name, [agent, account]] of Object.entries(seeded)) {
+				const text = `---\nobject: cal:event:${name}\n---\nTell me.\n`;
+				files[`watches/${name}.md`] = { sha: shaOf(text), text, at: 1 };
+				watches[name] = { agent, since: 1, connection: "cal", key: `cal/${account}/event:${name}` };
+			}
+		}, context);
+		const done = async () => {
+			const { watches } = (await s.harness.snapshot(Watches, context))!;
+			return Object.fromEntries(Object.entries(watches).map(([name, record]) => [name, record.done?.why]));
+		};
+		await s.capabilities.switchAccount("mara", "cal", "ana", false);
+		expect(await done()).toEqual({
+			"mara-ana": "Calendar as @ana was switched off for Mara",
+			"sancho-ana": undefined,
+			"sancho-bea": undefined,
+		});
+		await s.capabilities.signOut("cal", "bea");
+		expect((await done())["sancho-bea"]).toBe("you signed out of Calendar as @bea");
+		expect((await done())["sancho-ana"]).toBeUndefined();
+		await s.capabilities.disconnect("cal");
+		expect(await done()).toEqual({
+			"mara-ana": "Calendar as @ana was switched off for Mara",
+			"sancho-ana": "you disconnected Calendar",
+			"sancho-bea": "you signed out of Calendar as @bea",
+		});
 	});
 });
 

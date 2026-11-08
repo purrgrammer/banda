@@ -23,6 +23,8 @@ export type WatchRowView = {
 	readonly saw?: string | undefined;
 	readonly paused?: boolean | undefined;
 	readonly done?: boolean | undefined;
+	/** Done because its account or connection was taken away, not by one of its ends. */
+	readonly ended?: boolean | undefined;
 	readonly failing?: boolean | undefined;
 	/** A change the agent asked for, waiting for the owner: what allowing it does. */
 	readonly waiting?: "set up" | "change" | "stop" | undefined;
@@ -52,10 +54,14 @@ export function untilWords(watch: WatchView): string | undefined {
 	return until === undefined ? undefined : `until ${until}`;
 }
 
-/** What the watch last saw, in words: "Saw today 09:10: ana approved"; "Looked today 09:10, nothing new". */
+/**
+ * What the watch last saw, in words: "Saw today 09:10: ana approved"; "Looked today 09:10, nothing new"; what ended it
+ * ("Done Fri 17:02: merged", "Ended today 09:10: you signed out of GitHub as @bandarra"); or why it cannot look.
+ */
 export function sawWords(watch: WatchView, now: number): string | undefined {
+	if (watch.done !== undefined)
+		return `${watch.done.authority === true ? "Ended" : "Done"} ${near(watch.done.at, now)}: ${watch.done.why}`;
 	if (watch.failed !== undefined) return `Can't look: ${watch.failed.why}`;
-	if (watch.done !== undefined) return `Done ${near(watch.done.at, now)}: ${watch.done.why}`;
 	if (watch.saw !== undefined && watch.sawAt !== undefined)
 		return `Saw ${near(watch.sawAt, now)}: ${watch.saw.join(", ")}`;
 	if (watch.looked !== undefined) return `Looked ${near(watch.looked, now)}, nothing new`;
@@ -100,7 +106,8 @@ export function watchRows(
 					...(saw === undefined ? {} : { saw }),
 					paused: watch.paused !== undefined,
 					done: watch.done !== undefined,
-					failing: watch.failed !== undefined,
+					ended: watch.done?.authority === true,
+					failing: watch.done === undefined && watch.failed !== undefined,
 					...(change === undefined
 						? {}
 						: {
