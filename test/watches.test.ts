@@ -244,4 +244,32 @@ describe("a watch on a pull request", () => {
 		expect(summary.record.failed).toBeUndefined();
 		expect(summary.wakes).toHaveLength(0);
 	}, 60_000);
+
+	it("a cursor that fell off the kept readings wakes once, saying changes may be missing", async () => {
+		// Otto looks at every step; Mara only at the last, when her cursor fell off the readings kept
+		const lint = (conclusion: string, id: number) => (at: Reads) => {
+			Object.assign(at.get_check_runs.check_runs[1] ?? {}, { status: "completed", conclusion, id });
+		};
+		const steps: World[] = [
+			world(0),
+			world(1),
+			changed(1, lint("success", 100)),
+			changed(1, lint("failure", 101)),
+			changed(1, lint("success", 102)),
+			changed(1, lint("failure", 103)),
+			changed(1, lint("failure", 103)),
+		];
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			second: true,
+			world: (step) => steps[step] ?? world(1),
+			clicks: ["k1", "k2", "k3", "k4", "k5", "k6"],
+			only: (name, step) => name === "banda-142-otto" || step === 6,
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		const mara = summary.wakes.filter((wake) => wake.watch === "banda-142");
+		expect(mara).toHaveLength(1);
+		expect(mara[0]?.gap).toBe(true);
+		const otto = summary.wakes.filter((wake) => wake.watch === "banda-142-otto");
+		expect(otto.every((wake) => wake.gap === undefined)).toBe(true);
+	}, 60_000);
 });

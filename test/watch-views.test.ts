@@ -83,6 +83,9 @@ describe("watches in the app", () => {
 		expect(watchWords({ object, changes: ["lint failed", "merged"], resumed: true })).toBe(
 			"acme/banda #142 · while paused: lint failed, merged",
 		);
+		expect(watchWords({ object, changes: ["lint failed"], gap: true })).toBe(
+			"acme/banda #142 · lint failed · some changes may be missing",
+		);
 	});
 
 	it("a watch unable to look for an hour is an error line that opens the watch", () => {

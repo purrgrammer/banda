@@ -270,6 +270,8 @@ export type Item =
 			readonly ended?: string;
 			/** What changed while it was paused, come together at the look after resuming. */
 			readonly resumed?: true;
+			/** Some changes may be missing: its cursor fell off the readings kept. */
+			readonly gap?: true;
 			readonly at: number;
 	  }
 	/** An ask that ended: what was asked, and how it ended; an approval with what it would run, in words. */

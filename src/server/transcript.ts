@@ -314,6 +314,7 @@ export function itemOf(entry: EntryRecord): Item | undefined {
 			...(entry.kind === WATCH_TELL ? { tell: true as const } : {}),
 			...(data.ended === undefined ? {} : { ended: data.ended }),
 			...(data.resumed === true ? { resumed: true as const } : {}),
+			...(data.gap === true ? { gap: true as const } : {}),
 			at: data.at,
 		};
 	}
