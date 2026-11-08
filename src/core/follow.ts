@@ -194,13 +194,16 @@ export function observe(
 	];
 }
 
-/** Every value at a pattern: `[*]` stands for each item of a list. */
-function valuesAt(value: Json | undefined, p: Pattern): Json[] {
-	if (value === undefined) return [];
+/**
+ * Every value at a pattern: `[*]` stands for each item of a list. An item of a list that lacks the field is a value
+ * of its own, `undefined`, so `all` counts it: a check run still going has no conclusion (GitHub's server leaves the
+ * field out), and "all checks green" must not hold until it has one.
+ */
+function valuesAt(value: Json | undefined, p: Pattern, item = false): (Json | undefined)[] {
 	const [head, ...rest] = p;
-	if (head === undefined) return [value];
-	if (head === "[*]") return Array.isArray(value) ? value.flatMap((each) => valuesAt(each, rest)) : [];
-	return object(value) ? valuesAt(value[head], rest) : [];
+	if (head === undefined) return value === undefined && !item ? [] : [value];
+	if (head === "[*]") return Array.isArray(value) ? value.flatMap((each) => valuesAt(each, rest, true)) : [];
+	return object(value) ? valuesAt(value[head], rest, item) : item ? [undefined] : [];
 }
 
 /**
@@ -237,7 +240,9 @@ export function holds(text: string, reading: Json): boolean {
 	if ("error" in terms) return false;
 	return terms.some((term) => {
 		const values = valuesAt(reading, term.path);
-		const ok = (value: Json) => term.values.some((each) => canonical(value) === canonical(each)) === term.equal;
+		// a value that is not there equals nothing: "= x" fails on it, "!= x" holds
+		const ok = (value: Json | undefined) =>
+			(value !== undefined && term.values.some((each) => canonical(value) === canonical(each))) === term.equal;
 		return term.all ? values.length > 0 && values.every(ok) : values.some(ok);
 	});
 }
@@ -262,7 +267,8 @@ export function reading(follow: Pick<Follow, "derived">, answers: Item, before?:
 function steady(derived: Derived, answers: Item, before: Item | undefined): boolean {
 	if (typeof derived === "string" || before === undefined) return true;
 	const path = pattern(derived.steady);
-	return canonical(valuesAt(answers, path)) === canonical(valuesAt(before, path));
+	const at = (item: Item) => canonical(valuesAt(item, path).map((value) => value ?? null));
+	return at(answers) === at(before);
 }
 
 /** Whether a derived condition holds over `answers` but is held back because its steady path just changed. */

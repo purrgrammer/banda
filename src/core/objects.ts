@@ -1062,10 +1062,11 @@ export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as
 					(run as { status?: unknown } | null)?.status,
 					(run as { conclusion?: unknown } | null)?.conclusion,
 				);
+				// a skipped or neutral run counts for nothing, as GitHub counts it; a cancelled one did not pass
 				if (s === "passed") checks.passed++;
-				else if (s === "failed") checks.failed++;
+				else if (s === "failed" || s === "cancelled") checks.failed++;
 				else if (s === "running" || s === "queued") checks.running++;
-				else complete = false;
+				else if (s === "unknown") complete = false;
 			}
 			return {
 				card: "pull-request",

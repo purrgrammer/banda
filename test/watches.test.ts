@@ -328,6 +328,28 @@ describe("a watch on a pull request", () => {
 		expect(summary.record.resumed).toBeUndefined();
 	}, 60_000);
 
+	it("made under Pause all, it still takes its baseline, so the resume wakes with what changed since it was made", async () => {
+		// no tasks: the act looks itself, so the first look, under the pause, is the baseline, as when the owner follows
+		const none = async () => {};
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			tasks: false,
+			world: (step) => world(step < 3 ? 0 : 1),
+			// the look after the resume holds what it finds for the settling time; the one after it wakes
+			clicks: [undefined, undefined, undefined, undefined],
+			at: (step) => NOW + step * 10 * MINUTE,
+			act: async (step, { harness, core, now }) => {
+				if (step === 1) await pauseAll(harness, none, now);
+				if (step === 3) await resumeAll(harness, none, now);
+				await core.lookWatch(harness, "banda-142");
+			},
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.held).toEqual([{ watch: "banda-142", from: NOW + 10 * MINUTE, to: NOW + 30 * MINUTE }]);
+		expect(summary.wakes).toHaveLength(1);
+		expect(summary.wakes[0]).toMatchObject({ resumed: true });
+		expect(summary.wakes[0]?.changes).toEqual(expect.arrayContaining(["ana approved", "lint failed"]));
+	}, 60_000);
+
 	it("resumed with nothing changed: no wake, and nothing left marked for the next one", async () => {
 		const summary = await watchScenario(await tempHome(), new Faults(), {
 			world: (step) => world(step < 3 ? 0 : 1),

@@ -243,12 +243,22 @@ it("rejects absent primary data and preserves unavailable, incomplete and skippe
 			),
 		).toMatchObject({ state: conclusion === "new_unknown_value" ? "unknown" : conclusion });
 	}
-	expect(
+	// a skipped or neutral run counts for nothing, as GitHub counts it, and leaves the summary whole; a cancelled one
+	// did not pass; only a conclusion banda has no word for leaves the summary unsaid
+	const summary = (...conclusions: string[]) =>
 		cardOf(GITHUB_OBJECTS.pull_request, ref, {
 			pr: primary,
-			checks: { total_count: 1, check_runs: [{ status: "completed", conclusion: "skipped" }] },
-		}),
-	).toMatchObject({ checks: null });
+			checks: {
+				total_count: conclusions.length,
+				check_runs: conclusions.map((conclusion) => ({ status: "completed", conclusion })),
+			},
+		});
+	expect(summary("skipped")).toMatchObject({ checks: { passed: 0, failed: 0, running: 0 } });
+	expect(summary("success", "skipped", "neutral", "success")).toMatchObject({
+		checks: { passed: 2, failed: 0, running: 0 },
+	});
+	expect(summary("success", "cancelled")).toMatchObject({ checks: { passed: 1, failed: 1, running: 0 } });
+	expect(summary("success", "new_unknown_value")).toMatchObject({ checks: null });
 });
 it("draft data names exact effect verbs and editable fields, never caller card prose", () => {
 	expect(

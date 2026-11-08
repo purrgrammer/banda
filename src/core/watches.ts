@@ -810,12 +810,17 @@ export function defineWatches(options: WatchesOptions) {
 				return;
 			}
 			// a done watch never wakes again; a pause that came while the task read holds what it saw for the resume,
-			// though the owner's own Check now looks while paused, as they asked
+			// though the owner's own Check now looks while paused, as they asked, and a watch made under a pause still
+			// takes its baseline, so the resume wakes with what changed since it was made, not since the resume
 			if (record.done !== undefined) {
 				outcome = { outcome: "held", why: "done" };
 				return;
 			}
-			if (click === undefined && (record.paused !== undefined || (await tx.doc(Control)).paused !== undefined)) {
+			if (
+				click === undefined &&
+				seen !== undefined &&
+				(record.paused !== undefined || (await tx.doc(Control)).paused !== undefined)
+			) {
 				outcome = { outcome: "held", why: "paused" };
 				return;
 			}

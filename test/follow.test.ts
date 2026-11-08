@@ -186,6 +186,11 @@ describe("following an object", () => {
 		const green = "all checks.check_runs[*].conclusion = success|skipped|neutral";
 		expect(holds(green, runs("success", "skipped", "neutral"))).toBe(true);
 		expect(holds(green, runs("success", "failure"))).toBe(false);
+		// a run still going has no conclusion: GitHub's server leaves the field out, and it is not green yet
+		const going = runs("success", "skipped");
+		going.checks.check_runs.push({ status: "in_progress" } as (typeof going.checks.check_runs)[number]);
+		expect(holds(green, going)).toBe(false);
+		expect(holds("all checks.check_runs[*].status = completed", going)).toBe(false);
 		expect(holds("state != open|draft", { state: "closed" })).toBe(true);
 		expect(holds("state != open|draft", { state: "draft" })).toBe(false);
 		const shipped = reading(PR, { pr: { head: { sha: "a" } }, ...runs("success", "skipped") });
