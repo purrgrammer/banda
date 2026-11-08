@@ -319,8 +319,6 @@ export type CoreOptions = {
 	readonly workspace?: () => string | undefined;
 	/** Read an object for the daemon's eyes, as its card is read: what a watch looks with; none, and no watch looks. */
 	readonly read?: WatchesOptions["read"];
-	/** The schema a connection's tool was listed with, for a watch's reads. */
-	readonly listedSchema?: WatchesOptions["listedSchema"];
 	/** A fault point a watch's look passes (`watch:read`), for the fault suites. */
 	readonly fault?: (point: string) => void;
 	/**
@@ -1484,7 +1482,6 @@ export function defineCore(options: CoreOptions) {
 		agentChat,
 		...(options.workspace === undefined ? {} : { workspace: options.workspace }),
 		...(options.read === undefined ? {} : { read: options.read }),
-		...(options.listedSchema === undefined ? {} : { listedSchema: options.listedSchema }),
 		...(options.fault === undefined ? {} : { fault: options.fault }),
 	});
 

@@ -523,6 +523,8 @@ type Resolved = {
 	readonly stamp: string;
 	readonly source: string;
 	readonly reads: { readonly [as: string]: ObjectRead };
+	/** The schema each read's tool was listed with, by the read's name. */
+	readonly schemas: { readonly [as: string]: JsonObject | undefined };
 	/** The watch's cursor as resolved, which the look's commit must still find: another look moved it, keep nothing. */
 	readonly seen: number | undefined;
 };
@@ -547,8 +549,6 @@ export type WatchesOptions = {
 		authority: { readonly chat: number; readonly ref: ObjectRef; readonly stamp: string },
 		ctx: Context,
 	) => Promise<{ readonly text: string } | { readonly failed: string }>;
-	/** The schema a connection's tool was listed with. */
-	readonly listedSchema?: (connection: string, tool: string, ctx: Context) => Promise<JsonObject | undefined>;
 	/** A fault point, for the fault suites. */
 	readonly fault?: (point: string) => void;
 };
@@ -642,6 +642,7 @@ export function defineWatches(options: WatchesOptions) {
 			stamp: access.stamp,
 			source: access.source,
 			reads: access.reads,
+			schemas: access.schemas,
 			seen,
 		};
 	}
@@ -703,18 +704,17 @@ export function defineWatches(options: WatchesOptions) {
 		});
 		if (done) return { outcome: "held", why: "done" };
 		if (resolved === undefined) return why === "gone" ? { outcome: "gone" } : { outcome: "failed", why: why ?? "" };
-		const { watch, chat, ref, kind, connection, account, me, key, stamp, source, reads, seen } = resolved;
+		const { watch, chat, ref, kind, connection, account, me, key, stamp, source, reads, schemas, seen } = resolved;
 		if (options.read === undefined) return await failing("banda cannot read for a watch here");
 		const answers: Item = {};
 		let failed: string | undefined;
 		let bytes = 0;
 		for (const [as, read] of Object.entries(reads)) {
-			const schema = await options.listedSchema?.(connection.name, read.tool, ctx);
 			const answer = await options.read(
 				connection.name,
 				account === "" ? undefined : account,
 				read.tool,
-				readArgs(read, ref, schema),
+				readArgs(read, ref, schemas[as]),
 				{ chat, ref, stamp },
 				ctx,
 			);
