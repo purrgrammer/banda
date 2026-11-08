@@ -793,5 +793,10 @@ export async function slackResolve(
 		const said = s.named("channel", each);
 		if (said !== undefined) known[each] = said;
 	}
-	return { _channel_name: found.name, _names: known };
+	// what the card's words will carry: a name as Slack has it, without any control or format character someone slipped in
+	const clean = (value: string) => value.replace(/[\p{Cc}\p{Cf}]/gu, "").trim();
+	return {
+		_channel_name: clean(found.name),
+		_names: Object.fromEntries(Object.entries(known).map(([id, said]) => [id, clean(said)])),
+	};
 }

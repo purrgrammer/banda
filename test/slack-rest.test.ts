@@ -251,6 +251,16 @@ it("posts an approved message once, as a draft on the private floor whose words 
 		verb: "Send",
 	});
 	expect(slackDraft("post_message", { _channel_name: "@bob" })?.what).toBe("Post in @bob");
+	slack.channels.C0TRICK = { id: "C0TRICK", name: "ops\u200b\u0007 \u202e", is_member: true, topic: { value: "" } };
+	const tricked = await slackResolve(
+		slack.access,
+		"post_message",
+		{ channel: "C0TRICK", text: "hi" },
+		undefined,
+		slack.fetch,
+		budget,
+	);
+	expect(tricked._channel_name).toBe("ops");
 	await expect(
 		slackResolve(slack.access, "post_message", { channel: "C0NOPE", text: "x" }, undefined, slack.fetch, budget),
 	).rejects.toThrow("not one the owner can see");
