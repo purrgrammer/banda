@@ -58,6 +58,24 @@ const CONNECT_STEPS: readonly {
 }[] = [
 	{ label: "Access to grant", connection: "Google Calendar", id: "calendar", step: { kind: "permissions" } },
 	{ label: "GitHub's access", agent: "Octo", connection: "GitHub", id: "github", step: { kind: "permissions" } },
+	{ label: "Slack's access", agent: "Mara", connection: "Slack", id: "slack", step: { kind: "permissions" } },
+	{
+		label: "Slack on another port",
+		agent: "Mara",
+		connection: "Slack",
+		id: "slack",
+		step: {
+			kind: "failed",
+			why: "could not start signing in to Slack: Slack signs in only to a banda on port 7788, and this one runs on port 7799: start banda with --port 7788 to connect Slack.",
+		},
+	},
+	{
+		label: "Slack signed in",
+		agent: "Mara",
+		connection: "Slack",
+		id: "slack",
+		step: { kind: "done", login: "@ana at Acme" },
+	},
 	{ label: "Starting", connection: "GitHub", id: "github", step: { kind: "starting" } },
 	{
 		label: "Signing in on its page",

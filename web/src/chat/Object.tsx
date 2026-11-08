@@ -430,6 +430,22 @@ function gmailUrl(value: string | undefined): string | undefined {
 	}
 }
 
+/** A Slack page worth linking: the team's own host, `<team>.slack.com`, over https, nothing else. */
+export function slackUrl(value: string | undefined): string | undefined {
+	try {
+		const url = new URL(value ?? "");
+		return url.protocol === "https:" &&
+			url.port === "" &&
+			url.username === "" &&
+			url.password === "" &&
+			/^[a-z0-9-]{1,63}\.slack\.com$/.test(url.hostname)
+			? url.href
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 /**
  * An object named inline is a link wherever it has an address, drawn the same whatever the service: the words, a
  * subtle underline that darkens on hover; without an address, the words alone.
@@ -458,8 +474,9 @@ export function ObjectLink({
 	href: string;
 }) {
 	if (object.card === "messages") {
-		const Icon = object.search ? SearchIcon : MailsIcon;
-		const url = gmailUrl(href) ?? gmailUrl(object.url);
+		const slack = object.service === "slack";
+		const Icon = object.search ? SearchIcon : slack ? MessagesSquareIcon : MailsIcon;
+		const url = slack ? (slackUrl(href) ?? slackUrl(object.url)) : (gmailUrl(href) ?? gmailUrl(object.url));
 		return (
 			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
 				<Icon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
@@ -495,7 +512,10 @@ export function ObjectLink({
 		);
 	}
 	if (object.card === "contact") {
-		const url = contactsUrl(href) ?? contactsUrl(object.url);
+		const url =
+			object.service === "slack"
+				? (slackUrl(href) ?? slackUrl(object.url))
+				: (contactsUrl(href) ?? contactsUrl(object.url));
 		return (
 			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
 				<UserRoundIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
@@ -659,15 +679,102 @@ export type Messages = {
 		readonly from: string;
 		readonly subject: string;
 		readonly date: string;
+		/** A Slack message's words; an email has its subject. */
+		readonly text?: string | undefined;
 	}[];
 	readonly total: number | null;
-	/** Where it opens in Gmail: the conversation, or the search. */
+	/** Where it opens: in Gmail, the conversation or the search; in Slack, the thread or the channel. */
 	readonly url?: string | undefined;
 	readonly asOf?: string | undefined;
+	/** A Slack thread, channel (its topic and members) or search. */
+	readonly service?: "slack" | undefined;
+	readonly place?: "thread" | "channel" | undefined;
+	readonly topic?: string | undefined;
+	readonly members?: number | null | undefined;
 };
+
+/** When a Slack message was written, as a short local time: today's by the clock, an older one by its day. */
+export function slackWhen(iso: string, now = new Date()): string {
+	const at = new Date(iso);
+	if (Number.isNaN(at.getTime())) return "";
+	const sameDay = at.toDateString() === now.toDateString();
+	return sameDay
+		? at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+		: at.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+/** Slack's messages together, read-only: a thread under its channel, a channel with its topic, a search under its query. */
+function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactNode }) {
+	const Icon = list.search ? SearchIcon : MessagesSquareIcon;
+	const more = list.total === null ? 0 : list.total - list.messages.length;
+	const url = slackUrl(list.url);
+	const where = list.search ? "Slack messages matching" : list.place === "channel" ? "Slack channel" : "Slack thread";
+	const about = [
+		list.topic,
+		list.members === null || list.members === undefined
+			? undefined
+			: `${list.members} member${list.members === 1 ? "" : "s"}`,
+	]
+		.filter(Boolean)
+		.join(" · ");
+	return (
+		<Tile className="flex flex-col gap-2.5 p-3.5" data-slack-card={list.search ? "search" : (list.place ?? "thread")}>
+			<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-ink-2">
+				<Icon aria-hidden="true" className="size-3.5 shrink-0" />
+				<span className="min-w-0 flex-1 truncate">{where}</span>
+				{list.asOf === undefined ? null : <span>as of {list.asOf}</span>}
+				<span className="ml-auto shrink-0">{actions}</span>
+			</div>
+			<h3
+				className={cn(
+					"min-w-0 text-body font-semibold text-ink [overflow-wrap:anywhere]",
+					list.search && "font-mono font-normal",
+				)}
+			>
+				{list.title}
+			</h3>
+			{about === "" ? null : <p className="text-meta text-ink-2 [overflow-wrap:anywhere]">{about}</p>}
+			{list.messages.length === 0 ? (
+				<p className="text-meta text-ink-2">{list.search ? "No messages match yet" : "No messages"}</p>
+			) : (
+				<ul className="flex flex-col divide-y divide-border">
+					{list.messages.map((message) => (
+						<li key={message.id} className="flex min-w-0 flex-col gap-0.5 py-1.5 first:pt-0 last:pb-0">
+							<span className="flex min-w-0 items-baseline gap-2 text-meta text-ink-2">
+								<span className="min-w-0 flex-1 truncate" title={message.from}>
+									{message.from || "Someone"}
+								</span>
+								<span className="shrink-0">{slackWhen(message.date)}</span>
+							</span>
+							<span className="min-w-0 text-body text-ink line-clamp-2 [overflow-wrap:anywhere]" title={message.text}>
+								{message.text || "(No text)"}
+							</span>
+						</li>
+					))}
+				</ul>
+			)}
+			{more > 0 || url !== undefined ? (
+				<span className="flex flex-wrap items-center gap-2">
+					{more > 0 ? (
+						<span className="text-meta text-ink-2">{list.search ? `About ${more} more` : `${more} more`}</span>
+					) : null}
+					{url === undefined ? null : (
+						<Button asChild size="sm" variant="ghost" className="ml-auto">
+							<a href={url} target="_blank" rel="noopener noreferrer">
+								<ExternalLinkIcon />
+								Open in Slack
+							</a>
+						</Button>
+					)}
+				</span>
+			) : null}
+		</Tile>
+	);
+}
 
 /** Emails together, read-only: a conversation under its subject, or a search under its query, the newest few first. */
 export function MessagesCard({ list, actions }: { list: Messages; actions?: ReactNode }) {
+	if (list.service === "slack") return <SlackMessagesCard list={list} actions={actions} />;
 	const Icon = list.search ? SearchIcon : MailsIcon;
 	const more = list.total === null ? 0 : list.total - list.messages.length;
 	return (
@@ -906,6 +1013,12 @@ export type Person = {
 	readonly photo?: string | undefined;
 	readonly url?: string | undefined;
 	readonly asOf?: string | undefined;
+	/** A person in Slack: their handle, status and time zone, and whether they are of another team. */
+	readonly service?: "slack" | undefined;
+	readonly handle?: string | undefined;
+	readonly status?: string | undefined;
+	readonly timezone?: string | undefined;
+	readonly outside?: boolean | undefined;
 };
 
 /** Only Google Contacts' own pages open from a person. */
@@ -940,8 +1053,10 @@ const listOf = (value: string) =>
 
 /** A read-only person card: who, where they work, and their addresses and numbers as links that start an email or call. */
 export function ContactCard({ person, actions }: { person: Person; actions?: ReactNode }) {
-	const open = contactsUrl(person.url);
-	const work = [person.title, person.organization].filter(Boolean).join(" · ");
+	const slack = person.service === "slack";
+	const open = slack ? slackUrl(person.url) : contactsUrl(person.url);
+	const work = [slack ? person.handle : undefined, person.title, person.organization].filter(Boolean).join(" · ");
+	const about = slack ? [person.status, person.timezone].filter(Boolean).join(" · ") : "";
 	const initials = initialsOf(person.name);
 	return (
 		<Tile className="flex flex-col gap-2.5 p-3.5">
@@ -984,9 +1099,15 @@ export function ContactCard({ person, actions }: { person: Person; actions?: Rea
 					))}
 				</ul>
 			) : null}
+			{about === "" ? null : <span className="text-meta text-ink-2 [overflow-wrap:anywhere]">{about}</span>}
 			{person.other ? (
 				<span data-contact-other="" className="text-meta text-ink-2">
 					From people you've emailed
+				</span>
+			) : null}
+			{person.outside === true ? (
+				<span data-contact-outside="" className="text-meta text-ink-2">
+					From another team
 				</span>
 			) : null}
 			{open === undefined ? null : (
@@ -994,7 +1115,7 @@ export function ContactCard({ person, actions }: { person: Person; actions?: Rea
 					<Button asChild size="sm" variant="ghost">
 						<a href={open} target="_blank" rel="noopener noreferrer">
 							<ExternalLinkIcon />
-							Open in Google Contacts
+							{slack ? "Open in Slack" : "Open in Google Contacts"}
 						</a>
 					</Button>
 				</span>

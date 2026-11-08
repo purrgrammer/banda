@@ -6,6 +6,7 @@ import contacts from "../../../shipped/connections/contacts.json";
 import drive from "../../../shipped/connections/drive.json";
 import github from "../../../shipped/connections/github.json";
 import gmail from "../../../shipped/connections/gmail.json";
+import slack from "../../../shipped/connections/slack.json";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import type { WatchView } from "../../../src/server/api.ts";
 import type { Service } from "../chat/Catalogue.tsx";
@@ -354,6 +355,7 @@ const DEFINITIONS: { readonly [id: string]: { readonly scopes?: readonly string[
 	drive,
 	github,
 	gmail,
+	slack,
 };
 
 /** The access a connection banda ships offers, from its definition; its default scopes stand for the required row. */

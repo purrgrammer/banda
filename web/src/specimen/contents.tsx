@@ -22,6 +22,7 @@ import { DriveSection } from "./connections/drive.tsx";
 import { GithubSection } from "./connections/github.tsx";
 import { GmailSection } from "./connections/gmail.tsx";
 import { McpSection } from "./connections/mcp.tsx";
+import { SlackSection } from "./connections/slack.tsx";
 import { AppIcon } from "./explorations/app-icon.tsx";
 import { Controls } from "./foundation/controls.tsx";
 import { Copy } from "./foundation/copy.tsx";
@@ -68,6 +69,7 @@ export const CONTENTS: Readonly<Record<GroupId, readonly (readonly [string, Comp
 		["calendar", CalendarSection],
 		["contacts", ContactsSection],
 		["drive", DriveSection],
+		["slack", SlackSection],
 		["mcp", McpSection],
 	],
 	harness: [["harness", HarnessSection]],

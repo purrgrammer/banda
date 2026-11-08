@@ -39,14 +39,15 @@ function useConnection(connection: string, agent: Who | undefined, why: string |
 	const shipped = capabilities?.shipped?.find((each) => each.name === connection);
 	const service = serviceOf(connection, capabilities);
 	const currentScopes = view?.accepted?.connection?.scopes ?? shipped?.connection.scopes ?? [];
-	// Google signs in through the computer banda runs on: its redirect is that computer's loopback address.
-	const google = currentScopes.some((scope) => scope.startsWith("https://www.googleapis.com/auth/"));
+	// Google and Slack sign in through the computer banda runs on: their redirect is that computer's loopback address.
+	const loopback =
+		connection === "slack" || currentScopes.some((scope) => scope.startsWith("https://www.googleapis.com/auth/"));
 	const reason = [
 		why ??
 			(agent === undefined
 				? "Sign in once; then switch it on for the agents that may use it."
 				: `${agent.name} reads with it and asks before anything it writes.`),
-		runsOnDevice && google
+		runsOnDevice && loopback
 			? `Sign in${connection === "gmail" ? " and change Gmail access" : ` to ${service}`} on the computer Banda runs on. Connected accounts are available on this device.`
 			: undefined,
 	]
@@ -58,7 +59,7 @@ function useConnection(connection: string, agent: Who | undefined, why: string |
 		service,
 		connectionUrl: view?.accepted?.connection?.url ?? shipped?.connection.url,
 		currentScopes,
-		onComputerOnly: runsOnDevice && google,
+		onComputerOnly: runsOnDevice && loopback,
 		reason,
 	};
 }

@@ -3,7 +3,14 @@ import { cn } from "@/lib/cn";
 import { GitHubMark } from "./Object.tsx";
 
 /** Marks banda ships for the services it knows: a service's own favicon address needs its sign-in and is no image. */
-const SHIPPED_MARKS = new Set(["gmail", "calendar", "contacts", "drive", "docs"]);
+const SHIPPED_MARKS = new Map([
+	["gmail", "png"],
+	["calendar", "png"],
+	["contacts", "png"],
+	["drive", "png"],
+	["docs", "png"],
+	["slack", "svg"],
+]);
 
 function serverFavicon(url: string | undefined): string | undefined {
 	if (!url) return undefined;
@@ -27,7 +34,8 @@ export function ConnectionIcon({
 	className?: string | undefined;
 }) {
 	const name = connection.toLowerCase();
-	const src = SHIPPED_MARKS.has(name) ? `/connections/${name}.png` : serverFavicon(url);
+	const mark = SHIPPED_MARKS.get(name);
+	const src = mark !== undefined ? `/connections/${name}.${mark}` : serverFavicon(url);
 	const [failedSrc, setFailedSrc] = useState<string | undefined>();
 	if (name === "github") return <GitHubMark {...(className === undefined ? {} : { className })} />;
 	return (
