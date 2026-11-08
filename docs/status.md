@@ -11,8 +11,10 @@ remain local to the preview.
 Google Calendar, Contacts and Drive join Gmail as built-in connections, from one registry of Google APIs
 ([Connections](connections.md)). Calendar reads events and free/busy and makes approved changes (create with guests
 and a Meet link, change, answer, delete), each made once across a crash and from the event's current version;
-Contacts finds saved people and people the owner has emailed; Drive finds files and reads Docs, Sheets and Slides as
-text. Access is per account: each account asks for its own scopes within what its file allows, and the required ones
+Contacts finds saved people and people the owner has emailed; Drive finds files and reads Docs, every tab of a Sheet,
+and Slides as text, and adds rows, writes cells and adds tabs to a Sheet as approved drafts, under a "Change your
+spreadsheets" scope of its own; it reads a file's comments, adds text at the end of a Doc ("Change your documents")
+and replies to a comment in the owner's name, each an approved draft. Access is per account: each account asks for its own scopes within what its file allows, and the required ones
 are always asked. Connecting happens in one dialog, which ends by choosing the agents that use the account; a shipped
 connection is on for the lead by default. An agent names objects in its prose as links that open their cards; cards
 appear only when it shows them. Sends to third parties (Gmail's send, Calendar's create and change) ask every time.
@@ -75,7 +77,7 @@ concurrency and provenance work remains in [Memory](memory.md); this is not rele
 The Library and panel redesign is a separate slice.
 
 Watches are in code on the `watches` branch, draft PR #24 ([Watches](watches.md)): a watch file in `watches/`, its
-task that looks, diffs and wakes its agent's chat as a feed item ("Sancho saw <ref>: all checks green"), the `watch`
+task that looks, diffs and wakes its agent's chat as a feed item ("<ref>: all checks green", the ref a link), the `watch`
 tool's card, Follow on an object's card, the Watching list (Add a link, Check now, Pause, Stop) and the detail's
 editor. Slices 1 to 3 (health, gaps, resume, authority, bursts, cadence, wakes a day) and every connection banda
 ships: GitHub's pull requests, issues, jobs, notifications, repositories, discussions and workflow runs; Gmail's

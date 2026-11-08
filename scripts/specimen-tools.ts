@@ -32,12 +32,12 @@ const catalog = Object.fromEntries(
 	tools.map((tool) => [tool.name, { description: tool.description, parameters: tool.parameters }]),
 );
 await writeFile(
-	new URL("../web/src/specimen/tool-schemas.json", import.meta.url),
+	new URL("../web/src/specimen/agent/tool-schemas.json", import.meta.url),
 	`${JSON.stringify(catalog, null, 2)}\n`,
 );
 
 execFileSync(fileURLToPath(new URL("../node_modules/.bin/biome", import.meta.url)), [
 	"format",
 	"--write",
-	fileURLToPath(new URL("../web/src/specimen/tool-schemas.json", import.meta.url)),
+	fileURLToPath(new URL("../web/src/specimen/agent/tool-schemas.json", import.meta.url)),
 ]);

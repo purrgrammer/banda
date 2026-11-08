@@ -468,7 +468,7 @@ export async function calendarCall(
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ZONE = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+){0,2}$/;
-const EMAIL =
+export const EMAIL =
 	/^[^\s@<>(),;:"[\]\\]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?)+$/;
 const SEND_UPDATES: Record<string, string> = { all: "all", external: "externalOnly", none: "none" };
 const ANSWERS = ["accepted", "declined", "tentative"];
@@ -498,7 +498,7 @@ export function createdEventId(key: string): string {
 const given = (args: Record<string, unknown>, name: string) => args[name] !== undefined && args[name] !== null;
 
 /** Control characters, but for a tab and the ends of lines, which a description may hold. */
-const hasControl = (value: string) =>
+export const hasControl = (value: string) =>
 	[...value].some((char) => {
 		const point = char.codePointAt(0) ?? 0;
 		return (point < 0x20 && point !== 0x09 && point !== 0x0a && point !== 0x0d) || point === 0x7f;

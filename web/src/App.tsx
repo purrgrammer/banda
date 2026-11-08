@@ -7,13 +7,15 @@
 /** The phone's native shell, when the page runs in it: read once, as the transport is. */
 const native = nativeShell();
 
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { PairDevice } from "./app/PairDevice.tsx";
 import { Shell } from "./app/Shell.tsx";
 import { hasToken, onToken, onUnauthorized } from "./lib/api.ts";
 import { nativeShell } from "./lib/transport.ts";
-import { Specimen } from "./routes/Specimen.tsx";
+
+/** The specimen, loaded when its hash is opened: the app does not carry it. */
+const Specimen = lazy(() => import("./routes/Specimen.tsx").then((module) => ({ default: module.Specimen })));
 
 function useSpecimen(): boolean {
 	const [hash, setHash] = useState(location.hash);
@@ -34,7 +36,12 @@ export function App() {
 	useEffect(() => {
 		return onToken(() => setRefused(!hasToken()));
 	}, []);
-	if (specimen) return <Specimen />;
+	if (specimen)
+		return (
+			<Suspense fallback={null}>
+				<Specimen />
+			</Suspense>
+		);
 	if (native !== undefined)
 		return (
 			<PairDevice shell={native}>

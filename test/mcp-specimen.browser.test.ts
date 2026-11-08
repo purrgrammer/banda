@@ -1,3 +1,7 @@
+/**
+ * The MCP specimen (`#/specimen/mcp`): the app's own setup over a fixture connection, with no daemon behind it. Every
+ * phase and sign-in is reached as the owner would, nothing is sent to an API, and the page keeps its width.
+ */
 import { mkdir } from "node:fs/promises";
 import { createServer as createHttpServer, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -44,8 +48,14 @@ afterAll(async () => {
 
 const button = (text: string) =>
 	`[...document.querySelectorAll('button')].find(el => el.textContent.trim() === ${JSON.stringify(text)})`;
+const tab = (text: string) =>
+	`[...document.querySelectorAll('[role="tab"]')].find(el => el.textContent.trim() === ${JSON.stringify(text)})`;
+const summary = (text: string) =>
+	`[...document.querySelectorAll('summary')].find(el => el.textContent.trim() === ${JSON.stringify(text)})`;
 const labelled = (text: string) =>
 	`document.getElementById([...document.querySelectorAll('label')].find(el => el.textContent.trim() === ${JSON.stringify(text)})?.htmlFor)`;
+const heading = () => `document.querySelector('[data-mcp-phase] h1')?.textContent`;
+const alert = () => `document.querySelector('[data-mcp-phase] [role="alert"]')?.textContent`;
 async function click(page: Page, selector: string) {
 	await page.until(selector);
 	await page.run(
@@ -53,12 +63,13 @@ async function click(page: Page, selector: string) {
 	);
 }
 async function fill(page: Page, label: string, value: string) {
+	await page.until(labelled(label));
 	await page.run(
 		`(() => {const el=${labelled(label)}; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true}));})()`,
 	);
 }
-async function step(page: Page, value: string) {
-	await page.until(`document.querySelector('[data-mcp-step="${value}"]')`);
+async function phase(page: Page, value: string) {
+	await page.until(`document.querySelector('[data-mcp-phase="${value}"]')`);
 	expect(await page.run(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
 }
 async function scenario(page: Page, text: string) {
@@ -87,47 +98,44 @@ for (const width of [390, 1440])
 			`MCP specimen: OAuth, conservative access, cancellation and sign-out at ${width} ${theme}`,
 			async () => {
 				await withPage(url, { width, height: 900 }, async (page) => {
-					await step(page, "catalogue");
-					await click(page, `[...document.querySelectorAll('[role="tab"]')].find(el => el.textContent === '${theme}')`);
-					expect(await page.run(`getComputedStyle(document.querySelector('[data-mcp-step]')).colorScheme`)).toBe(
+					await phase(page, "setup");
+					await click(page, tab(theme));
+					expect(await page.run(`getComputedStyle(document.querySelector('[data-mcp-phase]')).colorScheme`)).toBe(
 						theme.toLowerCase(),
 					);
-					await click(page, button("Add MCP server"));
-					await step(page, "server");
 					await shot(page, `${width}-${theme}-server`);
+					// an address with credentials is refused above the form, and the owner's details stay
 					await fill(page, "Server address", "https://user:password@example.com/mcp");
 					await click(page, button("Check server"));
-					await page.until(`document.querySelector('[aria-invalid="true"]')`);
-					await step(page, "server");
+					await page.until(alert());
+					await phase(page, "setup");
+					expect(await page.run(`${labelled("Server address")}.value`)).toBe("https://user:password@example.com/mcp");
 					await fill(page, "Server address", "https://ernesto.example/mcp");
 					await click(page, button("Check server"));
-					await step(page, "auth");
+					await phase(page, "auth");
+					expect(await page.run(alert())).toBeUndefined();
 					await click(page, button("Continue to sign in"));
-					await step(page, "waiting");
+					await phase(page, "waiting");
+					expect(await page.run(`document.body.textContent.includes('HJKL-4821')`)).toBe(true);
 					await shot(page, `${width}-${theme}-waiting`);
 					await click(page, button("Cancel sign-in"));
-					await step(page, "auth");
+					await phase(page, "auth");
+					expect(await page.run(heading())).toBe("Connect Ernesto");
 					await click(page, button("Continue to sign in"));
-					await click(page, button("Simulate expired sign-in"));
-					await step(page, "auth");
-					await page.until(`document.querySelector('[role="alert"]')`);
-					await click(page, button("Continue to sign in"));
-					await click(page, button("Simulate successful sign-in"));
-					await step(page, "review");
+					await phase(page, "waiting");
+					// the service confirms: the daemon's view would move the setup on
+					await click(page, tab("Review"));
+					await phase(page, "review");
 					expect(await page.run(`document.querySelectorAll('[role="switch"][aria-checked="true"]').length`)).toBe(0);
-					expect(await page.run(`${labelled("Allow file reads without approval")}.getAttribute('aria-checked')`)).toBe(
-						"false",
-					);
-					await click(
-						page,
-						`[...document.querySelectorAll('summary')].find(el => el.textContent === 'Introduction from the server')`,
-					);
-					await click(page, `[...document.querySelectorAll('summary')].find(el => el.textContent === 'Tools · 3')`);
+					await click(page, summary("Read without asking"));
+					expect(await page.run(`${labelled("fs_read")}.getAttribute('aria-checked')`)).toBe("false");
+					await click(page, summary("Introduction from the server"));
+					await click(page, summary("Tools · 3"));
 					await shot(page, `${width}-${theme}-review`);
 					await click(page, labelled("Sancho"));
-					await click(page, button("Add connection and give access"));
-					await step(page, "done");
-					expect(await page.run(`document.body.textContent.includes('Sancho can use this connection.')`)).toBe(true);
+					await click(page, button("Save access"));
+					await phase(page, "done");
+					expect(await page.run(`${labelled("Sancho")}.getAttribute('aria-checked')`)).toBe("true");
 					expect(await page.run(`${labelled("Mara")}.getAttribute('aria-checked')`)).toBe("false");
 					await shot(page, `${width}-${theme}-done`);
 					await click(page, button("Sign out"));
@@ -136,20 +144,21 @@ for (const width of [390, 1440])
 						theme.toLowerCase(),
 					);
 					await click(page, button("Stay connected"));
-					await step(page, "done");
+					await page.until(`!document.querySelector('[role="alertdialog"]')`);
+					await phase(page, "done");
 					await click(page, button("Sign out"));
 					await click(
 						page,
 						`[...document.querySelectorAll('[role="alertdialog"] button')].find(el => el.textContent === 'Sign out')`,
 					);
-					await step(page, "auth");
+					await phase(page, "auth");
 					expect(
 						await page.run(
 							`performance.getEntriesByType('resource').filter(e => new URL(e.name).pathname.startsWith('/api/')).length`,
 						),
 					).toBe(0);
 					await scenario(page, "No sign-in");
-					await step(page, "catalogue");
+					await phase(page, "setup");
 					expect(page.errors()).toEqual([]);
 				});
 			},
@@ -158,42 +167,46 @@ for (const width of [390, 1440])
 	}
 
 it.skipIf(!hasChrome())(
-	"MCP specimen: anonymous, bearer, retry, and expired-sign-in branches",
+	"MCP specimen: anonymous, bearer, the way back, and an expired sign-in",
 	async () => {
 		await withPage(url, { width: 390, height: 844 }, async (page) => {
-			await step(page, "catalogue");
+			await phase(page, "setup");
 			await scenario(page, "No sign-in");
-			await click(page, button("Add MCP server"));
+			await fill(page, "Server address", "https://ernesto.example/mcp");
 			await click(page, button("Check server"));
-			await step(page, "review");
-			expect(await page.run(`document.body.textContent.includes('No account or credential will be created.')`)).toBe(
-				true,
-			);
-			await click(page, button("Add connection"));
-			await step(page, "done");
-			expect(await page.run(`document.body.textContent.includes('No agents have access yet.')`)).toBe(true);
+			await phase(page, "review");
+			expect(await page.run(`document.body.textContent.includes('No account or credential was created.')`)).toBe(true);
+			expect(await page.run(`Boolean(${button("Back to sign-in")})`)).toBe(false);
+			await click(page, button("Save access"));
+			await phase(page, "done");
+			expect(await page.run(`document.querySelectorAll('[role="switch"][aria-checked="true"]').length`)).toBe(0);
 			await scenario(page, "Bearer credential");
-			await click(page, button("Add MCP server"));
+			await fill(page, "Server address", "https://ernesto.example/mcp");
 			await click(page, button("Check server"));
-			await step(page, "auth");
-			expect(await page.run(`${button("Continue")}.disabled`)).toBe(true);
+			await phase(page, "auth");
+			expect(await page.run(`${button("Connect")}.disabled`)).toBe(true);
 			await fill(page, "Bearer credential", "pretend-value");
-			await click(page, button("Continue"));
-			await step(page, "review");
-			await click(page, button("Server details"));
-			await click(page, button("Check server"));
-			await step(page, "auth");
+			await click(page, button("Connect"));
+			await phase(page, "review");
+			await click(page, button("Back to sign-in"));
+			await phase(page, "auth");
 			expect(await page.run(`${labelled("Bearer credential")}.value`)).toBe("");
-			await scenario(page, "Server unavailable");
-			await click(page, button("Add MCP server"));
-			await click(page, button("Check server"));
-			await step(page, "problem");
-			await shot(page, "390-error");
-			await click(page, button("Try again"));
-			await step(page, "auth");
+			// from a connected server, signing in another account can come back to the review it left
+			await scenario(page, "Ernesto · OAuth");
+			await click(page, tab("Review"));
+			await phase(page, "review");
+			await click(page, button("Sign in another account"));
+			await phase(page, "auth");
+			expect(await page.run(`Boolean(${button("Use a connected account")})`)).toBe(false);
+			await click(page, button("Back to review"));
+			await phase(page, "review");
 			await scenario(page, "Expired sign-in");
-			await step(page, "auth");
-			await page.until(`document.querySelector('[role="alert"]')`);
+			await phase(page, "auth");
+			expect(await page.run(heading())).toBe("Sign in to Ernesto again");
+			expect(await page.run(alert())).toBe(
+				"Your sign-in expired or wasn’t completed. No new access has been given. Sign in again to continue.",
+			);
+			await shot(page, "390-expired");
 			expect(page.errors()).toEqual([]);
 		});
 	},

@@ -17,7 +17,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { AgentDoc, type ConversationId, type TaskId, type ToolExecutionApi } from "@earendil-works/pi-durable";
 import fc from "fast-check";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Accepted, parseAgent, shaOf } from "../src/core/agents.ts";
 import { Connected, connectionTools, connectionToolsOf, parseConnection, parseTool } from "../src/core/connections.ts";
 import { OWNER } from "../src/core/gateway.ts";
@@ -39,6 +39,21 @@ import { hostBox } from "./fixtures/host-box.ts";
 import { type FakeMcp, startFakeMcp } from "./fixtures/mcp-server.ts";
 import { echoModels, tempHome, until } from "./helpers.ts";
 import { pbtRuns } from "./pbt.ts";
+
+/** Held at the next read of the box, so a test can finish a sign-in inside a view that has already read the store. */
+const boxRead = vi.hoisted(() => ({ hold: undefined as Promise<void> | undefined }));
+vi.mock("../src/server/agents.ts", async (actual) => {
+	const agents = await actual<typeof import("../src/server/agents.ts")>();
+	return {
+		...agents,
+		boxFiles: async (...args: Parameters<typeof agents.boxFiles>) => {
+			const hold = boxRead.hold;
+			boxRead.hold = undefined;
+			await hold;
+			return agents.boxFiles(...args);
+		},
+	};
+});
 
 const opened: Opened[] = [];
 const fakes: FakeMcp[] = [];
@@ -1105,6 +1120,31 @@ describe("each account's own access", () => {
 		s.writeBox("connections/cal.md", fileWith(fake, ["read:user"], {}));
 		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
 		expect((await shown(s))?.accounts?.[0]?.stale).toBe(true);
+	});
+
+	it("a view begun during a sign-in by code never says to sign in, though the sign-in ends before the view does", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true, scopes: [] });
+		fakes.push(fake);
+		const s = await open(fake);
+		s.writeBox(
+			"connections/cal.md",
+			connectionFile({ url: fake.url, auth: "oauth", client: "banda-app", account: "get_me.login", reads: ["whoami"] }),
+		);
+		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		fake.user = "alice";
+		const started = await s.capabilities.signIn("cal", context, undefined, {});
+		if (!("code" in started)) throw new Error("expected a sign-in by code");
+		let release = () => {};
+		boxRead.hold = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		// this view reads the store, with no account yet, and stays at the box while the sign-in finishes
+		const reading = shown(s);
+		while (boxRead.hold !== undefined) await new Promise((resolve) => setTimeout(resolve, 5));
+		await fake.typeCode(started.code, true);
+		while ((await shown(s))?.state !== "connected") await new Promise((resolve) => setTimeout(resolve, 25));
+		release();
+		expect((await reading)?.state).toBe("signing-in");
 	});
 
 	it("narrowing what an account may ask for makes the accounts beyond it stale; changing the default does not", async () => {

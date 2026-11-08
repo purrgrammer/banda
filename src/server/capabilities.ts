@@ -352,7 +352,10 @@ export function openCapabilities(options: CapabilityOptions) {
 		});
 	}
 
-	/** Account-generation AND credential-version CAS, serialized with sign-in, sign-out and removals. */
+	/**
+	 * Account-generation AND credential-version CAS, serialized with sign-in, sign-out and removals. A newer version of
+	 * the same sign-in (another call's refresh landed first) stands and is used; a new sign-in or a sign-out refuses.
+	 */
 	async function keepRefreshed(
 		name: string,
 		account: string,
@@ -362,16 +365,66 @@ export function openCapabilities(options: CapabilityOptions) {
 	): Promise<CredentialSnapshot> {
 		return withCredentials(home, name, async (locked) => {
 			const current = await locked.read(account);
-			if (
-				(await generationOf(name, account, ctx)) !== expected.generation ||
-				current?.revision !== expected.credentials.revision
-			)
+			const generation = await generationOf(name, account, ctx);
+			if (generation !== expected.generation || current === undefined)
 				throw new Error("the sign-in changed while it was refreshing; try again");
+			if (current.revision !== expected.credentials.revision) return { credentials: current, generation };
 			fault("credential:replace");
 			const kept = await locked.keep(account, credentials);
 			fault("credential:replaced");
 			return { credentials: kept, generation: expected.generation };
 		});
+	}
+
+	/** Refreshes in flight, by connection and account: calls at the same moment share one, rather than racing. */
+	const refreshes = new Map<string, Promise<CredentialSnapshot>>();
+
+	/**
+	 * New tokens for `expected`, kept: one refresh for every call that finds the same version expiring or refused at
+	 * once. `failed` words a refresh the provider refused.
+	 */
+	function refreshOnce(
+		connection: Connection,
+		account: string,
+		expected: CredentialSnapshot,
+		ctx: Context,
+		failed?: () => Error,
+	): Promise<CredentialSnapshot> {
+		const key = JSON.stringify([connection.name, account, expected.credentials.revision]);
+		const running = refreshes.get(key);
+		if (running !== undefined) return running;
+		const { credentials } = expected;
+		const started = (async () => {
+			if (!("oauth" in credentials)) throw new Error("the credentials are a key, which does not refresh");
+			fault("credential:refresh");
+			let fresh: Awaited<ReturnType<typeof refresh>>;
+			try {
+				fresh = await refresh(
+					credentials.oauth.server,
+					credentials.oauth.client,
+					credentials.oauth.tokens,
+					credentials.url,
+					now(),
+					fetcher,
+				);
+			} catch (error) {
+				throw failed === undefined ? error : failed();
+			}
+			fault("credential:refreshed");
+			return keepRefreshed(
+				connection.name,
+				account,
+				expected,
+				{ ...credentials, oauth: { ...credentials.oauth, tokens: fresh } },
+				ctx,
+			);
+		})();
+		refreshes.set(key, started);
+		started.then(
+			() => refreshes.delete(key),
+			() => refreshes.delete(key),
+		);
+		return started;
 	}
 
 	/**
@@ -402,16 +455,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			if ("key" in credentials) return `Bearer ${credentials.key}`;
 			const { tokens } = credentials.oauth;
 			if (tokens.expires !== undefined && tokens.expires < now() + 60_000 && tokens.refresh !== undefined) {
-				fault("credential:refresh");
-				const fresh = await refresh(credentials.oauth.server, credentials.oauth.client, tokens, url, now(), fetcher);
-				fault("credential:refreshed");
-				snapshot = await keepRefreshed(
-					connection.name,
-					account as string,
-					snapshot,
-					{ url, oauth: { ...credentials.oauth, tokens: fresh } },
-					ctx,
-				);
+				snapshot = await refreshOnce(connection, account as string, snapshot, ctx);
 				credentials = snapshot.credentials;
 				used(snapshot);
 			}
@@ -464,24 +508,12 @@ export function openCapabilities(options: CapabilityOptions) {
 				credentials.oauth.tokens.refresh === undefined
 			)
 				throw error;
-			fault("credential:refresh");
-			const fresh = await refresh(
-				credentials.oauth.server,
-				credentials.oauth.client,
-				credentials.oauth.tokens,
-				credentials.url,
-				now(),
-				fetcher,
-			).catch(() => {
-				throw new Unauthorized("the sign-in ran out: the owner signs in again");
-			});
-			fault("credential:refreshed");
-			await keepRefreshed(
-				connection.name,
+			await refreshOnce(
+				connection,
 				account,
 				expected,
-				{ ...credentials, oauth: { ...credentials.oauth, tokens: fresh } },
 				ctx,
+				() => new Unauthorized("the sign-in ran out: the owner signs in again"),
 			);
 			await beforeRetry?.();
 			return connect();
@@ -1369,6 +1401,9 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	/** Every connection and tool, accepted or only in the box, with the change the box holds, and how each stands. */
 	async function view(ctx: Context = context): Promise<CapabilitiesView> {
+		// taken before the store is read: a sign-in leaves this map only after its account is stored, so one gone from
+		// here has its account in what is read next, and one that ends while this view runs still reads as signing in
+		const signing = new Map(devices);
 		const { accepted, connected, inEffectNow, own } = await harness.commit(
 			async (tx) => ({
 				accepted: JSON.parse(JSON.stringify((await tx.doc(Accepted)).files)) as {
@@ -1476,10 +1511,10 @@ export function openCapabilities(options: CapabilityOptions) {
 				if (signed && fresh.length === 0) state = connection.auth === "oauth" ? "sign-in" : "key";
 				else if (listed !== undefined && listed.sha === file?.sha) state = "connected";
 				else state = "connecting";
-				if (devices.has(name)) state = "signing-in";
+				if (signing.has(name)) state = "signing-in";
 				if (problems.has(name) && state !== "connected" && state !== "signing-in") state = "problem";
 			}
-			const device = state === "signing-in" ? devices.get(name)?.device : undefined;
+			const device = state === "signing-in" ? signing.get(name)?.device : undefined;
 			if (connection !== undefined) learnOffered(connection);
 			// only a sign-in that is this file's says what it was given: the first account's
 			const first = fresh[0];
@@ -1552,7 +1587,7 @@ export function openCapabilities(options: CapabilityOptions) {
 								code: device.code,
 								page: device.page,
 								expires: device.expires,
-								...(devices.get(name)?.agent === undefined ? {} : { agent: devices.get(name)?.agent as string }),
+								...(signing.get(name)?.agent === undefined ? {} : { agent: signing.get(name)?.agent as string }),
 							},
 						}),
 				...(finished.has(name) ? { finished: finished.get(name) as Finished } : {}),

@@ -57,8 +57,8 @@ returned to and merged, at desktop and phone width.
   finishing woke the agent as "all checks green, checks finished", each on the right look
 - [x] Add in the panel takes a link; the Watching section shows even when empty
 - [x] An editor for a watch's words: `until` from the kind's ends, and what matters, bound to the version shown
-- [ ] A wake's key is the transition (the watch's `since`, its cursor, the changes), so the same change later wakes
-  again; the fault sweep has not run on it yet (CI)
+- [x] A wake's key is the transition (the watch's `since`, its cursor, the changes), so the same change later wakes
+  again; the fault sweep ran on it in CI
 - [x] Slice 2, health and gaps: can't reach (since when) in the row; the error line after an hour, once per run of
   failures, unread; resume reconciles into one marked wake; a gap in the readings kept says changes may be missing;
   the account's switch, sign-out and removal end watches in the same commit; no wake after done or paused; scenarios:
@@ -67,8 +67,8 @@ returned to and merged, at desktop and phone width.
 - [x] Slice 2's rest in code: "behind" in the row until a wake without a gap; resuming after Pause all marks the next
   wake as from the pause; the fault worker runs the pause, Pause all and switch-off scenarios (`SCENARIOS`), each
   once without faults in the unit suite
-- [ ] The fault sweep and property over every scenario (pause, Pause all, the account's switch, the new burst and
-  limit paths, a held failure a later push undid) have not run in CI yet; only a two-run property of Pause all ran locally
+- [x] The fault sweep and property over every scenario (pause, Pause all, the account's switch, the new burst and
+  limit paths, a held failure a later push undid) ran in CI
 - [ ] Slice 2 through the app against a daemon at desktop and phone width
 - [x] Slice 3, volume: a burst is one wake (held while the last wake's run goes or within the kind's `settle`, the
   cursor kept, the held reading never evicted); busy cadence (`lookEvery`, tested end to end); `wakes_a_day` (pauses
@@ -110,8 +110,8 @@ returned to and merged, at desktop and phone width.
 - [x] A fault scenario with two watches on one object (`shared`: the act looks for both in turn, so each look may take
   the other's reading), and invariants that a kept reading is at or past every wake's version and that a live watch's
   reading is kept
-- [ ] The fault sweep over the shared reading, the dropped reading at the end, Check now keeping the task and the
-  stream's routing has not run in CI yet (dispatched on this branch after these commits)
+- [x] The fault sweep over the shared reading, the dropped reading at the end, Check now keeping the task and the
+  stream's routing ran in CI
 - [ ] A watch that shares a reading whose derived condition was held back (`steady`) schedules its quiet cadence, so
   it hears the flip up to a cadence after the watch that read; a held-back flag on the reading would give it the busy
   one

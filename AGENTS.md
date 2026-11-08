@@ -52,7 +52,8 @@ account, object, harness, session, artifact, memory, box, workspace, gateway, in
   not local pre-commit gates. Fault suites run one file at a time with at most two child jobs per runner.
 - The web UI is in `web/`: `npm run build:web` builds what the daemon serves, `npm run web:dev` serves it with hot
   reload against a daemon on `BANDA_PORT`, `npm run web:contrast` audits the palette, and `#/specimen` shows every
-  component. A new component or variant joins the specimen.
+  component, indexed by `web/src/specimen/registry.ts` (how to add or retire a section: `web/src/specimen/README.md`).
+  A new component or variant joins the specimen.
 - CI runs ordinary suites on every push to main and pull request, fault sweeps nightly at 02:17 UTC, and Docker
   suites on pushes to main. Manual CI runs select the fault and Docker suites. `node scripts/prebuild-images.ts`
   builds the box's images under the tags banda looks for (in CI through GitHub's layer cache).

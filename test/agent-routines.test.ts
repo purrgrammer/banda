@@ -117,15 +117,15 @@ describe("a permanent agent's routines", () => {
 			const researcher = await until(async () =>
 				requests.find((request) => request.prompt.includes("RESEARCHER INSTRUCTIONS")),
 			);
-			expect(researcher.tools).toEqual(expect.arrayContaining(["read", "message_user", "tool_search"]));
-			expect(researcher.tools).not.toContain("schedule");
-			for (const tool of ["propose_identity", "propose_preference", "bash"])
-				expect(researcher.tools, tool).not.toContain(tool);
+			expect(researcher.tools).toEqual(
+				expect.arrayContaining(["read", "bash", "schedule", "message_user", "tool_search"]),
+			);
+			for (const tool of ["propose_identity", "propose_preference"]) expect(researcher.tools, tool).not.toContain(tool);
 			await allowAndRun("daily-digest");
 			const digest = await wakeOf("DIGEST MARKER");
 			expect(digest.prompt).toContain("RESEARCHER INSTRUCTIONS");
 			expect(digest.tools).toContain("read");
-			expect(digest.tools).not.toContain("bash");
+			expect(digest.tools).toContain("bash");
 			// it is the researcher's, and woke in the researcher's one chat: no chat of its own
 			const control = await api<ControlView>("/control");
 			expect(control.routines.find((each) => each.name === "daily-digest")?.agent).toBe("researcher");

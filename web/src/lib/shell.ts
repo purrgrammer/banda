@@ -145,13 +145,17 @@ export const showBrowser = (chat: number, view: BrowserView) => {
 export const browserOf = (shell: Pick<Shell, "browsers">, chat: number | undefined): AgentBrowserView | undefined =>
 	chat === undefined ? undefined : shell.browsers.find((each) => each.tab === chat);
 
+// the same snapshot on the server: the specimen's registry test renders every component without a browser
+const snapshot = () => state;
+
 export function useShell(): Shell {
-	return useSyncExternalStore(subscribe, () => state);
+	return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
 
 /** One string `pick` makes of the shell: a component re-renders only when it changes, not at every event. */
 export function useShellPick(pick: (shell: Shell) => string): string {
-	return useSyncExternalStore(subscribe, () => pick(state));
+	const picked = () => pick(state);
+	return useSyncExternalStore(subscribe, picked, picked);
 }
 
 /** The agent chat `chat` runs, as the chat list says; the companion's when the list does not have it yet. */

@@ -224,6 +224,35 @@ it.each(["version", "signout", "disconnect", "remove"] as const)(
 		}
 	},
 );
+it("calls at the same moment share one refresh: the provider rotates the refresh token, so a second would lose the sign-in", async () => {
+	const s = await setup();
+	const original = await credentialsOf(s.home, "github", "alice");
+	if (original === undefined || !("oauth" in original)) throw new Error("no credential");
+	await keepCredentials(s.home, "github", "alice", {
+		...original,
+		oauth: { ...original.oauth, tokens: { ...original.oauth.tokens, expires: 0 } },
+	});
+	let release!: () => void;
+	const hold = new Promise<void>((r) => {
+		release = r;
+	});
+	let entered = 0;
+	s.fake.onRefresh = async () => {
+		entered++;
+		await hold;
+	};
+	const shows = [35, 36, 37].map((issue) =>
+		s.service.show(s.chat, [{ ref: `https://github.com/acme/banda/issues/${issue}` }]),
+	);
+	await until(() => entered > 0);
+	release();
+	const shown = await Promise.all(shows);
+	expect(shown.map((each) => each[0]?.shown)).toEqual(["card", "card", "card"]);
+	expect(s.fake.refreshed).toHaveLength(1);
+	const kept = await credentialsOf(s.home, "github", "alice");
+	if (kept === undefined || !("oauth" in kept)) throw new Error("no credential");
+	expect(s.fake.tokens.has(kept.oauth.tokens.access)).toBe(true);
+});
 it("normal tool calls share the refresh CAS, rather than a special card-only repair", async () => {
 	let called = false;
 	const s = await setup(() => {
