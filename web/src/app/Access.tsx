@@ -15,7 +15,6 @@ import { usePhone } from "../lib/phone.ts";
 import { useReturnFocus } from "../lib/return-focus.ts";
 import { showCapabilities, showControl, useShell } from "../lib/shell.ts";
 import { ConnectFlow } from "./ConnectFlow.tsx";
-import { ConnectionToolSettings } from "./ConnectionToolSettings.tsx";
 import { AddHarnessButton, HarnessAccessTile } from "./HarnessConnections.tsx";
 import { McpSetup } from "./McpSetup.tsx";
 

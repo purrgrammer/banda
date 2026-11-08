@@ -90,9 +90,11 @@ export const SCOPE_CHOICES: { readonly [connection: string]: ScopeChoices } = {
 		required: { scope: `${GOOGLE}drive.readonly`, label: "Find and read your files, including Docs and Sheets" },
 		choices: [
 			{ scope: `${GOOGLE}drive.file`, label: "Create files" },
+			{ scope: `${GOOGLE}spreadsheets`, label: "Change your spreadsheets" },
+			{ scope: `${GOOGLE}documents`, label: "Change your documents" },
 			{ scope: `${GOOGLE}drive`, label: "Change any of your files" },
 		],
-		note: "Changing access signs in again. Creating, replacing a Doc's text, renaming and trashing files still ask you to approve each one; banda never shares a file or deletes one for good.",
+		note: "Changing access signs in again. Every change (creating, replacing or adding to a Doc's text, renaming and trashing files, a Sheet's rows, cells and tabs, a reply to a comment) still asks you to approve it; banda never shares a file or deletes one for good.",
 	},
 	github: {
 		choices: [

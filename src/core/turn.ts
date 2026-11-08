@@ -137,8 +137,9 @@ export const NUDGES = 1;
 
 /** The nudge's words: fixed, the same whoever the companion is. */
 export const NUDGED =
-	"You ended your turn without answering the owner: your final text is your notes, which they never see. Answer " +
-	"them now with `message_user`, or, if nothing needs saying, with `react`. This reminder is automatic, not from the owner.";
+	"You ended your turn without answering the owner: your final text is your notes, which they never see. Nothing " +
+	"you wrote since their message reached them, so do not refer them to it. Answer them now with `message_user`, " +
+	"giving the whole answer in full, or, if nothing needs saying, with `react`. This reminder is automatic, not from the owner.";
 
 /** Whether an input of `kind` goes on with the task before it, rather than starting one: a nudge. */
 export const goesOn = (kind: string | undefined) => kind === NUDGE;

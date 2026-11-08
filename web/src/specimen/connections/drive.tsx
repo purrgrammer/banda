@@ -153,6 +153,86 @@ const DRAFTS: readonly (readonly [string, Draft, string, boolean])[] = [
 		"Move this file to the trash",
 		true,
 	],
+	[
+		"Draft: add rows to a tab",
+		{
+			type: "approval",
+			tool: "drive__append_rows",
+			verb: "Add",
+			as: AS,
+			on: ON,
+			args: {
+				file_id: "1sHeEt",
+				sheet: "ops",
+				rows: '2026-11-08,MSFT,BUY - MARKET,2,$530.61,"$1,061.22",USD,1.1552',
+				account: "alice",
+			},
+		},
+		"Add a row to the tab “ops” of this Sheet",
+		true,
+	],
+	[
+		"Draft: write cells",
+		{
+			type: "approval",
+			tool: "drive__update_range",
+			verb: "Write",
+			as: AS,
+			on: ON,
+			args: { file_id: "1sHeEt", range: "'Budget 2027'!G4", rows: "95", account: "alice" },
+		},
+		"Write “'Budget 2027'!G4” of this Sheet",
+		true,
+	],
+	[
+		"Draft: add a tab",
+		{
+			type: "approval",
+			tool: "drive__add_sheet",
+			verb: "Add",
+			as: AS,
+			on: ON,
+			args: { file_id: "1sHeEt", title: "2028", account: "alice" },
+		},
+		"Add the tab “2028” to this Sheet",
+		true,
+	],
+	[
+		"Draft: add text at the end of a Doc",
+		{
+			type: "approval",
+			tool: "drive__append_doc_text",
+			verb: "Add",
+			as: AS,
+			on: ON,
+			args: {
+				file_id: "1aBcD_eFgH-ijk",
+				markdown: "## Decisions, 8 Nov\n- Payments moves first\n- Growth waits for the new funnel",
+				account: "alice",
+			},
+		},
+		"Add text at the end of this Doc",
+		true,
+	],
+	[
+		"Draft: reply to a comment",
+		{
+			type: "approval",
+			tool: "drive__reply_comment",
+			verb: "Reply",
+			as: AS,
+			on: ON,
+			args: {
+				file_id: "1aBcD_eFgH-ijk",
+				comment_id: "AAABc9xYz",
+				text: "Done: the dates are in the table now.",
+				resolve: true,
+				account: "alice",
+			},
+		},
+		"Reply to a comment on this file and resolve it",
+		true,
+	],
 ];
 
 export function DriveSection() {

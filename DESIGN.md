@@ -387,7 +387,8 @@ lives inside agents' settings and the app's Settings, never as a screen of its o
   and Open GitHub as separate controls, the card alive in the chat so a phone can come back to it), the daemon sees
   the grant, the card says done ("Signed in as @bandarra · on for Mara"), and the account is on for that agent. A
   sign-in that did not finish says why and offers Try again; one that signs in an account already known says so
-  ("That's @bandarra, already connected · switched on for Mara"). When an account exists, a second agent's card is one
+  ("That's @bandarra, already connected · switched on for Mara"). Cancelling a sign-in in banda only stops
+  waiting for it: it never claims to cancel one open at the service. When an account exists, a second agent's card is one
   tap and no sign-in: "Let Mara use GitHub as @bandarra?". From then on reads run freely; a write is a draft. The
   agent is never asked for permission to use a connection it has: the draft is the only ask.
 - **What is offered is what was listed.** On connecting, the daemon lists the server's tools and keeps them in the

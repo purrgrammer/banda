@@ -366,8 +366,8 @@ export const SECTIONS: readonly Entry[] = [
 		id: "mcp",
 		title: "Add an MCP connection",
 		group: "connections",
-		status: "proposal",
-		sources: ["web/src/specimen/connections/mcp.tsx"],
+		status: "app",
+		sources: ["web/src/app/McpSetup.tsx", "web/src/chat/McpConnection.tsx", "web/src/chat/ToolKinds.tsx"],
 	},
 	// Harness
 	{

@@ -3,6 +3,9 @@
  * made by a multipart upload (converted to a Google file), read, listed by `appProperties`, renamed, trashed and given
  * new text by a media upload. With `file`, its files are kept there, written whole before it answers, so a process
  * killed after Drive applied a change and before banda recorded it leaves the change applied, as the real one would.
+ * A spreadsheet's tabs and cells answer the Sheets API: listed, read, appended to, written and added, under
+ * `tabs` (names in order) and `cells` (rows by tab) of the file. A document's text answers the Docs API as paragraphs
+ * and takes insertions; a file's `comments` are listed and replied to.
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 
@@ -20,14 +23,22 @@ const json = (body: unknown, status = 200) =>
 
 const GOOGLE = "https://www.googleapis.com/auth/";
 
-export function fakeDrive({ file, email = "alice@example.test" }: { file?: string; email?: string } = {}): FakeDrive {
-	let memory: { [id: string]: FakeFile } = {};
+export function fakeDrive({
+	file,
+	email = "alice@example.test",
+	seed = {},
+}: {
+	file?: string;
+	email?: string;
+	seed?: { [id: string]: FakeFile };
+} = {}): FakeDrive {
+	let memory: { [id: string]: FakeFile } = structuredClone(seed);
 	const load = () =>
 		file === undefined
 			? memory
 			: existsSync(file)
 				? (JSON.parse(readFileSync(file, "utf8")) as { [id: string]: FakeFile })
-				: {};
+				: structuredClone(seed);
 	const save = (files: { [id: string]: FakeFile }) => {
 		if (file === undefined) memory = files;
 		else {
@@ -36,6 +47,132 @@ export function fakeDrive({ file, email = "alice@example.test" }: { file?: strin
 		}
 	};
 	const writes: FakeDrive["writes"] = [];
+	/** A tab's name from an A1 range: quoted (with doubled quotes) or bare before `!`; the first tab when none. */
+	const tabOf = (range: string, tabs: string[]) => {
+		const at = range.lastIndexOf("!");
+		const named = at === -1 && !/^[A-Z$]/.test(range) ? range : at === -1 ? undefined : range.slice(0, at);
+		if (named === undefined) return { tab: tabs[0], cells: range };
+		const bare = /^'(.*)'$/s.exec(named)?.[1]?.replaceAll("''", "'") ?? named;
+		return { tab: tabs.includes(bare) ? bare : undefined, cells: at === -1 ? "" : range.slice(at + 1) };
+	};
+	const column = (letters: string) => [...letters.toUpperCase()].reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0) - 1;
+	const sheetsApi = (url: URL, method: string, raw: string | undefined) => {
+		const files = load();
+		const path = url.pathname.replace(/^\/v4\//, "");
+		const id = /^spreadsheets\/([^/:]+)/.exec(path)?.[1];
+		const found = id === undefined ? undefined : files[decodeURIComponent(id)];
+		if (found === undefined || found.mimeType !== "application/vnd.google-apps.spreadsheet" || found.trashed === true)
+			return json({ error: { code: 404, status: "NOT_FOUND" } }, 404);
+		const tabs = (found.tabs as string[] | undefined) ?? ["Sheet1"];
+		const cells = (found.cells as { [tab: string]: string[][] } | undefined) ?? {};
+		const rest = path.slice(`spreadsheets/${id}`.length);
+		const body = raw === undefined ? {} : (JSON.parse(raw) as { values?: string[][]; requests?: unknown[] });
+		const touched = () => {
+			found.tabs = tabs;
+			found.cells = cells;
+			found.modifiedTime = new Date().toISOString();
+			save(files);
+		};
+		if (rest === "" && method === "GET")
+			return json({ sheets: tabs.map((title) => ({ properties: { title, sheetType: "GRID" } })) });
+		if (rest === "/values:batchGet" && method === "GET")
+			return json({
+				valueRanges: url.searchParams.getAll("ranges").map((range) => {
+					const { tab } = tabOf(range, tabs);
+					const rows = tab === undefined ? [] : (cells[tab] ?? []);
+					return { range, majorDimension: "ROWS", ...(rows.length === 0 ? {} : { values: rows }) };
+				}),
+			});
+		const valuesAt = /^\/values\/([^:]+)(:append)?$/.exec(rest);
+		if (valuesAt !== null) {
+			const { tab, cells: at } = tabOf(decodeURIComponent(valuesAt[1] ?? ""), tabs);
+			if (tab === undefined) return json({ error: { code: 400, status: "INVALID_ARGUMENT" } }, 400);
+			const values = body.values ?? [];
+			if (cells[tab] === undefined) cells[tab] = [];
+			const rows = cells[tab];
+			if (valuesAt[2] === ":append" && method === "POST") {
+				writes.push({ method, path: `sheets/${id}/values/${tab}:append`, body: values });
+				const from = rows.length;
+				rows.push(...values);
+				touched();
+				return json({ updates: { updatedRange: `'${tab}'!A${from + 1}`, updatedRows: values.length } });
+			}
+			if (valuesAt[2] === undefined && method === "PUT") {
+				const start = /^\$?([A-Z]+)\$?(\d+)/i.exec(at);
+				if (start === null) return json({ error: { code: 400, status: "INVALID_ARGUMENT" } }, 400);
+				const [row0, col0] = [Number(start[2]) - 1, column(start[1] ?? "A")];
+				let count = 0;
+				values.forEach((row, r) => {
+					if (rows[row0 + r] === undefined) rows[row0 + r] = [];
+					const target = rows[row0 + r] as string[];
+					row.forEach((value, c) => {
+						target[col0 + c] = value;
+						count++;
+					});
+				});
+				writes.push({ method, path: `sheets/${id}/values/${tab}!${at}`, body: values });
+				touched();
+				return json({ updatedRange: `'${tab}'!${at}`, updatedCells: count });
+			}
+		}
+		if (rest === ":batchUpdate" && method === "POST") {
+			for (const request of body.requests ?? []) {
+				const title = (request as { addSheet?: { properties?: { title?: string } } }).addSheet?.properties?.title;
+				if (title === undefined) return json({ error: { code: 400, status: "INVALID_ARGUMENT" } }, 400);
+				if (tabs.includes(title))
+					return json({ error: { code: 400, status: "INVALID_ARGUMENT", message: "already exists" } }, 400);
+				writes.push({ method, path: `sheets/${id}:batchUpdate`, body: { addSheet: title } });
+				tabs.push(title);
+			}
+			touched();
+			return json({ spreadsheetId: id });
+		}
+		return json({ error: { code: 405 } }, 405);
+	};
+	/** A Doc's body as the Docs API shapes it: one paragraph an element, indexes counted from 1. */
+	const docsApi = (url: URL, method: string, raw: string | undefined) => {
+		const files = load();
+		const path = url.pathname.replace(/^\/v1\//, "");
+		const id = /^documents\/([^/:]+)/.exec(path)?.[1];
+		const found = id === undefined ? undefined : files[decodeURIComponent(id)];
+		if (found === undefined || found.mimeType !== "application/vnd.google-apps.document" || found.trashed === true)
+			return json({ error: { code: 404, status: "NOT_FOUND" } }, 404);
+		const rest = path.slice(`documents/${id}`.length);
+		const current = String(found.text ?? "");
+		if (rest === "" && method === "GET") {
+			const paragraphs = `${current}\n`.split("\n").slice(0, -1);
+			let index = 1;
+			const content = paragraphs.map((paragraph) => {
+				const startIndex = index;
+				index += paragraph.length + 1;
+				return {
+					startIndex,
+					endIndex: index,
+					paragraph: { elements: [{ startIndex, endIndex: index, textRun: { content: `${paragraph}\n` } }] },
+				};
+			});
+			return json({ documentId: id, body: { content } });
+		}
+		if (rest === ":batchUpdate" && method === "POST") {
+			const body = JSON.parse(raw ?? "{}") as {
+				requests?: { insertText?: { location: { index: number }; text: string } }[];
+			};
+			let text = `${current}\n`;
+			for (const request of body.requests ?? []) {
+				const insert = request.insertText;
+				if (insert === undefined) continue;
+				const at = insert.location.index - 1;
+				if (at < 0 || at >= text.length) return json({ error: { code: 400, status: "INVALID_ARGUMENT" } }, 400);
+				text = text.slice(0, at) + insert.text + text.slice(at);
+			}
+			writes.push({ method, path: `docs/${id}:batchUpdate`, body: body.requests });
+			found.text = text.slice(0, -1);
+			found.modifiedTime = new Date().toISOString();
+			save(files);
+			return json({ documentId: id });
+		}
+		return json({ error: { code: 405 } }, 405);
+	};
 	const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
 		const url = new URL(String(input instanceof Request ? input.url : input));
 		const method = init?.method ?? "GET";
@@ -48,6 +185,8 @@ export function fakeDrive({ file, email = "alice@example.test" }: { file?: strin
 				expires_in: 3600,
 				scope: `${GOOGLE}drive.readonly ${GOOGLE}drive.file ${GOOGLE}drive`,
 			});
+		if (url.origin === "https://sheets.googleapis.com") return sheetsApi(url, method, raw);
+		if (url.origin === "https://docs.googleapis.com") return docsApi(url, method, raw);
 		if (url.origin !== "https://www.googleapis.com") return json({ error: { code: 404 } }, 404);
 		const upload = url.pathname.startsWith("/upload/drive/v3/");
 		if (!upload && !url.pathname.startsWith("/drive/v3/")) return json({ error: { code: 404 } }, 404);
@@ -86,6 +225,35 @@ export function fakeDrive({ file, email = "alice@example.test" }: { file?: strin
 			files[id] = { ...given, id, trashed: false, text: media?.content ?? "", modifiedTime: new Date().toISOString() };
 			save(files);
 			return json({ id });
+		}
+		const commented = /^files\/([^/]+)\/comments(?:\/([^/]+))?(\/replies)?$/.exec(path);
+		if (commented !== null) {
+			const [, fileId = "", commentId, replying] = commented;
+			const file = files[decodeURIComponent(fileId)];
+			if (file === undefined) return json({ error: { code: 404, status: "NOT_FOUND" } }, 404);
+			const comments = (file.comments as FakeFile[] | undefined) ?? [];
+			if (commentId === undefined && method === "GET") return json({ comments });
+			const comment = comments.find((each) => each.id === commentId);
+			if (comment === undefined) return json({ error: { code: 404, status: "NOT_FOUND" } }, 404);
+			if (replying === undefined && method === "GET") return json(comment);
+			if (replying !== undefined && method === "POST") {
+				const body = JSON.parse(raw ?? "{}") as { content: string; action?: string };
+				if (comment.replies === undefined) comment.replies = [];
+				const replies = comment.replies as FakeFile[];
+				const reply = {
+					id: `r${replies.length + 1}`,
+					content: body.content,
+					createdTime: new Date().toISOString(),
+					author: { displayName: "Alice", me: true },
+					...(body.action === undefined ? {} : { action: body.action }),
+				};
+				replies.push(reply);
+				if (body.action === "resolve") comment.resolved = true;
+				note({ comment: commentId, ...body });
+				save(files);
+				return json({ id: reply.id });
+			}
+			return json({ error: { code: 405 } }, 405);
 		}
 		const id = /^files\/([^/]+)$/.exec(path)?.[1];
 		const found = id === undefined ? undefined : files[decodeURIComponent(id)];
