@@ -244,6 +244,30 @@ export const WATCH_VIEW: WatchView = {
 	},
 };
 
+/** Mara's watch on a contact, which nothing ends: its detail says so and its editor has no end to pick. */
+export const WATCH_CONTACT_VIEW: WatchView = {
+	name: "ana-garcia",
+	accepted: {
+		sha: "1".repeat(64),
+		watch: {
+			object: "contacts/pc111",
+			account: "me@example.com",
+			ask: "Keep Ana's details current in my notes when they change.",
+		},
+	},
+	state: "active",
+	agent: "mara",
+	object: {
+		key: "contacts/me@example.com/contact:contacts/pc111",
+		ref: "contacts:contact:contacts/pc111",
+		name: "pc111",
+		connection: "contacts",
+		service: "Google Contacts",
+		account: "me@example.com",
+		ends: [],
+	},
+};
+
 export const ACCOUNTS = [
 	{ id: "gh-bandarra", connection: "GitHub", login: "@bandarra", agents: ["Mara", "Octo"] },
 	{ id: "gh-purrgrammer", connection: "GitHub", login: "@purrgrammer", agents: ["Octo"] },

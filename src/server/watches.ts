@@ -326,7 +326,11 @@ export async function changeWatch(
 			const ends = found === undefined ? [] : Object.keys(found.kind.follow.ends);
 			if (!ends.includes(until))
 				throw new BadRequest(
-					found === undefined ? await cannotFollow(tx, parsed.watch.object) : `until is one of ${ends.join(", ")}`,
+					found === undefined
+						? await cannotFollow(tx, parsed.watch.object)
+						: ends.length === 0
+							? "nothing ends it: leave until out"
+							: `until is one of ${ends.join(", ")}`,
 				);
 		}
 		files[watchPath(name)] = { sha: changed, text: edited, at: now };
@@ -423,7 +427,9 @@ export async function createWatch(
 		if (found === undefined) throw new BadRequest(await cannotFollow(tx, object), 404);
 		const ends = Object.keys(found.kind.follow.ends);
 		if (made.until !== undefined && !ends.includes(made.until))
-			throw new BadRequest(`until is one of ${ends.join(", ")}`);
+			throw new BadRequest(
+				ends.length === 0 ? "nothing ends it: leave until out" : `until is one of ${ends.join(", ")}`,
+			);
 		const picked = await accountFor(tx, made.agent, found.connection, made.account);
 		if ("refused" in picked) throw new BadRequest(picked.refused, 409);
 		const objectName = `${found.ref.connection}:${found.ref.kind}:${Object.values(found.ref.values).join("-")}`;

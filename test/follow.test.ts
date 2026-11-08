@@ -131,6 +131,28 @@ describe("following an object", () => {
 		);
 	});
 
+	it("an object's author is every change in it: the account's own are nothing, another's said from its fields", () => {
+		const follow: Follow = {
+			authors: { file: "modifier.email" },
+			rules: [
+				{ on: "file.modified", does: "wake", says: "{modifier.name} edited it" },
+				{ on: "file.shared[*]", kind: "added", does: "tell", says: "shared with {who}" },
+			],
+			ends: { trashed: "file.trashed = true" },
+		};
+		const file = (modified: string, by: string, shared: Json[] = []): Json => ({
+			file: { name: "Plan", modified, modifier: { name: by, email: `${by}@example.com` }, shared },
+		});
+		const theirs = sort(follow, "me@example.com", file("1", "me"), file("2", "ana"));
+		expect(theirs.map((each) => [each.says, each.does])).toContainEqual(["ana edited it", "wake"]);
+		// the account's own edit is nothing, and so is what changed beside it
+		const mine = sort(follow, "me@example.com", file("1", "ana"), file("2", "me", [{ id: "p", who: "Bo" }]));
+		expect(mine.every((each) => each.does === "nothing")).toBe(true);
+		// a list item in it is said from its own fields, the author still the object's
+		const shared = sort(follow, "me@example.com", file("1", "ana"), file("1", "ana", [{ id: "p", who: "Bo" }]));
+		expect(shared.map((each) => [each.says, each.does])).toEqual([["shared with Bo", "tell"]]);
+	});
+
 	it("a condition steady over a path holds only once that path is what the reading before saw", () => {
 		const follow = { derived: { green: { when: "all runs[*].ok = true", steady: "head" } } };
 		const before = { head: "a1", runs: [{ ok: false }] };
@@ -221,7 +243,11 @@ describe("following an object", () => {
 			const parsed = parseFollow(value, "objects.x");
 			return "errors" in parsed ? parsed.errors : [];
 		};
-		expect(problems({ rules: [], ends: {} })).toContainEqual(expect.stringContaining("ends"));
+		expect(problems({ rules: [] })).toContainEqual(expect.stringContaining("ends"));
+		expect(problems({ rules: [], ends: { a: 1 } })).toContainEqual(expect.stringContaining("ends"));
+		// a kind nothing ends (a contact) says so: no end ever holds, and a watch on it follows until stopped
+		const never = parseFollow({ rules: [], ends: {} }, "objects.x");
+		expect("follow" in never ? endedBy(never.follow, undefined, { a: 1 }) : "refused").toBeUndefined();
 		expect(problems({ rules: [{ on: "a", does: "ring", says: "x" }], ends: { a: "a = 1" } })).toContainEqual(
 			expect.stringContaining("a rule is"),
 		);

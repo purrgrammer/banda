@@ -137,8 +137,18 @@ describe("Google Drive REST connection", () => {
 		);
 		expect(url.searchParams.has("orderBy")).toBe(false);
 		expect(url.searchParams.get("pageSize")).toBe("20");
+		// a folder's newest files by when they were made: an old file edited never reads as new
+		await call(fetcher, "search_files", { query: "'0Fold' in parents", order: "created" });
+		expect(urlOf(fetcher, 1).searchParams.get("orderBy")).toBe("createdTime desc");
+		expect(urlOf(fetcher, 1).searchParams.get("q")).toBe("trashed = false and ('0Fold' in parents)");
 		const refused = vi.fn<typeof fetch>();
-		for (const args of [{ query: "x".repeat(501) }, { text: "x".repeat(201) }, { text: 4 }, { page_token: "" }])
+		for (const args of [
+			{ query: "x".repeat(501) },
+			{ text: "x".repeat(201) },
+			{ text: 4 },
+			{ page_token: "" },
+			{ order: "name" },
+		])
 			expect((await call(refused, "search_files", args)).isError).toBe(true);
 		expect(refused).not.toHaveBeenCalled();
 	});
@@ -155,6 +165,16 @@ describe("Google Drive REST connection", () => {
 				iconLink: "https://drive-thirdparty.googleusercontent.com/icon.png",
 				size: "2457600",
 				description: "Signed",
+				lastModifyingUser: { displayName: "Ana", emailAddress: "ana@example.test" },
+				parents: ["0Fold", "bad/parent"],
+				trashed: false,
+				permissions: [
+					{ id: "p1", type: "user", role: "owner", emailAddress: "mira@example.test", displayName: "Mira" },
+					{ id: "p2", type: "user", role: "writer", emailAddress: "bo@example.test" },
+					{ id: "p3", type: "domain", role: "reader", domain: "example.test" },
+					{ id: "anyoneWithLink", type: "anyone", role: "reader" },
+					{ type: "user", role: "reader", emailAddress: "noid@example.test" },
+				],
 			}),
 		);
 		const file = JSON.parse((await call(fetcher, "get_file", { file_id: "drive/1pDf" })).text);
@@ -168,14 +188,30 @@ describe("Google Drive REST connection", () => {
 			size: 2457600,
 			description: "Signed",
 			url: "https://drive.google.com/file/d/1pDf/view",
+			modifier: { name: "Ana", email: "ana@example.test" },
+			parents: ["0Fold"],
+			trashed: false,
+			shared: [
+				{ id: "p1", who: "Mira", role: "owner" },
+				{ id: "p2", who: "bo@example.test", role: "writer" },
+				{ id: "p3", who: "example.test", role: "reader" },
+				{ id: "anyoneWithLink", who: "anyone with the link", role: "reader" },
+			],
 		});
 		expect(urlOf(fetcher, 0).pathname).toBe("/drive/v3/files/1pDf");
+		expect(urlOf(fetcher, 0).searchParams.get("fields")).toContain(
+			"lastModifyingUser(displayName,emailAddress),parents,trashed,permissions(",
+		);
 		const elsewhere = vi
 			.fn<typeof fetch>()
 			.mockResolvedValue(response({ id: "x", name: "x", mimeType: DOC, webViewLink: "https://evil.example/x" }));
 		const odd = JSON.parse((await call(elsewhere, "get_file", { file_id: "x" })).text);
 		expect(odd.url).toBeUndefined();
 		expect(odd.size).toBeNull();
+		// a file the account may not share lists nobody, rather than saying it is shared with nobody
+		expect(odd).toMatchObject({ parents: [], trashed: false });
+		expect(odd.shared).toBeUndefined();
+		expect(odd.modifier).toBeUndefined();
 	});
 
 	it("names kinds by mime type", () => {

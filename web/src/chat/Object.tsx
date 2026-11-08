@@ -185,7 +185,10 @@ function Where({
 	);
 }
 
-/** How an object can be followed from its card (DESIGN.md "Watches"): the words for what ends a watch. */
+/**
+ * How an object can be followed from its card (DESIGN.md "Watches"): the words for what ends a watch; none for a kind
+ * nothing ends (a contact), followed until the owner stops it.
+ */
 export type FollowOffer = {
 	readonly ends: readonly string[];
 	/** Follow it, until the end named, or any of them. */
@@ -225,20 +228,26 @@ export function ObjectMenu({
 							)}
 							{follow === undefined
 								? null
-								: [
-										...follow.ends.map((end) => (
-											<DropdownMenuItem key={end} disabled={busy} onSelect={() => follow.onFollow(end)}>
-												Follow until {end}
-											</DropdownMenuItem>
-										)),
-										...(follow.ends.length > 1
-											? [
-													<DropdownMenuItem key="any" disabled={busy} onSelect={() => follow.onFollow()}>
-														Follow until {follow.ends.join(" or ")}
-													</DropdownMenuItem>,
-												]
-											: []),
-									]}
+								: follow.ends.length === 0
+									? [
+											<DropdownMenuItem key="follow" disabled={busy} onSelect={() => follow.onFollow()}>
+												Follow
+											</DropdownMenuItem>,
+										]
+									: [
+											...follow.ends.map((end) => (
+												<DropdownMenuItem key={end} disabled={busy} onSelect={() => follow.onFollow(end)}>
+													Follow until {end}
+												</DropdownMenuItem>
+											)),
+											...(follow.ends.length > 1
+												? [
+														<DropdownMenuItem key="any" disabled={busy} onSelect={() => follow.onFollow()}>
+															Follow until {follow.ends.join(" or ")}
+														</DropdownMenuItem>,
+													]
+												: []),
+										]}
 						</DropdownMenuGroup>
 						<DropdownMenuSeparator />
 					</>
