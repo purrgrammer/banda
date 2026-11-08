@@ -87,8 +87,12 @@ export type ObjectKind = {
 	readonly urls: readonly string[];
 	/** Shorter ids that name it, as templates, matched whole. */
 	readonly ids: readonly string[];
-	/** Provider identity rules, by placeholder; omitted placeholders keep their spelling. */
-	readonly normalize?: { readonly [placeholder: string]: "lowercase" | "integer" };
+	/**
+	 * Provider identity rules, by placeholder; omitted placeholders keep their spelling. `text` is words, not an
+	 * identity (a search's query, `from:boss is:unread`): percent-encoded in a URL or id, where it is the last token,
+	 * and said decoded, its spaces collapsed, in the object's name and its reads' arguments.
+	 */
+	readonly normalize?: { readonly [placeholder: string]: Normalize };
 	/** The reads that fetch it, by the name its fields use. */
 	readonly reads: { readonly [as: string]: ObjectRead };
 	/** The card's fields, each a dotted path into what the reads answered (`pr.user.login`). */
@@ -100,6 +104,7 @@ export type ObjectKind = {
 };
 
 export type ObjectKinds = { readonly [kind: string]: ObjectKind };
+type Normalize = "lowercase" | "integer" | "text";
 
 /** One thing named: of which connection and kind, and the values its template matched. */
 export type ObjectRef = {
@@ -111,6 +116,20 @@ export type ObjectRef = {
 const PLACEHOLDER = /\{([a-z_]{1,32})\}/g;
 /** A bounded identity segment, never separators, spaces or `..`. */
 const VALUE = "([A-Za-z0-9_][A-Za-z0-9_.-]{0,399})";
+/**
+ * Words percent-encoded (a space as `+` or `%20`), never `/`, `?` or `#`: what a `text` placeholder captures; in an id,
+ * matched whole, a space may stand as itself (`gmail/search/from:boss is:unread`).
+ */
+const TEXT = (url: boolean) => `([A-Za-z0-9_.~!*'()%+:@$,;=${url ? "" : " "}-]{1,1500})`;
+/** Words a `text` placeholder holds, decoded: plain, one line, bounded. */
+const TEXT_VALUE = /^[^\p{Cc}\p{Cf}]{1,500}$/u;
+const textOf = (raw: string): string | undefined => {
+	try {
+		return decodeURIComponent(raw.replaceAll("+", " "));
+	} catch {
+		return undefined;
+	}
+};
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const TOOL = /^[A-Za-z0-9_.-]{1,64}$/;
 const PATH = /^[A-Za-z0-9_+-]{1,64}(?:\.[A-Za-z0-9_+-]{1,64}){0,7}$/;
@@ -124,13 +143,13 @@ const reserved = (key: string) => ["__proto__", "prototype", "constructor"].incl
 const placeholders = (template: string) => [...template.matchAll(PLACEHOLDER)].map((m) => m[1] as string);
 const escapePattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
-/** A template as a pattern: its placeholders captured, in order. */
-function patternOf(template: string, url: boolean): RegExp {
+/** A template as a pattern: its placeholders captured, in order; a `text` one as words percent-encoded. */
+function patternOf(template: string, url: boolean, normalize?: ObjectKind["normalize"]): RegExp {
 	let source = "";
 	let last = 0;
 	const literal = (text: string) => escapePattern(text).replaceAll("\\*", "[A-Za-z0-9_.%=-]{1,500}");
 	for (const match of template.matchAll(PLACEHOLDER)) {
-		source += literal(template.slice(last, match.index)) + VALUE;
+		source += literal(template.slice(last, match.index)) + (normalize?.[match[1] ?? ""] === "text" ? TEXT(url) : VALUE);
 		last = (match.index ?? 0) + match[0].length;
 	}
 	source += literal(template.slice(last));
@@ -210,17 +229,26 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 				errors.push(`${where}: "${shape}" names other placeholders than "${shapes[0]}"`);
 			if (/\}\{/.test(shape)) errors.push(`${where}: "${shape}" puts two placeholders together`);
 		}
-		const normalize: { [placeholder: string]: "lowercase" | "integer" } = {};
+		const normalize: { [placeholder: string]: Normalize } = {};
 		if (given.normalize !== undefined) {
 			if (typeof given.normalize !== "object" || given.normalize === null || Array.isArray(given.normalize))
-				errors.push(`${where}.normalize maps placeholders to lowercase or integer`);
+				errors.push(`${where}.normalize maps placeholders to lowercase, integer or text`);
 			else
 				for (const [placeholder, rule] of Object.entries(given.normalize)) {
-					if (!named.has(placeholder) || reserved(placeholder) || (rule !== "lowercase" && rule !== "integer"))
-						errors.push(`${where}.normalize.${placeholder} must name a placeholder and use lowercase or integer`);
+					if (
+						!named.has(placeholder) ||
+						reserved(placeholder) ||
+						(rule !== "lowercase" && rule !== "integer" && rule !== "text")
+					)
+						errors.push(`${where}.normalize.${placeholder} must name a placeholder and use lowercase, integer or text`);
 					else normalize[placeholder] = rule;
 				}
 		}
+		// words take any character but a separator: only a template's end tells where they stop
+		for (const shape of shapes)
+			for (const [placeholder, rule] of Object.entries(normalize))
+				if (rule === "text" && !shape.endsWith(`{${placeholder}}`))
+					errors.push(`${where}: "${shape}" must end with {${placeholder}}, which is words`);
 		const name = given.name;
 		if (typeof name !== "string" || name.length > 100 || placeholders(name).some((each) => !named.has(each)))
 			errors.push(`${where}.name is how the owner reads its name, from its placeholders`);
@@ -435,11 +463,18 @@ export function refKey(ref: ObjectRef, kinds: ObjectKinds): string {
 	const shape = kind?.ids[0] ?? kind?.urls[0] ?? "";
 	const values = normalizeValues(ref.values, kind?.normalize);
 	if (values === undefined) throw new Error("Invalid object identity");
-	return `${ref.connection}:${ref.kind}:${fill(shape, values)}`;
+	return `${ref.connection}:${ref.kind}:${fill(shape, values, kind?.normalize)}`;
 }
 
-const fill = (template: string, values: { readonly [placeholder: string]: string }) =>
-	template.replace(PLACEHOLDER, (_, name: string) => values[name] ?? "");
+/** A template filled; in a URL or id (`normalize` given), words are percent-encoded. */
+const fill = (
+	template: string,
+	values: { readonly [placeholder: string]: string },
+	normalize?: ObjectKind["normalize"],
+) =>
+	template.replace(PLACEHOLDER, (_, name: string) =>
+		normalize?.[name] === "text" ? encodeURIComponent(values[name] ?? "") : (values[name] ?? ""),
+	);
 
 /** How the owner reads an object's name: "purrgrammer/banda #34". */
 export const nameOf = (ref: ObjectRef, kinds: ObjectKinds) => fill(kinds[ref.kind]?.name ?? ref.kind, ref.values);
@@ -486,13 +521,15 @@ function matchOne(
 	// WHATWG parsing matches navigation semantics, including encoded dot segments and backslashes.
 	const input = url ? webUrl(text) : text;
 	if (input === undefined) return undefined;
-	const match = patternOf(template, url).exec(input);
+	const match = patternOf(template, url, kind.normalize).exec(input);
 	if (match === null) return undefined;
 	const names = placeholders(template);
 	const values: { [placeholder: string]: string } = {};
 	for (const [i, name] of names.entries()) {
 		const value = match[i + 1] ?? "";
-		values[name] = value;
+		const decoded = kind.normalize?.[name] === "text" ? textOf(value) : value;
+		if (decoded === undefined) return undefined;
+		values[name] = decoded;
 	}
 	return normalizeValues(values, kind.normalize);
 }
@@ -503,7 +540,14 @@ function normalizeValues(
 ): { [placeholder: string]: string } | undefined {
 	const normalized: { [placeholder: string]: string } = {};
 	for (const [name, value] of Object.entries(values)) {
-		if (!new RegExp(`^${VALUE}$`).test(value) || value.includes("..") || reserved(name)) return undefined;
+		if (reserved(name)) return undefined;
+		if (rules?.[name] === "text") {
+			const words = value.replace(/\s+/g, " ").trim();
+			if (!TEXT_VALUE.test(words)) return undefined;
+			normalized[name] = words;
+			continue;
+		}
+		if (!new RegExp(`^${VALUE}$`).test(value) || value.includes("..")) return undefined;
 		switch (rules?.[name]) {
 			case "integer":
 				if (!/^\d+$/.test(value) || /^0+$/.test(value)) return undefined;
