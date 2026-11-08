@@ -95,7 +95,7 @@ offers a search watch on the owner's mention (`slack/search/<@U…>`) for that.
 The `messages` card (Gmail's conversation and search) takes a list of `{from, text, date}` items. The adapter renders
 Slack's mrkdwn as plain text, resolves `<@U…>` to names (`users.info`, cached per account) and `<#C…>` to channel
 names, writes a bot's author as `<name>[bot]` (Slack marks them by `bot_id`, often with no user), and marks an author
-from another team (Slack Connect, a guest) as outside. Files and attachments stay as named links until a later slice
+from another team (Slack Connect, a guest) as outside. Files and attachments stay as named links until a later stage
 retrieves them through the daemon as Gmail's does. The account that reads a link is the one whose team the channel
 belongs to; a shared channel lives in several teams at once, and which account answers for it is a spike.
 
@@ -212,7 +212,7 @@ over the reading as the Follow type takes it. A `{text}` in a `says` is one line
 `{subject}` is; it is a member's words shown to the owner, never to the model, which gets the change as data at the
 wake. The default for a channel is that a mention wakes and everything else tells: a channel that woke the agent on
 every message would run a model every two minutes all day; words to watch for are a search watch's job
-(`slack/search/in:#deploys failed`), which is also cheaper for Slack (below). Reactions wait for slice 3: Slack lists
+(`slack/search/in:#deploys failed`), which is also cheaper for Slack (below). Reactions wait for stage 3: Slack lists
 a reaction as a name with the users who gave it, and a reaction on the owner's own message must not count as the
 owner's own change, which `authors` as declared today would make it.
 
@@ -253,11 +253,11 @@ and the Follow card on a channel says so.
 | Tool | Does | Draft | Floor | Effect |
 |---|---|---|---|---|
 | `post_message(channel, text, thread_ts?)` | `chat.postMessage` as the owner, in a channel or as a reply | the card of the channel or thread it goes to, the text editable, with `@channel`, `@here` and every mention resolved and shown as they will notify | **private**: a message to other people asks every time, like Gmail's send; no permission covers it | unsafe: Slack has no idempotency key, so a crash between approval and the send asks the owner again, as adding a contact does |
-| `add_reaction(channel, ts, name)` (slice 3) | `reactions.add` as the owner | the message it goes on, the emoji named | ordinary: "Don't ask again for this task" may be offered | idempotent: adding a reaction already there is the same end state (`already_reacted`), so it may run again unasked after a crash |
+| `add_reaction(channel, ts, name)` (stage 3) | `reactions.add` as the owner | the message it goes on, the emoji named | ordinary: "Don't ask again for this task" may be offered | idempotent: adding a reaction already there is the same end state (`already_reacted`), so it may run again unasked after a crash |
 
 Posting is on the floor because a Slack message reaches people the owner never approved as recipients, exactly the
 case the floor names. Marking as read, setting a status, uploading a file and editing or deleting the owner's own
-message are later slices, each a tool with its scope under `needs`.
+message are later stages, each a tool with its scope under `needs`.
 
 ## Sign-in
 
@@ -280,7 +280,10 @@ What the Slack app needs, for whoever configures it:
 - Distribution on, so other teams can install it. A Marketplace listing would lift the history limit; the owner
   decided not now, and the design holds without it.
 
-## Slices
+## Stages
+
+One PR, stacked on `watches` (PR #24) and landed after it, in ordered commits by stage, each with its own tests and
+app walkthrough ([the plan](slack-plan.md)). The spikes below are stage 0.
 
 1. **Connect and read.** The file, the adapter's reads behind the per-account budget (every caller), sign-in by PKCE
    on loopback, the account's handle, the four kinds' cards drawn from held readings, unfurls in agent prose and the
@@ -294,7 +297,7 @@ What the Slack app needs, for whoever configures it:
    permission (and `authors` scoped so a reaction on the owner's message counts), and files in messages read through
    the daemon.
 
-## Spikes before slice 1
+## Spikes before stage 1
 
 Each is a recorded manual run against a throwaway Slack app and team, or a test, before the design above is copied
 into DESIGN.md.
@@ -313,11 +316,12 @@ into DESIGN.md.
 
 ## Open work
 
-- [ ] Slice 1: the file, the adapter's reads under the budget, PKCE sign-in, the handle, cards and unfurls,
+- [ ] Stage 0: the spikes, recorded by `scripts/spike-slack.ts`
+- [ ] Stage 1: the file, the adapter's reads under the budget, PKCE sign-in, the handle, cards and unfurls,
   `post_message` on the floor; fake Slack in tests; the owner's team through the app at both widths
-- [ ] Slice 2: the paged list as connection data; thread and channel followed; scenarios and the fault sweep; a real
+- [ ] Stage 2: the paged list as connection data; thread and channel followed; scenarios and the fault sweep; a real
   busy channel in a forked home
-- [ ] Slice 3: search and person followed, `add_reaction`, files through the daemon
+- [ ] Stage 3: search and person followed, `add_reaction`, files through the daemon
 - [ ] Logo: Slack's mark as a shipped asset, with the others ([Connections](connections.md))
 - [ ] Slack as a gateway (the owner messaging the band from Slack) is not designed; it needs bot scopes and a
   server-side flow, so a second app configuration
