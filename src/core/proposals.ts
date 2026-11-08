@@ -19,6 +19,11 @@ import type { ModelId, Tier } from "./tiers.ts";
 
 export const PROPOSAL_ENTRY = "banda.meta-proposal";
 export const PROPOSAL_RESULT = "banda.meta-proposal-result";
+/**
+ * The daemon's word to the agent that the owner decided its proposal: a user message in its chat's history, read at
+ * its next turn, which starts no turn and is nobody's input. The owner's decision itself is `PROPOSAL_RESULT`.
+ */
+export const PROPOSAL_DECIDED = "banda.proposal-decided";
 export const PROPOSAL_AGENT = "propose_agent";
 export const PROPOSAL_GROUP = "propose_group";
 export const PROPOSAL_CHANGE = "propose_agent_change";
@@ -387,4 +392,9 @@ export function proposalSummary(proposal: Proposal): string {
 	if (proposal.kind === "agent") return `New agent: ${proposal.name} · ${proposal.description}`;
 	if (proposal.kind === "group") return `New group: ${proposal.name} · ${proposal.memberNames.join(", ")}`;
 	return `Change to ${proposal.displayName}${proposal.name === undefined ? "" : ` · ${proposal.name}`}`;
+}
+
+/** The decision notice's words: fixed, the same whoever the companion is. */
+export function decidedText(proposal: Proposal, state: "accepted" | "declined"): string {
+	return `The owner ${state} your proposal: ${proposalSummary(proposal)}. This notice is automatic, not from the owner.`;
 }

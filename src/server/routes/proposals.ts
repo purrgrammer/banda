@@ -13,7 +13,10 @@ const proposalOf = (value: unknown): Proposal | undefined => {
 	return value as Proposal;
 };
 
-async function finish(tx: Tx, proposal: Proposal, state: "accepted" | "declined"): Promise<boolean> {
+type Core = ReturnType<typeof defineCore>;
+
+/** Record the owner's decision: the card's result for the UI, and the daemon's word to the agent, in one commit. */
+async function finish(tx: Tx, proposal: Proposal, state: "accepted" | "declined", core: Core): Promise<boolean> {
 	const doc = await tx.doc(Proposals);
 	const current = proposalOf(doc.proposals[proposal.id]);
 	if (current === undefined || current.state !== "pending") return false;
@@ -22,6 +25,7 @@ async function finish(tx: Tx, proposal: Proposal, state: "accepted" | "declined"
 		kind: PROPOSAL_RESULT,
 		data: { proposal: proposal.id, state },
 	});
+	await core.proposalDecided(tx, current, state);
 	return true;
 }
 
@@ -71,7 +75,7 @@ export const proposals: AreaModule = {
 							};
 						}
 					}
-					await harness.commit((tx) => finish(tx, proposal, state), context);
+					await harness.commit((tx) => finish(tx, proposal, state, core), context);
 					deps.changed();
 					return {
 						body: {
@@ -85,12 +89,7 @@ export const proposals: AreaModule = {
 	},
 };
 
-async function accept(
-	proposal: Proposal,
-	harness: Harness,
-	workspace: Workspace,
-	core: ReturnType<typeof defineCore>,
-): Promise<boolean> {
+async function accept(proposal: Proposal, harness: Harness, workspace: Workspace, core: Core): Promise<boolean> {
 	if (proposal.kind === "group") {
 		await core.groups.createProposed(harness, proposal.id, { name: proposal.name, members: proposal.members }, context);
 		return false;
@@ -134,7 +133,7 @@ async function accept(
 					);
 				files.files[agentPath(name)] = { text, sha: shaOf(text), at: Date.now() };
 				await core.agentChanged(tx, name);
-				await finish(tx, proposal, "accepted");
+				await finish(tx, proposal, "accepted", core);
 			}, context);
 			return true;
 		}
@@ -147,7 +146,7 @@ async function accept(
 		base,
 		async (tx, id) => {
 			await core.agentChanged(tx, id);
-			await finish(tx, proposal, "accepted");
+			await finish(tx, proposal, "accepted", core);
 		},
 		context,
 	);

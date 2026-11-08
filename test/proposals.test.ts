@@ -16,13 +16,14 @@ import { Accepted, agentPath, shaOf } from "../src/core/agents.ts";
 import { defaultAvatarFace } from "../src/core/avatar-face.ts";
 import { OWNER } from "../src/core/gateway.ts";
 import { Groups } from "../src/core/groups.ts";
-import { PROPOSAL_ENTRY, type Proposal, Proposals } from "../src/core/proposals.ts";
+import { decidedText, PROPOSAL_DECIDED, PROPOSAL_ENTRY, type Proposal, Proposals } from "../src/core/proposals.ts";
 import { context, openStore } from "../src/core/store.ts";
-import { defineCore, type TurnResult } from "../src/core/turn.ts";
+import { defineCore, NUDGE, type TurnResult } from "../src/core/turn.ts";
 import type { Workspace } from "../src/server/agents.ts";
 import { proposalView } from "../src/server/proposals.ts";
 import type { Deps } from "../src/server/routes/area.ts";
 import { proposals as proposalArea } from "../src/server/routes/proposals.ts";
+import { itemOf } from "../src/server/transcript.ts";
 import { ProposalCard } from "../web/src/chat/Proposal.tsx";
 import { hostBox } from "./fixtures/host-box.ts";
 import { blobStore, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
@@ -209,6 +210,18 @@ describe("agent proposals", () => {
 				context,
 			);
 			expect(resultEntries.items.filter((entry) => entry.kind === "banda.meta-proposal-result")).toHaveLength(1);
+			// the agent is told in its chat's history, in the daemon's words, not the owner's
+			const decided = resultEntries.items.filter((entry) => entry.kind === PROPOSAL_DECIDED);
+			expect(decided).toHaveLength(1);
+			expect(decided[0]?.model).toEqual([
+				{
+					role: "user",
+					content:
+						"The owner accepted your proposal: New agent: Writer · Writes drafts. This notice is automatic, not from the owner.",
+					timestamp: expect.any(Number),
+				},
+			]);
+			expect(itemOf(decided[0]!)).toMatchObject({ role: "instruction", text: decidedText(proposal, "accepted") });
 		} finally {
 			await harness.close(context);
 			box.close();
@@ -339,5 +352,108 @@ describe("agent proposals", () => {
 		expect(groups?.proposalRooms?.[proposal.id]).toBe(Number(Object.keys(groups?.groups ?? {})[0]));
 		expect(changed).toBe(1);
 		await harness.close(context);
+	});
+
+	it("tells the agent the owner's decision in its next turn, starting no turn and owing the owner nothing", async () => {
+		const faux = fauxProvider();
+		const models = createModels();
+		models.setProvider(faux.provider);
+		const seen: ModelContext[] = [];
+		/** The user text the model has not answered yet: what ends the request's messages. */
+		const asked = (request: ModelContext) => {
+			const last = request.messages.at(-1);
+			return last?.role === "user" && typeof last.content === "string" ? last.content : "";
+		};
+		const respond = (request: ModelContext) => {
+			seen.push(request);
+			if (asked(request) === "Propose a change.")
+				return fauxAssistantMessage(
+					[
+						fauxToolCall("propose_agent_change", { description: "The lead agent." }),
+						fauxToolCall("message_user", { text: "I proposed a change for your review." }),
+					],
+					{ stopReason: "toolUse" },
+				);
+			if (asked(request) === "Thanks.")
+				return fauxAssistantMessage([fauxToolCall("message_user", { text: "Noted, thanks." })], {
+					stopReason: "toolUse",
+				});
+			return fauxAssistantMessage("done");
+		};
+		faux.setResponses(Array.from({ length: 10 }, () => respond as never));
+		const registry = createRegistry();
+		const gateway = new FakeGateway();
+		const core = defineCore({ blobs: blobStore(), gateway: () => gateway, model: () => FAUX_MODEL });
+		registry.install(core.extension);
+		const harness = await openStore(await tempHome(), { models, registry });
+		harness.resume();
+		try {
+			const origin = { gateway: "fake", peer: OWNER, thread: "main" };
+			const first = await core.receive(harness, { id: "owner-1", origin, text: "Propose a change.", agent: "sancho" });
+			if (!("turn" in first)) throw new Error(JSON.stringify(first));
+			await harness.waitForTask(first.turn as TaskId<TurnResult>, context);
+			const proposal = Object.values((await harness.snapshot(Proposals, context))?.proposals ?? {}).find(
+				(item) => item.kind === "agentChange",
+			) as unknown as Proposal;
+			expect(proposal).toMatchObject({ state: "pending", chat: first.chat });
+			const area = proposalArea.start?.({
+				harness,
+				core,
+				workspace: {} as Deps["workspace"],
+				changed() {},
+			} as unknown as Deps);
+			if (area?.route === undefined) throw new Error("proposal route is missing");
+			const answer = await area.route({
+				method: "POST",
+				path: `/proposals/${encodeURIComponent(proposal.id)}`,
+				url: new URL(`http://localhost/api/proposals/${encodeURIComponent(proposal.id)}`),
+				json: async () => ({ action: "decline" }),
+				signal: AbortSignal.abort(),
+			});
+			expect(answer).toMatchObject({ body: { state: "declined" } });
+			const entries = async () =>
+				(
+					await harness.commit(
+						(tx) => tx.scanEntries({ conversationId: first.chat as ConversationId, order: "ascending" }, 100),
+						context,
+					)
+				).items;
+			const notice = decidedText(proposal, "declined");
+			expect(notice).toBe(
+				"The owner declined your proposal: Change to sancho. This notice is automatic, not from the owner.",
+			);
+			const decided = (await entries()).filter((entry) => entry.kind === PROPOSAL_DECIDED);
+			expect(decided).toHaveLength(1);
+			expect(decided[0]?.model?.[0]).toMatchObject({ role: "user", content: notice });
+			// the decision starts no turn: no model request, and still the one Turn
+			const turns = async () =>
+				(await harness.commit((tx) => tx.scanTasks({ kind: "banda.turn" }, 100), context)).items;
+			const requestsBefore = seen.length;
+			await new Promise((resolve) => setTimeout(resolve, 50));
+			expect(seen).toHaveLength(requestsBefore);
+			expect(await turns()).toHaveLength(1);
+			// the agent reads the notice in its next turn, after the decision and before the owner's next words
+			const second = await core.receive(harness, { id: "owner-2", origin, text: "Thanks.", agent: "sancho" });
+			if (!("turn" in second)) throw new Error(JSON.stringify(second));
+			await harness.waitForTask(second.turn as TaskId<TurnResult>, context);
+			const next = seen[requestsBefore];
+			if (next === undefined) throw new Error("the next turn asked the model nothing");
+			const prompt = next.messages.map((message) =>
+				message.role === "user" && typeof message.content === "string" ? message.content : undefined,
+			);
+			expect(prompt.indexOf(notice)).toBeGreaterThan(0);
+			expect(prompt.indexOf(notice)).toBeLessThan(prompt.indexOf("Thanks."));
+			// the notice is the daemon's, so it neither answered the owner nor is owed an answer: no nudge, no notice
+			const kinds = (await entries()).map((entry) => entry.kind);
+			expect(kinds.filter((kind) => kind === NUDGE)).toHaveLength(0);
+			expect(kinds.filter((kind) => kind === "banda.notice")).toHaveLength(0);
+			expect(await turns()).toHaveLength(2);
+			expect(gateway.sent.map((sent) => sent.out.text)).toEqual([
+				"I proposed a change for your review.",
+				"Noted, thanks.",
+			]);
+		} finally {
+			await harness.close(context);
+		}
 	});
 });

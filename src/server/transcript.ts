@@ -41,7 +41,7 @@ import { Connected } from "../core/connections.ts";
 import { type Origin, type Outbound, OWNER } from "../core/gateway.ts";
 import { HARNESS_ENDED } from "../core/harness.ts";
 import { Permissions } from "../core/permissions.ts";
-import { PROPOSAL_ENTRY, PROPOSAL_RESULT, type Proposal } from "../core/proposals.ts";
+import { PROPOSAL_DECIDED, PROPOSAL_ENTRY, PROPOSAL_RESULT, type Proposal } from "../core/proposals.ts";
 import { Control, ROUTINE_TASK, Routines, TROUBLE, type TroubleData, WAKE, type WakeData } from "../core/routines.ts";
 import { localTime } from "../core/schedule.ts";
 import { openWaits, status } from "../core/status.ts";
@@ -295,8 +295,8 @@ export function itemOf(entry: EntryRecord): Item | undefined {
 			...(message === undefined ? {} : { at: message.timestamp }),
 		};
 	}
-	// the daemon's words to a nudged run
-	if (goesOn(entry.kind))
+	// the daemon's words to a nudged run, or its word that the owner decided a proposal (the card shows the decision)
+	if (goesOn(entry.kind) || entry.kind === PROPOSAL_DECIDED)
 		return {
 			id,
 			role: "instruction",
