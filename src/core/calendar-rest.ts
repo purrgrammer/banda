@@ -291,7 +291,14 @@ function meetOf(event: Json): string {
 	return text(points.find((point) => point.entryPointType === "video")?.uri, 500);
 }
 
-function full(event: Json) {
+/** The most guests an event's answer lists one by one; `attendees` still counts them all. */
+export const MAX_LISTED = 100;
+
+/**
+ * An event as get_event answers it: what its card shows, and each guest but the account with their reply, by
+ * address, so a watch sees who answered (the account's own reply is `response`, never a guest's).
+ */
+export function eventAnswer(event: Json) {
 	const people = attendeesOf(event).filter((each) => each.resource !== true);
 	const others = people.filter((each) => each.self !== true);
 	const names = others.map((each) => text(each.displayName, 100) || text(each.email, 250)).filter(Boolean);
@@ -312,6 +319,20 @@ function full(event: Json) {
 		description: plainDescription(event.description),
 		meet: meetOf(event),
 		url: text(event.htmlLink, 500),
+		// past the first hundred, how many there are: a guest past the list's end is not gone
+		...(others.length > MAX_LISTED ? { guestTotal: others.length } : {}),
+		guests: others.slice(0, MAX_LISTED).flatMap((each) => {
+			const email = text(each.email, 250).toLowerCase();
+			if (email === "") return [];
+			return [
+				{
+					email,
+					name: text(each.displayName, 100) || email,
+					response: RESPONSES[String(each.responseStatus)] ?? "needs-action",
+					comment: text(each.comment, 500),
+				},
+			];
+		}),
 	};
 }
 
@@ -389,7 +410,7 @@ export async function calendarCall(
 			case "get_event": {
 				const ref = typeof args.event_id === "string" ? eventOfRef(args.event_id) : undefined;
 				if (ref === undefined) throw new Error("Give the id of a calendar/<id> reference that list_events returned.");
-				answer = full(
+				answer = eventAnswer(
 					object(
 						await request(`calendars/${encodeURIComponent(ref.calendarId)}/events/${encodeURIComponent(ref.eventId)}`),
 					),
