@@ -170,6 +170,26 @@ describe("following an object", () => {
 		);
 	});
 
+	it("a keyed list the service leaves out when empty is empty; a read missing whole is not", () => {
+		const follow: Follow = {
+			rules: [
+				{ on: "comments.comments[*].replies[*]", kind: "added", does: "wake", says: "new reply" },
+				{ on: "comments.comments[*]", kind: "added", does: "wake", says: "new comment" },
+			],
+			ends: {},
+		};
+		const without: Json = { comments: { comments: [{ id: "c1", body: "hi" }] } };
+		const replied: Json = { comments: { comments: [{ id: "c1", body: "hi", replies: [{ id: "r1" }] }] } };
+		expect(sort(follow, undefined, without, replied).map((each) => [each.does, each.says])).toEqual([
+			["wake", "new reply"],
+		]);
+		expect(sort(follow, undefined, replied, without).map((each) => each.change.kind)).toEqual(["removed"]);
+		// the comments read failed one look and answered the next: its comments are not new
+		expect(sort(follow, undefined, {}, without).map((each) => [each.does, each.change.kind])).toEqual([
+			["nothing", "changed"],
+		]);
+	});
+
 	it("a page of the newest: what leaves it was pushed off, what slid in is nothing, only what is newer is new", () => {
 		const newest: Follow = {
 			newest: { releases: "published_at", "issues.issues": "number" },

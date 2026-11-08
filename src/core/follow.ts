@@ -131,8 +131,11 @@ export function observe(
 		Array.isArray(value) && value.every((each) => object(each) && ["string", "number"].includes(typeof each[field]))
 			? new Map((value as Item[]).map((each) => [String(each[field]), each]))
 			: undefined;
-	const was = byKey(before);
-	const now = byKey(after);
+	// a list the service leaves out when empty (a comment's replies) is empty; a read's whole answer missing (one that
+	// failed) is not, so its items never come back as new
+	const inside = path.length > 1;
+	const was = byKey(before === undefined && inside && Array.isArray(after) ? [] : before);
+	const now = byKey(after === undefined && inside && Array.isArray(before) ? [] : after);
 	if (was !== undefined && now !== undefined) {
 		const changes: Change[] = [];
 		for (const [key, item] of now) {
