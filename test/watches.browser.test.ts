@@ -5,7 +5,9 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
+import { createServer } from "vite";
 import { expect, it } from "vitest";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
@@ -13,11 +15,10 @@ import type { CapabilitiesView } from "../src/server/api.ts";
 import { world } from "./fault/watch-scenario.ts";
 import { githubObjectFile, startGithubObjects } from "./fixtures/github-objects.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome } from "./helpers.ts";
+import { freePort, skipShippedSkills, tempHome, viteCacheDir } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
-const SHOTS =
-	"/private/tmp/claude-501/-Users-bandarra-sancho/8882dff8-743e-4ee2-9b72-9a6faaebc2f8/scratchpad/watches-shots";
+const SHOTS = process.env.BANDA_WATCHES_SHOTS;
 const LINK = "https://github.com/acme/banda/pull/142";
 const REPLY = "Lint failed on banda#142; I will look at it.";
 
@@ -70,7 +71,7 @@ for (const width of [390, 1440])
 		async () => {
 			const phone = width < 768;
 			const home = await tempHome();
-			await mkdir(SHOTS, { recursive: true });
+			if (SHOTS !== undefined) await mkdir(SHOTS, { recursive: true });
 			let step = 0;
 			const github = await startGithubObjects({ auth: "oauth" });
 			github.user = "bandarra";
@@ -101,6 +102,21 @@ for (const width of [390, 1440])
 			const daemon = await startDaemon({ home, port: 0, models, box: hostBox(home), shipped, log: () => {} });
 			const base = `http://127.0.0.1:${daemon.port}`;
 			const token = (await readDaemonFile(home))!.token!;
+			const server = await createServer({
+				configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
+				cacheDir: await viteCacheDir(),
+				server: {
+					host: "127.0.0.1",
+					port: await freePort(),
+					strictPort: true,
+					open: false,
+					proxy: {
+						"/api": { target: base, changeOrigin: true, headers: { origin: base } },
+						"^/(?:icon(?:-maskable)?\\.svg|icon-(?:192|512|maskable-512)\\.png|apple-touch-icon\\.png|manifest\\.webmanifest)$":
+							{ target: base, changeOrigin: true },
+					},
+				},
+			});
 			const api = async <T>(path: string, method = "GET", body?: object): Promise<T> => {
 				const response = await fetch(`${base}/api${path}`, {
 					method,
@@ -130,7 +146,10 @@ for (const width of [390, 1440])
 				// this banda ships a newer GitHub: one that can follow a pull request
 				await writeFile(join(shipped, "github.md"), newer);
 
-				await withPage(`${base}/#token=${token}`, { width, height: 900 }, async (page) => {
+				await server.listen();
+				const address = server.httpServer!.address();
+				if (!address || typeof address === "string") throw new Error("No app port");
+				await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
 					const shot = async (name: string) => {
 						expect(
 							await page.run("document.documentElement.scrollWidth <= innerWidth"),
@@ -141,7 +160,7 @@ for (const width of [390, 1440])
 						await page.until(
 							"document.getAnimations().every(a => a.playState !== 'running' || !(a.effect?.getComputedTiming().endTime < 2000))",
 						);
-						await page.shoot(join(SHOTS, `${width}-${name}.png`));
+						if (SHOTS !== undefined) await page.shoot(join(SHOTS, `${width}-${name}.png`));
 					};
 					await page.until(shows("Mara"));
 					await page.run(`location.hash='#/connections'`);
@@ -215,6 +234,7 @@ for (const width of [390, 1440])
 					await shot("12-stopped");
 				});
 			} finally {
+				await server.close();
 				await daemon.close();
 				await github.close();
 			}
