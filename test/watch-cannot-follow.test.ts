@@ -12,17 +12,20 @@ const NOW = new Date(2026, 10, 2, 9, 0).getTime();
 /** A GitHub file as one accepted before `follow` existed: the same objects, none of them followable. */
 function olderGithubFile(): string {
 	const objects = Object.fromEntries(
-		Object.entries(GITHUB_OBJECTS).map(([kind, entry]) => {
-			const {
-				follow: _,
-				reads,
-				...rest
-			} = entry as { follow?: unknown; reads: { [as: string]: { follow?: unknown } } };
-			const plain = Object.fromEntries(
-				Object.entries(reads).flatMap(([as, { follow, ...read }]) => (follow === undefined ? [[as, read]] : [])),
-			);
-			return [kind, { ...rest, reads: plain }];
-		}),
+		// the pull request kind as it was before `follow`: the kinds added since have no older form
+		Object.entries(GITHUB_OBJECTS)
+			.filter(([kind]) => kind === "pull_request")
+			.map(([kind, entry]) => {
+				const {
+					follow: _,
+					reads,
+					...rest
+				} = entry as { follow?: unknown; reads: { [as: string]: { follow?: unknown } } };
+				const plain = Object.fromEntries(
+					Object.entries(reads).flatMap(([as, { follow, ...read }]) => (follow === undefined ? [[as, read]] : [])),
+				);
+				return [kind, { ...rest, reads: plain }];
+			}),
 	);
 	return `---\nservice: GitHub\nurl: https://example.com/mcp\nauth: oauth\naccount: get_me.login\nscopes: [repo]\nreads: [pull_request_read, issue_read, actions_get, get_notification_details]\n---\nGitHub objects.\n\n\`\`\`json\n${JSON.stringify({ objects }, null, 2)}\n\`\`\`\n`;
 }

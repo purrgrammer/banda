@@ -16,11 +16,13 @@ import { ObjectUnavailable } from "../chat/Loading.tsx";
 import { MemorySettings } from "../chat/MemorySettings.tsx";
 import {
 	CheckRunCard,
+	DiscussionCard,
 	IssueCard,
 	NotificationCard,
 	ObjectLink,
 	ObjectReference,
 	PullRequestCard,
+	RepositoryCard,
 } from "../chat/Object.tsx";
 import {
 	AgentPanel,
@@ -59,6 +61,7 @@ import { Band } from "./brand.tsx";
 import {
 	ATLAS,
 	CHECK_RUN,
+	DISCUSSION,
 	FACTS,
 	ISSUE,
 	MARA,
@@ -68,6 +71,7 @@ import {
 	PERMISSIONS,
 	PHOTO,
 	PR,
+	REPOSITORY,
 	ROUTINES,
 	ROWS,
 	SANCHO,
@@ -817,8 +821,74 @@ export function PanelSections() {
 							/>
 						</div>
 					</Specimen>
+					<Specimen label="A workflow run, drawn as a check: running with a job failed · passed">
+						<div className="flex flex-col gap-3">
+							<CheckRunCard
+								run={{
+									repo: "purrgrammer/banda",
+									name: "CI",
+									where: "main",
+									state: "running",
+									step: "test (node 26)",
+									url: "https://github.com/purrgrammer/banda/actions/runs/20",
+								}}
+							/>
+							<CheckRunCard
+								run={{ repo: "purrgrammer/banda", name: "Release", where: "v0.1.0-alpha.5", state: "passed" }}
+							/>
+						</div>
+					</Specimen>
+					<Specimen label="Repositories: the newest of each · a merged pull request and a closed issue · empty · long names, an old reading">
+						<div className="flex flex-col gap-3">
+							<RepositoryCard repository={REPOSITORY} />
+							<RepositoryCard
+								repository={{
+									...REPOSITORY,
+									pull: { number: 33, title: "Name every wake by its change", author: "bandarra", state: "merged" },
+									issue: { number: 40, title: "Search misses archived chats", author: "teo", state: "closed" },
+								}}
+							/>
+							<RepositoryCard repository={{ repo: "purrgrammer/empty", url: "https://github.com/purrgrammer/empty" }} />
+							<RepositoryCard
+								repository={{
+									...REPOSITORY,
+									repo: "an-organisation-with-a-long-name/a-repository-with-a-very-long-name-that-must-not-stretch-the-chat",
+									release: "v2026.11.08-nightly-with-a-long-suffix",
+									commit:
+										"A long first line of a commit message that keeps going well past what a phone can show on one line",
+									pull: { number: 35, title: "Draft: a repository card", author: "bandarra", state: "draft" },
+									asOf: "2 Nov, 09:40",
+								}}
+							/>
+							<Bubble mine>
+								What changed in{" "}
+								<ObjectLink object={{ ...REPOSITORY, card: "repository" }} href={REPOSITORY.url ?? ""} /> this week?
+							</Bubble>
+						</div>
+					</Specimen>
+					<Specimen label="Discussions: open · answered · closed · comments not read, long words, an old reading">
+						<div className="flex flex-col gap-3">
+							<DiscussionCard discussion={DISCUSSION} />
+							<DiscussionCard discussion={{ ...DISCUSSION, state: "answered", comments: 1 }} />
+							<DiscussionCard discussion={{ ...DISCUSSION, state: "closed", category: "Ideas", comments: 0 }} />
+							<DiscussionCard
+								discussion={{
+									...DISCUSSION,
+									state: "unknown",
+									title:
+										"A discussion title long enough to wrap on a phone, about a-very-long-identifier-that-must-not-stretch-the-chat",
+									category: "Show and tell, with a long category name",
+									comments: null,
+									asOf: "2 Nov, 09:40",
+								}}
+							/>
+							<Bubble mine>
+								Answer <ObjectLink object={{ ...DISCUSSION, card: "discussion" }} href={DISCUSSION.url ?? ""} /> for me
+							</Bubble>
+						</div>
+					</Specimen>
 					<Specimen label="Unrecognised or unavailable explicit object">
-						<ObjectReference reference="https://github.com/purrgrammer/banda/discussions/34" />
+						<ObjectReference reference="https://github.com/purrgrammer/banda/wiki/Home" />
 					</Specimen>
 					<Specimen label="Notifications: unread · done">
 						<div className="flex flex-col gap-4">

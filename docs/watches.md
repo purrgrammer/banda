@@ -77,6 +77,14 @@ returned to and merged, at desktop and phone width.
   the rest; a derived "all …" condition may be `steady` over a path, so a push's first look never says all checks
   green; the new rows and lines in the specimen
 - [ ] Slice 3 through the app against a daemon; a burst, a limit and an issue against real GitHub
+- [x] GitHub's repository-level kinds: a repository (a release, others' new pull requests and issues wake; a push to
+  the default branch tells; never ends), a discussion (comments and replies wake; until answered or closed) and a
+  workflow run (a job failing wakes; until completed), each with its card in the specimen
+- [ ] Those kinds through the app against a daemon and real GitHub, at desktop and phone width; the specimen not yet
+  looked at in a browser
+- [ ] A repository's push says "the default branch", not its name (no listed read answers it within four reads); a
+  discussion's comments carry no author, so the account's own wake too; a check that first appears already failed
+  (a pull request's check run) is an item added, which no conclusion rule sees
 - [ ] A watch's file has no editor field and the `watch` tool no parameter for `wakes_a_day`; an issue's and a pull
   request's comments are read one page of a hundred, so comments past the hundredth are never seen
 - [ ] Spike before slice 2: the readings doc keeps 300 and evicts the oldest first, so a held reading must be

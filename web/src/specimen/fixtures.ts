@@ -4,7 +4,7 @@ import type { FileUIPart } from "@/components/ai-elements/types";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import type { WatchView } from "../../../src/server/api.ts";
 import type { Service } from "../chat/Catalogue.tsx";
-import type { CheckRun, Issue, PullRequest } from "../chat/Object.tsx";
+import type { CheckRun, Discussion, Issue, PullRequest, Repository } from "../chat/Object.tsx";
 import type { RoutineRowView, WatchRowView } from "../chat/Panel.tsx";
 import type { RowView, Who } from "../chat/Row.tsx";
 
@@ -308,6 +308,28 @@ export const CHECK_RUN: CheckRun = {
 		"  expected 0 runs, got 1",
 		"    at test/routines.test.ts:88:21",
 	],
+};
+
+export const DISCUSSION: Discussion = {
+	repo: "purrgrammer/banda",
+	number: 52,
+	title: "How should a watch say what it saw while paused?",
+	state: "open",
+	category: "Q&A",
+	comments: 4,
+	url: "https://github.com/purrgrammer/banda/discussions/52",
+};
+
+export const REPOSITORY: Repository = {
+	repo: "purrgrammer/banda",
+	release: "v0.1.0-alpha.5",
+	released: Date.UTC(2026, 10, 3, 9),
+	commit: "feat: a check run is followed until it completes, a notification until read",
+	sha: "67e9f63",
+	committed: Date.UTC(2026, 10, 7, 18),
+	pull: { number: 34, title: "Keep objects as data", author: "ana-k", state: "open" },
+	issue: { number: 41, title: "The panel loses the open file on reload", author: "ana-k", state: "open" },
+	url: "https://github.com/purrgrammer/banda",
 };
 
 export const SERVICES: readonly Service[] = [

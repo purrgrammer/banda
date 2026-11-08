@@ -873,6 +873,128 @@ draws as cards, from scripts/github-objects.ts.
 				"url": "job.html_url"
 			}
 		},
+		"workflow_run": {
+			"card": "check-run",
+			"normalize": {
+				"owner": "lowercase",
+				"repo": "lowercase",
+				"run": "integer"
+			},
+			"name": "{owner}/{repo} · run {run}",
+			"urls": [
+				"https://github.com/{owner}/{repo}/actions/runs/{run}",
+				"https://api.github.com/repos/{owner}/{repo}/actions/runs/{run}"
+			],
+			"ids": [
+				"{owner}/{repo}/actions/runs/{run}"
+			],
+			"reads": {
+				"run": {
+					"tool": "actions_get",
+					"args": {
+						"method": "get_workflow_run",
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"resource_id": "{run}"
+					}
+				},
+				"jobs": {
+					"optional": true,
+					"tool": "actions_list",
+					"args": {
+						"method": "list_workflow_jobs",
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"resource_id": "{run}",
+						"perPage": 50
+					}
+				}
+			},
+			"follow": {
+				"totals": {
+					"jobs.jobs.jobs": "jobs.jobs.total_count"
+				},
+				"derived": {
+					"job_failed": "jobs.jobs.jobs[*].conclusion = failure|timed_out"
+				},
+				"ignore": [
+					"run.updated_at",
+					"run.run_started_at",
+					"run.head_commit",
+					"jobs.jobs.total_count",
+					"jobs.jobs.jobs[*].steps",
+					"jobs.jobs.jobs[*].started_at",
+					"jobs.jobs.jobs[*].completed_at",
+					"jobs.jobs.jobs[*].runner_id",
+					"jobs.jobs.jobs[*].runner_name",
+					"jobs.jobs.jobs[*].runner_group_id",
+					"jobs.jobs.jobs[*].runner_group_name"
+				],
+				"rules": [
+					{
+						"on": "run.conclusion",
+						"to": "failure",
+						"does": "wake",
+						"says": "failed"
+					},
+					{
+						"on": "run.conclusion",
+						"to": "startup_failure",
+						"does": "wake",
+						"says": "failed to start"
+					},
+					{
+						"on": "run.conclusion",
+						"to": "timed_out",
+						"does": "wake",
+						"says": "timed out"
+					},
+					{
+						"on": "run.conclusion",
+						"to": "cancelled",
+						"does": "wake",
+						"says": "cancelled"
+					},
+					{
+						"on": "run.conclusion",
+						"to": "success",
+						"does": "tell",
+						"says": "succeeded"
+					},
+					{
+						"on": "run.conclusion",
+						"does": "tell",
+						"says": "{to}",
+						"words": {
+							"action_required": "needs action",
+							"neutral": "finished neutral",
+							"skipped": "skipped",
+							"stale": "stale"
+						}
+					},
+					{
+						"on": "derived.job_failed",
+						"to": true,
+						"does": "wake",
+						"says": "a job failed"
+					}
+				],
+				"ends": {
+					"completed": "run.status = completed"
+				},
+				"every": "2m",
+				"settle": "1m"
+			},
+			"fields": {
+				"name": "run.name",
+				"status": "run.status",
+				"conclusion": "run.conclusion",
+				"steps": "jobs.jobs.jobs",
+				"started": "run.run_started_at",
+				"where": "run.head_branch",
+				"url": "run.html_url"
+			}
+		},
 		"notification": {
 			"card": "notification",
 			"normalize": {
@@ -964,6 +1086,312 @@ draws as cards, from scripts/github-objects.ts.
 					]
 				}
 			]
+		},
+		"discussion": {
+			"card": "discussion",
+			"normalize": {
+				"owner": "lowercase",
+				"repo": "lowercase",
+				"number": "integer"
+			},
+			"name": "{owner}/{repo} · discussion #{number}",
+			"urls": [
+				"https://github.com/{owner}/{repo}/discussions/{number}"
+			],
+			"ids": [
+				"{owner}/{repo}/discussions/{number}"
+			],
+			"reads": {
+				"discussion": {
+					"tool": "get_discussion",
+					"args": {
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"discussionNumber": "{number}"
+					}
+				},
+				"comments": {
+					"optional": true,
+					"follow": true,
+					"tool": "get_discussion_comments",
+					"args": {
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"discussionNumber": "{number}",
+						"perPage": 100,
+						"includeReplies": true
+					}
+				}
+			},
+			"follow": {
+				"totals": {
+					"comments.comments": "comments.totalCount"
+				},
+				"ignore": [
+					"discussion.body",
+					"comments.totalCount",
+					"comments.pageInfo",
+					"comments.comments[*].body",
+					"comments.comments[*].replyTotalCount",
+					"comments.comments[*].replies[*].body"
+				],
+				"rules": [
+					{
+						"on": "discussion.isAnswered",
+						"to": true,
+						"does": "wake",
+						"says": "answered"
+					},
+					{
+						"on": "discussion.closed",
+						"to": true,
+						"does": "wake",
+						"says": "closed"
+					},
+					{
+						"on": "discussion.closed",
+						"to": false,
+						"does": "wake",
+						"says": "reopened"
+					},
+					{
+						"on": "discussion.title",
+						"does": "tell",
+						"says": "retitled: {to}"
+					},
+					{
+						"on": "comments.comments[*]",
+						"kind": "added",
+						"does": "wake",
+						"says": "new comment"
+					},
+					{
+						"on": "comments.comments[*].replies[*]",
+						"kind": "added",
+						"does": "wake",
+						"says": "new reply"
+					}
+				],
+				"ends": {
+					"answered": "discussion.isAnswered = true",
+					"closed": "discussion.closed = true"
+				},
+				"every": "10m",
+				"settle": "1m"
+			},
+			"fields": {
+				"number": "discussion.number",
+				"title": "discussion.title",
+				"closed": "discussion.closed",
+				"answered": "discussion.isAnswered",
+				"category": "discussion.category.name",
+				"comments": "comments.totalCount",
+				"url": "discussion.url"
+			},
+			"writes": [
+				{
+					"tool": "discussion_comment_write",
+					"id": {
+						"owner": "owner",
+						"repo": "repo",
+						"number": "discussionNumber"
+					},
+					"verb": "Comment",
+					"what": "Comment on",
+					"text": "body",
+					"verbs": [
+						{
+							"when": {
+								"method": "reply"
+							},
+							"verb": "Reply",
+							"what": "Reply on"
+						},
+						{
+							"when": {
+								"method": "update"
+							},
+							"verb": "Edit",
+							"what": "Edit a comment on"
+						},
+						{
+							"when": {
+								"method": "delete"
+							},
+							"verb": "Delete",
+							"what": "Delete a comment on"
+						},
+						{
+							"when": {
+								"method": "mark_answer"
+							},
+							"verb": "Mark answer",
+							"what": "Mark an answer on"
+						},
+						{
+							"when": {
+								"method": "unmark_answer"
+							},
+							"verb": "Unmark answer",
+							"what": "Unmark the answer on"
+						}
+					]
+				}
+			]
+		},
+		"repository": {
+			"card": "repository",
+			"normalize": {
+				"owner": "lowercase",
+				"repo": "lowercase"
+			},
+			"name": "{owner}/{repo}",
+			"urls": [
+				"https://github.com/{owner}/{repo}",
+				"https://api.github.com/repos/{owner}/{repo}"
+			],
+			"ids": [
+				"github.com/{owner}/{repo}"
+			],
+			"reads": {
+				"pulls": {
+					"tool": "list_pull_requests",
+					"args": {
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"state": "all",
+						"sort": "created",
+						"direction": "desc",
+						"perPage": 30,
+						"page": 1,
+						"fields": [
+							"number",
+							"title",
+							"state",
+							"draft",
+							"merged",
+							"user",
+							"created_at"
+						]
+					}
+				},
+				"issues": {
+					"optional": true,
+					"tool": "list_issues",
+					"args": {
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"orderBy": "CREATED_AT",
+						"direction": "DESC",
+						"perPage": 30,
+						"fields": [
+							"number",
+							"title",
+							"state",
+							"user",
+							"created_at"
+						]
+					}
+				},
+				"releases": {
+					"optional": true,
+					"tool": "list_releases",
+					"args": {
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"perPage": 10,
+						"page": 1,
+						"fields": [
+							"id",
+							"tag_name",
+							"name",
+							"html_url",
+							"published_at",
+							"prerelease",
+							"draft",
+							"author"
+						]
+					}
+				},
+				"commits": {
+					"optional": true,
+					"tool": "list_commits",
+					"args": {
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"perPage": 1,
+						"page": 1,
+						"fields": [
+							"sha",
+							"html_url",
+							"commit",
+							"author"
+						]
+					}
+				}
+			},
+			"follow": {
+				"keys": {
+					"pulls": "number",
+					"issues.issues": "number",
+					"commits": "sha"
+				},
+				"newest": {
+					"pulls": "number",
+					"issues.issues": "number",
+					"releases": "published_at"
+				},
+				"ignore": [
+					"issues.totalCount",
+					"issues.pageInfo"
+				],
+				"authors": {
+					"pulls": "user.login",
+					"issues.issues": "user.login",
+					"commits": "author.login"
+				},
+				"rules": [
+					{
+						"on": "releases[*]",
+						"kind": "added",
+						"does": "wake",
+						"says": "released {tag_name}"
+					},
+					{
+						"on": "releases[*].draft",
+						"to": false,
+						"does": "wake",
+						"says": "released {tag_name}"
+					},
+					{
+						"on": "pulls[*]",
+						"kind": "added",
+						"does": "wake",
+						"says": "{user.login} opened #{number}: {title}"
+					},
+					{
+						"on": "issues.issues[*]",
+						"kind": "added",
+						"does": "wake",
+						"says": "{user.login} opened issue #{number}: {title}"
+					},
+					{
+						"on": "commits[*]",
+						"kind": "added",
+						"does": "tell",
+						"says": "new commits on the default branch"
+					}
+				],
+				"ends": {},
+				"every": "15m",
+				"settle": "1m"
+			},
+			"fields": {
+				"pulls": "pulls",
+				"issues": "issues.issues",
+				"releases": "releases",
+				"commits": "commits"
+			}
 		}
 	}
 }

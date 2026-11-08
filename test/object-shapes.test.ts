@@ -54,6 +54,23 @@ it("accepts curated data, rejects reads that can write and unbounded overlapping
 	if ("objects" in safe)
 		expect(recognise(`${"a-".repeat(90)}wrong`, [{ name: "example", objects: safe.objects }])).toEqual([]);
 });
+it("a read's argument may be a list of words, the fields a list read asks for; nothing else that is not a scalar", () => {
+	const withArgs = (args: unknown) =>
+		parseObjects({ issue: { ...GITHUB_OBJECTS.issue, reads: { issue: { tool: "issue_read", args } } } }, () => true);
+	const parsed = withArgs({ owner: "{owner}", fields: ["number", "user", "created_at"] });
+	expect(parsed).toHaveProperty("objects");
+	if ("objects" in parsed) {
+		const found = recognise("https://github.com/acme/banda/issues/12", [
+			{ name: "github", objects: parsed.objects },
+		])[0]!;
+		expect(readArgs(parsed.objects.issue!.reads.issue!, found, undefined)).toEqual({
+			owner: "acme",
+			fields: ["number", "user", "created_at"],
+		});
+	}
+	for (const fields of [["{owner}"], [1], [["a"]], { a: "b" }, Array.from({ length: 33 }, () => "a"), ["a b"]])
+		expect(withArgs({ fields }), JSON.stringify(fields)).toHaveProperty("errors");
+});
 it("validates identity metadata and leaves other providers' identities case-sensitive by default", () => {
 	for (const normalize of [
 		null,
@@ -123,6 +140,22 @@ it("recognises the object a browser opens, not the raw path before URL normalisa
 		"https://github.com/o/r/pull/34/../../../../elsewhere",
 	])
 		expect(recognise(url, [github])).toEqual([]);
+});
+it("a URL names its object with a tab, a query or a fragment after it, never a deeper path", () => {
+	for (const url of [
+		"https://github.com/o/r/pull/34",
+		"https://github.com/o/r/pull/34/",
+		"https://github.com/o/r/pull/34/files",
+		"https://github.com/o/r/pull/34/files/?w=1#diff",
+		"https://github.com/o/r/pull/34#issuecomment-1",
+	])
+		expect(
+			recognise(url, [github]).map((r) => r.kind),
+			url,
+		).toEqual(["pull_request"]);
+	// a commit of a pull request, a path below a tab: something inside it, not the object
+	for (const url of ["https://github.com/o/r/pull/34/commits/a1b2c3", "https://github.com/o/r/pull/34/files/a/b"])
+		expect(recognise(url, [github]), url).toEqual([]);
 });
 it("URL recognition is invariant under browser parsing for generated dot segments and separators", () => {
 	fc.assert(

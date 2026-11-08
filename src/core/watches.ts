@@ -608,7 +608,7 @@ export function defineWatches(options: WatchesOptions) {
 			return {
 				why:
 					Object.keys(kind.follow.ends).length === 0
-						? `"until: ${watch.until}" cannot end it: nothing does`
+						? `"until: ${watch.until}": nothing ends it, so leave "until" out`
 						: `"until: ${watch.until}" is none of its ends: ${Object.keys(kind.follow.ends).join(", ")}`,
 			};
 		const picked = await accountFor(tx, agent, connection, watch.account);
