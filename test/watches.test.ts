@@ -451,6 +451,40 @@ describe("a watch on a pull request", () => {
 		expect(took).toBeLessThan(5000);
 	}, 60_000);
 
+	it("a push's first look claims no green: all checks green only once the new head's runs have all come", async () => {
+		const run = (name: string, status: string, conclusion: string | null) => ({ id: name, name, status, conclusion });
+		const pushed =
+			(runs: Json[]) =>
+			(step: number): World => {
+				const at = structuredClone(world(0)) as {
+					get: { [key: string]: Json };
+					get_check_runs: { [key: string]: Json };
+				};
+				if (step >= 1) at.get.head = { ref: "objects", sha: "b2" };
+				if (step >= 1) at.get_check_runs = { total_count: runs.length, check_runs: runs };
+				return at as unknown as World;
+			};
+		const steps = [
+			pushed([]),
+			// seconds after the push only Vercel has reported; CI's runs are not listed yet
+			pushed([run("vercel", "completed", "success")]),
+			pushed([run("vercel", "completed", "success"), run("unit", "in_progress", null), run("lint", "queued", null)]),
+			pushed([
+				run("vercel", "completed", "success"),
+				run("unit", "completed", "success"),
+				run("lint", "completed", "success"),
+			]),
+		];
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: (step) => (steps[step] as (step: number) => World)(step),
+			clicks: ["k1", "k2", "k3"],
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.tells.map((tell) => tell.changes)).toEqual([["new commits"]]);
+		expect(summary.wakes.map((wake) => [...wake.changes].sort())).toEqual([["all checks green", "checks finished"]]);
+		expect(summary.wakes[0]?.version).toBe(summary.followed?.version);
+	}, 60_000);
+
 	it("an hour unable to look draws one error line; a good look clears it, and the next hour draws one again", async () => {
 		const down = new Set([1, 2, 3, 4, 5, 7, 8, 9, 10, 11]);
 		const summary = await watchScenario(await tempHome(), new Faults(), {

@@ -7,6 +7,7 @@ import {
 	EVERY,
 	endedBy,
 	type Follow,
+	heldBack,
 	holds,
 	type Json,
 	lookEvery,
@@ -127,6 +128,19 @@ describe("following an object", () => {
 		expect(said["dependabot[bot] commented"]).toBe("tell");
 		expect(sorted.find((each) => each.change.path.some((s) => typeof s === "object" && s.item === "5"))?.does).toBe(
 			"nothing",
+		);
+	});
+
+	it("a condition steady over a path holds only once that path is what the reading before saw", () => {
+		const follow = { derived: { green: { when: "all runs[*].ok = true", steady: "head" } } };
+		const before = { head: "a1", runs: [{ ok: false }] };
+		const pushed = { head: "b2", runs: [{ ok: true }] };
+		expect(reading(follow, pushed, before).derived).toEqual({ green: false });
+		expect(heldBack(follow, pushed, before)).toBe(true);
+		expect(reading(follow, pushed, pushed).derived).toEqual({ green: true });
+		expect(reading(follow, pushed).derived).toEqual({ green: true });
+		expect(parseFollow({ rules: [], ends: { x: "a = 1" }, derived: { g: { when: "a = 1" } } }, "k")).toHaveProperty(
+			"errors",
 		);
 	});
 

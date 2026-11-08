@@ -60,8 +60,12 @@ export type Follow = {
 	readonly ignore?: readonly string[];
 	/** Who wrote an item of a list, by the list's pattern: the account's own are nothing, a bot's only tell. */
 	readonly authors?: { readonly [list: string]: string };
-	/** Named conditions over the reading: when one flips, that is a change of its own (`derived.<name>`). */
-	readonly derived?: { readonly [name: string]: string };
+	/**
+	 * Named conditions over the reading: when one flips, that is a change of its own (`derived.<name>`). One written
+	 * `{"when", "steady"}` holds only when the value at `steady` is the same as in the reading before: a list it ranges
+	 * over is incomplete just after that value changed (a push's checks appear one by one).
+	 */
+	readonly derived?: { readonly [name: string]: Derived };
 	readonly rules: readonly Rule[];
 	/** What a change no rule matches does: nothing unless said. */
 	readonly otherwise?: Rule["does"];
@@ -75,6 +79,10 @@ export type Follow = {
 	/** How long after a change what changes next still joins its wake, as a period (`1m`); none, it wakes at once. */
 	readonly settle?: string;
 };
+
+/** A derived condition: its words, or its words and the path it must be steady over. */
+export type Derived = string | { readonly when: string; readonly steady: string };
+const whenOf = (derived: Derived) => (typeof derived === "string" ? derived : derived.when);
 
 /** How often a followed object is looked at unless its kind says: quiet, and while it is busy. */
 export const EVERY = 30 * 60_000;
@@ -207,11 +215,34 @@ export function holds(text: string, reading: Json): boolean {
 	});
 }
 
-/** A reading: what each read answered under its name, and the derived conditions beside, so a flip of one is a change. */
-export function reading(follow: Pick<Follow, "derived">, answers: Item): Item {
+/**
+ * A reading: what each read answered under its name, and the derived conditions beside, so a flip of one is a change.
+ * `before` is the reading it follows: a condition steady over a path that changed since does not hold yet, and is
+ * kept so, so it flips once the path has stayed.
+ */
+export function reading(follow: Pick<Follow, "derived">, answers: Item, before?: Item): Item {
 	const derived = Object.entries(follow.derived ?? {});
 	if (derived.length === 0) return answers;
-	return { ...answers, derived: Object.fromEntries(derived.map(([name, text]) => [name, holds(text, answers)])) };
+	return {
+		...answers,
+		derived: Object.fromEntries(
+			derived.map(([name, each]) => [name, holds(whenOf(each), answers) && steady(each, answers, before)]),
+		),
+	};
+}
+
+/** Whether a derived condition's steady path is the same in `answers` as in `before` (none before: it is). */
+function steady(derived: Derived, answers: Item, before: Item | undefined): boolean {
+	if (typeof derived === "string" || before === undefined) return true;
+	const path = pattern(derived.steady);
+	return canonical(valuesAt(answers, path)) === canonical(valuesAt(before, path));
+}
+
+/** Whether a derived condition holds over `answers` but is held back because its steady path just changed. */
+export function heldBack(follow: Pick<Follow, "derived">, answers: Item, before?: Item): boolean {
+	return Object.values(follow.derived ?? {}).some(
+		(each) => holds(whenOf(each), answers) && !steady(each, answers, before),
+	);
 }
 
 /** Which of `follow`'s ends holds over `after`: the one `until` names, or any; its name, or undefined. */
@@ -364,13 +395,25 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 	if (!object(value as Json)) return { errors: [`${where}.follow is {"rules", "ends", …}`] };
 	const follow = value as { [key: string]: unknown };
 	for (const key of Object.keys(follow)) if (!FIELDS.includes(key)) problem(`"${key}" is not a field`);
-	for (const key of ["keys", "totals", "authors", "derived", "ends"] as const)
+	for (const key of ["keys", "totals", "authors", "ends"] as const)
 		if (follow[key] !== undefined && !stringMap(follow[key])) problem(`"${key}" is {"pattern": "path"}`);
 	if (
 		follow.ignore !== undefined &&
 		!(Array.isArray(follow.ignore) && follow.ignore.every((each) => typeof each === "string"))
 	)
 		problem(`"ignore" is a list of paths`);
+	const derivedOk =
+		follow.derived === undefined ||
+		(object(follow.derived as Json) &&
+			Object.values(follow.derived as object).every(
+				(each) =>
+					typeof each === "string" ||
+					(object(each as Json) &&
+						typeof (each as { when?: unknown }).when === "string" &&
+						typeof (each as { steady?: unknown }).steady === "string" &&
+						Object.keys(each as object).every((key) => key === "when" || key === "steady")),
+			));
+	if (!derivedOk) problem(`"derived" is {"name": "condition"} or {"name": {"when": "condition", "steady": "path"}}`);
 	if (!Array.isArray(follow.rules)) problem(`"rules" is a list`);
 	else
 		for (const rule of follow.rules as unknown[]) {
@@ -393,7 +436,7 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 	for (const name of Object.keys(ends)) if (!NAME.test(name)) problem(`"${name}" is not a word for an end`);
 	const conditions = [
 		...Object.values(ends),
-		...Object.values(stringMap(follow.derived) ? (follow.derived as { [name: string]: string }) : {}),
+		...(derivedOk ? Object.values((follow.derived ?? {}) as { [name: string]: Derived }).map(whenOf) : []),
 	];
 	if (typeof follow.busy === "string") conditions.push(follow.busy);
 	for (const text of conditions) {

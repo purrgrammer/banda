@@ -407,8 +407,14 @@ draws as cards, from scripts/github-objects.ts.
 					"comments": "user.login"
 				},
 				"derived": {
-					"checks_done": "all checks.check_runs[*].status = completed",
-					"checks_green": "all checks.check_runs[*].conclusion = success"
+					"checks_done": {
+						"when": "all checks.check_runs[*].status = completed",
+						"steady": "pr.head.sha"
+					},
+					"checks_green": {
+						"when": "all checks.check_runs[*].conclusion = success",
+						"steady": "pr.head.sha"
+					}
 				},
 				"rules": [
 					{

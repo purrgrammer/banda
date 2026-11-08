@@ -90,9 +90,11 @@ export const GITHUB_OBJECTS = {
 				"comments[*].updated_at",
 			],
 			authors: { reviews: "user.login", comments: "user.login" },
+			// a push's check runs appear one by one: over the first look at a new head the list is not all of them, so
+			// "all" holds only once the head is the one the reading before saw
 			derived: {
-				checks_done: "all checks.check_runs[*].status = completed",
-				checks_green: "all checks.check_runs[*].conclusion = success",
+				checks_done: { when: "all checks.check_runs[*].status = completed", steady: "pr.head.sha" },
+				checks_green: { when: "all checks.check_runs[*].conclusion = success", steady: "pr.head.sha" },
 			},
 			rules: [
 				{ on: "pr.merged", to: true, does: "wake", says: "merged" },

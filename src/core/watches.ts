@@ -36,6 +36,7 @@ import {
 	canonical,
 	endedBy,
 	type Follow,
+	heldBack,
 	type Item,
 	type Json,
 	lookEvery,
@@ -755,8 +756,11 @@ export function defineWatches(options: WatchesOptions) {
 			const resumed = record.resumed !== undefined;
 			const doc = await tx.doc(Followed);
 			const kept = doc.objects[key];
-			const after = readingOf(kind.follow, answers);
-			const every = lookEvery(kind.follow, after);
+			const after = readingOf(kind.follow, answers, kept?.answers);
+			// a condition held back until its steady path stays is looked at again soon, not at the quiet cadence
+			const every = heldBack(kind.follow, answers, kept?.answers)
+				? Math.min(lookEvery(kind.follow, after), BUSY_EVERY)
+				: lookEvery(kind.follow, after);
 			let card: ReturnType<typeof cardOf> | undefined;
 			try {
 				card = cardOf(kind, ref, answers);
