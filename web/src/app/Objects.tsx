@@ -628,6 +628,18 @@ function useOldReading(shown: Extract<ObjectShown, { shown: "card" }>) {
 	return old;
 }
 
+/**
+ * What following a Slack channel does, said before the owner follows it: a mention wakes, the rest only tells, and words
+ * (or a mention in a thread, which the channel's history never shows) are a search's to follow.
+ */
+function followSays(card: Extract<ObjectShown, { shown: "card" }>["card"], agent: string): string | undefined {
+	if (card.card !== "messages" || card.service !== "slack" || card.place !== "channel") return undefined;
+	return (
+		`A message that mentions you wakes ${agent}; every other message only tells. ` +
+		`To follow words, or mentions in threads, follow a Slack search: slack/search/in:${card.title} your words.`
+	);
+}
+
 function ReadingCard({
 	chat,
 	shown,
@@ -655,6 +667,7 @@ function ReadingCard({
 					ends: shown.follow.ends,
 					onFollow: (until?: string) =>
 						void watchActions.follow({ agent: agent.id, object: shown.key, ...(until === undefined ? {} : { until }) }),
+					says: followSays(card, agent.name),
 				};
 	const actions = hideActions ? null : (
 		<ObjectMenu name={shown.name} details={readingDetails(shown)} onRefresh={onRefresh} follow={follow} busy={busy} />

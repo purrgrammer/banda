@@ -181,6 +181,9 @@ export async function watches(harness: Harness, workspace: Workspace, ctx: Conte
 						}),
 			...(record.last === undefined ? {} : { lastRun: record.last }),
 			...(record.behind === undefined || record.done !== undefined ? {} : { behind: record.behind }),
+			...(record.pages === undefined || record.done !== undefined
+				? {}
+				: { pages: { since: Math.min(...Object.values(record.pages).map((walk) => walk.since)) } }),
 			...(record.paused === undefined ? {} : { paused: record.paused }),
 			...(record.done === undefined ? {} : { done: { ...record.done } }),
 			...(record.allowed?.length ? { allowed: [...record.allowed] } : {}),

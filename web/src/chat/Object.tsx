@@ -327,6 +327,8 @@ export type FollowOffer = {
 	readonly ends: readonly string[];
 	/** Follow it, until the end named, or any of them. */
 	readonly onFollow: (until?: string) => void;
+	/** What following it wakes the agent for and what only tells, when the kind's default needs saying (a channel's). */
+	readonly says?: string | undefined;
 };
 
 /** Quiet manual actions and full reading details, reachable by touch or keyboard. */
@@ -382,6 +384,11 @@ export function ObjectMenu({
 													]
 												: []),
 										]}
+							{follow?.says === undefined ? null : (
+								<p data-follow-says="" className="px-2 pb-1 text-meta text-ink-2">
+									{follow.says}
+								</p>
+							)}
 						</DropdownMenuGroup>
 						<DropdownMenuSeparator />
 					</>
@@ -505,6 +512,12 @@ export function ObjectLink({
 						{title}
 					</a>
 				)}
+				{/* a thread is its first words and where they are, as its card says: a watch's row names it so too */}
+				{slack && object.place === "thread" && !linked?.reply && object.channel !== undefined ? (
+					<span data-slack-where="" className="shrink-0 text-ink-2">
+						in {object.channel}
+					</span>
+				) : null}
 			</span>
 		);
 	}

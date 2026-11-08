@@ -1,13 +1,16 @@
 /**
  * Slack: a thread, a channel, a direct message, a search and people as cards; authors from another team and bots; a post
- * and a reply as drafts on the floor; the access to choose before connecting; and Slack named in the owner's words.
+ * and a reply as drafts on the floor; the access to choose before connecting; Slack named in the owner's words; and a
+ * followed thread and channel: their watch rows (looking, behind while it reads a page a look, paused) and what Follow
+ * on a channel says.
  */
 import { useState } from "react";
 import { DraftApproval } from "../../app/DraftApproval.tsx";
 import { ConnectionPermissions } from "../../chat/Connect.tsx";
 import { ConnectionIcon } from "../../chat/ConnectionIcon.tsx";
 import { Bubble } from "../../chat/Feed.tsx";
-import { ContactCard, type Messages, MessagesCard, ObjectLink, type Person } from "../../chat/Object.tsx";
+import { ContactCard, type Messages, MessagesCard, ObjectLink, ObjectMenu, type Person } from "../../chat/Object.tsx";
+import { Watching, type WatchRowView } from "../../chat/Panel.tsx";
 import { scopesOfChoice } from "../../lib/connect.ts";
 import { choicesOf } from "../fixtures.ts";
 import { Section } from "../stage.tsx";
@@ -80,6 +83,8 @@ const CHANNEL: Messages = {
 		},
 	],
 };
+
+const GENERAL: Messages = { ...CHANNEL, title: "#general", url: "https://acme.slack.com/archives/C0GENERAL" };
 
 const DM: Messages = {
 	title: "@bob",
@@ -194,6 +199,35 @@ const DRAFTS: readonly (readonly [string, Draft, string, Messages])[] = [
 	],
 ];
 
+/** Mara's Slack watches: a thread looking, a channel behind a burst, another paused. */
+const SLACK_WATCHES: readonly WatchRowView[] = [
+	{
+		id: "release-notes",
+		name: "a thread in Slack",
+		service: "Slack",
+		object: { ref: "thread" },
+		next: "today 09:45",
+		saw: "Saw today 09:40: @bob replied",
+	},
+	{
+		id: "general",
+		name: "a channel in Slack",
+		service: "Slack",
+		object: { ref: "channel" },
+		next: "today 09:41",
+		saw: "Behind since today 09:40: more came than a page holds, reading a page a look",
+		behind: true,
+	},
+	{
+		id: "deploys",
+		name: "a channel in Slack",
+		service: "Slack",
+		object: { ref: "deploys" },
+		saw: "Saw today 08:10: @deploybot [bot]: deploy 41 green",
+		paused: true,
+	},
+];
+
 const CARDS: readonly (readonly [string, Messages])[] = [
 	["A thread, with a bot and someone from another team", SLACK_THREAD],
 	["A channel, its topic and members", CHANNEL],
@@ -231,6 +265,32 @@ export function SlackSection() {
 						<MessagesCard list={list} />
 					</div>
 				))}
+				<div className="flex min-w-0 flex-col gap-1.5">
+					<span className="text-meta text-ink-2">Following: Mara's Slack watches</span>
+					<Watching
+						agent="Mara"
+						watches={SLACK_WATCHES}
+						inline={(ref) => {
+							const list = ref === "thread" ? SLACK_THREAD : ref === "channel" ? GENERAL : CHANNEL;
+							return <ObjectLink object={{ ...list, card: "messages" }} href={list.url ?? ""} />;
+						}}
+					/>
+				</div>
+				<div className="flex min-w-0 flex-col gap-1.5">
+					<span className="text-meta text-ink-2">Follow on a channel: a mention wakes, the rest tells</span>
+					<span className="flex items-center gap-2 text-body text-ink">
+						#general
+						<ObjectMenu
+							name="#general"
+							details={[["Read", "today 09:40"]]}
+							follow={{
+								ends: [],
+								onFollow: () => {},
+								says: "A message that mentions you wakes Mara; every other message only tells. To follow words, or mentions in threads, follow a Slack search: slack/search/in:#general your words.",
+							}}
+						/>
+					</span>
+				</div>
 				<div className="flex min-w-0 flex-col gap-1.5">
 					<span className="text-meta text-ink-2">A person</span>
 					<ContactCard person={BOB} />
