@@ -1,4 +1,5 @@
 /** Google Contacts' person cards: a saved contact, one emailed but not saved, no name, long words, and nothing but a name. */
+import { DraftApproval } from "../app/DraftApproval.tsx";
 import { Bubble } from "../chat/Feed.tsx";
 import { ContactCard, ObjectLink, type Person } from "../chat/Object.tsx";
 import { Section } from "./stage.tsx";
@@ -45,18 +46,84 @@ export const PEOPLE: readonly (readonly [string, Person])[] = [
 	["Only a name", { name: "Grandma", emails: "", phones: "", organization: "", title: "", other: false }],
 ];
 
+type Draft = Parameters<typeof DraftApproval>[0]["ask"];
+const AS = "alice@example.test on Google Contacts";
+const ON = { refs: ["contacts:contact:cDEyMzQ1Njc4OTA"], account: "alice" };
+
+/** A draft of each change, as the daemon words them: no field is the owner's to edit. */
+const DRAFTS: readonly (readonly [string, Draft, string, boolean])[] = [
+	[
+		"Draft: add a contact",
+		{
+			type: "approval",
+			tool: "contacts__create_contact",
+			verb: "Add",
+			as: AS,
+			args: {
+				name: "Bo Lindqvist",
+				emails: ["bo@lindqvist.example"],
+				phones: ["+46 70 123 45 67"],
+				organization: "Lindqvist & Co",
+				notes: "Met at the fair.\nPrefers email.",
+				account: "alice",
+			},
+		},
+		"Add “Bo Lindqvist” to your contacts",
+		false,
+	],
+	[
+		"Draft: change a contact",
+		{
+			type: "approval",
+			tool: "contacts__update_contact",
+			verb: "Change",
+			as: AS,
+			on: ON,
+			args: { contact_id: "pc1234567890", title: "Director of Design", phones: [], account: "alice" },
+		},
+		"Change this contact",
+		true,
+	],
+	[
+		"Draft: delete a contact",
+		{
+			type: "approval",
+			tool: "contacts__delete_contact",
+			verb: "Delete",
+			as: AS,
+			on: ON,
+			args: { contact_id: "pc1234567890", account: "alice" },
+		},
+		"Delete this contact from your contacts",
+		true,
+	],
+];
+
 export function ContactsSection() {
 	return (
 		<Section
 			id="contacts"
 			title="Google Contacts"
-			note="People an agent names, drawn from banda's own reading. Read-only: nothing here adds or changes a contact."
+			note="People an agent names, drawn from banda's own reading. An agent's change to one is a draft the owner approves, with nothing to edit: add, change, delete."
 		>
 			<div className="grid gap-6 lg:grid-cols-2">
 				{PEOPLE.map(([label, person]) => (
 					<div key={label} className="flex min-w-0 flex-col gap-1.5">
 						<span className="text-meta text-ink-2">{label}</span>
 						<ContactCard person={person} />
+					</div>
+				))}
+				{DRAFTS.map(([label, ask, words, drawn]) => (
+					<div key={label} className="flex min-w-0 flex-col gap-1.5">
+						<span className="text-meta text-ink-2">{label}</span>
+						<DraftApproval
+							chat={0}
+							agent={{ name: "Iris" }}
+							label={words}
+							ask={ask}
+							wait={`specimen-${label}`}
+							drawn={drawn ? <ContactCard person={ANA} /> : undefined}
+						/>
 					</div>
 				))}
 				<div className="flex min-w-0 flex-col gap-1.5">
