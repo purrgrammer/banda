@@ -637,6 +637,14 @@ or not the model remembers it.
   change itself, so a read repeated after a crash yields the same events and the same wake key, which the chat's queue
   deduplicates. A short page never counts as removal. Push (a server's notification, a webhook) only says when to
   look, never what happened.
+- **A list too long for one answer is a window.** A connection may say that a list in a reading is a page of more
+  (a channel's history): the reading keeps its newest items, still one reading that every watch and the card share.
+  A look walks the service's own pages, one a look, until they reach the window, reading the newest page again so an
+  edit or a deletion in it is seen, and merges only then; what it fetched meanwhile is the watch's, kept across a
+  crash, and the watch is behind until the merge. A walk that cannot reach the window within an hour merges what it
+  read, and its wake says what may be missing. What leaves the window from its old end was pushed off, never
+  removed. Every call a connection makes for one account and one method, whoever makes it (a watch, an agent, a
+  card), waits its turn in one queue, and a refusal that says when to come back holds that queue until then.
 - **The first look comes before the watch is live.** Making a watch reads the object once, and that reading is its
   baseline: only what changes after it is an event; what came before, the agent can read for itself. A watch whose
   first look fails is not made, and the card says why.

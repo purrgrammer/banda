@@ -141,5 +141,7 @@ returned to and merged, at desktop and phone width.
 - [ ] Spike before slice 2: the readings doc keeps 300 and evicts the oldest first, so a held reading must be
   skipped; GitHub's hosted MCP server still answers `pull_request_read`'s get, get_reviews, get_comments and
   get_check_runs
-- [ ] With the mail connection: a feed with a cursor and a service subscription with renewal, as data
-  ([Connections](connections.md)); push through a relay stays in DESIGN.md "Open"
+- [x] A list walked by the service's cursor, as data: a read's `pages` keeps a window of the newest items, walked to
+  a page a look, held across a crash, behind until merged (Slack's thread and channel; test/watch-slack.test.ts)
+- [ ] With the mail connection: Gmail's history id as a `pages` read, and a service subscription with renewal, as
+  data ([Connections](connections.md)); push through a relay stays in DESIGN.md "Open"

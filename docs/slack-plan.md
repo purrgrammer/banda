@@ -90,10 +90,10 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or C
   - [x] `SLACK_TOOLS` and `slackCall`, each read's answer shaped as the kinds' `fields` name it and bounded by `MAX_RESPONSE_BYTES`.
   - [x] `slackWriteCall` for `post_message`, `effect: "unsafe"`, on the `private` floor, its draft words "Post in #name" or "Reply in thread in #name" with the text shown as it will notify.
   - [x] The Slack kinds in `src/core/objects.ts` and the two cards reading them, with `follow` left out of the file until stage 2.
-- [ ] Stage 2, follow a thread and a channel. `pages` in `src/core/follow.ts`, `window(reading, pages)` keeping the newest `keep` by the ordering field, `merge(held, pages)` joining pages into the window.
-  - [ ] `lookPaged` in `src/core/watches.ts`. Fetch the newest page, compare its oldest item to the window's newest, hold or merge, record "behind" with the gap's age, repeat on the next due look within the budget.
-  - [ ] The thread and channel `follow` entries in `shipped/connections/slack.md`, as `docs/slack.md` has them. A mention wakes, a message tells, the owner's own are nothing.
-  - [ ] DESIGN.md "Watches" gains the paged list and the budget.
+- [x] Stage 2, follow a thread and a channel. `pages` in `src/core/follow.ts`, `window(reading, pages)` keeping the newest `keep` by the ordering field, `merge(held, pages)` joining pages into the window.
+  - [x] `lookPaged` in `src/core/watches.ts`. Fetch the newest page, compare its oldest item to the window's newest, hold or merge, record "behind" with the gap's age, repeat on the next due look within the budget.
+  - [x] The thread and channel `follow` entries in `shipped/connections/slack.md`, as `docs/slack.md` has them. A mention wakes, a message tells, the owner's own are nothing.
+  - [x] DESIGN.md "Watches" gains the paged list and the budget.
 - [ ] Stage 3, search, people, reactions and files. `search_messages` followed as a `newest` page by `ts` sorted by timestamp, the person kind told, `add_reaction` as an idempotent draft with "Don't ask again for this task" offered, `get_file` reading a Slack file's bytes through the daemon as a blob and never into the box, and `authors` scoped to additions so a reaction on the owner's own message counts.
 
 **You see.**
@@ -110,7 +110,7 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or C
 - [x] `test/oauth.test.ts`. The `CLIENTS` table for Google and Slack, `user_scope` sent and `scope` not, `authed_user.access_token` as the token, no `client_secret`. Run `npm run test:fast -- test/oauth.test.ts`.
 - [ ] `test/slack-rest.test.ts`. Each read's shape against the fake, mrkdwn rendering, mention and bot marking, `whoami.handle`, the budget's spacing and `Retry-After`, `post_message` on the floor, `add_reaction` idempotent, `get_file` bounded. Run `npm run test:fast -- test/slack-rest.test.ts`.
 - [ ] `test/connections.test.ts`, `test/object-shapes.test.ts`, `test/stored-shapes.test.ts`. The file parses, the kinds' URLs and ids round-trip, a reply's link names its root, `limits` is stored. Run `npm run test:fast -- test/connections.test.ts test/object-shapes.test.ts test/stored-shapes.test.ts`.
-- [ ] `test/follow.test.ts`. `window` and `merge` properties. Merging the same pages twice is the same reading, and nothing newer than the window's newest is ever dropped. Run `npm run test:fast -- test/follow.test.ts`.
+- [x] `test/follow.test.ts`. `window` and `merge` properties. Merging the same pages twice is the same reading, and nothing newer than the window's newest is ever dropped. Run `npm run test:fast -- test/follow.test.ts`.
 - [ ] `test/watch-slack.test.ts`. A thread and a channel through the scenario harness. A burst past the page, a gap closed late, three watches sharing one budget, a `Retry-After`, pages held across a kill, the owner's own post ignored, a bot's post told, a search's late-indexed match, a person's status change told. Run `npm run test:fast -- test/watch-slack.test.ts`.
 - [ ] `test/slack.faults.test.ts` and `test/watch.faults.test.ts`. A post under a kill at every boundary is sent once or asks again, never twice. A reaction runs again unasked and ends with one reaction. The watch sweep kills at the page fetch, the hold, the merge and the wake. Dispatch the `ci` workflow with faults on the branch and record the run id.
 - [ ] `npm run check && npm run typecheck && npm test` green at the head.

@@ -118,7 +118,7 @@ Sketch of the kinds' entries, in the file's `objects`:
 		},
 		"follow": {
 			"keys": { "thread.messages": "ts" },
-			"authors": { "thread.messages": "from" },
+			"authors": { "thread.messages": "author" },
 			"ignore": ["thread.messages[*].reply_count", "thread.messages[*].latest_reply", "thread.active"],
 			"rules": [
 				{ "on": "thread.messages[*]", "kind": "added", "does": "wake", "says": "{from} replied" },
@@ -149,7 +149,7 @@ Sketch of the kinds' entries, in the file's `objects`:
 		},
 		"follow": {
 			"keys": { "history.messages": "ts" },
-			"authors": { "history.messages": "from" },
+			"authors": { "history.messages": "author" },
 			"ignore": ["history.active"],
 			"rules": [
 				{ "on": "history.messages[*]", "kind": "added", "where": "mentions_me = true", "does": "wake", "says": "{from} mentioned you" },
@@ -225,16 +225,21 @@ a minute with a hundred per page. Two things follow for the daemon, both new, bo
 
 - **A paged list.** A read may say that one list in its reading is a page of more (`pages`: the list, the field that
   orders it, how many to keep). The reading holds the newest `keep` items, a window, and is still one whole reading:
-  the card draws it and every watch diffs it, as DESIGN.md "Watches" asks. A look asks the service for what is newer
-  than the window's newest item, page by page with the service's own cursor, and merges only once the pages reach
-  the window (or the service says there is nothing more): a burst of forty messages at fifteen a page lands as one
-  reading, one wake, three minutes late, with nothing skipped. Pages fetched but not yet merged are the look's own
-  state, kept across a crash with the task; the row says "behind" while a gap is open, and a gap the budget cannot
-  close in an hour is closed by a fresh window with the wake that says changes may be missing, as Watches already
-  does. The first look is one page and the baseline. Slack's history answers newest first and replies oldest
-  first, so the daemon walks a page chain whichever way the service hands it and orders by the declared field. This
-  is the "feed with a cursor" Watches left for the mail connection: Gmail's history id can take the same declaration
-  later; Gmail's search and GitHub's releases stay `newest` pages, which fit them.
+  the card draws it and every watch diffs it, as DESIGN.md "Watches" asks. A look reads one page of overlap and
+  walks on, one page a look, with the service's own cursor: for history (newest first) the newest page with no
+  `oldest`, then back until a page reaches the window's items; for replies (oldest first) from the window's item one
+  full page back from its newest end (the page size read from a page that came back full: 100 on an unclamped team,
+  15 on a clamped one, never assumed), then forward until Slack has no more. It merges only then: a burst of forty
+  messages at fifteen a page lands as one reading, one wake, three looks later, with nothing skipped. Within the
+  pages fetched an item whose text changed is an edit and an item in that range missing from them is a deletion;
+  items older than the fetched range are never read again, so their edits and deletions are not seen, and a
+  thread's first message is seen because Slack sends it on every page. Pages fetched but not yet merged are the
+  watch's record, kept across a crash; the row says "behind" while the walk is open, and a walk that cannot reach the
+  window within an hour merges what it read (deleting nothing it did not reach) with the wake or tell that says
+  changes may be missing. The first look is one page and the baseline (oldest first with more, the walk to the end).
+  An item older than the window's oldest that leaves it was pushed off, never deleted. This is the "feed with a
+  cursor" Watches left for the mail connection: Gmail's history id can take the same declaration later; Gmail's
+  search and GitHub's releases stay `newest` pages, which fit them.
 - **A budget per account and method.** Every call of a method on an account, from a watch's look, an agent's read
   or a card's unfurl alike, goes through one queue for that (account, method): one call in flight at a time, and a
   refusal with `Retry-After` holds the queue until it passes, said in words where the call came from ("Slack is
@@ -338,8 +343,9 @@ AGENTS.md principle 6). Observed, not inferred:
   refresh token's 30 days remain
 - [ ] Stage 1: the file, the adapter's reads under the budget, PKCE sign-in, the handle, cards and unfurls,
   `post_message` on the floor; fake Slack in tests; the owner's team through the app at both widths
-- [ ] Stage 2: the paged list as connection data; thread and channel followed; scenarios and the fault sweep; a real
-  busy channel in a forked home
+- [ ] Stage 2: the paged list as connection data, thread and channel followed, scenarios and the sweep's Slack
+  scenarios are built (test/watch-slack.test.ts, test/slack-watch.browser.test.ts); the sweep run in CI, three watches
+  sharing one budget, and a real busy channel in a forked home remain
 - [ ] Stage 3: search and person followed, `add_reaction`, files through the daemon
 - [ ] Logo: Slack's mark as a shipped asset, with the others ([Connections](connections.md))
 - [ ] Slack as a gateway (the owner messaging the band from Slack) is not designed; it needs bot scopes and a
