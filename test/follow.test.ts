@@ -45,6 +45,17 @@ const open = (): Json => ({
 	comments: [],
 });
 
+/** `value` with every key whose value is an empty list left out, at any depth: how a reading's absence of a list reads. */
+function withoutEmptyLists(value: Json): Json {
+	if (Array.isArray(value)) return value.map(withoutEmptyLists);
+	if (value === null || typeof value !== "object") return value;
+	return Object.fromEntries(
+		Object.entries(value).flatMap(([key, each]) =>
+			Array.isArray(each) && each.length === 0 ? [] : [[key, withoutEmptyLists(each)]],
+		),
+	);
+}
+
 describe("following an object", () => {
 	it("the shipped pull request kind follows: comments are read only when followed, and it ends when merged or closed", () => {
 		expect(Object.keys(PR.ends)).toEqual(["merged", "closed"]);
@@ -401,7 +412,9 @@ describe("following an object", () => {
 				const once = observe(follow, before, after);
 				const twice = observe(follow, before, structuredClone(after));
 				expect(twice.map((each) => each.id)).toEqual(once.map((each) => each.id));
-				if (canonical(before) !== canonical(after)) expect(once.length).toBeGreaterThan(0);
+				// a list missing and a list empty are the same reading: only a difference beyond that is a change
+				if (canonical(withoutEmptyLists(before)) !== canonical(withoutEmptyLists(after)))
+					expect(once.length).toBeGreaterThan(0);
 			}),
 			{ numRuns: pbtRuns(200) },
 		);
