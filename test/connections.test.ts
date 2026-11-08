@@ -1437,16 +1437,12 @@ describe("connections banda ships", () => {
 		expect(await acceptedText(s)).toBe(later);
 	});
 
-	it("one the box lost is written back, at banda's version; one from before the store said so counts too", async () => {
+	it("one the box lost is written back, at banda's version", async () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
 		fakes.push(fake);
 		const shipped = await shipping(fake);
 		const s = await open(fake, shipped);
 		await s.capabilities.addShipped("cal");
-		// a home made before the store kept which connections are banda's
-		await s.harness.commit(async (tx) => {
-			delete (await tx.doc(Accepted)).shipped;
-		}, context);
 		rmSync(join(s.box.workspace, "connections/cal.md"));
 		expect((await cal(s))?.change).toMatchObject({ kind: "removed" });
 		const original = await acceptedText(s);
@@ -1516,6 +1512,27 @@ describe("connections banda ships", () => {
 		await s.capabilities.reconcile();
 		expect(boxText(s)).toBe(boxed);
 		expect(await acceptedText(s)).toBe(boxed);
+	});
+
+	it("one the store does not say is banda's is left alone, however like the shipped one it is", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		const shipped = await shipping(fake);
+		const s = await open(fake, shipped);
+		await s.capabilities.addShipped("cal");
+		// the owner narrowed it: the same service, address and client, one read fewer
+		const narrowed = (boxText(s) ?? "").replace(/^reads: \[[^\]]*\]$/m, "reads: []");
+		expect(narrowed).not.toBe(boxText(s));
+		s.writeBox("connections/cal.md", narrowed);
+		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		// and the store says nothing of whose it is
+		await s.harness.commit(async (tx) => {
+			delete (await tx.doc(Accepted)).shipped;
+		}, context);
+		shipNext(shipped);
+		await s.capabilities.reconcile();
+		expect(boxText(s)).toBe(narrowed);
+		expect(await acceptedText(s)).toBe(narrowed);
 	});
 });
 
