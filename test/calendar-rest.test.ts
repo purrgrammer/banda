@@ -8,8 +8,10 @@ import {
 	calendarExpand,
 	calendarWriteCall,
 	createdEventId,
+	eventAnswer,
 	eventOfRef,
 	eventRef,
+	MAX_LISTED,
 } from "../src/core/calendar-rest.ts";
 import { parseConnection } from "../src/core/connections.ts";
 import { discover } from "../src/core/oauth.ts";
@@ -249,9 +251,9 @@ describe("Google Calendar REST connection", () => {
 				organizer: { email: "mira@northstar.example", displayName: "Mira" },
 				attendees: [
 					{ email: "me@example.test", self: true, responseStatus: "needsAction" },
-					{ email: "ana@example.test", displayName: "Ana" },
-					{ email: "b@example.test" },
-					{ email: "c@example.test" },
+					{ email: "Ana@example.test", displayName: "Ana", responseStatus: "accepted", comment: "See you there" },
+					{ email: "b@example.test", responseStatus: "declined" },
+					{ email: "c@example.test", responseStatus: "tentative" },
 					{ email: "d@example.test" },
 					{ email: "room@resource.calendar.google.com", resource: true },
 				],
@@ -277,7 +279,26 @@ describe("Google Calendar REST connection", () => {
 			description: "Agenda:\nDates & owners\n\nSee you",
 			meet: "https://meet.google.com/abc-defg-hij",
 			url: "https://www.google.com/calendar/event?eid=xyz",
+			// each guest but the account and rooms, by address, with their reply
+			guests: [
+				{ email: "ana@example.test", name: "Ana", response: "accepted", comment: "See you there" },
+				{ email: "b@example.test", name: "b@example.test", response: "declined" },
+				{ email: "c@example.test", name: "c@example.test", response: "tentative" },
+				{ email: "d@example.test", name: "d@example.test", response: "needs-action" },
+			],
 		});
+	});
+
+	it("lists the first hundred guests of a larger event, and how many there are", () => {
+		const event = eventAnswer({
+			attendees: [
+				{ email: "me@example.test", self: true, responseStatus: "accepted" },
+				...Array.from({ length: MAX_LISTED + 5 }, (_, n) => ({ email: `g${n}@example.test` })),
+			],
+		});
+		expect(event.guests).toHaveLength(MAX_LISTED);
+		expect(event.guestTotal).toBe(MAX_LISTED + 5);
+		expect(eventAnswer({ attendees: [{ email: "a@example.test" }] })).not.toHaveProperty("guestTotal");
 	});
 
 	it("asks free/busy with a bounded POST", async () => {
