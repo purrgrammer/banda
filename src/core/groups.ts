@@ -32,6 +32,7 @@ import { ASK_WORDS } from "./ask.ts";
 import { type Attachment, blobLink, hold } from "./blobs.ts";
 import { nameOf } from "./companion.ts";
 import { connectionToolsOf } from "./connections.ts";
+import { GROUP_INPUT, type GroupInput } from "./foreign.ts";
 import { skillTokens } from "./skill-tokens.ts";
 import { acceptedSkills, ownerSkillEntry, type Skill } from "./skills.ts";
 import { context } from "./store.ts";
@@ -39,8 +40,7 @@ import { groupToolsName, MESSAGE_GROUP } from "./toolsets.ts";
 import { type Row, unanswered } from "./unanswered.ts";
 
 export const GROUP_MESSAGE = "banda.group-message";
-/** A member's turn's input: the room's messages since it last worked there. */
-export const GROUP_INPUT = "banda.group-input";
+export { GROUP_INPUT };
 /**
  * The daemon's words to a member whose run the owner asked for ended without posting to the room (DESIGN.md
  * "Messages"): part of the same turn, once.
@@ -502,6 +502,8 @@ export function defineGroups(options: GroupOptions) {
 				let names: string[] = [];
 				// whether the owner asked this member: then its run answers them in the room
 				let asked = false;
+				// whether another member wrote a message it reads: then its task read foreign content
+				let foreign = false;
 				let loads: { key: string; skill: Skill }[] = [];
 				let wait = false;
 				let done = false;
@@ -533,6 +535,7 @@ export function defineGroups(options: GroupOptions) {
 					const messages = await messagesThrough(tx, task.input.room, after, task.input.through);
 					input = frame(messages, options.files?.at);
 					asked = messages.some((message) => "owner" in message.author && message.mentions.includes(task.input.agent));
+					foreign = messages.some((message) => "agent" in message.author && message.author.agent !== task.input.agent);
 					files = messages.flatMap((message) => message.files ?? []);
 					loads = messages.flatMap((message) => (message.skills ?? []).map((skill) => ({ key: message.key, skill })));
 					names = (await askable(tx, task.input.room, task.input.agent)).map(({ name }) => name);
@@ -579,7 +582,12 @@ export function defineGroups(options: GroupOptions) {
 							whenBusy: "followUp",
 							entry: {
 								kind: GROUP_INPUT,
-								data: { room: task.input.room, through: task.input.through },
+								data: {
+									room: task.input.room,
+									through: task.input.through,
+									...(asked ? { asked: true } : {}),
+									...(foreign ? { foreign: true } : {}),
+								} satisfies GroupInput,
 							},
 						},
 						ctx,

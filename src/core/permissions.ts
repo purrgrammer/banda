@@ -8,7 +8,7 @@
  * carries no permission shape, a permission for it is refused, and no permission ever covers it, whatever the store holds.
  *
  * Scopes: once (no permission at all); the task, which is the input the chat is answering, so a permission for the task
- * ends when the owner writes to the chat again or a routine wakes it; a time window, until a moment within a week; always, until revoked. Revoking deletes the permission in one commit, and an
+ * ends when the owner writes to the chat again (in a group, asks the member again) or a routine wakes it; a time window, until a moment within a week; always, until revoked. Revoking deletes the permission in one commit, and an
  * effect checks its permission in the commit that records it starting, so a revoked permission covers nothing after it.
  *
  * Which scopes an ask offers is the daemon's to say (`offeredScopes`), each worded as its consequence, the task's
@@ -33,7 +33,7 @@ import { AgentChats, acceptedAgent, agentWords, ChatAgent, LEAD } from "./agents
 import { Companion } from "./companion.ts";
 
 import { FLOOR_WORDS, type Floor } from "./floor.ts";
-import { readForeign } from "./foreign.ts";
+import { GROUP_INPUT, type GroupInput, readForeign } from "./foreign.ts";
 import { allowedHost, hostCovers } from "./hosts.ts";
 import type { Grain } from "./objects.ts";
 import { WAKE, type WakeData } from "./routines.ts";
@@ -165,9 +165,14 @@ export async function errandOf(tx: Tx, chat: number): Promise<Errand> {
 	let cursor: Parameters<Tx["scanEntries"]>[2];
 	do {
 		const page = await tx.scanEntries({ conversationId: chat as ConversationId }, 50, cursor);
-		// what the chat answers: the owner's newest message, or a routine's wake
+		// what the chat answers: the owner's newest message, or a routine's wake; in a group member's chat, the newest
+		// input with a message of the owner's that asks the member
 		const input = page.items.find(
-			(item) => item.model?.[0]?.role === "user" && (item.kind === "banda.inbound" || item.kind === WAKE),
+			(item) =>
+				item.model?.[0]?.role === "user" &&
+				(item.kind === "banda.inbound" ||
+					item.kind === WAKE ||
+					(item.kind === GROUP_INPUT && (item.data as GroupInput | undefined)?.asked === true)),
 		);
 		if (input !== undefined) return { chat, input: Number(input.id) };
 		cursor = page.next;
@@ -624,7 +629,15 @@ export async function servesOf(tx: Tx, errand: Errand): Promise<Serves | undefin
 		const wake = entry.data as unknown as WakeData;
 		return { kind: "routine", routine: wake.routine, title: wake.description || wake.routine };
 	}
-	const content = entry.model?.[0]?.content;
+	// in a group, the owner's words are the room's message the member's input reads through
+	const through = entry.kind === GROUP_INPUT ? (entry.data as GroupInput).through : undefined;
+	const words = through === undefined ? undefined : (await tx.entry(through as EntryId))?.data;
+	const content =
+		through === undefined
+			? entry.model?.[0]?.content
+			: typeof (words as { text?: unknown } | undefined)?.text === "string"
+				? (words as { text: string }).text
+				: "";
 	const said =
 		typeof content === "string"
 			? content

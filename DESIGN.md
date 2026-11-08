@@ -558,13 +558,14 @@ data to a recipient the owner has not approved, ask every time. A tool declares 
 it: a draft on the floor offers no permission, a permission asked for it is refused, and no permission covers it. A
 permission binds one tool and the values of the arguments the tool names (by default all but the text the owner may
 edit): a later call is within it only with exactly those values. "For this task" lasts while the run answers the same
-input, so the owner's next message ends it. A tool declares wider grains as data, each a subset of what it binds and
+input, so the owner's next message ends it (in a group, the owner's next message that asks the member; another
+member's message never does). A tool declares wider grains as data, each a subset of what it binds and
 worded by the daemon: the object ("Merge banda#34"), the place ("Merge pull requests in purrgrammer/banda"), the
 action ("Merge any pull request as @bandarra"); a permission at a grain binds only that subset. Trust is earned from
 the owner's answers, never the model's asking: after three approvals of one place, unedited and with none declined in
 between, the card's offered row is that place's grain. The widest grain of a tool with no way back is never offered on
 a card; it is granted from the agent's permissions, its consequence in full. A task that read foreign content (a read
-from outside, another agent's message or chat, a harness's work) is offered no scope but an earned place, until the
+from outside, another agent's message or chat, a group member's message, a harness's work) is offered no scope but an earned place, until the
 owner's next message starts another. An agent knows its own: a section of its prompt says how it asks (a write
 it proposes is the owner's review, never a way around it; the floor asks every time) and lists, in the daemon's
 words, what it may do without asking and until when, so a grant or a revocation reaches it at its next model
