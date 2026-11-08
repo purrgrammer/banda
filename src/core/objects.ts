@@ -29,7 +29,10 @@ export const CARDS = [
 ] as const;
 export type CardKind = (typeof CARDS)[number];
 
-/** A read that fetches an object: a tool, and its arguments, each a value or a `{placeholder}` the match fills. */
+/**
+ * A read that fetches an object: a tool, and its arguments, each a value, a `{placeholder}` the match fills, or a list
+ * of words (the fields a list read asks for).
+ */
 export type ObjectRead = {
 	readonly tool: string;
 	readonly args: { readonly [arg: string]: JsonValue };
@@ -266,13 +269,18 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 				}
 				if (Object.keys(args).length > 20) errors.push(`${where}.reads.${as}: at most 20 arguments`);
 				for (const [arg, each] of Object.entries(args)) {
+					// a list of words, such as the fields a list read asks for, so a page of it stays small
+					const words =
+						Array.isArray(each) &&
+						each.length <= 32 &&
+						each.every((word) => typeof word === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(word));
 					if (
 						reserved(arg) ||
 						!/^[A-Za-z0-9_]{1,64}$/.test(arg) ||
-						(each !== null && !["string", "number", "boolean"].includes(typeof each)) ||
+						(each !== null && !words && !["string", "number", "boolean"].includes(typeof each)) ||
 						(typeof each === "string" && each.length > 500)
 					)
-						errors.push(`${where}.reads.${as}: arguments are bounded scalar values`);
+						errors.push(`${where}.reads.${as}: arguments are bounded scalar values or lists of words`);
 					if (typeof each === "string")
 						for (const used of placeholders(each))
 							if (!named.has(used))

@@ -54,6 +54,23 @@ it("accepts curated data, rejects reads that can write and unbounded overlapping
 	if ("objects" in safe)
 		expect(recognise(`${"a-".repeat(90)}wrong`, [{ name: "example", objects: safe.objects }])).toEqual([]);
 });
+it("a read's argument may be a list of words, the fields a list read asks for; nothing else that is not a scalar", () => {
+	const withArgs = (args: unknown) =>
+		parseObjects({ issue: { ...GITHUB_OBJECTS.issue, reads: { issue: { tool: "issue_read", args } } } }, () => true);
+	const parsed = withArgs({ owner: "{owner}", fields: ["number", "user", "created_at"] });
+	expect(parsed).toHaveProperty("objects");
+	if ("objects" in parsed) {
+		const found = recognise("https://github.com/acme/banda/issues/12", [
+			{ name: "github", objects: parsed.objects },
+		])[0]!;
+		expect(readArgs(parsed.objects.issue!.reads.issue!, found, undefined)).toEqual({
+			owner: "acme",
+			fields: ["number", "user", "created_at"],
+		});
+	}
+	for (const fields of [["{owner}"], [1], [["a"]], { a: "b" }, Array.from({ length: 33 }, () => "a"), ["a b"]])
+		expect(withArgs({ fields }), JSON.stringify(fields)).toHaveProperty("errors");
+});
 it("validates identity metadata and leaves other providers' identities case-sensitive by default", () => {
 	for (const normalize of [
 		null,
