@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { boundedBytes, MAX_RESPONSE_BYTES } from "./google-rest.ts";
 import { type McpResult, type McpTool, Unauthorized } from "./mcp.ts";
-import { type SlackNames, slackMentions, slackPlain, slackTs } from "./slack-text.ts";
+import { type SlackNames, slackAvatar, slackMentions, slackPlain, slackTs } from "./slack-text.ts";
 
 const BASE = "https://slack.com/api";
 export const SLACK_WRITES = ["post_message"] as const;
@@ -283,8 +283,9 @@ type Identity = {
 const hashOf = (token: string) => createHash("sha256").update(token).digest("hex");
 const MAX_ACCOUNTS = 64;
 const identities = new Map<string, Promise<Identity>>();
-/** Names each account has looked up: a user's handle and team, a channel's name. */
-const names = new Map<string, Map<string, { readonly name: string; readonly team?: string }>>();
+/** Names each account has looked up: a user's handle, team and face, a channel's name. */
+type Named = { readonly name: string; readonly team?: string; readonly avatar?: string };
+const names = new Map<string, Map<string, Named>>();
 const MAX_NAMES = 4000;
 
 /** A Map kept to `max` entries, the oldest dropped first. */
@@ -321,6 +322,7 @@ type Session = {
 	readonly lookup: (users: readonly string[], channels: readonly string[]) => Promise<void>;
 	readonly named: SlackNames;
 	readonly teamOf: (user: string) => string | undefined;
+	readonly avatarOf: (user: string) => string | undefined;
 };
 
 function session(token: string, signal: AbortSignal | undefined, fetcher: typeof fetch, budget: SlackBudget): Session {
@@ -355,7 +357,7 @@ function session(token: string, signal: AbortSignal | undefined, fetcher: typeof
 		return `${identity.teamId}/${identity.userId}`;
 	};
 	const call: Call = async (method, params = {}, post = false) => send(await accountKey(), method, params, post);
-	let held: Map<string, { name: string; team?: string }> | undefined;
+	let held: Map<string, Named> | undefined;
 	const book = async () => {
 		if (held !== undefined) return held;
 		const key = await accountKey();
@@ -373,7 +375,9 @@ function session(token: string, signal: AbortSignal | undefined, fetcher: typeof
 				if (kind === "user") {
 					const user = object((await call("users.info", { user: id })).user);
 					const name = text(user.name, 100);
-					if (name !== "") remember(known, id, { name, team: text(user.team_id, 41) }, MAX_NAMES);
+					const avatar = slackAvatar(object(user.profile).image_48);
+					const team = text(user.team_id, 41);
+					if (name !== "") remember(known, id, { name, team, ...(avatar === undefined ? {} : { avatar }) }, MAX_NAMES);
 				} else {
 					const found = await channelOf({ call, lookup, named }, id);
 					if (found.name !== "") remember(known, id, { name: found.name }, MAX_NAMES);
@@ -389,7 +393,14 @@ function session(token: string, signal: AbortSignal | undefined, fetcher: typeof
 		if (found === undefined) return undefined;
 		return kind === "user" ? `@${found}` : found.startsWith("@") ? found : `#${found}`;
 	};
-	return { call, me, lookup, named, teamOf: (user) => held?.get(user)?.team };
+	return {
+		call,
+		me,
+		lookup,
+		named,
+		teamOf: (user) => held?.get(user)?.team,
+		avatarOf: (user) => held?.get(user)?.avatar,
+	};
 }
 
 // ---- what reads answer
@@ -408,6 +419,8 @@ export type SlackMessage = {
 	readonly thread_ts?: string;
 	readonly reply_count?: number;
 	readonly mentions_me: boolean;
+	/** Its author's face, a `slack-edge.com` image: absent for a bot without one, or for someone not looked up. */
+	readonly avatar?: string;
 };
 
 export type SlackChannel = {
@@ -452,6 +465,11 @@ function messageOf(raw: Json, me: Identity, s: Session): SlackMessage | undefine
 	const said = typeof raw.text === "string" ? raw.text : "";
 	const thread = typeof raw.thread_ts === "string" ? slackTs(raw.thread_ts) : undefined;
 	const replies = count(raw.reply_count);
+	const avatar = bot
+		? slackAvatar(object(object(raw.bot_profile).icons).image_48 ?? object(raw.icons).image_48)
+		: user === undefined
+			? undefined
+			: s.avatarOf(user);
 	return {
 		ts: stamp,
 		from,
@@ -462,6 +480,7 @@ function messageOf(raw: Json, me: Identity, s: Session): SlackMessage | undefine
 		...(thread === undefined ? {} : { thread_ts: thread }),
 		...(replies === undefined ? {} : { reply_count: replies }),
 		mentions_me: new RegExp(`<@${me.userId}(?:\\|[^>]*)?>`).test(said),
+		...(avatar === undefined ? {} : { avatar }),
 	};
 }
 
@@ -693,6 +712,7 @@ export async function slackCall(
 				const user = object((await s.call("users.info", { user: id })).user);
 				const profile = object(user.profile);
 				const email = text(profile.email, 254);
+				const avatar = slackAvatar(profile.image_72);
 				answer = {
 					id,
 					name: text(user.name, 100),
@@ -703,6 +723,7 @@ export async function slackCall(
 					...(email === "" ? {} : { email }),
 					outside: typeof user.team_id === "string" && user.team_id !== "" && user.team_id !== me.teamId,
 					...(me.url === "" ? {} : { url: `${me.url}team/${id}` }),
+					...(avatar === undefined ? {} : { avatar }),
 				};
 				break;
 			}

@@ -407,13 +407,14 @@ it("names a Slack thread by its link, a reply's link or its id, one object, its 
 
 it("draws Slack's thread, channel, search and person from the adapter's readings", () => {
 	const kinds = slackKinds();
-	const message = (ts: string, from: string, text: string) => ({
+	const message = (ts: string, from: string, text: string, avatar?: string) => ({
 		ts,
 		from,
 		user: "U0",
 		text,
 		date: "2023-11-14T22:13:20.000Z",
 		mentions_me: false,
+		...(avatar === undefined ? {} : { avatar }),
 	});
 	const thread = cardOf(
 		kinds.thread!,
@@ -424,8 +425,9 @@ it("draws Slack's thread, channel, search and person from the adapter's readings
 				channel_name: "general",
 				root: "1700000000.000100",
 				messages: [
-					message("1700000000.000100", "@bob", "Release notes"),
-					message("1700000150.000150", "@deploybot [bot]", "Deploy\u0007 done"),
+					message("1700000000.000100", "@bob", "Release notes", "https://avatars.slack-edge.com/bob_48.png"),
+					// a face off Slack's image host is never drawn, whatever the reading says
+					message("1700000150.000150", "@deploybot [bot]", "Deploy\u0007 done", "https://evil.test/bot.png"),
 				],
 				total: 2,
 				url: "https://acme.slack.com/archives/C0GENERAL/p1700000000000100",
@@ -445,7 +447,14 @@ it("draws Slack's thread, channel, search and person from the adapter's readings
 				date: "2023-11-14T22:13:20.000Z",
 				text: "Deploy done",
 			},
-			{ id: "1700000000.000100", from: "@bob", subject: "", date: "2023-11-14T22:13:20.000Z", text: "Release notes" },
+			{
+				id: "1700000000.000100",
+				from: "@bob",
+				subject: "",
+				date: "2023-11-14T22:13:20.000Z",
+				text: "Release notes",
+				avatar: "https://avatars.slack-edge.com/bob_48.png",
+			},
 		],
 		total: 2,
 		url: "https://acme.slack.com/archives/C0GENERAL/p1700000000000100",
@@ -505,6 +514,7 @@ it("draws Slack's thread, channel, search and person from the adapter's readings
 				status_text: "Away",
 				outside: true,
 				url: "https://acme.slack.com/team/U0OLGA",
+				avatar: "https://avatars.slack-edge.com/olga_72.png",
 			},
 		},
 		"slack",
@@ -517,6 +527,7 @@ it("draws Slack's thread, channel, search and person from the adapter's readings
 		organization: "",
 		title: "Partner",
 		other: false,
+		photo: "https://avatars.slack-edge.com/olga_72.png",
 		url: "https://acme.slack.com/team/U0OLGA",
 		service: "slack",
 		handle: "@olga",

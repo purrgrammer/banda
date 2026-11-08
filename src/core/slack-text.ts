@@ -11,6 +11,26 @@ const USER = /^@([UWB][A-Z0-9]{1,40})(?:\|([^>]{0,200}))?$/;
 const CHANNEL = /^#([CDG][A-Z0-9]{1,40})(?:\|([^>]{0,200}))?$/;
 const SPECIAL = /^!([a-z]+)(?:\^([^|>]{0,200}))?(?:\|([^>]{0,200}))?$/;
 
+/**
+ * A face Slack serves, only `https://<host>.slack-edge.com/…`, else undefined: a card fetches it as it draws, so the
+ * adapter and the card both hold it to Slack's own image host.
+ */
+export function slackAvatar(value: unknown): string | undefined {
+	if (typeof value !== "string" || value.length > 500) return undefined;
+	try {
+		const url = new URL(value);
+		return url.protocol === "https:" &&
+			url.username === "" &&
+			url.password === "" &&
+			url.port === "" &&
+			/^(?:[a-z0-9-]{1,63}\.)*slack-edge\.com$/.test(url.hostname)
+			? url.toString()
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 /** A Slack timestamp from what names one: `1700000000.000100`, or a link's `p1700000000000100`; else undefined. */
 export function slackTs(value: string): string | undefined {
 	const dotted = /^(\d{9,11})\.(\d{6})$/.exec(value);

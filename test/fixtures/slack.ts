@@ -55,7 +55,13 @@ function world() {
 			real_name: "Ana García",
 			team_id: "T0ACME",
 			tz: "Europe/Madrid",
-			profile: { title: "Founder", status_text: "", email: "ana@acme.test" },
+			profile: {
+				title: "Founder",
+				status_text: "",
+				email: "ana@acme.test",
+				image_48: "https://avatars.slack-edge.com/ana_48.png",
+				image_72: "https://avatars.slack-edge.com/ana_72.png",
+			},
 		},
 		U0BOB: {
 			id: "U0BOB",
@@ -63,7 +69,13 @@ function world() {
 			real_name: "Bob Stone",
 			team_id: "T0ACME",
 			tz: "America/New_York",
-			profile: { title: "Engineer", status_text: "On call", email: "bob@acme.test" },
+			profile: {
+				title: "Engineer",
+				status_text: "On call",
+				email: "bob@acme.test",
+				image_48: "https://avatars.slack-edge.com/bob_48.png",
+				image_72: "https://avatars.slack-edge.com/bob_72.png",
+			},
 		},
 		U0OLGA: {
 			id: "U0OLGA",
@@ -71,7 +83,13 @@ function world() {
 			real_name: "Olga Ivanova",
 			team_id: "T0OTHER",
 			tz: "Europe/Berlin",
-			profile: { title: "Partner", status_text: "" },
+			// a face off Slack's image host, or not https, is never drawn
+			profile: {
+				title: "Partner",
+				status_text: "",
+				image_48: "http://a.slack-edge.com/olga_48.png",
+				image_72: "https://slack-edge.com.evil.test/olga_72.png",
+			},
 		},
 	};
 	const channels: FakeSlack["channels"] = {
@@ -112,7 +130,7 @@ function world() {
 				ts: "1700000300.000400",
 				bot_id: "B0DEPLOY",
 				username: "deploybot",
-				bot_profile: { name: "deploybot" },
+				bot_profile: { name: "deploybot", icons: { image_48: "https://a.slack-edge.com/deploybot_48.png" } },
 				text: "Deploy *finished* &amp; healthy",
 			},
 			{

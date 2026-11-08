@@ -199,10 +199,15 @@ Sketch of the kinds' entries, in the file's `objects`:
 			],
 			"ends": {}
 		},
-		"fields": { "name": "person.real_name", "handle": "person.name", "title": "person.title", "emails": "person.email", "status": "person.status_text", "timezone": "person.tz" }
+		"fields": { "name": "person.real_name", "handle": "person.name", "title": "person.title", "emails": "person.email", "status": "person.status_text", "timezone": "person.tz", "photo": "person.avatar" }
 	}
 }
 ```
+
+Faces are Slack's own: `users.info`'s `image_48` beside each message (from the names cache, a bot's from its
+`bot_profile`) and `image_72` on a person, taken only when https on a `*.slack-edge.com` host, by the adapter and again
+by the card, since the app fetches them as it draws (with no referrer). A message's `avatar` follows the names cache,
+so a follow ignores it.
 
 The rules name `{from}`, `{channel_name}`, `mentions_me` and `active`: fields the adapter puts on what it returns
 (authors as handles, `[bot]` and outside marked; mention computed against the account's own user id; `active` when

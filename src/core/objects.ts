@@ -13,7 +13,7 @@
  */
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
 import { type Follow, MAX_KEEP, type Pages, parseFollow } from "./follow.ts";
-import { slackTs } from "./slack-text.ts";
+import { slackAvatar, slackTs } from "./slack-text.ts";
 
 type JsonValue = JsonObject[string];
 
@@ -878,6 +878,8 @@ export type MessageLine = {
 	readonly date: string;
 	/** A chat message's words, plain; an email has its subject instead. */
 	readonly text?: string;
+	/** A Slack message's author's face, a `slack-edge.com` image. */
+	readonly avatar?: string;
 };
 
 /** Emails together: a conversation's (titled by its subject) or a search's (titled by its query), the newest first. */
@@ -1140,6 +1142,7 @@ function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: strin
 	const all = list
 		.flatMap((each): MessageLine[] => {
 			if (!plain(each) || typeof each.ts !== "string" || !/^\d{9,11}\.\d{6}$/.test(each.ts)) return [];
+			const avatar = slackAvatar(each.avatar);
 			return [
 				{
 					id: each.ts,
@@ -1147,6 +1150,7 @@ function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: strin
 					subject: "",
 					date: plainLine(each.date, 40),
 					text: plainLine(each.text, 300),
+					...(avatar === undefined ? {} : { avatar }),
 				},
 			];
 		})
@@ -1180,6 +1184,7 @@ function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: strin
 function slackPersonCard(field: (name: string) => unknown): ContactCard {
 	const handle = plainLine(field("handle"), 100);
 	const url = slackUrl(field("url"));
+	const photo = slackAvatar(field("photo"));
 	return {
 		card: "contact",
 		name: plainLine(field("name")) || (handle === "" ? "(No name)" : `@${handle}`),
@@ -1188,6 +1193,7 @@ function slackPersonCard(field: (name: string) => unknown): ContactCard {
 		organization: "",
 		title: plainLine(field("title"), 200),
 		other: false,
+		...(photo === undefined ? {} : { photo }),
 		...(url === undefined ? {} : { url }),
 		service: "slack",
 		...(handle === "" ? {} : { handle: `@${handle}` }),

@@ -16,7 +16,7 @@ import {
 	slackResolve,
 	slackWriteCall,
 } from "../src/core/slack-rest.ts";
-import { slackNotifies, slackPlain, slackTs } from "../src/core/slack-text.ts";
+import { slackAvatar, slackNotifies, slackPlain, slackTs } from "../src/core/slack-text.ts";
 import { definition } from "./fixtures/shipped.ts";
 import { fakeSlack, ROOT_TS } from "./fixtures/slack.ts";
 
@@ -85,13 +85,17 @@ it("says each message's author as a handle: the owner's own post is theirs, a bo
 		user: "U0ANA",
 		text: "Shipping today",
 		mentions_me: false,
+		avatar: "https://avatars.slack-edge.com/ana_48.png",
 	});
 	expect(bot).toMatchObject({
 		from: "@deploybot [bot]",
 		author: "@deploybot [bot]",
 		text: "Deploy finished & healthy",
+		avatar: "https://a.slack-edge.com/deploybot_48.png",
 	});
 	expect(outside).toMatchObject({ from: "@olga (outside)", author: "@olga at T0OTHER", user: "U0OLGA" });
+	// Olga's face is http, so she has none
+	expect(outside?.avatar).toBeUndefined();
 	expect(mention).toEqual({
 		ts: "1700000100.000200",
 		from: "@bob",
@@ -100,6 +104,7 @@ it("says each message's author as a handle: the owner's own post is theirs, a bo
 		text: "@ana can you check #deploys? See the log (https://example.test/log)",
 		date: "2023-11-14T22:15:00.000Z",
 		mentions_me: true,
+		avatar: "https://avatars.slack-edge.com/bob_48.png",
 	});
 	expect(root).toMatchObject({ ts: ROOT_TS, thread_ts: ROOT_TS, reply_count: 2 });
 	expect(history.active).toBe(true);
@@ -178,14 +183,35 @@ it("searches newest first, each match with its channel and permalink, and reads 
 		email: "bob@acme.test",
 		outside: false,
 		url: "https://acme.slack.com/team/U0BOB",
+		avatar: "https://avatars.slack-edge.com/bob_72.png",
 	});
-	expect(await read("get_person", { user: "slack/user/U0OLGA" })).toMatchObject({ outside: true });
+	// a face on another host is left out
+	const olga = await read("get_person", { user: "slack/user/U0OLGA" });
+	expect(olga).toMatchObject({ outside: true });
+	expect(olga.avatar).toBeUndefined();
 	expect(await read("list_channels")).toMatchObject({
 		channels: [
 			{ id: "C0GENERAL", name: "general", private: false },
 			{ id: "G0DEPLOYS", name: "deploys", private: true },
 		],
 	});
+});
+
+it("takes a face only from Slack's image host over https", () => {
+	for (const ok of ["https://a.slack-edge.com/x_48.png", "https://avatars.slack-edge.com/2023/x_72.png"])
+		expect(slackAvatar(ok)).toBe(ok);
+	for (const refused of [
+		"http://a.slack-edge.com/x.png",
+		"https://slack-edge.com.evil.test/x.png",
+		"https://evilslack-edge.com/x.png",
+		"https://a.slack-edge.com:8443/x.png",
+		"https://u:p@a.slack-edge.com/x.png",
+		"https://secure.gravatar.com/avatar/x",
+		`https://a.slack-edge.com/${"x".repeat(500)}`,
+		"javascript:alert(1)",
+		42,
+	])
+		expect(slackAvatar(refused), String(refused)).toBeUndefined();
 });
 
 it("renders mrkdwn as plain words and says who a post will notify", () => {

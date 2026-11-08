@@ -125,7 +125,8 @@
 				"ignore": [
 					"thread.active",
 					"thread.total",
-					"thread.messages[*].reply_count"
+					"thread.messages[*].reply_count",
+					"thread.messages[*].avatar"
 				],
 				"rules": [
 					{
@@ -212,7 +213,8 @@
 				"ignore": [
 					"history.active",
 					"channel.member_count",
-					"history.messages[*].reply_count"
+					"history.messages[*].reply_count",
+					"history.messages[*].avatar"
 				],
 				"rules": [
 					{
@@ -315,6 +317,7 @@
 				"status": "person.status_text",
 				"timezone": "person.tz",
 				"outside": "person.outside",
+				"photo": "person.avatar",
 				"url": "person.url"
 			}
 		}
