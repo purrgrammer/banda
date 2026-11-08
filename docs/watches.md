@@ -79,14 +79,13 @@ returned to and merged, at desktop and phone width.
   the rest; a derived "all …" condition may be `steady` over a path, so a push's first look never says all checks
   green; the new rows and lines in the specimen
 - [ ] Slice 3 through the app against a daemon: a burst, a limit and an issue against real GitHub (the pass followed
-  a pull request alone)
+  a pull request alone) (#35)
 - [x] GitHub's repository-level kinds: a repository (a release, others' new pull requests and issues wake; a push to
   the default branch tells; never ends), a discussion (comments and replies wake; until answered or closed) and a
   workflow run (a job failing wakes; until completed), each with its card in the specimen
-- [ ] Those kinds through the app against a daemon and real GitHub, at desktop and phone width; the specimen not yet
-  looked at in a browser
+- [ ] Those kinds through the app against a daemon and real GitHub, at desktop and phone width (#35)
 - [ ] A repository's push says "the default branch", not its name (no listed read answers it within four reads); a
-  discussion's comments carry no author, so the account's own wake too
+  discussion's comments carry no author, so the account's own wake too (#38)
 - [x] Every connection banda ships can be followed: GitHub's pull request, issue, check run, notification,
   repository, discussion and workflow run; Gmail's email (until read or trashed), conversation (others' replies wake)
   and search (new matches wake; never ends); Calendar's event (moved, cancelled, a guest's reply); Drive's file
@@ -104,16 +103,17 @@ returned to and merged, at desktop and phone width.
 - [ ] The Google kinds' changes against real accounts: whether a rename or a share moves Drive's `modifiedTime`,
   whether a deleted (not cancelled) event ends its watch, label names for user labels, a calendar's upcoming events
   (needs a sync token, not a moving window); a contact followed (the pass's account had no saved contacts); a
-  calendar event's link carries its id encoded, so an event is followed from its card alone
+  calendar event's link carries its id encoded, so an event is followed from its card alone (#35)
 - [ ] A watch's file has no editor field and the `watch` tool no parameter for `wakes_a_day`; an issue's and a pull
   request's comments and reviews are read one page of a hundred, so what is past the hundredth is never seen (the
   object's own counts are the totals for issue and pull request comments, so a comment off the page is never said
-  gone; reviews have no such count)
+  gone; reviews have no such count) (#39, #34)
 - [ ] Reads cost: a pull request is four requests a look (pr, checks, reviews, comments), every two minutes while
   busy, so twenty busy pull requests are ~2,400 requests an hour against GitHub's 5,000 per token, and sharing a
   reading saves only on one object. Either a `when` on a read (checks only while a check runs or the head moved,
   the answer before carried forward), a cadence per read, or one read of a fixed query (GitHub's MCP server lists no
-  GraphQL tool, so that is a Connections change). Decide by how many watches a home is expected to hold
+  GraphQL tool, so that is a Connections change). Decide by how many watches a home is expected to hold (#33; the
+  readings doc's growth with many watches, #40)
 - [x] **A look pushes the whole shell.** A watch's task waking and sleeping was a task-graph change the shell stream
   pushed everything for, every two to thirty minutes per watch and per client; `chats`, `control` and `agents` were
   written whether or not they changed, and the watches area watched no doc of its own. Now the area owns its state
@@ -134,7 +134,8 @@ returned to and merged, at desktop and phone width.
   stream's routing ran in CI
 - [ ] A watch that shares a reading whose derived condition was held back (`steady`) schedules its quiet cadence, so
   it hears the flip up to a cadence after the watch that read; a held-back flag on the reading would give it the busy
-  one
+  one (#37)
+- [ ] `npm run home:fork` carries no connection sign-ins, so a fork wants a sign-in per connection before a pass (#36)
 - [x] Time-derived state refreshes though a timer's task is no news to the shell: the stream pushes again when the
   earliest permission's `until` passes, and the app reads its day words again at local midnight
 - [ ] Spike before slice 2: the readings doc keeps 300 and evicts the oldest first, so a held reading must be
