@@ -118,8 +118,9 @@ for (const width of [390, 1440])
 				await page.run(`${bubble}.dispatchEvent(new PointerEvent('pointerup', {pointerType:'touch',bubbles:true}))`);
 				expect(await page.run(`${bubble}.getBoundingClientRect().height`)).toBe(height);
 				await click(page, '[data-recorded-chat] button[aria-label="View activity"]');
-				await page.until(`document.querySelector('[aria-label="Inspect recorded call fetch"]')`);
-				await click(page, '[aria-label="Inspect recorded call fetch"]');
+				await page.until(`document.querySelector('[aria-label="Inspect Reading a page"]')`);
+				expect(await page.run(`document.querySelector('[role="dialog"]').textContent.includes('Failed')`)).toBe(true);
+				await click(page, '[aria-label="Inspect Reading a page"]');
 				await page.until(`document.querySelector('[aria-label="Tools"]')`);
 				expect(
 					await page.run(`document.querySelector('[aria-label="Tools"] button').getAttribute('aria-expanded')`),
@@ -135,9 +136,14 @@ for (const width of [390, 1440])
 				);
 				expect(
 					await page.run(
-						`[...document.querySelectorAll('[data-raw-content] button')].find(el=>el.textContent.includes('Failed')).querySelector('[data-tool-preview]').textContent`,
+						`[...document.querySelectorAll('[data-raw-content] button')].filter(el=>!el.closest('[aria-label="Tools"]')).find(el=>el.querySelector('[data-raw-title]')?.textContent==='web_fetch').querySelector('[data-tool-preview]').textContent`,
 					),
 				).toBe("https://example.test/events");
+				expect(
+					await page.run(
+						`[...document.querySelectorAll('[data-raw-content] button')].find(el=>el.querySelector('[data-raw-title]')?.textContent==='web_fetch result').textContent.includes('Failed')`,
+					),
+				).toBe(true);
 				expect(await page.run(`document.querySelector('[aria-label="Tools"]').querySelectorAll('button').length`)).toBe(
 					23,
 				);
@@ -158,7 +164,7 @@ for (const width of [390, 1440])
 					`document.querySelector('[role="dialog"]').textContent.includes('Recorded system prompt, not regenerated.')`,
 				);
 				await page.run(
-					`(()=>{const el=[...document.querySelectorAll('[data-raw-content] button')].find(el=>el.querySelector('[data-raw-title]')?.textContent==='web_fetch' && el.textContent.includes('Failed'));el.scrollIntoView();el.click();})()`,
+					`(()=>{const el=[...document.querySelectorAll('[data-raw-content] button')].find(el=>el.querySelector('[data-raw-title]')?.textContent==='web_fetch result');el.scrollIntoView();el.click();})()`,
 				);
 				await page.until(`document.querySelector('[role="dialog"]').textContent.includes('Page unavailable')`);
 				expect(await page.run(`document.querySelectorAll('[role="dialog"]').length`)).toBe(1);

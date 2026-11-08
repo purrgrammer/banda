@@ -46,6 +46,7 @@ export function ChatScreen({
 	pill,
 	keyboard = false,
 	panelOpen = false,
+	onActivity,
 	children,
 }: {
 	name: string;
@@ -58,6 +59,8 @@ export function ChatScreen({
 	keyboard?: boolean;
 	/** The panel is open beside it: its toggle shows pressed. */
 	panelOpen?: boolean;
+	/** The status line opens the work's activity. */
+	onActivity?: (() => void) | undefined;
 	children: ReactNode;
 }) {
 	const { width } = useContext(StageContext);
@@ -72,6 +75,7 @@ export function ChatScreen({
 				phone={phone}
 				panelOpen={panelOpen}
 				onPanel={() => {}}
+				onActivity={onActivity}
 			/>
 			<div className="feed-scroll min-h-0 flex-1 overflow-y-auto">
 				<div className={`mx-auto flex max-w-[44rem] flex-col gap-4 px-4 pb-5 ${HEADER_CLEARANCE}`}>{children}</div>
