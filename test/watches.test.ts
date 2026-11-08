@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Accepted } from "../src/core/agents.ts";
 import { Connected } from "../src/core/connections.ts";
 import { pause as pauseAll, resume as resumeAll } from "../src/core/control.ts";
-import { BUSY_EVERY, EVERY } from "../src/core/follow.ts";
+import { BUSY_EVERY, EVERY, type Json } from "../src/core/follow.ts";
 import { context } from "../src/core/store.ts";
 import { endWatches, parseWatch, Watches, type WatchRecord, watchPath, watchText } from "../src/core/watches.ts";
 import { pause } from "../src/server/watches.ts";
@@ -386,6 +386,25 @@ describe("a watch on a pull request", () => {
 		expect(summary.record.paused).toBeUndefined();
 		// its line counts as unread, as each reply does
 		expect(summary.unread).toBe(summary.wakes.length + 1);
+	}, 60_000);
+
+	it("changes that only tell draw their line and the card, run no model and are not unread", async () => {
+		const pushed = (step: number): World => {
+			const at = structuredClone(world(0)) as { get: { [key: string]: Json } };
+			if (step >= 1)
+				Object.assign(at.get, { head: { ref: "objects", sha: "b2" }, title: "Keep objects as data, typed" });
+			return at as unknown as World;
+		};
+		const summary = await watchScenario(await tempHome(), new Faults(), { world: pushed, clicks: ["k1", "k2"] });
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes).toEqual([]);
+		expect(summary.tells.map((tell) => [...tell.changes].sort())).toEqual([
+			["new commits", "retitled: Keep objects as data, typed"],
+		]);
+		expect(summary.turns).toEqual([]);
+		expect(summary.models).toBe(0);
+		expect(summary.unread).toBe(0);
+		expect(summary.card?.at).toBe(summary.followed?.at);
 	}, 60_000);
 
 	it("an hour unable to look draws one error line; a good look clears it, and the next hour draws one again", async () => {
