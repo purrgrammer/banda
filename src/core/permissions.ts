@@ -21,11 +21,14 @@
  */
 import type { Context } from "@earendil-works/chord";
 import {
+	AssistantEntry,
 	type ConversationId,
 	defineDoc,
 	type EntryId,
+	type EntryRecord,
 	type Harness,
 	type JsonObject,
+	ResetEntry,
 	type Tx,
 } from "@earendil-works/pi-durable";
 import { log } from "./activity.ts";
@@ -160,24 +163,52 @@ export function canonical(value: unknown): string {
 	return JSON.stringify(value ?? null);
 }
 
-/** The task `chat` works on now. Reads only. */
+/**
+ * Whether `entry` is an input that starts a task when it starts a run: the owner's message or a routine's wake; in a
+ * group member's chat, an input with a message of the owner's that asks the member.
+ */
+const startsTask = (entry: EntryRecord) =>
+	entry.model?.[0]?.role === "user" &&
+	(entry.kind === "banda.inbound" ||
+		entry.kind === WAKE ||
+		(entry.kind === GROUP_INPUT && (entry.data as GroupInput | undefined)?.asked === true));
+
+/**
+ * The task `chat` works on now: the newest input that starts a task and started a run. The owner's message while a run
+ * works steers it (DESIGN.md "Flows"): pi-durable places it after the run's tool round, in the commit of the generation
+ * that made that round, and the run goes on, so it joins the task under way. Any other placement starts a run: into an
+ * idle chat (no task's commit), after a final answer, or after a reset. Reads only.
+ */
 export async function errandOf(tx: Tx, chat: number): Promise<Errand> {
+	// an input a generation placed, until the answer before it says whether that generation's run went on
+	let placed: EntryRecord | undefined;
 	let cursor: Parameters<Tx["scanEntries"]>[2];
 	do {
 		const page = await tx.scanEntries({ conversationId: chat as ConversationId }, 50, cursor);
-		// what the chat answers: the owner's newest message, or a routine's wake; in a group member's chat, the newest
-		// input with a message of the owner's that asks the member
-		const input = page.items.find(
-			(item) =>
-				item.model?.[0]?.role === "user" &&
-				(item.kind === "banda.inbound" ||
-					item.kind === WAKE ||
-					(item.kind === GROUP_INPUT && (item.data as GroupInput | undefined)?.asked === true)),
-		);
-		if (input !== undefined) return { chat, input: Number(input.id) };
+		for (const entry of page.items) {
+			if (placed !== undefined) {
+				const message = entry.model?.[0];
+				if (entry.kind === AssistantEntry.kind && message?.role === "assistant") {
+					const steered =
+						entry.byTaskId === placed.byTaskId && message.content.some((part) => part.type === "toolCall");
+					if (!steered) return { chat, input: Number(placed.id) };
+					placed = undefined;
+					continue;
+				}
+				if (entry.kind === ResetEntry.kind) return { chat, input: Number(placed.id) };
+				if (!startsTask(entry)) continue;
+				// placed in the same commit, it shares the newer one's run; otherwise no round lies between
+				if (entry.byTaskId !== placed.byTaskId) return { chat, input: Number(placed.id) };
+				placed = entry;
+				continue;
+			}
+			if (!startsTask(entry)) continue;
+			if (entry.byTaskId === undefined) return { chat, input: Number(entry.id) };
+			placed = entry;
+		}
 		cursor = page.next;
 	} while (cursor !== undefined);
-	return { chat, input: 0 };
+	return { chat, input: placed === undefined ? 0 : Number(placed.id) };
 }
 
 /** Whether `permission` is open at `now` for an effect working on `errand`. */

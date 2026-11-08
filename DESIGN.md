@@ -559,8 +559,8 @@ it: a draft on the floor offers no permission, a permission asked for it is refu
 permission binds one tool and the values of the arguments the tool names (by default all but the text the owner may
 edit): a later call is within it only with exactly those values. "For this task" lasts while the run answers the same
 input, so the owner's next message ends it (in a group, the owner's next message that asks the member; another
-member's message never does). A tool declares wider grains as data, each a subset of what it binds and
-worded by the daemon: the object ("Merge banda#34"), the place ("Merge pull requests in purrgrammer/banda"), the
+member's message never does); a steer joins the run under way, and its task with it. A tool declares wider grains as
+data, each a subset of what it binds and worded by the daemon: the object ("Merge banda#34"), the place ("Merge pull requests in purrgrammer/banda"), the
 action ("Merge any pull request as @bandarra"); a permission at a grain binds only that subset. Trust is earned from
 the owner's answers, never the model's asking: after three approvals of one place, unedited and with none declined in
 between, the card's offered row is that place's grain. The widest grain of a tool with no way back is never offered on

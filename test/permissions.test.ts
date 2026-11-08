@@ -4,7 +4,9 @@ import {
 	type ConversationId,
 	createRegistry,
 	defineExtension,
+	defineTool,
 	type Harness,
+	InboxDoc,
 	type TaskId,
 } from "@earendil-works/pi-durable";
 import fc from "fast-check";
@@ -12,10 +14,12 @@ import { describe, expect, it } from "vitest";
 import { ActivityLog } from "../src/core/activity.ts";
 import { AgentChats, LEAD } from "../src/core/agents.ts";
 import { EFFECT, type EffectRan } from "../src/core/ask.ts";
+import { markForeign, readForeign } from "../src/core/foreign.ts";
 
 import { OWNER, type Received } from "../src/core/gateway.ts";
 import {
 	covering,
+	errandOf,
 	FLOORS,
 	matches,
 	offeredScopes,
@@ -48,12 +52,13 @@ const owner = { gateway: "fake", peer: OWNER };
 const web = { gateway: "web", peer: OWNER };
 const HOUR = 60 * 60_000;
 
-type Call = { readonly tool: "send" | "pay" | "deploy"; readonly to: string; readonly body?: string };
+type Call = { readonly tool: "send" | "pay" | "deploy" | "read"; readonly to: string; readonly body?: string };
 
 /**
  * A core with three test effects that record their runs: `send` (a message to someone: a permission binds the recipient,
- * the owner may edit the body), `pay` (on the floor: money) and `deploy`. The model makes the calls each owner
- * message names, in one round, and then says nothing more.
+ * the owner may edit the body), `pay` (on the floor: money) and `deploy`; and `read`, a read from outside that marks its
+ * chat as having read foreign content, held while `reading` is. The model makes the calls each owner message names, in
+ * one round, and then says nothing more.
  */
 function setup() {
 	const gateway = new FakeGateway();
@@ -71,6 +76,10 @@ function setup() {
 	});
 	const runs: Call[] = [];
 	let hold: (() => void) | undefined;
+	/** While `held` is pending, a `read` holds its run after marking it; `entered` once one has. */
+	const reading = { entered: () => {}, held: Promise.resolve() };
+	/** While `held` is pending, the model's answer after a tool round is held; `entered` once one is. */
+	const answering = { entered: () => {}, held: Promise.resolve() };
 	const record = async (call: Call, ctx: Context) => {
 		runs.push(call);
 		if (hold !== undefined) {
@@ -107,13 +116,30 @@ function setup() {
 			effect: "unsafe",
 			run: (args, _effect, ctx) => record({ tool: "deploy", to: args.to }, ctx),
 		}),
+		defineTool({
+			name: "read",
+			description: "read a page from outside",
+			parameters: Type.Object({ to: Type.String() }),
+			replay: "safe",
+			execute: async (args, api, ctx) => {
+				await api.commit((tx) => markForeign(tx, Number(api.conversationId)), ctx);
+				runs.push({ tool: "read", to: args.to });
+				reading.entered();
+				await reading.held;
+				return { output: [{ type: "text" as const, text: `the page at ${args.to}` }] };
+			},
+		}),
 	];
 	/** The calls the next owner message makes, by its text. */
 	const planned = new Map<string, readonly Call[]>();
 	faux.setResponses(
-		Array.from({ length: 1000 }, () => (ctx: { messages: readonly { role: string; content: unknown }[] }) => {
+		Array.from({ length: 1000 }, () => async (ctx: { messages: readonly { role: string; content: unknown }[] }) => {
 			const last = ctx.messages.at(-1);
-			if (last?.role !== "user") return fauxAssistantMessage("ok");
+			if (last?.role !== "user") {
+				answering.entered();
+				await answering.held;
+				return fauxAssistantMessage("ok");
+			}
 			const said = typeof last.content === "string" ? last.content : JSON.stringify(last.content);
 			const calls = planned.get(said) ?? [];
 			if (calls.length === 0) return fauxAssistantMessage("nothing to do");
@@ -158,7 +184,23 @@ function setup() {
 		now,
 		holding: () => new Promise<void>((resolve) => (hold = resolve)),
 		release: () => (hold = undefined),
+		/** Hold the next `read`: once it has marked its chat, `entered` resolves; `release` lets it answer. */
+		holdReading: () => gate(reading),
+		/** Hold the model's next answer after a tool round: `entered` once it is asked for, `release` lets it answer. */
+		holdAnswer: () => gate(answering),
 	};
+}
+
+/** Once a message waits in `chat`'s queue for the run at work. */
+const queued = (harness: Harness, chat: number) =>
+	until(async () => ((await harness.snapshot(InboxDoc, chat as ConversationId, context))?.items.length ?? 0) > 0);
+
+/** Hold what `held` holds until `release`; `entered` once something waits on it. */
+function gate(held: { entered: () => void; held: Promise<void> }) {
+	let release!: () => void;
+	held.held = new Promise<void>((resolve) => (release = resolve));
+	const entered = new Promise<void>((resolve) => (held.entered = resolve));
+	return { entered, release };
 }
 
 const done = async (harness: Harness, turn: number) =>
@@ -293,6 +335,61 @@ describe("permissions", () => {
 		expect((await nextAsk(harness, next.turn)).wait?.ask).toMatchObject({ args: { body: "4" } });
 		expect(await openPermissions(harness, s.now())).toEqual([]);
 		expect(s.runs.map((run) => run.body)).toEqual(["1", "2", "3"]);
+		await harness.close(context);
+	});
+
+	it("the owner's steer joins the task under way: a run that read foreign content stays foreign after it", async () => {
+		const s = setup();
+		const harness = await s.open(await tempHome());
+		const reading = s.holdReading();
+		const first = await s.say(harness, [{ tool: "read", to: "example.com" }]);
+		await reading.entered;
+		// the owner writes while the read holds its round: it steers the run that read the page
+		const steer = await s.say(harness, [{ tool: "send", to: "ana", body: "1" }]);
+		await queued(harness, first.chat);
+		reading.release();
+		const { wait } = await nextAsk(harness, first.turn);
+		const inbound = (await entries(harness, first.chat)).filter((entry) => entry.kind === "banda.inbound");
+		expect(inbound).toHaveLength(2);
+		expect(wait?.ask).toMatchObject({ errand: { input: Number(inbound[0]?.id) }, foreign: true, scopes: [] });
+		await approve(harness, wait!.key);
+		await until(async () => (await done(harness, first.turn)) && (await done(harness, steer.turn)));
+		// the run is over, and its task is still the one the owner's first message began
+		const errand = await harness.commit((tx) => errandOf(tx, first.chat), context);
+		expect(errand.input).toBe(Number(inbound[0]?.id));
+		expect(await harness.commit((tx) => readForeign(tx, first.chat, errand.input), context)).toBe(true);
+		// the owner's next message starts a run, and a clean task
+		const next = await s.say(harness, [{ tool: "send", to: "bo", body: "2" }]);
+		const clean = (await nextAsk(harness, next.turn)).wait;
+		expect(clean?.ask).not.toHaveProperty("foreign");
+		expect(clean?.ask.type === "approval" && clean.ask.scopes?.map((one) => one.scope)).toEqual([
+			"task",
+			"hour",
+			"today",
+			"always",
+		]);
+		await approve(harness, clean!.key);
+		await until(() => done(harness, next.turn));
+		expect(s.runs.map((run) => run.to)).toEqual(["example.com", "ana", "bo"]);
+		await harness.close(context);
+	});
+
+	it("the owner's message queued as a run ends starts the next run, and a task of its own", async () => {
+		const s = setup();
+		const harness = await s.open(await tempHome());
+		const answering = s.holdAnswer();
+		const first = await s.say(harness, [{ tool: "read", to: "example.com" }]);
+		await answering.entered;
+		// past the read's round, the run's last answer is on its way: this message waits for it, then starts a run
+		const next = await s.say(harness, [{ tool: "send", to: "ana", body: "1" }]);
+		await queued(harness, first.chat);
+		answering.release();
+		const { wait } = await nextAsk(harness, next.turn);
+		const inbound = (await entries(harness, first.chat)).filter((entry) => entry.kind === "banda.inbound");
+		expect(wait?.ask).toMatchObject({ errand: { input: Number(inbound[1]?.id) } });
+		expect(wait?.ask).not.toHaveProperty("foreign");
+		await approve(harness, wait!.key);
+		await until(async () => (await done(harness, first.turn)) && (await done(harness, next.turn)));
 		await harness.close(context);
 	});
 

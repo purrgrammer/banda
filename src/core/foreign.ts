@@ -4,8 +4,8 @@
  * the chat in a commit before that result is recorded: every read from outside the activity log records (a
  * connection's, a page's, a command's through the proxy), the browser's pages, another agent's chat. An input that
  * carries it (another agent's message, a harness's work, a group's messages another member wrote) marks the task it
- * lands in by being there. The mark is for the task: the owner's next message (in a group, one that asks the member),
- * or a routine's wake, starts one with none.
+ * lands in by being there. The mark is for the task (`errandOf`): the owner's next message that starts a run (in a
+ * group, one that asks the member), or a routine's wake, starts one with none; a steer joins the task under way.
  */
 import { type ConversationId, defineDoc, type EntryId, type EntryRecord, type Tx } from "@earendil-works/pi-durable";
 
