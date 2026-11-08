@@ -194,10 +194,12 @@ one that gives them one more thing to manage stays out.
   while it can reach nothing; else on About. **Routines**: Routines on (a switch) and Add, then rows (name, when in
   words, next run, last run and what it said, paused; run now and pause in now on the row; tapping opens its editor) or,
   with none, one example in muted text ("Every weekday at 8:00, …"); Add opens a short form the daemon writes as the
-  owner's own file. Beneath them, **Watching**: rows (the service's icon and the object's title, what ends it, when it
-  last looked and what it last saw, paused or done; Check now and Pause on the row; tapping opens the object's card and
-  the watch's editor); Follow takes a link, and an object's card in the chat offers it too. **Access**: the connections
-  first, one row per
+  owner's own file. Beneath them, **Watching**: rows (the object as the owner's references draw it: the service's mark,
+  its state and its title; what ends it, when it last looked and what it last saw, paused or done; Check now, Pause and
+  Stop on the row, Stop asking first; tapping opens the watch: the object's card, what matters, its actions); Follow
+  takes a link, and an object's card in the chat offers it too. Wherever a watch names its object (its row, its lines
+  in the chat, its card) it draws it as the owner's references are drawn, never as a bare link. **Access**: the
+  connections first, one row per
   connection with one switch per account and Connect when none is signed in, then what the agent may do without
   asking, each revokable. **Memory**: the facts, editable and deletable. The face and the name at the top are
   edited where they show: a tap on the face picks another, a tap on the name edits it in place. **About**: the
@@ -433,7 +435,8 @@ behind the card's actions; an approval still names its acting account plainly. L
 full value available in details. A notification is drawn as the thing it is about.
 Unfurls are few per message and never retried in a loop, so a chatty model cannot make the daemon hammer a service. A
 reference names the object its URL opens, not a different object found before normalizing the URL. Equivalent names
-share a reading only under the connection's declared identity rules. A connection declares its objects as data,
+share a reading only under the connection's declared identity rules; an object may be named by words (a search, by
+its query), percent-encoded in its address and said plainly in its name. A connection declares its objects as data,
 never code: for each kind, the URL and id shapes that name it, the read that
 fetches it (a tool and how its arguments come from the match), the fields the card shows, the writes that act on it,
 by tool, and how it is followed ("Watches"). Every object in every state is in the specimen, light and dark, both
@@ -624,10 +627,15 @@ or not the model remembers it.
   reading's fields, what ends it, and when it is busy. The daemon makes the reads with the account's credentials, in
   the daemon: no box, no model. Any link the connection recognises as that kind can be followed; a kind without the
   declaration cannot, and the card says so.
-- **One reading per object.** The daemon keeps one reading per (connection, account, object) fresh while any watch
-  holds it, the same reading the object's card draws, so five watches on one inbox read it once and a followed
-  object's card is always current. An object's card offers Follow among its quiet actions; a followed one says who
-  follows it and until what, in one line, and never says "as of" while the daemon can look.
+- **One reading per object, a cursor per watch.** The daemon keeps one reading per (connection, account, object)
+  while any watch holds it, with the few before it, and the same reading draws the object's card, so a followed
+  object's card is always current, and five watches on one object ask the service once: a look takes the reading
+  another watch's look took within its cadence instead of asking again, never its own (a look that waits for the
+  object to settle looks again), and the owner's Check now always asks. Each watch keeps its own cursor on those
+  readings, the one it last diffed to, so whoever looked first, every watch on the object sees every change since its
+  own last look; a cursor that fell off the readings kept diffs from the oldest kept and sees the changes since,
+  coarser, never fewer. An object's card offers Follow among its quiet actions; a followed one says who follows it
+  and until what, in one line, and never says "as of" while the daemon can look.
 - **The change is the event, and its identity is the change.** Each reading is compared with the one before, or
   read from a feed's cursor where the service keeps one; the events are the differences, and an event's id is the
   change itself, so a read repeated after a crash yields the same events and the same wake key, which the chat's queue
@@ -642,15 +650,17 @@ or not the model remembers it.
   on its own work. At a wake the agent decides whether anything is worth a message, as at a routine's: its message
   counts as unread, a line alone does not.
 - **A burst is one wake.** Changes that arrive while the watch's last run still goes, or before the kind's settling
-  time passes, come together as one wake carrying the newest reading, and its line names what came together. A
+  time passes, come together as one wake carrying the newest reading, and its line names what came together:
+  everything a held look saw, though the newest reading no longer shows it (a failed check a later push runs again). A
   watch looks often while its object is busy (checks running) and seldom when it is quiet, as the kind says; wakes a
   day are per watch, as runs a day are per routine.
-- **The wake in the chat** is an event line, the change in the kind's words with the service's icon ("banda#142 · Ana
-  approved · 2 checks failed"), the object's card beneath and then the agent's reply when it had one. Tapping the line
-  opens the watch in the panel.
+- **The wake in the chat** is an event line, the object drawn as the owner's references are (the service's mark, its
+  state, its title) and then the change in the kind's words ("· Ana approved · 2 checks failed"), the object's card
+  beneath and then the agent's reply when it had one. Tapping the line opens the watch in the panel.
 - **It ends itself.** When what ends it holds, the last wake says so and the watch is done, as a routine that ran
   once is; its row says what ended it until the owner removes it. Following the same object again starts a new
-  watch from a fresh baseline.
+  watch from a fresh baseline. A kind the world never ends (a mail search, a conversation) says it has no end, and is
+  followed until the owner stops it.
 - **Health is observed and told.** A watch has what the owner wants (on, paused, done) and what the daemon sees
   (looking; can't reach, since when; behind, when a feed's cursor expired or a gap could not be recovered). The row
   says which, in words ("can't reach GitHub since 9:10"); a watch that could not look for an hour draws an error line

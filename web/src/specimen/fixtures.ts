@@ -2,9 +2,10 @@
 import { getExample } from "open-bot-avatar";
 import type { FileUIPart } from "@/components/ai-elements/types";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
+import type { WatchView } from "../../../src/server/api.ts";
 import type { Service } from "../chat/Catalogue.tsx";
-import type { CheckRun, Issue, PullRequest } from "../chat/Object.tsx";
-import type { RoutineRowView } from "../chat/Panel.tsx";
+import type { CheckRun, Discussion, Issue, PullRequest, Repository } from "../chat/Object.tsx";
+import type { RoutineRowView, WatchRowView } from "../chat/Panel.tsx";
 import type { RowView, Who } from "../chat/Row.tsx";
 
 export function sampleFace(shape: string, color: string) {
@@ -158,6 +159,115 @@ export const ROUTINES: readonly RoutineRowView[] = [
 	{ id: "deps", name: "Stale dependencies", when: "On the 1st of each month", next: "1 Dec", paused: true },
 ];
 
+/**
+ * What Mara watches: a pull request until it merges, one waiting for the owner, one it cannot reach, one behind (its
+ * newest wake had a gap), one that paused itself at its wakes a day, one done, and one ended when its account was
+ * switched off.
+ */
+export const WATCHES: readonly WatchRowView[] = [
+	{
+		id: "banda-142",
+		name: "purrgrammer/banda #142",
+		service: "GitHub",
+		until: "until merged",
+		next: "today 09:40",
+		saw: "Saw today 09:10: ana approved, lint failed",
+	},
+	{ id: "banda-150", name: "purrgrammer/banda #150", service: "GitHub", until: "until closed", waiting: "set up" },
+	{
+		id: "banda-98",
+		name: "purrgrammer/banda #98",
+		service: "GitHub",
+		until: "until merged or closed",
+		next: "today 09:40",
+		saw: "Can't reach GitHub since today 08:10: GitHub did not answer",
+		failing: true,
+	},
+	{
+		id: "banda-131",
+		name: "purrgrammer/banda #131",
+		service: "GitHub",
+		until: "until merged",
+		next: "today 09:40",
+		saw: "Saw today 09:05: lint failed; some changes may be missing",
+		behind: true,
+	},
+	{
+		id: "banda-120",
+		name: "purrgrammer/banda #120",
+		service: "GitHub",
+		until: "until merged",
+		saw: "Paused itself: it woke 24 times today, the most it may",
+		paused: true,
+	},
+	{
+		id: "banda-77",
+		name: "purrgrammer/banda #77",
+		service: "GitHub",
+		until: "until merged",
+		saw: "Done Fri 17:02: merged",
+		done: true,
+	},
+	{
+		id: "banda-60",
+		name: "purrgrammer/banda #60",
+		service: "GitHub",
+		until: "until merged",
+		saw: "Ended today 08:55: GitHub as @bandarra was switched off for Mara",
+		done: true,
+		ended: true,
+	},
+];
+
+/** Mara's watch on #142 as the daemon sends it, which its detail opens on. */
+export const WATCH_VIEW: WatchView = {
+	name: "banda-142",
+	accepted: {
+		sha: "0".repeat(64),
+		watch: {
+			object: "https://github.com/purrgrammer/banda/pull/142",
+			account: "bandarra",
+			until: "merged",
+			ask: "Tell me when it is approved or a check fails. A comment of my own is not news.",
+		},
+	},
+	state: "active",
+	agent: "mara",
+	object: {
+		key: "github/bandarra/pull_request:purrgrammer/banda#142",
+		ref: "github:pull_request:purrgrammer/banda#142",
+		name: "purrgrammer/banda #142",
+		connection: "github",
+		service: "GitHub",
+		account: "bandarra",
+		ends: ["merged", "closed"],
+	},
+};
+
+/** Mara's watch on a contact, which nothing ends: its detail says so and its editor has no end to pick. */
+export const WATCH_CONTACT_VIEW: WatchView = {
+	name: "ana-garcia",
+	accepted: {
+		sha: "1".repeat(64),
+		watch: {
+			object: "contacts/pc111",
+			account: "me@example.com",
+			ask: "Keep Ana's details current in my notes when they change.",
+		},
+	},
+	state: "active",
+	agent: "mara",
+	object: {
+		key: "contacts/me@example.com/contact:contacts/pc111",
+		ref: "contacts:contact:contacts/pc111",
+		name: "pc111",
+		connection: "contacts",
+		service: "Google Contacts",
+		account: "me@example.com",
+		ends: [],
+	},
+};
+
 export const ACCOUNTS = [
 	{ id: "gh-bandarra", connection: "GitHub", login: "@bandarra", agents: ["Mara", "Octo"] },
 	{ id: "gh-purrgrammer", connection: "GitHub", login: "@purrgrammer", agents: ["Octo"] },
@@ -193,6 +303,7 @@ export const CHECK_RUN: CheckRun = {
 	state: "failed",
 	step: "npm test",
 	took: "3m 12s",
+	url: "https://github.com/purrgrammer/banda/actions/runs/9921/job/7781",
 	log: [
 		"FAIL test/routines.test.ts > a paused routine never fires",
 		"  expected 0 runs, got 1",
@@ -200,8 +311,37 @@ export const CHECK_RUN: CheckRun = {
 	],
 };
 
+export const DISCUSSION: Discussion = {
+	repo: "purrgrammer/banda",
+	number: 52,
+	title: "How should a watch say what it saw while paused?",
+	state: "open",
+	category: "Q&A",
+	comments: 4,
+	url: "https://github.com/purrgrammer/banda/discussions/52",
+};
+
+export const REPOSITORY: Repository = {
+	repo: "purrgrammer/banda",
+	release: "v0.1.0-alpha.5",
+	released: Date.UTC(2026, 10, 3, 9),
+	commit: "feat: a check run is followed until it completes, a notification until read",
+	sha: "67e9f63",
+	committed: Date.UTC(2026, 10, 7, 18),
+	pull: { number: 34, title: "Keep objects as data", author: "ana-k", state: "open" },
+	issue: { number: 41, title: "The panel loses the open file on reload", author: "ana-k", state: "open" },
+	url: "https://github.com/purrgrammer/banda",
+};
+
 export const SERVICES: readonly Service[] = [
-	{ id: "github", name: "GitHub", does: "Pull requests, issues, checks", accounts: ["@bandarra", "@purrgrammer"] },
+	// banda ships a newer GitHub than the one in effect: the tile offers it
+	{
+		id: "github",
+		name: "GitHub",
+		does: "Pull requests, issues, checks",
+		accounts: ["@bandarra", "@purrgrammer"],
+		onUpdate: () => new Promise((resolve) => setTimeout(resolve, 800)),
+	},
 	// an account whose sign-in no longer fits: the tile says so, and signs in again
 	{ id: "gmail", name: "Gmail", does: "Read and draft email", accounts: [], stale: ["you@example.com"] },
 	// a server not reached

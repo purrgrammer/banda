@@ -88,8 +88,13 @@ export type Area = {
 	readonly route?: (request: AreaRequest) => Promise<AreaReply | undefined>;
 	/** Events for the shell stream, read on every change; each is written when it changed since the last. */
 	readonly shell?: () => Promise<readonly ShellEvent[]>;
-	/** Docs whose changes push the shell. */
+	/** Docs whose changes push the shell, whole: the chats, the control room, the agents and every area's events. */
 	readonly watch?: readonly Watched[];
+	/**
+	 * Docs that only this area's events read: a change of one pushes those events alone, nothing else of the shell. A
+	 * doc the chats or the control room also read goes in `watch`.
+	 */
+	readonly own?: readonly Watched[];
 	/** End the area's work in flight as the daemon stops, so nothing it opened keeps the process alive. */
 	readonly stop?: () => Promise<void>;
 };

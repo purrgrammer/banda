@@ -83,12 +83,16 @@ export function refusalWhy(result: Pick<ToolResult, "text"> | undefined): string
 	return plain.length > MAX_WHY ? `${plain.slice(0, MAX_WHY - 1).trimEnd()}…` : plain;
 }
 
+/** Whether `item` starts a run: the owner's message, a routine's wake, or a watch's (not what it only tells). */
+export const startsRun = (item: Item): item is Extract<Item, { role: "user" | "wake" | "watch" }> =>
+	item.role === "user" || item.role === "wake" || (item.role === "watch" && item.tell === undefined);
+
 /** The id of the item that started the run item `id` is in: the owner's message, or a wake; 0 before any. */
 export function runOf(items: readonly Item[], id: number): number {
 	let run = 0;
 	for (const item of items) {
 		if (item.id > id) break;
-		if (item.role === "user" || item.role === "wake") run = item.id;
+		if (startsRun(item)) run = item.id;
 	}
 	return run;
 }

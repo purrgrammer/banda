@@ -1,10 +1,11 @@
 /**
- * Objects: things in a connection the owner recognises, drawn by the daemon from its own reading. GitHub's four: a
- * pull request, an issue, a check run, and a notification drawn as its subject with why it came.
+ * Objects: things in a connection the owner recognises, drawn by the daemon from its own reading. GitHub's: a pull
+ * request, an issue, a check run, a discussion, a repository, and a notification drawn as its subject with why it came.
  */
 
 import type { LucideIcon } from "lucide-react";
 import {
+	BookMarkedIcon,
 	CalendarIcon,
 	ChevronDownIcon,
 	CircleCheckIcon,
@@ -18,14 +19,19 @@ import {
 	FileTextIcon,
 	FileTypeIcon,
 	FolderIcon,
+	GitCommitHorizontalIcon,
 	GitMergeIcon,
 	GitPullRequestDraftIcon,
 	GitPullRequestIcon,
 	ImageIcon,
 	MailIcon,
+	MailsIcon,
+	MessagesSquareIcon,
 	PhoneIcon,
 	PresentationIcon,
+	SearchIcon,
 	SheetIcon,
+	TagIcon,
 	UserRoundIcon,
 	VideoIcon,
 } from "lucide-react";
@@ -147,6 +153,132 @@ export function PullRequestCard({ pr, actions }: { pr: PullRequest; actions?: Re
 	);
 }
 
+/** One pull request or issue a repository's card names: the newest of each. */
+export type Opened = {
+	readonly number: number;
+	readonly title: string;
+	readonly author: string;
+	readonly state: "open" | "draft" | "merged" | "closed";
+};
+
+export type Repository = {
+	/** `owner/repo`. */
+	readonly repo: string;
+	/** The newest published release's tag, and when (ms). */
+	readonly release?: string | undefined;
+	readonly released?: number | undefined;
+	/** The default branch's head: its first line, short sha and when (ms). */
+	readonly commit?: string | undefined;
+	readonly sha?: string | undefined;
+	readonly committed?: number | undefined;
+	readonly pull?: Opened | undefined;
+	readonly issue?: Opened | undefined;
+	readonly url?: string | undefined;
+	readonly asOf?: string | undefined;
+};
+
+const OPENED_ISSUE = { open: CircleDotIcon, draft: CircleDotIcon, merged: CircleCheckIcon, closed: CircleCheckIcon };
+const day = (at: number | undefined) =>
+	at === undefined ? undefined : new Date(at).toLocaleDateString([], { month: "short", day: "numeric" });
+
+/** A repository: what is newest in it, one line each; what it lacks is said, never left blank. */
+export function RepositoryCard({ repository, actions }: { repository: Repository; actions?: ReactNode }) {
+	const { pull, issue } = repository;
+	const PullIcon = pull === undefined ? GitPullRequestIcon : STATE[pull.state].icon;
+	const IssueIcon = issue === undefined ? CircleDotIcon : OPENED_ISSUE[issue.state];
+	const rows: { key: string; icon: LucideIcon; words: ReactNode; title?: string | undefined }[] = [
+		{
+			key: "release",
+			icon: TagIcon,
+			words:
+				repository.release === undefined ? (
+					"No releases"
+				) : (
+					<>
+						Released <span className="font-code text-ink">{repository.release}</span>
+						{repository.released === undefined ? null : ` · ${day(repository.released)}`}
+					</>
+				),
+		},
+		{
+			key: "commit",
+			icon: GitCommitHorizontalIcon,
+			title: repository.commit,
+			words:
+				repository.commit === undefined ? (
+					"No commits"
+				) : (
+					<>
+						{repository.sha === undefined ? null : <span className="font-code text-ink-2">{repository.sha} </span>}
+						<span className="text-ink">{repository.commit}</span>
+						{repository.committed === undefined ? null : ` · ${day(repository.committed)}`}
+					</>
+				),
+		},
+		{
+			key: "pull",
+			icon: PullIcon,
+			title: pull?.title,
+			words:
+				pull === undefined ? (
+					"No pull requests"
+				) : (
+					<>
+						<span className="tabular-nums">#{pull.number}</span> <span className="text-ink">{pull.title}</span>
+						{pull.author === "" ? null : ` · ${pull.author}`}
+					</>
+				),
+		},
+		{
+			key: "issue",
+			icon: IssueIcon,
+			title: issue?.title,
+			words:
+				issue === undefined ? (
+					"No issues"
+				) : (
+					<>
+						<span className="tabular-nums">#{issue.number}</span> <span className="text-ink">{issue.title}</span>
+						{issue.author === "" ? null : ` · ${issue.author}`}
+					</>
+				),
+		},
+	];
+	return (
+		<Tile className="flex flex-col gap-2.5 p-3.5">
+			<Where
+				asOf={repository.asOf}
+				url={repository.url}
+				actions={
+					actions === undefined ? (
+						<ObjectMenu name={repository.repo} details={[["Repository", repository.repo]]} />
+					) : (
+						actions
+					)
+				}
+			>
+				Repository
+			</Where>
+			<span className="flex min-w-0 items-center gap-2">
+				<BookMarkedIcon aria-hidden="true" className="size-4 shrink-0 text-ink-2" />
+				<span className="min-w-0 truncate text-body font-semibold text-ink" title={repository.repo}>
+					{repository.repo}
+				</span>
+			</span>
+			<span className="flex flex-col gap-1.5 border-t border-line-soft pt-2.5 text-meta text-ink-2">
+				{rows.map((row) => (
+					<span key={row.key} data-repository-row={row.key} className="flex min-w-0 items-center gap-1.5">
+						<row.icon aria-hidden="true" className="size-3.5 shrink-0" />
+						<span className="min-w-0 truncate" title={row.title}>
+							{row.words}
+						</span>
+					</span>
+				))}
+			</span>
+		</Tile>
+	);
+}
+
 /** The line every object starts with: the service, where the thing lives, and how old the reading is. */
 function Where({
 	children,
@@ -185,16 +317,30 @@ function Where({
 	);
 }
 
+/**
+ * How an object can be followed from its card (DESIGN.md "Watches"): the words for what ends a watch; none for a kind
+ * nothing ends (a contact), followed until the owner stops it.
+ */
+export type FollowOffer = {
+	/** None: it never ends (a search), and is followed until the owner stops it. */
+	readonly ends: readonly string[];
+	/** Follow it, until the end named, or any of them. */
+	readonly onFollow: (until?: string) => void;
+};
+
 /** Quiet manual actions and full reading details, reachable by touch or keyboard. */
 export function ObjectMenu({
 	name,
 	details,
 	onRefresh,
+	follow,
 	busy = false,
 }: {
 	name: string;
 	details: readonly (readonly [string, string])[];
 	onRefresh?: (() => void) | undefined;
+	/** Offered when the kind can be followed and no watch of this agent follows it yet. */
+	follow?: FollowOffer | undefined;
 	busy?: boolean | undefined;
 }) {
 	return (
@@ -205,12 +351,36 @@ export function ObjectMenu({
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="w-72 max-w-[calc(100vw-2rem)]">
-				{onRefresh === undefined ? null : (
+				{onRefresh === undefined && follow === undefined ? null : (
 					<>
 						<DropdownMenuGroup>
-							<DropdownMenuItem disabled={busy} onSelect={onRefresh}>
-								Refresh preview
-							</DropdownMenuItem>
+							{onRefresh === undefined ? null : (
+								<DropdownMenuItem disabled={busy} onSelect={onRefresh}>
+									Refresh preview
+								</DropdownMenuItem>
+							)}
+							{follow === undefined
+								? null
+								: follow.ends.length === 0
+									? [
+											<DropdownMenuItem key="follow" disabled={busy} onSelect={() => follow.onFollow()}>
+												Follow
+											</DropdownMenuItem>,
+										]
+									: [
+											...follow.ends.map((end) => (
+												<DropdownMenuItem key={end} disabled={busy} onSelect={() => follow.onFollow(end)}>
+													Follow until {end}
+												</DropdownMenuItem>
+											)),
+											...(follow.ends.length > 1
+												? [
+														<DropdownMenuItem key="any" disabled={busy} onSelect={() => follow.onFollow()}>
+															Follow until {follow.ends.join(" or ")}
+														</DropdownMenuItem>,
+													]
+												: []),
+										]}
 						</DropdownMenuGroup>
 						<DropdownMenuSeparator />
 					</>
@@ -244,6 +414,31 @@ export function safeObjectUrl(value: string | undefined): string | undefined {
 	}
 }
 
+/** A Gmail address worth linking: `mail.google.com` over https, nothing else. */
+function gmailUrl(value: string | undefined): string | undefined {
+	try {
+		const url = new URL(value ?? "");
+		return url.protocol === "https:" &&
+			url.port === "" &&
+			url.username === "" &&
+			url.password === "" &&
+			url.hostname === "mail.google.com"
+			? url.href
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * An object named inline is a link wherever it has an address, drawn the same whatever the service: the words, a
+ * subtle underline that darkens on hover; without an address, the words alone.
+ */
+// a title's width is capped short of a phone's screen, so what follows it on a line (a colon, a time) stays beside it
+const INLINE_LINK =
+	"min-w-0 max-w-[min(20rem,calc(100vw-6rem))] truncate underline decoration-line underline-offset-2 hover:decoration-ink";
+const INLINE_TEXT = "min-w-0 max-w-[min(20rem,calc(100vw-6rem))] truncate";
+
 /** A reference in the owner's words, not another card. Inherit the bubble's ink in either theme. */
 export function ObjectLink({
 	object,
@@ -253,12 +448,33 @@ export function ObjectLink({
 		| (PullRequest & { card: "pull-request" })
 		| (Issue & { card: "issue" })
 		| (CheckRun & { card: "check-run" })
+		| (Discussion & { card: "discussion" })
+		| (Repository & { card: "repository" })
 		| (EmailMessage & { card: "email" })
+		| (Messages & { card: "messages" })
 		| (CalendarEvent & { card: "event" })
 		| (Person & { card: "contact" })
 		| (DriveFile & { card: "file" });
 	href: string;
 }) {
+	if (object.card === "messages") {
+		const Icon = object.search ? SearchIcon : MailsIcon;
+		const url = gmailUrl(href) ?? gmailUrl(object.url);
+		return (
+			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
+				<Icon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
+				{url === undefined ? (
+					<span className={INLINE_TEXT} title={object.title}>
+						{object.title}
+					</span>
+				) : (
+					<a href={url} target="_blank" rel="noopener noreferrer" className={INLINE_LINK} title={object.title}>
+						{object.title}
+					</a>
+				)}
+			</span>
+		);
+	}
 	if (object.card === "file") {
 		const Icon = FILE_KIND[object.kind].icon;
 		const url = driveUrl(href) ?? driveUrl(object.url);
@@ -267,17 +483,11 @@ export function ObjectLink({
 			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
 				<Icon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
 				{url === undefined ? (
-					<span className="min-w-0 truncate" title={name}>
+					<span className={INLINE_TEXT} title={name}>
 						{name}
 					</span>
 				) : (
-					<a
-						href={url}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="min-w-0 max-w-80 truncate underline"
-						title={name}
-					>
+					<a href={url} target="_blank" rel="noopener noreferrer" className={INLINE_LINK} title={name}>
 						{name}
 					</a>
 				)}
@@ -290,17 +500,11 @@ export function ObjectLink({
 			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
 				<UserRoundIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
 				{url === undefined ? (
-					<span className="min-w-0 truncate" title={object.name}>
+					<span className={INLINE_TEXT} title={object.name}>
 						{object.name}
 					</span>
 				) : (
-					<a
-						href={url}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="min-w-0 max-w-80 truncate underline"
-						title={object.name}
-					>
+					<a href={url} target="_blank" rel="noopener noreferrer" className={INLINE_LINK} title={object.name}>
 						{object.name}
 					</a>
 				)}
@@ -309,14 +513,12 @@ export function ObjectLink({
 	}
 	if (object.card === "event") {
 		const url = calendarUrl(href) ?? calendarUrl(object.url);
+		const struck = object.status === "cancelled" && "line-through";
 		return (
 			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
 				<CalendarIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
 				{url === undefined ? (
-					<span
-						className={cn("min-w-0 truncate", object.status === "cancelled" && "line-through")}
-						title={object.title}
-					>
+					<span className={cn(INLINE_TEXT, struck)} title={object.title}>
 						{object.title || "Event"}
 					</span>
 				) : (
@@ -324,7 +526,7 @@ export function ObjectLink({
 						href={url}
 						target="_blank"
 						rel="noopener noreferrer"
-						className={cn("min-w-0 max-w-80 truncate underline", object.status === "cancelled" && "line-through")}
+						className={cn(INLINE_LINK, struck)}
 						title={object.title}
 					>
 						{object.title || "Event"}
@@ -334,20 +536,16 @@ export function ObjectLink({
 		);
 	}
 	if (object.card === "email") {
-		const url = safeObjectUrl(href);
+		const url = gmailUrl(href) ?? gmailUrl(object.url);
 		return (
 			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
 				<MailIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
 				{url === undefined ? (
-					<span className="min-w-0 truncate">{object.subject || "Email"}</span>
+					<span className={INLINE_TEXT} title={object.subject}>
+						{object.subject || "Email"}
+					</span>
 				) : (
-					<a
-						href={url}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="min-w-0 max-w-80 truncate underline"
-						title={object.subject}
-					>
+					<a href={url} target="_blank" rel="noopener noreferrer" className={INLINE_LINK} title={object.subject}>
 						{object.subject || "Email"}
 					</a>
 				)}
@@ -355,13 +553,18 @@ export function ObjectLink({
 		);
 	}
 	const state =
-		object.card === "pull-request"
-			? STATE[object.state]
-			: object.card === "issue"
-				? ISSUE_STATE[object.state]
-				: CHECK_STATE[object.state];
-	const name = object.card === "check-run" ? object.name : object.title;
-	const location = object.card === "check-run" ? object.repo : `${object.repo} #${object.number}`;
+		object.card === "repository"
+			? { icon: BookMarkedIcon }
+			: object.card === "pull-request"
+				? STATE[object.state]
+				: object.card === "issue"
+					? ISSUE_STATE[object.state]
+					: object.card === "discussion"
+						? DISCUSSION_STATE[object.state]
+						: CHECK_STATE[object.state];
+	const name = object.card === "check-run" ? object.name : object.card === "repository" ? object.repo : object.title;
+	const location =
+		object.card === "check-run" || object.card === "repository" ? object.repo : `${object.repo} #${object.number}`;
 	const url = safeObjectUrl(href);
 	const label = name || location;
 	return (
@@ -369,7 +572,7 @@ export function ObjectLink({
 			<GitHubMark className="size-3.5 shrink-0 self-center fill-current" />
 			<state.icon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
 			{url === undefined ? (
-				<span className="min-w-0 truncate" title={label}>
+				<span className={INLINE_TEXT} title={label}>
 					{label}
 				</span>
 			) : (
@@ -377,7 +580,7 @@ export function ObjectLink({
 					href={url}
 					target="_blank"
 					rel="noopener noreferrer"
-					className="min-w-0 max-w-80 truncate"
+					className={INLINE_LINK}
 					title={label}
 					aria-label={`${label} on GitHub`}
 				>
@@ -411,7 +614,7 @@ export function EmailCard({
 	actions?: ReactNode;
 	attachments?: ReactNode;
 }) {
-	const url = safeObjectUrl(message.url);
+	const url = gmailUrl(message.url);
 	return (
 		<Tile className="flex flex-col gap-2.5 p-3.5">
 			<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-ink-2">
@@ -442,6 +645,69 @@ export function EmailCard({
 				{message.body || message.snippet || "No plain text body"}
 			</p>
 			{attachments}
+		</Tile>
+	);
+}
+
+export type Messages = {
+	readonly title: string;
+	/** A search's: its title is the query. */
+	readonly search: boolean;
+	/** The newest few, newest first. */
+	readonly messages: readonly {
+		readonly id: string;
+		readonly from: string;
+		readonly subject: string;
+		readonly date: string;
+	}[];
+	readonly total: number | null;
+	/** Where it opens in Gmail: the conversation, or the search. */
+	readonly url?: string | undefined;
+	readonly asOf?: string | undefined;
+};
+
+/** Emails together, read-only: a conversation under its subject, or a search under its query, the newest few first. */
+export function MessagesCard({ list, actions }: { list: Messages; actions?: ReactNode }) {
+	const Icon = list.search ? SearchIcon : MailsIcon;
+	const more = list.total === null ? 0 : list.total - list.messages.length;
+	return (
+		<Tile className="flex flex-col gap-2.5 p-3.5">
+			<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-ink-2">
+				<Icon aria-hidden="true" className="size-3.5 shrink-0" />
+				<span className="min-w-0 flex-1 truncate">{list.search ? "Mail matching" : "Conversation"}</span>
+				{list.asOf === undefined ? null : <span>as of {list.asOf}</span>}
+				<span className="ml-auto shrink-0">{actions}</span>
+			</div>
+			<h3
+				className={cn(
+					"min-w-0 text-body font-semibold text-ink [overflow-wrap:anywhere]",
+					list.search && "font-mono font-normal",
+				)}
+			>
+				{list.title}
+			</h3>
+			{list.messages.length === 0 ? (
+				<p className="text-meta text-ink-2">{list.search ? "No mail matches yet" : "No messages"}</p>
+			) : (
+				<ul className="flex flex-col divide-y divide-border">
+					{list.messages.map((message) => (
+						<li key={message.id} className="flex min-w-0 flex-col gap-0.5 py-1.5 first:pt-0 last:pb-0">
+							<span className="flex min-w-0 items-baseline gap-2 text-meta text-ink-2">
+								<span className="min-w-0 flex-1 truncate" title={message.from}>
+									{message.from || "Sender unavailable"}
+								</span>
+								<span className="shrink-0">{message.date}</span>
+							</span>
+							<span className="min-w-0 truncate text-body text-ink" title={message.subject}>
+								{message.subject || "(No subject)"}
+							</span>
+						</li>
+					))}
+				</ul>
+			)}
+			{more > 0 ? (
+				<span className="text-meta text-ink-2">{list.search ? `About ${more} more` : `${more} earlier`}</span>
+			) : null}
 		</Tile>
 	);
 }
@@ -831,6 +1097,68 @@ export function IssueCard({ issue, actions }: { issue: Issue; actions?: ReactNod
 						? "Comments unavailable"
 						: `${issue.comments} ${issue.comments === 1 ? "comment" : "comments"}`}
 				</span>
+			</span>
+		</Tile>
+	);
+}
+
+export type Discussion = {
+	readonly repo: string;
+	readonly number: number;
+	readonly title: string;
+	readonly state: "open" | "answered" | "closed" | "unknown";
+	readonly category: string;
+	/** Known once its comments were read: when it is followed. */
+	readonly comments: number | null;
+	readonly url?: string | undefined;
+	readonly asOf?: string | undefined;
+};
+
+const DISCUSSION_STATE = {
+	unknown: { icon: CircleDashedIcon, word: "State unavailable", live: false },
+	open: { icon: MessagesSquareIcon, word: "Open", live: true },
+	answered: { icon: CircleCheckIcon, word: "Answered", live: true },
+	closed: { icon: CircleSlashIcon, word: "Closed", live: false },
+} as const;
+
+export function DiscussionCard({ discussion, actions }: { discussion: Discussion; actions?: ReactNode }) {
+	const state = DISCUSSION_STATE[discussion.state];
+	return (
+		<Tile className="flex flex-col gap-2.5 p-3.5">
+			<Where
+				asOf={discussion.asOf}
+				url={discussion.url}
+				actions={
+					actions === undefined ? (
+						<ObjectMenu
+							name={`${discussion.repo} discussion #${discussion.number}`}
+							details={[
+								["Repository", discussion.repo],
+								["Category", discussion.category],
+							]}
+						/>
+					) : (
+						actions
+					)
+				}
+			>
+				{discussion.repo} · discussion #{discussion.number}
+			</Where>
+			<span className="text-body font-semibold text-ink [overflow-wrap:anywhere]">
+				{discussion.title || "Title unavailable"}
+			</span>
+			<span className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-meta text-ink-2">
+				<StatePill {...state} />
+				{discussion.category === "" ? null : (
+					<span className="min-w-0 max-w-full truncate rounded-full border border-line px-2 py-px">
+						{discussion.category}
+					</span>
+				)}
+				{discussion.comments === null ? null : (
+					<span className="tabular-nums">
+						{discussion.comments} {discussion.comments === 1 ? "comment" : "comments"}
+					</span>
+				)}
 			</span>
 		</Tile>
 	);

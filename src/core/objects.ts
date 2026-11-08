@@ -7,11 +7,12 @@
  * the writes that make one (a tool, the arguments that say where, the verb and the words the draft says).
  *
  * The card itself is the daemon's: each kind names one of the cards it draws (`pull-request`, `issue`, `check-run`,
- * `notification`), and what a reading holds is turned into that card here, every string a plain line, bounded. A
+ * `notification`, `repository`, …), and what a reading holds is turned into that card here, every string a plain line, bounded. A
  * reading is kept in the store by (connection, account, object), with its time, bounded: what the owner saw last, and
  * what keeps a chatty chat from making the daemon read a service again and again.
  */
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
+import { type Follow, parseFollow } from "./follow.ts";
 
 type JsonValue = JsonObject[string];
 
@@ -21,18 +22,26 @@ export const CARDS = [
 	"issue",
 	"check-run",
 	"notification",
+	"discussion",
+	"repository",
 	"email",
+	"messages",
 	"event",
 	"contact",
 	"file",
 ] as const;
 export type CardKind = (typeof CARDS)[number];
 
-/** A read that fetches an object: a tool, and its arguments, each a value or a `{placeholder}` the match fills. */
+/**
+ * A read that fetches an object: a tool, and its arguments, each a value, a `{placeholder}` the match fills, or a list
+ * of words (the fields a list read asks for).
+ */
 export type ObjectRead = {
 	readonly tool: string;
-	readonly args: { readonly [arg: string]: JsonValue };
+	readonly args: { readonly [arg: string]: JsonValue | readonly string[] };
 	readonly optional?: boolean;
+	/** Made only when the object is followed (its comments): the card does without it. */
+	readonly follow?: boolean;
 };
 
 /** A write that acts on an object: how its arguments name it, and the words its draft says. */
@@ -92,23 +101,31 @@ export type ObjectKind = {
 	/** Where one lives, from some of its name's placeholders: "{owner}/{repo}". */
 	readonly place?: string;
 	/**
-	 * Web addresses that name it, as templates: anything after the template's end (a tab, a query) still names it, and
-	 * a `*` stands for one part of the path that does not matter.
+	 * Web addresses that name it, as templates: a tab (one more part of the path), a query or a fragment after the
+	 * template's end still names it, a deeper path does not (it opens something inside: a commit of a pull request, a
+	 * file of a repository); and a `*` stands for one part of the path that does not matter.
 	 */
 	readonly urls: readonly string[];
 	/** Shorter ids that name it, as templates, matched whole. */
 	readonly ids: readonly string[];
-	/** Provider identity rules, by placeholder; omitted placeholders keep their spelling. */
-	readonly normalize?: { readonly [placeholder: string]: "lowercase" | "integer" };
+	/**
+	 * Provider identity rules, by placeholder; omitted placeholders keep their spelling. `text` is words, not an
+	 * identity (a search's query, `from:boss is:unread`): percent-encoded in a URL or id, where it is the last token,
+	 * and said decoded, its spaces collapsed, in the object's name and its reads' arguments.
+	 */
+	readonly normalize?: { readonly [placeholder: string]: Normalize };
 	/** The reads that fetch it, by the name its fields use. */
 	readonly reads: { readonly [as: string]: ObjectRead };
 	/** The card's fields, each a dotted path into what the reads answered (`pr.user.login`). */
 	readonly fields: { readonly [field: string]: string };
 	readonly writes?: readonly ObjectWrite[];
 	readonly creates?: readonly ObjectCreate[];
+	/** How a watch follows it (DESIGN.md "Watches"); a kind without it cannot be followed. */
+	readonly follow?: Follow;
 };
 
 export type ObjectKinds = { readonly [kind: string]: ObjectKind };
+type Normalize = "lowercase" | "integer" | "text";
 
 /** One thing named: of which connection and kind, and the values its template matched. */
 export type ObjectRef = {
@@ -120,12 +137,39 @@ export type ObjectRef = {
 const PLACEHOLDER = /\{([a-z_]{1,32})\}/g;
 /** A bounded identity segment, never separators, spaces or `..`. */
 const VALUE = "([A-Za-z0-9_][A-Za-z0-9_.-]{0,399})";
+/**
+ * Words percent-encoded (a space as `+` or `%20`), never `/`, `?` or `#`: what a `text` placeholder captures; in an id,
+ * matched whole, a space may stand as itself (`gmail/search/from:boss is:unread`).
+ */
+const TEXT = (url: boolean) => `([A-Za-z0-9_.~!*'()%+:@$,;=${url ? "" : " "}-]{1,1500})`;
+/** Words a `text` placeholder holds, decoded: plain, one line, bounded. */
+const TEXT_VALUE = /^[^\p{Cc}\p{Cf}]{1,500}$/u;
+const textOf = (raw: string): string | undefined => {
+	try {
+		return decodeURIComponent(raw.replaceAll("+", " "));
+	} catch {
+		return undefined;
+	}
+};
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const TOOL = /^[A-Za-z0-9_.-]{1,64}$/;
 const PATH = /^[A-Za-z0-9_+-]{1,64}(?:\.[A-Za-z0-9_+-]{1,64}){0,7}$/;
 const WORDS = /^[A-Za-z][A-Za-z ]{0,39}$/;
 const PLURAL = /^[a-z][a-z ]{0,39}$/;
-const FIELDS = ["card", "name", "plural", "place", "urls", "ids", "normalize", "reads", "fields", "writes", "creates"];
+const FIELDS = [
+	"card",
+	"name",
+	"plural",
+	"place",
+	"urls",
+	"ids",
+	"normalize",
+	"reads",
+	"fields",
+	"writes",
+	"creates",
+	"follow",
+];
 /** What a write that makes an object says, each placeholder read as one letter: "Create an issue on x/x". */
 const CREATED = /^[A-Za-z][A-Za-z0-9 /#.:-]{0,79}$/;
 const plain = (value: unknown): value is { [key: string]: unknown } =>
@@ -135,17 +179,24 @@ const reserved = (key: string) => ["__proto__", "prototype", "constructor"].incl
 const placeholders = (template: string) => [...template.matchAll(PLACEHOLDER)].map((m) => m[1] as string);
 const escapePattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
-/** A template as a pattern: its placeholders captured, in order. */
-function patternOf(template: string, url: boolean): RegExp {
+/**
+ * What may follow a URL template and still name its object: a tab (one more part of the path), then a query or a
+ * fragment. A deeper path opens something inside the object, so `https://github.com/{owner}/{repo}` never takes a
+ * pull request's URL, whatever order the kinds are declared in.
+ */
+export const TAB = "(?:/[^/?#\\s]+)?/?(?:[?#][^\\s]*)?";
+
+/** A template as a pattern: its placeholders captured, in order; a `text` one as words percent-encoded. */
+function patternOf(template: string, url: boolean, normalize?: ObjectKind["normalize"]): RegExp {
 	let source = "";
 	let last = 0;
 	const literal = (text: string) => escapePattern(text).replaceAll("\\*", "[A-Za-z0-9_.%=-]{1,500}");
 	for (const match of template.matchAll(PLACEHOLDER)) {
-		source += literal(template.slice(last, match.index)) + VALUE;
+		source += literal(template.slice(last, match.index)) + (normalize?.[match[1] ?? ""] === "text" ? TEXT(url) : VALUE);
 		last = (match.index ?? 0) + match[0].length;
 	}
 	source += literal(template.slice(last));
-	return new RegExp(url ? `^${source}(?:[/?#][^\\s]*)?$` : `^${source}$`);
+	return new RegExp(url ? `^${source}${TAB}$` : `^${source}$`);
 }
 
 /** Whether the read `read` only reads, as the file says: a tool in its `reads`, or matching one of its rules. */
@@ -218,17 +269,26 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 				errors.push(`${where}: "${shape}" names other placeholders than "${shapes[0]}"`);
 			if (/\}\{/.test(shape)) errors.push(`${where}: "${shape}" puts two placeholders together`);
 		}
-		const normalize: { [placeholder: string]: "lowercase" | "integer" } = {};
+		const normalize: { [placeholder: string]: Normalize } = {};
 		if (given.normalize !== undefined) {
 			if (typeof given.normalize !== "object" || given.normalize === null || Array.isArray(given.normalize))
-				errors.push(`${where}.normalize maps placeholders to lowercase or integer`);
+				errors.push(`${where}.normalize maps placeholders to lowercase, integer or text`);
 			else
 				for (const [placeholder, rule] of Object.entries(given.normalize)) {
-					if (!named.has(placeholder) || reserved(placeholder) || (rule !== "lowercase" && rule !== "integer"))
-						errors.push(`${where}.normalize.${placeholder} must name a placeholder and use lowercase or integer`);
+					if (
+						!named.has(placeholder) ||
+						reserved(placeholder) ||
+						(rule !== "lowercase" && rule !== "integer" && rule !== "text")
+					)
+						errors.push(`${where}.normalize.${placeholder} must name a placeholder and use lowercase, integer or text`);
 					else normalize[placeholder] = rule;
 				}
 		}
+		// words take any character but a separator: only a template's end tells where they stop
+		for (const shape of shapes)
+			for (const [placeholder, rule] of Object.entries(normalize))
+				if (rule === "text" && !shape.endsWith(`{${placeholder}}`))
+					errors.push(`${where}: "${shape}" must end with {${placeholder}}, which is words`);
 		const name = given.name;
 		if (typeof name !== "string" || name.length > 100 || placeholders(name).some((each) => !named.has(each)))
 			errors.push(`${where}.name is how the owner reads its name, from its placeholders`);
@@ -266,8 +326,11 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 				const tool = (read as { tool?: unknown } | null)?.tool;
 				const args = (read as { args?: unknown } | null)?.args ?? {};
 				const optional = (read as { optional?: unknown } | null)?.optional;
+				const follow = (read as { follow?: unknown } | null)?.follow;
 				if (optional !== undefined && typeof optional !== "boolean")
 					errors.push(`${where}.reads.${as}.optional is a boolean`);
+				if (follow !== undefined && typeof follow !== "boolean")
+					errors.push(`${where}.reads.${as}.follow is a boolean`);
 				if (
 					!NAME.test(as) ||
 					reserved(as) ||
@@ -282,13 +345,18 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 				}
 				if (Object.keys(args).length > 20) errors.push(`${where}.reads.${as}: at most 20 arguments`);
 				for (const [arg, each] of Object.entries(args)) {
+					// a list of words, such as the fields a list read asks for, so a page of it stays small
+					const words =
+						Array.isArray(each) &&
+						each.length <= 32 &&
+						each.every((word) => typeof word === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(word));
 					if (
 						reserved(arg) ||
 						!/^[A-Za-z0-9_]{1,64}$/.test(arg) ||
-						(each !== null && !["string", "number", "boolean"].includes(typeof each)) ||
+						(each !== null && !words && !["string", "number", "boolean"].includes(typeof each)) ||
 						(typeof each === "string" && each.length > 500)
 					)
-						errors.push(`${where}.reads.${as}: arguments are bounded scalar values`);
+						errors.push(`${where}.reads.${as}: arguments are bounded scalar values or lists of words`);
 					if (typeof each === "string")
 						for (const used of placeholders(each))
 							if (!named.has(used))
@@ -300,6 +368,7 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					tool,
 					args: args as { [arg: string]: JsonValue },
 					...(optional === true ? { optional: true } : {}),
+					...(follow === true ? { follow: true } : {}),
 				};
 			}
 		const fields: { [field: string]: string } = {};
@@ -448,6 +517,14 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					...(c.text === undefined ? {} : { text: c.text as string }),
 				});
 			}
+		let follow: Follow | undefined;
+		if (given.follow !== undefined) {
+			const parsed = parseFollow(given.follow, where);
+			if ("errors" in parsed) errors.push(...parsed.errors);
+			else follow = parsed.follow;
+		}
+		if (follow === undefined && Object.values(reads).some((read) => read.follow === true))
+			errors.push(`${where}: a read made only when followed needs a "follow"`);
 		objects[kind] = {
 			card: card as CardKind,
 			name: typeof name === "string" ? name : kind,
@@ -460,6 +537,7 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 			fields,
 			...(writes.length === 0 ? {} : { writes }),
 			...(creates.length === 0 ? {} : { creates }),
+			...(follow === undefined ? {} : { follow }),
 		};
 	}
 	return errors.length > 0 ? { errors } : { objects };
@@ -471,11 +549,18 @@ export function refKey(ref: ObjectRef, kinds: ObjectKinds): string {
 	const shape = kind?.ids[0] ?? kind?.urls[0] ?? "";
 	const values = normalizeValues(ref.values, kind?.normalize);
 	if (values === undefined) throw new Error("Invalid object identity");
-	return `${ref.connection}:${ref.kind}:${fill(shape, values)}`;
+	return `${ref.connection}:${ref.kind}:${fill(shape, values, kind?.normalize)}`;
 }
 
-const fill = (template: string, values: { readonly [placeholder: string]: string }) =>
-	template.replace(PLACEHOLDER, (_, name: string) => values[name] ?? "");
+/** A template filled; in a URL or id (`normalize` given), words are percent-encoded. */
+const fill = (
+	template: string,
+	values: { readonly [placeholder: string]: string },
+	normalize?: ObjectKind["normalize"],
+) =>
+	template.replace(PLACEHOLDER, (_, name: string) =>
+		normalize?.[name] === "text" ? encodeURIComponent(values[name] ?? "") : (values[name] ?? ""),
+	);
 
 /** How the owner reads an object's name: "purrgrammer/banda #34". */
 export const nameOf = (ref: ObjectRef, kinds: ObjectKinds) => fill(kinds[ref.kind]?.name ?? ref.kind, ref.values);
@@ -522,13 +607,15 @@ function matchOne(
 	// WHATWG parsing matches navigation semantics, including encoded dot segments and backslashes.
 	const input = url ? webUrl(text) : text;
 	if (input === undefined) return undefined;
-	const match = patternOf(template, url).exec(input);
+	const match = patternOf(template, url, kind.normalize).exec(input);
 	if (match === null) return undefined;
 	const names = placeholders(template);
 	const values: { [placeholder: string]: string } = {};
 	for (const [i, name] of names.entries()) {
 		const value = match[i + 1] ?? "";
-		values[name] = value;
+		const decoded = kind.normalize?.[name] === "text" ? textOf(value) : value;
+		if (decoded === undefined) return undefined;
+		values[name] = decoded;
 	}
 	return normalizeValues(values, kind.normalize);
 }
@@ -539,7 +626,14 @@ function normalizeValues(
 ): { [placeholder: string]: string } | undefined {
 	const normalized: { [placeholder: string]: string } = {};
 	for (const [name, value] of Object.entries(values)) {
-		if (!new RegExp(`^${VALUE}$`).test(value) || value.includes("..") || reserved(name)) return undefined;
+		if (reserved(name)) return undefined;
+		if (rules?.[name] === "text") {
+			const words = value.replace(/\s+/g, " ").trim();
+			if (!TEXT_VALUE.test(words)) return undefined;
+			normalized[name] = words;
+			continue;
+		}
+		if (!new RegExp(`^${VALUE}$`).test(value) || value.includes("..")) return undefined;
 		switch (rules?.[name]) {
 			case "integer":
 				if (!/^\d+$/.test(value) || /^0+$/.test(value)) return undefined;
@@ -564,7 +658,7 @@ export function readArgs(read: ObjectRead, ref: ObjectRef, schema: JsonObject | 
 	const args: JsonObject = {};
 	for (const [arg, value] of Object.entries(read.args)) {
 		if (typeof value !== "string") {
-			args[arg] = value;
+			args[arg] = Array.isArray(value) ? [...value] : (value as JsonValue);
 			continue;
 		}
 		const filled = fill(value, ref.values);
@@ -767,6 +861,44 @@ export type NotificationCard = {
 	readonly subject?: string;
 };
 
+/** A discussion: open, answered or closed, in its category, with how many comments when they were read. */
+export type DiscussionCard = {
+	readonly card: "discussion";
+	readonly repo: string;
+	readonly number: number;
+	readonly title: string;
+	readonly state: "open" | "answered" | "closed" | "unknown";
+	readonly category: string;
+	readonly comments: number | null;
+	readonly url?: string;
+};
+
+/** One pull request or issue as a repository's card names it: its number, title, author and state. */
+export type Opened = {
+	readonly number: number;
+	readonly title: string;
+	readonly author: string;
+	readonly state: "open" | "draft" | "merged" | "closed";
+};
+
+/** A repository: what is newest in it. */
+export type RepositoryCard = {
+	readonly card: "repository";
+	/** `owner/repo`. */
+	readonly repo: string;
+	/** The newest published release's tag, and when (ms). */
+	readonly release?: string;
+	readonly released?: number;
+	/** The default branch's head commit: its first line, its short sha, and when (ms). */
+	readonly commit?: string;
+	readonly sha?: string;
+	readonly committed?: number;
+	/** The newest pull request and issue. */
+	readonly pull?: Opened;
+	readonly issue?: Opened;
+	readonly url?: string;
+};
+
 export type EmailCard = {
 	readonly card: "email";
 	readonly from: string;
@@ -780,6 +912,31 @@ export type EmailCard = {
 	readonly unread: boolean;
 	readonly url?: string;
 };
+
+/** One email of a list, as a list says it. */
+export type MessageLine = {
+	readonly id: string;
+	readonly from: string;
+	readonly subject: string;
+	readonly date: string;
+};
+
+/** Emails together: a conversation's (titled by its subject) or a search's (titled by its query), the newest first. */
+export type MessagesCard = {
+	readonly card: "messages";
+	readonly title: string;
+	/** A search's: its title is the query. */
+	readonly search: boolean;
+	/** The newest few. */
+	readonly messages: MessageLine[];
+	/** How many there are in all, as the service says (a search's is its estimate). */
+	readonly total: number | null;
+	/** Where it opens in Gmail: the conversation by its id, or the search by its query. */
+	readonly url?: string;
+};
+
+/** How many emails a list's card shows. */
+export const MESSAGES_SHOWN = 5;
 
 /** A calendar event, every value scalar so the store's bounded JSON shape holds. */
 export type EventCard = {
@@ -838,7 +995,10 @@ export type ObjectCard =
 	| IssueCard
 	| CheckRunCard
 	| NotificationCard
+	| DiscussionCard
+	| RepositoryCard
 	| EmailCard
+	| MessagesCard
 	| EventCard
 	| ContactCard
 	| FileCard;
@@ -939,6 +1099,52 @@ function reviewWords(value: unknown): string {
 	return "None yet";
 }
 
+/**
+ * A list of emails as its card says it: titled by the `title` field (a conversation's subject) or, without one, by the
+ * kind's name (a search's query); the newest few by date first.
+ */
+function messagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: string) => unknown): MessagesCard {
+	const list = field("messages");
+	if (!Array.isArray(list)) throw new Error("Incomplete object");
+	const search = kind.fields.title === undefined;
+	const title = search ? plainLine(fill(kind.name, ref.values), 300) : plainLine(field("title"), 300);
+	const when = (date: string) => {
+		const ms = Date.parse(date);
+		return Number.isFinite(ms) ? ms : Number.NEGATIVE_INFINITY;
+	};
+	const messages = list
+		.flatMap((each): MessageLine[] => {
+			if (!plain(each) || typeof each.id !== "string" || each.id.length > 200) return [];
+			return [
+				{
+					id: each.id,
+					from: plainLine(each.from, 250),
+					subject: plainLine(each.subject, 300),
+					date: plainLine(each.date, 100),
+				},
+			];
+		})
+		.map((each, i) => ({ each, i }))
+		// newest first by date; one without a date keeps its place among those that have none
+		.sort((a, b) => when(b.each.date) - when(a.each.date) || (search ? a.i - b.i : b.i - a.i))
+		.slice(0, MESSAGES_SHOWN)
+		.map(({ each }) => each);
+	// Gmail opens a conversation by its id and a search by its query, both from the first account's mailbox
+	const url = webUrl(
+		search
+			? `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(ref.values.query ?? "")}`
+			: `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(ref.values.id ?? "")}`,
+	);
+	return {
+		card: "messages",
+		title: title || (search ? "Search" : "(No subject)"),
+		search,
+		messages,
+		total: count(field("total")),
+		...(url === undefined ? {} : { url }),
+	};
+}
+
 const REASONS: { readonly [reason: string]: Reason } = {
 	review_requested: "review-requested",
 	mention: "mention",
@@ -954,14 +1160,18 @@ const REASONS: { readonly [reason: string]: Reason } = {
  */
 export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as: string]: unknown }): ObjectCard {
 	const field = (name: string) => at(answers, kind.fields[name]);
+	if (kind.card === "messages") return messagesCard(kind, ref, field);
 	const titleField =
 		kind.card === "check-run" || kind.card === "contact" || kind.card === "file"
 			? "name"
 			: kind.card === "email"
 				? "subject"
 				: "title";
-	// a person may have no name: the card names them by address
-	if (typeof field(titleField) !== "string" || (kind.card !== "contact" && plainLine(field(titleField)) === ""))
+	// a person may have no name: the card names them by address; a repository is named by its ref
+	if (
+		kind.card !== "repository" &&
+		(typeof field(titleField) !== "string" || (kind.card !== "contact" && plainLine(field(titleField)) === ""))
+	)
 		throw new Error("Incomplete object");
 	const repo = plainLine(field("repo"), 100) || plainLine(`${ref.values.owner ?? ""}/${ref.values.repo ?? ""}`, 100);
 	const number = count(field("number")) || Number(ref.values.number ?? 0) || 0;
@@ -978,10 +1188,11 @@ export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as
 					(run as { status?: unknown } | null)?.status,
 					(run as { conclusion?: unknown } | null)?.conclusion,
 				);
+				// a skipped or neutral run counts for nothing, as GitHub counts it; a cancelled one did not pass
 				if (s === "passed") checks.passed++;
-				else if (s === "failed") checks.failed++;
+				else if (s === "failed" || s === "cancelled") checks.failed++;
 				else if (s === "running" || s === "queued") checks.running++;
-				else complete = false;
+				else if (s === "unknown") complete = false;
 			}
 			return {
 				card: "pull-request",
@@ -1072,6 +1283,74 @@ export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as
 				...(Number.isFinite(when) ? { at: when } : {}),
 				title: plainLine(field("title")),
 				...(subject === undefined || subject.length > 500 ? {} : { subject }),
+			};
+		}
+		case "discussion":
+			return {
+				card: "discussion",
+				repo,
+				number,
+				title: plainLine(field("title")),
+				state:
+					field("closed") === true
+						? "closed"
+						: field("answered") === true
+							? "answered"
+							: field("closed") === false
+								? "open"
+								: "unknown",
+				category: plainLine(field("category"), 60),
+				comments: count(field("comments")),
+				...withUrl,
+			};
+		case "repository": {
+			// its pull requests are the read every repository answers: without them it was not read
+			if (!Array.isArray(field("pulls"))) throw new Error("Incomplete object");
+			const newest = (list: unknown, ok: (item: { [key: string]: unknown }) => boolean = () => true) =>
+				(Array.isArray(list) ? list : []).find((item): item is { [key: string]: unknown } => plain(item) && ok(item));
+			const time = (value: unknown) => (typeof value === "string" ? Date.parse(value) : Number.NaN);
+			const opened = (item: { [key: string]: unknown } | undefined): Opened | undefined => {
+				const n = count(item?.number);
+				if (item === undefined || n === null || n === 0) return undefined;
+				const state = String(item.state ?? "").toLowerCase();
+				return {
+					number: n,
+					title: plainLine(item.title),
+					author: loginOf(item.user),
+					state:
+						item.merged === true || state === "merged"
+							? "merged"
+							: state === "closed"
+								? "closed"
+								: item.draft === true
+									? "draft"
+									: "open",
+				};
+			};
+			const release = newest(field("releases"), (each) => each.draft !== true && typeof each.tag_name === "string");
+			const head = newest(field("commits"));
+			const message = plainLine(
+				String((head?.commit as { message?: unknown } | undefined)?.message ?? "").split("\n")[0],
+				120,
+			);
+			const sha = typeof head?.sha === "string" && /^[0-9a-f]{7,64}$/.test(head.sha) ? head.sha.slice(0, 7) : "";
+			const by = head?.commit as { committer?: { date?: unknown }; author?: { date?: unknown } } | undefined;
+			const committed = time(by?.committer?.date ?? by?.author?.date);
+			const released = time(release?.published_at);
+			const pull = opened(newest(field("pulls")));
+			const issue = opened(newest(field("issues")));
+			const own = webUrl(`https://github.com/${ref.values.owner ?? ""}/${ref.values.repo ?? ""}`);
+			return {
+				card: "repository",
+				repo,
+				...(release === undefined ? {} : { release: plainLine(release.tag_name, 100) }),
+				...(Number.isFinite(released) ? { released } : {}),
+				...(message === "" ? {} : { commit: message }),
+				...(sha === "" ? {} : { sha }),
+				...(Number.isFinite(committed) ? { committed } : {}),
+				...(pull === undefined ? {} : { pull }),
+				...(issue === undefined ? {} : { issue }),
+				...(own === undefined ? {} : { url: own }),
 			};
 		}
 		case "email":

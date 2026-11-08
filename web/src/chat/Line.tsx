@@ -28,11 +28,16 @@ export function Line({
 	onClick?: (() => void) | undefined;
 	className?: string;
 }) {
+	// the icon leads the words and the time follows them in the same flow, so a long line wraps as a sentence and never
+	// leaves its icon or its time on a row of their own
 	const words = (
-		<>
-			{Icon === undefined ? null : <Icon aria-hidden="true" className="size-3.5 shrink-0" />}
-			<span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
-		</>
+		<span className="min-w-0 [overflow-wrap:anywhere]">
+			{Icon === undefined ? null : (
+				<Icon aria-hidden="true" className="mr-1.5 inline-block size-3.5 shrink-0 align-[-0.1875rem]" />
+			)}
+			{children}
+			{time === undefined ? null : <span className="ml-1.5 whitespace-nowrap text-meta text-ink-2">{time}</span>}
+		</span>
 	);
 	return (
 		<p
@@ -45,13 +50,24 @@ export function Line({
 			{onClick === undefined ? (
 				words
 			) : (
-				<button
-					type="button"
-					onClick={onClick}
-					className="inline-flex items-center gap-x-1.5 rounded-field px-1 hover:bg-paper-3 focus-visible:bg-paper-3"
+				// biome-ignore lint/a11y/useSemanticElements: the words may hold a link (a watch's object), which no button may
+				<span
+					role="button"
+					tabIndex={0}
+					onClick={(event) => {
+						// a link in the words goes where it says; the rest of the line opens what the line is about
+						if ((event.target as Element).closest("a") !== null) return;
+						onClick();
+					}}
+					onKeyDown={(event) => {
+						if (event.key !== "Enter" && event.key !== " ") return;
+						event.preventDefault();
+						onClick();
+					}}
+					className="min-w-0 cursor-pointer rounded-field px-1 text-center hover:bg-paper-3 focus-visible:bg-paper-3 focus-visible:outline-none"
 				>
 					{words}
-				</button>
+				</span>
 			)}
 			{action === undefined ? null : (
 				<>
@@ -67,7 +83,6 @@ export function Line({
 					</button>
 				</>
 			)}
-			{time === undefined ? null : <span className="text-meta text-ink-2">{time}</span>}
 		</p>
 	);
 }

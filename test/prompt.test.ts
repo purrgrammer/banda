@@ -98,6 +98,7 @@ describe("a chat's prompt", () => {
 				"search",
 				"skill",
 				"tool_search",
+				"watch",
 				"web_fetch",
 				"write",
 			]);

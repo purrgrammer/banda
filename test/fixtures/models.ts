@@ -23,9 +23,9 @@ export const SAY = "say ";
  * starting with `REACT`, the reaction `REACTION` alone, with `react`), then ends the run with the notes `sent: <what it sent>`. When
  * every one starts with `SAY`, it ends the run at once with `said: <its text>` for each in its notes, a line each; nudged
  * for that, it sends `re: <its text>` for each line, or, with none, the reaction alone. Each request passes the `model`
- * point.
+ * point, and waits for `gate` first when given, so a run can be held going.
  */
-export function echoModels(faults?: Faults, options?: RegisterFauxProviderOptions) {
+export function echoModels(faults?: Faults, options?: RegisterFauxProviderOptions, gate?: () => Promise<void>) {
 	const faux = fauxProvider(options);
 	const models = createModels();
 	models.setProvider(faux.provider);
@@ -67,7 +67,14 @@ export function echoModels(faults?: Faults, options?: RegisterFauxProviderOption
 		});
 		return fauxAssistantMessage(calls, { stopReason: "toolUse" });
 	};
-	faux.setResponses(Array.from({ length: 10_000 }, () => echo as never));
+	const answer =
+		gate === undefined
+			? echo
+			: async (context: Parameters<typeof echo>[0]) => {
+					await gate();
+					return echo(context);
+				};
+	faux.setResponses(Array.from({ length: 10_000 }, () => answer as never));
 	return { models, faux };
 }
 

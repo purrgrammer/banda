@@ -12,6 +12,7 @@ import { markForeign } from "./foreign.ts";
 export type Activity = {
 	at: number;
 	routine?: string;
+	watch?: string;
 	what: string;
 	chat?: number;
 	outside?: "read" | "sent";

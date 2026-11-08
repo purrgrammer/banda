@@ -143,11 +143,27 @@ export function remoteUrl(url: string): boolean {
 	}
 }
 
-/** Parse a connection file; every problem is reported, each saying what to write instead. */
-export function parseConnection(
-	name: string,
-	text: string,
-): { readonly connection: Connection } | { readonly errors: readonly string[] } {
+type ParsedConnection = { readonly connection: Connection } | { readonly errors: readonly string[] };
+
+/** The newest connection files parsed, by name and text: a file is parsed once per version, however often it is read. */
+const PARSED = new Map<string, ParsedConnection>();
+const PARSED_KEPT = 32;
+
+/**
+ * Parse a connection file; every problem is reported, each saying what to write instead. The same text parses to the
+ * same (shared, read-only) result: the accepted file is read at every object access, read and look.
+ */
+export function parseConnection(name: string, text: string): ParsedConnection {
+	const key = `${name}\n${text}`;
+	const known = PARSED.get(key);
+	if (known !== undefined) return known;
+	const parsed = parseConnectionText(name, text);
+	PARSED.set(key, parsed);
+	if (PARSED.size > PARSED_KEPT) PARSED.delete(PARSED.keys().next().value as string);
+	return parsed;
+}
+
+function parseConnectionText(name: string, text: string): ParsedConnection {
 	const errors: string[] = [];
 	if (!AGENT_NAME.test(name))
 		errors.push(`"${name}" is not a connection name: use lowercase letters, digits and dashes, such as "calendar"`);

@@ -153,6 +153,7 @@ import {
 	type Setting,
 } from "../core/tool-kinds.ts";
 import { liveWaits } from "../core/wait.ts";
+import { endWatches } from "../core/watches.ts";
 import { type AgentChanged, boxFiles, type Workspace, write } from "./agents.ts";
 import type {
 	AccountView,
@@ -1394,12 +1395,17 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	/**
 	 * In `tx`: the accounts `keys` of connection `name` signed out: gone from the store, switched off for every agent,
-	 * and every permission bound to one of them taken back. The agents that had one, whose chats are told.
+	 * every permission bound to one of them taken back, and every watch looking with one of them ended. The agents that
+	 * had one, whose chats are told.
 	 */
 	async function endAccounts(tx: Tx, name: string, keys: readonly string[], why: string): Promise<void> {
 		const doc = await tx.doc(Connected);
 		doc.epoch++;
 		const affected = new Set<string>();
+		// every account of it going ends every watch on it, those not resolved to an account yet among them
+		if (keys.length === Object.keys(doc.accounts?.[name] ?? {}).length)
+			await endWatches(tx, { connection: name }, why, now());
+		else for (const key of keys) await endWatches(tx, { connection: name, account: key }, why, now());
 		for (const key of keys) {
 			delete doc.accounts?.[name]?.[key];
 			// what was read as it goes with it: no card is drawn from a sign-in that is gone
@@ -2055,6 +2061,13 @@ export function openCapabilities(options: CapabilityOptions) {
 			if (connection === undefined || signsIn(connection)) return "this connection needs an account";
 			const allowed = doc.public[name] ?? [];
 			doc.public[name] = on ? [...new Set([...allowed, agent])].sort() : allowed.filter((value) => value !== agent);
+			if (!on)
+				await endWatches(
+					tx,
+					{ connection: name, agent },
+					`${connection.service} was switched off for ${await agentWords(tx, agent)}`,
+					now(),
+				);
 			await log(tx, {
 				at: now(),
 				what: `You ${on ? "let" : "stopped"} ${await agentWords(tx, agent)} ${on ? "use" : "using"} ${connection.service}`,
@@ -2075,6 +2088,13 @@ export function openCapabilities(options: CapabilityOptions) {
 		if (Object.keys(mine).length === 0) delete doc.on[agent];
 		const connection = await acceptedConnection(tx, name);
 		const who = await agentWords(tx, agent);
+		if (!on)
+			await endWatches(
+				tx,
+				{ connection: name, account, agent },
+				`${connection?.service ?? name} as ${accountLabel(known.id)} was switched off for ${who}`,
+				now(),
+			);
 		await log(tx, {
 			at: now(),
 			what: `You ${on ? "let" : "stopped"} ${who} ${on ? "use" : "using"} ${connection?.service ?? name} as ${accountLabel(known.id)}`,
@@ -2634,9 +2654,9 @@ export function openCapabilities(options: CapabilityOptions) {
 	 * At start: each connection the home added from what banda ships, and nobody but banda changed since (as the
 	 * store says, `Accepted.shipped`: one it says nothing of is the owner's), follows banda's version: the shipped file
 	 * (the scopes an account signed in with are the account's, not the file's), written into the workspace (or back into
-	 * it, if the box lost it) and allowed at once. Everything else the owner chose is kept by its name. One the box
-	 * changed and nobody accepted yet is left for the owner. A kill once the file is written finds it written next
-	 * time, and allows it.
+	 * it, if the box lost it) and allowed at once. Everything else the owner chose is kept by its name (the owner updates
+	 * it with `updateShipped`). One the box changed and nobody accepted yet is left for the owner. A kill once the file
+	 * is written finds it written next time, and allows it.
 	 */
 	async function followShipped(ctx: Context): Promise<void> {
 		const files = await shippedFiles();
@@ -2652,26 +2672,77 @@ export function openCapabilities(options: CapabilityOptions) {
 			const text = shipped.text;
 			const box = boxed.get(name) as { text: string } | { unreadable: string } | undefined;
 			if (box !== undefined && ("unreadable" in box || (box.text !== accepted && box.text !== text))) continue;
-			if (box?.text === text && text === accepted) continue;
 			try {
-				if (box?.text !== text) {
-					await write(workspace.env(), workspace, `${workspace.root}/${path}`, text, ctx);
-					fault("shipped:followed");
-				}
-				if (text !== accepted) await acceptConnection(name, shaOf(text), ctx, { shipped: "updated" });
+				await takeShipped(name, text, { box, accepted }, ctx, "shipped:followed");
 			} catch (error) {
 				say(`connections/${name}.md: banda's version was not taken up: ${(error as Error).message}`);
 			}
 		}
 	}
 
-	async function shippedView(present: ReadonlySet<string>, _ctx: Context): Promise<ShippedView[]> {
-		return [...(await shippedFiles())].map(([name, { connection }]) => ({
-			name,
-			connection: summaryOf(connection),
-			reads: connection.reads.length,
-			added: present.has(name),
-		}));
+	/**
+	 * The one way banda's version `text` of a connection reaches the workspace, whether banda follows it at start or
+	 * the owner asks for it: written unless the box holds it already (so a box that lost the file gets it again), then
+	 * allowed as banda's unless it is the accepted text already, so banda's next version is followed too.
+	 */
+	async function takeShipped(
+		name: string,
+		text: string,
+		state: { readonly box: { readonly text: string } | undefined; readonly accepted: string },
+		ctx: Context,
+		point: "shipped:followed" | "shipped:written",
+	): Promise<void> {
+		if (state.box?.text !== text) {
+			await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, text, ctx);
+			fault(point);
+		}
+		if (text !== state.accepted) await acceptConnection(name, shaOf(text), ctx, { shipped: "updated" });
+	}
+
+	async function shippedView(present: ReadonlySet<string>, ctx: Context): Promise<ShippedView[]> {
+		const accepted = (await harness.snapshot(Accepted, ctx))?.files ?? {};
+		return [...(await shippedFiles())].map(([name, { text, connection }]) => {
+			const file = accepted[connectionPath(name)];
+			const update = file === undefined ? undefined : shippedUpdate(name, text, file.text);
+			return {
+				name,
+				connection: summaryOf(connection),
+				reads: connection.reads.length,
+				added: present.has(name),
+				...(update === undefined || file === undefined ? {} : { update: file.sha }),
+			};
+		});
+	}
+
+	/**
+	 * The shipped file `shipped` as the accepted one `accepted` would become by updating, whole: each account's access
+	 * lives with the account, and an account fits a file whose scopes include what it asked. Undefined when the same.
+	 */
+	function shippedUpdate(_name: string, shipped: string, accepted: string): string | undefined {
+		return shipped === accepted ? undefined : shipped;
+	}
+
+	/**
+	 * The owner updates a connection banda ships to the version this banda ships (one banda follows by itself needs no
+	 * asking; this is for one the owner changed, or that a start has not followed yet): its file rewritten in the
+	 * workspace and allowed at once as banda's, as adding it was, its accounts kept. `sha` is the version in effect they
+	 * saw; refused when it changed since, or while the box holds a change of its own to the file waiting to be allowed;
+	 * a box that lost the file gets it again.
+	 */
+	async function updateShipped(name: string, sha: string, ctx: Context = context): Promise<void> {
+		const shipped = (await shippedFiles()).get(name);
+		if (shipped === undefined) throw new BadRequest(`banda ships no connection named ${name}`, 404);
+		const file = (await harness.snapshot(Accepted, ctx))?.files[connectionPath(name)];
+		if (file === undefined) throw new BadRequest(`there is no connection named ${name}`, 404);
+		if (file.sha !== sha) throw new BadRequest(`connections/${name}.md changed since you saw it: look again`, 409);
+		const box = (await boxedFiles("connections", ctx)).get(name) as
+			| { text: string }
+			| { unreadable: string }
+			| undefined;
+		// a box that lost the file is written again, as adding one writes it; a box that changed it waits on the owner
+		if (box !== undefined && ("unreadable" in box || box.text !== file.text))
+			throw new BadRequest("it proposes a change to this connection: allow or decline that first", 409);
+		await takeShipped(name, shipped.text, { box, accepted: file.text }, ctx, "shipped:written");
 	}
 
 	/**
@@ -3422,6 +3493,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		callback,
 		setKey,
 		addShipped,
+		updateShipped,
 		addByAddress,
 		addMcp,
 		refresh: connect,

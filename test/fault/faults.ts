@@ -30,6 +30,8 @@ export type FaultPoint =
 	/** The owner's change of when a routine runs, written into the box: before its bytes go, and once they are there. */
 	| "when:before"
 	| "when:after"
+	/** A watch's look: its reads made, before the commit that keeps the reading and the wake. */
+	| "watch:read"
 	/** A memory file written into the box: before its bytes go, and once they are there. */
 	| "memory:before"
 	| "memory:after"

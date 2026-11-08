@@ -1,5 +1,6 @@
 /** Words for token counts and costs in the raw transcript (DESIGN.md "The prompt"). */
 import type { Item, TurnUsage } from "../../../src/server/api.ts";
+import { startsRun } from "./feed.ts";
 
 /** A token count, short: 812, 12.3k, 1.2M. */
 export function tokens(n: number): string {
@@ -88,8 +89,8 @@ function add(a: TurnUsage, b: TurnUsage): TurnUsage {
 	};
 }
 
-/** Input that starts a turn or comes to one: the owner's words, a routine waking, what an agent told it. */
-const isInput = (item: Item) => item.role === "user" || item.role === "wake";
+/** Input that starts a turn or comes to one: the owner's words, a routine or a watch waking, what an agent told it. */
+const isInput = (item: Item) => startsRun(item);
 
 type Answer = Extract<Item, { role: "assistant" }>;
 

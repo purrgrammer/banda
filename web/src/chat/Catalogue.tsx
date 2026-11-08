@@ -23,7 +23,42 @@ export type Service = {
 	readonly stale?: readonly string[] | undefined;
 	/** Why the connection is not reached, in words. */
 	readonly problem?: string | undefined;
+	/** banda ships a newer version of it: update to it, keeping the owner's scopes and sign-ins; rejects with why. */
+	readonly onUpdate?: (() => Promise<unknown>) | undefined;
 };
+
+/** Updating a shipped connection: offered, under way, or refused with the daemon's words. */
+type Updating =
+	| { readonly state: "offered" }
+	| { readonly state: "updating" }
+	| { readonly state: "refused"; readonly why: string };
+
+/** The line on a tile that offers banda's newer version of the connection, with its button. */
+function UpdateOffer({ name, onUpdate }: { name: string; onUpdate: () => Promise<unknown> }) {
+	const [updating, setUpdating] = useState<Updating>({ state: "offered" });
+	return (
+		<span className="flex flex-wrap items-center gap-2 text-meta text-ink">
+			<span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-ink" />
+			<span className="min-w-0 flex-1">
+				{updating.state === "refused" ? updating.why : `banda has a newer ${name}: it can do more with your accounts.`}
+			</span>
+			<Button
+				variant="outline"
+				size="xs"
+				disabled={updating.state === "updating"}
+				onClick={() => {
+					setUpdating({ state: "updating" });
+					onUpdate().then(
+						() => setUpdating({ state: "offered" }),
+						(error: unknown) => setUpdating({ state: "refused", why: (error as Error).message }),
+					);
+				}}
+			>
+				{updating.state === "updating" ? "Updating…" : "Update"}
+			</Button>
+		</span>
+	);
+}
 
 export function Catalogue({
 	services,
@@ -80,6 +115,9 @@ export function Catalogue({
 								</span>
 							</span>
 						) : null}
+						{soon || service.onUpdate === undefined ? null : (
+							<UpdateOffer name={service.name} onUpdate={service.onUpdate} />
+						)}
 						{soon ? (
 							<span className="text-meta text-ink-2">Coming soon</span>
 						) : service.managed ? (

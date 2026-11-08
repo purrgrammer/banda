@@ -1,4 +1,5 @@
 /** Message refs are only names. Every displayed fact comes from the daemon's account-bound reading. */
+import { EyeIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -9,6 +10,7 @@ import { ObjectLoading, ObjectUnavailable } from "../chat/Loading.tsx";
 import {
 	CheckRunCard,
 	ContactCard,
+	DiscussionCard,
 	EmailCard,
 	EventCard,
 	eventWhen,
@@ -16,18 +18,83 @@ import {
 	fileModified,
 	fileType,
 	IssueCard,
+	MessagesCard,
 	NotificationCard,
 	ObjectLink,
 	ObjectMenu,
 	ObjectReference,
 	PullRequestCard,
+	RepositoryCard,
 } from "../chat/Object.tsx";
+import { Named } from "../chat/Watch.tsx";
 import { Markdown, MarkdownLinks } from "../components/Markdown.tsx";
 import { api, gmailAttachment } from "../lib/api.ts";
+import { sharedReads } from "../lib/object-reads.ts";
 import { githubKey, idLinks, idOfLink, objectAsks } from "../lib/objects.ts";
+import { type Shell, useShellPick } from "../lib/shell.ts";
 import { sizeOf } from "../lib/size.ts";
 import { ConnectFlowCard } from "./ConnectFlow.tsx";
 import { FilePart } from "./FilePart.tsx";
+import { watchActions } from "./watches.tsx";
+
+/** Read an object's card from the daemon, once for every line that names it. */
+const readObject = sharedReads((chat, reference, agent) =>
+	api<ObjectShown[]>("/objects", {
+		method: "POST",
+		body: JSON.stringify({ chat, asks: [{ ref: reference, ...(agent === undefined ? {} : { agent }) }] }),
+	}).then((shown) => shown[0]),
+);
+
+/** The name of agent `id`, as the band shows it; the agent whose card it is by its given name. */
+function whoFollows(id: string, agent: { readonly id: string; readonly name: string } | undefined): string {
+	if (agent?.id === id) return agent.name;
+	return id;
+}
+
+/**
+ * An object named inline, as the owner's own references are drawn: the service's mark, its state and its linked
+ * title, from the daemon's reading, read once for every line that names it (`readObject`) and again when a watch saw
+ * it change; `fallback` (its name) until then, or when it cannot be read.
+ */
+export function FollowedObject({
+	chat,
+	agent,
+	reference,
+	fallback,
+	strong = false,
+}: {
+	chat: number | undefined;
+	agent?: { readonly id: string; readonly name: string } | undefined;
+	/** The object: a link, or its canonical key as a card names it. */
+	reference: string;
+	fallback: string;
+	/** In a quiet line (a watch's), the object stands out: primary text, its title a link. */
+	strong?: boolean;
+}) {
+	const [shown, setShown] = useState<ObjectShown>();
+	const agentId = agent?.id;
+	const moved = useShellPick(watchesMoved);
+	useEffect(() => {
+		if (chat === undefined) return;
+		let gone = false;
+		void readObject(chat, reference, agentId, moved).then(
+			(next) => {
+				if (!gone) setShown(next);
+			},
+			() => {},
+		);
+		return () => {
+			gone = true;
+		};
+	}, [chat, reference, agentId, moved]);
+	const drawn =
+		shown?.shown === "card" && shown.card.card !== "notification" ? (
+			<ObjectLink object={shown.card} href={("url" in shown.card ? shown.card.url : undefined) ?? reference} />
+		) : (
+			<span data-object-inline="">{fallback}</span>
+		);
+	return strong ? <Named>{drawn}</Named> : drawn;
+}
 
 export function MessageObjects({
 	chat,
@@ -129,6 +196,38 @@ export function ObjectPreviews({
 	);
 }
 
+/** A number for each value the shell held, so a string can say which one a reader saw without spelling it out. */
+const generations = new WeakMap<object, number>();
+let generation = 0;
+const generationOf = (value: object | undefined) => {
+	if (value === undefined) return 0;
+	const known = generations.get(value);
+	if (known !== undefined) return known;
+	generation++;
+	generations.set(value, generation);
+	return generation;
+};
+
+/**
+ * What the watches have done, as one string: it changes when a followed object changed (the version of its reading,
+ * never a look that found it the same), and when a watch comes, goes, ends, pauses, fails, changes what ends it or
+ * what it follows, which its card says; and when the connections or the agents changed, since what a card may show
+ * depends on who may read it. The cards named on screen are read again when it changes, and only then.
+ */
+const watchesMoved = (shell: Shell) =>
+	JSON.stringify([
+		generationOf(shell.capabilities),
+		generationOf(shell.agents),
+		(shell.watches ?? []).map((watch) => [
+			watch.name,
+			watch.object?.ref,
+			watch.object?.version,
+			watch.accepted?.watch?.until,
+			watch.state,
+			watch.done?.at,
+		]),
+	]);
+
 function ReadObjects({
 	chat,
 	request,
@@ -172,6 +271,26 @@ function ReadObjects({
 			gone = true;
 		};
 	}, [chat, request]);
+	// a card of a kind that can be followed shows its newest reading and who follows it: a change a watch saw reads the
+	// kept reading again (from the daemon's store, not the service), so a card shown before never goes stale
+	const moved = useShellPick(watchesMoved);
+	const followable = shown?.some((one) => one.shown === "card" && one.follow !== undefined) === true;
+	const seenMoved = useRef(moved);
+	useEffect(() => {
+		if (seenMoved.current === moved) return;
+		seenMoved.current = moved;
+		if (!followable) return;
+		let gone = false;
+		api<ObjectShown[]>("/objects", { method: "POST", body: JSON.stringify({ chat, asks: JSON.parse(request) }) }).then(
+			(next) => {
+				if (!gone) setShown(next);
+			},
+			() => {},
+		);
+		return () => {
+			gone = true;
+		};
+	}, [moved, followable, chat, request]);
 	const refresh = async (indices?: readonly number[]) => {
 		if (busy !== undefined) return;
 		setBusy(indices?.[0] ?? "all");
@@ -444,12 +563,21 @@ function readingDetails(shown: Extract<ObjectShown, { shown: "card" }>): [string
 		if (subject.account !== shown.account || subject.connection !== shown.connection)
 			rows.push(["Subject read as", `${subject.account ?? "No account"} on ${subject.service}`]);
 	}
-	if (card.card === "pull-request" || card.card === "issue" || card.card === "check-run")
+	if (
+		card.card === "pull-request" ||
+		card.card === "issue" ||
+		card.card === "check-run" ||
+		card.card === "discussion" ||
+		card.card === "repository"
+	)
 		rows.push(["Repository", card.repo]);
+	if (card.card === "discussion") rows.push(["Title", card.title], ["Category", card.category]);
+	if (card.card === "repository") rows.push(["Latest release", card.release ?? ""], ["Head", card.sha ?? ""]);
 	if (card.card === "pull-request" || card.card === "issue") rows.push(["Title", card.title], ["Author", card.author]);
 	if (card.card === "pull-request") rows.push(["Branch", card.branch]);
 	if (card.card === "check-run") rows.push(["Check", card.name], ["Where", card.where ?? ""]);
 	if (card.card === "email") rows.push(["From", card.from], ["To", card.to], ["Subject", card.subject]);
+	if (card.card === "messages") rows.push([card.search ? "Search" : "Subject", card.title]);
 	if (card.card === "event")
 		rows.push(["When", eventWhen(card)], ["Location", card.location], ["Organizer", card.organizer]);
 	if (card.card === "contact") rows.push(["Name", card.name], ["Email", card.emails], ["Company", card.organization]);
@@ -458,15 +586,28 @@ function readingDetails(shown: Extract<ObjectShown, { shown: "card" }>): [string
 	return rows;
 }
 
-/** Age is display-only: one local wake at the boundary, never another service read. */
+/**
+ * Whether a card's reading is old: an hour and more since it was read. Age is display-only: one local timer at the
+ * boundary, never another service read. Never old while a watch looks at the object (one that is active, neither
+ * paused, done nor unable to look, while nothing is paused and the daemon is reached): the daemon keeps its reading
+ * current, and the card says "as of" only when nobody can look (DESIGN.md "Watches").
+ */
 function useOldReading(shown: Extract<ObjectShown, { shown: "card" }>) {
 	const [expiredAt, setExpiredAt] = useState<number>();
-	const old = shown.old || expiredAt === shown.at || Date.now() - shown.at > 3_600_000;
+	const looking =
+		useShellPick((shell) =>
+			!shell.offline &&
+			shell.control?.paused === undefined &&
+			(shell.watches ?? []).some((watch) => watch.state === "active" && watch.object?.ref === shown.key)
+				? "looking"
+				: "",
+		) === "looking";
+	const old = !looking && (shown.old || expiredAt === shown.at || Date.now() - shown.at > 3_600_000);
 	useEffect(() => {
-		if (shown.old || Date.now() - shown.at > 3_600_000) return;
+		if (looking || shown.old || Date.now() - shown.at > 3_600_000) return;
 		const timer = setTimeout(() => setExpiredAt(shown.at), shown.at + 3_600_001 - Date.now());
 		return () => clearTimeout(timer);
-	}, [shown.at, shown.old]);
+	}, [shown.at, shown.old, looking]);
 	return old;
 }
 
@@ -487,26 +628,68 @@ function ReadingCard({
 }) {
 	const old = useOldReading(shown);
 	const { card } = shown;
+	// Follow, when the kind can be followed and this agent does not yet; who follows it, when someone does
+	const followedBy = shown.follow?.by ?? [];
+	const mine = agent !== undefined && followedBy.some((each) => each.agent === agent.id);
+	const follow =
+		shown.follow === undefined || agent === undefined || mine
+			? undefined
+			: {
+					ends: shown.follow.ends,
+					onFollow: (until?: string) =>
+						void watchActions.follow({ agent: agent.id, object: shown.key, ...(until === undefined ? {} : { until }) }),
+				};
 	const actions = hideActions ? null : (
-		<ObjectMenu name={shown.name} details={readingDetails(shown)} onRefresh={onRefresh} busy={busy} />
+		<ObjectMenu name={shown.name} details={readingDetails(shown)} onRefresh={onRefresh} follow={follow} busy={busy} />
 	);
+	const following =
+		followedBy.length === 0 ? null : (
+			<p className="flex items-center gap-1.5 px-1 text-meta text-ink-2" data-following="">
+				<EyeIcon aria-hidden="true" className="size-3.5 shrink-0" />
+				Following
+				{followedBy.map(
+					(each) => ` · ${whoFollows(each.agent, agent)}${each.until === undefined ? "" : ` until ${each.until}`}`,
+				)}
+			</p>
+		);
 	const asOf = old
 		? new Date(shown.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
 		: undefined;
 	return (
 		<>
 			{card.card === "pull-request" ? (
-				<PullRequestCard pr={{ ...card, asOf }} actions={actions} />
+				<>
+					<PullRequestCard pr={{ ...card, asOf }} actions={actions} />
+					{following}
+				</>
 			) : card.card === "issue" ? (
-				<IssueCard issue={{ ...card, asOf }} actions={actions} />
+				<>
+					<IssueCard issue={{ ...card, asOf }} actions={actions} />
+					{following}
+				</>
 			) : card.card === "check-run" ? (
 				<CheckRunCard run={{ ...card, asOf }} actions={actions} />
+			) : card.card === "discussion" ? (
+				<>
+					<DiscussionCard discussion={{ ...card, asOf }} actions={actions} />
+					{following}
+				</>
+			) : card.card === "repository" ? (
+				<>
+					<RepositoryCard repository={{ ...card, asOf }} actions={actions} />
+					{following}
+				</>
 			) : card.card === "email" ? (
 				<EmailCard
 					message={{ ...card, ...(asOf === undefined ? {} : { asOf }) }}
 					actions={actions}
 					attachments={<EmailAttachments chat={chat} shown={shown} card={card} agent={agent} />}
 				/>
+			) : card.card === "messages" ? (
+				<>
+					<MessagesCard list={{ ...card, asOf }} actions={actions} />
+					{following}
+				</>
 			) : card.card === "event" ? (
 				<EventCard event={{ ...card, asOf }} actions={actions} />
 			) : card.card === "contact" ? (

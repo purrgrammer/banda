@@ -16,12 +16,13 @@ import { Band, BandNotice } from "../chat/Band.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
 import { Face, FaceStack } from "../chat/Face.tsx";
 import { MemorySettings, type NewFactSpec } from "../chat/MemorySettings.tsx";
-import { AgentPanel, firstTab, Panel, Routines } from "../chat/Panel.tsx";
+import { AgentPanel, firstTab, Panel, Routines, Watching } from "../chat/Panel.tsx";
 import { AppSettings, Archive, Personality, SettingsPage, ThinkingTiers } from "../chat/Settings.tsx";
 import { SkillCatalogue } from "../chat/Skill.tsx";
-import { actOnFact, setPaused, signOutAccount, signOutSite } from "../lib/api.ts";
+import { actOnFact, setPaused, signOutAccount, signOutSite, updateConnection } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { agentMainOf } from "../lib/chats.ts";
+import { useMidnight } from "../lib/midnight.ts";
 import { type ArchivedAgent, archivedAgents, chatAgents } from "../lib/navigation.ts";
 import { usePhone } from "../lib/phone.ts";
 import { setTheme, useTheme } from "../lib/prefs.ts";
@@ -39,6 +40,7 @@ import { BrowserDialog } from "./LiveBrowser.tsx";
 import { McpSetup } from "./McpSetup.tsx";
 import { NewSheet } from "./NewSheet.tsx";
 import { useAskNotifications, useNotify } from "./notify.ts";
+import { FollowedObject } from "./Objects.tsx";
 import { Onboarding, SkillsOnboarding, useShippedSkills } from "./Onboarding.tsx";
 import { ownerEdits } from "./owner-edits.ts";
 import { EditRoutine, routineRows } from "./routines.tsx";
@@ -48,6 +50,7 @@ import { SettingsProviders } from "./SettingsProviders.tsx";
 import { ShortcutsDialog, typing as typingIn } from "./Shortcuts.tsx";
 import { SkillsPage, useSkills, waitsOnOwner } from "./Skills.tsx";
 import { routineTitle } from "./titles.ts";
+import { WatchDetail, watchActions, watchRows } from "./watches.tsx";
 import { hrefOf, lastOf, parse, type Where } from "./where.ts";
 
 const LAST = "banda.last";
@@ -158,11 +161,13 @@ function Main() {
 	const [shortcuts, setShortcuts] = useState(false);
 	const [making, setMaking] = useState(false);
 	// the routine open in the panel's editor (none: a new one), and a routine's line asking for the agent's routines
-	const [editing, setEditing] = useState<{ agent: string; routine?: string }>();
+	const [editing, setEditing] = useState<{ agent: string; routine?: string; watch?: string }>();
 	const [focus, setFocus] = useState<{ agent: string; n: number }>();
-	// when the daemon last pushed the routines: their next runs are read then, so they never tick on their own
-	// biome-ignore lint/correctness/useExhaustiveDependencies: a push is what moves it
-	const pushedAt = useMemo(() => Date.now(), [shell.control]);
+	// when the daemon last pushed the routines or the watches, or the day turned: their next runs and looks are read
+	// then, so they never tick on their own
+	const day = useMidnight();
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a push, or the day turning, is what moves it
+	const pushedAt = useMemo(() => Date.now(), [shell.control, shell.watches, day]);
 	const companion: CompanionView = shell.companion ?? { face: DEFAULT_FACE };
 	const agents = useMemo(() => chatAgents(shell.agents, companion), [shell.agents, companion]);
 	// archived agents leave the band, but a group's history and Settings still name them
@@ -214,6 +219,7 @@ function Main() {
 			),
 		];
 	}, [shell.control?.routines, shell.agents]);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the day turning re-reads the rows' day words
 	const rows = useMemo(
 		() =>
 			bandRows(
@@ -226,7 +232,7 @@ function Main() {
 				archived,
 				shell.harnesses?.sessions,
 			),
-		[agents, shell.rows, shell.groups, shell.control?.paused, waiting, archived, shell.harnesses?.sessions],
+		[agents, shell.rows, shell.groups, shell.control?.paused, waiting, archived, shell.harnesses?.sessions, day],
 	);
 
 	// `#/` opens the last chat shown here, else the first agent's
@@ -389,18 +395,34 @@ function Main() {
 				/>
 			);
 			if (agent === undefined) return chat;
-			// an agent's routines wake in its chat; their times are read when the daemon last pushed them
+			// an agent's routines and watches wake in its chat; their times are read when the daemon last pushed them
 			const routines = routineRows(shell.control?.routines ?? [], where.id, pushedAt);
+			const watches = watchRows(shell.watches ?? [], where.id, pushedAt);
+			// a routine's editor and a watch's detail are opened from the Routines tab, and closing one goes back to it
+			const backToRoutines = () => {
+				setEditing(undefined);
+				setFocus((was) => ({ agent: where.id, n: (was?.agent === where.id ? was.n : 0) + 1 }));
+			};
+			const openWatch =
+				editing?.watch === undefined ? undefined : shell.watches?.find((each) => each.name === editing.watch);
 			const editor =
-				editing?.agent === where.id ? (
+				editing?.agent !== where.id ? undefined : openWatch !== undefined ? (
+					<WatchDetail
+						agent={{ id: where.id, name: who.name }}
+						chat={row?.chat}
+						watch={openWatch}
+						now={pushedAt}
+						onDone={backToRoutines}
+					/>
+				) : editing.watch !== undefined ? undefined : (
 					<EditRoutine
 						agent={where.id}
 						name={who.name}
 						routine={shell.control?.routines.find((each) => each.name === editing.routine)}
 						now={pushedAt}
-						onDone={() => setEditing(undefined)}
+						onDone={backToRoutines}
 					/>
-				) : undefined;
+				);
 			const agentFile = shell.agents.find((each) => each.accepted?.agent?.id === where.id)?.accepted;
 			const personality = where.id === "sancho" ? companion.personality : agentFile?.agent?.instructions;
 			const agentPanel = (
@@ -416,25 +438,46 @@ function Main() {
 							tab={(() => {
 								if (focus?.agent === where.id) return "routines";
 								const suggested = firstTab({
-									routines: routines.length,
+									routines: routines.length + watches.length,
 									connected: shell.capabilities === undefined || reachesSomething(shell.capabilities, where.id),
 								});
 								if (suggested === "access") onAccess.current.add(where.id);
 								return suggested === "about" && onAccess.current.has(where.id) ? "access" : suggested;
 							})()}
 							routines={
-								<Routines
-									agent={who.name}
-									routines={routines}
-									allPaused={shell.control?.paused !== undefined}
-									onAllPaused={(paused) => void setPaused(paused).then(showControl)}
-									onAdd={() => setEditing({ agent: where.id })}
-									onOpen={(id) => setEditing({ agent: where.id, routine: id })}
-									onRunNow={(id) => void actOnRoutine(id, { action: "run", key: clickKey() }).then(showControl)}
-									onPause={(id, paused) =>
-										void actOnRoutine(id, { action: paused ? "pause" : "resume" }).then(showControl)
-									}
-								/>
+								<>
+									<Routines
+										agent={who.name}
+										routines={routines}
+										allPaused={shell.control?.paused !== undefined}
+										watching={watches.length > 0}
+										onAllPaused={(paused) => void setPaused(paused).then(showControl)}
+										onAdd={() => setEditing({ agent: where.id })}
+										onOpen={(id) => setEditing({ agent: where.id, routine: id })}
+										onRunNow={(id) => void actOnRoutine(id, { action: "run", key: clickKey() }).then(showControl)}
+										onPause={(id, paused) =>
+											void actOnRoutine(id, { action: paused ? "pause" : "resume" }).then(showControl)
+										}
+									/>
+									<Watching
+										agent={who.name}
+										watches={watches}
+										allPaused={shell.control?.paused !== undefined}
+										inline={(key, name) => (
+											<FollowedObject
+												chat={row?.chat}
+												agent={{ id: where.id, name: who.name }}
+												reference={key}
+												fallback={name}
+											/>
+										)}
+										onOpen={(id) => setEditing({ agent: where.id, watch: id })}
+										onFollow={(link) => watchActions.follow({ agent: where.id, object: link })}
+										onCheck={(id) => void watchActions.check(id)}
+										onPause={(id, paused) => void watchActions.pause(id, paused)}
+										onRemove={(id) => void watchActions.remove(id)}
+									/>
+								</>
 							}
 							access={
 								<AccessTab
@@ -665,6 +708,10 @@ function Main() {
 					managed: view?.agents !== undefined,
 					stale: (view?.accounts ?? []).filter((account) => account.stale === true).map((account) => account.label),
 					problem: view?.state === "problem" ? (view.problem ?? "Not reached") : undefined,
+					onUpdate:
+						shipped?.update === undefined
+							? undefined
+							: () => updateConnection(name, shipped.update as string).then(showCapabilities),
 				};
 			});
 			return (

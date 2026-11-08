@@ -6,6 +6,11 @@ import { pbtRuns } from "../../../test/pbt.ts";
 import { objectAsks } from "./objects.ts";
 
 describe("message object names", () => {
+	it("takes a link to an object of a named kind, its words encoded, as an id", () => {
+		expect(
+			objectAsks("[the thread](gmail/thread/18c2f0a1) and [the boss](gmail/search/from%3Aboss+is%3Aunread)"),
+		).toEqual([{ ref: "gmail/thread/18c2f0a1" }, { ref: "gmail/search/from%3Aboss+is%3Aunread" }]);
+	});
 	it("keeps two jobs of one run distinct, but deduplicates a job's fragments", () => {
 		const one = "https://github.com/o/r/actions/runs/100/job/201";
 		const two = "https://github.com/o/r/actions/runs/100/job/202";

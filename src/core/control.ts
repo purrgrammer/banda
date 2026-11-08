@@ -12,6 +12,7 @@ import { agentWords, isArchived } from "./agents.ts";
 import { Control, RoutineRefused, Routines, routineAgent } from "./routines.ts";
 import { context } from "./store.ts";
 import { Routes, stop } from "./turn.ts";
+import { resumeWatches } from "./watches.ts";
 
 type Reconcile = (harness: Harness, ctx?: Context) => Promise<void>;
 
@@ -29,12 +30,16 @@ export async function pause(harness: Harness, reconcile: Reconcile, now: number,
 	for (const chat of homes) await stop(harness, Number(chat), ctx);
 }
 
-/** Resume: routines run again, each due time missed meanwhile as one wake. */
+/**
+ * Resume: routines run again, each due time missed meanwhile as one wake; watches look again, what changed meanwhile
+ * as one wake each, said to come from the pause.
+ */
 export async function resume(harness: Harness, reconcile: Reconcile, now: number, ctx: Context = context) {
 	await harness.commit(async (tx) => {
 		const control = await tx.doc(Control);
 		if (control.paused === undefined) return;
 		delete control.paused;
+		await resumeWatches(tx, now);
 		await log(tx, { at: now, what: "You resumed" });
 	}, ctx);
 	await reconcile(harness, ctx);
