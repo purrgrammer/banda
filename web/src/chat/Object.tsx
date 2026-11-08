@@ -861,7 +861,7 @@ export function SlackFileLine({
 	) : (
 		<button
 			type="button"
-			className="flex min-w-0 items-center gap-1.5 self-start text-left text-meta text-accent underline-offset-2 hover:underline disabled:opacity-60"
+			className="flex min-w-0 items-center gap-1.5 self-start text-left text-meta text-ink underline decoration-line underline-offset-2 hover:decoration-ink disabled:opacity-60"
 			disabled={busy}
 			onClick={open}
 			data-slack-file={file.id}
