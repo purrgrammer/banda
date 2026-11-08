@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Accepted } from "../src/core/agents.ts";
 import { Connected } from "../src/core/connections.ts";
 import { pause as pauseAll, resume as resumeAll } from "../src/core/control.ts";
+import { BUSY_EVERY, EVERY } from "../src/core/follow.ts";
 import { context } from "../src/core/store.ts";
 import { endWatches, parseWatch, Watches, watchPath, watchText } from "../src/core/watches.ts";
 import { pause } from "../src/server/watches.ts";
@@ -260,6 +261,31 @@ describe("a watch on a pull request", () => {
 		expect(watchInvariants(summary)).toEqual([]);
 		expect(summary.wakes.length).toBeLessThanOrEqual(3);
 		expect(summary.wakes[0]?.changes).toEqual(expect.arrayContaining(["ana approved", "lint failed"]));
+	}, 60_000);
+
+	it("busy cadence: it looks on its own every two minutes while checks run, and every half hour once they finish", async () => {
+		let busy: { looked?: number; next?: number } = {};
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: (step) =>
+				step < 2
+					? world(0)
+					: changed(0, (at) => {
+							Object.assign(at.get_check_runs.check_runs[1] ?? {}, { status: "completed", conclusion: "success" });
+						}),
+			clicks: [undefined, "k2"],
+			at: (step) => (step === 0 ? NOW : NOW + BUSY_EVERY),
+			act: async (step, { harness }) => {
+				if (step !== 1) return;
+				// the baseline saw checks running: the task's own next look is two minutes on, and the one after it too
+				const record = async () => (await harness.snapshot(Watches, context))?.watches["banda-142"];
+				while ((await record())?.looked !== NOW + BUSY_EVERY) await new Promise((resolve) => setTimeout(resolve, 5));
+				busy = (await record()) ?? {};
+			},
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(busy).toMatchObject({ looked: NOW + BUSY_EVERY, next: NOW + 2 * BUSY_EVERY });
+		expect(summary.wakes.map((wake) => wake.changes)).toEqual([["all checks green", "checks finished"]]);
+		expect(summary.record.next).toBe(NOW + BUSY_EVERY + EVERY);
 	}, 60_000);
 
 	it("a burst is one wake: what comes within the kind's settling time joins the first change's wake", async () => {
