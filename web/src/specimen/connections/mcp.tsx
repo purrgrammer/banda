@@ -267,10 +267,11 @@ function McpStage() {
 						setPhase(value as McpPhase);
 						setGeneration((old) => old + 1);
 					}}
+					className="max-w-full overflow-x-auto"
 				>
 					<TabsList aria-label="Phase">
 						{PHASES.map(([value, label]) => (
-							<TabsTrigger key={value} value={value}>
+							<TabsTrigger key={value} value={value} className="whitespace-nowrap">
 								{label}
 							</TabsTrigger>
 						))}
