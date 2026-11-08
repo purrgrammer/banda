@@ -20,6 +20,7 @@ import { boxEnv, boxTools } from "../../src/box/tools.ts";
 import { Accepted, shaOf } from "../../src/core/agents.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
 import { Connected } from "../../src/core/connections.ts";
+import { pause as pauseAll, resume as resumeAll } from "../../src/core/control.ts";
 import type { Json } from "../../src/core/follow.ts";
 import { type Gateway, OWNER } from "../../src/core/gateway.ts";
 import { Readings } from "../../src/core/objects.ts";
@@ -28,6 +29,7 @@ import { status } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore, Routes, type TurnResult } from "../../src/core/turn.ts";
 import {
+	endWatches,
 	Followed,
 	TELL,
 	TROUBLE,
@@ -39,6 +41,7 @@ import {
 	watchPath,
 } from "../../src/core/watches.ts";
 import { chats } from "../../src/server/transcript.ts";
+import { pause } from "../../src/server/watches.ts";
 import { githubObjectFile } from "../fixtures/github-objects.ts";
 import { hostBox } from "../fixtures/host-box.ts";
 import { echoModels, FAUX_MODEL } from "../fixtures/models.ts";
@@ -129,21 +132,24 @@ export type Scene = {
 	readonly now: number;
 };
 
+/** How a scenario differs from the pull request's life. */
+export type ScenarioOptions = {
+	readonly second?: boolean;
+	/** What GitHub answers at each step, and the owner's clicks, one per step; the pull request's life by default. */
+	readonly world?: (step: number) => World;
+	readonly clicks?: readonly (string | undefined)[];
+	/** The clock at each step; NOW throughout by default, so no task looks on its own after the baseline. */
+	readonly at?: (step: number) => number;
+	/** What the owner does at a step, after the world moved and before the clicks: done again after a kill. */
+	readonly act?: (step: number, scene: Scene) => Promise<void>;
+	/** Whether watch `name` is clicked at step `step`; every watch at every step by default. */
+	readonly only?: (name: string, step: number) => boolean;
+};
+
 export async function watchScenario(
 	home: string,
 	faults: Faults,
-	options: {
-		readonly second?: boolean;
-		/** What GitHub answers at each step, and the owner's clicks, one per step; the pull request's life by default. */
-		readonly world?: (step: number) => World;
-		readonly clicks?: readonly (string | undefined)[];
-		/** The clock at each step; NOW throughout by default, so no task looks on its own after the baseline. */
-		readonly at?: (step: number) => number;
-		/** What the owner does at a step, after the world moved and before the clicks: done again after a kill. */
-		readonly act?: (step: number, scene: Scene) => Promise<void>;
-		/** Whether watch `name` is clicked at step `step`; every watch at every step by default. */
-		readonly only?: (name: string, step: number) => boolean;
-	} = {},
+	options: ScenarioOptions = {},
 ): Promise<WatchSummary> {
 	const worldAt = options.world ?? world;
 	const clicks = options.clicks ?? CLICKS;
@@ -461,3 +467,93 @@ export function watchProblems(summary: WatchSummary): string[] {
 	say("nothing is parked", summary.parked.length === 0);
 	return errors;
 }
+
+/** The world as it stands at `step`, the pull request's life held at step 1 until step 3: it changed while held. */
+const heldWorld = (step: number) => world(step === 2 ? 1 : step);
+
+/** What must hold of a scenario that held the watch while the world changed: one wake, from the pause, that ends it. */
+function fromThePause(summary: WatchSummary): string[] {
+	const errors = watchInvariants(summary);
+	const say = (what: string, ok: boolean) => {
+		if (!ok) errors.push(what);
+	};
+	say(`one wake, got ${summary.wakes.length}`, summary.wakes.length === 1);
+	say("the wake says it comes from the pause", summary.wakes[0]?.resumed === true);
+	say("the wake ends it: merged", summary.wakes[0]?.ended === "merged");
+	say("nothing is left marked for a later wake", summary.record.resumed === undefined);
+	say("the watch is done: merged", summary.record.done?.why === "merged");
+	for (const turn of summary.turns) say("a run ended", turn?.status === "completed");
+	say("nothing is parked", summary.parked.length === 0);
+	return errors;
+}
+
+/**
+ * The scenarios the fault worker runs by name, each with what must hold of it however the process was killed: the
+ * pull request's life; the watch paused on its own, and with everything (Pause all), while the world changes, then
+ * resumed; and the account switched off for the agent at step 2, which ends the watch in that commit.
+ */
+export const SCENARIOS: {
+	readonly [name: string]: {
+		readonly options: ScenarioOptions;
+		readonly problems: (summary: WatchSummary) => string[];
+	};
+} = {
+	life: { options: {}, problems: watchProblems },
+	pause: {
+		options: {
+			world: heldWorld,
+			clicks: [undefined, undefined, "k3"],
+			act: async (step, { harness, core, now }) => {
+				const reconcile = (h: Harness) => core.reconcile(h);
+				if (step === 1) await pause(harness, reconcile, "banda-142", true, now);
+				if (step === 3) await pause(harness, reconcile, "banda-142", false, now);
+			},
+		},
+		problems: fromThePause,
+	},
+	"pause-all": {
+		options: {
+			world: heldWorld,
+			clicks: [undefined, undefined, "k3"],
+			act: async (step, { harness, core, now }) => {
+				const reconcile = (h: Harness) => core.reconcile(h);
+				if (step === 1) await pauseAll(harness, reconcile, now);
+				if (step === 3) await resumeAll(harness, reconcile, now);
+			},
+		},
+		problems: fromThePause,
+	},
+	"switch-off": {
+		options: {
+			act: async (step, { harness, now }) => {
+				if (step !== 2) return;
+				await harness.commit(async (tx) => {
+					const { on } = await tx.doc(Connected);
+					if (on.mara?.github === undefined) return;
+					delete on.mara.github;
+					await endWatches(
+						tx,
+						{ connection: "github", account: "bandarra", agent: "mara" },
+						"GitHub as @bandarra was switched off for Mara",
+						now,
+					);
+				}, context);
+			},
+		},
+		problems: (summary) => {
+			const errors = watchInvariants(summary);
+			const say = (what: string, ok: boolean) => {
+				if (!ok) errors.push(what);
+			};
+			say(
+				"one wake before the switch, none after",
+				JSON.stringify(summary.wakes.map((wake) => wake.ended ?? null)) === "[null]",
+			);
+			say("ended by authority, saying why", summary.record.done?.authority === true);
+			say("ended, it does not say it fails", summary.record.failed === undefined);
+			for (const turn of summary.turns) say("a run ended", turn?.status === "completed");
+			say("nothing is parked", summary.parked.length === 0);
+			return errors;
+		},
+	},
+};

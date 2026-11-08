@@ -10,6 +10,7 @@ import { pause } from "../src/server/watches.ts";
 import { Faults } from "./fault/faults.ts";
 import {
 	NOW,
+	SCENARIOS,
 	type Scene,
 	type World,
 	watchInvariants,
@@ -70,6 +71,15 @@ describe("a watch file", () => {
 });
 
 describe("a watch on a pull request", () => {
+	it.each(Object.keys(SCENARIOS))(
+		"the fault worker's scenario %s holds what it must, with no fault",
+		async (name) => {
+			const scenario = SCENARIOS[name] as (typeof SCENARIOS)[string];
+			expect(scenario.problems(await watchScenario(await tempHome(), new Faults(), scenario.options))).toEqual([]);
+		},
+		60_000,
+	);
+
 	it("looks once for its baseline, wakes its agent once per change in the kind's words, ignores its own and the same again, and ends when merged", async () => {
 		const summary = await watchScenario(await tempHome(), new Faults());
 		expect(watchProblems(summary)).toEqual([]);
