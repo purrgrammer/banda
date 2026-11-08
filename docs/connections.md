@@ -102,13 +102,15 @@ in a throwaway home, at desktop and phone width.
 - [x] "For this task" in an effect's result does not say the task ends with the owner's next message, so an agent
   still counted a task's permission after it ended
 - [ ] Agent trust, slice 3: the card offers the earned place after three clean approvals, a foreign-content chat
-  only that; the widest grain of a tool with no way back from Access only. Built, not yet walked in the app: the
+  only that; the widest grain of a tool with no way back from Access only. Built and covered by
+  test/approval-card.browser.test.ts at both widths; not walked in the app, which needs three real approved writes
+  on a disposable repository: the
   streak, the place's row and its permission; nothing yet marks a chat as having read foreign content, so that rule
   holds only for an ask that says so
 - [ ] A chat that read foreign content is told apart from one that did not: nothing sets the ask's `foreign` flag yet,
   so every chat is offered the task's scope (and an earned place) as if it read nothing foreign
-- [ ] Agent trust, slice 4: a connection's tools and groups set to Allow, Ask, Always ask or Off in Settings. Built,
-  not yet walked in the app: each remote connection's tools in their groups on its Connections page (and in an
+- [x] Agent trust, slice 4: a connection's tools and groups set to Allow, Ask, Always ask or Off in Settings. Walked
+  in a forked home at desktop width, after the review below: each remote connection's tools in their groups on its Connections page (and in an
   agent's Access), set at once for every agent; Ask on a read and Always ask on a write put it on the floor ("you
   asked to be asked every time"), Off is the tool's switch; a connection banda ships only narrows
 - [x] Classifying a new connection: spike first. scripts/spike-classify.ts runs the inference (Balanced, Sonnet 5.5)
@@ -117,8 +119,12 @@ in a throwaway home, at desktop and phone width.
   get_copilot_job_status and run_secret_scanning, both read-like by their words; GitHub annotates them, so the guess
   is never asked there), 0 of 213 reads guessed as writes. Groups need a first pass over the whole listing (at most
   8, then each tool sorted into one): one pass per chunk made 69 groups for Vercel's 200 tools
-- [ ] Classifying a new connection: the grouped review after sign-in, each tool's source, new tools marked in their
-  group. Built, not yet walked in the app: the review opens in Add MCP server once its tools are listed and sorted
+- [x] Classifying a new connection: the grouped review after sign-in, each tool's source, new tools marked in their
+  group. Walked in a forked home at both widths against test/fixtures/mcp-server.ts and the real Balanced model: its
+  unannotated send_payment came back "banda's guess · moves money" on Always ask, create_event a write that asks, in
+  three groups; Accept wrote list_events and whoami as reads and left the page on the same list. The walk found that
+  every connection's guess started at once and the ones refused as busy were kept as failed (fixed in 5e4c57ad).
+  Built: the review opens in Add MCP server once its tools are listed and sorted
   (Balanced tier, the spike's prompts), Accept writes its reads and groups and keeps each setting; a later tool is
   guessed alone and waits new and off. banda's shipped connections are grouped by name, not guessed
 - [ ] "Don't ask again today" ends at the browser's midnight; the daemon checks only that the end is within a week
