@@ -1,8 +1,9 @@
 /**
- * Slack: a thread, a channel, a direct message, a search and people as cards; authors from another team and bots; a post
- * and a reply as drafts on the floor; the access to choose before connecting; Slack named in the owner's words; and a
- * followed thread and channel: their watch rows (looking, behind while it reads a page a look, paused) and what Follow
- * on a channel says.
+ * Slack: a thread, a channel, a direct message, a search and people as cards; authors from another team and bots; a
+ * file in a message, opened through banda; a post and a reply as drafts on the floor, and a reaction as a draft a
+ * permission may cover; the access to choose before connecting; Slack named in the owner's words; and followed
+ * threads, channels, searches and people: their watch rows (looking, behind while it reads a page a look, busy, paused)
+ * and what Follow on a channel says.
  */
 import { useState } from "react";
 import { DraftApproval } from "../../app/DraftApproval.tsx";
@@ -60,6 +61,7 @@ export const SLACK_THREAD: Messages = {
 			date: at(10, 12),
 			text: "@ana can you check #deploys before we ship?",
 			avatar: FACE.bob,
+			files: [{ id: "F0LOG", name: "deploy-41-migrations.log", size: 2 * 1024 * 1024 + 300_000 }],
 		},
 		{ id: "1700000200.000300", from: "@ana", subject: "", date: at(9, 58), text: "Looks good to me", avatar: FACE.ana },
 		{
@@ -216,6 +218,40 @@ const DRAFTS: readonly (readonly [string, Draft, string, Messages])[] = [
 		"Post in #deploys",
 		CHANNEL,
 	],
+	[
+		"Draft: react to a message, Don't ask again offered",
+		{
+			type: "approval",
+			tool: "slack__add_reaction",
+			verb: "React",
+			as: AS,
+			on: { refs: ["slack:thread:slack/C0GENERAL/p1700000000.000100"], account: "@ana at Acme" },
+			args: {
+				channel: "C0GENERAL",
+				ts: "1700000300.000400",
+				name: "white_check_mark",
+				_channel_name: "general",
+				account: "@ana at Acme",
+			},
+			permission: {
+				match: { channel: "C0GENERAL", account: "@ana at Acme" },
+				what: "react to messages in #general as @ana at Acme",
+			},
+			scopes: [
+				{
+					scope: "task",
+					words: "React to messages in #general as @ana at Acme without asking until this task is done",
+				},
+				{ scope: "hour", words: "React to messages in #general as @ana at Acme without asking for the next hour" },
+				{
+					scope: "always",
+					words: "React to messages in #general as @ana at Acme without asking until you take it back",
+				},
+			],
+		},
+		"React :white_check_mark: to a message in #general",
+		SLACK_THREAD,
+	],
 ];
 
 /** Mara's Slack watches: a thread looking, a channel behind a burst, another paused. */
@@ -244,6 +280,31 @@ const SLACK_WATCHES: readonly WatchRowView[] = [
 		object: { ref: "deploys" },
 		saw: "Saw today 08:10: @deploybot [bot]: deploy 41 green",
 		paused: true,
+	},
+	{
+		id: "deploys-failed",
+		name: "from:@bob failed",
+		service: "Slack",
+		object: { ref: "search" },
+		next: "today 09:45",
+		saw: "Saw today 09:40: @bob in #deploys: deploy 42 failed: migrations timed out",
+	},
+	{
+		id: "bob",
+		name: "Bob Stone",
+		service: "Slack",
+		object: { ref: "person" },
+		next: "today 10:10",
+		saw: "Saw today 09:40: status: On call",
+	},
+	{
+		id: "general-busy",
+		name: "a channel in Slack",
+		service: "Slack",
+		object: { ref: "channel" },
+		next: "today 09:42",
+		saw: "Can't reach Slack since today 09:40: Slack is busy, back at 09:41",
+		failing: true,
 	},
 ];
 
@@ -290,7 +351,9 @@ export function SlackSection() {
 						agent="Mara"
 						watches={SLACK_WATCHES}
 						inline={(ref) => {
-							const list = ref === "thread" ? SLACK_THREAD : ref === "channel" ? GENERAL : CHANNEL;
+							if (ref === "person") return <ObjectLink object={{ ...BOB, card: "contact" }} href={BOB.url ?? ""} />;
+							const list =
+								ref === "thread" ? SLACK_THREAD : ref === "channel" ? GENERAL : ref === "search" ? SEARCH : CHANNEL;
 							return <ObjectLink object={{ ...list, card: "messages" }} href={list.url ?? ""} />;
 						}}
 					/>

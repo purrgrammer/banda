@@ -25,10 +25,12 @@ import {
 	ObjectReference,
 	PullRequestCard,
 	RepositoryCard,
+	type SlackFile,
+	SlackFileLine,
 } from "../chat/Object.tsx";
 import { Named } from "../chat/Watch.tsx";
 import { Markdown, MarkdownLinks } from "../components/Markdown.tsx";
-import { api, gmailAttachment } from "../lib/api.ts";
+import { api, gmailAttachment, objectAttachment } from "../lib/api.ts";
 import { sharedReads } from "../lib/object-reads.ts";
 import { githubKey, idLinks, idOfLink, objectAsks } from "../lib/objects.ts";
 import { type Shell, useShellPick } from "../lib/shell.ts";
@@ -564,6 +566,62 @@ function EmailAttachmentItem({
 	);
 }
 
+/**
+ * A file a Slack message in the card shares: the owner opens it and the daemon fetches it as the account the card was
+ * read as, into the chat's files, then shows it here; one over 10 MB says so and is not fetched.
+ */
+function SlackFileItem({
+	chat,
+	shown,
+	file,
+	agent,
+}: {
+	chat: number;
+	shown: Extract<ObjectShown, { shown: "card" }>;
+	file: SlackFile;
+	agent: { readonly id: string; readonly name: string } | undefined;
+}) {
+	const [opened, setOpened] = useState<{ sha: string; name: string }>();
+	const [busy, setBusy] = useState(false);
+	const [failure, setFailure] = useState<string>();
+	const oversized = file.size > 10 * 1024 * 1024;
+	const open = async () => {
+		if (busy || opened !== undefined) return;
+		setBusy(true);
+		setFailure(undefined);
+		try {
+			// the card's own id, what the daemon recognises it by: `slack/<channel>/p<ts>` or `slack/<channel>`
+			const saved = await objectAttachment(chat, shown.key.split(":").slice(2).join(":"), file.id, {
+				...(agent === undefined ? {} : { agent: agent.id }),
+				...(shown.accountKey === undefined ? {} : { account: shown.accountKey }),
+			});
+			setOpened({ sha: saved.sha, name: saved.name });
+		} catch (error) {
+			setFailure(error instanceof Error ? error.message : "Could not open this file.");
+		} finally {
+			setBusy(false);
+		}
+	};
+	return (
+		<span className="flex min-w-0 flex-col gap-1">
+			{oversized ? (
+				<span className="flex min-w-0 items-center gap-1.5 text-meta text-ink-2">
+					<SlackFileLine file={file} />
+					<span className="shrink-0">· over 10 MB, open it in Slack</span>
+				</span>
+			) : (
+				<SlackFileLine file={file} busy={busy} open={() => void open()} />
+			)}
+			{failure === undefined ? null : (
+				<span role="alert" className="text-meta text-danger">
+					{failure}
+				</span>
+			)}
+			{opened === undefined ? null : <FilePart chat={chat} file={{ kind: "blob", ...opened, image: false }} />}
+		</span>
+	);
+}
+
 function readingDetails(shown: Extract<ObjectShown, { shown: "card" }>): [string, string][] {
 	const subject = shown.subject?.shown === "card" ? shown.subject : undefined;
 	const card = subject?.card ?? shown.card;
@@ -717,7 +775,11 @@ function ReadingCard({
 				/>
 			) : card.card === "messages" ? (
 				<>
-					<MessagesCard list={{ ...card, asOf }} actions={actions} />
+					<MessagesCard
+						list={{ ...card, asOf }}
+						actions={actions}
+						file={(file) => <SlackFileItem chat={chat} shown={shown} file={file} agent={agent} />}
+					/>
 					{following}
 				</>
 			) : card.card === "event" ? (

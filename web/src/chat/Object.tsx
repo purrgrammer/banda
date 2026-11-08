@@ -28,6 +28,7 @@ import {
 	MailIcon,
 	MailsIcon,
 	MessagesSquareIcon,
+	PaperclipIcon,
 	PhoneIcon,
 	PresentationIcon,
 	SearchIcon,
@@ -738,6 +739,8 @@ export type Messages = {
 		readonly text?: string | undefined;
 		/** A Slack message's author's face. */
 		readonly avatar?: string | undefined;
+		/** The files a Slack message shares, by name and size. */
+		readonly files?: readonly SlackFile[] | undefined;
 	}[];
 	readonly total: number | null;
 	/** Where it opens: in Gmail, the conversation or the search; in Slack, the thread or the channel. */
@@ -831,12 +834,57 @@ function SlackChannelCard({ list, actions }: { list: Messages; actions?: ReactNo
 	);
 }
 
+/** A file a Slack message shares, as its row names it. */
+export type SlackFile = { readonly id: string; readonly name: string; readonly size: number };
+
+/** A file in a message row, by its name and size: what opens it, when the card may, is the caller's (`open`). */
+export function SlackFileLine({
+	file,
+	open,
+	busy = false,
+}: {
+	file: SlackFile;
+	open?: (() => void) | undefined;
+	busy?: boolean;
+}) {
+	const words = (
+		<>
+			<PaperclipIcon aria-hidden="true" className="size-3.5 shrink-0" />
+			<span className="min-w-0 truncate">{file.name}</span>
+			<span className="shrink-0 text-ink-2">{busy ? "Loading…" : sizeOf(file.size)}</span>
+		</>
+	);
+	return open === undefined ? (
+		<span className="flex min-w-0 items-center gap-1.5 text-meta text-ink" data-slack-file={file.id}>
+			{words}
+		</span>
+	) : (
+		<button
+			type="button"
+			className="flex min-w-0 items-center gap-1.5 self-start text-left text-meta text-accent underline-offset-2 hover:underline disabled:opacity-60"
+			disabled={busy}
+			onClick={open}
+			data-slack-file={file.id}
+		>
+			{words}
+		</button>
+	);
+}
+
 /**
  * Slack's messages together, read-only, laid out as the channel's and a Drive file's card are: Slack's mark, the
  * thread's first words (or the search's query) with where it is and how many messages beneath, then the newest few
  * messages, one line each, and Open in Slack. A thread's first message is its title, so the list leaves it out.
  */
-function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactNode }) {
+function SlackMessagesCard({
+	list,
+	actions,
+	file,
+}: {
+	list: Messages;
+	actions?: ReactNode;
+	file?: ((file: SlackFile) => ReactNode) | undefined;
+}) {
 	if (!list.search && list.place === "channel") return <SlackChannelCard list={list} actions={actions} />;
 	const url = slackUrl(list.url);
 	const rows = list.search ? list.messages : list.messages.filter((message) => message.text !== list.title);
@@ -889,6 +937,11 @@ function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactN
 								<span className="min-w-0 truncate text-body text-ink" title={message.text}>
 									{message.text || "(No text)"}
 								</span>
+								{(message.files ?? []).map((each) => (
+									<span key={each.id} className="flex min-w-0">
+										{file === undefined ? <SlackFileLine file={each} /> : file(each)}
+									</span>
+								))}
 							</span>
 						</li>
 					))}
@@ -912,8 +965,17 @@ function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactN
 }
 
 /** Emails together, read-only: a conversation under its subject, or a search under its query, the newest few first. */
-export function MessagesCard({ list, actions }: { list: Messages; actions?: ReactNode }) {
-	if (list.service === "slack") return <SlackMessagesCard list={list} actions={actions} />;
+export function MessagesCard({
+	list,
+	actions,
+	file,
+}: {
+	list: Messages;
+	actions?: ReactNode;
+	/** How a Slack message's file is drawn: one the owner may open through the daemon. */
+	file?: ((file: SlackFile) => ReactNode) | undefined;
+}) {
+	if (list.service === "slack") return <SlackMessagesCard list={list} actions={actions} file={file} />;
 	const Icon = list.search ? SearchIcon : MailsIcon;
 	const more = list.total === null ? 0 : list.total - list.messages.length;
 	return (

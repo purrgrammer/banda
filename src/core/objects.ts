@@ -880,7 +880,12 @@ export type MessageLine = {
 	readonly text?: string;
 	/** A Slack message's author's face, a `slack-edge.com` image. */
 	readonly avatar?: string;
+	/** The files a Slack message shares, by name and size: the owner opens one through the daemon. */
+	readonly files?: MessageFile[];
 };
+
+/** A file in a message, as its row names it. */
+export type MessageFile = { readonly id: string; readonly name: string; readonly size: number };
 
 /** Emails together: a conversation's (titled by its subject) or a search's (titled by its query), the newest first. */
 export type MessagesCard = {
@@ -1143,6 +1148,11 @@ function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: strin
 		.flatMap((each): MessageLine[] => {
 			if (!plain(each) || typeof each.ts !== "string" || !/^\d{9,11}\.\d{6}$/.test(each.ts)) return [];
 			const avatar = slackAvatar(each.avatar);
+			const files = (Array.isArray(each.files) ? each.files : []).flatMap((file): MessageFile[] =>
+				plain(file) && typeof file.id === "string" && /^F[A-Z0-9]{2,40}$/.test(file.id)
+					? [{ id: file.id, name: plainLine(file.name, 200) || file.id, size: count(file.size) ?? 0 }]
+					: [],
+			);
 			return [
 				{
 					id: each.ts,
@@ -1151,6 +1161,7 @@ function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: strin
 					date: plainLine(each.date, 40),
 					text: plainLine(each.text, 300),
 					...(avatar === undefined ? {} : { avatar }),
+					...(files.length === 0 ? {} : { files: files.slice(0, 10) }),
 				},
 			];
 		})

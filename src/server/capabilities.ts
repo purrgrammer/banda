@@ -123,6 +123,7 @@ import {
 } from "../core/objects.ts";
 import { agentOfChat, canonical, Permissions } from "../core/permissions.ts";
 import { REST_APIS, type RestApi } from "../core/rest.ts";
+import { slackFile } from "../core/slack-rest.ts";
 import { context } from "../core/store.ts";
 import {
 	type Classed,
@@ -2805,6 +2806,53 @@ export function openCapabilities(options: CapabilityOptions) {
 		}
 	}
 
+	/**
+	 * Fetch a file's bytes for the owner, as the account a Slack object it is shown in was read as, only while that
+	 * object's access holds: the bytes go to the chat's blobs, never to a box or a model.
+	 */
+	async function readSlackFile(
+		account: string,
+		fileId: string,
+		authority: { readonly chat: number; readonly ref: ObjectRef; readonly stamp: string },
+		ctx: Context = context,
+	): Promise<{ readonly bytes: Uint8Array; readonly name: string } | { readonly failed: string }> {
+		const found = await harness.commit(async (tx) => {
+			const access = await objectAccess(tx, authority.chat, authority.ref, account);
+			return access?.stamp === authority.stamp && access.connection.api === "slack"
+				? { connection: access.connection }
+				: undefined;
+		}, ctx);
+		if (found === undefined) return { failed: "This Slack message is not available as that account." };
+		const usedSecrets = new Set(await secrets(home));
+		try {
+			const check = async () => {
+				const access = await harness.commit((tx) => objectAccess(tx, authority.chat, authority.ref, account), ctx);
+				if (access?.stamp !== authority.stamp) throw new Error("Object access was taken back.");
+			};
+			const file = await withServer(
+				found.connection,
+				account,
+				ctx,
+				async (_client, bearer) => {
+					await check();
+					const got = await slackFile(bearer ?? "", fileId, ctx.abortSignal, fetcher);
+					await check();
+					return got;
+				},
+				check,
+				usedSecrets,
+			);
+			return { bytes: file.bytes, name: file.name };
+		} catch (error) {
+			return {
+				failed: scrub(error instanceof Error ? error.message : String(error), [
+					...usedSecrets,
+					...(await secrets(home)),
+				]).slice(0, 300),
+			};
+		}
+	}
+
 	/** The schema a connection's tool was listed with, for the file accepted now. */
 	const listedSchema = (name: string, tool: string, ctx: Context = context) =>
 		harness.commit(async (tx) => {
@@ -2845,6 +2893,7 @@ export function openCapabilities(options: CapabilityOptions) {
 	return {
 		readFor,
 		readAttachment,
+		readSlackFile,
 		listedSchema,
 		shipped,
 		carryListings,

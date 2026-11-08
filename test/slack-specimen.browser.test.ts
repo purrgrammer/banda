@@ -71,10 +71,22 @@ for (const width of [390, 1440])
 					"@here notes are final. @bob I'll look at #deploys after lunch.",
 					"Direct messages and search",
 					"Send messages as you",
+					"React as you",
+					"Read files you can see",
+					"React :white_check_mark: to a message in #general",
+					"deploy-41-migrations.log",
+					"2.3 MB",
+					"Slack is busy, back at 09:41",
 				])
 					expect(await text(words), words).toBe(true);
-				// a post is on the floor: no permission is offered on its card
-				expect(await text("Don't ask again")).toBe(false);
+				// a post is on the floor: no permission is offered on its card; a reaction's offers its channel for the task
+				expect(await text("in #deploys as @ana at Acme without asking")).toBe(false);
+				expect(await text("Reply in thread in #general as @ana at Acme without asking")).toBe(false);
+				expect(await text("React to messages in #general as @ana at Acme without asking until this task is done")).toBe(
+					true,
+				);
+				// a file in a message is named with its size
+				expect(await page.run(`${section}.querySelector('[data-slack-file="F0LOG"]') !== null`)).toBe(true);
 				expect(await page.run(`${section}.querySelector('[aria-label="Slack message"]') !== null`)).toBe(true);
 				// a link to a reply reads as the reply, in its author's and its words; a link to the thread's first message as
 				// the thread, led by who started it

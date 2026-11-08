@@ -30,6 +30,7 @@ import {
 	refKey,
 } from "../core/objects.ts";
 import { agentOfChat } from "../core/permissions.ts";
+import { MAX_SLACK_FILE_BYTES } from "../core/slack-rest.ts";
 import { context } from "../core/store.ts";
 import { parseWatch, Watches, watchAgent, watchPath } from "../core/watches.ts";
 import type { Capabilities } from "./capabilities.ts";
@@ -100,7 +101,7 @@ export function openObjects({
 }: {
 	harness: Harness;
 	capabilities: Pick<Capabilities, "readFor" | "listedSchema" | "shipped"> &
-		Partial<Pick<Capabilities, "readAttachment">>;
+		Partial<Pick<Capabilities, "readAttachment" | "readSlackFile">>;
 	blobs?: BlobStore;
 	now?: () => number;
 	fault?: (point: string) => void;
@@ -396,6 +397,10 @@ export function openObjects({
 	): Promise<Attachment | undefined> {
 		const connections = await known(ctx);
 		const refs = recognise(refText, connections);
+		const slack = refs.find(
+			(candidate) => candidate.connection === "slack" && (candidate.kind === "thread" || candidate.kind === "channel"),
+		);
+		if (slack !== undefined) return slackAttachment(chat, refText, slack, attachmentId, agent, account, ctx);
 		const ref = refs.find((candidate) => candidate.connection === "gmail" && candidate.kind === "email");
 		if (ref === undefined) return undefined;
 		const displayed = (
@@ -497,6 +502,69 @@ export function openObjects({
 			fault("object:attachment:kept");
 			if ((await harness.commit((tx) => objectAccess(tx, authorityChat, ref, accountKey), ctx))?.stamp !== access.stamp)
 				return undefined;
+			return file;
+		});
+	}
+
+	/**
+	 * A file a Slack message shares, which the card of its thread or channel shows the owner: fetched by the daemon as
+	 * the account the card was read as, kept as a blob the chat holds, never handed to a box.
+	 */
+	async function slackAttachment(
+		chat: number,
+		refText: string,
+		ref: ObjectRef,
+		fileId: string,
+		agent: string | undefined,
+		account: string | undefined,
+		ctx: Context,
+	): Promise<Attachment | undefined> {
+		const displayed = (
+			await show(
+				chat,
+				[{ refs: [refText], ...(agent === undefined ? {} : { agent }), ...(account === undefined ? {} : { account }) }],
+				false,
+				ctx,
+			)
+		)[0];
+		if (
+			displayed?.shown !== "card" ||
+			displayed.card.card !== "messages" ||
+			displayed.card.service !== "slack" ||
+			displayed.authorityChat === undefined ||
+			displayed.accountKey === undefined
+		)
+			return undefined;
+		const listed = displayed.card.messages.flatMap((message) => message.files ?? []).find((each) => each.id === fileId);
+		if (listed === undefined) return undefined;
+		if (blobs === undefined || capabilities.readSlackFile === undefined)
+			throw new BadRequest("Slack file storage is unavailable.", 503);
+		if (listed.size > MAX_SLACK_FILE_BYTES) throw new BadRequest(`${listed.name} is larger than 10 MB.`);
+		const authorityChat = displayed.authorityChat;
+		const accountKey = displayed.accountKey;
+		const access = await harness.commit((tx) => objectAccess(tx, authorityChat, ref, accountKey), ctx);
+		if (access === undefined) return undefined;
+		fault("object:attachment:read");
+		const fetched = await capabilities.readSlackFile(
+			accountKey,
+			fileId,
+			{ chat: authorityChat, ref, stamp: access.stamp },
+			ctx,
+		);
+		if ("failed" in fetched) throw new BadRequest(`Slack could not open that file: ${fetched.failed}`, 502);
+		fault("object:attachment:received");
+		const name = safeName(fetched.name || listed.name);
+		return blobs.exclusive(async () => {
+			const sha = await blobs.put(Buffer.from(fetched.bytes));
+			const file = { sha, name, mimeType: mimeOf(name), size: fetched.bytes.length };
+			fault("object:attachment:stored");
+			const kept = await harness.commit(async (tx) => {
+				if ((await objectAccess(tx, authorityChat, ref, accountKey))?.stamp !== access.stamp) return false;
+				await hold(tx, authorityChat, file, "connection", now(), { connection: "slack", account: accountKey });
+				return true;
+			}, ctx);
+			if (!kept) return undefined;
+			fault("object:attachment:kept");
 			return file;
 		});
 	}

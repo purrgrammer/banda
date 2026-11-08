@@ -178,7 +178,7 @@ export type Routes = {
 	 * as the account its agent uses, the connect card, or a plain link; `refresh`, the owner tapped one.
 	 */
 	readonly objects?: (chat: number, asks: readonly ObjectAsk[], refresh: boolean) => Promise<ObjectShown[]>;
-	/** Fetch an attachment named by an authorized Gmail object; bytes are stored as a held blob before publishing. */
+	/** Fetch an attachment or a file named by an authorized Gmail or Slack object; bytes are stored as a held blob first. */
 	readonly objectAttachment?: (
 		chat: number,
 		ref: string,
@@ -717,9 +717,9 @@ export function handler(
 			if (typeof chat !== "number" || !Number.isSafeInteger(chat) || chat <= 0)
 				throw new BadRequest("chat is a chat's number");
 			if (typeof ref !== "string" || ref.length === 0 || ref.length > 500)
-				throw new BadRequest("ref names a Gmail message");
+				throw new BadRequest("ref names a Gmail message or a Slack thread or channel");
 			if (typeof attachmentId !== "string" || attachmentId.length === 0 || attachmentId.length > 500)
-				throw new BadRequest("attachmentId names an attachment on that message");
+				throw new BadRequest("attachmentId names an attachment or a file on that message");
 			if (agent !== undefined && (typeof agent !== "string" || agent.length > 100))
 				throw new BadRequest("agent is a member's name");
 			if (account !== undefined && (typeof account !== "string" || account.length > 100))
@@ -731,9 +731,7 @@ export function handler(
 				agent as string | undefined,
 				account as string | undefined,
 			);
-			return file === undefined
-				? reply(res, 404, { error: "no such authorized Gmail attachment" })
-				: reply(res, 200, file);
+			return file === undefined ? reply(res, 404, { error: "no such authorized attachment" }) : reply(res, 200, file);
 		}
 		if (route === "GET /capabilities") return reply(res, 200, await routes.capabilities());
 		if (route === "POST /capabilities/mcp" && routes.addMcp !== undefined)
