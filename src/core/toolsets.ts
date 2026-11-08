@@ -28,12 +28,6 @@ export const TOOLSETS: { readonly [name: string]: readonly string[] } = {
 	],
 };
 
-/**
- * What an agent that runs commands may ask about what its proxy held: to send one request, or to be allowed hosts. In a
- * group, a member whose file names `bash` gets both with it, since its commands' writes are held whatever its file lists.
- */
-export const EGRESS_TOOLS = ["propose_send", "ask_hosts"] as const;
-
 /** How an agent speaks to the owner, in its own chats. */
 export const MESSAGE_USER = "message_user";
 /** How a group member speaks, in its room: in its chat for the group, in place of `message_user`. */
@@ -108,14 +102,10 @@ export const groupToolsName = (chat: number) => `${GROUP_TOOLS}:${chat}`;
 export const isGroupTools = (name: string) => name === GROUP_TOOLS || name.startsWith(`${GROUP_TOOLS}:`);
 
 /**
- * The base that holds in a direct chat only: a group member's chat gets these just if its file names them, since a group
- * grants no member more than its own file.
+ * The tools every agent chat gets, a group member's too: all of banda's own. Only a connection's tools stay outside, by
+ * account. What leaves the box is held whatever a chat may run: `requests` (`propose_send`, `ask_hosts`) is how the agent
+ * asks the owner about it, so being base, it widens nothing.
  */
-export const DIRECT_BASE: readonly string[] = ["files", "shell", "requests", "web", "browser"].flatMap(
-	(label) => TOOLSETS[label] ?? [],
-);
-
-/** The tools every direct agent chat gets: all of banda's own. Only a connection's tools stay outside, by account. */
 export const EVERY_AGENT: readonly string[] = [
 	MESSAGE_USER,
 	...OWNER_ACTS,

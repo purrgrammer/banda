@@ -16,10 +16,12 @@ import {
 	agentText,
 	ChatAgent,
 	ChatTier,
+	chatTools,
 	EVERY_AGENT,
 	LEAD_TEXT,
 	parseAgent,
 	shaOf,
+	TOOLSETS,
 	toolsOf,
 } from "../src/core/agents.ts";
 import { writeAvatarFace } from "../src/core/avatar-face.ts";
@@ -60,6 +62,43 @@ describe("agent files", () => {
 		});
 		if (!("agent" in listed)) throw new Error(listed.errors.join("; "));
 		expect(toolsOf(listed.agent, [])).toEqual([...EVERY_AGENT]);
+	});
+
+	it("a group member's chat has the same base as its own, speaking with message_group in place of message_user", () => {
+		const base = [
+			"read",
+			"write",
+			"edit",
+			"skill",
+			"bash",
+			"web_fetch",
+			"propose_send",
+			"ask_hosts",
+			...TOOLSETS.browser,
+			"schedule",
+			"remember",
+			"tool_search",
+			"search",
+		];
+		const group = chatTools({ id: "helper", tools: [] }, [], [], true) ?? [];
+		const direct = chatTools({ id: "helper", tools: [] }, [], [], false) ?? [];
+		for (const tool of base) expect(group, tool).toContain(tool);
+		expect(group).toContain("message_group");
+		expect(group).not.toContain("message_user");
+		expect(direct).toContain("message_user");
+		expect(direct).not.toContain("message_group");
+		// the meta tools and the face stay the agent's own chat's: the one difference besides how it speaks
+		const directOnly = [
+			"propose_avatar",
+			"message_agent",
+			"read_agent_chat",
+			"propose_agent",
+			"propose_group",
+			"propose_agent_change",
+		];
+		expect(new Set(direct.filter((tool) => !directOnly.includes(tool) && tool !== "message_user"))).toEqual(
+			new Set(group.filter((tool) => tool !== "message_group")),
+		);
 	});
 
 	it("takes lists both ways, quotes, a model, and keeps the body as instructions", () => {

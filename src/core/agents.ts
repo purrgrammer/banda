@@ -25,9 +25,7 @@ import { Companion, nameLine } from "./companion.ts";
 import { context } from "./store.ts";
 import { DEFAULT_TIER, isTier, modelFor, TIERS, type Tier } from "./tiers.ts";
 import {
-	DIRECT_BASE,
 	DIRECT_META_TOOLS,
-	EGRESS_TOOLS,
 	EVERY_AGENT,
 	GROUP_TOOLS,
 	groupToolsName,
@@ -354,14 +352,7 @@ function unquote(value: string): string {
  * those its file names (the lead: `all`), once each.
  */
 export function toolsOf(agent: Pick<Agent, "id" | "tools">, all: readonly string[]): string[] {
-	return [...new Set([...EVERY_AGENT, ...ownTools(agent, all)])];
-}
-
-/** The tools `agent`'s own file gives it, which is all a group chat grants of `DIRECT_BASE`. */
-function ownTools(agent: Pick<Agent, "id" | "tools">, all: readonly string[]): readonly string[] {
-	const named = agent.id === LEAD ? all : agent.tools;
-	// its commands' writes are held: an agent that runs them may ask about them
-	return agent.id !== LEAD && named.includes("bash") ? [...named, ...EGRESS_TOOLS] : named;
+	return [...new Set([...EVERY_AGENT, ...(agent.id === LEAD ? all : agent.tools)])];
 }
 
 /**
@@ -385,11 +376,9 @@ export function chatTools(
 					all.filter((tool) => !tool.includes("__") || connected.includes(tool)),
 				);
 	if (tools === undefined) return undefined;
-	const own = ownTools(agent, all ?? []);
+	// a group member's chat has the same base as its own, but the meta tools and the face
 	const inGroupChat = (tool: string) =>
-		tool !== PROPOSE_AVATAR &&
-		!DIRECT_META_TOOLS.includes(tool as (typeof DIRECT_META_TOOLS)[number]) &&
-		(!DIRECT_BASE.includes(tool) || own.includes(tool));
+		tool !== PROPOSE_AVATAR && !DIRECT_META_TOOLS.includes(tool as (typeof DIRECT_META_TOOLS)[number]);
 	// a group member speaks to its room, and nowhere else does an agent post to one
 	const speaking = tools.filter(
 		(tool) => tool !== MESSAGE_USER && tool !== MESSAGE_GROUP && (!group || inGroupChat(tool)),
