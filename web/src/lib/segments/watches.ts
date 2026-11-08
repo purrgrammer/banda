@@ -72,36 +72,45 @@ export function watchObject(segment: Pick<WatchCallSegment, "name" | "watch">): 
 	);
 }
 
-/** The line's words, by state, from the watch as it is. */
-export function watchCallWords(segment: Pick<WatchCallSegment, "state" | "name" | "watch" | "change" | "why">): string {
+/**
+ * The line's words, by state, from the watch as it is, as every feed item reads: who, what they did, what to.
+ * Without `who` (a search's text), the verb leads.
+ */
+export function watchCallWords(
+	segment: Pick<WatchCallSegment, "state" | "name" | "watch" | "change" | "why">,
+	who?: string,
+): string {
 	const { watch } = segment;
 	const what = watchObject(segment);
 	const changed = segment.change === "changed";
-	switch (segment.state) {
-		case "working":
-			return "Setting up a watch…";
-		case "stopped":
-			return "Didn't finish setting up a watch";
-		case "refused":
-			return segment.why === undefined ? "No watch set up" : `No watch set up: ${segment.why}`;
-		case "pending":
-			return watch?.change?.kind === "removed"
-				? `Stop following ${what}? Waiting for you`
-				: watch?.change?.kind === "changed"
-					? `Watch change: ${what} · waiting for you`
-					: `Follow ${what}? Waiting for you`;
-		case "declined":
-			return changed ? `Watch not changed: ${what}` : `Not following ${what}`;
-		case "removed":
-			return `Stopped following ${what}`;
-		default:
-			if (watch?.state === "done")
-				return `Done following ${what}${watch.done === undefined ? "" : `: ${watch.done.why}`}`;
-			if (watch?.state === "failing") return `Watch needs attention: ${what}`;
-			if (watch?.paused !== undefined) return `Watch paused: ${what}`;
-			if (changed) return `Watch changed: ${what}`;
-			return `Following ${what}`;
-	}
+	const said = (() => {
+		switch (segment.state) {
+			case "working":
+				return "is setting up a watch…";
+			case "stopped":
+				return "didn't finish setting up a watch";
+			case "refused":
+				return segment.why === undefined ? "couldn't follow it" : `couldn't follow it: ${segment.why}`;
+			case "pending":
+				return watch?.change?.kind === "removed"
+					? `wants to stop following ${what}`
+					: watch?.change?.kind === "changed"
+						? `wants to change how it follows ${what}`
+						: `wants to follow ${what}`;
+			case "declined":
+				return changed ? `didn't change how it follows ${what}` : `isn't following ${what}`;
+			case "removed":
+				return `stopped following ${what}`;
+			default:
+				if (watch?.state === "done")
+					return `finished following ${what}${watch.done === undefined ? "" : `: ${watch.done.why}`}`;
+				if (watch?.state === "failing") return `can't reach ${what}`;
+				if (watch?.paused !== undefined) return `paused following ${what}`;
+				if (changed) return `changed how it follows ${what}`;
+				return `followed ${what}`;
+		}
+	})();
+	return who === undefined ? said.replace(/^./, (first) => first.toUpperCase()) : `${who} ${said}`;
 }
 
 const TOOLS = new Set(["watch"]);

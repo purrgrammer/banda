@@ -41,18 +41,18 @@ describe("watches in the app", () => {
 			view(items, [], idle, { watches, ...(removed === undefined ? {} : { removed }) }).flatMap(shown);
 		expect(
 			line([{ agent: "mara", name: "banda-142", state: "allow", change: { kind: "added", sha: SHA, watch: summary } }]),
-		).toEqual(["Follow https://github.com/acme/banda/pull/142? Waiting for you"]);
+		).toEqual(["Wants to follow https://github.com/acme/banda/pull/142"]);
 		const accepted = { sha: SHA, watch: summary };
 		expect(line([{ agent: "mara", name: "banda-142", state: "active", accepted, object }])).toEqual([
-			"Following acme/banda #142",
+			"Followed acme/banda #142",
 		]);
 		expect(line([{ agent: "mara", name: "banda-142", state: "paused", accepted, object, paused: "owner" }])).toEqual([
-			"Watch paused: acme/banda #142",
+			"Paused following acme/banda #142",
 		]);
 		expect(
 			line([{ agent: "mara", name: "banda-142", state: "done", accepted, object, done: { at: NOW, why: "merged" } }]),
-		).toEqual(["Done following acme/banda #142: merged"]);
-		expect(line([])).toEqual(["Not following banda-142"]);
+		).toEqual(["Finished following acme/banda #142: merged"]);
+		expect(line([])).toEqual(["Isn't following banda-142"]);
 		expect(line([], { "watches/banda-142.md": NOW })).toEqual(["Stopped following banda-142"]);
 		expect(
 			view(
@@ -61,7 +61,7 @@ describe("watches in the app", () => {
 				idle,
 				{},
 			).flatMap(shown),
-		).toEqual(["No watch set up: no connection can follow that link"]);
+		).toEqual(["Couldn't follow it: no connection can follow that link"]);
 	});
 
 	it("a watch's change is a line in the chat, with the object beneath; the last says what ended it", () => {

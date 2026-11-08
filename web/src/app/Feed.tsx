@@ -329,7 +329,7 @@ function WatchLine({
 			/>
 		);
 	}
-	const words = watchCallWords(segment);
+	const words = watchCallWords(segment, who.name);
 	const at = what === "" ? -1 : words.indexOf(what);
 	return (
 		<Line
@@ -819,17 +819,23 @@ function partOf(
 			return (
 				<div className="flex w-full flex-col items-center gap-2">
 					<Line icon={segment.ended === undefined ? EyeIcon : EyeOffIcon} time={time(segment.at)} onClick={openWatch}>
-						<InlineObject
-							chat={chat}
-							agent={objectAgent}
-							reference={segment.object.ref}
-							fallback={segment.object.name}
-							strong
-						/>
-						{rest}
+						{who.name} saw
+						<span className="ml-1">
+							<InlineObject
+								chat={chat}
+								agent={objectAgent}
+								reference={segment.object.ref}
+								fallback={segment.object.name}
+								strong
+							/>
+						</span>
+						{rest.replace(/^ · /, ": ")}
 					</Line>
 					{objectAgent === undefined ? null : (
-						<ObjectPreviews chat={chat} asks={[{ ref: segment.object.ref }]} agent={objectAgent} />
+						// the wake's line already says who follows it: the card beneath is the object alone
+						<div className="flex w-full justify-center [&_[data-following]]:hidden">
+							<ObjectPreviews chat={chat} asks={[{ ref: segment.object.ref }]} agent={objectAgent} />
+						</div>
 					)}
 				</div>
 			);
