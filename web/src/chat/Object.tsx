@@ -788,36 +788,47 @@ function SlackChannelCard({ list, actions }: { list: Messages; actions?: ReactNo
 	);
 }
 
-/** Slack's messages together, read-only: a thread under its first words in its channel, or a search under its query. */
+/**
+ * Slack's messages together, read-only, laid out as the channel's and a Drive file's card are: Slack's mark, the
+ * thread's first words (or the search's query) with where it is and how many messages beneath, then the newest few
+ * messages, one line each, and Open in Slack. A thread's first message is its title, so the list leaves it out.
+ */
 function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactNode }) {
 	if (!list.search && list.place === "channel") return <SlackChannelCard list={list} actions={actions} />;
-	const Icon = slackListIcon(list);
-	const more = list.total === null ? 0 : list.total - list.messages.length;
 	const url = slackUrl(list.url);
-	const where = list.search ? "Messages matching" : `Thread${list.channel ? ` in ${list.channel}` : ""}`;
+	const rows = list.search ? list.messages : list.messages.filter((message) => message.text !== list.title);
+	const more = list.total === null ? 0 : Math.max(0, list.total - list.messages.length);
+	const facts = list.search
+		? [list.total === null ? "" : `About ${list.total} ${list.total === 1 ? "match" : "matches"}`]
+		: [
+				list.channel ? `Thread in ${list.channel}` : "Thread",
+				list.total === null ? "" : `${list.total} ${list.total === 1 ? "message" : "messages"}`,
+			];
 	return (
 		<Tile className="flex flex-col gap-2.5 p-3.5" data-slack-card={list.search ? "search" : (list.place ?? "thread")}>
-			<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-ink-2">
-				<SlackMark />
-				{Icon === undefined ? null : <Icon aria-hidden="true" className="size-3.5 shrink-0" />}
-				<span className="min-w-0 flex-1 truncate">{where}</span>
-				{list.asOf === undefined ? null : <span>as of {list.asOf}</span>}
-				<span className="ml-auto shrink-0">{actions}</span>
+			<div className="flex min-w-0 items-start gap-2.5">
+				<SlackMark className="mt-0.5 size-5" />
+				<div className="flex min-w-0 flex-1 flex-col gap-1">
+					<h3
+						className={cn(
+							"min-w-0 text-body font-semibold text-ink [overflow-wrap:anywhere]",
+							list.search ? "font-mono font-normal" : "line-clamp-2",
+						)}
+					>
+						{list.title}
+					</h3>
+					<span className="text-meta text-ink-2 [overflow-wrap:anywhere]">
+						{facts.filter((each) => each !== "").join(" · ")}
+					</span>
+				</div>
+				{list.asOf === undefined ? null : <span className="shrink-0 text-meta text-ink-2">as of {list.asOf}</span>}
+				<span className="shrink-0">{actions}</span>
 			</div>
-			<h3
-				className={cn(
-					"min-w-0 text-body font-semibold text-ink [overflow-wrap:anywhere]",
-					list.search && "font-mono font-normal",
-					list.place === "thread" && "line-clamp-2",
-				)}
-			>
-				{list.title}
-			</h3>
-			{list.messages.length === 0 ? (
-				<p className="text-meta text-ink-2">{list.search ? "No messages match yet" : "No messages"}</p>
+			{rows.length === 0 ? (
+				<p className="text-meta text-ink-2">{list.search ? "No messages match yet" : "No replies yet"}</p>
 			) : (
 				<ul className="flex flex-col divide-y divide-border">
-					{list.messages.map((message) => (
+					{rows.map((message) => (
 						<li key={message.id} className="flex min-w-0 flex-col gap-0.5 py-1.5 first:pt-0 last:pb-0">
 							<span className="flex min-w-0 items-baseline gap-2 text-meta text-ink-2">
 								<span className="min-w-0 flex-1 truncate" title={message.from}>
@@ -825,7 +836,7 @@ function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactN
 								</span>
 								<span className="shrink-0">{slackWhen(message.date)}</span>
 							</span>
-							<span className="min-w-0 text-body text-ink line-clamp-2 [overflow-wrap:anywhere]" title={message.text}>
+							<span className="min-w-0 truncate text-body text-ink" title={message.text}>
 								{message.text || "(No text)"}
 							</span>
 						</li>
@@ -834,17 +845,15 @@ function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactN
 			)}
 			{more > 0 || url !== undefined ? (
 				<span className="flex flex-wrap items-center gap-2">
-					{more > 0 ? (
-						<span className="text-meta text-ink-2">{list.search ? `About ${more} more` : `${more} more`}</span>
-					) : null}
 					{url === undefined ? null : (
-						<Button asChild size="sm" variant="ghost" className="ml-auto">
+						<Button asChild size="sm" variant="ghost" className="-ml-2">
 							<a href={url} target="_blank" rel="noopener noreferrer">
 								<ExternalLinkIcon />
 								Open in Slack
 							</a>
 						</Button>
 					)}
+					{more > 0 ? <span className="text-meta text-ink-2">{more} more in Slack</span> : null}
 				</span>
 			) : null}
 		</Tile>

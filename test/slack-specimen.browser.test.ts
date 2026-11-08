@@ -54,7 +54,8 @@ for (const width of [390, 1440])
 				for (const words of [
 					"Thread in #general",
 					"Release notes draft for Thursday",
-					"Messages matching",
+					"About 23 matches",
+					"6 messages",
 					"@deploybot [bot]",
 					"@olga (outside)",
 					"Every deploy, green or red. Ping #oncall when red.",
