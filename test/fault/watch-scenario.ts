@@ -539,6 +539,16 @@ export function watchInvariants(summary: WatchSummary): string[] {
 	}
 	if (summary.card !== undefined && summary.followed !== undefined)
 		say("the card is the newest look's", summary.card.at === summary.followed.at);
+	// a done watch never looks again: its reading goes with it, unless a live watch on the object shares it
+	const shared = Object.entries(summary.records).some(
+		([name, record]) =>
+			name !== WATCHES[0] &&
+			record.key === summary.record.key &&
+			record.done === undefined &&
+			summary.live.includes(name),
+	);
+	if (summary.record.done !== undefined && !shared)
+		say("a done watch holds no reading unless a live watch shares it", summary.followed === undefined);
 	return errors;
 }
 
@@ -578,8 +588,9 @@ export function watchProblems(summary: WatchSummary): string[] {
 		!summary.wakes.some((wake) => wake.changes.some((c) => c.includes("bandarra"))),
 	);
 	say("done, it has no live task", summary.task === undefined || summary.task.status === "terminal");
-	// a look a kill cut short is made again: a reading the same as the newest is no new version, never a second wake
-	say("the reading kept is the newest: three that differed", summary.followed?.version === 3);
+	// a look a kill cut short is made again: a reading the same as the newest is no new version, never a second wake;
+	// the watch is done, so its reading is gone, and the last wake says the version it diffed to
+	say("the readings differed three times", Math.max(...summary.wakes.map((wake) => wake.version)) === 3);
 	say("the card is the newest reading", summary.card?.state === "merged");
 	say("no tell beside the wakes", summary.tells.length === 0);
 	say(`${2 * names.length} runs, got ${summary.turns.length}`, summary.turns.length === 2 * names.length);

@@ -159,9 +159,12 @@ describe("a watch on a pull request", () => {
 			expect([...(wakes[0]?.changes ?? [])].sort()).toEqual(["ana approved", "checks finished", "lint failed"]);
 		}
 		expect(summary.second?.done?.why).toBe("merged");
-		expect(summary.second?.seen).toBe(summary.followed?.version);
-		// the reading kept is the newest look's that read it: Mara's at step 4, which Otto's look at step 5 confirmed
-		expect(summary.followed?.at).toBe(NOW + 50 * MINUTE);
+		// the readings differed three times (steps 2 and 4), and both cursors reached the last
+		expect(summary.record.seen).toBe(3);
+		expect(summary.second?.seen).toBe(3);
+		// the card is the newest look's that read it: Otto's at step 5; both watches are done, so the reading is gone
+		expect(summary.card?.at).toBe(NOW + 50 * MINUTE);
+		expect(summary.followed).toBeUndefined();
 	}, 60_000);
 
 	it("a change that happens again later wakes again: lint fails, goes green, then fails on the next push", async () => {

@@ -322,6 +322,18 @@ export async function acceptedConnections(tx: Tx): Promise<(Connection & { reado
 /** The agent a watch belongs to: the one its record names, else the lead. */
 export const watchAgent = (record: WatchRecord): string => record.agent ?? LEAD;
 
+/**
+ * In `tx`: drop the reading kept at `key` in `followed` unless an accepted watch that is not done holds it. A done
+ * watch never looks again, and its card is `Readings`'s own: its readings would sit in the store until the owner
+ * removed it, written into every checkpoint of the doc.
+ */
+async function dropUnheld(tx: Tx, followed: { objects: { [key: string]: FollowedReading } }, key: string) {
+	const { watches } = await tx.doc(Watches);
+	const names = await acceptedWatches(tx);
+	if (names.some((name) => watches[name]?.key === key && watches[name]?.done === undefined)) return;
+	delete followed.objects[key];
+}
+
 /** A watch's wake, or what it tells, as the chat's entry says it. */
 export type WatchWakeData = {
 	readonly watch: string;
@@ -400,6 +412,12 @@ export async function endWatches(tx: Tx, authority: Authority, why: string, now:
 		delete record.resumed;
 		ended.push(name);
 		await log(tx, { at: now, watch: name, what: `ended: ${why}` });
+	}
+	// what they followed goes with them, unless a live watch shares a reading
+	const followedDoc = await tx.doc(Followed);
+	for (const name of ended) {
+		const key = watches[name]?.key;
+		if (key !== undefined) await dropUnheld(tx, followedDoc, key);
 	}
 	return ended;
 }
@@ -966,6 +984,7 @@ export function defineWatches(options: WatchesOptions) {
 			if (ended !== undefined) {
 				record.done = { at: now, why: ended };
 				await log(tx, { at: now, watch: name, what: `done: ${ended}` });
+				await dropUnheld(tx, doc, key);
 			}
 			await taken();
 			outcome = { outcome: "looked", changes, ...(ended === undefined ? {} : { ended }) };
@@ -1073,8 +1092,13 @@ export function defineWatches(options: WatchesOptions) {
 				delete record.task;
 			};
 			for (const [name, record] of Object.entries(watches)) if (!names.includes(name)) drop(name, record);
-			// a followed object's readings live while an accepted watch holds them
-			const held = new Set(names.map((name) => watches[name]?.key).filter((key) => key !== undefined));
+			// a followed object's readings live while an accepted watch that is not done holds them (`dropUnheld`)
+			const held = new Set(
+				names
+					.filter((name) => watches[name]?.done === undefined)
+					.map((name) => watches[name]?.key)
+					.filter((key) => key !== undefined),
+			);
 			const followed = await tx.doc(Followed);
 			for (const key of Object.keys(followed.objects)) if (!held.has(key)) delete followed.objects[key];
 			for (const name of names) {
