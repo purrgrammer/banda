@@ -47,7 +47,7 @@ export const DRIVE_TOOLS: McpTool[] = [
 	),
 	tool(
 		"get_file",
-		"Read one file's details: its name, type, owner, when it changed, its size and description. Name it in your answer as a link, [its name](drive/<id>); to show cards, give them in the message's objects.",
+		"Read one file's details: its name, type, owner, when it changed and who changed it, its size and description, the folders it is in, whom it is shared with and whether it is in the trash. Name it in your answer as a link, [its name](drive/<id>); to show cards, give them in the message's objects.",
 		{ file_id: fileId },
 		["file_id"],
 	),
@@ -182,6 +182,42 @@ function searchOf(args: Record<string, unknown>): { q: string; ranked: boolean }
 const LIST_FIELDS = "nextPageToken,files(id,name,mimeType,modifiedTime,owners(displayName),webViewLink,size)";
 const FILE_FIELDS =
 	"id,name,mimeType,modifiedTime,owners(displayName,emailAddress),webViewLink,size,description,shortcutDetails(targetId)";
+/** One file's details: its own, and who changed it last, where it sits, who it is shared with, whether it is trashed. */
+const DETAIL_FIELDS = `${FILE_FIELDS},lastModifyingUser(displayName,emailAddress),parents,trashed,permissions(id,type,role,emailAddress,displayName,domain)`;
+/** How many of a file's folders and people it is shared with a read gives. */
+const LISTED = 100;
+
+/** A person as Drive names them: their name, else their address. */
+const userOf = (value: unknown) => {
+	const user = object(value);
+	const email = text(user.emailAddress, 254);
+	return { name: text(user.displayName, 200) || email, email };
+};
+
+/** Whom one permission shares the file with, in words: a person, a group, a domain, or anyone with the link. */
+const sharedOf = (value: unknown) => {
+	const permission = object(value);
+	const id = text(permission.id, 200);
+	const who =
+		permission.type === "anyone"
+			? "anyone with the link"
+			: text(permission.displayName, 200) || text(permission.emailAddress, 254) || text(permission.domain, 254);
+	return id === "" ? [] : [{ id, who, role: text(permission.role, 40) }];
+};
+
+/** What `get_file` answers: the card's fields, and what a watch on the file follows. */
+function detail(file: Json) {
+	return {
+		...full(file),
+		...(file.lastModifyingUser === undefined ? {} : { modifier: userOf(file.lastModifyingUser) }),
+		parents: (Array.isArray(file.parents) ? file.parents : [])
+			.filter((each): each is string => typeof each === "string" && FILE_ID.test(each))
+			.slice(0, LISTED),
+		trashed: file.trashed === true,
+		// Drive lists a file's permissions only to whoever may share it
+		...(Array.isArray(file.permissions) ? { shared: file.permissions.flatMap(sharedOf).slice(0, LISTED) } : {}),
+	};
+}
 
 function full(file: Json) {
 	const mimeType = text(file.mimeType, 100);
@@ -330,8 +366,8 @@ export async function driveCall(
 			case "get_file": {
 				const id = fileOfRef(args.file_id);
 				if (id === undefined) throw new Error("Give the id of a drive/<id> reference that search_files returned.");
-				answer = full(
-					object(await request(`files/${id}?${new URLSearchParams({ ...ALL_DRIVES, fields: FILE_FIELDS })}`)),
+				answer = detail(
+					object(await request(`files/${id}?${new URLSearchParams({ ...ALL_DRIVES, fields: DETAIL_FIELDS })}`)),
 				);
 				break;
 			}

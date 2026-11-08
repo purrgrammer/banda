@@ -155,6 +155,16 @@ describe("Google Drive REST connection", () => {
 				iconLink: "https://drive-thirdparty.googleusercontent.com/icon.png",
 				size: "2457600",
 				description: "Signed",
+				lastModifyingUser: { displayName: "Ana", emailAddress: "ana@example.test" },
+				parents: ["0Fold", "bad/parent"],
+				trashed: false,
+				permissions: [
+					{ id: "p1", type: "user", role: "owner", emailAddress: "mira@example.test", displayName: "Mira" },
+					{ id: "p2", type: "user", role: "writer", emailAddress: "bo@example.test" },
+					{ id: "p3", type: "domain", role: "reader", domain: "example.test" },
+					{ id: "anyoneWithLink", type: "anyone", role: "reader" },
+					{ type: "user", role: "reader", emailAddress: "noid@example.test" },
+				],
 			}),
 		);
 		const file = JSON.parse((await call(fetcher, "get_file", { file_id: "drive/1pDf" })).text);
@@ -168,14 +178,30 @@ describe("Google Drive REST connection", () => {
 			size: 2457600,
 			description: "Signed",
 			url: "https://drive.google.com/file/d/1pDf/view",
+			modifier: { name: "Ana", email: "ana@example.test" },
+			parents: ["0Fold"],
+			trashed: false,
+			shared: [
+				{ id: "p1", who: "Mira", role: "owner" },
+				{ id: "p2", who: "bo@example.test", role: "writer" },
+				{ id: "p3", who: "example.test", role: "reader" },
+				{ id: "anyoneWithLink", who: "anyone with the link", role: "reader" },
+			],
 		});
 		expect(urlOf(fetcher, 0).pathname).toBe("/drive/v3/files/1pDf");
+		expect(urlOf(fetcher, 0).searchParams.get("fields")).toContain(
+			"lastModifyingUser(displayName,emailAddress),parents,trashed,permissions(",
+		);
 		const elsewhere = vi
 			.fn<typeof fetch>()
 			.mockResolvedValue(response({ id: "x", name: "x", mimeType: DOC, webViewLink: "https://evil.example/x" }));
 		const odd = JSON.parse((await call(elsewhere, "get_file", { file_id: "x" })).text);
 		expect(odd.url).toBeUndefined();
 		expect(odd.size).toBeNull();
+		// a file the account may not share lists nobody, rather than saying it is shared with nobody
+		expect(odd).toMatchObject({ parents: [], trashed: false });
+		expect(odd.shared).toBeUndefined();
+		expect(odd.modifier).toBeUndefined();
 	});
 
 	it("names kinds by mime type", () => {
