@@ -29,6 +29,19 @@ afterEach(async () => {
 });
 
 const CELLS = "https://www.googleapis.com/auth/spreadsheets";
+const TEXT = "https://www.googleapis.com/auth/documents";
+/** A Doc the owner already has, with a comment on it. */
+const PLAN = {
+	d1: {
+		id: "d1",
+		name: "Q1 plan",
+		mimeType: "application/vnd.google-apps.document",
+		trashed: false,
+		modifiedTime: "2026-11-05T16:42:10.000Z",
+		text: "# Q1 plan\nPlatform moves first",
+		comments: [{ id: "c1", content: "Dates?", resolved: false, author: { displayName: "Ana" }, replies: [] }],
+	},
+};
 /** A Sheet the owner already has, with a budget tab: the fake Google starts with it. */
 const BUDGET = {
 	s1: {
@@ -48,7 +61,11 @@ const BUDGET = {
 	},
 };
 
-async function connectedWith(call: { tool: string; args: JsonObject }, scopes = [READ, FILE], seed?: typeof BUDGET) {
+async function connectedWith(
+	call: { tool: string; args: JsonObject },
+	scopes = [READ, FILE],
+	seed?: typeof BUDGET | typeof PLAN,
+) {
 	const home = await tempHome();
 	const shipped = join(home, "shipped");
 	mkdirSync(shipped, { recursive: true });
@@ -193,6 +210,38 @@ describe("Drive changes as drafts", () => {
 				["1", "2"],
 			],
 		});
+	});
+
+	it("text added to a Doc is a draft; approved with Change your documents alone, it follows the last paragraph", async () => {
+		const connected = await connectedWith(
+			{ tool: "append_doc_text", args: { file_id: "drive/d1", markdown: "## Decisions\n- Payments next" } },
+			[READ, TEXT],
+			PLAN,
+		);
+		const { s, google } = connected;
+		const { wait, turn } = await drafted(connected);
+		expect(wait.ask).toMatchObject({ label: "Add text at the end of this Doc", verb: "Add" });
+		await answer(s.harness, wait.key, "approve", web, "bearer", { type: "approval" });
+		await s.harness.waitForTask(turn, context);
+		expect(google.files().d1?.text).toBe("# Q1 plan\nPlatform moves first\nDecisions\nPayments next");
+		expect(google.writes).toHaveLength(1);
+	});
+
+	it("a reply to a comment is a draft; approved, it is posted in the owner's name and resolves the comment when asked", async () => {
+		const connected = await connectedWith(
+			{ tool: "reply_comment", args: { file_id: "drive/d1", comment_id: "c1", text: "Added them.", resolve: true } },
+			[READ, FILE],
+			PLAN,
+		);
+		const { s, google } = connected;
+		const { wait, turn } = await drafted(connected);
+		expect(wait.ask).toMatchObject({ label: "Reply to a comment on this file and resolve it", verb: "Reply" });
+		await answer(s.harness, wait.key, "approve", web, "bearer", { type: "approval" });
+		await s.harness.waitForTask(turn, context);
+		const comment = (
+			google.files().d1?.comments as { resolved: boolean; replies: { content: string }[] }[] | undefined
+		)?.[0];
+		expect(comment).toMatchObject({ resolved: true, replies: [{ content: "Added them.", action: "resolve" }] });
 	});
 
 	it("a denied trash runs nothing", async () => {

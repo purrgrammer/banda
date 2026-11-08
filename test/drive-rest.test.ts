@@ -35,6 +35,7 @@ describe("Google Drive REST connection", () => {
 			"search_files",
 			"get_file",
 			"read_file",
+			"list_comments",
 			"create_doc",
 			"create_sheet",
 			"replace_doc_text",
@@ -43,12 +44,15 @@ describe("Google Drive REST connection", () => {
 			"append_rows",
 			"update_range",
 			"add_sheet",
+			"append_doc_text",
+			"reply_comment",
 		]);
 		expect(DRIVE_TOOLS.filter((tool) => tool.readOnlyHint === true).map((tool) => tool.name)).toEqual([
 			"get_profile",
 			"search_files",
 			"get_file",
 			"read_file",
+			"list_comments",
 		]);
 		expect(REST_APIS.drive.tools).toBe(DRIVE_TOOLS);
 	});
@@ -60,7 +64,7 @@ describe("Google Drive REST connection", () => {
 			service: "Google Drive",
 			scopes: ["https://www.googleapis.com/auth/drive.readonly"],
 		});
-		expect(connection.reads).toEqual(["get_profile", "search_files", "get_file", "read_file"]);
+		expect(connection.reads).toEqual(["get_profile", "search_files", "get_file", "read_file", "list_comments"]);
 		expect(connection.objects?.file?.card).toBe("file");
 		const errors = (from: string, to: string) => {
 			const parsed = parseConnection("drive", source().replace(from, to));
@@ -523,5 +527,60 @@ describe("Google Drive REST connection", () => {
 			expect(card({ name: "x", url })).not.toHaveProperty("url");
 		expect(card({ name: "x", size: -1 })).toMatchObject({ size: null });
 		expect(() => card({ name: "" })).toThrow("Incomplete object");
+	});
+});
+
+describe("A file's comments", () => {
+	it("lists open comments with their anchor and replies, resolved ones on request, without the authors' addresses", async () => {
+		const page = {
+			comments: [
+				{
+					id: "c1",
+					content: "Dates?",
+					resolved: false,
+					createdTime: "2026-11-05T10:00:00.000Z",
+					modifiedTime: "2026-11-05T11:00:00.000Z",
+					author: { displayName: "Ana García", emailAddress: "ana@example.test" },
+					quotedFileContent: { value: "Platform moves first" },
+					replies: [
+						{
+							id: "r1",
+							content: "Adding them",
+							createdTime: "2026-11-05T11:00:00.000Z",
+							author: { displayName: "Alice", me: true },
+						},
+					],
+				},
+				{ id: "c2", content: "Old", resolved: true, author: { displayName: "Teo" }, replies: [] },
+			],
+			nextPageToken: "more",
+		};
+		const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => response(page));
+		const result = JSON.parse((await call(fetcher, "list_comments", { file_id: "drive/f1" })).text);
+		expect(result).toEqual({
+			ref: "drive/f1",
+			comments: [
+				{
+					id: "c1",
+					author: "Ana García",
+					text: "Dates?",
+					resolved: false,
+					created: "2026-11-05T10:00:00.000Z",
+					modified: "2026-11-05T11:00:00.000Z",
+					anchor: "Platform moves first",
+					replies: [{ id: "r1", author: "Alice", me: true, text: "Adding them", created: "2026-11-05T11:00:00.000Z" }],
+				},
+			],
+			nextPageToken: "more",
+		});
+		expect(JSON.stringify(result)).not.toContain("ana@example.test");
+		const url = urlOf(fetcher, 0);
+		expect(url.pathname).toBe("/drive/v3/files/f1/comments");
+		expect(url.searchParams.get("includeDeleted")).toBe("false");
+		const all = JSON.parse(
+			(await call(fetcher, "list_comments", { file_id: "f1", include_resolved: true, page_token: "more" })).text,
+		);
+		expect(all.comments.map((comment: { id: string }) => comment.id)).toEqual(["c1", "c2"]);
+		expect(urlOf(fetcher, 1).searchParams.get("pageToken")).toBe("more");
 	});
 });

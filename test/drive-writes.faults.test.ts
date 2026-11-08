@@ -16,7 +16,7 @@ import { tempHome } from "./helpers.ts";
 import { pbtFaultRuns } from "./pbt.ts";
 
 const effects = ["connection:call", "connection:answered", "answer", "model"] as const;
-type Mode = "create" | "update" | "append";
+type Mode = "create" | "update" | "append" | "doc" | "reply";
 type Summary = {
 	outcome: { status: string };
 	parked: unknown[];
@@ -24,6 +24,8 @@ type Summary = {
 	open: number;
 	files: { id: string; name: string; text: string; trashed: boolean }[];
 	sheet?: { [tab: string]: string[][] };
+	doc?: string;
+	comment?: { resolved: boolean; replies: { content: string }[] };
 	commits: number;
 	points: Record<(typeof effects)[number], number>;
 };
@@ -38,7 +40,7 @@ async function run(mode: Mode, schedules: readonly (readonly Fault[])[] = []) {
 		expect(summary.files.length).toBeLessThanOrEqual(1);
 		for (const file of summary.files)
 			expect(file).toMatchObject({ name: "Q1 plan", text: "# Plan\n\n- one", trashed: false });
-	} else expect(summary.files.map((file) => file.id)).toEqual(["s1"]);
+	} else expect(summary.files.map((file) => file.id)).toEqual(["s1", "d1"]);
 	// never asked again: an idempotent change is the same when run again with its key
 	if (mode !== "append") expect(summary.answers.filter((answer) => answer === "asked-again")).toEqual([]);
 	// the budget tab is as it was, but for the one cell written
@@ -49,10 +51,13 @@ async function run(mode: Mode, schedules: readonly (readonly Fault[])[] = []) {
 		]);
 	if (mode === "update") expect(summary.sheet?.["2027"]).toEqual([]);
 	expect((summary.sheet?.["2027"] ?? []).length).toBeLessThanOrEqual(1);
+	// the text is there at most once, the reply too
+	expect((summary.doc ?? "").split("Decisions").length).toBeLessThanOrEqual(2);
+	expect((summary.comment?.replies ?? []).length).toBeLessThanOrEqual(1);
 	return { ...summary, kills };
 }
 
-describe.each(["create", "update", "append"] as const)("Drive %s under faults", (mode) => {
+describe.each(["create", "update", "append", "doc", "reply"] as const)("Drive %s under faults", (mode) => {
 	/** What a finished, unfaulted or idempotent change leaves. */
 	const done = (result: Awaited<ReturnType<typeof run>>) => {
 		if (mode === "create") expect(result.files).toHaveLength(1);
@@ -62,6 +67,9 @@ describe.each(["create", "update", "append"] as const)("Drive %s under faults", 
 				["6385", "", "95"],
 			]);
 		if (mode === "append") expect(result.sheet?.["2027"]).toEqual([["a", "b"]]);
+		if (mode === "doc") expect(result.doc).toBe("# Q1 plan\nPlatform moves first\nDecisions\nPayments next");
+		if (mode === "reply")
+			expect(result.comment).toMatchObject({ resolved: true, replies: [{ content: "Added them." }] });
 	};
 
 	it("recovers from generated thrown faults and kills at the change's boundaries without a second file", async () => {

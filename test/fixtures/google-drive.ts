@@ -4,7 +4,8 @@
  * new text by a media upload. With `file`, its files are kept there, written whole before it answers, so a process
  * killed after Drive applied a change and before banda recorded it leaves the change applied, as the real one would.
  * A spreadsheet's tabs and cells answer the Sheets API: listed, read, appended to, written and added, under
- * `tabs` (names in order) and `cells` (rows by tab) of the file.
+ * `tabs` (names in order) and `cells` (rows by tab) of the file. A document's text answers the Docs API as paragraphs
+ * and takes insertions; a file's `comments` are listed and replied to.
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 
@@ -128,6 +129,50 @@ export function fakeDrive({
 		}
 		return json({ error: { code: 405 } }, 405);
 	};
+	/** A Doc's body as the Docs API shapes it: one paragraph an element, indexes counted from 1. */
+	const docsApi = (url: URL, method: string, raw: string | undefined) => {
+		const files = load();
+		const path = url.pathname.replace(/^\/v1\//, "");
+		const id = /^documents\/([^/:]+)/.exec(path)?.[1];
+		const found = id === undefined ? undefined : files[decodeURIComponent(id)];
+		if (found === undefined || found.mimeType !== "application/vnd.google-apps.document" || found.trashed === true)
+			return json({ error: { code: 404, status: "NOT_FOUND" } }, 404);
+		const rest = path.slice(`documents/${id}`.length);
+		const current = String(found.text ?? "");
+		if (rest === "" && method === "GET") {
+			const paragraphs = `${current}\n`.split("\n").slice(0, -1);
+			let index = 1;
+			const content = paragraphs.map((paragraph) => {
+				const startIndex = index;
+				index += paragraph.length + 1;
+				return {
+					startIndex,
+					endIndex: index,
+					paragraph: { elements: [{ startIndex, endIndex: index, textRun: { content: `${paragraph}\n` } }] },
+				};
+			});
+			return json({ documentId: id, body: { content } });
+		}
+		if (rest === ":batchUpdate" && method === "POST") {
+			const body = JSON.parse(raw ?? "{}") as {
+				requests?: { insertText?: { location: { index: number }; text: string } }[];
+			};
+			let text = `${current}\n`;
+			for (const request of body.requests ?? []) {
+				const insert = request.insertText;
+				if (insert === undefined) continue;
+				const at = insert.location.index - 1;
+				if (at < 0 || at >= text.length) return json({ error: { code: 400, status: "INVALID_ARGUMENT" } }, 400);
+				text = text.slice(0, at) + insert.text + text.slice(at);
+			}
+			writes.push({ method, path: `docs/${id}:batchUpdate`, body: body.requests });
+			found.text = text.slice(0, -1);
+			found.modifiedTime = new Date().toISOString();
+			save(files);
+			return json({ documentId: id });
+		}
+		return json({ error: { code: 405 } }, 405);
+	};
 	const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
 		const url = new URL(String(input instanceof Request ? input.url : input));
 		const method = init?.method ?? "GET";
@@ -141,6 +186,7 @@ export function fakeDrive({
 				scope: `${GOOGLE}drive.readonly ${GOOGLE}drive.file ${GOOGLE}drive`,
 			});
 		if (url.origin === "https://sheets.googleapis.com") return sheetsApi(url, method, raw);
+		if (url.origin === "https://docs.googleapis.com") return docsApi(url, method, raw);
 		if (url.origin !== "https://www.googleapis.com") return json({ error: { code: 404 } }, 404);
 		const upload = url.pathname.startsWith("/upload/drive/v3/");
 		if (!upload && !url.pathname.startsWith("/drive/v3/")) return json({ error: { code: 404 } }, 404);
@@ -179,6 +225,35 @@ export function fakeDrive({
 			files[id] = { ...given, id, trashed: false, text: media?.content ?? "", modifiedTime: new Date().toISOString() };
 			save(files);
 			return json({ id });
+		}
+		const commented = /^files\/([^/]+)\/comments(?:\/([^/]+))?(\/replies)?$/.exec(path);
+		if (commented !== null) {
+			const [, fileId = "", commentId, replying] = commented;
+			const file = files[decodeURIComponent(fileId)];
+			if (file === undefined) return json({ error: { code: 404, status: "NOT_FOUND" } }, 404);
+			const comments = (file.comments as FakeFile[] | undefined) ?? [];
+			if (commentId === undefined && method === "GET") return json({ comments });
+			const comment = comments.find((each) => each.id === commentId);
+			if (comment === undefined) return json({ error: { code: 404, status: "NOT_FOUND" } }, 404);
+			if (replying === undefined && method === "GET") return json(comment);
+			if (replying !== undefined && method === "POST") {
+				const body = JSON.parse(raw ?? "{}") as { content: string; action?: string };
+				if (comment.replies === undefined) comment.replies = [];
+				const replies = comment.replies as FakeFile[];
+				const reply = {
+					id: `r${replies.length + 1}`,
+					content: body.content,
+					createdTime: new Date().toISOString(),
+					author: { displayName: "Alice", me: true },
+					...(body.action === undefined ? {} : { action: body.action }),
+				};
+				replies.push(reply);
+				if (body.action === "resolve") comment.resolved = true;
+				note({ comment: commentId, ...body });
+				save(files);
+				return json({ id: reply.id });
+			}
+			return json({ error: { code: 405 } }, 405);
 		}
 		const id = /^files\/([^/]+)$/.exec(path)?.[1];
 		const found = id === undefined ? undefined : files[decodeURIComponent(id)];

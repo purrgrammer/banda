@@ -197,6 +197,42 @@ const DRAFTS: readonly (readonly [string, Draft, string, boolean])[] = [
 		"Add the tab “2028” to this Sheet",
 		true,
 	],
+	[
+		"Draft: add text at the end of a Doc",
+		{
+			type: "approval",
+			tool: "drive__append_doc_text",
+			verb: "Add",
+			as: AS,
+			on: ON,
+			args: {
+				file_id: "1aBcD_eFgH-ijk",
+				markdown: "## Decisions, 8 Nov\n- Payments moves first\n- Growth waits for the new funnel",
+				account: "alice",
+			},
+		},
+		"Add text at the end of this Doc",
+		true,
+	],
+	[
+		"Draft: reply to a comment",
+		{
+			type: "approval",
+			tool: "drive__reply_comment",
+			verb: "Reply",
+			as: AS,
+			on: ON,
+			args: {
+				file_id: "1aBcD_eFgH-ijk",
+				comment_id: "AAABc9xYz",
+				text: "Done: the dates are in the table now.",
+				resolve: true,
+				account: "alice",
+			},
+		},
+		"Reply to a comment on this file and resolve it",
+		true,
+	],
 ];
 
 export function DriveSection() {
