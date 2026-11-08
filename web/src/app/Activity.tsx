@@ -9,7 +9,7 @@ import {
 	MessageSquareIcon,
 	SparklesIcon,
 } from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { ModelContext, RawRow, RawValue } from "../chat/ActivityDetail.tsx";
 import { SkillToolPreview } from "../chat/Skill.tsx";
 import { shortPreview, ToolIcon, toolIcon, toolPreview } from "../chat/tool-presentation.tsx";
@@ -58,17 +58,21 @@ export type ActivityTarget = {
 	readonly anchor?: ActivityAnchor;
 	readonly heading?: string;
 };
-type Source = { readonly chat: number; readonly transcript: Transcript };
+/** A transcript given instead of read from the daemon (the specimen's), with the model context it was prompted with. */
+type Source = { readonly chat: number; readonly transcript: Transcript; readonly prompt?: ChatPrompt };
 type Depth = "activity" | "transcript";
 
 export function ActivitySheet({
 	targets,
 	source,
 	onClose,
+	style,
 }: {
 	targets: readonly ActivityTarget[];
 	source?: Source;
 	onClose: () => void;
+	/** The specimen's frame passes its colour scheme to the sheet, which opens outside the frame. */
+	style?: CSSProperties;
 }) {
 	const [index, setIndex] = useState(0);
 	const [depth, setDepth] = useState<Depth>("activity");
@@ -91,6 +95,7 @@ export function ActivitySheet({
 		>
 			<SheetContent
 				className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[560px]"
+				{...(style === undefined ? {} : { style })}
 				onOpenAutoFocus={(event) => {
 					event.preventDefault();
 					heading.current?.focus();
@@ -127,7 +132,7 @@ export function ActivitySheet({
 					) : null}
 				</SheetHeader>
 				{source?.chat === target.chat ? (
-					<ActivityBody key={index} {...props} transcript={source.transcript} />
+					<ActivityBody key={index} {...props} transcript={source.transcript} given={source.prompt} />
 				) : (
 					<FetchedActivity key={index} {...props} />
 				)}
@@ -136,13 +141,20 @@ export function ActivitySheet({
 	);
 }
 
-type BodyProps = { target: ActivityTarget; depth: Depth; onDrill: () => void; transcript: Transcript };
-function FetchedActivity(props: Omit<BodyProps, "transcript">) {
+type BodyProps = {
+	target: ActivityTarget;
+	depth: Depth;
+	onDrill: () => void;
+	transcript: Transcript;
+	/** The model context, when it came with the transcript instead of being fetched. */
+	given?: ChatPrompt | undefined;
+};
+function FetchedActivity(props: Omit<BodyProps, "transcript" | "given">) {
 	const transcript = useTranscript(props.target.chat);
 	return <ActivityBody {...props} transcript={transcript} />;
 }
 
-function ActivityBody({ target, depth, onDrill, transcript }: BodyProps) {
+function ActivityBody({ target, depth, onDrill, transcript, given }: BodyProps) {
 	const { items, input, busy, older, loaded, missing, loadOlder, partial, running } = transcript;
 	const works = useMemo(() => activityWork(items, input), [items, input]);
 	// Pin the first selected work: a new owner input must not retarget an open sheet.
@@ -166,10 +178,11 @@ function ActivityBody({ target, depth, onDrill, transcript }: BodyProps) {
 	const lastAssistant = [...(work?.items ?? [])].reverse().find((item) => item.role === "assistant")?.id;
 	const contextAt = live ? undefined : (selectedRequest?.id ?? lastAssistant);
 	const requestAvailable = live || contextAt !== undefined;
-	const [prompt, setPrompt] = useState<ChatPrompt>();
+	const [fetched, setFetched] = useState<ChatPrompt>();
+	const prompt = given ?? fetched;
 	const [promptError, setPromptError] = useState(false);
 	const [retry, setRetry] = useState(0);
-	const enabled = depth === "transcript" && requestAvailable && !needOlder;
+	const enabled = depth === "transcript" && requestAvailable && !needOlder && given === undefined;
 	// A newly committed model request invalidates the live context; streamed text does not.
 	const promptRequest = useMemo(
 		() => ({ chat: target.chat, at: contextAt, lastAssistant, retry }),
@@ -182,7 +195,7 @@ function ActivityBody({ target, depth, onDrill, transcript }: BodyProps) {
 		setPromptError(false);
 		void chatPrompt(promptRequest.chat, promptRequest.at)
 			.then((value) => {
-				if (!stale) setPrompt(value);
+				if (!stale) setFetched(value);
 			})
 			.catch(() => {
 				if (!stale) setPromptError(true);
@@ -473,7 +486,9 @@ function ModelRecord({
 		<div className="flex min-w-0 flex-col gap-4">
 			{thinking ? (
 				<RawRow title="Thinking" icon={<SparklesIcon className="size-4" />} defaultOpen {...streaming}>
-					<p className="whitespace-pre-wrap text-ui text-ink-2">{thinking}</p>
+					<p data-thinking="" className="whitespace-pre-wrap text-ui text-ink-2">
+						{thinking}
+					</p>
 				</RawRow>
 			) : null}
 			{text ? (
