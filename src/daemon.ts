@@ -73,9 +73,11 @@ import type { ComputerView, OwnerInput, Posted, PostMessage, ViewEvent } from ".
 import { acceptedIconFace } from "./server/avatar-icon-face.ts";
 import { bringable, chooseBring } from "./server/bring.ts";
 import { openCapabilities } from "./server/capabilities.ts";
+import { classify } from "./server/classify.ts";
 import { change, companion, validPicks } from "./server/companion.ts";
 import { openDevices } from "./server/devices.ts";
 import { BadRequest, handler } from "./server/http.ts";
+import { inferenceModel } from "./server/inference.ts";
 import { add as addFact, boxMemory, edit as editFact, memory, remove as removeFact } from "./server/memory.ts";
 import { openObjects } from "./server/objects.ts";
 import { openRemote, type Remote, type RemoteSettings, type RemoteState, remoteSettings } from "./server/remote.ts";
@@ -513,6 +515,12 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			log,
 			changed: () => capabilitiesChanged(),
 			agentChanged: core.agentChanged,
+			// what a new connection's tools do, guessed on the owner's Balanced tier
+			classify: async (input) => {
+				const model = await inferenceModel({ harness: open, models, fallback: config.model }, "balanced");
+				if (model === undefined) return { ok: false, why: "No model is set up to sort its tools." };
+				return classify({ models, model, ...input });
+			},
 		});
 		await capabilities.install();
 		const objects = openObjects({ harness: open, capabilities, blobs });
@@ -879,6 +887,11 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 							await capabilities.switchAccount(act.agent, act.name, undefined, act.on, context, act.sha);
 						else if (act.action === "refresh") await capabilities.refresh(act.name);
 						else if (act.action === "switch") await capabilities.toggle(act.tool, act.on);
+						else if (act.action === "settings")
+							await (act.group === undefined
+								? capabilities.setTools(act.name, act.tools)
+								: capabilities.setGroup(act.name, act.group, act.setting));
+						else if (act.action === "review") await capabilities.review(act.name, act.sha, act.tools);
 						changed();
 						return capabilitiesView();
 					},

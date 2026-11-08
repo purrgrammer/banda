@@ -210,7 +210,7 @@ describe("connections under faults", () => {
 		const clean = await run([], "mcp");
 		check(clean);
 		expect(clean.creates).toBe(1);
-		const points: FaultPoint[] = ["address:written", "accept:after", "oauth:kept", "trust:written", "connect:listed"];
+		const points: FaultPoint[] = ["address:written", "accept:after", "oauth:kept", "review:written", "connect:listed"];
 		await pool(
 			2,
 			points.map((point) => async () => {

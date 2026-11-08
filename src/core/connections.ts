@@ -25,6 +25,7 @@ import { FLOORS, type Floor } from "./floor.ts";
 import { harnessToolsOf } from "./harness.ts";
 import { DEFAULT_GOOGLE_CLIENT_ID, type OAuthClient, type OAuthServer, type Pending, type Tokens } from "./oauth.ts";
 import { type ObjectKinds, parseObjects } from "./objects.ts";
+import { type Classed, classOf, defaultOf, type Guess, nameGroups, type Setting } from "./tool-kinds.ts";
 
 export const connectionPath = (name: string) => `connections/${name}.md`;
 export const toolPath = (name: string) => `tools/${name}.md`;
@@ -78,6 +79,11 @@ export type Connection = {
 	readonly account?: { readonly tool: string; readonly field: string };
 	/** The things it names that the app draws as cards (DESIGN.md "Connections", objects), by kind. */
 	readonly objects?: ObjectKinds;
+	/**
+	 * Its tools by group, as the file says (in the ```json block, `{"groups": {"Issues": [tool, …]}}`): what the owner
+	 * scans them in. A tool it leaves out is grouped as banda guessed, or by its name.
+	 */
+	readonly groups?: { readonly [group: string]: readonly string[] };
 	/** Why the agent wants it, in its words. */
 	readonly why: string;
 };
@@ -232,10 +238,11 @@ export function parseConnection(
 	let why = read.body;
 	let needs: { [tool: string]: string[] } | undefined;
 	let objects: ObjectKinds | undefined;
+	let groups: { [group: string]: string[] } | undefined;
 	const block = /```json\s*\n([\s\S]*?)\n```/.exec(read.body);
 	if (block !== null) {
 		why = (read.body.slice(0, block.index) + read.body.slice(block.index + block[0].length)).trim();
-		const problem = `the json block is {"needs": {"tool": ["scope", …]}, "objects": {…}}: the scopes each tool needs, any one will do, and the things it names`;
+		const problem = `the json block is {"needs": {"tool": ["scope", …]}, "objects": {…}, "groups": {"group": ["tool", …]}}: the scopes each tool needs, any one will do, the things it names, and its tools by group`;
 		let parsed: unknown;
 		try {
 			parsed = JSON.parse(block[1] ?? "") as unknown;
@@ -247,7 +254,7 @@ export function parseConnection(
 			if (
 				typeof parsed !== "object" ||
 				parsed === null ||
-				Object.keys(parsed).some((key) => key !== "needs" && key !== "objects") ||
+				Object.keys(parsed).some((key) => key !== "needs" && key !== "objects" && key !== "groups") ||
 				(given !== undefined &&
 					(typeof given !== "object" ||
 						given === null ||
@@ -262,6 +269,12 @@ export function parseConnection(
 			)
 				errors.push(problem);
 			else if (given !== undefined) needs = given as { [tool: string]: string[] };
+			const grouped = (parsed as { groups?: unknown } | null)?.groups;
+			if (grouped !== undefined) {
+				const found = parseGroups(grouped);
+				if (typeof found === "string") errors.push(found);
+				else groups = found;
+			}
 			const declared = (parsed as { objects?: unknown } | null)?.objects;
 			if (declared !== undefined) {
 				const isRead = (tool: string, args: { readonly [arg: string]: unknown }) =>
@@ -289,6 +302,7 @@ export function parseConnection(
 			...(scopes === undefined ? {} : { scopes }),
 			...(needs === undefined ? {} : { needs }),
 			...(objects === undefined ? {} : { objects }),
+			...(groups === undefined ? {} : { groups }),
 			...(Object.keys(readsWhen).length === 0 ? {} : { readsWhen }),
 			reads,
 			floors,
@@ -334,6 +348,69 @@ export function withoutSignIn(name: string, text: string): string | undefined {
 	const rewritten = `---\n${out.join("\n")}\n---${text.slice(match[0].length)}`;
 	const parsed = parseConnection(name, rewritten);
 	return "connection" in parsed && parsed.connection.auth === "none" ? rewritten : undefined;
+}
+
+/** A group's name: a few plain words on one line. */
+const GROUP = /^[\p{L}\p{N}][\p{L}\p{N} &'’,./-]{0,39}$/u;
+
+/** At most this many groups in a file: a few more than banda makes, for an owner who splits one. */
+const MAX_FILE_GROUPS = 12;
+
+/** A file's `groups`, read: each a name and its tools, no tool in two; or what is wrong with it. */
+function parseGroups(value: unknown): { [group: string]: string[] } | string {
+	const problem = `"groups" is {"Issues": ["tool", …], …}: at most ${MAX_FILE_GROUPS} short names, each tool in one`;
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return problem;
+	const entries = Object.entries(value);
+	if (entries.length > MAX_FILE_GROUPS) return problem;
+	const seen = new Set<string>();
+	const groups: { [group: string]: string[] } = {};
+	for (const [group, tools] of entries) {
+		if (!GROUP.test(group) || !Array.isArray(tools)) return problem;
+		for (const tool of tools) {
+			if (typeof tool !== "string" || !/^[A-Za-z0-9_.-]{1,64}$/.test(tool) || seen.has(tool)) return problem;
+			seen.add(tool);
+		}
+		groups[group] = tools as string[];
+	}
+	return groups;
+}
+
+/**
+ * `text` (a connection file) with its tools in `groups`, in its ```json block (added at the end of its body when it
+ * has none); undefined when it would not read back as exactly those groups.
+ */
+export function withGroups(
+	name: string,
+	text: string,
+	groups: { readonly [group: string]: readonly string[] },
+): string | undefined {
+	const fence = "`".repeat(3);
+	const block = /```json\s*\n([\s\S]*?)\n```/.exec(text);
+	let rewritten: string;
+	if (block === null)
+		rewritten = `${text.replace(/\s*$/, "")}\n\n${fence}json\n${JSON.stringify({ groups }, null, "\t")}\n${fence}\n`;
+	else {
+		let parsed: { [key: string]: unknown };
+		try {
+			parsed = JSON.parse(block[1] ?? "") as { [key: string]: unknown };
+		} catch {
+			return undefined;
+		}
+		const json = JSON.stringify({ ...parsed, groups }, null, "\t");
+		rewritten = `${text.slice(0, block.index)}${fence}json\n${json}\n${fence}${text.slice(block.index + block[0].length)}`;
+	}
+	const again = parseConnection(name, rewritten);
+	return "connection" in again && JSON.stringify(again.connection.groups) === JSON.stringify(groups)
+		? rewritten
+		: undefined;
+}
+
+/** `text` (a connection file) without `ask: always`, every other byte as it was. */
+export function withoutAlways(text: string): string {
+	const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+	if (match === null) return text;
+	const kept = (match[1] ?? "").split("\n").filter((line) => !/^ask\s*:\s*always\s*$/.test(line));
+	return `---\n${kept.join("\n")}\n---${text.slice(match[0].length)}`;
 }
 
 /** A connection's `reads` as written: its tools' names, then its rules. */
@@ -434,6 +511,8 @@ export type Listed = {
 	schema: JsonObject;
 	/** The server's own word that it only reads, shown, never trusted. */
 	readOnlyHint?: boolean;
+	/** The server's own word that it may destroy something: it makes the tool at least a write. */
+	destructiveHint?: boolean;
 };
 
 /** An account: one sign-in to a connection, as the store knows it. */
@@ -482,6 +561,95 @@ export const Connected = defineDoc<ConnectedValue>({
 	migrate: (value, from) => (from >= 2 ? value : { ...value, public: {} }) as unknown as ConnectedValue,
 	checkpointWhen: () => true,
 });
+
+/**
+ * The owner's setting of each connection's tool, by the name the model knows it by, beside its switch (`off` in
+ * `Connected`, which is Off and switches the agent's own tools too): Allow, Ask or Always ask, as set; a tool with none
+ * is as its kind says (`defaultOf`). And the tools listed after their connection was, not yet set: new, and off.
+ */
+type ToolSettingsValue = {
+	set: { [tool: string]: Exclude<Setting, "off"> };
+	fresh: { [tool: string]: true };
+};
+
+export const ToolSettings = defineDoc<ToolSettingsValue>({
+	kind: "banda.tool-settings",
+	version: 1,
+	scope: "session",
+	initial: () => ({ set: {}, fresh: {} }),
+	checkpointWhen: () => true,
+});
+
+/**
+ * banda's guesses for each connection's tools, from one inference over its listing (`listing`, a hash of the tools it
+ * was made for): its groups, and each tool's kind and group. Derived and rebuildable, never permission by itself: a
+ * guessed read only runs once the owner confirms it, and the owner's settings outlast any guess. `failed` says why a
+ * listing has none; it is not asked again for that listing.
+ */
+type ClassifiedValue = {
+	connections: {
+		[name: string]: {
+			listing: string;
+			groups: string[];
+			tools: { [tool: string]: Guess };
+			failed?: string;
+		};
+	};
+};
+
+export const Classified = defineDoc<ClassifiedValue>({
+	kind: "banda.classified",
+	version: 1,
+	scope: "session",
+	initial: () => ({ connections: {} }),
+	checkpointWhen: () => true,
+});
+
+/** The hash of a listing a guess is made for: its tools' names and words, in order. */
+export const listingSha = (tools: { readonly [tool: string]: Pick<Listed, "description"> }) =>
+	createHash("sha256")
+		.update(
+			JSON.stringify(
+				Object.keys(tools)
+					.sort()
+					.map((tool) => [tool, tools[tool]?.description ?? ""]),
+			),
+		)
+		.digest("hex");
+
+/** Whether connection file `path` is one banda ships, written by banda and changed since by nobody else. */
+const shippedOf = (accepted: { readonly shipped?: { readonly [path: string]: boolean } }, name: string) =>
+	accepted.shipped?.[connectionPath(name)] === true;
+
+/**
+ * What each listed tool of connection `name` does and which group it is in: as its file says, else its server's
+ * annotations, else banda's guess, else a write; its group as the file says, else the guess, else by its name. Reads
+ * only.
+ */
+export async function classesOf(
+	tx: Tx,
+	connection: Connection,
+): Promise<{ readonly [tool: string]: Classed & { readonly group: string } }> {
+	const listed = (await tx.doc(Connected)).connections[connection.name]?.tools ?? {};
+	const shipped = shippedOf(await tx.doc(Accepted), connection.name);
+	const guesses = (await tx.doc(Classified)).connections[connection.name];
+	const byName = nameGroups(Object.keys(listed).sort());
+	const fileGroup = new Map(
+		Object.entries(connection.groups ?? {}).flatMap(([group, tools]) => tools.map((tool) => [tool, group] as const)),
+	);
+	return Object.fromEntries(
+		Object.entries(listed).map(([tool, hints]) => {
+			const guess = guesses?.tools[tool];
+			return [
+				tool,
+				{
+					...classOf(connection, tool, hints, guess, shipped),
+					group: fileGroup.get(tool) ?? guess?.group ?? byName[tool] ?? "Other",
+				},
+			];
+		}),
+	);
+}
 
 /** An account's key, the folder its credentials are in: its id, lowercase, or a hash of it when it is not a name. */
 export function accountKey(id: string): string {
@@ -589,6 +757,7 @@ export type InEffect = {
 export async function connectionTools(tx: Tx): Promise<InEffect[]> {
 	const { files } = await tx.doc(Accepted);
 	const { connections, off } = await tx.doc(Connected);
+	const { set } = await tx.doc(ToolSettings);
 	const found: InEffect[] = [];
 	for (const path of Object.keys(files).sort()) {
 		const name = /^connections\/(.+)\.md$/.exec(path)?.[1];
@@ -596,14 +765,23 @@ export async function connectionTools(tx: Tx): Promise<InEffect[]> {
 		const connection = await acceptedConnection(tx, name);
 		const listed = connections[name];
 		if (connection === undefined || listed === undefined || listed.sha !== connection.sha) continue;
+		const classes = connection.command === undefined ? await classesOf(tx, connection) : {};
 		for (const [tool, shape] of Object.entries(listed.tools).sort(([a], [b]) => a.localeCompare(b))) {
 			const model = toolName(name, tool);
 			if (off[model] === true || found.some((other) => other.name === model)) continue;
+			const classed = classes[tool];
+			const level = set[model] ?? (classed === undefined ? undefined : defaultOf(classed.kind));
+			// the owner's Ask on a read, or Always ask on a write, puts it on the floor for every agent
+			const asked = classed !== undefined && (level === "always" || (level === "ask" && classed.kind === "read"));
 			const floor = Object.hasOwn(connection.floors, tool)
 				? connection.floors[tool]
-				: connection.ask === "always" && !connection.reads.includes(tool)
-					? "private"
-					: undefined;
+				: asked
+					? classed.kind === "floor" && classed.floor !== undefined
+						? classed.floor
+						: "owner"
+					: connection.ask === "always" && !connection.reads.includes(tool)
+						? "private"
+						: undefined;
 			const carried = tool === listed.notesOn ? listed.notes : undefined;
 			found.push({
 				name: model,
@@ -611,8 +789,8 @@ export async function connectionTools(tx: Tx): Promise<InEffect[]> {
 				tool,
 				listed: JSON.parse(JSON.stringify(shape)) as Listed,
 				// a server in the box runs there like any command: nothing it does leaves but through the proxy
-				read: connection.command !== undefined || connection.reads.includes(tool),
-				...(connection.command === undefined && connection.readsWhen?.[tool] !== undefined
+				read: connection.command !== undefined || (connection.reads.includes(tool) && !asked),
+				...(connection.command === undefined && connection.readsWhen?.[tool] !== undefined && !asked
 					? { readsWhen: connection.readsWhen[tool] }
 					: {}),
 				...(floor === undefined ? {} : { floor }),

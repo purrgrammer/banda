@@ -107,8 +107,13 @@ if (mode === "followed") {
 	writeFileSync(join(shipped, "cal.md"), next);
 	await s.capabilities.reconcile();
 }
+// "mcp": the owner accepts what its tools do, as reviewed: what the server says only reads runs without asking
+if (mode === "mcp") {
+	const view = (await s.capabilities.view()).connections.find((c) => c.name === "cal");
+	if (view?.review === true) await s.capabilities.review("cal", view.accepted?.sha, {});
+}
 // "address": its reads are none at first; the owner lets what the server says only reads run without asking
-if (mode === "address" || mode === "mcp") {
+if (mode === "address") {
 	const hinted = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.hinted ?? [];
 	if (hinted.includes("list_events")) await s.capabilities.trustReads("cal", ["list_events"]);
 }

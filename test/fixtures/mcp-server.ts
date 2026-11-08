@@ -17,6 +17,7 @@ export type FakeTool = {
 	readonly description: string;
 	readonly inputSchema: { readonly [key: string]: unknown };
 	readonly readOnlyHint?: boolean;
+	readonly destructiveHint?: boolean;
 };
 
 export const FAKE_TOOLS: readonly FakeTool[] = [
@@ -240,7 +241,14 @@ export async function startFakeMcp({
 								name: tool.name,
 								description: tool.description,
 								inputSchema: tool.inputSchema,
-								...(tool.readOnlyHint === undefined ? {} : { annotations: { readOnlyHint: tool.readOnlyHint } }),
+								...(tool.readOnlyHint === undefined && tool.destructiveHint === undefined
+									? {}
+									: {
+											annotations: {
+												...(tool.readOnlyHint === undefined ? {} : { readOnlyHint: tool.readOnlyHint }),
+												...(tool.destructiveHint === undefined ? {} : { destructiveHint: tool.destructiveHint }),
+											},
+										}),
 							})),
 						},
 						false,

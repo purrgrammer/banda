@@ -7,7 +7,7 @@ import { createModels } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc } from "@earendil-works/pi-durable";
 import { expect, it } from "vitest";
 import { LEAD } from "../src/core/agents.ts";
-import { Connected } from "../src/core/connections.ts";
+import { Classified, Connected, ToolSettings } from "../src/core/connections.ts";
 import { Devices, INVITE_MS, pairingState } from "../src/core/devices.ts";
 import { Harnesses } from "../src/core/harness.ts";
 import { keepReading, Readings } from "../src/core/objects.ts";
@@ -206,6 +206,39 @@ it("reopens current harness authority, continuation and process identities uncha
 	const after = await open(home);
 	try {
 		expect((await after.snapshot(Harnesses, context))?.sessions[10]).toEqual(session);
+	} finally {
+		await after.close(context);
+	}
+});
+
+it("reopens the owner's tool settings and banda's guesses as they were stored", async () => {
+	const home = await tempHome();
+	const before = await open(home);
+	await before.commit(async (tx) => {
+		const settings = await tx.doc(ToolSettings);
+		settings.set["cal__list_events"] = "ask";
+		settings.set["cal__create_event"] = "always";
+		settings.fresh["cal__cancel_event"] = true;
+		(await tx.doc(Classified)).connections.cal = {
+			listing: "c".repeat(64),
+			groups: ["Events", "Payments"],
+			tools: { send_payment: { kind: "write", floor: "money", group: "Payments" } },
+			failed: "The model couldn't answer: rate limited.",
+		};
+	}, context);
+	await before.close(context);
+	const after = await open(home);
+	try {
+		expect(await after.snapshot(ToolSettings, context)).toEqual({
+			set: { cal__list_events: "ask", cal__create_event: "always" },
+			fresh: { cal__cancel_event: true },
+		});
+		expect((await after.snapshot(Classified, context))?.connections.cal).toEqual({
+			listing: "c".repeat(64),
+			groups: ["Events", "Payments"],
+			tools: { send_payment: { kind: "write", floor: "money", group: "Payments" } },
+			failed: "The model couldn't answer: rate limited.",
+		});
 	} finally {
 		await after.close(context);
 	}

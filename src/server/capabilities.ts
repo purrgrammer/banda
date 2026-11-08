@@ -52,9 +52,11 @@ import {
 	accountKey,
 	accountLabel,
 	accountsOn,
+	Classified,
 	Connected,
 	type Connection,
 	type Credentials,
+	classesOf,
 	connectionPath,
 	connectionTools,
 	credentialed,
@@ -65,6 +67,7 @@ import {
 	inEffect,
 	keepPending,
 	type Listed,
+	listingSha,
 	MAX_DEFINITION_BYTES,
 	mayUse,
 	multiAccount,
@@ -79,11 +82,14 @@ import {
 	scrub,
 	secrets,
 	signsIn,
+	ToolSettings,
 	takePending,
 	toolName,
 	toolPath,
 	withCredentials,
+	withGroups,
 	withList,
+	withoutAlways,
 	withoutSignIn,
 	withReads,
 	withScopes,
@@ -137,6 +143,16 @@ import {
 import { agentOfChat, canonical, Permissions } from "../core/permissions.ts";
 import { publicFetch } from "../core/public-fetch.ts";
 import { context } from "../core/store.ts";
+import {
+	type Classed,
+	defaultOf,
+	type Guess,
+	inGroup,
+	isSetting,
+	optionsOf,
+	SETTING_WORDS,
+	type Setting,
+} from "../core/tool-kinds.ts";
 import { liveWaits } from "../core/wait.ts";
 import { type AgentChanged, boxFiles, type Workspace, write } from "./agents.ts";
 import type {
@@ -148,7 +164,9 @@ import type {
 	OwnToolView,
 	ShippedView,
 } from "./api.ts";
+import type { Classification, Listing } from "./classify.ts";
 import { BadRequest } from "./http.ts";
+import type { Inferred } from "./inference.ts";
 
 export type CapabilityOptions = {
 	readonly home: string;
@@ -176,6 +194,15 @@ export type CapabilityOptions = {
 	readonly shipped?: string;
 	/** Apply what is in effect to agent `id`'s chats, in the commit that changed it: its tools, as its accounts allow. */
 	readonly agentChanged?: AgentChanged;
+	/**
+	 * banda's guess at what a listing's tools do (`classify.ts`, on the owner's Balanced tier); none, and every tool
+	 * nobody said anything of is a write, grouped by its name.
+	 */
+	readonly classify?: (input: {
+		readonly service: string;
+		readonly tools: readonly Listing[];
+		readonly groups?: readonly string[] | undefined;
+	}) => Promise<Inferred<Classification>>;
 };
 
 /** A sign-in that just finished, for the card that started it: whom it signed in as, for which agent, and when. */
@@ -267,6 +294,7 @@ const listedOf = (tools: readonly McpTool[]): { [tool: string]: Listed } =>
 				description: tool.description,
 				schema: JSON.parse(JSON.stringify(tool.inputSchema)) as JsonObject,
 				...(tool.readOnlyHint === undefined ? {} : { readOnlyHint: tool.readOnlyHint }),
+				...(tool.destructiveHint === undefined ? {} : { destructiveHint: tool.destructiveHint }),
 			},
 		]),
 	);
@@ -1109,8 +1137,12 @@ export function openCapabilities(options: CapabilityOptions) {
 				...(kept === undefined || on === undefined ? {} : { notes: kept, notesOn: on }),
 				at: now(),
 			};
-			// a tool a server adds after it was connected waits for the owner to switch it on
-			for (const tool of fresh) doc.off[toolName(name, tool)] = true;
+			// a tool a server adds after it was connected waits for the owner to switch it on, marked new
+			const settings = await tx.doc(ToolSettings);
+			for (const tool of fresh) {
+				doc.off[toolName(name, tool)] = true;
+				settings.fresh[toolName(name, tool)] = true;
+			}
 			await offer(
 				tx,
 				listed.map((tool) => toolName(name, tool.name)).filter((tool) => doc.off[tool] !== true),
@@ -1125,6 +1157,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		}, ctx);
 		await install(ctx);
 		options.changed?.();
+		if (stored) classifyLater(name, ctx);
 		return stored;
 	}
 
@@ -1209,6 +1242,9 @@ export function openCapabilities(options: CapabilityOptions) {
 		}, ctx);
 		for (const name of due) await connect(name, ctx);
 		await followShipped(ctx);
+		// a guess a kill cut short is made again: it is derived, and nothing waits for it
+		const names = await harness.commit(async (tx) => Object.keys((await tx.doc(Connected)).connections), ctx);
+		for (const name of names) classifyLater(name, ctx);
 	}
 
 	/**
@@ -1296,10 +1332,27 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	/** Every connection and tool, accepted or only in the box, with the change the box holds, and how each stands. */
 	async function view(ctx: Context = context): Promise<CapabilitiesView> {
-		const { accepted, connected, inEffectNow, own } = await harness.commit(
+		const { accepted, connected, inEffectNow, own, kinds, settings, guessed, ours } = await harness.commit(
 			async (tx) => ({
 				accepted: JSON.parse(JSON.stringify((await tx.doc(Accepted)).files)) as {
 					[path: string]: { sha: string; text: string; at?: number };
+				},
+				ours: { ...(await tx.doc(Accepted)).shipped },
+				kinds: await (async () => {
+					const found: { [name: string]: { [tool: string]: Classed & { group: string } } } = {};
+					for (const name of Object.keys((await tx.doc(Connected)).connections)) {
+						const connection = await acceptedConnection(tx, name);
+						if (connection !== undefined && connection.command === undefined)
+							found[name] = JSON.parse(JSON.stringify(await classesOf(tx, connection)));
+					}
+					return found;
+				})(),
+				settings: JSON.parse(JSON.stringify(await tx.doc(ToolSettings))) as {
+					set: { [tool: string]: Exclude<Setting, "off"> };
+					fresh: { [tool: string]: true };
+				},
+				guessed: JSON.parse(JSON.stringify((await tx.doc(Classified)).connections)) as {
+					[name: string]: { groups: string[]; failed?: string };
 				},
 				connected: JSON.parse(JSON.stringify(await tx.doc(Connected))) as {
 					connections: {
@@ -1406,6 +1459,7 @@ export function openCapabilities(options: CapabilityOptions) {
 						: [anyOf[0] as string];
 				return [...new Set([...challenged, ...listed])];
 			};
+			const shipped = ours[connectionPath(name)] === true;
 			const tools: ConnectionToolView[] =
 				connection === undefined || listed === undefined || listed.sha !== file?.sha
 					? []
@@ -1414,7 +1468,38 @@ export function openCapabilities(options: CapabilityOptions) {
 							.map(([tool, shape]) => {
 								const model = toolName(name, tool);
 								const floor = Object.hasOwn(connection.floors, tool) ? connection.floors[tool] : undefined;
+								const classed = kinds[name]?.[tool];
+								const effect = inEffectNow.find((each) => each.name === model);
+								// what it does now: off, a read that runs, on the floor, or a write that asks first
+								const setting: Setting =
+									effect === undefined
+										? "off"
+										: effect.read || effect.readsWhen !== undefined
+											? "allow"
+											: effect.floor !== undefined
+												? classed?.kind === "read"
+													? "ask"
+													: "always"
+												: "ask";
 								return {
+									...(classed === undefined
+										? {}
+										: {
+												classed: {
+													kind: classed.kind,
+													...(classed.floor === undefined ? {} : { floor: classed.floor }),
+													from: classed.from,
+												},
+												group: classed.group,
+												setting,
+												// what the review starts from: as set, else as its kind says
+												proposed:
+													connected.off[model] === true
+														? ("off" as const)
+														: (settings.set[model] ?? defaultOf(classed.kind)),
+												options: optionsOf(classed, shipped),
+												...(settings.fresh[model] === true ? { fresh: true as const } : {}),
+											}),
 									name: model,
 									title: tool,
 									words: toolWords(tool),
@@ -1516,6 +1601,20 @@ export function openCapabilities(options: CapabilityOptions) {
 					return hinted.length === 0 ? {} : { hinted };
 				})(),
 				...(listed?.sha === file?.sha && listed?.notes !== undefined ? { notes: listed.notes } : {}),
+				...(connection === undefined || connection.command !== undefined || listed?.sha !== file?.sha
+					? {}
+					: {
+							groups: [
+								...new Set([
+									...Object.keys(connection.groups ?? {}),
+									...(guessed[name]?.groups ?? []),
+									...tools.flatMap((tool) => (tool.group === undefined ? [] : [tool.group])).sort(),
+								]),
+							].filter((group) => tools.some((tool) => tool.group === group)),
+							...(connection.ask === "always" && !shipped ? { review: true as const } : {}),
+							...(classifying.has(name) ? { classifying: true as const } : {}),
+							...(guessed[name]?.failed === undefined ? {} : { unguessed: guessed[name].failed }),
+						}),
 				...(() => {
 					// what its tools turned out to need, and what the file asks for that the sign-in was not given
 					const short = held1 === undefined ? [] : (connection?.scopes ?? []).filter((s) => !granted.includes(s));
@@ -1719,6 +1818,10 @@ export function openCapabilities(options: CapabilityOptions) {
 				delete doc.connections[name];
 				delete doc.public[name];
 				for (const tool of Object.keys(doc.off)) if (tool.startsWith(`${name}__`)) delete doc.off[tool];
+				const settings = await tx.doc(ToolSettings);
+				for (const tool of Object.keys(settings.set)) if (tool.startsWith(`${name}__`)) delete settings.set[tool];
+				for (const tool of Object.keys(settings.fresh)) if (tool.startsWith(`${name}__`)) delete settings.fresh[tool];
+				delete (await tx.doc(Classified)).connections[name];
 				await endAccounts(
 					tx,
 					name,
@@ -2062,6 +2165,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				: (await tx.doc(Accepted)).files[toolPath(name)] !== undefined;
 			if (!exists) return false;
 			const doc = await tx.doc(Connected);
+			delete (await tx.doc(ToolSettings)).fresh[name];
 			if (on) {
 				delete doc.off[name];
 				await offer(tx, [name], name.includes("__") ? connection : undefined);
@@ -2873,6 +2977,292 @@ export function openCapabilities(options: CapabilityOptions) {
 		}
 	}
 
+	// ---- what each tool does, and what the owner set it to
+
+	/** Guesses in progress, by connection: one at a time each, never asked again for a listing it was made for. */
+	const classifying = new Map<string, Promise<void>>();
+
+	/** Guess what connection `name`'s listed tools do, in the background, when its listing has no guess yet. */
+	function classifyLater(name: string, ctx: Context): void {
+		if (options.classify === undefined || classifying.has(name)) return;
+		const run = (async () => {
+			// a listing that changed while it was guessed is guessed again, for its new tools alone
+			for (let round = 0; round < 3 && (await classifyNow(name, ctx)); round++);
+		})()
+			.catch((error: unknown) => say(`capabilities: guessing ${name}'s tools: ${(error as Error).message}`))
+			.finally(() => {
+				classifying.delete(name);
+				options.changed?.();
+			});
+		classifying.set(name, run);
+		options.changed?.();
+	}
+
+	/** Every guess in progress, ended. */
+	const classified = async () => {
+		while (classifying.size > 0) await Promise.all(classifying.values());
+	};
+
+	/**
+	 * One guess for connection `name`'s listing as it is now: for the tools that have none yet and that nobody said the
+	 * kind of, or that the file puts in no group. A connection banda ships says its kinds, and is grouped by name.
+	 * Whether it must go again, the listing having changed meanwhile.
+	 */
+	async function classifyNow(name: string, ctx: Context): Promise<boolean> {
+		const classify = options.classify;
+		if (classify === undefined) return false;
+		const plan = await harness.commit(async (tx) => {
+			const connection = await acceptedConnection(tx, name);
+			const listed = (await tx.doc(Connected)).connections[name];
+			if (connection?.url === undefined || listed?.sha !== connection.sha) return undefined;
+			if ((await tx.doc(Accepted)).shipped?.[connectionPath(name)] === true) return undefined;
+			const sha = listingSha(listed.tools);
+			const was = (await tx.doc(Classified)).connections[name];
+			if (was?.listing === sha) return undefined;
+			const grouped = new Set(Object.values(connection.groups ?? {}).flat());
+			const fileGroups = connection.groups === undefined ? undefined : Object.keys(connection.groups);
+			const need = Object.entries(listed.tools)
+				.filter(([tool, hints]) => {
+					if (was?.tools[tool] !== undefined) return false;
+					const said =
+						connection.reads.includes(tool) ||
+						connection.readsWhen?.[tool] !== undefined ||
+						Object.hasOwn(connection.floors, tool) ||
+						hints.readOnlyHint !== undefined ||
+						hints.destructiveHint === true;
+					return !said || !grouped.has(tool);
+				})
+				.map(([tool, hints]) => ({ tool, description: hints.description, parameters: hints.schema }))
+				.sort((a, b) => a.tool.localeCompare(b.tool));
+			return JSON.parse(
+				JSON.stringify({
+					service: connection.service,
+					sha,
+					need,
+					groups: fileGroups ?? (was === undefined || was.groups.length === 0 ? undefined : was.groups),
+					was: was ?? null,
+				}),
+			) as {
+				service: string;
+				sha: string;
+				need: Listing[];
+				groups?: string[];
+				was: { groups: string[]; tools: { [tool: string]: Guess } } | null;
+			};
+		}, ctx);
+		if (plan === undefined) return false;
+		const got: Inferred<Classification> =
+			plan.need.length === 0
+				? { ok: true, value: { groups: plan.groups ?? [], tools: {} } }
+				: await classify({ service: plan.service, tools: plan.need, groups: plan.groups }).catch((error: unknown) => ({
+						ok: false as const,
+						why: (error as Error).message,
+					}));
+		const kept = await harness.commit(async (tx) => {
+			const listed = (await tx.doc(Connected)).connections[name];
+			// listed again meanwhile: this guess is for a listing that is gone, and the next round makes the new one's
+			if (listed === undefined || listingSha(listed.tools) !== plan.sha) return false;
+			const tools = Object.fromEntries(
+				Object.entries({ ...(plan.was?.tools ?? {}), ...(got.ok ? got.value.tools : {}) }).filter(([tool]) =>
+					Object.hasOwn(listed.tools, tool),
+				),
+			);
+			(await tx.doc(Classified)).connections[name] = {
+				listing: plan.sha,
+				groups: got.ok ? [...got.value.groups] : (plan.was?.groups ?? plan.groups ?? []),
+				tools,
+				...(got.ok ? (got.value.failed === undefined ? {} : { failed: got.value.failed }) : { failed: got.why }),
+			};
+			return true;
+		}, ctx);
+		if (!got.ok) say(`capabilities: ${name}'s tools were not guessed: ${got.why}`);
+		// a guessed floor asks every time from now on
+		await install(ctx);
+		options.changed?.();
+		return !kept;
+	}
+
+	/** What connection `name` is and how its tools stand, copied out of a commit, for setting them. */
+	const settingState = (name: string, ctx: Context) =>
+		harness.commit(async (tx) => {
+			const accepted = (await tx.doc(Accepted)).files[connectionPath(name)];
+			const connection = await acceptedConnection(tx, name);
+			const listed = (await tx.doc(Connected)).connections[name];
+			if (accepted === undefined || connection === undefined) return undefined;
+			if (connection.command !== undefined) return { boxed: true as const };
+			if (listed?.sha !== connection.sha) return { unlisted: true as const };
+			return JSON.parse(
+				JSON.stringify({
+					connection,
+					text: accepted.text,
+					shipped: (await tx.doc(Accepted)).shipped?.[connectionPath(name)] === true,
+					classes: await classesOf(tx, connection),
+					off: (await tx.doc(Connected)).off,
+					set: (await tx.doc(ToolSettings)).set,
+					order: (await tx.doc(Classified)).connections[name]?.groups ?? [],
+				}),
+			) as SettingState;
+		}, ctx);
+
+	/** `given`, checked as settings by tool: each a listed tool of `state`'s connection, set to one it may be. */
+	function settingsOf(name: string, given: unknown, state: SettingState): { [tool: string]: Setting } {
+		if (typeof given !== "object" || given === null || Array.isArray(given) || Object.keys(given).length > 500)
+			throw new BadRequest("give the settings as tool names, each with allow, ask, always or off");
+		const settings: { [tool: string]: Setting } = {};
+		for (const [tool, setting] of Object.entries(given)) {
+			const classed = state.classes[tool];
+			if (classed === undefined) throw new BadRequest(`${name} lists no tool named ${tool}`);
+			if (!isSetting(setting)) throw new BadRequest(`${tool}: give allow, ask, always or off`);
+			if (!optionsOf(classed, state.shipped).includes(setting))
+				throw new BadRequest(
+					`${tool} cannot be set to ${SETTING_WORDS[setting]}: a connection only narrows what its file says`,
+				);
+			settings[tool] = setting;
+		}
+		return settings;
+	}
+
+	/** The state of connection `name` for setting its tools, or why they cannot be set now. */
+	async function settable(name: string, ctx: Context): Promise<SettingState> {
+		const state = await settingState(name, ctx);
+		if (state === undefined) throw new BadRequest(`there is no connection named ${name}`, 404);
+		if ("boxed" in state) throw new BadRequest(`${name} runs in its computer: switch its tools on or off`);
+		if ("unlisted" in state)
+			throw new BadRequest(`${name} is not connected yet: sign in first, then its tools are known`, 409);
+		return state;
+	}
+
+	/** In `tx`: `settings` (by tool) kept for connection `name`: Off its switch, the rest beside it; none of them new. */
+	async function keepSettings(tx: Tx, name: string, settings: { readonly [tool: string]: Setting }): Promise<void> {
+		const doc = await tx.doc(Connected);
+		const kept = await tx.doc(ToolSettings);
+		const on: string[] = [];
+		for (const [tool, setting] of Object.entries(settings)) {
+			const model = toolName(name, tool);
+			delete kept.fresh[model];
+			if (setting === "off") {
+				doc.off[model] = true;
+				continue;
+			}
+			if (doc.off[model] === true) on.push(model);
+			delete doc.off[model];
+			kept.set[model] = setting;
+		}
+		// a read set to Ask is taken back: one in flight does not finish as a read
+		doc.epoch++;
+		await offer(tx, on, name);
+	}
+
+	/** The tools of `settings` set to Allow that are not reads yet: confirming them makes them the file's. */
+	const confirmedReads = (state: SettingState, settings: { readonly [tool: string]: Setting }) =>
+		Object.entries(settings)
+			.filter(
+				([tool, setting]) =>
+					setting === "allow" &&
+					!state.connection.reads.includes(tool) &&
+					state.connection.readsWhen?.[tool] === undefined,
+			)
+			.map(([tool]) => tool)
+			.sort();
+
+	/**
+	 * The owner sets connection `name`'s tools (`given`, by the server's name for each) from Settings, at once, for
+	 * every agent. Allow on one that is not a read yet confirms it as one: it joins the file's reads (`trustReads`).
+	 */
+	async function setTools(name: string, given: unknown, ctx: Context = context): Promise<void> {
+		const state = await settable(name, ctx);
+		const settings = settingsOf(name, given, state);
+		const confirmed = confirmedReads(state, settings);
+		if (confirmed.length > 0) await trustReads(name, confirmed, ctx);
+		await harness.commit(async (tx) => {
+			await keepSettings(tx, name, settings);
+			const [only, ...more] = Object.entries(settings);
+			await log(tx, {
+				at: now(),
+				what:
+					only !== undefined && more.length === 0
+						? `You set ${state.connection.service}'s ${only[0]} to ${SETTING_WORDS[only[1]]}`
+						: `You set ${more.length + 1} of ${state.connection.service}'s tools`,
+			});
+		}, ctx);
+		await install(ctx);
+		options.changed?.();
+	}
+
+	/** The owner sets every tool in connection `name`'s group `group` to `setting`: each to it, or the nearest it has. */
+	async function setGroup(name: string, group: unknown, setting: unknown, ctx: Context = context): Promise<void> {
+		if (typeof group !== "string" || !isSetting(setting)) throw new BadRequest("give a group and a setting");
+		const state = await settable(name, ctx);
+		const tools = Object.entries(state.classes).filter(([, classed]) => classed.group === group);
+		if (tools.length === 0) throw new BadRequest(`${name} has no group named ${group}`, 404);
+		const settings: { [tool: string]: Setting } = {};
+		for (const [tool, classed] of tools) {
+			const near = inGroup(setting, optionsOf(classed, state.shipped));
+			if (near !== undefined) settings[tool] = near;
+		}
+		await setTools(name, settings, ctx);
+	}
+
+	/**
+	 * The owner accepts what connection `name`'s tools do, as reviewed after sign-in (`sha`, the file they saw): the
+	 * tools set to Allow join its reads, its groups are written into it, and it no longer asks for everything; each
+	 * tool's setting is kept beside its switch. Until then nothing banda guessed runs unasked. A tool not in `given` is
+	 * accepted as it stands, or as proposed.
+	 */
+	async function review(name: string, sha: unknown, given: unknown, ctx: Context = context): Promise<void> {
+		if (typeof sha !== "string") throw new BadRequest("sha is the reviewed connection hash");
+		const state = await settable(name, ctx);
+		if (state.shipped) throw new BadRequest(`${state.connection.service}'s file says what its tools do`, 409);
+		if (state.connection.sha !== sha) throw new BadRequest("This connection changed meanwhile. Review it again.", 409);
+		const chosen = settingsOf(name, given, state);
+		const settings: { [tool: string]: Setting } = Object.fromEntries(
+			Object.entries(state.classes).map(([tool, classed]) => [
+				tool,
+				chosen[tool] ??
+					(state.off[toolName(name, tool)] === true
+						? "off"
+						: (state.set[toolName(name, tool)] ?? defaultOf(classed.kind))),
+			]),
+		);
+		const reads = confirmedReads(state, settings);
+		// in the order banda guessed them, then any by name
+		const groups: { [group: string]: string[] } = Object.fromEntries(state.order.map((group) => [group, []]));
+		for (const [tool, classed] of Object.entries(state.classes).sort(([a], [b]) => a.localeCompare(b)))
+			groups[classed.group] = [...(groups[classed.group] ?? []), tool];
+		for (const [group, tools] of Object.entries(groups)) if (tools.length === 0) delete groups[group];
+		const withRead = withReads(name, state.text, reads);
+		const grouped =
+			withRead === undefined || state.connection.groups !== undefined ? withRead : withGroups(name, withRead, groups);
+		const rewritten = grouped === undefined ? undefined : withoutAlways(grouped);
+		if (rewritten === undefined || !("connection" in parseConnection(name, rewritten)))
+			throw new BadRequest(`could not write what its tools do into connections/${name}.md`);
+		const box = (await boxedFiles("connections", ctx)).get(name) as
+			| { text: string }
+			| { unreadable: string }
+			| undefined;
+		// a review a kill cut short once its file was written is accepted as written
+		if (box === undefined || "unreadable" in box || (box.text !== state.text && box.text !== rewritten))
+			throw new BadRequest("it proposes a change to this connection: allow or decline that first", 409);
+		if (box.text !== rewritten) {
+			await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, rewritten, ctx);
+			fault("review:written");
+		}
+		await harness.commit(async (tx) => {
+			const files = (await tx.doc(Accepted)).files;
+			const listing = (await tx.doc(Connected)).connections[name];
+			if (files[connectionPath(name)]?.sha !== state.connection.sha || listing?.sha !== state.connection.sha)
+				throw new BadRequest("This connection changed meanwhile. Review it again.", 409);
+			const next = shaOf(rewritten);
+			files[connectionPath(name)] = { sha: next, text: rewritten, at: now() };
+			listing.sha = next;
+			await keepSettings(tx, name, settings);
+			await log(tx, { at: now(), what: `You set what ${state.connection.service}'s tools may do` });
+		}, ctx);
+		fault("accept:after");
+		await install(ctx);
+		options.changed?.();
+	}
+
 	/** The schema a connection's tool was listed with, for the file accepted now. */
 	const listedSchema = (name: string, tool: string, ctx: Context = context) =>
 		harness.commit(async (tx) => {
@@ -2890,6 +3280,10 @@ export function openCapabilities(options: CapabilityOptions) {
 	return {
 		readFor,
 		readAttachment,
+		setTools,
+		setGroup,
+		review,
+		classified,
 		listedSchema,
 		shipped,
 		install,
@@ -2917,3 +3311,15 @@ export function openCapabilities(options: CapabilityOptions) {
 }
 
 export type Capabilities = ReturnType<typeof openCapabilities>;
+
+/** A connection whose tools the owner sets, as it stands: copied out of a commit. */
+type SettingState = {
+	readonly connection: Connection & { sha: string };
+	readonly text: string;
+	readonly shipped: boolean;
+	readonly classes: { readonly [tool: string]: Classed & { readonly group: string } };
+	readonly off: { readonly [tool: string]: true };
+	readonly set: { readonly [tool: string]: Exclude<Setting, "off"> };
+	/** The groups banda guessed, in its order. */
+	readonly order: readonly string[];
+};

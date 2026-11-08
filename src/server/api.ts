@@ -11,6 +11,7 @@ import type { Origin, Received } from "../core/gateway.ts";
 import type { Grain } from "../core/objects.ts";
 import type { Floor, PermissionScope, Serves } from "../core/permissions.ts";
 import type { OpenWait, Parked, State } from "../core/status.ts";
+import type { From, Kind, Setting } from "../core/tool-kinds.ts";
 import type { Answer, WaitEnded } from "../core/wait.ts";
 
 export type { BrowserView, OwnerInput, ViewEvent } from "../box/browser.ts";
@@ -656,6 +657,25 @@ export type ConnectionToolView = {
 		readonly place?: { readonly words: string; readonly place: string };
 		readonly action?: { readonly words: string };
 	};
+	/**
+	 * For a remote connection's tool, what it does (a read, a write, or on the floor and its class) and who said so: its
+	 * file, its server ("service"), banda's guess, or nobody. Until the owner accepts it, a read said by anyone but the
+	 * file is only proposed: it asks.
+	 */
+	readonly classed?: { readonly kind: Kind; readonly floor?: Floor; readonly from: From };
+	/** Its group, as the file says, else banda's guess, else by its name. */
+	readonly group?: string;
+	/**
+	 * What it does now, as the owner's control reads it (`POST …/connections/:name/settings` with `tools`, or `group`
+	 * and `setting`, changes it): Allow, Ask, Always ask or Off.
+	 */
+	readonly setting?: Setting;
+	/** What the review after sign-in starts it at: as the owner set it, else as its kind says. */
+	readonly proposed?: Setting;
+	/** The settings it may be given: a connection only narrows. */
+	readonly options?: readonly Setting[];
+	/** Listed after its connection was, and not set since: off until the owner sets it. */
+	readonly fresh?: true;
 };
 
 /**
@@ -693,6 +713,17 @@ export type ConnectionView = {
 	readonly hinted?: readonly string[];
 	/** The server's own notes about its tools, as kept when it was connected: what the model is told of them. */
 	readonly notes?: string;
+	/** Its tools' groups, in the order they are shown. */
+	readonly groups?: readonly string[];
+	/**
+	 * Added by the owner and not reviewed yet: every tool not in its file's reads asks every time until the owner
+	 * accepts what each does (`POST …/connections/:name/review` with the `sha` shown and `tools`, by tool, each a setting).
+	 */
+	readonly review?: true;
+	/** banda is guessing what its tools do. */
+	readonly classifying?: true;
+	/** Why some of its tools have no guess: they ask, grouped by name. */
+	readonly unguessed?: string;
 	/** The scopes the server says it can grant, once known: what the owner picks from. */
 	readonly offered?: readonly string[];
 	/** Scopes some of its tools turned out to need that the sign-in was not given (from the server's challenges). */

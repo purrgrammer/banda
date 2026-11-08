@@ -17,6 +17,8 @@ export type McpTool = {
 	readonly inputSchema: { readonly [key: string]: unknown };
 	/** The server's own hints, which banda shows but never trusts for what asks the owner. */
 	readonly readOnlyHint?: boolean;
+	/** The server's word that it may destroy something: shown, and it makes the tool a write whatever else is said. */
+	readonly destructiveHint?: boolean;
 };
 
 /** What a call answered: its text (images and resources said in words), and whether the server called it an error. */
@@ -134,7 +136,7 @@ export function toolOf(raw: unknown): McpTool | undefined {
 		name?: unknown;
 		description?: unknown;
 		inputSchema?: unknown;
-		annotations?: { readOnlyHint?: unknown };
+		annotations?: { readOnlyHint?: unknown; destructiveHint?: unknown };
 	};
 	if (typeof name !== "string" || !TOOL_NAME.test(name)) return undefined;
 	const schema =
@@ -147,6 +149,7 @@ export function toolOf(raw: unknown): McpTool | undefined {
 		description: typeof description === "string" ? description.slice(0, 2000) : "",
 		inputSchema: schema,
 		...(typeof annotations?.readOnlyHint === "boolean" ? { readOnlyHint: annotations.readOnlyHint } : {}),
+		...(typeof annotations?.destructiveHint === "boolean" ? { destructiveHint: annotations.destructiveHint } : {}),
 	};
 }
 

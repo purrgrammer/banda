@@ -224,7 +224,15 @@ export type CapabilityAction =
 			readonly sha?: string;
 	  }
 	| { readonly action: "refresh"; readonly name: string }
-	| { readonly action: "switch"; readonly tool: string; readonly on: boolean };
+	| { readonly action: "switch"; readonly tool: string; readonly on: boolean }
+	| {
+			readonly action: "settings";
+			readonly name: string;
+			readonly tools?: unknown;
+			readonly group?: unknown;
+			readonly setting?: unknown;
+	  }
+	| { readonly action: "review"; readonly name: string; readonly sha: unknown; readonly tools: unknown };
 
 /** What the owner does to memory from the app. */
 export type FactAction =
@@ -771,7 +779,7 @@ export function handler(
 		if (route === "POST /capabilities/connections")
 			return reply(res, 200, await routes.capability({ action: "address", url: (await json(req)).url }));
 		const capability =
-			/^\/capabilities\/(connections|tools)\/([a-z0-9-]{1,64})\/(accept|decline|remove|signin|key|scopes|add|trust|disconnect|public|refresh|reads)$/.exec(
+			/^\/capabilities\/(connections|tools)\/([a-z0-9-]{1,64})\/(accept|decline|remove|signin|key|scopes|add|trust|disconnect|public|refresh|reads|settings|review)$/.exec(
 				path,
 			);
 		if (capability !== null && req.method === "POST") {
@@ -830,6 +838,17 @@ export function handler(
 				return reply(res, 200, await routes.capability({ action, name, scopes: (await json(req)).scopes }));
 			if (action === "disconnect" && kind === "connections")
 				return reply(res, 200, await routes.capability({ action, name }));
+			// what each tool does, for every agent: from Settings at once, or accepted after the review that follows sign-in
+			if (action === "settings" && kind === "connections") {
+				const { tools, group, setting } = await json(req);
+				return reply(res, 200, await routes.capability({ action, name, tools, group, setting }));
+			}
+			if (action === "review" && kind === "connections") {
+				const { sha, tools } = await json(req);
+				if (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha))
+					throw new BadRequest("sha is the reviewed connection hash");
+				return reply(res, 200, await routes.capability({ action, name, sha, tools: tools ?? {} }));
+			}
 			return reply(res, 404, { error: "not found" });
 		}
 		// an account of a connection: switched on or off for an agent, or signed out

@@ -16,7 +16,7 @@ import { context, openStore } from "../../src/core/store.ts";
 import { defineCore } from "../../src/core/turn.ts";
 import { revive } from "../../src/core/wait.ts";
 import type { Workspace } from "../../src/server/agents.ts";
-import { type Capabilities, openCapabilities } from "../../src/server/capabilities.ts";
+import { type Capabilities, type CapabilityOptions, openCapabilities } from "../../src/server/capabilities.ts";
 import { hostBox } from "./host-box.ts";
 import { FAUX_MODEL } from "./models.ts";
 
@@ -40,6 +40,7 @@ export async function openConnected({
 	fault,
 	install,
 	shipped,
+	classify,
 	registry = createRegistry(),
 }: {
 	home: string;
@@ -53,6 +54,8 @@ export async function openConnected({
 	fault?: (point: string) => void;
 	/** Where the connections banda ships are, for this test. */
 	shipped?: string;
+	/** How a listing's tools are guessed, for this test: none, unless it says. */
+	classify?: CapabilityOptions["classify"];
 }) {
 	const box = openBox(hostBox(home), () => {});
 	const faux = fauxProvider();
@@ -99,6 +102,7 @@ export async function openConnected({
 		log: (line) => logs.push(line),
 		...(fault === undefined ? {} : { fault }),
 		...(shipped === undefined ? {} : { shipped }),
+		...(classify === undefined ? {} : { classify }),
 		// the fake servers are on this machine: the tests probe them as they are
 		probe: fetch,
 		agentChanged: core.agentChanged,
