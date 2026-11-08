@@ -180,8 +180,12 @@ export type WatchRecord = {
 	/** The newest changes it saw, in the kind's words, and when. */
 	saw?: string[];
 	sawAt?: number;
-	/** The newest look that could not be made: when, and why in the daemon's words. */
-	failed?: { at: number; why: string };
+	/**
+	 * The newest look that could not be made: when, why in the daemon's words, and since when it could not, the first
+	 * failure of this run of them; `told` once its chat drew the error line for this run; `run` when it was the wake's
+	 * run that failed, not a look. A good look clears it.
+	 */
+	failed?: { at: number; why: string; since: number; told?: number; run?: true };
 	/** The Turn of its newest wake. */
 	turn?: number;
 	/** When it woke, within the last day. */
@@ -205,6 +209,8 @@ export type WatchRecord = {
 
 export const ALLOWED_KEPT = 8;
 const CHECKED_KEPT = 8;
+/** How long a watch may be unable to look before its chat is told. */
+export const TELL_AFTER = 60 * 60_000;
 
 export const Watches = defineDoc<{ watches: { [name: string]: WatchRecord } }>({
 	kind: "banda.watches",
@@ -300,6 +306,18 @@ export type WatchWakeData = {
 export const WAKE = "banda.watch-wake";
 /** Changes that only tell: the line and the card in the chat, no run. */
 export const TELL = "banda.watch-tell";
+
+/** A watch unable to look for an hour, as its chat's error line says it: what it follows, why, and since when. */
+export type WatchTroubleData = {
+	readonly watch: string;
+	/** What it follows, once resolved; else the watch's own name. */
+	readonly name: string;
+	readonly service?: string;
+	readonly why: string;
+	readonly since: number;
+	readonly at: number;
+};
+export const TROUBLE = "banda.watch-trouble";
 
 /** Whose authority a watch looks with: a connection, one account of it (by its key), one agent given it. */
 export type Authority = { readonly connection: string; readonly account?: string; readonly agent?: string };
@@ -530,6 +548,33 @@ export function defineWatches(options: WatchesOptions) {
 	}
 
 	/**
+	 * In `tx`: watch `name` could not look, `why`. The run of failures keeps its first; once it has lasted an hour, its
+	 * agent's chat (`chat`, else found) draws one error line, which counts as unread, and the record says it was told
+	 * in this same commit, so a look repeated after a crash never draws a second.
+	 */
+	async function unable(tx: Tx, name: string, record: WatchRecord, why: string, now: number, chat?: number) {
+		const before = record.failed?.run === undefined ? record.failed : undefined;
+		const since = before?.since ?? now;
+		let told = before?.told;
+		if (told === undefined && now - since >= TELL_AFTER) {
+			const target = chat ?? (await options.agentChat(tx, watchAgent(record)));
+			if (target !== undefined) {
+				const data: WatchTroubleData = {
+					watch: name,
+					name: record.name ?? name,
+					...(record.service === undefined ? {} : { service: record.service }),
+					why,
+					since,
+					at: now,
+				};
+				await tx.appendEntry(target as ConversationId, { kind: TROUBLE, data: data as unknown as JsonObject });
+				told = now;
+			}
+		}
+		record.failed = { at: now, why, since, ...(told === undefined ? {} : { told }) };
+	}
+
+	/**
 	 * One look at watch `name`'s object: resolve it (first commit), read it as the daemon (outside any commit), and
 	 * keep what it read with the wake or what it tells (second commit). Nothing is kept when the watch, its authority
 	 * or the reading kept changed in between: the next look reads again.
@@ -548,7 +593,11 @@ export function defineWatches(options: WatchesOptions) {
 			const found = await resolve(tx, name);
 			if ("why" in found) {
 				why = found.why;
-				if (record !== undefined && found.why !== "gone") record.failed = { at: now, why: found.why };
+				if (record !== undefined && found.why !== "gone") {
+					await unable(tx, name, record, found.why, now);
+					record.looked = now;
+					record.next = now + lookEvery({}, {});
+				}
 				return;
 			}
 			resolved = found;
@@ -600,7 +649,7 @@ export function defineWatches(options: WatchesOptions) {
 			}
 			if ((await objectAccess(tx, chat, ref, account))?.stamp !== stamp) {
 				outcome = { outcome: "failed", why: `${connection.service} is no longer connected as that account` };
-				record.failed = { at: now, why: outcome.why };
+				await unable(tx, name, record, outcome.why, now, chat);
 				return;
 			}
 			// a done watch never wakes again; a pause that came while the task read holds what it saw for the resume,
@@ -718,7 +767,7 @@ export function defineWatches(options: WatchesOptions) {
 			await commit(async (tx) => {
 				const record = (await tx.doc(Watches)).watches[name];
 				if (record !== undefined && record.done === undefined) {
-					record.failed = { at: now, why: reason };
+					await unable(tx, name, record, reason, now, chat);
 					record.looked = now;
 					record.next = now + lookEvery(kind.follow, {});
 				}

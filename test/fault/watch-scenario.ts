@@ -29,12 +29,15 @@ import { defineCore, Routes, type TurnResult } from "../../src/core/turn.ts";
 import {
 	Followed,
 	TELL,
+	TROUBLE,
 	WAKE,
 	Watches,
 	type WatchRecord,
+	type WatchTroubleData,
 	type WatchWakeData,
 	watchPath,
 } from "../../src/core/watches.ts";
+import { chats } from "../../src/server/transcript.ts";
 import { githubObjectFile } from "../fixtures/github-objects.ts";
 import { hostBox } from "../fixtures/host-box.ts";
 import { echoModels, FAUX_MODEL } from "../fixtures/models.ts";
@@ -97,8 +100,12 @@ export type WatchSummary = {
 	card?: { state?: string; at: number };
 	wakes: WatchWakeData[];
 	tells: WatchWakeData[];
+	/** The error lines its chat drew: a watch that could not look for an hour. */
+	troubles: WatchTroubleData[];
 	/** The watches accepted at the end. */
 	live: string[];
+	/** What its chats count as unread for the owner. */
+	unread: number;
 	/** When each watch was paused, and resumed, by the scenario's acts. */
 	held: { watch: string; from: number; to?: number }[];
 	turns: ({ status: string } | undefined)[];
@@ -277,6 +284,7 @@ export async function watchScenario(
 		const routes: Record<string, { chat: number }> = (await harness.snapshot(Routes, context))?.routes ?? {};
 		const wakes: WatchWakeData[] = [];
 		const tells: WatchWakeData[] = [];
+		const troubles: WatchTroubleData[] = [];
 		for (const { chat } of Object.values(routes)) {
 			const page = await (await harness.conversation(chat as ConversationId, context))!.entries(
 				{ order: "ascending" },
@@ -287,6 +295,7 @@ export async function watchScenario(
 			for (const entry of page.items) {
 				if (entry.kind === WAKE) wakes.push(entry.data as unknown as WatchWakeData);
 				if (entry.kind === TELL) tells.push(entry.data as unknown as WatchWakeData);
+				if (entry.kind === TROUBLE) troubles.push(entry.data as unknown as WatchTroubleData);
 			}
 		}
 		const turns = await harness.commit(async (tx) => {
@@ -323,7 +332,9 @@ export async function watchScenario(
 				: { card: { ...(card.state === undefined ? {} : { state: card.state }), at: reading.at } }),
 			wakes,
 			tells,
+			troubles,
 			live,
+			unread: (await chats(harness, context)).reduce((sum, row) => sum + row.unread, 0),
 			held,
 			turns,
 			sent: readFileSync(join(home, "sent.jsonl"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean),

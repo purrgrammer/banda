@@ -7,6 +7,7 @@
  * Pure, so it is unit-tested beside the server's tests; it imports types alone.
  */
 import type { TroubleData } from "../../../src/core/routines.ts";
+import type { WatchTroubleData } from "../../../src/core/watches.ts";
 import type { Answer, Ask, Item, PermissionScope, Queued, RunningTool, ShownWait } from "../../../src/server/api.ts";
 import { routineTitle } from "../app/titles.ts";
 import { permissionWhen } from "./permissions.ts";
@@ -88,12 +89,16 @@ type CoreSegment =
 			readonly open?: { readonly wait: string; readonly deadline: number };
 			readonly ended?: Ended;
 	  }
-	/** A notice: something went wrong. One about a routine names it, and taps open the agent's routines. */
+	/**
+	 * A notice: something went wrong. One about a routine names it, as one about a watch unable to look for an hour does
+	 * (`watch`); a tap opens it in the agent's panel.
+	 */
 	| {
 			readonly kind: "notice";
 			readonly key: string;
 			readonly text: string;
 			readonly routine?: string;
+			readonly watch?: string;
 			readonly at?: number;
 	  }
 	| {
@@ -543,8 +548,14 @@ export function view(
 			segments.push({
 				kind: "notice",
 				key: `${item.id}`,
-				text: item.routine === undefined ? item.text : troubleWords(item.routine),
+				text:
+					item.routine !== undefined
+						? troubleWords(item.routine)
+						: item.watch !== undefined
+							? watchTroubleWords(item.watch)
+							: item.text,
 				...(item.routine === undefined ? {} : { routine: item.routine.routine }),
+				...(item.watch === undefined ? {} : { watch: item.watch.watch }),
 				...(item.at === undefined ? {} : { at: item.at }),
 			});
 		else if (item.role === "effect")
@@ -636,6 +647,12 @@ export function watchWords(item: Pick<Extract<Item, { role: "watch" }>, "object"
 	const words = [item.object.name, ...(changes.length === 0 ? [] : [changes.join(", ")])];
 	if (item.ended !== undefined) words.push(`done: ${item.ended}`);
 	return words.join(" · ");
+}
+
+/** A watch unable to look for an hour, in the owner's words: what it follows, where, since when, and why. */
+export function watchTroubleWords(data: WatchTroubleData): string {
+	const time = new Date(data.since).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+	return `${data.name} · can't reach ${data.service ?? "it"} since ${time} · ${data.why}`;
 }
 
 /** A routine in trouble, in the owner's words: which, and what went wrong. */

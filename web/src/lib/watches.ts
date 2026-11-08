@@ -56,12 +56,15 @@ export function untilWords(watch: WatchView): string | undefined {
 
 /**
  * What the watch last saw, in words: "Saw today 09:10: ana approved"; "Looked today 09:10, nothing new"; what ended it
- * ("Done Fri 17:02: merged", "Ended today 09:10: you signed out of GitHub as @bandarra"); or why it cannot look.
+ * ("Done Fri 17:02: merged", "Ended today 09:10: you signed out of GitHub as @bandarra"); and, while it cannot look,
+ * since when, never "nothing new" ("Can't reach GitHub since today 09:10: …").
  */
 export function sawWords(watch: WatchView, now: number): string | undefined {
 	if (watch.done !== undefined)
 		return `${watch.done.authority === true ? "Ended" : "Done"} ${near(watch.done.at, now)}: ${watch.done.why}`;
-	if (watch.failed !== undefined) return `Can't look: ${watch.failed.why}`;
+	if (watch.failed?.run === true) return watch.failed.why.replace(/^./, (first) => first.toUpperCase());
+	if (watch.failed !== undefined)
+		return `Can't reach ${watch.object?.service ?? "it"} since ${near(watch.failed.since, now)}: ${watch.failed.why}`;
 	if (watch.saw !== undefined && watch.sawAt !== undefined)
 		return `Saw ${near(watch.sawAt, now)}: ${watch.saw.join(", ")}`;
 	if (watch.looked !== undefined) return `Looked ${near(watch.looked, now)}, nothing new`;

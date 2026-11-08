@@ -129,7 +129,16 @@ export async function watches(harness: Harness, workspace: Workspace, ctx: Conte
 				: { next: record.next }),
 			...(record.saw === undefined ? {} : { saw: [...record.saw] }),
 			...(record.sawAt === undefined ? {} : { sawAt: record.sawAt }),
-			...(record.failed === undefined ? {} : { failed: { ...record.failed } }),
+			...(record.failed === undefined
+				? {}
+				: {
+						failed: {
+							at: record.failed.at,
+							why: record.failed.why,
+							since: record.failed.since,
+							...(record.failed.run === undefined ? {} : { run: true as const }),
+						},
+					}),
 			...(record.last === undefined ? {} : { lastRun: record.last }),
 			...(record.paused === undefined ? {} : { paused: record.paused }),
 			...(record.done === undefined ? {} : { done: { ...record.done } }),

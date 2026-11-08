@@ -54,7 +54,13 @@ import {
 	undeliveredText,
 } from "../core/turn.ts";
 import { type Ask, WAIT, type WaitEnded } from "../core/wait.ts";
-import { TELL as WATCH_TELL, WAKE as WATCH_WAKE, type WatchWakeData } from "../core/watches.ts";
+import {
+	TELL as WATCH_TELL,
+	TROUBLE as WATCH_TROUBLE,
+	WAKE as WATCH_WAKE,
+	type WatchTroubleData,
+	type WatchWakeData,
+} from "../core/watches.ts";
 import type {
 	AgentView,
 	Block,
@@ -292,6 +298,10 @@ export function itemOf(entry: EntryRecord): Item | undefined {
 		const data = entry.data as unknown as TroubleData;
 		return { id, role: "notice", text: troubleText(data), routine: data, at: data.at };
 	}
+	if (entry.kind === WATCH_TROUBLE) {
+		const data = entry.data as unknown as WatchTroubleData;
+		return { id, role: "notice", text: watchTroubleText(data), watch: data, at: data.at };
+	}
 	if (entry.kind === WATCH_WAKE || entry.kind === WATCH_TELL) {
 		const data = entry.data as unknown as WatchWakeData;
 		return {
@@ -426,7 +436,15 @@ export function troubleText(data: TroubleData): string {
 	return `${what} paused: it ran ${data.runsADay} times today, the most it may`;
 }
 
-/** Count what reached the owner: message_user calls that show a reply and a routine's trouble, never the model's notes or tool results. */
+/** A watch unable to look for an hour, in the daemon's words. */
+export function watchTroubleText(data: WatchTroubleData): string {
+	return `${data.name}: can't reach ${data.service ?? "it"} since ${localTime(data.since)}: ${data.why}`;
+}
+
+/**
+ * Count what reached the owner: message_user calls that show a reply, a routine's trouble and a watch's, never the
+ * model's notes or tool results.
+ */
 async function unread(harness: Harness, id: number, after: number, ctx: Context): Promise<number> {
 	const chat = await harness.conversation(id as ConversationId, ctx);
 	if (chat === undefined) return 0;
@@ -438,7 +456,7 @@ async function unread(harness: Harness, id: number, after: number, ctx: Context)
 		const page = await chat.entries({ minEntryId: (after + 1) as EntryId, order: "ascending" }, PAGE, cursor, ctx);
 		for (const entry of page.items) {
 			const item = itemOf(entry);
-			if (item?.role === "notice" && item.routine !== undefined) troubles++;
+			if (item?.role === "notice" && (item.routine !== undefined || item.watch !== undefined)) troubles++;
 			if (item?.role === "tool") results.set(item.call, item);
 			if (item?.role === "assistant") calls.push(...(item.calls ?? []).filter((call) => call.name === "message_user"));
 		}

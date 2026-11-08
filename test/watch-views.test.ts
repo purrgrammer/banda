@@ -82,6 +82,30 @@ describe("watches in the app", () => {
 		);
 	});
 
+	it("a watch unable to look for an hour is an error line that opens the watch", () => {
+		const items: Item[] = [
+			{
+				id: 4,
+				role: "notice",
+				text: "",
+				watch: {
+					watch: "banda-142",
+					name: "acme/banda #142",
+					service: "GitHub",
+					why: "GitHub did not answer",
+					since: NOW,
+					at: NOW + 60 * 60_000,
+				},
+				at: NOW + 60 * 60_000,
+			},
+		];
+		const [line] = view(items, [], idle, {});
+		expect(line).toMatchObject({ kind: "notice", watch: "banda-142" });
+		expect(shown(line as Parameters<typeof shown>[0])[0]).toMatch(
+			/^acme\/banda #142 · can't reach GitHub since 09:00.* · GitHub did not answer$/,
+		);
+	});
+
 	it("the panel's rows: what it follows, until what, what it last saw, and a change waiting for the owner", () => {
 		const accepted = { sha: SHA, watch: summary };
 		const rows = watchRows(
@@ -104,7 +128,8 @@ describe("watches in the app", () => {
 					state: "failing",
 					accepted,
 					object,
-					failed: { at: NOW, why: "not connected" },
+					looked: NOW,
+					failed: { at: NOW, why: "GitHub did not answer", since: NOW - 50 * 60_000 },
 				},
 				{ agent: "mara", name: "banda-77", state: "done", accepted, object, done: { at: NOW, why: "merged" } },
 				{
@@ -113,7 +138,7 @@ describe("watches in the app", () => {
 					state: "done",
 					accepted,
 					object,
-					failed: { at: NOW, why: "GitHub is not connected for Mara" },
+					failed: { at: NOW, why: "GitHub is not connected for Mara", since: NOW },
 					done: { at: NOW, why: "GitHub as @bandarra was switched off for Mara", authority: true },
 				},
 				{ agent: "otto", name: "other", state: "active", accepted, object },
@@ -127,7 +152,9 @@ describe("watches in the app", () => {
 		expect(rows[0]?.next).toMatch(/^today 09:29/);
 		expect(rows[0]?.saw).toMatch(/^Saw today 08:59.*: ana approved$/);
 		expect(rows[1]).toMatchObject({ waiting: "set up", name: summary.object });
-		expect(rows[2]).toMatchObject({ failing: true, saw: "Can't look: not connected" });
+		// failing, it says since when it could not reach the service, never "nothing new"
+		expect(rows[2]?.failing).toBe(true);
+		expect(rows[2]?.saw).toMatch(/^Can't reach GitHub since today 08:10.*: GitHub did not answer$/);
 		expect(rows[3]?.done).toBe(true);
 		expect(rows[3]?.ended).toBe(false);
 		expect(rows[3]?.saw).toMatch(/^Done today 09:00.*: merged$/);

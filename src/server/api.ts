@@ -204,12 +204,16 @@ export type Item =
 	  }
 	/** A recorded daemon instruction to the model, not a message from the owner. */
 	| { readonly id: number; readonly role: "instruction"; readonly text: string; readonly at?: number }
-	/** A notice in the daemon's words; one about a routine in trouble names it, so the chat draws it in its own words. */
+	/**
+	 * A notice in the daemon's words; one about a routine in trouble, or a watch unable to look for an hour, names it, so
+	 * the chat draws it in its own words.
+	 */
 	| {
 			readonly id: number;
 			readonly role: "notice";
 			readonly text: string;
 			readonly routine?: import("../core/routines.ts").TroubleData;
+			readonly watch?: import("../core/watches.ts").WatchTroubleData;
 			readonly at?: number;
 	  }
 	/** An effect ran without asking, within a permission the owner gave: what ran, in the daemon's words, and the permission. */
@@ -661,8 +665,11 @@ export type WatchView = {
 	/** The newest changes it saw, in the kind's words, and when. */
 	readonly saw?: readonly string[];
 	readonly sawAt?: number;
-	/** Why it cannot look, in the daemon's words, since when. */
-	readonly failed?: { readonly at: number; readonly why: string };
+	/**
+	 * Why it cannot look, in the daemon's words: at its newest try, and since the first of this run of them; `run` when
+	 * it was its wake's run that failed.
+	 */
+	readonly failed?: { readonly at: number; readonly why: string; readonly since: number; readonly run?: true };
 	/** When it last woke its agent. */
 	readonly lastRun?: number;
 	readonly paused?: "owner";

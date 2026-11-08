@@ -437,9 +437,11 @@ export function FeedView({
 		);
 		run = undefined;
 	};
-	// what counts as unread: the agent's segments, and a routine's trouble, which reached the owner as a reply does
+	// what counts as unread: the agent's segments, and a routine's or a watch's trouble, which reached the owner as a
+	// reply does
 	const counts = (segment: Segment) =>
-		sideOf(segment) === "agent" || (segment.kind === "notice" && segment.routine !== undefined);
+		sideOf(segment) === "agent" ||
+		(segment.kind === "notice" && (segment.routine !== undefined || segment.watch !== undefined));
 	const unread = segments.filter(counts);
 	// the divider stands before the first of the agent's segments after the last one read: the owner's own words are
 	// never unread
@@ -779,17 +781,19 @@ function partOf(
 		}
 		case "skill":
 			return <SkillFeedItem name={segment.name} href={`#/skills/${segment.name}`} />;
-		case "notice":
+		case "notice": {
+			const watch = segment.watch;
 			return (
 				<Line
-					icon={segment.routine === undefined ? CircleAlertIcon : CalendarXIcon}
+					icon={watch !== undefined ? EyeOffIcon : segment.routine === undefined ? CircleAlertIcon : CalendarXIcon}
 					tone="danger"
 					time={time(segment.at)}
-					onClick={openRoutine}
+					onClick={watch === undefined || onRoutine === undefined ? openRoutine : () => onRoutine(watch)}
 				>
 					{segment.text}
 				</Line>
 			);
+		}
 		case "effect":
 			return <Done kind="permission" action={segment.label} />;
 		case "proposal":

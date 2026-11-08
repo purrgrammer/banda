@@ -1175,7 +1175,13 @@ export function defineCore(options: CoreOptions) {
 						if (internal?.kind === WATCH_WAKE) {
 							const wake = internal.data as unknown as WatchWakeData;
 							const record = (await tx.doc(Watches)).watches[wake.watch];
-							if (record !== undefined) record.failed = { at: runtime.now(), why: `its run failed: ${result.failed}` };
+							if (record !== undefined)
+								record.failed = {
+									at: runtime.now(),
+									why: `its run failed: ${result.failed}`,
+									since: runtime.now(),
+									run: true,
+								};
 						}
 					}
 					return { status: "terminal", outcome: { status: "completed", result } };

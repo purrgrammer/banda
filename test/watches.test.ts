@@ -185,4 +185,18 @@ describe("a watch on a pull request", () => {
 		expect(summary.wakes.length).toBeLessThanOrEqual(3);
 		expect(summary.wakes[0]?.changes).toEqual(expect.arrayContaining(["ana approved", "lint failed"]));
 	}, 60_000);
+
+	it("an hour unable to look draws one error line; a good look clears it, and the next hour draws one again", async () => {
+		const down = new Set([1, 2, 3, 4, 5, 7, 8, 9, 10, 11]);
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: (step) => (down.has(step) ? {} : world(0)),
+			clicks: Array.from({ length: 12 }, (_, n) => `k${n + 1}`),
+			at: (step) => NOW + step * 20 * MINUTE,
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.troubles.map((each) => each.since)).toEqual([NOW + 20 * MINUTE, NOW + 140 * MINUTE]);
+		expect(summary.unread).toBe(2);
+		expect(summary.record.failed).toBeUndefined();
+		expect(summary.wakes).toHaveLength(0);
+	}, 60_000);
 });
