@@ -26,6 +26,7 @@ const shipped = () => {
 const urlOf = (fetcher: ReturnType<typeof vi.fn<typeof fetch>>, index: number) =>
 	new URL(String(fetcher.mock.calls[index]?.[0]));
 const DOC = "application/vnd.google-apps.document";
+const SHEET = "application/vnd.google-apps.spreadsheet";
 
 describe("Google Drive REST connection", () => {
 	it("declares four reads and, apart from them, only the changes that ask the owner", () => {
@@ -208,10 +209,92 @@ describe("Google Drive REST connection", () => {
 		).toEqual(["doc", "sheet", "slides", "folder", "pdf", "image", "file", "file"]);
 	});
 
-	it("exports each Google kind in its text format", async () => {
+	it("reads every tab of a Sheet through the Sheets API, as CSV under the tab's name", async () => {
+		const fetcher = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(response({ id: "s1", name: "Economía", mimeType: SHEET }))
+			.mockResolvedValueOnce(
+				response({
+					sheets: [
+						{ properties: { title: "🏠", sheetType: "GRID" } },
+						{ properties: { title: "chart", sheetType: "OBJECT" } },
+						{ properties: { title: "Ana's", sheetType: "GRID" } },
+						{ properties: { title: "vacía", sheetType: "GRID" } },
+					],
+				}),
+			)
+			.mockResolvedValueOnce(
+				response({
+					valueRanges: [
+						{
+							range: "'🏠'!A1:C2",
+							values: [
+								["ingresos", "", "a, b"],
+								["€6,385.00", 'say "hi"'],
+							],
+						},
+						{ range: "'Ana''s'!A1:A1", values: [["1"]] },
+						{ range: "'vacía'!A1:Z1000" },
+					],
+				}),
+			);
+		const result = await read(fetcher, { file_id: "s1" });
+		expect(result).toMatchObject({
+			ref: "drive/s1",
+			kind: "sheet",
+			format: "text/csv",
+			sheets: ["🏠", "chart", "Ana's", "vacía"],
+			truncated: false,
+		});
+		expect(result.note).toBeUndefined();
+		expect(result.text).toBe(
+			[
+				'## 🏠\ningresos,,"a, b"\n"€6,385.00","say ""hi"""',
+				"## chart\n(a chart, no cells)",
+				"## Ana's\n1",
+				"## vacía\n(empty)",
+			].join("\n\n"),
+		);
+		const book = urlOf(fetcher, 1);
+		expect(book.origin).toBe("https://sheets.googleapis.com");
+		expect(book.pathname).toBe("/v4/spreadsheets/s1");
+		const values = urlOf(fetcher, 2);
+		expect(values.pathname).toBe("/v4/spreadsheets/s1/values:batchGet");
+		expect(values.searchParams.getAll("ranges")).toEqual(["'🏠'", "'Ana''s'", "'vacía'"]);
+		expect(values.searchParams.get("valueRenderOption")).toBe("FORMATTED_VALUE");
+		expect(fetcher.mock.calls[1]?.[1]?.headers).toMatchObject({ authorization: "Bearer t" });
+	});
+
+	it("falls back to Drive's export of the first tab, and says so, when the Sheets API refuses; other refusals stand", async () => {
+		const disabled = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(response({ id: "s1", name: "Economía", mimeType: SHEET }))
+			.mockResolvedValueOnce(
+				response({ error: { code: 403, status: "PERMISSION_DENIED", details: [{ reason: "SERVICE_DISABLED" }] } }, 403),
+			)
+			.mockResolvedValueOnce(textResponse("a,b\n1,2", "text/csv"));
+		const result = await read(disabled, { file_id: "s1" });
+		expect(result).toMatchObject({ format: "text/csv", text: "a,b\n1,2", truncated: false });
+		expect(result.sheets).toBeUndefined();
+		expect(result.note).toBe(
+			"Only the first tab could be read, as Google Sheets answered 403 (SERVICE_DISABLED): the Google Sheets API is not enabled for banda's Google Cloud project. The other tabs, if any, are not shown.",
+		);
+		expect(urlOf(disabled, 2).pathname).toBe("/drive/v3/files/s1/export");
+		expect(urlOf(disabled, 2).searchParams.get("mimeType")).toBe("text/csv");
+		const gone = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(response({ id: "s1", name: "Economía", mimeType: SHEET }))
+			.mockResolvedValueOnce(response({ error: { code: 404, status: "NOT_FOUND" } }, 404));
+		expect(await call(gone, "read_file", { file_id: "s1" })).toEqual({
+			text: "Google Sheets answered 404 (NOT_FOUND)",
+			isError: true,
+		});
+		expect(gone).toHaveBeenCalledTimes(2);
+	});
+
+	it("exports each other Google kind in its text format", async () => {
 		for (const [mimeType, format, body] of [
 			[DOC, "text/markdown", "# Plan\n\n- dates"],
-			["application/vnd.google-apps.spreadsheet", "text/csv", "a,b\n1,2"],
 			["application/vnd.google-apps.presentation", "text/plain", "Slide one"],
 		] as const) {
 			const fetcher = vi
