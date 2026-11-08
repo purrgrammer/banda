@@ -8,7 +8,15 @@ import {
 	calendarExpand,
 	calendarWriteCall,
 } from "./calendar-rest.ts";
-import { CONTACTS_TOOLS, contactsCall, contactsWriteCall } from "./contacts-rest.ts";
+import {
+	CONTACTS_IDEMPOTENT,
+	CONTACTS_TOOLS,
+	contactsCall,
+	contactsDraft,
+	contactsEditable,
+	contactsExpand,
+	contactsWriteCall,
+} from "./contacts-rest.ts";
 import { DRIVE_TOOLS, driveCall, driveWriteCall } from "./drive-rest.ts";
 import { GMAIL_TOOLS, gmailCall, gmailWriteCall } from "./gmail-rest.ts";
 import type { McpResult, McpTool } from "./mcp.ts";
@@ -99,12 +107,15 @@ export const REST_APIS = {
 		scopes: [
 			"https://www.googleapis.com/auth/contacts.readonly",
 			"https://www.googleapis.com/auth/contacts.other.readonly",
+			"https://www.googleapis.com/auth/contacts",
 			"https://www.googleapis.com/auth/userinfo.email",
 		],
 		tools: CONTACTS_TOOLS,
 		account: { tool: "get_profile", field: "email" },
 		read: (token, tool, args, signal, fetcher) => contactsCall(token, tool, args, signal, fetcher),
-		write: contactsWriteCall,
+		write: (token, tool, args, signal, fetcher) => contactsWriteCall(token, tool, args, signal, fetcher),
+		idempotent: CONTACTS_IDEMPOTENT,
+		drafts: { words: contactsDraft, editable: contactsEditable, expand: contactsExpand },
 	},
 	drive: {
 		service: "Google Drive",
