@@ -31,6 +31,7 @@ import {
 import { log } from "./activity.ts";
 import { AgentChats, acceptedAgent, agentWords, ChatAgent, LEAD } from "./agents.ts";
 import { Companion } from "./companion.ts";
+import { connectionTool } from "./connections.ts";
 
 import { FLOOR_WORDS, type Floor } from "./floor.ts";
 import { readForeign } from "./foreign.ts";
@@ -264,8 +265,20 @@ export async function allowHostIn(
 }
 
 /**
- * The open permission covering a call of `tool` with `args` from `chat`, if any: never one for a draft on the floor,
- * and only one given to the agent `chat` runs, so a chat of no agent the store knows is covered by none. Reads only.
+ * The floor a draft of `tool` is on now: the one its tool gave it when drafted, else the one the store puts its tool on
+ * in this commit (its connection's file, or the owner's Always ask on a write and Ask on a read), so a draft made before
+ * the owner changed a setting never runs under one. Reads only.
+ */
+export async function floorNow(
+	tx: Tx,
+	draft: { readonly tool: string; readonly floor?: Floor | undefined },
+): Promise<Floor | undefined> {
+	return draft.floor ?? (await connectionTool(tx, draft.tool))?.floor;
+}
+
+/**
+ * The open permission covering a call of `tool` with `args` from `chat`, if any: never one for a draft on the floor
+ * now, and only one given to the agent `chat` runs, so a chat of no agent the store knows is covered by none. Reads only.
  */
 export async function covering(
 	tx: Tx,
@@ -273,7 +286,7 @@ export async function covering(
 	chat: number,
 	now: number,
 ): Promise<{ readonly id: string; readonly permission: Permission } | undefined> {
-	if (draft.floor !== undefined) return undefined;
+	if ((await floorNow(tx, draft)) !== undefined) return undefined;
 	const agent = await agentOfChat(tx, chat);
 	if (agent === undefined) return undefined;
 	const { permissions } = await tx.doc(Permissions);

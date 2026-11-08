@@ -24,6 +24,7 @@ import {
 	type Errand,
 	errandOf,
 	type Floor,
+	floorNow,
 	give,
 	isOpen,
 	matches,
@@ -363,7 +364,7 @@ export async function fill(
 			draft = edited.draft;
 		}
 		if (permission !== undefined) {
-			const why = refusal(permission, shapeFor(permission, ask), ask.floor, now, offeredScopes(ask));
+			const why = refusal(permission, shapeFor(permission, ask), await floorNow(tx, ask), now, offeredScopes(ask));
 			if (why !== undefined) return { refused: why };
 		}
 	}

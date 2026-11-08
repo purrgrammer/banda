@@ -30,6 +30,7 @@ import {
 	countRan,
 	covering,
 	type Floor,
+	floorNow,
 	offering,
 	type Permission,
 	type PermissionScope,
@@ -728,6 +729,14 @@ export function draftOf<P extends TSchema>(tool: EffectTool<P>, args: JsonObject
 	};
 }
 
+/** `draft` on the floor its tool is on now (`floorNow`): one the store put there since it was drafted offers no scope. */
+async function onFloorNow(tx: Tx, draft: Draft): Promise<Draft> {
+	const floor = await floorNow(tx, draft);
+	if (floor === undefined || floor === draft.floor) return draft;
+	const { permission: _permission, host: _host, ...rest } = draft;
+	return { ...rest, floor };
+}
+
 /**
  * The tool for `tool`: it runs only as a draft the owner approved, or within a permission they gave that is open in the
  * commit recording the run's start (law 2). A denied or expired approval returns an error to the model, which never
@@ -841,7 +850,10 @@ export function effect<P extends TSchema>(asking: Asking, tool: EffectTool<P>): 
 				if (permitted !== undefined) return run(draft.args, permitted);
 				// the ask names its task and the place it acts in, and offers the scopes the daemon allows
 				const chat = Number(api.conversationId);
-				const asked = await api.commit(async (tx) => offering(tx, chat, await withPlace(tx, chat, draft)), ctx);
+				const asked = await api.commit(
+					async (tx) => offering(tx, chat, await withPlace(tx, chat, await onFloorNow(tx, draft))),
+					ctx,
+				);
 				const answer = await approved(api, "approval", asked, ctx);
 				if (typeof answer === "string") return text(`${tool.name} did not run: ${answer}.`, true);
 				const final = answer.draft ?? draft.args;

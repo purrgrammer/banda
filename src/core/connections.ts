@@ -813,10 +813,28 @@ export async function ownTools(tx: Tx): Promise<OwnTool[]> {
 	return found;
 }
 
+/**
+ * The connection tool the model knows as `name` as it is in effect now: a read or a write, and its floor, as its file and
+ * the owner's settings say them in this commit, whatever the tool the model was offered said. Reads only.
+ */
+export async function connectionTool(tx: Tx, name: string): Promise<InEffect | undefined> {
+	if (!name.includes("__")) return undefined;
+	return (await connectionTools(tx)).find((tool) => tool.name === name);
+}
+
 /** Whether the tool the model knows as `name` is in effect now, checked in the commit that starts a call. */
 export async function inEffect(tx: Tx, name: string): Promise<boolean> {
-	if (name.includes("__")) return (await connectionTools(tx)).some((tool) => tool.name === name);
+	if (name.includes("__")) return (await connectionTool(tx, name)) !== undefined;
 	return (await ownTools(tx)).some((tool) => tool.name === name);
+}
+
+/**
+ * Whether a call of the tool the model knows as `name` with `args` runs as a read now, checked in the commit that starts
+ * it: a read the owner set to Ask since it was offered does not. Reads only.
+ */
+export async function readsNow(tx: Tx, name: string, args: unknown): Promise<boolean> {
+	const tool = await connectionTool(tx, name);
+	return tool !== undefined && (tool.read || readsFor(tool.readsWhen, args));
 }
 
 /**

@@ -80,6 +80,7 @@ import {
 	prunePending,
 	publicOn,
 	readsFor,
+	readsNow,
 	remoteUrl,
 	requiredOf,
 	scrub,
@@ -710,10 +711,17 @@ export function openCapabilities(options: CapabilityOptions) {
 		return schema;
 	};
 
-	/** A remote server's read, or any tool of a server in the box: it runs when called. */
+	/**
+	 * A remote server's read, or any tool of a server in the box: it runs when called, while the store still has it as a
+	 * read for those arguments in the commit that lets it reach the server.
+	 */
 	function readTool(tool: InEffect, accounts?: readonly string[]): ToolRegistration {
 		const boxed = tool.connection.command !== undefined;
 		const arg = accountArg(tool.listed.schema);
+		const asksNow = async (tx: Tx, args: unknown) =>
+			(await readsNow(tx, tool.name, args))
+				? undefined
+				: "the owner set it to ask first since it was offered: call it again and it asks them";
 		return defineTool({
 			name: tool.name,
 			description:
@@ -729,6 +737,8 @@ export function openCapabilities(options: CapabilityOptions) {
 				const resolved = await api.commit(async (tx) => {
 					const off = await allowed(tool.name, tool.connection)(tx);
 					if (off !== undefined) return { refused: off };
+					const asks = await asksNow(tx, args);
+					if (asks !== undefined) return { refused: asks };
 					return accountFor(tx, tool.connection, chat, (args as JsonObject)[arg], tool.tool);
 				}, ctx);
 				if ("refused" in resolved) return text(`${tool.name} did not run: ${resolved.refused}.`, true);
@@ -770,7 +780,9 @@ export function openCapabilities(options: CapabilityOptions) {
 								: remoteCall(client as McpClient, tool.tool, sent, ctx.abortSignal),
 						async () => {
 							const refused = await api.commit(
-								(tx) => allowedAs(tool, arg)(tx, account === undefined ? {} : { [arg]: account }, chat),
+								async (tx) =>
+									(await allowedAs(tool, arg)(tx, account === undefined ? {} : { [arg]: account }, chat)) ??
+									(await asksNow(tx, args)),
 								ctx,
 							);
 							if (refused !== undefined) throw new Error(refused);
