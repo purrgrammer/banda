@@ -413,7 +413,8 @@ behind the card's actions; an approval still names its acting account plainly. L
 full value available in details. A notification is drawn as the thing it is about.
 Unfurls are few per message and never retried in a loop, so a chatty model cannot make the daemon hammer a service. A
 reference names the object its URL opens, not a different object found before normalizing the URL. Equivalent names
-share a reading only under the connection's declared identity rules. A connection declares its objects as data,
+share a reading only under the connection's declared identity rules; an object may be named by words (a search, by
+its query), percent-encoded in its address and said plainly in its name. A connection declares its objects as data,
 never code: for each kind, the URL and id shapes that name it, the read that
 fetches it (a tool and how its arguments come from the match), the fields the card shows, the writes that act on it,
 by tool, and how it is followed ("Watches"). Every object in every state is in the specimen, light and dark, both
@@ -618,7 +619,8 @@ or not the model remembers it.
   beneath and then the agent's reply when it had one. Tapping the line opens the watch in the panel.
 - **It ends itself.** When what ends it holds, the last wake says so and the watch is done, as a routine that ran
   once is; its row says what ended it until the owner removes it. Following the same object again starts a new
-  watch from a fresh baseline.
+  watch from a fresh baseline. A kind the world never ends (a mail search, a conversation) says it has no end, and is
+  followed until the owner stops it.
 - **Health is observed and told.** A watch has what the owner wants (on, paused, done) and what the daemon sees
   (looking; can't reach, since when; behind, when a feed's cursor expired or a gap could not be recovered). The row
   says which, in words ("can't reach GitHub since 9:10"); a watch that could not look for an hour draws an error line

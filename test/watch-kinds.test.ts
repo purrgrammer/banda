@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Json } from "../src/core/follow.ts";
 import { REST_APIS } from "../src/core/rest.ts";
 import { Faults } from "./fault/faults.ts";
-import { type Answer, failure, GITHUB, watchInvariants, watchScenario } from "./fault/watch-scenario.ts";
+import { type Answer, failure, GITHUB, watchFile, watchInvariants, watchScenario } from "./fault/watch-scenario.ts";
 import { githubObjectTools } from "./fixtures/github-objects.ts";
 import { tempHome } from "./helpers.ts";
 
@@ -15,13 +15,14 @@ const GMAIL = {
 	account: "ana@example.com",
 };
 
-/** An email as `get_message` answers it: unread, then read and labelled. */
+/** An email as `get_message` answers it: unread in the inbox; then read and marked important; then starred. */
 const email: Answer = (tool, args, step) => {
 	if (tool !== "get_message") return failure(`no ${tool}`);
 	return {
 		id: String(args.message_id),
 		threadId: "t1",
 		from: "Bob <bob@example.com>",
+		fromAddress: "bob@example.com",
 		to: "ana@example.com",
 		cc: "",
 		subject: "Lunch?",
@@ -29,25 +30,153 @@ const email: Answer = (tool, args, step) => {
 		snippet: "Are you free",
 		body: "Are you free on Thursday?",
 		attachments: [],
-		labels: step >= 1 ? ["INBOX", "IMPORTANT"] : ["INBOX", "UNREAD"],
-		unread: step < 1,
+		labels: step === 0 ? ["INBOX", "UNREAD"] : step === 1 ? ["INBOX", "IMPORTANT"] : ["INBOX", "IMPORTANT", "STARRED"],
+		unread: step === 0,
 	};
 };
 
-describe("a watch through any connection", () => {
-	it("a Gmail email, until Gmail declares how one is followed, is refused in the kind's words", async () => {
+/** A message of a conversation or a search, as Gmail's reads give it. */
+const message = (id: string, from: string, subject: string, labels: string[] = ["INBOX"]) => ({
+	id,
+	threadId: "t1",
+	from,
+	fromAddress: (/<(.+)>/.exec(from)?.[1] ?? from).toLowerCase(),
+	to: "ana@example.com",
+	cc: "",
+	subject,
+	date: "Mon, 2 Nov 2026 09:00:00 +0100",
+	snippet: subject,
+	body: subject,
+	attachments: [],
+	labels,
+	unread: labels.includes("UNREAD"),
+});
+
+const BOB = "Bob <bob@example.com>";
+const ANA = "Ana <ana@example.com>";
+const CAROL = "Carol <carol@example.com>";
+
+/**
+ * A conversation's life, as `get_thread` answers it: Bob asks; then the owner reads it and answers herself; then
+ * Carol replies; then the owner stars it.
+ */
+const conversation: Answer = (tool, args, step) => {
+	if (tool !== "get_thread") return failure(`no ${tool}`);
+	const messages = [message("m1", BOB, "Lunch?", step === 0 ? ["INBOX", "UNREAD"] : ["INBOX"])];
+	if (step >= 1) messages.push(message("m2", ANA, "Re: Lunch?", ["SENT"]));
+	if (step >= 2) messages.push(message("m3", CAROL, "Re: Lunch?", step >= 3 ? ["INBOX", "STARRED"] : ["INBOX"]));
+	return {
+		id: String(args.thread_id),
+		subject: "Lunch?",
+		total: messages.length,
+		labels: [...new Set(messages.flatMap((each) => each.labels))],
+		messages,
+	};
+};
+
+describe("a watch on Gmail", () => {
+	it("an email is followed for its labels, and until it is read: read and marked important ends it", async () => {
 		const summary = await watchScenario(await tempHome(), new Faults(), {
 			connection: GMAIL,
 			object: "gmail/18c2f0a1b2c3d4e5",
 			answer: email,
+			clicks: ["k1", "k2"],
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		// reading it is no change of its own (UNREAD gone is nothing), but it is the end; the label says itself
+		expect(summary.wakes.map((wake) => [wake.changes, wake.ended ?? null])).toEqual([[["marked important"], "read"]]);
+		expect(summary.wakes[0]?.object).toMatchObject({ service: "Gmail" });
+		expect(summary.record.done?.why).toBe("read");
+		expect(summary.tells).toEqual([]);
+	}, 60_000);
+
+	it("an email followed until trashed tells each label, and wakes for none of them", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: GMAIL,
+			watch: watchFile("gmail/18c2f0a1b2c3d4e5", GMAIL.account).replace("---\n", "---\nuntil: trashed\n"),
+			answer: email,
+			clicks: ["k1", "k2"],
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes).toEqual([]);
+		expect(summary.tells.map((tell) => tell.changes)).toEqual([["marked important"], ["starred"]]);
+		expect(summary.record.done).toBeUndefined();
+	}, 60_000);
+
+	it("a conversation: the owner's own reply is nothing, another's wakes, a label only tells; it never ends", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: GMAIL,
+			object: "gmail/thread/t1",
+			answer: conversation,
+			clicks: ["k1", "k2", "k3"],
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes.map((wake) => wake.changes)).toEqual([[`${CAROL} replied`]]);
+		expect(summary.wakes[0]?.object).toMatchObject({ name: "conversation t1", service: "Gmail" });
+		expect(summary.tells.map((tell) => tell.changes)).toEqual([["starred"]]);
+		expect(summary.record.done).toBeUndefined();
+		expect(summary.turns.every((turn) => turn?.status === "completed")).toBe(true);
+	}, 60_000);
+
+	it("a conversation longer than a page: an older message falling off it is not gone", async () => {
+		const long: Answer = (tool, args, step) => {
+			if (tool !== "get_thread") return failure(`no ${tool}`);
+			const all = Array.from({ length: 25 + step }, (_, n) => message(`m${n}`, BOB, `Re: ${n}`));
+			const messages = all.slice(-25);
+			return { id: String(args.thread_id), subject: "Lunch?", total: all.length, labels: ["INBOX"], messages };
+		};
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: GMAIL,
+			object: "gmail/thread/t1",
+			answer: long,
 			clicks: ["k1"],
 		});
 		expect(watchInvariants(summary)).toEqual([]);
-		expect(summary.record.failed?.why).toBe(
-			"Gmail here cannot follow a email yet: update Gmail on the Connections page",
-		);
-		expect(summary.wakes).toEqual([]);
-		expect(summary.reads).toBe(0);
+		expect(summary.wakes.map((wake) => wake.changes)).toEqual([[`${BOB} replied`]]);
+		expect(summary.tells).toEqual([]);
+	}, 60_000);
+
+	/**
+	 * A search's life, as `search_messages` answers it: one mail from the boss; then a new one; then the same again;
+	 * then the first is read, so it matches no more, and the owner's own mail to the boss matches.
+	 */
+	const search: Answer = (tool, args, step) => {
+		if (tool !== "search_messages") return failure(`no ${tool}`);
+		if (args.query !== "from:boss is:unread" || args.max_results !== 25) return failure(`not ${String(args.query)}`);
+		const boss = "The Boss <boss@example.com>";
+		const messages = [
+			...(step >= 3 ? [message("m9", ANA, "Re: Numbers")] : []),
+			...(step >= 1 ? [message("m2", boss, "Numbers for Thursday")] : []),
+			...(step < 3 ? [message("m1", boss, "Budget")] : []),
+		].map(({ id, threadId, from, fromAddress, subject, date, snippet }) => ({
+			id,
+			threadId,
+			from,
+			fromAddress,
+			subject,
+			date,
+			snippet,
+		}));
+		return { resultSizeEstimate: messages.length, messages };
+	};
+
+	it("a search: new mail matching wakes in from: subject words; the same again, mail gone or the owner's own is nothing", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: GMAIL,
+			object: "https://mail.google.com/mail/u/0/#search/from%3Aboss+is%3Aunread",
+			answer: search,
+			clicks: ["k1", "k2", "k3"],
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes.map((wake) => wake.changes)).toEqual([["The Boss <boss@example.com>: Numbers for Thursday"]]);
+		expect(summary.wakes[0]?.object).toMatchObject({
+			name: "mail matching from:boss is:unread",
+			ref: "gmail:search:gmail/search/from%3Aboss%20is%3Aunread",
+			service: "Gmail",
+		});
+		expect(summary.tells).toEqual([]);
+		expect(summary.record.done).toBeUndefined();
+		expect(summary.card).toBeDefined();
 	}, 60_000);
 });
 

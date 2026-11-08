@@ -240,6 +240,58 @@ describe("Gmail REST connection", () => {
 		});
 	});
 
+	it("draws a conversation and a search as lists of emails, the newest first, titled by subject and query", () => {
+		const text = readFileSync(new URL("../shipped/connections/gmail.md", import.meta.url), "utf8");
+		const parsed = parseConnection("gmail", text);
+		if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
+		const objects = parsed.connection.objects ?? {};
+		const line = (id: string, date: string) => ({
+			id,
+			from: `Bob\u0007 <bob@example.test>`,
+			subject: `About ${id}`,
+			date,
+		});
+		const thread = cardOf(
+			objects.thread!,
+			{ connection: "gmail", kind: "thread", values: { id: "t1" } },
+			{
+				thread: {
+					id: "t1",
+					subject: "Lunch?",
+					total: 7,
+					labels: ["INBOX"],
+					messages: ["m1", "m2", "m3", "m4", "m5", "m6", "m7"].map((id, n) =>
+						line(id, `Mon, ${n + 2} Nov 2026 09:00:00 +0100`),
+					),
+				},
+			},
+		);
+		expect(thread).toMatchObject({ card: "messages", title: "Lunch?", search: false, total: 7 });
+		expect(thread.card === "messages" && thread.messages.map((each) => each.id)).toEqual([
+			"m7",
+			"m6",
+			"m5",
+			"m4",
+			"m3",
+		]);
+		expect(thread.card === "messages" && thread.messages[0]?.from).toBe("Bob <bob@example.test>");
+		const search = cardOf(
+			objects.search!,
+			{ connection: "gmail", kind: "search", values: { query: "from:bob is:unread" } },
+			{ search: { resultSizeEstimate: 40, messages: [line("m9", "Tue, 3 Nov 2026"), line("m8", "")] } },
+		);
+		expect(search).toMatchObject({
+			card: "messages",
+			title: "mail matching from:bob is:unread",
+			search: true,
+			total: 40,
+		});
+		expect(search.card === "messages" && search.messages.map((each) => each.id)).toEqual(["m9", "m8"]);
+		expect(() =>
+			cardOf(objects.search!, { connection: "gmail", kind: "search", values: { query: "x" } }, { search: {} }),
+		).toThrow();
+	});
+
 	it("requests offline Google access without persisting a client secret in pending sign-in", async () => {
 		const server = {
 			issuer: "https://accounts.google.com",

@@ -23,6 +23,7 @@ export const CARDS = [
 	"check-run",
 	"notification",
 	"email",
+	"messages",
 	"event",
 	"contact",
 	"file",
@@ -730,6 +731,29 @@ export type EmailCard = {
 	readonly url?: string;
 };
 
+/** One email of a list, as a list says it. */
+export type MessageLine = {
+	readonly id: string;
+	readonly from: string;
+	readonly subject: string;
+	readonly date: string;
+};
+
+/** Emails together: a conversation's (titled by its subject) or a search's (titled by its query), the newest first. */
+export type MessagesCard = {
+	readonly card: "messages";
+	readonly title: string;
+	/** A search's: its title is the query. */
+	readonly search: boolean;
+	/** The newest few. */
+	readonly messages: MessageLine[];
+	/** How many there are in all, as the service says (a search's is its estimate). */
+	readonly total: number | null;
+};
+
+/** How many emails a list's card shows. */
+export const MESSAGES_SHOWN = 5;
+
 /** A calendar event, every value scalar so the store's bounded JSON shape holds. */
 export type EventCard = {
 	readonly card: "event";
@@ -788,6 +812,7 @@ export type ObjectCard =
 	| CheckRunCard
 	| NotificationCard
 	| EmailCard
+	| MessagesCard
 	| EventCard
 	| ContactCard
 	| FileCard;
@@ -888,6 +913,45 @@ function reviewWords(value: unknown): string {
 	return "None yet";
 }
 
+/**
+ * A list of emails as its card says it: titled by the `title` field (a conversation's subject) or, without one, by the
+ * kind's name (a search's query); the newest few by date first.
+ */
+function messagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: string) => unknown): MessagesCard {
+	const list = field("messages");
+	if (!Array.isArray(list)) throw new Error("Incomplete object");
+	const search = kind.fields.title === undefined;
+	const title = search ? plainLine(fill(kind.name, ref.values), 300) : plainLine(field("title"), 300);
+	const when = (date: string) => {
+		const ms = Date.parse(date);
+		return Number.isFinite(ms) ? ms : Number.NEGATIVE_INFINITY;
+	};
+	const messages = list
+		.flatMap((each): MessageLine[] => {
+			if (!plain(each) || typeof each.id !== "string" || each.id.length > 200) return [];
+			return [
+				{
+					id: each.id,
+					from: plainLine(each.from, 250),
+					subject: plainLine(each.subject, 300),
+					date: plainLine(each.date, 100),
+				},
+			];
+		})
+		.map((each, i) => ({ each, i }))
+		// newest first by date; one without a date keeps its place among those that have none
+		.sort((a, b) => when(b.each.date) - when(a.each.date) || (search ? a.i - b.i : b.i - a.i))
+		.slice(0, MESSAGES_SHOWN)
+		.map(({ each }) => each);
+	return {
+		card: "messages",
+		title: title || (search ? "Search" : "(No subject)"),
+		search,
+		messages,
+		total: count(field("total")),
+	};
+}
+
 const REASONS: { readonly [reason: string]: Reason } = {
 	review_requested: "review-requested",
 	mention: "mention",
@@ -903,6 +967,7 @@ const REASONS: { readonly [reason: string]: Reason } = {
  */
 export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as: string]: unknown }): ObjectCard {
 	const field = (name: string) => at(answers, kind.fields[name]);
+	if (kind.card === "messages") return messagesCard(kind, ref, field);
 	const titleField =
 		kind.card === "check-run" || kind.card === "contact" || kind.card === "file"
 			? "name"

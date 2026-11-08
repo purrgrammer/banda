@@ -17,6 +17,7 @@ import {
 	fileModified,
 	fileType,
 	IssueCard,
+	MessagesCard,
 	NotificationCard,
 	ObjectLink,
 	ObjectMenu,
@@ -75,7 +76,7 @@ export function FollowedObject({
 	}, [chat, reference, agentId]);
 	const drawn =
 		shown?.shown === "card" && shown.card.card !== "notification" ? (
-			<ObjectLink object={shown.card} href={shown.card.url ?? reference} />
+			<ObjectLink object={shown.card} href={("url" in shown.card ? shown.card.url : undefined) ?? reference} />
 		) : (
 			<span data-object-inline="">{fallback}</span>
 		);
@@ -541,6 +542,7 @@ function readingDetails(shown: Extract<ObjectShown, { shown: "card" }>): [string
 	if (card.card === "pull-request") rows.push(["Branch", card.branch]);
 	if (card.card === "check-run") rows.push(["Check", card.name], ["Where", card.where ?? ""]);
 	if (card.card === "email") rows.push(["From", card.from], ["To", card.to], ["Subject", card.subject]);
+	if (card.card === "messages") rows.push([card.search ? "Search" : "Subject", card.title]);
 	if (card.card === "event")
 		rows.push(["When", eventWhen(card)], ["Location", card.location], ["Organizer", card.organizer]);
 	if (card.card === "contact") rows.push(["Name", card.name], ["Email", card.emails], ["Company", card.organization]);
@@ -625,6 +627,11 @@ function ReadingCard({
 					actions={actions}
 					attachments={<EmailAttachments chat={chat} shown={shown} card={card} agent={agent} />}
 				/>
+			) : card.card === "messages" ? (
+				<>
+					<MessagesCard list={{ ...card, asOf }} actions={actions} />
+					{following}
+				</>
 			) : card.card === "event" ? (
 				<EventCard event={{ ...card, asOf }} actions={actions} />
 			) : card.card === "contact" ? (
