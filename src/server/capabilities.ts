@@ -616,8 +616,8 @@ export function openCapabilities(options: CapabilityOptions) {
 	// ---- what is in effect, as tools
 
 	/**
-	 * The commit check every call makes: the tool is in effect now, and a connection's tool `offered` as a read still is
-	 * one. The owner's Ask on a read is kept beside its switch, not in its file, so the file's hash does not say it.
+	 * The commit check every call makes: the tool is in effect now, and a connection's tool was `offered` from the
+	 * version its file still has. Whether it still reads for its arguments is `readsNow`, checked beside it.
 	 */
 	const allowed = (name: string, offered?: InEffect) => async (tx: Tx) => {
 		if (offered === undefined)
@@ -626,8 +626,6 @@ export function openCapabilities(options: CapabilityOptions) {
 		if (now === undefined) return "the owner switched it off or took it back";
 		if (now.connection.sha !== offered.connection.sha)
 			return "the connection changed since this tool was offered; use its current tools";
-		if ((offered.read && !now.read) || (offered.readsWhen !== undefined && now.readsWhen === undefined))
-			return "the owner set it to ask first since it was offered; use its current tools";
 		return undefined;
 	};
 
