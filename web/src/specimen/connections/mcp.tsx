@@ -58,10 +58,17 @@ const NOTES =
 	"Ernesto exposes files and actions through three tools. Read files with fs_read, change files with fs_write, and use execute for routes such as search. Inspect a route before running it.";
 const ACCOUNT = { account: "1", id: "account 1", label: "account 1", at: Date.UTC(2026, 10, 13, 9, 30) };
 
-/** The daemon's view of the fixture server at `phase`, for a scenario: what it would answer once that far. */
-function connection(scenario: Scenario, phase: McpPhase, agents: readonly string[]): ConnectionView {
+/**
+ * The daemon's view of the fixture server for a scenario: connected once its tools were listed (and still, while another
+ * account signs in), else waiting for the sign-in the scenario needs.
+ */
+function connection(
+	scenario: Scenario,
+	phase: McpPhase,
+	connected: boolean,
+	agents: readonly string[],
+): ConnectionView {
 	const auth = scenario === "key" ? "key" : scenario === "anonymous" ? "none" : "oauth";
-	const connected = phase === "review" || phase === "done";
 	return {
 		name: "ernesto",
 		accepted: {
@@ -77,15 +84,16 @@ function connection(scenario: Scenario, phase: McpPhase, agents: readonly string
 				why: "Files and routes in Ernesto.",
 			},
 		},
-		state: connected
-			? "connected"
-			: phase === "waiting"
+		state:
+			phase === "waiting"
 				? "signing-in"
-				: auth === "oauth"
-					? "sign-in"
-					: auth === "key"
-						? "key"
-						: "connecting",
+				: connected
+					? "connected"
+					: auth === "oauth"
+						? "sign-in"
+						: auth === "key"
+							? "key"
+							: "connecting",
 		tools: connected ? TOOLS : [],
 		...(connected ? { notes: NOTES } : {}),
 		...(auth === "none"
@@ -116,9 +124,11 @@ function McpExample({
 	const [selected, setSelected] = useState<string[]>([]);
 	const [reads, setReads] = useState<string[]>([]);
 	const [granted, setGranted] = useState<string[]>([]);
+	// the server's tools were listed: once the setup reached review, until the owner signs out
+	const [connected, setConnected] = useState(phase === "review" || phase === "done");
 	// the phases gone through, as the app keeps them: Back returns to sign-in or review, never to the form
 	const [trail, setTrail] = useState<readonly McpPhase[]>([]);
-	const view = phase === "setup" ? undefined : connection(scenario, phase, granted);
+	const view = phase === "setup" ? undefined : connection(scenario, phase, connected, granted);
 	const previous = trail.at(-1);
 	const back =
 		previous === "review" && view?.state === "connected"
@@ -128,6 +138,7 @@ function McpExample({
 				: undefined;
 	const go = (next: McpPhase) => {
 		setError("");
+		if (next === "review" || next === "done") setConnected(true);
 		setTrail((old) => [...old, phase]);
 		onPhase(next);
 	};
@@ -189,6 +200,7 @@ function McpExample({
 		signOut: () => {
 			setGranted([]);
 			setSelected([]);
+			setConnected(false);
 			setTrail([]);
 			onPhase("auth");
 		},
