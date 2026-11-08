@@ -366,7 +366,11 @@ is first class in the UI (a logo and a name on every card, event and draft of it
 lives inside agents' settings and the app's Settings, never as a screen of its own.
 - **Accounts.** An account is one sign-in: `auth/connections/<connection>/<account>/` holds its credentials, bound to
   the URL they were given for, so a changed URL never carries them along. Its id is what the service calls the owner,
-  read once after sign-in and shown ("@bandarra"). The owner signs in another at any time; signing out forgets the
+  read once after sign-in and shown ("@bandarra"). Each account has its own access: the file's scopes are what a new
+  account asks for, and the owner may pick others for one account from what the file allows (its scopes and every
+  scope its tools need), so a personal mailbox can read while a work one sends; what an account was given is what its
+  credentials record, and a tool it was not given access for is refused in words before any request. Narrowing what
+  the file allows makes the accounts beyond it sign in again. The owner signs in another at any time; signing out forgets the
   credentials and switches the account off for every agent. Credentials never reach the
   box, a prompt, an entry, the store or a log; what a server echoes of one is hidden.
 - **One flow everywhere: enable, sign in, done.** From an agent's panel (Permissions), from Settings, or from a card the agent

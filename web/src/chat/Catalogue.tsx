@@ -7,6 +7,7 @@
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import { scopeChoicesOf } from "../lib/connect.ts";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
 
 export type Service = {
@@ -34,11 +35,10 @@ export function Catalogue({
 	/** Whole cards of their own in the grid (a harness on this computer), after what can be connected, before what is coming. */
 	extra?: readonly { readonly key: string; readonly card: ReactNode }[];
 	onManage?: (id: string) => void;
-	/** The connect card for a service, opened in its tile by Connect or Add account. */
+	/** The connect dialog for a service, opened by its tile's Connect, Sign in again, Manage access or Add account. */
 	connect?: ((service: Service, close: () => void) => ReactNode) | undefined;
 }) {
 	const [open, setOpen] = useState<string | undefined>(undefined);
-	const toggle = (id: string) => setOpen(open === id ? undefined : id);
 	return (
 		<ul className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2">
 			{[
@@ -90,11 +90,9 @@ export function Catalogue({
 								</Button>
 							</>
 						) : service.accounts.length === 0 ? (
-							open === service.id && connect !== undefined ? null : (
-								<Button size="sm" className="self-start" onClick={() => toggle(service.id)}>
-									{stale.length > 0 ? "Sign in again" : "Connect"}
-								</Button>
-							)
+							<Button size="sm" className="self-start" onClick={() => setOpen(service.id)}>
+								{stale.length > 0 ? "Sign in again" : "Connect"}
+							</Button>
 						) : (
 							<span className="flex flex-wrap items-center gap-2">
 								<span className="text-meta text-ink-2">{service.accounts.join(", ")}</span>
@@ -102,11 +100,11 @@ export function Catalogue({
 									variant={stale.length > 0 ? "outline" : "ghost"}
 									size="xs"
 									className="ml-auto"
-									onClick={() => toggle(service.id)}
+									onClick={() => setOpen(service.id)}
 								>
 									{stale.length > 0
 										? "Sign in again"
-										: service.id === "github" || service.id === "gmail"
+										: scopeChoicesOf(service.id) !== undefined
 											? "Manage access"
 											: "Add account"}
 								</Button>

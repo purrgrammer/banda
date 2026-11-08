@@ -25,11 +25,11 @@ import {
 	type Preview,
 	sentFile,
 	sentPreview,
-	sizeOf,
 	typedUrl,
 } from "../lib/api.ts";
 import type { SegmentFile } from "../lib/chat.ts";
 import { useReturnFocus } from "../lib/return-focus.ts";
+import { sizeOf } from "../lib/size.ts";
 
 /** A language as people name it, by the highlighter's id. */
 const LANGUAGE_NAMES: Record<string, string> = {

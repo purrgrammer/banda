@@ -80,7 +80,11 @@ function usePhone(): boolean {
 }
 
 const SERVICES = [
-	{ id: "gmail", name: "Gmail", does: "Read and draft email" },
+	{ id: "github", name: "GitHub", does: "Pull requests, issues, checks" },
+	{ id: "gmail", name: "Gmail", does: "Read and send email" },
+	{ id: "calendar", name: "Google Calendar", does: "Read and change your events" },
+	{ id: "contacts", name: "Google Contacts", does: "Find people and their addresses" },
+	{ id: "drive", name: "Google Drive", does: "Find and read your files" },
 	{ id: "linear", name: "Linear", does: "Issues and cycles" },
 	{ id: "slack", name: "Slack", does: "Channels and messages" },
 	{ id: "notion", name: "Notion", does: "Pages and databases" },
@@ -632,7 +636,6 @@ function Main() {
 								.then(showCapabilities)
 								.catch(() => {});
 						}}
-						connect={(name, close) => <ConnectFlow connection={name} onDismiss={close} />}
 						onRestore={(who) => (who.id === undefined ? undefined : restore(who.id))}
 						onRestoreGroup={(room) => archiveGroup(room, false)}
 						onGroupLimits={(limits) => setGroupLimits(limits)}
@@ -667,7 +670,8 @@ function Main() {
 					id: name,
 					name: view?.accepted?.connection?.service ?? shipped?.connection.service ?? name,
 					url: view?.accepted?.connection?.url ?? shipped?.connection.url,
-					does: name === "github" ? "Pull requests, issues, checks" : (view?.accepted?.connection?.where ?? ""),
+					// what banda says the service is for, else where an added server is
+					does: SERVICES.find((service) => service.id === name)?.does ?? view?.accepted?.connection?.where ?? "",
 					accounts: freshAccounts(view).map((account) => account.label),
 					managed: view?.agents !== undefined,
 					stale: (view?.accounts ?? []).filter((account) => account.stale === true).map((account) => account.label),
@@ -688,25 +692,10 @@ function Main() {
 							.map(({ name }) => ({ key: `harness:${name}`, card: <HarnessConnectionTile name={name} /> }))}
 						onManage={(connection) => go({ name: "connections", connection })}
 						services={[
-							...(services.length === 0
-								? [{ id: "github", name: "GitHub", does: "Pull requests, issues, checks", accounts: [] }]
-								: services),
+							...services,
 							...SERVICES.filter((service) => !services.some((existing) => existing.id === service.id)),
 						]}
-						connect={(service, close) =>
-							service.accounts === undefined ? null : capabilities?.connections.find((each) => each.name === service.id)
-									?.agents !== undefined ? (
-								<Button
-									variant="outline"
-									className="self-start"
-									onClick={() => go({ name: "connections", connection: service.id })}
-								>
-									Manage connection
-								</Button>
-							) : (
-								<ConnectFlow connection={service.id} onDismiss={close} />
-							)
-						}
+						connect={(service, close) => <ConnectFlow connection={service.id} onClose={close} />}
 					/>
 				</SettingsPage>
 			);

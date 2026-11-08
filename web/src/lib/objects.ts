@@ -62,12 +62,23 @@ export function githubKey(ref: string): string | undefined {
 	return keys.size > 1 ? JSON.stringify([...keys]) : keys.values().next().value;
 }
 
+const ID_LINK = /\]\(([a-z][a-z0-9-]{0,63}\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,399})\)/g;
+
+/**
+ * Prose whose links to an object's id ([Team offsite](calendar/<id>)) are given the `object:` scheme: the renderer
+ * blocks a link with no address, and an id has none. `idOfLink` reads the id back.
+ */
+export const idLinks = (text: string) => text.replace(ID_LINK, "](object:$1)");
+export const idOfLink = (href: string) => (href.startsWith("object:") ? href.slice("object:".length) : href);
+
 /** Names only, never card facts. Tabs/fragments of one object deduplicate; distinct jobs of a run do not. */
 export function objectAsks(text: string, objects: readonly string[] = []): ObjectAsk[] {
 	const refs = [
 		...objects,
 		...(text.match(/https:\/\/[^\s<>"`]+/gi) ?? []).map((ref) => ref.replace(/[),.;!?\]]+$/, "")),
 		...(text.match(/[a-z][a-z0-9-]{0,63}:[a-z][a-z0-9_]{0,63}:[A-Za-z0-9_.:/-]{1,400}/g) ?? []),
+		// a connection's object linked in the prose by its id: [Team offsite](calendar/<id>)
+		...[...text.matchAll(ID_LINK)].map((match) => match[1] as string),
 	];
 	const unique = new Map<string, string>();
 	for (const ref of refs) {

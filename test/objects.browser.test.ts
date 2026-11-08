@@ -51,8 +51,13 @@ const interruptedApproval = {
 	interrupted: true,
 	args: { ...approval.args, body: "Original stored bytes\nsecond line" },
 };
+/** An agent's message that shows the links it names as cards: a card is only what a message gives in `objects`. */
 const agentMessage = (id: number, text: string) => [
-	{ role: "assistant", id, calls: [{ id: `sent-${id}`, name: "message_user", args: { text } }] },
+	{
+		role: "assistant",
+		id,
+		calls: [{ id: `sent-${id}`, name: "message_user", args: { text, objects: text.match(/https:\/\/\S+/g) ?? [] } }],
+	},
 	{ role: "tool", id: id + 1, name: "message_user", call: `sent-${id}`, text: "Sent.", error: false },
 ];
 const items = [
@@ -90,6 +95,7 @@ const ownerItems = [
 	{ role: "user", id: 303, text: "Failed https://github.com/owner/repo/issues/400" },
 	{ role: "user", id: 304, text: "No account https://github.com/owner/repo/issues/401" },
 	{ role: "user", id: 305, text: "Network https://github.com/owner/repo/issues/503" },
+	{ role: "user", id: 306, text: "See you at [the offsite](calendar/abc), and [this one](calendar/nothing)" },
 ];
 const connectItems = [
 	{
@@ -133,7 +139,7 @@ const group = {
 	notices: [],
 	messages: [
 		{ entry: 1, author: { owner: true }, text: `Owner in group ${pr}`, mentions: [], at: 1 },
-		{ entry: 2, author: { agent: "mara" }, text: `Mara in group ${pr}`, mentions: [], at: 2 },
+		{ entry: 2, author: { agent: "mara" }, text: `Mara in group ${pr}`, objects: [pr], mentions: [], at: 2 },
 		{ entry: 3, author: { agent: "octo" }, text: "", objects: [check], mentions: [], at: 3 },
 		{ entry: 4, author: { agent: "retired" }, text: "", objects: [unknownRef], mentions: [], at: 4 },
 	],
@@ -153,6 +159,32 @@ let recoveryRefusals = 0;
 let longMetadata = false;
 
 function shown(ref: string, account = "personal", refresh = false): ObjectShown {
+	if (ref === "calendar/nothing") return { shown: "link" };
+	if (ref === "calendar/abc")
+		return {
+			shown: "card",
+			key: ref,
+			name: "abc",
+			connection: "calendar",
+			service: "Google Calendar",
+			at: Date.now(),
+			old: false,
+			card: {
+				card: "event",
+				title: "Team offsite",
+				start: "2026-11-11",
+				end: "2026-11-14",
+				allDay: true,
+				timeZone: "",
+				location: "Lisbon",
+				organizer: "Ana",
+				who: "Ana, Teo",
+				attendees: 3,
+				response: "accepted",
+				status: "confirmed",
+				description: "",
+			},
+		};
 	if (ref === unknownRef || ref.startsWith("javascript:") || ref.startsWith("https://example.com/"))
 		return { shown: "link" };
 	if (ref.endsWith("pull/500"))
@@ -634,6 +666,14 @@ for (const width of [320, 1280])
 							expect(
 								await page.run(`document.querySelector('[data-entry="301"] [data-object-inline]').textContent`),
 							).toBe(longTitle);
+							// an id has no page: its name opens its card; an id that reads as nothing is its words
+							await page.until(`document.querySelector('[data-entry="306"] button [data-object-inline]') !== null`);
+							expect(await page.run(`document.querySelector('[data-entry="306"]').textContent`)).toContain("this one");
+							expect(await page.run(`document.querySelectorAll('[data-entry="306"] a').length`)).toBe(0);
+							await page.run(`document.querySelector('[data-entry="306"] button').click()`);
+							await page.until(
+								`document.querySelector('[data-radix-popper-content-wrapper]')?.textContent.includes('Team offsite') === true`,
+							);
 							for (const id of [302, 303, 304, 305]) {
 								expect(await page.run(`document.querySelector('[data-entry="${id}"] a') !== null`)).toBe(true);
 								expect(
@@ -646,10 +686,10 @@ for (const width of [320, 1280])
 									`Array.from(document.querySelectorAll('[data-object-inline]')).every(e => e.getBoundingClientRect().right <= innerWidth)`,
 								),
 							).toBe(true);
-							expect(requests).toHaveLength(5);
+							expect(requests).toHaveLength(6);
 							await page.run(`document.querySelector('button').click()`);
 							await page.until(`document.querySelector('button').textContent === 'Rerender 1'`);
-							expect(requests).toHaveLength(5);
+							expect(requests).toHaveLength(6);
 							expect(answers).toHaveLength(0);
 							expect(page.errors()).toEqual([]);
 						},
@@ -726,11 +766,16 @@ it.skipIf(!hasChrome())(
 				{ width: 390, height: 900 },
 				async (page) => {
 					await page.until(
-						`Array.from(document.querySelectorAll('button')).some(b => b.textContent === 'Allow')`,
+						`Array.from(document.querySelectorAll('[data-object="connect:github"] button')).some(b => b.textContent === 'Connect GitHub')`,
 						30_000,
 					);
 					expect(await page.run(`document.querySelectorAll('[data-object="connect:github"]').length`)).toBe(1);
 					expect(requests).toHaveLength(1);
+					// the card opens the connect dialog, which asks to share the account banda has
+					await page.run(
+						`Array.from(document.querySelectorAll('[data-object="connect:github"] button')).find(b => b.textContent === 'Connect GitHub').click()`,
+					);
+					await page.until(`document.querySelector('[role="dialog"][data-connect-step="share"]') !== null`);
 					await page.run(
 						`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Allow').click()`,
 					);

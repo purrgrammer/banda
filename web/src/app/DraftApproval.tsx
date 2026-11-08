@@ -1,6 +1,6 @@
 /** One approval view for direct chats and groups: the daemon's verb, account, stored facts and editable bytes. */
 
-import { useId, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 import { ApprovalCard, type ApprovalState, Details, Facts, HostsWarning } from "../chat/Approval.tsx";
@@ -11,6 +11,7 @@ import { argList, draftParts, wildcardWarning } from "../lib/chat.ts";
 import { fileChanges } from "../lib/file-changes.ts";
 import { scopeOf, scopesOf } from "../lib/permissions.ts";
 import { EmailDraftPreview } from "./EmailDraftPreview.tsx";
+import { CALENDAR_DRAFT, EventDraftPreview, eventDraftWhat } from "./EventDraftPreview.tsx";
 import { ObjectPreviews } from "./Objects.tsx";
 
 type Props = {
@@ -20,6 +21,8 @@ type Props = {
 	label: string;
 	wait?: string | undefined;
 	state?: ApprovalState | undefined;
+	/** The object the draft acts on, drawn already (the specimen's), instead of read from the daemon. */
+	drawn?: ReactNode;
 };
 
 /**
@@ -30,7 +33,7 @@ export function DraftApproval(props: Props) {
 	return <Draft key={props.wait ?? "answered"} {...props} />;
 }
 
-function Draft({ chat, agent, ask, label, wait, state }: Props) {
+function Draft({ chat, agent, ask, label, wait, state, drawn }: Props) {
 	const id = useId();
 	const [edits, setEdits] = useState<Record<string, string>>({});
 	const [busy, setBusy] = useState(false);
@@ -43,6 +46,14 @@ function Draft({ chat, agent, ask, label, wait, state }: Props) {
 	const emailRecipient = emailDraft
 		? (edits.to ?? (typeof ask.args.to === "string" ? ask.args.to : "the chosen recipient"))
 		: undefined;
+	const eventDraft = CALENDAR_DRAFT.test(ask.tool) && !interrupted;
+	const what =
+		emailRecipient !== undefined
+			? `Send email to ${emailRecipient}`
+			: eventDraft && ask.tool.endsWith("__create_event")
+				? eventDraftWhat(ask.args, edits)
+				: label;
+	const preview = emailDraft || eventDraft;
 	// the daemon's verb, where the effect has one of its own; never a word of the label, which may be a tool's name
 	const verb = interrupted ? "Retry" : (ask.verb ?? "Allow");
 	const scope = !interrupted && ask.floor === undefined ? scopesOf(ask)[0] : undefined;
@@ -50,7 +61,7 @@ function Draft({ chat, agent, ask, label, wait, state }: Props) {
 	return (
 		<ApprovalCard
 			agent={agent.name}
-			what={emailRecipient === undefined ? label : `Send email to ${emailRecipient}`}
+			what={what}
 			verb={verb}
 			declineLabel={interrupted ? "Skip" : undefined}
 			as={ask.as}
@@ -64,9 +75,17 @@ function Draft({ chat, agent, ask, label, wait, state }: Props) {
 							not try again.
 						</p>
 					) : null}
-					{ask.on === undefined ? null : <ObjectPreviews chat={chat} asks={[ask.on]} agent={asAgent} />}
+					{drawn ?? (ask.on === undefined ? null : <ObjectPreviews chat={chat} asks={[ask.on]} agent={asAgent} />)}
 					{emailDraft ? (
 						<EmailDraftPreview
+							args={ask.args}
+							edits={edits}
+							readOnly={readOnly || busy}
+							onEdit={(name, value) => setEdits((prior) => ({ ...prior, [name]: value }))}
+						/>
+					) : eventDraft ? (
+						<EventDraftPreview
+							tool={ask.tool}
 							args={ask.args}
 							edits={edits}
 							readOnly={readOnly || busy}
@@ -77,7 +96,7 @@ function Draft({ chat, agent, ask, label, wait, state }: Props) {
 					)}
 					{changes.files.length === 0 ? null : <FileChanges files={changes.files} />}
 					{details.length === 0 ? null : <Details rows={details} />}
-					{emailDraft || fields.length === 0 ? null : (
+					{preview || fields.length === 0 ? null : (
 						<FieldGroup>
 							{fields.map((name) => {
 								const value = edits[name] ?? String(ask.args[name]);

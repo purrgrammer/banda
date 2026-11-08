@@ -6,6 +6,7 @@ auth: oauth
 client: google
 scopes: [https://www.googleapis.com/auth/gmail.readonly]
 ask: always
+private: [send_message]
 account: get_profile.emailAddress
 reads: [get_profile, get_labels, search_messages, get_message, get_thread]
 ---

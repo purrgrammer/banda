@@ -879,7 +879,6 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						else if (act.action === "account")
 							await capabilities.switchAccount(act.agent, act.name, act.account, act.on, context, act.sha);
 						else if (act.action === "signout") await capabilities.signOut(act.name, act.account);
-						else if (act.action === "scopes") await capabilities.setScopes(act.name, act.scopes);
 						else if (act.action === "add") await capabilities.addShipped(act.name);
 						else if (act.action === "address") await capabilities.addByAddress(act.url);
 						else if (act.action === "trust" || act.action === "reads")
@@ -891,7 +890,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						changed();
 						return capabilitiesView();
 					},
-					signIn: (name, agent, onDevice) => capabilities.signIn(name, context, agent, onDevice),
+					signIn: (name, { agent, ...choice }) => capabilities.signIn(name, context, agent, choice),
 					objects: (chat, asks, refresh) => objects.show(chat, asks, refresh),
 					objectAttachment: (chat, ref, attachmentId, agent, account) =>
 						objects.attachment(chat, ref, attachmentId, agent, account),

@@ -28,7 +28,6 @@ import { Line } from "../chat/Line.tsx";
 import { ChatLoading, GroupEmpty } from "../chat/Loading.tsx";
 import { GroupPanel, Panel } from "../chat/Panel.tsx";
 import { SkillFeedItem } from "../chat/Skill.tsx";
-import { Markdown } from "../components/Markdown.tsx";
 import { MENTION_LINK, Mentionable } from "../components/MentionChip.tsx";
 import { answerWait, api, dismissQuestion, type GroupNoticeView, type GroupView, upload } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
@@ -42,7 +41,7 @@ import { whoOf } from "./band.ts";
 import { DraftApproval } from "./DraftApproval.tsx";
 import { HarnessActivitySheet } from "./HarnessSession.tsx";
 import { chatActivity, harnessActivity } from "./harness-activity.ts";
-import { MessageObjects, OwnerMessage } from "./Objects.tsx";
+import { MessageObjects, MessageText } from "./Objects.tsx";
 import { useSkills } from "./Skills.tsx";
 
 /** A message's markdown with each agent it mentions as a link, which `Markdown` draws as its chip. */
@@ -220,7 +219,7 @@ export function GroupChat({
 											{message.text.trim() === "" ? null : (
 												<Bubble mine copy={message.text} reaction={reactionsOn(group, message.entry)}>
 													<Mentionable.Provider value={known}>
-														<OwnerMessage chat={room} text={linkedMentions(message.text, message.mentions, known)} />
+														<MessageText chat={room} text={linkedMentions(message.text, message.mentions, known)} />
 													</Mentionable.Provider>
 												</Bubble>
 											)}
@@ -241,7 +240,6 @@ export function GroupChat({
 								const objects = (
 									<MessageObjects
 										chat={room}
-										text={message.text}
 										objects={message.objects}
 										agent={{ id: message.author.agent, name: member.name }}
 									/>
@@ -255,7 +253,12 @@ export function GroupChat({
 										{message.text.trim() === "" ? null : (
 											<Bubble copy={message.text} onActivity={inspect}>
 												<Mentionable.Provider value={known}>
-													<Markdown>{linkedMentions(message.text, message.mentions, known)}</Markdown>
+													<MessageText
+														chat={room}
+														text={linkedMentions(message.text, message.mentions, known)}
+														agent={{ id: message.author.agent, name: member.name }}
+														shown={message.objects}
+													/>
 												</Mentionable.Provider>
 											</Bubble>
 										)}

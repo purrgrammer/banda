@@ -61,7 +61,17 @@ for (const width of [390, 1440])
 				expect(await page.run(`document.getElementById('gmail').innerText.includes('Email draft')`)).toBe(true);
 				expect(await page.run(`document.getElementById('gmail').innerText.includes('planning-notes.pdf')`)).toBe(true);
 				expect(await page.run(`document.querySelector('#gmail [aria-label="Email recipient"]') !== null`)).toBe(true);
-				expect(await page.run(`document.getElementById('gmail').innerText.includes('Send email')`)).toBe(true);
+				// the access to grant is the connect dialog's first step, opened from the card
+				await page.run(
+					`[...document.querySelectorAll('#gmail button')].find((b) => b.innerText.includes('Connect Gmail')).click()`,
+				);
+				const dialog = `document.querySelector('[role="dialog"][data-connect-step="permissions"]')`;
+				await page.until(dialog);
+				expect(await page.run(`${dialog}.innerText.includes('Gmail access')`)).toBe(true);
+				expect(await page.run(`${dialog}.innerText.includes('Send email')`)).toBe(true);
+				expect(await page.run(`${dialog}.getBoundingClientRect().right <= innerWidth`)).toBe(true);
+				await page.run(`${dialog}.querySelector('[data-slot="dialog-close"]').click()`);
+				await page.until(`${dialog} === null`);
 				expect(await page.run(`document.getElementById('gmail').innerText.includes('Search messages')`)).toBe(false);
 				expect(await page.run(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
 				if (directory !== undefined) {

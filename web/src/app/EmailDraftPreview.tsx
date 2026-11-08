@@ -3,6 +3,7 @@ import { useId } from "react";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { sizeOf } from "../lib/size.ts";
 
 /** The exact email the owner is about to send, in an editable, readable form. */
 export function EmailDraftPreview({
@@ -87,6 +88,3 @@ export function EmailDraftPreview({
 		</section>
 	);
 }
-
-const sizeOf = (size: number) =>
-	size < 1024 * 1024 ? `${Math.ceil(size / 1024)} KB` : `${(size / 1024 / 1024).toFixed(1).replace(/\.0$/, "")} MB`;
