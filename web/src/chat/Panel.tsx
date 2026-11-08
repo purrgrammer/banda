@@ -643,7 +643,7 @@ function WatchRow({
 						<MoreHorizontalIcon />
 					</Button>
 				</DropdownMenuTrigger>
-				<DropdownMenuContent align="end" className="max-w-72">
+				<DropdownMenuContent align="end" className="min-w-60 max-w-72">
 					{watch.saw === undefined && (watch.next === undefined || quiet) ? null : (
 						<>
 							<DropdownMenuLabel className="flex flex-col gap-0.5 font-normal text-meta text-ink-2">
