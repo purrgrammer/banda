@@ -298,6 +298,37 @@ export const GITHUB_OBJECTS = {
 				args: { method: "get_workflow_job", owner: "{owner}", repo: "{repo}", resource_id: "{job}" },
 			},
 		},
+		// how a watch follows it: a job that fails, times out or is cancelled wakes, one that succeeds tells, and it
+		// ends when completed; its steps' progress, timestamps and runner are nothing until then
+		follow: {
+			keys: { "job.steps": "number" },
+			ignore: [
+				"job.created_at",
+				"job.started_at",
+				"job.completed_at",
+				"job.runner_id",
+				"job.runner_name",
+				"job.runner_group_id",
+				"job.runner_group_name",
+				"job.steps[*].started_at",
+				"job.steps[*].completed_at",
+			],
+			rules: [
+				{ on: "job.conclusion", to: "failure", does: "wake", says: "failed" },
+				{ on: "job.conclusion", to: "timed_out", does: "wake", says: "timed out" },
+				{ on: "job.conclusion", to: "cancelled", does: "wake", says: "cancelled" },
+				{ on: "job.conclusion", to: "success", does: "tell", says: "succeeded" },
+				{
+					on: "job.conclusion",
+					does: "tell",
+					says: "{to}",
+					words: { action_required: "needs action", neutral: "finished neutral", skipped: "skipped", stale: "stale" },
+				},
+			],
+			ends: { completed: "job.status = completed" },
+			// a job runs minutes: it is looked at often until it completes
+			every: "2m",
+		},
 		fields: {
 			name: "job.name",
 			status: "job.status",
@@ -316,6 +347,40 @@ export const GITHUB_OBJECTS = {
 		urls: ["https://api.github.com/notifications/threads/{thread}"],
 		ids: ["notification/{thread}"],
 		reads: { thread: { tool: "get_notification_details", args: { notificationID: "{thread}" } } },
+		// how a watch follows it: new activity on the thread (its updated_at, a new reason) wakes, a new title tells,
+		// and it ends once read (marked done, GitHub answers it read too)
+		follow: {
+			ignore: ["thread.repository", "thread.url", "thread.last_read_at", "thread.subject.latest_comment_url"],
+			rules: [
+				{
+					on: "thread.reason",
+					does: "wake",
+					says: "{to}",
+					words: {
+						approval_requested: "approval requested",
+						assign: "assigned to you",
+						author: "activity on your thread",
+						ci_activity: "a workflow run finished",
+						comment: "new comment",
+						invitation: "invited you",
+						manual: "subscribed",
+						member_feature_requested: "feature requested",
+						mention: "mentioned you",
+						review_requested: "review requested",
+						security_advisory_credit: "credited in an advisory",
+						security_alert: "security alert",
+						state_change: "state changed",
+						subscribed: "activity",
+						team_mention: "your team was mentioned",
+					},
+				},
+				{ on: "thread.updated_at", does: "wake", says: "new activity" },
+				{ on: "thread.subject.title", does: "tell", says: "retitled: {to}" },
+			],
+			ends: { read: "thread.unread = false" },
+			every: "5m",
+			settle: "1m",
+		},
 		fields: {
 			reason: "thread.reason",
 			unread: "thread.unread",

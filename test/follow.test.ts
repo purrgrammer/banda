@@ -49,7 +49,8 @@ describe("following an object", () => {
 		const parsed = parseObjects(GITHUB_OBJECTS, () => true);
 		if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
 		expect(parsed.objects.pull_request?.reads.comments?.follow).toBe(true);
-		expect(parsed.objects.check_run?.follow).toBeUndefined();
+		expect(Object.keys(parsed.objects.check_run?.follow?.ends ?? {})).toEqual(["completed"]);
+		expect(Object.keys(parsed.objects.notification?.follow?.ends ?? {})).toEqual(["read"]);
 	});
 
 	it("the shipped issue kind follows: closed, reopened and others' comments wake; labels and assignees tell", () => {
