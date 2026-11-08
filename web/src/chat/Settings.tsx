@@ -423,7 +423,7 @@ export function Permissions({
 							}
 						>
 							<Button variant="destructive" size="xs">
-								Revoke
+								Take back
 							</Button>
 						</Confirm>
 					}

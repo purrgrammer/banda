@@ -350,7 +350,7 @@ function AllowHost({
 									}
 								>
 									<Button variant="destructive" size="xs">
-										Revoke
+										Take back
 									</Button>
 								</Confirm>
 							}
