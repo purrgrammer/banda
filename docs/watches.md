@@ -64,11 +64,21 @@ returned to and merged, at desktop and phone width.
   the account's switch, sign-out and removal end watches in the same commit; no wake after done or paused; scenarios:
   a revoked account, days offline, a cancel (Stop) while a wake is pending, duplicate and out-of-order readings; the
   scenario's invariants (`watchInvariants`); every state in the specimen
-- [ ] Slice 2's rest: "behind" in the row (the gap is said in the wake only); resuming after Pause all routines marks
-  no wake as from the pause; the fault sweep over the new acts (pause, resume, the account's switch) has not run (CI);
-  slice 2 through the app against a daemon at desktop and phone width
-- [ ] Slice 3, volume: bursts as one wake; busy cadence; wakes a day; tell-only changes; the issue kind; a thousand
-  changes in one look
+- [x] Slice 2's rest in code: "behind" in the row until a wake without a gap; resuming after Pause all marks the next
+  wake as from the pause; the fault worker runs the pause, Pause all and switch-off scenarios (`SCENARIOS`), each
+  once without faults in the unit suite
+- [ ] The fault sweep and property over every scenario (pause, Pause all, the account's switch, the new burst and
+  limit paths) have not run in CI yet; only a two-run property of Pause all ran locally
+- [ ] Slice 2 through the app against a daemon at desktop and phone width
+- [x] Slice 3, volume: a burst is one wake (held while the last wake's run goes or within the kind's `settle`, the
+  cursor kept, the held reading never evicted); busy cadence (`lookEvery`, tested end to end); `wakes_a_day` (pauses
+  alone, an error line, unread; resume wakes once); tell-only changes run no model and are not unread; the issue kind
+  followed until closed (labels and assignees as sets, told); a thousand changes in one look name twenty and count
+  the rest; a derived "all …" condition may be `steady` over a path, so a push's first look never says all checks
+  green; the new rows and lines in the specimen
+- [ ] Slice 3 through the app against a daemon; a burst, a limit and an issue against real GitHub
+- [ ] A watch's file has no editor field and the `watch` tool no parameter for `wakes_a_day`; an issue's and a pull
+  request's comments are read one page of a hundred, so comments past the hundredth are never seen
 - [ ] Spike before slice 2: the readings doc keeps 300 and evicts the oldest first, so a held reading must be
   skipped; GitHub's hosted MCP server still answers `pull_request_read`'s get, get_reviews, get_comments and
   get_check_runs

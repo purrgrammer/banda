@@ -63,7 +63,10 @@ that looks, diffs and wakes its agent's chat, the `watch` tool's card, Follow on
 list with Add (a link), Check now, Pause and Stop, the detail's editor for what ends it and what matters, and the fault
 sweep. A connection banda ships offers Update when this banda ships a newer file, so a home that connected GitHub
 before `follow` can follow ([Connections](connections.md)). Driven against a real pull request in a forked home at
-desktop width. A browser test at both widths, a real wake in the app and owner review remain open.
+desktop width; a browser test follows one at both widths. Slice 2 (health, gaps, resume, authority, behind, Pause
+all's resume) and slice 3 (bursts, busy cadence, wakes a day, tell-only changes, the issue kind, a thousand changes
+in one look, no green claim on a push's first look) are in code with unit tests; the fault sweeps over the new
+scenarios have not run in CI, and slices 2 and 3 through the app, a real wake and owner review remain open.
 
 Bringing your own is in code ([Chat](chat.md)): at first run on the desktop, the skills and agents of Claude Code,
 Codex and pi on this computer, in place of banda's skills, and again from Settings; the band's menu with Skills and a
@@ -132,7 +135,7 @@ chat; a name, an avatar and a style the owner chooses; notifications only when s
 | Hand-offs, helpers, side chats, errands and tasks areas | Removed | Agent-to-agent messages are a narrow direct-chat tool; groups keep their existing mention behavior |
 | Goals, Inbox, Library, Routines and Connections pages | Removed | Deleted; routines in the panel, connections in settings, artifacts in the chat |
 | Routines, schedule | Present | Wake in the agent's chat as events |
-| Watches, `follow` in an object kind, `watches.ts` | Present on the `watches` branch | Slices 1 and 2: a pull request followed until merged; health, gaps, resume and authority; owner review pending ([Watches](watches.md)) |
+| Watches, `follow` in an object kind, `watches.ts` | Present on the `watches` branch | Slices 1 to 3: a pull request or an issue followed until it ends; health, gaps, resume and authority; bursts, cadence and wakes a day; owner review pending ([Watches](watches.md)) |
 | Skills, `skill` | Wired in a separate worktree, owner review pending | Accepted shared prompt files, owner and agent loads; supporting files remain data |
 | Memory's accepted core, learned cards, `propose_preference`, `used` | Removed | Deleted; facts in effect at once |
 | Connections, OAuth, GitHub by code, shipped file | Present, per-account credentials and object readings | Accounts; one connect flow; objects |
