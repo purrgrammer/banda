@@ -71,12 +71,12 @@ describe("egress under faults", () => {
 		expect(clean.activity).toContain(
 			"Sent POST git.example.com/me/repo.git/git-receive-pack under your permission (HTTP 200)",
 		);
-		// the chat read from outside, and still the first ask offered every scope; the route allowed always, the second
-		// request ran within it, unasked
+		// the chat read from outside, so the first ask offered its host alone; the host allowed, the second request ran
+		// within it, unasked
 		const asked = clean.waits.filter((w) => w.ask.type === "approval");
 		expect(
 			asked.map((w) => (w.ask.type === "approval" ? w.ask.scopes?.map((offered) => offered.scope) : undefined)),
-		).toEqual([["task", "hour", "today", "always", "host"]]);
+		).toEqual([["host"]]);
 		expect(clean.permissions).toBe(1);
 		expect(clean.activity.filter((what) => what.startsWith("Ran without asking"))).toHaveLength(1);
 		const faults: Fault[] = [];
