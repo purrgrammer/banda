@@ -67,7 +67,7 @@ Direct messages and search are one choice because a search returns from everythi
 messages included: a "search but not my DMs" choice would promise what Slack does not keep. The owner decided they
 stay a choice rather than required, so an account without it never sends a direct message to the model provider.
 
-`whoami` is `auth.test` plus `team.info`; its `handle` is `@<user name> at <team name>`, read once after sign-in as
+`whoami` is `auth.test`; its `handle` is `@<user name> at <team name>`, read once after sign-in as
 the account's id: what the service calls the owner, as DESIGN.md asks, and it tells two teams apart (one account per
 team). The adapter writes every author it returns in the same form, so "the account's own" (DESIGN.md "Watches":
 an agent never wakes on its own work, the owner's approved post included) is a plain comparison. The adapter keeps
@@ -94,7 +94,7 @@ offers a search watch on the owner's mention (`slack/search/<@U…>`) for that.
 
 The `messages` card (Gmail's conversation and search) takes a list of `{from, text, date}` items. The adapter renders
 Slack's mrkdwn as plain text, resolves `<@U…>` to names (`users.info`, cached per account) and `<#C…>` to channel
-names, writes a bot's author as `<name>[bot]` (Slack marks them by `bot_id`, often with no user), and marks an author
+names, writes a bot's author as `<name>[bot]` (a message with no `user`, or whose subtype says so; the owner's own posts carry a `bot_id` too), and marks an author
 from another team (Slack Connect, a guest) as outside. Files and attachments stay as named links until a later stage
 retrieves them through the daemon as Gmail's does. The account that reads a link is the one whose team the channel
 belongs to; a shared channel lives in several teams at once, and which account answers for it is a spike.
@@ -297,26 +297,43 @@ app walkthrough ([the plan](slack-plan.md)). The spikes below are stage 0.
    permission (and `authors` scoped so a reaction on the owner's message counts), and files in messages read through
    the daemon.
 
-## Spikes before stage 1
+## What the spikes found
 
-Each is a recorded manual run against a throwaway Slack app and team, or a test, before the design above is copied
-into DESIGN.md.
+Stage 0 ran on 2026-11-08 against the owner's own team with `scripts/spike-slack.ts` (its log is the recorded run;
+AGENTS.md principle 6). Observed, not inferred:
 
-- [ ] PKCE on a loopback redirect: does Slack accept a port other than the registered one; does the grant come back
-  with `authed_user.access_token` alone when only `user_scope` is asked; are the tokens rotating without the setting;
-  do the 30 days of a refresh token run from the last refresh or from the sign-in
-- [ ] The history limit: install the shipped app in a fresh team, call `conversations.history` with `limit: 100`
-  twice in a minute, read the `limit` the answer honoured and the `Retry-After`; then the same with two user tokens
-  of one team, to learn whether the budget is per team or per token; and the order and cursor of `history` and
-  `replies` pages with and without `oldest`
-- [ ] `search.messages` indexing lag against a message just posted, and whether a match indexed late with an older
-  `ts` is ever seen by a `newest` page, so the search kind's `every` and window are honest
-- [ ] A permalink from a team the account is not in, and a Slack Connect channel shared by two teams the owner has
-  accounts in: what `conversations.info` answers to each account, so the link stays a link or one account answers
+- **PKCE on a loopback redirect works, and only with PKCE.** Before PKCE was enabled the grant came back but the
+  exchange answered `bad_client_secret`; after, the exchange without a secret answered `authed_user.access_token`
+  alone (no bot token), `team.id` and `team.name`. A loopback port other than the registered one is refused on
+  Slack's own page ("redirect_uri did not match any configured URIs") before any redirect, so banda registers its
+  default port and a daemon on another port says so in the connect card.
+- **Tokens rotate.** The grant carries a refresh token and a twelve-hour access token whether or not the setting was
+  touched; a refresh without a secret answers new tokens of both kinds. Whether the refresh token's 30 days slide is
+  still unknown and needs a month.
+- **The handle needs no extra scope.** `team.info` wants `team:read`, which the file does not ask for; `auth.test`
+  already answers the user name, the team id and the team name, so `whoami` is `auth.test` alone.
+- **The owner's team is not clamped.** `conversations.history` with a limit of 100 answered the channel's 60 messages
+  twice within a second, no `Retry-After`; the app's own team counts as an internal install. Whether another team
+  installing the shipped app gets the one-a-minute, fifteen-message limit is still unknown; the budget stays declared
+  as data, and its number comes from a second-team spike before stage 2's rules enter DESIGN.md.
+- **Page order.** `conversations.history` answers newest first, with `oldest` too. `conversations.replies` answers
+  the parent first and then replies oldest first, `limit` counts replies only (fifteen replies come as sixteen
+  messages), and every page repeats the parent, so the thread's list is keyed by `ts` and the parent deduplicated.
+- **Search is fresh.** A message posted was found by `search.messages` ten seconds later, sorted by timestamp.
+- **A post as the owner carries the app's mark.** A message sent with the user token has `user` (the owner), and
+  also `bot_id`, `app_id` and a `bot_profile` named after the app. The adapter marks an author `[bot]` only when a
+  message has no `user` or its subtype says so, never on `bot_id` alone, or the owner's own posts would read as a
+  bot's.
+- **A channel list is not an index.** `conversations.list` over all 758 channels did not include a public channel the
+  owner is a member of and created in May; `conversations.info` by id answered it at once. Cards and links resolve by
+  id, never through a list.
+- **Still open**, in the plan's Appendix A: the limit a second team meets, a Slack Connect channel seen from two
+  teams, and whether the 30 days slide.
 
 ## Open work
 
-- [ ] Stage 0: the spikes, recorded by `scripts/spike-slack.ts`
+- [x] Stage 0: the spikes, recorded by `scripts/spike-slack.ts`; a second team's limit, a shared channel and the
+  refresh token's 30 days remain
 - [ ] Stage 1: the file, the adapter's reads under the budget, PKCE sign-in, the handle, cards and unfurls,
   `post_message` on the floor; fake Slack in tests; the owner's team through the app at both widths
 - [ ] Stage 2: the paged list as connection data; thread and channel followed; scenarios and the fault sweep; a real

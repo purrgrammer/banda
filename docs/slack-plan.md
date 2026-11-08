@@ -156,17 +156,20 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or C
 
 ## Appendix A. Prototype evidence
 
-Nothing is proven yet. Stage 0 fills this appendix before stage 1 begins. What the Slack app needs first, then the
-questions.
+Stage 0 ran on 2026-11-08 on this branch with `scripts/spike-slack.ts` against the owner's own team and the channel
+they named; the probes' log is the recorded run and `docs/slack.md` "What the spikes found" holds the observations.
 
-- The app. PKCE enabled (one-way), redirect `http://127.0.0.1:7788/oauth/callback` and a second port if the port spike refuses, user scopes `channels:read`, `groups:read`, `channels:history`, `groups:history`, `users:read`, `im:read`, `mpim:read`, `im:history`, `mpim:history`, `search:read`, `chat:write`, `reactions:write`, no bot scopes, no bot user, no event subscriptions, no Socket Mode, distribution on, token rotation as the operator chooses, and the client id given to the root.
-- Does Slack accept a loopback port other than the registered one. Branch, SHA, the script's output.
-- Does a `user_scope`-only grant return `authed_user.access_token` and nothing else.
-- The history limit. The limit honoured, `Retry-After`, and whether the budget is per team or per token.
-- Page order and cursors of history and replies with `oldest`.
-- Search indexing lag.
-- A shared channel seen from two accounts.
-- Refresh behaviour and the 30-day expiry, sliding or fixed.
+- The app as configured. PKCE enabled, redirect `http://127.0.0.1:7788/oauth/callback`, the twelve user scopes, no bot scopes.
+- A loopback port other than the registered one. Refused on Slack's page before any redirect, "redirect_uri did not match any configured URIs".
+- A `user_scope`-only grant. Returns `authed_user.access_token`, `refresh_token` and `expires_in` of twelve hours, and no bot token; before PKCE was on, the exchange answered `bad_client_secret`.
+- The history limit on the owner's team. Not clamped, 60 of 60 messages twice within a second, no `Retry-After`. Open, the limit a second team meets, and whether the budget is per team or per token.
+- Page order and cursors. History newest first with and without `oldest`; replies parent first then oldest first, `limit` counting replies, the parent repeated on every page, `next_cursor` present while `has_more`.
+- Search indexing lag. Under ten seconds.
+- A shared channel from two accounts. Open, no shared channel was available.
+- Refresh behaviour. A refresh without a secret answers new access and refresh tokens. Open, whether the 30 days slide.
+- `team.info` needs `team:read`; `auth.test` answers the team's name, so the handle needs no extra scope.
+- A post with the user token carries `user` and also `bot_id`, `app_id` and a `bot_profile` named after the app.
+- `conversations.list` over 758 channels missed a public channel the owner is in; `conversations.info` by id answered it.
 
 ## Appendix B. Alternatives rejected
 
