@@ -22,6 +22,13 @@ const at = (hours: number, minutes: number) => {
 	return when.toISOString();
 };
 
+/** Faces on Slack's image host that are not there, so each card shows its initials as it would offline. */
+const FACE = {
+	ana: "https://a.slack-edge.com/specimen/ana_48.png",
+	bob: "https://a.slack-edge.com/specimen/bob_48.png",
+	olga: "https://a.slack-edge.com/specimen/olga_48.png",
+} as const;
+
 export const SLACK_THREAD: Messages = {
 	title: "Release notes draft for Thursday",
 	search: false,
@@ -44,6 +51,7 @@ export const SLACK_THREAD: Messages = {
 			subject: "",
 			date: at(10, 31),
 			text: "From our side the partner API is ready whenever you are",
+			avatar: FACE.olga,
 		},
 		{
 			id: "1700000300.000400",
@@ -51,9 +59,17 @@ export const SLACK_THREAD: Messages = {
 			subject: "",
 			date: at(10, 12),
 			text: "@ana can you check #deploys before we ship?",
+			avatar: FACE.bob,
 		},
-		{ id: "1700000200.000300", from: "@ana", subject: "", date: at(9, 58), text: "Looks good to me" },
-		{ id: "1700000000.000100", from: "@bob", subject: "", date: at(9, 40), text: "Release notes draft for Thursday" },
+		{ id: "1700000200.000300", from: "@ana", subject: "", date: at(9, 58), text: "Looks good to me", avatar: FACE.ana },
+		{
+			id: "1700000000.000100",
+			from: "@bob",
+			subject: "",
+			date: at(9, 40),
+			text: "Release notes draft for Thursday",
+			avatar: FACE.bob,
+		},
 	],
 };
 
@@ -80,6 +96,7 @@ const CHANNEL: Messages = {
 			subject: "",
 			date: at(10, 50),
 			text: "rolling back 42, looking at the migration",
+			avatar: FACE.bob,
 		},
 	],
 };
@@ -132,6 +149,7 @@ const BOB: Person = {
 	status: "On call",
 	timezone: "America/New_York",
 	outside: false,
+	photo: "https://a.slack-edge.com/specimen/bob_72.png",
 	url: "https://acme.slack.com/team/U0BOB",
 };
 
@@ -147,6 +165,7 @@ const OLGA: Person = {
 	status: "",
 	timezone: "Europe/Berlin",
 	outside: true,
+	photo: "https://a.slack-edge.com/specimen/olga_72.png",
 	url: "https://acme.slack.com/team/U0OLGA",
 };
 

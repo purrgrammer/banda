@@ -76,15 +76,26 @@ for (const width of [390, 1440])
 				// a post is on the floor: no permission is offered on its card
 				expect(await text("Don't ask again")).toBe(false);
 				expect(await page.run(`${section}.querySelector('[aria-label="Slack message"]') !== null`)).toBe(true);
-				// a link to a reply reads as the reply, in its words; a link to the thread's first message as the thread
+				// a link to a reply reads as the reply, in its author's and its words; a link to the thread's first message as
+				// the thread, led by who started it
 				expect(await page.run<string>(`${section}.querySelector('[data-slack-reply]')?.innerText ?? ""`)).toContain(
-					"can you check #deploys before we ship?",
+					"@bob: @ana can you check #deploys before we ship?",
 				);
 				expect(
 					await page.run<string>(
 						`${section}.querySelector('[data-object-inline]:not([data-slack-reply]) a[href*="/archives/"]')?.innerText ?? ""`,
 					),
-				).toContain("Release notes draft for Thursday");
+				).toContain("@bob: Release notes draft for Thursday");
+				// faces on Slack's image host that are not there fall back to the author's initial, and a person's to the icon
+				await page.until(
+					`[...${section}.querySelectorAll('[data-slack-card="thread"] [data-slot="avatar-fallback"]')].some((el) => el.innerText === "O")`,
+				);
+				expect(
+					await page.run(
+						`[...${section}.querySelectorAll('[data-slot="avatar-image"]')].every((img) => img.alt === "" && img.referrerPolicy === "no-referrer")`,
+					),
+				).toBe(true);
+				await page.until(`${section}.querySelector('[data-slack-face] [data-slot="avatar-fallback"] svg') !== null`);
 				expect(
 					await page.run(
 						`${section}.querySelector('[data-object-inline] a[href^="https://acme.slack.com/"]') !== null`,

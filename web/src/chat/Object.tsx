@@ -486,6 +486,16 @@ export function ObjectLink({
 		// a link to a reply names its thread (one object, one card), but the reference says the reply, in its own words
 		const linked = slack && object.place === "thread" ? slackLinked(href) : undefined;
 		const reply = linked?.reply ? object.messages.find((each) => each.id === linked.ts) : undefined;
+		// a thread's or a reply's words are someone's: its author leads them when the card holds that message
+		const said = !slack
+			? undefined
+			: linked?.reply
+				? reply
+				: object.place === "thread"
+					? (object.messages.find((each) => linked !== undefined && each.id === linked.ts) ??
+						object.messages.find((each) => each.text === object.title))
+					: undefined;
+		const by = said?.from ? `${said.from}: ` : "";
 		const Icon = slack
 			? linked?.reply
 				? CornerDownRightIcon
@@ -493,7 +503,13 @@ export function ObjectLink({
 			: object.search
 				? SearchIcon
 				: MailsIcon;
-		const title = linked?.reply ? reply?.text || `Reply in ${object.channel ?? "a thread"}` : object.title;
+		const title = linked?.reply
+			? reply?.text
+				? `${by}${reply.text}`
+				: `Reply in ${object.channel ?? "a thread"}`
+			: said?.text === object.title && object.title !== ""
+				? `${by}${object.title}`
+				: object.title;
 		const url = slack ? (slackUrl(href) ?? slackUrl(object.url)) : (gmailUrl(href) ?? gmailUrl(object.url));
 		return (
 			<span
@@ -548,7 +564,16 @@ export function ObjectLink({
 		return (
 			<span data-object-inline="" className="inline-flex max-w-full items-baseline gap-1 align-baseline">
 				{object.service === "slack" ? <SlackMark className="self-center" /> : null}
-				<UserRoundIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
+				{object.service === "slack" && object.photo !== undefined ? (
+					<Avatar data-slack-face="" className="size-3.5 self-center after:hidden">
+						<AvatarImage src={object.photo} alt="" referrerPolicy="no-referrer" />
+						<AvatarFallback className="bg-transparent text-current">
+							<UserRoundIcon aria-hidden="true" className="size-3.5" />
+						</AvatarFallback>
+					</Avatar>
+				) : (
+					<UserRoundIcon aria-hidden="true" className="size-3.5 shrink-0 self-center" />
+				)}
 				{url === undefined ? (
 					<span className={INLINE_TEXT} title={object.name}>
 						{object.name}
@@ -711,6 +736,8 @@ export type Messages = {
 		readonly date: string;
 		/** A Slack message's words; an email has its subject. */
 		readonly text?: string | undefined;
+		/** A Slack message's author's face. */
+		readonly avatar?: string | undefined;
 	}[];
 	readonly total: number | null;
 	/** Where it opens: in Gmail, the conversation or the search; in Slack, the thread or the channel. */
@@ -749,6 +776,9 @@ function slackLinked(href: string): { readonly ts: string; readonly reply: boole
 	const root = parsed.searchParams.get("thread_ts");
 	return { ts, reply: root !== null && root !== ts };
 }
+
+/** A Slack author's initial for their face when it has no image: `@bob` is B, `@deploybot [bot]` D. */
+const handleInitial = (from: string) => [...from.replace(/^@/, "").trim()][0]?.toUpperCase() ?? "";
 
 /** Slack's own mark, beside a type icon, so a reference or a card reads as Slack's at a glance. */
 export function SlackMark({ className }: { className?: string }) {
@@ -842,15 +872,23 @@ function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactN
 			) : (
 				<ul className="flex flex-col divide-y divide-border">
 					{rows.map((message) => (
-						<li key={message.id} className="flex min-w-0 flex-col gap-0.5 py-1.5 first:pt-0 last:pb-0">
-							<span className="flex min-w-0 items-baseline gap-2 text-meta text-ink-2">
-								<span className="min-w-0 flex-1 truncate" title={message.from}>
-									{message.from || "Someone"}
+						<li key={message.id} className="flex min-w-0 items-start gap-2 py-1.5 first:pt-0 last:pb-0">
+							<Avatar size="sm" className="mt-0.5">
+								{message.avatar === undefined ? null : (
+									<AvatarImage src={message.avatar} alt="" referrerPolicy="no-referrer" />
+								)}
+								<AvatarFallback>{handleInitial(message.from)}</AvatarFallback>
+							</Avatar>
+							<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+								<span className="flex min-w-0 items-baseline gap-2 text-meta text-ink-2">
+									<span className="min-w-0 flex-1 truncate" title={message.from}>
+										{message.from || "Someone"}
+									</span>
+									<span className="shrink-0">{slackWhen(message.date)}</span>
 								</span>
-								<span className="shrink-0">{slackWhen(message.date)}</span>
-							</span>
-							<span className="min-w-0 truncate text-body text-ink" title={message.text}>
-								{message.text || "(No text)"}
+								<span className="min-w-0 truncate text-body text-ink" title={message.text}>
+									{message.text || "(No text)"}
+								</span>
 							</span>
 						</li>
 					))}

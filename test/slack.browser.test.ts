@@ -21,6 +21,7 @@ import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const SHOTS = process.env.BANDA_SLACK_SHOTS;
 const CHANNEL = "https://acme.slack.com/archives/C0GENERAL";
+const REPLY = `${CHANNEL}/p1700000160000160?thread_ts=${ROOT_TS}&cid=C0GENERAL`;
 
 const visible = "el.getClientRects().length > 0";
 const button = (text: string, within = "document") =>
@@ -97,7 +98,15 @@ for (const width of [390, 1440])
 						],
 						{ stopReason: "toolUse" },
 					),
-				() => fauxAssistantMessage([fauxToolCall("message_user", { text: "Sent." })], { stopReason: "toolUse" }),
+				() =>
+					fauxAssistantMessage(
+						[
+							fauxToolCall("message_user", {
+								text: `Sent, after [Bob's thanks](${REPLY}).`,
+							}),
+						],
+						{ stopReason: "toolUse" },
+					),
 				() => fauxAssistantMessage(""),
 			]);
 			const daemon = await startDaemon({
@@ -221,7 +230,19 @@ for (const width of [390, 1440])
 					);
 					await page.until(shows("Notifies @bob"));
 					await click(page, button("Send"));
-					await page.until(shows("Sent."));
+					await page.until(shows("Sent, after"));
+					// a reply's words in a reference are led by who wrote them
+					await page.until(
+						`[...document.querySelectorAll('[data-slack-reply]')].some((el) => el.innerText.includes("@bob: Thanks @ana"))`,
+					);
+					// each message on the thread's card has its author's face, its image fetched with no referrer
+					const card = `document.querySelector('[data-slack-card="thread"]')`;
+					expect(await page.run<number>(`${card}.querySelectorAll('[data-slot="avatar"]').length`)).toBeGreaterThan(0);
+					expect(
+						await page.run(
+							`[...document.querySelectorAll('[data-slot="avatar-image"]')].every((img) => img.alt === "" && img.referrerPolicy === "no-referrer")`,
+						),
+					).toBe(true);
 					await shot("5-sent");
 				});
 				expect(slack.posts()).toEqual([
