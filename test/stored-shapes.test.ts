@@ -8,12 +8,13 @@ import { join } from "node:path";
 import { createModels } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc } from "@earendil-works/pi-durable";
 import { expect, it } from "vitest";
-import { LEAD } from "../src/core/agents.ts";
+import { Accepted, LEAD } from "../src/core/agents.ts";
 import { Classified, Connected, ToolSettings } from "../src/core/connections.ts";
 import { Devices, INVITE_MS, pairingState } from "../src/core/devices.ts";
+import { Foreign } from "../src/core/foreign.ts";
 import { Harnesses } from "../src/core/harness.ts";
 import { keepReading, Readings } from "../src/core/objects.ts";
-import { Permissions } from "../src/core/permissions.ts";
+import { Earned, Permissions } from "../src/core/permissions.ts";
 import { FileCredentialStore } from "../src/core/provider-credentials.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { tempHome } from "./helpers.ts";
@@ -312,6 +313,47 @@ it("reopens the owner's tool settings and banda's guesses as they were stored", 
 			tools: { send_payment: { kind: "write", floor: "money", group: "Payments" } },
 			failed: "The model couldn't answer: rate limited.",
 		});
+	} finally {
+		await after.close(context);
+	}
+});
+
+it("reopens what trust is kept as: banda's files, earned places, a foreign read, a permission's grain and runs", async () => {
+	const home = await tempHome();
+	const before = await open(home);
+	const permission = {
+		tool: "github__merge_pull_request",
+		match: { account: "alice", owner: "org", repo: "app" },
+		what: "merge pull requests in org/app as @alice",
+		scope: "always" as const,
+		agent: "sancho",
+		grain: "place" as const,
+		ran: { count: 2, last: 50 },
+		at: 10,
+		wait: 3,
+	};
+	const chat = await before.commit(async (tx) => {
+		(await tx.doc(Accepted)).shipped = { "connections/github.md": true, "connections/cal.md": false };
+		(await tx.doc(Earned)).streaks['sancho|github__merge_pull_request|{"account":"alice"}'] = { count: 3, at: 40 };
+		const permissions = await tx.doc(Permissions);
+		permissions.permissions["7"] = permission;
+		permissions.next = 8;
+		const { id } = await tx.createConversation({ ownership: { kind: "ownerless" } });
+		(await tx.doc(Foreign, id)).read = 12;
+		return id;
+	}, context);
+	await before.close(context);
+	const after = await open(home);
+	try {
+		expect((await after.snapshot(Accepted, context))?.shipped).toEqual({
+			"connections/github.md": true,
+			"connections/cal.md": false,
+		});
+		expect((await after.snapshot(Earned, context))?.streaks).toEqual({
+			'sancho|github__merge_pull_request|{"account":"alice"}': { count: 3, at: 40 },
+		});
+		expect((await after.snapshot(Permissions, context))?.permissions["7"]).toEqual(permission);
+		expect(await after.snapshot(Foreign, chat, context)).toEqual({ read: 12 });
 	} finally {
 		await after.close(context);
 	}
