@@ -833,7 +833,7 @@ export function defineCore(options: CoreOptions) {
 			: { files: { at: (file: Attachment) => placed(file), place: (files: readonly Attachment[]) => place(files) } }),
 	});
 
-	const sending: Sending = (api, name, { to: where, text, files, ask, objects, reaction }, ctx) =>
+	const sending: Sending = (api, name, { to: where, text, files, ask, objects, reaction, artifacts }, ctx) =>
 		api.commit(async (tx) => {
 			const of = await tx.doc(TasksOf, api.taskId);
 			const found = of.tasks[name];
@@ -854,6 +854,7 @@ export function defineCore(options: CoreOptions) {
 					ask,
 					objects,
 					reaction,
+					artifacts,
 				);
 				if (posted === undefined) return { refused: "this chat is not in a group" };
 				return "refused" in posted

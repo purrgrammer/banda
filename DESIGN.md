@@ -338,7 +338,7 @@ it to them; each starts independently against the same shared history, and the m
 nobody in it, a message asks nobody and stays for whoever joins. The composer
 says so beneath the field ("To everyone · @ to pick one"). A mention, in the composer and in any message, shows as the
 agent's face and name, a link that opens its chat. A member speaks only in the room: `message_group` posts its
-words and files there, and its other speaking tools act there (`ask_user` asks the owner in the room, `react` puts its
+words, files and artifacts (by id, each at its version then) there, and its other speaking tools act there (`ask_user` asks the owner in the room, `react` puts its
 emoji on the owner's message its turn answers, `publish` shows its card); `message_user` and `propose_avatar` are not
 offered in a group, and
 `message_group` nowhere else. Its `ask` names the members whose work is needed, each starting a turn: its schema is an

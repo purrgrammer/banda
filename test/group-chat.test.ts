@@ -70,10 +70,18 @@ describe("groups", () => {
 					stopReason: "toolUse",
 				});
 			if (text.includes("FAIL ME")) return fauxAssistantMessage("", { stopReason: "error", errorMessage: "boom" });
-			const args: { [key: string]: string } = text.includes("ASK ME")
-				? { question: "Which one?" }
-				: { text: `${agent} reply` };
-			return fauxAssistantMessage([fauxToolCall("message_group", args)], { stopReason: "toolUse" });
+			if (text.includes("ASK ME"))
+				return fauxAssistantMessage([fauxToolCall("ask_user", { question: "Which one?" })], { stopReason: "toolUse" });
+			// showing again what it published, by the id publish returned
+			const published = results.map((result) => /its id is ([0-9a-f]{16})/.exec(result)?.[1]).find(Boolean);
+			if (text.includes("SHOW IT") && published !== undefined)
+				return fauxAssistantMessage(
+					[fauxToolCall("message_group", { text: "Here it is again.", artifacts: [published] })],
+					{ stopReason: "toolUse" },
+				);
+			return fauxAssistantMessage([fauxToolCall("message_group", { text: `${agent} reply` })], {
+				stopReason: "toolUse",
+			});
 		};
 		faux.setResponses(Array.from({ length: 100 }, () => respond as never));
 		const daemon = await startDaemon({ home, port: 0, models, log: () => {}, box: hostBox(home), web });
@@ -269,10 +277,17 @@ describe("groups", () => {
 			await post(room, { key: randomUUID(), text: "PUBLISH IT", mentions: ["researcher"] });
 			const card = await until(async () => {
 				const view = await api<GroupView>(`/groups/${room}`);
-				return view.messages.find((m) => m.artifact !== undefined);
+				return view.messages.find((m) => (m.artifacts ?? []).length > 0);
 			});
 			expect(card.author).toEqual({ agent: "researcher" });
-			expect(card.artifact).toMatchObject({ title: "Launch post", n: 1 });
+			expect(card.artifacts).toMatchObject([{ title: "Launch post", n: 1 }]);
+			// shown again by id: the card on that message, at the version it showed
+			await post(room, { key: randomUUID(), text: "SHOW IT", mentions: ["researcher"] });
+			const again = await until(async () => {
+				const view = await api<GroupView>(`/groups/${room}`);
+				return view.messages.find((m) => m.text === "Here it is again.");
+			});
+			expect(again.artifacts).toMatchObject([{ id: card.artifacts?.[0]?.id, title: "Launch post", n: 1 }]);
 
 			// stop: nothing works there after
 			const stopped = await api<GroupView>(`/groups/${room}/stop`, { method: "POST", body: "{}" });

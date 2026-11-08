@@ -121,6 +121,8 @@ export type GroupMessage = {
 	readonly call?: string;
 	/** A member's: one emoji on the owner's message its run answered (`on`, its entry); alone, its whole answer. */
 	readonly reaction?: { readonly emoji: string; readonly on: number };
+	/** A member's: artifacts it showed again, each at the version current when it was posted. */
+	readonly artifacts?: readonly { readonly id: string; readonly n: number }[];
 };
 
 type Execution = { chat: number; cursor?: number; lastTurn?: number };
@@ -702,6 +704,7 @@ export function defineGroups(options: GroupOptions) {
 				...(message.call === undefined ? {} : { call: message.call }),
 				...(message.objects === undefined ? {} : { objects: [...message.objects] }),
 				...(message.reaction === undefined ? {} : { reaction: { ...message.reaction } }),
+				...(message.artifacts === undefined ? {} : { artifacts: message.artifacts.map(({ id, n }) => ({ id, n })) }),
 			} as unknown as JsonObject,
 		});
 		// its place in its chain: an owner's message begins one; a member's is one deeper than what it answers
@@ -941,6 +944,7 @@ export function defineGroups(options: GroupOptions) {
 		ask: readonly string[] = [],
 		objects: readonly string[] = [],
 		reaction?: string,
+		artifacts: readonly { readonly id: string; readonly n: number }[] = [],
 	): Promise<{ readonly entry: number; readonly note?: string } | { readonly refused: string } | undefined> {
 		const doc = await tx.doc(Groups);
 		const at = doc.byExecution[chat];
@@ -996,6 +1000,7 @@ export function defineGroups(options: GroupOptions) {
 					...(files.length === 0 ? {} : { files }),
 					...(call === undefined ? {} : { call }),
 					...(reaction === undefined || on === undefined ? {} : { reaction: { emoji: reaction, on } }),
+					...(artifacts.length === 0 ? {} : { artifacts: artifacts.map(({ id, n }) => ({ id, n })) }),
 				},
 				from === undefined ? undefined : { ...from },
 			);

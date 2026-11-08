@@ -170,6 +170,8 @@ export type Sending = (
 		readonly ask?: readonly string[];
 		/** To the group: one emoji on the owner's message the run answers. */
 		readonly reaction?: string;
+		/** Artifacts it shows again, each at the version current when it was sent. */
+		readonly artifacts?: readonly { readonly id: string; readonly n: number }[];
 	},
 	ctx: Context,
 ) => Promise<number | { readonly refused: string } | { readonly posted: number; readonly note?: string }>;
@@ -299,6 +301,7 @@ function speak(
 						...(files.length === 0 ? {} : { files }),
 						...(args.ask === undefined ? {} : { ask: args.ask }),
 						...(reaction === undefined ? {} : { reaction }),
+						...(receipt?.kind === "artifacts" ? { artifacts: receipt.artifacts as { id: string; n: number }[] } : {}),
 					},
 					ctx,
 				);
@@ -340,9 +343,6 @@ export const ASK_WORDS =
 
 /** The members a group message may ask, at most: everyone else in the largest group. */
 const MAX_ASKED = 8;
-
-/** What a room message carries besides its words: a room message holds no artifacts by id yet, only what it publishes. */
-const ROOM_PARTS: readonly MessagePart[] = MESSAGE_PARTS.filter((part) => !("artifacts" in (part.parameters ?? {})));
 
 /** The tools that speak, with what they share: how a message is sent, its files stored, a question asked. */
 export type Speaking = {
@@ -402,7 +402,7 @@ export function groupMessageTool({ asking, sending, blobs, limit }: Speaking): T
 			"Post to the group's room, where the owner and every member read it: the only way to speak here. `text` is " +
 			`markdown; \`files\` are paths in your box, posted with it (${sizeOf(limit)} at most each). ` +
 			ASK_WORDS +
-			partsWords(ROOM_PARTS).trim() +
+			partsWords(MESSAGE_PARTS).trim() +
 			` To ask the owner something in the room, use \`${ASK_USER}\`; to react to their message, \`${REACT}\`.`,
 		parameters: Type.Object({
 			text: Type.Optional(Type.String()),
@@ -414,11 +414,11 @@ export function groupMessageTool({ asking, sending, blobs, limit }: Speaking): T
 					description: "The other members asked to work on it, by their names.",
 				}),
 			),
-			...partsParameters(ROOM_PARTS),
+			...partsParameters(MESSAGE_PARTS),
 		}),
 		replay: "safe",
 		executionMode: "sequential",
-		execute: speak(asking, sending, blobs, limit, "group", ROOM_PARTS),
+		execute: speak(asking, sending, blobs, limit, "group", MESSAGE_PARTS),
 	});
 }
 
