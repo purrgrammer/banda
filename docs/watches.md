@@ -68,7 +68,7 @@ returned to and merged, at desktop and phone width.
   wake as from the pause; the fault worker runs the pause, Pause all and switch-off scenarios (`SCENARIOS`), each
   once without faults in the unit suite
 - [ ] The fault sweep and property over every scenario (pause, Pause all, the account's switch, the new burst and
-  limit paths) have not run in CI yet; only a two-run property of Pause all ran locally
+  limit paths, a held failure a later push undid) have not run in CI yet; only a two-run property of Pause all ran locally
 - [ ] Slice 2 through the app against a daemon at desktop and phone width
 - [x] Slice 3, volume: a burst is one wake (held while the last wake's run goes or within the kind's `settle`, the
   cursor kept, the held reading never evicted); busy cadence (`lookEvery`, tested end to end); `wakes_a_day` (pauses

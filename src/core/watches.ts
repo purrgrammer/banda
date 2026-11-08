@@ -228,6 +228,12 @@ export type WatchRecord = {
 	 * passed, so its cursor stays and what changes meanwhile joins that wake.
 	 */
 	burst?: number;
+	/**
+	 * What the looks that held its wake saw, kept in the commit that held: the changes that wake and those that tell, in
+	 * the kind's words, and the ids of those that wake. The wake that ends the hold says them with what the newest
+	 * reading shows, so a change the object undid meanwhile still wakes; that commit clears them.
+	 */
+	held?: { wake: string[]; tell: string[]; ids: string[] };
 	/** Behind since then: its newest wake or tell had a gap (some changes may be missing), until one without a gap. */
 	behind?: number;
 	/** Done: when, and by which of its ends, or, with `authority`, why its account or connection was taken away. */
@@ -813,27 +819,51 @@ export function defineWatches(options: WatchesOptions) {
 			const wake = sorted.filter((each) => each.does === "wake");
 			const tell = sorted.filter((each) => each.does === "tell");
 			const ended = endedBy(kind.follow, watch.until, after);
+			// what the looks that held saw, with what this one sees: a change once seen to wake still wakes, though the
+			// newest reading no longer shows it (a failed check a new push made run again), and each is said once
+			const union = (before: readonly string[] | undefined, now: readonly string[]) => [
+				...new Set([...(before ?? []), ...now]),
+			];
+			const held = {
+				wake: union(
+					record.held?.wake,
+					wake.map((each) => each.says),
+				),
+				tell: union(
+					record.held?.tell,
+					tell.map((each) => each.says),
+				),
+				ids: union(
+					record.held?.ids,
+					wake.map((each) => each.change.id),
+				),
+			};
+			const wakes = held.wake.length > 0;
 			// a burst is one wake: while its last wake's run still goes, or until the kind's settling time has passed
-			// since the first change, the cursor stays and what changes meanwhile joins the wake; the owner's Check now
-			// wakes at once, as they asked
-			if ((wake.length > 0 || ended !== undefined) && click === undefined) {
+			// since the first change, the cursor stays and what changes meanwhile joins the wake, what each look saw kept
+			// in the commit that holds, so a kill between looks loses none of it; the owner's Check now wakes at once,
+			// as they asked
+			if ((wakes || ended !== undefined) && click === undefined) {
 				const last = record.turn === undefined ? undefined : await tx.task(record.turn as TaskId);
 				const running = last !== undefined && last.state.status !== "terminal";
 				const first = record.burst ?? now;
 				const settled = first + settleOf(kind.follow);
 				if (running || now < settled) {
 					record.burst = first;
+					record.held = held;
 					record.next = running ? now + Math.min(every, BUSY_EVERY) : Math.min(settled, now + every);
 					outcome = { outcome: "held", why: "burst" };
 					return;
 				}
 			}
-			// past its wakes a day it pauses alone and says so; its cursor stays, so the resume wakes once with what came
-			if (wake.length > 0 && ended === undefined && click === undefined) {
+			// past its wakes a day it pauses alone and says so; its cursor stays and what it saw is kept, so the resume
+			// wakes once with what came
+			if (wakes && ended === undefined && click === undefined) {
 				const limit = watch.wakesADay ?? DEFAULT_WAKES_A_DAY;
 				record.wakes = (record.wakes ?? []).filter((at) => at > now - DAY);
 				if (record.wakes.length >= limit) {
 					record.paused = "limit";
+					record.held = held;
 					await log(tx, { at: now, watch: name, what: "paused: it woke the most times a day it may" });
 					const data: WatchTroubleData = {
 						watch: name,
@@ -853,7 +883,8 @@ export function defineWatches(options: WatchesOptions) {
 			delete record.resumed;
 			const burst = record.burst;
 			delete record.burst;
-			const said = [...new Set([...wake, ...tell].map((each) => each.says))];
+			delete record.held;
+			const said = [...new Set([...held.wake, ...held.tell])];
 			if (ended !== undefined && said.length === 0) said.push(ended);
 			// however much changed in one look, the line and the model's text name a bounded few and count the rest
 			const changes =
@@ -881,15 +912,9 @@ export function defineWatches(options: WatchesOptions) {
 			};
 			if (gap) record.behind = now;
 			else if (changes.length > 0) delete record.behind;
-			if (wake.length > 0 || ended !== undefined) {
+			if (wakes || ended !== undefined) {
 				record.turn = await options.followUp(tx, chat, {
-					key: wakeKey(
-						name,
-						record.since,
-						seen,
-						wake.map((each) => each.change.id),
-						ended,
-					),
+					key: wakeKey(name, record.since, seen, held.ids, ended),
 					text: wakeText(watch, data.object.name, connection.service, changes, {
 						...(ended === undefined ? {} : { ended }),
 						resumed,
@@ -901,7 +926,7 @@ export function defineWatches(options: WatchesOptions) {
 				record.wakes = [...(record.wakes ?? []).filter((at) => at > now - DAY), now];
 				record.last = now;
 				await log(tx, { at: now, watch: name, what: `${data.object.name}: ${changes.join(", ")}`, chat });
-			} else if (tell.length > 0) {
+			} else if (held.tell.length > 0) {
 				await tx.appendEntry(chat as ConversationId, { kind: TELL, data: data as unknown as JsonObject });
 			}
 			if (changes.length > 0) {

@@ -610,7 +610,8 @@ or not the model remembers it.
   on its own work. At a wake the agent decides whether anything is worth a message, as at a routine's: its message
   counts as unread, a line alone does not.
 - **A burst is one wake.** Changes that arrive while the watch's last run still goes, or before the kind's settling
-  time passes, come together as one wake carrying the newest reading, and its line names what came together. A
+  time passes, come together as one wake carrying the newest reading, and its line names what came together:
+  everything a held look saw, though the newest reading no longer shows it (a failed check a later push runs again). A
   watch looks often while its object is busy (checks running) and seldom when it is quiet, as the kind says; wakes a
   day are per watch, as runs a day are per routine.
 - **The wake in the chat** is an event line, the object drawn as the owner's references are (the service's mark, its

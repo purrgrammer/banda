@@ -353,6 +353,15 @@ describe("a watch on a pull request", () => {
 		expect(summary.wakes[1]?.ended).toBe("merged");
 	}, 60_000);
 
+	it("a burst is one wake: a failure a held look saw wakes, though the newest reading no longer shows it", async () => {
+		const scenario = SCENARIOS["held-failure"] as (typeof SCENARIOS)[string];
+		const summary = await watchScenario(await tempHome(), new Faults(), scenario.options);
+		expect(scenario.problems(summary)).toEqual([]);
+		expect([...(summary.wakes[0]?.changes ?? [])].sort()).toEqual(["check failed", "new commits"]);
+		expect(summary.wakes[0]?.burst).toBe(NOW + 30_000);
+		expect(summary.tells).toEqual([]);
+	}, 60_000);
+
 	it("past its wakes a day it pauses alone and says so once; resumed, what came meanwhile is one wake", async () => {
 		// bob's comments, one more each step; the watch looks on its own (here, the act's look), its run ended first
 		const comments = (step: number): World =>

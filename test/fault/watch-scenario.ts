@@ -500,6 +500,18 @@ export function watchInvariants(summary: WatchSummary): string[] {
 			record.burst !== undefined;
 		if (summary.live.includes(name) && !quiet && summary.followed !== undefined)
 			say(`${name}: its cursor is on the newest reading`, record.seen === summary.followed.version);
+		// a hold begins with a change that wakes: once seen, it ends in a wake, whatever the newest reading shows then
+		say(
+			`${name}: a held wake ended in a wake, not a tell`,
+			summary.tells.every((tell) => tell.watch !== name || tell.burst === undefined),
+		);
+		say(
+			`${name}: what it held is kept only while it holds, or is paused or done`,
+			record.held === undefined ||
+				record.burst !== undefined ||
+				record.paused !== undefined ||
+				record.done !== undefined,
+		);
 		const transitions = wakes.map((wake) => `${wake.seen}>${wake.version}`);
 		say(`${name}: a transition woke once: ${transitions.join(" ")}`, new Set(transitions).size === transitions.length);
 		for (const [i, wake] of wakes.entries()) {
@@ -583,6 +595,43 @@ export function watchProblems(summary: WatchSummary): string[] {
 /** The world as it stands at `step`, the pull request's life held at step 1 until step 3: it changed while held. */
 const heldWorld = (step: number) => world(step === 2 ? 1 : step);
 
+/**
+ * A push that fails its check, then another that runs it again, each seen by the watch's own look: green on head a;
+ * at +30s head b with check failed, its wake held to settle; at +90s head c with check running. The diff from the
+ * cursor to the newest says only "new commits", but the failure was seen and wakes with it.
+ */
+const pushes = (step: number): World => {
+	const [sha, status, conclusion] = (
+		[
+			["a", "completed", "success"],
+			["b", "completed", "failure"],
+			["c", "in_progress", null],
+		] as const
+	)[Math.min(step, 2)] as readonly [string, string, string | null];
+	const at = world(0) as { [read: string]: Json } & { get: { [key: string]: Json } };
+	at.get.head = { ref: "objects", sha };
+	at.get_check_runs = { total_count: 1, check_runs: [{ id: 1 + step, name: "check", status, conclusion }] };
+	return at;
+};
+
+/** What must hold of a failure a held look saw and the newest reading no longer shows: it wakes, once, with the push. */
+function heldFailure(summary: WatchSummary): string[] {
+	const errors = watchInvariants(summary);
+	const say = (what: string, ok: boolean) => {
+		if (!ok) errors.push(what);
+	};
+	say(`one wake, got ${summary.wakes.length}`, summary.wakes.length === 1);
+	say(
+		"the wake says the failure and the push, each once",
+		[...(summary.wakes[0]?.changes ?? [])].sort().join(", ") === "check failed, new commits",
+	);
+	say("no tell beside the wake", summary.tells.length === 0);
+	say("nothing is left held", summary.record.burst === undefined && summary.record.held === undefined);
+	for (const turn of summary.turns) say("a run ended", turn?.status === "completed");
+	say("nothing is parked", summary.parked.length === 0);
+	return errors;
+}
+
 /** What must hold of a scenario that held the watch while the world changed: one wake, from the pause, that ends it. */
 function fromThePause(summary: WatchSummary): string[] {
 	const errors = watchInvariants(summary);
@@ -634,6 +683,18 @@ export const SCENARIOS: {
 			},
 		},
 		problems: fromThePause,
+	},
+	"held-failure": {
+		options: {
+			world: pushes,
+			clicks: [undefined, undefined],
+			at: (step) => NOW + [0, 30_000, 90_000][Math.min(step, 2)]!,
+			// no clicks: the watch looks on its own (here, the act's look), as the owner's Check now would wake at once
+			act: async (_step, { harness, core }) => {
+				await core.lookWatch(harness, "banda-142");
+			},
+		},
+		problems: heldFailure,
 	},
 	"switch-off": {
 		options: {
