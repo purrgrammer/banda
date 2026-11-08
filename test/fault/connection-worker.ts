@@ -112,10 +112,12 @@ if (mode === "mcp") {
 	const view = (await s.capabilities.view()).connections.find((c) => c.name === "cal");
 	if (view?.review === true) await s.capabilities.review("cal", view.accepted?.sha, {});
 }
-// "address": its reads are none at first; the owner lets what the server says only reads run without asking
+// "address": its reads are none at first; the owner allows in Settings the read the server says it is
 if (mode === "address") {
-	const hinted = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.hinted ?? [];
-	if (hinted.includes("list_events")) await s.capabilities.trustReads("cal", ["list_events"]);
+	const listEvents = (await s.capabilities.view()).connections
+		.find((c) => c.name === "cal")
+		?.tools.find((t) => t.title === "list_events");
+	if (listEvents?.kind !== "read") await s.capabilities.setTools("cal", { list_events: "allow" });
 }
 
 const received = await s.core.receive(s.harness, {

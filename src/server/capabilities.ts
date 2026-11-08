@@ -1707,20 +1707,6 @@ export function openCapabilities(options: CapabilityOptions) {
 					const at = Math.max(file?.at ?? 0, relisted ?? 0);
 					return at === 0 ? {} : { at };
 				})(),
-				...(() => {
-					if (connection === undefined || connection.command !== undefined || listed?.sha !== file?.sha) return {};
-					const hinted = Object.entries(listed?.tools ?? {})
-						.filter(
-							([tool, shape]) =>
-								shape.readOnlyHint === true &&
-								!connection.reads.includes(tool) &&
-								connection.readsWhen?.[tool] === undefined &&
-								connection.floors[tool] === undefined,
-						)
-						.map(([tool]) => tool)
-						.sort();
-					return hinted.length === 0 ? {} : { hinted };
-				})(),
 				...(listed?.sha === file?.sha && listed?.notes !== undefined ? { notes: listed.notes } : {}),
 				...(connection === undefined || connection.command !== undefined || listed?.sha !== file?.sha
 					? {}
@@ -2884,87 +2870,6 @@ export function openCapabilities(options: CapabilityOptions) {
 	}
 
 	/**
-	 * The owner says tools only read, so they run without asking: they join the file's reads, the file rewritten in the
-	 * box and accepted again at once (the owner wrote it). The app offers the ones the server says only read
-	 * (`readOnlyHint`) together, and any other one by one; never with a change from the companion waiting.
-	 */
-	async function trustReads(
-		name: string,
-		tools: unknown,
-		ctx: Context = context,
-		expected?: string,
-		replace = false,
-	): Promise<void> {
-		if (
-			!Array.isArray(tools) ||
-			(!replace && tools.length === 0) ||
-			tools.length > 500 ||
-			!tools.every((t) => typeof t === "string")
-		)
-			throw new BadRequest("give the tools as a list of names");
-		const box = (await boxedFiles("connections", ctx)).get(name) as
-			| { text: string }
-			| { unreadable: string }
-			| undefined;
-		if (box === undefined || "unreadable" in box) throw new BadRequest(`there is no connection named ${name}`, 404);
-		// copied out of the commit: the store's own objects are not to be read after it
-		const { accepted, listed } = await harness.commit(
-			async (tx) =>
-				JSON.parse(
-					JSON.stringify({
-						accepted: (await tx.doc(Accepted)).files[connectionPath(name)] ?? null,
-						listed: (await tx.doc(Connected)).connections[name] ?? null,
-					}),
-				) as {
-					accepted: { sha: string; text: string } | null;
-					listed: { sha: string; tools: { [tool: string]: { readOnlyHint?: boolean } } } | null;
-				},
-			ctx,
-		);
-		const rewrite = (text: string) => {
-			if (!replace) return withReads(name, text, [...new Set(tools as string[])]);
-			const parsed = parseConnection(name, text);
-			if (!("connection" in parsed)) return undefined;
-			const conditional = Object.entries(parsed.connection.readsWhen ?? {}).flatMap(([tool, rules]) =>
-				(tools as string[]).includes(tool) ? [] : rules.map((rule) => `${tool}(${rule.arg}=${rule.value})`),
-			);
-			const next = withList(text, "reads", [...conditional, ...new Set(tools as string[])], ["auth", "url", "service"]);
-			return next !== undefined && "connection" in parseConnection(name, next) ? next : undefined;
-		};
-		if (
-			accepted === null ||
-			(accepted.text !== box.text && rewrite(accepted.text) !== box.text) ||
-			(expected !== undefined && expected !== accepted.sha)
-		)
-			throw new BadRequest("it proposes a change to this connection: allow or decline that first", 409);
-		if (listed === null || listed.sha !== accepted.sha)
-			throw new BadRequest(`${name} is not connected yet: sign in first, then its tools are known`, 409);
-		const named = [...new Set(tools as string[])];
-		const unknown = named.filter((tool) => !Object.hasOwn(listed.tools, tool));
-		if (unknown.length > 0) throw new BadRequest(`${name} lists no tool named ${unknown.join(", ")}`);
-		const rewritten = rewrite(accepted.text);
-		if (rewritten === undefined) throw new BadRequest(`could not write the reads into connections/${name}.md`);
-		await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, rewritten, ctx);
-		fault("trust:written");
-		// Changing read policy is not permission to accept new server instructions or schemas.
-		await harness.commit(async (tx) => {
-			const files = (await tx.doc(Accepted)).files;
-			const connected = await tx.doc(Connected);
-			const listing = connected.connections[name];
-			if (files[connectionPath(name)]?.sha !== accepted.sha || listing?.sha !== accepted.sha)
-				throw new BadRequest("This connection changed meanwhile. Review it again.", 409);
-			const sha = shaOf(rewritten);
-			files[connectionPath(name)] = { sha, text: rewritten, at: now() };
-			listing.sha = sha;
-			connected.epoch++;
-			await log(tx, { at: now(), what: `You allowed reads from ${name}: ${named.join(", ")}` });
-		}, ctx);
-		fault("accept:after");
-		await install(ctx);
-		options.changed?.();
-	}
-
-	/**
 	 * How a server answers a probe: how it signs in, and, when it lists its tools to anyone, which; or why it is not one
 	 * banda can connect to. The probe asks what anyone on the internet could: no credential, the public internet only.
 	 */
@@ -3337,12 +3242,13 @@ export function openCapabilities(options: CapabilityOptions) {
 		await offer(tx, on, name);
 	}
 
-	/** The tools of `settings` set to Allow that are not reads yet: confirming them makes them the file's. */
-	const confirmedReads = (state: SettingState, settings: { readonly [tool: string]: Setting }) =>
+	/** The tools of `settings` set to Allow that are reads its file does not say yet: allowing one makes it the file's. */
+	const proposedReads = (state: SettingState, settings: { readonly [tool: string]: Setting }) =>
 		Object.entries(settings)
 			.filter(
 				([tool, setting]) =>
 					setting === "allow" &&
+					state.classes[tool]?.kind === "read" &&
 					!state.connection.reads.includes(tool) &&
 					state.connection.readsWhen?.[tool] === undefined,
 			)
@@ -3350,27 +3256,73 @@ export function openCapabilities(options: CapabilityOptions) {
 			.sort();
 
 	/**
+	 * Connection `name`'s `settings` kept in one commit, with its file as `file` rewrites it when they change what the
+	 * file says: written into the box first (then the fault point `file.point`), and accepted in that same commit. A
+	 * kill after the write leaves the file written, and doing it again accepts it as written. Never over a change the
+	 * companion proposes, nor over a file accepted since `state`.
+	 */
+	async function keepWithFile(
+		name: string,
+		state: SettingState,
+		settings: { readonly [tool: string]: Setting },
+		file: { readonly text: string; readonly point: "review:written" | "reads:written" } | undefined,
+		what: string,
+		ctx: Context,
+	): Promise<void> {
+		if (file !== undefined) {
+			const box = (await boxedFiles("connections", ctx)).get(name) as
+				| { text: string }
+				| { unreadable: string }
+				| undefined;
+			if (box === undefined || "unreadable" in box || (box.text !== state.text && box.text !== file.text))
+				throw new BadRequest("it proposes a change to this connection: allow or decline that first", 409);
+			if (box.text !== file.text) {
+				await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, file.text, ctx);
+				fault(file.point);
+			}
+		}
+		await harness.commit(async (tx) => {
+			if (file !== undefined) {
+				const files = (await tx.doc(Accepted)).files;
+				const listing = (await tx.doc(Connected)).connections[name];
+				if (files[connectionPath(name)]?.sha !== state.connection.sha || listing?.sha !== state.connection.sha)
+					throw new BadRequest("This connection changed meanwhile. Review it again.", 409);
+				// what the server said when listed stays as listed: its notes and schemas are not accepted again
+				const next = shaOf(file.text);
+				files[connectionPath(name)] = { sha: next, text: file.text, at: now() };
+				listing.sha = next;
+			}
+			await keepSettings(tx, name, settings);
+			await log(tx, { at: now(), what });
+		}, ctx);
+		if (file !== undefined) fault("accept:after");
+		await install(ctx);
+		options.changed?.();
+	}
+
+	/**
 	 * The owner sets connection `name`'s tools (`given`, by the server's name for each) from Settings, at once, for
-	 * every agent. Allow on one that is not a read yet confirms it as one: it joins the file's reads (`trustReads`).
+	 * every agent. Allow on a read its file does not say yet (one the server or banda's guess proposed) accepts it: it
+	 * joins the file's reads.
 	 */
 	async function setTools(name: string, given: unknown, ctx: Context = context): Promise<void> {
 		const state = await settable(name, ctx);
 		const settings = settingsOf(name, given, state);
-		const confirmed = confirmedReads(state, settings);
-		if (confirmed.length > 0) await trustReads(name, confirmed, ctx);
-		await harness.commit(async (tx) => {
-			await keepSettings(tx, name, settings);
-			const [only, ...more] = Object.entries(settings);
-			await log(tx, {
-				at: now(),
-				what:
-					only !== undefined && more.length === 0
-						? `You set ${state.connection.service}'s ${only[0]} to ${SETTING_WORDS[only[1]]}`
-						: `You set ${more.length + 1} of ${state.connection.service}'s tools`,
-			});
-		}, ctx);
-		await install(ctx);
-		options.changed?.();
+		const reads = proposedReads(state, settings);
+		const text = reads.length === 0 ? undefined : withReads(name, state.text, reads);
+		if (reads.length > 0 && text === undefined)
+			throw new BadRequest(`could not write the reads into connections/${name}.md`);
+		const [only, ...more] = Object.entries(settings);
+		await keepWithFile(
+			name,
+			state,
+			settings,
+			text === undefined ? undefined : { text, point: "reads:written" },
+			only !== undefined && more.length === 0
+				? `You set ${state.connection.service}'s ${only[0]} to ${SETTING_WORDS[only[1]]}`
+				: `You set ${more.length + 1} of ${state.connection.service}'s tools`,
+			ctx,
+		);
 	}
 
 	/** The owner sets every tool in connection `name`'s group `group` to `setting`: each to it, or the nearest it has. */
@@ -3408,7 +3360,7 @@ export function openCapabilities(options: CapabilityOptions) {
 						: (state.set[toolName(name, tool)] ?? defaultOf(classed.kind))),
 			]),
 		);
-		const reads = confirmedReads(state, settings);
+		const reads = proposedReads(state, settings);
 		// in the order banda guessed them, then any by name
 		const groups: { [group: string]: string[] } = Object.fromEntries(state.order.map((group) => [group, []]));
 		for (const [tool, classed] of Object.entries(state.classes).sort(([a], [b]) => a.localeCompare(b)))
@@ -3420,31 +3372,14 @@ export function openCapabilities(options: CapabilityOptions) {
 		const rewritten = grouped === undefined ? undefined : withoutAlways(grouped);
 		if (rewritten === undefined || !("connection" in parseConnection(name, rewritten)))
 			throw new BadRequest(`could not write what its tools do into connections/${name}.md`);
-		const box = (await boxedFiles("connections", ctx)).get(name) as
-			| { text: string }
-			| { unreadable: string }
-			| undefined;
-		// a review a kill cut short once its file was written is accepted as written
-		if (box === undefined || "unreadable" in box || (box.text !== state.text && box.text !== rewritten))
-			throw new BadRequest("it proposes a change to this connection: allow or decline that first", 409);
-		if (box.text !== rewritten) {
-			await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, rewritten, ctx);
-			fault("review:written");
-		}
-		await harness.commit(async (tx) => {
-			const files = (await tx.doc(Accepted)).files;
-			const listing = (await tx.doc(Connected)).connections[name];
-			if (files[connectionPath(name)]?.sha !== state.connection.sha || listing?.sha !== state.connection.sha)
-				throw new BadRequest("This connection changed meanwhile. Review it again.", 409);
-			const next = shaOf(rewritten);
-			files[connectionPath(name)] = { sha: next, text: rewritten, at: now() };
-			listing.sha = next;
-			await keepSettings(tx, name, settings);
-			await log(tx, { at: now(), what: `You set what ${state.connection.service}'s tools may do` });
-		}, ctx);
-		fault("accept:after");
-		await install(ctx);
-		options.changed?.();
+		await keepWithFile(
+			name,
+			state,
+			settings,
+			{ text: rewritten, point: "review:written" },
+			`You set what ${state.connection.service}'s tools may do`,
+			ctx,
+		);
 	}
 
 	/** The schema a connection's tool was listed with, for the file accepted now. */
@@ -3486,7 +3421,6 @@ export function openCapabilities(options: CapabilityOptions) {
 		addByAddress,
 		addMcp,
 		refresh: connect,
-		trustReads,
 		connect,
 		signOut,
 		switchAccount,

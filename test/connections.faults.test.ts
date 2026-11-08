@@ -225,11 +225,11 @@ describe("connections under faults", () => {
 		);
 	}, 300_000);
 
-	it("sweep, added by its address and its reads trusted: one kill at each step the owner takes", async () => {
+	it("sweep, added by its address and a read its server proposes allowed: one kill at each step the owner takes", async () => {
 		const clean = await run([], "address");
 		check(clean);
 		expect(clean.creates).toBe(1);
-		const points: FaultPoint[] = ["address:written", "accept:after", "oauth:kept", "trust:written", "connect:listed"];
+		const points: FaultPoint[] = ["address:written", "accept:after", "oauth:kept", "reads:written", "connect:listed"];
 		await pool(
 			2,
 			points.map((point) => async () => {

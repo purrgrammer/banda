@@ -59,9 +59,10 @@ export type FaultPoint =
 	| "bring:accepted"
 	| "bring:agent"
 	| "address:written"
-	| "trust:written"
 	/** The owner's review of what a connection's tools do: its file written, before it is accepted. */
 	| "review:written"
+	/** A read a connection's server or banda's guess proposed, allowed in Settings: its file written, before it is accepted. */
+	| "reads:written"
 	| "nosignin:written"
 	/** A connection's tools listed, before the store holds them. */
 	| "connect:listed"

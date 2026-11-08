@@ -352,11 +352,6 @@ export const addMcp = (config: import("../../../src/core/mcp-config.ts").McpConf
 	});
 export const refreshConnection = (name: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/refresh`, { method: "POST", body: "{}" });
-export const setConnectionReads = (name: string, tools: readonly string[], sha: string) =>
-	api<CapabilitiesView>(`/capabilities/connections/${name}/reads`, {
-		method: "POST",
-		body: JSON.stringify({ tools, sha }),
-	});
 /** Set some of a connection's tools, each to Allow, Ask, Always ask or Off, for every agent, at once. */
 export const setToolSettings = (name: string, tools: { readonly [tool: string]: Setting }) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/settings`, {
@@ -414,7 +409,6 @@ export type CapabilityAct =
 	| { readonly action: "key"; readonly name: string; readonly key: string }
 	| { readonly action: "add"; readonly name: string }
 	| { readonly action: "address"; readonly url: string }
-	| { readonly action: "trust"; readonly name: string; readonly tools: readonly string[] }
 	| { readonly action: "switch"; readonly tool: string; readonly on: boolean };
 
 /** Act on a connection or a tool as the owner; what the companion can use as it is after, or rejects with why. */
@@ -426,12 +420,10 @@ export const actOnCapability = (act: CapabilityAct) =>
 			})
 		: act.action === "address"
 			? api<CapabilitiesView>("/capabilities/connections", { method: "POST", body: JSON.stringify({ url: act.url }) })
-			: act.action === "disconnect" || act.action === "key" || act.action === "add" || act.action === "trust"
+			: act.action === "disconnect" || act.action === "key" || act.action === "add"
 				? api<CapabilitiesView>(`/capabilities/connections/${act.name}/${act.action}`, {
 						method: "POST",
-						body: JSON.stringify(
-							act.action === "key" ? { key: act.key } : act.action === "trust" ? { tools: act.tools } : {},
-						),
+						body: JSON.stringify(act.action === "key" ? { key: act.key } : {}),
 					})
 				: api<CapabilitiesView>(`/capabilities/${act.folder}/${act.name}/${act.action}`, {
 						method: "POST",

@@ -722,11 +722,6 @@ export type ConnectionView = {
 	readonly state: "waiting" | "sign-in" | "signing-in" | "key" | "connecting" | "connected" | "problem";
 	/** When it last changed (allowed, or its tools listed again), epoch ms: the newest come first. */
 	readonly at?: number;
-	/**
-	 * Tools the server says only read (`readOnlyHint`) that the file does not list as reads: the owner may let them run
-	 * without asking, with one tap. The server's word, shown, never trusted by itself.
-	 */
-	readonly hinted?: readonly string[];
 	/** The server's own notes about its tools, as kept when it was connected: what the model is told of them. */
 	readonly notes?: string;
 	/** Its tools' groups, in the order they are shown. */
