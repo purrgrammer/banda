@@ -9,7 +9,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type AssistantMessage, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
-import type { TaskId } from "@earendil-works/pi-durable";
+import type { TaskId, ToolExecutionApi } from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
 import { Accepted } from "../src/core/agents.ts";
 import { Classified, connectionTools, parseConnection, ToolSettings, withGroups } from "../src/core/connections.ts";
@@ -17,7 +17,16 @@ import { OWNER } from "../src/core/gateway.ts";
 import { offeredScopes } from "../src/core/permissions.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context } from "../src/core/store.ts";
-import { nameGroup, nameGroups } from "../src/core/tool-kinds.ts";
+import {
+	type From,
+	inGroup,
+	type Kind,
+	nameGroup,
+	nameGroups,
+	optionsOf,
+	SETTINGS,
+	type Setting,
+} from "../src/core/tool-kinds.ts";
 import type { TurnResult } from "../src/core/turn.ts";
 import { answer } from "../src/core/wait.ts";
 import type { CapabilityOptions } from "../src/server/capabilities.ts";
@@ -138,7 +147,7 @@ describe("a tool's setting", () => {
 		});
 		const shown = (await s.cal())?.tools.map((t) => [t.title, t.classed, t.setting, t.options]);
 		expect(shown).toEqual([
-			["create_event", { kind: "write", from: "none" }, "ask", ["allow", "ask", "always", "off"]],
+			["create_event", { kind: "write", from: "none" }, "ask", ["ask", "always", "off"]],
 			["list_events", { kind: "read", from: "you" }, "allow", ["allow", "ask", "off"]],
 			["send_payment", { kind: "floor", floor: "money", from: "you" }, "always", ["always", "off"]],
 			["whoami", { kind: "read", from: "you" }, "allow", ["allow", "ask", "off"]],
@@ -169,26 +178,48 @@ describe("a tool's setting", () => {
 		expect(fake.calls).toEqual([]);
 		expect((await openWaits(s.harness)).length).toBe(0);
 
-		// a connection only narrows: its file's floor stays, and an unknown setting is refused
+		// a connection only narrows: its file's floor stays, a write is never allowed, and an unknown setting is refused
+		const file = (await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"]?.text;
 		await expect(s.capabilities.setTools("cal", { send_payment: "ask" })).rejects.toThrow("only narrows");
+		await expect(s.capabilities.setTools("cal", { create_event: "allow" })).rejects.toThrow("only narrows");
 		await expect(s.capabilities.setTools("cal", { list_events: "sometimes" })).rejects.toThrow();
 
-		// a group sets each of its tools: Always ask on a read is Ask
+		// a group sets each of its tools: Allow sets its reads and leaves its writes as they were
 		const groups = (await s.cal())?.groups;
 		expect(groups).toEqual(["Events", "Other"]);
 		await s.capabilities.setGroup("cal", "Events", "allow");
-		expect(await effect(s)).toMatchObject({ create_event: { read: true }, list_events: { read: true } });
-		// Allow on a write that is not a read yet confirms it as one: it joins the file's reads
-		const file = (await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"]?.text ?? "";
-		expect("connection" in parseConnection("cal", file) && parseConnection("cal", file)).toMatchObject({
-			connection: { reads: ["list_events", "whoami", "create_event"] },
-		});
+		expect(await effect(s)).toMatchObject({ list_events: { read: true } });
+		expect((await effect(s)).create_event).toBeUndefined();
+		expect((await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"]?.text).toBe(file);
+		// Always ask on a read is Ask
 		await s.capabilities.setGroup("cal", "Events", "always");
 		expect(await effect(s)).toMatchObject({
 			create_event: { read: false, floor: "owner" },
 			list_events: { read: false, floor: "owner" },
 		});
-		expect((await s.cal())?.tools.filter((t) => t.group === "Events").map((t) => t.setting)).toEqual(["ask", "ask"]);
+		expect((await s.cal())?.tools.filter((t) => t.group === "Events").map((t) => t.setting)).toEqual(["always", "ask"]);
+	});
+
+	it("Ask on a read refuses a call of it already under way as a read", async () => {
+		const fake = await startFakeMcp();
+		fakes.push(fake);
+		const s = await open(await tempHome());
+		await proposed(s, fake);
+		const warm = await s.say("hello");
+		await s.done(warm.turn);
+		const old = s.registry
+			.snapshot()
+			.tools()
+			.find(({ tool }) => tool.name === "cal__list_events")!.tool;
+		await s.capabilities.setTools("cal", { list_events: "ask" });
+		// the registration a call already under way holds; its admission reads the real store
+		const api = { conversationId: warm.chat, commit: s.harness.commit.bind(s.harness) } as unknown as ToolExecutionApi;
+		const result = await old.execute({ day: "mon" }, api, context);
+		expect(result.isError).toBe(true);
+		expect(JSON.stringify(result.output)).toContain("the owner set it to ask first");
+		expect(fake.calls).toEqual([]);
+		// called again, as offered now, it asks every time, offering no scope
+		expect(offeredScopes(await asked(s, "cal__list_events", { day: "mon" }))).toEqual([]);
 	});
 
 	it("outlasts a restart, and banda's next version of a file it ships", async () => {
@@ -298,13 +329,28 @@ describe("banda's guess at a new connection's tools", () => {
 		const view = await s.cal();
 		expect(view?.review).toBe(true);
 		expect(view?.groups).toEqual(["Events", "Rooms", "Payments"]);
-		expect(view?.tools.map((t) => [t.title, t.classed, t.group, t.proposed, t.setting])).toEqual([
-			["create_event", { kind: "write", from: "guess" }, "Events", "ask", "always"],
-			["find_rooms", { kind: "read", from: "guess" }, "Rooms", "allow", "ask"],
-			["list_events", { kind: "read", from: "service" }, "Events", "allow", "ask"],
-			["send_payment", { kind: "floor", floor: "money", from: "guess" }, "Payments", "always", "always"],
-			["whoami", { kind: "read", from: "service" }, "Events", "allow", "ask"],
+		expect(view?.tools.map((t) => [t.title, t.classed, t.group, t.proposed, t.setting, t.options])).toEqual([
+			["create_event", { kind: "write", from: "guess" }, "Events", "ask", "always", ["ask", "always", "off"]],
+			["find_rooms", { kind: "read", from: "guess" }, "Rooms", "allow", "ask", ["allow", "ask", "off"]],
+			["list_events", { kind: "read", from: "service" }, "Events", "allow", "ask", ["allow", "ask", "off"]],
+			[
+				"send_payment",
+				{ kind: "floor", floor: "money", from: "guess" },
+				"Payments",
+				"always",
+				"always",
+				["always", "off"],
+			],
+			["whoami", { kind: "read", from: "service" }, "Events", "allow", "ask", ["allow", "ask", "off"]],
 		]);
+		// a guess never lets a write or the floor run unasked, in Settings or in the review
+		for (const setting of ["ask", "allow"] as const)
+			await expect(s.capabilities.setTools("cal", { send_payment: setting })).rejects.toThrow("only narrows");
+		await expect(s.capabilities.setTools("cal", { create_event: "allow" })).rejects.toThrow("only narrows");
+		for (const tool of ["send_payment", "create_event"])
+			await expect(s.capabilities.review("cal", view?.accepted?.sha, { [tool]: "allow" })).rejects.toThrow(
+				"only narrows",
+			);
 		// nothing guessed runs unasked before the owner accepts it
 		await s.capabilities.switchAccount("sancho", "cal", undefined, true);
 		expect(await effect(s)).toEqual({
@@ -567,6 +613,34 @@ describe("banda's guess at a new connection's tools", () => {
 		expect(Object.keys(groups).slice(0, 8)).toEqual(guessed);
 		expect(groups.Other?.length).toBeGreaterThan(0);
 		expect(Object.values(groups).flat().sort()).toEqual(fake.tools.map((t) => t.name).sort());
+	});
+});
+
+const KINDS: readonly Kind[] = ["read", "write", "floor"];
+const FROMS: readonly From[] = ["service", "you", "guess", "none"];
+const classed = (kind: Kind, from: From) => ({ kind, from, ...(kind === "floor" ? { floor: "money" as const } : {}) });
+
+describe("what the owner may set a tool to", () => {
+	it("is its kind's alone, whoever said it: a read Allow, Ask, Off; a write Ask, Always ask, Off; the floor Always ask, Off", () => {
+		expect(
+			Object.fromEntries(KINDS.map((kind) => [kind, FROMS.map((from) => optionsOf(classed(kind, from)))])),
+		).toEqual({
+			read: FROMS.map(() => ["allow", "ask", "off"]),
+			write: FROMS.map(() => ["ask", "always", "off"]),
+			floor: FROMS.map(() => ["always", "off"]),
+		});
+	});
+
+	it("from a group is each tool's own setting, else the nearest that narrows as much; Allow sets only reads", () => {
+		const each = (setting: Setting) =>
+			KINDS.flatMap((kind) => FROMS.map((from) => inGroup(setting, optionsOf(classed(kind, from)))));
+		const by = (of: (kind: Kind) => string | undefined) => KINDS.flatMap((kind) => FROMS.map(() => of(kind)));
+		expect(Object.fromEntries(SETTINGS.map((setting) => [setting, each(setting)]))).toEqual({
+			allow: by((kind) => (kind === "read" ? "allow" : undefined)),
+			ask: by((kind) => (kind === "floor" ? "always" : "ask")),
+			always: by((kind) => (kind === "read" ? "ask" : "always")),
+			off: by(() => "off"),
+		});
 	});
 });
 

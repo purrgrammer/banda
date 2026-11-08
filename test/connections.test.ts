@@ -657,12 +657,12 @@ describe("adding a server", () => {
 		const sha = (await state()).accepted!.sha;
 		fake.instructions = "Changed instructions that have not been accepted";
 		fake.tools = fake.tools.map((tool) => ({ ...tool, description: "Changed description" }));
-		await s.capabilities.trustReads(name, ["list_events"], context, sha, true);
+		await s.capabilities.review(name, sha, {});
 		expect((await state()).notes).toBe("Original server introduction");
 		expect((await state()).tools.find((tool) => tool.title === "list_events")?.description).toBe(
 			"List the events on a day.",
 		);
-		await expect(s.capabilities.trustReads(name, ["whoami"], context, sha, true)).rejects.toThrow(/change/);
+		await expect(s.capabilities.review(name, sha, {})).rejects.toThrow(/change/);
 		await expect(s.capabilities.switchAccount("sancho", name, undefined, true, context, sha)).rejects.toThrow(
 			/changed/,
 		);
@@ -677,8 +677,6 @@ describe("adding a server", () => {
 		expect(await s.harness.commit((tx) => connectionToolsOf(tx, { id: "sancho" }), context)).toEqual([]);
 		await s.capabilities.addMcp(config);
 		expect((await state()).agents).toEqual([]);
-		await s.capabilities.trustReads(name, [], context, (await state()).accepted!.sha, true);
-		expect((await state()).tools.every((tool) => tool.kind === "write")).toBe(true);
 	});
 
 	it("MCP setup supports a registered OAuth client and a bearer without granting either to agents", async () => {
@@ -740,12 +738,13 @@ describe("adding a server", () => {
 		]);
 	});
 
-	it("an old read registration cannot call after the owner makes it ask again", async () => {
+	it("an old read registration cannot call after the owner's file makes it ask again", async () => {
 		const fake = await startFakeMcp();
 		fakes.push(fake);
 		const s = await open();
 		const name = await s.capabilities.addMcp({ url: fake.url });
-		await s.capabilities.trustReads(name, ["list_events"]);
+		const added = (await s.capabilities.view()).connections.find((each) => each.name === name)!;
+		await s.capabilities.review(name, added.accepted!.sha, {});
 		await s.capabilities.switchAccount("sancho", name, undefined, true);
 		const warm = await s.say("hello");
 		await s.done(warm.turn);
@@ -753,8 +752,9 @@ describe("adding a server", () => {
 			.snapshot()
 			.tools()
 			.find(({ tool }) => tool.name === `${name}__list_events`)!.tool;
-		const shown = (await s.capabilities.view()).connections.find((each) => each.name === name)!;
-		await s.capabilities.trustReads(name, [], context, shown.accepted!.sha, true);
+		const path = join(s.box.workspace, `connections/${name}.md`);
+		writeFileSync(path, readFileSync(path, "utf8").replace(/^reads:.*$/m, "reads: []"));
+		await s.capabilities.acceptConnection(name, ((await changeOf(s, name)) as { sha: string }).sha);
 		// Retain the old registration exactly as an already-running model request can. Its admission uses the real store.
 		const api = { conversationId: warm.chat, commit: s.harness.commit.bind(s.harness) } as unknown as ToolExecutionApi;
 		const result = await old.execute({ day: "mon" }, api, context);
@@ -811,25 +811,35 @@ describe("adding a server", () => {
 		const docs = (await s.capabilities.view()).connections.find((c) => c.name === "docs");
 		expect(docs).toMatchObject({ state: "connected", accepted: { connection: { auth: "none" } } });
 		expect(readFileSync(join(s.box.workspace, "connections/docs.md"), "utf8")).not.toContain("auth:");
-		// one the owner says only reads, without the server saying so: it reads too
-		await s.capabilities.trustReads("docs", ["create_event"]);
-		const view = (await s.capabilities.view()).connections.find((c) => c.name === "docs");
-		expect(view?.tools.find((t) => t.title === "create_event")?.kind).toBe("read");
 	});
 
-	it("the owner lets the tools the server says only read run without asking, with one tap", async () => {
+	it("the owner allows in Settings a read the server says it is: it joins the file's reads, and a write never does", async () => {
 		const fake = await startFakeMcp();
 		fakes.push(fake);
 		const s = await open(fake);
 		const name = await s.capabilities.addByAddress(fake.url);
 		const cal = async () => (await s.capabilities.view()).connections.find((c) => c.name === name);
-		expect((await cal())?.hinted).toEqual(["list_events", "whoami"]);
-		expect((await cal())?.tools.find((t) => t.title === "list_events")?.kind).toBe("write");
-		await expect(s.capabilities.trustReads(name, ["send_rocket"])).rejects.toThrow(/lists no tool named send_rocket/);
-		await s.capabilities.trustReads(name, ["list_events"]);
-		expect(readFileSync(join(s.box.workspace, `connections/${name}.md`), "utf8")).toContain("reads: [list_events]");
-		expect((await cal())?.hinted).toEqual(["whoami"]);
-		expect((await cal())?.tools.find((t) => t.title === "list_events")?.kind).toBe("read");
+		const listEvents = async () => (await cal())?.tools.find((t) => t.title === "list_events");
+		expect(await listEvents()).toMatchObject({ kind: "write", classed: { kind: "read", from: "service" } });
+		await expect(s.capabilities.setTools(name, { send_rocket: "allow" })).rejects.toThrow(
+			/lists no tool named send_rocket/,
+		);
+		await expect(s.capabilities.setTools(name, { create_event: "allow" })).rejects.toThrow(/only narrows/);
+		// a companion's change waiting: the owner allows or declines it first
+		const path = join(s.box.workspace, `connections/${name}.md`);
+		const added = readFileSync(path, "utf8");
+		writeFileSync(path, `${added}\nA change of the companion's.\n`);
+		await expect(s.capabilities.setTools(name, { list_events: "allow" })).rejects.toThrow(
+			/allow or decline that first/,
+		);
+		writeFileSync(path, added);
+		await s.capabilities.setTools(name, { list_events: "allow" });
+		expect(readFileSync(path, "utf8")).toContain("reads: [list_events]");
+		expect((await s.harness.snapshot(Accepted, context))?.files[`connections/${name}.md`]?.text).toBe(
+			readFileSync(path, "utf8"),
+		);
+		expect(await listEvents()).toMatchObject({ kind: "read", classed: { kind: "read", from: "you" } });
+		expect((await cal())?.tools.find((t) => t.title === "whoami")?.kind).toBe("write");
 		// it runs without asking now
 		s.model.plan([{ tool: `${name}__list_events`, args: { day: "mon" } }]);
 		const ran = await s.say("monday?");

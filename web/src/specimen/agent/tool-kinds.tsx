@@ -5,7 +5,7 @@
  */
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { Setting } from "../../../../src/core/tool-kinds.ts";
+import { inGroup, optionsOf, type Setting } from "../../../../src/core/tool-kinds.ts";
 import type { ConnectionToolView, ConnectionView } from "../../../../src/server/api.ts";
 import { ReviewBody, reviewTally, ToolList, ToolReview, toolTally } from "../../chat/ToolKinds.tsx";
 import { Section } from "../stage.tsx";
@@ -48,12 +48,7 @@ const toolOf = ([title, words, group, kind, from, setting, more]: Row): Connecti
 	group,
 	setting,
 	proposed: setting,
-	options:
-		kind === "floor" && from !== "guess"
-			? ["always", "off"]
-			: kind === "read"
-				? ["allow", "ask", "off"]
-				: ["allow", "ask", "always", "off"],
+	options: optionsOf({ kind, from }),
 	...(more?.fresh === true ? { fresh: true as const } : {}),
 	...(more?.floor === undefined || from === "guess" ? {} : { floor: more.floor }),
 });
@@ -106,7 +101,15 @@ function InSettings() {
 				settingOf={settingOf}
 				onTools={(settings) => setSet((old) => ({ ...old, ...settings }))}
 				onGroup={(_group, setting, tools) =>
-					setSet((old) => ({ ...old, ...Object.fromEntries(tools.map((tool) => [tool.title, setting])) }))
+					setSet((old) => ({
+						...old,
+						...Object.fromEntries(
+							tools.flatMap((tool) => {
+								const near = inGroup(setting, tool.options ?? []);
+								return near === undefined ? [] : [[tool.title, near]];
+							}),
+						),
+					}))
 				}
 			/>
 		</div>

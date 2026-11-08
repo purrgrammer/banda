@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/cn";
-import type { Setting } from "../../../../src/core/tool-kinds.ts";
+import { optionsOf, type Setting } from "../../../../src/core/tool-kinds.ts";
 import type { ConnectionToolView, ConnectionView } from "../../../../src/server/api.ts";
 import { type McpPhase, type McpSetupActions, McpSetupView } from "../../app/McpSetup.tsx";
 import type { ChatAgent } from "../../lib/navigation.ts";
@@ -92,7 +92,7 @@ const tool = (fixture: Fixture, reviewed: boolean, settings: Settings): Connecti
 		group: fixture.group,
 		setting,
 		proposed: fixture.proposed,
-		options: fixture.classed.kind === "read" ? ["allow", "ask", "off"] : ["allow", "ask", "always", "off"],
+		options: optionsOf(fixture.classed),
 	};
 };
 const NOTES =

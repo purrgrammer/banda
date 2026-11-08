@@ -314,8 +314,9 @@ export function ReviewBody({
 				<p className="text-meta text-ink-2">banda couldn't sort some of them, so they ask first.</p>
 			) : null}
 			<p className="text-meta text-ink-2">
-				Allow lets a tool run without asking, for every agent with {service}. Ask shows you each change first; Always
-				ask never lets an agent skip that.
+				Allow lets a tool that reads run without asking, for every agent with {service}. A tool that changes something
+				asks: Ask shows you each change first, unless you let one agent make it in its Access; Always ask never lets an
+				agent skip that.
 			</p>
 			<ToolList
 				service={service}
