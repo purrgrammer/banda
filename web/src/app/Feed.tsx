@@ -341,7 +341,7 @@ function WatchLine({
 			) : (
 				<>
 					{words.slice(0, at)}
-					{inline}
+					{at === 0 ? inline : <span className="ml-1">{inline}</span>}
 					{words.slice(at + what.length)}
 				</>
 			)}

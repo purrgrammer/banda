@@ -19,6 +19,8 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -599,6 +601,7 @@ function WatchRow({
 			</li>
 		);
 	const quiet = paused || watch.done === true;
+	// one line for the object, one beneath for what ends it and what holds it; the rest is in the menu
 	const state =
 		watch.done === true
 			? watch.ended === true
@@ -606,11 +609,15 @@ function WatchRow({
 				: "Done"
 			: paused
 				? "Paused"
-				: [watch.behind === true ? "Behind" : null, watch.next === undefined ? null : `Next look ${watch.next}`]
-						.filter((part) => part !== null)
-						.join(" · ") || null;
+				: watch.behind === true
+					? "Behind"
+					: null;
+	const failing = watch.failing === true && watch.done !== true;
+	const subline = failing
+		? watch.saw
+		: [watch.until, state].filter((part) => part !== undefined && part !== null).join(" · ");
 	return (
-		<li className="group/watch relative flex items-start gap-2 rounded-field px-2 py-2 hover:bg-paper-3">
+		<li className="group/watch relative flex items-center gap-2 rounded-field px-2 py-2 hover:bg-paper-3">
 			<button
 				type="button"
 				onClick={onOpen}
@@ -626,13 +633,8 @@ function WatchRow({
 						<span className="shrink-0 font-normal text-ink-2"> · {watch.service}</span>
 					)}
 				</span>
-				<span className="truncate text-meta text-ink-2">
-					{[watch.until, state].filter((part) => part !== undefined && part !== null).join(" · ")}
-				</span>
-				{watch.saw === undefined ? null : (
-					<span className={cn("line-clamp-2 text-meta", watch.failing === true ? "text-danger" : "text-ink-2")}>
-						{watch.saw}
-					</span>
+				{subline === undefined || subline === "" ? null : (
+					<span className={cn("truncate text-meta", failing ? "text-danger" : "text-ink-2")}>{subline}</span>
 				)}
 			</button>
 			<DropdownMenu>
@@ -641,7 +643,18 @@ function WatchRow({
 						<MoreHorizontalIcon />
 					</Button>
 				</DropdownMenuTrigger>
-				<DropdownMenuContent align="end">
+				<DropdownMenuContent align="end" className="max-w-72">
+					{watch.saw === undefined && (watch.next === undefined || quiet) ? null : (
+						<>
+							<DropdownMenuLabel className="flex flex-col gap-0.5 font-normal text-meta text-ink-2">
+								{watch.saw === undefined ? null : (
+									<span className={cn("line-clamp-3", watch.failing === true && "text-danger")}>{watch.saw}</span>
+								)}
+								{watch.next === undefined || quiet ? null : <span>Next look {watch.next}</span>}
+							</DropdownMenuLabel>
+							<DropdownMenuSeparator />
+						</>
+					)}
 					{watch.done === true ? null : (
 						<DropdownMenuItem onSelect={onCheck} disabled={onCheck === undefined}>
 							<PlayIcon />
