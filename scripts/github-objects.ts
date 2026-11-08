@@ -121,6 +121,21 @@ export const GITHUB_OBJECTS = {
 				},
 				{ on: "reviews[*].state", to: "DISMISSED", does: "tell", says: "{user.login}'s review was dismissed" },
 				{ on: "comments[*]", kind: "added", does: "wake", says: "{user.login} commented" },
+				// a run a push brings may come already finished: its first sight is an item added, not a conclusion changed
+				{
+					on: "checks.check_runs[*]",
+					kind: "added",
+					where: "conclusion = failure",
+					does: "wake",
+					says: "{name} failed",
+				},
+				{
+					on: "checks.check_runs[*]",
+					kind: "added",
+					where: "conclusion = timed_out",
+					does: "wake",
+					says: "{name} timed out",
+				},
 				{ on: "pr.head.sha", does: "tell", says: "new commits" },
 			],
 			ends: { merged: "pr.merged = true", closed: "pr.state = closed" },

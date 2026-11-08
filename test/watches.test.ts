@@ -552,4 +552,20 @@ describe("a watch on a pull request", () => {
 		expect(summary.record.next).toBe(NOW + 60_000 + BUSY_EVERY);
 		expect(summary.task).toEqual({ status: "sleeping", until: summary.record.next });
 	}, 60_000);
+
+	it("a check that first appears already failed wakes, in its own words", async () => {
+		// lint is not there at the baseline; on the next push it comes already failed
+		const lintLate = (step: number): World => {
+			const at = structuredClone(world(0)) as {
+				get_check_runs: { total_count: number; check_runs: { [key: string]: unknown }[] };
+			};
+			at.get_check_runs.check_runs = at.get_check_runs.check_runs.filter((run) => run.name !== "lint");
+			if (step >= 1)
+				at.get_check_runs.check_runs.push({ id: 77, name: "lint", status: "completed", conclusion: "failure" });
+			at.get_check_runs.total_count = at.get_check_runs.check_runs.length;
+			return at as unknown as World;
+		};
+		const summary = await watchScenario(await tempHome(), new Faults(), { world: lintLate, clicks: ["k1"] });
+		expect(summary.wakes.flatMap((wake) => wake.changes)).toContain("lint failed");
+	}, 60_000);
 });

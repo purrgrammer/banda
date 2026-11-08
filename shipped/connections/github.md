@@ -496,6 +496,20 @@ draws as cards, from scripts/github-objects.ts.
 						"says": "{user.login} commented"
 					},
 					{
+						"on": "checks.check_runs[*]",
+						"kind": "added",
+						"where": "conclusion = failure",
+						"does": "wake",
+						"says": "{name} failed"
+					},
+					{
+						"on": "checks.check_runs[*]",
+						"kind": "added",
+						"where": "conclusion = timed_out",
+						"does": "wake",
+						"says": "{name} timed out"
+					},
+					{
 						"on": "pr.head.sha",
 						"does": "tell",
 						"says": "new commits"

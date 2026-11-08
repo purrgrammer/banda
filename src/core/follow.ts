@@ -43,6 +43,8 @@ export type Rule = {
 	readonly to?: Json;
 	/** Only a change from this value: a label gone from a set is a change from it, to nothing. */
 	readonly from?: Json;
+	/** Only a change whose item this condition holds over: a check run that comes already failed (`conclusion = failure`). */
+	readonly where?: string;
 	readonly does: "wake" | "tell" | "nothing";
 	/**
 	 * The change in words, from the item's fields and the values (`{user.login} {state}`, `{to}`); a value a `words`
@@ -448,7 +450,8 @@ export function sort(follow: Follow, me: string | undefined, before: Json, after
 				matches(pattern(each.on), change.path) &&
 				(each.kind === undefined || each.kind === change.kind) &&
 				(each.to === undefined || canonical(each.to) === canonical(change.to)) &&
-				(each.from === undefined || canonical(each.from) === canonical(change.from)),
+				(each.from === undefined || canonical(each.from) === canonical(change.from)) &&
+				(each.where === undefined || (change.item !== undefined && holds(each.where, change.item))),
 		);
 		const says =
 			rule === undefined
@@ -519,10 +522,11 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 				typeof r.says !== "string" ||
 				r.says.length > 200 ||
 				(r.kind !== undefined && !KINDS.has(r.kind)) ||
+				(r.where !== undefined && (typeof r.where !== "string" || "error" in parseCondition(r.where))) ||
 				(r.words !== undefined && !stringMap(r.words))
 			)
 				problem(
-					`a rule is {"on": "path", "kind"?, "to"?, "from"?, "does": "wake" | "tell" | "nothing", "says", "words"?}`,
+					`a rule is {"on": "path", "kind"?, "to"?, "from"?, "where"?, "does": "wake" | "tell" | "nothing", "says", "words"?}`,
 				);
 		}
 	if (follow.otherwise !== undefined && !DOES.has(follow.otherwise as string))
