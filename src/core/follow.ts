@@ -58,7 +58,10 @@ export type Follow = {
 	readonly totals?: { readonly [list: string]: string };
 	/** Paths (and all below them) that change without anything happening. */
 	readonly ignore?: readonly string[];
-	/** Who wrote an item of a list, by the list's pattern: the account's own are nothing, a bot's only tell. */
+	/**
+	 * Who wrote an item of a list, by the list's pattern, or every change in an object, by the object's path (a file:
+	 * who changed it last): the account's own are nothing, a bot's only tell.
+	 */
 	readonly authors?: { readonly [list: string]: string };
 	/**
 	 * Named conditions over the reading: when one flips, that is a change of its own (`derived.<name>`). One written
@@ -273,6 +276,16 @@ export function settleOf(follow: Pick<Follow, "settle">): number {
 	return follow.settle === undefined ? 0 : (parseEvery(follow.settle) ?? 0);
 }
 
+/** The object at a path of plain keys, or undefined: a list's item, or anything not an object, is none. */
+function objectAt(value: Json | undefined, path: Path): Item | undefined {
+	let here = value;
+	for (const segment of path) {
+		if (typeof segment !== "string" || !object(here)) return undefined;
+		here = here[segment];
+	}
+	return object(here) ? here : undefined;
+}
+
 /** A list's items gone from a short page are not gone: only a complete list can say one was removed. */
 function complete(follow: Follow, after: Json, change: Change): boolean {
 	if (change.kind !== "removed") return true;
@@ -357,7 +370,10 @@ export function sort(follow: Follow, me: string | undefined, before: Json, after
 		const list = Object.entries(follow.authors ?? {}).find(([each]) =>
 			matches(pattern(each), change.path.slice(0, pattern(each).length)),
 		);
-		const author = list === undefined ? undefined : valuesAt(change.item, pattern(list[1]))[0];
+		// a pattern may name one object rather than a list (a file, whose last change says whose it was): every change
+		// in it is that author's, and a change no list item holds is said from the object's fields
+		const whole = list === undefined ? undefined : objectAt(after, change.path.slice(0, pattern(list[0]).length));
+		const author = list === undefined ? undefined : valuesAt(whole ?? change.item, pattern(list[1]))[0];
 		if (me !== undefined && author === me) {
 			sorted.push({ change, does: "nothing", says: changeWords(change) });
 			continue;
@@ -368,7 +384,10 @@ export function sort(follow: Follow, me: string | undefined, before: Json, after
 				(each.kind === undefined || each.kind === change.kind) &&
 				(each.to === undefined || canonical(each.to) === canonical(change.to)),
 		);
-		const says = rule === undefined ? changeWords(change) : saysOf(rule, change);
+		const says =
+			rule === undefined
+				? changeWords(change)
+				: saysOf(rule, change.item === undefined && whole !== undefined ? { ...change, item: whole } : change);
 		const does = rule?.does ?? follow.otherwise ?? "nothing";
 		const bot = typeof author === "string" && author.endsWith("[bot]");
 		sorted.push({ change, does: bot && does === "wake" ? "tell" : does, says });
