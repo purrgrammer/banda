@@ -320,8 +320,10 @@ export function openObjects({
 	): Promise<ObjectShown[]> {
 		const connections = await known(ctx);
 		const out: ObjectShown[] = [];
-		const seen = new Set<string>();
-		const rendered = new Set<string>();
+		// an object named twice (a thread and a link to one of its replies) is read once, and each link gets its reading:
+		// the prose draws every link it holds, and the cards beneath draw each object once by its key
+		const seen = new Map<string, number>();
+		const rendered = new Map<string, number>();
 		const attempts = new Map<string, Attempt>();
 		let count = 0;
 		for (const ask of asks.slice(0, 8)) {
@@ -334,11 +336,12 @@ export function openObjects({
 				continue;
 			}
 			const identity = JSON.stringify([ask.agent, "account" in ask ? ask.account : undefined, own]);
-			if (seen.has(identity)) {
-				out.push({ shown: "link" });
+			const again = seen.get(identity);
+			if (again !== undefined) {
+				out.push(out[again] ?? { shown: "link" });
 				continue;
 			}
-			seen.add(identity);
+			seen.set(identity, out.length);
 			count++;
 			const selected = await harness.commit(async (tx) => {
 				const group = (await tx.doc(Groups)).groups[chat];
@@ -369,12 +372,13 @@ export function openObjects({
 			const shown = await drawn(connection, own, selected.chat, selected.account, refresh, attempts, ctx);
 			if (shown.shown === "card" || shown.shown === "failed") {
 				const key = keyFor(shown.key);
-				if (rendered.has(key)) {
+				const before = rendered.get(key);
+				if (before !== undefined) {
 					count--;
-					out.push({ shown: "link" });
+					out.push(out[before] ?? { shown: "link" });
 					continue;
 				}
-				rendered.add(key);
+				rendered.set(key, out.length);
 			}
 			out.push(shown);
 		}

@@ -149,6 +149,7 @@ it("fetches a file only when a Slack thread's card shows it, at most 10 MB, and 
 		store.on.reader = { slack: ["ana"] };
 	}, context);
 	const fetched: string[] = [];
+	let reads = 0;
 	const message = (ts: string, text: string, files?: unknown[]) => ({
 		ts,
 		from: "@bob",
@@ -167,6 +168,7 @@ it("fetches a file only when a Slack thread's card shows it, at most 10 MB, and 
 			listedSchema: async () => schema(["channel", "ts"]),
 			readFor: async () => ({
 				text: JSON.stringify({
+					read: ++reads,
 					channel: "C0GENERAL",
 					channel_name: "general",
 					root: "1700000000.000100",
@@ -208,4 +210,16 @@ it("fetches a file only when a Slack thread's card shows it, at most 10 MB, and 
 		account: "ana",
 	});
 	expect(fetched).toEqual(["F0LOG"]);
+	// a message linking the thread and one of its replies: read once, and both links drawn from the one reading
+	const before = reads;
+	const both = await service.show(chat, [
+		{ ref: "https://acme.slack.com/archives/C0GENERAL/p1700000000000100", agent: "reader" },
+		{
+			ref: "https://acme.slack.com/archives/C0GENERAL/p1700000160000160?thread_ts=1700000000.000100&cid=C0GENERAL",
+			agent: "reader",
+		},
+	]);
+	expect(both.map((each) => each.shown)).toEqual(["card", "card"]);
+	expect(both[1]).toBe(both[0]);
+	expect(reads - before).toBeLessThanOrEqual(1);
 });
