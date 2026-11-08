@@ -532,7 +532,8 @@ export function Watching({
 			{watches.length === 0 ? (
 				form.step === "closed" ? (
 					<p className="text-meta text-ink-2">
-						Follow a pull request or an issue: paste its link, and {agent} wakes when it changes.
+						Paste a link to follow it (a pull request, a repository, an email search, a calendar event, a Drive file),
+						and {agent} wakes when it changes.
 					</p>
 				) : null
 			) : (

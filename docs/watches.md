@@ -53,8 +53,8 @@ returned to and merged, at desktop and phone width.
   event line with the card; the Watching list with Check now, Pause and Stop; the fault sweep at look, diff, wake
   and end; a real pull request in a forked home at desktop width
 - [ ] Slice 1 through the app at phone width (the desktop pass is done; the phone pass needs a resizable browser)
-- [ ] A real wake seen in the app: the followed pull request must change by another hand (a review, a failed check);
-  the fake GitHub's wakes are covered by the suites
+- [x] A real wake seen in the app: purrgrammer/banda#24 followed in a forked home; its pushes told, its checks
+  finishing woke the agent as "all checks green, checks finished", each on the right look
 - [x] Add in the panel takes a link; the Watching section shows even when empty
 - [x] An editor for a watch's words: `until` from the kind's ends, and what matters, bound to the version shown
 - [ ] A wake's key is the transition (the watch's `since`, its cursor, the changes), so the same change later wakes
@@ -83,8 +83,15 @@ returned to and merged, at desktop and phone width.
 - [ ] Those kinds through the app against a daemon and real GitHub, at desktop and phone width; the specimen not yet
   looked at in a browser
 - [ ] A repository's push says "the default branch", not its name (no listed read answers it within four reads); a
-  discussion's comments carry no author, so the account's own wake too; a check that first appears already failed
-  (a pull request's check run) is an item added, which no conclusion rule sees
+  discussion's comments carry no author, so the account's own wake too
+- [x] Every connection banda ships can be followed: GitHub's pull request, issue, check run, notification,
+  repository, discussion and workflow run; Gmail's email (until read or trashed), conversation (others' replies wake)
+  and search (new matches wake; never ends); Calendar's event (moved, cancelled, a guest's reply); Drive's file
+  (another's edit, trashed) and folder (a new file); Contacts' contact (told only; never ends). Each with scenario
+  tests through the harness, which fakes any connection's reads by tool name
+- [ ] The Google kinds against real accounts and through the app: whether a rename or a share moves Drive's
+  `modifiedTime`, whether a deleted (not cancelled) event ends its watch, label names for user labels, a calendar's
+  upcoming events (needs a sync token, not a moving window)
 - [ ] A watch's file has no editor field and the `watch` tool no parameter for `wakes_a_day`; an issue's and a pull
   request's comments are read one page of a hundred, so comments past the hundredth are never seen
 - [ ] Spike before slice 2: the readings doc keeps 300 and evicts the oldest first, so a held reading must be

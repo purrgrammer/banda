@@ -74,15 +74,15 @@ palette checks pass; the running app was exercised at both widths, including dra
 concurrency and provenance work remains in [Memory](memory.md); this is not release qualification.
 The Library and panel redesign is a separate slice.
 
-Watches, slice 1, is in code on the `watches` branch ([Watches](watches.md)): a watch file in `watches/`, its task
-that looks, diffs and wakes its agent's chat, the `watch` tool's card, Follow on a pull request's card, the Watching
-list with Add (a link), Check now, Pause and Stop, the detail's editor for what ends it and what matters, and the fault
-sweep. A connection banda ships offers Update when this banda ships a newer file, so a home that connected GitHub
-before `follow` can follow ([Connections](connections.md)). Driven against a real pull request in a forked home at
-desktop width; a browser test follows one at both widths. Slice 2 (health, gaps, resume, authority, behind, Pause
-all's resume) and slice 3 (bursts, busy cadence, wakes a day, tell-only changes, the issue kind, a thousand changes
-in one look, no green claim on a push's first look) are in code with unit tests; the fault sweeps over the new
-scenarios have not run in CI, and slices 2 and 3 through the app, a real wake and owner review remain open.
+Watches are in code on the `watches` branch, draft PR #24 ([Watches](watches.md)): a watch file in `watches/`, its
+task that looks, diffs and wakes its agent's chat as a feed item ("Sancho saw <ref>: all checks green"), the `watch`
+tool's card, Follow on an object's card, the Watching list (Add a link, Check now, Pause, Stop) and the detail's
+editor. Slices 1 to 3 (health, gaps, resume, authority, bursts, cadence, wakes a day) and every connection banda
+ships: GitHub's pull requests, issues, jobs, notifications, repositories, discussions and workflow runs; Gmail's
+emails, conversations and searches; Calendar's events; Drive's files and folders; contacts. A shipped connection
+offers Update when this banda ships a newer file ([Connections](connections.md)). Followed for real in a forked home:
+purrgrammer/banda#24's pushes and green checks, each seen on time. The fault sweeps over the new scenarios, the Google
+kinds against real accounts, the phone pass of slices 2 and 3 and owner review remain open.
 
 Bringing your own is in code ([Chat](chat.md)): at first run on the desktop, the skills and agents of Claude Code,
 Codex and pi on this computer, in place of banda's skills, and again from Settings; the band's menu with Skills and a

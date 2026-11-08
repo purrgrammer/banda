@@ -1203,22 +1203,27 @@ export function defineWatches(options: WatchesOptions) {
 	const watch = defineTool({
 		name: "watch",
 		description:
-			"Follow something outside until it changes: when you tell the owner you will keep an eye on a pull request or " +
-			'an issue ("I\'ll let you know when it merges"), make it a watch, or it will not happen: you remember nothing ' +
-			"between runs. banda reads it on its own and wakes you with what changed, in words, until what ends it. It " +
-			"writes watches/<name>.md, which runs once the owner allows it; the same object again changes it.",
+			"Follow something outside until it changes: when you tell the owner you will keep an eye on something (a pull " +
+			"request, an issue, a CI run, a repository's releases, an email thread or a search of the inbox, a calendar " +
+			'event, a Drive file or folder: "I\'ll let you know when it merges"), make it a watch, or it will not happen: ' +
+			"you remember nothing between runs. banda reads it on its own and wakes you with what changed, in words, until " +
+			"what ends it. It writes watches/<name>.md, which runs once the owner allows it; the same object again changes it.",
 		parameters: Type.Object({
 			object: Type.String({
 				minLength: 1,
 				maxLength: 500,
-				description: "The link of what to follow: a pull request or an issue on a connection the owner has.",
+				description:
+					"What to follow, as its link or the id its card names, on a connection the owner has: " +
+					"https://github.com/o/r/pull/1, https://github.com/o/r, gmail/thread/<id>, gmail/search/<query>, " +
+					"calendar/<id>, drive/<id>.",
 			}),
 			until: Type.Optional(
 				Type.String({
 					minLength: 1,
 					maxLength: 32,
 					description:
-						"What ends it, in the kind's own word: a pull request ends when merged or closed. Leave it out to end on any.",
+						"What ends it, in the kind's own word (a pull request: merged or closed; an event: cancelled; a file: " +
+						"trashed). Leave it out to end on any; some kinds (a repository, a search) never end, so leave it out.",
 				}),
 			),
 			account: Type.Optional(
