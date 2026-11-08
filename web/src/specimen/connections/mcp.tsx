@@ -270,6 +270,7 @@ function McpExample({
 					view,
 					agents: AGENTS,
 					busy: false,
+					changing: false,
 					error,
 					credential,
 					account: ACCOUNT.account,

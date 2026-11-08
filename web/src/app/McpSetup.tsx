@@ -4,6 +4,7 @@
  */
 import { ArrowLeftIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -44,6 +45,8 @@ export type McpSetupState = {
 	readonly credential: string;
 	readonly account: string;
 	readonly selected: readonly string[];
+	/** A tool's setting is being changed in the list. */
+	readonly changing: boolean;
 	/** The review of what its tools may do is open. */
 	readonly reviewing: boolean;
 	/** The sign-in page this visit opened, while waiting. */
@@ -123,6 +126,7 @@ export function McpSetup({
 	const [account, setAccount] = useState("");
 	const [selected, setSelected] = useState<string[]>([]);
 	const [reviewing, setReviewing] = useState(false);
+	const [changing, setChanging] = useState(false);
 	const offered = useRef<string | undefined>(undefined);
 	const [link, setLink] = useState<string>();
 	const [before, setBefore] = useState<number>();
@@ -248,6 +252,17 @@ export function McpSetup({
 					);
 			go("done");
 		});
+	/** A tool's setting changed in the list: sent at once; a refusal is said beside the control, not above the page. */
+	const change = async (work: () => Promise<CapabilitiesView>) => {
+		setChanging(true);
+		try {
+			update(await work());
+		} catch (failed) {
+			if (alive.current) toast.error(failed instanceof Error ? failed.message : "Couldn’t change it. Try again.");
+		} finally {
+			if (alive.current) setChanging(false);
+		}
+	};
 	const actions: McpSetupActions = {
 		close: onClose,
 		back: () => {
@@ -298,15 +313,11 @@ export function McpSetup({
 		},
 		setToolSettings: (settings) => {
 			if (!view) return;
-			void run(async () => {
-				update(await setToolSettings(view.name, settings));
-			});
+			void change(() => setToolSettings(view.name, settings));
 		},
 		setGroupSetting: (group, setting) => {
 			if (!view) return;
-			void run(async () => {
-				update(await setGroupSetting(view.name, group, setting));
-			});
+			void change(() => setGroupSetting(view.name, group, setting));
 		},
 		switchAgent: (agent, on) =>
 			phase === "done"
@@ -343,7 +354,7 @@ export function McpSetup({
 	};
 	return (
 		<McpSetupView
-			state={{ phase, view, agents, busy, error, credential, account, selected, reviewing, link, back }}
+			state={{ phase, view, agents, busy, error, credential, account, selected, changing, reviewing, link, back }}
 			actions={actions}
 		/>
 	);
@@ -351,7 +362,7 @@ export function McpSetup({
 
 /** The setup as the owner sees it, from its state alone: no daemon, no network, nothing kept. */
 export function McpSetupView({ state, actions }: { state: McpSetupState; actions: McpSetupActions }) {
-	const { phase, view, agents, busy, error, credential, account, selected, reviewing, link, back } = state;
+	const { phase, view, agents, busy, error, credential, account, selected, changing, reviewing, link, back } = state;
 	const id = useId();
 	const heading = useRef<HTMLHeadingElement>(null);
 	const summary = view?.accepted?.connection;
@@ -537,7 +548,7 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 							<p className="text-meta text-ink-2">
 								{view.classifying
 									? "banda is sorting its tools."
-									: `Until you accept, every tool asks first. ${toolTally(view.tools, (tool) => tool.proposed ?? "ask")}.`}
+									: `Until you accept, every tool asks every time. As proposed: ${toolTally(view.tools, (tool) => tool.proposed ?? "ask")}.`}
 							</p>
 							<Button variant="outline" size="sm" className="self-start" onClick={() => actions.setReviewing(true)}>
 								Review its tools
@@ -547,7 +558,7 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 						<ToolSettings
 							view={view}
 							service={service}
-							busy={busy}
+							busy={busy || changing}
 							onTools={actions.setToolSettings}
 							onGroup={actions.setGroupSetting}
 						/>
@@ -583,7 +594,7 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 						</>
 					) : (
 						<Button variant="outline" className="self-start" onClick={actions.review}>
-							Review tool permissions
+							Review who can use it
 						</Button>
 					)}
 					<div className="flex flex-wrap gap-2">

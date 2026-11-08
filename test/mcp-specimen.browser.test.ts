@@ -130,7 +130,9 @@ for (const width of [390, 1440])
 					// until the owner accepts what its tools may do, every tool asks; the review says who said what each does
 					const offer = `document.querySelector('[data-tool-review-offer]')`;
 					await page.until(offer);
-					expect(await page.run<string>(`${offer}.textContent`)).toContain("Until you accept, every tool asks first.");
+					expect(await page.run<string>(`${offer}.textContent`)).toContain(
+						"Until you accept, every tool asks every time.",
+					);
 					expect(await page.run(`document.querySelectorAll('[data-tool-settings]').length`)).toBe(0);
 					await click(page, button("Review its tools"));
 					const dialog = `document.querySelector('[role="dialog"] [data-tool-review]')?.closest('[role="dialog"]')`;
