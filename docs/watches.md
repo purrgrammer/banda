@@ -108,7 +108,16 @@ returned to and merged, at desktop and phone width.
   `checkNow` keeps a task whose sleep ends by the new time (it wakes then, reads nothing, sleeps until the new one)
   and remakes it only when the look found the object busy, its sleep ending too late
 - [ ] The fault sweep over the shared reading, the dropped reading at the end, and Check now keeping the task has not
-  run in CI yet
+  run in CI yet; and no fault scenario has two watches on one object (`second`) with a moving clock, so the shared
+  path (`watch:read` on a shared look, the exit when the shared reading moved on, `dropUnheld` keeping a reading a
+  live watch holds) runs under no kill yet. The invariants should also say a key's version never drops while a live
+  watch follows the object: a reading lost and read again at version 1 passes them today
+- [ ] A watch that shares a reading whose derived condition was held back (`steady`) schedules its quiet cadence, so
+  it hears the flip up to a cadence after the watch that read; a held-back flag on the reading would give it the busy
+  one
+- [ ] Nothing refreshes time-derived state now that a timer's task is no news to the shell: a permission's `until`
+  expiring and the day words of the rows and the push clock moved with the pushes the tasks caused; a whole push at
+  the earliest expiry, and the day words ticking at local midnight, would
 - [ ] Spike before slice 2: the readings doc keeps 300 and evicts the oldest first, so a held reading must be
   skipped; GitHub's hosted MCP server still answers `pull_request_read`'s get, get_reviews, get_comments and
   get_check_runs
