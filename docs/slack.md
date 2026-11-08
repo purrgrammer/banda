@@ -62,6 +62,7 @@ choices, each a scope bundle the owner adds when signing in or later, re-consent
 | Direct messages and search | `im:read`, `mpim:read`, `im:history`, `mpim:history`, `search:read` | `search_messages`; direct and group messages in `list_channels`, `get_channel`, `channel_history`, `get_thread` |
 | Send messages as you | `chat:write` | `post_message` |
 | React as you | `reactions:write` | `add_reaction` |
+| Read files you can see | `files:read` | `get_file`, and the owner opening a file from a card |
 
 Direct messages and search are one choice because a search returns from everything the owner can see, direct
 messages included: a "search but not my DMs" choice would promise what Slack does not keep. The owner decided they
@@ -80,10 +81,17 @@ Four kinds, each named by the links Slack hands out and by a `slack/…` id, eac
 
 | Kind | Names it | Card | Read | Followed |
 |---|---|---|---|---|
-| thread | `https://<team>.slack.com/archives/<C>/p<ts>`, with or without `thread_ts`; `slack/<C>/p<ts>` | `messages` | `get_thread` (`conversations.replies`: the message first, its replies after) | a reply wakes; an edit or a deletion tells; never ends |
+| thread | `https://<team>.slack.com/archives/<C>/p<ts>`, with or without `thread_ts`; `slack/<C>/p<ts>` | `messages` | `get_thread` (`conversations.replies`: the message first, its replies after) | a reply wakes; an edit, a deletion or a reaction tells; never ends |
 | channel | `https://<team>.slack.com/archives/<C>`, `slack/<C>` | `messages` | `get_channel` and `channel_history` (`conversations.info`, `conversations.history`) | a message that mentions the owner wakes; any other message tells; never ends |
-| search | `slack/search/<query>` | `messages` | `search_messages` (`search.messages`, newest first) | a new match wakes; never ends |
+| search | `slack/search/<query>` | `messages` | `search_messages` (`search.messages`, newest first) | a match newer than any it had wakes; never ends |
 | person | `https://<team>.slack.com/team/<U>`, `slack/user/<U>` | `contact` | `get_person` (`users.info`) | a status or title change tells; never ends |
+
+A message carries its reactions, `{name, count}` by emoji name (a name not shaped as Slack's is left out), and its
+files, `{id, name, size, mimetype}`. A followed thread keys a message's reactions by name: one added tells
+"2 reacted :tada:", on the owner's own message too; one taken back, or more people giving the same one, is nothing. A
+channel's watch ignores reactions. A search match is keyed by its permalink, since one `ts` names messages in two
+channels; it is new only when its `ts` is past every match the reading had, so a match Slack indexes late with an
+older time is not new (the file says so). A person's face changing is nothing.
 
 A message and a thread are one kind. A link to a reply carries `thread_ts`, and the kind's `normalize` takes the
 thread's root from it, so a link to a reply and a link to its root name the same object and share one reading; the
@@ -95,8 +103,9 @@ offers a search watch on the owner's mention (`slack/search/<@U…>`) for that.
 The `messages` card (Gmail's conversation and search) takes a list of `{from, text, date}` items. The adapter renders
 Slack's mrkdwn as plain text, resolves `<@U…>` to names (`users.info`, cached per account) and `<#C…>` to channel
 names, writes a bot's author as `<name>[bot]` (a message with no `user`, or whose subtype says so; the owner's own posts carry a `bot_id` too), and marks an author
-from another team (Slack Connect, a guest) as outside. Files and attachments stay as named links until a later stage
-retrieves them through the daemon as Gmail's does. The account that reads a link is the one whose team the channel
+from another team (Slack Connect, a guest) as outside. A file in a message is a row with its name and size; the owner
+opens it from the card, and the daemon fetches it as the account the card was read as, at most 10 MB, into the chat's
+files, as Gmail's attachments are (below). The account that reads a link is the one whose team the channel
 belongs to; a shared channel lives in several teams at once, and which account answers for it is a spike.
 
 Sketch of the kinds' entries, in the file's `objects`:
@@ -117,10 +126,12 @@ Sketch of the kinds' entries, in the file's `objects`:
 			}
 		},
 		"follow": {
-			"keys": { "thread.messages": "ts" },
+			"keys": { "thread.messages": "ts", "thread.messages[*].reactions": "name" },
 			"authors": { "thread.messages": "author" },
 			"ignore": ["thread.messages[*].reply_count", "thread.messages[*].latest_reply", "thread.active"],
 			"rules": [
+				{ "on": "thread.messages[*].reactions[*]", "kind": "added", "does": "tell", "says": "{count} reacted :{name}:" },
+				{ "on": "thread.messages[*].reactions[*]", "kind": "removed", "does": "nothing", "says": "a reaction :{name}: was taken back" },
 				{ "on": "thread.messages[*]", "kind": "added", "does": "wake", "says": "{from} replied" },
 				{ "on": "thread.messages[*].text", "kind": "changed", "does": "tell", "says": "{from} edited a message" },
 				{ "on": "thread.messages[*]", "kind": "removed", "does": "tell", "says": "a message from {from} was deleted" }
@@ -132,7 +143,10 @@ Sketch of the kinds' entries, in the file's `objects`:
 			"settle": "2m"
 		},
 		"fields": { "title": "thread.channel_name", "messages": "thread.messages", "total": "thread.total" },
-		"writes": [{ "tool": "post_message", "id": { "channel": "channel", "root": "thread_ts" }, "verb": "Reply in" }]
+		"writes": [
+			{ "tool": "post_message", "id": { "channel": "channel", "root": "thread_ts" }, "verb": "Reply in" },
+			{ "tool": "add_reaction", "id": { "channel": "channel", "ts": "ts" }, "verb": "React" }
+		]
 	},
 	"channel": {
 		"card": "messages",
@@ -177,7 +191,8 @@ Sketch of the kinds' entries, in the file's `objects`:
 		"follow": {
 			"keys": { "search.messages": "permalink" },
 			"newest": { "search.messages": "ts" },
-			"authors": { "search.messages": "from" },
+			"authors": { "search.messages": "author" },
+			"ignore": ["search.total", "search.messages[*].avatar"],
 			"rules": [{ "on": "search.messages[*]", "kind": "added", "does": "wake", "says": "{from} in #{channel_name}: {text}" }],
 			"ends": {},
 			"every": "5m",
@@ -192,12 +207,13 @@ Sketch of the kinds' entries, in the file's `objects`:
 		"ids": ["slack/user/{user}"],
 		"reads": { "person": { "tool": "get_person", "args": { "user": "{user}" } } },
 		"follow": {
-			"ignore": ["person.presence", "person.tz_offset"],
+			"ignore": ["person.avatar"],
 			"rules": [
-				{ "on": "person.status_text", "kind": "changed", "does": "tell", "says": "status: {to}" },
-				{ "on": "person.title", "kind": "changed", "does": "tell", "says": "title: {to}" }
+				{ "on": "person.status_text", "kind": "changed", "does": "tell", "says": "status: {to}", "words": { "": "cleared" } },
+				{ "on": "person.title", "kind": "changed", "does": "tell", "says": "title: {to}", "words": { "": "cleared" } }
 			],
-			"ends": {}
+			"ends": {},
+			"every": "30m"
 		},
 		"fields": { "name": "person.real_name", "handle": "person.name", "title": "person.title", "emails": "person.email", "status": "person.status_text", "timezone": "person.tz", "photo": "person.avatar" }
 	}
@@ -217,9 +233,10 @@ over the reading as the Follow type takes it. A `{text}` in a `says` is one line
 `{subject}` is; it is a member's words shown to the owner, never to the model, which gets the change as data at the
 wake. The default for a channel is that a mention wakes and everything else tells: a channel that woke the agent on
 every message would run a model every two minutes all day; words to watch for are a search watch's job
-(`slack/search/in:#deploys failed`), which is also cheaper for Slack (below). Reactions wait for stage 3: Slack lists
-a reaction as a name with the users who gave it, and a reaction on the owner's own message must not count as the
-owner's own change, which `authors` as declared today would make it.
+(`slack/search/in:#deploys failed`), which is also cheaper for Slack (below). A reaction on the owner's own message
+is not the owner's change: an `authors` entry over a list speaks for an item's coming and going and its own fields,
+and a change inside a list the item holds (its reactions) is judged by that list's own entry, else by the rules
+alone (DESIGN.md "Watches"); an entry over one object (Drive's file) still covers every change in it.
 
 ## Following under Slack's limits
 
@@ -252,7 +269,9 @@ a minute with a hundred per page. Two things follow for the daemon, both new, bo
   owner's own team was not clamped (stage 0), so no rate is declared for it; a team that is clamped is met by its
   `Retry-After`, and a kind's `every` keeps looks apart. The file may still say `limits: { channel_history: "1/m" }`
   when a number is known, and the queue then spaces calls to it before Slack has to refuse. Whether Slack counts a
-  limit per team or per user token is still open (no second team was available).
+  limit per team or per user token is still open (no second team was available). A watch whose look the held queue
+  refused looks again when the queue opens (sooner than its cadence, never later), so watches sharing an account
+  take turns a minute apart rather than meeting the refusal together every five minutes.
 
 What this means for the owner: a followed channel wakes within a minute or two while it is busy and within five when
 quiet; a channel busier than fifteen messages a minute is read behind, and the row says so until the daemon catches
@@ -265,11 +284,20 @@ and the Follow card on a channel says so.
 | Tool | Does | Draft | Floor | Effect |
 |---|---|---|---|---|
 | `post_message(channel, text, thread_ts?)` | `chat.postMessage` as the owner, in a channel or as a reply | the card of the channel or thread it goes to, the text editable, with `@channel`, `@here` and every mention resolved and shown as they will notify | **private**: a message to other people asks every time, like Gmail's send; no permission covers it | unsafe: Slack has no idempotency key, so a crash between approval and the send asks the owner again, as adding a contact does |
-| `add_reaction(channel, ts, name)` (stage 3) | `reactions.add` as the owner | the message it goes on, the emoji named | ordinary: "Don't ask again for this task" may be offered | idempotent: adding a reaction already there is the same end state (`already_reacted`), so it may run again unasked after a crash |
+| `add_reaction(channel, ts, name)` | `reactions.add` as the owner; the name is Slack's emoji (`thumbsup`, `wave::skin-tone-3`), colons dropped, anything else refused | "React :name: to a message in #channel" on the message's thread card, nothing editable | ordinary: a permission binds the channel (and the account), "react to messages in #general", so one given for the task covers the run's next reaction there | idempotent: adding a reaction already there is the same end state (`already_reacted` is success), so it runs again unasked after a crash |
 
 Posting is on the floor because a Slack message reaches people the owner never approved as recipients, exactly the
-case the floor names. Marking as read, setting a status, uploading a file and editing or deleting the owner's own
+case the floor names. A reaction notifies only the message's author and adds nothing anyone reads as the owner's
+words, so it is ordinary. Marking as read, setting a status, uploading a file and editing or deleting the owner's own
 message are later stages, each a tool with its scope under `needs`.
+
+Files are read, never written. `get_file(file_id)` (`files.info`) tells the agent what a file is: its name, title,
+type, size and the message it is in; never its download address or its bytes. The owner opens a file from a card's
+message row: the daemon checks the file is one the card's reading shows and is at most 10 MB, fetches it from
+`files.slack.com` with the account's token as the card was read, refusing Slack's sign-in page served in its place
+(what Slack answers without `files:read`), and keeps it as a blob the chat holds, through the route Gmail's
+attachments use. It never enters a box or a model. Unlike Gmail's, a card keeps no hash of a fetched file, so
+opening it again fetches it again.
 
 ## Sign-in
 
@@ -287,8 +315,9 @@ What the Slack app needs, for whoever configures it:
 - Redirect URLs: `http://127.0.0.1:<port>/oauth/callback` for the ports banda uses. Whether Slack lets the port vary
   on loopback (RFC 8252) or wants each registered is the second spike; if each, banda's default port is registered
   and a daemon on another port says so in the connect card and offers the default.
-- User scopes only: the five required, the five of the direct-messages choice, `chat:write` and `reactions:write`;
-  no bot scopes, no bot user, no event subscriptions, no Socket Mode.
+- User scopes only: the five required, the five of the direct-messages choice, `chat:write`, `reactions:write` and
+  `files:read`; no bot scopes, no bot user, no event subscriptions, no Socket Mode. The shipped app does not request
+  `files:read` yet; until it does, opening a file says the owner must allow it.
 - Distribution on, so other teams can install it. A Marketplace listing would lift the history limit; the owner
   decided not now, and the design holds without it.
 
@@ -307,7 +336,9 @@ app walkthrough ([the plan](slack-plan.md)). The spikes below are stage 0.
    kill), the fault sweep at the new effect boundaries, a real busy channel followed in a forked home.
 3. **Search and people.** `search_messages` followed, the person kind, `add_reaction` with its choice and
    permission (and `authors` scoped so a reaction on the owner's message counts), and files in messages read through
-   the daemon.
+   the daemon. Built: the scenarios in test/watch-slack.test.ts, the draft in test/slack-writes.test.ts, the adapter
+   in test/slack-rest.test.ts, the file route in test/gmail-attachments.test.ts, a reaction's kill sweep in
+   test/slack.faults.test.ts (CI).
 
 ## What the spikes found
 
@@ -351,7 +382,9 @@ AGENTS.md principle 6). Observed, not inferred:
 - [ ] Stage 2: the paged list as connection data, thread and channel followed, scenarios and the sweep's Slack
   scenarios are built (test/watch-slack.test.ts, test/slack-watch.browser.test.ts); the sweep run in CI, three watches
   sharing one budget, and a real busy channel in a forked home remain
-- [ ] Stage 3: search and person followed, `add_reaction`, files through the daemon
+- [ ] Stage 3: search and person followed, `add_reaction`, files through the daemon are built and tested; the
+  reaction's kill sweep run in CI, `files:read` added to the shipped app, and the owner's walkthrough (a search watch
+  over a day, a reaction approved for a task, a file opened at both widths) remain
 - [ ] Logo: Slack's mark as a shipped asset, with the others ([Connections](connections.md))
 - [ ] Slack as a gateway (the owner messaging the band from Slack) is not designed; it needs bot scopes and a
   server-side flow, so a second app configuration
