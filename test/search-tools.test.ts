@@ -9,8 +9,10 @@ import {
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Artifacts } from "../src/core/artifacts.ts";
+import { readForeign } from "../src/core/foreign.ts";
 import { OWNER } from "../src/core/gateway.ts";
 import { Groups } from "../src/core/groups.ts";
+import { errandOf } from "../src/core/permissions.ts";
 import { Search } from "../src/core/search.ts";
 import { searchService } from "../src/core/search-service.ts";
 import { searchExtension } from "../src/core/search-tools.ts";
@@ -122,6 +124,31 @@ describe("band search", () => {
 			);
 			await expect(s.invoke("search", { query: "Lisbon" }, 999999)).rejects.toThrow("calling agent");
 			expect(JSON.stringify(await s.invoke("search", { query: "Lisbon" }, s.hidden))).toContain("Lisbon train booked");
+		} finally {
+			await s.close();
+		}
+	});
+
+	it("what a search finds, and a source it reads, is foreign content in the chat that called it", async () => {
+		const s = await fixture();
+		try {
+			const foreign = (chat: number) =>
+				s.harness.commit(async (tx) => readForeign(tx, chat, (await errandOf(tx, chat)).input), context);
+			const said = (result: Awaited<ReturnType<typeof s.invoke>>) =>
+				JSON.parse(result.output?.[0]?.type === "text" ? result.output[0].text : "{}");
+			await s.core.groups.post(s.harness, { room: s.room, key: "train", text: "Porto train is confirmed" });
+			// a search that finds nothing brings nothing in
+			expect(said(await s.invoke("search", { query: "nothingmatcheshere" })).results).toEqual([]);
+			expect(await foreign(s.chat)).toBe(false);
+			const found = said(await s.invoke("search", { query: "Porto" }));
+			expect(found.results).toHaveLength(1);
+			expect(await foreign(s.chat)).toBe(true);
+			// read from another chat whose task read nothing yet
+			expect(await foreign(s.hidden)).toBe(false);
+			expect(said(await s.invoke("read_search_result", { source: found.results[0].source }, s.hidden)).text).toContain(
+				"Porto train is confirmed",
+			);
+			expect(await foreign(s.hidden)).toBe(true);
 		} finally {
 			await s.close();
 		}

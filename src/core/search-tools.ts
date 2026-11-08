@@ -1,9 +1,13 @@
-/** Read-only tools over the same local corpus as the owner's Cmd+K search. */
+/**
+ * Read-only tools over the same local corpus as the owner's Cmd+K search. What they bring back (other agents' chats, a
+ * group's members' messages, artifacts) is foreign content: the calling chat is marked before it is recorded.
+ */
 
 import type { Context } from "@earendil-works/chord";
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool, type ToolExecutionApi } from "@earendil-works/pi-durable";
 import { AgentChats } from "./agents.ts";
+import { markForeign } from "./foreign.ts";
 import type { searchService } from "./search-service.ts";
 
 export function searchExtension(service: ReturnType<typeof searchService>) {
@@ -11,6 +15,8 @@ export function searchExtension(service: ReturnType<typeof searchService>) {
 		const agent = await api.commit(async (tx) => (await tx.doc(AgentChats)).chats[Number(api.conversationId)], ctx);
 		if (agent === undefined) throw new Error("search requires a stored calling agent");
 	};
+	const reading = (api: ToolExecutionApi, ctx: Context) =>
+		api.commit((tx) => markForeign(tx, Number(api.conversationId)), ctx);
 	const id = Type.Integer({ minimum: 1 });
 	const source = Type.Union([
 		Type.Object({ kind: Type.Literal("message"), chat: id, entry: id }),
@@ -43,7 +49,9 @@ export function searchExtension(service: ReturnType<typeof searchService>) {
 				replay: "safe",
 				execute: async (args, api, ctx) => {
 					await caller(api, ctx);
-					return { output: [{ type: "text", text: JSON.stringify(await service.search(args, ctx)) }] };
+					const found = await service.search(args, ctx);
+					if (found.results.length > 0) await reading(api, ctx);
+					return { output: [{ type: "text", text: JSON.stringify(found) }] };
 				},
 			}),
 			defineTool({
@@ -56,9 +64,9 @@ export function searchExtension(service: ReturnType<typeof searchService>) {
 				replay: "safe",
 				execute: async (args, api, ctx) => {
 					await caller(api, ctx);
-					return {
-						output: [{ type: "text", text: JSON.stringify(await service.read(args.source, args.offset ?? 0, ctx)) }],
-					};
+					const read = await service.read(args.source, args.offset ?? 0, ctx);
+					await reading(api, ctx);
+					return { output: [{ type: "text", text: JSON.stringify(read) }] };
 				},
 			}),
 		],
