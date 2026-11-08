@@ -585,8 +585,8 @@ export const ToolSettings = defineDoc<ToolSettingsValue>({
 /**
  * banda's guesses for each connection's tools, from one inference over its listing (`listing`, a hash of the tools it
  * was made for): its groups, and each tool's kind and group. Derived and rebuildable, never permission by itself: a
- * guessed read only runs once the owner confirms it, and the owner's settings outlast any guess. `failed` says why a
- * listing has none; it is not asked again for that listing.
+ * guessed read only runs once the owner confirms it, and the owner's settings outlast any guess. `failed` says why
+ * some of a listing's tools have none; those are asked again at the next start or listing.
  */
 type ClassifiedValue = {
 	connections: {

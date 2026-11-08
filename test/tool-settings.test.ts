@@ -359,13 +359,67 @@ describe("banda's guess at a new connection's tools", () => {
 			["send_payment", { kind: "write", from: "none" }, "Other", "ask"],
 			["whoami", { kind: "read", from: "service" }, "Other", "allow"],
 		]);
-		// not asked again for the same listing
-		await s.capabilities.reconcile();
-		await s.capabilities.classified();
-		expect(guess.asked).toHaveLength(1);
 		await s.capabilities.review("cal", view?.accepted?.sha, {});
 		expect(await effect(s)).toMatchObject({ find_rooms: { read: false }, send_payment: { read: false } });
 		expect((await effect(s)).find_rooms?.floor).toBeUndefined();
+	});
+
+	it("that failed is made again at the next start, for the same listing", async () => {
+		const fake = await startFakeMcp();
+		fakes.push(fake);
+		const guess = guessing(
+			fauxAssistantMessage("", { stopReason: "error", errorMessage: "overloaded" }),
+			groupsAnswer(["Events", "Payments"]),
+			kindsAnswer([
+				{ tool: "create_event", kind: "write", group: "Events" },
+				{ tool: "list_events", kind: "read", group: "Events" },
+				{ tool: "send_payment", kind: "write", floor: "money", group: "Payments" },
+				{ tool: "whoami", kind: "read", group: "Events" },
+			]),
+		);
+		const s = await open(await tempHome(), { classify: guess.classify });
+		await s.capabilities.addMcp({ url: fake.url, service: "Cal" });
+		await s.capabilities.classified();
+		expect((await s.cal())?.unguessed).toContain("overloaded");
+		await s.capabilities.reconcile();
+		await s.capabilities.classified();
+		expect(guess.asked).toHaveLength(3);
+		const view = await s.cal();
+		expect(view?.unguessed).toBeUndefined();
+		expect(view?.groups).toEqual(["Events", "Payments"]);
+		expect(view?.tools.find((t) => t.title === "send_payment")?.classed).toEqual({
+			kind: "floor",
+			floor: "money",
+			from: "guess",
+		});
+	});
+
+	it("that failed in part is made again for the tools still without a guess, into the groups it named", async () => {
+		const fake = await startFakeMcp();
+		fakes.push(fake);
+		manyTools(fake);
+		const parts = fake.tools.map((t) => t.name).filter((tool) => tool.startsWith("zpart"));
+		const guess = guessing(
+			groupsAnswer(["Things", "Parts"]),
+			kindsAnswer(Array.from({ length: 25 }, (_, i) => ({ tool: `zone_thing_${i}`, kind: "write", group: "Things" }))),
+			fauxAssistantMessage("no"),
+			fauxAssistantMessage("still no"),
+			kindsAnswer(parts.map((tool) => ({ tool, kind: tool.endsWith("_get") ? "read" : "write", group: "Parts" }))),
+		);
+		const s = await open(await tempHome(), { classify: guess.classify });
+		await s.capabilities.addMcp({ url: fake.url, service: "Cal" });
+		await s.capabilities.classified();
+		expect((await s.cal())?.unguessed).toBeDefined();
+		await s.capabilities.reconcile();
+		await s.capabilities.classified();
+		expect(guess.asked).toHaveLength(5);
+		expect(said(guess.asked[4])).toContain("zpart0_get");
+		expect(said(guess.asked[4])).not.toContain("zone_thing_0");
+		expect(said(guess.asked[4])).toContain('["Things","Parts"]');
+		const view = await s.cal();
+		expect(view?.unguessed).toBeUndefined();
+		expect(view?.groups).toEqual(["Things", "Parts"]);
+		expect(view?.tools.find((t) => t.title === "zpart3_get")?.classed).toEqual({ kind: "read", from: "guess" });
 	});
 
 	it("refused as busy is made again, never kept as failed, and two connections are guessed one at a time", async () => {

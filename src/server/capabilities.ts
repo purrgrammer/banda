@@ -3146,7 +3146,7 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	// ---- what each tool does, and what the owner set it to
 
-	/** Guesses waiting or in progress, by connection; never asked again for a listing one was made for. */
+	/** Guesses waiting or in progress, by connection; a listing's is made once, unless it failed. */
 	const classifying = new Map<string, Promise<void>>();
 	/**
 	 * The guesses run one after another, whatever the connection: started together (every connection at start) they
@@ -3201,7 +3201,8 @@ export function openCapabilities(options: CapabilityOptions) {
 			if ((await tx.doc(Accepted)).shipped?.[connectionPath(name)] === true) return undefined;
 			const sha = listingSha(listed.tools);
 			const was = (await tx.doc(Classified)).connections[name];
-			if (was?.listing === sha) return undefined;
+			// one that failed is said, never final: the next start or listing asks for the tools still without a guess
+			if (was?.listing === sha && was.failed === undefined) return undefined;
 			const grouped = new Set(Object.values(connection.groups ?? {}).flat());
 			const fileGroups = connection.groups === undefined ? undefined : Object.keys(connection.groups);
 			const need = Object.entries(listed.tools)
