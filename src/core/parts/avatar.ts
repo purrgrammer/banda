@@ -2,36 +2,26 @@
 import { Type } from "@earendil-works/pi-ai";
 import { AssistantEntry, type JsonObject, type ToolTaskInput } from "@earendil-works/pi-durable";
 import { validateAvatarCandidate } from "../../server/avatar-validation.ts";
+import { PROPOSE_AVATAR } from "../toolsets.ts";
 import type { MessagePart } from "./part.ts";
 
-export const avatar: MessagePart = {
-	parameters: {
-		avatar: Type.Optional(
-			Type.Object(
-				{
-					version: Type.Literal(1),
-					id: Type.String({ minLength: 1, maxLength: 40 }),
-					name: Type.String({ minLength: 1, maxLength: 40 }),
-					body: Type.Object({ path: Type.String({ minLength: 1, maxLength: 6000 }) }, { additionalProperties: false }),
-					eyes: Type.Object(
-						{ x: Type.Number(), y: Type.Number(), spacing: Type.Number(), scale: Type.Number() },
-						{ additionalProperties: false },
-					),
-				},
-				{ additionalProperties: false },
-			),
+/** A face as geometry: what `propose_avatar` takes, which validation checks before any card is shown. */
+export const AVATAR_GEOMETRY = Type.Object(
+	{
+		version: Type.Literal(1),
+		id: Type.String({ minLength: 1, maxLength: 40 }),
+		name: Type.String({ minLength: 1, maxLength: 40 }),
+		body: Type.Object({ path: Type.String({ minLength: 1, maxLength: 6000 }) }, { additionalProperties: false }),
+		eyes: Type.Object(
+			{ x: Type.Number(), y: Type.Number(), spacing: Type.Number(), scale: Type.Number() },
+			{ additionalProperties: false },
 		),
 	},
-	describe:
-		"Give `avatar` to offer a generated face for yourself as a preview card. First read `read_avatar_instructions`. " +
-		"Supply geometry data here, never JSON in `text` or a file. Validation may refuse it with errors to correct. " +
-		"Only the owner's Use this face button applies it; sending a candidate changes nothing. " +
-		"Send it separately from a question, and only in your direct chat, not a group.",
+	{ additionalProperties: false },
+);
+
+export const avatar: MessagePart = {
 	present: (args) => args.avatar !== undefined,
-	refuse: (args) =>
-		args.avatar !== undefined && args.question !== undefined
-			? "send the face preview separately from a question; its own control lets the owner apply it"
-			: undefined,
 	said: (args) =>
 		args.avatar === undefined
 			? undefined
@@ -51,11 +41,10 @@ export const avatar: MessagePart = {
 			if (message?.role !== "assistant") return undefined;
 			const calls = message.content.filter((part) => part.type === "toolCall");
 			const matches = calls.filter((call) => call.id === api.callId);
-			if (matches.length !== 1 || matches[0]?.name !== "message_user") return undefined;
+			if (matches.length !== 1 || matches[0]?.name !== PROPOSE_AVATAR) return undefined;
 			return { assistant: Number(input.assistant), index: calls.findIndex((call) => call.id === api.callId) };
 		}, ctx);
-		if (occurrence === undefined)
-			return "the face preview needs an unambiguous direct message call; use a fresh call ID";
+		if (occurrence === undefined) return "the face preview needs an unambiguous call; use a fresh call ID";
 		// Only the successful delivery result publishes this receipt. Replay revalidates the durable intent;
 		// neither the raw (possibly coerced) model arguments nor a running result can attest geometry.
 		return { receipt: { kind: "avatar", ...occurrence, definition: result.definition as unknown as JsonObject } };

@@ -44,6 +44,7 @@ import { localTime } from "../core/schedule.ts";
 import { openWaits, status } from "../core/status.ts";
 import { context } from "../core/store.ts";
 import { thinkingMs, thinkingTimes } from "../core/timing.ts";
+import { isMessageTool, MESSAGE_GROUP, messageArgs } from "../core/toolsets.ts";
 import {
 	AGENT_MESSAGE,
 	goesOn,
@@ -121,7 +122,9 @@ const RECEIPTS: { readonly [tool: string]: Receipt["kind"] } = {
 	remember: "fact",
 	forget: "fact",
 	schedule: "routine",
-	message_user: "avatar",
+	propose_avatar: "avatar",
+	message_user: "artifacts",
+	message_group: "artifacts",
 	skill: "skill",
 };
 
@@ -173,6 +176,19 @@ export function receiptOf(tool: string, isError: boolean, details: unknown): Rec
 				? { invocation: receipt.invocation as { gateway: string; message: string } }
 				: {}),
 		};
+	if (
+		kind === "artifacts" &&
+		Array.isArray(receipt.artifacts) &&
+		receipt.artifacts.every(
+			(shown) =>
+				typeof shown === "object" &&
+				shown !== null &&
+				/^[0-9a-f]{16}$/.test(String((shown as { id?: unknown }).id)) &&
+				Number.isSafeInteger((shown as { n?: unknown }).n) &&
+				Number((shown as { n?: unknown }).n) > 0,
+		)
+	)
+		return { kind, artifacts: (receipt.artifacts as { id: string; n: number }[]).map(({ id, n }) => ({ id, n })) };
 	if (kind === "fact" && typeof receipt.id === "string" && typeof receipt.text === "string")
 		return { kind, id: receipt.id, text: receipt.text };
 	if (
@@ -410,7 +426,7 @@ export function troubleText(data: TroubleData): string {
 	return `${what} paused: it ran ${data.runsADay} times today, the most it may`;
 }
 
-/** Count what reached the owner: message_user calls that show a reply and a routine's trouble, never the model's notes or tool results. */
+/** Count what reached the owner: speaking calls that show a reply and a routine's trouble, never the model's notes or tool results. */
 async function unread(harness: Harness, id: number, after: number, ctx: Context): Promise<number> {
 	const chat = await harness.conversation(id as ConversationId, ctx);
 	if (chat === undefined) return 0;
@@ -424,7 +440,12 @@ async function unread(harness: Harness, id: number, after: number, ctx: Context)
 			const item = itemOf(entry);
 			if (item?.role === "notice" && item.routine !== undefined) troubles++;
 			if (item?.role === "tool") results.set(item.call, item);
-			if (item?.role === "assistant") calls.push(...(item.calls ?? []).filter((call) => call.name === "message_user"));
+			if (item?.role === "assistant")
+				calls.push(
+					...(item.calls ?? [])
+						.filter((call) => call.name !== MESSAGE_GROUP && isMessageTool(call.name))
+						.map((call) => ({ ...call, args: messageArgs(call.name, call.args) })),
+				);
 		}
 		cursor = page.next;
 	} while (cursor !== undefined);
@@ -488,8 +509,8 @@ async function lastWords(
 		const at = item.at === undefined ? {} : { at: item.at };
 		for (const call of [...(item.calls ?? [])].reverse()) {
 			if (ask?.call !== undefined && call.id === ask.call) return { text: line(ask.words), by: "agent", ...at };
-			if (call.name !== "message_user") continue;
-			const { text, question, files, reaction, view } = call.args as Record<string, unknown>;
+			if (call.name === MESSAGE_GROUP || !isMessageTool(call.name)) continue;
+			const { text, question, files, reaction, view } = messageArgs(call.name, call.args);
 			const words = [text, question].find((part) => typeof part === "string" && part.trim() !== "");
 			if (typeof words === "string") return { text: line(words), by: "agent", ...at };
 			if (Array.isArray(files) && files.length > 0)

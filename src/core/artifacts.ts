@@ -3,7 +3,7 @@
  * each a file of the box published to the owner's Library with every version it had. The store holds every fact about
  * them; a version's bytes are a blob the artifact holds, so any version is restorable byte for byte.
  *
- * - **Publishing.** `message_user`'s artifact part reads the file from the box, stores it as a blob and commits it as
+ * - **Publishing.** `publish` reads the file from the box, stores it as a blob and commits it as
  *   the artifact's next version, keyed by the call that published it, so a rerun after a crash finds its version
  *   instead of adding one. The same bytes as the newest version add none.
  * - **The owner's versions.** An edit (markdown and text) or a restore is a version `by: "owner"`, committed with a

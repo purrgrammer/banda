@@ -3,7 +3,6 @@
  * of it ("got it", "thanks"), where nothing else needs saying. It is still a message: sent at least once like any other,
  * as its emoji where a gateway has no reactions; the app folds it onto the owner's message instead of a bubble.
  */
-import { Type } from "@earendil-works/pi-ai";
 import type { EntryId } from "@earendil-works/pi-durable";
 import { oneEmoji } from "../choices.ts";
 import { errandOf } from "../permissions.ts";
@@ -14,18 +13,6 @@ const emojiOf = (args: { readonly reaction?: unknown }) =>
 	typeof args.reaction === "string" ? oneEmoji(args.reaction) : undefined;
 
 export const reaction: MessagePart = {
-	parameters: {
-		reaction: Type.Optional(
-			Type.String({
-				minLength: 1,
-				maxLength: 32,
-				description:
-					"One emoji on the owner's message you are answering: alone, it is your whole reply, " +
-					"for when nothing needs saying (a thanks, an ok); with text, it goes on their message beside your reply.",
-			}),
-		),
-	},
-	describe: "Give `reaction` alone to answer with one emoji on their message when words would add nothing.",
 	present: (args) => args.reaction !== undefined,
 	refuse: (args) =>
 		args.reaction === undefined || emojiOf(args) !== undefined ? undefined : "a reaction is exactly one emoji",

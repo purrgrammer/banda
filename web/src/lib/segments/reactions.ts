@@ -1,6 +1,7 @@
 /**
  * The owner's message in the chat, with a reaction only when the agent actually sent one. Pure, like `../chat.ts`.
  */
+import { REACT } from "../../../../src/core/toolsets.ts";
 import type { Item } from "../../../../src/server/api.ts";
 import type { Segment, SegmentFile } from "../chat.ts";
 import type { Segmenter, ViewInput } from "./types.ts";
@@ -36,7 +37,7 @@ export function reactionsOf(items: readonly Item[]): Map<number, string> {
 		if (item.role !== "assistant" || answering === undefined) continue;
 		for (const call of item.calls ?? []) {
 			const emoji = (call.args as { reaction?: unknown }).reaction;
-			if (call.name !== "message_user" || typeof emoji !== "string") continue;
+			if (call.name !== REACT || typeof emoji !== "string") continue;
 			// A proposed call is not a sent reaction; wait for its successful tool result.
 			if (results.get(call.id)?.error !== false) continue;
 			if (emoji.trim() !== "") out.set(answering, emoji.trim());

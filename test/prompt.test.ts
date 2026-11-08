@@ -75,10 +75,14 @@ describe("a chat's prompt", () => {
 				})),
 			);
 			expect(body.tools.map((tool) => tool.name)).toContain("message_user");
+			// the rarer speaking tools, connect and propose_avatar, load on demand
 			expect(body.tools.map((tool) => tool.name).sort()).toEqual([
+				"ask_user",
 				"bash",
 				"edit",
 				"message_user",
+				"publish",
+				"react",
 				"read",
 				"tool_search",
 				"write",
@@ -119,8 +123,9 @@ describe("a chat's prompt", () => {
 			const after = (await api<ChatPrompt>(`/chats/${chat}/prompt?at=${loaded.id}`)).body;
 			expect(before.tools.map((tool) => tool.name)).not.toContain("read_avatar_instructions");
 			expect(after.tools.map((tool) => tool.name)).toContain("read_avatar_instructions");
+			// propose_avatar is still to load: the group stays until none of its tools is left
 			expect(before.system).toMatch(/On demand: .*\bavatar\b/);
-			expect(after.system).not.toMatch(/On demand: .*\bavatar\b/);
+			expect(after.system).toMatch(/On demand: .*\bavatar\b/);
 			expect(entries.filter((item) => item.role === "tool" && item.error)).toEqual([]);
 		} finally {
 			await daemon.close();

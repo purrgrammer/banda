@@ -271,7 +271,7 @@ describe("a chat runs its agent", () => {
 					entered();
 					await hold;
 				}
-				return fauxAssistantMessage([fauxToolCall("message_user", { reaction: "👍" })], { stopReason: "toolUse" });
+				return fauxAssistantMessage([fauxToolCall("react", { reaction: "👍" })], { stopReason: "toolUse" });
 			}
 			return fauxAssistantMessage("done");
 		};

@@ -42,7 +42,7 @@ describe("daemon", () => {
 			fauxAssistantMessage(
 				[
 					fauxToolCall(
-						"message_user",
+						"ask_user",
 						{ question: "Which port?", fields: [{ name: "port", type: "number", hint: "above 1024" }] },
 						{ id: "c1" },
 					),

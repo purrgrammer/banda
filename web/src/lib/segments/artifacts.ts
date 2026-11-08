@@ -31,6 +31,8 @@ export type ArtifactSegment = {
 	readonly at?: number;
 	/** The publishing call, which the Library finds the version by. */
 	readonly call?: string;
+	/** Shown again by a message, by its id: not published by it. */
+	readonly shown?: boolean;
 };
 
 declare module "./types.ts" {
@@ -55,6 +57,7 @@ export function artifactLine(segment: ArtifactSegment): { state: FeedState; text
 	if (segment.failed === true) return { state: "refused", text: "Not published" };
 	if (segment.removed === true) return { state: "removed", text: "A document, removed from the Library since" };
 	if (segment.id === undefined) return { state: "working", text: "Publishing a document…" };
+	if (segment.shown === true) return { state: "done", text: `${segment.title} · v${segment.n ?? 1}` };
 	const version = segment.n === undefined || segment.n === 1 ? "" : ` · v${segment.n}`;
 	return {
 		state: "done",
@@ -64,6 +67,19 @@ export function artifactLine(segment: ArtifactSegment): { state: FeedState; text
 
 export const artifacts: Segmenter = {
 	message: (call, key, { result }) => {
+		// artifacts a message showed again: each at the version its receipt names, once it was sent
+		if (result?.error === false && result.receipt?.kind === "artifacts")
+			return result.receipt.artifacts.map(({ id, n }) => ({
+				kind: "artifact",
+				key: `${key}:artifact:${id}`,
+				by: "companion",
+				title: "A document",
+				id,
+				n,
+				shown: true,
+				ended: true,
+				...(result.at === undefined ? {} : { at: result.at }),
+			}));
 		const given = call.args.artifact as Named | undefined;
 		if (typeof given !== "object" || given === null || typeof given.path !== "string") return [];
 		const title = typeof given.title === "string" ? given.title : nameOf(given.path);
@@ -96,6 +112,14 @@ export const artifacts: Segmenter = {
 		for (const item of items)
 			if (item.role === "user" && item.artifact !== undefined) told.set(`${item.id}`, item.artifact);
 		return segments.map((segment): Segment => {
+			// shown again by id: its title and kind from the Library, the version as it was sent
+			if (segment.kind === "artifact" && segment.shown === true && segment.id !== undefined) {
+				const artifact = library.get(segment.id);
+				if (artifact !== undefined) return { ...segment, title: artifact.title, artifactKind: artifact.kind };
+				// removed from the Library since: no card to open, as for one it published
+				const { id: _gone, ...rest } = segment;
+				return { ...rest, removed: true };
+			}
 			if (segment.kind === "artifact" && segment.call !== undefined) {
 				const found = published.get(segment.call);
 				// published (its call ended) and not in the Library: removed from it since

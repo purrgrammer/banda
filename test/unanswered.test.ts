@@ -231,7 +231,7 @@ describe("a run that leaves the owner unanswered", () => {
 	it("a reaction alone answers; a message then notes answers", async () => {
 		const s = setup((ctx) =>
 			pending(ctx).some((text) => text.includes("thanks"))
-				? call("message_user", { reaction: "👍" }, `r${ctx.messages.length}`)
+				? call("react", { reaction: "👍" }, `r${ctx.messages.length}`)
 				: pending(ctx).length > 0
 					? call("message_user", { text: "the answer" }, `m${ctx.messages.length}`)
 					: fauxAssistantMessage("done, notes"),

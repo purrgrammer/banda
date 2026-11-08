@@ -536,12 +536,12 @@ describe("web", () => {
 		const models = createModels();
 		models.setProvider(faux.provider);
 		faux.setResponses([
-			fauxAssistantMessage([fauxToolCall("message_user", { reaction: "👍" })], { stopReason: "toolUse" }),
+			fauxAssistantMessage([fauxToolCall("react", { reaction: "👍" })], { stopReason: "toolUse" }),
 			fauxAssistantMessage("sent"),
 			fauxAssistantMessage([fauxToolCall("not_offered", { nested: { value }, values: [value] })], {
 				stopReason: "toolUse",
 			}),
-			fauxAssistantMessage([fauxToolCall("message_user", { reaction: "👍" })], { stopReason: "toolUse" }),
+			fauxAssistantMessage([fauxToolCall("react", { reaction: "👍" })], { stopReason: "toolUse" }),
 			fauxAssistantMessage("sent"),
 		]);
 		const { daemon, api, post, token, url } = await start({ models, stream: true });
@@ -820,7 +820,7 @@ describe("web", () => {
 		models.setProvider(faux.provider);
 		faux.setResponses([
 			// the first run answers with a reaction, so it is not left unanswered
-			fauxAssistantMessage([fauxToolCall("message_user", { reaction: "👍" }, { id: "h1" })], {
+			fauxAssistantMessage([fauxToolCall("react", { reaction: "👍" }, { id: "h1" })], {
 				stopReason: "toolUse",
 			}),
 			fauxAssistantMessage("hello"),
@@ -905,7 +905,7 @@ describe("web", () => {
 		models.setProvider(faux.provider);
 		// each run answers the owner with a reaction, so none is left unanswered
 		faux.setResponses([
-			fauxAssistantMessage([fauxToolCall("message_user", { reaction: "👍" }, { id: "w1" })], { stopReason: "toolUse" }),
+			fauxAssistantMessage([fauxToolCall("react", { reaction: "👍" }, { id: "w1" })], { stopReason: "toolUse" }),
 			fauxAssistantMessage("warm"),
 		]);
 		const { daemon, api, post, url, token } = await start({ models, stream: true });
@@ -918,7 +918,7 @@ describe("web", () => {
 					[
 						fauxThinking("weighing the options, slowly"),
 						fauxText("done, after weighing it all"),
-						fauxToolCall("message_user", { reaction: "👍" }, { id: "t1" }),
+						fauxToolCall("react", { reaction: "👍" }, { id: "t1" }),
 					],
 					{ stopReason: "toolUse" },
 				),
@@ -1161,7 +1161,7 @@ describe("web", () => {
 		const models = createModels();
 		models.setProvider(faux.provider);
 		faux.setResponses([
-			fauxAssistantMessage([fauxToolCall("message_user", { question: "Colour?" }, { id: "c1" })], {
+			fauxAssistantMessage([fauxToolCall("ask_user", { question: "Colour?" }, { id: "c1" })], {
 				stopReason: "toolUse",
 			}),
 		]);
