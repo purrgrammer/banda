@@ -27,13 +27,13 @@ import { boxEnv, boxTools } from "../src/box/tools.ts";
 import { ActivityLog } from "../src/core/activity.ts";
 import { AgentChats, LEAD } from "../src/core/agents.ts";
 import { EFFECT } from "../src/core/ask.ts";
-
 import {
 	addressOf,
 	draftArgs,
 	type EgressControl,
 	type HeldRequest,
 	hostOf,
+	intake,
 	ownCredential,
 	permittedHost,
 	permittedHosts,
@@ -51,9 +51,10 @@ import {
 	type Taken,
 	Tickets,
 } from "../src/core/egress.ts";
+import { readForeign } from "../src/core/foreign.ts";
 import { OWNER, type Received } from "../src/core/gateway.ts";
 import { hostCovers } from "../src/core/hosts.ts";
-import { allowHost, covering, Permissions, revoke } from "../src/core/permissions.ts";
+import { allowHost, covering, errandOf, Permissions, revoke } from "../src/core/permissions.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
@@ -93,7 +94,10 @@ class FakeProxy implements EgressControl {
 	/** What each chat's next command will have sent straight through, under a host permission. */
 	readonly sentOut = new Map<number, SentRequest[]>();
 	readonly acked: string[] = [];
+	/** The proxy does not answer: what a command read and sent stays where it is. */
+	failing = false;
 	async take(chat: number): Promise<Taken> {
+		if (this.failing) throw new Error("docker exec: it did not answer in time");
 		const reads = this.reads.get(chat) ?? [];
 		return {
 			held: [...(this.pending.get(chat) ?? [])],
@@ -289,6 +293,33 @@ describe("a held write", () => {
 			expect(Object.keys((await harness.snapshot(Tickets, context))?.tickets ?? {})).toEqual([]);
 			expect(await openWaits(harness)).toEqual([]);
 			expect(s.proxy.sent).toEqual([]);
+		} finally {
+			await close();
+		}
+	});
+
+	it("a command whose reads the proxy could not say marks its chat as having read foreign content", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			s.proxy.failing = true;
+			const first = await s.say(harness);
+			await until(() => done(harness, first.turn));
+			const [said] = await results(harness, first.chat);
+			expect(said).toContain("The egress proxy did not answer");
+			const foreign = await harness.commit(
+				async (tx) => readForeign(tx, first.chat, (await errandOf(tx, first.chat)).input),
+				context,
+			);
+			expect(foreign).toBe(true);
+			// every call that takes in what the proxy saw fails closed alike: a tool the agent built, web_fetch, the browser
+			const other = await harness.commit(
+				async (tx) => Number((await tx.createConversation({ ownership: { kind: "ownerless" } })).id),
+				context,
+			);
+			const api = { conversationId: other as ConversationId, commit: harness.commit.bind(harness), now: Date.now };
+			await expect(intake(s.proxy, api as never, context)).rejects.toThrow("did not answer");
+			expect(await harness.commit((tx) => readForeign(tx, other, 0), context)).toBe(true);
 		} finally {
 			await close();
 		}

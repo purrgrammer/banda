@@ -254,22 +254,23 @@ function fake(pages: { [url: string]: Fetched }, options: { egress?: EgressContr
 		},
 	});
 	const logged: { what: string; outside?: string }[] = [];
+	// the activity log's events and the chat's foreign mark, as the fake store holds them
+	const docs: { events: object; read?: number } = {
+		events: { push: (event: { what: string }) => logged.push(event), length: 0 },
+	};
 	const api = {
 		conversationId: "7",
 		now: () => 1_000,
 		env: undefined,
 		commit: async (run: (tx: unknown) => Promise<unknown>) =>
-			run({
-				scanEntries: async () => ({ items: [] }),
-				doc: async () => ({ events: { push: (event: { what: string }) => logged.push(event), length: 0 } }),
-			}),
+			run({ scanEntries: async () => ({ items: [] }), doc: async () => docs }),
 	} as unknown as ToolExecutionApi;
 	const call = async (url: string) => {
 		const result = (await tool.execute({ url }, api, context)) as ToolExecutionResult;
 		const text = (result.output ?? []).map((part) => (part.type === "text" ? part.text : "")).join("\n");
 		return { text, error: result.isError === true };
 	};
-	return { tool, asked, call, logged };
+	return { tool, asked, call, logged, marked: () => docs.read !== undefined };
 }
 
 describe("web_fetch", () => {
@@ -460,6 +461,20 @@ describe("web_fetch", () => {
 		expect(taken).toEqual([7, 7]);
 		// the proxy logs what it saw; the tool logs nothing of its own
 		expect(logged).toEqual([]);
+	});
+
+	it("marks its chat when the proxy cannot say what it read: the read goes unlogged, never unmarked", async () => {
+		const egress: EgressControl = {
+			take: async () => {
+				throw new Error("docker exec: it did not answer in time");
+			},
+			ack: async () => {},
+			replay: async () => ({ refused: "never" }),
+		};
+		const { call, logged, marked } = fake({ "https://example.com/": page(200, "<p>x</p>") }, { egress });
+		expect((await call("https://example.com/")).text).toContain("The egress proxy did not answer");
+		expect(logged).toEqual([]);
+		expect(marked()).toBe(true);
 	});
 
 	it("takes an address and nothing else: no method, no header, no body", () => {
