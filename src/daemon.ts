@@ -124,6 +124,8 @@ export type DaemonOptions = {
 	readonly remote?: RemoteSettings;
 	/** Where the connections banda ships are; default `shipped/connections/` of its install. */
 	readonly shipped?: string;
+	/** How the daemon reaches the services its connections name; a test fakes one that is not on this machine. */
+	readonly fetch?: typeof fetch;
 };
 
 export type Daemon = {
@@ -536,6 +538,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			changed: () => capabilitiesChanged(),
 			agentChanged: core.agentChanged,
 			...(options.shipped === undefined ? {} : { shipped: options.shipped }),
+			...(options.fetch === undefined ? {} : { fetch: options.fetch }),
 		});
 		await capabilities.carryListings();
 		await capabilities.install();
