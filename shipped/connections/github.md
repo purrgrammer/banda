@@ -964,6 +964,160 @@ draws as cards, from scripts/github-objects.ts.
 					]
 				}
 			]
+		},
+		"repository": {
+			"card": "repository",
+			"normalize": {
+				"owner": "lowercase",
+				"repo": "lowercase"
+			},
+			"name": "{owner}/{repo}",
+			"urls": [
+				"https://github.com/{owner}/{repo}",
+				"https://api.github.com/repos/{owner}/{repo}"
+			],
+			"ids": [
+				"github.com/{owner}/{repo}"
+			],
+			"reads": {
+				"pulls": {
+					"tool": "list_pull_requests",
+					"args": {
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"state": "all",
+						"sort": "created",
+						"direction": "desc",
+						"perPage": 30,
+						"page": 1,
+						"fields": [
+							"number",
+							"title",
+							"state",
+							"draft",
+							"merged",
+							"user",
+							"created_at"
+						]
+					}
+				},
+				"issues": {
+					"optional": true,
+					"tool": "list_issues",
+					"args": {
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"orderBy": "CREATED_AT",
+						"direction": "DESC",
+						"perPage": 30,
+						"fields": [
+							"number",
+							"title",
+							"state",
+							"user",
+							"created_at"
+						]
+					}
+				},
+				"releases": {
+					"optional": true,
+					"tool": "list_releases",
+					"args": {
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"perPage": 10,
+						"page": 1,
+						"fields": [
+							"id",
+							"tag_name",
+							"name",
+							"html_url",
+							"published_at",
+							"prerelease",
+							"draft",
+							"author"
+						]
+					}
+				},
+				"commits": {
+					"optional": true,
+					"tool": "list_commits",
+					"args": {
+						"owner": "{owner}",
+						"repo": "{repo}",
+						"perPage": 1,
+						"page": 1,
+						"fields": [
+							"sha",
+							"html_url",
+							"commit",
+							"author"
+						]
+					}
+				}
+			},
+			"follow": {
+				"keys": {
+					"pulls": "number",
+					"issues.issues": "number",
+					"commits": "sha"
+				},
+				"newest": {
+					"pulls": "number",
+					"issues.issues": "number",
+					"releases": "published_at"
+				},
+				"ignore": [
+					"issues.totalCount",
+					"issues.pageInfo"
+				],
+				"authors": {
+					"pulls": "user.login",
+					"issues.issues": "user.login",
+					"commits": "author.login"
+				},
+				"rules": [
+					{
+						"on": "releases[*]",
+						"kind": "added",
+						"does": "wake",
+						"says": "released {tag_name}"
+					},
+					{
+						"on": "releases[*].draft",
+						"to": false,
+						"does": "wake",
+						"says": "released {tag_name}"
+					},
+					{
+						"on": "pulls[*]",
+						"kind": "added",
+						"does": "wake",
+						"says": "{user.login} opened #{number}: {title}"
+					},
+					{
+						"on": "issues.issues[*]",
+						"kind": "added",
+						"does": "wake",
+						"says": "{user.login} opened issue #{number}: {title}"
+					},
+					{
+						"on": "commits[*]",
+						"kind": "added",
+						"does": "tell",
+						"says": "new commits on the default branch"
+					}
+				],
+				"ends": {},
+				"every": "15m",
+				"settle": "1m"
+			},
+			"fields": {
+				"pulls": "pulls",
+				"issues": "issues.issues",
+				"releases": "releases",
+				"commits": "commits"
+			}
 		}
 	}
 }

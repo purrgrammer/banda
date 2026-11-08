@@ -1,6 +1,6 @@
 /**
  * GitHub's objects (DESIGN.md "Connections"), as `scripts/shipped-github.ts` writes them into the file banda ships: a
- * pull request, an issue, a check run and a notification, each with the URLs and ids that name it, the reads (of
+ * pull request, an issue, a check run, a notification and a repository, each with the URLs and ids that name it, the reads (of
  * github-mcp-server's own read tools, its minimal answers) that fetch it, the fields its card shows and the writes that
  * act on it. Data, never code: the daemon draws each card.
  */
@@ -396,5 +396,91 @@ export const GITHUB_OBJECTS = {
 				verbs: [{ when: { state: "done" }, verb: "Mark done" }],
 			},
 		],
+	},
+	repository: {
+		card: "repository",
+		normalize: { owner: "lowercase", repo: "lowercase" },
+		name: "{owner}/{repo}",
+		// the repository's own page and its tabs (`/pulls`, `/releases`), never a page inside it: a pull request's URL is
+		// one more part deeper than a tab, so it is never taken for its repository's
+		urls: ["https://github.com/{owner}/{repo}", "https://api.github.com/repos/{owner}/{repo}"],
+		// `owner/repo` alone would be any connection's `<connection>/<id>`: the host says it is GitHub's
+		ids: ["github.com/{owner}/{repo}"],
+		// each the first page of the newest, asking only for the fields it diffs and draws (bodies would outgrow an
+		// answer); the pull requests first, the one read every repository answers, so a page that is not a repository
+		// fails before the rest are made
+		reads: {
+			pulls: {
+				tool: "list_pull_requests",
+				args: {
+					owner: "{owner}",
+					repo: "{repo}",
+					state: "all",
+					sort: "created",
+					direction: "desc",
+					perPage: 30,
+					page: 1,
+					fields: ["number", "title", "state", "draft", "merged", "user", "created_at"],
+				},
+			},
+			issues: {
+				optional: true,
+				tool: "list_issues",
+				args: {
+					owner: "{owner}",
+					repo: "{repo}",
+					orderBy: "CREATED_AT",
+					direction: "DESC",
+					perPage: 30,
+					fields: ["number", "title", "state", "user", "created_at"],
+				},
+			},
+			releases: {
+				optional: true,
+				tool: "list_releases",
+				args: {
+					owner: "{owner}",
+					repo: "{repo}",
+					perPage: 10,
+					page: 1,
+					fields: ["id", "tag_name", "name", "html_url", "published_at", "prerelease", "draft", "author"],
+				},
+			},
+			// the default branch's head: one commit, so a push is its sha changing (an empty repository has none)
+			commits: {
+				optional: true,
+				tool: "list_commits",
+				args: {
+					owner: "{owner}",
+					repo: "{repo}",
+					perPage: 1,
+					page: 1,
+					fields: ["sha", "html_url", "commit", "author"],
+				},
+			},
+		},
+		// how a watch follows it: a release, and a pull request or an issue opened by someone else, wake; a push to the
+		// default branch tells; the account's own are nothing, a bot's only tell; nothing ends it. Pull requests and
+		// issues are read open and closed alike, so one closing never moves the page, and each list is a page of the
+		// newest: one that slid onto it as another left is nothing
+		follow: {
+			keys: { pulls: "number", "issues.issues": "number", commits: "sha" },
+			newest: { pulls: "number", "issues.issues": "number", releases: "published_at" },
+			ignore: ["issues.totalCount", "issues.pageInfo"],
+			authors: { pulls: "user.login", "issues.issues": "user.login", commits: "author.login" },
+			rules: [
+				// a release is the repository's news whoever cut it: most are cut by a workflow's bot, so no author is read
+				{ on: "releases[*]", kind: "added", does: "wake", says: "released {tag_name}" },
+				{ on: "releases[*].draft", to: false, does: "wake", says: "released {tag_name}" },
+				{ on: "pulls[*]", kind: "added", does: "wake", says: "{user.login} opened #{number}: {title}" },
+				{ on: "issues.issues[*]", kind: "added", does: "wake", says: "{user.login} opened issue #{number}: {title}" },
+				{ on: "commits[*]", kind: "added", does: "tell", says: "new commits on the default branch" },
+			],
+			ends: {},
+			// nothing in a repository is urgent: four reads every quarter of an hour
+			every: "15m",
+			settle: "1m",
+		},
+		fields: { pulls: "pulls", issues: "issues.issues", releases: "releases", commits: "commits" },
 	},
 } as const;

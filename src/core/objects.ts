@@ -7,7 +7,7 @@
  * the writes that make one (a tool, the arguments that say where, the verb and the words the draft says).
  *
  * The card itself is the daemon's: each kind names one of the cards it draws (`pull-request`, `issue`, `check-run`,
- * `notification`), and what a reading holds is turned into that card here, every string a plain line, bounded. A
+ * `notification`, `repository`, …), and what a reading holds is turned into that card here, every string a plain line, bounded. A
  * reading is kept in the store by (connection, account, object), with its time, bounded: what the owner saw last, and
  * what keeps a chatty chat from making the daemon read a service again and again.
  */
@@ -22,6 +22,7 @@ export const CARDS = [
 	"issue",
 	"check-run",
 	"notification",
+	"repository",
 	"email",
 	"event",
 	"contact",
@@ -35,7 +36,7 @@ export type CardKind = (typeof CARDS)[number];
  */
 export type ObjectRead = {
 	readonly tool: string;
-	readonly args: { readonly [arg: string]: JsonValue };
+	readonly args: { readonly [arg: string]: JsonValue | readonly string[] };
 	readonly optional?: boolean;
 	/** Made only when the object is followed (its comments): the card does without it. */
 	readonly follow?: boolean;
@@ -544,7 +545,7 @@ export function readArgs(read: ObjectRead, ref: ObjectRef, schema: JsonObject | 
 	const args: JsonObject = {};
 	for (const [arg, value] of Object.entries(read.args)) {
 		if (typeof value !== "string") {
-			args[arg] = value;
+			args[arg] = Array.isArray(value) ? [...value] : (value as JsonValue);
 			continue;
 		}
 		const filled = fill(value, ref.values);
@@ -688,6 +689,32 @@ export type NotificationCard = {
 	readonly subject?: string;
 };
 
+/** One pull request or issue as a repository's card names it: its number, title, author and state. */
+export type Opened = {
+	readonly number: number;
+	readonly title: string;
+	readonly author: string;
+	readonly state: "open" | "draft" | "merged" | "closed";
+};
+
+/** A repository: what is newest in it. */
+export type RepositoryCard = {
+	readonly card: "repository";
+	/** `owner/repo`. */
+	readonly repo: string;
+	/** The newest published release's tag, and when (ms). */
+	readonly release?: string;
+	readonly released?: number;
+	/** The default branch's head commit: its first line, its short sha, and when (ms). */
+	readonly commit?: string;
+	readonly sha?: string;
+	readonly committed?: number;
+	/** The newest pull request and issue. */
+	readonly pull?: Opened;
+	readonly issue?: Opened;
+	readonly url?: string;
+};
+
 export type EmailCard = {
 	readonly card: "email";
 	readonly from: string;
@@ -759,6 +786,7 @@ export type ObjectCard =
 	| IssueCard
 	| CheckRunCard
 	| NotificationCard
+	| RepositoryCard
 	| EmailCard
 	| EventCard
 	| ContactCard
@@ -881,8 +909,11 @@ export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as
 			: kind.card === "email"
 				? "subject"
 				: "title";
-	// a person may have no name: the card names them by address
-	if (typeof field(titleField) !== "string" || (kind.card !== "contact" && plainLine(field(titleField)) === ""))
+	// a person may have no name: the card names them by address; a repository is named by its ref
+	if (
+		kind.card !== "repository" &&
+		(typeof field(titleField) !== "string" || (kind.card !== "contact" && plainLine(field(titleField)) === ""))
+	)
 		throw new Error("Incomplete object");
 	const repo = plainLine(field("repo"), 100) || plainLine(`${ref.values.owner ?? ""}/${ref.values.repo ?? ""}`, 100);
 	const number = count(field("number")) || Number(ref.values.number ?? 0) || 0;
@@ -993,6 +1024,56 @@ export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as
 				...(Number.isFinite(when) ? { at: when } : {}),
 				title: plainLine(field("title")),
 				...(subject === undefined || subject.length > 500 ? {} : { subject }),
+			};
+		}
+		case "repository": {
+			// its pull requests are the read every repository answers: without them it was not read
+			if (!Array.isArray(field("pulls"))) throw new Error("Incomplete object");
+			const newest = (list: unknown, ok: (item: { [key: string]: unknown }) => boolean = () => true) =>
+				(Array.isArray(list) ? list : []).find((item): item is { [key: string]: unknown } => plain(item) && ok(item));
+			const time = (value: unknown) => (typeof value === "string" ? Date.parse(value) : Number.NaN);
+			const opened = (item: { [key: string]: unknown } | undefined): Opened | undefined => {
+				const n = count(item?.number);
+				if (item === undefined || n === null || n === 0) return undefined;
+				const state = String(item.state ?? "").toLowerCase();
+				return {
+					number: n,
+					title: plainLine(item.title),
+					author: loginOf(item.user),
+					state:
+						item.merged === true || state === "merged"
+							? "merged"
+							: state === "closed"
+								? "closed"
+								: item.draft === true
+									? "draft"
+									: "open",
+				};
+			};
+			const release = newest(field("releases"), (each) => each.draft !== true && typeof each.tag_name === "string");
+			const head = newest(field("commits"));
+			const message = plainLine(
+				String((head?.commit as { message?: unknown } | undefined)?.message ?? "").split("\n")[0],
+				120,
+			);
+			const sha = typeof head?.sha === "string" && /^[0-9a-f]{7,64}$/.test(head.sha) ? head.sha.slice(0, 7) : "";
+			const by = head?.commit as { committer?: { date?: unknown }; author?: { date?: unknown } } | undefined;
+			const committed = time(by?.committer?.date ?? by?.author?.date);
+			const released = time(release?.published_at);
+			const pull = opened(newest(field("pulls")));
+			const issue = opened(newest(field("issues")));
+			const own = webUrl(`https://github.com/${ref.values.owner ?? ""}/${ref.values.repo ?? ""}`);
+			return {
+				card: "repository",
+				repo,
+				...(release === undefined ? {} : { release: plainLine(release.tag_name, 100) }),
+				...(Number.isFinite(released) ? { released } : {}),
+				...(message === "" ? {} : { commit: message }),
+				...(sha === "" ? {} : { sha }),
+				...(Number.isFinite(committed) ? { committed } : {}),
+				...(pull === undefined ? {} : { pull }),
+				...(issue === undefined ? {} : { issue }),
+				...(own === undefined ? {} : { url: own }),
 			};
 		}
 		case "email":

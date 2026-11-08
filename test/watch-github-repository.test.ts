@@ -1,0 +1,268 @@
+import { describe, expect, it } from "vitest";
+import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
+import { endedBy, type Json, sort } from "../src/core/follow.ts";
+import { cardOf, parseObjects, recognise, refKey } from "../src/core/objects.ts";
+import { Faults } from "./fault/faults.ts";
+import { type Answer, failure, GITHUB, watchInvariants, watchScenario } from "./fault/watch-scenario.ts";
+import { githubObjectTools } from "./fixtures/github-objects.ts";
+import { tempHome } from "./helpers.ts";
+
+/** GitHub with the reads of the repository-level objects listed, as its server lists them. */
+const github = async () => ({
+	...GITHUB,
+	tools: (await githubObjectTools()).filter((tool) =>
+		[
+			"list_pull_requests",
+			"list_issues",
+			"list_releases",
+			"list_commits",
+			"get_discussion",
+			"get_discussion_comments",
+			"actions_get",
+			"actions_list",
+		].includes(tool.name),
+	),
+});
+
+type Item = { [key: string]: Json };
+const pull = (number: number, login: string, title: string, state = "open"): Item => ({
+	number,
+	title,
+	state,
+	draft: false,
+	merged: false,
+	user: { login },
+	created_at: `2026-11-0${Math.min(9, number % 10)}T09:00:00Z`,
+});
+const issue = (number: number, login: string, title: string): Item => ({
+	number,
+	title,
+	state: "OPEN",
+	user: { login },
+	created_at: "2026-11-01T09:00:00Z",
+});
+const release = (id: number, tag: string, day: number, draft = false): Item => ({
+	id,
+	tag_name: tag,
+	html_url: `https://github.com/acme/banda/releases/tag/${tag}`,
+	...(draft ? {} : { published_at: `2026-11-0${day}T09:00:00Z` }),
+	prerelease: false,
+	draft,
+	author: { login: "github-actions[bot]" },
+});
+const commit = (sha: string, login: string, message: string): Item => ({
+	sha,
+	html_url: `https://github.com/acme/banda/commit/${sha}`,
+	commit: { message, author: { name: login, date: "2026-11-02T08:00:00Z" } },
+	author: { login },
+});
+
+/** A repository's world: what each of its four reads answers at a step, as github-mcp-server's minimal answers. */
+type RepositoryWorld = { pulls: Item[]; issues: Item[]; releases: Item[]; commits: Item[] };
+const repository =
+	(worldAt: (step: number) => RepositoryWorld): Answer =>
+	(tool, args, step) => {
+		if (args.owner !== "acme" || args.repo !== "banda") return failure("Not Found");
+		const world = worldAt(step);
+		if (tool === "list_pull_requests") return world.pulls;
+		if (tool === "list_issues")
+			return {
+				issues: world.issues,
+				totalCount: 40 + world.issues.length,
+				pageInfo: { hasNextPage: true, hasPreviousPage: false, endCursor: `c${step}` },
+			};
+		if (tool === "list_releases") return world.releases;
+		if (tool === "list_commits") return world.commits;
+		return failure(`no ${tool}`);
+	};
+
+const REPOSITORY = "https://github.com/acme/banda";
+
+describe("a watch on a repository", () => {
+	it("others' new pull requests and issues wake, the account's own are nothing, a bot's tell; it never ends", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: await github(),
+			object: REPOSITORY,
+			answer: repository((step) => ({
+				pulls: [
+					...(step >= 2 ? [pull(15, "dependabot[bot]", "Bump vite")] : []),
+					...(step >= 1 ? [pull(14, "bandarra", "My own change"), pull(13, "carol", "Faster boot")] : []),
+					// one closing is no news: the list holds closed ones too, and a state change is nothing
+					pull(12, "ana", "Keep objects as data", step >= 2 ? "closed" : "open"),
+					pull(11, "ana", "Older"),
+				],
+				issues: [...(step >= 1 ? [issue(16, "dave", "Crash on start")] : []), issue(10, "bob", "Slow panel")],
+				releases: [release(2, "v1.1", 1)],
+				commits: [commit("a1b2c3d4", "ana", "Start")],
+			})),
+			clicks: ["k1", "k2"],
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes.map((wake) => [...wake.changes].sort())).toEqual([
+			["carol opened #13: Faster boot", "dave opened issue #16: Crash on start"],
+		]);
+		expect(summary.tells.map((tell) => tell.changes)).toEqual([["dependabot[bot] opened #15: Bump vite"]]);
+		expect(summary.wakes[0]?.object).toMatchObject({ name: "acme/banda", service: "GitHub" });
+		expect(summary.record.done).toBeUndefined();
+		expect(summary.turns.every((turn) => turn?.status === "completed")).toBe(true);
+	}, 60_000);
+
+	it("a new release wakes, a draft only once published; a push to the default branch tells", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: await github(),
+			object: REPOSITORY,
+			answer: repository((step) => ({
+				pulls: [pull(11, "ana", "Older")],
+				issues: [],
+				releases: [
+					...(step >= 2 ? [release(4, "v1.3", 3, step < 3)] : []),
+					...(step >= 1 ? [release(3, "v1.2", 2)] : []),
+					release(2, "v1.1", 1),
+				],
+				commits: [step >= 2 ? commit("e5f6a7b8", "ana", "Prepare v1.3") : commit("a1b2c3d4", "ana", "Start")],
+			})),
+			clicks: ["k1", "k2", "k3"],
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes.map((wake) => wake.changes)).toEqual([["released v1.2"], ["released v1.3"]]);
+		expect(summary.tells.map((tell) => tell.changes)).toEqual([["new commits on the default branch"]]);
+		expect(summary.record.done).toBeUndefined();
+	}, 60_000);
+
+	it("one that slid onto a page as another left is nothing: a deleted release, a transferred issue", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: await github(),
+			object: REPOSITORY,
+			answer: repository((step) => ({
+				pulls: [pull(11, "ana", "Older")],
+				// a page of two: v1.2 deleted, v1.0 slides in; issue 10 transferred away, issue 8 slides in
+				issues:
+					step >= 1
+						? [issue(9, "bob", "Nine"), issue(8, "bob", "Eight")]
+						: [issue(10, "bob", "Ten"), issue(9, "bob", "Nine")],
+				releases:
+					step >= 1 ? [release(2, "v1.1", 2), release(1, "v1.0", 1)] : [release(3, "v1.2", 3), release(2, "v1.1", 2)],
+				commits: [commit("a1b2c3d4", "ana", "Start")],
+			})),
+			clicks: ["k1"],
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.record.failed).toBeUndefined();
+		expect(summary.looks).toBe(2);
+		expect(summary.wakes).toEqual([]);
+		expect(summary.tells).toEqual([]);
+	}, 60_000);
+
+	it("the account's own push is nothing; an empty repository's missing commits and releases are no failure", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: await github(),
+			object: "github.com/acme/banda",
+			answer: (tool, args, step) =>
+				tool === "list_commits" && step === 0
+					? failure("Git Repository is empty.")
+					: tool === "list_releases"
+						? failure("Not Found")
+						: repository(() => ({
+								pulls: [],
+								issues: [],
+								releases: [],
+								commits: [commit("a1b2c3d4", "bandarra", "Initial commit")],
+							}))(tool, args, step),
+			clicks: ["k1"],
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.record.failed).toBeUndefined();
+		expect(summary.looks).toBe(2);
+		expect(summary.wakes).toEqual([]);
+		expect(summary.tells).toEqual([]);
+	}, 60_000);
+});
+
+const parsed = parseObjects(GITHUB_OBJECTS, () => true);
+if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
+const kinds = parsed.objects;
+const hub = [{ name: "github", objects: kinds }];
+
+describe("a repository as an object", () => {
+	it("its URL and its tabs name it; a pull request's, an issue's or a file's never do", () => {
+		for (const url of [
+			"https://github.com/Acme/Banda",
+			"https://github.com/acme/banda/",
+			"https://github.com/acme/banda/pulls?q=is%3Aopen",
+			"https://github.com/acme/banda#readme",
+			"https://api.github.com/repos/acme/banda",
+			"github.com/acme/banda",
+		]) {
+			const found = recognise(url, hub);
+			expect(
+				found.map((ref) => ref.kind),
+				url,
+			).toEqual(["repository"]);
+			expect(refKey(found[0]!, kinds)).toBe("github:repository:github.com/acme/banda");
+		}
+		for (const [url, kind] of [
+			["https://github.com/acme/banda/pull/142", "pull_request"],
+			["https://github.com/acme/banda/issues/41", "issue"],
+			["https://github.com/acme/banda/actions/runs/20/job/77", "check_run"],
+			["https://api.github.com/repos/acme/banda/pulls/142", "pull_request"],
+		])
+			expect(
+				recognise(url as string, hub).map((ref) => ref.kind),
+				url,
+			).toEqual([kind]);
+		for (const url of ["https://github.com/acme/banda/blob/main/README.md", "https://github.com/acme/banda/tree/main"])
+			expect(recognise(url, hub), url).toEqual([]);
+		// `owner/repo` alone is any connection's `<connection>/<id>`: never taken for a repository
+		expect(recognise("acme/banda", hub)).toEqual([]);
+	});
+
+	it("its card says what is newest: the release, the head, the newest pull request and issue", () => {
+		const kind = kinds.repository!;
+		const ref = recognise(REPOSITORY, hub)[0]!;
+		const answers = {
+			pulls: [pull(13, "carol", "Faster boot"), pull(12, "ana", "Keep objects as data", "closed")],
+			issues: { issues: [issue(16, "dave", "Crash on start")], totalCount: 1 },
+			releases: [release(4, "v1.3", 3, true), release(3, "v1.2", 2)],
+			commits: [commit("e5f6a7b8c9", "ana", "Prepare v1.3\n\nThe long story")],
+		};
+		expect(cardOf(kind, ref, answers)).toEqual({
+			card: "repository",
+			repo: "acme/banda",
+			release: "v1.2",
+			released: Date.parse("2026-11-02T09:00:00Z"),
+			commit: "Prepare v1.3",
+			sha: "e5f6a7b",
+			committed: Date.parse("2026-11-02T08:00:00Z"),
+			pull: { number: 13, title: "Faster boot", author: "carol", state: "open" },
+			issue: { number: 16, title: "Crash on start", author: "dave", state: "open" },
+			url: "https://github.com/acme/banda",
+		});
+		// an empty repository: no releases, no commits, nothing opened, and still a card
+		expect(cardOf(kind, ref, { pulls: [] })).toEqual({
+			card: "repository",
+			repo: "acme/banda",
+			url: "https://github.com/acme/banda",
+		});
+		// no pull requests read: not a repository it could read
+		expect(() => cardOf(kind, ref, { releases: [] })).toThrow();
+	});
+
+	it("follows as declared: nothing ends it, and each list is a page of the newest", () => {
+		const follow = kinds.repository!.follow!;
+		expect(follow.ends).toEqual({});
+		expect(endedBy(follow, undefined, { pulls: [] })).toBeUndefined();
+		const before: Json = { pulls: [pull(12, "ana", "A"), pull(11, "ana", "B")], commits: [commit("a1", "ana", "x")] };
+		const after: Json = {
+			pulls: [pull(13, "renovate[bot]", "Bump"), pull(12, "ana", "A")],
+			commits: [commit("b2", "github-actions[bot]", "y")],
+		};
+		expect(
+			sort(follow, "bandarra", before, after)
+				.filter((each) => each.does !== "nothing")
+				.map((each) => [each.does, each.says]),
+		).toEqual([
+			["tell", "new commits on the default branch"],
+			["tell", "renovate[bot] opened #13: Bump"],
+		]);
+	});
+});

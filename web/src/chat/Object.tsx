@@ -1,10 +1,11 @@
 /**
- * Objects: things in a connection the owner recognises, drawn by the daemon from its own reading. GitHub's four: a
- * pull request, an issue, a check run, and a notification drawn as its subject with why it came.
+ * Objects: things in a connection the owner recognises, drawn by the daemon from its own reading. GitHub's: a pull
+ * request, an issue, a check run, a repository, and a notification drawn as its subject with why it came.
  */
 
 import type { LucideIcon } from "lucide-react";
 import {
+	BookMarkedIcon,
 	CalendarIcon,
 	ChevronDownIcon,
 	CircleCheckIcon,
@@ -18,6 +19,7 @@ import {
 	FileTextIcon,
 	FileTypeIcon,
 	FolderIcon,
+	GitCommitHorizontalIcon,
 	GitMergeIcon,
 	GitPullRequestDraftIcon,
 	GitPullRequestIcon,
@@ -26,6 +28,7 @@ import {
 	PhoneIcon,
 	PresentationIcon,
 	SheetIcon,
+	TagIcon,
 	UserRoundIcon,
 	VideoIcon,
 } from "lucide-react";
@@ -142,6 +145,132 @@ export function PullRequestCard({ pr, actions }: { pr: PullRequest; actions?: Re
 					Checks: {checks.words}
 				</span>
 				<span className="text-ink-2">Reviews: {pr.reviews || "Unavailable"}</span>
+			</span>
+		</Tile>
+	);
+}
+
+/** One pull request or issue a repository's card names: the newest of each. */
+export type Opened = {
+	readonly number: number;
+	readonly title: string;
+	readonly author: string;
+	readonly state: "open" | "draft" | "merged" | "closed";
+};
+
+export type Repository = {
+	/** `owner/repo`. */
+	readonly repo: string;
+	/** The newest published release's tag, and when (ms). */
+	readonly release?: string | undefined;
+	readonly released?: number | undefined;
+	/** The default branch's head: its first line, short sha and when (ms). */
+	readonly commit?: string | undefined;
+	readonly sha?: string | undefined;
+	readonly committed?: number | undefined;
+	readonly pull?: Opened | undefined;
+	readonly issue?: Opened | undefined;
+	readonly url?: string | undefined;
+	readonly asOf?: string | undefined;
+};
+
+const OPENED_ISSUE = { open: CircleDotIcon, draft: CircleDotIcon, merged: CircleCheckIcon, closed: CircleCheckIcon };
+const day = (at: number | undefined) =>
+	at === undefined ? undefined : new Date(at).toLocaleDateString([], { month: "short", day: "numeric" });
+
+/** A repository: what is newest in it, one line each; what it lacks is said, never left blank. */
+export function RepositoryCard({ repository, actions }: { repository: Repository; actions?: ReactNode }) {
+	const { pull, issue } = repository;
+	const PullIcon = pull === undefined ? GitPullRequestIcon : STATE[pull.state].icon;
+	const IssueIcon = issue === undefined ? CircleDotIcon : OPENED_ISSUE[issue.state];
+	const rows: { key: string; icon: LucideIcon; words: ReactNode; title?: string | undefined }[] = [
+		{
+			key: "release",
+			icon: TagIcon,
+			words:
+				repository.release === undefined ? (
+					"No releases"
+				) : (
+					<>
+						Released <span className="font-code text-ink">{repository.release}</span>
+						{repository.released === undefined ? null : ` · ${day(repository.released)}`}
+					</>
+				),
+		},
+		{
+			key: "commit",
+			icon: GitCommitHorizontalIcon,
+			title: repository.commit,
+			words:
+				repository.commit === undefined ? (
+					"No commits"
+				) : (
+					<>
+						{repository.sha === undefined ? null : <span className="font-code text-ink-2">{repository.sha} </span>}
+						<span className="text-ink">{repository.commit}</span>
+						{repository.committed === undefined ? null : ` · ${day(repository.committed)}`}
+					</>
+				),
+		},
+		{
+			key: "pull",
+			icon: PullIcon,
+			title: pull?.title,
+			words:
+				pull === undefined ? (
+					"No pull requests"
+				) : (
+					<>
+						<span className="tabular-nums">#{pull.number}</span> <span className="text-ink">{pull.title}</span>
+						{pull.author === "" ? null : ` · ${pull.author}`}
+					</>
+				),
+		},
+		{
+			key: "issue",
+			icon: IssueIcon,
+			title: issue?.title,
+			words:
+				issue === undefined ? (
+					"No issues"
+				) : (
+					<>
+						<span className="tabular-nums">#{issue.number}</span> <span className="text-ink">{issue.title}</span>
+						{issue.author === "" ? null : ` · ${issue.author}`}
+					</>
+				),
+		},
+	];
+	return (
+		<Tile className="flex flex-col gap-2.5 p-3.5">
+			<Where
+				asOf={repository.asOf}
+				url={repository.url}
+				actions={
+					actions === undefined ? (
+						<ObjectMenu name={repository.repo} details={[["Repository", repository.repo]]} />
+					) : (
+						actions
+					)
+				}
+			>
+				Repository
+			</Where>
+			<span className="flex min-w-0 items-center gap-2">
+				<BookMarkedIcon aria-hidden="true" className="size-4 shrink-0 text-ink-2" />
+				<span className="min-w-0 truncate text-body font-semibold text-ink" title={repository.repo}>
+					{repository.repo}
+				</span>
+			</span>
+			<span className="flex flex-col gap-1.5 border-t border-line-soft pt-2.5 text-meta text-ink-2">
+				{rows.map((row) => (
+					<span key={row.key} data-repository-row={row.key} className="flex min-w-0 items-center gap-1.5">
+						<row.icon aria-hidden="true" className="size-3.5 shrink-0" />
+						<span className="min-w-0 truncate" title={row.title}>
+							{row.words}
+						</span>
+					</span>
+				))}
 			</span>
 		</Tile>
 	);
@@ -289,6 +418,7 @@ export function ObjectLink({
 		| (PullRequest & { card: "pull-request" })
 		| (Issue & { card: "issue" })
 		| (CheckRun & { card: "check-run" })
+		| (Repository & { card: "repository" })
 		| (EmailMessage & { card: "email" })
 		| (CalendarEvent & { card: "event" })
 		| (Person & { card: "contact" })
@@ -391,13 +521,16 @@ export function ObjectLink({
 		);
 	}
 	const state =
-		object.card === "pull-request"
-			? STATE[object.state]
-			: object.card === "issue"
-				? ISSUE_STATE[object.state]
-				: CHECK_STATE[object.state];
-	const name = object.card === "check-run" ? object.name : object.title;
-	const location = object.card === "check-run" ? object.repo : `${object.repo} #${object.number}`;
+		object.card === "repository"
+			? { icon: BookMarkedIcon }
+			: object.card === "pull-request"
+				? STATE[object.state]
+				: object.card === "issue"
+					? ISSUE_STATE[object.state]
+					: CHECK_STATE[object.state];
+	const name = object.card === "check-run" ? object.name : object.card === "repository" ? object.repo : object.title;
+	const location =
+		object.card === "check-run" || object.card === "repository" ? object.repo : `${object.repo} #${object.number}`;
 	const url = safeObjectUrl(href);
 	const label = name || location;
 	return (

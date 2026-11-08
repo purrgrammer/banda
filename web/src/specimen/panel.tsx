@@ -21,6 +21,7 @@ import {
 	ObjectLink,
 	ObjectReference,
 	PullRequestCard,
+	RepositoryCard,
 } from "../chat/Object.tsx";
 import {
 	AgentPanel,
@@ -68,6 +69,7 @@ import {
 	PERMISSIONS,
 	PHOTO,
 	PR,
+	REPOSITORY,
 	ROUTINES,
 	ROWS,
 	SANCHO,
@@ -791,6 +793,34 @@ export function PanelSections() {
 							<CheckRunCard
 								run={{ ...CHECK_RUN, name: "build", state: "passed", step: undefined, took: "48s", log: undefined }}
 							/>
+						</div>
+					</Specimen>
+					<Specimen label="Repositories: the newest of each · a merged pull request and a closed issue · empty · long names, an old reading">
+						<div className="flex flex-col gap-3">
+							<RepositoryCard repository={REPOSITORY} />
+							<RepositoryCard
+								repository={{
+									...REPOSITORY,
+									pull: { number: 33, title: "Name every wake by its change", author: "bandarra", state: "merged" },
+									issue: { number: 40, title: "Search misses archived chats", author: "teo", state: "closed" },
+								}}
+							/>
+							<RepositoryCard repository={{ repo: "purrgrammer/empty", url: "https://github.com/purrgrammer/empty" }} />
+							<RepositoryCard
+								repository={{
+									...REPOSITORY,
+									repo: "an-organisation-with-a-long-name/a-repository-with-a-very-long-name-that-must-not-stretch-the-chat",
+									release: "v2026.11.08-nightly-with-a-long-suffix",
+									commit:
+										"A long first line of a commit message that keeps going well past what a phone can show on one line",
+									pull: { number: 35, title: "Draft: a repository card", author: "bandarra", state: "draft" },
+									asOf: "2 Nov, 09:40",
+								}}
+							/>
+							<Bubble mine>
+								What changed in{" "}
+								<ObjectLink object={{ ...REPOSITORY, card: "repository" }} href={REPOSITORY.url ?? ""} /> this week?
+							</Bubble>
 						</div>
 					</Specimen>
 					<Specimen label="Unrecognised or unavailable explicit object">
