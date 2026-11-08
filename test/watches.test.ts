@@ -1,6 +1,9 @@
+import type { Context } from "@earendil-works/chord";
+import type { Harness } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
 import { Accepted } from "../src/core/agents.ts";
 import { Connected } from "../src/core/connections.ts";
+import { pause as pauseAll, resume as resumeAll } from "../src/core/control.ts";
 import { context } from "../src/core/store.ts";
 import { endWatches, parseWatch, Watches, watchPath, watchText } from "../src/core/watches.ts";
 import { pause } from "../src/server/watches.ts";
@@ -186,6 +189,24 @@ describe("a watch on a pull request", () => {
 		expect(summary.wakes).toHaveLength(1);
 		expect(summary.wakes[0]).toMatchObject({ resumed: true, ended: "merged" });
 		expect(summary.wakes[0]?.changes).toEqual(expect.arrayContaining(["ana approved", "lint failed", "merged"]));
+		expect(summary.record.resumed).toBeUndefined();
+	}, 60_000);
+
+	it("Pause all while the world changes, then resume: one wake, which says it comes from the pause", async () => {
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: (step) => world(step === 2 ? 1 : step),
+			clicks: [undefined, undefined, "k3"],
+			at: (step) => NOW + step * 10 * MINUTE,
+			act: async (step, { harness, core, now }) => {
+				const reconcile = (h: Harness, ctx?: Context) => core.reconcile(h, ctx);
+				if (step === 1) await pauseAll(harness, reconcile, now);
+				if (step === 3) await resumeAll(harness, reconcile, now);
+			},
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.held).toEqual([{ watch: "banda-142", from: NOW + 10 * MINUTE, to: NOW + 30 * MINUTE }]);
+		expect(summary.wakes).toHaveLength(1);
+		expect(summary.wakes[0]).toMatchObject({ resumed: true, ended: "merged" });
 		expect(summary.record.resumed).toBeUndefined();
 	}, 60_000);
 

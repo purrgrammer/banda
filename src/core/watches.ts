@@ -362,6 +362,21 @@ export async function endWatches(tx: Tx, authority: Authority, why: string, now:
 	return ended;
 }
 
+/**
+ * In `tx`, the commit that resumes everything (Pause all): each watch it held, neither done nor paused on its own,
+ * looks again at once, and what changed meanwhile comes as one wake that says it comes from the pause, as a single
+ * watch's resume does.
+ */
+export async function resumeWatches(tx: Tx, now: number): Promise<void> {
+	const { watches } = await tx.doc(Watches);
+	for (const name of await acceptedWatches(tx)) {
+		const record = watches[name];
+		if (record === undefined || record.done !== undefined || record.paused !== undefined) continue;
+		delete record.next;
+		record.resumed = now;
+	}
+}
+
 /** What the model reads when a watch wakes it. */
 function wakeText(
 	watch: Watch,

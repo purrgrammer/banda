@@ -23,6 +23,7 @@ import { Connected } from "../../src/core/connections.ts";
 import type { Json } from "../../src/core/follow.ts";
 import { type Gateway, OWNER } from "../../src/core/gateway.ts";
 import { Readings } from "../../src/core/objects.ts";
+import { Control } from "../../src/core/routines.ts";
 import { status } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore, Routes, type TurnResult } from "../../src/core/turn.ts";
@@ -106,7 +107,7 @@ export type WatchSummary = {
 	live: string[];
 	/** What its chats count as unread for the owner. */
 	unread: number;
-	/** When each watch was paused, and resumed, by the scenario's acts. */
+	/** When each watch was paused, on its own or with everything, and resumed, by the scenario's acts. */
 	held: { watch: string; from: number; to?: number }[];
 	turns: ({ status: string } | undefined)[];
 	sent: string[];
@@ -251,23 +252,37 @@ export async function watchScenario(
 			return names.every((name) => records[name]?.looked !== undefined);
 		};
 		while (!(await looked())) await new Promise((r) => setTimeout(r, 5));
-		// the world moves on, and the owner checks now at each step: the same click, sent again after a kill
-		const held: WatchSummary["held"] = [];
+		// the world moves on, and the owner checks now at each step: the same click, sent again after a kill; a step's
+		// act is done again only in the step a kill cut short, the steps before it were done
+		const heldFile = join(home, "held.json");
+		const held: WatchSummary["held"] = (() => {
+			try {
+				return JSON.parse(readFileSync(heldFile, "utf8")) as WatchSummary["held"];
+			} catch {
+				return [];
+			}
+		})();
+		const resumedAt = step;
+		const holds = async () => {
+			const records = (await harness.snapshot(Watches, context))?.watches ?? {};
+			const all = (await harness.snapshot(Control, context))?.paused !== undefined;
+			return new Set(names.filter((name) => all || records[name]?.paused !== undefined));
+		};
 		for (const [i, key] of clicks.entries()) {
 			if (step < i + 1) {
 				step = i + 1;
 				writeFileSync(worldFile, String(step));
 			}
-			if (options.act !== undefined) {
-				const before = (await harness.snapshot(Watches, context))?.watches ?? {};
+			if (options.act !== undefined && i + 1 >= resumedAt) {
+				const before = await holds();
 				await options.act(i + 1, { harness, core, now: now() });
-				const after = (await harness.snapshot(Watches, context))?.watches ?? {};
+				const after = await holds();
 				for (const name of names) {
-					if (before[name]?.paused === undefined && after[name]?.paused !== undefined)
-						held.push({ watch: name, from: now() });
+					if (!before.has(name) && after.has(name)) held.push({ watch: name, from: now() });
 					const open = held.find((each) => each.watch === name && each.to === undefined);
-					if (open !== undefined && after[name]?.paused === undefined) open.to = now();
+					if (open !== undefined && !after.has(name)) open.to = now();
 				}
+				writeFileSync(heldFile, JSON.stringify(held));
 			}
 			if (key === undefined) continue;
 			for (const name of names) if (options.only?.(name, i + 1) ?? true) await core.checkWatch(harness, name, key);
