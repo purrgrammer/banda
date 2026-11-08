@@ -45,8 +45,8 @@ describe("shipped avatar instructions", () => {
 			for (const group of [false, true]) {
 				const tools = chatTools({ id, tools: [] }, [name, "message_user", "schedule"], [], group);
 				expect(tools).toContain(name);
-				expect(tools).not.toContain("write");
 				if (group) {
+					expect(tools).not.toContain("write");
 					for (const tool of [
 						"message_agent",
 						"read_agent_chat",
@@ -58,6 +58,7 @@ describe("shipped avatar instructions", () => {
 				} else {
 					expect(tools).toEqual(
 						expect.arrayContaining([
+							"write",
 							"message_agent",
 							"read_agent_chat",
 							"propose_agent",
