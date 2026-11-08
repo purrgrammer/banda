@@ -199,6 +199,21 @@ describe("following an object", () => {
 			"retitled: New",
 		);
 		expect(holds("pr.state = closed or pr.merged = true", { pr: { state: "open", merged: true } })).toBe(true);
+		// an email gone from a list is said by its own fields: its `from` is whose it is, not the change's value
+		const email = { id: "m1", from: "Bob <bob@example.com>", to: "ana@example.com", subject: "Lunch?" };
+		const gone = {
+			id: "z",
+			path: ["messages", { item: "m1" }] as const,
+			kind: "removed" as const,
+			from: email,
+			item: email,
+		};
+		expect(saysOf({ says: "{from} to {to}: {subject} is gone" }, gone)).toBe(
+			"Bob <bob@example.com> to ana@example.com: Lunch? is gone",
+		);
+		expect(
+			saysOf({ says: "unlabelled {from}" }, { id: "w", path: ["labels", { item: "x" }], kind: "removed", from: "x" }),
+		).toBe("unlabelled x");
 		expect(holds("all checks[*].ok = true", { checks: [] })).toBe(false);
 	});
 

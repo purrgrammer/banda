@@ -338,10 +338,14 @@ export function plainWords(text: string, max = SAID): string {
 	return characters.length <= max ? visible : `${characters.slice(0, max - 1).join("")}…`;
 }
 
-/** A rule's words for a change: each `{path}` from the item (or `{to}`, `{from}`), said as `words` say, plain. */
+/**
+ * A rule's words for a change: each `{path}` from the item (or `{to}`, `{from}`: the value it changed to or from), said
+ * as `words` say, plain. A list's item added or gone is the item itself, so its own `to` and `from` (an email's) stay.
+ */
 export function saysOf(rule: Pick<Rule, "says" | "words">, change: Change): string {
-	const scope: Item = { ...(change.item ?? {}), ...(change.to === undefined ? {} : { to: change.to }) };
-	if (change.from !== undefined) scope.from = change.from;
+	const scope: Item = { ...(change.item ?? {}) };
+	if (change.to !== undefined && change.to !== change.item) scope.to = change.to;
+	if (change.from !== undefined && change.from !== change.item) scope.from = change.from;
 	return plainWords(
 		rule.says.replace(/\{([\w.]+)\}/g, (_, path: string) => {
 			const value = at(scope, path);
