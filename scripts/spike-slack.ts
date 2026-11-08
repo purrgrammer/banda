@@ -5,6 +5,7 @@
  *   node scripts/spike-slack.ts auth [--port 7788]        sign in; tokens go to BANDA_SLACK_SPIKE (a file, mode 600)
  *   node scripts/spike-slack.ts probe --channel C0123     the probes, against the channel named (it gets one test
  *                                                         message and its replies)
+ *   node scripts/spike-slack.ts cleanup --channel C0123 --ts <root ts>   deletes that test message and its replies
  *
  * Every observation is printed as one JSON line with tokens and codes redacted, and appended to the same file's
  * `.log`. Nothing here touches a banda home.
@@ -356,9 +357,37 @@ async function probe() {
 		});
 }
 
+/** Delete the probe's test message and its replies, the replies first so no tombstone keeps them. */
+async function cleanup() {
+	const channel = option("channel");
+	const root = option("ts");
+	if (channel === undefined || root === undefined) throw new Error("--channel C0123 --ts <root ts> are required");
+	const saved = JSON.parse(await readFile(TOKENS, "utf8")) as { access: string };
+	const token = saved.access;
+	const thread = await slack("conversations.replies", token, { channel, ts: root, limit: 200 });
+	const messages = ((thread.body as { messages?: { ts: string }[] }).messages ?? []).map((m) => m.ts);
+	const replies = messages.filter((ts) => ts !== root);
+	let deleted = 0;
+	for (const ts of [...replies, root]) {
+		const r = await slack("chat.delete", token, { channel, ts }, true);
+		if ((r.body as { ok?: boolean }).ok === true) deleted++;
+		else
+			await record("chat.delete.failed", {
+				ts,
+				status: r.status,
+				error: (r.body as { error?: string }).error ?? null,
+				headers: r.headers,
+			});
+	}
+	await record("cleanup", { channel, root, replies: replies.length, deleted });
+}
+
 if (command === "auth") await auth();
 else if (command === "probe") await probe();
+else if (command === "cleanup") await cleanup();
 else {
-	console.error("usage: spike-slack.ts auth [--port 7788] | probe --channel C0123 [--replies 20]");
+	console.error(
+		"usage: spike-slack.ts auth [--port 7788] | probe --channel C0123 [--replies 20] | cleanup --channel C0123 --ts <root ts>",
+	);
 	process.exit(2);
 }
