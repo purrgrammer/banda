@@ -51,8 +51,9 @@ export const GROUP_NUDGES = 1;
 /** The nudge's words: fixed, the same whoever the member is. */
 export const GROUP_NUDGED =
 	"You ended your turn without posting to the group: your final text is your notes, which nobody in the room sees. " +
-	"Answer there now with `message_group`, or, if nothing needs saying, `react` to the owner's message. This " +
-	"reminder is automatic, not from the owner.";
+	"Nothing you wrote since the owner's message reached the room, so do not refer to it. Answer there now with " +
+	"`message_group`, giving the whole answer in full, or, if nothing needs saying, `react` to the owner's message. " +
+	"This reminder is automatic, not from the owner.";
 
 /** What the daemon says in a room when a member's run there ended without its answer: failed, or stopped. */
 export const GROUP_NOTICE = "banda.group-notice";
