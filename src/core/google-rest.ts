@@ -123,7 +123,7 @@ async function googleResponse(
  * At most `limit` bytes of an answer. A cut answer is refused, unless `cut` says the caller takes the bytes up to the
  * limit (a file's text, which says it was truncated).
  */
-async function boundedBytes(
+export async function boundedBytes(
 	response: Response,
 	service: string,
 	limit: number,

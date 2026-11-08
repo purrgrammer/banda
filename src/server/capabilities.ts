@@ -96,11 +96,11 @@ import { connectionWord, type McpConfig, mcpConfig, serviceOf } from "../core/mc
 import { remoteCall, remoteListing, remoteSession } from "../core/mcp-remote.ts";
 import {
 	begin,
-	DEFAULT_GOOGLE_CLIENT_ID,
+	CLIENTS,
+	clientNamed,
 	type Device,
 	discover,
 	exchange,
-	googleOAuthClient,
 	type OAuthClient,
 	type OAuthServer,
 	pollDevice,
@@ -524,10 +524,10 @@ export function openCapabilities(options: CapabilityOptions) {
 		}
 	}
 
-	/** Resolve Banda's shipped Google desktop client, with daemon environment overrides for development. */
+	/** The client a file names: a shipped one by its row, with daemon environment overrides for development; else its id. */
 	function oauthClient(connection: Connection): OAuthClient {
-		if (connection.client !== "google") return { id: connection.client as string };
-		return googleOAuthClient(process.env.BANDA_GOOGLE_CLIENT_ID, process.env.BANDA_GOOGLE_CLIENT_SECRET);
+		const shipped = clientNamed(connection.client);
+		return shipped === undefined ? { id: connection.client as string } : CLIENTS[shipped].client();
 	}
 
 	/**
@@ -813,9 +813,11 @@ export function openCapabilities(options: CapabilityOptions) {
 				: `${object.what} ${nameOf(first, kinds)}`;
 		};
 		const editable = [
-			...editableOf(tool.tool, kinds).filter((field) => !signed || field !== arg),
-			...(tool.connection.api === "gmail" && tool.tool === "send_message" ? ["to", "subject", "body"] : []),
-			...(builtIn?.drafts?.editable(tool.tool) ?? []),
+			...new Set([
+				...editableOf(tool.tool, kinds).filter((field) => !signed || field !== arg),
+				...(tool.connection.api === "gmail" && tool.tool === "send_message" ? ["to", "subject", "body"] : []),
+				...(builtIn?.drafts?.editable(tool.tool) ?? []),
+			]),
 		];
 		return options.effect({
 			name: tool.name,
@@ -918,7 +920,28 @@ export function openCapabilities(options: CapabilityOptions) {
 				);
 				if ("refused" in resolved) return resolved.refused;
 				const account = await api.memo("account", resolved.account ?? "", ctx);
-				return { ...expanded, [arg]: account };
+				const resolve = builtIn?.drafts?.resolve;
+				if (resolve === undefined) return { ...expanded, [arg]: account };
+				// read once as it is drafted, so a rerun shows the owner the same draft whatever changed at the service since
+				let shown = await api.memo<JsonObject>("drafted", ctx);
+				if (shown === undefined) {
+					const approved = without(expanded, arg);
+					try {
+						const read = await withServer(
+							tool.connection,
+							account === "" ? undefined : account,
+							ctx,
+							(_client, bearer) =>
+								resolve(bearer ?? "", tool.tool, approved as Record<string, unknown>, ctx.abortSignal, fetcher),
+						);
+						shown = await api.memo("drafted", JSON.parse(JSON.stringify(read)) as JsonObject, ctx);
+					} catch (error) {
+						if (error instanceof Unauthorized)
+							return `${tool.connection.service} is not signed in: the owner signs in again.`;
+						return error instanceof Error ? error.message : `${tool.connection.service} could not be read.`;
+					}
+				}
+				return { ...expanded, ...shown, [arg]: account };
 			},
 			allowed: allowedAs(tool, arg),
 			run: async (args, { api, key }, ctx) => {
@@ -2102,7 +2125,15 @@ export function openCapabilities(options: CapabilityOptions) {
 				throw new BadRequest(
 					"Start sign-in on the computer Banda runs on; accounts connected there are available on this device.",
 				);
-			const redirect = connection.client === "google" ? new URL(options.redirect()).origin : options.redirect();
+			const shipped = clientNamed(connection.client);
+			const row = shipped === undefined ? undefined : CLIENTS[shipped];
+			const callback = options.redirect();
+			const port = new URL(callback).port;
+			if (row?.port !== undefined && row.shipped() && port !== String(row.port))
+				throw new BadRequest(
+					`${connection.service} signs in only to a banda on port ${row.port}, and this one runs on port ${port}: start banda with --port ${row.port} to connect ${connection.service}.`,
+				);
+			const redirect = row?.redirectAsOrigin === true ? new URL(callback).origin : callback;
 			const client =
 				connection.client !== undefined ? oauthClient(connection) : await register(server, redirect, fetcher);
 			const started = begin(name, connection.url, server, client, redirect, now(), agent, again);
@@ -2297,14 +2328,15 @@ export function openCapabilities(options: CapabilityOptions) {
 		const connection = await harness.commit((tx) => acceptedConnection(tx, pending.connection), ctx);
 		if (connection?.url !== pending.resource)
 			return { ok: false, words: "That connection changed while you signed in. Start again from the app." };
-		if (
-			connection.client === "google" &&
-			pending.client.id !== (process.env.BANDA_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID)
-		)
-			return { ok: false, words: "The Google OAuth client changed during sign-in. Start again from the app." };
+		const shipped = clientNamed(connection.client);
+		if (shipped !== undefined && pending.client.id !== CLIENTS[shipped].client().id)
+			return {
+				ok: false,
+				words: `The ${connection.service} OAuth client changed during sign-in. Start again from the app.`,
+			};
+		const client = shipped === undefined ? pending.client : oauthClient(connection);
 		let tokens: Awaited<ReturnType<typeof exchange>>;
 		try {
-			const client = connection.client === "google" ? oauthClient(connection) : pending.client;
 			tokens = await exchange({ ...pending, client }, query.code, now(), fetcher);
 		} catch (error) {
 			return { ok: false, words: `Signing in did not finish: ${await problemOf(error)}` };
@@ -2318,7 +2350,7 @@ export function openCapabilities(options: CapabilityOptions) {
 					url: pending.resource,
 					oauth: {
 						server: pending.server,
-						client: connection.client === "google" ? oauthClient(connection) : pending.client,
+						client,
 						tokens,
 					},
 				},

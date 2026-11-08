@@ -1,4 +1,4 @@
-/** The built-in daemon REST adapters: first-party APIs that do not speak MCP, each signed in to as Google. */
+/** The built-in daemon REST adapters: first-party APIs that do not speak MCP, each signed in to as its shipped client. */
 import {
 	CALENDAR_TOOLS,
 	CALENDAR_WRITES,
@@ -28,6 +28,16 @@ import {
 } from "./drive-rest.ts";
 import { GMAIL_TOOLS, gmailCall, gmailWriteCall } from "./gmail-rest.ts";
 import type { McpResult, McpTool } from "./mcp.ts";
+import type { ClientName } from "./oauth.ts";
+import {
+	SLACK_TOOLS,
+	slackCall,
+	slackDraft,
+	slackEditable,
+	slackExpand,
+	slackResolve,
+	slackWriteCall,
+} from "./slack-rest.ts";
 
 /** A file the owner approved to send, held by the chat; its bytes were checked against `sha` before they leave. */
 export type ApprovedFile = {
@@ -39,6 +49,8 @@ export type ApprovedFile = {
 
 export type RestApi = {
 	readonly service: string;
+	/** The shipped OAuth client its connection file names, and the server that signs in to it. */
+	readonly client: ClientName;
 	/** The one address a connection file naming this API must give. */
 	readonly url: string;
 	/**
@@ -77,12 +89,25 @@ export type RestApi = {
 		readonly words: (tool: string, args: Record<string, unknown>) => { what: string; verb: string } | undefined;
 		readonly editable: (tool: string) => readonly string[];
 		readonly expand: (tool: string, args: Record<string, unknown>) => Record<string, unknown>;
+		/**
+		 * What the draft shows that the call does not say, read from the service once, as the account it acts as, when it
+		 * is drafted (a channel's name for its id): added to the draft under `_` names, which the write never reads. A
+		 * refusal refuses the draft.
+		 */
+		readonly resolve?: (
+			token: string,
+			tool: string,
+			args: Record<string, unknown>,
+			signal?: AbortSignal,
+			fetcher?: typeof fetch,
+		) => Promise<Record<string, unknown>>;
 	};
 };
 
 export const REST_APIS = {
 	gmail: {
 		service: "Gmail",
+		client: "google",
 		url: "https://gmail.googleapis.com/gmail/v1/users/me",
 		required: ["https://www.googleapis.com/auth/gmail.readonly"],
 		scopes: [
@@ -97,6 +122,7 @@ export const REST_APIS = {
 	},
 	calendar: {
 		service: "Google Calendar",
+		client: "google",
 		url: "https://www.googleapis.com/calendar/v3",
 		required: ["https://www.googleapis.com/auth/calendar.readonly"],
 		scopes: ["https://www.googleapis.com/auth/calendar.readonly", "https://www.googleapis.com/auth/calendar.events"],
@@ -110,6 +136,7 @@ export const REST_APIS = {
 	},
 	contacts: {
 		service: "Google Contacts",
+		client: "google",
 		url: "https://people.googleapis.com/v1",
 		required: ["https://www.googleapis.com/auth/contacts.readonly", "https://www.googleapis.com/auth/userinfo.email"],
 		scopes: [
@@ -127,6 +154,7 @@ export const REST_APIS = {
 	},
 	drive: {
 		service: "Google Drive",
+		client: "google",
 		url: "https://www.googleapis.com/drive/v3",
 		required: ["https://www.googleapis.com/auth/drive.readonly"],
 		scopes: [
@@ -142,6 +170,36 @@ export const REST_APIS = {
 		write: (token, tool, args, signal, fetcher, _files, key) => driveWriteCall(token, tool, args, signal, fetcher, key),
 		idempotent: DRIVE_IDEMPOTENT,
 		drafts: { words: driveDraft, editable: driveEditable, expand: driveExpand },
+	},
+	slack: {
+		service: "Slack",
+		client: "slack",
+		url: "https://slack.com/api",
+		required: ["channels:read", "groups:read", "channels:history", "groups:history", "users:read"],
+		scopes: [
+			"channels:read",
+			"groups:read",
+			"channels:history",
+			"groups:history",
+			"users:read",
+			"im:read",
+			"mpim:read",
+			"im:history",
+			"mpim:history",
+			"search:read",
+			"chat:write",
+			"reactions:write",
+		],
+		tools: SLACK_TOOLS,
+		account: { tool: "whoami", field: "handle" },
+		read: (token, tool, args, signal, fetcher) => slackCall(token, tool, args, signal, fetcher),
+		write: (token, tool, args, signal, fetcher) => slackWriteCall(token, tool, args, signal, fetcher),
+		drafts: {
+			words: slackDraft,
+			editable: slackEditable,
+			expand: slackExpand,
+			resolve: (token, tool, args, signal, fetcher) => slackResolve(token, tool, args, signal, fetcher),
+		},
 	},
 } as const satisfies Record<string, RestApi>;
 

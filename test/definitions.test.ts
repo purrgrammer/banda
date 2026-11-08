@@ -15,7 +15,7 @@ import { REST_APIS } from "../src/core/rest.ts";
 import { SHIPPED } from "../src/server/capabilities.ts";
 import { pbtRuns } from "./pbt.ts";
 
-const NAMES = ["calendar", "contacts", "drive", "github", "gmail"];
+const NAMES = ["calendar", "contacts", "drive", "github", "gmail", "slack"];
 const text = (name: string) => readFileSync(join(SHIPPED, `${name}.json`), "utf8");
 const definition = (name: string) => JSON.parse(text(name)) as Definition;
 const errorsOf = (name: string, value: unknown) => {
@@ -24,7 +24,7 @@ const errorsOf = (name: string, value: unknown) => {
 };
 
 describe("the definitions banda ships", () => {
-	it("are the five, each passing its schema and its checks, with the line and the access the app shows", () => {
+	it("are the six, each passing its schema and its checks, with the line and the access the app shows", () => {
 		expect(
 			readdirSync(SHIPPED)
 				.filter((file) => file.endsWith(".json"))
@@ -308,7 +308,7 @@ describe("a definition", () => {
 		for (const [name, api] of Object.entries(REST_APIS)) {
 			const read = readDefinition(name, text(name));
 			if ("errors" in read) throw new Error(read.errors.join("; "));
-			expect(read.connection).toMatchObject({ api: name, url: api.url, client: "google", service: api.service });
+			expect(read.connection).toMatchObject({ api: name, url: api.url, client: api.client, service: api.service });
 		}
 	});
 });

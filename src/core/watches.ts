@@ -1072,7 +1072,7 @@ export function defineWatches(options: WatchesOptions) {
 			if (shared === undefined) {
 				let card: ReturnType<typeof cardOf> | undefined;
 				try {
-					card = cardOf(kind, ref, looked);
+					card = cardOf(kind, ref, looked, connection.api);
 				} catch {
 					card = undefined;
 				}

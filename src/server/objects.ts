@@ -175,7 +175,7 @@ export function openObjects({
 			let card: ObjectCard | undefined;
 			if (failed === undefined) {
 				try {
-					card = cardOf(access.kind, ref, answers);
+					card = cardOf(access.kind, ref, answers, access.connection.api);
 				} catch {
 					failed = "The service returned an incomplete reading.";
 				}

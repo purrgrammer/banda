@@ -13,6 +13,7 @@
  */
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
 import { type Follow, parseFollow } from "./follow.ts";
+import { slackTs } from "./slack-text.ts";
 
 type JsonValue = JsonObject[string];
 
@@ -111,7 +112,12 @@ export type ObjectKind = {
 };
 
 export type ObjectKinds = { readonly [kind: string]: ObjectKind };
-type Normalize = "lowercase" | "integer" | "text";
+/**
+ * `slack-ts`: a Slack message's timestamp, from a link's `p1700000000000100` or as Slack writes it, `1700000000.000100`;
+ * in a URL, a `thread_ts` in its query names the thread the message is in, so a reply's link names its thread.
+ */
+export const NORMALIZE = ["lowercase", "integer", "text", "slack-ts"] as const;
+type Normalize = (typeof NORMALIZE)[number];
 
 /** One thing named: of which connection and kind, and the values its template matched. */
 export type ObjectRef = {
@@ -218,7 +224,8 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 		const shapes = [...urls, ...ids];
 		const named = new Set(placeholders(shapes[0] ?? ""));
 		for (const url of urls)
-			if (!/^https:\/\/[a-z0-9.-]+\//.test(url)) errors.push(`${where}: "${url}" is not an https address's template`);
+			if (!/^https:\/\/(?:\*\.)?[a-z0-9.-]+\//.test(url))
+				errors.push(`${where}: "${url}" is not an https address's template`);
 		for (const shape of shapes) {
 			const own = placeholders(shape);
 			// Repetitions may never overlap: every pair of variable tokens has a delimiter
@@ -246,16 +253,14 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 		const normalize: { [placeholder: string]: Normalize } = {};
 		if (given.normalize !== undefined) {
 			if (typeof given.normalize !== "object" || given.normalize === null || Array.isArray(given.normalize))
-				errors.push(`${where}.normalize maps placeholders to lowercase, integer or text`);
+				errors.push(`${where}.normalize maps placeholders to lowercase, integer, text or slack-ts`);
 			else
 				for (const [placeholder, rule] of Object.entries(given.normalize)) {
-					if (
-						!named.has(placeholder) ||
-						reserved(placeholder) ||
-						(rule !== "lowercase" && rule !== "integer" && rule !== "text")
-					)
-						errors.push(`${where}.normalize.${placeholder} must name a placeholder and use lowercase, integer or text`);
-					else normalize[placeholder] = rule;
+					if (!named.has(placeholder) || reserved(placeholder) || !NORMALIZE.includes(rule as Normalize))
+						errors.push(
+							`${where}.normalize.${placeholder} must name a placeholder and use lowercase, integer, text or slack-ts`,
+						);
+					else normalize[placeholder] = rule as Normalize;
 				}
 		}
 		// words take any character but a separator: only a template's end tells where they stop
@@ -550,6 +555,13 @@ function matchOne(
 		if (decoded === undefined) return undefined;
 		values[name] = decoded;
 	}
+	// a reply's link carries its thread's first message: the reply and its thread are one object
+	if (url)
+		for (const name of names)
+			if (kind.normalize?.[name] === "slack-ts") {
+				const thread = new URL(input).searchParams.get("thread_ts");
+				if (thread !== null) values[name] = thread;
+			}
 	return normalizeValues(values, kind.normalize);
 }
 
@@ -575,6 +587,12 @@ function normalizeValues(
 			case "lowercase":
 				normalized[name] = value.toLowerCase();
 				break;
+			case "slack-ts": {
+				const stamp = slackTs(value);
+				if (stamp === undefined) return undefined;
+				normalized[name] = stamp;
+				break;
+			}
 			default:
 				normalized[name] = value;
 		}
@@ -821,12 +839,14 @@ export type EmailCard = {
 	readonly url?: string;
 };
 
-/** One email of a list, as a list says it. */
+/** One message of a list, as a list says it: an email by its subject, a Slack message by its text. */
 export type MessageLine = {
 	readonly id: string;
 	readonly from: string;
 	readonly subject: string;
 	readonly date: string;
+	/** A chat message's words, plain; an email has its subject instead. */
+	readonly text?: string;
 };
 
 /** Emails together: a conversation's (titled by its subject) or a search's (titled by its query), the newest first. */
@@ -839,8 +859,13 @@ export type MessagesCard = {
 	readonly messages: MessageLine[];
 	/** How many there are in all, as the service says (a search's is its estimate). */
 	readonly total: number | null;
-	/** Where it opens in Gmail: the conversation by its id, or the search by its query. */
+	/** Where it opens: in Gmail, the conversation by its id or the search by its query; in Slack, the thread or channel. */
 	readonly url?: string;
+	/** A Slack list's: a thread, a channel (with its topic and how many members) or a search. */
+	readonly service?: "slack";
+	readonly place?: "thread" | "channel";
+	readonly topic?: string;
+	readonly members?: number | null;
 };
 
 /** How many emails a list's card shows. */
@@ -880,6 +905,12 @@ export type ContactCard = {
 	readonly other: boolean;
 	readonly photo?: string;
 	readonly url?: string;
+	/** A Slack person's: their handle, status and time zone, and whether they are of another team. */
+	readonly service?: "slack";
+	readonly handle?: string;
+	readonly status?: string;
+	readonly timezone?: string;
+	readonly outside?: boolean;
 };
 
 /** A file in a drive, every value scalar so the store's bounded JSON shape holds. */
@@ -1053,6 +1084,83 @@ function messagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: string) =>
 	};
 }
 
+/** A Slack page worth linking: the team's own host, `<team>.slack.com`, over https. */
+const slackUrl = (value: unknown) => {
+	const url = webUrl(value);
+	return url !== undefined && new URL(url).port === "" && /^[a-z0-9-]{1,63}\.slack\.com$/.test(new URL(url).hostname)
+		? url
+		: undefined;
+};
+
+/** A channel as the owner reads it: `#general`, or a direct message's `@bob`. */
+const channelTitle = (name: string) => (name === "" || name.startsWith("@") ? name : `#${name}`);
+
+/**
+ * A Slack thread, channel or search as its card says it: the newest few messages first, each its author's handle and its
+ * text as one plain line; a thread titled by its channel, a channel by its name with its topic, a search by its query.
+ */
+function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: string) => unknown): MessagesCard {
+	const list = field("messages");
+	if (!Array.isArray(list)) throw new Error("Incomplete object");
+	const search = kind.fields.title === undefined;
+	const place = search
+		? undefined
+		: kind.fields.topic !== undefined || kind.fields.members !== undefined
+			? "channel"
+			: "thread";
+	const title = search
+		? plainLine(ref.values.query ?? fill(kind.name, ref.values), 300)
+		: channelTitle(plainLine(field("title"), 200) || plainLine(ref.values.channel, 60));
+	const messages = list
+		.flatMap((each): MessageLine[] => {
+			if (!plain(each) || typeof each.ts !== "string" || !/^\d{9,11}\.\d{6}$/.test(each.ts)) return [];
+			return [
+				{
+					id: each.ts,
+					from: plainLine(each.from, 120),
+					subject: "",
+					date: plainLine(each.date, 40),
+					text: plainLine(each.text, 300),
+				},
+			];
+		})
+		.sort((a, b) => Number(b.id) - Number(a.id))
+		.slice(0, MESSAGES_SHOWN);
+	const url = slackUrl(field("url"));
+	return {
+		card: "messages",
+		title: title || (search ? "Search" : "Slack"),
+		search,
+		messages,
+		total: count(field("total")),
+		...(url === undefined ? {} : { url }),
+		service: "slack",
+		...(place === undefined ? {} : { place }),
+		...(place === "channel" ? { topic: plainLine(field("topic"), 300), members: count(field("members")) } : {}),
+	};
+}
+
+/** A person in Slack as the contact card says them: name, handle, title, status, time zone, and email when shared. */
+function slackPersonCard(field: (name: string) => unknown): ContactCard {
+	const handle = plainLine(field("handle"), 100);
+	const url = slackUrl(field("url"));
+	return {
+		card: "contact",
+		name: plainLine(field("name")) || (handle === "" ? "(No name)" : `@${handle}`),
+		emails: plainLine(field("emails"), 300),
+		phones: "",
+		organization: "",
+		title: plainLine(field("title"), 200),
+		other: false,
+		...(url === undefined ? {} : { url }),
+		service: "slack",
+		...(handle === "" ? {} : { handle: `@${handle}` }),
+		status: plainLine(field("status"), 200),
+		timezone: plainLine(field("timezone"), 100),
+		outside: field("outside") === true,
+	};
+}
+
 const REASONS: { readonly [reason: string]: Reason } = {
 	review_requested: "review-requested",
 	mention: "mention",
@@ -1066,9 +1174,17 @@ const REASONS: { readonly [reason: string]: Reason } = {
  * The card a kind draws from what its reads answered (each read's answer parsed as JSON, by its name): the daemon's
  * own rendering, every string a plain line. The repo and number come from the ref when the answer does not say them.
  */
-export function cardOf(kind: ObjectKind, ref: ObjectRef, answers: { readonly [as: string]: unknown }): ObjectCard {
+export function cardOf(
+	kind: ObjectKind,
+	ref: ObjectRef,
+	answers: { readonly [as: string]: unknown },
+	/** The built-in API that read it, when one did: Slack's lists and people are drawn as Slack's. */
+	api?: string,
+): ObjectCard {
 	const field = (name: string) => at(answers, kind.fields[name]);
-	if (kind.card === "messages") return messagesCard(kind, ref, field);
+	if (kind.card === "messages")
+		return api === "slack" ? slackMessagesCard(kind, ref, field) : messagesCard(kind, ref, field);
+	if (kind.card === "contact" && api === "slack") return slackPersonCard(field);
 	const titleField =
 		kind.card === "check-run" || kind.card === "contact" || kind.card === "file"
 			? "name"

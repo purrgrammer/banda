@@ -172,6 +172,52 @@ it("reopens current account authority and object readings without a migration", 
 				total: 1,
 			},
 		});
+		await keepReading(tx, "slack/@ana at Acme/thread:slack/C0GENERAL/p1700000000.000100", {
+			connection: "slack",
+			account: "@ana at Acme",
+			kind: "thread",
+			source: "accepted-definition-and-account-generation",
+			at: 792,
+			card: {
+				card: "messages",
+				title: "#general",
+				search: false,
+				messages: [
+					{
+						id: "1700000150.000150",
+						from: "@deploybot [bot]",
+						subject: "",
+						date: "2023-11-14T22:15:50.000Z",
+						text: "Done",
+					},
+				],
+				total: 3,
+				url: "https://acme.slack.com/archives/C0GENERAL/p1700000000000100",
+				service: "slack",
+				place: "thread",
+			},
+		});
+		await keepReading(tx, "slack/@ana at Acme/person:slack/user/U0OLGA", {
+			connection: "slack",
+			account: "@ana at Acme",
+			kind: "person",
+			source: "accepted-definition-and-account-generation",
+			at: 792,
+			card: {
+				card: "contact",
+				name: "Olga Ivanova",
+				emails: "",
+				phones: "",
+				organization: "",
+				title: "Partner",
+				other: false,
+				service: "slack",
+				handle: "@olga",
+				status: "",
+				timezone: "Europe/Berlin",
+				outside: true,
+			},
+		});
 	}, context);
 	await before.close(context);
 	const after = await open(home);
@@ -220,6 +266,13 @@ it("reopens current account authority and object readings without a migration", 
 		expect(
 			(await after.snapshot(Readings, context))?.readings["gmail/me@example.test/search:gmail/search/from%3Aboss"],
 		).toMatchObject({ card: { card: "messages", search: true, messages: [{ id: "m1", subject: "Numbers" }] } });
+		const readings = (await after.snapshot(Readings, context))?.readings ?? {};
+		expect(readings["slack/@ana at Acme/thread:slack/C0GENERAL/p1700000000.000100"]).toMatchObject({
+			card: { service: "slack", place: "thread", messages: [{ id: "1700000150.000150", text: "Done" }] },
+		});
+		expect(readings["slack/@ana at Acme/person:slack/user/U0OLGA"]).toMatchObject({
+			card: { card: "contact", service: "slack", handle: "@olga", outside: true },
+		});
 	} finally {
 		await after.close(context);
 	}
