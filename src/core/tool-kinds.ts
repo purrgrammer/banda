@@ -72,20 +72,20 @@ export function classOf(
 export const defaultOf = (kind: Kind): Setting => (kind === "read" ? "allow" : kind === "write" ? "ask" : "always");
 
 /**
- * The settings the owner may pick for a tool. A connection only narrows: a file's floor stays on it, and a connection
- * banda ships says its reads, so its writes cannot be allowed. On any other, Allow on a tool that is not yet a read
- * confirms it as one (it joins the file's reads); a guess or a hint alone never does.
+ * The settings the owner may pick for a tool, by its kind alone, whoever said it. A connection only narrows: nothing
+ * set on it makes a write or the floor a read. A tool becomes a read only as the file's reads say, written by the
+ * owner, or as the server or banda's guess proposed and the owner allowed (it then joins the file's reads).
  */
-export function optionsOf(classed: Classed, shipped: boolean): readonly Setting[] {
-	if (classed.kind === "floor" && classed.from !== "guess") return ["always", "off"];
+export function optionsOf(classed: Classed): readonly Setting[] {
 	if (classed.kind === "read") return ["allow", "ask", "off"];
-	return shipped ? ["ask", "always", "off"] : ["allow", "ask", "always", "off"];
+	if (classed.kind === "write") return ["ask", "always", "off"];
+	return ["always", "off"];
 }
 
 /**
  * What setting a group to `setting` sets one of its tools to: the setting itself where the tool has it, else the
  * nearest that narrows as much (Ask on the floor is Always ask; Always ask on a read is Ask); undefined where it has
- * nothing near (Allow on a write of a connection banda ships): that tool keeps its own.
+ * nothing near (Allow on a write or the floor): that tool keeps its own.
  */
 export function inGroup(setting: Setting, options: readonly Setting[]): Setting | undefined {
 	if (options.includes(setting)) return setting;

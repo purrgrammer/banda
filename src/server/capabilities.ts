@@ -1618,7 +1618,7 @@ export function openCapabilities(options: CapabilityOptions) {
 													connected.off[model] === true
 														? ("off" as const)
 														: (settings.set[model] ?? defaultOf(classed.kind)),
-												options: optionsOf(classed, shipped),
+												options: optionsOf(classed),
 												...(settings.fresh[model] === true ? { fresh: true as const } : {}),
 											}),
 									name: model,
@@ -3297,7 +3297,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			const classed = state.classes[tool];
 			if (classed === undefined) throw new BadRequest(`${name} lists no tool named ${tool}`);
 			if (!isSetting(setting)) throw new BadRequest(`${tool}: give allow, ask, always or off`);
-			if (!optionsOf(classed, state.shipped).includes(setting))
+			if (!optionsOf(classed).includes(setting))
 				throw new BadRequest(
 					`${tool} cannot be set to ${SETTING_WORDS[setting]}: a connection only narrows what its file says`,
 				);
@@ -3381,7 +3381,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		if (tools.length === 0) throw new BadRequest(`${name} has no group named ${group}`, 404);
 		const settings: { [tool: string]: Setting } = {};
 		for (const [tool, classed] of tools) {
-			const near = inGroup(setting, optionsOf(classed, state.shipped));
+			const near = inGroup(setting, optionsOf(classed));
 			if (near !== undefined) settings[tool] = near;
 		}
 		await setTools(name, settings, ctx);
