@@ -146,7 +146,9 @@ export function ActivityPreview() {
 		>
 			<div style={{ colorScheme: scheme }} className="flex h-svh flex-col bg-paper-2 text-ink">
 				<header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-line-soft bg-paper px-4 py-3">
-					<span className="text-meta text-ink-2">Activity · specimen</span>
+					<a href="#/specimen?section=activity" className="text-meta text-ink-2 hover:text-ink">
+						Activity · specimen
+					</a>
 					<div className="ml-auto flex flex-wrap items-center gap-2">
 						<Tabs value={scheme} onValueChange={setScheme}>
 							<TabsList aria-label="Theme">
