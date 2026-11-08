@@ -12,6 +12,7 @@ import { BrowserScreen, type Frame } from "../components/BrowserScreen.tsx";
 import { type BrowserView, browserEvents, browserInput, holdBrowser, stopChat } from "../lib/api.ts";
 import { setBrowserOpen, useBrowserOpen } from "../lib/browser.ts";
 import { BrowserSession } from "../lib/browser-session.ts";
+import { useReturnFocus } from "../lib/return-focus.ts";
 import { browserOf, showBrowser, useShell } from "../lib/shell.ts";
 
 /** Chat `chat`'s tab as the daemon says it, and its page as last drawn, while `active`. */
@@ -84,6 +85,8 @@ export function LiveView({ chat, who }: { chat: number; who: Who }) {
 /** The browser enlarged, over the app, for whichever chat asked for it. */
 export function BrowserDialog({ who }: { who: (chat: number) => Who }) {
 	const chat = useBrowserOpen();
+	// opened from state (a chat's browser card), with no Radix trigger: closed, focus returns to the opener
+	const returnFocus = useReturnFocus(chat !== undefined);
 	const [why, setWhy] = useState<string | undefined>(undefined);
 	const [stuck, setStuck] = useState(false);
 	const feed = useBrowserFeed(chat ?? 0, chat !== undefined);
@@ -134,6 +137,7 @@ export function BrowserDialog({ who }: { who: (chat: number) => Who }) {
 		<Dialog open onOpenChange={(open) => (open ? undefined : close())}>
 			<DialogContent
 				showCloseButton={false}
+				onCloseAutoFocus={returnFocus}
 				className="max-w-[min(64rem,calc(100vw-2rem))] border-0 bg-transparent p-0 shadow-none sm:max-w-[min(64rem,calc(100vw-2rem))]"
 			>
 				<DialogTitle className="sr-only">{agent.name}'s browser</DialogTitle>

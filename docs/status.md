@@ -2,6 +2,12 @@
 
 ## Current work
 
+Agent search is in review on `feat/agent-search`: messages, shared group histories and artifacts use the same
+retrieval as Cmd+K, with bounded results and source reads. Recall now searches saved facts only. Validation and
+owner acceptance remain pending; definition and attachment coverage is tracked in [Chat](chat.md). The local tool-access
+preview has owner review: Connections, Permissions, Tools, toolset icons and highlighted schemas in Details. Its switches
+remain local to the preview.
+
 Gmail REST is implemented in a topic worktree with least-privilege sign-in, account-bound email cards and attachment
 reads, approval-required sending and mailbox actions, and separate OAuth scopes for reading, sending and modifying
 mail ([Connections](connections.md)). Redirect sign-in starts on the computer; paired devices can use accounts already

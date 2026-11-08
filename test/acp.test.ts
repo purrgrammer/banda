@@ -5,9 +5,11 @@ import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
 import {
 	type AcpConnection,
+	AcpError,
 	type AcpPermissionOutcome,
 	type AcpUpdate,
 	cancel,
+	closeSession,
 	jsonLines,
 	openSession,
 	prompt,
@@ -16,7 +18,10 @@ import {
 
 const FAKE = join(import.meta.dirname, "fixtures/fake-acp-agent.ts");
 
-function fake(answer: (command: string) => AcpPermissionOutcome | Promise<AcpPermissionOutcome>) {
+function fake(
+	answer: (command: string) => AcpPermissionOutcome | Promise<AcpPermissionOutcome>,
+	env: NodeJS.ProcessEnv = {},
+) {
 	const home = mkdtempSync(join(tmpdir(), "banda-acp-"));
 	const log = join(home, "fake.jsonl");
 	const updates: AcpUpdate[] = [];
@@ -24,7 +29,7 @@ function fake(answer: (command: string) => AcpPermissionOutcome | Promise<AcpPer
 		command: process.execPath,
 		args: [FAKE],
 		cwd: home,
-		env: { ...process.env, FAKE_ACP_LOG: log },
+		env: { ...process.env, FAKE_ACP_LOG: log, ...env },
 		handlers: {
 			update: (_session, update) => updates.push(update),
 			permission: async (request) => answer(String((request.toolCall.rawInput as { command?: string }).command)),
@@ -110,6 +115,100 @@ describe("acp", () => {
 		void prompt(other, second, "sleep 60000").catch(() => {});
 		await other.close();
 		expect(alive(other.pid)).toBe(false);
+	});
+});
+
+describe("acp session capabilities", () => {
+	const deny = () => ({ outcome: "cancelled" }) as const;
+
+	it("resumes by session/resume, with no history replayed, when the agent announces resume", async () => {
+		const { connection, updates, entries } = fake(deny, { FAKE_ACP_RESUME: "1", FAKE_ACP_NO_LOAD: "1" });
+		try {
+			const opened = await openSession(connection, { cwd: tmpdir(), resume: "earlier-7" });
+			expect(opened).toMatchObject({ sessionId: "earlier-7", loaded: true });
+			expect(entries()).toContainEqual(expect.objectContaining({ resumed: "earlier-7" }));
+			// unlike session/load, nothing from before is replayed
+			expect(updates).toEqual([]);
+			expect((await prompt(connection, "earlier-7", "say back")).stopReason).toBe("end_turn");
+		} finally {
+			await connection.close();
+		}
+	});
+
+	it("falls back to session/load (history replayed) when resume is not announced", async () => {
+		const { connection, updates, entries } = fake(deny);
+		try {
+			const opened = await openSession(connection, { cwd: tmpdir(), resume: "earlier-8" });
+			expect(opened).toMatchObject({ sessionId: "earlier-8", loaded: true, canClose: false });
+			expect(entries()).toContainEqual(expect.objectContaining({ loaded: "earlier-8" }));
+			expect(updates.length).toBeGreaterThan(0);
+		} finally {
+			await connection.close();
+		}
+	});
+
+	it("closes a session when the agent announces close, and one already gone (-32002) counts as closed", async () => {
+		const { connection, entries } = fake(deny, { FAKE_ACP_CLOSE: "1" });
+		try {
+			const { sessionId, canClose } = await openSession(connection, { cwd: tmpdir() });
+			expect(canClose).toBe(true);
+			await closeSession(connection, sessionId);
+			expect(entries()).toContainEqual(expect.objectContaining({ closed: sessionId }));
+			// the agent no longer has it: -32002, as closed
+			await expect(closeSession(connection, sessionId)).resolves.toBeUndefined();
+		} finally {
+			await connection.close();
+		}
+	});
+
+	it("treats only -32002 as success on close; any other refusal still throws", async () => {
+		const refuse = (code: number) =>
+			({
+				request: async () => {
+					throw new AcpError("refused", code);
+				},
+			}) as unknown as AcpConnection;
+		await expect(closeSession(refuse(-32002), "s")).resolves.toBeUndefined();
+		await expect(closeSession(refuse(-32601), "s")).rejects.toThrow("refused");
+	});
+
+	it("appends banda's instructions as a system prompt only when the agent announces systemPrompt", async () => {
+		const offered = fake(deny, { FAKE_ACP_SYSTEM: "1" });
+		try {
+			const { sessionId } = await openSession(offered.connection, { cwd: tmpdir(), system: "banda's rules" });
+			expect(offered.entries()).toContainEqual(
+				expect.objectContaining({
+					made: sessionId,
+					systemPrompt: { mode: "append", content: [{ type: "text", text: "banda's rules" }] },
+				}),
+			);
+		} finally {
+			await offered.connection.close();
+		}
+		const plain = fake(deny);
+		try {
+			const { sessionId } = await openSession(plain.connection, { cwd: tmpdir(), system: "banda's rules" });
+			const made = plain.entries().find((entry) => entry.made === sessionId);
+			expect(made).toBeDefined();
+			expect(made).not.toHaveProperty("systemPrompt");
+		} finally {
+			await plain.connection.close();
+		}
+	});
+
+	it("sends the same system prompt again on resume", async () => {
+		const { connection, entries } = fake(deny, { FAKE_ACP_RESUME: "1", FAKE_ACP_SYSTEM: "1" });
+		try {
+			await openSession(connection, { cwd: tmpdir(), resume: "earlier-9", system: "banda's rules" });
+			expect(entries()).toContainEqual(
+				expect.objectContaining({
+					resumed: "earlier-9",
+					systemPrompt: { mode: "append", content: [{ type: "text", text: "banda's rules" }] },
+				}),
+			);
+		} finally {
+			await connection.close();
+		}
 	});
 });
 

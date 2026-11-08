@@ -1,7 +1,9 @@
 /** The panel, settings and connections: the agent beside its chat, what opens there, and the pages behind the gear. */
 import { isValidElement, type ReactNode, useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Tabs } from "@/components/ui/tabs";
 import { DraftApproval } from "../app/DraftApproval.tsx";
+import { MakeTabsList } from "../app/NewSheet.tsx";
 import { ObjectReading } from "../app/Objects.tsx";
 import { ApprovalCard } from "../chat/Approval.tsx";
 import { BrowserWindow } from "../chat/Browser.tsx";
@@ -10,6 +12,7 @@ import { ConnectCard, ConnectDialog, type ConnectStep } from "../chat/Connect.ts
 import type { FaceState } from "../chat/Face.tsx";
 import { Bubble } from "../chat/Feed.tsx";
 import { ObjectUnavailable } from "../chat/Loading.tsx";
+import { MemorySettings } from "../chat/MemorySettings.tsx";
 import {
 	CheckRunCard,
 	IssueCard,
@@ -40,7 +43,6 @@ import {
 	FaceAndName,
 	GroupLimitsBlock,
 	Members,
-	Memory,
 	ModelProviders,
 	Permissions,
 	Personality,
@@ -146,7 +148,19 @@ function AgentPanelOf({
 						<Permissions agent={who.name} permissions={permissions} />
 					</>
 				}
-				memory={<Memory agent={who.name} facts={facts} />}
+				memory={
+					<MemorySettings
+						agent={{ id: "specimen", name: who.name }}
+						phone={phone}
+						memory={{
+							facts: facts.map((fact) => ({ ...fact, scope: "agent" as const, agent: "specimen" })),
+							budget: 4000,
+						}}
+						onAdd={async () => {}}
+						onEdit={async () => {}}
+						onForget={async () => {}}
+					/>
+				}
 				about={
 					<>
 						<Personality text="Warm and brief. Plans our family trips, keeps to the budget, and asks before booking anything." />
@@ -452,6 +466,17 @@ export function PanelSections() {
 				bleed
 			>
 				<SettingsPage title="New agent" phone footer={<Button className="flex-1">Add to the band</Button>}>
+					<div className="flex flex-col gap-2">
+						<p className="text-meta font-medium text-ink-2">Agent or group: tabs, so the arrow keys switch</p>
+						<span className="flex gap-3">
+							<Tabs defaultValue="agent">
+								<MakeTabsList />
+							</Tabs>
+							<Tabs defaultValue="group">
+								<MakeTabsList />
+							</Tabs>
+						</span>
+					</div>
 					<FaceAndName who={{ ...OTTO, name: "" }} autoFocus={false} />
 					<Personality starters />
 				</SettingsPage>

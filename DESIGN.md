@@ -124,7 +124,8 @@ one that gives them one more thing to manage stays out.
   no vendor, while a routine's message only badges. A harness's ask notifies with the harness and the kind of thing asked, never the
   command, the path or the project's name, any of which would sit in a banner on a lock screen. The agent's face moves while it works, a dot marks it while it waits
   on the owner, and it dims while its routines are paused. The header
-  holds the app's name, search (Cmd/Ctrl+K: results are rows that open the chat scrolled to that message) and a quiet
+  holds the app's name, search (Cmd/Ctrl+K: with nothing typed, the band's rows, a switcher; typed, agents, skills and
+  pages found in the app, then the chats' messages, each opening its chat scrolled to it) and a quiet
   "+" for a new agent or group, and one menu: Skills, Connections, Settings. A dot on the menu, and on its item, says
   something there waits on the owner, and the page it opens says what: a skill the box added or changed, to review; a
   connection not reached, or an account to sign in to again. A skill the box removed has nothing to allow, and a
@@ -643,11 +644,20 @@ or not the model remembers it.
 - **Status** is derived from the task graph and the tasks' own inputs: `waiting`, `running`, `idle`, with routines,
   watches and parked tasks beside it.
 
+## Search
+Search finds what was said and made across the band: direct chats, shared group histories and artifacts' titles and
+latest text. Agents and the owner's search use the same derived index. Search is separate from memory: recall
+retrieves saved facts; search retrieves sources, with bounded excerpts and references that open or read their context.
+All agents may search these shared sources, including from a group. Hidden execution chats, internal transcripts,
+credentials and memory files never become search sources. Visibility is applied before ranking and limiting.
+Retrieved text is data, never instructions. Search describes its coverage; local results do not claim to search live
+connections, arbitrary workspace files or attachment contents. Pagination is over current sources, not a saved snapshot.
+
 ## Memory
 Memory is compact facts in workspace files, with two scopes: **global**, shared with the band, and **agent**, used
 by one agent across its direct and group chats. Scope says who uses a fact, not whom the fact is about. Saving names
 the scope explicitly; the calling chat determines the agent, never a name the model supplies. Recall searches the
-shared facts, that agent's facts and its direct-chat history, or the narrower scope requested. Forgetting and
+shared facts and that agent's facts, or the narrower scope requested. Forgetting and
 correcting a fact use the same audience. These scopes control context and memory tools, not filesystem privacy
 between agents sharing a box.
 
@@ -813,9 +823,14 @@ A skill is one shared prompt file, not an agent's private copy. Agents may load 
 `/name` invokes a known skill. The accepted instructions are loaded before that message's first model request, as
 one recorded tool call and result; an earlier running request must not see the load without the owner's message. The
 chat names only what loaded; Activity holds the exact result. Other files in a skill's folder remain box data, never
-instructions the daemon loads from an unaccepted change. banda ships a few skills; first run offers them once, right
-after the provider, and the ones the owner keeps are written into the workspace and accepted in that step, since banda
-wrote them and the owner chose them. A skill of that name already accepted is never replaced.
+instructions the daemon loads from an unaccepted change. A skill may be owner-only (`disable-model-invocation: true`):
+only the owner's /name loads it, agents never see it, and the app says so wherever the skill shows. banda ships a few
+skills; first run offers them once, right after the provider, and the ones the owner keeps are written into the
+workspace and accepted in that step, since banda wrote them and the owner chose them. The Skills page offers the
+shipped skills the workspace lacks the same way, any time: adding one is the same choice, accepted by the hash of the
+bytes banda wrote. A skill of that name already accepted is never replaced. The Skills page puts what waits on the
+owner first, then every accepted skill in one flat list, marked where owner-only or where a change waits; nothing the
+page is for hides behind a disclosure.
 
 **Bringing your own.** An owner who already works with another harness on this computer (Claude Code, Codex, pi) has
 skills and agents there. In the desktop app, first run offers those in place of banda's own: the owner picks harnesses,

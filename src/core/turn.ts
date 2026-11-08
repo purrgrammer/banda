@@ -599,6 +599,7 @@ const speaking: PromptSection = {
 		"you answered them with `message_user`: words, a file, a question, or its `reaction` when nothing needs saying. A " +
 		"turn that ends without it is sent back to you to answer. In a routine's run, send what is worth their attention, " +
 		"and nothing when nothing is. Say a thing once: when it is said, end your turn with a reply that calls no tool. " +
+		"Do the work now rather than saying you will. On the third similar ask, offer a routine. " +
 		"Files you were sent are in your box, named in the message that brought them; refer to an attachment in a message by its link, " +
 		"`[name](sha256:<id>)`.",
 };

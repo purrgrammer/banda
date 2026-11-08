@@ -248,7 +248,8 @@ export type Item =
 
 /**
  * `GET /api/search?q=`: the best matches, best first: a message in an agent's chat or in a group, each at its entry
- * (the chat opens there), or an artifact by its title and words.
+ * (the chat opens there), or an artifact by its title and words. Text is a bounded matching excerpt; open the source
+ * for its full context.
  */
 export type SearchHit =
 	| {
@@ -485,12 +486,18 @@ export type ShellEvent =
 	| GroupsShellEvent
 	| HarnessesShellEvent;
 
-/** A saved fact and its audience; no workspace path on consumer screens. */
-export type FactView = Omit<Fact, "path"> & Audience;
+/**
+ * A saved fact and its audience; no workspace path on consumer screens. `from` is the owner's metadata alone:
+ * the prompt section never carries it, so an agent cannot read who wrote a fact. `size` is the characters the
+ * fact takes of its scope's budget, as the daemon counts them.
+ */
+export type FactView = Omit<Fact, "path"> & Audience & { readonly size?: number };
 
 /** The owner's view of all scopes. An unavailable box is not empty memory. */
 export type MemoryView = {
 	readonly facts: readonly FactView[];
+	/** Each scope's budget, in the characters `size` counts. */
+	readonly budget?: number;
 	readonly unavailable?: true;
 };
 

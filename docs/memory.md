@@ -11,7 +11,7 @@ Entry points: ../src/core/memory.ts, ../src/core/search.ts, ../src/server/memory
 
 ## Work and acceptance
 
-Bind every model operation to its stored calling agent, including group executions. Apply recall's audience before
+Bind every model operation to its stored calling agent, including group executions. Recall searches saved facts only; use search for conversations and artifacts. Apply recall's audience before
 ranking and limiting. A fact's path and exact words bind its id; corrections and deletions never use an id to reach
 another agent's facts. The owner can inspect and change every audience. Shared memory in Settings and in an agent's
 controls is one set of facts, not copies. A changed global fact reaches an existing chat at its next model boundary.
@@ -26,5 +26,5 @@ recoverable edit failures; unsaved drafts survive both scope switches and tempor
 - [ ] Conditional workspace mutations under concurrent box writes; apply the shared primitive from [Workspace](workspace.md)
 - [ ] A fact's source is written by the box, so it can be forged: sign it, or keep sources in the store
 - [ ] Deleting a chat (and its messages from search): a deleted fact stays in what was said where it came from
-- [ ] Search catches up lazily (before recall, after memory writes, at the sweep); messages are scanned per chat
+- [ ] Search catches up lazily before a query; recall refreshes facts only, and message search scans entries per chat
 - [ ] A "before" gate for the facts an agent writes, and "Why" a message said what it did (DESIGN.md "Open")

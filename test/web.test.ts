@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 import { LEAD_TEXT } from "../src/core/agents.ts";
 import { writeAvatarFace } from "../src/core/avatar-face.ts";
 import { DEFAULT_FACE, DEFAULT_PERSONALITY, withPersonality } from "../src/core/choices.ts";
+import { MAX_MEMORY_CHARS } from "../src/core/memory.ts";
 import type { Status } from "../src/core/status.ts";
 import { type DaemonOptions, startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
@@ -342,14 +343,23 @@ describe("web", () => {
 		const send = (path: string, body?: unknown, method = "POST") =>
 			api<MemoryView>(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 		try {
-			expect(await api<MemoryView>("/memory")).toEqual({ facts: [] });
+			expect(await api<MemoryView>("/memory")).toEqual({ facts: [], budget: MAX_MEMORY_CHARS });
 			// the owner's own fact, always in mind: in effect at once
 			const added = await send("/memory", { text: "Never books flights before 9am", scope: "global" });
 			expect(added.facts).toEqual([
-				expect.objectContaining({ text: "Never books flights before 9am", scope: "global", from: { owner: true } }),
+				expect.objectContaining({
+					text: "Never books flights before 9am",
+					scope: "global",
+					from: { owner: true },
+					size: expect.any(Number),
+				}),
 			]);
 			await expect(send("/memory", { text: "  " })).rejects.toThrow(/^400 /);
 			await expect(send("/memory", { text: "x", scope: "unknown" })).rejects.toThrow(/^400 /);
+			// whom a fact is about is declared by the owner, never detected; shared memory refuses it
+			await expect(send("/memory", { text: "Sarah is vegetarian", scope: "global", about: "Sarah" })).rejects.toThrow(
+				/^400 .*stays with an agent/,
+			);
 			// the box adds a core fact of its own: in effect at once, and the app is told
 			const core = join(home, "workspace", "memory", "global.md");
 			await writeFile(core, `${await readFile(core, "utf8")}- Allergic to peanuts\n`);

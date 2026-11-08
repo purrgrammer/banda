@@ -437,7 +437,10 @@ describe("memory files", () => {
 		expect(parseFacts(agentMemoryPath("sancho"), s.read(agentMemoryPath("sancho")))).toHaveLength(1);
 		await s.call("recall", { query: "window seat" });
 		expect(s.lastResult()).toContain(`[${fact!.id}] Prefers window seats (agent)`);
-		expect(s.lastResult()).toContain("From your chats:");
+		expect(s.lastResult()).not.toContain("From your chats:");
+		await s.say("zqhistoryonly never saved as a fact");
+		await s.call("recall", { query: "zqhistoryonly" });
+		expect(s.lastResult()).toContain("Nothing found");
 	});
 
 	it("keeps no global profile of anyone else: a fact about another person needs an agent task", async () => {
@@ -463,6 +466,46 @@ describe("memory files", () => {
 			about: "Sarah",
 			for: "dinner on Friday",
 		});
+	});
+
+	it("the owner declares whom a fact is about; provenance is the owner's metadata, never the agent's context", async () => {
+		const s = await open();
+		await allowTools(s.harness, "mara", []);
+		// declared when adding, never detected from the words; shared memory refuses and points to an agent's own
+		await expect(
+			add(s.desk, { scope: "global", text: "Sarah is vegetarian", about: "Sarah", task: "dinner" }, 1),
+		).rejects.toThrow(/stays with an agent/);
+		await expect(
+			add(s.desk, { scope: "agent", agent: "mara", text: "Sarah is vegetarian", about: "Sarah" }, 1),
+		).rejects.toThrow(/names the task/);
+		const saved = await add(
+			s.desk,
+			{ scope: "agent", agent: "mara", text: "Sarah is vegetarian", about: "Sarah", task: "dinner on Friday" },
+			1,
+		);
+		expect(saved).toMatchObject({
+			about: "Sarah",
+			for: "dinner on Friday",
+			from: { owner: true },
+			size: expect.any(Number),
+		});
+		// the agent writes one from a chat: the owner's view says where each fact came from, and the budget as it fills
+		await s.call("remember", { fact: "Prefers window seats", scope: "agent" }, undefined, "mara");
+		const view = await memory(s.desk, 2);
+		expect(view.budget).toBe(MAX_MEMORY_CHARS);
+		expect(view.facts.find((fact) => fact.text === "Prefers window seats")?.from).toMatchObject({
+			chat: expect.any(Number),
+		});
+		// the agent's context carries the facts and whom they are about, never who wrote them
+		const section = await memorySection(s.files).render(
+			{ conversationId: await s.say("hi", undefined, "mara"), read: s.harness } as never,
+			context,
+		);
+		expect(section).toContain("Sarah is vegetarian (agent; about Sarah, for dinner on Friday)");
+		expect(section).toContain("Prefers window seats");
+		expect(section).not.toContain("owner");
+		expect(section).not.toContain("from");
+		expect(section).not.toContain("banda");
 	});
 
 	it("a global fact is in effect at once, and reaches running chats as an entry", async () => {

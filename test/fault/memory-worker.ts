@@ -23,6 +23,8 @@ import {
 	memoryExtension,
 } from "../../src/core/memory.ts";
 import { Search } from "../../src/core/search.ts";
+import { searchService } from "../../src/core/search-service.ts";
+import { searchExtension } from "../../src/core/search-tools.ts";
 import { status } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore, type TurnResult } from "../../src/core/turn.ts";
@@ -59,7 +61,8 @@ const files: MemoryFiles = {
 	},
 };
 const search = new Search(join(home, "search.db"), { hit: () => faults.hit("index") });
-const core = defineCore({ blobs: new BlobStore(join(home, "blobs")), gateway: () => gateway, model: () => FAUX_MODEL });
+const blobs = new BlobStore(join(home, "blobs"));
+const core = defineCore({ blobs, gateway: () => gateway, model: () => FAUX_MODEL });
 
 const textOf = (message: Message | undefined): string =>
 	message === undefined
@@ -76,6 +79,11 @@ const respond = (ctx: { messages: readonly Message[] }) => {
 	if (heed !== undefined) return heed;
 	const last = ctx.messages.filter((message) => message.role !== "system").at(-1);
 	if (last?.role === "toolResult") {
+		if (last.toolName === "search" && !last.isError) {
+			const source = JSON.parse(textOf(last)).results[0]?.source;
+			if (source)
+				return fauxAssistantMessage([fauxToolCall("read_search_result", { source })], { stopReason: "toolUse" });
+		}
 		if (last.isError && last.toolName === "remember") {
 			const previous = ctx.messages
 				.flatMap((message) =>
@@ -90,18 +98,20 @@ const respond = (ctx: { messages: readonly Message[] }) => {
 		return fauxAssistantMessage("noted");
 	}
 	const said = textOf(last);
-	const call = said.startsWith("correct")
-		? fauxToolCall("remember", {
-				fact: "Prefers aisle seats",
-				scope: "global",
-				replaces: factId(GLOBAL_MEMORY, FACTS[0]!),
-			})
-		: said.startsWith("recall")
-			? fauxToolCall("recall", { query: "seats hotels flies" })
-			: fauxToolCall("remember", {
-					fact: said.replace(/^remember /, ""),
-					scope: said.includes("window") ? "global" : "agent",
-				});
+	const call = said.startsWith("search")
+		? fauxToolCall("search", { query: "window hotels flies" })
+		: said.startsWith("correct")
+			? fauxToolCall("remember", {
+					fact: "Prefers aisle seats",
+					scope: "global",
+					replaces: factId(GLOBAL_MEMORY, FACTS[0]!),
+				})
+			: said.startsWith("recall")
+				? fauxToolCall("recall", { query: "seats hotels flies" })
+				: fauxToolCall("remember", {
+						fact: said.replace(/^remember /, ""),
+						scope: said.includes("window") ? "global" : "agent",
+					});
 	return fauxAssistantMessage([call], { stopReason: "toolUse" });
 };
 faux.setResponses(Array.from({ length: 1000 }, () => respond as never));
@@ -110,6 +120,8 @@ const registry = createRegistry();
 registry.install(core.extension);
 registry.install(boxTools({ workspace: box.workspace }));
 registry.install(memoryExtension({ files, search, lock: new MemoryLock() }));
+const retrieval = searchService({ index: search, blobs, groups: core.groups, harness: () => harness });
+registry.install(searchExtension(retrieval));
 const harness = await openStore(home, {
 	models,
 	registry,
@@ -119,7 +131,7 @@ const harness = await openStore(home, {
 await revive(harness);
 harness.resume();
 
-const said = [...FACTS.map((fact) => `remember ${fact}`), "correct", "recall"];
+const said = [...FACTS.map((fact) => `remember ${fact}`), "correct", "recall", "search"];
 const outcomes = [];
 for (const [i, text] of said.entries()) {
 	const got = await core.receive(harness, { id: `m${i}`, origin: { gateway: "fake", peer: OWNER }, text });

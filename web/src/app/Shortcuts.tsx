@@ -3,15 +3,14 @@
  * and Alt+↓ the chat above or below, Esc closes the panel or a sheet; "?" lists them, in a dialog of their own.
  */
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-
-const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
-const MOD = MAC ? "⌘" : "Ctrl";
+import { MOD } from "@/lib/keys";
+import { useReturnFocus } from "../lib/return-focus.ts";
 
 /** Each shortcut: its keys, and what it does in words. */
 export const SHORTCUTS: readonly (readonly [readonly string[], string])[] = [
 	[["Enter"], "Send"],
 	[["Shift", "Enter"], "A new line"],
-	[[MOD, "K"], "Search every chat"],
+	[[MOD, "K"], "Search banda"],
 	[[MOD, "1–9"], "Open a chat of the band, top to bottom"],
 	[["Alt", "↑"], "The chat above"],
 	[["Alt", "↓"], "The chat below"],
@@ -24,9 +23,11 @@ export const typing = (target: EventTarget | null) =>
 	target instanceof HTMLElement && target.closest("input, textarea, select, [contenteditable]") !== null;
 
 export function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+	// opened from state (the "?" key), with no Radix trigger: closed, focus goes back to where it was
+	const returnFocus = useReturnFocus(open);
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-w-sm gap-3 bg-paper p-5">
+			<DialogContent onCloseAutoFocus={returnFocus} className="max-w-sm gap-3 bg-paper p-5">
 				<DialogTitle className="text-heading font-semibold text-ink">Keyboard shortcuts</DialogTitle>
 				<DialogDescription className="sr-only">The keys banda answers to, and what each does</DialogDescription>
 				<ShortcutList />
