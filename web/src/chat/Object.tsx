@@ -749,24 +749,52 @@ export function SlackMark({ className }: { className?: string }) {
 const slackListIcon = (list: Pick<Messages, "search" | "place">): LucideIcon | undefined =>
 	list.search ? SearchIcon : list.place === "channel" ? undefined : MessagesSquareIcon;
 
-/** Slack's messages together, read-only: a thread under its first words in its channel, a channel with its topic, a search under its query. */
+/**
+ * A Slack channel as a place, not a transcript: Slack's mark, its name with how many are in it on one line, its topic
+ * beneath, and Open in Slack, laid out as a Drive file's card is. Its messages are read for the agent and for a watch,
+ * never listed here.
+ */
+function SlackChannelCard({ list, actions }: { list: Messages; actions?: ReactNode }) {
+	const url = slackUrl(list.url);
+	const members =
+		list.members === null || list.members === undefined
+			? undefined
+			: `${list.members} member${list.members === 1 ? "" : "s"}`;
+	return (
+		<Tile className="flex flex-col gap-2.5 p-3.5" data-slack-card="channel">
+			<div className="flex min-w-0 items-start gap-2.5">
+				<SlackMark className="mt-0.5 size-5" />
+				<div className="flex min-w-0 flex-1 flex-col gap-1">
+					<div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+						<h3 className="min-w-0 text-body font-semibold text-ink [overflow-wrap:anywhere]">{list.title}</h3>
+						{members === undefined ? null : <span className="shrink-0 text-meta text-ink-2">{members}</span>}
+					</div>
+					{list.topic ? <p className="text-meta text-ink-2 [overflow-wrap:anywhere]">{list.topic}</p> : null}
+				</div>
+				{list.asOf === undefined ? null : <span className="shrink-0 text-meta text-ink-2">as of {list.asOf}</span>}
+				<span className="shrink-0">{actions}</span>
+			</div>
+			{url === undefined ? null : (
+				<span className="flex flex-wrap items-center gap-2">
+					<Button asChild size="sm" variant="ghost" className="-ml-2">
+						<a href={url} target="_blank" rel="noopener noreferrer">
+							<ExternalLinkIcon />
+							Open in Slack
+						</a>
+					</Button>
+				</span>
+			)}
+		</Tile>
+	);
+}
+
+/** Slack's messages together, read-only: a thread under its first words in its channel, or a search under its query. */
 function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactNode }) {
+	if (!list.search && list.place === "channel") return <SlackChannelCard list={list} actions={actions} />;
 	const Icon = slackListIcon(list);
 	const more = list.total === null ? 0 : list.total - list.messages.length;
 	const url = slackUrl(list.url);
-	const where = list.search
-		? "Messages matching"
-		: list.place === "channel"
-			? "Channel"
-			: `Thread${list.channel ? ` in ${list.channel}` : ""}`;
-	const about = [
-		list.topic,
-		list.members === null || list.members === undefined
-			? undefined
-			: `${list.members} member${list.members === 1 ? "" : "s"}`,
-	]
-		.filter(Boolean)
-		.join(" · ");
+	const where = list.search ? "Messages matching" : `Thread${list.channel ? ` in ${list.channel}` : ""}`;
 	return (
 		<Tile className="flex flex-col gap-2.5 p-3.5" data-slack-card={list.search ? "search" : (list.place ?? "thread")}>
 			<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-ink-2">
@@ -785,7 +813,6 @@ function SlackMessagesCard({ list, actions }: { list: Messages; actions?: ReactN
 			>
 				{list.title}
 			</h3>
-			{about === "" ? null : <p className="text-meta text-ink-2 [overflow-wrap:anywhere]">{about}</p>}
 			{list.messages.length === 0 ? (
 				<p className="text-meta text-ink-2">{list.search ? "No messages match yet" : "No messages"}</p>
 			) : (

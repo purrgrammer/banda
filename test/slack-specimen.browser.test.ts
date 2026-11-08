@@ -54,11 +54,11 @@ for (const width of [390, 1440])
 				for (const words of [
 					"Thread in #general",
 					"Release notes draft for Thursday",
-					"Channel",
 					"Messages matching",
 					"@deploybot [bot]",
 					"@olga (outside)",
-					"Every deploy, green or red. Ping #oncall when red. · 14 members",
+					"Every deploy, green or red. Ping #oncall when red.",
+					"14 members",
 					"No messages match yet",
 					"@bob · Engineer",
 					"On call · America/New_York",

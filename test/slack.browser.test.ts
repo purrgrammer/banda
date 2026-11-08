@@ -203,9 +203,11 @@ for (const width of [390, 1440])
 					await page.run(`location.hash='#/a/mara'`);
 					await say("what's new in #general?");
 					await page.until(`document.querySelector('[data-slack-card="channel"]')?.innerText.includes('Company-wide')`);
-					expect(await page.run<string>(`document.querySelector('[data-slack-card="channel"]').innerText`)).toContain(
-						"@deploybot [bot]",
-					);
+					// a channel's card is the place, not its transcript: its name beside how many are in it, its topic, Open in Slack
+					const channelCard = await page.run<string>(`document.querySelector('[data-slack-card="channel"]').innerText`);
+					expect(channelCard).toContain("#general");
+					expect(channelCard).toContain("12 members");
+					expect(channelCard).not.toContain("@deploybot [bot]");
 					await shot("3-channel-card");
 
 					await say("reply in that thread saying I'll look");
