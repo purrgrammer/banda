@@ -352,6 +352,48 @@ describe("banda's guess at a new connection's tools", () => {
 		expect((await effect(s)).find_rooms?.floor).toBeUndefined();
 	});
 
+	it("refused as busy is made again, never kept as failed, and two connections are guessed one at a time", async () => {
+		const first = await startFakeMcp();
+		const second = await startFakeMcp();
+		fakes.push(first, second);
+		const answers = () => [
+			groupsAnswer(["Events"]),
+			kindsAnswer([
+				{ tool: "create_event", kind: "write", group: "Events" },
+				{ tool: "list_events", kind: "read", group: "Events" },
+				{ tool: "send_payment", kind: "write", floor: "money", group: "Events" },
+				{ tool: "whoami", kind: "read", group: "Events" },
+			]),
+		];
+		const guess = guessing(...answers(), ...answers());
+		let running = 0;
+		let most = 0;
+		let busy = 1;
+		const classify_: CapabilityOptions["classify"] = async (input) => {
+			running++;
+			most = Math.max(most, running);
+			try {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+				if (busy-- > 0) return { ok: false, why: "banda is busy thinking already.", busy: true };
+				return await guess.classify!(input);
+			} finally {
+				running--;
+			}
+		};
+		const s = await open(await tempHome(), { classify: classify_ });
+		await Promise.all([
+			s.capabilities.addMcp({ url: first.url, service: "Cal" }),
+			s.capabilities.addMcp({ url: second.url, service: "Diary" }),
+		]);
+		await s.capabilities.classified();
+		expect(most).toBe(1);
+		const { connections } = (await s.harness.snapshot(Classified, context))!;
+		for (const name of ["cal", "diary"]) {
+			expect(connections[name]?.failed, name).toBeUndefined();
+			expect(connections[name]?.tools.send_payment, name).toMatchObject({ kind: "write", floor: "money" });
+		}
+	});
+
 	it("is made again only for the tools a listing adds, which wait new and off in their group", async () => {
 		const fake = await startFakeMcp();
 		fakes.push(fake);

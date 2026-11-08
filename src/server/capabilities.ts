@@ -240,6 +240,10 @@ const _hostOf = (url: string) => {
 };
 
 /** The connections banda ships; the same path from `src/server` and `dist/server`. */
+/** How often, and how long apart, a guess refused as busy is tried again. */
+const BUSY_TRIES = 20;
+const BUSY_WAIT_MS = 3_000;
+
 export const SHIPPED = fileURLToPath(new URL("../../shipped/connections/", import.meta.url));
 
 /** The extension the tools are installed as; replaced whole whenever what is in effect changes. */
@@ -2979,16 +2983,29 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	// ---- what each tool does, and what the owner set it to
 
-	/** Guesses in progress, by connection: one at a time each, never asked again for a listing it was made for. */
+	/** Guesses waiting or in progress, by connection; never asked again for a listing one was made for. */
 	const classifying = new Map<string, Promise<void>>();
+	/**
+	 * The guesses run one after another, whatever the connection: started together (every connection at start) they
+	 * took every inference banda allows at once, and the rest were refused as busy.
+	 */
+	let guessing: Promise<void> = Promise.resolve();
 
 	/** Guess what connection `name`'s listed tools do, in the background, when its listing has no guess yet. */
 	function classifyLater(name: string, ctx: Context): void {
 		if (options.classify === undefined || classifying.has(name)) return;
-		const run = (async () => {
-			// a listing that changed while it was guessed is guessed again, for its new tools alone
-			for (let round = 0; round < 3 && (await classifyNow(name, ctx)); round++);
-		})()
+		const run = (guessing = guessing.then(async () => {
+			// a listing that changed while it was guessed is guessed again, for its new tools alone; one refused as busy
+			// (another inference held every place) waits and goes again, never kept as failed
+			for (let round = 0, busy = 0; round < 3 && busy < BUSY_TRIES; ) {
+				const went = await classifyNow(name, ctx);
+				if (went === "busy") {
+					busy++;
+					await new Promise((resolve) => setTimeout(resolve, BUSY_WAIT_MS));
+				} else if (went === "again") round++;
+				else break;
+			}
+		}))
 			.catch((error: unknown) => say(`capabilities: guessing ${name}'s tools: ${(error as Error).message}`))
 			.finally(() => {
 				classifying.delete(name);
@@ -3008,9 +3025,9 @@ export function openCapabilities(options: CapabilityOptions) {
 	 * kind of, or that the file puts in no group. A connection banda ships says its kinds, and is grouped by name.
 	 * Whether it must go again, the listing having changed meanwhile.
 	 */
-	async function classifyNow(name: string, ctx: Context): Promise<boolean> {
+	async function classifyNow(name: string, ctx: Context): Promise<"done" | "again" | "busy"> {
 		const classify = options.classify;
-		if (classify === undefined) return false;
+		if (classify === undefined) return "done";
 		const plan = await harness.commit(async (tx) => {
 			const connection = await acceptedConnection(tx, name);
 			const listed = (await tx.doc(Connected)).connections[name];
@@ -3050,7 +3067,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				was: { groups: string[]; tools: { [tool: string]: Guess } } | null;
 			};
 		}, ctx);
-		if (plan === undefined) return false;
+		if (plan === undefined) return "done";
 		const got: Inferred<Classification> =
 			plan.need.length === 0
 				? { ok: true, value: { groups: plan.groups ?? [], tools: {} } }
@@ -3058,6 +3075,7 @@ export function openCapabilities(options: CapabilityOptions) {
 						ok: false as const,
 						why: (error as Error).message,
 					}));
+		if (!got.ok && got.busy === true) return "busy";
 		const kept = await harness.commit(async (tx) => {
 			const listed = (await tx.doc(Connected)).connections[name];
 			// listed again meanwhile: this guess is for a listing that is gone, and the next round makes the new one's
@@ -3079,7 +3097,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		// a guessed floor asks every time from now on
 		await install(ctx);
 		options.changed?.();
-		return !kept;
+		return kept ? "done" : "again";
 	}
 
 	/** What connection `name` is and how its tools stand, copied out of a commit, for setting them. */

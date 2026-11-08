@@ -23,7 +23,9 @@ export type Read<T> =
 	| { readonly ok: false; readonly errors: readonly string[] };
 
 /** An inference's outcome: the value, or why there is none, in the owner's words. */
-export type Inferred<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly why: string };
+export type Inferred<T> =
+	| { readonly ok: true; readonly value: T }
+	| { readonly ok: false; readonly why: string; readonly busy?: true };
 
 let running = 0;
 
@@ -68,7 +70,8 @@ export async function infer<T>({
 	maxTokens?: number;
 	signal?: AbortSignal | undefined;
 }): Promise<Inferred<T>> {
-	if (running >= INFERENCES) return { ok: false, why: "banda is busy thinking already. Try again in a moment." };
+	if (running >= INFERENCES)
+		return { ok: false, why: "banda is busy thinking already. Try again in a moment.", busy: true };
 	running++;
 	const deadline = AbortSignal.timeout(deadlineMs);
 	const aborted = signal === undefined ? deadline : AbortSignal.any([signal, deadline]);

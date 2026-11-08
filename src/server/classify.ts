@@ -143,6 +143,8 @@ export async function classify({
 				return errors.length === 0 ? { ok: true, value: guesses } : { ok: false, errors };
 			},
 		});
+		// busy is not an answer: the whole guess goes again later
+		if (!got.ok && got.busy === true) return got;
 		if (!got.ok) {
 			failed = got.why;
 			continue;
