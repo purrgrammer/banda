@@ -4,7 +4,6 @@ import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
 import {
 	BUSY_EVERY,
 	canonical,
-	EVERY,
 	endedBy,
 	type Follow,
 	heldBack,
@@ -169,7 +168,7 @@ describe("following an object", () => {
 		const quiet = open() as { [key: string]: Json };
 		((quiet.checks as { check_runs: { [key: string]: Json }[] }).check_runs[1] as { [key: string]: Json }).status =
 			"completed";
-		expect(lookEvery(PR, quiet)).toBe(EVERY);
+		expect(lookEvery(PR, quiet)).toBe(5 * 60_000);
 		expect(lookEvery({ every: "5m" }, {})).toBe(5 * 60_000);
 	});
 

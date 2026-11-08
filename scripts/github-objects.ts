@@ -125,6 +125,9 @@ export const GITHUB_OBJECTS = {
 			],
 			ends: { merged: "pr.merged = true", closed: "pr.state = closed" },
 			busy: "checks.check_runs[*].status != completed",
+			// GitHub tells nothing when a push comes, so a quiet pull request is looked at often enough that a push is
+			// seen within minutes: four reads every five minutes
+			every: "5m",
 			// a review's comments, a push's checks: what comes within a minute of a change wakes with it
 			settle: "1m",
 		},
@@ -235,6 +238,7 @@ export const GITHUB_OBJECTS = {
 				{ on: "issue.title", does: "tell", says: "retitled: {to}" },
 			],
 			ends: { closed: "issue.state = closed" },
+			every: "10m",
 			settle: "1m",
 		},
 		fields: {

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Accepted } from "../src/core/agents.ts";
 import { Connected } from "../src/core/connections.ts";
 import { pause as pauseAll, resume as resumeAll } from "../src/core/control.ts";
-import { BUSY_EVERY, EVERY, type Json } from "../src/core/follow.ts";
+import { BUSY_EVERY, type Json } from "../src/core/follow.ts";
 import { context } from "../src/core/store.ts";
 import { endWatches, parseWatch, Watches, type WatchRecord, watchPath, watchText } from "../src/core/watches.ts";
 import { pause } from "../src/server/watches.ts";
@@ -270,7 +270,7 @@ describe("a watch on a pull request", () => {
 		expect(summary.wakes[0]?.changes).toEqual(expect.arrayContaining(["ana approved", "lint failed"]));
 	}, 60_000);
 
-	it("busy cadence: it looks on its own every two minutes while checks run, and every half hour once they finish", async () => {
+	it("busy cadence: it looks on its own every two minutes while checks run, and every five once they finish", async () => {
 		let busy: { looked?: number; next?: number } = {};
 		const summary = await watchScenario(await tempHome(), new Faults(), {
 			world: (step) =>
@@ -292,7 +292,7 @@ describe("a watch on a pull request", () => {
 		expect(watchInvariants(summary)).toEqual([]);
 		expect(busy).toMatchObject({ looked: NOW + BUSY_EVERY, next: NOW + 2 * BUSY_EVERY });
 		expect(summary.wakes.map((wake) => wake.changes)).toEqual([["all checks green", "checks finished"]]);
-		expect(summary.record.next).toBe(NOW + BUSY_EVERY + EVERY);
+		expect(summary.record.next).toBe(NOW + BUSY_EVERY + 5 * 60_000);
 	}, 60_000);
 
 	it("a burst is one wake: what comes within the kind's settling time joins the first change's wake", async () => {

@@ -506,6 +506,7 @@ draws as cards, from scripts/github-objects.ts.
 					"closed": "pr.state = closed"
 				},
 				"busy": "checks.check_runs[*].status != completed",
+				"every": "5m",
 				"settle": "1m"
 			},
 			"fields": {
@@ -703,6 +704,7 @@ draws as cards, from scripts/github-objects.ts.
 				"ends": {
 					"closed": "issue.state = closed"
 				},
+				"every": "10m",
 				"settle": "1m"
 			},
 			"fields": {
