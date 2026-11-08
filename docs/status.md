@@ -8,7 +8,7 @@ owner acceptance remain pending; definition and attachment coverage is tracked i
 preview has owner review: Connections, Permissions, Tools, toolset icons and highlighted schemas in Details. Its switches
 remain local to the preview.
 
-Provider accounts are implemented on `feat/provider-account-rename`: a model provider holds several accounts, each
+Provider accounts are on main: a model provider holds several accounts, each
 named by the owner, added, renamed, used and signed out of in Settings → Model; the band thinks with one at a time, and
 each account's usage is counted apart. Tests, static checks and a desktop/phone walkthrough in a throwaway home with
 keys pass. A real second OAuth sign-in and a paid run on a second account remain, then owner review.
