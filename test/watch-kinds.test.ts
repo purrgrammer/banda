@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { REST_APIS } from "../src/core/rest.ts";
 import { Faults } from "./fault/faults.ts";
-import { type Answer, watchInvariants, watchScenario } from "./fault/watch-scenario.ts";
+import { type Answer, failure, watchInvariants, watchScenario } from "./fault/watch-scenario.ts";
 import { tempHome } from "./helpers.ts";
 
 /** Gmail as banda ships it, signed in as ana@example.com: the shape each connection's watch scenario copies. */
@@ -15,7 +15,7 @@ const GMAIL = {
 
 /** An email as `get_message` answers it: unread, then read and labelled. */
 const email: Answer = (tool, args, step) => {
-	if (tool !== "get_message") return { failed: `no ${tool}` };
+	if (tool !== "get_message") return failure(`no ${tool}`);
 	return {
 		id: String(args.message_id),
 		threadId: "t1",

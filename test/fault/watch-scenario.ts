@@ -60,8 +60,9 @@ export const ISSUE_WATCH =
 
 export type World = { [read: string]: Json };
 
-/** A read the service could not answer, in its words: what `answer` gives for a read that fails. */
+/** A read the service could not answer, in its words: what `answer` gives, by `failure(why)`, for a read that fails. */
 export type Failure = { readonly failed: string };
+export const failure = (why: string): Failure => ({ failed: why });
 const isFailure = (value: Json | Failure): value is Failure =>
 	value !== null &&
 	typeof value === "object" &&
@@ -101,9 +102,9 @@ export const GITHUB: ScenarioConnection = {
 export const byMethod =
 	(worldAt: (step: number) => World): Answer =>
 	(tool, args, step) => {
-		if (!["pull_request_read", "issue_read"].includes(tool)) return { failed: "not that" };
+		if (!["pull_request_read", "issue_read"].includes(tool)) return failure("not that");
 		const answer = worldAt(step)[String(args.method)];
-		return answer === undefined ? { failed: `no ${String(args.method)}` } : answer;
+		return answer === undefined ? failure(`no ${String(args.method)}`) : answer;
 	};
 
 /** A watch file on `object` as `account`, with `ask` below. */
