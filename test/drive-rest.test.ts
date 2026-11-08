@@ -137,8 +137,18 @@ describe("Google Drive REST connection", () => {
 		);
 		expect(url.searchParams.has("orderBy")).toBe(false);
 		expect(url.searchParams.get("pageSize")).toBe("20");
+		// a folder's newest files by when they were made: an old file edited never reads as new
+		await call(fetcher, "search_files", { query: "'0Fold' in parents", order: "created" });
+		expect(urlOf(fetcher, 1).searchParams.get("orderBy")).toBe("createdTime desc");
+		expect(urlOf(fetcher, 1).searchParams.get("q")).toBe("trashed = false and ('0Fold' in parents)");
 		const refused = vi.fn<typeof fetch>();
-		for (const args of [{ query: "x".repeat(501) }, { text: "x".repeat(201) }, { text: 4 }, { page_token: "" }])
+		for (const args of [
+			{ query: "x".repeat(501) },
+			{ text: "x".repeat(201) },
+			{ text: 4 },
+			{ page_token: "" },
+			{ order: "name" },
+		])
 			expect((await call(refused, "search_files", args)).isError).toBe(true);
 		expect(refused).not.toHaveBeenCalled();
 	});

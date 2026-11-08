@@ -32,7 +32,7 @@ export const DRIVE_TOOLS: McpTool[] = [
 	tool("get_profile", "Read the signed-in Google account's address.", {}),
 	tool(
 		"search_files",
-		"Find files in Google Drive, newest first unless text is given (then by relevance); trashed files are left out. Returns a ref for each file. Name each in your answer as a link, [its name](drive/<id>); to show cards, give them in the message's objects. Use page_token with a returned nextPageToken to continue.",
+		"Find files in Google Drive, newest first (by when they changed, or were made) unless text is given (then by relevance); trashed files are left out. Returns a ref for each file. Name each in your answer as a link, [its name](drive/<id>); to show cards, give them in the message's objects. Use page_token with a returned nextPageToken to continue.",
 		{
 			text: { type: "string", maxLength: 200, description: "Words to find in the files' names and contents" },
 			query: {
@@ -40,6 +40,12 @@ export const DRIVE_TOOLS: McpTool[] = [
 				maxLength: 500,
 				description:
 					"A Drive search in its own syntax, such as mimeType = 'application/vnd.google-apps.document' and modifiedTime > '2026-01-01T00:00:00' or 'FOLDER_ID' in parents",
+			},
+			order: {
+				type: "string",
+				enum: ["modified", "created"],
+				description:
+					"Newest by when they last changed (the default) or by when they were made; with text, by relevance",
 			},
 			max_results: { type: "integer", minimum: 1, maximum: 50 },
 			page_token: { type: "string", minLength: 1, maxLength: 2048 },
@@ -341,7 +347,9 @@ export async function driveCall(
 					...ALL_DRIVES,
 					includeItemsFromAllDrives: "true",
 				});
-				if (!ranked) params.set("orderBy", "modifiedTime desc");
+				if (args.order !== undefined && args.order !== "modified" && args.order !== "created")
+					throw new Error("Give order as modified or created.");
+				if (!ranked) params.set("orderBy", args.order === "created" ? "createdTime desc" : "modifiedTime desc");
 				const page = pageToken(args.page_token);
 				if (page !== undefined) params.set("pageToken", page);
 				const list = object(await request(`files?${params}`));

@@ -46,10 +46,10 @@ const life =
 		return file;
 	};
 
-const follow = async (answer: Answer, clicks: string[]) => {
+const follow = async (answer: Answer, clicks: string[], object = "drive/1aBc") => {
 	const summary = await watchScenario(await tempHome(), new Faults(), {
 		connection: DRIVE,
-		object: "drive/1aBc",
+		object,
 		answer,
 		clicks,
 	});
@@ -107,5 +107,59 @@ describe("a watch on a Drive file", () => {
 		);
 		expect(summary.wakes.map((wake) => [wake.changes, wake.ended])).toEqual([[["trashed"], "trashed"]]);
 		expect(summary.record.done?.why).toBe("trashed");
+	}, 60_000);
+});
+
+/** A folder as `get_file` answers it, last changed by the account. */
+const work = (): File => ({
+	...plan(),
+	ref: "drive/0Work",
+	name: "Work",
+	kind: "folder",
+	mimeType: "application/vnd.google-apps.folder",
+	url: "https://drive.google.com/drive/folders/0Work",
+	parents: ["0Root"],
+});
+
+type Listed = { ref: string; name: string; kind: string; modified: string; owner: string };
+
+/**
+ * The folder's life, as `get_file` and `search_files` ("'0Work' in parents", newest made first) answer it: Plan in it;
+ * then Ana adds Budget while Plan is edited; then Plan leaves the folder; then the folder is trashed.
+ */
+const folder: Answer = (tool, args, step) => {
+	if (tool === "get_file" && args.file_id === "0Work")
+		return step >= 3 ? { ...work(), trashed: true, modifier: ana } : work();
+	if (tool !== "search_files" || args.query !== "'0Work' in parents" || args.order !== "created")
+		return failure(`no ${tool}`);
+	const files: Listed[] = [];
+	if (step >= 1)
+		files.push({ ref: "drive/2Bud", name: "Budget", kind: "sheet", modified: "2026-11-02T09:10:00Z", owner: "Ana" });
+	if (step < 2)
+		files.push({
+			ref: "drive/1aBc",
+			name: "Plan",
+			kind: "doc",
+			modified: step >= 1 ? "2026-11-02T09:11:00Z" : "2026-11-02T08:00:00Z",
+			owner: "Mira",
+		});
+	return { files } as unknown as Json;
+};
+
+describe("a watch on a Drive folder", () => {
+	it("a new file in it wakes; a file edited or gone from it is nothing; trashed wakes and ends it", async () => {
+		const summary = await follow(folder, ["k1", "k2", "k3"], "https://drive.google.com/drive/folders/0Work");
+		expect(summary.tells).toEqual([]);
+		expect(summary.wakes.map((wake) => [wake.changes, wake.ended ?? null])).toEqual([
+			[["new file: Budget"], null],
+			[["trashed"], "trashed"],
+		]);
+		expect(summary.wakes[0]?.object).toMatchObject({ name: "folder 0Work", service: "Google Drive" });
+		expect(summary.record.done?.why).toBe("trashed");
+	}, 60_000);
+
+	it("its ref, drive/folder/<id>, names it as its link does", async () => {
+		const summary = await follow(folder, ["k1"], "drive/folder/0Work");
+		expect(summary.wakes.map((wake) => wake.changes)).toEqual([["new file: Budget"]]);
 	}, 60_000);
 });
