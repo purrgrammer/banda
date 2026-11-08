@@ -476,7 +476,7 @@ export function Parts() {
 			<Section
 				id="watch-items"
 				title="Watches in the chat"
-				note="An agent's watch waits for you as its card; each change the kind's rules say matters is a line, the object's card beneath it as the daemon reads it now; the last one says what ended it."
+				note="An agent's watch waits for you as its card; each change the kind's rules say matters is a line, the object's card beneath it as the daemon reads it now; the last one says what ended it. What changed while paused comes as one line that says so; one whose readings fell off says changes may be missing; an hour unable to look is an error line, unread."
 			>
 				<div className="flex max-w-2xl flex-col gap-3">
 					<WatchProposal
@@ -494,6 +494,15 @@ export function Parts() {
 						purrgrammer/banda #142 · ana approved, lint failed
 					</Line>
 					<PullRequestCard pr={{ ...PR, checks: { passed: 2, failed: 1, running: 0 }, reviews: "Approved by ana" }} />
+					<Line icon={EyeIcon} time="11:30">
+						purrgrammer/banda #142 · while paused: lint failed, ana commented
+					</Line>
+					<Line icon={EyeIcon} time="12:05">
+						purrgrammer/banda #142 · lint failed · some changes may be missing
+					</Line>
+					<Line icon={EyeOffIcon} tone="danger" time="13:10">
+						purrgrammer/banda #98 · can't reach GitHub since 12:10 · GitHub did not answer
+					</Line>
 					<Line icon={EyeOffIcon} time="17:02">
 						purrgrammer/banda #142 · merged · done: merged
 					</Line>

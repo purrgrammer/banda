@@ -159,7 +159,10 @@ export const ROUTINES: readonly RoutineRowView[] = [
 	{ id: "deps", name: "Stale dependencies", when: "On the 1st of each month", next: "1 Dec", paused: true },
 ];
 
-/** What Mara watches: a pull request until it merges, one waiting for the owner, one it cannot look at, one done. */
+/**
+ * What Mara watches: a pull request until it merges, one waiting for the owner, one it cannot reach, one done, and one
+ * ended when its account was switched off.
+ */
 export const WATCHES: readonly WatchRowView[] = [
 	{
 		id: "banda-142",
@@ -175,7 +178,8 @@ export const WATCHES: readonly WatchRowView[] = [
 		name: "purrgrammer/banda #98",
 		service: "GitHub",
 		until: "until merged or closed",
-		saw: "Can't look: GitHub is not connected as @bandarra",
+		next: "today 09:40",
+		saw: "Can't reach GitHub since today 08:10: GitHub did not answer",
 		failing: true,
 	},
 	{
@@ -185,6 +189,15 @@ export const WATCHES: readonly WatchRowView[] = [
 		until: "until merged",
 		saw: "Done Fri 17:02: merged",
 		done: true,
+	},
+	{
+		id: "banda-60",
+		name: "purrgrammer/banda #60",
+		service: "GitHub",
+		until: "until merged",
+		saw: "Ended today 08:55: GitHub as @bandarra was switched off for Mara",
+		done: true,
+		ended: true,
 	},
 ];
 

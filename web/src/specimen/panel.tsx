@@ -258,6 +258,11 @@ export function PanelSections() {
 					<Specimen label="No routines or watches yet: Add takes a link">
 						<AgentPanelOf who={OCTO} tab="routines" routines={[]} watches={[]} />
 					</Specimen>
+					<Specimen label="Every watch's state: looking, waiting for you, can't reach, done, ended by authority">
+						<Panel name="Mara">
+							<Watching agent="Mara" watches={WATCHES} onFollow={async () => {}} />
+						</Panel>
+					</Specimen>
 					<Specimen label="Add, its first look running">
 						<Panel name="Octo">
 							<Watching

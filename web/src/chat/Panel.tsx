@@ -630,7 +630,7 @@ function WatchRow({
 					{[watch.until, state].filter((part) => part !== undefined && part !== null).join(" · ")}
 				</span>
 				{watch.saw === undefined ? null : (
-					<span className={cn("truncate text-meta", watch.failing === true ? "text-danger" : "text-ink-2")}>
+					<span className={cn("line-clamp-2 text-meta", watch.failing === true ? "text-danger" : "text-ink-2")}>
 						{watch.saw}
 					</span>
 				)}
