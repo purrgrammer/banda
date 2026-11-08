@@ -8,7 +8,8 @@
  * carries no permission shape, a permission for it is refused, and no permission ever covers it, whatever the store holds.
  *
  * Scopes: once (no permission at all); the task, which is the input the chat is answering, so a permission for the task
- * ends when the owner writes to the chat again (in a group, asks the member again) or a routine wakes it; a time window, until a moment within a week; always, until revoked. Revoking deletes the permission in one commit, and an
+ * ends when the owner's next message starts a run (in a group, one that asks the member; a steer joins the run under way) or a
+ * routine wakes it; a time window, until a moment within a week; always, until revoked. Revoking deletes the permission in one commit, and an
  * effect checks its permission in the commit that records it starting, so a revoked permission covers nothing after it.
  *
  * Which scopes an ask offers is the daemon's to say (`offeredScopes`), each worded as its consequence, the task's
@@ -190,8 +191,11 @@ export async function errandOf(tx: Tx, chat: number): Promise<Errand> {
 			if (placed !== undefined) {
 				const message = entry.model?.[0];
 				if (entry.kind === AssistantEntry.kind && message?.role === "assistant") {
+					// only an answer that stopped for its calls began a tool round; one cut short or failed mid-call ended the run
 					const steered =
-						entry.byTaskId === placed.byTaskId && message.content.some((part) => part.type === "toolCall");
+						entry.byTaskId === placed.byTaskId &&
+						message.stopReason === "toolUse" &&
+						message.content.some((part) => part.type === "toolCall");
 					if (!steered) return { chat, input: Number(placed.id) };
 					placed = undefined;
 					continue;

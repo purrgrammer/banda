@@ -1,6 +1,7 @@
 import type { Context } from "@earendil-works/chord";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, Type } from "@earendil-works/pi-ai";
 import {
+	AssistantEntry,
 	type ConversationId,
 	createRegistry,
 	defineExtension,
@@ -1077,5 +1078,46 @@ describe("the app's permission words and groups", () => {
 			["For “Morning news”", "routine", ["2"]],
 			["Other", undefined, ["1"]],
 		]);
+	});
+});
+
+describe("errandOf reads where pi-durable placed an input", () => {
+	const user = (text: string) => [{ role: "user", content: text, timestamp: 0 }];
+	const answered = (stopReason: string, call: boolean) => [
+		{
+			role: "assistant",
+			content: call ? [{ type: "toolCall", id: "c", name: "x", arguments: {} }] : [{ type: "text", text: "ok" }],
+			stopReason,
+		},
+	];
+	const over = (entries: readonly { id: number; kind: string; byTaskId?: string; model: unknown }[]) =>
+		({
+			scanEntries: async (_scope: unknown, _size: number, cursor?: unknown) => ({
+				items: cursor === undefined ? [...entries].reverse() : [],
+				next: undefined,
+			}),
+		}) as unknown as Parameters<typeof errandOf>[0];
+	const first = { id: 1, kind: "banda.inbound", model: user("a") };
+	const next = { id: 4, kind: "banda.inbound", byTaskId: "G1", model: user("next") };
+
+	it("a message placed after a tool round, in that round's commit, steers the run: the task stays", async () => {
+		const entries = [
+			first,
+			{ id: 2, kind: AssistantEntry.kind, byTaskId: "G1", model: answered("toolUse", true) },
+			{ id: 3, kind: "pi.toolResult", byTaskId: "T1", model: [{ role: "toolResult" }] },
+			next,
+		];
+		expect((await errandOf(over(entries), 9)).input).toBe(1);
+	});
+
+	it("a message placed after a final answer starts a run, even one cut short in a tool call", async () => {
+		for (const stopReason of ["length", "error", "stop"]) {
+			const entries = [
+				first,
+				{ id: 2, kind: AssistantEntry.kind, byTaskId: "G1", model: answered(stopReason, true) },
+				next,
+			];
+			expect((await errandOf(over(entries), 9)).input, stopReason).toBe(4);
+		}
 	});
 });
