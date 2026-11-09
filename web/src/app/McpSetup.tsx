@@ -69,7 +69,7 @@ export type McpSetupActions = {
 	readonly setLabel: (label: string) => void;
 	readonly setChosen: (chosen: { readonly [tool: string]: Setting }) => void;
 	/** Set tools at once, once it is connected and past the review. */
-	readonly setTools: (settings: { readonly [tool: string]: Setting }) => void;
+	readonly setTools: (settings: { readonly [tool: string]: Setting }, group?: boolean) => void;
 	readonly switchAgent: (agent: string, on: boolean) => void;
 	readonly save: () => void;
 	readonly review: () => void;
@@ -301,10 +301,10 @@ export function McpSetup({
 		setAccount,
 		setLabel,
 		setChosen,
-		setTools: (settings) =>
+		setTools: (settings, group) =>
 			void run(async () => {
 				if (!view?.accepted || !name) return;
-				update(await setConnectionTools(name, settings, view.accepted.version));
+				update(await setConnectionTools(name, settings, view.accepted.version, group));
 			}),
 		switchAgent: (agent, on) =>
 			phase === "done"

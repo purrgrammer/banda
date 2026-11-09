@@ -16,8 +16,10 @@ import { offeredScopes } from "../src/core/permissions.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context } from "../src/core/store.ts";
 import {
+	type Classed,
 	classOf,
 	defaultOf,
+	groupValue,
 	inGroup,
 	type Kind,
 	nameGroup,
@@ -221,6 +223,21 @@ describe("a tool's kind, as said", () => {
 		const tools = Array.from({ length: 30 }, (_, i) => `create_things${i}`);
 		expect(new Set(Object.values(nameGroups(tools))).size).toBeLessThanOrEqual(8);
 		expect(Object.keys(nameGroups(["list_issues", "get_issue", "whoami"]))).toHaveLength(3);
+	});
+
+	it("a group's Allow says nothing of a tool nobody spoke for or a server only proposed: only the tool's own control does", () => {
+		const options = (classed: Classed) => optionsOf(classed, undefined);
+		const unknown: Classed = { kind: "unknown", from: "nobody" };
+		const proposed: Classed = { kind: "read", from: "server" };
+		const known: Classed = { kind: "read", from: "definition" };
+		const theirs: Classed = { kind: "read", from: "you" };
+		expect(groupValue("allow", unknown, options(unknown))).toBeUndefined();
+		expect(groupValue("allow", proposed, options(proposed))).toBeUndefined();
+		expect(groupValue("allow", known, options(known))).toBe("allow");
+		expect(groupValue("allow", theirs, options(theirs))).toBe("allow");
+		// the other settings narrow as ever
+		expect(groupValue("ask", unknown, options(unknown))).toBe("ask");
+		expect(groupValue("off", proposed, options(proposed))).toBe("off");
 	});
 
 	it("a property: no write or floor is ever offered Allow, and a setting a tool may take keeps it", () => {
@@ -536,6 +553,32 @@ describe("over versions, and on a server the owner added", () => {
 		await s.capabilities.remove("cal");
 		expect((await s.harness.snapshot(ToolSettings, context))?.set).toEqual({});
 		expect((await s.harness.snapshot(Connected, context))?.off).toEqual({});
+	});
+
+	it("the daemon refuses a group's Allow on a tool only the tool's own control may call a read", async () => {
+		const fake = await startFakeMcp(SIGNED);
+		fakes.push(fake);
+		fake.tools = [
+			...fake.tools,
+			{ name: "no_word", description: "Nobody said", inputSchema: { type: "object", properties: {} } },
+		];
+		const s = await added(fake, (d) => {
+			d.reads = ["whoami"];
+			d.needs = { create_event: ["cal.write"] };
+		});
+		expect((await s.tool("list_events"))?.classed).toEqual({ kind: "read", from: "server" });
+		expect((await s.tool("no_word"))?.classed).toEqual({ kind: "unknown", from: "nobody" });
+		const version = await s.version();
+		await expect(s.capabilities.setTools("cal", { list_events: "allow" }, version, context, true)).rejects.toThrow(
+			/group/,
+		);
+		await expect(s.capabilities.setTools("cal", { no_word: "allow" }, version, context, true)).rejects.toThrow(/group/);
+		// nothing landed, not even the setting the group could give
+		expect(await s.version()).toBe(version);
+		expect((await s.tool("no_word"))?.classed).toEqual({ kind: "unknown", from: "nobody" });
+		// the tool's own control still may
+		await s.capabilities.setTools("cal", { no_word: "allow" }, version);
+		expect((await s.tool("no_word"))?.classed).toEqual({ kind: "read", from: "you" });
 	});
 });
 

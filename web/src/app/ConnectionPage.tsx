@@ -94,10 +94,10 @@ export function ConnectionPage({ connection, onClose }: { connection: string; on
 				access={access}
 				busy={busy}
 				error={error}
-				onSetTools={(settings) => {
+				onSetTools={(settings, group) => {
 					const sha = version.current;
 					if (sha === undefined) return;
-					void run(async () => showCapabilities(await setConnectionTools(connection, settings, sha)));
+					void run(async () => showCapabilities(await setConnectionTools(connection, settings, sha, group)));
 				}}
 				onChangeAccess={(account) => {
 					// a key has no sign-in page to come back from: the setup takes a new one

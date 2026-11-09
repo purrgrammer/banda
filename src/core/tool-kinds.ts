@@ -88,6 +88,15 @@ export function inGroup(setting: Setting, options: readonly Setting[]): Setting 
 	return undefined;
 }
 
+/**
+ * What a group's control sets one of its tools to, as `inGroup` says, but Allow never where it would say the tool
+ * reads when nobody has: that is the owner's word on the tool alone, in the tool's own control.
+ */
+export function groupValue(setting: Setting, classed: Classed, options: readonly Setting[]): Setting | undefined {
+	if (setting === "allow" && (classed.kind === "unknown" || classed.from === "server")) return undefined;
+	return inGroup(setting, options);
+}
+
 /** Whether a tool set to `setting` asks every time (on the floor): Always ask, or Ask on a read. */
 export const asksEveryTime = (setting: Setting, kind: Kind) =>
 	setting === "always" || (setting === "ask" && kind === "read");

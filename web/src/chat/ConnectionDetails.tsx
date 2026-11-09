@@ -17,7 +17,7 @@ import { FLOOR_WORDS } from "../../../src/core/floor.ts";
 import {
 	type Classed,
 	type From,
-	inGroup,
+	groupValue,
 	type Kind,
 	SETTING_WORDS,
 	SETTINGS,
@@ -98,18 +98,21 @@ function Choice({
 	);
 }
 
-/** Each of `tools` set to `setting` as a group sets it: the setting, or the nearest it has; the rest as they were. */
+/**
+ * Each of `tools` set to `setting` as a group sets it: the setting, or the nearest it has; the rest as they were. A group
+ * never says a tool reads when nobody has: Allow leaves such a tool alone.
+ */
 const groupSet = (tools: readonly Settable[], setting: Setting): { [tool: string]: Setting } =>
 	Object.fromEntries(
 		tools.flatMap((tool) => {
-			const near = inGroup(setting, tool.options);
+			const near = groupValue(setting, tool.classed, tool.options);
 			return near === undefined ? [] : [[tool.title, near]];
 		}),
 	);
 
 /** The settings a group's control offers: each one some tool in it takes. */
 const groupOptions = (tools: readonly Settable[]) =>
-	SETTINGS.filter((setting) => tools.some((tool) => inGroup(setting, tool.options) !== undefined));
+	SETTINGS.filter((setting) => tools.some((tool) => groupValue(setting, tool.classed, tool.options) !== undefined));
 
 /** The line that says how a connection's tools are set: "34 run freely · 20 ask first". */
 export function toolTally(tools: readonly ConnectionToolView[], settingOf: (tool: Settable) => Setting) {
@@ -130,7 +133,7 @@ export function ToolList({
 	tools: readonly ConnectionToolView[];
 	groups: readonly string[];
 	settingOf: (tool: Settable) => Setting;
-	onTools: (settings: { readonly [tool: string]: Setting }) => void;
+	onTools: (settings: { readonly [tool: string]: Setting }, group?: boolean) => void;
 	disabled?: boolean | undefined;
 	expanded?: boolean | undefined;
 }) {
@@ -211,7 +214,7 @@ function ToolGroup({
 	group: string;
 	tools: readonly Settable[];
 	settingOf: (tool: Settable) => Setting;
-	onTools: (settings: { readonly [tool: string]: Setting }) => void;
+	onTools: (settings: { readonly [tool: string]: Setting }, group?: boolean) => void;
 	disabled?: boolean | undefined;
 	expanded: boolean;
 }) {
@@ -243,7 +246,7 @@ function ToolGroup({
 						options={groupOptions(tools)}
 						value={common}
 						disabled={disabled}
-						onChange={(setting) => onTools(groupSet(tools, setting))}
+						onChange={(setting) => onTools(groupSet(tools, setting), true)}
 					/>
 				</div>
 			</div>
@@ -349,7 +352,7 @@ export function ConnectionDetailsView({
 	mode: "details" | "review";
 	chosen?: { readonly [tool: string]: Setting } | undefined;
 	onChoose?: ((chosen: { readonly [tool: string]: Setting }) => void) | undefined;
-	onSetTools?: ((settings: { readonly [tool: string]: Setting }) => void) | undefined;
+	onSetTools?: ((settings: { readonly [tool: string]: Setting }, group?: boolean) => void) | undefined;
 	agents: readonly (Who & { id: string })[];
 	agentsFor: readonly AgentsFor[];
 	access?: ScopeChoices | undefined;
@@ -362,8 +365,8 @@ export function ConnectionDetailsView({
 }) {
 	const review = mode === "review";
 	const settingOf = (tool: Settable): Setting => (review ? (chosen[tool.title] ?? tool.setting) : tool.setting);
-	const onTools = (settings: { readonly [tool: string]: Setting }) =>
-		review ? onChoose?.({ ...chosen, ...settings }) : onSetTools?.(settings);
+	const onTools = (settings: { readonly [tool: string]: Setting }, group?: boolean) =>
+		review ? onChoose?.({ ...chosen, ...settings }) : onSetTools?.(settings, group);
 	const line = toolTally(view.tools, settingOf);
 	const hasTools = view.tools.length > 0;
 	return (

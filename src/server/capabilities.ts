@@ -128,6 +128,7 @@ import {
 	type Classed,
 	classOf,
 	defaultOf,
+	groupValue,
 	inGroup,
 	isSetting,
 	nameGroups,
@@ -2537,7 +2538,14 @@ export function openCapabilities(options: CapabilityOptions) {
 	 * rest what narrows. `expected` is the version the owner saw: a stale view changes nothing. A setting never moves the
 	 * version, or every card would read again for it; only a new read does, as it always has.
 	 */
-	async function setTools(name: string, given: unknown, expected: unknown, ctx: Context = context): Promise<void> {
+	async function setTools(
+		name: string,
+		given: unknown,
+		expected: unknown,
+		ctx: Context = context,
+		/** The settings are one of a group's control: Allow may not say a tool reads when nobody said so. */
+		group = false,
+	): Promise<void> {
 		if (typeof expected !== "string") throw new BadRequest("give the version of the connection you saw");
 		if (typeof given !== "object" || given === null || Array.isArray(given) || Object.keys(given).length > 500)
 			throw new BadRequest("give the settings as tool names, each with allow, ask, always or off");
@@ -2561,6 +2569,11 @@ export function openCapabilities(options: CapabilityOptions) {
 				if (!Object.hasOwn(listing.tools, tool)) return { status: 400, why: `${name} lists no tool named ${tool}` };
 				if (!isSetting(setting)) return { status: 400, why: `${tool}: give allow, ask, always or off` };
 				const classed = classOf(said, tool, overlay, listing.tools[tool]);
+				if (group && setting === "allow" && groupValue(setting, classed, optionsOf(classed, said.ask)) === undefined)
+					return {
+						status: 400,
+						why: `${tool}: a group cannot say a tool only reads; set it on the tool itself`,
+					};
 				if (!optionsOf(classed, said.ask).includes(setting))
 					return {
 						status: 400,

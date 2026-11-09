@@ -888,7 +888,8 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						else if (act.action === "label") await capabilities.labelAccount(act.name, act.account, act.label);
 						else if (act.action === "add") await capabilities.addShipped(act.name);
 						else if (act.action === "address") await capabilities.addByAddress(act.url);
-						else if (act.action === "tools") await capabilities.setTools(act.name, act.settings, act.version);
+						else if (act.action === "tools")
+							await capabilities.setTools(act.name, act.settings, act.version, context, act.group === true);
 						else if (act.action === "public")
 							await capabilities.switchAccount(act.agent, act.name, undefined, act.on, context, act.version);
 						else if (act.action === "refresh") await capabilities.refresh(act.name);

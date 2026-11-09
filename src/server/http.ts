@@ -213,7 +213,13 @@ export type CapabilityAction =
 	| { readonly action: "label"; readonly name: string; readonly account: string; readonly label: string }
 	| { readonly action: "add"; readonly name: string }
 	| { readonly action: "address"; readonly url: unknown }
-	| { readonly action: "tools"; readonly name: string; readonly settings: unknown; readonly version: string }
+	| {
+			readonly action: "tools";
+			readonly name: string;
+			readonly settings: unknown;
+			readonly version: string;
+			readonly group?: boolean;
+	  }
 	| {
 			readonly action: "public";
 			readonly name: string;
@@ -771,10 +777,14 @@ export function handler(
 			}
 			if (action === "add") return reply(res, 200, await routes.capability({ action, name }));
 			if (action === "tools") {
-				const { settings, version } = await json(req);
+				const { settings, version, group } = await json(req);
 				if (typeof version !== "string" || !VERSION.test(version))
 					throw new BadRequest("version is the version of the connection you saw");
-				return reply(res, 200, await routes.capability({ action, name, settings, version: version as string }));
+				return reply(
+					res,
+					200,
+					await routes.capability({ action, name, settings, version: version as string, group: group === true }),
+				);
 			}
 			if (action === "public") {
 				const { agent, on, version } = await json(req);

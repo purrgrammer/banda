@@ -347,10 +347,15 @@ export const addMcp = (config: import("../../../src/core/mcp-config.ts").McpConf
 export const refreshConnection = (name: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/refresh`, { method: "POST", body: "{}" });
 /** Set connection `name`'s tools, each as given, for the `version` the owner saw: a stale view changes nothing. */
-export const setConnectionTools = (name: string, settings: { readonly [tool: string]: Setting }, version: string) =>
+export const setConnectionTools = (
+	name: string,
+	settings: { readonly [tool: string]: Setting },
+	version: string,
+	group = false,
+) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/tools`, {
 		method: "POST",
-		body: JSON.stringify({ settings, version }),
+		body: JSON.stringify({ settings, version, ...(group ? { group: true } : {}) }),
 	});
 export const switchPublicConnection = (name: string, agent: string, on: boolean, version?: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/public`, {
