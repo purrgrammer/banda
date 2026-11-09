@@ -54,7 +54,7 @@ it("fetches only an attachment named by the same authorized Gmail message and ho
 		(await tx.doc(AgentChats)).chats[chat] = "reader";
 		const store = await tx.doc(Connected);
 		store.connections.gmail = {
-			sha: shaOf(definition),
+			version: shaOf(definition),
 			at: 1,
 			tools: {
 				get_profile: { description: "profile", schema: { type: "object" } },

@@ -118,7 +118,7 @@ async function open(home: string, shipped?: string, model = chatModel()) {
 		if (found === undefined) throw new Error("no connection cal");
 		return found;
 	};
-	const version = async () => (await view()).accepted?.sha as string;
+	const version = async () => (await view()).accepted?.version as string;
 	const tool = async (name: string) => (await view()).tools.find((each) => each.title === name);
 	const set = async (settings: { [tool: string]: Setting }) =>
 		s.capabilities.setTools("cal", settings, await version());

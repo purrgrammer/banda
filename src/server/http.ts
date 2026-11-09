@@ -205,7 +205,7 @@ export type CapabilityAction =
 			readonly action: "account";
 			readonly name: string;
 			readonly account: string;
-			readonly sha?: string;
+			readonly version?: string;
 			readonly agent: string;
 			readonly on: boolean;
 	  }
@@ -213,13 +213,13 @@ export type CapabilityAction =
 	| { readonly action: "label"; readonly name: string; readonly account: string; readonly label: string }
 	| { readonly action: "add"; readonly name: string }
 	| { readonly action: "address"; readonly url: unknown }
-	| { readonly action: "tools"; readonly name: string; readonly settings: unknown; readonly sha: string }
+	| { readonly action: "tools"; readonly name: string; readonly settings: unknown; readonly version: string }
 	| {
 			readonly action: "public";
 			readonly name: string;
 			readonly agent: string;
 			readonly on: boolean;
-			readonly sha?: string;
+			readonly version?: string;
 	  }
 	| { readonly action: "refresh"; readonly name: string };
 
@@ -771,21 +771,27 @@ export function handler(
 			}
 			if (action === "add") return reply(res, 200, await routes.capability({ action, name }));
 			if (action === "tools") {
-				const { settings, sha } = await json(req);
-				if (typeof sha !== "string" || !VERSION.test(sha))
-					throw new BadRequest("sha is the version of the connection you saw");
-				return reply(res, 200, await routes.capability({ action, name, settings, sha: sha as string }));
+				const { settings, version } = await json(req);
+				if (typeof version !== "string" || !VERSION.test(version))
+					throw new BadRequest("version is the version of the connection you saw");
+				return reply(res, 200, await routes.capability({ action, name, settings, version: version as string }));
 			}
 			if (action === "public") {
-				const { agent, on, sha } = await json(req);
-				if (sha !== undefined && (typeof sha !== "string" || !VERSION.test(sha)))
-					throw new BadRequest("sha is the version of the connection you saw");
+				const { agent, on, version } = await json(req);
+				if (version !== undefined && (typeof version !== "string" || !VERSION.test(version)))
+					throw new BadRequest("version is the version of the connection you saw");
 				if (typeof on !== "boolean" || typeof agent !== "string" || !/^[a-z0-9-]{1,64}$/.test(agent))
 					throw new BadRequest("Choose an agent and whether it has access");
 				return reply(
 					res,
 					200,
-					await routes.capability({ action, name, agent, on, ...(sha === undefined ? {} : { sha: sha as string }) }),
+					await routes.capability({
+						action,
+						name,
+						agent,
+						on,
+						...(version === undefined ? {} : { version: version as string }),
+					}),
 				);
 			}
 			if (action === "refresh") return reply(res, 200, await routes.capability({ action, name }));
@@ -812,9 +818,9 @@ export function handler(
 				if (typeof label !== "string") throw new BadRequest("label is the account's name");
 				return reply(res, 200, await routes.capability({ action: "label", name, account: key, label }));
 			}
-			const { agent, on, sha } = await json(req);
-			if (sha !== undefined && (typeof sha !== "string" || !VERSION.test(sha)))
-				throw new BadRequest("sha is the version of the connection you saw");
+			const { agent, on, version } = await json(req);
+			if (version !== undefined && (typeof version !== "string" || !VERSION.test(version)))
+				throw new BadRequest("version is the version of the connection you saw");
 			if (typeof on !== "boolean") throw new BadRequest("on is true or false");
 			if (typeof agent !== "string" || !/^[a-z0-9-]{1,64}$/.test(agent)) throw new BadRequest("agent names an agent");
 			return reply(
@@ -826,7 +832,7 @@ export function handler(
 					account: key,
 					agent,
 					on,
-					...(sha === undefined ? {} : { sha: sha as string }),
+					...(version === undefined ? {} : { version: version as string }),
 				}),
 			);
 		}

@@ -43,7 +43,7 @@ export async function objectScenario(home: string, scenario: ObjectScenario, fau
 			(await tx.doc(AgentChats)).chats[1] = "reader";
 			const connected = await tx.doc(Connected);
 			connected.connections.example = {
-				sha: shaOf(text),
+				version: shaOf(text),
 				at: 1,
 				tools: {
 					get: { description: "read", schema: { type: "object", properties: { number: { type: "integer" } } } },

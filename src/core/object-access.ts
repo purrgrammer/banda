@@ -19,7 +19,7 @@ export async function objectAccess(tx: Tx, chat: number, ref: ObjectRef, account
 	if (connection === undefined || kind === undefined) return undefined;
 	const doc = await tx.doc(Connected);
 	const listed = doc.connections[ref.connection];
-	if (listed?.sha !== connection.sha) return undefined;
+	if (listed?.version !== connection.version) return undefined;
 	if (signsIn(connection) && !(await accountsOn(tx, id, ref.connection)).includes(account)) return undefined;
 	if (!signsIn(connection) && account !== "") return undefined;
 	const schemas = [];
@@ -43,6 +43,6 @@ export async function objectAccess(tx: Tx, chat: number, ref: ObjectRef, account
 	}
 	// the sign-in the read is made with, not what the account is called: a rename changes no access
 	const held = doc.accounts[ref.connection]?.[account];
-	const source = JSON.stringify([connection.sha, held && [held.id, held.generation, held.at], schemas]);
+	const source = JSON.stringify([connection.version, held && [held.id, held.generation, held.at], schemas]);
 	return { connection, kind, reads, schemas: listedWith, source, stamp: JSON.stringify([source, agent, doc.epoch]) };
 }

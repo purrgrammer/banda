@@ -178,7 +178,7 @@ export function McpSetup({
 	}, [view, phase, before, account]);
 	const initialized = useRef("");
 	useEffect(() => {
-		const key = `${name}/${account}/${view?.accepted?.sha}`;
+		const key = `${name}/${account}/${view?.accepted?.version}`;
 		if (initialized.current === key) return;
 		initialized.current = key;
 		setSelected([...new Set([...active, ...(agent === undefined ? [] : [agent.id])])]);
@@ -239,7 +239,7 @@ export function McpSetup({
 				current = next;
 			}
 			if (Object.keys(chosen).length > 0) {
-				const next = update(await setConnectionTools(name, chosen, view.accepted.sha));
+				const next = update(await setConnectionTools(name, chosen, view.accepted.version));
 				if (!next) throw new Error("This connection was removed. Return to Connections.");
 				current = next;
 				setChosen({});
@@ -251,8 +251,8 @@ export function McpSetup({
 				if (selected.includes(agent.id) !== allowed.includes(agent.id))
 					update(
 						await (anonymous
-							? switchPublicConnection(name, agent.id, selected.includes(agent.id), current.accepted?.sha)
-							: switchAccount(name, account, agent.id, selected.includes(agent.id), current.accepted?.sha)),
+							? switchPublicConnection(name, agent.id, selected.includes(agent.id), current.accepted?.version)
+							: switchAccount(name, account, agent.id, selected.includes(agent.id), current.accepted?.version)),
 					);
 			go("done");
 		});
@@ -304,7 +304,7 @@ export function McpSetup({
 		setTools: (settings) =>
 			void run(async () => {
 				if (!view?.accepted || !name) return;
-				update(await setConnectionTools(name, settings, view.accepted.sha));
+				update(await setConnectionTools(name, settings, view.accepted.version));
 			}),
 		switchAgent: (agent, on) =>
 			phase === "done"
@@ -312,8 +312,8 @@ export function McpSetup({
 						if (!view) return;
 						update(
 							await (anonymous
-								? switchPublicConnection(view.name, agent, on, view.accepted?.sha)
-								: switchAccount(view.name, account, agent, on, view.accepted?.sha)),
+								? switchPublicConnection(view.name, agent, on, view.accepted?.version)
+								: switchAccount(view.name, account, agent, on, view.accepted?.version)),
 						);
 					})
 				: setSelected((old) => (on ? [...new Set([...old, agent])] : old.filter((each) => each !== agent))),

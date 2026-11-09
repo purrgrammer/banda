@@ -346,16 +346,16 @@ export const addMcp = (config: import("../../../src/core/mcp-config.ts").McpConf
 	});
 export const refreshConnection = (name: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/refresh`, { method: "POST", body: "{}" });
-/** Set connection `name`'s tools, each as given, for the version `sha` the owner saw: a stale view changes nothing. */
-export const setConnectionTools = (name: string, settings: { readonly [tool: string]: Setting }, sha: string) =>
+/** Set connection `name`'s tools, each as given, for the `version` the owner saw: a stale view changes nothing. */
+export const setConnectionTools = (name: string, settings: { readonly [tool: string]: Setting }, version: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/tools`, {
 		method: "POST",
-		body: JSON.stringify({ settings, sha }),
+		body: JSON.stringify({ settings, version }),
 	});
-export const switchPublicConnection = (name: string, agent: string, on: boolean, sha?: string) =>
+export const switchPublicConnection = (name: string, agent: string, on: boolean, version?: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/public`, {
 		method: "POST",
-		body: JSON.stringify({ agent, on, sha }),
+		body: JSON.stringify({ agent, on, version }),
 	});
 /** Shared catalogue, including box changes awaiting the owner's acceptance. */
 export const skills = () => api<SkillView[]>("/skills");
@@ -458,10 +458,10 @@ export async function typedUrl(url: string, mimeType: string): Promise<string> {
 	return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
 }
 /** Switch account `account` of connection `name` on or off for agent `agent`, in effect at once. */
-export const switchAccount = (name: string, account: string, agent: string, on: boolean, sha?: string) =>
+export const switchAccount = (name: string, account: string, agent: string, on: boolean, version?: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/accounts/${encodeURIComponent(account)}/switch`, {
 		method: "POST",
-		body: JSON.stringify({ agent, on, sha }),
+		body: JSON.stringify({ agent, on, version }),
 	});
 
 /** Name numbered account `account` of connection `name`, whose server did not say whom it is for. */

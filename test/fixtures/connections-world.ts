@@ -119,6 +119,6 @@ export const allowReads = async (
 	tools: readonly string[],
 	version?: string,
 ) => {
-	const seen = version ?? (await s.capabilities.view()).connections.find((c) => c.name === name)?.accepted?.sha;
+	const seen = version ?? (await s.capabilities.view()).connections.find((c) => c.name === name)?.accepted?.version;
 	await s.capabilities.setTools(name, Object.fromEntries(tools.map((tool) => [tool, "allow"])), seen);
 };

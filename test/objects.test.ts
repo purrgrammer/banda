@@ -48,7 +48,7 @@ async function setup() {
 		(await tx.doc(AgentChats)).chats[1] = "reader";
 		const c = await tx.doc(Connected);
 		c.connections.example = {
-			sha: shaOf(text),
+			version: shaOf(text),
 			at: 1,
 			tools: { get: { description: "read", schema: { type: "object", properties: { number: { type: "integer" } } } } },
 		};
@@ -90,7 +90,7 @@ it("URL, ambiguous shorthand and canonical aliases draw once without spending th
 	});
 	shipping(definition("example", next));
 	await s.harness.commit(async (tx) => {
-		(await tx.doc(Connected)).connections.example!.sha = shaOf(next);
+		(await tx.doc(Connected)).connections.example!.version = shaOf(next);
 	}, context);
 	const shown = await s.service.show(1, [
 		{ ref: "https://example.com/a/b/pull/1" },
@@ -120,7 +120,7 @@ it("refreshes each fallback candidate at most once per request, including failur
 	shipping(definition("example", next));
 	await s.harness.commit(async (tx) => {
 		const connected = await tx.doc(Connected);
-		connected.connections.example!.sha = shaOf(next);
+		connected.connections.example!.version = shaOf(next);
 		connected.connections.example!.tools.pull = connected.connections.example!.tools.get!;
 	}, context);
 	const calls: string[] = [];

@@ -160,13 +160,13 @@ if (state === "sign-in") {
 // "address": its reads are none at first; the owner lets what the server says only reads run without asking
 if (mode === "address" || mode === "mcp") {
 	const hinted = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.hinted ?? [];
-	const seen = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.accepted?.sha;
+	const seen = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.accepted?.version;
 	if (hinted.includes("list_events") && seen !== undefined)
 		await s.capabilities.setTools("cal", { list_events: "allow" }, seen);
 	// and sets one of them to ask: the same after a kill, whichever side of the commit it died on
 	const current = (await s.capabilities.view()).connections.find((c) => c.name === "cal");
-	if (current?.accepted?.sha !== undefined)
-		await s.capabilities.setTools("cal", { whoami: "ask" }, current.accepted.sha);
+	if (current?.accepted?.version !== undefined)
+		await s.capabilities.setTools("cal", { whoami: "ask" }, current.accepted.version);
 }
 
 const received = await s.core.receive(s.harness, {

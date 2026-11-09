@@ -258,7 +258,7 @@ export async function define(
 	} else await s.capabilities.addShipped(name);
 	// a tool the server lists that the definition does not name waits off: on, as a test of what it does expects
 	await turnOnWaiting(s, name);
-	return read.connection.sha;
+	return read.connection.version;
 }
 
 /** The owner switching tool `tool` (the model's name for it) on or off, in its connection's details. */
@@ -268,7 +268,7 @@ export async function switchTool(s: Pick<Connected, "capabilities">, tool: strin
 	const found = shown?.tools.find((each) => each.name === tool);
 	if (shown === undefined || found === undefined) throw new Error(`there is no tool named ${tool}`);
 	const setting = !on ? "off" : found.classed?.kind === "read" && found.classed.from !== "server" ? "allow" : "ask";
-	await s.capabilities.setTools(name, { [found.title]: setting }, shown.accepted?.sha);
+	await s.capabilities.setTools(name, { [found.title]: setting }, shown.accepted?.version);
 }
 
 /** Every tool of connection `name` waiting for the owner, switched on. */

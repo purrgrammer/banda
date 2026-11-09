@@ -345,7 +345,7 @@ export type Server = {
 export type OwnerReads = { tools: string[]; version: number };
 
 /**
- * What the connections hold: for each, the tools its server listed and for which accepted file (its hash), and when;
+ * What the connections hold: for each, the tools its server listed and for which version of its definition, and when;
  * the tools the owner switched off, by the name the model knows them by; the accounts signed in, by connection and by
  * key (the folder their credentials are in); and which accounts each agent may use, by agent and connection.
  */
@@ -354,7 +354,7 @@ type ConnectedValue = {
 	epoch: number;
 	connections: {
 		[name: string]: {
-			sha: string;
+			version: string;
 			tools: { [tool: string]: Listed };
 			/** The server's own notes about its tools, as it gave them when first listed for this file. */
 			notes?: string;
@@ -525,7 +525,7 @@ export function toolName(connection: string, tool: string): string {
 }
 
 /** The connection a server's record is: every tool asks until the owner says it reads; its version is the record's. */
-export function serverConnection(name: string, server: Server): Connection & { sha: string } {
+export function serverConnection(name: string, server: Server): Connection & { version: string } {
 	return {
 		name,
 		service: server.service,
@@ -536,7 +536,7 @@ export function serverConnection(name: string, server: Server): Connection & { s
 		...(server.scopes === undefined ? {} : { scopes: [...server.scopes] }),
 		reads: [],
 		floors: {},
-		sha: `s${server.version}`,
+		version: `s${server.version}`,
 	};
 }
 
@@ -546,9 +546,9 @@ export function serverConnection(name: string, server: Server): Connection & { s
  * store by name, so it returns if the definition stops naming it.
  */
 function withOwnerReads(
-	connection: Connection & { sha: string },
+	connection: Connection & { version: string },
 	overlay: OwnerReads | undefined,
-): Connection & { sha: string } {
+): Connection & { version: string } {
 	if (overlay === undefined) return connection;
 	const named = namedTools(connection);
 	const reads = overlay.tools.filter(
@@ -561,7 +561,7 @@ function withOwnerReads(
 		...connection,
 		reads: [...new Set([...connection.reads, ...reads])],
 		...(Object.keys(readsWhen).length === 0 ? {} : { readsWhen }),
-		sha: `${connection.sha}.r${overlay.version}`,
+		version: `${connection.version}.r${overlay.version}`,
 	};
 }
 
@@ -583,10 +583,13 @@ export function saidOf(name: string, connection: Connection, server: boolean): S
 
 /**
  * The connection `name` in effect: one banda ships, as this banda ships it, while the owner has it added; or a server
- * the owner added, from its record. Its `sha` is its version: a definition's hash or a record's counter, with the
+ * the owner added, from its record. Its `version` is a definition's hash or a record's counter, with the
  * owner's reads' own counter when they laid any over it. Reads only.
  */
-export async function acceptedConnection(tx: Tx, name: string): Promise<(Connection & { sha: string }) | undefined> {
+export async function acceptedConnection(
+	tx: Tx,
+	name: string,
+): Promise<(Connection & { version: string }) | undefined> {
 	const doc = await tx.doc(Connected);
 	const shipped = shippedDefinition(name);
 	if (shipped !== undefined)
@@ -628,7 +631,7 @@ export function namedTools(connection: Connection): Set<string> {
 /** A connection's tool in effect: whose, its server's name for it, and whether it is a read or on the floor. */
 export type InEffect = {
 	readonly name: string;
-	readonly connection: Connection & { sha: string };
+	readonly connection: Connection & { version: string };
 	readonly tool: string;
 	readonly listed: Listed;
 	readonly read: boolean;
@@ -650,7 +653,7 @@ export async function connectionTools(tx: Tx): Promise<InEffect[]> {
 	for (const name of await acceptedNames(tx)) {
 		const connection = await acceptedConnection(tx, name);
 		const listed = connections[name];
-		if (connection === undefined || listed === undefined || listed.sha !== connection.sha) continue;
+		if (connection === undefined || listed === undefined || listed.version !== connection.version) continue;
 		for (const [tool, shape] of Object.entries(listed.tools).sort(([a], [b]) => a.localeCompare(b))) {
 			const model = toolName(name, tool);
 			if (off[model] !== undefined || found.some((other) => other.name === model)) continue;

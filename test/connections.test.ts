@@ -298,7 +298,7 @@ describe("adding a server", () => {
 		expect((await state()).tools.every((tool) => tool.alwaysAsk)).toBe(true);
 		expect((await s.harness.commit(connectionTools, context)).every((tool) => tool.floor === "private")).toBe(true);
 		expect(await s.harness.commit((tx) => connectionToolsOf(tx, { id: "sancho" }), context)).toEqual([]);
-		const sha = (await state()).accepted!.sha;
+		const sha = (await state()).accepted!.version;
 		fake.instructions = "Changed instructions that have not been accepted";
 		fake.tools = fake.tools.map((tool) => ({ ...tool, description: "Changed description" }));
 		await allowReads(s, name, ["list_events"], sha);
@@ -311,7 +311,7 @@ describe("adding a server", () => {
 			/changed/,
 		);
 		expect(await s.harness.commit((tx) => connectionToolsOf(tx, { id: "sancho" }), context)).toEqual([]);
-		await s.capabilities.switchAccount("sancho", name, undefined, true, context, (await state()).accepted!.sha);
+		await s.capabilities.switchAccount("sancho", name, undefined, true, context, (await state()).accepted!.version);
 		expect(await s.harness.commit((tx) => connectionToolsOf(tx, { id: "sancho" }), context)).not.toEqual([]);
 		s.model.plan([{ tool: `${name}__list_events`, args: { day: "mon" } }]);
 		const ran = await s.say("monday?");
@@ -396,7 +396,7 @@ describe("adding a server", () => {
 			.tools()
 			.find(({ tool }) => tool.name === `${name}__list_events`)!.tool;
 		const shown = (await s.capabilities.view()).connections.find((each) => each.name === name)!;
-		await s.capabilities.setTools(name, { list_events: "ask" }, shown.accepted!.sha);
+		await s.capabilities.setTools(name, { list_events: "ask" }, shown.accepted!.version);
 		// Retain the old registration exactly as an already-running model request can. Its admission uses the real store.
 		const api = { conversationId: warm.chat, commit: s.harness.commit.bind(s.harness) } as unknown as ToolExecutionApi;
 		const result = await old.execute({ day: "mon" }, api, context);
@@ -621,14 +621,14 @@ describe("adding a server", () => {
 			expect(stored).toMatchObject({ service: "Ernesto", url: fake.url, auth: "none" });
 			expect(Number.isInteger(stored?.version)).toBe(true);
 			const shown = (await s.capabilities.view()).connections.find((each) => each.name === name)!;
-			expect(shown.accepted?.sha).toMatch(/^s\d+$/);
+			expect(shown.accepted?.version).toMatch(/^s\d+$/);
 			expect(shown).toMatchObject({ state: "connected", agents: [] });
 			expect(shown.tools.every((tool) => tool.alwaysAsk)).toBe(true);
 			// allowing a read moves its version, with no text rewritten anywhere
-			const before = shown.accepted!.sha;
+			const before = shown.accepted!.version;
 			await allowReads(s, name, ["list_events"], before);
 			const after = (await s.capabilities.view()).connections.find((each) => each.name === name)!;
-			expect(after.accepted?.sha).not.toBe(before);
+			expect(after.accepted?.version).not.toBe(before);
 			expect(after.tools.find((tool) => tool.title === "list_events")?.kind).toBe("read");
 			expect(existsSync(join(s.box.workspace, "connections"))).toBe(false);
 		});
@@ -653,7 +653,7 @@ describe("adding a server", () => {
 			const s = await open();
 			const name = await s.capabilities.addMcp({ url: fake.url, service: "Ernesto" });
 			const shown = async () => (await s.capabilities.view()).connections.find((each) => each.name === name);
-			const first = (await shown())?.accepted?.sha;
+			const first = (await shown())?.accepted?.version;
 			await allowReads(s, name, ["list_events"]);
 			await s.capabilities.remove(name);
 			const doc = await s.harness.snapshot(Connected, context);
@@ -662,7 +662,7 @@ describe("adding a server", () => {
 			expect(doc?.connections[name]).toBeUndefined();
 			expect(await shown()).toBeUndefined();
 			await s.capabilities.addMcp({ url: fake.url, service: "Ernesto" });
-			expect((await shown())?.accepted?.sha).not.toBe(first);
+			expect((await shown())?.accepted?.version).not.toBe(first);
 			expect((await shown())?.tools.find((tool) => tool.title === "list_events")?.kind).toBe("write");
 		});
 
@@ -681,7 +681,7 @@ describe("adding a server", () => {
 			const s = await open(fake, undefined, false, gated);
 			const name = await s.capabilities.addMcp({ url: fake.url, service: "Ernesto" });
 			const state = async () => (await s.capabilities.view()).connections.find((each) => each.name === name)!;
-			const version = (await state()).accepted!.sha;
+			const version = (await state()).accepted!.version;
 			await expect(allowReads(s, name, ["list_events"], "s999999")).rejects.toThrow(/changed/);
 			await allowReads(s, name, ["list_events"], version);
 			await expect(allowReads(s, name, ["whoami"], version)).rejects.toThrow(/changed/);
@@ -693,12 +693,12 @@ describe("adding a server", () => {
 			const listing = s.capabilities.refresh(name);
 			await until(() => release !== undefined);
 			await allowReads(s, name, ["whoami"]);
-			const moved = (await state()).accepted!.sha;
+			const moved = (await state()).accepted!.version;
 			fake.tools = fake.tools.filter((tool) => tool.name !== "create_event");
 			holding = false;
 			release?.();
 			await listing;
-			expect((await state()).accepted?.sha).toBe(moved);
+			expect((await state()).accepted?.version).toBe(moved);
 			expect((await state()).tools.some((tool) => tool.title === "create_event")).toBe(true);
 		});
 
@@ -720,10 +720,10 @@ describe("adding a server", () => {
 				};
 			}, context);
 			const docs = async () => (await s.capabilities.view()).connections.find((c) => c.name === "docs")!;
-			const before = (await docs()).accepted!.sha;
+			const before = (await docs()).accepted!.version;
 			expect(await s.capabilities.signIn("docs")).toEqual({ connected: true });
 			expect(await docs()).toMatchObject({ state: "connected", accepted: { connection: { auth: "none" } } });
-			expect((await docs()).accepted?.sha).not.toBe(before);
+			expect((await docs()).accepted?.version).not.toBe(before);
 			const stored = (await s.harness.snapshot(Connected, context))?.servers.docs;
 			expect(stored).toMatchObject({ auth: "none" });
 			expect(stored?.client).toBeUndefined();
@@ -1130,7 +1130,7 @@ describe("connections banda ships", () => {
 		const view = await s.capabilities.view();
 		expect(view.shipped?.[0]?.added).toBe(true);
 		expect(await cal(s)).toMatchObject({ state: "sign-in", accepted: { connection: { service: "Calendar" } } });
-		expect((await cal(s))?.accepted?.sha).toBe(shaOf(calDefinition(fake)));
+		expect((await cal(s))?.accepted?.version).toBe(shaOf(calDefinition(fake)));
 		expect(existsSync(join(s.box.workspace, "connections"))).toBe(false);
 		const files = (await s.harness.snapshot(Accepted, context))?.files ?? {};
 		expect(Object.keys(files).filter((path) => path.startsWith("connections/"))).toEqual([]);
@@ -1176,8 +1176,8 @@ describe("connections banda ships", () => {
 		});
 		s = await restart(s, newer);
 		const after = await cal(s);
-		expect(after?.accepted?.sha).not.toBe(before?.accepted?.sha);
-		expect(after?.accepted?.sha).toBe(shaOf(readFileSync(join(newer, "cal.json"), "utf8")));
+		expect(after?.accepted?.version).not.toBe(before?.accepted?.version);
+		expect(after?.accepted?.version).toBe(shaOf(readFileSync(join(newer, "cal.json"), "utf8")));
 		expect(after?.state).toBe("connected");
 		expect(after?.accounts?.map(({ account, agents, stale }) => ({ account, agents, stale }))).toEqual(
 			before?.accounts?.map(({ account, agents, stale }) => ({ account, agents, stale })),
@@ -1186,7 +1186,7 @@ describe("connections banda ships", () => {
 		expect((await switches(s)).list_events).toBe(false);
 		// listed again for the new version, and offered to the lead as it was
 		const listed = (await s.harness.snapshot(Connected, context))?.connections.cal;
-		expect(listed?.sha).toBe(after?.accepted?.sha);
+		expect(listed?.version).toBe(after?.accepted?.version);
 		expect(s.offered()).toContain("cal__whoami");
 		expect(s.offered()).not.toContain("cal__list_events");
 	});
@@ -1350,11 +1350,11 @@ describe("connections banda ships", () => {
 		let s = await open(fake, await shipping(fake));
 		await s.capabilities.addShipped("cal");
 		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
-		const version = (await cal(s))?.accepted?.sha as string;
+		const version = (await cal(s))?.accepted?.version as string;
 		await allowReads(s, "cal", ["create_event"], version);
 		expect((await cal(s))?.tools.find((t) => t.title === "create_event")?.kind).toBe("read");
 		expect((await cal(s))?.accepted?.connection?.reads).toContain("create_event");
-		expect((await cal(s))?.accepted?.sha).not.toBe(version);
+		expect((await cal(s))?.accepted?.version).not.toBe(version);
 		expect((await cal(s))?.state).toBe("connected");
 		expect(existsSync(join(s.box.workspace, "connections"))).toBe(false);
 		expect((await s.harness.snapshot(Connected, context))?.reads.cal?.tools).toEqual(["create_event"]);
@@ -1363,7 +1363,7 @@ describe("connections banda ships", () => {
 		// two edits that cross: the second, on the version the first moved, is refused
 		await expect(allowReads(s, "cal", ["send_payment"], version)).rejects.toThrow(/changed/);
 		await expect(allowReads(s, "cal", ["nope"])).rejects.toThrow(/lists no tool named nope/);
-		const allowed = (await cal(s))?.accepted?.sha as string;
+		const allowed = (await cal(s))?.accepted?.version as string;
 		s = await restart(
 			s,
 			await shipping(fake, (definition) => {
@@ -1372,13 +1372,13 @@ describe("connections banda ships", () => {
 		);
 		// the definition moved on and the read stays; the listing is taken again for the new version
 		expect((await cal(s))?.tools.find((t) => t.title === "create_event")?.kind).toBe("read");
-		expect((await cal(s))?.accepted?.sha).not.toBe(allowed);
+		expect((await cal(s))?.accepted?.version).not.toBe(allowed);
 		expect((await cal(s))?.accepted?.connection?.reads).toEqual(expect.arrayContaining(["whoami", "create_event"]));
 		// asking first again is a setting that narrows; the read stays what the owner allowed
-		const before = (await cal(s))?.accepted?.sha as string;
+		const before = (await cal(s))?.accepted?.version as string;
 		await s.capabilities.setTools("cal", { create_event: "ask" }, before);
 		expect((await cal(s))?.tools.find((t) => t.title === "create_event")?.setting).toBe("ask");
-		expect((await cal(s))?.accepted?.sha).toBe(before);
+		expect((await cal(s))?.accepted?.version).toBe(before);
 		// removing the connection forgets what the owner allowed
 		await s.capabilities.remove("cal");
 		expect((await s.harness.snapshot(Connected, context))?.reads.cal).toBeUndefined();
@@ -1659,10 +1659,10 @@ describe("through the daemon's API", () => {
 				["cal", "connected"],
 				["notes", "connected"],
 			]);
-			const version = keyedView.connections[0]?.accepted?.sha;
+			const version = keyedView.connections[0]?.accepted?.version;
 			const off = await api<View>("/capabilities/connections/cal/tools", {
 				settings: { create_event: "off" },
-				sha: version,
+				version,
 			});
 			expect(off.connections[0]?.tools.find((t) => t.name === "cal__create_event")?.on).toBe(false);
 			const gone = await api<View>("/capabilities/connections/notes/remove", {});

@@ -91,7 +91,7 @@ function connection(
 		groups: ["Tools"],
 		draws: [],
 		accepted: {
-			sha: "specimen",
+			version: "specimen",
 			connection: {
 				service: "Ernesto",
 				url: "https://ernesto.example/mcp",

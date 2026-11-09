@@ -802,7 +802,7 @@ export type ConnectionView = {
 	/** Explicit anonymous access; no account is created for a public server. */
 	readonly agents?: readonly string[];
 	readonly accepted?: {
-		readonly sha: string;
+		readonly version: string;
 		readonly connection?: ConnectionSummary;
 	};
 	readonly state: "waiting" | "sign-in" | "signing-in" | "key" | "connecting" | "connected" | "problem";

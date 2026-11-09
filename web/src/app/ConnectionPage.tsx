@@ -25,8 +25,8 @@ export function ConnectionPage({ connection, onClose }: { connection: string; on
 	const [changing, setChanging] = useState<AccountView>();
 	const [leaving, setLeaving] = useState<AccountView>();
 	const [setup, setSetup] = useState(false);
-	const version = useRef(view?.accepted?.sha);
-	version.current = view?.accepted?.sha ?? version.current;
+	const version = useRef(view?.accepted?.version);
+	version.current = view?.accepted?.version ?? version.current;
 	const summary = view?.accepted?.connection;
 	if (view === undefined || summary === undefined) return <p className="text-ui text-ink-2">Loading connection…</p>;
 	// a server the owner added and has not connected yet is still being set up

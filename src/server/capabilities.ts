@@ -606,9 +606,9 @@ export function openCapabilities(options: CapabilityOptions) {
 	// ---- what is in effect, as tools
 
 	/** The commit check every call makes: the tool is in effect now. */
-	const allowed = (name: string, connection?: Connection & { sha: string }) => async (tx: Tx) => {
+	const allowed = (name: string, connection?: Connection & { version: string }) => async (tx: Tx) => {
 		if (!(await inEffect(tx, name))) return "the owner switched it off or took it back";
-		if (connection !== undefined && (await acceptedConnection(tx, connection.name))?.sha !== connection.sha)
+		if (connection !== undefined && (await acceptedConnection(tx, connection.name))?.version !== connection.version)
 			return "the connection changed since this tool was offered; use its current tools";
 		return undefined;
 	};
@@ -1100,10 +1100,10 @@ export function openCapabilities(options: CapabilityOptions) {
 		}
 	}
 
-	/** Store what connection `name`'s server listed, for its accepted file `sha`, and offer the tools to whom they are for. */
+	/** Store what connection `name`'s server listed, for its `version`, and offer the tools to whom they are for. */
 	async function keepListing(
 		name: string,
-		sha: string,
+		version: string,
 		listed: readonly McpTool[],
 		ctx: Context,
 		given?: string,
@@ -1126,7 +1126,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		const stored = await harness.commit(async (tx) => {
 			const accepted = await acceptedConnection(tx, name);
 			// the connection changed since: what was listed is for another version
-			if (accepted === undefined || accepted.sha !== sha) return false;
+			if (accepted === undefined || accepted.version !== version) return false;
 			const doc = await tx.doc(Connected);
 			const was = doc.connections[name];
 			const proposed = listedOf(listed);
@@ -1137,7 +1137,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			const named = definition === undefined ? undefined : namedTools(definition);
 			const fresh = Object.keys(proposed).filter((tool) =>
 				named === undefined
-					? was?.sha === sha && !Object.hasOwn(was.tools, tool)
+					? was?.version === version && !Object.hasOwn(was.tools, tool)
 					: !named.has(tool) && (was === undefined || !Object.hasOwn(was.tools, tool)),
 			);
 			// A server's relisting may remove a tool, but never rewrite the prompt authority of an existing one.
@@ -1146,16 +1146,16 @@ export function openCapabilities(options: CapabilityOptions) {
 				: Object.fromEntries(
 						Object.entries(proposed).map(([tool, shape]) => [
 							tool,
-							(was?.sha === sha && Object.hasOwn(was.tools, tool) ? was.tools[tool] : undefined) ?? shape,
+							(was?.version === version && Object.hasOwn(was.tools, tool) ? was.tools[tool] : undefined) ?? shape,
 						]),
 					);
 			// notes too are kept as first listed for this file, on the tool chosen then to carry them: a relisting never
 			// rewrites what the model was told, and switching other tools never moves them from one description to another
-			const same = was?.sha === sha;
+			const same = was?.version === version;
 			const kept = same ? was.notes : notes;
 			const on = same ? was.notesOn : Object.keys(tools).sort()[0];
 			doc.connections[name] = {
-				sha,
+				version,
 				tools,
 				...(kept === undefined || on === undefined ? {} : { notes: kept, notesOn: on }),
 				at: now(),
@@ -1174,7 +1174,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				listed.map((tool) => toolName(name, tool.name)).filter((tool) => doc.off[tool] === undefined),
 				name,
 			);
-			if (was?.sha !== sha) await log(tx, { at: now(), what: `Connected to ${accepted.service}` });
+			if (was?.version !== version) await log(tx, { at: now(), what: `Connected to ${accepted.service}` });
 			return true;
 		}, ctx);
 		await install(ctx);
@@ -1207,7 +1207,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		if (signsIn(connection) && account === undefined) return false;
 		if (connection.api !== undefined) {
 			fault("connect:listed");
-			await keepListing(name, connection.sha, REST_APIS[connection.api].tools, ctx, undefined, new Set(), true);
+			await keepListing(name, connection.version, REST_APIS[connection.api].tools, ctx, undefined, new Set(), true);
 			problems.delete(name);
 			options.changed?.();
 			return false;
@@ -1224,7 +1224,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			);
 			fault("connect:listed");
 			problems.delete(name);
-			await keepListing(name, connection.sha, listed.tools, ctx, listed.instructions, used);
+			await keepListing(name, connection.version, listed.tools, ctx, listed.instructions, used);
 			return false;
 		} catch (error) {
 			problems.set(
@@ -1241,7 +1241,9 @@ export function openCapabilities(options: CapabilityOptions) {
 	const listingDue = (name: string, ctx: Context) =>
 		harness.commit(async (tx) => {
 			const connection = await acceptedConnection(tx, name);
-			return connection?.url !== undefined && (await tx.doc(Connected)).connections[name]?.sha !== connection.sha;
+			return (
+				connection?.url !== undefined && (await tx.doc(Connected)).connections[name]?.version !== connection.version
+			);
 		}, ctx);
 
 	/**
@@ -1297,7 +1299,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				// the model with no version moving
 				if (
 					connection?.url !== undefined &&
-					(connections[name]?.sha !== connection.sha || connection.api !== undefined)
+					(connections[name]?.version !== connection.version || connection.api !== undefined)
 				)
 					names.push(name);
 			}
@@ -1392,7 +1394,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				names: await acceptedNames(tx),
 				connected: JSON.parse(JSON.stringify(await tx.doc(Connected))) as {
 					connections: {
-						[name: string]: { sha: string; tools: { [tool: string]: Listed }; notes?: string; notesOn?: string };
+						[name: string]: { version: string; tools: { [tool: string]: Listed }; notes?: string; notesOn?: string };
 					};
 					off: { [tool: string]: "owner" | "waiting" };
 					accounts?: { [name: string]: { [account: string]: Account } };
@@ -1414,7 +1416,7 @@ export function openCapabilities(options: CapabilityOptions) {
 							),
 						),
 					),
-				) as { [name: string]: (Connection & { sha: string }) | undefined },
+				) as { [name: string]: (Connection & { version: string }) | undefined },
 			}),
 			ctx,
 		);
@@ -1430,9 +1432,9 @@ export function openCapabilities(options: CapabilityOptions) {
 			const definition = definitions.get(name);
 			const server = connected.servers[name];
 			const connection = current[name];
-			const version = connection?.sha;
+			const version = connection?.version;
 			const file = {
-				sha: version ?? "",
+				version: version ?? "",
 				at: definition !== undefined ? (connected.added[name]?.at ?? 0) : (server?.at ?? 0),
 			};
 			let state: ConnectionView["state"] = "waiting";
@@ -1443,7 +1445,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			const lacking = (credentials: Credentials | undefined) => {
 				if (connection?.auth !== "oauth" || credentials === undefined || !("oauth" in credentials)) return [];
 				const given = grantedScopes(credentials);
-				const listedTools = listed !== undefined && listed.sha === file?.sha ? Object.keys(listed.tools) : [];
+				const listedTools = listed !== undefined && listed.version === file?.version ? Object.keys(listed.tools) : [];
 				const found: string[] = [];
 				for (const [tool, anyOf] of Object.entries(connection.needs ?? {}))
 					if (!givenFor(credentials, connection, tool) && anyOf[0] !== undefined) found.push(anyOf[0]);
@@ -1476,7 +1478,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			if (connection !== undefined) {
 				const signed = signsIn(connection);
 				if (signed && fresh.length === 0) state = connection.auth === "oauth" ? "sign-in" : "key";
-				else if (listed !== undefined && listed.sha === file?.sha) state = "connected";
+				else if (listed !== undefined && listed.version === file?.version) state = "connected";
 				else state = "connecting";
 				if (signing.has(name)) state = "signing-in";
 				if (problems.has(name) && state !== "connected" && state !== "signing-in") state = "problem";
@@ -1503,7 +1505,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			const overlay = connected.reads[name]?.tools ?? [];
 			const toolGroups = listed === undefined ? {} : groupsOf(connection, Object.keys(listed.tools));
 			const tools: ConnectionToolView[] =
-				connection === undefined || listed === undefined || listed.sha !== file?.sha
+				connection === undefined || listed === undefined || listed.version !== file?.version
 					? []
 					: Object.entries(listed.tools)
 							.sort(([a], [b]) => a.localeCompare(b))
@@ -1552,7 +1554,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			const connectionProblem = problems.get(name);
 			connections.push({
 				name,
-				accepted: { sha: file.sha, ...(connection === undefined ? {} : { connection: summaryOf(connection) }) },
+				accepted: { version: file.version, ...(connection === undefined ? {} : { connection: summaryOf(connection) }) },
 				state,
 				...(connection !== undefined && signsIn(connection) ? { accounts } : {}),
 				...(Object.hasOwn(connected.public, name) ? { agents: [...(connected.public[name] ?? [])] } : {}),
@@ -1571,12 +1573,12 @@ export function openCapabilities(options: CapabilityOptions) {
 				// when it last changed: allowed, or listed again
 				...(() => {
 					const relisted =
-						listed !== undefined && listed.sha === file?.sha ? (listed as { at?: number }).at : undefined;
+						listed !== undefined && listed.version === file?.version ? (listed as { at?: number }).at : undefined;
 					const at = Math.max(file?.at ?? 0, relisted ?? 0);
 					return at === 0 ? {} : { at };
 				})(),
 				...(() => {
-					if (connection === undefined || listed?.sha !== file?.sha) return {};
+					if (connection === undefined || listed?.version !== file?.version) return {};
 					const hinted = Object.entries(listed?.tools ?? {})
 						.filter(
 							([tool, shape]) =>
@@ -1589,7 +1591,7 @@ export function openCapabilities(options: CapabilityOptions) {
 						.sort();
 					return hinted.length === 0 ? {} : { hinted };
 				})(),
-				...(listed?.sha === file?.sha && listed?.notes !== undefined ? { notes: listed.notes } : {}),
+				...(listed?.version === file?.version && listed?.notes !== undefined ? { notes: listed.notes } : {}),
 				...(connectionProblem === undefined ? {} : { problem: connectionProblem }),
 				tools,
 				groups: [
@@ -1806,7 +1808,7 @@ export function openCapabilities(options: CapabilityOptions) {
 	): Promise<void> {
 		if (!AGENT_NAME.test(agent)) throw new BadRequest(`"${agent}" is not an agent`, 404);
 		const plan = await harness.commit(async (tx) => {
-			if (expectedConnection !== undefined && (await acceptedConnection(tx, name))?.sha !== expectedConnection)
+			if (expectedConnection !== undefined && (await acceptedConnection(tx, name))?.version !== expectedConnection)
 				return { refused: "This connection changed. Review it again." };
 			const file = (await tx.doc(Accepted)).files[agentPath(agent)];
 			const parsed = file === undefined ? undefined : parseAgent(agent, file.text);
@@ -1838,7 +1840,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			fault("account:file");
 		}
 		const refused = await harness.commit(async (tx) => {
-			if (expectedConnection !== undefined && (await acceptedConnection(tx, name))?.sha !== expectedConnection)
+			if (expectedConnection !== undefined && (await acceptedConnection(tx, name))?.version !== expectedConnection)
 				return "This connection changed. Review it again.";
 			if (rewritten !== undefined) {
 				const accepted = (await tx.doc(Accepted)).files;
@@ -1938,7 +1940,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			fault("account:read");
 			const account = accountKey(id);
 			const current = await harness.commit((tx) => acceptedConnection(tx, name), ctx);
-			if (current?.sha !== connection.sha) throw new Error("that connection changed while you signed in");
+			if (current?.version !== connection.version) throw new Error("that connection changed while you signed in");
 			// signing one account in again came back as another the owner already has: its access was chosen for the
 			// first, so neither changes
 			if (expected !== undefined && expected !== account) {
@@ -1951,7 +1953,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			await locked.keep(account, credentials);
 			fault("oauth:kept");
 			const { known } = await harness.commit(async (tx) => {
-				if ((await acceptedConnection(tx, name))?.sha !== connection.sha)
+				if ((await acceptedConnection(tx, name))?.version !== connection.version)
 					throw new Error("that connection changed while you signed in");
 				const doc = await tx.doc(Connected);
 				doc.accounts ??= {};
@@ -1991,7 +1993,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			at: now(),
 		};
 		const listed = await harness.commit(
-			async (tx) => (await tx.doc(Connected)).connections[name]?.sha === connection.sha,
+			async (tx) => (await tx.doc(Connected)).connections[name]?.version === connection.version,
 			ctx,
 		);
 		if (!listed) await connect(name, ctx);
@@ -1999,14 +2001,14 @@ export function openCapabilities(options: CapabilityOptions) {
 		// agent can use it; the connect card will offer the account switch and show why it was refused.
 		let accessProblem: string | undefined;
 		if (agent !== undefined)
-			await switchAccount(agent, name, account, true, ctx, connection.sha).catch((error: unknown) => {
+			await switchAccount(agent, name, account, true, ctx, connection.version).catch((error: unknown) => {
 				if (!(error instanceof BadRequest)) throw error;
 				accessProblem = error.message;
 			});
 		// A new account of a connection banda ships, signed in for no agent, is on for the lead: its tools are curated,
 		// and an account nobody can use reads as a broken connection. One added by URL waits for the owner's switch.
 		else if (!known && definitions.has(name))
-			await switchAccount(LEAD, name, account, true, ctx, connection.sha).catch((error: unknown) => {
+			await switchAccount(LEAD, name, account, true, ctx, connection.version).catch((error: unknown) => {
 				if (!(error instanceof BadRequest)) throw error;
 			});
 		await install(ctx);
@@ -2511,10 +2513,10 @@ export function openCapabilities(options: CapabilityOptions) {
 			const connection = await acceptedConnection(tx, name);
 			if (connection === undefined) return { status: 404, why: `there is no connection named ${name}` };
 			const server = doc.servers[name] !== undefined;
-			if (expected !== connection.sha)
+			if (expected !== connection.version)
 				return { status: 409, why: "This connection changed meanwhile. Review it again." };
 			const listing = doc.connections[name];
-			if (listing === undefined || listing.sha !== connection.sha)
+			if (listing === undefined || listing.version !== connection.version)
 				return { status: 409, why: `${name} is not connected yet: sign in first, then its tools are known` };
 			const said = saidOf(name, connection, server);
 			const overlay = doc.reads[name]?.tools ?? [];
@@ -2551,7 +2553,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				doc.versions++;
 				doc.reads[name] = { tools: [...new Set([...overlay, ...reading])], version: doc.versions };
 				// the tools keep their first-listed shape: allowing a read is not a new listing
-				listing.sha = (await acceptedConnection(tx, name))?.sha ?? listing.sha;
+				listing.version = (await acceptedConnection(tx, name))?.version ?? listing.version;
 			}
 			// one in flight as a read does not finish as one once it was narrowed
 			doc.epoch++;
@@ -2642,7 +2644,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			const usable =
 				reads &&
 				listed !== undefined &&
-				listed.sha === connection.sha &&
+				listed.version === connection.version &&
 				listed.tools[tool] !== undefined &&
 				(!signsIn(connection) || (account !== undefined && doc.accounts?.[name]?.[account] !== undefined));
 			return { connection, usable };
@@ -2710,7 +2712,7 @@ export function openCapabilities(options: CapabilityOptions) {
 						canonical({ message_id: messageId }),
 			);
 			const listed = doc.connections[name];
-			return declared && listed?.sha === connection.sha && listed.tools.get_message !== undefined
+			return declared && listed?.version === connection.version && listed.tools.get_message !== undefined
 				? { connection }
 				: undefined;
 		}, ctx);
@@ -2751,7 +2753,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			const connection = await acceptedConnection(tx, name);
 			const listed = (await tx.doc(Connected)).connections[name];
 			const schema =
-				connection === undefined || listed?.sha !== connection.sha ? undefined : listed.tools[tool]?.schema;
+				connection === undefined || listed?.version !== connection.version ? undefined : listed.tools[tool]?.schema;
 			return schema === undefined ? undefined : (JSON.parse(JSON.stringify(schema)) as JsonObject);
 		}, ctx);
 

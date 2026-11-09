@@ -48,7 +48,7 @@ for (let attempt = 0; attempt < 4; attempt++) {
 			await added(tx, "gmail");
 			accepted.files["agents/reader.md"] ??= { text: agent, sha: shaOf(agent), at: 1 };
 			connected.connections.gmail ??= {
-				sha: shaOf(definition),
+				version: shaOf(definition),
 				at: 1,
 				tools: {
 					get_profile: { description: "profile", schema: { type: "object" } },

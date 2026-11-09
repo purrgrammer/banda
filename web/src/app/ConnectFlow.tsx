@@ -200,7 +200,7 @@ export function ConnectFlow({
 		if (account === undefined) return;
 		setBusy(true);
 		try {
-			showCapabilities(await switchAccount(connection, account.account, id, on, view?.accepted?.sha));
+			showCapabilities(await switchAccount(connection, account.account, id, on, view?.accepted?.version));
 		} catch (error) {
 			toast.error(wordsOf(error));
 		} finally {

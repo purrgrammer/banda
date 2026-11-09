@@ -196,7 +196,7 @@ describe("a watch on a pull request", () => {
 					shipping(newer);
 					await harness.commit(async (tx) => {
 						const listed = (await tx.doc(Connected)).connections.github;
-						if (listed !== undefined) listed.sha = newer.sha;
+						if (listed !== undefined) listed.version = newer.version;
 					}, context);
 				}
 				const after = reads();

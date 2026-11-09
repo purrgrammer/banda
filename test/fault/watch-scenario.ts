@@ -329,7 +329,7 @@ export async function watchScenario(
 			accepted.files["agents/mara.md"] = { sha: shaOf(agent), text: agent, at: NOW };
 			const connected = await tx.doc(Connected);
 			connected.connections[via] = {
-				sha: shipped.sha,
+				version: shipped.version,
 				at: NOW,
 				tools: Object.fromEntries(
 					connection.tools.map((tool) => [

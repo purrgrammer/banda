@@ -201,7 +201,7 @@ export const Definition = Type.Object(
 export type Definition = Static<typeof Definition>;
 
 /** A connection as banda ships it, with its version: the hash of the bytes read. */
-export type Shipped = Connection & { readonly sha: string };
+export type Shipped = Connection & { readonly version: string };
 
 /**
  * The connection the definition `text` says, with its version; or why it is not one: not JSON, not of its schema
@@ -243,7 +243,7 @@ export function readDefinition(name: string, text: string): { connection: Shippe
 		...(value.objects === undefined ? {} : { objects: value.objects }),
 		...(value.access === undefined ? {} : { access: value.access }),
 	});
-	return "errors" in parsed ? parsed : { connection: { ...parsed.connection, sha: shaOf(text) } };
+	return "errors" in parsed ? parsed : { connection: { ...parsed.connection, version: shaOf(text) } };
 }
 
 /**

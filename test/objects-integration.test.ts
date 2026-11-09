@@ -452,7 +452,7 @@ it.each(["signout", "switch", "regrant", "definition"] as const)(
 		else if (mode === "switch" || mode === "regrant") {
 			await s.capabilities.switchAccount("reader", "github", "alice", false);
 			if (mode === "regrant") await s.capabilities.switchAccount("reader", "github", "alice", true);
-		} else setDefinitions(new Map([["github", { ...(shippedDefinition("github") as Shipped), sha: "changed" }]]));
+		} else setDefinitions(new Map([["github", { ...(shippedDefinition("github") as Shipped), version: "changed" }]]));
 		finish();
 		expect((await shown)[0]?.shown).not.toBe("card");
 		expect(Object.keys((await s.harness.snapshot(Readings, context))?.readings ?? {})).toHaveLength(0);

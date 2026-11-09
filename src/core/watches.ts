@@ -324,8 +324,8 @@ export async function acceptedWatches(tx: Tx): Promise<string[]> {
 }
 
 /** Every connection in effect, with its version. */
-export async function acceptedConnections(tx: Tx): Promise<(Connection & { readonly sha: string })[]> {
-	const out: (Connection & { readonly sha: string })[] = [];
+export async function acceptedConnections(tx: Tx): Promise<(Connection & { readonly version: string })[]> {
+	const out: (Connection & { readonly version: string })[] = [];
 	for (const name of await acceptedNames(tx)) {
 		const connection = await acceptedConnection(tx, name);
 		if (connection !== undefined) out.push(connection);
@@ -488,7 +488,7 @@ export async function followed(
 	tx: Tx,
 	object: string,
 ): Promise<
-	{ ref: ObjectRef; kind: ObjectKind & { follow: Follow }; connection: Connection & { sha: string } } | undefined
+	{ ref: ObjectRef; kind: ObjectKind & { follow: Follow }; connection: Connection & { version: string } } | undefined
 > {
 	const connections = await acceptedConnections(tx);
 	for (const ref of recognise(object, connections)) {
@@ -550,7 +550,7 @@ type Resolved = {
 	readonly chat: number;
 	readonly ref: ObjectRef;
 	readonly kind: ObjectKind & { follow: Follow };
-	readonly connection: Connection & { sha: string };
+	readonly connection: Connection & { version: string };
 	readonly account: string;
 	/** What the service calls the account: its own changes are nothing. */
 	readonly me?: string;

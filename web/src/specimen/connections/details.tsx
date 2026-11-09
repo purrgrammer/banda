@@ -75,7 +75,7 @@ const VIEW: ConnectionView = {
 	name: "github",
 	state: "connected",
 	accepted: {
-		sha: "specimen",
+		version: "specimen",
 		connection: {
 			service: "GitHub",
 			url: "https://api.githubcopilot.com/mcp/",

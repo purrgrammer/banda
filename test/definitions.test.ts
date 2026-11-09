@@ -88,11 +88,11 @@ describe("the definitions banda ships", () => {
 		const b = readDefinition("gmail", text("gmail"));
 		const spaced = readDefinition("gmail", `${text("gmail")}\n`);
 		if ("errors" in a || "errors" in b || "errors" in spaced) throw new Error("gmail does not read");
-		expect(a.connection.sha).toMatch(/^[0-9a-f]{64}$/);
-		expect(a.connection.sha).toBe(b.connection.sha);
-		expect(spaced.connection.sha).not.toBe(a.connection.sha);
-		const { sha: _a, ...one } = a.connection;
-		const { sha: _b, ...other } = spaced.connection;
+		expect(a.connection.version).toMatch(/^[0-9a-f]{64}$/);
+		expect(a.connection.version).toBe(b.connection.version);
+		expect(spaced.connection.version).not.toBe(a.connection.version);
+		const { version: _a, ...one } = a.connection;
+		const { version: _b, ...other } = spaced.connection;
 		expect(other).toEqual(one);
 	});
 
