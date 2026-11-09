@@ -951,16 +951,26 @@
 			}
 		}
 	},
-	"propose_send": {
-		"description": "Ask the owner to send a request your computer's proxy held. A request that writes (any method but GET, HEAD and OPTIONS) is never sent from your computer directly: it is held, answered 403 with a ticket, and listed in your command's result. Call this with the ticket: the owner sees exactly that request and approves it or not; approved, it is sent once, exactly as held, and you get the response. Do not send it again yourself.",
+	"ask_hosts": {
+		"description": "Ask the owner to allow you hosts, several at once, before you need them: anything you send there (any method, WebSockets included, e.g. Nostr relays or a streaming API) then goes straight through, from any of your chats, until the owner takes it back. Reads never need this. Ask for what the task needs: exact names first, a pattern (*.example.com) when the names are many under one domain, * only when the owner asked for it.",
 		"parameters": {
 			"type": "object",
-			"required": ["ticket"],
+			"required": ["hosts", "why"],
 			"properties": {
-				"ticket": {
+				"hosts": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"minItems": 1,
+					"maxItems": 32,
+					"description": "The hosts to allow: names (relay.example.com), patterns for every name under one (*.example.com), or * for every host. A scheme or port only when not https on 443 (ws://, wss://, http:// are read as their HTTP ones)."
+				},
+				"why": {
 					"type": "string",
-					"pattern": "^t[0-9a-f]{10}$",
-					"description": "The ticket a held request was given."
+					"minLength": 1,
+					"maxLength": 500,
+					"description": "What you need them for, in the owner's words."
 				}
 			}
 		}

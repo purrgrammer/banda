@@ -4,7 +4,6 @@ import {
 	BookOpenIcon,
 	CalendarClockIcon,
 	CameraIcon,
-	ClipboardListIcon,
 	ClockIcon,
 	FilePenLineIcon,
 	FilePlusIcon,
@@ -59,7 +58,6 @@ const ICONS: Record<string, LucideIcon> = {
 	browser_send: SendIcon,
 	browser_hand_over: HandIcon,
 	propose_key: KeyRoundIcon,
-	propose_send: ClipboardListIcon,
 	remember: MemoryStickIcon,
 	recall: MemoryStickIcon,
 	search: SearchIcon,
@@ -151,9 +149,6 @@ export function toolPreview(name: string, args: Readonly<Record<string, unknown>
 		// A credential is not a useful collapsed preview. Its connection and host are.
 		case "propose_key":
 			value = text("connection", "host");
-			break;
-		case "propose_send":
-			value = text("ticket");
 			break;
 		case "remember":
 			value = text("fact");

@@ -315,11 +315,11 @@ describe("refused proposals", () => {
 			]);
 		// turned away before it ran: never the arguments the harness quotes back
 		const invalid =
-			'Validation failed for tool "propose_send":\n  - topic: must be string\n\nReceived arguments:\n{"x":1}';
-		expect(lines(refused(1, "propose_send", invalid))).toEqual(["Not proposed: it was not asked in a form that works"]);
+			'Validation failed for tool "propose_key":\n  - topic: must be string\n\nReceived arguments:\n{"x":1}';
+		expect(lines(refused(1, "propose_key", invalid))).toEqual(["Not proposed: it was not asked in a form that works"]);
 	});
 	it("a call that was not refused, or another tool's refusal, draws no refusal line", () => {
-		expect(lines([called(1, "p1", "propose_send", {}), answered(2, "p1", "propose_send")])).toEqual([]);
+		expect(lines([called(1, "p1", "propose_key", {}), answered(2, "p1", "propose_key")])).toEqual([]);
 		expect(lines(refused(1, "bash", "Command failed"))).toEqual([]);
 	});
 });
