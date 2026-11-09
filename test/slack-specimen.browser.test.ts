@@ -56,8 +56,8 @@ for (const width of [390, 1440])
 					"Release notes draft for Thursday",
 					"About 23 matches",
 					"6 messages",
-					"@deploybot [bot]",
-					"@olga (outside)",
+					"deploybot [bot]",
+					"olga (outside)",
 					"14 members",
 					"No messages match yet",
 					"@bob · Engineer",
@@ -93,9 +93,9 @@ for (const width of [390, 1440])
 				// a thread opens with its first message, and reads down the card as a conversation does, the latest last
 				expect(
 					await page.run<string[]>(
-						`[...${section}.querySelector('[data-slack-card="thread"]').querySelectorAll('[data-slack-bubble]')].map((bubble) => bubble.innerText.split("\\n").find((line) => line.startsWith("@")) ?? "")`,
+						`[...${section}.querySelector('[data-slack-card="thread"]').querySelectorAll('[data-slack-bubble]')].map((bubble) => bubble.innerText.trim().split("\\n").filter((line) => line.length > 1)[0] ?? "")`,
 					),
-				).toEqual(["@bob", "@ana", "@bob", "@olga (outside)", "@deploybot [bot]"]);
+				).toEqual(["bob", "ana", "bob", "olga (outside)", "deploybot [bot]"]);
 				// a card's actions sit on its title's line, and a thread's replies hang under its first message
 				for (const card of ["thread", "channel"]) {
 					const off = await page.run<number>(
@@ -120,13 +120,13 @@ for (const width of [390, 1440])
 				// a link to a reply reads as the reply, in its author's and its words; a link to the thread's first message as
 				// the thread, led by who started it
 				expect(await page.run<string>(`${section}.querySelector('[data-slack-reply]')?.innerText ?? ""`)).toContain(
-					"@bob: @ana can you check #deploys before we ship?",
+					"@ana can you check #deploys before we ship?",
 				);
 				expect(
 					await page.run<string>(
 						`${section}.querySelector('[data-object-inline]:not([data-slack-reply]) a[href*="/archives/"]')?.innerText ?? ""`,
 					),
-				).toContain("@bob: Release notes draft for Thursday");
+				).toContain("Release notes draft for Thursday");
 				// faces on Slack's image host that are not there fall back to the author's initial, and a person's to the icon
 				await page.until(
 					`[...${section}.querySelectorAll('[data-slack-card="thread"] [data-slot="avatar-fallback"]')].some((el) => el.innerText === "O")`,

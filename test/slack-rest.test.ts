@@ -107,6 +107,8 @@ it("says each message's author as a handle: the owner's own post is theirs, a bo
 		date: "2023-11-14T22:15:00.000Z",
 		mentions_me: true,
 		avatar: "https://avatars.slack-edge.com/bob_48.png",
+		profile: "https://acme.slack.com/team/U0BOB",
+		mentions: [{ name: "@ana", url: "https://acme.slack.com/team/U0ANA" }],
 	});
 	expect(root).toMatchObject({ ts: ROOT_TS, thread_ts: ROOT_TS, reply_count: 2 });
 	expect(history.active).toBe(true);
@@ -158,6 +160,34 @@ it("reads a thread once per message, its first message first, even when Slack re
 	expect(slack.calls.find((call) => call.method === "conversations.replies")?.params).toMatchObject({ ts: ROOT_TS });
 });
 
+it("names people as Slack shows them, in every place, and links to their profiles", async () => {
+	const { slack, read } = world();
+	(slack.users as Record<string, unknown>).U0DANI = {
+		id: "U0DANI",
+		name: "dani.r",
+		real_name: "Daniela Ruiz",
+		team_id: "T0ACME",
+		profile: { display_name: "Dani" },
+	};
+	slack.history.C0GENERAL?.unshift({
+		type: "message",
+		ts: "1700000900.000900",
+		user: "U0DANI",
+		team: "T0ACME",
+		text: "ping <@U0DANI>",
+	});
+	const { messages } = (await read("channel_history", { channel: "C0GENERAL", limit: 1 })) as {
+		messages: (SlackMessage & Record<string, unknown>)[];
+	};
+	expect(messages[0]).toMatchObject({
+		from: "@Dani",
+		author: "@dani.r at Acme",
+		text: "ping @Dani",
+		profile: "https://acme.slack.com/team/U0DANI",
+		mentions: [{ name: "@Dani", url: "https://acme.slack.com/team/U0DANI" }],
+	});
+});
+
 it("reads the whole thread when asked about one of its replies", async () => {
 	const { read } = world();
 	const thread = (await read("get_thread", { channel: "C0GENERAL", ts: "1700000150.000150" })) as {
@@ -187,6 +217,7 @@ it("searches newest first, each match with its channel and permalink, and reads 
 	expect(await read("get_person", { user: "U0BOB" })).toEqual({
 		id: "U0BOB",
 		name: "bob",
+		display_name: "bob",
 		real_name: "Bob Stone",
 		title: "Engineer",
 		tz: "America/New_York",

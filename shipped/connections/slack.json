@@ -380,7 +380,7 @@
 				}
 			},
 			"fields": {
-				"name": "person.real_name",
+				"name": "person.display_name",
 				"handle": "person.name",
 				"title": "person.title",
 				"emails": "person.email",

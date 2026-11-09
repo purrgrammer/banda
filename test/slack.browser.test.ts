@@ -233,7 +233,7 @@ for (const width of [390, 1440])
 					await page.until(shows("Sent, after"));
 					// a reply's words in a reference are led by who wrote them
 					await page.until(
-						`[...document.querySelectorAll('[data-slack-reply]')].some((el) => el.innerText.includes("@bob: Thanks @ana"))`,
+						`[...document.querySelectorAll('[data-slack-reply]')].some((el) => el.innerText.includes("bob:") && el.innerText.includes("Thanks @ana"))`,
 					);
 					// each message on the thread's card has its author's face, its image fetched with no referrer
 					const card = `document.querySelector('[data-slack-card="thread"]')`;

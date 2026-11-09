@@ -532,6 +532,7 @@ it("draws Slack's thread, channel, search and person from the adapter's readings
 			person: {
 				id: "U0OLGA",
 				name: "olga",
+				display_name: "Olga Ivanova",
 				real_name: "Olga Ivanova",
 				title: "Partner",
 				tz: "Europe/Berlin",

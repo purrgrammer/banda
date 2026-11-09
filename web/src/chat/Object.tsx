@@ -506,7 +506,8 @@ export function ObjectLink({
 				: object.place === "thread"
 					? object.messages.at(-1)
 					: undefined;
-		const by = said?.from ? `${said.from}: ` : "";
+		const who = said?.from ? slackName(said.from) : "";
+		const whoUrl = slackUrl(said?.profile);
 		const Icon = slack
 			? linked?.reply
 				? CornerDownRightIcon
@@ -516,10 +517,10 @@ export function ObjectLink({
 				: MailsIcon;
 		const title = linked?.reply
 			? reply?.text
-				? `${by}${slackLine(reply.text)}`
+				? slackLine(reply.text)
 				: "Reply"
 			: slack
-				? `${by}${slackLine(object.title)}`
+				? slackLine(object.title)
 				: object.title;
 		const channelUrl = slack ? /^.*\/archives\/[^/?#]+/.exec(slackUrl(object.url) ?? "")?.[0] : undefined;
 		const url = slack ? (slackUrl(href) ?? slackUrl(object.url)) : (gmailUrl(href) ?? gmailUrl(object.url));
@@ -534,6 +535,18 @@ export function ObjectLink({
 				{/* the words take the room: where a thread is follows them on their line while it fits, and wraps out of
 				    sight, clipped to the one line, when it does not (a watch's row, a phone's bubble) */}
 				<span className="inline-flex min-w-0 max-h-lh flex-wrap items-baseline gap-x-1 gap-y-2 overflow-clip [overflow-clip-margin:0.25rem]">
+					{who === "" ? null : (
+						<span data-slack-who="" className="shrink-0">
+							{whoUrl === undefined ? (
+								<span className={INLINE_TEXT}>{who}</span>
+							) : (
+								<a href={whoUrl} target="_blank" rel="noopener noreferrer" className={INLINE_LINK}>
+									{who}
+								</a>
+							)}
+							:
+						</span>
+					)}
 					{url === undefined ? (
 						<span className={INLINE_TEXT} title={title}>
 							{title}
@@ -763,6 +776,10 @@ export type Messages = {
 		readonly avatar?: string | undefined;
 		/** The files a Slack message shares, by name and size. */
 		readonly files?: readonly SlackFile[] | undefined;
+		/** A Slack message's author's profile. */
+		readonly profile?: string | undefined;
+		/** Who a Slack message mentions, as its words name them, and their profiles. */
+		readonly mentions?: readonly { readonly name: string; readonly url: string }[] | undefined;
 	}[];
 	readonly total: number | null;
 	/** Where it opens: in Gmail, the conversation or the search; in Slack, the thread or the channel. */
@@ -801,6 +818,9 @@ function slackLinked(href: string): { readonly ts: string; readonly reply: boole
 	const root = parsed.searchParams.get("thread_ts");
 	return { ts, reply: root !== null && root !== ts };
 }
+
+/** A Slack author as a card or reference draws them: the name Slack shows, as Slack draws an author, with no @. */
+const slackName = (from: string) => from.replace(/^@/, "");
 
 /** A Slack author's initial for their face when it has no image: `@bob` is B, `@deploybot [bot]` D. */
 const handleInitial = (from: string) => [...from.replace(/^@/, "").trim()][0]?.toUpperCase() ?? "";
@@ -940,22 +960,50 @@ export function SlackFileLine({
 	);
 }
 
+const SLACK_MENTION = "underline decoration-line underline-offset-2 hover:decoration-ink";
+
 /** A line of Slack's words, its `code` as code. */
-function slackWords(words: string) {
-	return words.split(/(`[^`\n]+`)/).map((part, n) =>
-		part.length > 2 && part.startsWith("`") && part.endsWith("`") ? (
-			// biome-ignore lint/suspicious/noArrayIndexKey: a line's parts never move
-			<code key={n} className="font-code text-[0.92em]">
-				{part.slice(1, -1)}
-			</code>
-		) : (
-			part
-		),
-	);
+function slackWords(words: string, mentions: NonNullable<Messages["messages"][number]["mentions"]>) {
+	const named =
+		mentions.length === 0
+			? undefined
+			: new RegExp(
+					`(${[...mentions]
+						.sort((a, b) => b.name.length - a.name.length)
+						.map((each) => each.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+						.join("|")})`,
+				);
+	return words.split(/(`[^`\n]+`)/).flatMap((part, n) => {
+		if (part.length > 2 && part.startsWith("`") && part.endsWith("`"))
+			return (
+				// biome-ignore lint/suspicious/noArrayIndexKey: a line's parts never move
+				<code key={n} className="font-code text-[0.92em]">
+					{part.slice(1, -1)}
+				</code>
+			);
+		if (named === undefined) return part;
+		return part.split(named).map((piece, m) => {
+			const url = slackUrl(mentions.find((each) => each.name === piece)?.url);
+			return url === undefined ? (
+				piece
+			) : (
+				// biome-ignore lint/suspicious/noArrayIndexKey: a line's parts never move
+				<a key={`${n}:${m}`} href={url} target="_blank" rel="noopener noreferrer" className={SLACK_MENTION}>
+					{piece}
+				</a>
+			);
+		});
+	});
 }
 
 /** Slack's words as a chat holds them: what it says in bubbles, what it quotes marked beside them, outside any bubble. */
-function SlackText({ text }: { text: string }) {
+function SlackText({
+	text,
+	mentions = [],
+}: {
+	text: string;
+	mentions?: NonNullable<Messages["messages"][number]["mentions"]> | undefined;
+}) {
 	return slackBlocks(slackEmoji(text)).map((block) => {
 		const words = block.lines.join("\n");
 		return block.quote ? (
@@ -963,11 +1011,11 @@ function SlackText({ text }: { text: string }) {
 				key={words}
 				className="line-clamp-3 whitespace-pre-wrap border-l-2 border-line pl-2.5 text-body text-ink-2"
 			>
-				{slackWords(words)}
+				{slackWords(words, mentions)}
 			</blockquote>
 		) : (
 			<Bubble key={words} mine={false}>
-				<p className="line-clamp-6 whitespace-pre-wrap">{slackWords(words)}</p>
+				<p className="line-clamp-6 whitespace-pre-wrap">{slackWords(words, mentions)}</p>
 			</Bubble>
 		);
 	});
@@ -982,6 +1030,8 @@ function SlackMessage({
 	file?: ((file: SlackFile) => ReactNode) | undefined;
 }) {
 	const files = message.files ?? [];
+	const name = slackName(message.from) || "Someone";
+	const profile = slackUrl(message.profile);
 	return (
 		<li className="flex min-w-0 gap-2.5" data-slack-bubble="">
 			<Avatar size="sm" className="-mt-0.5">
@@ -990,13 +1040,22 @@ function SlackMessage({
 			</Avatar>
 			<div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
 				<span className="flex max-w-full items-baseline gap-2">
-					<span className="min-w-0 truncate text-body font-semibold text-ink" title={message.from}>
-						{message.from || "Someone"}
-					</span>
+					{profile === undefined ? (
+						<span className="min-w-0 truncate text-body font-semibold text-ink">{name}</span>
+					) : (
+						<a
+							href={profile}
+							target="_blank"
+							rel="noopener noreferrer"
+							className="min-w-0 truncate text-body font-semibold text-ink decoration-line underline-offset-2 hover:underline"
+						>
+							{name}
+						</a>
+					)}
 					<span className="shrink-0 text-meta text-ink-2">{slackWhen(message.date)}</span>
 				</span>
 				{message.text ? (
-					<SlackText text={message.text} />
+					<SlackText text={message.text} mentions={message.mentions} />
 				) : files.length === 0 ? (
 					<Bubble mine={false}>(No text)</Bubble>
 				) : null}
@@ -1385,7 +1444,20 @@ export function ContactCard({ person, actions }: { person: Person; actions?: Rea
 					<AvatarFallback>{initials || <UserRoundIcon aria-hidden="true" className="size-4" />}</AvatarFallback>
 				</Avatar>
 				<div className="flex min-w-0 flex-1 flex-col">
-					<h3 className="text-body font-semibold text-ink [overflow-wrap:anywhere]">{person.name}</h3>
+					<h3 className="text-body font-semibold text-ink [overflow-wrap:anywhere]">
+						{person.service === "slack" && slackUrl(person.url) !== undefined ? (
+							<a
+								href={slackUrl(person.url)}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="decoration-line underline-offset-2 hover:underline"
+							>
+								{person.name}
+							</a>
+						) : (
+							person.name
+						)}
+					</h3>
 					{work === "" ? null : <span className="text-meta text-ink-2 [overflow-wrap:anywhere]">{work}</span>}
 				</div>
 				{person.asOf === undefined ? null : <span className="text-meta text-ink-2">as of {person.asOf}</span>}

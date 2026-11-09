@@ -343,7 +343,7 @@ const hashOf = (token: string) => createHash("sha256").update(token).digest("hex
 const MAX_ACCOUNTS = 64;
 const identities = new Map<string, Promise<Identity>>();
 /** Names each account has looked up: a user's handle, team and face, a channel's name. */
-type Named = { readonly name: string; readonly team?: string; readonly avatar?: string };
+type Named = { readonly name: string; readonly handle?: string; readonly team?: string; readonly avatar?: string };
 const names = new Map<string, Map<string, Named>>();
 const MAX_NAMES = 4000;
 
@@ -401,6 +401,7 @@ type Session = {
 	readonly named: SlackNames;
 	readonly teamOf: (user: string) => string | undefined;
 	readonly avatarOf: (user: string) => string | undefined;
+	readonly handleOf: (user: string) => string | undefined;
 };
 
 function session(token: string, signal: AbortSignal | undefined, fetcher: typeof fetch, budget: SlackBudget): Session {
@@ -454,10 +455,12 @@ function session(token: string, signal: AbortSignal | undefined, fetcher: typeof
 			try {
 				if (kind === "user") {
 					const user = object((await call("users.info", { user: id })).user);
-					const name = line(user.name, 100);
+					const handle = line(user.name, 100);
+					const name = shownName(user) || handle;
 					const avatar = slackAvatar(object(user.profile).image_48);
 					const team = idOf(user.team_id, TEAM);
-					if (name !== "") remember(known, id, { name, team, ...(avatar === undefined ? {} : { avatar }) }, MAX_NAMES);
+					if (name !== "")
+						remember(known, id, { name, handle, team, ...(avatar === undefined ? {} : { avatar }) }, MAX_NAMES);
 				} else {
 					const found = await channelOf({ call, lookup, named }, id);
 					if (found.name !== "") remember(known, id, { name: found.name }, MAX_NAMES);
@@ -478,6 +481,7 @@ function session(token: string, signal: AbortSignal | undefined, fetcher: typeof
 		me,
 		lookup,
 		named,
+		handleOf: (user) => held?.get(user)?.handle,
 		teamOf: (user) => held?.get(user)?.team,
 		avatarOf: (user) => held?.get(user)?.avatar,
 	};
@@ -488,6 +492,10 @@ function session(token: string, signal: AbortSignal | undefined, fetcher: typeof
 export type SlackMessage = {
 	readonly ts: string;
 	readonly from: string;
+	/** Their profile in Slack: absent for a bot. */
+	readonly profile?: string;
+	/** Who it mentions, as its text names them, and their profiles. */
+	readonly mentions?: readonly { readonly name: string; readonly url: string }[];
 	/**
 	 * Who wrote it in the account's own form, `@ana at Acme`, so the owner's own posts are the account's: someone of
 	 * another team by that team's id (never equal to an account), a bot `@deploybot [bot]`.
@@ -555,6 +563,12 @@ const dateOf = (value: string) => {
 	return Number.isFinite(seconds) ? new Date(seconds * 1000).toISOString() : "";
 };
 
+/** The name Slack shows for a person: the one they chose, else their full name. */
+const shownName = (user: Json) => {
+	const profile = object(user.profile);
+	return line(profile.display_name, 100) || line(user.real_name, 100) || line(profile.real_name, 100);
+};
+
 const botName = (raw: Json) => line(object(raw.bot_profile).name, 80) || line(raw.username, 80) || "bot";
 
 /**
@@ -569,11 +583,12 @@ function messageOf(raw: Json, me: Identity, s: Session): SlackMessage | undefine
 	const team = idOf(raw.user_team, TEAM) || (user === undefined ? "" : (s.teamOf(user) ?? "")) || idOf(raw.team, TEAM);
 	const outside = !bot && team !== "" && team !== me.teamId;
 	// the owner's own handle is known without a lookup, so their posts are the account's whatever the names cache holds
+	const handled = user === undefined ? undefined : s.handleOf(user);
 	const handle =
-		user === me.userId
-			? `@${me.user}`
-			: ((user === undefined ? undefined : s.named("user", user)) ?? `@${line(raw.username, 80) || user}`);
-	const from = bot ? `@${botName(raw)} [bot]` : `${handle}${outside ? " (outside)" : ""}`;
+		user === me.userId ? `@${me.user}` : handled === undefined ? `@${line(raw.username, 80) || user}` : `@${handled}`;
+	// the name Slack shows for them, the one every place draws; the handle stays in `author`, which an account is matched by
+	const shown = (user === undefined ? undefined : s.named("user", user)) ?? handle;
+	const from = bot ? `@${botName(raw)} [bot]` : `${shown}${outside ? " (outside)" : ""}`;
 	const author = bot ? from : `${handle} at ${outside ? team : me.team}`;
 	const said = typeof raw.text === "string" ? raw.text : "";
 	const thread = typeof raw.thread_ts === "string" ? slackTs(raw.thread_ts) : undefined;
@@ -585,6 +600,13 @@ function messageOf(raw: Json, me: Identity, s: Session): SlackMessage | undefine
 			: s.avatarOf(user);
 	const reactions = reactionsOf(raw.reactions);
 	const files = filesOf(raw.files);
+	const mentions =
+		me.url === ""
+			? []
+			: slackMentions(said).users.flatMap((id) => {
+					const name = s.named("user", id);
+					return name === undefined ? [] : [{ name, url: `${me.url}team/${id}` }];
+				});
 	return {
 		ts: stamp,
 		from,
@@ -595,6 +617,8 @@ function messageOf(raw: Json, me: Identity, s: Session): SlackMessage | undefine
 		...(thread === undefined ? {} : { thread_ts: thread }),
 		...(replies === undefined ? {} : { reply_count: replies }),
 		mentions_me: new RegExp(`<@${me.userId}(?:\\|[^>]*)?>`).test(said),
+		...(bot || me.url === "" ? {} : { profile: `${me.url}team/${user}` }),
+		...(mentions.length === 0 ? {} : { mentions }),
 		...(avatar === undefined ? {} : { avatar }),
 		...(reactions.length === 0 ? {} : { reactions }),
 		...(files.length === 0 ? {} : { files }),
@@ -832,6 +856,7 @@ export async function slackCall(
 				answer = {
 					id,
 					name: line(user.name, 100),
+					display_name: shownName(user) || line(user.name, 100),
 					real_name: line(user.real_name, 200) || line(profile.real_name, 200) || line(user.name, 100),
 					title: line(profile.title, 200),
 					tz: line(user.tz, 100),

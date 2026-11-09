@@ -882,6 +882,10 @@ export type MessageLine = {
 	readonly avatar?: string;
 	/** The files a Slack message shares, by name and size: the owner opens one through the daemon. */
 	readonly files?: MessageFile[];
+	/** A Slack message's author's profile. */
+	readonly profile?: string;
+	/** Who a Slack message mentions, as its words name them. */
+	readonly mentions?: { readonly name: string; readonly url: string }[];
 };
 
 /** A file in a message, as its row names it. */
@@ -1177,6 +1181,12 @@ function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: strin
 						]
 					: [],
 			);
+			const profile = slackUrl(each.profile);
+			const mentions = (Array.isArray(each.mentions) ? each.mentions : []).flatMap((one) => {
+				const url = plain(one) ? slackUrl(one.url) : undefined;
+				const name = plain(one) ? plainLine(one.name, 120) : "";
+				return url === undefined || name === "" ? [] : [{ name, url }];
+			});
 			return [
 				{
 					id: each.ts,
@@ -1186,6 +1196,8 @@ function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: strin
 					text: plainLines(each.text, 500),
 					...(avatar === undefined ? {} : { avatar }),
 					...(files.length === 0 ? {} : { files: files.slice(0, 10) }),
+					...(profile === undefined ? {} : { profile }),
+					...(mentions.length === 0 ? {} : { mentions: mentions.slice(0, 10) }),
 				},
 			];
 		})

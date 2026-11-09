@@ -68,6 +68,7 @@ function world() {
 			team_id: "T0ACME",
 			tz: "Europe/Madrid",
 			profile: {
+				display_name: "ana",
 				title: "Founder",
 				status_text: "",
 				email: "ana@acme.test",
@@ -82,6 +83,7 @@ function world() {
 			team_id: "T0ACME",
 			tz: "America/New_York",
 			profile: {
+				display_name: "bob",
 				title: "Engineer",
 				status_text: "On call",
 				email: "bob@acme.test",
@@ -97,6 +99,7 @@ function world() {
 			tz: "Europe/Berlin",
 			// a face off Slack's image host, or not https, is never drawn
 			profile: {
+				display_name: "olga",
 				title: "Partner",
 				status_text: "",
 				image_48: "http://a.slack-edge.com/olga_48.png",
