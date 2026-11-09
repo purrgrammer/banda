@@ -31,7 +31,7 @@ import { ownerAnswer } from "./owner.ts";
 const [home, url, mode, scheduleJson] = process.argv.slice(2) as [
 	string,
 	string,
-	"callback" | "code" | "shipped" | "remove" | "rule" | "address" | "mcp",
+	"callback" | "code" | "shipped" | "remove" | "remove-server" | "rule" | "address" | "mcp",
 	string,
 ];
 const byCode = mode === "code" || mode === "shipped" || mode === "remove";
@@ -89,6 +89,28 @@ const s = await openConnected({
 	...(shipping ? { shipped } : {}),
 });
 
+const hasRecord = async () => (await s.harness.snapshot(Connected, context))?.servers.cal !== undefined;
+
+// "remove-server": a server the owner added, then removed; a kill anywhere ends with it gone
+if (mode === "remove-server") {
+	const removing = join(home, "removing");
+	if (!existsSync(removing)) {
+		await s.capabilities.addMcp({ url, service: "Cal" });
+		writeFileSync(removing, "");
+	}
+	if (await hasRecord()) await s.capabilities.remove("connections", "cal");
+	const connected = await s.harness.snapshot(Connected, context);
+	console.log(
+		JSON.stringify({
+			record: await hasRecord(),
+			listed: connected?.connections.cal !== undefined,
+			reads: connected?.reads.cal !== undefined,
+		}),
+	);
+	await s.close();
+	process.exit(0);
+}
+
 // "remove": added and signed in to once, then removed; a kill after it was removed leaves it for the next start to
 // finish, and adding it again is what must not happen
 if (mode === "remove") {
@@ -128,12 +150,11 @@ if (mode === "mcp") {
 	if (named !== "cal") throw new Error(`setting it up again made ${named}, not cal`);
 } else if (mode === "shipped") {
 	if ((await s.harness.snapshot(Connected, context))?.added.cal === undefined) await s.capabilities.addShipped("cal");
+} else if (mode === "address") {
+	if (!(await hasRecord())) await s.capabilities.addByAddress(url, context, "cal");
 } else if (!existsSync(file)) {
-	if (mode === "address") await s.capabilities.addByAddress(url, context, "cal");
-	else {
-		mkdirSync(join(s.box.workspace, "connections"), { recursive: true });
-		writeFileSync(file, calendar);
-	}
+	mkdirSync(join(s.box.workspace, "connections"), { recursive: true });
+	writeFileSync(file, calendar);
 }
 // the owner allows it, as shown
 const shown = (await s.capabilities.view()).connections.find((c) => c.name === "cal");
@@ -173,7 +194,8 @@ const outcome = (await s.harness.getTask(received.turn as TaskId<TurnResult>, co
 const { parked } = await status(s.harness);
 const accepted =
 	(await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"] !== undefined ||
-	(await s.harness.snapshot(Connected, context))?.added.cal !== undefined;
+	(await s.harness.snapshot(Connected, context))?.added.cal !== undefined ||
+	(await hasRecord());
 const connected = (await s.harness.snapshot(Connected, context))?.connections.cal !== undefined;
 const answers = readFileSync(join(home, "answers.txt"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean);
 console.log(

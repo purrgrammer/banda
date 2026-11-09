@@ -422,29 +422,6 @@ export function connectionOf(
 	};
 }
 
-/**
- * `text` (a connection file) for a server that needs no sign-in: its `auth`, `client` and `scopes` dropped, every
- * other byte as it was; undefined when it would not read back as needing none.
- */
-export function withoutSignIn(name: string, text: string): string | undefined {
-	const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-	if (match === null) return undefined;
-	const out: string[] = [];
-	let skipping = false;
-	for (const line of (match[1] ?? "").split("\n")) {
-		if (/^(auth|client|scopes)\s*:/.test(line)) {
-			skipping = true;
-			continue;
-		}
-		if (skipping && /^\s*-\s/.test(line)) continue;
-		skipping = false;
-		out.push(line);
-	}
-	const rewritten = `---\n${out.join("\n")}\n---${text.slice(match[0].length)}`;
-	const parsed = parseConnection(name, rewritten);
-	return "connection" in parsed && parsed.connection.auth === "none" ? rewritten : undefined;
-}
-
 /** A connection's `reads` as written: its tools' names, then its rules. */
 export const readItems = (connection: Connection): string[] => [
 	...connection.reads,
@@ -452,56 +429,6 @@ export const readItems = (connection: Connection): string[] => [
 		rules.map((rule) => `${tool}(${rule.arg}=${rule.value})`),
 	),
 ];
-
-/**
- * `text` (a connection file) with `tools` among its reads too, every other byte as it was; undefined when it would not
- * read back as exactly those reads.
- */
-export function withReads(name: string, text: string, tools: readonly string[]): string | undefined {
-	const parsed = parseConnection(name, text);
-	if ("errors" in parsed) return undefined;
-	const items = [...new Set([...readItems(parsed.connection), ...tools])];
-	const rewritten = withList(text, "reads", items, ["scopes", "client", "auth", "url", "command"]);
-	if (rewritten === undefined) return undefined;
-	const again = parseConnection(name, rewritten);
-	if ("errors" in again) return undefined;
-	const read = readItems(again.connection);
-	return read.length === items.length && read.every((item, i) => item === items[i]) ? rewritten : undefined;
-}
-
-/**
- * `text`'s frontmatter with `key` set to the list `values`: its line replaced (whatever form it was in), or added
- * after the first of `after` there is, else at the end. Undefined when there is no frontmatter.
- */
-export function withList(
-	text: string,
-	key: string,
-	values: readonly string[],
-	after: readonly string[],
-): string | undefined {
-	const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-	if (match === null) return undefined;
-	const lines = (match[1] ?? "").split("\n");
-	const out: string[] = [];
-	let skipping = false;
-	const own = new RegExp(`^${key}\\s*:`);
-	for (const line of lines) {
-		if (own.test(line)) {
-			skipping = true;
-			continue;
-		}
-		if (skipping && /^\s*-\s/.test(line)) continue;
-		skipping = false;
-		out.push(line);
-	}
-	let at = -1;
-	for (const field of after) {
-		at = out.findIndex((line) => new RegExp(`^${field}\\s*:`).test(line));
-		if (at !== -1) break;
-	}
-	out.splice(at === -1 ? out.length : at + 1, 0, `${key}: [${values.join(", ")}]`);
-	return `---\n${out.join("\n")}\n---${text.slice(match[0].length)}`;
-}
 
 /** Parse a tool file: frontmatter, then the JSON schema of its arguments in a ```json block (none: it takes none). */
 export function parseTool(
@@ -558,6 +485,24 @@ export type Account = {
 };
 
 /**
+ * A server the owner added by address: what the daemon stores in the commit that takes the owner's choice, and all of
+ * what connects to it. Its reads are an overlay (`OwnerReads`), as on any connection; its credentials stay with its
+ * accounts. `version` moves with each change to it.
+ */
+export type Server = {
+	service: string;
+	url: string;
+	auth: AuthKind;
+	client?: string;
+	scopes?: string[];
+	version: number;
+	at: number;
+};
+
+/** The tools the owner said only read, on top of what the connection's definition says; its version is its own. */
+export type OwnerReads = { tools: string[]; version: number };
+
+/**
  * What the connections hold: for each, the tools its server listed and for which accepted file (its hash), and when;
  * the tools the owner switched off, by the name the model knows them by; the accounts signed in, by connection and by
  * key (the folder their credentials are in); and which accounts each agent may use, by agent and connection.
@@ -583,6 +528,12 @@ type ConnectedValue = {
 	public: { [connection: string]: string[] };
 	/** The connections banda ships that the owner added in this home, and when: its definition is banda's. */
 	added: { [connection: string]: { at: number } };
+	/** The servers the owner added by address, one record each; never a file, never written by anything in the box. */
+	servers: { [connection: string]: Server };
+	/** The owner's reads over a connection's definition; they outlive its versions and go when the connection does. */
+	reads: { [connection: string]: OwnerReads };
+	/** The last version given to a record or an overlay here: never reused, even for a removed connection's name. */
+	versions: number;
 };
 
 /** What is connected and who may use it. */
@@ -591,7 +542,18 @@ export const Connected = defineDoc<ConnectedValue>({
 	// 2: owner-managed anonymous connections keep their agent switches in `public`; a version 1 doc had none
 	version: 2,
 	scope: "session",
-	initial: () => ({ epoch: 0, connections: {}, off: {}, accounts: {}, on: {}, public: {}, added: {} }),
+	initial: () => ({
+		epoch: 0,
+		connections: {},
+		off: {},
+		accounts: {},
+		on: {},
+		public: {},
+		added: {},
+		servers: {},
+		reads: {},
+		versions: 0,
+	}),
 	migrate: (value, from) => (from >= 2 ? value : { ...value, public: {} }) as unknown as ConnectedValue,
 	checkpointWhen: () => true,
 });
@@ -701,13 +663,52 @@ export function toolName(connection: string, tool: string): string {
 	return `${connection}__${tool.replace(/[^A-Za-z0-9_-]/g, "_")}`.slice(0, 64);
 }
 
+/** The connection a server's record is: every tool asks until the owner says it reads; its version is the record's. */
+export function serverConnection(name: string, server: Server): Connection & { sha: string } {
+	return {
+		name,
+		service: server.service,
+		url: server.url,
+		auth: server.auth,
+		ask: "always",
+		...(server.client === undefined ? {} : { client: server.client }),
+		...(server.scopes === undefined ? {} : { scopes: [...server.scopes] }),
+		reads: [],
+		floors: {},
+		sha: `s${server.version}`,
+	};
+}
+
+/** `connection` with the owner's reads laid over it, in no way the definition's: a floor it names still asks. */
+function withOwnerReads(
+	connection: Connection & { sha: string },
+	overlay: OwnerReads | undefined,
+): Connection & { sha: string } {
+	if (overlay === undefined) return connection;
+	const reads = overlay.tools.filter((tool) => connection.floors[tool] === undefined);
+	const readsWhen = Object.fromEntries(
+		Object.entries(connection.readsWhen ?? {}).filter(([tool]) => !reads.includes(tool)),
+	);
+	return {
+		...connection,
+		reads: [...new Set([...connection.reads, ...reads])],
+		...(Object.keys(readsWhen).length === 0 ? {} : { readsWhen }),
+		sha: `${connection.sha}.r${overlay.version}`,
+	};
+}
+
 /**
- * The connection `name` in effect: one banda ships, as this banda ships it, while the owner has it added; else an
- * owner-added server's accepted file, if it parses. Its `sha` is its version. Reads only.
+ * The connection `name` in effect: one banda ships, as this banda ships it, while the owner has it added; a server the
+ * owner added, from its record; else an accepted file an agent built, if it parses. Its `sha` is its version: a
+ * definition's hash or a record's counter, with the owner's reads' own counter when they laid any over it. Reads only.
  */
 export async function acceptedConnection(tx: Tx, name: string): Promise<(Connection & { sha: string }) | undefined> {
+	const doc = await tx.doc(Connected);
 	const shipped = shippedDefinition(name);
-	if (shipped !== undefined) return (await tx.doc(Connected)).added[name] === undefined ? undefined : shipped;
+	if (shipped !== undefined)
+		return doc.added[name] === undefined ? undefined : withOwnerReads(shipped, doc.reads[name]);
+	const server = doc.servers[name];
+	if (server !== undefined) return withOwnerReads(serverConnection(name, server), doc.reads[name]);
 	const file = (await tx.doc(Accepted)).files[connectionPath(name)];
 	if (file === undefined) return undefined;
 	const parsed = parseConnection(name, file.text);
@@ -715,17 +716,19 @@ export async function acceptedConnection(tx: Tx, name: string): Promise<(Connect
 }
 
 /**
- * The names of the connections in effect, sorted: the shipped ones added in this home, and the owner-added servers
- * whose files were accepted (a name banda ships is never one of those). Reads only.
+ * The names of the connections in effect, sorted: the shipped ones added in this home, the servers the owner added, and
+ * the agent-built ones whose files were accepted (a name banda ships or a record has is never one of those). Reads only.
  */
 export async function acceptedNames(tx: Tx): Promise<string[]> {
 	const shipped = shippedDefinitions();
-	const added = Object.keys((await tx.doc(Connected)).added).filter((name) => shipped.has(name));
+	const doc = await tx.doc(Connected);
+	const added = Object.keys(doc.added).filter((name) => shipped.has(name));
+	const servers = Object.keys(doc.servers);
 	const own = Object.keys((await tx.doc(Accepted)).files).flatMap((path) => {
 		const name = /^connections\/(.+)\.md$/.exec(path)?.[1];
-		return name === undefined || shipped.has(name) ? [] : [name];
+		return name === undefined || shipped.has(name) || doc.servers[name] !== undefined ? [] : [name];
 	});
-	return [...added, ...own].sort();
+	return [...added, ...servers, ...own].sort();
 }
 
 /**

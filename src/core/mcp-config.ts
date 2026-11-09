@@ -1,5 +1,5 @@
 /** Owner-supplied remote MCP configuration. Credentials never belong in this shape. */
-import { parseConnection, remoteUrl } from "./connections.ts";
+import { remoteUrl } from "./connections.ts";
 
 export type McpConfig = {
 	readonly url: string;
@@ -82,38 +82,11 @@ export function mcpConfig(input: unknown): McpConfig {
 		throw new Error("Give scopes as a list of names.");
 	if ((auth === "key" || auth === "none") && (value.client !== undefined || value.scopes !== undefined))
 		throw new Error("Client ID and scopes are only for OAuth.");
-	const config: McpConfig = {
+	return {
 		url,
 		service: service.trim(),
 		auth: auth as McpConfig["auth"],
 		...(value.client === undefined ? {} : { client: value.client as string }),
 		...(value.scopes === undefined ? {} : { scopes: [...new Set(value.scopes as string[])] }),
 	};
-	// The file is the definition: configuration must round-trip without quoting or list ambiguity.
-	const parsed = parseConnection("mcp", mcpDefinition(config, "oauth"));
-	if (
-		!("connection" in parsed) ||
-		parsed.connection.service !== config.service ||
-		JSON.stringify(parsed.connection.scopes) !== JSON.stringify(config.scopes)
-	)
-		throw new Error(
-			"The name or scopes cannot be represented in a connection file. Remove surrounding quotes, brackets or commas.",
-		);
-	return config;
-}
-
-export function mcpDefinition(config: McpConfig, auth: "oauth" | "key" | "none"): string {
-	return [
-		"---",
-		`service: ${config.service}`,
-		`url: ${config.url}`,
-		`auth: ${auth}`,
-		...(config.client === undefined ? [] : [`client: ${config.client}`]),
-		...(config.scopes === undefined ? [] : [`scopes: [${config.scopes.join(", ")}]`]),
-		"reads: []",
-		"ask: always",
-		"---",
-		"Added by you. Every tool asks first until you explicitly allow a read.",
-		"",
-	].join("\n");
 }

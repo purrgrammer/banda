@@ -242,6 +242,9 @@ export type RoutineAction =
 	| { readonly action: "decline" | "pause" | "resume" | "remove" };
 
 /** The built web UI (`npm run build:web`); the same path from `src/server` and `dist/server`. */
+/** A connection's version as the app sends it back: a definition's hash or a record's counter, with its overlay's. */
+const VERSION = /^[0-9a-f]{64}(\.r\d+)?$|^s\d+(\.r\d+)?$/;
+
 export const WEB = fileURLToPath(new URL("../../web/dist/", import.meta.url));
 
 const TYPES: Record<string, string> = {
@@ -784,8 +787,8 @@ export function handler(
 			if (action === "add" && kind === "connections") return reply(res, 200, await routes.capability({ action, name }));
 			if ((action === "trust" || action === "reads") && kind === "connections") {
 				const { tools, sha } = await json(req);
-				if ((action === "reads" || sha !== undefined) && (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)))
-					throw new BadRequest("sha is the reviewed connection hash");
+				if ((action === "reads" || sha !== undefined) && (typeof sha !== "string" || !VERSION.test(sha)))
+					throw new BadRequest("sha is the version of the connection you saw");
 				return reply(
 					res,
 					200,
@@ -794,8 +797,8 @@ export function handler(
 			}
 			if (action === "public" && kind === "connections") {
 				const { agent, on, sha } = await json(req);
-				if (sha !== undefined && (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)))
-					throw new BadRequest("sha is the reviewed connection hash");
+				if (sha !== undefined && (typeof sha !== "string" || !VERSION.test(sha)))
+					throw new BadRequest("sha is the version of the connection you saw");
 				if (typeof on !== "boolean" || typeof agent !== "string" || !/^[a-z0-9-]{1,64}$/.test(agent))
 					throw new BadRequest("Choose an agent and whether it has access");
 				return reply(
@@ -831,8 +834,8 @@ export function handler(
 				return reply(res, 200, await routes.capability({ action: "label", name, account: key, label }));
 			}
 			const { agent, on, sha } = await json(req);
-			if (sha !== undefined && (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)))
-				throw new BadRequest("sha is the reviewed connection hash");
+			if (sha !== undefined && (typeof sha !== "string" || !VERSION.test(sha)))
+				throw new BadRequest("sha is the version of the connection you saw");
 			if (typeof on !== "boolean") throw new BadRequest("on is true or false");
 			if (typeof agent !== "string" || !/^[a-z0-9-]{1,64}$/.test(agent)) throw new BadRequest("agent names an agent");
 			return reply(

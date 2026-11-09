@@ -68,9 +68,10 @@ export type FaultPoint =
 	| "bring:written"
 	| "bring:accepted"
 	| "bring:agent"
-	| "address:written"
-	| "trust:written"
-	| "nosignin:written"
+	| "server:before"
+	| "server:added"
+	| "server:remove"
+	| "server:removed"
 	/** A connection's tools listed, before the store holds them. */
 	| "connect:listed"
 	/** An account: whom a sign-in is for read; added to the store; its agent's file rewritten; switched; signed out. */

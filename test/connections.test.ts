@@ -13,6 +13,7 @@ import fc from "fast-check";
 import { afterEach, describe, expect, it } from "vitest";
 import { Accepted, parseAgent, shaOf } from "../src/core/agents.ts";
 import {
+	acceptedConnection,
 	accountNamed,
 	Connected,
 	type Connection,
@@ -684,6 +685,163 @@ describe("adding a server", () => {
 		await expect(s.capabilities.labelAccount("cal", "alice", "Work")).rejects.toThrow(/already @alice/);
 	});
 
+	describe("a server the owner adds is a record in the store", () => {
+		it("no file in the workspace, every tool asks, none on for any agent, and its version moves with each change", async () => {
+			const fake = await startFakeMcp();
+			fakes.push(fake);
+			const s = await open();
+			const name = await s.capabilities.addMcp({ url: fake.url, service: "Ernesto" });
+			expect(name).toBe("ernesto");
+			expect(readdirSync(join(s.box.workspace, "connections"))).toEqual([]);
+			const files = Object.keys((await s.harness.snapshot(Accepted, context))?.files ?? {});
+			expect(files.filter((path) => path.startsWith("connections/"))).toEqual([]);
+			const stored = (await s.harness.snapshot(Connected, context))?.servers[name];
+			expect(stored).toMatchObject({ service: "Ernesto", url: fake.url, auth: "none" });
+			expect(Number.isInteger(stored?.version)).toBe(true);
+			const shown = (await s.capabilities.view()).connections.find((each) => each.name === name)!;
+			expect(shown.accepted?.sha).toMatch(/^s\d+$/);
+			expect(shown).toMatchObject({ state: "connected", agents: [] });
+			expect(shown.tools.every((tool) => tool.alwaysAsk)).toBe(true);
+			// allowing a read moves its version, with no text rewritten anywhere
+			const before = shown.accepted!.sha;
+			await s.capabilities.trustReads(name, ["list_events"], context, before);
+			const after = (await s.capabilities.view()).connections.find((each) => each.name === name)!;
+			expect(after.accepted?.sha).not.toBe(before);
+			expect(after.tools.find((tool) => tool.title === "list_events")?.kind).toBe("read");
+			expect(readdirSync(join(s.box.workspace, "connections"))).toEqual([]);
+		});
+
+		it("the same address again is the same connection, by either path; another address is another record", async () => {
+			const fake = await startFakeMcp();
+			const other = await startFakeMcp();
+			fakes.push(fake, other);
+			const s = await open();
+			const first = await s.capabilities.addByAddress(fake.url);
+			expect(await s.capabilities.addMcp({ url: fake.url })).toBe(first);
+			const second = await s.capabilities.addMcp({ url: other.url });
+			expect(second).not.toBe(first);
+			const doc = await s.harness.snapshot(Connected, context);
+			expect(Object.keys(doc?.servers ?? {}).sort()).toEqual([first, second].sort());
+			expect(doc?.public[first]).toEqual([]);
+		});
+
+		it("removed, it is gone; its name taken again has a new version, so nothing bound to the old one matches", async () => {
+			const fake = await startFakeMcp();
+			fakes.push(fake);
+			const s = await open();
+			const name = await s.capabilities.addMcp({ url: fake.url, service: "Ernesto" });
+			const shown = async () => (await s.capabilities.view()).connections.find((each) => each.name === name);
+			const first = (await shown())?.accepted?.sha;
+			await s.capabilities.trustReads(name, ["list_events"]);
+			await s.capabilities.remove("connections", name);
+			const doc = await s.harness.snapshot(Connected, context);
+			expect(doc?.servers[name]).toBeUndefined();
+			expect(doc?.reads[name]).toBeUndefined();
+			expect(doc?.connections[name]).toBeUndefined();
+			expect(await shown()).toBeUndefined();
+			await s.capabilities.addMcp({ url: fake.url, service: "Ernesto" });
+			expect((await shown())?.accepted?.sha).not.toBe(first);
+			expect((await shown())?.tools.find((tool) => tool.title === "list_events")?.kind).toBe("write");
+		});
+
+		it("nothing in the box changes a record: a file of its name is not offered, accepted or declined", async () => {
+			const fake = await startFakeMcp();
+			fakes.push(fake);
+			const s = await open(fake);
+			const name = await s.capabilities.addMcp({ url: fake.url, service: "Ernesto" });
+			const stored = JSON.parse(JSON.stringify((await s.harness.snapshot(Connected, context))?.servers[name]));
+			const proposed = connectionFile({ url: "https://evil.example/mcp", service: "Evil", reads: ["create_event"] });
+			s.writeBox(`connections/${name}.md`, proposed);
+			const shown = (await s.capabilities.view()).connections.find((each) => each.name === name)!;
+			expect(shown.change).toBeUndefined();
+			expect(shown.accepted?.connection?.url).toBe(fake.url);
+			await expect(s.capabilities.acceptConnection(name, shaOf(proposed))).rejects.toThrow(/you added/);
+			await expect(s.capabilities.decline("connections", name)).rejects.toThrow(/you added/);
+			// the box's bytes stay the box's; the record is untouched and still what runs
+			expect((await s.harness.snapshot(Connected, context))?.servers[name]).toEqual(stored);
+			const running = await s.harness.commit((tx) => acceptedConnection(tx, name), context);
+			expect(running).toMatchObject({ url: fake.url, service: "Ernesto", reads: [], sha: shown.accepted?.sha });
+		});
+
+		it("an agent cannot make or alter a record: a file it writes stays a box proposal, and the store has no record of it", async () => {
+			const fake = await startFakeMcp();
+			fakes.push(fake);
+			const s = await open(fake);
+			s.writeBox("connections/cal.md", connectionFile({ url: fake.url, service: "Cal", reads: [] }));
+			expect(await changeOf(s, "cal")).toMatchObject({ kind: "added" });
+			expect(Object.keys((await s.harness.snapshot(Connected, context))?.servers ?? {})).toEqual([]);
+			// the owner adds a server: the pending name is not taken from under the proposal, the record is its own
+			const named = await s.capabilities.addMcp({ url: fake.url, service: "cal" });
+			expect(named).not.toBe("cal");
+			expect(Object.keys((await s.harness.snapshot(Connected, context))?.servers ?? {})).toEqual([named]);
+			expect(await changeOf(s, "cal")).toMatchObject({ kind: "added" });
+		});
+
+		it("a stale version is refused at each bound site: reads, an agent's switch, and a listing taken before it changed", async () => {
+			const fake = await startFakeMcp();
+			fakes.push(fake);
+			let release: (() => void) | undefined;
+			let holding = false;
+			const gated: typeof fetch = async (input, init) => {
+				if (holding && String(input).startsWith(fake.url) && String(init?.body ?? "").includes("tools/list"))
+					await new Promise<void>((resolve) => {
+						release = resolve;
+					});
+				return fetch(input, init);
+			};
+			const s = await open(fake, undefined, false, gated);
+			const name = await s.capabilities.addMcp({ url: fake.url, service: "Ernesto" });
+			const state = async () => (await s.capabilities.view()).connections.find((each) => each.name === name)!;
+			const version = (await state()).accepted!.sha;
+			await expect(s.capabilities.trustReads(name, ["list_events"], context, "s999999")).rejects.toThrow(/change/);
+			await s.capabilities.trustReads(name, ["list_events"], context, version);
+			await expect(s.capabilities.trustReads(name, ["whoami"], context, version)).rejects.toThrow(/change/);
+			await expect(s.capabilities.switchAccount("sancho", name, undefined, true, context, version)).rejects.toThrow(
+				/changed/,
+			);
+			// a listing begun before the record moved is for another version: it is not kept
+			holding = true;
+			const listing = s.capabilities.refresh(name);
+			await until(() => release !== undefined);
+			await s.capabilities.trustReads(name, ["whoami"]);
+			const moved = (await state()).accepted!.sha;
+			fake.tools = fake.tools.filter((tool) => tool.name !== "create_event");
+			holding = false;
+			release?.();
+			await listing;
+			expect((await state()).accepted?.sha).toBe(moved);
+			expect((await state()).tools.some((tool) => tool.title === "create_event")).toBe(true);
+		});
+
+		it("a server that turns out to need no sign-in becomes one in a transaction, its version moving, and connects", async () => {
+			const fake = await startFakeMcp();
+			fakes.push(fake);
+			const s = await open(fake);
+			await s.harness.commit(async (tx) => {
+				const doc = await tx.doc(Connected);
+				doc.versions = 1;
+				doc.servers.docs = {
+					service: "Docs",
+					url: fake.url,
+					auth: "oauth",
+					client: "banda",
+					scopes: ["x"],
+					version: 1,
+					at: 1,
+				};
+			}, context);
+			const docs = async () => (await s.capabilities.view()).connections.find((c) => c.name === "docs")!;
+			const before = (await docs()).accepted!.sha;
+			expect(await s.capabilities.signIn("docs")).toEqual({ connected: true });
+			expect(await docs()).toMatchObject({ state: "connected", accepted: { connection: { auth: "none" } } });
+			expect((await docs()).accepted?.sha).not.toBe(before);
+			const stored = (await s.harness.snapshot(Connected, context))?.servers.docs;
+			expect(stored).toMatchObject({ auth: "none" });
+			expect(stored?.client).toBeUndefined();
+			expect(readdirSync(join(s.box.workspace, "connections"))).toEqual([]);
+		});
+	});
+
 	it("by its address: banda finds how it signs in, names it by its host and allows it", async () => {
 		const open_ = await startFakeMcp();
 		const keyed = await startFakeMcp({ auth: "key" });
@@ -706,20 +864,15 @@ describe("adding a server", () => {
 		await expect(s.capabilities.addByAddress(42)).rejects.toThrow(/https/);
 	});
 
-	it("a file that guessed a sign-in its server does not need connects without one when the owner signs in", async () => {
+	it("a connection an agent built keeps its sign-in and reads in its file: they are not rewritten", async () => {
 		const fake = await startFakeMcp();
 		fakes.push(fake);
 		const s = await open(fake);
 		s.writeBox("connections/docs.md", connectionFile({ url: fake.url, service: "Docs", auth: "oauth", reads: [] }));
 		await s.capabilities.acceptConnection("docs", ((await changeOf(s, "docs")) as { sha: string }).sha);
-		expect(await s.capabilities.signIn("docs")).toEqual({ connected: true });
-		const docs = (await s.capabilities.view()).connections.find((c) => c.name === "docs");
-		expect(docs).toMatchObject({ state: "connected", accepted: { connection: { auth: "none" } } });
-		expect(readFileSync(join(s.box.workspace, "connections/docs.md"), "utf8")).not.toContain("auth:");
-		// one the owner says only reads, without the server saying so: it reads too
-		await s.capabilities.trustReads("docs", ["create_event"]);
-		const view = (await s.capabilities.view()).connections.find((c) => c.name === "docs");
-		expect(view?.tools.find((t) => t.title === "create_event")?.kind).toBe("read");
+		await expect(s.capabilities.signIn("docs")).rejects.toThrow(/its file/);
+		await expect(s.capabilities.trustReads("docs", ["create_event"])).rejects.toThrow(/its file/);
+		expect(readFileSync(join(s.box.workspace, "connections/docs.md"), "utf8")).toContain("auth:");
 	});
 
 	it("the owner lets the tools the server says only read run without asking, with one tap", async () => {
@@ -732,9 +885,10 @@ describe("adding a server", () => {
 		expect((await cal())?.tools.find((t) => t.title === "list_events")?.kind).toBe("write");
 		await expect(s.capabilities.trustReads(name, ["send_rocket"])).rejects.toThrow(/lists no tool named send_rocket/);
 		await s.capabilities.trustReads(name, ["list_events"]);
-		expect(readFileSync(join(s.box.workspace, `connections/${name}.md`), "utf8")).toContain("reads: [list_events]");
 		expect((await cal())?.hinted).toEqual(["whoami"]);
 		expect((await cal())?.tools.find((t) => t.title === "list_events")?.kind).toBe("read");
+		// on for no agent until the owner says, like every server they add
+		await s.capabilities.switchAccount("sancho", name, undefined, true);
 		// it runs without asking now
 		s.model.plan([{ tool: `${name}__list_events`, args: { day: "mon" } }]);
 		const ran = await s.say("monday?");

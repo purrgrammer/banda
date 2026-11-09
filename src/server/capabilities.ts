@@ -41,6 +41,7 @@ import {
 	parseAgent,
 	shaOf,
 	unaccept,
+	withList,
 } from "../core/agents.ts";
 import { EffectRun, type EffectTool, toolWords } from "../core/ask.ts";
 import { type BlobStore, Blobs, hasBlobHash, releaseConnection } from "../core/blobs.ts";
@@ -57,6 +58,7 @@ import {
 	type Connection,
 	type Credentials,
 	ceilingOf,
+	connectionOf,
 	connectionPath,
 	connectionTools,
 	credentialed,
@@ -92,9 +94,6 @@ import {
 	toolName,
 	toolPath,
 	withCredentials,
-	withList,
-	withoutSignIn,
-	withReads,
 } from "../core/connections.ts";
 import { readDefinitions, setDefinitions } from "../core/definitions.ts";
 import { type HoldingEgress, intake } from "../core/egress.ts";
@@ -108,7 +107,7 @@ import {
 	notesOf,
 	Unauthorized,
 } from "../core/mcp.ts";
-import { connectionWord, hostWord, mcpConfig, mcpDefinition, serviceOf } from "../core/mcp-config.ts";
+import { connectionWord, type McpConfig, mcpConfig, serviceOf } from "../core/mcp-config.ts";
 import { remoteCall, remoteListing, remoteSession } from "../core/mcp-remote.ts";
 import {
 	begin,
@@ -1212,8 +1211,10 @@ export function openCapabilities(options: CapabilityOptions) {
 			const was = doc.connections[name];
 			const proposed = listedOf(listed);
 			// a tool a server adds waits for the owner: within one version of an owner-added server's file; for one banda
-			// ships, whatever the version, unless its definition names it, when it comes with the release
-			const named = definitions.has(name) ? namedTools(accepted) : undefined;
+			// ships, whatever the version, unless its definition names it, when it comes with the release. The owner's own
+			// reads are no definition: they do not switch a waiting tool on
+			const definition = definitions.get(name);
+			const named = definition === undefined ? undefined : namedTools(definition);
 			const fresh = Object.keys(proposed).filter((tool) =>
 				named === undefined
 					? was?.sha === sha && !Object.hasOwn(was.tools, tool)
@@ -1328,7 +1329,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			for (const name of await acceptedNames(tx)) {
 				const connection = await acceptedConnection(tx, name);
 				// a built-in API's tools are this daemon's own: listed again at every start, so a new build's words reach
-				// the model without the file changing
+				// the model with no version moving
 				if (
 					connection?.url !== undefined &&
 					(connections[name]?.sha !== connection.sha || connection.api !== undefined)
@@ -1439,6 +1440,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			connected,
 			inEffectNow,
 			own,
+			current,
 		} = await harness.commit(
 			async (tx) => ({
 				accepted: JSON.parse(JSON.stringify((await tx.doc(Accepted)).files)) as {
@@ -1454,9 +1456,19 @@ export function openCapabilities(options: CapabilityOptions) {
 					on?: { [agent: string]: { [name: string]: string[] } };
 					public: { [name: string]: string[] };
 					added: { [name: string]: { at: number } };
+					servers: { [name: string]: { at: number } };
 				},
 				inEffectNow: await connectionTools(tx),
 				own: await ownTools(tx),
+				current: JSON.parse(
+					JSON.stringify(
+						Object.fromEntries(
+							await Promise.all(
+								(await acceptedNames(tx)).map(async (name) => [name, await acceptedConnection(tx, name)]),
+							),
+						),
+					),
+				) as { [name: string]: (Connection & { sha: string }) | undefined },
 			}),
 			ctx,
 		);
@@ -1478,25 +1490,27 @@ export function openCapabilities(options: CapabilityOptions) {
 		]);
 		for (const name of [...names].filter((each) => !definitions.has(each) || inEffectNames.includes(each)).sort()) {
 			const definition = definitions.get(name);
-			// a connection banda ships is in effect as its definition, at its version, since it was added
-			const file =
-				definition === undefined
-					? accepted[connectionPath(name)]
-					: { sha: definition.sha, at: connected.added[name]?.at ?? 0 };
-			const parsedAccepted =
-				definition !== undefined
-					? { connection: definition }
-					: file === undefined || !("text" in file)
-						? undefined
-						: parseConnection(name, file.text);
+			const server = connected.servers[name];
+			// a connection banda ships or a server the owner added is in effect as itself, at its version; the box has no say
+			const own = definition !== undefined || server !== undefined;
+			const version = current[name]?.sha;
+			const file = !own
+				? accepted[connectionPath(name)]
+				: { sha: version ?? "", at: definition !== undefined ? (connected.added[name]?.at ?? 0) : (server?.at ?? 0) };
+			const parsedAccepted = own
+				? current[name] === undefined
+					? undefined
+					: { connection: current[name] }
+				: file === undefined || !("text" in file)
+					? undefined
+					: parseConnection(name, file.text);
 			const connection =
 				parsedAccepted !== undefined && "connection" in parsedAccepted ? parsedAccepted.connection : undefined;
-			const box =
-				definition === undefined
-					? (boxConnections.get(name) as { text: string } | { unreadable: string } | undefined)
-					: undefined;
+			const box = !own
+				? (boxConnections.get(name) as { text: string } | { unreadable: string } | undefined)
+				: undefined;
 			let change: ConnectionView["change"];
-			if (definition !== undefined) change = undefined;
+			if (own) change = undefined;
 			else if (box === undefined) change = file === undefined ? undefined : { kind: "removed" };
 			else if ("unreadable" in box)
 				change = {
@@ -1734,14 +1748,8 @@ export function openCapabilities(options: CapabilityOptions) {
 	 * Accept the box's connection `name` as the owner saw it (`sha`; null for a removal). A server in the box binds the
 	 * tools it listed too, so the model is offered exactly those. A file changed since is refused.
 	 */
-	async function acceptConnection(
-		name: string,
-		sha: string | null,
-		ctx: Context = context,
-		restricted = false,
-	): Promise<void> {
-		if (definitions.has(name))
-			throw new BadRequest(`${name} is a connection banda ships: nothing in the box changes it`, 409);
+	async function acceptConnection(name: string, sha: string | null, ctx: Context = context): Promise<void> {
+		await refuseOwn(name, ctx);
 		const box = (await boxedFiles("connections", ctx)).get(name) as
 			| { text: string }
 			| { unreadable: string }
@@ -1771,7 +1779,6 @@ export function openCapabilities(options: CapabilityOptions) {
 		fault("accept:before");
 		await harness.commit(async (tx) => {
 			(await tx.doc(Accepted)).files[connectionPath(name)] = { sha: fileSha, text: box.text, at: now() };
-			if (restricted) (await tx.doc(Connected)).public[name] = [];
 			await log(tx, { at: now(), what: `You allowed ${connection.service}` });
 			if (listing !== undefined) {
 				const doc = await tx.doc(Connected);
@@ -1832,8 +1839,7 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	/** Decline the box's change: the accepted file is written back, or a new one removed. */
 	async function decline(folder: "connections" | "tools", name: string, ctx: Context = context): Promise<void> {
-		if (folder === "connections" && definitions.has(name))
-			throw new BadRequest(`${name} is a connection banda ships: nothing in the box changes it`, 409);
+		if (folder === "connections") await refuseOwn(name, ctx);
 		const path = folder === "connections" ? connectionPath(name) : toolPath(name);
 		const file = await harness.commit(async (tx) => {
 			const found = (await tx.doc(Accepted)).files[path];
@@ -1848,16 +1854,30 @@ export function openCapabilities(options: CapabilityOptions) {
 		options.changed?.();
 	}
 
-	/** Forget connection `name` whole: its accepted file, its tools and its credentials. */
+	/** Connection `name`'s definition or record is the store's or banda's: nothing in the box changes it. */
+	async function refuseOwn(name: string, ctx: Context): Promise<void> {
+		if (definitions.has(name))
+			throw new BadRequest(`${name} is a connection banda ships: nothing in the box changes it`, 409);
+		if (await isServer(name, ctx))
+			throw new BadRequest(`${name} is a server you added: nothing in the box changes it`, 409);
+	}
+
+	const isServer = (name: string, ctx: Context) =>
+		harness.commit(async (tx) => (await tx.doc(Connected)).servers[name] !== undefined, ctx);
+
+	/** Forget connection `name` whole: its definition's switch or its record, its tools and its credentials. */
 	async function forget(name: string, ctx: Context): Promise<void> {
+		const server = await isServer(name, ctx);
 		await withCredentials(home, name, async (locked) => {
 			await harness.commit(async (tx) => {
 				const accepted = await acceptedConnection(tx, name);
 				const doc = await tx.doc(Connected);
 				if (definitions.has(name)) delete doc.added[name];
+				else if (server) delete doc.servers[name];
 				else await unaccept(tx, connectionPath(name), now());
 				delete doc.connections[name];
 				delete doc.public[name];
+				delete doc.reads[name];
 				for (const tool of Object.keys(doc.off)) if (tool.startsWith(`${name}__`)) delete doc.off[tool];
 				await endAccounts(
 					tx,
@@ -1868,6 +1888,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				await log(tx, { at: now(), what: `You removed ${accepted?.service ?? name}` });
 			}, ctx);
 			if (definitions.has(name)) fault("shipped:removed");
+			if (server) fault("server:removed");
 			await locked.forget();
 		});
 		stopDevice(name);
@@ -1892,6 +1913,11 @@ export function openCapabilities(options: CapabilityOptions) {
 	async function remove(folder: "connections" | "tools", name: string, ctx: Context = context): Promise<void> {
 		if (folder === "connections" && definitions.has(name)) {
 			fault("shipped:remove");
+			await forget(name, ctx);
+			return;
+		}
+		if (folder === "connections" && (await isServer(name, ctx))) {
+			fault("server:remove");
 			await forget(name, ctx);
 			return;
 		}
@@ -2262,7 +2288,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			});
 		// A new account of a connection banda ships, signed in for no agent, is on for the lead: its tools are curated,
 		// and an account nobody can use reads as a broken connection. One added by URL waits for the owner's switch.
-		else if (!known && definitions.get(name)?.sha === connection.sha)
+		else if (!known && definitions.has(name))
 			await switchAccount(LEAD, name, account, true, ctx, connection.sha).catch((error: unknown) => {
 				if (!(error instanceof BadRequest)) throw error;
 			});
@@ -2442,25 +2468,32 @@ export function openCapabilities(options: CapabilityOptions) {
 		);
 
 	/**
-	 * Connection `name`'s file said it needs a sign-in, but its server answers without one: the file is rewritten as
-	 * needing none (the owner asked to connect it, so it is their edit) and accepted again, and its tools are listed.
+	 * A server the owner added said it needs a sign-in, but it answers without one: its record says none now, in a
+	 * commit that moves its version, and its tools are listed. Its agent switches go as a server's with no sign-in do.
 	 */
 	async function needsNoSignIn(name: string, ctx: Context): Promise<void> {
-		const box = (await boxedFiles("connections", ctx)).get(name) as
-			| { text: string }
-			| { unreadable: string }
-			| undefined;
-		const accepted = await harness.commit(
-			async (tx) => (await tx.doc(Accepted)).files[connectionPath(name)]?.text,
-			ctx,
-		);
-		if (box === undefined || "unreadable" in box || accepted !== box.text)
-			throw new BadRequest("it proposes a change to this connection: allow or decline that first", 409);
-		const rewritten = withoutSignIn(name, box.text);
-		if (rewritten === undefined) throw new BadRequest(`could not rewrite connections/${name}.md`);
-		await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, rewritten, ctx);
-		fault("nosignin:written");
-		await acceptConnection(name, shaOf(rewritten), ctx);
+		const changed = await harness.commit(async (tx) => {
+			const doc = await tx.doc(Connected);
+			const server = doc.servers[name];
+			if (server === undefined) return false;
+			doc.versions++;
+			doc.servers[name] = {
+				service: server.service,
+				url: server.url,
+				auth: "none",
+				version: doc.versions,
+				at: now(),
+			};
+			delete doc.connections[name];
+			doc.public[name] ??= [];
+			await log(tx, { at: now(), what: `${server.service} needs no sign-in` });
+			return true;
+		}, ctx);
+		if (!changed) throw new BadRequest(`${name}'s sign-in is in its file: change that, and allow it again`, 409);
+		problems.delete(name);
+		await install(ctx);
+		await connect(name, ctx);
+		options.changed?.();
 	}
 
 	/**
@@ -2629,24 +2662,20 @@ export function openCapabilities(options: CapabilityOptions) {
 		options.changed?.();
 	}
 
-	/**
-	 * The owner adds a server by its address: the daemon asks it how it signs in (only because the owner typed it; the
-	 * companion's proposals are never fetched before the owner signs in), names it by its host, writes its file into
-	 * the workspace and allows it at once, since the owner wrote it. Its tools are listed once signed in (or at once,
-	 * with no sign-in); which only read, the owner says after.
-	 */
-	/** The connection names in use: banda's own, accepted, or a file waiting in the box. */
+	/** The connection names in use: banda's own, the owner's servers, accepted, or a file waiting in the box. */
 	async function connectionNames(ctx: Context): Promise<Set<string>> {
 		return new Set([
 			...definitions.keys(),
 			...(await harness.commit(
-				async (tx) =>
-					Object.keys((await tx.doc(Accepted)).files).flatMap(
+				async (tx) => [
+					...Object.keys((await tx.doc(Connected)).servers),
+					...Object.keys((await tx.doc(Accepted)).files).flatMap(
 						(path) => /^connections\/(.+)\.md$/.exec(path)?.slice(1) ?? [],
 					),
+				],
 				ctx,
 			)),
-			...(await boxedFiles("connections", ctx)).keys(),
+			...(await boxedFiles("connections", ctx).catch(() => new Map<string, unknown>())).keys(),
 		]);
 	}
 
@@ -2657,155 +2686,136 @@ export function openCapabilities(options: CapabilityOptions) {
 		return name;
 	}
 
-	// Serialize owner setup so concurrent retries cannot overwrite each other's definitions.
-	let addingMcp = Promise.resolve();
+	// Setting up a server is serialized, so concurrent retries of the same address find one connection.
+	let addingServer: Promise<unknown> = Promise.resolve();
+	function serialized<T>(work: () => Promise<T>): Promise<T> {
+		const operation = addingServer.then(work);
+		addingServer = operation.catch(() => {});
+		return operation;
+	}
+
+	/** The owner sets up a server, given its configuration (the app's form): its name, in the end. */
 	async function addMcp(input: unknown, ctx: Context = context): Promise<string> {
-		const operation = addingMcp.then(async () => {
-			let config: ReturnType<typeof mcpConfig>;
+		return serialized(async () => {
+			let config: McpConfig;
 			try {
 				config = mcpConfig(input);
 			} catch (error) {
 				throw new BadRequest((error as Error).message);
 			}
-			// a server is connected once: a retry, or the same address again, finds the connection that has it
-			const existing = await harness.commit(async (tx) => {
-				for (const named of await acceptedNames(tx)) {
-					const connection = await acceptedConnection(tx, named);
-					if (connection?.url === config.url) return { ...connection, name: named };
-				}
-				return undefined;
-			}, ctx);
-			if (existing !== undefined) {
-				if (
-					existing.url !== config.url ||
-					(config.auth !== "auto" && existing.auth !== config.auth) ||
-					existing.client !== config.client ||
-					JSON.stringify(existing.scopes) !== JSON.stringify(config.scopes)
-				)
-					throw new BadRequest(
-						"This server already has a connection with different sign-in settings. Manage that connection instead.",
-						409,
-					);
-				return existing.name;
-			}
-			const signal = AbortSignal.any([
-				...(ctx.abortSignal === undefined ? [] : [ctx.abortSignal]),
-				AbortSignal.timeout(30_000),
-			]);
-			const bounded: typeof fetch = (input, init) => fetcher(input, { ...init, signal });
-			let anonymous = false;
-			try {
-				await remoteSession(
-					config.url,
-					async () => undefined,
-					bounded,
-					signal,
-					(client) => remoteListing(client, signal),
-				);
-				anonymous = true;
-			} catch (error) {
-				if (!(error instanceof Unauthorized))
-					throw new BadRequest(`The server did not answer as MCP: ${await problemOf(error)}`, 502);
-			}
-			let auth = config.auth;
-			if (auth === "auto" && anonymous && config.client === undefined && config.scopes === undefined) auth = "none";
-			if (auth === "none" && !anonymous)
-				throw new BadRequest("This server requires sign-in. Choose automatic sign-in or a bearer credential.");
-			if (auth === "auto" || auth === "oauth") {
-				const server = await discover(config.url, bounded).catch(() => undefined);
-				if (server === undefined) {
-					if (auth === "oauth" || config.client !== undefined || config.scopes !== undefined)
-						throw new BadRequest(
-							"The server did not provide OAuth discovery. Check its address or use a bearer credential.",
-							422,
-						);
-					auth = "key";
-				} else {
-					if (server.register === undefined && config.client === undefined)
-						throw new BadRequest(
-							"This service needs a registered OAuth client. Enter its public client ID in advanced sign-in settings.",
-							422,
-						);
-					auth = "oauth";
-				}
-			}
-			const text = mcpDefinition(config, auth);
-			// named for what the owner calls it ("ernesto"); a file this setup wrote before a crash is taken up again
-			const boxed = await boxedFiles("connections", ctx);
-			const written = [...boxed].find(([, box]) => "text" in box && box.text === text)?.[0];
-			const name = written ?? freeName(connectionWord(config.service), await connectionNames(ctx));
-			if (written === undefined)
-				await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, text, ctx);
-			fault("address:written");
-			await acceptConnection(name, shaOf(text), ctx, true);
-			return name;
+			return addServer(config, ctx);
 		});
-		addingMcp = operation.then(
-			() => {},
-			() => {},
-		);
-		return operation;
 	}
 
+	/** The owner adds a server by its address alone: named for its host, how it signs in found out. */
 	async function addByAddress(url: unknown, ctx: Context = context, named?: string): Promise<string> {
 		if (typeof url !== "string" || url.length > 2000 || !remoteUrl(url.trim()))
 			throw new BadRequest("give the server's address, starting with https://");
 		const address = new URL(url.trim()).toString();
-		const host = new URL(address).hostname;
+		return serialized(() => addServer({ url: address, service: serviceOf(address), auth: "auto" }, ctx, named));
+	}
+
+	/**
+	 * The one way a server is added: the daemon asks it how it signs in (only because the owner typed it), checks what
+	 * came back, and stores it as a record in one commit; nothing goes to the workspace. Every tool asks first, and it is
+	 * on for no agent until the owner says. A retry, or the same address again, finds the connection that has it.
+	 */
+	async function addServer(config: McpConfig, ctx: Context, named?: string): Promise<string> {
+		const host = new URL(config.url).hostname;
 		const taken = await connectionNames(ctx);
 		if (named !== undefined && (!AGENT_NAME.test(named) || taken.has(named)))
 			throw new BadRequest(`"${named}" is not a free connection name`);
-		const name = named ?? freeName(connectionWord(hostWord(address)), taken);
-		// how it signs in: OAuth when it says where and lets an app register itself, none when it answers without
-		let auth: "oauth" | "key" | "none";
-		try {
-			const server = await discover(address, fetcher);
-			if (server.register === undefined)
-				throw new BadRequest(
-					`${host} wants a sign-in, but lets no app register itself: banda needs an app made for it first`,
-					422,
-				);
-			auth = "oauth";
-		} catch (error) {
-			if (error instanceof BadRequest) throw error;
-			const answered = await remoteSession(
-				address,
-				async () => undefined,
-				fetcher,
-				ctx.abortSignal,
-				(client) => remoteListing(client, ctx.abortSignal),
+		const existing = await harness.commit(async (tx) => {
+			for (const each of await acceptedNames(tx)) {
+				const connection = await acceptedConnection(tx, each);
+				if (connection?.url === config.url) return { ...connection, name: each };
+			}
+			return undefined;
+		}, ctx);
+		if (existing !== undefined) {
+			if (
+				(config.auth !== "auto" && existing.auth !== config.auth) ||
+				existing.client !== config.client ||
+				JSON.stringify(existing.scopes) !== JSON.stringify(config.scopes)
 			)
-				.then(
-					() => true,
-					(why: unknown) => (why instanceof Unauthorized ? false : Promise.reject(why)),
-				)
-				.catch(async (why: unknown) => {
-					throw new BadRequest(`${host} did not answer as an MCP server: ${await problemOf(why)}`, 502);
-				});
-			auth = answered ? "none" : "key";
+				throw new BadRequest(
+					"This server already has a connection with different sign-in settings. Manage that connection instead.",
+					409,
+				);
+			return existing.name;
 		}
-		const service = serviceOf(address);
-		const text = [
-			"---",
-			`service: ${service}`,
-			`url: ${address}`,
-			...(auth === "none" ? [] : [`auth: ${auth}`]),
-			"reads: []",
-			"---",
-			`Added by you from ${address}. Every tool asks first until you say which only read.`,
-			"",
-		].join("\n");
-		if ("errors" in parseConnection(name, text)) throw new BadRequest(`could not write a connection for ${host}`);
-		await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, text, ctx);
-		fault("address:written");
-		await acceptConnection(name, shaOf(text), ctx);
+		const signal = AbortSignal.any([
+			...(ctx.abortSignal === undefined ? [] : [ctx.abortSignal]),
+			AbortSignal.timeout(30_000),
+		]);
+		const bounded: typeof fetch = (input, init) => fetcher(input, { ...init, signal });
+		let anonymous = false;
+		try {
+			await remoteSession(
+				config.url,
+				async () => undefined,
+				bounded,
+				signal,
+				(client) => remoteListing(client, signal),
+			);
+			anonymous = true;
+		} catch (error) {
+			if (!(error instanceof Unauthorized))
+				throw new BadRequest(`${host} did not answer as an MCP server: ${await problemOf(error)}`, 502);
+		}
+		let auth = config.auth;
+		if (auth === "auto" && anonymous && config.client === undefined && config.scopes === undefined) auth = "none";
+		if (auth === "none" && !anonymous)
+			throw new BadRequest("This server requires sign-in. Choose automatic sign-in or a bearer credential.");
+		if (auth === "auto" || auth === "oauth") {
+			const server = await discover(config.url, bounded).catch(() => undefined);
+			if (server === undefined) {
+				if (auth === "oauth" || config.client !== undefined || config.scopes !== undefined)
+					throw new BadRequest(
+						"The server did not provide OAuth discovery. Check its address or use a bearer credential.",
+						422,
+					);
+				auth = "key";
+			} else {
+				if (server.register === undefined && config.client === undefined)
+					throw new BadRequest(
+						`${host} wants a sign-in, but lets no app register itself: enter its public client ID in advanced sign-in settings`,
+						422,
+					);
+				auth = "oauth";
+			}
+		}
+		const name = named ?? freeName(connectionWord(config.service), taken);
+		const fields = {
+			service: config.service,
+			url: config.url,
+			auth,
+			...(config.client === undefined ? {} : { client: config.client }),
+			...(config.scopes === undefined ? {} : { scopes: [...config.scopes] }),
+		};
+		const checked = connectionOf(name, { ...fields, ask: "always", reads: [], floors: {} });
+		if ("errors" in checked) throw new BadRequest(checked.errors.join("\n"));
+		fault("server:before");
+		await harness.commit(async (tx) => {
+			const doc = await tx.doc(Connected);
+			doc.versions++;
+			doc.servers[name] = { ...fields, version: doc.versions, at: now() };
+			doc.public[name] = [];
+			await log(tx, { at: now(), what: `You added ${config.service}` });
+		}, ctx);
+		fault("server:added");
+		problems.delete(name);
+		await install(ctx);
+		await connect(name, ctx);
+		options.changed?.();
 		return name;
 	}
 
 	/**
-	 * The owner says tools only read, so they run without asking: they join the file's reads, the file rewritten in the
-	 * box and accepted again at once (the owner wrote it). The app offers the ones the server says only read
-	 * (`readOnlyHint`) together, and any other one by one; never with a change from the companion waiting.
+	 * The owner says tools only read, so they run without asking: an overlay in the store, kept by name across versions
+	 * of the connection and never written into what banda ships. Each change moves the connection's version, in the commit
+	 * that keeps its listing, so an earlier token is refused. Never for a tool on the floor or that a definition says
+	 * writes: a connection only narrows. `replace` sets the owner's reads to exactly these.
 	 */
 	async function trustReads(
 		name: string,
@@ -2821,63 +2831,39 @@ export function openCapabilities(options: CapabilityOptions) {
 			!tools.every((t) => typeof t === "string")
 		)
 			throw new BadRequest("give the tools as a list of names");
-		const box = (await boxedFiles("connections", ctx)).get(name) as
-			| { text: string }
-			| { unreadable: string }
-			| undefined;
-		if (box === undefined || "unreadable" in box) throw new BadRequest(`there is no connection named ${name}`, 404);
-		// copied out of the commit: the store's own objects are not to be read after it
-		const { accepted, listed } = await harness.commit(
-			async (tx) =>
-				JSON.parse(
-					JSON.stringify({
-						accepted: (await tx.doc(Accepted)).files[connectionPath(name)] ?? null,
-						listed: (await tx.doc(Connected)).connections[name] ?? null,
-					}),
-				) as {
-					accepted: { sha: string; text: string } | null;
-					listed: { sha: string; tools: { [tool: string]: { readOnlyHint?: boolean } } } | null;
-				},
-			ctx,
-		);
-		const rewrite = (text: string) => {
-			if (!replace) return withReads(name, text, [...new Set(tools as string[])]);
-			const parsed = parseConnection(name, text);
-			if (!("connection" in parsed)) return undefined;
-			const conditional = Object.entries(parsed.connection.readsWhen ?? {}).flatMap(([tool, rules]) =>
-				(tools as string[]).includes(tool) ? [] : rules.map((rule) => `${tool}(${rule.arg}=${rule.value})`),
-			);
-			const next = withList(text, "reads", [...conditional, ...new Set(tools as string[])], ["auth", "url", "service"]);
-			return next !== undefined && "connection" in parseConnection(name, next) ? next : undefined;
-		};
-		if (
-			accepted === null ||
-			(accepted.text !== box.text && rewrite(accepted.text) !== box.text) ||
-			(expected !== undefined && expected !== accepted.sha)
-		)
-			throw new BadRequest("it proposes a change to this connection: allow or decline that first", 409);
-		if (listed === null || listed.sha !== accepted.sha)
-			throw new BadRequest(`${name} is not connected yet: sign in first, then its tools are known`, 409);
 		const named = [...new Set(tools as string[])];
-		const unknown = named.filter((tool) => !Object.hasOwn(listed.tools, tool));
-		if (unknown.length > 0) throw new BadRequest(`${name} lists no tool named ${unknown.join(", ")}`);
-		const rewritten = rewrite(accepted.text);
-		if (rewritten === undefined) throw new BadRequest(`could not write the reads into connections/${name}.md`);
-		await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, rewritten, ctx);
-		fault("trust:written");
-		// Changing read policy is not permission to accept new server instructions or schemas.
-		await harness.commit(async (tx) => {
-			const files = (await tx.doc(Accepted)).files;
-			const connected = await tx.doc(Connected);
-			const listing = connected.connections[name];
-			if (files[connectionPath(name)]?.sha !== accepted.sha || listing?.sha !== accepted.sha)
-				throw new BadRequest("This connection changed meanwhile. Review it again.", 409);
-			const sha = shaOf(rewritten);
-			files[connectionPath(name)] = { sha, text: rewritten, at: now() };
-			listing.sha = sha;
-			connected.epoch++;
-			await log(tx, { at: now(), what: `You allowed reads from ${name}: ${named.join(", ")}` });
+		const refused = await harness.commit(async (tx) => {
+			const doc = await tx.doc(Connected);
+			const connection = await acceptedConnection(tx, name);
+			if (connection === undefined) return { status: 404, why: `there is no connection named ${name}` };
+			const definition = definitions.get(name);
+			if (definition === undefined && doc.servers[name] === undefined)
+				return { status: 409, why: `${name}'s reads are in its file: change that, and allow it again` };
+			if (expected !== undefined && expected !== connection.sha)
+				return { status: 409, why: "This connection changed meanwhile. Review it again." };
+			const listing = doc.connections[name];
+			if (listing === undefined || listing.sha !== connection.sha)
+				return { status: 409, why: `${name} is not connected yet: sign in first, then its tools are known` };
+			const unknown = named.filter((tool) => !Object.hasOwn(listing.tools, tool));
+			if (unknown.length > 0) return { status: 400, why: `${name} lists no tool named ${unknown.join(", ")}` };
+			const asks = named.filter(
+				(tool) => connection.floors[tool] !== undefined || (definition !== undefined && writes(definition).has(tool)),
+			);
+			if (asks.length > 0)
+				return { status: 400, why: `${asks.join(", ")} of ${name} asks every time: it cannot be made a read` };
+			const given = definition?.reads ?? [];
+			const before = doc.reads[name]?.tools ?? [];
+			const next = [...new Set(replace ? named : [...before, ...named])].filter((tool) => !given.includes(tool));
+			if (JSON.stringify(next) === JSON.stringify(before)) return undefined;
+			doc.versions++;
+			doc.reads[name] = { tools: next, version: doc.versions };
+			// the tools keep their first-listed shape: allowing a read is not a new listing
+			listing.sha = (await acceptedConnection(tx, name))?.sha ?? listing.sha;
+			doc.epoch++;
+			await log(tx, { at: now(), what: `You allowed reads from ${name}: ${named.join(", ") || "none"}` });
+			return undefined;
 		}, ctx);
+		if (refused !== undefined) throw new BadRequest(refused.why, refused.status);
 		fault("accept:after");
 		await install(ctx);
 		options.changed?.();
@@ -3072,6 +3058,15 @@ export function openCapabilities(options: CapabilityOptions) {
 				connection === undefined || listed?.sha !== connection.sha ? undefined : listed.tools[tool]?.schema;
 			return schema === undefined ? undefined : (JSON.parse(JSON.stringify(schema)) as JsonObject);
 		}, ctx);
+
+	/** The tools `definition`'s kinds say write or create: a read the owner allows is never one of these. */
+	const writes = (definition: Connection) =>
+		new Set(
+			Object.values(definition.objects ?? {}).flatMap((kind) => [
+				...(kind.writes ?? []).map((write) => write.tool),
+				...(kind.creates ?? []).map((create) => create.tool),
+			]),
+		);
 
 	/** The connections banda ships, as this banda ships them. */
 	const shipped = async (): Promise<Connection[]> => [...definitions.values()];

@@ -179,6 +179,29 @@ describe("connections under faults", () => {
 		);
 	}, 300_000);
 
+	it("sweep, removing a server the owner added: one kill at each step, and it ends gone", async () => {
+		const removal = async (schedules: readonly (readonly Fault[])[]) => {
+			const home = await tempHome();
+			const fake = await startFakeMcp();
+			try {
+				return await runWorker("test/fault/connection-worker.ts", [home, fake.url, "remove-server"], schedules);
+			} finally {
+				await fake.close();
+			}
+		};
+		const gone = { record: false, listed: false, reads: false };
+		expect((await removal([])).last).toMatchObject(gone);
+		const points: FaultPoint[] = ["server:before", "server:added", "server:remove", "server:removed"];
+		await pool(
+			2,
+			points.map((point) => async () => {
+				const killed = await removal([[{ point, hit: 1, kind: "kill" }]]);
+				expect(killed.kills, point).toBe(1);
+				expect(killed.last, point).toMatchObject(gone);
+			}),
+		);
+	}, 300_000);
+
 	it("sweep, its read through a rule: one kill at each call and answer, on the read path and the draft's", async () => {
 		const clean = await run([], "rule");
 		check(clean);
@@ -207,7 +230,7 @@ describe("connections under faults", () => {
 		const clean = await run([], "mcp");
 		check(clean);
 		expect(clean.creates).toBe(1);
-		const points: FaultPoint[] = ["address:written", "accept:after", "oauth:kept", "trust:written", "connect:listed"];
+		const points: FaultPoint[] = ["server:added", "accept:after", "oauth:kept", "connect:listed"];
 		await pool(
 			2,
 			points.map((point) => async () => {
@@ -226,7 +249,7 @@ describe("connections under faults", () => {
 		const clean = await run([], "address");
 		check(clean);
 		expect(clean.creates).toBe(1);
-		const points: FaultPoint[] = ["address:written", "accept:after", "oauth:kept", "trust:written", "connect:listed"];
+		const points: FaultPoint[] = ["server:added", "accept:after", "oauth:kept", "connect:listed"];
 		await pool(
 			2,
 			points.map((point) => async () => {

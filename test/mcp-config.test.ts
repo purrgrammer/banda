@@ -1,8 +1,7 @@
 import { expect, it } from "vitest";
-import { parseConnection } from "../src/core/connections.ts";
-import { connectionWord, hostWord, mcpConfig, mcpDefinition, serviceOf } from "../src/core/mcp-config.ts";
+import { connectionWord, hostWord, mcpConfig, serviceOf } from "../src/core/mcp-config.ts";
 
-it("normalizes remote MCP config into one ordinary definition, with no reads by default", () => {
+it("normalizes remote MCP config: its scopes as a set, what the owner gave and nothing more", () => {
 	const config = mcpConfig({
 		url: " https://ernesto.example/mcp ",
 		service: "Ernesto",
@@ -10,16 +9,7 @@ it("normalizes remote MCP config into one ordinary definition, with no reads by 
 		scopes: ["mcp", "mcp"],
 	});
 	expect(config.scopes).toEqual(["mcp"]);
-	expect(parseConnection("ernesto", mcpDefinition(config, "oauth"))).toMatchObject({
-		connection: {
-			service: "Ernesto",
-			url: "https://ernesto.example/mcp",
-			auth: "oauth",
-			client: "banda",
-			scopes: ["mcp"],
-			reads: [],
-		},
-	});
+	expect(config).toMatchObject({ url: "https://ernesto.example/mcp", service: "Ernesto", client: "banda" });
 });
 for (const url of [
 	"http://elsewhere.example/mcp",
@@ -33,8 +23,6 @@ for (const extra of [
 	{ command: "sh" },
 	{ env: { TOKEN: "private" } },
 	{ service: "Ernesto\nauth: none" },
-	{ service: "[Ernesto]" },
-	{ scopes: ["a,b"] },
 	{ auth: "none", client: "app" },
 ])
 	it("refuses unsupported, credential-bearing or ambiguous configuration", () =>
