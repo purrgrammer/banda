@@ -520,21 +520,25 @@ export function ObjectLink({
 			>
 				{slack ? <SlackMark className="self-center" /> : null}
 				{Icon === undefined ? null : <Icon aria-hidden="true" className="size-3.5 shrink-0 self-center" />}
-				{url === undefined ? (
-					<span className={INLINE_TEXT} title={title}>
-						{title}
-					</span>
-				) : (
-					<a href={url} target="_blank" rel="noopener noreferrer" className={INLINE_LINK} title={title}>
-						{title}
-					</a>
-				)}
-				{/* a thread is its first words and where they are, as its card says: a watch's row names it so too */}
-				{slack && object.place === "thread" && !linked?.reply && object.channel !== undefined ? (
-					<span data-slack-where="" className="shrink-0 text-ink-2">
-						in {object.channel}
-					</span>
-				) : null}
+				{/* the words take the room: where a thread is follows them on their line while it fits, and wraps out of
+				    sight, clipped to the one line, when it does not (a watch's row, a phone's bubble) */}
+				<span className="inline-flex min-w-0 max-h-lh flex-wrap items-baseline gap-x-1 gap-y-2 overflow-clip [overflow-clip-margin:0.25rem]">
+					{url === undefined ? (
+						<span className={INLINE_TEXT} title={title}>
+							{title}
+						</span>
+					) : (
+						<a href={url} target="_blank" rel="noopener noreferrer" className={INLINE_LINK} title={title}>
+							{title}
+						</a>
+					)}
+					{/* a thread is its first words and where they are, as its card says: a watch's row names it so too */}
+					{slack && object.place === "thread" && !linked?.reply && object.channel !== undefined ? (
+						<span data-slack-where="" className="shrink-0 text-ink-2">
+							in {object.channel}
+						</span>
+					) : null}
+				</span>
 			</span>
 		);
 	}
@@ -783,6 +787,26 @@ function slackLinked(href: string): { readonly ts: string; readonly reply: boole
 /** A Slack author's initial for their face when it has no image: `@bob` is B, `@deploybot [bot]` D. */
 const handleInitial = (from: string) => [...from.replace(/^@/, "").trim()][0]?.toUpperCase() ?? "";
 
+/** A message's author's face, their initial when it has none: a bubble's, or a small one in its author's line. */
+function SlackFace({
+	message,
+	small = false,
+	className,
+}: {
+	message: Messages["messages"][number];
+	small?: boolean;
+	className?: string;
+}) {
+	return (
+		<Avatar size={small ? "default" : "sm"} className={cn(small && "size-4", className)}>
+			{message.avatar === undefined ? null : <AvatarImage src={message.avatar} alt="" referrerPolicy="no-referrer" />}
+			<AvatarFallback className={cn(small && "text-[0.5625rem] leading-none")}>
+				{handleInitial(message.from)}
+			</AvatarFallback>
+		</Avatar>
+	);
+}
+
 /** Slack's own mark, beside a type icon, so a reference or a card reads as Slack's at a glance. */
 export function SlackMark({ className }: { className?: string }) {
 	return <img src="/connections/slack.svg" alt="" aria-hidden="true" className={cn("size-3.5 shrink-0", className)} />;
@@ -802,9 +826,12 @@ const slackListIcon = (list: Pick<Messages, "search" | "place">): LucideIcon | u
  */
 function SlackChannelCard({ list, actions }: { list: Messages; actions?: ReactNode }) {
 	const url = slackUrl(list.url);
+	// a direct message is named by the person in it (`@bob`), and has no members to count: it says what it is instead
 	const members =
 		list.members === null || list.members === undefined
-			? undefined
+			? list.title.startsWith("@")
+				? "Direct message"
+				: undefined
 			: `${list.members} member${list.members === 1 ? "" : "s"}`;
 	return (
 		<Tile className="flex flex-col gap-2.5 p-3.5" data-slack-card="channel">
@@ -887,16 +914,23 @@ function SlackMessagesCard({
 }) {
 	if (!list.search && list.place === "channel") return <SlackChannelCard list={list} actions={actions} />;
 	const url = slackUrl(list.url);
-	const rows = list.search ? list.messages : list.messages.filter((message) => message.text !== list.title);
+	// a search's matches stay in the order they came, newest first; a thread's newest few read as a conversation does,
+	// down the card, the latest last
+	const rows = list.search
+		? list.messages
+		: [...list.messages.filter((message) => message.text !== list.title)].reverse();
 	const more = list.total === null ? 0 : Math.max(0, list.total - list.messages.length);
 	const facts = list.search
-		? [list.total === null ? "" : `About ${list.total} ${list.total === 1 ? "match" : "matches"}`]
+		? [list.total === null || list.total === 0 ? "" : `About ${list.total} ${list.total === 1 ? "match" : "matches"}`]
 		: [
 				list.channel ? `Thread in ${list.channel}` : "Thread",
 				list.total === null ? "" : `${list.total} ${list.total === 1 ? "message" : "messages"}`,
 			];
 	return (
-		<Tile className="flex flex-col gap-2.5 p-3.5" data-slack-card={list.search ? "search" : (list.place ?? "thread")}>
+		<Tile
+			className="@container/slack flex flex-col gap-2.5 p-3.5"
+			data-slack-card={list.search ? "search" : (list.place ?? "thread")}
+		>
 			<div className="flex min-w-0 items-start gap-2.5">
 				<SlackMark className="mt-0.5 size-5" />
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -908,31 +942,32 @@ function SlackMessagesCard({
 					>
 						{list.title}
 					</h3>
-					<span className="text-meta text-ink-2 [overflow-wrap:anywhere]">
-						{facts.filter((each) => each !== "").join(" · ")}
-					</span>
+					{facts.some((each) => each !== "") ? (
+						<span className="text-meta text-ink-2 [overflow-wrap:anywhere]">
+							{facts.filter((each) => each !== "").join(" · ")}
+						</span>
+					) : null}
 				</div>
 				{list.asOf === undefined ? null : <span className="shrink-0 text-meta text-ink-2">as of {list.asOf}</span>}
 				<span className="shrink-0">{actions}</span>
 			</div>
-			{rows.length === 0 ? (
+			{/* a thread's replies before the newest few are above them, where a conversation keeps its past */}
+			{!list.search && more > 0 ? <span className="text-meta text-ink-2">{more} earlier in Slack</span> : null}
+			{rows.length === 0 && !list.search && more > 0 ? null : rows.length === 0 ? (
 				<p className="text-meta text-ink-2">{list.search ? "No messages match yet" : "No replies yet"}</p>
 			) : (
 				<ul className="flex flex-col gap-1.5">
 					{rows.map((message) => (
 						<li key={message.id} className="flex min-w-0 items-end gap-2">
-							<Avatar size="sm" className="mb-0.5">
-								{message.avatar === undefined ? null : (
-									<AvatarImage src={message.avatar} alt="" referrerPolicy="no-referrer" />
-								)}
-								<AvatarFallback>{handleInitial(message.from)}</AvatarFallback>
-							</Avatar>
+							{/* the face beside the bubble where the card has room; on a narrow card, in the author's line */}
+							<SlackFace message={message} className="mb-0.5 hidden @xs/slack:flex" />
 							{/* a quoted bubble: Slack's words beside their face, in neither the owner's nor the agent's dress */}
 							<span
 								data-slack-bubble=""
 								className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-bubble border border-line-soft bg-paper-2 px-3 py-1.5"
 							>
-								<span className="flex min-w-0 items-baseline gap-2 text-meta text-ink-2">
+								<span className="flex min-w-0 items-center gap-1.5 text-meta text-ink-2">
+									<SlackFace message={message} small className="@xs/slack:hidden" />
 									<span className="min-w-0 flex-1 truncate" title={message.from}>
 										{message.from || "Someone"}
 									</span>
@@ -951,7 +986,7 @@ function SlackMessagesCard({
 					))}
 				</ul>
 			)}
-			{more > 0 || url !== undefined ? (
+			{(list.search && more > 0) || url !== undefined ? (
 				<span className="flex flex-wrap items-center gap-2">
 					{url === undefined ? null : (
 						<Button asChild size="sm" variant="ghost" className="-ml-2">
@@ -961,7 +996,7 @@ function SlackMessagesCard({
 							</a>
 						</Button>
 					)}
-					{more > 0 ? <span className="text-meta text-ink-2">{more} more in Slack</span> : null}
+					{list.search && more > 0 ? <span className="text-meta text-ink-2">{more} more in Slack</span> : null}
 				</span>
 			) : null}
 		</Tile>
@@ -1317,7 +1352,7 @@ export function ContactCard({ person, actions }: { person: Person; actions?: Rea
 			) : null}
 			{open === undefined ? null : (
 				<span className="flex flex-wrap items-center gap-2">
-					<Button asChild size="sm" variant="ghost">
+					<Button asChild size="sm" variant="ghost" className="-ml-2">
 						<a href={open} target="_blank" rel="noopener noreferrer">
 							<ExternalLinkIcon />
 							{slack ? "Open in Slack" : "Open in Google Contacts"}
