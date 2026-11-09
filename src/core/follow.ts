@@ -750,7 +750,8 @@ const inSpan = (value: Json | undefined, span: Span) =>
  * the `span` the pages read whole left out unless they brought it again (it was deleted), ordered by `by` newest first
  * or last as `descending` says, and only the newest `keep`. An item without a value of `by` cannot be placed in the
  * window and is left out. Merging the same pages again changes nothing, and nothing newer than the `keep`-th newest
- * that the pages did not find deleted is ever dropped.
+ * that the pages did not find deleted is ever dropped. With `maxBytes`, the window keeps only the newest items whose
+ * JSON fits in it, the oldest pushed off first, so a window of long messages stays as bounded as one answer.
  */
 export function merge(
 	held: readonly Item[],
@@ -759,6 +760,7 @@ export function merge(
 	key: string,
 	descending: boolean,
 	span?: Span,
+	maxBytes?: number,
 ): Item[] {
 	const byKey = new Map<string, Item>();
 	const kept = span === undefined ? held : held.filter((item) => !inSpan(item[pages.by], span));
@@ -768,18 +770,25 @@ export function merge(
 		later(a[pages.by], b[pages.by]) ? 1 : later(b[pages.by], a[pages.by]) ? -1 : 0,
 	);
 	const newest = ascending.slice(Math.max(0, ascending.length - pages.keep));
+	if (maxBytes !== undefined) {
+		let size = bytesOf(newest);
+		while (newest.length > 0 && size > maxBytes) size -= JSON.stringify(newest.shift()).length + 1;
+	}
 	return descending ? newest.reverse() : newest;
 }
 
+/** The bytes of a list of items as JSON. */
+const bytesOf = (items: readonly Item[]) => items.reduce((sum, item) => sum + JSON.stringify(item).length + 1, 1);
+
 /**
  * A walk of a paged list's pages that has not reached the window yet: when it began, what it asked from (`oldest`),
- * the service's cursor for the next page, the newest `keep` items it brought, the span of what it read, and which way
- * the service hands the pages.
+ * the service's cursor for the next page (none once it was given up on, an hour on: the next page is a look's own), the
+ * newest `keep` items it brought, the span of what it read, and which way the service hands the pages.
  */
 export type Walk = {
 	since: number;
 	oldest?: string;
-	cursor: string;
+	cursor?: string;
 	items: Item[];
 	low?: Json;
 	high?: Json;
@@ -797,10 +806,12 @@ export function pageArgs(
 	by: string,
 	size: number | undefined,
 ): { readonly oldest?: string; readonly cursor?: string } {
-	if (walk !== undefined) return { ...(walk.oldest === undefined ? {} : { oldest: walk.oldest }), cursor: walk.cursor };
+	if (walk?.cursor !== undefined)
+		return { ...(walk.oldest === undefined ? {} : { oldest: walk.oldest }), cursor: walk.cursor };
 	if (window === undefined || size === undefined || descends(window, by) !== false) return {};
 	const ascending = merge([], window, { by, keep: MAX_KEEP }, by, false);
-	const from = ascending[ascending.length - 1 - size]?.[by];
+	// a window shorter than a page (its bytes pushed the rest off) is read again from its oldest, never the whole list
+	const from = ascending[Math.max(0, ascending.length - 1 - size)]?.[by];
 	return from === undefined || from === null ? {} : { oldest: String(from) };
 }
 
@@ -819,7 +830,8 @@ const highest = (values: readonly (Json | undefined)[]) =>
  * again taken as deleted. Newest first, the walk reaches the window when a page brings an item at or before the
  * window's newest; oldest first, when the service has no more. With no window yet (the first look), a newest page is
  * the window by itself. A walk older than `expire` merges what it read, never deleting what it did not reach, and says
- * so (`gap`): changes between may be missing. `size` is how many items a full page held, when this one was full.
+ * so (`gap`): changes between may be missing, and so does a walk whose items outgrow `maxBytes`, the most the window
+ * may hold. `size` is how many items a full page held, when this one was full.
  */
 export function walkOn(look: {
 	readonly walk: Walk | undefined;
@@ -831,8 +843,9 @@ export function walkOn(look: {
 	readonly key: string;
 	readonly now: number;
 	readonly expire: number;
+	readonly maxBytes?: number;
 }): ({ readonly walk: Walk } | { readonly list: Item[]; readonly gap: boolean }) & { readonly size?: number } {
-	const { walk, asked, page, next, window, pages, key } = look;
+	const { walk, asked, page, next, window, pages, key, maxBytes } = look;
 	const by = pages.by;
 	const descending =
 		descends(page, by) ?? walk?.descending ?? (window === undefined ? undefined : descends(window, by));
@@ -859,14 +872,15 @@ export function walkOn(look: {
 						: low === undefined
 							? undefined
 							: { from: low, inclusive: true };
-		return { list: merge(window ?? [], items, pages, key, desc, span), gap: false, ...sized };
+		return { list: merge(window ?? [], items, pages, key, desc, span, maxBytes), gap: false, ...sized };
 	}
-	if (walk !== undefined && look.now - walk.since >= look.expire) {
+	const full = maxBytes !== undefined && bytesOf(items) > maxBytes;
+	if (full || (walk !== undefined && look.now - walk.since >= look.expire)) {
 		const span: Span | undefined =
 			low === undefined
 				? undefined
 				: { from: low, inclusive: true, ...(desc || high === undefined ? {} : { to: high }) };
-		return { list: merge(window ?? [], items, pages, key, desc, span), gap: true, ...sized };
+		return { list: merge(window ?? [], items, pages, key, desc, span, maxBytes), gap: true, ...sized };
 	}
 	return {
 		walk: {

@@ -718,6 +718,17 @@ describe("a paged list: a window of the newest, walked to by pages", () => {
 		expect(pageArgs(undefined, newestFirst(thread), "ts", 2)).toEqual({});
 		const held: Walk = { since: 0, oldest: ts(3), cursor: "c2", items: [] };
 		expect(pageArgs(held, thread, "ts", 2)).toEqual({ oldest: ts(3), cursor: "c2" });
+		// a window its bytes cut shorter than a page is read from its oldest, not the whole thread again
+		expect(pageArgs(undefined, thread.slice(4), "ts", 5)).toEqual({ oldest: ts(4) });
+		// a walk given up on asks what a look without one asks
+		expect(pageArgs({ since: 0, items: [] }, thread, "ts", 2)).toEqual({ oldest: ts(3) });
+	});
+
+	it("a window within its bytes keeps its newest, contiguous", () => {
+		const items = Array.from({ length: 10 }, (_, n) => msg(n, "x".repeat(100)));
+		const one = JSON.stringify(items[0]).length + 1;
+		const kept = merge([], items, { by: "ts", keep: 100 }, "ts", true, undefined, one * 4 + 1);
+		expect(kept.map((item) => item.ts)).toEqual([ts(9), ts(8), ts(7), ts(6)]);
 	});
 
 	/** Slack's thread and channel kinds, as the shipped file declares them. */

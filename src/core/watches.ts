@@ -87,6 +87,11 @@ export const watchPath = (name: string) => `watches/${name}.md`;
 export const MAX_WATCH_BYTES = 16 * 1024;
 /** The most bytes one reading of a followed object may hold, every read's answer together. */
 export const MAX_READING_BYTES = 512 * 1024;
+/**
+ * The most bytes a paged read's window, or a walk toward it, may hold: half a reading, beside the object's other reads.
+ * A window past it pushes off its oldest; a walk past it merges as far as it read.
+ */
+export const MAX_WINDOW_BYTES = MAX_READING_BYTES / 2;
 const DAY = 24 * 60 * 60_000;
 /** The most changes one wake or tell names, in its line and the model's text; the rest are counted. */
 export const CHANGES_SAID = 20;
@@ -984,6 +989,8 @@ export function defineWatches(options: WatchesOptions) {
 			// what it follows is written on the record here, before the read: the row and a trouble line name the object
 			// and its service from the first look on, whether or not any look has succeeded yet
 			if (record !== undefined) {
+				// a walk is of one object as one account: a watch now following another, or as another, starts afresh
+				if (record.key !== found.note.key) delete record.pages;
 				const { until, ...note } = found.note;
 				Object.assign(record, note);
 				if (until === undefined) delete record.until;
@@ -1096,11 +1103,11 @@ export function defineWatches(options: WatchesOptions) {
 				key: kind.follow.keys?.[pages.list] ?? "id",
 				now,
 				expire: TELL_AFTER,
+				maxBytes: MAX_WINDOW_BYTES,
 			});
 			if (step.size !== undefined) learned = { as, size: step.size };
 			if ("walk" in step) {
 				walked = { as, walk: step.walk };
-				if (canonical(step.walk as unknown as Json).length > MAX_READING_BYTES) failed = "The reading was too large.";
 				break;
 			}
 			gapped = step.gap;
@@ -1362,7 +1369,9 @@ export function defineWatches(options: WatchesOptions) {
 					outcome = { outcome: "held", why: "paused" };
 					return;
 				}
-				if (record.seen !== seen) return;
+				// another look went on from the same walk, or merged it, while this one read: this page is not the next
+				if (record.seen !== seen || canonical(record.pages?.[step.as] ?? null) !== canonical(paging?.walk ?? null))
+					return;
 				record.pages = { ...record.pages, [step.as]: step.walk };
 				delete record.failed;
 				record.looked = now;
@@ -1396,6 +1405,13 @@ export function defineWatches(options: WatchesOptions) {
 					record.looked = now;
 					const quiet = now + lookEvery(kind.follow, {});
 					record.next = until !== undefined && until > now ? Math.min(until, quiet) : quiet;
+					// a walk that could not go on for an hour (its cursor refused, say) is not asked from again: the next
+					// look reads the page a look without a walk reads, and merges it with what the walk read, with a gap
+					for (const walk of Object.values(record.pages ?? {}))
+						if (now - walk.since >= TELL_AFTER) {
+							delete walk.cursor;
+							delete walk.oldest;
+						}
 				}
 			});
 			return { outcome: "failed", why: reason };
@@ -1513,6 +1529,8 @@ export function defineWatches(options: WatchesOptions) {
 					// cursor would replay what the object did since its end from a reading another watch kept
 					if (record.sha !== undefined) record.since = now;
 					record.sha = watch.sha;
+					// a walk was of the reads the old file named
+					delete record.pages;
 					if (record.done !== undefined) delete record.seen;
 					delete record.done;
 					delete record.next;

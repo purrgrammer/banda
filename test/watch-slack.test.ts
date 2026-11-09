@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Json } from "../src/core/follow.ts";
 import { type SlackBudget, slackBudget, slackCall } from "../src/core/slack-rest.ts";
 import { context } from "../src/core/store.ts";
-import { Watches, type WatchRecord } from "../src/core/watches.ts";
+import { Followed, MAX_WINDOW_BYTES, Watches, type WatchRecord } from "../src/core/watches.ts";
 import { Faults } from "./fault/faults.ts";
 import {
 	CHANNEL,
@@ -189,6 +189,88 @@ describe("a watch on a Slack channel", () => {
 		expect(summary.tells[0]?.changes).not.toContain("@cy: burst 24");
 		expect(summary.record.behind).toBeDefined();
 		expect(summary.record.pages).toBeUndefined();
+	}, 60_000);
+});
+
+describe("a walk held on a Slack channel", () => {
+	it("a walk read for another object or account is never gone on from: the look starts afresh", async () => {
+		const seen: WatchRecord[] = [];
+		const summary = await follow(
+			CHANNEL_REF,
+			(step) => ({ channel: step >= 1 ? [...BEFORE, ...BURST] : BEFORE }),
+			["k1", "k2", "k3", "k4"],
+			{
+				act: async (step, { harness }) => {
+					// the record as a look for another object (or as another account) left it, its walk that object's
+					if (step === 2)
+						await harness.commit(async (tx) => {
+							const record = (await tx.doc(Watches)).watches["banda-142"];
+							if (record !== undefined) record.key = "other-account slack:channel:slack/C0OTHER";
+						}, context);
+					seen.push(await recordNow(harness));
+				},
+			},
+		);
+		// the second look began a walk of its own, one page in, not the third page of the walk it found
+		expect(seen[2]?.pages?.history?.items).toHaveLength(15);
+		expect(summary.record.pages).toBeUndefined();
+		expect(summary.wakes).toHaveLength(1);
+	}, 60_000);
+
+	it("a walk whose page keeps failing for an hour stops asking from its cursor and merges with a gap", async () => {
+		const seen: WatchRecord[] = [];
+		const asked: { tool: string; oldest?: unknown; cursor?: unknown }[] = [];
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: SLACK,
+			object: CHANNEL_REF,
+			answer: slackWorld(
+				(step) => ({
+					channel: step >= 1 ? [...BEFORE, ...BURST] : BEFORE,
+					...(step === 2 || step === 3 ? { busy: "Slack refused (invalid_cursor)." } : {}),
+				}),
+				15,
+				asked,
+			),
+			clicks: ["k1", "k2", "k3", "k4"],
+			at: (step) => NOW + Math.max(0, step - 1) * 40 * 60_000,
+			act: async (_step, { harness }) => {
+				seen.push(await recordNow(harness));
+			},
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		// past the hour the failing look let go of the cursor; the next asked the newest page and merged, with a gap
+		expect(seen[3]?.pages?.history).toBeDefined();
+		expect(seen[3]?.pages?.history?.cursor).toBeUndefined();
+		const history = asked.filter((each) => each.tool === "channel_history");
+		expect(history.at(-1)?.cursor).toBeUndefined();
+		expect(summary.record.pages).toBeUndefined();
+		expect(summary.record.failed).toBeUndefined();
+		expect(summary.wakes.concat(summary.tells).at(-1)?.gap).toBe(true);
+	}, 60_000);
+
+	it("a window of long messages stays within its bytes: the oldest are pushed off, never told as deleted", async () => {
+		const long = (n: number, words: string) => said(n, "@cy at Acme", `${words} ${"x".repeat(3900)}`);
+		const before = Array.from({ length: 80 }, (_, n) => long(10 + n, `old ${n}`));
+		let kept: unknown[] = [];
+		const summary = await follow(
+			CHANNEL_REF,
+			(step) => ({ channel: step >= 1 ? [...before, long(200, "new one")] : before }),
+			["k1"],
+			{
+				pageMax: 100,
+				act: async (_step, { harness }) => {
+					const objects = (await harness.snapshot(Followed, context))?.objects ?? {};
+					kept = (Object.values(objects)[0]?.answers.history as { messages?: unknown[] } | undefined)?.messages ?? [];
+				},
+			},
+		);
+		// the baseline's window, as the first look kept it
+		expect(kept.length).toBeGreaterThan(0);
+		expect(kept.length).toBeLessThan(80);
+		expect(JSON.stringify(kept).length).toBeLessThanOrEqual(MAX_WINDOW_BYTES);
+		expect(summary.tells).toHaveLength(1);
+		expect(summary.tells[0]?.changes).toHaveLength(1);
+		expect(summary.tells[0]?.changes[0]).toMatch(/^@cy: new one x/);
 	}, 60_000);
 });
 
