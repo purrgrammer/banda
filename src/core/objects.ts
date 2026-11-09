@@ -981,6 +981,18 @@ export type ObjectCard =
 	| ContactCard
 	| FileCard;
 
+/** Words of several lines: each a plain line, blank ones dropped, bounded as a whole. */
+function plainLines(value: unknown, max: number): string {
+	if (typeof value !== "string") return "";
+	const lines = value
+		.split("\n")
+		.map((line) => plainLine(line, max))
+		.filter((line) => line !== "")
+		.join("\n");
+	const characters = [...lines];
+	return characters.length <= max ? lines : `${characters.slice(0, max - 1).join("")}…`;
+}
+
 /** A plain line: no control or invisible characters, one space for each run of spaces, bounded. */
 export function plainLine(value: unknown, max = 200): string {
 	if (typeof value !== "string") return "";
@@ -1136,7 +1148,7 @@ const channelTitle = (name: string) => (name === "" || name.startsWith("@") ? na
 
 /**
  * A Slack thread, channel or search as its card says it: the newest few messages first, each its author's handle and its
- * text as one plain line. A thread (a kind with a `root`) is titled by its first message's words, in its channel; a
+ * text, its lines kept. A thread (a kind with a `root`) is titled by its first message's words, in its channel; a
  * channel (a kind with a `title`) by its name, with its topic and members; a search by its query.
  */
 function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: string) => unknown): MessagesCard {
@@ -1159,7 +1171,7 @@ function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: strin
 					from: plainLine(each.from, 120),
 					subject: "",
 					date: plainLine(each.date, 40),
-					text: plainLine(each.text, 300),
+					text: plainLines(each.text, 500),
 					...(avatar === undefined ? {} : { avatar }),
 					...(files.length === 0 ? {} : { files: files.slice(0, 10) }),
 				},
@@ -1177,11 +1189,16 @@ function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: strin
 			? plainLine(first?.text, 120)
 			: channel;
 	const url = slackUrl(field("url"));
+	const newest = all.slice(0, MESSAGES_SHOWN);
 	return {
 		card: "messages",
 		title: title || (search ? "Search" : place === "thread" ? "Thread" : "Slack"),
 		search,
-		messages: all.slice(0, MESSAGES_SHOWN),
+		// a thread's card opens with the message that started it, however many replies came after
+		messages:
+			place === "thread" && first !== undefined && !newest.includes(first)
+				? [...newest.slice(0, MESSAGES_SHOWN - 1), first]
+				: newest,
 		total: count(field("total")),
 		...(url === undefined ? {} : { url }),
 		service: "slack",

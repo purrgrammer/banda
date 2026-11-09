@@ -740,9 +740,11 @@ function ReadingCard({
 				)}
 			</p>
 		);
-	const asOf = old
-		? new Date(shown.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
-		: undefined;
+	// a Slack card's reading time stays in its menu's details
+	const asOf =
+		old && !("service" in card && card.service === "slack")
+			? new Date(shown.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+			: undefined;
 	return (
 		<>
 			{card.card === "pull-request" ? (

@@ -58,13 +58,11 @@ for (const width of [390, 1440])
 					"6 messages",
 					"@deploybot [bot]",
 					"@olga (outside)",
-					"Every deploy, green or red. Ping #oncall when red.",
 					"14 members",
 					"No messages match yet",
 					"@bob · Engineer",
 					"On call · America/New_York",
 					"From another team",
-					"Open in Slack",
 					"Reply in thread in #general",
 					"Post in #deploys",
 					"Notifies @here (everyone active in the channel), @bob",
@@ -92,12 +90,24 @@ for (const width of [390, 1440])
 				// a search with no matches says so once, never "About 0 matches"; a reaction's draft shows no raw arguments
 				expect(await text("About 0 matches")).toBe(false);
 				expect(await text("1700000300.000400")).toBe(false);
-				// a thread reads down the card as a conversation does, the latest last
+				// a thread opens with its first message, and reads down the card as a conversation does, the latest last
 				expect(
 					await page.run<string[]>(
 						`[...${section}.querySelector('[data-slack-card="thread"]').querySelectorAll('[data-slack-bubble]')].map((bubble) => bubble.innerText.split("\\n").find((line) => line.startsWith("@")) ?? "")`,
 					),
-				).toEqual(["@ana", "@bob", "@olga (outside)", "@deploybot [bot]"]);
+				).toEqual(["@bob", "@ana", "@bob", "@olga (outside)", "@deploybot [bot]"]);
+				// a card's actions sit on its title's line, and a thread's replies hang under its first message
+				for (const card of ["thread", "channel"]) {
+					const off = await page.run<number>(
+						`(() => { const card = ${section}.querySelector('[data-slack-card="${card}"]'); const middle = (el) => { const box = el.getBoundingClientRect(); return box.top + box.height / 2; }; return Math.abs(middle(card.querySelector('h3')) - middle(card.querySelector('[aria-label^="Actions for"] svg'))); })()`,
+					);
+					expect(off, card).toBeLessThanOrEqual(1.5);
+				}
+				expect(
+					await page.run<number>(
+						`${section}.querySelector('[data-slack-replies]').querySelectorAll('[data-slack-bubble]').length`,
+					),
+				).toBe(4);
 				// a file in a message is named with its size
 				expect(await page.run(`${section}.querySelector('[data-slack-file="F0LOG"]') !== null`)).toBe(true);
 				expect(await page.run(`${section}.querySelector('[aria-label="Slack message"]') !== null`)).toBe(true);

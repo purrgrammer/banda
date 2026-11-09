@@ -28,7 +28,6 @@ import {
 	MailIcon,
 	MailsIcon,
 	MessagesSquareIcon,
-	PaperclipIcon,
 	PhoneIcon,
 	PresentationIcon,
 	SearchIcon,
@@ -52,7 +51,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
 import { sizeOf } from "../lib/size.ts";
+import { slackBlocks, slackEmoji } from "../lib/slack-text.ts";
 import { Tile } from "./Cards.tsx";
+import { Bubble } from "./Feed.tsx";
+import { PlainFile } from "./Files.tsx";
 
 export type PullRequest = {
 	readonly repo: string;
@@ -350,7 +352,13 @@ export function ObjectMenu({
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<Button variant="ghost" size="icon-sm" disabled={busy} aria-label={`Actions for ${name}`}>
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					disabled={busy}
+					aria-label={`Actions for ${name}`}
+					className="-my-1.5 -mr-1.5"
+				>
 					<EllipsisIcon />
 				</Button>
 			</DropdownMenuTrigger>
@@ -787,26 +795,6 @@ function slackLinked(href: string): { readonly ts: string; readonly reply: boole
 /** A Slack author's initial for their face when it has no image: `@bob` is B, `@deploybot [bot]` D. */
 const handleInitial = (from: string) => [...from.replace(/^@/, "").trim()][0]?.toUpperCase() ?? "";
 
-/** A message's author's face, their initial when it has none: a bubble's, or a small one in its author's line. */
-function SlackFace({
-	message,
-	small = false,
-	className,
-}: {
-	message: Messages["messages"][number];
-	small?: boolean;
-	className?: string;
-}) {
-	return (
-		<Avatar size={small ? "default" : "sm"} className={cn(small && "size-4", className)}>
-			{message.avatar === undefined ? null : <AvatarImage src={message.avatar} alt="" referrerPolicy="no-referrer" />}
-			<AvatarFallback className={cn(small && "text-[0.5625rem] leading-none")}>
-				{handleInitial(message.from)}
-			</AvatarFallback>
-		</Avatar>
-	);
-}
-
 /** Slack's own mark, beside a type icon, so a reference or a card reads as Slack's at a glance. */
 export function SlackMark({ className }: { className?: string }) {
 	return <img src="/connections/slack.svg" alt="" aria-hidden="true" className={cn("size-3.5 shrink-0", className)} />;
@@ -820,12 +808,62 @@ const slackListIcon = (list: Pick<Messages, "search" | "place">): LucideIcon | u
 	list.search ? SearchIcon : list.place === "channel" ? undefined : MessagesSquareIcon;
 
 /**
- * A Slack channel as a place, not a transcript: Slack's mark, its name with how many are in it on one line, its topic
- * beneath, and Open in Slack, laid out as a Drive file's card is. Its messages are read for the agent and for a watch,
- * never listed here.
+ * The line a Slack card opens with: Slack's mark and its name, together the link to it in Slack, what it counts beside
+ * them, and its actions.
  */
+function SlackHead({
+	title,
+	url,
+	facts,
+	hint,
+	mono = false,
+	actions,
+}: {
+	title: string;
+	url: string | undefined;
+	facts?: string | undefined;
+	hint?: string | undefined;
+	mono?: boolean;
+	actions?: ReactNode;
+}) {
+	const name = (
+		<>
+			<SlackMark className="size-5" />
+			<h3
+				className={cn(
+					"min-w-0 text-body font-semibold text-ink [overflow-wrap:anywhere]",
+					mono && "font-mono font-normal",
+				)}
+				title={hint}
+			>
+				{title}
+			</h3>
+		</>
+	);
+	return (
+		<div className="flex min-w-0 items-start gap-2.5">
+			<div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-0.5">
+				{url === undefined ? (
+					<span className="flex min-w-0 items-center gap-2.5">{name}</span>
+				) : (
+					<a
+						href={url}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="flex min-w-0 items-center gap-2.5 decoration-line underline-offset-2 hover:underline"
+					>
+						{name}
+					</a>
+				)}
+				{facts === undefined || facts === "" ? null : <span className="shrink-0 text-meta text-ink-2">{facts}</span>}
+			</div>
+			{actions === undefined ? null : <span className="flex h-6 shrink-0 items-center">{actions}</span>}
+		</div>
+	);
+}
+
+/** A Slack channel as a place, not a transcript: one line, its name (to Slack) and how many are in it. */
 function SlackChannelCard({ list, actions }: { list: Messages; actions?: ReactNode }) {
-	const url = slackUrl(list.url);
 	// a direct message is named by the person in it (`@bob`), and has no members to count: it says what it is instead
 	const members =
 		list.members === null || list.members === undefined
@@ -834,29 +872,14 @@ function SlackChannelCard({ list, actions }: { list: Messages; actions?: ReactNo
 				: undefined
 			: `${list.members} member${list.members === 1 ? "" : "s"}`;
 	return (
-		<Tile className="flex flex-col gap-2.5 p-3.5" data-slack-card="channel">
-			<div className="flex min-w-0 items-start gap-2.5">
-				<SlackMark className="mt-0.5 size-5" />
-				<div className="flex min-w-0 flex-1 flex-col gap-1">
-					<div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-						<h3 className="min-w-0 text-body font-semibold text-ink [overflow-wrap:anywhere]">{list.title}</h3>
-						{members === undefined ? null : <span className="shrink-0 text-meta text-ink-2">{members}</span>}
-					</div>
-					{list.topic ? <p className="text-meta text-ink-2 [overflow-wrap:anywhere]">{list.topic}</p> : null}
-				</div>
-				{list.asOf === undefined ? null : <span className="shrink-0 text-meta text-ink-2">as of {list.asOf}</span>}
-				<span className="shrink-0">{actions}</span>
-			</div>
-			{url === undefined ? null : (
-				<span className="flex flex-wrap items-center gap-2">
-					<Button asChild size="sm" variant="ghost" className="-ml-2">
-						<a href={url} target="_blank" rel="noopener noreferrer">
-							<ExternalLinkIcon />
-							Open in Slack
-						</a>
-					</Button>
-				</span>
-			)}
+		<Tile className="p-3.5" data-slack-card="channel">
+			<SlackHead
+				title={list.title}
+				url={slackUrl(list.url)}
+				facts={members}
+				hint={list.topic || undefined}
+				actions={actions}
+			/>
 		</Tile>
 	);
 }
@@ -864,7 +887,7 @@ function SlackChannelCard({ list, actions }: { list: Messages; actions?: ReactNo
 /** A file a Slack message shares, as its row names it. */
 export type SlackFile = { readonly id: string; readonly name: string; readonly size: number };
 
-/** A file in a message row, by its name and size: what opens it, when the card may, is the caller's (`open`). */
+/** A file in a message, as a chat shows a file it does not preview: what opens it, when the card may, is the caller's. */
 export function SlackFileLine({
 	file,
 	open,
@@ -874,34 +897,86 @@ export function SlackFileLine({
 	open?: (() => void) | undefined;
 	busy?: boolean;
 }) {
-	const words = (
-		<>
-			<PaperclipIcon aria-hidden="true" className="size-3.5 shrink-0" />
-			<span className="min-w-0 truncate">{file.name}</span>
-			<span className="shrink-0 text-ink-2">{busy ? "Loading…" : sizeOf(file.size)}</span>
-		</>
-	);
-	return open === undefined ? (
-		<span className="flex min-w-0 items-center gap-1.5 text-meta text-ink" data-slack-file={file.id}>
-			{words}
+	return (
+		<span className="flex min-w-0 max-w-full" data-slack-file={file.id}>
+			<PlainFile
+				file={{ name: file.name, size: busy ? "Loading…" : sizeOf(file.size) }}
+				onOpen={busy ? undefined : open}
+			/>
 		</span>
-	) : (
-		<button
-			type="button"
-			className="flex min-w-0 items-center gap-1.5 self-start text-left text-meta text-ink underline decoration-line underline-offset-2 hover:decoration-ink disabled:opacity-60"
-			disabled={busy}
-			onClick={open}
-			data-slack-file={file.id}
-		>
-			{words}
-		</button>
+	);
+}
+
+/** Slack's words as a chat bubble holds them: its lines, what it quotes, its emoji, its `code`. */
+function SlackText({ text }: { text: string }) {
+	const line = (words: string) =>
+		words.split(/(`[^`\n]+`)/).map((part, n) =>
+			part.length > 2 && part.startsWith("`") && part.endsWith("`") ? (
+				// biome-ignore lint/suspicious/noArrayIndexKey: a line's parts never move
+				<code key={n} className="font-code text-[0.92em]">
+					{part.slice(1, -1)}
+				</code>
+			) : (
+				part
+			),
+		);
+	return (
+		<div className="line-clamp-6 whitespace-pre-wrap [&>*+*]:mt-1">
+			{slackBlocks(slackEmoji(text)).map((block) =>
+				block.quote ? (
+					<blockquote key={block.lines.join("\n")} className="border-l-2 border-line pl-2.5 text-ink-2">
+						{line(block.lines.join("\n"))}
+					</blockquote>
+				) : (
+					<p key={block.lines.join("\n")}>{line(block.lines.join("\n"))}</p>
+				),
+			)}
+		</div>
+	);
+}
+
+/** One message in a Slack card, laid out as a chat's: the face, the author and when, the bubble, the files beneath it. */
+function SlackMessage({
+	message,
+	file,
+}: {
+	message: Messages["messages"][number];
+	file?: ((file: SlackFile) => ReactNode) | undefined;
+}) {
+	const files = message.files ?? [];
+	return (
+		<li className="flex min-w-0 gap-2.5" data-slack-bubble="">
+			<Avatar size="sm" className="-mt-0.5">
+				{message.avatar === undefined ? null : <AvatarImage src={message.avatar} alt="" referrerPolicy="no-referrer" />}
+				<AvatarFallback>{handleInitial(message.from)}</AvatarFallback>
+			</Avatar>
+			<div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+				<span className="flex max-w-full items-baseline gap-2">
+					<span className="min-w-0 truncate text-body font-semibold text-ink" title={message.from}>
+						{message.from || "Someone"}
+					</span>
+					<span className="shrink-0 text-meta text-ink-2">{slackWhen(message.date)}</span>
+				</span>
+				{message.text ? (
+					<Bubble mine={false}>
+						<SlackText text={message.text} />
+					</Bubble>
+				) : files.length === 0 ? (
+					<Bubble mine={false}>(No text)</Bubble>
+				) : null}
+				{files.map((each) => (
+					<span key={each.id} className="flex min-w-0 max-w-full">
+						{file === undefined ? <SlackFileLine file={each} /> : file(each)}
+					</span>
+				))}
+			</div>
+		</li>
 	);
 }
 
 /**
- * Slack's messages together, read-only, laid out as the channel's and a Drive file's card are: Slack's mark, the
- * thread's first words (or the search's query) with where it is and how many messages beneath, then the newest few
- * messages, one line each, and Open in Slack. A thread's first message is its title, so the list leaves it out.
+ * Slack's messages together, read-only. A thread reads down the card as a chat does: the message that started it, then
+ * its newest replies threaded beneath, the replies before them counted. A search lists its matches as they came.
  */
 function SlackMessagesCard({
 	list,
@@ -914,91 +989,59 @@ function SlackMessagesCard({
 }) {
 	if (!list.search && list.place === "channel") return <SlackChannelCard list={list} actions={actions} />;
 	const url = slackUrl(list.url);
-	// a search's matches stay in the order they came, newest first; a thread's newest few read as a conversation does,
-	// down the card, the latest last
-	const rows = list.search
-		? list.messages
-		: [...list.messages.filter((message) => message.text !== list.title)].reverse();
 	const more = list.total === null ? 0 : Math.max(0, list.total - list.messages.length);
-	const facts = list.search
-		? [list.total === null || list.total === 0 ? "" : `About ${list.total} ${list.total === 1 ? "match" : "matches"}`]
-		: [
-				list.channel ? `Thread in ${list.channel}` : "Thread",
-				list.total === null ? "" : `${list.total} ${list.total === 1 ? "message" : "messages"}`,
-			];
+	if (list.search)
+		return (
+			<Tile className="flex flex-col gap-3 p-3.5" data-slack-card="search">
+				<SlackHead
+					title={list.title}
+					url={url}
+					mono
+					facts={
+						list.total === null || list.total === 0
+							? ""
+							: `About ${list.total} ${list.total === 1 ? "match" : "matches"}`
+					}
+					actions={actions}
+				/>
+				{list.messages.length === 0 ? (
+					<p className="text-meta text-ink-2">No messages match yet</p>
+				) : (
+					<ul className="flex flex-col gap-3">
+						{list.messages.map((message) => (
+							<SlackMessage key={message.id} message={message} file={file} />
+						))}
+					</ul>
+				)}
+				{more > 0 ? <span className="text-meta text-ink-2">{more} more in Slack</span> : null}
+			</Tile>
+		);
+	const [first, ...replies] = [...list.messages].reverse();
 	return (
-		<Tile
-			className="@container/slack flex flex-col gap-2.5 p-3.5"
-			data-slack-card={list.search ? "search" : (list.place ?? "thread")}
-		>
-			<div className="flex min-w-0 items-start gap-2.5">
-				<SlackMark className="mt-0.5 size-5" />
-				<div className="flex min-w-0 flex-1 flex-col gap-1">
-					<h3
-						className={cn(
-							"min-w-0 text-body font-semibold text-ink [overflow-wrap:anywhere]",
-							list.search ? "font-mono font-normal" : "line-clamp-2",
-						)}
-					>
-						{list.title}
-					</h3>
-					{facts.some((each) => each !== "") ? (
-						<span className="text-meta text-ink-2 [overflow-wrap:anywhere]">
-							{facts.filter((each) => each !== "").join(" · ")}
-						</span>
-					) : null}
-				</div>
-				{list.asOf === undefined ? null : <span className="shrink-0 text-meta text-ink-2">as of {list.asOf}</span>}
-				<span className="shrink-0">{actions}</span>
-			</div>
-			{/* a thread's replies before the newest few are above them, where a conversation keeps its past */}
-			{!list.search && more > 0 ? <span className="text-meta text-ink-2">{more} earlier in Slack</span> : null}
-			{rows.length === 0 && !list.search && more > 0 ? null : rows.length === 0 ? (
-				<p className="text-meta text-ink-2">{list.search ? "No messages match yet" : "No replies yet"}</p>
+		<Tile className="flex flex-col gap-3 p-3.5" data-slack-card={list.place ?? "thread"}>
+			<SlackHead
+				title={list.channel ? `Thread in ${list.channel}` : "Thread"}
+				url={url}
+				facts={list.total === null ? "" : `${list.total} ${list.total === 1 ? "message" : "messages"}`}
+				actions={actions}
+			/>
+			{first === undefined ? (
+				<p className="text-meta text-ink-2">No messages yet</p>
 			) : (
-				<ul className="flex flex-col gap-1.5">
-					{rows.map((message) => (
-						<li key={message.id} className="flex min-w-0 items-end gap-2">
-							{/* the face beside the bubble where the card has room; on a narrow card, in the author's line */}
-							<SlackFace message={message} className="mb-0.5 hidden @xs/slack:flex" />
-							{/* a quoted bubble: Slack's words beside their face, in neither the owner's nor the agent's dress */}
-							<span
-								data-slack-bubble=""
-								className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-bubble border border-line-soft bg-paper-2 px-3 py-1.5"
-							>
-								<span className="flex min-w-0 items-center gap-1.5 text-meta text-ink-2">
-									<SlackFace message={message} small className="@xs/slack:hidden" />
-									<span className="min-w-0 flex-1 truncate" title={message.from}>
-										{message.from || "Someone"}
-									</span>
-									<span className="shrink-0">{slackWhen(message.date)}</span>
-								</span>
-								<span className="min-w-0 text-body text-ink line-clamp-2 [overflow-wrap:anywhere]" title={message.text}>
-									{message.text || "(No text)"}
-								</span>
-								{(message.files ?? []).map((each) => (
-									<span key={each.id} className="flex min-w-0">
-										{file === undefined ? <SlackFileLine file={each} /> : file(each)}
-									</span>
+				<ul className="flex flex-col gap-3">
+					<SlackMessage message={first} file={file} />
+					{replies.length === 0 && more === 0 ? null : (
+						<li>
+							<ul className="ml-3 flex flex-col gap-3 border-l-2 border-line-soft pl-3" data-slack-replies="">
+								{more > 0 ? <li className="text-meta text-ink-2">{more} earlier in Slack</li> : null}
+								{replies.map((message) => (
+									<SlackMessage key={message.id} message={message} file={file} />
 								))}
-							</span>
+							</ul>
 						</li>
-					))}
+					)}
 				</ul>
 			)}
-			{(list.search && more > 0) || url !== undefined ? (
-				<span className="flex flex-wrap items-center gap-2">
-					{url === undefined ? null : (
-						<Button asChild size="sm" variant="ghost" className="-ml-2">
-							<a href={url} target="_blank" rel="noopener noreferrer">
-								<ExternalLinkIcon />
-								Open in Slack
-							</a>
-						</Button>
-					)}
-					{list.search && more > 0 ? <span className="text-meta text-ink-2">{more} more in Slack</span> : null}
-				</span>
-			) : null}
 		</Tile>
 	);
 }

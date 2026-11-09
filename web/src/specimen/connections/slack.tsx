@@ -63,7 +63,14 @@ export const SLACK_THREAD: Messages = {
 			avatar: FACE.bob,
 			files: [{ id: "F0LOG", name: "deploy-41-migrations.log", size: 2 * 1024 * 1024 + 300_000 }],
 		},
-		{ id: "1700000200.000300", from: "@ana", subject: "", date: at(9, 58), text: "Looks good to me", avatar: FACE.ana },
+		{
+			id: "1700000200.000300",
+			from: "@ana",
+			subject: "",
+			date: at(9, 58),
+			text: "> ship it on Thursday\nLooks good to me :+1: `v41` is tagged",
+			avatar: FACE.ana,
+		},
 		{
 			id: "1700000000.000100",
 			from: "@bob",
@@ -310,7 +317,7 @@ const SLACK_WATCHES: readonly WatchRowView[] = [
 
 const CARDS: readonly (readonly [string, Messages])[] = [
 	["A thread, with a bot and someone from another team", SLACK_THREAD],
-	["A channel, its topic and members", CHANNEL],
+	["A channel", CHANNEL],
 	["A direct message, nothing yet", DM],
 	["A search", SEARCH],
 	["A search, no matches", { ...SEARCH, title: "in:general launch party", total: 0, messages: [] }],
@@ -342,7 +349,7 @@ export function SlackSection() {
 				{CARDS.map(([label, list]) => (
 					<div key={label} className="flex min-w-0 flex-col gap-1.5">
 						<span className="text-meta text-ink-2">{label}</span>
-						<MessagesCard list={list} />
+						<MessagesCard list={list} actions={<ObjectMenu name={list.title} details={[["Read", "today 09:40"]]} />} />
 					</div>
 				))}
 				<div className="flex min-w-0 flex-col gap-1.5">

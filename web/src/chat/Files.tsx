@@ -274,7 +274,15 @@ export function CodeFile({
 }
 
 /** A file there is nothing to show of: its name and size, and a tap downloads or opens it. */
-export function PlainFile({ file, kind = "File", onOpen }: { file: FileMeta; kind?: string; onOpen?: () => void }) {
+export function PlainFile({
+	file,
+	kind = "File",
+	onOpen,
+}: {
+	file: FileMeta;
+	kind?: string;
+	onOpen?: (() => void) | undefined;
+}) {
 	return <Card file={file} detail={kind} icon={<FileIcon />} onOpen={onOpen} />;
 }
 
