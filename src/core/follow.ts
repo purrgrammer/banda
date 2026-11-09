@@ -271,6 +271,32 @@ function steady(derived: Derived, answers: Item, before: Item | undefined): bool
 	return at(answers) === at(before);
 }
 
+/**
+ * `answers` with the last answer (`before`) of each read in `unanswered`: a read that may fail and did says nothing about
+ * what it reads, so its last answer stands. Not for a condition whose steady path moved: that answer is about what the
+ * path no longer names (a push's checks are not the last commit's), and left out it counts as nothing yet.
+ */
+export function withLastAnswers(
+	follow: Pick<Follow, "derived">,
+	answers: Item,
+	before: Item,
+	unanswered: readonly string[],
+): Item {
+	const outdated = new Set(
+		Object.values(follow.derived ?? {}).flatMap((each) => {
+			if (steady(each, answers, before)) return [];
+			const terms = parseCondition(whenOf(each));
+			return "error" in terms ? [] : terms.map((term) => term.path[0]);
+		}),
+	);
+	const looked = { ...answers };
+	for (const as of unanswered) {
+		const last = before[as];
+		if (last !== undefined && !outdated.has(as)) looked[as] = last;
+	}
+	return looked;
+}
+
 /** Whether a derived condition holds over `answers` but is held back because its steady path just changed. */
 export function heldBack(follow: Pick<Follow, "derived">, answers: Item, before?: Item): boolean {
 	return Object.values(follow.derived ?? {}).some(

@@ -303,6 +303,51 @@ describe("a watch on a pull request", () => {
 		expect(summary.looks).toBe(2);
 	}, 60_000);
 
+	it("a read that may fail and did keeps its last answer: green, a failed read, green again wakes no one", async () => {
+		const green = (): World =>
+			changed(0, (at) => {
+				for (const run of at.get_check_runs.check_runs)
+					Object.assign(run, { status: "completed", conclusion: "success" });
+			});
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			world: (step) => {
+				if (step !== 1) return green();
+				const { get_check_runs: _failed, ...rest } = green();
+				return rest;
+			},
+			clicks: ["k1", "k2"],
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes).toEqual([]);
+		expect(summary.record.failed).toBeUndefined();
+	}, 60_000);
+
+	it.each([
+		["success", 1],
+		["failure", 0],
+	])(
+		"a push straddled by failed reads judges its own checks, %s, never the last commit's",
+		async (conclusion, wakes) => {
+			const checked = (head: string, result: string): World => {
+				const at = changed(0, (each) => {
+					for (const run of each.get_check_runs.check_runs)
+						Object.assign(run, { status: "completed", conclusion: result });
+				});
+				return { ...at, get: { ...(at.get as { [key: string]: Json }), head: { ref: "objects", sha: head } } };
+			};
+			const { get_check_runs: _failed, ...unread } = checked("b1", "success");
+			const summary = await watchScenario(await tempHome(), new Faults(), {
+				world: (step) => [checked("a1", "success"), unread, unread, checked("b1", conclusion)][step] as World,
+				clicks: ["k1", "k2", "k3"],
+			});
+			expect(watchInvariants(summary)).toEqual([]);
+			expect(summary.wakes.flatMap((wake) => wake.changes).filter((each) => each === "all checks green")).toHaveLength(
+				wakes,
+			);
+		},
+		60_000,
+	);
+
 	it("days offline: the world moves many steps without a look, then one look is one wake with all of it", async () => {
 		const offline = (step: number): World =>
 			step >= 6

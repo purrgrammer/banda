@@ -52,6 +52,7 @@ import {
 	reading as readingOf,
 	settleOf,
 	sort,
+	withLastAnswers,
 } from "./follow.ts";
 import { fileNameFor } from "./names.ts";
 import { objectAccess } from "./object-access.ts";
@@ -927,6 +928,7 @@ export function defineWatches(options: WatchesOptions) {
 		const { watch, chat, ref, kind, connection, account, me, key, stamp, source, reads, schemas, seen } = resolved;
 		if (options.read === undefined) return await failing("banda cannot read for a watch here");
 		const answers: Item = {};
+		const unanswered: string[] = [];
 		let failed: string | undefined;
 		let bytes = 0;
 		for (const [as, read] of Object.entries(shared === undefined ? reads : {})) {
@@ -939,7 +941,10 @@ export function defineWatches(options: WatchesOptions) {
 				ctx,
 			);
 			if ("failed" in answer) {
-				if (read.optional) continue;
+				if (read.optional) {
+					unanswered.push(as);
+					continue;
+				}
 				failed = answer.failed;
 				break;
 			}
@@ -951,7 +956,10 @@ export function defineWatches(options: WatchesOptions) {
 			try {
 				answers[as] = JSON.parse(answer.text) as Json;
 			} catch {
-				if (read.optional) continue;
+				if (read.optional) {
+					unanswered.push(as);
+					continue;
+				}
 				failed = `${connection.service} did not return an object.`;
 				break;
 			}
@@ -994,18 +1002,21 @@ export function defineWatches(options: WatchesOptions) {
 			const kept = doc.objects[key];
 			// the reading it shares moved on meanwhile: this look is stale, and the next diffs what is kept then
 			if (shared !== undefined && kept?.version !== shared.version) return;
+			// a moment's failure of a read that may fail is no change, and never a condition that went false and comes back
+			const looked =
+				kept?.source === source ? withLastAnswers(kind.follow, answers, kept.answers, unanswered) : answers;
 			// a shared reading is taken as it was kept, its derived conditions with it: deriving them again over itself
 			// would call a condition steady that the look which read it held back
-			const after = shared === undefined ? readingOf(kind.follow, answers, kept?.answers) : (kept?.answers ?? answers);
+			const after = shared === undefined ? readingOf(kind.follow, looked, kept?.answers) : (kept?.answers ?? answers);
 			// a condition held back until its steady path stays is looked at again soon, not at the quiet cadence
 			const every =
-				shared === undefined && heldBack(kind.follow, answers, kept?.answers)
+				shared === undefined && heldBack(kind.follow, looked, kept?.answers)
 					? Math.min(lookEvery(kind.follow, after), BUSY_EVERY)
 					: lookEvery(kind.follow, after);
 			if (shared === undefined) {
 				let card: ReturnType<typeof cardOf> | undefined;
 				try {
-					card = cardOf(kind, ref, answers);
+					card = cardOf(kind, ref, looked);
 				} catch {
 					card = undefined;
 				}
