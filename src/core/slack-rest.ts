@@ -20,6 +20,8 @@ export const SLACK_EMOJI = /^[a-z0-9_+-]{1,100}(?:::skin-tone-\d)?$/;
 const FILE = /^F[A-Z0-9]{2,40}$/;
 const CHANNEL = /^[CDG][A-Z0-9]{2,40}$/;
 const USER = /^[UWB][A-Z0-9]{2,40}$/;
+/** A team's id: the owner's own (`T…`), or an Enterprise Grid org's (`E…`). */
+const TEAM = /^[TE][A-Z0-9]{2,40}$/;
 const MAX_TEXT = 4000;
 /** How many names one read looks up that the account's cache lacks; the rest stay as their ids. */
 const MAX_LOOKUPS = 40;
@@ -157,6 +159,20 @@ const object = (value: unknown): Json =>
 	typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Json) : {};
 const list = (value: unknown): Json[] => (Array.isArray(value) ? value.map(object) : []);
 const text = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : "");
+/** What someone in Slack named something (a person, a channel, a topic, a file), as one plain line. */
+const line = (value: unknown, max: number) =>
+	text(value, max)
+		.replace(/[\p{Cc}\p{Cf}]/gu, "")
+		.trim();
+/**
+ * A message's words as plain text: its lines and tabs kept, any other control character dropped, and the marks that
+ * reorder text (a right-to-left override) too; a joiner inside an emoji stays.
+ */
+const words = (value: string) =>
+	value
+		.replace(/\p{Cc}/gu, (char) => ("\n\t".includes(char) ? char : ""))
+		.replace(/[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "");
+const idOf = (value: unknown, shape: RegExp) => (typeof value === "string" && shape.test(value) ? value : "");
 const count = (value: unknown) =>
 	typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 
@@ -383,10 +399,10 @@ function session(token: string, signal: AbortSignal | undefined, fetcher: typeof
 		if (known !== undefined) return known;
 		const asked = send(tokenKey, "auth.test", {}, false).then((body) => {
 			const identity = {
-				user: text(body.user, 100),
-				userId: text(body.user_id, 41),
-				team: text(body.team, 200),
-				teamId: text(body.team_id, 41),
+				user: line(body.user, 100),
+				userId: idOf(body.user_id, USER),
+				team: line(body.team, 200),
+				teamId: idOf(body.team_id, TEAM),
 				url: teamUrl(body.url),
 			};
 			if (identity.user === "" || identity.userId === "" || identity.teamId === "")
@@ -420,9 +436,9 @@ function session(token: string, signal: AbortSignal | undefined, fetcher: typeof
 			try {
 				if (kind === "user") {
 					const user = object((await call("users.info", { user: id })).user);
-					const name = text(user.name, 100);
+					const name = line(user.name, 100);
 					const avatar = slackAvatar(object(user.profile).image_48);
-					const team = text(user.team_id, 41);
+					const team = idOf(user.team_id, TEAM);
 					if (name !== "") remember(known, id, { name, team, ...(avatar === undefined ? {} : { avatar }) }, MAX_NAMES);
 				} else {
 					const found = await channelOf({ call, lookup, named }, id);
@@ -482,11 +498,7 @@ export type SlackFile = {
 };
 
 /** A file's name as one plain line, without a path or any control or format character. */
-const fileName = (value: unknown) =>
-	text(value, 200)
-		.replace(/[\p{Cc}\p{Cf}]/gu, "")
-		.replace(/[/\\]/g, "_")
-		.trim();
+const fileName = (value: unknown) => line(value, 200).replace(/[/\\]/g, "_");
 const mimeOf = (value: unknown) => {
 	const said = text(value, 201);
 	return /^[\w.+-]{1,100}\/[\w.+-]{1,100}$/.test(said) ? said : "";
@@ -525,9 +537,7 @@ const dateOf = (value: string) => {
 	return Number.isFinite(seconds) ? new Date(seconds * 1000).toISOString() : "";
 };
 
-const botName = (raw: Json) =>
-	(text(object(raw.bot_profile).name, 80) || text(raw.username, 80) || "bot").replace(/[\p{Cc}\p{Cf}]/gu, "").trim() ||
-	"bot";
+const botName = (raw: Json) => line(object(raw.bot_profile).name, 80) || line(raw.username, 80) || "bot";
 
 /**
  * A message as banda says it: its author a handle, `[bot]` only for a message with no user or Slack's bot subtype (the
@@ -538,16 +548,13 @@ function messageOf(raw: Json, me: Identity, s: Session): SlackMessage | undefine
 	if (stamp === undefined) return undefined;
 	const user = typeof raw.user === "string" && USER.test(raw.user) ? raw.user : undefined;
 	const bot = user === undefined || raw.subtype === "bot_message";
-	const team =
-		(typeof raw.user_team === "string" ? raw.user_team : undefined) ??
-		(user === undefined ? undefined : s.teamOf(user)) ??
-		(typeof raw.team === "string" ? raw.team : undefined);
-	const outside = !bot && team !== undefined && team !== "" && team !== me.teamId;
+	const team = idOf(raw.user_team, TEAM) || (user === undefined ? "" : (s.teamOf(user) ?? "")) || idOf(raw.team, TEAM);
+	const outside = !bot && team !== "" && team !== me.teamId;
 	// the owner's own handle is known without a lookup, so their posts are the account's whatever the names cache holds
 	const handle =
 		user === me.userId
 			? `@${me.user}`
-			: ((user === undefined ? undefined : s.named("user", user)) ?? `@${text(raw.username, 80) || user}`);
+			: ((user === undefined ? undefined : s.named("user", user)) ?? `@${line(raw.username, 80) || user}`);
 	const from = bot ? `@${botName(raw)} [bot]` : `${handle}${outside ? " (outside)" : ""}`;
 	const author = bot ? from : `${handle} at ${outside ? team : me.team}`;
 	const said = typeof raw.text === "string" ? raw.text : "";
@@ -565,7 +572,7 @@ function messageOf(raw: Json, me: Identity, s: Session): SlackMessage | undefine
 		from,
 		author,
 		user: user ?? text(raw.bot_id, 41),
-		text: slackPlain(said, s.named).slice(0, MAX_TEXT),
+		text: words(slackPlain(said, s.named)).slice(0, MAX_TEXT),
 		date: dateOf(stamp),
 		...(thread === undefined ? {} : { thread_ts: thread }),
 		...(replies === undefined ? {} : { reply_count: replies }),
@@ -599,13 +606,13 @@ async function messagesOf(raws: readonly Json[], me: Identity, s: Session): Prom
 async function channelOf(s: Pick<Session, "call" | "lookup" | "named">, id: string): Promise<SlackChannel> {
 	const raw = object((await s.call("conversations.info", { channel: id, include_num_members: true })).channel);
 	const dm = raw.is_im === true;
-	const peer = typeof raw.user === "string" ? raw.user : "";
+	const peer = idOf(raw.user, USER);
 	if (dm && peer !== "") await s.lookup([peer], []);
 	const named = s.named;
 	return {
 		id: text(raw.id, 41) || id,
-		name: dm ? (named("user", peer) ?? `@${peer}`) : text(raw.name, 100),
-		topic: text(object(raw.topic).value, 500),
+		name: dm ? (named("user", peer) ?? `@${peer}`) : line(raw.name, 100),
+		topic: line(object(raw.topic).value, 500),
 		member_count: count(raw.num_members) ?? null,
 		private: raw.is_private === true || raw.is_group === true || dm || raw.is_mpim === true,
 		is_member: raw.is_member === true || dm,
@@ -694,11 +701,11 @@ export async function slackCall(
 				answer = {
 					channels: raws.map((raw) => {
 						const dm = raw.is_im === true;
-						const peer = typeof raw.user === "string" ? raw.user : "";
+						const peer = idOf(raw.user, USER);
 						return {
 							id: text(raw.id, 41),
-							name: dm ? (s.named("user", peer) ?? `@${peer}`) : text(raw.name, 100),
-							topic: text(object(raw.topic).value, 500),
+							name: dm ? (s.named("user", peer) ?? `@${peer}`) : line(raw.name, 100),
+							topic: line(object(raw.topic).value, 500),
 							member_count: count(raw.num_members) ?? null,
 							private: raw.is_private === true || raw.is_group === true || dm || raw.is_mpim === true,
 							is_member: true,
@@ -791,7 +798,7 @@ export async function slackCall(
 					const permalink = permalinkOf(raw.permalink);
 					if (message === undefined || permalink === "") return [];
 					const where = object(raw.channel);
-					return [{ ...message, channel_id: text(where.id, 41), channel_name: text(where.name, 100), permalink }];
+					return [{ ...message, channel_id: text(where.id, 41), channel_name: line(where.name, 100), permalink }];
 				});
 				answer = { query: args.query, messages, total: count(found.total) ?? messages.length };
 				break;
@@ -802,15 +809,15 @@ export async function slackCall(
 				const me = await s.me();
 				const user = object((await s.call("users.info", { user: id })).user);
 				const profile = object(user.profile);
-				const email = text(profile.email, 254);
+				const email = line(profile.email, 254);
 				const avatar = slackAvatar(profile.image_72);
 				answer = {
 					id,
-					name: text(user.name, 100),
-					real_name: text(user.real_name, 200) || text(profile.real_name, 200) || text(user.name, 100),
-					title: text(profile.title, 200),
-					tz: text(user.tz, 100),
-					status_text: text(profile.status_text, 200),
+					name: line(user.name, 100),
+					real_name: line(user.real_name, 200) || line(profile.real_name, 200) || line(user.name, 100),
+					title: line(profile.title, 200),
+					tz: line(user.tz, 100),
+					status_text: line(profile.status_text, 200),
 					...(email === "" ? {} : { email }),
 					outside: typeof user.team_id === "string" && user.team_id !== "" && user.team_id !== me.teamId,
 					...(me.url === "" ? {} : { url: `${me.url}team/${id}` }),
@@ -1070,7 +1077,7 @@ export async function slackResolve(
 	const s = session(token, signal, fetcher, budget);
 	const id = channelArg(args.channel);
 	// what the card's words will carry: a name as Slack has it, without any control or format character someone slipped in
-	const clean = (value: string) => value.replace(/[\p{Cc}\p{Cf}]/gu, "").trim();
+	const clean = (value: string) => line(value, 200);
 	if (name === "add_reaction") {
 		tsArg(args.ts);
 		emojiArg(args.name);

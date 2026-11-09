@@ -480,3 +480,26 @@ it("adds a reaction once: an emoji by its name, already there is the same end st
 	expect(await resolve("tada")).toEqual({ _channel_name: "general" });
 	await expect(resolve("No")).rejects.toThrow(/emoji's name/);
 });
+
+it("says what people named as plain lines: no control or bidi character in a name, a topic or a message; a team only by its id", async () => {
+	const { slack, read } = world();
+	slack.users.U0EVE = { id: "U0EVE", name: "eve‮gnp.exe", team_id: "T0ACME", profile: { title: "x\u0007y" } };
+	(slack.channels.C0GENERAL as { [key: string]: unknown }).topic = { value: "Ship​ it\u0000" };
+	slack.history.C0GENERAL?.unshift(
+		{ type: "message", ts: "1700000450.000000", user: "U0EVE", text: "hi\u0000 there\nnext‮ line" },
+		{
+			type: "message",
+			ts: "1700000449.000000",
+			user: "U0EVE",
+			user_team: `T0OTHER ${"x".repeat(5000)}`,
+			text: "spoofed team",
+		},
+	);
+	const history = (await read("channel_history", { channel: "C0GENERAL" })) as { messages: SlackMessage[] };
+	const [first, second] = history.messages;
+	expect(first).toMatchObject({ from: "@evegnp.exe", text: "hi there\nnext line" });
+	// a team that is not a team's id is no team: the author is not said to be of it
+	expect(second).toMatchObject({ from: "@evegnp.exe", author: "@evegnp.exe at Acme" });
+	expect(await read("get_channel", { channel: "C0GENERAL" })).toMatchObject({ topic: "Ship it" });
+	expect(await read("get_person", { user: "U0EVE" })).toMatchObject({ name: "evegnp.exe", title: "xy" });
+});
