@@ -128,6 +128,7 @@ export function ConnectDialog({
 	onScopes,
 	scopesChanged = false,
 	scopesReadonly = false,
+	account,
 	onSignIn,
 	onPermissions,
 	onUse,
@@ -151,6 +152,8 @@ export function ConnectDialog({
 	scopesChanged?: boolean | undefined;
 	/** The access can be changed only on the computer banda runs on. */
 	scopesReadonly?: boolean | undefined;
+	/** The account signing in again to change its access, as the owner reads it. */
+	account?: string | undefined;
 	/** Start signing in: Sign in, Save and sign in, Try again, Sign in another. */
 	onSignIn?: (() => void) | undefined;
 	/** Back to the access to grant; none for a connection without choices. */
@@ -177,7 +180,10 @@ export function ConnectDialog({
 		step.kind === "permissions"
 			? {
 					title: `${connection} access`,
-					detail: "Choose what Banda can access. You can change this later by signing in again.",
+					detail:
+						account === undefined
+							? "Choose what Banda can access. You can change this later by signing in again."
+							: `Choose what Banda can access as ${account}, then sign in as ${account}.`,
 				}
 			: step.kind === "starting"
 				? { title: `Sign in on ${connection}`, detail: `Waiting for ${connection}…` }

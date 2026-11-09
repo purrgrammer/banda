@@ -3,7 +3,7 @@
  * each tool's kind and source, a setting changed in place, an agent switched, and a tool the server added since waiting
  * for the owner, told from one they switched off. At both widths, with no horizontal scroll.
  */
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -136,3 +136,99 @@ for (const width of [390, 1440])
 		},
 		110000,
 	);
+
+it.skipIf(!hasChrome())(
+	"changing access signs in the account it was chosen for, with two accounts",
+	async () => {
+		const home = await tempHome();
+		const fake = await startFakeMcp({ auth: "oauth", scopes: ["calendar", "repo"] });
+		await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
+		const shipped = join(home, "shipped");
+		await mkdir(shipped, { recursive: true });
+		await writeFile(
+			join(shipped, "cal.json"),
+			JSON.stringify({
+				service: "Cal",
+				about: "Your days",
+				url: fake.url,
+				auth: "oauth",
+				scopes: ["calendar"],
+				account: "get_me.login",
+				reads: ["list_events"],
+				needs: { create_event: ["repo"] },
+				access: {
+					choices: [
+						{ label: "See your days", scopes: ["calendar"] },
+						{ label: "Change them", scopes: ["repo"] },
+					],
+					note: "Sign in again to change this.",
+				},
+			}),
+		);
+		const models = createModels();
+		models.setProvider(fauxProvider().provider);
+		const daemon = await startDaemon({ home, port: 0, models, box: hostBox(home), shipped, log: () => {} });
+		const base = `http://127.0.0.1:${daemon.port}`;
+		const token = (await readDaemonFile(home))?.token as string;
+		await skipShippedSkills(daemon.port, token);
+		const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+		await fetch(`${base}/api/capabilities/connections/cal/add`, { method: "POST", headers, body: "{}" });
+		for (const login of ["ana", "bob"]) {
+			fake.user = login;
+			const started = (await (
+				await fetch(`${base}/api/capabilities/connections/cal/signin`, {
+					method: "POST",
+					headers,
+					body: JSON.stringify({ scopes: ["calendar"] }),
+				})
+			).json()) as { url: string };
+			const consent = await fetch(started.url, { redirect: "manual" });
+			await fetch(consent.headers.get("location") ?? "", { redirect: "manual" });
+		}
+		let vite: Awaited<ReturnType<typeof createViteServer>>;
+		const listener = createServer((req, res) => vite.middlewares(req, res));
+		vite = await createViteServer({
+			configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
+			cacheDir: await viteCacheDir(),
+			server: {
+				middlewareMode: true,
+				hmr: { server: listener },
+				proxy: { "/api": { target: base, changeOrigin: true, headers: { origin: base } } },
+			},
+		});
+		try {
+			await new Promise<void>((resolve) => listener.listen(0, "127.0.0.1", resolve));
+			const address = listener.address();
+			if (!address || typeof address === "string") throw new Error("No app port");
+			const url = `http://127.0.0.1:${address.port}/#token=${token}`;
+			await withPage(url, { width: 1440, height: 900 }, async (page) => {
+				await page.until(`document.body.textContent.includes('Sancho')`);
+				await page.run(`window.open = () => ({ opener: null, close() {}, location: { replace() {} } })`);
+				await page.run(`window.__signins = [];
+					const was = window.fetch;
+					window.fetch = (input, init) => {
+						if (String(input).includes('/signin')) window.__signins.push(JSON.parse(init.body));
+						return was(input, init);
+					};
+					location.hash = '#/connections?connection=cal'`);
+				await page.until(`document.querySelector('[data-account="bob"]')`);
+				const change = (who: string) =>
+					`[...document.querySelector('[data-account="${who}"]').querySelectorAll('button')].find(el => el.textContent.trim() === 'Change access')`;
+				await page.run(`${change("ana")}.click()`);
+				await page.until(`document.querySelector('[role="dialog"]')?.textContent.includes('as @ana')`);
+				await page.run(
+					`[...document.querySelector('[role="dialog"]').querySelectorAll('button')].find(el => /sign in/i.test(el.textContent)).click()`,
+				);
+				await page.until(`window.__signins.length > 0`);
+				expect(await page.run(`window.__signins[0]`)).toMatchObject({ account: "ana", scopes: ["calendar"] });
+				expect(page.errors()).toEqual([]);
+			});
+		} finally {
+			await vite.close();
+			await new Promise<void>((resolve) => listener.close(() => resolve()));
+			await daemon.close();
+			await fake.close();
+		}
+	},
+	110000,
+);

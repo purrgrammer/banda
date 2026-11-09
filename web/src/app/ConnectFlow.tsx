@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DEFAULT_FACE } from "../../../src/core/choices.ts";
+import type { AccountView } from "../../../src/server/api.ts";
 import { ConnectCard, ConnectDialog, type ConnectStep } from "../chat/Connect.tsx";
 import { actOnCapability, labelAccount, runsOnDevice, signIn, switchAccount } from "../lib/api.ts";
 import { connectState, freshAccounts, type Phase, scopeChoicesOf } from "../lib/connect.ts";
@@ -70,6 +71,7 @@ function useConnection(connection: string, agent: Who | undefined, why: string |
 export function ConnectFlow({
 	connection,
 	agent,
+	account: signingAgain,
 	why,
 	onClose,
 	quiet = false,
@@ -78,19 +80,32 @@ export function ConnectFlow({
 	connection: string;
 	/** The agent it connects for: the account is switched on for it. None from Settings or the Connections page. */
 	agent?: Who | undefined;
+	/** The account signing in again, to change its access: that one, however many there are. */
+	account?: AccountView | undefined;
 	/** Why, in a line, before anything is connected. */
 	why?: string | undefined;
 	onClose: () => void;
 	quiet?: boolean | undefined;
 }) {
+	const shell = useShell();
 	const { view, shipped, service, connectionUrl, currentScopes, onComputerOnly, reason } = useConnection(
 		connection,
 		agent,
-		why,
+		signingAgain === undefined
+			? why
+			: `Sign in as ${signingAgain.label} on ${serviceOf(connection, shell.capabilities)} to change its access. Signing in as anyone else changes nothing for it.`,
 	);
 	const offered = scopeChoicesOf(shipped?.access, shipped?.connection.required);
+	// the access it asks for starts as what it has now, as far as the definition still offers it
+	const startingScopes =
+		signingAgain?.scopes === undefined || offered === undefined
+			? currentScopes
+			: signingAgain.scopes.filter(
+					(scope) =>
+						(offered.required?.scopes ?? []).includes(scope) ||
+						offered.choices.some((choice) => choice.scopes.includes(scope)),
+				);
 	const choices = offered !== undefined;
-	const shell = useShell();
 	const band = useMemo(
 		() => chatAgents(shell.agents, shell.companion ?? { face: DEFAULT_FACE }),
 		[shell.agents, shell.companion],
@@ -100,12 +115,13 @@ export function ConnectFlow({
 	const [used, setUsed] = useState(false);
 	const [named, setNamed] = useState(false);
 	const [nameProblem, setNameProblem] = useState<string>();
-	const [pickedScopes, setPickedScopes] = useState<readonly string[]>(currentScopes);
+	const [pickedScopes, setPickedScopes] = useState<readonly string[]>(startingScopes);
 	const state = connectState(view, phase, agent?.id, reason);
 	// a connection with choices starts on them, unless a sign-in is already under way or an account is there to use
 	const [choosing, setChoosing] = useState(choices && state.kind === "connect");
 	const scopesChanged =
-		pickedScopes.length !== currentScopes.length || pickedScopes.some((scope, index) => scope !== currentScopes[index]);
+		pickedScopes.length !== startingScopes.length ||
+		pickedScopes.some((scope, index) => scope !== startingScopes[index]);
 	const finishedNow = phase.kind === "started" && view?.finished !== undefined && view.finished.at !== phase.before;
 	const signInWith = async () => {
 		// opened in the click, so no pop-up blocker stops it; it goes to the service's page once the daemon names it
@@ -120,7 +136,10 @@ export function ConnectFlow({
 				if (shipped === undefined) throw new Error(`${service} is not one banda can connect yet.`);
 				showCapabilities(await actOnCapability({ action: "add", name: connection }));
 			}
-			const started = await signIn(connection, agent?.id, choices ? { scopes: pickedScopes } : {});
+			const started = await signIn(connection, agent?.id, {
+				...(choices ? { scopes: pickedScopes } : {}),
+				...(signingAgain === undefined ? {} : { account: signingAgain.account }),
+			});
 			const page = "url" in started ? started.url : "page" in started ? started.page : undefined;
 			if (page === undefined) tab?.close();
 			else tab?.location.replace(page);
@@ -227,6 +246,7 @@ export function ConnectFlow({
 			onScopes={setPickedScopes}
 			scopesChanged={scopesChanged}
 			scopesReadonly={onComputerOnly}
+			account={signingAgain?.label}
 			onSignIn={() => void signInWith()}
 			{...(choices ? { onPermissions: () => setChoosing(true) } : {})}
 			onUse={(login) => void use(login)}

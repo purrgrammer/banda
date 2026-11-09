@@ -100,7 +100,9 @@ export function ConnectionPage({ connection, onClose }: { connection: string; on
 				}}
 				onSignOut={setLeaving}
 			/>
-			{changing !== undefined ? <ConnectFlow connection={connection} onClose={() => setChanging(undefined)} /> : null}
+			{changing !== undefined ? (
+				<ConnectFlow connection={connection} account={changing} onClose={() => setChanging(undefined)} />
+			) : null}
 			{leaving !== undefined ? (
 				<Confirm
 					open

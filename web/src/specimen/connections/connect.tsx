@@ -54,9 +54,17 @@ const CONNECT_STEPS: readonly {
 	readonly connection: string;
 	readonly id: string;
 	readonly step: ConnectStep;
+	readonly account?: string;
 }[] = [
 	{ label: "Access to grant", connection: "Google Calendar", id: "calendar", step: { kind: "permissions" } },
 	{ label: "GitHub's access", agent: "Octo", connection: "GitHub", id: "github", step: { kind: "permissions" } },
+	{
+		label: "Changing one account's access",
+		connection: "Google Calendar",
+		id: "calendar",
+		account: "@bandarra",
+		step: { kind: "permissions" },
+	},
 	{ label: "Starting", connection: "GitHub", id: "github", step: { kind: "starting" } },
 	{
 		label: "Signing in on its page",
@@ -163,6 +171,7 @@ function ConnectSteps() {
 					agent={shown.agent}
 					connection={shown.connection}
 					id={shown.id}
+					account={shown.account}
 					step={shown.step}
 					scopes={scopes}
 					choices={choicesOf(shown.id)}
