@@ -23,7 +23,7 @@ import type { Harness, JsonObject, ToolExecutionApi, ToolExecutionResult } from 
 import { defineDoc, type Tx } from "@earendil-works/pi-durable";
 import { log } from "./activity.ts";
 import { AgentChats } from "./agents.ts";
-import type { EffectTool } from "./ask.ts";
+import type { EffectApi, EffectTool } from "./ask.ts";
 import { Permissions } from "./permissions.ts";
 import { addressWords, bodyWords, headersWords } from "./request-words.ts";
 import { context } from "./store.ts";
@@ -87,7 +87,8 @@ export type Replayed =
 			readonly truncated?: boolean;
 	  }
 	| { readonly refused: string }
-	| { readonly failed: string };
+	/** `reached`: it failed after some of the request may have left, so whether its server got it is not known. */
+	| { readonly failed: string; readonly reached?: boolean };
 
 /** The daemon's side of the proxy. */
 export type EgressControl = {
@@ -108,8 +109,11 @@ export type Release = (tx: Tx, chat: number, held: readonly HeldRequest[], now: 
 /** The proxy's control, with what opens the release of a ticket taken from it. */
 export type HoldingEgress = EgressControl & { readonly release: Release };
 
-/** The requests taken from the proxy, by ticket. A ticket names exactly one request, never changed once stored. */
-export const Tickets = defineDoc<{ tickets: { [ticket: string]: HeldRequest } }>({
+/**
+ * The requests taken from the proxy, by ticket. A ticket names exactly one request, never changed once stored.
+ * `unasked`: nobody was asked about it, as too many of its chat's already waited, which a retake must say again.
+ */
+export const Tickets = defineDoc<{ tickets: { [ticket: string]: HeldRequest & { unasked?: true } } }>({
 	kind: "banda.tickets",
 	version: 1,
 	scope: "session",
@@ -422,12 +426,15 @@ export async function intake(
 		for (const [id, held] of Object.entries(doc.tickets)) if (held.at < now - TICKET_KEPT_MS) delete doc.tickets[id];
 		const fresh = own.filter((held) => doc.tickets[held.ticket] === undefined);
 		for (const held of fresh) doc.tickets[held.ticket] = JSON.parse(JSON.stringify(held));
-		over = await egress.release(
+		const unasked = await egress.release(
 			tx,
 			chat,
 			fresh.filter((held) => !webSocket(held.headers)),
 			now,
 		);
+		for (const ticket of unasked) (doc.tickets[ticket] as { unasked?: true }).unasked = true;
+		// kept with the ticket: a kill before the ack takes it again, and what it is told must not change
+		over = own.filter((held) => doc.tickets[held.ticket]?.unasked === true).map((held) => held.ticket);
 		await keepSent(tx, chat, sent, now);
 		if (taken.reads.length > 0)
 			await log(tx, { at: now, what: `Read from ${taken.reads.join(", ")}`, chat, outside: "read" });
@@ -445,8 +452,11 @@ export async function intake(
 		lines.push(
 			`Held, not sent: ${held.method} ${addressOf(held)} (ticket ${held.ticket}). ` +
 				(webSocket(held.headers)
-					? `A WebSocket is a stream, never sent as one request: ask the owner to allow ${permittedHost(held)} with ` +
-						"ask_hosts (with every other host the task needs), then run the command again."
+					? ownCredential(held.headers, held.path)
+						? "A WebSocket is a stream, never sent as one request, and one carrying a credential of its own is never " +
+							"let through: it will not be sent. Open it without that credential."
+						: `A WebSocket is a stream, never sent as one request: ask the owner to allow ${permittedHost(held)} with ` +
+							"ask_hosts (with every other host the task needs), then run the command again."
 					: over.includes(held.ticket)
 						? "It writes, and too many of your requests already wait on the owner, so they were not asked about " +
 							"this one and it will not be sent. Wait for those, or ask the owner to allow the host with ask_hosts, " +
@@ -456,7 +466,8 @@ export async function intake(
 							"not send it again yourself." +
 							(ownCredential(held.headers, held.path)
 								? ""
-								: ` To write there without asking, ask the owner to allow ${permittedHost(held)} with ask_hosts first.`)),
+								: ` Before your next writes there, you can ask the owner to allow ${permittedHost(held)} with ask_hosts: ` +
+									"this one is then sent too, once.")),
 		);
 	}
 	return lines.length === 0 ? "" : `\n\n[banda] ${lines.join("\n[banda] ")}`;
@@ -493,14 +504,15 @@ const drafted = (args: unknown) => args as JsonObject;
 export function proposeSendTool(
 	egress: EgressControl,
 	fault: (point: string) => void = () => {},
-): EffectTool<typeof parameters> {
-	const stored = (api: ToolExecutionApi, ticket: string, ctx: Context) =>
+): EffectTool<typeof parameters, EffectApi> {
+	const stored = (api: EffectApi, ticket: string, ctx: Context) =>
 		api.commit(async (tx: Tx) => {
 			const held = (await tx.doc(Tickets)).tickets[ticket];
 			return held === undefined ? undefined : (JSON.parse(JSON.stringify(held)) as HeldRequest);
 		}, ctx);
 	return {
 		name: "propose_send",
+		spoken: "The request",
 		description: "Send a request the proxy held, once the owner approved it.",
 		parameters,
 		effect: "unsafe",
@@ -537,21 +549,31 @@ export function proposeSendTool(
 			fault("replay:sent");
 			const now = api.now();
 			const chat = Number(api.conversationId);
+			const unknown = "failed" in replayed && replayed.reached === true;
 			const said =
 				"status" in replayed
 					? `Sent ${held.method} ${addressWords(addressOf(held))}: it answered ${replayed.status}`
-					: `Did not send ${held.method} ${addressWords(addressOf(held))}: ${"refused" in replayed ? replayed.refused : replayed.failed}`;
+					: `${unknown ? "May have sent" : "Did not send"} ${held.method} ${addressWords(addressOf(held))}: ${"refused" in replayed ? replayed.refused : replayed.failed}`;
 			await api.commit(async (tx) => {
 				await log(tx, {
 					at: now,
 					what: said,
 					chat,
-					...("status" in replayed ? { outside: "sent" as const, hash: requestHash(held) } : {}),
+					...("status" in replayed || unknown ? { outside: "sent" as const, hash: requestHash(held) } : {}),
 				});
 			}, ctx);
-			if (!("status" in replayed))
+			if ("refused" in replayed)
+				return { output: [{ type: "text", text: `Not sent: ${replayed.refused}.` }], isError: true };
+			if ("failed" in replayed)
 				return {
-					output: [{ type: "text", text: `Not sent: ${"refused" in replayed ? replayed.refused : replayed.failed}.` }],
+					output: [
+						{
+							type: "text",
+							text: unknown
+								? `It may or may not have been sent: ${replayed.failed}. Do not send it again unless you find it did not arrive.`
+								: `Not sent: ${replayed.failed}. Nothing left, so you may run the command again.`,
+						},
+					],
 					isError: true,
 				};
 			return { output: [{ type: "text", text: responseText(replayed) }] };

@@ -953,7 +953,7 @@ export function defineCore(options: CoreOptions) {
 	 * A tool's Wait, created in one commit with its record under the tool task and the message that sends its ask: where
 	 * the chat's messages go, else to the owner wherever they are reached unprompted.
 	 */
-	const asking: Asking = (api: ToolExecutionApi, name, ask, deadline, ctx) =>
+	const asking: Asking = (api, name, ask, deadline, ctx) =>
 		api.commit(async (tx) => {
 			const of = await tx.doc(TasksOf, api.taskId);
 			const found = of.tasks[name];
@@ -1648,6 +1648,7 @@ export function defineCore(options: CoreOptions) {
 		placeAsk,
 		hasHome: async (tx, chat) => (await tx.doc(Routes)).chats[chat] !== undefined,
 		followUp,
+		retryDelay,
 	});
 
 	const speakingWith: Speaking = {

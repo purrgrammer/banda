@@ -231,7 +231,7 @@ console.log(
 		sends,
 		results: page.items.filter((e) => e.kind === "pi.tool-result").length,
 		tickets: Object.keys((await harness.snapshot(Tickets, context))?.tickets ?? {}).sort(),
-		released: page.items.filter((e) => e.kind === RELEASED).map((e) => (e.data as { ticket: string }).ticket),
+		released: page.items.filter((e) => e.kind === RELEASED).flatMap((e) => (e.data as { tickets: string[] }).tickets),
 		live: await settledReleases(),
 		sent: Object.keys((await harness.snapshot(Sent, context))?.sent ?? {}),
 		chat,

@@ -113,7 +113,15 @@ describe("egress under faults", () => {
 	it("sweep: one kill at every commit, at ticket intake, at a direct send taken, at each send and at the answer", async () => {
 		const clean = await cleanRun();
 		const faults: Fault[] = [];
-		for (const point of ["intake", "intake:stored", "replay", "replay:sent", "release:ran", "release:told"] as const)
+		for (const point of [
+			"intake",
+			"intake:stored",
+			"release:run",
+			"replay",
+			"replay:sent",
+			"release:ran",
+			"release:told",
+		] as const)
 			faults.push({ point, hit: 1, kind: "kill" }, { point, hit: 2, kind: "kill" });
 		// the owner is asked once: the second request runs within the permission
 		faults.push({ point: "answer", hit: 1, kind: "kill" });
@@ -138,7 +146,15 @@ describe("egress under faults", () => {
 	it("a kill or a throw at each boundary of a release: nothing sent twice unasked, no ticket orphaned, the agent told once", async () => {
 		const faults: Fault[] = [];
 		for (const kind of ["kill", "error"] as const)
-			for (const point of ["intake", "intake:stored", "replay", "replay:sent", "release:ran", "release:told"] as const)
+			for (const point of [
+				"intake",
+				"intake:stored",
+				"release:run",
+				"replay",
+				"replay:sent",
+				"release:ran",
+				"release:told",
+			] as const)
 				faults.push({ point, hit: 1, kind });
 		faults.push({ point: "answer", hit: 1, kind: "kill" });
 		await pool(

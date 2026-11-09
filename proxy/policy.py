@@ -338,6 +338,11 @@ def is_websocket(headers):
 def held_words(ticket, scheme, host, port, headers, path=""):
     """What the box hears of a write held as `ticket`: that it waits, and how the next one goes straight through."""
     said = f"this request writes, so it waits for the owner: ticket {ticket}. It has not been sent."
+    if is_websocket(headers) and own_credentials(headers, path):
+        return (
+            f"{said} A WebSocket is a stream, never sent as one request, and one carrying a credential of its own is "
+            "never let through: it will not be sent. Open it without that credential."
+        )
     if own_credentials(headers, path):
         return f"{said} It carries a credential of its own, so the owner is asked every time."
     allowed = permitted_host(scheme, host, port)
@@ -347,7 +352,7 @@ def held_words(ticket, scheme, host, port, headers, path=""):
             "ask_hosts (with every other host the task needs), then run the command again."
         )
     return (
-        f"{said} The owner is asked about it, and you will be told how it ended. Before writing more there, ask the "
+        f"{said} When this command ends you are told what happens to it. Before writing more there, ask the "
         f"owner to allow {allowed} with ask_hosts (it takes several hosts at once): once allowed, writes there go "
         "straight through."
     )

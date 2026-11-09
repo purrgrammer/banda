@@ -17,12 +17,13 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { openBox } from "../src/box/box.ts";
 import { writeHash } from "../src/box/browser.ts";
-import { browserLogin, browserMark, proxyMark, tabStamp } from "../src/box/container.ts";
+import { browserLogin, browserMark, proxyDown, proxyMark, tabStamp } from "../src/box/container.ts";
 import { boxEnv, boxTools } from "../src/box/tools.ts";
 import { ActivityLog } from "../src/core/activity.ts";
 import { Accepted, AgentChats, agentPath, LEAD } from "../src/core/agents.ts";
 import { stopArchived } from "../src/core/archive.ts";
 import { EFFECT } from "../src/core/ask.ts";
+import { allowHost } from "../src/core/ask-hosts.ts";
 import {
 	addressOf,
 	draftArgs,
@@ -48,8 +49,8 @@ import {
 } from "../src/core/egress.ts";
 import { OWNER, type Received } from "../src/core/gateway.ts";
 import { hostCovers } from "../src/core/hosts.ts";
-import { allowHost, covering, Permissions, revoke } from "../src/core/permissions.ts";
-import { MAX_OPEN_ASKS, RELEASE, RELEASED } from "../src/core/release.ts";
+import { covering, Permissions, revoke } from "../src/core/permissions.ts";
+import { MAX_OPEN_ASKS, RELEASE, RELEASED, releasedText } from "../src/core/release.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
@@ -123,10 +124,7 @@ class FakeProxy implements EgressControl {
 	}
 }
 
-/**
- * A core with the box's tools (on the host) and `propose_send`, over a fake proxy. The model runs `bash` for an
- * owner message; when a result lists a held ticket it asks with `propose_send`; then it is done.
- */
+/** A core with the box's tools (on the host), over a fake proxy. The model runs `bash` for an owner message, then is done. */
 function setup() {
 	const gateway = new FakeGateway();
 	const faux = fauxProvider();
@@ -143,23 +141,18 @@ function setup() {
 			const last = ctx.messages.at(-1);
 			const text = typeof last?.content === "string" ? last.content : JSON.stringify(last?.content ?? "");
 			n += 1;
-			if (last?.role === "user")
+			if (last?.role === "user" && !text.includes("<held-request-result>"))
 				return fauxAssistantMessage([fauxToolCall("bash", { command: "true" }, { id: `b${n}` })], {
-					stopReason: "toolUse",
-				});
-			const ticket = /ticket (t[0-9a-f]{10})\)/.exec(text)?.[1];
-			if (last?.role === "toolResult" && ticket !== undefined && !text.includes("Sent."))
-				return fauxAssistantMessage([fauxToolCall("propose_send", { ticket }, { id: `r${n}` })], {
 					stopReason: "toolUse",
 				});
 			return fauxAssistantMessage("Done.");
 		}) as never,
 	);
-	const open = async (home: string) => {
+	const open = async (home: string, egress: typeof holding = holding) => {
 		const box = openBox(hostBox(home), () => {});
 		const registry = createRegistry();
 		registry.install(core.extension);
-		registry.install(boxTools({ egress: holding }));
+		registry.install(boxTools({ egress }));
 		const harness = await openStore(home, { models, registry, env: boxEnv(box) });
 		harness.resume();
 		const close = async () => {
@@ -177,7 +170,7 @@ function setup() {
 		if (!("turn" in received)) throw new Error(JSON.stringify(received));
 		return received;
 	};
-	return { proxy, open, say, holding };
+	return { proxy, open, say, holding, withFault: (fault: (point: string) => void) => core.held(proxy, fault) };
 }
 
 /** Turn `turn` ended, and so did what it held: no release left, and no Turn waking the agent with one. */
@@ -776,6 +769,270 @@ describe("a held write's release", () => {
 		}
 	});
 
+	/** A proxy whose sends each wait to be let go. */
+	const heldBack = (proxy: FakeProxy) => {
+		const go: (() => void)[] = [];
+		proxy.replay = async (request) => {
+			proxy.sent.push(request);
+			await new Promise<void>((resolve) => go.push(resolve));
+			return { status: 200, reason: "OK", headers: [], body: "" };
+		};
+		return go;
+	};
+	/** The tickets each wake-up of the agent told of. */
+	const wakeUps = async (harness: Harness, chat: number) => {
+		const page = await (await harness.conversation(chat as ConversationId, context))!.entries(
+			{ order: "ascending" },
+			1000,
+			undefined,
+			context,
+		);
+		return page.items.filter((e) => e.kind === RELEASED).map((e) => (e.data as { tickets: string[] }).tickets);
+	};
+
+	it("those that can go leave oldest first, one at a time, and wake the agent once", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const go = heldBack(s.proxy);
+			const first = await s.say(harness);
+			const now = Date.now();
+			const older = held(first.chat, { path: "/v1/issues/1/comments", at: now - 10 });
+			const middle = held(first.chat, { path: "/v1/issues/2/comments", at: now - 5 });
+			const newer = held(first.chat, { path: "/v1/issues/3/comments", at: now });
+			// the proxy lists them by ticket, whatever order they were made in
+			s.proxy.pending.set(first.chat, [newer, older, middle]);
+			await until(async () => (await openWaits(harness)).length === 3);
+			const [wait] = await openWaits(harness);
+			// one permission answers all three in one commit
+			await approve(harness, wait!.key, { permission: { scope: "always" } });
+			for (const [i, request] of [older, middle, newer].entries()) {
+				await until(() => s.proxy.sent.length === i + 1);
+				await new Promise((resolve) => setTimeout(resolve, 30));
+				expect(s.proxy.sent).toHaveLength(i + 1);
+				expect(s.proxy.sent[i]?.ticket).toBe(request.ticket);
+				go[i]?.();
+			}
+			await until(() => done(harness, first.turn));
+			expect(await wakeUps(harness, first.chat)).toEqual([[older.ticket, middle.ticket, newer.ticket]]);
+		} finally {
+			await close();
+		}
+	});
+
+	it("one still waiting on the owner holds up nothing behind it", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const first = await s.say(harness);
+			const now = Date.now();
+			const older = held(first.chat, { path: "/one", at: now - 10 });
+			const newer = held(first.chat, { path: "/two", at: now });
+			s.proxy.pending.set(first.chat, [older, newer]);
+			await until(async () => (await openWaits(harness)).length === 2);
+			const waits = await openWaits(harness);
+			const ticketOf = (w: (typeof waits)[number]) => (w.ask.type === "approval" ? w.ask.args._ticket : "");
+			await approve(harness, waits.find((w) => ticketOf(w) === newer.ticket)!.key);
+			await until(() => s.proxy.sent.length === 1);
+			expect(s.proxy.sent[0]?.ticket).toBe(newer.ticket);
+			// told straight away: the other may never be answered
+			await until(async () => (await wakeUps(harness, first.chat)).length === 1);
+			await answer(harness, waits.find((w) => ticketOf(w) === older.ticket)!.key, "deny", web, "bearer");
+			await until(() => done(harness, first.turn));
+			expect(s.proxy.sent).toHaveLength(1);
+			expect(await wakeUps(harness, first.chat)).toEqual([[newer.ticket], [older.ticket]]);
+		} finally {
+			await close();
+		}
+	});
+
+	it("what one wake-up carries stays a size a model can take", () => {
+		const told = Array.from({ length: 200 }, (_, i) => ({
+			ticket: `t${i}`,
+			label: `send ${i}`,
+			said: "x".repeat(20_000),
+		}));
+		const text = releasedText(told);
+		expect(text.length).toBeLessThan(120_000);
+		expect(text).toContain("send 199");
+		expect(text).toContain("(cut)");
+	});
+
+	it("allowing the host of a request waiting on the owner sends it, once, and answers its card", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const first = await s.say(harness);
+			const plain = held(first.chat);
+			const secret = held(first.chat, { path: "/s", headers: [["Authorization", "Bearer x"]] });
+			s.proxy.pending.set(first.chat, [plain, secret]);
+			await until(async () => (await openWaits(harness)).length === 2);
+			expect(await allowHost(harness, LEAD, "api.example.com", Date.now())).toMatchObject({ host: "api.example.com" });
+			await until(() => s.proxy.sent.length === 1);
+			expect(s.proxy.sent).toEqual([plain]);
+			// a credential of its own is on the floor: no host covers it, so its card stays
+			await until(async () => (await openWaits(harness)).length === 1);
+			const [left] = await openWaits(harness);
+			expect(left?.ask.type === "approval" && left.ask.args._ticket).toBe(secret.ticket);
+			await answer(harness, left!.key, "deny", web, "bearer");
+			await until(() => done(harness, first.turn));
+			expect(s.proxy.sent).toEqual([plain]);
+		} finally {
+			await close();
+		}
+	});
+
+	it("a WebSocket with a credential of its own is told it will not be sent, not to ask for its host", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const first = await s.say(harness);
+			s.proxy.pending.set(first.chat, [
+				held(first.chat, {
+					headers: [
+						["Upgrade", "websocket"],
+						["Authorization", "Bearer x"],
+					],
+				}),
+			]);
+			await until(turnOver(harness, first.turn));
+			const [said] = await results(harness, first.chat);
+			expect(said).toContain("it will not be sent");
+			expect(said).not.toContain("ask_hosts");
+			expect(await openWaits(harness)).toEqual([]);
+		} finally {
+			await close();
+		}
+	});
+
+	it("a permission for this task is for the task the card offered, though the chat moved on", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const first = await s.say(harness);
+			s.proxy.pending.set(first.chat, [held(first.chat)]);
+			const { wait } = await nextAsk(harness, first.turn);
+			await until(turnOver(harness, first.turn));
+			const offered = wait?.ask.type === "approval" ? wait.ask.errand : undefined;
+			const second = await s.say(harness);
+			await until(turnOver(harness, second.turn));
+			await approve(harness, wait!.key, { permission: { scope: "task" } });
+			await until(() => s.proxy.sent.length === 1);
+			const given = Object.values((await harness.snapshot(Permissions, context))!.permissions);
+			expect(given).toHaveLength(1);
+			expect(given[0]?.task).toEqual(offered);
+		} finally {
+			await close();
+		}
+	});
+
+	it("taken again after a kill, a request nobody was asked about is still told so", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const first = await s.say(harness);
+			const many = Array.from({ length: MAX_OPEN_ASKS + 1 }, (_, i) =>
+				held(first.chat, { path: `/many/${i}`, at: Date.now() + i }),
+			);
+			const ack = s.proxy.ack.bind(s.proxy);
+			s.proxy.ack = async () => {};
+			s.proxy.pending.set(first.chat, many);
+			await until(turnOver(harness, first.turn));
+			s.proxy.ack = ack;
+			const again = await s.say(harness);
+			await until(turnOver(harness, again.turn));
+			const said = await results(harness, first.chat);
+			// the second is the same tickets, taken again: the commands' results are the first and third, a reply between
+			const commands = said.filter((one) => one.includes("Held, not sent"));
+			expect(commands).toHaveLength(2);
+			for (const one of commands) {
+				expect(one.match(/too many of your requests already wait/g)).toHaveLength(1);
+				expect(one).toContain(`ticket ${many.at(-1)?.ticket}). It writes, and too many`);
+			}
+			for (const wait of await openWaits(harness)) await answer(harness, wait.key, "deny", web, "bearer");
+			await until(() => done(harness, first.turn));
+		} finally {
+			await close();
+		}
+	});
+
+	it("a failure before anything left is tried again, and the owner's answer stands", async () => {
+		const s = setup();
+		let left = 3;
+		const holding = s.withFault((point) => {
+			if (point === "release:run" && left-- > 0) throw new Error("the store was busy");
+		});
+		const { harness, close } = await s.open(await tempHome(), holding);
+		try {
+			const first = await s.say(harness);
+			const request = held(first.chat);
+			s.proxy.pending.set(first.chat, [request]);
+			const { wait } = await nextAsk(harness, first.turn);
+			await approve(harness, wait!.key);
+			await until(() => done(harness, first.turn));
+			expect(s.proxy.sent).toEqual([request]);
+			const told = await released(harness, first.chat);
+			expect(told).toHaveLength(1);
+			expect(told[0]).toContain("Sent.");
+			expect(told[0]).not.toContain("may or may not");
+		} finally {
+			await close();
+		}
+	});
+
+	it("waking the agent is never given up on while it can still be done", async () => {
+		const s = setup();
+		let left = 12;
+		const holding = s.withFault((point) => {
+			if (point === "release:told" && left-- > 0) throw new Error("the chat was busy");
+		});
+		const { harness, close } = await s.open(await tempHome(), holding);
+		try {
+			const first = await s.say(harness);
+			s.proxy.pending.set(first.chat, [held(first.chat)]);
+			const { wait } = await nextAsk(harness, first.turn);
+			await approve(harness, wait!.key);
+			await until(() => done(harness, first.turn));
+			expect(left).toBeLessThan(0);
+			expect(await released(harness, first.chat)).toHaveLength(1);
+		} finally {
+			await close();
+		}
+	});
+
+	it("says a failed send was not sent only when nothing left", async () => {
+		for (const [failure, words, not] of [
+			[{ failed: "ConnectionRefusedError" }, "you may run the command again", "may or may not"],
+			[{ failed: "TimeoutError", reached: true }, "may or may not have been sent", "you may run the command again"],
+		] as const) {
+			const s = setup();
+			const { harness, close } = await s.open(await tempHome());
+			try {
+				s.proxy.replay = async () => failure;
+				const first = await s.say(harness);
+				s.proxy.pending.set(first.chat, [held(first.chat)]);
+				const { wait } = await nextAsk(harness, first.turn);
+				await approve(harness, wait!.key);
+				await until(() => done(harness, first.turn));
+				const [told] = await released(harness, first.chat);
+				expect(told).toContain(words);
+				expect(told).not.toContain(not);
+			} finally {
+				await close();
+			}
+		}
+	});
+
+	it("a proxy docker cannot reach has been sent nothing; any other failure is not known", () => {
+		for (const said of [
+			"docker exec: Error response from daemon: No such container: x",
+			"docker exec: Error response from daemon: Container abc is not running",
+			"Docker isn't running: start Docker Desktop (or the Docker service), and the computer starts by itself.",
+		])
+			expect(proxyDown(new Error(said)), said).toBeDefined();
+		expect(proxyDown(new Error("docker exec: it did not answer in time"))).toBeUndefined();
+	});
+
 	it("property: whatever is held, taken once or twice, each own write is asked once and sent only if approved, once", async () => {
 		const scenario = fc.record({
 			requests: fc.array(
@@ -835,7 +1092,7 @@ describe("a held write's release", () => {
 							.map((h) => h.ticket)
 							.sort(),
 					);
-					expect(await released(harness, first.chat)).toHaveLength(expected.length);
+					expect((await wakeUps(harness, first.chat)).flat().sort()).toEqual(expected.map((h) => h.ticket).sort());
 				} finally {
 					await close();
 				}
@@ -1287,6 +1544,13 @@ describe.skipIf(!python)("a host the owner allowed, at the proxy", () => {
 		expect(policy("policy.permitted_host(x[0], x[1], x[2])", requests)).toEqual(
 			requests.map(([scheme, host, port]) => permittedHost({ scheme: scheme as "http" | "https", host, port })),
 		);
+		// a WebSocket carrying its own credential can be neither asked about nor let through, and is told so
+		const [socket] = policy(
+			'policy.held_words("t1", "https", "a.example", 443, [["Upgrade", "websocket"], ["Authorization", "x"]])',
+			[null],
+		) as string[];
+		expect(socket).toContain("it will not be sent");
+		expect(socket).not.toContain("ask_hosts");
 		expect(policy("sorted(policy.SECRET_HEADERS)", [null])).toEqual([[...SECRET_HEADERS].sort()]);
 		expect(policy("sorted(policy.SECRET_QUERY)", [null])).toEqual([[...SECRET_QUERY].sort()]);
 		// the proxy reads a path's query as the daemon does
@@ -1345,7 +1609,7 @@ describe.skipIf(!python)("a host the owner allowed, at the proxy", () => {
 		]);
 		const body = (n: number) => (rest[n] as { body: string }).body;
 		expect(body(0)).toMatch(
-			/ticket t[0-9a-f]{10}\. It has not been sent\. The owner is asked about it, and you will be told how it ended\. Before writing more there, ask the owner to allow other\.example with ask_hosts/,
+			/ticket t[0-9a-f]{10}\. It has not been sent\. When this command ends you are told what happens to it\. Before writing more there, ask the owner to allow other\.example with ask_hosts/,
 		);
 		expect(body(1)).toContain("It carries a credential of its own, so the owner is asked every time.");
 		expect(body(5)).toContain("to allow http://forge.example with ask_hosts");
