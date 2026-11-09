@@ -1504,6 +1504,9 @@ export function openCapabilities(options: CapabilityOptions) {
 			const settable = connection !== undefined;
 			const overlay = connected.reads[name]?.tools ?? [];
 			const toolGroups = listed === undefined ? {} : groupsOf(connection, Object.keys(listed.tools));
+			const read = new Set(
+				Object.values(connection?.objects ?? {}).flatMap((kind) => Object.values(kind.reads).map((each) => each.tool)),
+			);
 			const tools: ConnectionToolView[] =
 				connection === undefined || listed === undefined || listed.version !== file?.version
 					? []
@@ -1530,6 +1533,7 @@ export function openCapabilities(options: CapabilityOptions) {
 									...(setting === undefined ? {} : { setting }),
 									...(options === undefined ? {} : { options }),
 									...(off === "waiting" ? { waiting: true as const } : {}),
+									...(read.has(tool) ? { cards: true as const } : {}),
 									name: model,
 									title: tool,
 									words: toolWords(tool),
@@ -2555,8 +2559,9 @@ export function openCapabilities(options: CapabilityOptions) {
 				// the tools keep their first-listed shape: allowing a read is not a new listing
 				listing.version = (await acceptedConnection(tx, name))?.version ?? listing.version;
 			}
-			// one in flight as a read does not finish as one once it was narrowed
-			doc.epoch++;
+			// one in flight as a read does not finish as one once it was switched off; Ask and Always ask change nothing for a
+			// card or a watch, so a look under way keeps its stamp
+			if (checked.some(([, setting]) => setting === "off")) doc.epoch++;
 			await offer(tx, on, name);
 			await log(tx, { at: now(), what: `You changed what ${connection.service}'s tools may do` });
 			return undefined;

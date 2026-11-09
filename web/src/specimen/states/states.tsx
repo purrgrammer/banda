@@ -77,6 +77,14 @@ export function States() {
 							fix="Sign in again"
 						/>
 					</div>
+					<div className="w-[24rem] max-w-full">
+						<ObjectUnavailable
+							what="purrgrammer/banda #34 can't be shown"
+							why={
+								'You turned off "pull request read" for GitHub. Turn it back on in GitHub\'s details, under Connections.'
+							}
+						/>
+					</div>
 				</Group>
 				<Group label="A file while its preview is drawn" className="items-start">
 					<FileLoading name="Booking terms.pdf" size="1.2 MB" />

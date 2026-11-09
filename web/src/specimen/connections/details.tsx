@@ -22,7 +22,7 @@ type Row = [
 	group: string,
 	classed: Classed,
 	setting: Setting,
-	more?: { readonly waiting?: true; readonly ask?: "always" },
+	more?: { readonly waiting?: true; readonly ask?: "always"; readonly cards?: true },
 ];
 
 const ROWS: readonly Row[] = [
@@ -43,6 +43,7 @@ const ROWS: readonly Row[] = [
 	["search_gists", "Search gists", "Gists", { kind: "read", from: "server" }, "off", { waiting: true }],
 	["run_macro", "Run a macro", "Gists", { kind: "unknown", from: "nobody" }, "off", { waiting: true }],
 	["drop_cache", "Drop the cache", "Gists", { kind: "write", from: "server" }, "off"],
+	["list_gists", "List gists", "Gists", { kind: "read", from: "definition" }, "off", { cards: true }],
 ];
 
 const toolOf = ([title, words, group, classed, setting, more]: Row): ConnectionToolView => ({
@@ -57,6 +58,7 @@ const toolOf = ([title, words, group, classed, setting, more]: Row): ConnectionT
 	setting,
 	options: optionsOf(classed, more?.ask),
 	...(more?.waiting === true ? { waiting: true as const } : {}),
+	...(more?.cards === true ? { cards: true as const } : {}),
 });
 
 const TOOLS = ROWS.map(toolOf);

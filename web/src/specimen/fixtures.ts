@@ -223,6 +223,14 @@ export const WATCHES: readonly WatchRowView[] = [
 		done: true,
 		ended: true,
 	},
+	{
+		id: "banda-55",
+		name: "purrgrammer/banda #55",
+		service: "GitHub",
+		until: "until merged",
+		saw: 'Stopped: You turned off "pull request read" for GitHub. Turn it back on in GitHub\'s details, under Connections.',
+		failing: true,
+	},
 ];
 
 /** Mara's watch on #142 as the daemon sends it, which its detail opens on. */

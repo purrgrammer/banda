@@ -226,5 +226,17 @@ describe("watches in the app", () => {
 		expect(sawWords({ agent: "mara", name: "x", state: "active", looked: NOW }, NOW)).toMatch(
 			/^Looked today 09:00.*, nothing new$/,
 		);
+		// stopped by the owner's switch: it says so in those words, never "can't reach"
+		expect(
+			sawWords(
+				{
+					agent: "mara",
+					name: "x",
+					state: "failing",
+					failed: { at: NOW, since: NOW, off: true, why: 'You turned off "issue read" for GitHub.' },
+				},
+				NOW,
+			),
+		).toBe('Stopped: You turned off "issue read" for GitHub.');
 	});
 });

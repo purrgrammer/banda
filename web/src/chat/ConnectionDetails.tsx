@@ -256,6 +256,9 @@ function ToolGroup({
 							disabled={disabled}
 							onChange={(setting) => onTools({ [tool.title]: setting })}
 						/>
+						{tool.cards === true && settingOf(tool) === "off" ? (
+							<p className="basis-full text-meta text-ink-2">Off also stops the cards and watches that use it.</p>
+						) : null}
 					</ToolRow>
 				))}
 			</CollapsibleContent>

@@ -508,3 +508,22 @@ it("a card's follow line names the watches on it whose files stand: one stopped,
 	const shown = await s.service.show(s.chat, [{ ref: "https://github.com/acme/banda/issues/35" }]);
 	expect(shown[0]).toMatchObject({ shown: "card", follow: { by: [{ watch: "banda-35", agent: "reader" }] } });
 });
+
+it("a tool a kind reads says so; Ask leaves a read under way alone, Off does not", async () => {
+	const s = await setup();
+	const github = async () =>
+		(await s.capabilities.view()).connections.find((each) => each.name === "github") as NonNullable<
+			Awaited<ReturnType<typeof s.capabilities.view>>["connections"][number]
+		>;
+	const before = await github();
+	const version = before.accepted?.version as string;
+	const tool = (title: string) => before.tools.find((each) => each.title === title);
+	expect(tool("issue_read")?.cards).toBe(true);
+	expect(tool("add_issue_comment")?.cards).toBeUndefined();
+	const epoch = async () => (await s.harness.snapshot(Connected, context))?.epoch as number;
+	const start = await epoch();
+	await s.capabilities.setTools("github", { issue_read: "ask" }, version);
+	expect(await epoch()).toBe(start);
+	await s.capabilities.setTools("github", { issue_read: "off" }, version);
+	expect(await epoch()).toBe(start + 1);
+});

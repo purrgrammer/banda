@@ -72,7 +72,11 @@ const isFailure = (value: Json | Failure): value is Failure =>
 	typeof (value as { failed?: unknown }).failed === "string";
 
 /** What the service answers read `tool` with `args` at step `step` of the world: JSON, or a failure. */
-export type Answer = (tool: string, args: { readonly [key: string]: unknown }, step: number) => Json | Failure;
+export type Answer = (
+	tool: string,
+	args: { readonly [key: string]: unknown },
+	step: number,
+) => Json | Failure | Promise<Json | Failure>;
 
 /**
  * The connection the watch follows through, as a signed-in one leaves the store: its name and definition, the tools
@@ -298,7 +302,7 @@ export async function watchScenario(
 		read: async (_connection, account, tool, args) => {
 			appendFileSync(join(home, "reads.jsonl"), `${JSON.stringify({ tool, account, method: args.method })}\n`);
 			if (account !== accountAs) return { failed: "not that" };
-			const answer = answerOf(tool, args, step);
+			const answer = await answerOf(tool, args, step);
 			return isFailure(answer) ? answer : { text: JSON.stringify(answer) };
 		},
 		fault: (point) => faults.hit(point as "watch:read"),

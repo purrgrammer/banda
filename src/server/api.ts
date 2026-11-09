@@ -687,7 +687,14 @@ export type WatchView = {
 	 * Why it cannot look, in the daemon's words: at its newest try, and since the first of this run of them; `run` when
 	 * it was its wake's run that failed.
 	 */
-	readonly failed?: { readonly at: number; readonly why: string; readonly since: number; readonly run?: true };
+	readonly failed?: {
+		readonly at: number;
+		readonly why: string;
+		readonly since: number;
+		readonly run?: true;
+		/** The owner's switch holds a read off: stopped, with no line in its chat, and `why` says what to change. */
+		readonly off?: true;
+	};
 	/** When it last woke its agent. */
 	readonly lastRun?: number;
 	/** Behind since then: its newest wake said some changes may be missing, until a later one without a gap. */
@@ -783,6 +790,8 @@ export type ConnectionToolView = {
 	readonly options?: readonly Setting[];
 	/** Switched off because the server listed it alone and no definition names it: waiting for the owner, not their off. */
 	readonly waiting?: true;
+	/** A kind this connection draws reads it: Off also stops those cards and the watches that follow them. */
+	readonly cards?: true;
 };
 
 /** A kind a connection draws as cards, and what following one does, in words. Absent `follow`: it cannot be followed. */

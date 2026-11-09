@@ -142,6 +142,7 @@ export async function watches(harness: Harness, workspace: Workspace, ctx: Conte
 							why: record.failed.why,
 							since: record.failed.since,
 							...(record.failed.run === undefined ? {} : { run: true as const }),
+							...(record.failed.off === undefined ? {} : { off: true as const }),
 						},
 					}),
 			...(record.last === undefined ? {} : { lastRun: record.last }),

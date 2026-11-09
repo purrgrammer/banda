@@ -59,7 +59,8 @@ export function untilWords(watch: WatchView): string | undefined {
 /**
  * What the watch last saw, in words: "Saw today 09:10: ana approved"; "Looked today 09:10, nothing new"; what ended it
  * ("Done Fri 17:02: merged", "Ended today 09:10: you signed out of GitHub as @bandarra"); and, while it cannot look,
- * since when, never "nothing new" ("Can't reach GitHub since today 09:10: …"); paused at its wakes a day ("Paused
+ * since when, never "nothing new" ("Can't reach GitHub since today 09:10: …"); stopped by the owner's switch on a tool
+ * it reads ("Stopped: You turned off …"); paused at its wakes a day ("Paused
  * itself: it woke 24 times today, the most it may"); behind, that some may be missing
  * ("Saw today 09:10: lint failed; some changes may be missing").
  */
@@ -72,6 +73,7 @@ export function sawWords(watch: WatchView, now: number): string | undefined {
 			? "Paused itself: it woke the most times a day it may"
 			: `Paused itself: it woke ${limit} times today, the most it may`;
 	}
+	if (watch.failed?.off === true) return `Stopped: ${watch.failed.why}`;
 	if (watch.failed?.run === true) return watch.failed.why.replace(/^./, (first) => first.toUpperCase());
 	if (watch.failed !== undefined)
 		return `Can't reach ${watch.object?.service ?? "it"} since ${near(watch.failed.since, now)}: ${watch.failed.why}`;

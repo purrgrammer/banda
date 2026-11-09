@@ -15,7 +15,7 @@ import {
 } from "../core/connections.ts";
 import { mimeOf } from "../core/gateway.ts";
 import { Groups } from "../core/groups.ts";
-import { objectAccess } from "../core/object-access.ts";
+import { type OffRead, objectAccess, objectStanding, offWords } from "../core/object-access.ts";
 import {
 	cardOf,
 	keepReading,
@@ -78,6 +78,8 @@ export type ObjectShown =
 			readonly name: string;
 			readonly at: number;
 			readonly why: string;
+			/** The owner's switch holds a read it needs off: nothing to try again, `why` says what to change. */
+			readonly off?: true;
 	  };
 type Known = Connection & { readonly accepted: boolean };
 type Attempt = {
@@ -211,9 +213,15 @@ export function openObjects({
 	): Promise<ObjectShown> {
 		const kinds = connection.objects ?? {};
 		let last: { ref: ObjectRef; found: Reading; stamp: string } | undefined;
+		let held: { ref: ObjectRef; off: OffRead } | undefined;
 		for (const ref of refs.slice(0, 4)) {
-			const access = await harness.commit((tx) => objectAccess(tx, chat, ref, account), ctx);
+			const access = await harness.commit((tx) => objectStanding(tx, chat, ref, account), ctx);
 			if (access === undefined) return { shown: "link" };
+			if (access.off !== undefined) {
+				// the first candidate speaks for the link: another read as another kind would not be what it names
+				held = { ref, off: access.off };
+				break;
+			}
 			// A request may reach this candidate through a URL, shorthand fallback or notification subject.
 			// Share successes AND failures, but never across an authority generation or another request's Retry.
 			const key = JSON.stringify([chat, account, refKey(ref, access.connection.objects ?? {}), access.stamp]);
@@ -227,14 +235,27 @@ export function openObjects({
 			last = { ref, found, stamp: access.stamp };
 			if (found.card !== undefined) break;
 		}
-		if (last === undefined) return { shown: "link" };
-		const { ref, found, stamp } = last;
 		const label =
 			account === ""
 				? undefined
 				: accountLabel(
 						(await harness.snapshot(Connected, ctx))?.accounts[connection.name]?.[account] ?? { id: account },
 					);
+		// the owner's switch, not a failed read: the same card as one that could not be read, with nothing to try again
+		if (held !== undefined)
+			return {
+				shown: "failed",
+				key: refKey(held.ref, kinds),
+				connection: connection.name,
+				service: connection.service,
+				...(label === undefined ? {} : { account: label }),
+				name: nameOf(held.ref, kinds),
+				at: now(),
+				why: offWords(held.off),
+				off: true,
+			};
+		if (last === undefined) return { shown: "link" };
+		const { ref, found, stamp } = last;
 		const base = {
 			key: refKey(ref, kinds),
 			connection: connection.name,

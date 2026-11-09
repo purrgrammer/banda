@@ -368,7 +368,7 @@ function ReadObjects({
 							busy={busy !== undefined}
 							onRefresh={() => void refresh([index])}
 						/>
-						{one.shown === "card" ? null : (
+						{one.shown === "card" || (one.shown === "failed" && one.off === true) ? null : (
 							<Button
 								variant="ghost"
 								size="sm"
@@ -415,8 +415,12 @@ export function ObjectReading({
 	if (shown.shown === "failed")
 		return (
 			<ObjectUnavailable
-				what={`Couldn't read ${shown.name}`}
-				why={`${shown.service}${shown.account ? ` as ${shown.account}` : ""}: ${shown.why}`}
+				what={shown.off === true ? `${shown.name} can't be shown` : `Couldn't read ${shown.name}`}
+				why={
+					shown.off === true
+						? shown.why
+						: `${shown.service}${shown.account ? ` as ${shown.account}` : ""}: ${shown.why}`
+				}
 			/>
 		);
 	return (
