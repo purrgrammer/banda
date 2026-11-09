@@ -9,6 +9,7 @@ type State = {
 	accepted: string;
 	box: string;
 	results: number;
+	decided: number;
 	commits: number;
 	proposalApply: number;
 	writeBefore: number;
@@ -23,6 +24,7 @@ const expectAccepted = ({ state }: Awaited<ReturnType<typeof run>>) => {
 	expect(state.accepted).toContain("Read carefully and verify claims.");
 	expect(state.box).toBe(state.accepted);
 	expect(state.results).toBe(1);
+	expect(state.decided).toBe(1);
 };
 
 describe("accepting an existing-agent proposal across box and store faults", () => {

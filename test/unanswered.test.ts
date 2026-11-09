@@ -17,10 +17,11 @@ import {
 } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
 import { type Inbound, type Origin, OWNER, type Received, routeKey } from "../src/core/gateway.ts";
+import { PROPOSAL_DECIDED } from "../src/core/proposals.ts";
 import { WAKE } from "../src/core/routines.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context, openStore } from "../src/core/store.ts";
-import { defineCore, NUDGE, NUDGED, Routes, stop, type TurnResult } from "../src/core/turn.ts";
+import { defineCore, NUDGE, NUDGED, Routes, rowOf, stop, type TurnResult } from "../src/core/turn.ts";
 import { type Row, unanswered } from "../src/core/unanswered.ts";
 import { itemOf } from "../src/server/transcript.ts";
 import { view } from "../web/src/lib/chat.ts";
@@ -72,6 +73,21 @@ describe("the unanswered rule", () => {
 
 	it("a task going on (a nudge) answers the owner", () => {
 		expect(unanswered([end, { role: "nudge" }, end, wrote])).toEqual({ nudged: 1 });
+	});
+
+	it("the daemon's word that the owner decided a proposal is no row: the walk goes on past it", () => {
+		const decided = {
+			id: "7" as never,
+			conversationId: "1" as never,
+			kind: PROPOSAL_DECIDED,
+			data: { proposal: "p", state: "declined" },
+			model: [{ role: "user" as const, content: "The owner declined your proposal.", timestamp: 1 }],
+		} as unknown as Parameters<typeof rowOf>[0];
+		expect(rowOf(decided)).toBeUndefined();
+		// so the walk over a chat holding one reads as if it were not there: an owner unanswered is still unanswered
+		const walked = (rows: readonly (Row | undefined)[]) => rows.filter((row): row is Row => row !== undefined);
+		expect(unanswered(walked([end, rowOf(decided), wrote]))).toEqual({ nudged: 0 });
+		expect(unanswered(walked([end, rowOf(decided), ...acted("message_user", "m"), wrote]))).toBeUndefined();
 	});
 
 	it("a run answering no one's input of the owner's (a wake, another person) may stay silent", () => {

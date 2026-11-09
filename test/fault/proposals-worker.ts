@@ -13,7 +13,13 @@ import { BlobStore } from "../../src/core/blobs.ts";
 import type { Gateway } from "../../src/core/gateway.ts";
 import { OWNER } from "../../src/core/gateway.ts";
 import { Groups } from "../../src/core/groups.ts";
-import { PROPOSAL_ENTRY, PROPOSAL_RESULT, type Proposal, Proposals } from "../../src/core/proposals.ts";
+import {
+	PROPOSAL_DECIDED,
+	PROPOSAL_ENTRY,
+	PROPOSAL_RESULT,
+	type Proposal,
+	Proposals,
+} from "../../src/core/proposals.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore, type TurnResult } from "../../src/core/turn.ts";
 import type { Area, Deps } from "../../src/server/routes/area.ts";
@@ -154,6 +160,7 @@ console.log(
 		room: groups?.proposalRooms?.[proposal.id],
 		proposals: entries.items.filter((entry) => entry.kind === PROPOSAL_ENTRY).length,
 		results: entries.items.filter((entry) => entry.kind === PROPOSAL_RESULT).length,
+		decided: entries.items.filter((entry) => entry.kind === PROPOSAL_DECIDED).length,
 		commits: faults.hits("commit:after"),
 	}),
 );

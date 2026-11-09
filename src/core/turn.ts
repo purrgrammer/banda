@@ -85,7 +85,7 @@ import {
 } from "./gateway.ts";
 import { defineGroups, Groups, groupSection } from "./groups.ts";
 import { FLOOR_WORDS } from "./permissions.ts";
-import { makeProposal, proposalTools } from "./proposals.ts";
+import { decidedText, makeProposal, PROPOSAL_DECIDED, type Proposal, proposalTools } from "./proposals.ts";
 import { defineRoutines, Routines, troubleIn, WAKE, type WakeData } from "./routines.ts";
 import { skillTokens } from "./skill-tokens.ts";
 import { acceptedSkills, ownerSkillEntry, type Skill } from "./skills.ts";
@@ -424,6 +424,8 @@ export function rowOf(entry: EntryRecord): Row | undefined {
 	}
 	// a summary in place of older entries: no one's input, so the walk goes on past it
 	if (entry.kind === CompactionEntry.kind) return undefined;
+	// the daemon's word that the owner decided a proposal: nobody's input, starting no work, so the walk goes on past it
+	if (entry.kind === PROPOSAL_DECIDED) return undefined;
 	const message = entry.model?.[0];
 	if (message?.role === "user") {
 		if (entry.kind === NUDGE) return { role: "nudge" };
@@ -1319,6 +1321,20 @@ export function defineCore(options: CoreOptions) {
 		}, ctx);
 	}
 
+	/**
+	 * Tell the agent, in its proposal's chat, that the owner decided its proposal: a `PROPOSAL_DECIDED` entry carrying the
+	 * daemon's words as a user message, in the caller's commit with the decision. It starts no turn: the agent reads it
+	 * at its next model request, in a run under way or else its next turn, and it is nobody's input (`rowOf`), so an
+	 * unanswered owner is still unanswered.
+	 */
+	async function proposalDecided(tx: Tx, proposal: Proposal, state: "accepted" | "declined"): Promise<void> {
+		await tx.appendEntry(proposal.chat as ConversationId, {
+			kind: PROPOSAL_DECIDED,
+			data: { proposal: proposal.id, state },
+			model: [{ role: "user", content: decidedText(proposal, state), timestamp: options.now?.() ?? Date.now() }],
+		});
+	}
+
 	/** Queue an input nobody wrote to `chat`, after its other inputs, watched by a Turn. */
 	async function followUp(
 		tx: Tx,
@@ -1660,6 +1676,8 @@ export function defineCore(options: CoreOptions) {
 		reconcileTools: (harness: Harness, ctx: Context = context) => reconcileTools(harness, ctx),
 		/** Queue an input nobody wrote to a chat, after its other inputs, watched by a Turn: in the caller's commit. */
 		followUp,
+		/** Tell the agent the owner decided its proposal, in the caller's commit with the decision; it starts no turn. */
+		proposalDecided,
 		/** Bring the routines' and the watches' tasks in line with their accepted files. */
 		reconcile: async (harness: Harness, ctx: Context = context) => {
 			await routines.reconcile(harness, options.now?.() ?? Date.now(), ctx);

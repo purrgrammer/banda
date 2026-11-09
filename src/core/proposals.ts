@@ -19,6 +19,11 @@ import type { ModelId, Tier } from "./tiers.ts";
 
 export const PROPOSAL_ENTRY = "banda.meta-proposal";
 export const PROPOSAL_RESULT = "banda.meta-proposal-result";
+/**
+ * The daemon's word to the agent that the owner decided its proposal: a user message in its chat's history, read at
+ * its next model request, which starts no turn and is nobody's input. The owner's decision itself is `PROPOSAL_RESULT`.
+ */
+export const PROPOSAL_DECIDED = "banda.proposal-decided";
 export const PROPOSAL_AGENT = "propose_agent";
 export const PROPOSAL_GROUP = "propose_group";
 export const PROPOSAL_CHANGE = "propose_agent_change";
@@ -387,4 +392,29 @@ export function proposalSummary(proposal: Proposal): string {
 	if (proposal.kind === "agent") return `New agent: ${proposal.name} · ${proposal.description}`;
 	if (proposal.kind === "group") return `New group: ${proposal.name} · ${proposal.memberNames.join(", ")}`;
 	return `Change to ${proposal.displayName}${proposal.name === undefined ? "" : ` · ${proposal.name}`}`;
+}
+
+const CHANGEABLE = ["name", "face", "description", "model", "tier", "instructions"] as const;
+
+/** The fields a change to an agent really changes, compared in its definition: clearing a model counts too. */
+function changedFields(proposal: Extract<Proposal, { kind: "agentChange" }>): readonly string[] {
+	const before = parseAgent(proposal.agent, proposal.before);
+	const after = parseAgent(proposal.agent, proposal.result);
+	if (!("agent" in before) || !("agent" in after)) return [];
+	return CHANGEABLE.filter((field) => JSON.stringify(before.agent[field]) !== JSON.stringify(after.agent[field]));
+}
+
+function decidedWhat(proposal: Proposal): string {
+	if (proposal.kind === "agent") return `a new agent named ${JSON.stringify(proposal.name)}`;
+	if (proposal.kind === "group") return `a new group named ${JSON.stringify(proposal.name)}`;
+	const fields = changedFields(proposal);
+	return `changes to ${JSON.stringify(proposal.displayName)}${fields.length === 0 ? "" : ` (${fields.join(", ")})`}`;
+}
+
+/**
+ * The decision notice's words. It goes to the model as a user message, so of what a model wrote it carries only a
+ * name, quoted: never a proposal's free text.
+ */
+export function decidedText(proposal: Proposal, state: "accepted" | "declined"): string {
+	return `The owner ${state} your proposal: ${decidedWhat(proposal)}. This notice is automatic, not from the owner.`;
 }

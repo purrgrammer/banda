@@ -9,7 +9,7 @@ import { type Box, openBox } from "../../src/box/box.ts";
 import { Accepted, agentPath, shaOf } from "../../src/core/agents.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
 import type { Gateway } from "../../src/core/gateway.ts";
-import { PROPOSAL_RESULT, type Proposal, Proposals } from "../../src/core/proposals.ts";
+import { PROPOSAL_DECIDED, PROPOSAL_RESULT, type Proposal, Proposals } from "../../src/core/proposals.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore } from "../../src/core/turn.ts";
 import type { Workspace } from "../../src/server/agents.ts";
@@ -177,6 +177,7 @@ console.log(
 		accepted: accepted?.text,
 		box: boxText,
 		results: entries.items.filter((entry) => entry.kind === PROPOSAL_RESULT).length,
+		decided: entries.items.filter((entry) => entry.kind === PROPOSAL_DECIDED).length,
 		commits: faults.hits("commit:after"),
 		proposalApply: faults.hits("proposal:apply"),
 		writeBefore: faults.hits("agent:write:before"),
