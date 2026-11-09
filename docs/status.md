@@ -95,7 +95,6 @@ the daemon into the chat's blobs. The spikes ran against the owner's team; each 
 fault sweep in CI, `files:read` on the shipped app, the owner's UI pass over the specimen and the walkthrough at both
 widths, and owner acceptance remain.
 
-
 Bringing your own is in code ([Chat](chat.md)): at first run on the desktop, the skills and agents of Claude Code,
 Codex and pi on this computer, in place of banda's skills, and again from Settings; the band's menu with Skills and a
 dot while something waits. Unit and fault tests pass; the real desktop app on a fresh home, phone width and owner

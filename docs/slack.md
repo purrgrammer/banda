@@ -256,10 +256,14 @@ a minute with a hundred per page. Two things follow for the daemon, both new, bo
   pages fetched an item whose text changed is an edit and an item in that range missing from them is a deletion;
   items older than the fetched range are never read again, so their edits and deletions are not seen, and a
   thread's first message is seen because Slack sends it on every page. Pages fetched but not yet merged are the
-  watch's record, kept across a crash; the row says "behind" while the walk is open, and a walk that cannot reach the
-  window within an hour merges what it read (deleting nothing it did not reach) with the wake or tell that says
-  changes may be missing. The first look is one page and the baseline (oldest first with more, the walk to the end).
-  An item older than the window's oldest that leaves it was pushed off, never deleted. This is the "feed with a
+  watch's record, kept across a crash, and only for the object and account it was read for (a watch whose file,
+  object or account changed starts afresh); the row says "behind" while the walk is open, and a walk that cannot
+  reach the window within an hour merges what it read (deleting nothing it did not reach) with the wake or tell that
+  says changes may be missing. A walk whose page keeps failing for an hour stops asking from its cursor, and the next
+  look merges it the same way. The window is bounded in bytes too (half a reading): past that its oldest are pushed
+  off, and a walk that outgrows it merges as far as it read, with the same words. The first look is one page and the
+  baseline (oldest first with more, the walk to the end). An item older than the window's oldest that leaves it was
+  pushed off, never deleted. This is the "feed with a
   cursor" Watches left for the mail connection: Gmail's history id can take the same declaration later; Gmail's
   search and GitHub's releases stay `newest` pages, which fit them.
 - **A budget per account and method.** Every call of a method on an account, from a watch's look, an agent's read
@@ -267,9 +271,8 @@ a minute with a hundred per page. Two things follow for the daemon, both new, bo
   refusal with `Retry-After` holds the queue until it passes, said in words where the call came from ("Slack is
   busy, back at 10:43" on a card, "can't reach Slack, back at 10:43" in a watch's row), never a retry loop. The
   owner's own team was not clamped (stage 0), so no rate is declared for it; a team that is clamped is met by its
-  `Retry-After`, and a kind's `every` keeps looks apart. The file may still say `limits: { channel_history: "1/m" }`
-  when a number is known, and the queue then spaces calls to it before Slack has to refuse. Whether Slack counts a
-  limit per team or per user token is still open (no second team was available). A watch whose look the held queue
+  `Retry-After`, and a kind's `every` keeps looks apart. Whether Slack counts a limit per team or per user token is
+  still open (no second team was available). A watch whose look the held queue
   refused looks again when the queue opens (sooner than its cadence, never later), so watches sharing an account
   take turns a minute apart rather than meeting the refusal together every five minutes.
 
@@ -380,11 +383,19 @@ AGENTS.md principle 6). Observed, not inferred:
 - [ ] Stage 1: the file, the adapter's reads under the budget, PKCE sign-in, the handle, cards and unfurls,
   `post_message` on the floor; fake Slack in tests; the owner's team through the app at both widths
 - [ ] Stage 2: the paged list as connection data, thread and channel followed, scenarios and the sweep's Slack
-  scenarios are built (test/watch-slack.test.ts, test/slack-watch.browser.test.ts); the sweep run in CI, three watches
-  sharing one budget, and a real busy channel in a forked home remain
+  scenarios are built, three watches sharing one budget among them (test/watch-slack.test.ts,
+  test/slack-watch.browser.test.ts); the sweep run in CI and a real busy channel in a forked home remain
 - [ ] Stage 3: search and person followed, `add_reaction`, files through the daemon are built and tested; the
   reaction's kill sweep run in CI, `files:read` added to the shipped app, and the owner's walkthrough (a search watch
   over a day, a reaction approved for a task, a file opened at both widths) remain
+- [ ] A rate a connection file declares (`limits: { channel_history: "1/m" }`), so the queue spaces calls before
+  Slack refuses: not built; a clamped team is met by its `Retry-After` alone
+- [ ] The names an account looked up (a person's handle, a channel's name) are kept for the daemon's life: a rename
+  shows its old name in cards and a post's mentions until a restart; they want an age
+- [ ] A file whose own type is `text/html` is taken as Slack answered it, so without `files:read` Slack's sign-in page
+  could be kept as that file (served only as a download); a check of the bytes' start would close it
+- [ ] A look that went on from a walk while another look merged it keeps its page only over the walk it began from;
+  no deterministic test interleaves two looks there, the fault sweep's kills come nearest
 - [ ] Logo: Slack's mark as a shipped asset, with the others ([Connections](connections.md))
 - [ ] Slack as a gateway (the owner messaging the band from Slack) is not designed; it needs bot scopes and a
   server-side flow, so a second app configuration
