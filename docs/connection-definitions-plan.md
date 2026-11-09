@@ -116,7 +116,7 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 - [x] `test/stored-shapes.test.ts`. The new records and docs as they are. Run `npm run test:fast -- test/stored-shapes.test.ts`.
 - [ ] `test/connections.faults.test.ts`. Kills at turning a connection on, adding a server, accepting its tools, changing a setting, and removing it. Dispatch the `ci` workflow with faults on the branch and record the run id.
 - [x] The property "nothing the box writes reaches a definition" in `test/connections.test.ts`, in place of "nothing the box wrote is offered or runs before the owner accepted it".
-- [ ] `npm run check && npm run typecheck && npm test` green at the head.
+- [x] `npm run check && npm run typecheck && npm test` green at the head (232 files, 1617 passed, 3 expected fail, at stage 4's last code commit).
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `sonnet` at the PR head, per the boot recipe.
 
