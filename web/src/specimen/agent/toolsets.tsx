@@ -12,7 +12,6 @@ import {
 	MonitorIcon,
 	SearchIcon,
 	SendIcon,
-	SmileIcon,
 	TerminalIcon,
 	UsersIcon,
 } from "lucide-react";
@@ -42,7 +41,6 @@ const ICONS: Record<string, LucideIcon> = {
 	routines: CalendarClockIcon,
 	skills: BookOpenIcon,
 	agents: UsersIcon,
-	avatar: SmileIcon,
 	requests: SendIcon,
 	search: SearchIcon,
 	github: GitBranchIcon,
@@ -58,7 +56,6 @@ const GROUPS: Record<string, { title: string; description: string }> = {
 	routines: { title: "Routines", description: "Schedule work for later or repeat it." },
 	skills: { title: "Skills", description: "Load instructions from accepted skills." },
 	agents: { title: "The band", description: "Contact agents, read their chats and propose changes." },
-	avatar: { title: "Appearance", description: "Read instructions for creating an agent’s face." },
 	requests: { title: "Outgoing requests", description: "Prepare a held network request for your approval." },
 };
 const TOOL_LABELS: Record<string, string> = {
@@ -79,7 +76,6 @@ const TOOL_LABELS: Record<string, string> = {
 	propose_agent: "Propose an agent",
 	propose_group: "Propose a group",
 	propose_agent_change: "Propose changes to an agent",
-	read_avatar_instructions: "Read face instructions",
 	propose_send: "Prepare a network request",
 	browser_snapshot: "Read the page",
 	browser_navigate: "Open a page",
@@ -102,7 +98,6 @@ const INVENTORY = Object.entries({
 	search: ["search", "read_search_result"],
 	skills: ["skill"],
 	agents: ["message_agent", "read_agent_chat", "propose_agent", "propose_group", "propose_agent_change"],
-	avatar: ["read_avatar_instructions"],
 	requests: ["propose_send"],
 }).map(([id, tools]) => ({
 	id,
