@@ -135,7 +135,7 @@ import {
 	SETTING_WORDS,
 	type Setting,
 } from "../core/tool-kinds.ts";
-import { liveWaits } from "../core/wait.ts";
+import { liveWaits, TasksOf } from "../core/wait.ts";
 import { endWatches } from "../core/watches.ts";
 import { type AgentChanged, boxFiles, type Workspace, write } from "./agents.ts";
 import type {
@@ -717,6 +717,15 @@ export function openCapabilities(options: CapabilityOptions) {
 			parameters: schemaOf(tool, accounts) as never,
 			replay: "safe",
 			execute: async (args, api, ctx) => {
+				// a call that already asked the owner, or whose write started, stays a write whatever the definition says now:
+				// replayed as a read it would run unapproved, or send again unasked
+				const wasWrite = await api.commit(
+					async (tx) =>
+						(await tx.doc(TasksOf, api.taskId)).tasks.approval !== undefined ||
+						Object.keys((await tx.doc(EffectRun, api.taskId)).started).length > 0,
+					ctx,
+				);
+				if (wasWrite) return writeTool(tool, accounts).execute(args as never, api, ctx);
 				const chat = Number(api.conversationId);
 				const resolved = await api.commit(async (tx) => {
 					const off = (await allowed(tool.name, tool.connection)(tx)) ?? (await asksNow(tx, args));
@@ -1011,15 +1020,8 @@ export function openCapabilities(options: CapabilityOptions) {
 				"does something for the owner, so it asks them first: they see exactly what you give, may edit it, and it runs " +
 				"once, as approved. Do not call it again to retry an approval.)" +
 				notesFor(tool),
-			execute: async (args, api, ctx) => {
-				// a call whose write already started (a restart came after it may have reached the server) stays a write,
-				// whatever the rules are now: replaying it as a read would send it again unasked
-				const started = await api.commit(
-					async (tx) => Object.keys((await tx.doc(EffectRun, api.taskId)).started).length > 0,
-					ctx,
-				);
-				return !started && readsFor(rules, args) ? read.execute(args, api, ctx) : write.execute(args, api, ctx);
-			},
+			execute: async (args, api, ctx) =>
+				readsFor(rules, args) ? read.execute(args, api, ctx) : write.execute(args, api, ctx),
 		} as ToolRegistration;
 	}
 

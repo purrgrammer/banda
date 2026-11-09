@@ -128,7 +128,7 @@ start after a release.
   as the daemon's start already does when a file's hash differs. Tool shapes and the server's notes are taken as it
   gives them then. Until then the old listing is carried to the new version and marked due, in the commit before
   anything resumes, so a draft waiting on one of its tools can still finish; what each tool may do is read from the new
-  definition from that first moment.
+  definition from that first moment, except that a call which already asked the owner stays the draft it was.
 - Tool switches are kept by name across versions. One for a tool that no longer exists is kept until the connection
   is removed, so it returns if the tool does.
 - A tool the definition names comes with the release: switched on, a read if the definition says so, with nothing

@@ -389,8 +389,10 @@ describe("adding a server", () => {
 		const name = await s.capabilities.addMcp({ url: fake.url });
 		await allowReads(s, name, ["list_events"]);
 		await s.capabilities.switchAccount("sancho", name, undefined, true);
+		// a run held open by a waiting draft: what its tools execute under
+		s.model.plan([{ tool: `${name}__create_event`, args: { title: "x", day: "mon" } }]);
 		const warm = await s.say("hello");
-		await s.done(warm.turn);
+		const wait = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
 		const old = s.registry
 			.snapshot()
 			.tools()
@@ -398,11 +400,17 @@ describe("adding a server", () => {
 		const shown = (await s.capabilities.view()).connections.find((each) => each.name === name)!;
 		await s.capabilities.setTools(name, { list_events: "ask" }, shown.accepted!.version);
 		// Retain the old registration exactly as an already-running model request can. Its admission uses the real store.
-		const api = { conversationId: warm.chat, commit: s.harness.commit.bind(s.harness) } as unknown as ToolExecutionApi;
+		const api = {
+			conversationId: warm.chat,
+			taskId: warm.turn,
+			commit: s.harness.commit.bind(s.harness),
+		} as unknown as ToolExecutionApi;
 		const result = await old.execute({ day: "mon" }, api, context);
 		expect(result.isError).toBe(true);
 		expect(JSON.stringify(result.output)).toContain("set it to ask first");
 		expect(fake.calls).toEqual([]);
+		await answer(s.harness, wait.key, "deny", web, "bearer");
+		await s.done(warm.turn);
 	});
 
 	it("a numbered sign-in is new, not an identity match that inherits old grants", async () => {

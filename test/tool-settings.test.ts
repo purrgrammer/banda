@@ -338,19 +338,27 @@ describe("the check at the call's start", () => {
 		const fake = await startFakeMcp(SIGNED);
 		fakes.push(fake);
 		const s = await added(fake);
+		// a run held open by a waiting draft: what its tools execute under
+		s.model.plan([{ tool: "cal__create_event", args: { title: "x", day: "mon" } }]);
 		const warm = await s.say("hello");
-		await s.done(warm.turn);
+		const wait = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
 		const old = s.registry
 			.snapshot()
 			.tools()
 			.find(({ tool }) => tool.name === "cal__list_events")?.tool;
 		if (old === undefined) throw new Error("no registration");
 		await s.set({ list_events: "ask" });
-		const api = { conversationId: warm.chat, commit: s.harness.commit.bind(s.harness) } as unknown as ToolExecutionApi;
+		const api = {
+			conversationId: warm.chat,
+			taskId: warm.turn,
+			commit: s.harness.commit.bind(s.harness),
+		} as unknown as ToolExecutionApi;
 		const result = await old.execute({ day: "mon" }, api, context);
 		expect(result.isError).toBe(true);
 		expect(JSON.stringify(result.output)).toContain("the owner set it to ask first");
 		expect(fake.calls).toEqual([]);
+		await answer(s.harness, wait.key, "deny", web, "bearer");
+		await s.done(warm.turn);
 		expect(offeredScopes(await asked(s, "cal__list_events", { day: "mon" }))).toEqual([]);
 	});
 
@@ -704,6 +712,28 @@ describe("a draft waiting across a change", () => {
 		await s.set({ ping_stuff: "allow" });
 		expect(await s.version()).not.toBe(before);
 		expect(await answer(s.harness, wait.key, "approve", web, "bearer")).toMatchObject({ answered: expect.anything() });
+		await until(async () => writes(fake).length === 1);
+		expect(writes(fake)).toHaveLength(1);
+	});
+
+	it("a draft waiting for approval stays that draft when the new build says its tool only reads: nothing runs unapproved", async () => {
+		const fake = await startFakeMcp(SIGNED);
+		fakes.push(fake);
+		let s = await added(fake);
+		await drafted(s);
+		s = await restart(
+			s,
+			await shipping(fake, (d) => {
+				d.reads = ["whoami", "list_events", "create_event"];
+				d.needs = {};
+			}),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 800));
+		expect(writes(fake)).toEqual([]);
+		const [waiting] = await openWaits(s.harness);
+		expect(await answer(s.harness, waiting?.key as string, "approve", web, "bearer")).toMatchObject({
+			answered: expect.anything(),
+		});
 		await until(async () => writes(fake).length === 1);
 		expect(writes(fake)).toHaveLength(1);
 	});
