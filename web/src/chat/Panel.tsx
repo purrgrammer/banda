@@ -113,6 +113,9 @@ export function firstTab({ routines, connected }: { routines: number; connected:
 	return connected ? "about" : "access";
 }
 
+/** A tab scrolls by itself, so its height never moves the face, the name or the tabs above it. */
+const TAB_SCROLLS = "min-h-0 flex-1 overflow-y-auto";
+
 /**
  * An agent's panel: its face and its name over four tabs, opening on the one `firstTab` picks. Everything about the
  * agent lives here, so it has no settings page of its own.
@@ -146,7 +149,7 @@ export function AgentPanel({
 	const open = picked ?? tab;
 	return (
 		<Tabs value={open} onValueChange={setPicked} className="min-h-0 flex-1">
-			<div className="flex flex-col items-center gap-1.5 px-4 pt-6 pb-4 text-center">
+			<div className="flex shrink-0 flex-col items-center gap-1.5 px-4 pt-6 pb-4 text-center">
 				<Identity who={who} state={state} paused={paused} onChange={onIdentity} />
 			</div>
 			<TabsList aria-label={`About ${who.name}`}>
@@ -155,14 +158,16 @@ export function AgentPanel({
 				<TabsTrigger value="memory">Memory</TabsTrigger>
 				<TabsTrigger value="about">About</TabsTrigger>
 			</TabsList>
-			<TabsContent value="routines">{routines}</TabsContent>
-			<TabsContent value="access" className="flex flex-col gap-8 px-4 py-5">
+			<TabsContent value="routines" className={TAB_SCROLLS}>
+				{routines}
+			</TabsContent>
+			<TabsContent value="access" className={cn(TAB_SCROLLS, "flex flex-col gap-8 px-4 py-5 *:shrink-0")}>
 				{access}
 			</TabsContent>
-			<TabsContent value="memory" className="flex flex-col gap-8 px-4 py-5">
+			<TabsContent value="memory" className={cn(TAB_SCROLLS, "flex flex-col gap-8 px-4 py-5 *:shrink-0")}>
 				{memory}
 			</TabsContent>
-			<TabsContent value="about" className="flex flex-col gap-8 px-4 py-5">
+			<TabsContent value="about" className={cn(TAB_SCROLLS, "flex flex-col gap-8 px-4 py-5 *:shrink-0")}>
 				{about}
 			</TabsContent>
 		</Tabs>
