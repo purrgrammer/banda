@@ -36,6 +36,7 @@ import { sizeOf } from "../lib/size.ts";
 import { ConnectFlowCard } from "./ConnectFlow.tsx";
 import { FilePart } from "./FilePart.tsx";
 import { watchActions } from "./watches.tsx";
+import { hrefOf } from "./where.ts";
 
 /** Read an object's card from the daemon, once for every line that names it. */
 const readObject = sharedReads((chat, reference, agent) =>
@@ -421,6 +422,14 @@ export function ObjectReading({
 						? shown.why
 						: `${shown.service}${shown.account ? ` as ${shown.account}` : ""}: ${shown.why}`
 				}
+				{...(shown.off === true
+					? {
+							fix: "Details",
+							onFix: () => {
+								location.hash = hrefOf({ name: "connections", connection: shown.connection });
+							},
+						}
+					: {})}
 			/>
 		);
 	return (

@@ -89,7 +89,7 @@ for (const width of [390, 1440])
 						"The server says · reads",
 					);
 					expect(await page.run(`document.querySelector('[data-tool="create_event"]').textContent`)).toContain(
-						"Nobody said · unknown, so it asks",
+						"Not known · asks until you say",
 					);
 					// Allow on what the server only proposed: it is a read now, and the owner's
 					await page.run(`${choice("list_events", "Allow")}.click()`);
@@ -118,11 +118,11 @@ for (const width of [390, 1440])
 						body: "{}",
 					});
 					await page.until(
-						`document.querySelector('[data-tool="archive_events"]')?.textContent.includes('Waiting for you')`,
+						`document.querySelector('[data-tool="archive_events"]')?.textContent.includes('Off until you choose')`,
 					);
 					await page.run(`${choice("archive_events", "Off")}.click()`);
 					await page.until(
-						`!document.querySelector('[data-tool="archive_events"]').textContent.includes('Waiting for you')`,
+						`!document.querySelector('[data-tool="archive_events"]').textContent.includes('Off until you choose')`,
 					);
 					expect((await view()).tools.find((tool) => tool.title === "archive_events")?.waiting).toBeUndefined();
 					// Remove, confirmed, takes it whole and comes back to the list
@@ -137,6 +137,8 @@ for (const width of [390, 1440])
 						`!document.querySelector('[data-tool-list]') && document.body.textContent.includes('Add MCP server')`,
 					);
 					expect(await view()).toBeUndefined();
+					// focus lands on the list's heading, not on nothing, once the Remove button is gone
+					await page.until(`document.activeElement?.matches('h1[data-page-title]')`);
 					expect(page.errors()).toEqual([]);
 				});
 			} finally {

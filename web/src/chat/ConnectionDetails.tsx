@@ -10,7 +10,6 @@ import { type ReactNode, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/cn";
 import { FLOOR_WORDS } from "../../../src/core/floor.ts";
@@ -46,17 +45,17 @@ const settable = (tools: readonly ConnectionToolView[]): Settable[] =>
 /** What a tool does, in words: "reads", "changes something", why it asks every time, or that nobody said. */
 export function kindWords(kind: Kind, floor: Classed["floor"]): string {
 	if (kind === "read") return "reads";
-	if (kind === "unknown") return "unknown, so it asks";
+	if (kind === "unknown") return "asks until you say";
 	if (kind === "write" || floor === undefined) return "changes something";
 	return FLOOR_WORDS[floor].replace(/^it /, "");
 }
 
 /** Who said what a tool does, in words. */
-export function fromWords(from: From, service: string): string {
-	if (from === "definition") return `${service} says`;
+export function fromWords(from: From): string {
+	if (from === "definition") return "banda says";
 	if (from === "you") return "You said";
 	if (from === "server") return "The server says";
-	return "Nobody said";
+	return "Not known";
 }
 
 /** One control: a segmented choice of the settings given. */
@@ -90,7 +89,7 @@ function Choice({
 			className="max-w-full shrink-0"
 		>
 			{options.map((setting) => (
-				<ToggleGroupItem key={setting} value={setting} className="px-2">
+				<ToggleGroupItem key={setting} value={setting} className="px-2 max-sm:min-h-10">
 					{SETTING_WORDS[setting]}
 				</ToggleGroupItem>
 			))}
@@ -114,14 +113,29 @@ const groupSet = (tools: readonly Settable[], setting: Setting): { [tool: string
 const groupOptions = (tools: readonly Settable[]) =>
 	SETTINGS.filter((setting) => tools.some((tool) => groupValue(setting, tool.classed, tool.options) !== undefined));
 
+/**
+ * The setting the group's control is at: one whose effect every tool already shows (a tool it cannot set counts as
+ * unmoved), so Allow on a mix of reads and writes reads as Allow, not Mixed. Undefined when the tools differ.
+ */
+const groupCommon = (tools: readonly Settable[], settingOf: (tool: Settable) => Setting) =>
+	SETTINGS.find((setting) => {
+		const applied = tools.map((tool) => ({
+			near: groupValue(setting, tool.classed, tool.options),
+			now: settingOf(tool),
+		}));
+		return (
+			applied.some(({ near }) => near !== undefined) &&
+			applied.every(({ near, now }) => near === undefined || near === now)
+		);
+	});
+
 /** The line that says how a connection's tools are set: "34 run freely · 20 ask first". */
 export function toolTally(tools: readonly ConnectionToolView[], settingOf: (tool: Settable) => Setting) {
-	return tallyWords(tally(settable(tools).map((tool) => ({ kind: tool.classed.kind, setting: settingOf(tool) }))));
+	return tallyWords(tally(settable(tools).map((tool) => ({ setting: settingOf(tool) }))));
 }
 
 /** A connection's tools in their groups, each set as `settingOf` says; a tool with no settings is shown as it is. */
 export function ToolList({
-	service,
 	tools,
 	groups,
 	settingOf,
@@ -129,7 +143,6 @@ export function ToolList({
 	disabled,
 	expanded = false,
 }: {
-	service: string;
 	tools: readonly ConnectionToolView[];
 	groups: readonly string[];
 	settingOf: (tool: Settable) => Setting;
@@ -147,7 +160,6 @@ export function ToolList({
 				return inside.length === 0 ? null : (
 					<ToolGroup
 						key={group}
-						service={service}
 						group={group}
 						tools={inside}
 						settingOf={settingOf}
@@ -160,7 +172,7 @@ export function ToolList({
 			{without.length === 0 ? null : (
 				<div className="flex flex-col divide-y divide-line-soft">
 					{without.map((tool) => (
-						<ToolRow key={tool.name} tool={tool} service={service} />
+						<ToolRow key={tool.name} tool={tool} />
 					))}
 				</div>
 			)}
@@ -169,7 +181,7 @@ export function ToolList({
 }
 
 /** A tool's own line: what it does, in words, and who said so; its setting beside it when it has one. */
-function ToolRow({ tool, service, children }: { tool: ConnectionToolView; service: string; children?: ReactNode }) {
+function ToolRow({ tool, children }: { tool: ConnectionToolView; children?: ReactNode }) {
 	const classed = tool.classed;
 	return (
 		<div
@@ -179,18 +191,18 @@ function ToolRow({ tool, service, children }: { tool: ConnectionToolView; servic
 			<div className="flex min-w-0 flex-1 basis-48 flex-col gap-0.5">
 				<p className="flex flex-wrap items-center gap-1.5 break-words text-ui text-ink">
 					{tool.words}
-					{tool.waiting ? <Badge variant="secondary">Waiting for you</Badge> : null}
+					{tool.waiting ? <Badge variant="secondary">Off until you choose</Badge> : null}
 				</p>
 				<p className="text-meta text-ink-2">
 					{classed === undefined
 						? tool.on
 							? "On"
 							: "Off"
-						: `${fromWords(classed.from, service)} · ${kindWords(classed.kind, classed.floor)}`}
-					{tool.needs ? ` · needs ${tool.needs.join(", ")}` : ""}
+						: `${fromWords(classed.from)} · ${kindWords(classed.kind, classed.floor)}`}
+					{tool.needs ? " · needs more access" : ""}
 				</p>
 				<details className="text-meta text-ink-2">
-					<summary className="cursor-pointer">Tool details</summary>
+					<summary className="cursor-pointer max-sm:flex max-sm:min-h-10 max-sm:items-center">Tool details</summary>
 					<p className="mt-1 break-all font-mono">{tool.title}</p>
 					<p className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap break-words">{tool.description}</p>
 					{tool.readsWhen ? <p className="mt-1">Reads when {tool.readsWhen.join(" or ")}</p> : null}
@@ -202,7 +214,6 @@ function ToolRow({ tool, service, children }: { tool: ConnectionToolView; servic
 }
 
 function ToolGroup({
-	service,
 	group,
 	tools,
 	settingOf,
@@ -210,7 +221,6 @@ function ToolGroup({
 	disabled,
 	expanded,
 }: {
-	service: string;
 	group: string;
 	tools: readonly Settable[];
 	settingOf: (tool: Settable) => Setting;
@@ -221,8 +231,7 @@ function ToolGroup({
 	const waiting = tools.filter((tool) => tool.waiting === true).length;
 	const [open, setOpen] = useState(expanded || waiting > 0);
 	const id = useId();
-	const settings = new Set(tools.map(settingOf));
-	const common = settings.size === 1 ? [...settings][0] : undefined;
+	const common = groupCommon(tools, settingOf);
 	return (
 		<Collapsible open={open} onOpenChange={setOpen} data-group={group}>
 			<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3.5 py-2.5">
@@ -252,7 +261,7 @@ function ToolGroup({
 			</div>
 			<CollapsibleContent id={id} className="flex flex-col divide-y divide-line-soft border-t border-line-soft">
 				{tools.map((tool) => (
-					<ToolRow key={tool.name} tool={tool} service={service}>
+					<ToolRow key={tool.name} tool={tool}>
 						<Choice
 							label={tool.words}
 							options={tool.options}
@@ -285,12 +294,11 @@ function Part({ title, note, children }: { title: string; note?: ReactNode; chil
 export function accessWords(account: Pick<AccountView, "scopes" | "stale">, access: ScopeChoices | undefined): string {
 	if (account.stale === true) return "Its sign-in no longer fits this connection";
 	const scopes = account.scopes ?? [];
-	if (scopes.length === 0) return "Signed in";
-	if (access === undefined) return scopes.join(", ");
-	const labels = access.choices
-		.filter((choice) => choice.scopes.every((scope) => scopes.includes(scope)))
-		.map((choice) => choice.label);
-	return labels.length > 0 ? labels.join(" · ") : scopes.join(", ");
+	const labels =
+		access?.choices
+			.filter((choice) => choice.scopes.every((scope) => scopes.includes(scope)))
+			.map((choice) => choice.label) ?? [];
+	return labels.length > 0 ? labels.join(" · ") : "Signed in";
 }
 
 /** One kind it draws, and what following one does, in words. */
@@ -372,7 +380,8 @@ export function ConnectionDetailsView({
 	return (
 		<div className="flex min-w-0 flex-col gap-6" data-connection-details={view.name} data-mode={mode}>
 			{about === undefined || about === "" ? null : <p className="text-ui text-ink-2">{about}</p>}
-			{error ? (
+			{/* a change in details is told at the control, or by a toast from the page; the review's Save is beside this */}
+			{error && review ? (
 				<p role="alert" className="break-words text-ui text-danger">
 					{error}
 				</p>
@@ -395,12 +404,14 @@ export function ConnectionDetailsView({
 							Allow lets a tool that reads run without asking, for every agent with {service}. Ask shows you each change
 							first; Always ask never lets an agent skip that. Nothing here makes a tool that changes something run
 							unasked.
+							{view.tools.some((tool) => tool.classed?.kind === "unknown")
+								? " Allow on a tool marked Not known is you saying it only reads; only that tool's own control can say so."
+								: null}
 						</>
 					) : undefined
 				}
 			>
 				<ToolList
-					service={service}
 					tools={view.tools}
 					groups={view.groups}
 					settingOf={settingOf}
@@ -425,7 +436,7 @@ export function ConnectionDetailsView({
 									</span>
 									<span className="text-meta text-ink-2">{accessWords(account, access)}</span>
 									{account.missing ? (
-										<span className="text-meta text-ink-2">Needs {account.missing.join(", ")} for some tools</span>
+										<span className="text-meta text-ink-2">Needs more access for some tools</span>
 									) : null}
 								</span>
 								<span className="flex items-center gap-1.5">
@@ -446,14 +457,16 @@ export function ConnectionDetailsView({
 				</Part>
 			)}
 			{agentsFor.length === 0 ? null : (
-				<div className="flex min-w-0 flex-col gap-4">
-					{agentsFor.map((each) => (
-						<div key={each.key} className="flex flex-col gap-2">
-							{each.label === undefined ? null : <p className="text-meta font-medium text-ink-2">{each.label}</p>}
-							<McpAgents agents={agents} selected={each.selected} onSwitch={each.onSwitch} disabled={busy} />
-						</div>
-					))}
-				</div>
+				<Part title="Who can use it?" note="Only the agents you select get this connection’s introduction and tools.">
+					<div className="flex flex-col divide-y divide-line-soft rounded-field border border-line-soft">
+						{agentsFor.map((each) => (
+							<div key={each.key} className="flex flex-col gap-2 px-3.5 py-3">
+								{each.label === undefined ? null : <p className="text-meta font-medium text-ink-2">{each.label}</p>}
+								<McpAgents agents={agents} selected={each.selected} onSwitch={each.onSwitch} disabled={busy} plain />
+							</div>
+						))}
+					</div>
+				</Part>
 			)}
 			{view.draws.length === 0 ? null : (
 				<Part title="What it draws" note="Cards banda shows for it, and what following one does.">
@@ -473,17 +486,15 @@ export function ConnectionDetailsView({
 						keep={`Keep ${service}`}
 						onConfirm={onRemove}
 					>
-						<Button variant="ghost" size="sm" disabled={busy}>
+						<Button variant="destructive" size="sm" disabled={busy}>
 							Remove {service}
 						</Button>
 					</Confirm>
 				</div>
 			)}
-			{busy ? (
-				<p role="status" className="flex items-center gap-2 text-meta text-ink-2">
-					<Spinner /> Saving…
-				</p>
-			) : null}
+			<p role="status" className="sr-only">
+				{busy ? "Saving" : ""}
+			</p>
 		</div>
 	);
 }

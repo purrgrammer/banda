@@ -127,31 +127,38 @@ export function McpAgents({
 	selected,
 	onSwitch,
 	disabled,
+	plain = false,
 }: {
 	agents: readonly (Who & { id: string })[];
 	selected: readonly string[];
 	onSwitch: (agent: string, on: boolean) => void;
 	disabled: boolean;
+	/** Inside a section that already says who can use it: the switches alone. */
+	plain?: boolean;
 }) {
 	const id = useId();
+	const switches = (
+		<FieldGroup>
+			{agents.map((agent) => (
+				<Field key={agent.id} orientation="horizontal">
+					<Face face={agent.face} name={agent.name} size="message" />
+					<FieldLabel htmlFor={`${id}-${agent.id}`}>{agent.name}</FieldLabel>
+					<Switch
+						id={`${id}-${agent.id}`}
+						checked={selected.includes(agent.id)}
+						onCheckedChange={(on) => onSwitch(agent.id, on)}
+						disabled={disabled}
+					/>
+				</Field>
+			))}
+		</FieldGroup>
+	);
+	if (plain) return switches;
 	return (
 		<FieldSet>
 			<FieldLegend variant="label">Who can use it?</FieldLegend>
 			<FieldDescription>Only the agents you select get this connection’s introduction and tools.</FieldDescription>
-			<FieldGroup>
-				{agents.map((agent) => (
-					<Field key={agent.id} orientation="horizontal">
-						<Face face={agent.face} name={agent.name} size="message" />
-						<FieldLabel htmlFor={`${id}-${agent.id}`}>{agent.name}</FieldLabel>
-						<Switch
-							id={`${id}-${agent.id}`}
-							checked={selected.includes(agent.id)}
-							onCheckedChange={(on) => onSwitch(agent.id, on)}
-							disabled={disabled}
-						/>
-					</Field>
-				))}
-			</FieldGroup>
+			{switches}
 		</FieldSet>
 	);
 }

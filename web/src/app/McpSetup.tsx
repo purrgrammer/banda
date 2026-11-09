@@ -328,11 +328,14 @@ export function McpSetup({
 		signOut: () => {
 			if (!view) return;
 			void run(async () => {
-				update(
-					await (anonymous
-						? actOnCapability({ action: "disconnect", name: view.name })
-						: signOutAccount(view.name, account)),
-				);
+				// a server with no sign-in has only Remove, the same one its details offer: the page goes with it
+				if (anonymous) {
+					const next = await actOnCapability({ action: "remove", name: view.name });
+					onClose();
+					update(next);
+					return;
+				}
+				update(await signOutAccount(view.name, account));
 				setAccount("");
 				setSelected([]);
 				setTrail([]);
@@ -504,7 +507,7 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 						</>
 					) : null}
 					{anonymous ? (
-						<p className="text-ui text-ink-2">No sign-in needed. No account or credential was created.</p>
+						<p className="text-ui text-ink-2">No sign-in needed.</p>
 					) : (
 						<Field>
 							<FieldLabel htmlFor={`${id}-account`}>Account</FieldLabel>
@@ -589,14 +592,18 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 							</Button>
 						) : null}
 						<Confirm
-							title={anonymous ? `Disconnect ${service}?` : `Sign out of ${service}?`}
-							body="Agents lose access to this sign-in. You can reconnect later."
-							action={anonymous ? "Disconnect" : "Sign out"}
-							keep="Stay connected"
+							title={anonymous ? `Remove ${service}?` : `Sign out of ${service}?`}
+							body={
+								anonymous
+									? "Agents lose access to it. You can add it again later."
+									: "Agents lose access to this sign-in. You can reconnect later."
+							}
+							action={anonymous ? "Remove" : "Sign out"}
+							keep={anonymous ? "Keep it" : "Stay connected"}
 							onConfirm={actions.signOut}
 						>
 							<Button variant="outline" size="sm" disabled={busy || (!anonymous && account === "")}>
-								{anonymous ? "Disconnect" : "Sign out"}
+								{anonymous ? "Remove" : "Sign out"}
 							</Button>
 						</Confirm>
 					</div>

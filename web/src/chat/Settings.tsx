@@ -81,7 +81,9 @@ export function SettingsPage({
 				>
 					{phone ? <XIcon /> : <ChevronLeftIcon className="size-5" />}
 				</Button>
-				<h1 className="text-ui font-semibold text-ink">{title}</h1>
+				<h1 data-page-title="" tabIndex={-1} className="text-ui font-semibold text-ink focus:outline-none">
+					{title}
+				</h1>
 			</header>
 			<div className="min-h-0 flex-1 overflow-y-auto">
 				<div
@@ -582,14 +584,15 @@ export function Members({ band, picked }: { band: readonly Who[]; picked: readon
 	);
 }
 
-export type Account = {
+/** A connection, as Settings lists it: one row whatever its accounts, a server with no sign-in among them. */
+export type ConnectionLine = {
 	readonly id: string;
-	readonly connection: string;
-	/** The connection's name in the daemon ("github"), for Sign in another. */
-	readonly name?: string;
-	readonly login: string;
+	readonly service: string;
+	/** The accounts signed in to it; none for a connection that needs no sign-in. */
+	readonly logins: readonly string[];
+	/** The agents that use it, by name. */
 	readonly agents: readonly string[];
-	/** Its sign-in no longer fits what the connection asks: it signs in again. */
+	/** An account's sign-in no longer fits what the connection asks. */
 	readonly stale?: boolean;
 };
 
@@ -597,7 +600,7 @@ export type SettingsData = {
 	/** The provider the band thinks with, and the model behind each tier, by name. */
 	readonly provider: { readonly id: string; readonly name: string };
 	readonly models: { readonly quick: string; readonly balanced: string; readonly deep: string };
-	readonly accounts: readonly Account[];
+	readonly connections: readonly ConnectionLine[];
 	/** Archived agents, to restore: each with when it was archived, in words. */
 	readonly archived: readonly (Who & { readonly id?: string; readonly when: string })[];
 	/** Archived groups, to restore: each its room, name, members' faces, and when it was archived, in words. */
@@ -637,8 +640,6 @@ export type SettingsActions = {
 	readonly onNotify?: (on: boolean) => void;
 	/** Sign an agent's browser out of a site. */
 	readonly onSignOut?: (agent: string, site: string) => void;
-	/** Sign an account of a connection out: off for every agent, its permissions taken back. */
-	readonly onAccountSignOut?: (account: Account) => void;
 	/** Open a connection's details. */
 	readonly onDetails?: (connection: string) => void;
 	/** Restore an archived agent; a refusal rejects with why. */
@@ -997,7 +998,7 @@ export function AppSettings({
 				{providers}
 			</TabsContent>
 			<TabsContent value="connections" className="flex flex-col gap-8">
-				<Accounts accounts={data.accounts} act={act} />
+				<ConnectionRows connections={data.connections} act={act} />
 				<SignedIn sites={data.signedIn ?? []} onSignOut={act.onSignOut} />
 			</TabsContent>
 			<TabsContent value="agents" className="flex flex-col gap-8">
@@ -1342,61 +1343,43 @@ export function ModelProviders({
 }
 
 /**
- * Every account across services: who it is, which agents use it, Sign out (asked first); and Connect a service, the
- * Connections page, where access and accounts are managed.
+ * Every connection: one row each, the accounts signed in to it (or that it needs none) and which agents use it, with
+ * its details, where access and accounts are changed; and Connect a service, the Connections page.
  */
-function Accounts({ accounts, act }: { accounts: readonly Account[]; act: SettingsActions }) {
+function ConnectionRows({ connections, act }: { connections: readonly ConnectionLine[]; act: SettingsActions }) {
 	return (
-		<Block title="Accounts" note="Every account you signed in to, and which agents use it.">
+		<Block title="Connections" note="Each connection, who is signed in and which agents use it.">
 			<Rows>
-				{accounts.map((account) => (
+				{connections.map((connection) => (
 					<RowOf
-						key={account.id}
+						key={connection.id}
 						lead={
 							<span className="flex size-8 shrink-0 items-center justify-center rounded-field bg-paper-3">
-								<ConnectionIcon connection={account.name ?? account.connection} />
+								<ConnectionIcon connection={connection.id} />
 							</span>
 						}
-						title={
-							<>
-								{account.connection} · <span className="font-medium">{account.login}</span>
-							</>
-						}
+						title={connection.service}
 						detail={
-							account.stale === true
+							connection.stale
 								? "Sign in again to use it"
-								: account.agents.length === 0
-									? "No agent uses it"
-									: `Used by ${account.agents.join(", ")}`
+								: [
+										connection.logins.length === 0 ? "No sign-in needed" : connection.logins.join(", "),
+										connection.agents.length === 0 ? "No agent uses it" : `Used by ${connection.agents.join(", ")}`,
+									].join(" · ")
 						}
 						end={
-							<span className="flex items-center gap-1.5">
-								{account.name === undefined || act.onDetails === undefined ? null : (
-									<Button variant="ghost" size="xs" onClick={() => act.onDetails?.(account.name as string)}>
-										Details
-									</Button>
-								)}
-								<Confirm
-									title={`Sign out of ${account.connection} as ${account.login}?`}
-									body={
-										account.agents.length === 0
-											? "Its sign-in is forgotten. You can sign in again any time."
-											: `${account.agents.join(", ")} will lose it: what they were allowed to do as ${account.login} is taken back, and what waits for your approval is dropped.`
-									}
-									action="Sign out"
-									keep="Stay signed in"
-									onConfirm={act.onAccountSignOut === undefined ? undefined : () => act.onAccountSignOut?.(account)}
-								>
-									<Button variant="outline" size="xs">
-										Sign out
-									</Button>
-								</Confirm>
-							</span>
+							act.onDetails === undefined ? undefined : (
+								<Button variant="ghost" size="xs" onClick={() => act.onDetails?.(connection.id)}>
+									Details
+								</Button>
+							)
 						}
 					/>
 				))}
 				<RowOf
-					title={<span className="text-ink-2">{accounts.length === 0 ? "No accounts yet" : "More services"}</span>}
+					title={
+						<span className="text-ink-2">{connections.length === 0 ? "No connections yet" : "More services"}</span>
+					}
 					end={
 						<Button variant="outline" size="xs" onClick={act.onConnect}>
 							<PlusIcon />

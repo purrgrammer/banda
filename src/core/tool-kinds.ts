@@ -97,10 +97,6 @@ export function groupValue(setting: Setting, classed: Classed, options: readonly
 	return inGroup(setting, options);
 }
 
-/** Whether a tool set to `setting` asks every time (on the floor): Always ask, or Ask on a read. */
-export const asksEveryTime = (setting: Setting, kind: Kind) =>
-	setting === "always" || (setting === "ask" && kind === "read");
-
 /** Words that say what an action does rather than what it acts on, left out of a group's name. */
 const VERBS = new Set(
 	"get list search find fetch read query describe show view create add new make update edit set patch modify put delete remove cancel close open run start stop trigger send post write merge move copy upload download sync submit approve assign unassign mark toggle enable disable invite rename archive restore resolve reopen lock unlock star unstar fork by for of to from the a an all my me".split(
@@ -154,12 +150,12 @@ export function nameGroups(tools: readonly string[]): { readonly [tool: string]:
 	);
 }
 
-/** How many tools of a connection, as set, run freely, ask first, ask every time, or are off. */
-export function tally(tools: readonly { readonly kind: Kind; readonly setting: Setting }[]) {
+/** How many tools of a connection, as their rows say: Allow runs freely, Ask asks first, Always ask, Off. */
+export function tally(tools: readonly { readonly setting: Setting }[]) {
 	const count = { free: 0, first: 0, every: 0, off: 0 };
-	for (const { kind, setting } of tools) {
+	for (const { setting } of tools) {
 		if (setting === "off") count.off++;
-		else if (asksEveryTime(setting, kind)) count.every++;
+		else if (setting === "always") count.every++;
 		else if (setting === "allow") count.free++;
 		else count.first++;
 	}

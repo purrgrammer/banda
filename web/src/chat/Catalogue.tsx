@@ -85,19 +85,20 @@ export function Catalogue({
 						) : (
 							<span className="flex flex-wrap items-center gap-2">
 								<span className="text-meta text-ink-2">{service.accounts.join(", ")}</span>
-								{onManage === undefined ? null : (
-									<Button variant="outline" size="xs" className="ml-auto" onClick={() => onManage(service.id)}>
-										Details
+								<span className="ml-auto flex items-center gap-2">
+									{onManage === undefined ? null : (
+										<Button variant="outline" size="xs" onClick={() => onManage(service.id)}>
+											Details
+										</Button>
+									)}
+									<Button
+										variant={stale.length > 0 ? "outline" : "ghost"}
+										size="xs"
+										onClick={() => setOpen(service.id)}
+									>
+										{stale.length > 0 ? "Sign in again" : service.choices ? "Manage access" : "Add account"}
 									</Button>
-								)}
-								<Button
-									variant={stale.length > 0 ? "outline" : "ghost"}
-									size="xs"
-									{...(onManage === undefined ? { className: "ml-auto" } : {})}
-									onClick={() => setOpen(service.id)}
-								>
-									{stale.length > 0 ? "Sign in again" : service.choices ? "Manage access" : "Add account"}
-								</Button>
+								</span>
 							</span>
 						)}
 						{open === service.id && connect !== undefined ? connect(service, () => setOpen(undefined)) : null}

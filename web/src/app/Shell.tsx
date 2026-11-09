@@ -19,7 +19,7 @@ import { MemorySettings, type NewFactSpec } from "../chat/MemorySettings.tsx";
 import { AgentPanel, firstTab, Panel, Routines, Watching } from "../chat/Panel.tsx";
 import { AppSettings, Archive, Personality, SettingsPage } from "../chat/Settings.tsx";
 import { SkillCatalogue } from "../chat/Skill.tsx";
-import { actOnFact, setPaused, signOutAccount, signOutSite } from "../lib/api.ts";
+import { actOnFact, setPaused, signOutSite } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { agentMainOf } from "../lib/chats.ts";
 import { useMidnight } from "../lib/midnight.ts";
@@ -613,16 +613,17 @@ function Main() {
 								balanced: tiers?.models.balanced.name ?? "",
 								deep: tiers?.models.deep.name ?? "",
 							},
-							accounts: (shell.capabilities?.connections ?? []).flatMap((view) =>
-								(view.accounts ?? []).map((account) => ({
-									id: `${view.name}/${account.account}`,
-									name: view.name,
-									connection: view.accepted?.connection?.service ?? view.name,
-									login: account.label,
-									agents: account.agents.map((agent) => whoOf(agents, agent).name),
-									...(account.stale === true ? { stale: true } : {}),
+							connections: (shell.capabilities?.connections ?? [])
+								.filter((view) => view.accounts !== undefined || view.agents !== undefined)
+								.map((view) => ({
+									id: view.name,
+									service: view.accepted?.connection?.service ?? view.name,
+									logins: (view.accounts ?? []).map((account) => account.label),
+									agents: [
+										...new Set([...(view.accounts ?? []).flatMap((account) => account.agents), ...(view.agents ?? [])]),
+									].map((agent) => whoOf(agents, agent).name),
+									...(view.accounts?.some((account) => account.stale === true) ? { stale: true } : {}),
 								})),
-							),
 							archivedGroups: (shell.groups ?? []).flatMap((group) =>
 								group.archived === undefined
 									? []
@@ -665,12 +666,6 @@ function Main() {
 						onConnect={() => go({ name: "connections" })}
 						onSignOut={(agent, site) => void signOutSite(agent, site).then(showCapabilities)}
 						onDetails={(connection) => go({ name: "connections", connection })}
-						onAccountSignOut={(account) => {
-							const [name = "", key = ""] = account.id.split("/");
-							void signOutAccount(name, key)
-								.then(showCapabilities)
-								.catch(() => {});
-						}}
 						onRestore={(who) => (who.id === undefined ? undefined : restore(who.id))}
 						onRestoreGroup={(room) => archiveGroup(room, false)}
 						onGroupLimits={(limits) => setGroupLimits(limits)}

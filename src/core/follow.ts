@@ -375,12 +375,22 @@ export const kindLabel = (kind: string) => {
 	return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 };
 
-/** A rule's words with its placeholders as an ellipsis, trimmed of a leading one: "{from} replied" is "replied". */
+/** Words that say nothing alone once their data is gone ("now at Google", "no longer at Google", "in #general"). */
+const DANGLING = new Set(["now", "no longer", "in"]);
+
+/**
+ * A rule's words as they read without their data: placeholders gone, with the possessive, punctuation or preposition
+ * that only made sense with them ("{user.login}'s review was dismissed" is "review was dismissed", "moved to {to}" is
+ * "moved"). Empty when nothing reads alone: such a rule is not said.
+ */
 function saysWords(says: string): string {
-	return says
-		.replace(/\{[^}]*\}/g, "…")
-		.replace(/^…\s*/, "")
-		.trim();
+	const words = says
+		.replace(/\{[^}]*\}(?:['’]s\b)?/g, "\0")
+		.replace(/\b(?:from|to|with|at|by|for|of|on)\s+\0/gi, "\0")
+		.replace(/[:#]*\0:?/g, " ")
+		.replace(/\s+/g, " ")
+		.replace(/^[\s:#,.]+|[\s:#,.]+$/g, "");
+	return DANGLING.has(words.toLowerCase()) ? "" : words;
 }
 
 /**

@@ -229,6 +229,7 @@ export const WATCHES: readonly WatchRowView[] = [
 		service: "GitHub",
 		until: "until merged",
 		saw: 'Stopped: You turned off "pull request read" for GitHub. Turn it back on in GitHub\'s details, under Connections.',
+		stopped: true,
 		failing: true,
 	},
 ];
@@ -424,7 +425,11 @@ export const SETTINGS_PROVIDERS: readonly import("../chat/Settings.tsx").Provide
 export const SETTINGS: import("../chat/Settings.tsx").SettingsData = {
 	provider: { id: "anthropic", name: "Anthropic" },
 	models: { quick: "Claude Haiku 5.5", balanced: "Claude Sonnet 5.5", deep: "Claude Opus 5.5" },
-	accounts: [...ACCOUNTS],
+	connections: [
+		{ id: "github", service: "GitHub", logins: ACCOUNTS.map((one) => one.login), agents: ["Mara", "Octo"] },
+		{ id: "fetch", service: "Fetch", logins: [], agents: ["Mara"] },
+		{ id: "gmail", service: "Gmail", logins: ["you@example.com"], agents: [], stale: true },
+	],
 	archived: [],
 	theme: "system",
 	paused: false,

@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { type Classed, optionsOf, type Setting } from "../../../../src/core/tool-kinds.ts";
 import type { ConnectionToolView, ConnectionView } from "../../../../src/server/api.ts";
+import { ConnectionGone } from "../../app/ConnectionPage.tsx";
 import { type AgentsFor, ConnectionDetailsView } from "../../chat/ConnectionDetails.tsx";
 import type { ChatAgent } from "../../lib/navigation.ts";
 import { MARA, SANCHO } from "../fixtures.ts";
@@ -158,6 +159,11 @@ export function ConnectionDetailsSection() {
 				<Labelled label="Review, on adding: nothing changes until Save">
 					<div className="max-w-2xl">
 						<Live view={{ ...VIEW, name: "reviewing", accounts: [], draws: [] }} mode="review" />
+					</div>
+				</Labelled>
+				<Labelled label="A connection that is gone, or never was">
+					<div className="max-w-2xl">
+						<ConnectionGone onConnections={() => {}} />
 					</div>
 				</Labelled>
 				<Labelled label="Its tools not listed yet">

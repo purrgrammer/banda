@@ -18,6 +18,7 @@ import { Field } from "../chat/RoutineEditor.tsx";
 import { showWatching } from "../lib/shell.ts";
 import { near, watchRows as rows, sawWords, untilWords, watchTitle } from "../lib/watches.ts";
 import { ObjectPreviews } from "./Objects.tsx";
+import { hrefOf } from "./where.ts";
 
 /** The owner's actions on a watch, wired to the daemon: each in effect at once, the panel drawn from its answer. */
 export const watchActions = {
@@ -127,6 +128,18 @@ export function WatchDetail({
 						...(file === undefined || edit.step !== "closed" ? [] : ([["What matters", file.ask]] as const)),
 					]}
 				/>
+				{watch.failed?.off === true && watch.object !== undefined ? (
+					<Button
+						variant="outline"
+						size="sm"
+						className="self-start"
+						onClick={() => {
+							location.hash = hrefOf({ name: "connections", connection: watch.object?.connection as string });
+						}}
+					>
+						Details
+					</Button>
+				) : null}
 				{edit.step === "closed" ? null : (
 					<form
 						className="flex flex-col gap-4"

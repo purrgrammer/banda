@@ -26,6 +26,8 @@ export type WatchRowView = {
 	/** Done because its account or connection was taken away, not by one of its ends. */
 	readonly ended?: boolean | undefined;
 	readonly failing?: boolean | undefined;
+	/** The owner's switch holds a read it needs off: a state of theirs, not a fault. */
+	readonly stopped?: boolean | undefined;
 	/** Its newest wake said some changes may be missing: it is behind until one without a gap. */
 	readonly behind?: boolean | undefined;
 	/** A change the agent asked for, waiting for the owner: what allowing it does. */
@@ -123,6 +125,7 @@ export function watchRows(
 					done: watch.done !== undefined,
 					ended: watch.done?.authority === true,
 					failing: watch.done === undefined && watch.failed !== undefined,
+					stopped: watch.done === undefined && watch.failed?.off === true,
 					behind: watch.done === undefined && watch.behind !== undefined,
 					...(change === undefined
 						? {}

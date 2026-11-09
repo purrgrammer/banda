@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from "node:fs";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
@@ -70,9 +71,36 @@ describe("what following a kind does, in words", () => {
 		};
 		expect(followWords(follow)).toEqual({
 			wakes: ["replied", "review requested", "assigned"],
-			tells: ["renamed: …"],
+			tells: ["renamed"],
 		});
 		expect(followWords({ ...follow, otherwise: "tell" }).tells).toContain("anything else that changes");
+	});
+
+	it("leaves no template holes in what it shows: no ellipsis, no brackets, no dangling punctuation or word", () => {
+		const dir = new URL("../shipped/connections/", import.meta.url);
+		for (const file of readdirSync(dir).filter((name) => name.endsWith(".json"))) {
+			const read = readDefinition(file.replace(".json", ""), readFileSync(new URL(file, dir), "utf8"));
+			if ("errors" in read) throw new Error(read.errors.join("; "));
+			for (const [kind, shape] of Object.entries(read.connection.objects ?? {})) {
+				if (shape.follow === undefined) continue;
+				const { wakes, tells } = followWords(shape.follow);
+				for (const phrase of [...wakes, ...tells]) {
+					expect(phrase, `${file} ${kind}: ${phrase}`).not.toMatch(/[…{}]/);
+					expect(phrase, `${file} ${kind}: ${phrase}`).not.toMatch(/^['’:#]|[:#]$/);
+					expect(phrase, `${file} ${kind}: ${phrase}`).not.toMatch(/^(now|no longer|in)$/);
+				}
+			}
+		}
+		// each kind of a template: a possessive, a hole between words, a preposition before a hole, nothing to say
+		const says = (text: string) => followWords({ rules: [{ on: "x", does: "wake", says: text }] }).wakes;
+		expect(says("{user.login}'s review was dismissed")).toEqual(["review was dismissed"]);
+		expect(says("{user.login} opened #{number}: {title}")).toEqual(["opened"]);
+		expect(says("a message from {from} was deleted")).toEqual(["a message was deleted"]);
+		expect(says("{count} reacted :{name}:")).toEqual(["reacted"]);
+		expect(says("moved to {to}")).toEqual(["moved"]);
+		expect(says("{name}: {to}")).toEqual([]);
+		expect(says("{user.login} {state}")).toEqual([]);
+		expect(says("now at {to}")).toEqual([]);
 	});
 });
 
