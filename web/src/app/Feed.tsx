@@ -24,7 +24,7 @@ import { AgentMessage } from "../chat/AgentMessage.tsx";
 import { ApprovalCard, ChangeCard, Facts } from "../chat/Approval.tsx";
 import { ArtifactCard, Browsed, QuestionCard } from "../chat/Cards.tsx";
 import { Done, Settling } from "../chat/Done.tsx";
-import { Bubble, DaySeparator, MessageActions, Run, UnreadDivider } from "../chat/Feed.tsx";
+import { Bubble, DaySeparator, MessageActions, QueuedNote, Run, UnreadDivider } from "../chat/Feed.tsx";
 import { Line } from "../chat/Line.tsx";
 import { ProposalCard } from "../chat/Proposal.tsx";
 import { RoutineProposal } from "../chat/Routine.tsx";
@@ -575,12 +575,7 @@ export function FeedView({
 	for (const pending of outgoing) {
 		nodes.push(
 			<Run key={`outgoing:${pending.id}`}>
-				<div
-					className={cn(
-						"flex flex-col items-end gap-1 transition-opacity duration-200",
-						pending.state === "sending" && "opacity-60",
-					)}
-				>
+				<div className="flex flex-col items-end gap-1">
 					{pending.text.trim() === "" ? null : (
 						<Bubble mine>
 							<Markdown>{pending.text}</Markdown>
@@ -630,13 +625,7 @@ function partOf(
 	switch (segment.kind) {
 		case "owner":
 			return (
-				// queued, it shows dimmed, as a message on its way does, until the agent takes it
-				<div
-					className={cn(
-						"contents",
-						segment.queued === true && "flex flex-col items-end gap-1 opacity-60 transition-opacity duration-200",
-					)}
-				>
+				<>
 					{segment.text.trim() === "" ? null : (
 						<Bubble mine copy={segment.text}>
 							{segment.queued ? (
@@ -649,9 +638,8 @@ function partOf(
 					{segment.files.map((file) => (
 						<FilePart key={`${file.name}-${"sha" in file ? file.sha : ""}`} chat={chat} file={file} />
 					))}
-					{/* the dimming says it to the eye; the words only to a screen reader */}
-					{segment.queued === true ? <span className="sr-only">Waiting its turn</span> : null}
-				</div>
+					{segment.queued === true ? <QueuedNote /> : null}
+				</>
 			);
 		case "owner-message":
 			return (

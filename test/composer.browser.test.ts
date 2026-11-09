@@ -51,18 +51,16 @@ async function attach(page: Page, name: string, body: string) {
 
 for (const width of [390, 1440]) {
 	it.skipIf(!hasChrome())(
-		`while the agent works, Send steers and Stop shows when empty; the draft survives at ${width}px`,
+		`the composer always offers Send and never Stop; the draft survives at ${width}px`,
 		async () => {
 			await withPage(url, { width, height: 900 }, async (page) => {
 				await open(page);
-				// empty while working: Stop, and no Send
-				expect(await page.run(`!!${at(`button[aria-label="Stop"]`)} && !${at(`button[aria-label="Send"]`)}`)).toBe(
+				// empty while working: Send, and no Stop
+				expect(await page.run(`!!${at(`button[aria-label="Send"]`)} && !${at(`button[aria-label="Stop"]`)}`)).toBe(
 					true,
 				);
 
-				// words or a file turn Stop into Send
 				await type(page, "Take the 10:40");
-				await page.until(`!!${at(`button[aria-label="Send"]`)} && !${at(`button[aria-label="Stop"]`)}`);
 				await attach(page, "notes.txt", "seat 12A");
 				await page.until(`${attached}.some(text => text.includes('notes.txt'))`);
 
@@ -73,27 +71,24 @@ for (const width of [390, 1440]) {
 				await page.until(`${field}.value === 'Take the 10:40'`);
 				await page.until(`${attached}.some(text => text.includes('notes.txt'))`, 5000);
 
-				// sent, it steers; words written while it is on its way stay in the composer
+				// sent, it goes in the queue; words written while it is on its way stay in the composer
 				await page.run(`${at(`button[aria-label="Send"]`)}.click()`);
 				await type(page, " and the bags");
-				await page.until(`${sent}.includes('Steered: Take the 10:40 + notes.txt')`);
+				await page.until(`${sent}.includes('Queued: Take the 10:40 + notes.txt')`);
 				await page.until(`${field}.value === 'and the bags'`);
 				expect(await page.run(`${attached}.length`)).toBe(0);
 
-				// emptied, Stop is back; a reload brings no file back
+				// emptied, still Send and no Stop; a reload brings no file back
 				await page.run(
 					`(() => { const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(${field}, ''); ${field}.dispatchEvent(new Event('input', { bubbles: true })); })()`,
 				);
-				await page.until(`!!${at(`button[aria-label="Stop"]`)}`);
+				await page.until(`!!${at(`button[aria-label="Send"]`)} && !${at(`button[aria-label="Stop"]`)}`);
 				await keeps(page, 0);
 				await page.goto(url.replace("#", "?reload=2#"));
 				await open(page);
 				await new Promise((resolve) => setTimeout(resolve, 500));
 				expect(await page.run(`${field}.value`)).toBe("");
 				expect(await page.run(`${attached}.length`)).toBe(0);
-
-				await page.run(`${at(`button[aria-label="Stop"]`)}.click()`);
-				await page.until(`${sent}.includes('Stopped')`);
 				expect(page.errors()).toEqual([]);
 			});
 		},

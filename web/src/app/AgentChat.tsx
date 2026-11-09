@@ -101,6 +101,7 @@ export function AgentChat({
 }) {
 	const state = row?.state === "running" ? "working" : row?.state === "waiting" ? "waiting" : "idle";
 	const [doing, setDoing] = useState<string | undefined>(undefined);
+	const [stoppable, setStoppable] = useState(false);
 	const [activity, setActivity] = useState<{ anchor?: number }>();
 	const shell = useShell();
 	const agents = shell.agents;
@@ -148,6 +149,7 @@ export function AgentChat({
 				onBack={onBack}
 				onPanel={onPanel}
 				onActivity={status.delegatedPrimary ? openDelegated : row === undefined ? undefined : () => setActivity({})}
+				onStop={stoppable && row !== undefined ? () => void attempt("stop it", () => stopChat(row.chat)) : undefined}
 			/>
 			{delegatedOpen === undefined ? null : (
 				<HarnessActivitySheet tasks={delegatedOpen} onClose={() => setDelegatedOpen(undefined)} />
@@ -184,6 +186,7 @@ export function AgentChat({
 					tools={tools}
 					at={at}
 					onDoing={setDoing}
+					onStoppable={setStoppable}
 					onAnswered={onAnswered}
 					onRoutine={onRoutine}
 					activity={activity}
@@ -204,6 +207,7 @@ function Timeline({
 	tools,
 	at,
 	onDoing,
+	onStoppable,
 	onAnswered,
 	onRoutine,
 	activity,
@@ -220,6 +224,8 @@ function Timeline({
 	onRoutine?: ((name: string) => void) | undefined;
 	/** What it does now, for the header: "Using its browser…". */
 	onDoing: (doing: string | undefined) => void;
+	/** Whether a run is at work, not waiting on the owner: what the header's Stop follows. */
+	onStoppable: (stoppable: boolean) => void;
 	who: Who;
 	agent: string;
 	/** Its tools, for its first words; undefined for the lead. */
@@ -271,7 +277,7 @@ function Timeline({
 					busy: transcript.busy,
 					running: transcript.running,
 					thinking: transcript.thinking,
-					// the owner's messages waiting for the run (a steer, or a follow-up), dimmed until the agent takes them
+					// the owner's messages waiting for the run (a steer, or a follow-up), marked queued until the agent takes them
 					queued: transcript.queued,
 				},
 				context,
@@ -345,6 +351,10 @@ function Timeline({
 	const ask = segments.find(
 		(segment) => (segment.kind === "question" || segment.kind === "approval") && segment.open !== undefined,
 	);
+	const stoppable = transcript.busy && ask === undefined;
+	useEffect(() => {
+		onStoppable(stoppable);
+	}, [stoppable, onStoppable]);
 	return (
 		<Conversation className="flex flex-col">
 			<ConversationContent
@@ -407,7 +417,6 @@ function Timeline({
 				agent={agent}
 				who={who}
 				mentionables={mentionables}
-				working={transcript.busy && ask === undefined}
 				{...(ask === undefined
 					? {}
 					: { ask: ask.kind === "question" ? ask.ask.question : ask.kind === "approval" ? ask.label : "" })}
@@ -417,7 +426,6 @@ function Timeline({
 					setOutgoing((items) => [...items, pending]);
 					deliver(pending);
 				}}
-				onStop={() => void stopChat(chat)}
 			/>
 			{activity === undefined ? null : (
 				<ActivitySheet
@@ -514,18 +522,14 @@ function Foot({
 	agent,
 	who,
 	mentionables,
-	working = false,
 	ask,
 	onSend,
-	onStop,
 }: {
 	agent: string;
 	who: Who;
 	mentionables: readonly Who[];
-	working?: boolean;
 	ask?: string;
 	onSend: (text: string, files: readonly File[]) => Promise<void>;
-	onStop?: () => void;
 }) {
 	const { list } = useSkills();
 	return (
@@ -540,9 +544,7 @@ function Foot({
 				keep={`a:${agent}`}
 				focus
 				className="w-full"
-				state={working ? "working" : "ready"}
 				onSend={onSend}
-				{...(onStop === undefined ? {} : { onStop })}
 			/>
 		</div>
 	);

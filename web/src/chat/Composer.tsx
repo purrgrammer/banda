@@ -1,10 +1,10 @@
 /**
  * The composer, on ai-elements' prompt-input: words, files (photos, documents, video, dropped or pasted anywhere), a
- * voice message (transcribed here, sent as words with its audio), send. While the agent works, Stop when the composer is
- * empty and Send once it holds something: sent then, it steers the turn under way. One quiet menu holds the rest. In a
- * group it says who a message goes to. Its draft, words and files, is kept per chat until it is sent.
+ * voice message (transcribed here, sent as words with its audio), send. It is the same while the agent works: what is
+ * sent then waits in the chat's queue, and stopping lives in the header. One quiet menu holds the rest. In a group it
+ * says who a message goes to. Its draft, words and files, is kept per chat until it is sent.
  */
-import { ArrowUpIcon, PaperclipIcon, SquareIcon, Trash2Icon } from "lucide-react";
+import { ArrowUpIcon, PaperclipIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
 	Attachment,
@@ -44,7 +44,7 @@ import { Recording } from "./Voice.tsx";
 
 const FINE_POINTER = typeof matchMedia === "function" && matchMedia("(pointer: fine)").matches;
 
-export type ComposerState = "ready" | "working" | "recording";
+export type ComposerState = "ready" | "recording";
 
 export function Composer({
 	to,
@@ -55,7 +55,6 @@ export function Composer({
 	mentionables,
 	skills,
 	onSend,
-	onStop,
 	focus = false,
 	className,
 	keep,
@@ -76,7 +75,6 @@ export function Composer({
 	skills?: readonly SkillSummary[] | undefined;
 	/** Send the words and files as written; a rejection keeps the draft and says why. */
 	onSend?: (text: string, files: readonly File[]) => Promise<void>;
-	onStop?: () => void;
 	/** Take the focus as it opens, where there is a keyboard of its own (not a touch screen). */
 	focus?: boolean;
 	className?: string;
@@ -143,13 +141,9 @@ export function Composer({
 							{state === "ready" ? (
 								<SpeechInput variant="ghost" size="icon-sm" aria-label="Record a voice message" />
 							) : null}
-							{state === "working" ? (
-								<SendOrStop shown={files.length} onStop={onStop} />
-							) : (
-								<PromptInputSubmit className="rounded-full bg-ink text-paper hover:bg-ink/85" aria-label="Send">
-									<ArrowUpIcon className="size-4" />
-								</PromptInputSubmit>
-							)}
+							<PromptInputSubmit className="rounded-full bg-ink text-paper hover:bg-ink/85" aria-label="Send">
+								<ArrowUpIcon className="size-4" />
+							</PromptInputSubmit>
 						</span>
 					</PromptInputFooter>
 				</PromptInput>
@@ -161,28 +155,6 @@ export function Composer({
 				{group ? <GroupHint members={mentionables ?? []} /> : null}
 			</div>
 		</PromptInputProvider>
-	);
-}
-
-/**
- * While the agent works: Stop with nothing written, Send once there are words or files. Sent then, the message steers
- * the turn under way (DESIGN.md "Queue"), so writing never has to wait for the agent or stop it first.
- */
-function SendOrStop({ shown, onStop }: { shown: number; onStop?: (() => void) | undefined }) {
-	const { textInput, attachments } = usePromptInputController();
-	const empty = textInput.value.trim() === "" && attachments.files.length === 0 && shown === 0;
-	return empty ? (
-		<PromptInputSubmit
-			status="streaming"
-			onStop={onStop ?? (() => {})}
-			className="rounded-full bg-ink text-paper hover:bg-ink/85"
-		>
-			<SquareIcon className="size-3.5 fill-current" />
-		</PromptInputSubmit>
-	) : (
-		<PromptInputSubmit className="rounded-full bg-ink text-paper hover:bg-ink/85" aria-label="Send">
-			<ArrowUpIcon className="size-4" />
-		</PromptInputSubmit>
 	);
 }
 
