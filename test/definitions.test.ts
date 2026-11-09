@@ -37,7 +37,6 @@ describe("the definitions banda ships", () => {
 		for (const [name, connection] of read) {
 			expect(connection.about, name).toMatch(/^\S/);
 			expect(connection.access?.choices.length, name).toBeGreaterThan(0);
-			expect(connection.why, name).toBeUndefined();
 		}
 		expect(read.get("gmail")?.access).toMatchObject({
 			required: "Read email",

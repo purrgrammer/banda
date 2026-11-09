@@ -523,7 +523,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			known: (model) => models.getModel(model.provider, model.modelId) !== undefined,
 		};
 		let capabilitiesChanged = () => {};
-		// connections and the tools the agent built: what is in effect is installed before anything resumes
+		// connections: what is in effect is installed before anything resumes
 		const capabilities = openCapabilities({
 			home,
 			blobs,
@@ -531,9 +531,6 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			workspace,
 			registry,
 			effect: core.effect,
-			// a server the agent built is listed in its box, reading as nobody's chat (0)
-			listEnv: () => agentBox.env(undefined, agentBox.egress?.env(0)),
-			...(holding === undefined ? {} : { egress: holding }),
 			redirect: () => `http://127.0.0.1:${port}/oauth/callback`,
 			log,
 			changed: () => capabilitiesChanged(),
@@ -881,12 +878,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						capabilities: await capabilitiesView(),
 					}),
 					capability: async (act) => {
-						if (act.action === "accept")
-							await (act.folder === "connections"
-								? capabilities.acceptConnection(act.name, act.sha)
-								: capabilities.acceptTool(act.name, act.sha));
-						else if (act.action === "decline") await capabilities.decline(act.folder, act.name);
-						else if (act.action === "remove") await capabilities.remove(act.folder, act.name);
+						if (act.action === "remove") await capabilities.remove(act.name);
 						else if (act.action === "disconnect") await capabilities.disconnect(act.name);
 						else if (act.action === "key") await capabilities.setKey(act.name, act.key, context, act.agent);
 						else if (act.action === "account")
@@ -895,13 +887,10 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						else if (act.action === "label") await capabilities.labelAccount(act.name, act.account, act.label);
 						else if (act.action === "add") await capabilities.addShipped(act.name);
 						else if (act.action === "address") await capabilities.addByAddress(act.url);
-						else if (act.action === "trust" || act.action === "reads")
-							await capabilities.trustReads(act.name, act.tools, context, act.sha, act.action === "reads");
 						else if (act.action === "tools") await capabilities.setTools(act.name, act.settings, act.sha);
 						else if (act.action === "public")
 							await capabilities.switchAccount(act.agent, act.name, undefined, act.on, context, act.sha);
 						else if (act.action === "refresh") await capabilities.refresh(act.name);
-						else if (act.action === "switch") await capabilities.toggle(act.tool, act.on);
 						changed();
 						return capabilitiesView();
 					},

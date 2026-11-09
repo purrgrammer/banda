@@ -329,7 +329,7 @@ export async function write(env: ExecutionEnv, _workspace: Workspace, path: stri
 }
 
 /**
- * Watch the folders of "before" files (agents, routines, connections and tools) and memory, and call `changed` on every change, so the app
+ * Watch the folders of "before" files (agents, routines, watches) and memory, and call `changed` on every change, so the app
  * shows a change the box made as it happens. Retries while the box is down.
  */
 export function watchAgents(
@@ -337,7 +337,7 @@ export function watchAgents(
 	changed: () => void,
 	log: (line: string) => void,
 	ctx: Context = context,
-	folders: readonly string[] = ["agents", "routines", "watches", "connections", "tools", "memory", "memory/agents"],
+	folders: readonly string[] = ["agents", "routines", "watches", "memory", "memory/agents"],
 ): () => Promise<void> {
 	let closed = false;
 	let watcher: FileWatcher | undefined;

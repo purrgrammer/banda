@@ -533,7 +533,7 @@ describe("over versions, and on a server the owner added", () => {
 		fakes.push(fake);
 		const s = await added(fake);
 		await s.set({ list_events: "ask", create_event: "off" });
-		await s.capabilities.remove("connections", "cal");
+		await s.capabilities.remove("cal");
 		expect((await s.harness.snapshot(ToolSettings, context))?.set).toEqual({});
 		expect((await s.harness.snapshot(Connected, context))?.off).toEqual({});
 	});

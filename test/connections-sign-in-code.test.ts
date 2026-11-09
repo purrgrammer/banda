@@ -4,10 +4,10 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseConnection } from "../src/core/connections.ts";
+import { readDefinition } from "../src/core/definitions.ts";
 import { context } from "../src/core/store.ts";
-import { connectionFile, signInAsOwner } from "./fixtures/connected.ts";
-import { changeOf, closeAll, fakes, open } from "./fixtures/connections-world.ts";
+import { connectionDefinition, define, signInAsOwner } from "./fixtures/connected.ts";
+import { closeAll, fakes, open } from "./fixtures/connections-world.ts";
 import { type FakeMcp, startFakeMcp } from "./fixtures/mcp-server.ts";
 import { until } from "./helpers.ts";
 
@@ -15,30 +15,29 @@ afterEach(closeAll);
 
 describe("signing in by code, as a file's named client", () => {
 	const fileOf = (fake: FakeMcp, extra: { scopes?: string[]; account?: string } = {}) =>
-		connectionFile({ url: fake.url, auth: "oauth", client: "banda-app", reads: ["whoami"], ...extra });
+		connectionDefinition({ url: fake.url, auth: "oauth", client: "banda-app", reads: ["whoami"], ...extra });
 	const shown = async (s: Awaited<ReturnType<typeof open>>) =>
 		(await s.capabilities.view()).connections.find((c) => c.name === "cal");
 
-	it("a file names its client and scopes only for a server the owner signs in to", () => {
-		expect(
-			parseConnection("cal", fileOf({ url: "https://a.example/mcp" } as FakeMcp, { scopes: ["repo", "read:org"] })),
-		).toMatchObject({ connection: { client: "banda-app", scopes: ["repo", "read:org"] } });
-		expect(
-			parseConnection("cal", "---\nservice: Cal\nurl: https://a.example/mcp\nauth: key\nclient: x\n---\n"),
-		).toEqual({
+	it("a definition names its client and scopes only for a server the owner signs in to", () => {
+		const read = (text: string) => readDefinition("cal", text);
+		const parsed = read(fileOf({ url: "https://a.example/mcp" } as FakeMcp, { scopes: ["repo", "read:org"] }));
+		expect(parsed).toMatchObject({ connection: { client: "banda-app", scopes: ["repo", "read:org"] } });
+		const keyed = JSON.parse(connectionDefinition({ url: "https://a.example/mcp", auth: "key" }));
+		expect(read(JSON.stringify({ ...keyed, client: "x" }))).toEqual({
 			errors: ['"client" and "scopes" are for a server the owner signs in to: add "auth: oauth" or drop them'],
 		});
-		expect(
-			parseConnection("cal", "---\nservice: Cal\nurl: https://a.example/mcp\nauth: oauth\nclient: a b\n---\n"),
-		).toEqual({ errors: ['"client: a b" is not a client id: letters, digits, dots, dashes and underscores'] });
+		const signed = JSON.parse(connectionDefinition({ url: "https://a.example/mcp", auth: "oauth" }));
+		expect(read(JSON.stringify({ ...signed, client: "a b" }))).toEqual({
+			errors: ['"client: a b" is not a client id: letters, digits, dots, dashes and underscores'],
+		});
 	});
 
 	it("registers nothing, asks for the file's scopes, shows the code until typed, then connects and reads", async () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true, scopes: ["all"] });
 		fakes.push(fake);
 		const s = await open(fake);
-		s.writeBox("connections/cal.md", fileOf(fake, { scopes: ["read:user"] }));
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await define(s, "cal", fileOf(fake, { scopes: ["read:user"] }));
 		expect((await shown(s))?.accepted?.connection?.scopes).toEqual(["read:user"]);
 		const started = await s.capabilities.signIn("cal", context, "sancho");
 		expect(started).toMatchObject({ code: expect.any(String), page: `${fake.origin}/device` });
@@ -66,18 +65,15 @@ describe("signing in by code, as a file's named client", () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
 		fakes.push(fake);
 		const s = await open(fake);
-		s.writeBox("connections/cal.md", fileOf(fake, { scopes: ["read:user"] }));
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await define(s, "cal", fileOf(fake, { scopes: ["read:user"] }));
 		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
 		// a wider default is for accounts signed in from now on: this one keeps what it asked for
-		s.writeBox("connections/cal.md", fileOf(fake, { scopes: ["read:user", "repo"] }));
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await define(s, "cal", fileOf(fake, { scopes: ["read:user", "repo"] }));
 		await until(async () => ((await shown(s))?.state === "connected" ? true : undefined));
 		expect((await shown(s))?.accounts?.[0]).toMatchObject({ scopes: ["read:user"] });
 		expect((await shown(s))?.accounts?.[0]?.stale).toBeUndefined();
 		// a file that no longer lets an account ask for what this one asked: the old token is not kept for it
-		s.writeBox("connections/cal.md", fileOf(fake, { scopes: ["repo"] }));
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await define(s, "cal", fileOf(fake, { scopes: ["repo"] }));
 		expect((await shown(s))?.state).toBe("sign-in");
 		expect((await shown(s))?.accounts?.[0]?.stale).toBe(true);
 		expect(s.offered()).toEqual([]);
@@ -95,8 +91,7 @@ describe("signing in by code, as a file's named client", () => {
 		fake.needs = { whoami: "repo" };
 		fakes.push(fake);
 		const s = await open(fake);
-		s.writeBox("connections/cal.md", fileOf(fake, { scopes: ["read:user"], account: "get_me.login" }));
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await define(s, "cal", fileOf(fake, { scopes: ["read:user"], account: "get_me.login" }));
 		// what the server can grant is learnt in the background, for the owner to pick from
 		await until(async () => ((await shown(s))?.offered !== undefined ? true : undefined));
 		expect((await shown(s))?.offered).toEqual(["read:user", "repo", "gist"]);
@@ -114,8 +109,7 @@ describe("signing in by code, as a file's named client", () => {
 		// beyond what the file allows, an account cannot ask: the owner widens the file, then signs that account in again
 		const choice = { scopes: ["read:user", "repo"], account: before?.accounts?.[0]?.account as string };
 		await expect(signInAsOwner(s.capabilities, "cal", { fake, choice })).rejects.toThrow(/may not ask for repo/);
-		s.writeBox("connections/cal.md", fileOf(fake, { scopes: ["read:user", "repo"], account: "get_me.login" }));
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await define(s, "cal", fileOf(fake, { scopes: ["read:user", "repo"], account: "get_me.login" }));
 		expect(await signInAsOwner(s.capabilities, "cal", { fake, choice })).toEqual({ ok: true, words: "connected" });
 		const after = await shown(s);
 		expect(after?.accounts).toHaveLength(1);
@@ -132,8 +126,7 @@ describe("signing in by code, as a file's named client", () => {
 		fake.withheld = ["repo"];
 		fakes.push(fake);
 		const s = await open(fake);
-		s.writeBox("connections/cal.md", fileOf(fake, { scopes: ["read:user", "repo"] }));
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await define(s, "cal", fileOf(fake, { scopes: ["read:user", "repo"] }));
 		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
 		// the tokens came without repo: connected with what was given, which the account says
 		expect((await shown(s))?.accounts?.[0]?.scopes).toEqual(["read:user"]);
@@ -144,8 +137,7 @@ describe("signing in by code, as a file's named client", () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
 		fakes.push(fake);
 		const s = await open(fake);
-		s.writeBox("connections/cal.md", fileOf(fake));
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await define(s, "cal", fileOf(fake));
 		expect(await signInAsOwner(s.capabilities, "cal", { fake, consent: false })).toEqual({
 			ok: false,
 			words: "signing in did not finish: the sign-in was declined",
@@ -157,8 +149,7 @@ describe("signing in by code, as a file's named client", () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
 		fakes.push(fake);
 		const s = await open(fake);
-		s.writeBox("connections/cal.md", fileOf(fake));
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await define(s, "cal", fileOf(fake));
 		const { code } = (await s.capabilities.signIn("cal", context, "sancho")) as { code: string };
 		await s.capabilities.disconnect("cal");
 		expect((await shown(s))?.state).toBe("sign-in");
@@ -173,8 +164,7 @@ describe("signing in by code, as a file's named client", () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app" });
 		fakes.push(fake);
 		const s = await open(fake);
-		s.writeBox("connections/cal.md", fileOf(fake, { scopes: ["read:user"] }));
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await define(s, "cal", fileOf(fake, { scopes: ["read:user"] }));
 		await expect(s.capabilities.signIn("cal", context, "sancho", { onDevice: true })).rejects.toThrow(
 			/computer Banda runs on/,
 		);

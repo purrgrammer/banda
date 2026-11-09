@@ -96,11 +96,9 @@ function connection(
 				service: "Ernesto",
 				url: "https://ernesto.example/mcp",
 				where: "ernesto.example",
-				boxed: false,
 				auth,
 				reads: [],
 				floors: {},
-				why: "Files and routes in Ernesto.",
 			},
 		},
 		state:

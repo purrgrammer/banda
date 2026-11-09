@@ -65,17 +65,7 @@ const s = await openConnected({
 });
 
 const shown = async () => (await s.capabilities.view()).connections.find((c) => c.name === "contacts");
-// what the file says now, allowed, whatever a kill left between writing it and allowing it
-const allow = async () => {
-	const change = (await shown())?.change;
-	if (change !== undefined && "sha" in change && change.sha !== undefined)
-		await s.capabilities.acceptConnection("contacts", change.sha);
-};
-if ((await shown())?.accepted === undefined) {
-	await allow();
-	if ((await shown())?.accepted === undefined) await s.capabilities.addShipped("contacts");
-}
-await allow();
+if ((await shown())?.accepted === undefined) await s.capabilities.addShipped("contacts");
 if ((await shown())?.state === "sign-in") {
 	const started = await s.capabilities.signIn("contacts", context, LEAD, {
 		scopes: [

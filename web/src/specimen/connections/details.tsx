@@ -80,7 +80,6 @@ const VIEW: ConnectionView = {
 			service: "GitHub",
 			url: "https://api.githubcopilot.com/mcp/",
 			where: "api.githubcopilot.com",
-			boxed: false,
 			auth: "oauth",
 			reads: [],
 			floors: {},

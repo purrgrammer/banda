@@ -2,7 +2,7 @@
  * The world the connections tests share: a daemon core over a temp home with a fake MCP server, a scripted model,
  * and what a test opened, closed after it (`closeAll`).
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	type AssistantMessage,
@@ -78,8 +78,6 @@ export async function open(fake?: FakeMcp, shipped?: string, discovery = false, 
 		...(fetcher === undefined ? {} : { fetch: fetcher }),
 	});
 	opened.push(s);
-	mkdirSync(join(s.box.workspace, "connections"), { recursive: true });
-	mkdirSync(join(s.box.workspace, "tools"), { recursive: true });
 	const say = async (text: string) => {
 		const received = await s.core.receive(s.harness, {
 			id: crypto.randomUUID(),
@@ -114,6 +112,13 @@ export async function open(fake?: FakeMcp, shipped?: string, discovery = false, 
 	return { ...s, model, say, done, results, writeBox, fake };
 }
 
-/** The change the box holds for connection `name`, as the app shows it. */
-export const changeOf = async (s: Awaited<ReturnType<typeof open>>, name: string) =>
-	(await s.capabilities.view()).connections.find((c) => c.name === name)?.change;
+/** The owner allowing `tools` as reads on connection `name`, at the version they saw (their latest, unless said). */
+export const allowReads = async (
+	s: Awaited<ReturnType<typeof open>>,
+	name: string,
+	tools: readonly string[],
+	version?: string,
+) => {
+	const seen = version ?? (await s.capabilities.view()).connections.find((c) => c.name === name)?.accepted?.sha;
+	await s.capabilities.setTools(name, Object.fromEntries(tools.map((tool) => [tool, "allow"])), seen);
+};

@@ -1,21 +1,19 @@
 /**
  * Changes to "before" files in the chat's feed: a `write`, `edit` or `bash` call the daemon marked as touching a file
  * that takes effect only once the owner accepts it (its note `awaits-acceptance`, naming the file as the daemon resolved
- * it; a command is told of each file it changed) is one line per file where the chat last changed that file: a tool or a connection it made, an agent, a routine. How it stands
+ * it; a command is told of each file it changed) is one line per file where the chat last changed that file: an agent, a routine. How it stands
  * is read from what the daemon reports for that file now: waiting ("Allow this change?", its card inline), allowed, not
  * allowed, or removed since. Never the call's arguments; a write to any other file draws nothing.
  */
-import type { AgentView, CapabilitiesView, Item, RoutineView } from "../../../../src/server/api.ts";
+import type { AgentView, Item, RoutineView } from "../../../../src/server/api.ts";
 import type { Segment } from "../chat.ts";
 import type { FeedState } from "../feed.ts";
 import type { Segmenter } from "./types.ts";
 
-export type ChangeFolder = "tools" | "connections" | "agents" | "routines";
+export type ChangeFolder = "agents" | "routines";
 
 /** What the line's file is, as the daemon reports it now; one field, by folder. */
 export type ChangeSubject = {
-	readonly tool?: CapabilitiesView["tools"][number] | undefined;
-	readonly connection?: CapabilitiesView["connections"][number] | undefined;
 	readonly agent?: AgentView | undefined;
 	readonly routine?: RoutineView | undefined;
 };
@@ -40,13 +38,11 @@ declare module "./types.ts" {
 		readonly agents?: readonly AgentView[];
 		/** The "before" files the owner took out of effect after accepting them, by path: when. */
 		readonly removed?: { readonly [path: string]: number };
-		/** The connections and the tools it made, as the daemon last said. */
-		readonly capabilities?: CapabilitiesView;
 	}
 }
 
-const FOLDERS: readonly ChangeFolder[] = ["tools", "connections", "agents", "routines"];
-const NOTED = /^(tools|connections|agents|routines)\/([a-z0-9][a-z0-9-]*)\.md takes effect only once/;
+const FOLDERS: readonly ChangeFolder[] = ["agents", "routines"];
+const NOTED = /^(agents|routines)\/([a-z0-9][a-z0-9-]*)\.md takes effect only once/;
 
 /** The path of a line's file in the workspace. */
 const pathOf = (folder: ChangeFolder, name: string) => `${folder}/${name}.md`;
@@ -75,14 +71,6 @@ type Known = {
 /** The file's subject in what the daemon reports, by folder; undefined while that part is not known yet. */
 function subjectOf(segment: ChangeSegment, context: Parameters<NonNullable<Segmenter["after"]>>[1]["context"]) {
 	const { folder, name } = segment;
-	if (folder === "tools")
-		return context.capabilities === undefined
-			? undefined
-			: { tool: context.capabilities.tools.find((each) => each.name === name) };
-	if (folder === "connections")
-		return context.capabilities === undefined
-			? undefined
-			: { connection: context.capabilities.connections.find((each) => each.name === name) };
 	if (folder === "agents")
 		return context.agents === undefined ? undefined : { agent: context.agents.find((each) => each.name === name) };
 	return context.routines === undefined ? undefined : { routine: context.routines.find((each) => each.name === name) };
@@ -95,26 +83,17 @@ export function changeState(
 	removed: { readonly [path: string]: number } | undefined,
 	since = 0,
 ): FeedState {
-	const known: Known | undefined = subject.tool ?? subject.connection ?? subject.agent ?? subject.routine;
+	const known: Known | undefined = subject.agent ?? subject.routine;
 	if (known?.change !== undefined) return "pending";
 	if (known?.accepted !== undefined) return "done";
 	const gone = removed?.[path];
 	return gone !== undefined && gone >= since ? "removed" : "declined";
 }
 
-/** What the file is, in a few words: "a tool it made: weather", "the routine Morning briefing". */
+/** What the file is, in a few words: "the agent Mara", "the routine Morning briefing". */
 export function changeNoun(segment: Pick<ChangeSegment, "folder" | "name" | "subject">): string {
 	const { subject, name } = segment;
 	switch (segment.folder) {
-		case "tools":
-			return `a tool it made: ${name}`;
-		case "connections": {
-			const change = subject?.connection?.change;
-			const service =
-				subject?.connection?.accepted?.connection?.service ??
-				(change !== undefined && "connection" in change ? change.connection?.service : undefined);
-			return `a connection to ${service ?? name}`;
-		}
 		case "agents": {
 			const change = subject?.agent?.change;
 			const shown =

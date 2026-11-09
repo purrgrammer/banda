@@ -95,17 +95,7 @@ const s = await openConnected({
 });
 
 const shown = async () => (await s.capabilities.view()).connections.find((c) => c.name === "drive");
-// what the file says now, allowed, whatever a kill left between writing it and allowing it
-const allow = async () => {
-	const change = (await shown())?.change;
-	if (change !== undefined && "sha" in change && change.sha !== undefined)
-		await s.capabilities.acceptConnection("drive", change.sha);
-};
-if ((await shown())?.accepted === undefined) {
-	await allow();
-	if ((await shown())?.accepted === undefined) await s.capabilities.addShipped("drive");
-}
-await allow();
+if ((await shown())?.accepted === undefined) await s.capabilities.addShipped("drive");
 if ((await shown())?.state === "sign-in") {
 	const started = await s.capabilities.signIn("drive", context, LEAD, {
 		scopes: [

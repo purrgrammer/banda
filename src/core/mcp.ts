@@ -1,14 +1,7 @@
 /**
- * A small MCP bridge (DESIGN.md "Connections") for a server the agent built in its box over stdio. Remote MCP
- * uses pi-mcp in mcp-remote.ts; the box uses pi-env and cannot run an agent-written server in the daemon.
- *
- * Each box exchange initializes a new server. What a server answers is data: shapes are checked, sizes cut, and
- * nothing in it is run by the daemon.
+ * What banda keeps of a remote MCP server's answers (mcp-remote.ts speaks the protocol through pi-mcp): what a server
+ * answers is data, so shapes are checked, sizes cut, and nothing in it is run by the daemon.
  */
-import type { Context } from "@earendil-works/chord";
-import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
-
-export const PROTOCOL_VERSION = "2025-06-18";
 
 /** A tool as a server lists it: its name, its words for the model, and the JSON schema of its arguments. */
 export type McpTool = {
@@ -70,65 +63,7 @@ export function challengedScopes(status: number, header: string | null): readonl
 const TOOL_NAME = /^[A-Za-z0-9_.-]{1,64}$/;
 
 /** What one answer may weigh, and one result's text. */
-const MAX_BODY = 4 * 1024 * 1024;
 export const MAX_RESULT_CHARS = 50_000;
-
-/** How the daemon reaches a server: one JSON-RPC request in, its response out. */
-export type Transport = (message: JsonRpcRequest, ctx: Context) => Promise<unknown>;
-
-type JsonRpcRequest = {
-	readonly jsonrpc: "2.0";
-	readonly id?: number;
-	readonly method: string;
-	readonly params?: { readonly [key: string]: unknown };
-};
-
-const initialize = (id: number): JsonRpcRequest => ({
-	jsonrpc: "2.0",
-	id,
-	method: "initialize",
-	params: { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: "banda", version: "0.1.0" } },
-});
-
-/** The result of a JSON-RPC response, or why there is none. */
-function resultOf(response: unknown, id: number): { readonly [key: string]: unknown } {
-	const { id: got, result, error } = (response ?? {}) as { id?: unknown; result?: unknown; error?: unknown };
-	if (got !== id) throw new Error("the server answered another request");
-	if (error !== undefined) {
-		const { message } = (error ?? {}) as { message?: unknown };
-		throw new Error(typeof message === "string" ? message.slice(0, 300) : "the server refused the request");
-	}
-	if (typeof result !== "object" || result === null) throw new Error("the server answered nothing");
-	return result as { readonly [key: string]: unknown };
-}
-
-/** Run one request on a fresh session: initialize, say so, then `method`. Its result. */
-async function exchange(
-	transport: Transport,
-	method: string,
-	params: { readonly [key: string]: unknown },
-	ctx: Context,
-): Promise<{ readonly [key: string]: unknown }> {
-	resultOf(await transport(initialize(1), ctx), 1);
-	await transport({ jsonrpc: "2.0", method: "notifications/initialized" }, ctx);
-	return resultOf(await transport({ jsonrpc: "2.0", id: 2, method, params }, ctx), 2);
-}
-
-/** The tools a server lists, every page, those that are malformed left out. */
-export async function listTools(transport: Transport, ctx: Context): Promise<McpTool[]> {
-	const tools: McpTool[] = [];
-	let cursor: string | undefined;
-	for (let page = 0; page < 20; page++) {
-		const result = await exchange(transport, "tools/list", cursor === undefined ? {} : { cursor }, ctx);
-		for (const raw of Array.isArray(result.tools) ? result.tools : []) {
-			const tool = toolOf(raw);
-			if (tool !== undefined && !tools.some((known) => known.name === tool.name)) tools.push(tool);
-		}
-		cursor = typeof result.nextCursor === "string" ? result.nextCursor : undefined;
-		if (cursor === undefined) break;
-	}
-	return tools.slice(0, 200);
-}
 
 export function toolOf(raw: unknown): McpTool | undefined {
 	const { name, description, inputSchema, annotations } = (raw ?? {}) as {
@@ -150,17 +85,6 @@ export function toolOf(raw: unknown): McpTool | undefined {
 		...(typeof annotations?.readOnlyHint === "boolean" ? { readOnlyHint: annotations.readOnlyHint } : {}),
 		...(typeof annotations?.destructiveHint === "boolean" ? { destructiveHint: annotations.destructiveHint } : {}),
 	};
-}
-
-/** Call tool `name` with `args`: its content as text. */
-export async function callTool(
-	transport: Transport,
-	name: string,
-	args: { readonly [key: string]: unknown },
-	ctx: Context,
-): Promise<McpResult> {
-	const result = await exchange(transport, "tools/call", { name, arguments: args }, ctx);
-	return resultText(result);
 }
 
 /** Bounded foreign tool output, also used by the pi-mcp remote client. */
@@ -186,99 +110,5 @@ export function resultText(result: { content?: unknown; structuredContent?: unkn
 	return {
 		text: text.length > MAX_RESULT_CHARS ? `${text.slice(0, MAX_RESULT_CHARS)}\n… (cut)` : text,
 		isError: result.isError === true,
-	};
-}
-
-/** The line the bridge prints its answer on, so whatever else the server printed is not taken for it. */
-const ANSWER = "banda-mcp:";
-
-/**
- * The bridge, run by node in the box: it starts the server's command, speaks stdio JSON-RPC with it (initialize, then
- * each request in `BANDA_MCP`), prints each response on a line of its own, and stops the server.
- */
-const BRIDGE = `
-const { spawn } = require("node:child_process");
-const requests = JSON.parse(process.env.BANDA_MCP);
-const server = spawn("/bin/sh", ["-c", process.env.BANDA_MCP_COMMAND], { stdio: ["pipe", "pipe", "inherit"] });
-let buffer = "";
-let next = 0;
-const send = (message) => server.stdin.write(JSON.stringify(message) + "\\n");
-const end = (code) => { try { server.kill("SIGKILL"); } catch {} process.exit(code); };
-server.on("exit", () => end(3));
-server.stdout.on("data", (chunk) => {
-	buffer += chunk;
-	for (let at = buffer.indexOf("\\n"); at !== -1; at = buffer.indexOf("\\n")) {
-		const line = buffer.slice(0, at).trim();
-		buffer = buffer.slice(at + 1);
-		let message;
-		try { message = JSON.parse(line); } catch { continue; }
-		if (message.id !== requests[next]?.id) continue;
-		process.stdout.write("${ANSWER}" + JSON.stringify(message) + "\\n");
-		if (next === 0) send({ jsonrpc: "2.0", method: "notifications/initialized" });
-		next += 1;
-		if (next === requests.length) end(0);
-		send(requests[next]);
-	}
-});
-send(requests[0]);
-`;
-
-/** How long a server in the box may take for one exchange, in seconds. */
-const BOX_SECONDS = 60;
-
-/**
- * One exchange with a server the agent built, run in the box (`command`, at the workspace) through `env`, whose
- * commands reach outside only through the egress proxy: initialize, then `method`, in one bridge run; its result.
- */
-export async function boxExchange(
-	env: ExecutionEnv,
-	command: string,
-	method: string,
-	params: { readonly [key: string]: unknown },
-	ctx: Context,
-): Promise<{ readonly [key: string]: unknown }> {
-	const requests = [initialize(1), { jsonrpc: "2.0", id: 2, method, params }];
-	let output = "";
-	const ran = await env.exec(
-		["node", "-e", BRIDGE],
-		{
-			timeout: BOX_SECONDS,
-			env: { BANDA_MCP: JSON.stringify(requests), BANDA_MCP_COMMAND: command },
-			onOutput: (text, _ctx, info) => {
-				if (info.stream === "stdout" && output.length < MAX_BODY) output += text;
-			},
-		},
-		ctx,
-	);
-	if (!ran.ok) throw new Error(`the server in the box did not run: ${ran.error.message}`);
-	const answers = output
-		.split("\n")
-		.filter((line) => line.startsWith(ANSWER))
-		.map((line) => {
-			try {
-				return JSON.parse(line.slice(ANSWER.length)) as unknown;
-			} catch {
-				return undefined;
-			}
-		});
-	if (answers.length < 2)
-		throw new Error(
-			ran.value.exitCode === 3
-				? "the server in the box stopped before it answered"
-				: "the server in the box did not answer",
-		);
-	resultOf(answers[0], 1);
-	return resultOf(answers[1], 2);
-}
-
-/** A transport over one box exchange per request: what `listTools` and `callTool` take for a server in the box. */
-export function boxSession(env: () => ExecutionEnv, command: string): Transport {
-	// the initialize and its notice are the bridge's; each request is a whole exchange of its own
-	return async (message, ctx) => {
-		if (message.method === "initialize")
-			return { jsonrpc: "2.0", id: message.id, result: { protocolVersion: PROTOCOL_VERSION } };
-		if (message.id === undefined) return undefined;
-		const result = await boxExchange(env(), command, message.method, message.params ?? {}, ctx);
-		return { jsonrpc: "2.0", id: message.id, result };
 	};
 }

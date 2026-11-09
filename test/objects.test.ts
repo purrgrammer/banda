@@ -2,12 +2,13 @@ import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { afterEach, expect, it } from "vitest";
 import { Accepted, AgentChats, shaOf } from "../src/core/agents.ts";
 import { defaultAvatarFace } from "../src/core/avatar-face.ts";
-import { Connected, parseConnection } from "../src/core/connections.ts";
+import { Connected } from "../src/core/connections.ts";
 import { Groups } from "../src/core/groups.ts";
 import { keepReading, MAX_READINGS, Readings } from "../src/core/objects.ts";
 import { context } from "../src/core/store.ts";
 import { openObjects } from "../src/server/objects.ts";
 import { openConnected } from "./fixtures/connected.ts";
+import { added, definition, shipping } from "./fixtures/shipped.ts";
 import { tempHome } from "./helpers.ts";
 
 const opened: Awaited<ReturnType<typeof openConnected>>[] = [];
@@ -24,15 +25,24 @@ const kinds = {
 		fields: { title: "issue.title", state: "issue.state" },
 	},
 };
-const text = `---\nservice: Example\nurl: https://example.com/mcp\nauth: key\nreads: [get]\n---\n\n\`\`\`json\n${JSON.stringify({ objects: kinds })}\n\`\`\`\n`;
+/** The definition of the connection the objects are from: what it reads, and what it draws. */
+const definitionText = (objects: object, reads: readonly string[] = ["get"]) =>
+	JSON.stringify({
+		service: "Example",
+		about: "An example",
+		url: "https://example.com/mcp",
+		auth: "key",
+		reads,
+		objects,
+	});
+const text = definitionText(kinds);
 async function setup() {
 	const s = await openConnected({ home: await tempHome(), respond: () => fauxAssistantMessage("done") });
 	opened.push(s);
-	const parsed = parseConnection("example", text);
-	if (!("connection" in parsed)) throw new Error(JSON.stringify(parsed));
+	shipping(definition("example", text));
 	await s.harness.commit(async (tx) => {
 		const a = await tx.doc(Accepted);
-		a.files["connections/example.md"] = { text, sha: shaOf(text), at: 1 };
+		await added(tx, "example");
 		const agent = `---\nname: Reader\ndescription: Reads objects\nface: ${JSON.stringify(defaultAvatarFace())}\nstate: active\nconnections: [example]\n---\nReader`;
 		a.files["agents/reader.md"] = { text: agent, sha: shaOf(agent), at: 1 };
 		(await tx.doc(AgentChats)).chats[1] = "reader";
@@ -51,7 +61,7 @@ async function setup() {
 		harness: s.harness,
 		now: () => clock,
 		capabilities: {
-			shipped: async () => [parsed.connection],
+			shipped: async () => [definition("example", text)],
 			listedSchema: async () => ({ type: "object", properties: { number: { type: "integer" } } }),
 			readFor: async () => {
 				calls++;
@@ -70,21 +80,16 @@ async function setup() {
 }
 it("URL, ambiguous shorthand and canonical aliases draw once without spending the remaining card budget", async () => {
 	const s = await setup();
-	const next = text.replace(
-		JSON.stringify({ objects: kinds }),
-		JSON.stringify({
-			objects: {
-				pull_request: {
-					...kinds.issue,
-					card: "pull-request",
-					urls: ["https://example.com/{owner}/{repo}/pull/{number}"],
-				},
-				...kinds,
-			},
-		}),
-	);
+	const next = definitionText({
+		pull_request: {
+			...kinds.issue,
+			card: "pull-request",
+			urls: ["https://example.com/{owner}/{repo}/pull/{number}"],
+		},
+		...kinds,
+	});
+	shipping(definition("example", next));
 	await s.harness.commit(async (tx) => {
-		(await tx.doc(Accepted)).files["connections/example.md"] = { text: next, sha: shaOf(next), at: 2 };
 		(await tx.doc(Connected)).connections.example!.sha = shaOf(next);
 	}, context);
 	const shown = await s.service.show(1, [
@@ -100,28 +105,22 @@ it("URL, ambiguous shorthand and canonical aliases draw once without spending th
 
 it("refreshes each fallback candidate at most once per request, including failures", async () => {
 	const s = await setup();
-	const next = text.replace(
-		JSON.stringify({ objects: kinds }),
-		JSON.stringify({
-			objects: {
-				pull_request: {
-					...kinds.issue,
-					card: "pull-request",
-					urls: ["https://example.com/{owner}/{repo}/pull/{number}"],
-					reads: { issue: { tool: "pull", args: { number: "{number}" } } },
-				},
-				...kinds,
+	const next = definitionText(
+		{
+			pull_request: {
+				...kinds.issue,
+				card: "pull-request",
+				urls: ["https://example.com/{owner}/{repo}/pull/{number}"],
+				reads: { issue: { tool: "pull", args: { number: "{number}" } } },
 			},
-		}),
+			...kinds,
+		},
+		["get", "pull"],
 	);
+	shipping(definition("example", next));
 	await s.harness.commit(async (tx) => {
-		(await tx.doc(Accepted)).files["connections/example.md"] = {
-			text: next.replace("reads: [get]", "reads: [get, pull]"),
-			sha: shaOf(next.replace("reads: [get]", "reads: [get, pull]")),
-			at: 2,
-		};
 		const connected = await tx.doc(Connected);
-		connected.connections.example!.sha = shaOf(next.replace("reads: [get]", "reads: [get, pull]"));
+		connected.connections.example!.sha = shaOf(next);
 		connected.connections.example!.tools.pull = connected.connections.example!.tools.get!;
 	}, context);
 	const calls: string[] = [];

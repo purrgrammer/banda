@@ -15,7 +15,7 @@ import { context } from "../src/core/store.ts";
 import { answer } from "../src/core/wait.ts";
 import { Watches, watchPath } from "../src/core/watches.ts";
 import { openObjects } from "../src/server/objects.ts";
-import { openConnected, signInAsOwner } from "./fixtures/connected.ts";
+import { openConnected, signInAsOwner, switchTool } from "./fixtures/connected.ts";
 import { githubObjectDefinition, startGithubObjects } from "./fixtures/github-objects.ts";
 import { tempHome, until } from "./helpers.ts";
 
@@ -214,7 +214,7 @@ it.each(["version", "signout", "disconnect", "remove"] as const)(
 			if (mode === "version") await keepCredentials(s.home, "github", "alice", original);
 			else if (mode === "signout") await s.capabilities.signOut("github", "alice");
 			else if (mode === "disconnect") await s.capabilities.disconnect("github");
-			else await s.capabilities.remove("connections", "github");
+			else await s.capabilities.remove("github");
 			const replacement = await credentialsOf(s.home, "github", "alice");
 			release();
 			await shown;
@@ -425,7 +425,7 @@ it("reads all GitHub shapes using upstream schemas, scopes accounts, and never c
 	const count = s.fake.calls.length;
 	expect((await s.service.show(s.chat, [{ refs: ["acme/banda#34"], account: "bob" }]))[0]?.shown).not.toBe("card");
 	expect(s.fake.calls).toHaveLength(count);
-	await s.capabilities.toggle("github__pull_request_read", false);
+	await switchTool(s, "github__pull_request_read", false);
 	expect((await s.service.show(s.chat, [{ ref: "acme/banda#34" }]))[0]?.shown).not.toBe("card");
 	expect(s.fake.calls).toHaveLength(count);
 });

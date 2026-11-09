@@ -198,13 +198,7 @@ export type Routes = {
 
 /** What the owner does to a connection or a tool the companion made, from the app. */
 export type CapabilityAction =
-	| {
-			readonly action: "accept";
-			readonly folder: "connections" | "tools";
-			readonly name: string;
-			readonly sha: string | null;
-	  }
-	| { readonly action: "decline" | "remove"; readonly folder: "connections" | "tools"; readonly name: string }
+	| { readonly action: "remove"; readonly name: string }
 	| { readonly action: "disconnect"; readonly name: string }
 	| { readonly action: "key"; readonly name: string; readonly key: unknown; readonly agent?: string }
 	| {
@@ -219,7 +213,6 @@ export type CapabilityAction =
 	| { readonly action: "label"; readonly name: string; readonly account: string; readonly label: string }
 	| { readonly action: "add"; readonly name: string }
 	| { readonly action: "address"; readonly url: unknown }
-	| { readonly action: "trust" | "reads"; readonly name: string; readonly tools: unknown; readonly sha?: string }
 	| { readonly action: "tools"; readonly name: string; readonly settings: unknown; readonly sha: string }
 	| {
 			readonly action: "public";
@@ -228,8 +221,7 @@ export type CapabilityAction =
 			readonly on: boolean;
 			readonly sha?: string;
 	  }
-	| { readonly action: "refresh"; readonly name: string }
-	| { readonly action: "switch"; readonly tool: string; readonly on: boolean };
+	| { readonly action: "refresh"; readonly name: string };
 
 /** What the owner does to memory from the app. */
 export type FactAction =
@@ -744,13 +736,12 @@ export function handler(
 		if (route === "POST /capabilities/connections")
 			return reply(res, 200, await routes.capability({ action: "address", url: (await json(req)).url }));
 		const capability =
-			/^\/capabilities\/(connections|tools)\/([a-z0-9-]{1,64})\/(accept|decline|remove|signin|key|add|trust|disconnect|public|refresh|reads|tools)$/.exec(
+			/^\/capabilities\/connections\/([a-z0-9-]{1,64})\/(remove|signin|key|add|disconnect|public|refresh|tools)$/.exec(
 				path,
 			);
 		if (capability !== null && req.method === "POST") {
-			const [, folder = "", name = "", action = ""] = capability;
-			const kind = folder as "connections" | "tools";
-			if (action === "signin" && kind === "connections") {
+			const [, name = "", action = ""] = capability;
+			if (action === "signin") {
 				const { agent, scopes, account } = await json(req);
 				if (agent !== undefined && (typeof agent !== "string" || !/^[a-z0-9-]{1,64}$/.test(agent)))
 					throw new BadRequest("agent names an agent");
@@ -767,15 +758,8 @@ export function handler(
 					}),
 				);
 			}
-			if (action === "accept") {
-				const { sha } = await json(req);
-				if (sha !== null && (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)))
-					throw new BadRequest("sha must be the hash shown, or null for a removal");
-				return reply(res, 200, await routes.capability({ action, folder: kind, name, sha }));
-			}
-			if (action === "decline" || action === "remove")
-				return reply(res, 200, await routes.capability({ action, folder: kind, name }));
-			if (action === "key" && kind === "connections") {
+			if (action === "remove") return reply(res, 200, await routes.capability({ action, name }));
+			if (action === "key") {
 				const { key, agent } = await json(req);
 				if (agent !== undefined && (typeof agent !== "string" || !/^[a-z0-9-]{1,64}$/.test(agent)))
 					throw new BadRequest("agent names an agent");
@@ -785,24 +769,14 @@ export function handler(
 					await routes.capability({ action, name, key, ...(agent === undefined ? {} : { agent: agent as string }) }),
 				);
 			}
-			if (action === "add" && kind === "connections") return reply(res, 200, await routes.capability({ action, name }));
-			if ((action === "trust" || action === "reads") && kind === "connections") {
-				const { tools, sha } = await json(req);
-				if ((action === "reads" || sha !== undefined) && (typeof sha !== "string" || !VERSION.test(sha)))
-					throw new BadRequest("sha is the version of the connection you saw");
-				return reply(
-					res,
-					200,
-					await routes.capability({ action, name, tools, ...(sha === undefined ? {} : { sha: sha as string }) }),
-				);
-			}
-			if (action === "tools" && kind === "connections") {
+			if (action === "add") return reply(res, 200, await routes.capability({ action, name }));
+			if (action === "tools") {
 				const { settings, sha } = await json(req);
 				if (typeof sha !== "string" || !VERSION.test(sha))
 					throw new BadRequest("sha is the version of the connection you saw");
 				return reply(res, 200, await routes.capability({ action, name, settings, sha: sha as string }));
 			}
-			if (action === "public" && kind === "connections") {
+			if (action === "public") {
 				const { agent, on, sha } = await json(req);
 				if (sha !== undefined && (typeof sha !== "string" || !VERSION.test(sha)))
 					throw new BadRequest("sha is the version of the connection you saw");
@@ -814,10 +788,8 @@ export function handler(
 					await routes.capability({ action, name, agent, on, ...(sha === undefined ? {} : { sha: sha as string }) }),
 				);
 			}
-			if (action === "refresh" && kind === "connections")
-				return reply(res, 200, await routes.capability({ action, name }));
-			if (action === "disconnect" && kind === "connections")
-				return reply(res, 200, await routes.capability({ action, name }));
+			if (action === "refresh") return reply(res, 200, await routes.capability({ action, name }));
+			if (action === "disconnect") return reply(res, 200, await routes.capability({ action, name }));
 			return reply(res, 404, { error: "not found" });
 		}
 		// an account of a connection: switched on or off for an agent, or signed out
@@ -857,12 +829,6 @@ export function handler(
 					...(sha === undefined ? {} : { sha: sha as string }),
 				}),
 			);
-		}
-		const switching = /^\/capabilities\/tools\/([A-Za-z0-9_-]{1,64})\/switch$/.exec(path);
-		if (switching !== null && req.method === "POST") {
-			const { on } = await json(req);
-			if (typeof on !== "boolean") throw new BadRequest("on is true or false");
-			return reply(res, 200, await routes.capability({ action: "switch", tool: switching[1] ?? "", on }));
 		}
 		if (route === "GET /events") {
 			// one stream a page: the shell, and the live events of the chat it shows (`?chat=`), each tagged with it, so

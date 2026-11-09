@@ -731,14 +731,11 @@ export type ControlView = {
  */
 export type ConnectionSummary = {
 	readonly service: string;
-	readonly url?: string;
+	readonly url: string;
 	readonly where: string;
-	readonly boxed: boolean;
 	readonly auth: "none" | "key" | "oauth";
 	readonly reads: readonly string[];
 	readonly floors: { readonly [tool: string]: Floor };
-	readonly why?: string;
-	readonly command?: string;
 	/** The scopes a new account asks for unless the owner chooses others, when the file names them. */
 	readonly scopes?: readonly string[];
 	/**
@@ -754,8 +751,8 @@ export type ConnectionSummary = {
 
 /**
  * A connection's tool, as listed when it was connected: the name the model knows it by, the server's own, in words,
- * the server's description; a read (runs when called), a write (asks first; on the floor, every time) or one of a
- * server in the companion's computer; and its switch (`PUT /api/capabilities/tools/:name` with `on`).
+ * the server's description; a read (runs when called) or a write (asks first; on the floor, every time); and whether
+ * it is on (`POST …/connections/:name/tools`).
  */
 export type ConnectionToolView = {
 	readonly name: string;
@@ -764,7 +761,7 @@ export type ConnectionToolView = {
 	readonly title: string;
 	readonly words: string;
 	readonly description: string;
-	readonly kind: "read" | "write" | "box";
+	readonly kind: "read" | "write";
 	readonly floor?: Floor;
 	readonly on: boolean;
 	/** For a tool that only reads for some arguments: when, in words ("uri is _ernesto://resolve"). */
@@ -775,7 +772,7 @@ export type ConnectionToolView = {
 	readonly hint?: "reads" | "changes";
 	/**
 	 * What it does and who said so: its definition, the owner, the server's annotations, or nobody. A server's "reads" is
-	 * only proposed until the owner allows it. Absent for a connection without definition or record (one in its computer).
+	 * only proposed until the owner allows it.
 	 */
 	readonly classed?: Classed;
 	/** Its group: as the definition says, else by its name. */
@@ -796,11 +793,9 @@ export type KindView = {
 };
 
 /**
- * A connection (`GET /api/capabilities`): the version in effect, the change the companion's file holds (allowed with
- * `POST /api/capabilities/connections/:name/accept` and the `sha` shown, or null for a removal; for a server in its
- * computer, `tools` are those it lists, which the `sha` binds), and how it stands: waiting to be allowed, waiting for
- * the owner to sign in (`POST …/signin` gives the page) or give a key (`POST …/key`), connecting, connected, or not
- * reached (`problem`, in words).
+ * A connection (`GET /api/capabilities`): the version in effect and how it stands: waiting for the owner to sign in
+ * (`POST …/signin` gives the page) or give a key (`POST …/key`), connecting, connected, or not reached (`problem`, in
+ * words).
  */
 export type ConnectionView = {
 	readonly name: string;
@@ -809,17 +804,7 @@ export type ConnectionView = {
 	readonly accepted?: {
 		readonly sha: string;
 		readonly connection?: ConnectionSummary;
-		readonly errors?: readonly string[];
 	};
-	readonly change?:
-		| {
-				readonly kind: "added" | "changed";
-				readonly sha?: string;
-				readonly connection?: ConnectionSummary;
-				readonly errors?: readonly string[];
-				readonly tools?: readonly { readonly name: string; readonly description: string }[];
-		  }
-		| { readonly kind: "removed" };
 	readonly state: "waiting" | "sign-in" | "signing-in" | "key" | "connecting" | "connected" | "problem";
 	/** When it last changed (allowed, or its tools listed again), epoch ms: the newest come first. */
 	readonly at?: number;
@@ -883,28 +868,6 @@ export type AccountView = {
 	readonly missing?: readonly string[];
 };
 
-/** A tool the companion made, as the owner reads it: what it is for, the command it runs, what it takes. */
-export type OwnToolSummary = {
-	readonly description: string;
-	readonly command: string;
-	readonly schema: { readonly [key: string]: unknown };
-};
-
-/** A tool the companion made: the version in effect, the change its file holds, and its switch. */
-export type OwnToolView = {
-	readonly name: string;
-	readonly accepted?: { readonly sha: string; readonly tool?: OwnToolSummary; readonly errors?: readonly string[] };
-	readonly change?:
-		| {
-				readonly kind: "added" | "changed";
-				readonly sha?: string;
-				readonly tool?: OwnToolSummary;
-				readonly errors?: readonly string[];
-		  }
-		| { readonly kind: "removed" };
-	readonly on: boolean;
-};
-
 /** What the companion can use beyond its computer: its connections, and the tools it made. */
 /**
  * A connection banda ships, as this banda ships it: what it reaches and does, the line the app says under its name,
@@ -923,7 +886,6 @@ export type ShippedView = {
 
 export type CapabilitiesView = {
 	readonly connections: readonly ConnectionView[];
-	readonly tools: readonly OwnToolView[];
 	/** The connections banda ships, to add with one tap. */
 	readonly shipped?: readonly ShippedView[];
 	/** Sites the owner signed in to in an agent's browser: sessions it keeps, until they sign it out; each with its agent. */

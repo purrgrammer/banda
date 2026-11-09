@@ -1,26 +1,22 @@
 /**
- * Connections and the agent's own tools (DESIGN.md "Connections", "The workspace"): what the agent may use beyond its
- * box, each a "before" file it writes and the owner accepts.
+ * Connections (DESIGN.md "Connections"): what an agent may use beyond its box. A connection is a definition banda ships
+ * (`definitions.ts`, read from the release) or a server the owner added by address (a record in `Connected`), never a
+ * file in the workspace. A remote server is called by the daemon outside the box, with the credentials it keeps in
+ * `auth/`; its definition says which of its tools only read, every other tool is a write, a draft the owner approves,
+ * and a tool it names under a floor class asks every time.
  *
- * - `connections/<name>.md`: an MCP server, remote (`url`, called by the daemon outside the box with the credentials it
- *   keeps in `auth/`) or the agent's own (`command`, run in the box over stdio, reaching outside only through the egress
- *   proxy). The file says which of its tools only read; every other tool of a remote server is a write, a draft the
- *   owner approves, and a tool it names under a floor class asks every time.
- * - `tools/<name>.md`: a command in the box, with the JSON schema of the arguments the model gives it.
- *
- * The store holds what is in effect: the accepted files (in `Accepted`, like every "before" file), the tools a server
- * listed when it was connected for that accepted file, the accounts signed in to each (an account is one sign-in, named
- * by what the service calls the owner), and the owner's switches: per tool, and per agent and account. Credentials
- * never enter it: they live in `auth/connections/<connection>/<account>/`, bound to the URL they were given for, so a
- * changed URL never carries them along. The store is the truth of which accounts exist: credentials it does not name
- * are a sign-in that did not finish, or a sign-out that did, and are forgotten.
+ * The store holds what this home chose: the tools a server listed for a version of its definition, the accounts signed
+ * in to each (an account is one sign-in, named by what the service calls the owner), and the owner's switches: per tool,
+ * and per agent and account. Credentials never enter it: they live in `auth/connections/<connection>/<account>/`, bound
+ * to the URL they were given for, so a changed URL never carries them along. The store is the truth of which accounts
+ * exist: credentials it does not name are a sign-in that did not finish, or a sign-out that did, and are forgotten.
  */
 
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
-import { Accepted, AGENT_NAME, type Agent, agentPath, frontmatter, LEAD, parseAgent } from "./agents.ts";
+import { Accepted, AGENT_NAME, type Agent, agentPath, LEAD, parseAgent } from "./agents.ts";
 import { shippedDefinition, shippedDefinitions } from "./definitions.ts";
 import { type DefinedFloor, FLOORS, type Floor } from "./floor.ts";
 import { harnessToolsOf } from "./harness.ts";
@@ -29,23 +25,19 @@ import { type ObjectKinds, parseObjects, plainLine } from "./objects.ts";
 import { REST_APIS, type RestApiName, restApiNamed } from "./rest.ts";
 import type { Said } from "./tool-kinds.ts";
 
-export const connectionPath = (name: string) => `connections/${name}.md`;
-export const toolPath = (name: string) => `tools/${name}.md`;
-
-/** What a connection or tool file may weigh. */
+/** What a definition banda ships may weigh. */
 export const MAX_DEFINITION_BYTES = 64 * 1024;
 
 /** How the daemon signs in to a remote server: not at all, with a key the owner types, or with OAuth. */
 export type AuthKind = "none" | "key" | "oauth";
 
-/** A connection as its file says. */
+/** A connection, as its definition or record says. */
 export type Connection = {
 	readonly name: string;
 	/** The service, as the owner calls it: "your calendar", "Linear". */
 	readonly service: string;
-	/** A remote server's URL; or `command`, a server the agent built, run in its box. */
-	readonly url?: string;
-	readonly command?: string;
+	/** The server's URL, called by the daemon. */
+	readonly url: string;
 	/** A built-in daemon REST adapter, whose API does not speak MCP. */
 	readonly api?: RestApiName;
 	readonly auth: AuthKind;
@@ -84,8 +76,6 @@ export type Connection = {
 	readonly account?: { readonly tool: string; readonly field: string };
 	/** The things it names that the app draws as cards (DESIGN.md "Connections", objects), by kind. */
 	readonly objects?: ObjectKinds;
-	/** Why the agent wants it, in its words: an owner-added file's body; a definition banda ships has none. */
-	readonly why?: string;
 	/** What it lets the band do, in a line for the owner: a definition banda ships says it. */
 	readonly about?: string;
 	/** Its tools in groups, in order, as a definition says: a tool in none goes by its name. */
@@ -116,29 +106,6 @@ export function readsFor(rules: readonly ReadRule[] | undefined, args: unknown):
 	return rules.some((rule) => (args as { [arg: string]: unknown })[rule.arg] === rule.value);
 }
 
-/** A tool the agent built: a command in its box, and the schema of its arguments. */
-export type OwnTool = {
-	readonly name: string;
-	readonly description: string;
-	readonly command: string;
-	readonly parameters: { readonly [key: string]: unknown };
-};
-
-const CONNECTION_FIELDS = [
-	"service",
-	"url",
-	"command",
-	"api",
-	"auth",
-	"ask",
-	"client",
-	"scopes",
-	"account",
-	"reads",
-	...FLOORS,
-] as const;
-const TOOL_FIELDS = ["description", "command"] as const;
-
 /** Whether `url` may be a remote server's: https, or http on this machine. */
 export function remoteUrl(url: string): boolean {
 	try {
@@ -157,103 +124,16 @@ export function remoteUrl(url: string): boolean {
 
 type ParsedConnection = { readonly connection: Connection } | { readonly errors: readonly string[] };
 
-/** The newest connection files parsed, by name and text: a file is parsed once per version, however often it is read. */
-const PARSED = new Map<string, ParsedConnection>();
-const PARSED_KEPT = 32;
-
-/**
- * Parse a connection file; every problem is reported, each saying what to write instead. The same text parses to the
- * same (shared, read-only) result: the accepted file is read at every object access, read and look.
- */
-export function parseConnection(name: string, text: string): ParsedConnection {
-	const key = `${name}\n${text}`;
-	const known = PARSED.get(key);
-	if (known !== undefined) return known;
-	const parsed = parseConnectionText(name, text);
-	PARSED.set(key, parsed);
-	if (PARSED.size > PARSED_KEPT) PARSED.delete(PARSED.keys().next().value as string);
-	return parsed;
-}
-
-function parseConnectionText(name: string, text: string): ParsedConnection {
-	const read = frontmatter(text, CONNECTION_FIELDS);
-	if (read === undefined) {
-		const named = AGENT_NAME.test(name) ? [] : [nameError(name)];
-		return { errors: [...named, "a connection file starts with its frontmatter between two --- lines"] };
-	}
-	const errors = [...read.errors];
-	const floors: { [floor in DefinedFloor]?: readonly string[] } = {};
-	for (const floor of FLOORS) floors[floor] = read.list(floor);
-	const fields: ConnectionFields = {
-		service: read.one("service"),
-		url: read.one("url"),
-		command: read.one("command"),
-		api: read.one("api"),
-		auth: read.one("auth"),
-		ask: read.one("ask"),
-		client: read.one("client"),
-		...(read.values.has("scopes") ? { scopes: read.list("scopes") } : {}),
-		account: read.one("account"),
-		reads: read.list("reads"),
-		floors,
-	};
-	let why = read.body;
-	let needs: { [tool: string]: string[] } | undefined;
-	let objects: unknown;
-	const late: string[] = [];
-	const block = /```json\s*\n([\s\S]*?)\n```/.exec(read.body);
-	if (block !== null) {
-		why = (read.body.slice(0, block.index) + read.body.slice(block.index + block[0].length)).trim();
-		const problem = `the json block is {"needs": {"tool": ["scope", …]}, "objects": {…}}: the scopes each tool needs, any one will do, and the things it names`;
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(block[1] ?? "") as unknown;
-		} catch {
-			late.push(problem);
-		}
-		if (parsed !== undefined) {
-			const given = (parsed as { needs?: unknown } | null)?.needs;
-			if (
-				typeof parsed !== "object" ||
-				parsed === null ||
-				Object.keys(parsed).some((key) => key !== "needs" && key !== "objects") ||
-				(given !== undefined &&
-					(typeof given !== "object" ||
-						given === null ||
-						Array.isArray(given) ||
-						!Object.entries(given).every(
-							([tool, list]) =>
-								/^[A-Za-z0-9_.-]{1,64}$/.test(tool) &&
-								Array.isArray(list) &&
-								list.length > 0 &&
-								list.every((scope) => typeof scope === "string" && /^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/.test(scope)),
-						)))
-			)
-				late.push(problem);
-			else if (given !== undefined) needs = given as { [tool: string]: string[] };
-			objects = (parsed as { objects?: unknown } | null)?.objects;
-		}
-	}
-	if (why.length > 2000) late.push("say why in a few lines");
-	return connectionOf(
-		name,
-		{ ...fields, ...(needs === undefined ? {} : { needs }), ...(objects === undefined ? {} : { objects }), why },
-		errors,
-		late,
-	);
-}
-
 const nameError = (name: string) =>
 	`"${name}" is not a connection name: use lowercase letters, digits and dashes, such as "calendar"`;
 
 /**
- * What a connection says, before the checks across its fields: read from a file's frontmatter, or from a definition
- * banda ships (`definitions.ts`), whose schema has checked each field's shape already.
+ * What a connection says, before the checks across its fields: from a definition banda ships (`definitions.ts`), whose
+ * schema has checked each field's shape already, or from a server's record.
  */
 export type ConnectionFields = {
 	readonly service: string | undefined;
-	readonly url?: string | undefined;
-	readonly command?: string | undefined;
+	readonly url: string | undefined;
 	readonly api?: string | undefined;
 	readonly auth?: string | undefined;
 	readonly ask?: string | undefined;
@@ -265,7 +145,6 @@ export type ConnectionFields = {
 	readonly floors: { readonly [floor in DefinedFloor]?: readonly string[] };
 	readonly needs?: { readonly [tool: string]: readonly string[] };
 	readonly objects?: unknown;
-	readonly why?: string;
 	readonly about?: string;
 	readonly groups?: { readonly [group: string]: readonly string[] };
 	readonly access?: Access;
@@ -273,29 +152,21 @@ export type ConnectionFields = {
 
 /**
  * The connection `fields` say, or every problem with them, each saying what to write instead: the checks a schema
- * cannot say (an address or a command but not both, a built-in's client and scopes within its registry's ceiling, a
- * read that is not also on a floor, the kinds' templates and paths, an access choice within what an account may ask
- * for). `before` are problems found first, `after` ones said last.
+ * cannot say (a built-in's client and scopes within its registry's ceiling, a read that is not also on a floor, the
+ * kinds' templates and paths, an access choice within what an account may ask for).
  */
-export function connectionOf(
-	name: string,
-	fields: ConnectionFields,
-	before: readonly string[] = [],
-	after: readonly string[] = [],
-): ParsedConnection {
+export function connectionOf(name: string, fields: ConnectionFields): ParsedConnection {
 	const errors: string[] = [];
 	if (!AGENT_NAME.test(name)) errors.push(nameError(name));
-	errors.push(...before);
 	const service = fields.service ?? "";
 	if (service === "") errors.push(`add "service:", the service as the owner calls it, such as "your calendar"`);
-	const { url, command, client, scopes } = fields;
+	const { url, client, scopes } = fields;
 	const apiName = fields.api;
 	const api = apiName === undefined ? undefined : restApiNamed(apiName);
 	const builtIn = api === undefined ? undefined : REST_APIS[api];
-	if ((url === undefined) === (command === undefined))
-		errors.push(`give "url:" for a server elsewhere, or "command:" for one you run in your computer, not both`);
-	if (url !== undefined && !remoteUrl(url)) errors.push(`"url: ${url}" is not an https address`);
-	if (apiName !== undefined && (command !== undefined || builtIn === undefined || url !== builtIn.url))
+	if (url === undefined) errors.push('add "url:", the server\'s address');
+	else if (!remoteUrl(url)) errors.push(`"url: ${url}" is not an https address`);
+	if (apiName !== undefined && (builtIn === undefined || url !== builtIn.url))
 		errors.push(
 			`a built-in API is one of ${Object.entries(REST_APIS)
 				.map(([name, { url }]) => `"${name}" at ${url}`)
@@ -304,10 +175,8 @@ export function connectionOf(
 	const auth = fields.auth ?? "none";
 	if (auth !== "none" && auth !== "key" && auth !== "oauth")
 		errors.push(`"auth: ${auth}": use none, key (the owner types one in) or oauth (the owner signs in)`);
-	if (command !== undefined && auth !== "none")
-		errors.push(`a server in your computer gets no credentials: drop "auth"`);
 	const ask = fields.ask;
-	if (ask !== undefined && (ask !== "always" || command !== undefined))
+	if (ask !== undefined && ask !== "always")
 		errors.push('"ask: always" is for a remote connection whose non-read tools must ask every time');
 	if (
 		builtIn !== undefined &&
@@ -336,7 +205,7 @@ export function connectionOf(
 		errors.push(
 			`"account: ${accountRead}" is a read tool and the field naming you in its answer, such as get_me.login`,
 		);
-	if (accountRead !== undefined && (auth === "none" || command !== undefined))
+	if (accountRead !== undefined && auth === "none")
 		errors.push(`"account" is for a server the owner signs in to: drop it`);
 	const reads: string[] = [];
 	const readsWhen: { [tool: string]: ReadRule[] } = {};
@@ -375,7 +244,7 @@ export function connectionOf(
 	let objects: ObjectKinds | undefined;
 	if (fields.objects !== undefined) {
 		const isRead = (tool: string, args: { readonly [arg: string]: unknown }) =>
-			command === undefined && (reads.includes(tool) || readsFor(readsWhen[tool], args));
+			reads.includes(tool) || readsFor(readsWhen[tool], args);
 		const found = parseObjects(fields.objects, isRead);
 		if ("errors" in found) errors.push(...found.errors);
 		else objects = found.objects;
@@ -401,14 +270,12 @@ export function connectionOf(
 		if (access.required !== undefined && builtIn === undefined)
 			errors.push("a required access is the scopes every account asks for, which only a built-in API has");
 	}
-	errors.push(...after);
-	if (errors.length > 0) return { errors };
+	if (errors.length > 0 || url === undefined) return { errors };
 	return {
 		connection: {
 			name,
 			service,
-			...(url === undefined ? {} : { url }),
-			...(command === undefined ? {} : { command }),
+			url,
 			...(api === undefined ? {} : { api }),
 			auth: auth as AuthKind,
 			...(ask === "always" ? { ask: "always" as const } : {}),
@@ -423,7 +290,6 @@ export function connectionOf(
 			...(accountParts === null || accountParts === undefined
 				? {}
 				: { account: { tool: accountParts[1] ?? "", field: accountParts[2] ?? "" } }),
-			...(fields.why === undefined ? {} : { why: fields.why }),
 			...(fields.about === undefined ? {} : { about: fields.about }),
 			...(access === undefined ? {} : { access }),
 		},
@@ -437,40 +303,6 @@ export const readItems = (connection: Connection): string[] => [
 		rules.map((rule) => `${tool}(${rule.arg}=${rule.value})`),
 	),
 ];
-
-/** Parse a tool file: frontmatter, then the JSON schema of its arguments in a ```json block (none: it takes none). */
-export function parseTool(
-	name: string,
-	text: string,
-	taken: readonly string[] = [],
-): { readonly tool: OwnTool } | { readonly errors: readonly string[] } {
-	const errors: string[] = [];
-	if (!AGENT_NAME.test(name))
-		errors.push(`"${name}" is not a tool name: use lowercase letters, digits and dashes, such as "weather-now"`);
-	if (taken.includes(name)) errors.push(`"${name}" is already a tool: pick another name`);
-	const read = frontmatter(text, TOOL_FIELDS);
-	if (read === undefined)
-		return { errors: [...errors, "a tool file starts with its frontmatter between two --- lines"] };
-	errors.push(...read.errors);
-	const description = read.one("description") ?? "";
-	if (description === "") errors.push(`add "description:", which is how the model knows when to call it`);
-	const command = read.one("command") ?? "";
-	if (command === "")
-		errors.push(`add "command:", what runs in your computer; it gets the arguments as JSON in $BANDA_INPUT`);
-	let parameters: { [key: string]: unknown } = { type: "object", properties: {} };
-	const block = /```json\s*\n([\s\S]*?)\n```/.exec(read.body);
-	if (block !== null)
-		try {
-			const parsed = JSON.parse(block[1] ?? "") as unknown;
-			if (typeof parsed !== "object" || parsed === null || (parsed as { type?: unknown }).type !== "object")
-				errors.push(`the schema is a JSON object with "type": "object"`);
-			else parameters = parsed as { [key: string]: unknown };
-		} catch (error) {
-			errors.push(`the schema is not JSON: ${(error as Error).message}`);
-		}
-	if (errors.length > 0) return { errors };
-	return { tool: { name, description, command, parameters } };
-}
 
 /** A tool as a server listed it when it was connected: what the model is offered, fixed until it is listed again. */
 export type Listed = {
@@ -640,8 +472,7 @@ export function defaultAccountLabel(url: string, accounts: readonly Named[]): st
 }
 
 /** Whether connection `connection` is signed in to: its tools act as one of its accounts. */
-export const signsIn = (connection: Pick<Connection, "url" | "auth">) =>
-	connection.url !== undefined && connection.auth !== "none";
+export const signsIn = (connection: Pick<Connection, "auth">) => connection.auth !== "none";
 
 /** Whether agent `agent`'s file lets it use connection `name`: it names it, or it is the lead, which may use any. */
 export const mayUse = (agent: Pick<Agent, "id" | "connections">, name: string) =>
@@ -736,7 +567,7 @@ function withOwnerReads(
 
 /**
  * What connection `name`'s definition says of its tools, as `classOf` needs it: a server the owner added says nothing
- * and asks every time; else as banda ships it, else as its accepted file says.
+ * and asks every time; else as banda ships it.
  */
 export function saidOf(name: string, connection: Connection, server: boolean): Said {
 	if (server) return { reads: [], floors: {}, named: new Set(), ask: "always" };
@@ -751,9 +582,9 @@ export function saidOf(name: string, connection: Connection, server: boolean): S
 }
 
 /**
- * The connection `name` in effect: one banda ships, as this banda ships it, while the owner has it added; a server the
- * owner added, from its record; else an accepted file an agent built, if it parses. Its `sha` is its version: a
- * definition's hash or a record's counter, with the owner's reads' own counter when they laid any over it. Reads only.
+ * The connection `name` in effect: one banda ships, as this banda ships it, while the owner has it added; or a server
+ * the owner added, from its record. Its `sha` is its version: a definition's hash or a record's counter, with the
+ * owner's reads' own counter when they laid any over it. Reads only.
  */
 export async function acceptedConnection(tx: Tx, name: string): Promise<(Connection & { sha: string }) | undefined> {
 	const doc = await tx.doc(Connected);
@@ -761,27 +592,15 @@ export async function acceptedConnection(tx: Tx, name: string): Promise<(Connect
 	if (shipped !== undefined)
 		return doc.added[name] === undefined ? undefined : withOwnerReads(shipped, doc.reads[name]);
 	const server = doc.servers[name];
-	if (server !== undefined) return withOwnerReads(serverConnection(name, server), doc.reads[name]);
-	const file = (await tx.doc(Accepted)).files[connectionPath(name)];
-	if (file === undefined) return undefined;
-	const parsed = parseConnection(name, file.text);
-	return "connection" in parsed ? { ...parsed.connection, sha: file.sha } : undefined;
+	return server === undefined ? undefined : withOwnerReads(serverConnection(name, server), doc.reads[name]);
 }
 
-/**
- * The names of the connections in effect, sorted: the shipped ones added in this home, the servers the owner added, and
- * the agent-built ones whose files were accepted (a name banda ships or a record has is never one of those). Reads only.
- */
+/** The names of the connections in effect, sorted: the shipped ones added in this home and the servers the owner added. Reads only. */
 export async function acceptedNames(tx: Tx): Promise<string[]> {
 	const shipped = shippedDefinitions();
 	const doc = await tx.doc(Connected);
 	const added = Object.keys(doc.added).filter((name) => shipped.has(name));
-	const servers = Object.keys(doc.servers);
-	const own = Object.keys((await tx.doc(Accepted)).files).flatMap((path) => {
-		const name = /^connections\/(.+)\.md$/.exec(path)?.[1];
-		return name === undefined || shipped.has(name) || doc.servers[name] !== undefined ? [] : [name];
-	});
-	return [...added, ...servers, ...own].sort();
+	return [...added, ...Object.keys(doc.servers)].sort();
 }
 
 /**
@@ -804,14 +623,6 @@ export function namedTools(connection: Connection): Set<string> {
 		for (const create of kind.creates ?? []) named.add(create.tool);
 	}
 	return named;
-}
-
-/** The accepted tool `name`, if its file parses. Reads only. */
-export async function acceptedTool(tx: Tx, name: string): Promise<(OwnTool & { sha: string }) | undefined> {
-	const file = (await tx.doc(Accepted)).files[toolPath(name)];
-	if (file === undefined) return undefined;
-	const parsed = parseTool(name, file.text);
-	return "tool" in parsed ? { ...parsed.tool, sha: file.sha } : undefined;
 }
 
 /** A connection's tool in effect: whose, its server's name for it, and whether it is a read or on the floor. */
@@ -845,7 +656,7 @@ export async function connectionTools(tx: Tx): Promise<InEffect[]> {
 			if (off[model] !== undefined || found.some((other) => other.name === model)) continue;
 			const reads = connection.reads.includes(tool) || connection.readsWhen?.[tool] !== undefined;
 			// the owner's Ask on a read, or Always ask on anything, puts it on the floor; a definition's own floor stays
-			const narrowed = connection.command === undefined && (set[model] === "always" || (set[model] === "ask" && reads));
+			const narrowed = set[model] === "always" || (set[model] === "ask" && reads);
 			const floor = Object.hasOwn(connection.floors, tool)
 				? connection.floors[tool]
 				: narrowed
@@ -859,29 +670,12 @@ export async function connectionTools(tx: Tx): Promise<InEffect[]> {
 				connection,
 				tool,
 				listed: JSON.parse(JSON.stringify(shape)) as Listed,
-				// a server in the box runs there like any command: nothing it does leaves but through the proxy
-				read: connection.command !== undefined || (connection.reads.includes(tool) && !narrowed),
-				...(connection.command === undefined && connection.readsWhen?.[tool] !== undefined && !narrowed
-					? { readsWhen: connection.readsWhen[tool] }
-					: {}),
+				read: connection.reads.includes(tool) && !narrowed,
+				...(connection.readsWhen?.[tool] !== undefined && !narrowed ? { readsWhen: connection.readsWhen[tool] } : {}),
 				...(floor === undefined ? {} : { floor }),
 				...(carried === undefined ? {} : { notes: carried }),
 			});
 		}
-	}
-	return found;
-}
-
-/** Every tool the agent built that is in effect: accepted and not switched off. Reads only. */
-export async function ownTools(tx: Tx): Promise<OwnTool[]> {
-	const { files } = await tx.doc(Accepted);
-	const { off } = await tx.doc(Connected);
-	const found: OwnTool[] = [];
-	for (const path of Object.keys(files).sort()) {
-		const name = /^tools\/(.+)\.md$/.exec(path)?.[1];
-		if (name === undefined || off[name] !== undefined) continue;
-		const tool = await acceptedTool(tx, name);
-		if (tool !== undefined) found.push(tool);
 	}
 	return found;
 }
@@ -894,8 +688,7 @@ export async function connectionTool(tx: Tx, name: string): Promise<InEffect | u
 
 /** Whether the tool the model knows as `name` is in effect now, checked in the commit that starts a call. */
 export async function inEffect(tx: Tx, name: string): Promise<boolean> {
-	if (name.includes("__")) return (await connectionTools(tx)).some((tool) => tool.name === name);
-	return (await ownTools(tx)).some((tool) => tool.name === name);
+	return (await connectionTools(tx)).some((tool) => tool.name === name);
 }
 
 /**

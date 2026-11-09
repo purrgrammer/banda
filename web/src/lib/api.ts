@@ -378,42 +378,22 @@ export const chooseBring = (skills: readonly BringPick[], agents: readonly Bring
 export const chooseShippedSkills = (add: readonly string[]) =>
 	api<ShippedSkillsView>("/skills/shipped", { method: "POST", body: JSON.stringify({ add }) });
 
-/** What the owner does to a connection or a tool the companion made. */
+/** What the owner does to a connection or one of its tools. */
 export type CapabilityAct =
-	| {
-			readonly action: "accept";
-			readonly folder: "connections" | "tools";
-			readonly name: string;
-			readonly sha: string | null;
-	  }
-	| { readonly action: "decline" | "remove"; readonly folder: "connections" | "tools"; readonly name: string }
+	| { readonly action: "remove"; readonly name: string }
 	| { readonly action: "disconnect"; readonly name: string }
 	| { readonly action: "key"; readonly name: string; readonly key: string }
 	| { readonly action: "add"; readonly name: string }
-	| { readonly action: "address"; readonly url: string }
-	| { readonly action: "trust"; readonly name: string; readonly tools: readonly string[] }
-	| { readonly action: "switch"; readonly tool: string; readonly on: boolean };
+	| { readonly action: "address"; readonly url: string };
 
-/** Act on a connection or a tool as the owner; what the companion can use as it is after, or rejects with why. */
+/** Act on a connection as the owner; what the companion can use as it is after, or rejects with why. */
 export const actOnCapability = (act: CapabilityAct) =>
-	act.action === "switch"
-		? api<CapabilitiesView>(`/capabilities/tools/${act.tool}/switch`, {
+	act.action === "address"
+		? api<CapabilitiesView>("/capabilities/connections", { method: "POST", body: JSON.stringify({ url: act.url }) })
+		: api<CapabilitiesView>(`/capabilities/connections/${act.name}/${act.action}`, {
 				method: "POST",
-				body: JSON.stringify({ on: act.on }),
-			})
-		: act.action === "address"
-			? api<CapabilitiesView>("/capabilities/connections", { method: "POST", body: JSON.stringify({ url: act.url }) })
-			: act.action === "disconnect" || act.action === "key" || act.action === "add" || act.action === "trust"
-				? api<CapabilitiesView>(`/capabilities/connections/${act.name}/${act.action}`, {
-						method: "POST",
-						body: JSON.stringify(
-							act.action === "key" ? { key: act.key } : act.action === "trust" ? { tools: act.tools } : {},
-						),
-					})
-				: api<CapabilitiesView>(`/capabilities/${act.folder}/${act.name}/${act.action}`, {
-						method: "POST",
-						body: JSON.stringify(act.action === "accept" ? { sha: act.sha } : {}),
-					});
+				body: JSON.stringify(act.action === "key" ? { key: act.key } : {}),
+			});
 
 /**
  * Start signing in to a connection: the page to send the browser to, which comes back to banda; or the code the owner

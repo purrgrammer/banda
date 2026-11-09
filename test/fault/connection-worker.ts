@@ -1,11 +1,11 @@
 /**
- * The process the connection fault suite kills: the agent proposes a calendar it signs in to with OAuth; the owner
- * allows it and signs in; then one owner message whose run reads the calendar and creates an event, which the owner
+ * The process the connection fault suite kills: a calendar banda ships that signs in with OAuth; the owner adds it and
+ * signs in; then one owner message whose run reads the calendar and creates an event, which the owner
  * approves. A run interrupted while it created the event asks to run it again, and the owner says no, so a write that
  * may have reached the server is never sent twice. Every step is safe to repeat, as each process does them again from
  * the start; the fake server, in the test's own process, keeps counting across kills. Prints a summary as its last line.
  *
- * With "code", the file names its client and the owner signs in by code, typed on the fake server's page; a sign-in by
+ * With "code", the definition names its client and the owner signs in by code, typed on the fake server's page; a sign-in by
  * code dies with the process that waited for it, so a restart starts it again.
  *
  * With "shipped", the calendar is a definition banda ships, the owner adds it as a switch. With "remove", the owner adds
@@ -17,13 +17,12 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, write
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { TaskId } from "@earendil-works/pi-durable";
-import { Accepted } from "../../src/core/agents.ts";
 import { Connected } from "../../src/core/connections.ts";
 import { OWNER } from "../../src/core/gateway.ts";
 import { openWaits, status } from "../../src/core/status.ts";
 import { context } from "../../src/core/store.ts";
 import type { TurnResult } from "../../src/core/turn.ts";
-import { connectionFile, openConnected, signInAsOwner, typingAt } from "../fixtures/connected.ts";
+import { connectionDefinition, openConnected, signInAsOwner, typingAt } from "../fixtures/connected.ts";
 import { answerNudge } from "../fixtures/models.ts";
 import { type Fault, type FaultPoint, Faults } from "./faults.ts";
 import { ownerAnswer } from "./owner.ts";
@@ -35,30 +34,32 @@ const [home, url, mode, scheduleJson] = process.argv.slice(2) as [
 	string,
 ];
 const byCode = mode === "code" || mode === "shipped" || mode === "remove";
-const calendar = connectionFile({
+const calendar = connectionDefinition({
 	url,
 	auth: "oauth",
 	// "rule": the read is list_events only for day=mon, the call the model makes; any other day would ask
 	reads: [mode === "rule" ? "list_events(day=mon)" : "list_events"],
 	...(byCode ? { client: "banda-app", scopes: ["calendar"] } : {}),
 });
-// what banda ships, for "shipped" and "remove": the calendar as a definition, in a folder of its own
+// what banda ships, in a folder of its own: every mode but the servers the owner adds
 const shipped = join(home, "shipped");
-const shipping = mode === "shipped" || mode === "remove";
+const shipping = mode !== "address" && mode !== "mcp" && mode !== "remove-server";
 if (shipping && !existsSync(shipped)) {
 	mkdirSync(shipped, { recursive: true });
 	writeFileSync(
 		join(shipped, "cal.json"),
-		JSON.stringify({
-			service: "Calendar",
-			about: "Your days",
-			url,
-			auth: "oauth",
-			client: "banda-app",
-			scopes: ["calendar"],
-			reads: ["list_events"],
-			needs: { create_event: ["calendar"] },
-		}),
+		mode === "shipped" || mode === "remove"
+			? JSON.stringify({
+					service: "Calendar",
+					about: "Your days",
+					url,
+					auth: "oauth",
+					client: "banda-app",
+					scopes: ["calendar"],
+					reads: ["list_events"],
+					needs: { create_event: ["calendar"] },
+				})
+			: calendar,
 	);
 }
 const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
@@ -98,7 +99,7 @@ if (mode === "remove-server") {
 		await s.capabilities.addMcp({ url, service: "Cal" });
 		writeFileSync(removing, "");
 	}
-	if (await hasRecord()) await s.capabilities.remove("connections", "cal");
+	if (await hasRecord()) await s.capabilities.remove("cal");
 	const connected = await s.harness.snapshot(Connected, context);
 	console.log(
 		JSON.stringify({
@@ -124,8 +125,7 @@ if (mode === "remove") {
 		}
 		writeFileSync(removing, "");
 	}
-	if ((await s.harness.snapshot(Connected, context))?.added.cal !== undefined)
-		await s.capabilities.remove("connections", "cal");
+	if ((await s.harness.snapshot(Connected, context))?.added.cal !== undefined) await s.capabilities.remove("cal");
 	const connected = await s.harness.snapshot(Connected, context);
 	console.log(
 		JSON.stringify({
@@ -143,23 +143,14 @@ if (mode === "remove") {
 }
 
 // the agent proposes it, or the owner adds the one banda ships
-const file = join(s.box.workspace, "connections", "cal.md");
 // "mcp": the owner sets it up from Connections, and after a kill sets it up again: the same connection, never a second
 if (mode === "mcp") {
 	const named = await s.capabilities.addMcp({ url, service: "Cal" });
 	if (named !== "cal") throw new Error(`setting it up again made ${named}, not cal`);
-} else if (mode === "shipped") {
-	if ((await s.harness.snapshot(Connected, context))?.added.cal === undefined) await s.capabilities.addShipped("cal");
 } else if (mode === "address") {
 	if (!(await hasRecord())) await s.capabilities.addByAddress(url, context, "cal");
-} else if (!existsSync(file)) {
-	mkdirSync(join(s.box.workspace, "connections"), { recursive: true });
-	writeFileSync(file, calendar);
-}
-// the owner allows it, as shown
-const shown = (await s.capabilities.view()).connections.find((c) => c.name === "cal");
-if (shown?.change !== undefined && "sha" in shown.change && shown.change.sha !== undefined)
-	await s.capabilities.acceptConnection("cal", shown.change.sha);
+} else if ((await s.harness.snapshot(Connected, context))?.added.cal === undefined)
+	await s.capabilities.addShipped("cal");
 // and signs in, unless the credentials are in already (the start listed its tools then)
 const state = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.state;
 if (state === "sign-in") {
@@ -169,7 +160,9 @@ if (state === "sign-in") {
 // "address": its reads are none at first; the owner lets what the server says only reads run without asking
 if (mode === "address" || mode === "mcp") {
 	const hinted = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.hinted ?? [];
-	if (hinted.includes("list_events")) await s.capabilities.trustReads("cal", ["list_events"]);
+	const seen = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.accepted?.sha;
+	if (hinted.includes("list_events") && seen !== undefined)
+		await s.capabilities.setTools("cal", { list_events: "allow" }, seen);
 	// and sets one of them to ask: the same after a kill, whichever side of the commit it died on
 	const current = (await s.capabilities.view()).connections.find((c) => c.name === "cal");
 	if (current?.accepted?.sha !== undefined)
@@ -196,10 +189,7 @@ while (!(await Promise.race([ended, new Promise<false>((r) => setTimeout(r, 10, 
 
 const outcome = (await s.harness.getTask(received.turn as TaskId<TurnResult>, context))?.state.outcome;
 const { parked } = await status(s.harness);
-const accepted =
-	(await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"] !== undefined ||
-	(await s.harness.snapshot(Connected, context))?.added.cal !== undefined ||
-	(await hasRecord());
+const accepted = (await s.harness.snapshot(Connected, context))?.added.cal !== undefined || (await hasRecord());
 const connected = (await s.harness.snapshot(Connected, context))?.connections.cal !== undefined;
 const answers = readFileSync(join(home, "answers.txt"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean);
 console.log(

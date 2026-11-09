@@ -69,17 +69,7 @@ const s = await openConnected({
 });
 
 const shown = async () => (await s.capabilities.view()).connections.find((c) => c.name === "calendar");
-// what the file says now, allowed, whatever a kill left between writing it and allowing it
-const allow = async () => {
-	const change = (await shown())?.change;
-	if (change !== undefined && "sha" in change && change.sha !== undefined)
-		await s.capabilities.acceptConnection("calendar", change.sha);
-};
-if ((await shown())?.accepted === undefined) {
-	await allow();
-	if ((await shown())?.accepted === undefined) await s.capabilities.addShipped("calendar");
-}
-await allow();
+if ((await shown())?.accepted === undefined) await s.capabilities.addShipped("calendar");
 if ((await shown())?.state === "sign-in") {
 	const started = await s.capabilities.signIn("calendar", context, LEAD, {
 		scopes: ["https://www.googleapis.com/auth/calendar.readonly", "https://www.googleapis.com/auth/calendar.events"],

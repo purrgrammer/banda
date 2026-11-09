@@ -8,7 +8,6 @@ import type { Context } from "@earendil-works/chord";
 import type { Harness } from "@earendil-works/pi-durable";
 import { log } from "../core/activity.ts";
 import { Accepted, activeAgents, agentWords, isArchived, shaOf, unaccept } from "../core/agents.ts";
-import { connectionPath, parseConnection } from "../core/connections.ts";
 import { shippedDefinition } from "../core/definitions.ts";
 import { nameOf, Readings, readingKey, refKey } from "../core/objects.ts";
 import { withAsk } from "../core/routines.ts";
@@ -56,20 +55,9 @@ const fileView = (name: string, sha: string, text: string): WatchFileView => {
 
 const watchFiles = (workspace: Workspace, ctx: Context) => boxFiles(workspace, ctx, "watches", MAX_WATCH_BYTES);
 
-/** The words that can end a watch on the kind `ref` names (`github:pull_request:…`), as its accepted connection says. */
-function endsOf(accepted: { readonly [path: string]: { readonly text: string } }, connection: string, ref: string) {
-	const shipped = shippedDefinition(connection);
-	const file = shipped === undefined ? accepted[connectionPath(connection)] : undefined;
-	const parsed =
-		shipped !== undefined
-			? { connection: shipped }
-			: file === undefined
-				? undefined
-				: parseConnection(connection, file.text);
-	const follow =
-		parsed !== undefined && "connection" in parsed
-			? parsed.connection.objects?.[ref.split(":")[1] ?? ""]?.follow
-			: undefined;
+/** The words that can end a watch on the kind `ref` names (`github:pull_request:…`), as its definition says. */
+function endsOf(connection: string, ref: string) {
+	const follow = shippedDefinition(connection)?.objects?.[ref.split(":")[1] ?? ""]?.follow;
 	return follow === undefined ? undefined : Object.keys(follow.ends);
 }
 
@@ -119,8 +107,7 @@ export async function watches(harness: Harness, workspace: Workspace, ctx: Conte
 			(record.key === undefined
 				? undefined
 				: `${record.key.split("/")[0] ?? ""}:${record.key.split("/").slice(2).join("/")}`);
-		const ends =
-			record.connection === undefined || ref === undefined ? undefined : endsOf(accepted, record.connection, ref);
+		const ends = record.connection === undefined || ref === undefined ? undefined : endsOf(record.connection, ref);
 		const version = record.key === undefined ? undefined : readings[record.key]?.version;
 		const object =
 			record.key === undefined || ref === undefined || record.name === undefined || record.connection === undefined

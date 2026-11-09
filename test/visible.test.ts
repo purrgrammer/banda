@@ -5,7 +5,6 @@
  */
 import { describe, expect, it } from "vitest";
 import { parseAgent } from "../src/core/agents.ts";
-import { parseConnection, parseTool } from "../src/core/connections.ts";
 import { GLOBAL_MEMORY, parseFacts } from "../src/core/memory.ts";
 import { parseRoutine } from "../src/core/routines.ts";
 
@@ -52,13 +51,6 @@ describe("characters nobody sees", () => {
 			expect("errors" in parseRoutine("tea", `---\ndescription: Tea\nevery: 2h\n---\nTea.${hidden}\n`), says).toBe(
 				true,
 			);
-			expect("errors" in parseTool("greet", `---\ndescription: Greets${hidden}\ncommand: echo hi\n---\n`), says).toBe(
-				true,
-			);
-			expect(
-				"errors" in parseConnection("cal", `---\nservice: Cal\nurl: https://a.example/mcp\n---\nWhy${hidden}\n`),
-				says,
-			).toBe(true);
 			expect(
 				parseFacts(GLOBAL_MEMORY, `- Likes tea${hidden}\n- Likes coffee\n`).map((fact) => fact.text),
 				says,

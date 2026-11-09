@@ -77,8 +77,6 @@ describe("connections under faults", () => {
 			expect(clean.creates).toBe(1);
 			expect(clean.answers).toEqual(["approve"]);
 			const points: [FaultPoint, number][] = [
-				["accept:before", 1],
-				["accept:after", 1],
 				["oauth:taken", 1],
 				["oauth:exchanged", 1],
 				["oauth:kept", 1],
@@ -230,7 +228,7 @@ describe("connections under faults", () => {
 		const clean = await run([], "mcp");
 		check(clean);
 		expect(clean.creates).toBe(1);
-		const points: FaultPoint[] = ["server:added", "accept:after", "settings:after", "oauth:kept", "connect:listed"];
+		const points: FaultPoint[] = ["server:added", "settings:after", "oauth:kept", "connect:listed"];
 		await pool(
 			2,
 			points.map((point) => async () => {
@@ -249,7 +247,7 @@ describe("connections under faults", () => {
 		const clean = await run([], "address");
 		check(clean);
 		expect(clean.creates).toBe(1);
-		const points: FaultPoint[] = ["server:added", "accept:after", "settings:after", "oauth:kept", "connect:listed"];
+		const points: FaultPoint[] = ["server:added", "settings:after", "oauth:kept", "connect:listed"];
 		await pool(
 			2,
 			points.map((point) => async () => {

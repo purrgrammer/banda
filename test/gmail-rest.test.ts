@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseConnection } from "../src/core/connections.ts";
+import { readDefinition } from "../src/core/definitions.ts";
 import { addressOf, GMAIL_TOOLS, gmailAttachment, gmailCall, gmailWriteCall } from "../src/core/gmail-rest.ts";
 import {
 	begin,
@@ -38,57 +38,69 @@ describe("Gmail REST connection", () => {
 			"get_message",
 			"get_thread",
 		]);
-		const definition = parseConnection(
+		const read = readDefinition(
 			"gmail",
-			"---\nservice: Gmail\nurl: https://gmail.googleapis.com/gmail/v1/users/me\napi: gmail\nauth: oauth\nclient: google\nscopes: [https://www.googleapis.com/auth/gmail.readonly]\naccount: get_profile.emailAddress\nreads: [get_profile, search_messages, get_message, get_thread]\n---\nRead mail.",
-		);
-		expect("connection" in definition && definition.connection.api).toBe("gmail");
-	});
-
-	it("accepts a built-in API only at its own address, as Google, with scopes it allows", () => {
-		const file = (lines: Record<string, string>) =>
-			`---\n${Object.entries({
+			JSON.stringify({
 				service: "Gmail",
+				about: "Your mail",
 				url: "https://gmail.googleapis.com/gmail/v1/users/me",
 				api: "gmail",
 				auth: "oauth",
 				client: "google",
-				scopes: "[https://www.googleapis.com/auth/gmail.readonly]",
-				...lines,
-			})
-				.filter(([, value]) => value !== "")
-				.map(([key, value]) => `${key}: ${value}`)
-				.join("\n")}\n---\nRead mail.`;
-		const errors = (lines: Record<string, string>) => {
-			const parsed = parseConnection("gmail", file(lines));
+				scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+				account: "get_profile.emailAddress",
+				reads: ["get_profile", "search_messages", "get_message", "get_thread"],
+			}),
+		);
+		expect("connection" in read && read.connection.api).toBe("gmail");
+	});
+
+	it("accepts a built-in API only at its own address, as Google, with scopes it allows", () => {
+		const definitionText = (fields: Record<string, unknown>) =>
+			JSON.stringify({
+				service: "Gmail",
+				about: "Your mail",
+				url: "https://gmail.googleapis.com/gmail/v1/users/me",
+				api: "gmail",
+				auth: "oauth",
+				client: "google",
+				scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+				reads: [],
+				...fields,
+			});
+		const errors = (fields: Record<string, unknown>) => {
+			const parsed = readDefinition("gmail", definitionText(fields));
 			return "errors" in parsed ? parsed.errors : [];
 		};
 		expect(errors({})).toEqual([]);
 		expect(
 			errors({
-				scopes:
-					"[https://www.googleapis.com/auth/gmail.readonly, https://www.googleapis.com/auth/gmail.send, https://www.googleapis.com/auth/gmail.modify]",
+				scopes: [
+					"https://www.googleapis.com/auth/gmail.readonly",
+					"https://www.googleapis.com/auth/gmail.send",
+					"https://www.googleapis.com/auth/gmail.modify",
+				],
 			}),
 		).toEqual([]);
 		expect(errors({ api: "drive" }).join()).toContain("built-in API");
 		expect(errors({ url: "https://gmail.googleapis.com/gmail/v1/users/other" }).join()).toContain("built-in API");
 		expect(errors({ client: "someone-else" }).join()).toContain("Gmail uses OAuth client");
-		expect(errors({ scopes: "[https://www.googleapis.com/auth/gmail.send]" }).join()).toContain(
+		expect(errors({ scopes: ["https://www.googleapis.com/auth/gmail.send"] }).join()).toContain(
 			"Gmail uses OAuth client",
 		);
 		expect(
 			errors({
-				scopes: "[https://www.googleapis.com/auth/gmail.readonly, https://www.googleapis.com/auth/drive]",
+				scopes: ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/drive"],
 			}).join(),
 		).toContain("Gmail uses OAuth client");
 		expect(
 			errors({
-				scopes: "[https://www.googleapis.com/auth/gmail.readonly, https://www.googleapis.com/auth/gmail.readonly]",
+				scopes: ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.readonly"],
 			}).join(),
-		).toContain("Gmail uses OAuth client");
+		).toContain("duplicate");
 		// what a tool needs is what an account may ask for: only scopes the API allows
 		const needing = (needs: Record<string, string[]>) => {
-			const parsed = parseConnection("gmail", `${file({})}\n\`\`\`json\n${JSON.stringify({ needs })}\n\`\`\`\n`);
+			const parsed = readDefinition("gmail", definitionText({ needs }));
 			return "errors" in parsed ? parsed.errors : [];
 		};
 		expect(needing({ send_message: ["https://www.googleapis.com/auth/gmail.send"] })).toEqual([]);

@@ -23,7 +23,7 @@ import { openWaits } from "../src/core/status.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
 import { maxFileBytes } from "../src/home.ts";
-import type { CapabilitiesView } from "../src/server/api.ts";
+import type { AgentView } from "../src/server/api.ts";
 import { items } from "../src/server/transcript.ts";
 import { view } from "../web/src/lib/chat.ts";
 import { changeWords } from "../web/src/lib/segments/changes.ts";
@@ -150,36 +150,36 @@ describe("the box's tools run freely", () => {
 		expect(note?.text).not.toContain("takes effect");
 	});
 
-	it("a write to a tool's file is a feed line read from the tool as the daemon reports it, never from the write", async () => {
+	it("a write to an agent's file is a feed line read from the agent as the daemon reports it, never from the write", async () => {
 		const s = await open(hostBox);
-		mkdirSync(join(s.home, "workspace", "tools"), { recursive: true });
+		mkdirSync(join(s.home, "workspace", "agents"), { recursive: true });
 		s.script(
-			s.call("write", { path: "tools/weather.md", content: "---\ndescription: Weather\n---\n" }),
+			s.call("write", { path: "agents/weather.md", content: "---\ndescription: Weather\n---\n" }),
 			fauxAssistantMessage("Done."),
 		);
-		const { turn, chat } = await s.receive("make a weather tool");
+		const { turn, chat } = await s.receive("make a weather agent");
 		await finished(s.harness, turn);
 		const page = (await items(s.harness, chat, {}))?.items ?? [];
-		const lines = (capabilities?: CapabilitiesView, removed?: { [path: string]: number }) =>
+		const lines = (agents?: AgentView[], removed?: { [path: string]: number }) =>
 			view(
 				page,
 				[],
 				{ busy: false, running: [], thinking: false },
 				{
-					...(capabilities === undefined ? {} : { capabilities }),
+					...(agents === undefined ? {} : { agents }),
 					...(removed === undefined ? {} : { removed }),
 				},
 			).flatMap((segment) => (segment.kind === "change" ? [[segment.state, changeWords(segment)]] : []));
-		const tool = { name: "weather", on: true };
-		expect(lines({ connections: [], tools: [{ ...tool, change: { kind: "added", sha: "a" } }] })).toEqual([
-			["pending", "Allow this change? A tool it made: weather"],
+		const agent = { name: "weather" } as unknown as AgentView;
+		expect(lines([{ ...agent, change: { kind: "added", sha: "a" } } as unknown as AgentView])).toEqual([
+			["pending", "Allow this change? The agent weather"],
 		]);
-		expect(lines({ connections: [], tools: [{ ...tool, accepted: { sha: "a" } }] })).toEqual([
-			["done", "Allowed: a tool it made: weather"],
+		expect(lines([{ ...agent, accepted: { sha: "a" } } as unknown as AgentView])).toEqual([
+			["done", "Allowed: the agent weather"],
 		]);
-		expect(lines({ connections: [], tools: [] })).toEqual([["declined", "Not allowed: a tool it made: weather"]]);
-		expect(lines({ connections: [], tools: [] }, { "tools/weather.md": Date.now() + 1000 })).toEqual([
-			["removed", "Removed since: a tool it made: weather"],
+		expect(lines([])).toEqual([["declined", "Not allowed: the agent weather"]]);
+		expect(lines([], { "agents/weather.md": Date.now() + 1000 })).toEqual([
+			["removed", "Removed since: the agent weather"],
 		]);
 		await s.harness.close(context);
 	});

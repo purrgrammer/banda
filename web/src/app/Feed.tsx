@@ -21,7 +21,7 @@ import { actOnRoutine } from "../areas/routines.ts";
 import { actOnWatch } from "../areas/watches.ts";
 import { AvatarCandidateMessage } from "../avatar/CandidateMessage.tsx";
 import { AgentMessage } from "../chat/AgentMessage.tsx";
-import { ApprovalCard, ChangeCard, Facts } from "../chat/Approval.tsx";
+import { ChangeCard } from "../chat/Approval.tsx";
 import { ArtifactCard, Browsed, QuestionCard } from "../chat/Cards.tsx";
 import { Done, Settling } from "../chat/Done.tsx";
 import { Bubble, DaySeparator, MessageActions, Run, UnreadDivider } from "../chat/Feed.tsx";
@@ -33,13 +33,13 @@ import { SkillFeedItem } from "../chat/Skill.tsx";
 import { WatchLine, WatchProposal } from "../chat/Watch.tsx";
 import { Markdown } from "../components/Markdown.tsx";
 import { Mentionable } from "../components/MentionChip.tsx";
-import { actOnCapability, actOnProposal, answerAgent, answerWait, dismissQuestion } from "../lib/api.ts";
+import { actOnProposal, answerAgent, answerWait, dismissQuestion } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { type Segment, tryAgainAfter } from "../lib/chat.ts";
 import { linkMentions } from "../lib/mentions.ts";
 import { changeNoun, changeWords } from "../lib/segments/changes.ts";
 import { watchCallWords, watchObject } from "../lib/segments/watches.ts";
-import { showAgents, showCapabilities, showControl, showWatching, useShell } from "../lib/shell.ts";
+import { showAgents, showControl, showWatching, useShell } from "../lib/shell.ts";
 import { AgentPreview } from "./AgentPreview.tsx";
 import { kindWords } from "./ArtifactPage.tsx";
 import { ConnectFlowCard } from "./ConnectFlow.tsx";
@@ -141,7 +141,6 @@ const words = (name: string) => name.replace(/-/g, " ").replace(/^./, (c) => c.t
 function ChangeLine({ who, segment }: { who: Who; segment: Extract<Segment, { kind: "change" }> }) {
 	const { subject, folder, name, state } = segment;
 	const agentFile = subject?.agent;
-	const capability = subject?.tool ?? subject?.connection;
 	if (state === "pending") sawOpen(segment.key);
 	if (state === "pending" && agentFile?.change !== undefined) {
 		const change = agentFile.change;
@@ -163,33 +162,6 @@ function ChangeLine({ who, segment }: { who: Who; segment: Extract<Segment, { ki
 						(done) => done && showAgents(done),
 					)
 				}
-			/>
-		);
-	}
-	if (state === "pending" && capability?.change !== undefined && (folder === "tools" || folder === "connections")) {
-		const change = capability.change;
-		const removed = change.kind === "removed";
-		const noun = folder === "tools" ? "a tool it made" : "a connection";
-		const described =
-			"description" in capability && typeof capability.description === "string" ? capability.description : undefined;
-		return (
-			<ApprovalCard
-				agent={who.name}
-				what={
-					removed
-						? `stop using ${words(name)}`
-						: change.kind === "changed"
-							? `change ${noun}: ${words(name)}`
-							: `use ${noun}: ${words(name)}`
-				}
-				verb={removed ? "Stop" : "Allow"}
-				{...(described === undefined ? {} : { object: <Facts rows={[["What it does", described]]} /> })}
-				onApprove={() =>
-					void actOnCapability({ action: "accept", folder, name, sha: removed ? null : (change.sha ?? null) }).then(
-						showCapabilities,
-					)
-				}
-				onDecline={() => void actOnCapability({ action: "decline", folder, name }).then(showCapabilities)}
 			/>
 		);
 	}
