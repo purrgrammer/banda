@@ -42,8 +42,8 @@ connections:
   with a TypeBox schema, `.md` only where free-form text is the point. `band.json` and `auth/providers.json` follow
   it; connection files are data behind about ninety hand-written checks.
 
-Shipped harnesses are already read from `shipped/harnesses/` and never copied into a home; they are still Markdown,
-so they are the precedent for where a definition lives, not for its format.
+Shipped harnesses are already read from `shipped/harnesses/` and never copied into a home, which is the precedent
+for where a definition lives. That they are Markdown too is a separate cleanup, not part of this.
 
 ## The design
 
