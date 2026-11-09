@@ -39,6 +39,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/cn";
 import { accountTitle, backendOf } from "../../../src/core/provider-accounts.ts";
+import { TIER_WORDS, TIERS, type Tier } from "../../../src/core/tiers.ts";
 import { AvatarChoices } from "../avatar/Choices.tsx";
 import { Confirm } from "./Confirm.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
@@ -335,33 +336,69 @@ export function Connections({
 }
 
 /** Three tiers of thinking, picked by name; the exact model lives beside them. */
-function Thinking({ value }: { value: "Quick" | "Balanced" | "Deep" }) {
+function Thinking({
+	value,
+	disabled,
+	onPick,
+}: {
+	value: Tier | undefined;
+	disabled: boolean;
+	onPick: (tier: Tier) => void;
+}) {
 	return (
 		<div role="radiogroup" aria-label="Thinking" className="flex rounded-field bg-paper-3 p-0.5">
-			{(["Quick", "Balanced", "Deep"] as const).map((one) => (
+			{TIERS.map((one) => (
 				// biome-ignore lint/a11y/useSemanticElements: a segment of a segmented control
 				<button
 					key={one}
 					type="button"
 					role="radio"
 					aria-checked={one === value}
+					disabled={disabled}
+					onClick={() => {
+						if (one !== value) onPick(one);
+					}}
 					className={cn(
-						"flex-1 rounded-[6px] px-3 py-1.5 text-ui text-ink-2",
+						"flex-1 rounded-[6px] px-3 py-1.5 text-ui text-ink-2 disabled:opacity-60",
 						one === value && "bg-paper font-medium text-ink shadow-[0_0_0_1px_var(--line-soft)]",
 					)}
 				>
-					{one}
+					{TIER_WORDS[one].name}
 				</button>
 			))}
 		</div>
 	);
 }
 
-/** How hard the agent thinks, by name: the model behind each tier is the provider's, set in Settings. */
-export function ThinkingTiers() {
+/**
+ * How hard the agent thinks, by name: the model behind each tier is the provider's, set in Settings. It shows only the
+ * tier the store holds, which comes back on the chat's row: a pick that fails leaves the one that is really in effect.
+ */
+export function ThinkingTiers({
+	tier,
+	custom,
+	onPick,
+}: {
+	tier: Tier | undefined;
+	custom: boolean;
+	onPick: (tier: Tier) => Promise<unknown>;
+}) {
+	const [saving, setSaving] = useState(false);
+	const note = custom
+		? "This agent's file names its own model, so it thinks the same whatever is picked here."
+		: tier === undefined
+			? "You can pick this once the chat has started."
+			: "Quick answers fast; Deep takes its time on hard things.";
 	return (
-		<Block title="Thinking" note="Quick answers fast; Deep takes its time on hard things.">
-			<Thinking value="Balanced" />
+		<Block title="Thinking" note={note}>
+			<Thinking
+				value={tier}
+				disabled={saving || custom || tier === undefined}
+				onPick={(picked) => {
+					setSaving(true);
+					void onPick(picked).finally(() => setSaving(false));
+				}}
+			/>
 		</Block>
 	);
 }

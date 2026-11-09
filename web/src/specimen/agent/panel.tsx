@@ -154,7 +154,7 @@ function AgentPanelOf({
 					<>
 						<Personality text="Warm and brief. Plans our family trips, keeps to the budget, and asks before booking anything." />
 						<SkillCatalogue skills={SKILLS} hrefFor={skillHref} />
-						<ThinkingTiers />
+						<ThinkingTiers tier="balanced" custom={false} onPick={async () => {}} />
 						<Archive agent={who.name} />
 					</>
 				}
