@@ -191,8 +191,8 @@ it("fetches a file only when a Slack thread's card shows it, at most 10 MB, and 
 	const shown = (await service.show(chat, [{ ref: "slack/C0GENERAL/p1700000000000100", agent: "reader" }]))[0];
 	if (shown?.shown !== "card" || shown.card.card !== "messages") throw new Error(JSON.stringify(shown));
 	expect(shown.card.messages.find((each) => each.id === "1700000160.000160")?.files).toEqual([
-		{ id: "F0LOG", name: "deploy-41.log", size: 5 },
-		{ id: "F0BIG", name: "dump.bin", size: 11 * 1024 * 1024 },
+		{ id: "F0LOG", name: "deploy-41.log", size: 5, mimetype: "text/plain" },
+		{ id: "F0BIG", name: "dump.bin", size: 11 * 1024 * 1024, mimetype: "application/octet-stream" },
 	]);
 	// the app names the object by its card's own id
 	const ref = shown.key.split(":").slice(2).join(":");
