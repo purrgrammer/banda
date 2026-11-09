@@ -228,6 +228,13 @@ not open.
 - [x] The owner allows a read on a shipped connection (`trustReads`): an overlay in the store, kept by name across
   versions, never over a floor or a write the definition names (test/connections.test.ts, test/tool-settings.test.ts);
   offered in a connection's details, on every connection
+- [x] Off stops cards and watches, for either reason a tool is off, in the commit that starts the read: a card
+  needing it is unavailable and says why, a read only a watch makes leaves the card alone, a watch stays alive, makes no
+  call, tells nothing and its next look once the tool is back on is a baseline; Ask and Always ask change nothing for
+  them (test/objects-off.test.ts, test/watches-off.test.ts)
+- [x] A connection is removed from its details, with the app's confirm saying what goes; it is offered again on the
+  Connections list, its watches end and its waiting drafts are dropped (test/connection-details.browser.test.ts,
+  test/connections.test.ts)
 
 ## Open work
 

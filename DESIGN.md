@@ -418,7 +418,9 @@ lives inside agents' settings and the app's Settings, never as a screen of its o
   even mid-run, a write waiting for approval included. Each tool has a kind, said by its definition, by the owner, by
   the server's own annotations, or by nobody, and then it is unknown and asks; banda never guesses one. The owner
   sets each tool in a connection's details: Allow or Ask on a read, Ask or Always ask on a write, Always ask on the
-  floor, Off on any. A connection only narrows: a setting never lets a known write run unasked, and the store holds
+  floor, Off on any. Ask and Always ask apply to an agent's calls. Off also stops what the tool reads for: a card
+  that needs it says it is unavailable and why, and a watch stays alive, makes no call and tells nothing until the
+  tool is back on, when its next look starts it over, so the resume is not a change. A connection only narrows: a setting never lets a known write run unasked, and the store holds
   only what narrows. A setting that puts a tool on the floor applies in the same commit, so a permission given before
   does not cover it. A stale view changes nothing: each change names the version the owner saw. A connection's tools,
   accounts, agents and what it draws are checked and changed in its details, the same component as the review on adding it.
