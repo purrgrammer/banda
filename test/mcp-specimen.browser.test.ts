@@ -164,7 +164,7 @@ it.skipIf(!hasChrome())(
 			await fill(page, "Server address", "https://ernesto.example/mcp");
 			await click(page, button("Check server"));
 			await phase(page, "review");
-			expect(await page.run(`document.body.textContent.includes('No account or credential was created.')`)).toBe(true);
+			expect(await page.run(`document.body.textContent.includes('No sign-in needed.')`)).toBe(true);
 			expect(await page.run(`Boolean(${button("Back to sign-in")})`)).toBe(false);
 			await click(page, button("Save access"));
 			await phase(page, "done");
