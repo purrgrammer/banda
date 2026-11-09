@@ -58,13 +58,6 @@ const CONNECT_STEPS: readonly {
 }[] = [
 	{ label: "Access to grant", connection: "Google Calendar", id: "calendar", step: { kind: "permissions" } },
 	{ label: "GitHub's access", agent: "Octo", connection: "GitHub", id: "github", step: { kind: "permissions" } },
-	{
-		label: "Changing one account's access",
-		connection: "Google Calendar",
-		id: "calendar",
-		account: "@bandarra",
-		step: { kind: "permissions" },
-	},
 	{ label: "Starting", connection: "GitHub", id: "github", step: { kind: "starting" } },
 	{
 		label: "Signing in on its page",
@@ -122,6 +115,13 @@ const CONNECT_STEPS: readonly {
 		connection: "GitHub",
 		id: "github",
 		step: { kind: "share", login: "@bandarra" },
+	},
+	{
+		label: "Changing one account's access",
+		connection: "Google Calendar",
+		id: "calendar",
+		account: "@bandarra",
+		step: { kind: "permissions" },
 	},
 ];
 
