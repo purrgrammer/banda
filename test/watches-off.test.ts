@@ -52,8 +52,9 @@ const LABELLED: ScenarioConnection = {
 				fields: { title: "issue.title", state: "issue.state" },
 				follow: {
 					ends: {},
+					otherwise: "tell",
 					rules: [
-						{ on: "labels.names[*]", kind: "added", does: "wake", says: "labelled {value}" },
+						{ on: "labels[*]", does: "wake", says: "label {name}" },
 						{ on: "issue.state", does: "wake", says: "now {to}" },
 					],
 				},
@@ -155,7 +156,12 @@ describe("a watch whose tool is off", () => {
 		const answer = (tool: string, step: number): Json =>
 			tool === "get"
 				? { title: "x", state: step >= 6 ? "closed" : "open" }
-				: { names: step >= 3 ? ["bug", "later"] : ["bug"] };
+				: step >= 3
+					? [
+							{ id: 1, name: "bug" },
+							{ id: 2, name: "later" },
+						]
+					: [{ id: 1, name: "bug" }];
 		const called: string[][] = [];
 		let current: string[] = [];
 		const summary = await watchScenario(home, new Faults(), {
