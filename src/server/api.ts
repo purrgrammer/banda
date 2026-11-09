@@ -735,7 +735,7 @@ export type ConnectionSummary = {
 	readonly auth: "none" | "key" | "oauth";
 	readonly reads: readonly string[];
 	readonly floors: { readonly [tool: string]: Floor };
-	readonly why: string;
+	readonly why?: string;
 	readonly command?: string;
 	/** The scopes a new account asks for unless the owner chooses others, when the file names them. */
 	readonly scopes?: readonly string[];

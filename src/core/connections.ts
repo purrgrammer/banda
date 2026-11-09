@@ -82,8 +82,22 @@ export type Connection = {
 	readonly account?: { readonly tool: string; readonly field: string };
 	/** The things it names that the app draws as cards (DESIGN.md "Connections", objects), by kind. */
 	readonly objects?: ObjectKinds;
-	/** Why the agent wants it, in its words. */
-	readonly why: string;
+	/** Why the agent wants it, in its words: an owner-added file's body; a definition banda ships has none. */
+	readonly why?: string;
+	/** What it lets the band do, in a line for the owner: a definition banda ships says it. */
+	readonly about?: string;
+	/** The access the owner chooses among before signing in, in words: a definition banda ships says them. */
+	readonly access?: Access;
+};
+
+/**
+ * The access an owner chooses for a connection before signing in: the words for the scopes every account asks for
+ * (`required`, a built-in API's), each choice with the scopes it stands for, and what changing access means.
+ */
+export type Access = {
+	readonly required?: string;
+	readonly choices: readonly { readonly label: string; readonly note?: string; readonly scopes: readonly string[] }[];
+	readonly note: string;
 };
 
 /** One argument and the one string it is: a call whose argument is exactly that only reads. */
@@ -158,18 +172,119 @@ export function parseConnection(name: string, text: string): ParsedConnection {
 }
 
 function parseConnectionText(name: string, text: string): ParsedConnection {
-	const errors: string[] = [];
-	if (!AGENT_NAME.test(name))
-		errors.push(`"${name}" is not a connection name: use lowercase letters, digits and dashes, such as "calendar"`);
 	const read = frontmatter(text, CONNECTION_FIELDS);
-	if (read === undefined)
-		return { errors: [...errors, "a connection file starts with its frontmatter between two --- lines"] };
-	errors.push(...read.errors);
-	const service = read.one("service") ?? "";
+	if (read === undefined) {
+		const named = AGENT_NAME.test(name) ? [] : [nameError(name)];
+		return { errors: [...named, "a connection file starts with its frontmatter between two --- lines"] };
+	}
+	const errors = [...read.errors];
+	const floors: { [floor in Floor]?: readonly string[] } = {};
+	for (const floor of FLOORS) floors[floor] = read.list(floor);
+	const fields: ConnectionFields = {
+		service: read.one("service"),
+		url: read.one("url"),
+		command: read.one("command"),
+		api: read.one("api"),
+		auth: read.one("auth"),
+		ask: read.one("ask"),
+		client: read.one("client"),
+		...(read.values.has("scopes") ? { scopes: read.list("scopes") } : {}),
+		account: read.one("account"),
+		reads: read.list("reads"),
+		floors,
+	};
+	let why = read.body;
+	let needs: { [tool: string]: string[] } | undefined;
+	let objects: unknown;
+	const late: string[] = [];
+	const block = /```json\s*\n([\s\S]*?)\n```/.exec(read.body);
+	if (block !== null) {
+		why = (read.body.slice(0, block.index) + read.body.slice(block.index + block[0].length)).trim();
+		const problem = `the json block is {"needs": {"tool": ["scope", …]}, "objects": {…}}: the scopes each tool needs, any one will do, and the things it names`;
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(block[1] ?? "") as unknown;
+		} catch {
+			late.push(problem);
+		}
+		if (parsed !== undefined) {
+			const given = (parsed as { needs?: unknown } | null)?.needs;
+			if (
+				typeof parsed !== "object" ||
+				parsed === null ||
+				Object.keys(parsed).some((key) => key !== "needs" && key !== "objects") ||
+				(given !== undefined &&
+					(typeof given !== "object" ||
+						given === null ||
+						Array.isArray(given) ||
+						!Object.entries(given).every(
+							([tool, list]) =>
+								/^[A-Za-z0-9_.-]{1,64}$/.test(tool) &&
+								Array.isArray(list) &&
+								list.length > 0 &&
+								list.every((scope) => typeof scope === "string" && /^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/.test(scope)),
+						)))
+			)
+				late.push(problem);
+			else if (given !== undefined) needs = given as { [tool: string]: string[] };
+			objects = (parsed as { objects?: unknown } | null)?.objects;
+		}
+	}
+	if (why.length > 2000) late.push("say why in a few lines");
+	return connectionOf(
+		name,
+		{ ...fields, ...(needs === undefined ? {} : { needs }), ...(objects === undefined ? {} : { objects }), why },
+		errors,
+		late,
+	);
+}
+
+const nameError = (name: string) =>
+	`"${name}" is not a connection name: use lowercase letters, digits and dashes, such as "calendar"`;
+
+/**
+ * What a connection says, before the checks across its fields: read from a file's frontmatter, or from a definition
+ * banda ships (`definitions.ts`), whose schema has checked each field's shape already.
+ */
+export type ConnectionFields = {
+	readonly service: string | undefined;
+	readonly url?: string | undefined;
+	readonly command?: string | undefined;
+	readonly api?: string | undefined;
+	readonly auth?: string | undefined;
+	readonly ask?: string | undefined;
+	readonly client?: string | undefined;
+	readonly scopes?: readonly string[];
+	/** The read and the field of its answer that name the account: `get_me.login`. */
+	readonly account?: string | undefined;
+	readonly reads: readonly string[];
+	readonly floors: { readonly [floor in Floor]?: readonly string[] };
+	readonly needs?: { readonly [tool: string]: readonly string[] };
+	readonly objects?: unknown;
+	readonly why?: string;
+	readonly about?: string;
+	readonly access?: Access;
+};
+
+/**
+ * The connection `fields` say, or every problem with them, each saying what to write instead: the checks a schema
+ * cannot say (an address or a command but not both, a built-in's client and scopes within its registry's ceiling, a
+ * read that is not also on a floor, the kinds' templates and paths, an access choice within what an account may ask
+ * for). `before` are problems found first, `after` ones said last.
+ */
+export function connectionOf(
+	name: string,
+	fields: ConnectionFields,
+	before: readonly string[] = [],
+	after: readonly string[] = [],
+): ParsedConnection {
+	const errors: string[] = [];
+	if (!AGENT_NAME.test(name)) errors.push(nameError(name));
+	errors.push(...before);
+	const service = fields.service ?? "";
 	if (service === "") errors.push(`add "service:", the service as the owner calls it, such as "your calendar"`);
-	const url = read.one("url");
-	const command = read.one("command");
-	const apiName = read.one("api");
+	const { url, command, client, scopes } = fields;
+	const apiName = fields.api;
 	const api = apiName === undefined ? undefined : restApiNamed(apiName);
 	const builtIn = api === undefined ? undefined : REST_APIS[api];
 	if ((url === undefined) === (command === undefined))
@@ -181,16 +296,14 @@ function parseConnectionText(name: string, text: string): ParsedConnection {
 				.map(([name, { url }]) => `"${name}" at ${url}`)
 				.join(", ")}`,
 		);
-	const auth = read.one("auth") ?? "none";
+	const auth = fields.auth ?? "none";
 	if (auth !== "none" && auth !== "key" && auth !== "oauth")
 		errors.push(`"auth: ${auth}": use none, key (the owner types one in) or oauth (the owner signs in)`);
 	if (command !== undefined && auth !== "none")
 		errors.push(`a server in your computer gets no credentials: drop "auth"`);
-	const ask = read.one("ask");
+	const ask = fields.ask;
 	if (ask !== undefined && (ask !== "always" || command !== undefined))
 		errors.push('"ask: always" is for a remote connection whose non-read tools must ask every time');
-	const client = read.one("client");
-	const scopes = read.values.has("scopes") ? read.list("scopes") : undefined;
 	if (
 		builtIn !== undefined &&
 		(auth !== "oauth" ||
@@ -211,7 +324,7 @@ function parseConnectionText(name: string, text: string): ParsedConnection {
 		errors.push(`"client: ${client}" is not a client id: letters, digits, dots, dashes and underscores`);
 	for (const scope of scopes ?? [])
 		if (!/^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/.test(scope)) errors.push(`"${scope}" is not a scope`);
-	const accountRead = read.one("account");
+	const accountRead = fields.account;
 	const accountParts =
 		accountRead === undefined ? undefined : /^([A-Za-z0-9_.-]{1,64})\.([A-Za-z0-9_]{1,64})$/.exec(accountRead);
 	if (accountRead !== undefined && (accountParts === null || accountParts === undefined))
@@ -222,7 +335,7 @@ function parseConnectionText(name: string, text: string): ParsedConnection {
 		errors.push(`"account" is for a server the owner signs in to: drop it`);
 	const reads: string[] = [];
 	const readsWhen: { [tool: string]: ReadRule[] } = {};
-	for (const item of read.list("reads")) {
+	for (const item of fields.reads) {
 		const rule = RULE.exec(item);
 		if (rule === null) {
 			if (/[()=]/.test(item))
@@ -243,65 +356,44 @@ function parseConnectionText(name: string, text: string): ParsedConnection {
 		if (reads.includes(tool)) errors.push(`"${tool}" is a read already: drop its rules, or its name`);
 	const floors: { [tool: string]: Floor } = {};
 	for (const floor of FLOORS)
-		for (const tool of read.list(floor)) {
+		for (const tool of fields.floors[floor] ?? []) {
 			if (floors[tool] !== undefined) errors.push(`"${tool}" is under two floors`);
 			floors[tool] = floor;
 			if (reads.includes(tool)) errors.push(`"${tool}" is a read and on the floor: a read sends nothing, so drop one`);
 			if (readsWhen[tool] !== undefined)
 				errors.push(`"${tool}" reads for some arguments and is on the floor: it asks every time, so drop its rules`);
 		}
-	let why = read.body;
-	let needs: { [tool: string]: string[] } | undefined;
+	const needs = fields.needs;
 	let objects: ObjectKinds | undefined;
-	const block = /```json\s*\n([\s\S]*?)\n```/.exec(read.body);
-	if (block !== null) {
-		why = (read.body.slice(0, block.index) + read.body.slice(block.index + block[0].length)).trim();
-		const problem = `the json block is {"needs": {"tool": ["scope", …]}, "objects": {…}}: the scopes each tool needs, any one will do, and the things it names`;
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(block[1] ?? "") as unknown;
-		} catch {
-			errors.push(problem);
-		}
-		if (parsed !== undefined) {
-			const given = (parsed as { needs?: unknown } | null)?.needs;
-			if (
-				typeof parsed !== "object" ||
-				parsed === null ||
-				Object.keys(parsed).some((key) => key !== "needs" && key !== "objects") ||
-				(given !== undefined &&
-					(typeof given !== "object" ||
-						given === null ||
-						Array.isArray(given) ||
-						!Object.entries(given).every(
-							([tool, list]) =>
-								/^[A-Za-z0-9_.-]{1,64}$/.test(tool) &&
-								Array.isArray(list) &&
-								list.length > 0 &&
-								list.every((scope) => typeof scope === "string" && /^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/.test(scope)),
-						)))
-			)
-				errors.push(problem);
-			else if (given !== undefined) needs = given as { [tool: string]: string[] };
-			const declared = (parsed as { objects?: unknown } | null)?.objects;
-			if (declared !== undefined) {
-				const isRead = (tool: string, args: { readonly [arg: string]: unknown }) =>
-					command === undefined && (reads.includes(tool) || readsFor(readsWhen[tool], args));
-				const found = parseObjects(declared, isRead);
-				if ("errors" in found) errors.push(...found.errors);
-				else objects = found.objects;
-				if (url === undefined) errors.push(`"objects" are for a server elsewhere, read with its "url"`);
-			}
-		}
-		if (needs !== undefined && auth !== "oauth") errors.push(`"needs" is for a server the owner signs in to`);
-		if (needs !== undefined && builtIn !== undefined) {
-			const allowed: readonly string[] = builtIn.scopes;
-			const beyond = [...new Set(Object.values(needs).flat())].filter((scope) => !allowed.includes(scope));
-			if (beyond.length > 0)
-				errors.push(`${builtIn.service}'s tools may need only ${allowed.join(", ")}: drop ${beyond.join(", ")}`);
-		}
+	if (fields.objects !== undefined) {
+		const isRead = (tool: string, args: { readonly [arg: string]: unknown }) =>
+			command === undefined && (reads.includes(tool) || readsFor(readsWhen[tool], args));
+		const found = parseObjects(fields.objects, isRead);
+		if ("errors" in found) errors.push(...found.errors);
+		else objects = found.objects;
+		if (url === undefined) errors.push(`"objects" are for a server elsewhere, read with its "url"`);
 	}
-	if (why.length > 2000) errors.push("say why in a few lines");
+	if (needs !== undefined && auth !== "oauth") errors.push(`"needs" is for a server the owner signs in to`);
+	if (needs !== undefined && builtIn !== undefined) {
+		const allowed: readonly string[] = builtIn.scopes;
+		const beyond = [...new Set(Object.values(needs).flat())].filter((scope) => !allowed.includes(scope));
+		if (beyond.length > 0)
+			errors.push(`${builtIn.service}'s tools may need only ${allowed.join(", ")}: drop ${beyond.join(", ")}`);
+	}
+	const access = fields.access;
+	if (access !== undefined) {
+		const ceiling = ceilingOf({
+			...(scopes === undefined ? {} : { scopes }),
+			...(needs === undefined ? {} : { needs }),
+		});
+		for (const choice of access.choices)
+			for (const scope of choice.scopes)
+				if (ceiling === undefined || !ceiling.includes(scope))
+					errors.push(`the access choice "${choice.label}" asks for ${scope}, which no account of it may ask for`);
+		if (access.required !== undefined && builtIn === undefined)
+			errors.push("a required access is the scopes every account asks for, which only a built-in API has");
+	}
+	errors.push(...after);
 	if (errors.length > 0) return { errors };
 	return {
 		connection: {
@@ -322,7 +414,9 @@ function parseConnectionText(name: string, text: string): ParsedConnection {
 			...(accountParts === null || accountParts === undefined
 				? {}
 				: { account: { tool: accountParts[1] ?? "", field: accountParts[2] ?? "" } }),
-			why,
+			...(fields.why === undefined ? {} : { why: fields.why }),
+			...(fields.about === undefined ? {} : { about: fields.about }),
+			...(access === undefined ? {} : { access }),
 		},
 	};
 }

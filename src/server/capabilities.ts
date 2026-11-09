@@ -253,7 +253,7 @@ const summaryOf = (connection: Connection): ConnectionSummary => ({
 		),
 	],
 	floors: connection.floors,
-	why: connection.why,
+	...(connection.why === undefined ? {} : { why: connection.why }),
 	...(connection.command === undefined ? {} : { command: connection.command }),
 	...(connection.scopes === undefined ? {} : { scopes: connection.scopes }),
 	...(() => {
