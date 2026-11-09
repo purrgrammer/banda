@@ -11,7 +11,7 @@ import type { CompanionView, FactView } from "../../../src/server/api.ts";
 import { centreBand, pinRow, useBand } from "../areas/band.ts";
 import { archiveGroup, setGroupLimits } from "../areas/groups.ts";
 import { actOnRoutine, clickKey } from "../areas/routines.ts";
-import { useTiers } from "../areas/tiers.ts";
+import { setChatTier, useTiers } from "../areas/tiers.ts";
 import { Band, BandNotice } from "../chat/Band.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
 import { Face, FaceStack } from "../chat/Face.tsx";
@@ -523,7 +523,15 @@ function Main() {
 										text={personality}
 										onChange={(text) => edit(where.id, { personality: text })}
 									/>
-									<ThinkingTiers />
+									<ThinkingTiers
+										key={`${where.id}-thinking`}
+										tier={row?.tier}
+										custom={row?.custom === true}
+										onPick={async (tier) => {
+											if (row !== undefined)
+												await attempt("change how hard it thinks", () => setChatTier(row.chat, tier));
+										}}
+									/>
 									<SkillCatalogue skills={skillSummaries} hrefFor={(name) => `#/skills/${name}`} />
 									<a href="#/skills" className="text-ui text-ink-2 underline underline-offset-4">
 										Manage shared skills
