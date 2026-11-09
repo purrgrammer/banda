@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Context } from "@earendil-works/chord";
 import type { Harness, TaskId } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
-import { Accepted } from "../src/core/agents.ts";
+import { Accepted, shaOf } from "../src/core/agents.ts";
 import { Connected } from "../src/core/connections.ts";
 import { pause as pauseAll, resume as resumeAll } from "../src/core/control.ts";
 import { BUSY_EVERY, type Json } from "../src/core/follow.ts";
@@ -169,6 +169,56 @@ describe("a watch on a pull request", () => {
 		// the card is the newest look's that read it: Otto's at step 5; both watches are done, so the reading is gone
 		expect(summary.card?.at).toBe(NOW + 50 * MINUTE);
 		expect(summary.followed).toBeUndefined();
+	}, 60_000);
+
+	it("the first look after its connection's definition changed keeps the watch live, reads again and wakes on nothing", async () => {
+		// the pull request stands still; Mara reads it at step 3, then the connection's definition changes (as accepting
+		// an update does), and Otto's look takes no reading made under the version before: it reads for itself
+		const home = await tempHome();
+		const reads = () =>
+			readFileSync(join(home, "reads.jsonl"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean).length;
+		const made: { mara: number; otto: number }[] = [];
+		const summary = await watchScenario(home, new Faults(), {
+			second: true,
+			tasks: false,
+			world: () => world(0),
+			clicks: [undefined, undefined, undefined, undefined],
+			at: (step) => NOW + step * 10 * MINUTE,
+			act: async (step, { harness, core }) => {
+				const before = reads();
+				await core.lookWatch(harness, "banda-142");
+				const mara = reads() - before;
+				if (step === 3)
+					await harness.commit(async (tx) => {
+						const files = (await tx.doc(Accepted)).files;
+						const file = files["connections/github.md"];
+						if (file === undefined) throw new Error("no github file");
+						const text = `${file.text}\nA newer version.\n`;
+						files["connections/github.md"] = { sha: shaOf(text), text, at: file.at };
+						const listed = (await tx.doc(Connected)).connections.github;
+						if (listed !== undefined) listed.sha = shaOf(text);
+					}, context);
+				const after = reads();
+				await core.lookWatch(harness, "banda-142-otto");
+				made.push({ mara, otto: reads() - after });
+			},
+		});
+		expect(made).toEqual([
+			{ mara: 4, otto: 4 },
+			{ mara: 4, otto: 0 },
+			{ mara: 4, otto: 4 },
+			{ mara: 4, otto: 0 },
+		]);
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes).toEqual([]);
+		expect(summary.tells).toEqual([]);
+		expect(summary.troubles).toEqual([]);
+		expect(summary.live).toEqual(["banda-142", "banda-142-otto"]);
+		for (const record of Object.values(summary.records)) {
+			expect(record.failed).toBeUndefined();
+			expect(record.done).toBeUndefined();
+			expect(record.looked).toBe(NOW + 40 * MINUTE);
+		}
 	}, 60_000);
 
 	it("the first look after a resume reads the object itself, and its wake says it comes from the pause", async () => {

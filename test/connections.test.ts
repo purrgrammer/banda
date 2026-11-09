@@ -1130,6 +1130,32 @@ describe("connections banda ships", () => {
 		expect(cal?.change).toBeUndefined();
 	});
 
+	it("a tool the server adds later waits switched off within one file; one added before the file changes comes in on", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		const shipped = await shipping(fake);
+		const s = await open(fake, shipped);
+		await s.capabilities.addShipped("cal");
+		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
+		const tool = (name: string) => ({ name, description: `${name}.`, inputSchema: { type: "object", properties: {} } });
+		const on = async () =>
+			Object.fromEntries(
+				((await s.capabilities.view()).connections.find((c) => c.name === "cal")?.tools ?? []).map((t) => [
+					t.title,
+					t.on,
+				]),
+			);
+		// within one version of the file: a tool listed later waits for the owner
+		fake.tools.push(tool("later_tool"));
+		await s.capabilities.refresh("cal");
+		expect(await on()).toMatchObject({ list_events: true, whoami: true, later_tool: false });
+		// across a change of the file: one the server added meanwhile comes in switched on, the earlier switch kept
+		fake.tools.push(tool("added_before_change"));
+		writeFileSync(join(shipped, "cal.md"), `${readFileSync(join(shipped, "cal.md"), "utf8")}\nNewer.\n`);
+		await s.capabilities.updateShipped("cal", (await s.capabilities.view()).shipped?.[0]?.update as string);
+		expect(await on()).toMatchObject({ later_tool: false, added_before_change: true });
+	});
+
 	it("recovers a shipped definition left in the box before it was allowed", async () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
 		fakes.push(fake);
