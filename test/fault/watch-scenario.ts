@@ -45,9 +45,10 @@ import {
 } from "../../src/core/watches.ts";
 import { chats } from "../../src/server/transcript.ts";
 import { pause } from "../../src/server/watches.ts";
-import { githubObjectFile } from "../fixtures/github-objects.ts";
+import { githubObjectDefinition } from "../fixtures/github-objects.ts";
 import { hostBox } from "../fixtures/host-box.ts";
 import { echoModels, FAUX_MODEL } from "../fixtures/models.ts";
+import { added, definition, shipping } from "../fixtures/shipped.ts";
 import type { Faults } from "./faults.ts";
 
 /** Monday 2 November 2026, 09:00. */
@@ -74,7 +75,7 @@ const isFailure = (value: Json | Failure): value is Failure =>
 export type Answer = (tool: string, args: { readonly [key: string]: unknown }, step: number) => Json | Failure;
 
 /**
- * The connection the watch follows through, as a signed-in one leaves the store: its name and accepted file, the tools
+ * The connection the watch follows through, as a signed-in one leaves the store: its name and definition, the tools
  * its server listed (their names and schemas) and the account signed in to it, by what the service calls it.
  */
 export type ScenarioConnection = {
@@ -93,7 +94,7 @@ const read = (name: string, key: string): McpTool => ({
 /** GitHub as the pull request's life has it: its two reads of a pull request and an issue, signed in as bandarra. */
 export const GITHUB: ScenarioConnection = {
 	name: "github",
-	file: githubObjectFile("https://example.com/mcp"),
+	file: githubObjectDefinition("https://example.com/mcp"),
 	tools: [read("pull_request_read", "pullNumber"), read("issue_read", "issue_number")],
 	account: "bandarra",
 };
@@ -318,15 +319,17 @@ export async function watchScenario(
 	try {
 		// the connection, the agent and the account, as a signed-in connection leaves them; the watch, allowed once
 		const { name: via, file } = connection;
+		const shipped = definition(via, file);
+		shipping(shipped);
 		await harness.commit(async (tx) => {
 			const accepted = await tx.doc(Accepted);
-			if (accepted.files[`connections/${via}.md`] !== undefined) return;
-			accepted.files[`connections/${via}.md`] = { sha: shaOf(file), text: file, at: NOW };
+			if ((await tx.doc(Connected)).added[via] !== undefined) return;
+			await added(tx, via, NOW);
 			const agent = `---\nname: Mara\ndescription: Follows things\nconnections: [${via}]\n---\nFollow things for the owner.`;
 			accepted.files["agents/mara.md"] = { sha: shaOf(agent), text: agent, at: NOW };
 			const connected = await tx.doc(Connected);
 			connected.connections[via] = {
-				sha: shaOf(file),
+				sha: shipped.sha,
 				at: NOW,
 				tools: Object.fromEntries(
 					connection.tools.map((tool) => [

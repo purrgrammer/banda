@@ -9,7 +9,7 @@ import { tempHome } from "./helpers.ts";
 /** Google Drive as banda ships it, signed in as me@example.com. */
 const DRIVE = {
 	name: "drive",
-	file: readFileSync(new URL("../shipped/connections/drive.md", import.meta.url), "utf8"),
+	file: readFileSync(new URL("../shipped/connections/drive.json", import.meta.url), "utf8"),
 	tools: REST_APIS.drive.tools,
 	account: "me@example.com",
 };

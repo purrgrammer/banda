@@ -1,8 +1,7 @@
-import { readFileSync } from "node:fs";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
-import { parseConnection } from "../src/core/connections.ts";
+import { readDefinition } from "../src/core/definitions.ts";
 import {
 	BUSY_EVERY,
 	canonical,
@@ -21,6 +20,7 @@ import {
 	sort,
 } from "../src/core/follow.ts";
 import { parseObjects } from "../src/core/objects.ts";
+import { shippedText } from "./fixtures/shipped.ts";
 import { pbtRuns } from "./pbt.ts";
 
 /** How GitHub's pull request is followed, as the shipped file declares it. */
@@ -402,10 +402,7 @@ describe("following an object", () => {
 
 	/** Gmail's kinds, as the shipped file declares them. */
 	const gmail = (() => {
-		const parsed = parseConnection(
-			"gmail",
-			readFileSync(new URL("../shipped/connections/gmail.md", import.meta.url), "utf8"),
-		);
+		const parsed = readDefinition("gmail", shippedText("gmail"));
 		if (!("connection" in parsed)) throw new Error(JSON.stringify(parsed));
 		const objects = parsed.connection.objects ?? {};
 		const follow = (kind: string) => {

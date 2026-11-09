@@ -27,7 +27,7 @@ type Summary = {
 /** One scenario, against a fake server of its own, which outlives the processes killed. */
 const run = async (
 	schedules: readonly (readonly Fault[])[],
-	mode: "callback" | "code" | "shipped" | "rule" | "address" | "mcp" = "callback",
+	mode: "callback" | "code" | "shipped" | "remove" | "rule" | "address" | "mcp" = "callback",
 ) => {
 	const home = await tempHome();
 	const fake = await startFakeMcp(
@@ -136,11 +136,11 @@ describe("connections under faults", () => {
 		);
 	}, 300_000);
 
-	it("sweep, adding what banda ships: one kill once its file was written, and once it was allowed", async () => {
+	it("sweep, adding what banda ships: one kill before it is on, and once it is", async () => {
 		const clean = await run([], "shipped");
 		check(clean);
 		expect(clean.creates).toBe(1);
-		const points: FaultPoint[] = ["shipped:written", "accept:before", "accept:after"];
+		const points: FaultPoint[] = ["shipped:before", "shipped:added"];
 		await pool(
 			2,
 			points.map((point) => async () => {
@@ -152,6 +152,29 @@ describe("connections under faults", () => {
 				} catch (error) {
 					throw new Error(`killed at ${point}: ${(error as Error).message}`);
 				}
+			}),
+		);
+	}, 300_000);
+
+	it("sweep, removing what banda ships: one kill before it is gone, and once it is, before its credentials go", async () => {
+		const removal = async (schedules: readonly (readonly Fault[])[]) => {
+			const home = await tempHome();
+			const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+			try {
+				return await runWorker("test/fault/connection-worker.ts", [home, fake.url, "remove"], schedules);
+			} finally {
+				await fake.close();
+			}
+		};
+		const gone = { added: false, accounts: [], listed: false, credentials: 0 };
+		expect((await removal([])).last).toMatchObject(gone);
+		const points: FaultPoint[] = ["shipped:remove", "shipped:removed"];
+		await pool(
+			2,
+			points.map((point) => async () => {
+				const killed = await removal([[{ point, hit: 1, kind: "kill" }]]);
+				expect(killed.kills, point).toBe(1);
+				expect(killed.last, point).toMatchObject(gone);
 			}),
 		);
 	}, 300_000);

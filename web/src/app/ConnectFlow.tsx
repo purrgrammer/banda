@@ -88,7 +88,8 @@ export function ConnectFlow({
 		agent,
 		why,
 	);
-	const choices = scopeChoicesOf(connection) !== undefined;
+	const offered = scopeChoicesOf(shipped?.access, shipped?.connection.required);
+	const choices = offered !== undefined;
 	const shell = useShell();
 	const band = useMemo(
 		() => chatAgents(shell.agents, shell.companion ?? { face: DEFAULT_FACE }),
@@ -114,7 +115,7 @@ export function ConnectFlow({
 		setChoosing(false);
 		const before = view?.finished?.at;
 		try {
-			// Finish adding a shipped connection before sign-in, including recovery when its exact file was left in the box.
+			// a connection banda ships is added (switched on in this home) before its sign-in
 			if (view?.accepted?.connection === undefined) {
 				if (shipped === undefined) throw new Error(`${service} is not one banda can connect yet.`);
 				showCapabilities(await actOnCapability({ action: "add", name: connection }));
@@ -222,6 +223,7 @@ export function ConnectFlow({
 			step={step}
 			busy={busy}
 			scopes={pickedScopes}
+			choices={offered}
 			onScopes={setPickedScopes}
 			scopesChanged={scopesChanged}
 			scopesReadonly={onComputerOnly}

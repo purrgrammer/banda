@@ -8,7 +8,7 @@ import { Readings } from "../../src/core/objects.ts";
 import { context } from "../../src/core/store.ts";
 import { openObjects } from "../../src/server/objects.ts";
 import { openConnected, signInAsOwner } from "../fixtures/connected.ts";
-import { githubObjectFile } from "../fixtures/github-objects.ts";
+import { githubObjectDefinition } from "../fixtures/github-objects.ts";
 import type { CredentialScenario, CredentialSummary } from "./credential-invariants.ts";
 import { type Fault, type FaultPoint, Faults } from "./faults.ts";
 
@@ -29,8 +29,12 @@ const wrapStorage = (storage: Storage): Storage => {
 };
 async function run(): Promise<CredentialSummary> {
 	active = false;
+	const shipped = join(home, "shipped");
+	await mkdir(shipped, { recursive: true });
+	await writeFile(join(shipped, "github.json"), githubObjectDefinition(url));
 	const s = await openConnected({
 		home,
+		shipped,
 		respond: () => fauxAssistantMessage("done"),
 		wrapStorage,
 		fault: (p) => {
@@ -48,13 +52,8 @@ async function run(): Promise<CredentialSummary> {
 			chats.chats[chat] = "reader";
 			return chat;
 		}, context);
-		if ((await s.harness.snapshot(Accepted, context))?.files["connections/github.md"] === undefined) {
-			await mkdir(join(s.box.workspace, "connections"), { recursive: true });
-			await writeFile(join(s.box.workspace, "connections/github.md"), githubObjectFile(url));
-			const change = (await s.capabilities.view()).connections.find((c) => c.name === "github")?.change;
-			if (change === undefined || !("sha" in change) || change.sha === undefined) throw new Error("no definition");
-			await s.capabilities.acceptConnection("github", change.sha);
-		}
+		if ((await s.harness.snapshot(Connected, context))?.added.github === undefined)
+			await s.capabilities.addShipped("github");
 		const signin = async () => {
 			const result = await signInAsOwner(s.capabilities, "github", { agent: "reader" });
 			if (!result.ok) throw new Error("owner sign-in failed");

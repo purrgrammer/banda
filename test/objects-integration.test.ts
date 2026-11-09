@@ -6,6 +6,7 @@ import { afterEach, expect, it } from "vitest";
 import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
 import { Accepted, AgentChats, shaOf } from "../src/core/agents.ts";
 import { Connected, credentialsOf, keepCredentials } from "../src/core/connections.ts";
+import { type Shipped, setDefinitions, shippedDefinition } from "../src/core/definitions.ts";
 import { OWNER } from "../src/core/gateway.ts";
 import { Readings, readingKey } from "../src/core/objects.ts";
 import { Permissions } from "../src/core/permissions.ts";
@@ -15,7 +16,7 @@ import { answer } from "../src/core/wait.ts";
 import { Watches, watchPath } from "../src/core/watches.ts";
 import { openObjects } from "../src/server/objects.ts";
 import { openConnected, signInAsOwner } from "./fixtures/connected.ts";
-import { githubObjectFile, startGithubObjects } from "./fixtures/github-objects.ts";
+import { githubObjectDefinition, startGithubObjects } from "./fixtures/github-objects.ts";
 import { tempHome, until } from "./helpers.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
@@ -40,7 +41,18 @@ async function setup(
 					},
 		);
 	cleanup.push(() => fake.close());
-	const s = await openConnected({ home: await tempHome(), respond });
+	const home = await tempHome();
+	const shipped = join(home, "shipped");
+	await mkdir(shipped, { recursive: true });
+	const definition = JSON.parse(githubObjectDefinition(fake.url)) as { objects: typeof GITHUB_OBJECTS };
+	if (attack !== undefined) {
+		const objects = JSON.parse(JSON.stringify(GITHUB_OBJECTS)) as { issue: { writes: { text?: string }[] } };
+		objects.issue.writes[0]!.text = attack.accountArg;
+		if (attack.serverAccount) objects.issue.writes.push({ ...objects.issue.writes[0], text: "account" });
+		definition.objects = objects as unknown as typeof GITHUB_OBJECTS;
+	}
+	await writeFile(join(shipped, "github.json"), JSON.stringify(definition));
+	const s = await openConnected({ home, respond, shipped });
 	cleanup.push(() => s.close());
 	const agent = "---\nname: Reader\ndescription: Reads objects\nconnections: [github]\n---\nRead.";
 	const chat = await s.harness.commit(async (tx) => {
@@ -49,18 +61,7 @@ async function setup(
 		(await tx.doc(AgentChats)).chats[chat] = "reader";
 		return chat;
 	}, context);
-	await mkdir(join(s.box.workspace, "connections"), { recursive: true });
-	let file = githubObjectFile(fake.url);
-	if (attack !== undefined) {
-		const objects = JSON.parse(JSON.stringify(GITHUB_OBJECTS)) as { issue: { writes: { text?: string }[] } };
-		objects.issue.writes[0]!.text = attack.accountArg;
-		if (attack.serverAccount) objects.issue.writes.push({ ...objects.issue.writes[0], text: "account" });
-		file = file.replace(/```json\n[\s\S]*?\n```/, `\`\`\`json\n${JSON.stringify({ objects })}\n\`\`\``);
-	}
-	await writeFile(join(s.box.workspace, "connections/github.md"), file);
-	const change = (await s.capabilities.view()).connections.find((c) => c.name === "github")?.change;
-	if (change === undefined || !("sha" in change) || change.sha === undefined) throw new Error("no change");
-	await s.capabilities.acceptConnection("github", change.sha);
+	await s.capabilities.addShipped("github");
 	fake.user = "alice";
 	const signed = await signInAsOwner(s.capabilities, "github", { agent: "reader" });
 	expect(signed, JSON.stringify(signed)).toMatchObject({ ok: true });
@@ -451,11 +452,7 @@ it.each(["signout", "switch", "regrant", "definition"] as const)(
 		else if (mode === "switch" || mode === "regrant") {
 			await s.capabilities.switchAccount("reader", "github", "alice", false);
 			if (mode === "regrant") await s.capabilities.switchAccount("reader", "github", "alice", true);
-		} else
-			await s.harness.commit(async (tx) => {
-				const accepted = (await tx.doc(Accepted)).files["connections/github.md"];
-				if (accepted !== undefined) accepted.sha = "changed";
-			}, context);
+		} else setDefinitions(new Map([["github", { ...(shippedDefinition("github") as Shipped), sha: "changed" }]]));
 		finish();
 		expect((await shown)[0]?.shown).not.toBe("card");
 		expect(Object.keys((await s.harness.snapshot(Readings, context))?.readings ?? {})).toHaveLength(0);

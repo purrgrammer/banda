@@ -59,7 +59,11 @@ export type FaultPoint =
 	| "oauth:exchanged"
 	| "oauth:kept"
 	| "oauth:device"
-	| "shipped:written"
+	/** A connection banda ships: before the store has it on, once it does; before it is removed, once it was. */
+	| "shipped:before"
+	| "shipped:added"
+	| "shipped:remove"
+	| "shipped:removed"
 	/** Bringing from the other harnesses: the skills written, then accepted, then each agent saved. */
 	| "bring:written"
 	| "bring:accepted"

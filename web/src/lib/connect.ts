@@ -2,6 +2,7 @@
  * What the connect card shows (`../app/ConnectFlow.tsx`), from the daemon's view of a connection and the card's own
  * sign-in, if it started one. Pure, like `chat.ts`.
  */
+import type { Access } from "../../../src/core/connections.ts";
 import type { AccountView, ConnectionView } from "../../../src/server/api.ts";
 import type { ConnectState } from "../chat/Connect.tsx";
 
@@ -53,65 +54,29 @@ export function connectState(
 	return { kind: "connect", why };
 }
 
-/** The access an owner chooses for a connection before signing in: one row per scope, the required one fixed. */
+/** One row of access: the scopes it stands for, taken together, and its words. */
+export type ScopeChoice = { readonly label: string; readonly note?: string; readonly scopes: readonly string[] };
+
+/** The scopes a row stands for. */
+export const scopesOfChoice = (choice: ScopeChoice): readonly string[] => choice.scopes;
+
+/** The access an owner chooses for a connection before signing in: one row per scope or bundle, the required one fixed. */
 export type ScopeChoices = {
-	readonly required?: { readonly scope: string; readonly label: string };
-	readonly choices: readonly { readonly scope: string; readonly label: string }[];
+	readonly required?: ScopeChoice;
+	readonly choices: readonly ScopeChoice[];
 	/** What changing access means, said under the choices. */
 	readonly note: string;
 };
 
-const GOOGLE = "https://www.googleapis.com/auth/";
-
-/** The connections whose access the owner manages in the permissions dialog, by their name in the daemon. */
-export const SCOPE_CHOICES: { readonly [connection: string]: ScopeChoices } = {
-	gmail: {
-		required: { scope: `${GOOGLE}gmail.readonly`, label: "Read email" },
-		choices: [
-			{ scope: `${GOOGLE}gmail.send`, label: "Send email" },
-			{ scope: `${GOOGLE}gmail.modify`, label: "Archive, trash, mark read and manage labels" },
-		],
-		note: "Changing access signs in again. Sending and mailbox changes still ask you to approve each action.",
-	},
-	calendar: {
-		required: { scope: `${GOOGLE}calendar.readonly`, label: "Read your calendars and events" },
-		choices: [{ scope: `${GOOGLE}calendar.events`, label: "Create, change and answer events" }],
-		note: "Changing access signs in again. Creating, changing, answering and deleting events still ask you to approve each one.",
-	},
-	contacts: {
-		required: { scope: `${GOOGLE}contacts.readonly`, label: "Read your contacts" },
-		choices: [
-			{ scope: `${GOOGLE}contacts.other.readonly`, label: "People you've emailed" },
-			{ scope: `${GOOGLE}contacts`, label: "Add, change and delete contacts" },
-		],
-		note: "Changing access signs in again. Adding, changing and deleting contacts still ask you to approve each one.",
-	},
-	drive: {
-		required: { scope: `${GOOGLE}drive.readonly`, label: "Find and read your files, including Docs and Sheets" },
-		choices: [
-			{ scope: `${GOOGLE}drive.file`, label: "Create files" },
-			{ scope: `${GOOGLE}spreadsheets`, label: "Change your spreadsheets" },
-			{ scope: `${GOOGLE}documents`, label: "Change your documents" },
-			{ scope: `${GOOGLE}drive`, label: "Change any of your files" },
-		],
-		note: "Changing access signs in again. Every change (creating, replacing or adding to a Doc's text, renaming and trashing files, a Sheet's rows, cells and tabs, a reply to a comment) still asks you to approve it; banda never shares a file or deletes one for good.",
-	},
-	github: {
-		choices: [
-			{ scope: "repo", label: "Repositories, including private repositories" },
-			{ scope: "read:org", label: "Organization and team information" },
-			{ scope: "notifications", label: "Read and manage notifications" },
-			{ scope: "gist", label: "Read and manage gists" },
-			{ scope: "security_events", label: "Repository security alerts" },
-			{ scope: "project", label: "Read and manage projects" },
-			{ scope: "read:project", label: "Read projects" },
-			{ scope: "admin:org", label: "Administer organizations" },
-			{ scope: "write:org", label: "Manage organization membership and teams" },
-			{ scope: "delete_repo", label: "Delete repositories" },
-		],
-		note: "Changing access signs in again. Actions that change GitHub still ask you to approve them.",
-	},
-};
-
-export const scopeChoicesOf = (connection: string | undefined): ScopeChoices | undefined =>
-	connection !== undefined && Object.hasOwn(SCOPE_CHOICES, connection) ? SCOPE_CHOICES[connection] : undefined;
+/**
+ * The access a connection banda ships offers, as its definition words it: `required` the scopes every account of it
+ * asks for, which its required row stands for. Undefined for a connection without choices.
+ */
+export function scopeChoicesOf(access: Access | undefined, required: readonly string[] = []): ScopeChoices | undefined {
+	if (access === undefined) return undefined;
+	return {
+		...(access.required === undefined ? {} : { required: { label: access.required, scopes: required } }),
+		choices: access.choices,
+		note: access.note,
+	};
+}

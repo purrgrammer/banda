@@ -3,6 +3,7 @@ import { useState } from "react";
 import { EmailDraftPreview } from "../../app/EmailDraftPreview.tsx";
 import { ConnectCard, ConnectDialog } from "../../chat/Connect.tsx";
 import { EmailCard, MessagesCard } from "../../chat/Object.tsx";
+import { choicesOf } from "../fixtures.ts";
 import { Section } from "../stage.tsx";
 
 const READ_ONLY = "https://www.googleapis.com/auth/gmail.readonly";
@@ -115,6 +116,7 @@ export function GmailSection() {
 						id="gmail"
 						step={{ kind: "permissions" }}
 						scopes={scopes}
+						choices={choicesOf("gmail")}
 						onScopes={(next) => setScopes([...next])}
 						scopesChanged={scopes.length > 1}
 						onSignIn={() => setPermissions(false)}

@@ -8,9 +8,12 @@
  * With "code", the file names its client and the owner signs in by code, typed on the fake server's page; a sign-in by
  * code dies with the process that waited for it, so a restart starts it again.
  *
- * argv: home, the fake server's URL, "callback" or "code", fault schedule JSON (Fault[])
+ * With "shipped", the calendar is a definition banda ships, the owner adds it as a switch. With "remove", the owner adds
+ * it, signs in, and removes it: the process ends with no fact, no account and no credential of it, whatever was killed.
+ *
+ * argv: home, the fake server's URL, "callback" or "code" or another mode, fault schedule JSON (Fault[])
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { TaskId } from "@earendil-works/pi-durable";
@@ -28,10 +31,10 @@ import { ownerAnswer } from "./owner.ts";
 const [home, url, mode, scheduleJson] = process.argv.slice(2) as [
 	string,
 	string,
-	"callback" | "code" | "shipped" | "rule" | "address" | "mcp",
+	"callback" | "code" | "shipped" | "remove" | "rule" | "address" | "mcp",
 	string,
 ];
-const byCode = mode === "code" || mode === "shipped";
+const byCode = mode === "code" || mode === "shipped" || mode === "remove";
 const calendar = connectionFile({
 	url,
 	auth: "oauth",
@@ -39,11 +42,24 @@ const calendar = connectionFile({
 	reads: [mode === "rule" ? "list_events(day=mon)" : "list_events"],
 	...(byCode ? { client: "banda-app", scopes: ["calendar"] } : {}),
 });
-// what banda ships, for "shipped": the same file, in a folder of its own
+// what banda ships, for "shipped" and "remove": the calendar as a definition, in a folder of its own
 const shipped = join(home, "shipped");
-if (mode === "shipped" && !existsSync(shipped)) {
+const shipping = mode === "shipped" || mode === "remove";
+if (shipping && !existsSync(shipped)) {
 	mkdirSync(shipped, { recursive: true });
-	writeFileSync(join(shipped, "cal.md"), calendar);
+	writeFileSync(
+		join(shipped, "cal.json"),
+		JSON.stringify({
+			service: "Calendar",
+			about: "Your days",
+			url,
+			auth: "oauth",
+			client: "banda-app",
+			scopes: ["calendar"],
+			reads: ["list_events"],
+			needs: { create_event: ["calendar"] },
+		}),
+	);
 }
 const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
 
@@ -70,18 +86,50 @@ const s = await openConnected({
 	respond: respond as never,
 	wrapStorage: (storage) => faults.storage(storage),
 	fault: (point) => faults.hit(point as FaultPoint),
-	...(mode === "shipped" ? { shipped } : {}),
+	...(shipping ? { shipped } : {}),
 });
 
-// the agent proposes it, or the owner adds the one banda ships (a kill after the file was written leaves it to allow)
+// "remove": added and signed in to once, then removed; a kill after it was removed leaves it for the next start to
+// finish, and adding it again is what must not happen
+if (mode === "remove") {
+	const removing = join(home, "removing");
+	if (!existsSync(removing)) {
+		if ((await s.harness.snapshot(Connected, context))?.added.cal === undefined) await s.capabilities.addShipped("cal");
+		const before = (await s.capabilities.view()).connections.find((c) => c.name === "cal");
+		if (before?.state === "sign-in") {
+			const signed = await signInAsOwner(s.capabilities, "cal", { fake: typingAt(new URL(url).origin) });
+			if (!signed.ok) throw new Error(signed.words);
+		}
+		writeFileSync(removing, "");
+	}
+	if ((await s.harness.snapshot(Connected, context))?.added.cal !== undefined)
+		await s.capabilities.remove("connections", "cal");
+	const connected = await s.harness.snapshot(Connected, context);
+	console.log(
+		JSON.stringify({
+			added: connected?.added.cal !== undefined,
+			accounts: Object.keys(connected?.accounts.cal ?? {}),
+			listed: connected?.connections.cal !== undefined,
+			credentials: existsSync(join(home, "auth", "connections", "cal"))
+				? readdirSync(join(home, "auth", "connections", "cal")).length
+				: 0,
+			commits: faults.hits("commit:after"),
+		}),
+	);
+	await s.close();
+	process.exit(0);
+}
+
+// the agent proposes it, or the owner adds the one banda ships
 const file = join(s.box.workspace, "connections", "cal.md");
 // "mcp": the owner sets it up from Connections, and after a kill sets it up again: the same connection, never a second
 if (mode === "mcp") {
 	const named = await s.capabilities.addMcp({ url, service: "Cal" });
 	if (named !== "cal") throw new Error(`setting it up again made ${named}, not cal`);
+} else if (mode === "shipped") {
+	if ((await s.harness.snapshot(Connected, context))?.added.cal === undefined) await s.capabilities.addShipped("cal");
 } else if (!existsSync(file)) {
-	if (mode === "shipped") await s.capabilities.addShipped("cal");
-	else if (mode === "address") await s.capabilities.addByAddress(url, context, "cal");
+	if (mode === "address") await s.capabilities.addByAddress(url, context, "cal");
 	else {
 		mkdirSync(join(s.box.workspace, "connections"), { recursive: true });
 		writeFileSync(file, calendar);
@@ -123,7 +171,9 @@ while (!(await Promise.race([ended, new Promise<false>((r) => setTimeout(r, 10, 
 
 const outcome = (await s.harness.getTask(received.turn as TaskId<TurnResult>, context))?.state.outcome;
 const { parked } = await status(s.harness);
-const accepted = (await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"] !== undefined;
+const accepted =
+	(await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"] !== undefined ||
+	(await s.harness.snapshot(Connected, context))?.added.cal !== undefined;
 const connected = (await s.harness.snapshot(Connected, context))?.connections.cal !== undefined;
 const answers = readFileSync(join(home, "answers.txt"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean);
 console.log(

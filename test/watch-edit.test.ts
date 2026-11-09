@@ -9,8 +9,9 @@ import { defineCore } from "../src/core/turn.ts";
 import { Followed, type Looked, Watches, watchPath, withUntil } from "../src/core/watches.ts";
 import type { Workspace } from "../src/server/agents.ts";
 import { changeWatch, createWatch, watches } from "../src/server/watches.ts";
-import { githubObjectFile } from "./fixtures/github-objects.ts";
+import { githubObjectDefinition } from "./fixtures/github-objects.ts";
 import { hostBox } from "./fixtures/host-box.ts";
+import { added, definition, shipping } from "./fixtures/shipped.ts";
 import { blobStore, echoModels, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
 
 const NOW = new Date(2026, 10, 2, 9, 0).getTime();
@@ -26,10 +27,10 @@ async function setUp() {
 	registry.install(core.extension);
 	const harness = await openStore(home, { models: echoModels().models, registry });
 	const workspace: Workspace = { env: () => box.env(), root: box.workspace, tools: () => [], known: () => true };
-	const connection = githubObjectFile("https://example.com/mcp");
+	shipping(definition("github", githubObjectDefinition("https://example.com/mcp")));
 	await harness.commit(async (tx) => {
+		await added(tx, "github", NOW);
 		const files = (await tx.doc(Accepted)).files;
-		files["connections/github.md"] = { sha: shaOf(connection), text: connection, at: NOW };
 		files[watchPath("banda-142")] = { sha: shaOf(WATCH), text: WATCH, at: NOW };
 		(await tx.doc(Watches)).watches["banda-142"] = {
 			agent: "sancho",

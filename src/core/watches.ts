@@ -33,6 +33,7 @@ import { log } from "./activity.ts";
 import { Accepted, AGENT_NAME, agentWords, ChatAgent, frontmatter, isArchived, LEAD, shaOf } from "./agents.ts";
 import {
 	acceptedConnection,
+	acceptedNames,
 	accountLabel,
 	accountNamed,
 	accountsOn,
@@ -322,12 +323,11 @@ export async function acceptedWatches(tx: Tx): Promise<string[]> {
 	);
 }
 
-/** Every accepted connection, with its hash. */
+/** Every connection in effect, with its version. */
 export async function acceptedConnections(tx: Tx): Promise<(Connection & { readonly sha: string })[]> {
 	const out: (Connection & { readonly sha: string })[] = [];
-	for (const path of Object.keys((await tx.doc(Accepted)).files).sort()) {
-		const name = /^connections\/(.+)\.md$/.exec(path)?.[1];
-		const connection = name === undefined ? undefined : await acceptedConnection(tx, name);
+	for (const name of await acceptedNames(tx)) {
+		const connection = await acceptedConnection(tx, name);
 		if (connection !== undefined) out.push(connection);
 	}
 	return out;
@@ -501,8 +501,8 @@ export async function followed(
 }
 
 /**
- * Why `object` cannot be followed, in words: no connection recognises the link, or one does but its file in effect
- * declares no `follow` for that kind, which a newer file banda ships may have (Update on its Connections tile).
+ * Why `object` cannot be followed, in words: no connection recognises the link, or one does but its definition
+ * declares no `follow` for that kind.
  */
 export async function cannotFollow(tx: Tx, object: string): Promise<string> {
 	const connections = await acceptedConnections(tx);
@@ -510,7 +510,7 @@ export async function cannotFollow(tx: Tx, object: string): Promise<string> {
 	const connection = connections.find((each) => each.name === ref?.connection);
 	if (ref === undefined || connection === undefined) return "no connection you have recognises that link";
 	const kind = ref.kind.replaceAll("_", " ");
-	return `${connection.service} here cannot follow a ${kind} yet: update ${connection.service} on the Connections page`;
+	return `${connection.service} cannot follow a ${kind}`;
 }
 
 /**

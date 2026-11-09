@@ -1,10 +1,10 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { parseConnection } from "../src/core/connections.ts";
+import { readDefinition } from "../src/core/definitions.ts";
 import { DRIVE_TOOLS, driveCall, fileOfRef, fullText, kindOf } from "../src/core/drive-rest.ts";
 import { discover } from "../src/core/oauth.ts";
 import { cardOf, readArgs, recognise } from "../src/core/objects.ts";
 import { REST_APIS, type RestApi } from "../src/core/rest.ts";
+import { refusal, shippedText } from "./fixtures/shipped.ts";
 
 const response = (body: unknown, status = 200) =>
 	new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -17,9 +17,9 @@ const read = async (fetcher: typeof fetch, args: Record<string, unknown>) => {
 	expect(result.isError).toBe(false);
 	return JSON.parse(result.text);
 };
-const source = () => readFileSync(new URL("../shipped/connections/drive.md", import.meta.url), "utf8");
+const source = () => shippedText("drive");
 const shipped = () => {
-	const parsed = parseConnection("drive", source());
+	const parsed = readDefinition("drive", source());
 	if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
 	return parsed.connection;
 };
@@ -66,20 +66,22 @@ describe("Google Drive REST connection", () => {
 		});
 		expect(connection.reads).toEqual(["get_profile", "search_files", "get_file", "read_file", "list_comments"]);
 		expect(connection.objects?.file?.card).toBe("file");
-		const errors = (from: string, to: string) => {
-			const parsed = parseConnection("drive", source().replace(from, to));
-			return "errors" in parsed ? parsed.errors.join() : "";
-		};
 		const scope = "https://www.googleapis.com/auth/drive.readonly";
 		for (const other of [
-			`${scope}, https://www.googleapis.com/auth/drive.metadata`,
-			"https://www.googleapis.com/auth/drive.appdata",
-			"https://www.googleapis.com/auth/drive.metadata.readonly",
+			[scope, "https://www.googleapis.com/auth/drive.metadata"],
+			["https://www.googleapis.com/auth/drive.appdata"],
+			["https://www.googleapis.com/auth/drive.metadata.readonly"],
 		])
-			expect(errors(`scopes: [${scope}]`, `scopes: [${other}]`)).toContain("Google Drive uses OAuth client");
-		expect(errors("url: https://www.googleapis.com/drive/v3", "url: https://www.googleapis.com/drive/v2")).toContain(
-			"built-in API",
-		);
+			expect(
+				refusal("drive", (each) => {
+					each.scopes = other;
+				}),
+			).toContain("Google Drive uses OAuth client");
+		expect(
+			refusal("drive", (each) => {
+				each.url = "https://www.googleapis.com/drive/v2";
+			}),
+		).toContain("built-in API");
 	});
 
 	it("signs in at Google's fixed endpoints", async () => {

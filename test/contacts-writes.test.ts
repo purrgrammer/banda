@@ -39,8 +39,8 @@ async function connectedWith(call: { tool: string; args: JsonObject }) {
 	const shipped = join(home, "shipped");
 	mkdirSync(shipped, { recursive: true });
 	writeFileSync(
-		join(shipped, "contacts.md"),
-		readFileSync(new URL("../shipped/connections/contacts.md", import.meta.url), "utf8"),
+		join(shipped, "contacts.json"),
+		readFileSync(new URL("../shipped/connections/contacts.json", import.meta.url), "utf8"),
 	);
 	const google = fakeContacts({ seed: { "people/c111": structuredClone(ANA) } });
 	const s = await openConnected({

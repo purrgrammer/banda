@@ -3,6 +3,7 @@ import type { AgentBrowserView } from "../box/browsers.ts";
 import type { Agent } from "../core/agents.ts";
 import type { AvatarFace } from "../core/avatar-face.ts";
 import type { Attachment } from "../core/blobs.ts";
+import type { Access } from "../core/connections.ts";
 import type { Audience, Fact } from "../core/memory.ts";
 
 export type { AvatarFace } from "../core/avatar-face.ts";
@@ -880,19 +881,19 @@ export type OwnToolView = {
 };
 
 /** What the companion can use beyond its computer: its connections, and the tools it made. */
-/** A connection banda ships, the owner can add as it is: what it reaches and does, and whether it is there already. */
+/**
+ * A connection banda ships, as this banda ships it: what it reaches and does, the line the app says under its name,
+ * the access the owner chooses among before signing in, and whether it is added in this home (`POST …/add`).
+ */
 export type ShippedView = {
 	readonly name: string;
 	readonly connection: ConnectionSummary;
+	/** What it lets the band do, in a line. */
+	readonly about: string;
+	readonly access?: Access;
 	/** How many of its tools only read. */
 	readonly reads: number;
-	/** A connection of that name is in the workspace already (this one, or another the companion made). */
 	readonly added: boolean;
-	/**
-	 * This banda ships a newer version of the one in effect: the sha of the version in effect, which updating names.
-	 * The owner's scopes are kept, so a scope choice alone is no update.
-	 */
-	readonly update?: string;
 };
 
 export type CapabilitiesView = {

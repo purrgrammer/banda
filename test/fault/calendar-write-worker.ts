@@ -25,11 +25,11 @@ import { ownerAnswer } from "./owner.ts";
 const [home, scheduleJson] = process.argv.slice(2) as [string, string];
 const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
 const shipped = join(home, "shipped");
-if (!existsSync(join(shipped, "calendar.md"))) {
+if (!existsSync(join(shipped, "calendar.json"))) {
 	mkdirSync(shipped, { recursive: true });
 	writeFileSync(
-		join(shipped, "calendar.md"),
-		readFileSync(new URL("../../shipped/connections/calendar.md", import.meta.url), "utf8"),
+		join(shipped, "calendar.json"),
+		readFileSync(new URL("../../shipped/connections/calendar.json", import.meta.url), "utf8"),
 	);
 }
 const google = fakeCalendar({ file: join(home, "google-calendar.json") });

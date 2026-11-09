@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { parseConnection } from "../src/core/connections.ts";
 import { addressOf, GMAIL_TOOLS, gmailAttachment, gmailCall, gmailWriteCall } from "../src/core/gmail-rest.ts";
@@ -11,6 +10,7 @@ import {
 	googleOAuthClient,
 } from "../src/core/oauth.ts";
 import { cardOf } from "../src/core/objects.ts";
+import { definition } from "./fixtures/shipped.ts";
 
 const response = (body: unknown, status = 200) =>
 	new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -212,10 +212,7 @@ describe("Gmail REST connection", () => {
 	});
 
 	it("ships an email object and draws it from bounded Gmail fields", () => {
-		const text = readFileSync(new URL("../shipped/connections/gmail.md", import.meta.url), "utf8");
-		const parsed = parseConnection("gmail", text);
-		if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
-		const kind = parsed.connection.objects?.email;
+		const kind = definition("gmail").objects?.email;
 		expect(kind?.card).toBe("email");
 		const card = cardOf(
 			kind!,
@@ -241,10 +238,7 @@ describe("Gmail REST connection", () => {
 	});
 
 	it("draws a conversation and a search as lists of emails, the newest first, titled by subject and query", () => {
-		const text = readFileSync(new URL("../shipped/connections/gmail.md", import.meta.url), "utf8");
-		const parsed = parseConnection("gmail", text);
-		if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
-		const objects = parsed.connection.objects ?? {};
+		const objects = definition("gmail").objects ?? {};
 		const line = (id: string, date: string) => ({
 			id,
 			from: `Bob\u0007 <bob@example.test>`,

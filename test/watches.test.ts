@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Context } from "@earendil-works/chord";
 import type { Harness, TaskId } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
-import { Accepted, shaOf } from "../src/core/agents.ts";
+import { Accepted } from "../src/core/agents.ts";
 import { Connected } from "../src/core/connections.ts";
 import { pause as pauseAll, resume as resumeAll } from "../src/core/control.ts";
 import { BUSY_EVERY, type Json } from "../src/core/follow.ts";
@@ -14,6 +14,7 @@ import { endWatches, parseWatch, Watches, type WatchRecord, watchPath, watchText
 import { pause } from "../src/server/watches.ts";
 import { Faults } from "./fault/faults.ts";
 import {
+	GITHUB,
 	NOW,
 	SCENARIOS,
 	type Scene,
@@ -24,6 +25,7 @@ import {
 	watchScenario,
 	world,
 } from "./fault/watch-scenario.ts";
+import { definition, shipping } from "./fixtures/shipped.ts";
 import { tempHome } from "./helpers.ts";
 
 const MINUTE = 60_000;
@@ -172,8 +174,8 @@ describe("a watch on a pull request", () => {
 	}, 60_000);
 
 	it("the first look after its connection's definition changed keeps the watch live, reads again and wakes on nothing", async () => {
-		// the pull request stands still; Mara reads it at step 3, then the connection's definition changes (as accepting
-		// an update does), and Otto's look takes no reading made under the version before: it reads for itself
+		// the pull request stands still; Mara reads it at step 3, then the connection's definition changes (the daemon
+		// started on a new build), and Otto's look takes no reading made under the version before: it reads for itself
 		const home = await tempHome();
 		const reads = () =>
 			readFileSync(join(home, "reads.jsonl"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean).length;
@@ -188,16 +190,15 @@ describe("a watch on a pull request", () => {
 				const before = reads();
 				await core.lookWatch(harness, "banda-142");
 				const mara = reads() - before;
-				if (step === 3)
+				if (step === 3) {
+					// the daemon started on a build whose definition differs: the version moves, and its start lists it again
+					const newer = definition("github", `${GITHUB.file}\n`);
+					shipping(newer);
 					await harness.commit(async (tx) => {
-						const files = (await tx.doc(Accepted)).files;
-						const file = files["connections/github.md"];
-						if (file === undefined) throw new Error("no github file");
-						const text = `${file.text}\nA newer version.\n`;
-						files["connections/github.md"] = { sha: shaOf(text), text, at: file.at };
 						const listed = (await tx.doc(Connected)).connections.github;
-						if (listed !== undefined) listed.sha = shaOf(text);
+						if (listed !== undefined) listed.sha = newer.sha;
 					}, context);
+				}
 				const after = reads();
 				await core.lookWatch(harness, "banda-142-otto");
 				made.push({ mara, otto: reads() - after });

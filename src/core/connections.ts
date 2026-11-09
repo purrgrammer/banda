@@ -21,6 +21,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promise
 import { join, resolve } from "node:path";
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
 import { Accepted, AGENT_NAME, type Agent, agentPath, frontmatter, LEAD, parseAgent } from "./agents.ts";
+import { shippedDefinition, shippedDefinitions } from "./definitions.ts";
 import { FLOORS, type Floor } from "./floor.ts";
 import { harnessToolsOf } from "./harness.ts";
 import { DEFAULT_GOOGLE_CLIENT_ID, type OAuthClient, type OAuthServer, type Pending, type Tokens } from "./oauth.ts";
@@ -580,6 +581,8 @@ type ConnectedValue = {
 	on: { [agent: string]: { [connection: string]: string[] } };
 	/** Owner-managed anonymous connections have explicit agent switches, not invented accounts. */
 	public: { [connection: string]: string[] };
+	/** The connections banda ships that the owner added in this home, and when: its definition is banda's. */
+	added: { [connection: string]: { at: number } };
 };
 
 /** What is connected and who may use it. */
@@ -588,7 +591,7 @@ export const Connected = defineDoc<ConnectedValue>({
 	// 2: owner-managed anonymous connections keep their agent switches in `public`; a version 1 doc had none
 	version: 2,
 	scope: "session",
-	initial: () => ({ epoch: 0, connections: {}, off: {}, accounts: {}, on: {}, public: {} }),
+	initial: () => ({ epoch: 0, connections: {}, off: {}, accounts: {}, on: {}, public: {}, added: {} }),
 	migrate: (value, from) => (from >= 2 ? value : { ...value, public: {} }) as unknown as ConnectedValue,
 	checkpointWhen: () => true,
 });
@@ -698,12 +701,53 @@ export function toolName(connection: string, tool: string): string {
 	return `${connection}__${tool.replace(/[^A-Za-z0-9_-]/g, "_")}`.slice(0, 64);
 }
 
-/** The accepted connection `name`, if its file parses. Reads only. */
+/**
+ * The connection `name` in effect: one banda ships, as this banda ships it, while the owner has it added; else an
+ * owner-added server's accepted file, if it parses. Its `sha` is its version. Reads only.
+ */
 export async function acceptedConnection(tx: Tx, name: string): Promise<(Connection & { sha: string }) | undefined> {
+	const shipped = shippedDefinition(name);
+	if (shipped !== undefined) return (await tx.doc(Connected)).added[name] === undefined ? undefined : shipped;
 	const file = (await tx.doc(Accepted)).files[connectionPath(name)];
 	if (file === undefined) return undefined;
 	const parsed = parseConnection(name, file.text);
 	return "connection" in parsed ? { ...parsed.connection, sha: file.sha } : undefined;
+}
+
+/**
+ * The names of the connections in effect, sorted: the shipped ones added in this home, and the owner-added servers
+ * whose files were accepted (a name banda ships is never one of those). Reads only.
+ */
+export async function acceptedNames(tx: Tx): Promise<string[]> {
+	const shipped = shippedDefinitions();
+	const added = Object.keys((await tx.doc(Connected)).added).filter((name) => shipped.has(name));
+	const own = Object.keys((await tx.doc(Accepted)).files).flatMap((path) => {
+		const name = /^connections\/(.+)\.md$/.exec(path)?.[1];
+		return name === undefined || shipped.has(name) ? [] : [name];
+	});
+	return [...added, ...own].sort();
+}
+
+/**
+ * The tools connection `connection` names, so they come with its version, switched on: its reads and their rules, the
+ * scopes' tools, the floors, the account's read, its kinds' reads and writes, and a built-in API's own tools. A tool a
+ * server lists that its definition does not name waits for the owner.
+ */
+export function namedTools(connection: Connection): Set<string> {
+	const named = new Set<string>([
+		...connection.reads,
+		...Object.keys(connection.readsWhen ?? {}),
+		...Object.keys(connection.needs ?? {}),
+		...Object.keys(connection.floors),
+		...(connection.account === undefined ? [] : [connection.account.tool]),
+		...(connection.api === undefined ? [] : REST_APIS[connection.api].tools.map((tool) => tool.name)),
+	]);
+	for (const kind of Object.values(connection.objects ?? {})) {
+		for (const read of Object.values(kind.reads)) named.add(read.tool);
+		for (const write of kind.writes ?? []) named.add(write.tool);
+		for (const create of kind.creates ?? []) named.add(create.tool);
+	}
+	return named;
 }
 
 /** The accepted tool `name`, if its file parses. Reads only. */
@@ -733,12 +777,9 @@ export type InEffect = {
  * off. Reads only.
  */
 export async function connectionTools(tx: Tx): Promise<InEffect[]> {
-	const { files } = await tx.doc(Accepted);
 	const { connections, off } = await tx.doc(Connected);
 	const found: InEffect[] = [];
-	for (const path of Object.keys(files).sort()) {
-		const name = /^connections\/(.+)\.md$/.exec(path)?.[1];
-		if (name === undefined) continue;
+	for (const name of await acceptedNames(tx)) {
 		const connection = await acceptedConnection(tx, name);
 		const listed = connections[name];
 		if (connection === undefined || listed === undefined || listed.sha !== connection.sha) continue;

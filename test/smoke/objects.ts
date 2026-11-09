@@ -22,7 +22,7 @@ import {
 import { startDaemon } from "../../src/daemon.ts";
 import { readDaemonFile, webLink } from "../../src/home.ts";
 import { WEB } from "../../src/server/http.ts";
-import { githubObjectFile, startGithubObjects } from "../fixtures/github-objects.ts";
+import { githubObjectDefinition, startGithubObjects } from "../fixtures/github-objects.ts";
 import { hostBox } from "../fixtures/host-box.ts";
 
 const FAKE_KEY = "fake-key-0123456789";
@@ -163,11 +163,13 @@ process.once("SIGINT", () => void stop());
 process.once("SIGTERM", () => void stop());
 try {
 	await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
-	await mkdir(join(home, "workspace", "connections"), { recursive: true });
-	await writeFile(join(home, "workspace", "connections", "github.md"), githubObjectFile(fake.url, "key"));
+	const shipped = join(home, "shipped");
+	await mkdir(shipped, { recursive: true });
+	await writeFile(join(shipped, "github.json"), githubObjectDefinition(fake.url, "key"));
 	daemon = await startDaemon({
 		home,
 		port: 0,
+		shipped,
 		models: scripted(fake),
 		box: hostBox(home),
 		log: (line) => console.error(line),
@@ -184,15 +186,7 @@ try {
 		if (!response.ok) throw new Error(`${path}: ${response.status} ${await response.text()}`);
 		return response.json();
 	};
-	// The file is proposed from the host workspace, then explicitly reviewed through the owner API.
-	let sha: string | undefined;
-	for (let attempt = 0; attempt < 200 && sha === undefined; attempt++) {
-		const view = (await api("/capabilities")) as { connections: { name: string; change?: { sha: string } }[] };
-		sha = view.connections.find((connection) => connection.name === "github")?.change?.sha;
-		if (sha === undefined) await new Promise((resolve) => setTimeout(resolve, 100));
-	}
-	if (sha === undefined) throw new Error("GitHub file never appeared for owner acceptance");
-	await api("/capabilities/connections/github/accept", { sha });
+	await api("/capabilities/connections/github/add", {});
 	await api("/capabilities/connections/github/key", { key: fake.key, agent: "sancho" });
 	controls = createServer((req, res) => {
 		void (async () => {

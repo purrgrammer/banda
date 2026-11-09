@@ -26,11 +26,11 @@ import { ownerAnswer } from "./owner.ts";
 const [home, mode, scheduleJson] = process.argv.slice(2) as [string, "update" | "delete" | "create", string];
 const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
 const shipped = join(home, "shipped");
-if (!existsSync(join(shipped, "contacts.md"))) {
+if (!existsSync(join(shipped, "contacts.json"))) {
 	mkdirSync(shipped, { recursive: true });
 	writeFileSync(
-		join(shipped, "contacts.md"),
-		readFileSync(new URL("../../shipped/connections/contacts.md", import.meta.url), "utf8"),
+		join(shipped, "contacts.json"),
+		readFileSync(new URL("../../shipped/connections/contacts.json", import.meta.url), "utf8"),
 	);
 }
 const google = fakeContacts({

@@ -21,7 +21,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import type { AvatarFace } from "../../../src/core/avatar-face.ts";
 import { ACCOUNT_LABEL_MAX } from "../../../src/core/choices.ts";
-import { scopeChoicesOf } from "../lib/connect.ts";
+import { type ScopeChoices, scopesOfChoice } from "../lib/connect.ts";
 import { Tile } from "./Cards.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
 import { Face } from "./Face.tsx";
@@ -124,6 +124,7 @@ export function ConnectDialog({
 	step,
 	busy = false,
 	scopes = [],
+	choices,
 	onScopes,
 	scopesChanged = false,
 	scopesReadonly = false,
@@ -143,8 +144,9 @@ export function ConnectDialog({
 	step: ConnectStep;
 	/** A control is waiting on banda. */
 	busy?: boolean | undefined;
-	/** The access chosen on the permissions step. */
+	/** The access chosen on the permissions step, among `choices`. */
 	scopes?: readonly string[] | undefined;
+	choices?: ScopeChoices | undefined;
 	onScopes?: ((scopes: readonly string[]) => void) | undefined;
 	scopesChanged?: boolean | undefined;
 	/** The access can be changed only on the computer banda runs on. */
@@ -213,7 +215,7 @@ export function ConnectDialog({
 				</DialogHeader>
 				{step.kind === "permissions" ? (
 					<ConnectionPermissions
-						connection={id}
+						choices={choices}
 						service={connection}
 						scopes={scopes}
 						onScopes={onScopes ?? (() => {})}
@@ -383,15 +385,15 @@ function ConnectionMark({ id, url }: { id: string; url?: string | undefined }) {
 
 /** OAuth permissions chosen before sign-in, on the connect dialog's first step. */
 export function ConnectionPermissions({
-	connection,
+	choices: offered,
 	service,
 	scopes,
 	onScopes,
 	busy = false,
 	readonly = false,
 }: {
-	/** Its name in the daemon ("gmail"). */
-	connection: string;
+	/** The access the connection offers, as its definition words it. */
+	choices: ScopeChoices | undefined;
 	/** The service, in words ("Gmail"). */
 	service: string;
 	scopes: readonly string[];
@@ -399,30 +401,43 @@ export function ConnectionPermissions({
 	busy?: boolean;
 	readonly?: boolean;
 }) {
-	const { required, choices, note } = scopeChoicesOf(connection) ?? { choices: [], note: "" };
+	const { required, choices, note } = offered ?? { choices: [], note: "" };
 	return (
 		<fieldset className="flex flex-col gap-3 text-meta" disabled={busy || readonly}>
 			{required === undefined ? null : (
 				<label className="flex items-start gap-2 text-ink-2">
-					<input type="checkbox" checked={scopes.includes(required.scope)} disabled readOnly className="mt-0.5" />
+					<input
+						type="checkbox"
+						checked={required.scopes.every((scope) => scopes.includes(scope))}
+						disabled
+						readOnly
+						className="mt-0.5"
+					/>
 					<span>
 						{required.label} <span className="text-ink-3">· required</span>
 					</span>
 				</label>
 			)}
-			{choices.map(({ scope, label }) => (
-				<label key={scope} className="flex items-start gap-2 text-ink-2">
-					<input
-						type="checkbox"
-						checked={scopes.includes(scope)}
-						onChange={(event) =>
-							onScopes(event.target.checked ? [...scopes, scope] : scopes.filter((current) => current !== scope))
-						}
-						className="mt-0.5"
-					/>
-					<span>{label}</span>
-				</label>
-			))}
+			{choices.map((choice) => {
+				const members = scopesOfChoice(choice);
+				return (
+					<label key={choice.label} className="flex items-start gap-2 text-ink-2">
+						<input
+							type="checkbox"
+							checked={members.every((scope) => scopes.includes(scope))}
+							onChange={(event) =>
+								onScopes(
+									event.target.checked
+										? [...scopes, ...members.filter((scope) => !scopes.includes(scope))]
+										: scopes.filter((current) => !members.includes(current)),
+								)
+							}
+							className="mt-0.5"
+						/>
+						<span>{choice.label}</span>
+					</label>
+				);
+			})}
 			<p className="text-ink-3">
 				{readonly
 					? `Change access and sign in again on the computer Banda runs on. Connected ${service} accounts are available on this device.`

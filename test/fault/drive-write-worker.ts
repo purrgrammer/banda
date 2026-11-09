@@ -32,11 +32,11 @@ const [home, mode, scheduleJson] = process.argv.slice(2) as [
 ];
 const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
 const shipped = join(home, "shipped");
-if (!existsSync(join(shipped, "drive.md"))) {
+if (!existsSync(join(shipped, "drive.json"))) {
 	mkdirSync(shipped, { recursive: true });
 	writeFileSync(
-		join(shipped, "drive.md"),
-		readFileSync(new URL("../../shipped/connections/drive.md", import.meta.url), "utf8"),
+		join(shipped, "drive.json"),
+		readFileSync(new URL("../../shipped/connections/drive.json", import.meta.url), "utf8"),
 	);
 }
 /** The Sheet the owner has, before anything: two tabs, a budget in the first. */

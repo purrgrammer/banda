@@ -1,6 +1,4 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { parseConnection } from "../src/core/connections.ts";
 import {
 	CONTACTS_IDEMPOTENT,
 	CONTACTS_TOOLS,
@@ -12,17 +10,19 @@ import {
 	contactsExpand,
 	contactsWriteCall,
 } from "../src/core/contacts-rest.ts";
+import { readDefinition } from "../src/core/definitions.ts";
 import { discover } from "../src/core/oauth.ts";
 import { cardOf, readArgs, recognise } from "../src/core/objects.ts";
 import { REST_APIS, type RestApi } from "../src/core/rest.ts";
+import { refusal, shippedText } from "./fixtures/shipped.ts";
 
 const response = (body: unknown, status = 200) =>
 	new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const call = (fetcher: typeof fetch, name: string, args: Record<string, unknown> = {}, token = "t") =>
 	contactsCall(token, name, args, undefined, fetcher);
-const FILE = () => readFileSync(new URL("../shipped/connections/contacts.md", import.meta.url), "utf8");
+const FILE = () => shippedText("contacts");
 const shipped = () => {
-	const parsed = parseConnection("contacts", FILE());
+	const parsed = readDefinition("contacts", FILE());
 	if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
 	return parsed.connection;
 };
@@ -74,23 +74,23 @@ describe("Google Contacts REST connection", () => {
 			expect(connection.needs?.[tool]).toEqual(["https://www.googleapis.com/auth/contacts"]);
 		expect(connection.floors).toEqual({});
 		expect(connection.objects?.contact?.card).toBe("contact");
-		const errors = (from: string, to: string) => {
-			const parsed = parseConnection("contacts", FILE().replace(from, to));
-			return "errors" in parsed ? parsed.errors.join() : "";
-		};
 		const google = "https://www.googleapis.com/auth/";
-		const scopes = /scopes: \[.*\]/.exec(FILE())?.[0] ?? "";
-		expect(errors(scopes, `scopes: [${google}contacts.readonly, ${google}userinfo.email]`)).toBe("");
-		// the address that names the account is read under its own scope, so every file asks for it
-		expect(errors(scopes, `scopes: [${google}contacts.readonly]`)).toContain("Google Contacts uses OAuth client");
-		expect(errors(scopes, `scopes: [${google}contacts.readonly, ${google}userinfo.email, ${google}contacts]`)).toBe("");
-		expect(errors(scopes, `scopes: [${google}contacts.readonly, ${google}contacts]`)).toContain(
-			"Google Contacts uses OAuth client",
-		);
-		expect(errors(scopes, `scopes: [${google}contacts.other.readonly]`)).toContain("Google Contacts uses OAuth client");
-		expect(errors("url: https://people.googleapis.com/v1", "url: https://people.googleapis.com/v2")).toContain(
-			"built-in API",
-		);
+		const scoped = (scopes: string[]) =>
+			refusal("contacts", (each) => {
+				each.scopes = scopes;
+				delete each.access;
+			});
+		expect(scoped([`${google}contacts.readonly`, `${google}userinfo.email`])).toBe("");
+		// the address that names the account is read under its own scope, so every definition asks for it
+		expect(scoped([`${google}contacts.readonly`])).toContain("Google Contacts uses OAuth client");
+		expect(scoped([`${google}contacts.readonly`, `${google}userinfo.email`, `${google}contacts`])).toBe("");
+		expect(scoped([`${google}contacts.readonly`, `${google}contacts`])).toContain("Google Contacts uses OAuth client");
+		expect(scoped([`${google}contacts.other.readonly`])).toContain("Google Contacts uses OAuth client");
+		expect(
+			refusal("contacts", (each) => {
+				each.url = "https://people.googleapis.com/v2";
+			}),
+		).toContain("built-in API");
 	});
 
 	it("signs in at Google's fixed endpoints", async () => {

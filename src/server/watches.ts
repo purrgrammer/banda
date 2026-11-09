@@ -9,6 +9,7 @@ import type { Harness } from "@earendil-works/pi-durable";
 import { log } from "../core/activity.ts";
 import { Accepted, activeAgents, agentWords, isArchived, shaOf, unaccept } from "../core/agents.ts";
 import { connectionPath, parseConnection } from "../core/connections.ts";
+import { shippedDefinition } from "../core/definitions.ts";
 import { nameOf, Readings, readingKey, refKey } from "../core/objects.ts";
 import { withAsk } from "../core/routines.ts";
 import { context } from "../core/store.ts";
@@ -57,10 +58,18 @@ const watchFiles = (workspace: Workspace, ctx: Context) => boxFiles(workspace, c
 
 /** The words that can end a watch on the kind `ref` names (`github:pull_request:…`), as its accepted connection says. */
 function endsOf(accepted: { readonly [path: string]: { readonly text: string } }, connection: string, ref: string) {
-	const file = accepted[connectionPath(connection)];
-	if (file === undefined) return undefined;
-	const parsed = parseConnection(connection, file.text);
-	const follow = "connection" in parsed ? parsed.connection.objects?.[ref.split(":")[1] ?? ""]?.follow : undefined;
+	const shipped = shippedDefinition(connection);
+	const file = shipped === undefined ? accepted[connectionPath(connection)] : undefined;
+	const parsed =
+		shipped !== undefined
+			? { connection: shipped }
+			: file === undefined
+				? undefined
+				: parseConnection(connection, file.text);
+	const follow =
+		parsed !== undefined && "connection" in parsed
+			? parsed.connection.objects?.[ref.split(":")[1] ?? ""]?.follow
+			: undefined;
 	return follow === undefined ? undefined : Object.keys(follow.ends);
 }
 

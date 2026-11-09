@@ -266,7 +266,7 @@ export function readDefinitions(dir: string, say: (line: string) => void = () =>
 let inEffect: ReadonlyMap<string, Shipped> = new Map();
 
 /** Make `definitions` the ones in effect: the daemon's, at start. */
-export function useDefinitions(definitions: ReadonlyMap<string, Shipped>): void {
+export function setDefinitions(definitions: ReadonlyMap<string, Shipped>): void {
 	inEffect = definitions;
 }
 

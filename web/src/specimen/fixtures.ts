@@ -1,12 +1,18 @@
 /** The specimen's data: one band, its chats, and pictures drawn in SVG so nothing loads from outside. */
 import { getExample } from "open-bot-avatar";
 import type { FileUIPart } from "@/components/ai-elements/types";
+import calendar from "../../../shipped/connections/calendar.json";
+import contacts from "../../../shipped/connections/contacts.json";
+import drive from "../../../shipped/connections/drive.json";
+import github from "../../../shipped/connections/github.json";
+import gmail from "../../../shipped/connections/gmail.json";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import type { WatchView } from "../../../src/server/api.ts";
 import type { Service } from "../chat/Catalogue.tsx";
 import type { CheckRun, Discussion, Issue, PullRequest, Repository } from "../chat/Object.tsx";
 import type { RoutineRowView, WatchRowView } from "../chat/Panel.tsx";
 import type { RowView, Who } from "../chat/Row.tsx";
+import { type ScopeChoices, scopeChoicesOf } from "../lib/connect.ts";
 
 export function sampleFace(shape: string, color: string) {
 	const definition = getExample(shape);
@@ -333,14 +339,28 @@ export const REPOSITORY: Repository = {
 	url: "https://github.com/purrgrammer/banda",
 };
 
+const DEFINITIONS: { readonly [id: string]: { readonly scopes?: readonly string[]; readonly access?: unknown } } = {
+	calendar,
+	contacts,
+	drive,
+	github,
+	gmail,
+};
+
+/** The access a connection banda ships offers, from its definition; its default scopes stand for the required row. */
+export function choicesOf(id: string | undefined): ScopeChoices | undefined {
+	const definition = id === undefined ? undefined : DEFINITIONS[id];
+	return scopeChoicesOf(definition?.access as Parameters<typeof scopeChoicesOf>[0], definition?.scopes);
+}
+
 export const SERVICES: readonly Service[] = [
-	// banda ships a newer GitHub than the one in effect: the tile offers it
+	// two accounts, and access the owner chose: the tile offers to change it
 	{
 		id: "github",
 		name: "GitHub",
 		does: "Pull requests, issues, checks",
 		accounts: ["@bandarra", "@purrgrammer"],
-		onUpdate: () => new Promise((resolve) => setTimeout(resolve, 800)),
+		choices: true,
 	},
 	// an account whose sign-in no longer fits: the tile says so, and signs in again
 	{ id: "gmail", name: "Gmail", does: "Read and draft email", accounts: [], stale: ["you@example.com"] },

@@ -71,6 +71,7 @@ it("reopens current account authority and object readings without a migration", 
 		connected.accounts.notes = { "account-1": { id: "account 1", label: "Work", at: 124 } };
 		connected.on.reader = { github: ["alice"] };
 		connected.off.github__issue_read = true;
+		connected.added.github = { at: 99 };
 		await keepReading(tx, "github/alice/issue:org/repo#12", {
 			connection: "github",
 			account: "alice",
@@ -171,6 +172,7 @@ it("reopens current account authority and object readings without a migration", 
 			},
 			on: { reader: { github: ["alice"] } },
 			off: { github__issue_read: true },
+			added: { github: { at: 99 } },
 		});
 		expect((await after.snapshot(Readings, context))?.readings["github/alice/issue:org/repo#12"]).toMatchObject({
 			account: "alice",

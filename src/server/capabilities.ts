@@ -10,8 +10,6 @@
  * approves (slice 4's machinery, its floor respected). A server or tool the agent built runs in its box, like any
  * command: nothing it does leaves but through the egress proxy.
  */
-import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Context } from "@earendil-works/chord";
 import {
@@ -50,6 +48,7 @@ import { ACCOUNT_LABEL_MAX } from "../core/choices.ts";
 import {
 	type Account,
 	acceptedConnection,
+	acceptedNames,
 	accountKey,
 	accountLabel,
 	accountNamed,
@@ -73,6 +72,7 @@ import {
 	MAX_DEFINITION_BYTES,
 	mayUse,
 	multiAccount,
+	namedTools,
 	nameForm,
 	numberedAccount,
 	type OwnTool,
@@ -96,6 +96,7 @@ import {
 	withoutSignIn,
 	withReads,
 } from "../core/connections.ts";
+import { readDefinitions, setDefinitions } from "../core/definitions.ts";
 import { type HoldingEgress, intake } from "../core/egress.ts";
 import { gmailAttachment, MAX_GMAIL_ATTACHMENT_BYTES, MAX_GMAIL_SEND_ATTACHMENT_BYTES } from "../core/gmail-rest.ts";
 import {
@@ -299,6 +300,9 @@ export function openCapabilities(options: CapabilityOptions) {
 	const now = options.now ?? Date.now;
 	const fault = options.fault ?? (() => {});
 	const say = options.log ?? (() => {});
+	/** The connections banda ships, read once now: the definitions in effect until the daemon starts again. */
+	const definitions = readDefinitions(options.shipped ?? SHIPPED, say);
+	setDefinitions(definitions);
 	const fetcher = options.fetch ?? fetch;
 	/** Why a connection is not working, as last found: the app says it. */
 	const problems = new Map<string, string>();
@@ -1201,13 +1205,20 @@ export function openCapabilities(options: CapabilityOptions) {
 			throw new Error("The server echoed a credential in its tool listing. The listing was not accepted.");
 		const notes = notesOf(given);
 		const stored = await harness.commit(async (tx) => {
-			const accepted = (await tx.doc(Accepted)).files[connectionPath(name)];
-			// the file changed since: what was listed is for another version
-			if (accepted?.sha !== sha) return false;
+			const accepted = await acceptedConnection(tx, name);
+			// the connection changed since: what was listed is for another version
+			if (accepted === undefined || accepted.sha !== sha) return false;
 			const doc = await tx.doc(Connected);
 			const was = doc.connections[name];
 			const proposed = listedOf(listed);
-			const fresh = was?.sha === sha ? Object.keys(proposed).filter((tool) => !Object.hasOwn(was.tools, tool)) : [];
+			// a tool a server adds waits for the owner: within one version of an owner-added server's file; for one banda
+			// ships, whatever the version, unless its definition names it, when it comes with the release
+			const named = definitions.has(name) ? namedTools(accepted) : undefined;
+			const fresh = Object.keys(proposed).filter((tool) =>
+				named === undefined
+					? was?.sha === sha && !Object.hasOwn(was.tools, tool)
+					: !named.has(tool) && (was === undefined || !Object.hasOwn(was.tools, tool)),
+			);
 			// A server's relisting may remove a tool, but never rewrite the prompt authority of an existing one.
 			const tools = own
 				? proposed
@@ -1235,11 +1246,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				listed.map((tool) => toolName(name, tool.name)).filter((tool) => doc.off[tool] !== true),
 				name,
 			);
-			if (was?.sha !== sha) {
-				const connection = parseConnection(name, accepted.text);
-				const service = "connection" in connection ? connection.connection.service : name;
-				await log(tx, { at: now(), what: `Connected to ${service}` });
-			}
+			if (was?.sha !== sha) await log(tx, { at: now(), what: `Connected to ${accepted.service}` });
 			return true;
 		}, ctx);
 		await install(ctx);
@@ -1318,9 +1325,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		const due = await harness.commit(async (tx) => {
 			const names: string[] = [];
 			const { connections } = await tx.doc(Connected);
-			for (const path of Object.keys((await tx.doc(Accepted)).files)) {
-				const name = /^connections\/(.+)\.md$/.exec(path)?.[1];
-				if (name === undefined) continue;
+			for (const name of await acceptedNames(tx)) {
 				const connection = await acceptedConnection(tx, name);
 				// a built-in API's tools are this daemon's own: listed again at every start, so a new build's words reach
 				// the model without the file changing
@@ -1428,11 +1433,18 @@ export function openCapabilities(options: CapabilityOptions) {
 		// taken before the store is read: a sign-in leaves this map only after its account is stored, so one gone from
 		// here has its account in what is read next, and one that ends while this view runs still reads as signing in
 		const signing = new Map(devices);
-		const { accepted, connected, inEffectNow, own } = await harness.commit(
+		const {
+			accepted,
+			names: inEffectNames,
+			connected,
+			inEffectNow,
+			own,
+		} = await harness.commit(
 			async (tx) => ({
 				accepted: JSON.parse(JSON.stringify((await tx.doc(Accepted)).files)) as {
 					[path: string]: { sha: string; text: string; at?: number };
 				},
+				names: await acceptedNames(tx),
 				connected: JSON.parse(JSON.stringify(await tx.doc(Connected))) as {
 					connections: {
 						[name: string]: { sha: string; tools: { [tool: string]: Listed }; notes?: string; notesOn?: string };
@@ -1441,6 +1453,7 @@ export function openCapabilities(options: CapabilityOptions) {
 					accounts?: { [name: string]: { [account: string]: Account } };
 					on?: { [agent: string]: { [name: string]: string[] } };
 					public: { [name: string]: string[] };
+					added: { [name: string]: { at: number } };
 				},
 				inEffectNow: await connectionTools(tx),
 				own: await ownTools(tx),
@@ -1457,18 +1470,34 @@ export function openCapabilities(options: CapabilityOptions) {
 			return held.get(key);
 		};
 		const connections: ConnectionView[] = [];
+		// a name banda ships is its definition, never the box's: a file of that name there is nothing to offer
 		const names = new Set([
 			...Object.keys(accepted).flatMap((path) => /^connections\/(.+)\.md$/.exec(path)?.slice(1) ?? []),
 			...boxConnections.keys(),
+			...inEffectNames,
 		]);
-		for (const name of [...names].sort()) {
-			const file = accepted[connectionPath(name)];
-			const parsedAccepted = file === undefined ? undefined : parseConnection(name, file.text);
+		for (const name of [...names].filter((each) => !definitions.has(each) || inEffectNames.includes(each)).sort()) {
+			const definition = definitions.get(name);
+			// a connection banda ships is in effect as its definition, at its version, since it was added
+			const file =
+				definition === undefined
+					? accepted[connectionPath(name)]
+					: { sha: definition.sha, at: connected.added[name]?.at ?? 0 };
+			const parsedAccepted =
+				definition !== undefined
+					? { connection: definition }
+					: file === undefined || !("text" in file)
+						? undefined
+						: parseConnection(name, file.text);
 			const connection =
 				parsedAccepted !== undefined && "connection" in parsedAccepted ? parsedAccepted.connection : undefined;
-			const box = boxConnections.get(name) as { text: string } | { unreadable: string } | undefined;
+			const box =
+				definition === undefined
+					? (boxConnections.get(name) as { text: string } | { unreadable: string } | undefined)
+					: undefined;
 			let change: ConnectionView["change"];
-			if (box === undefined) change = file === undefined ? undefined : { kind: "removed" };
+			if (definition !== undefined) change = undefined;
+			else if (box === undefined) change = file === undefined ? undefined : { kind: "removed" };
 			else if ("unreadable" in box)
 				change = {
 					kind: file === undefined ? "added" : "changed",
@@ -1698,7 +1727,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				on: own.some((tool) => tool.name === name),
 			});
 		}
-		return { connections, tools, shipped: await shippedView(names, ctx) };
+		return { connections, tools, shipped: await shippedView(ctx) };
 	}
 
 	/**
@@ -1711,6 +1740,8 @@ export function openCapabilities(options: CapabilityOptions) {
 		ctx: Context = context,
 		restricted = false,
 	): Promise<void> {
+		if (definitions.has(name))
+			throw new BadRequest(`${name} is a connection banda ships: nothing in the box changes it`, 409);
 		const box = (await boxedFiles("connections", ctx)).get(name) as
 			| { text: string }
 			| { unreadable: string }
@@ -1801,6 +1832,8 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	/** Decline the box's change: the accepted file is written back, or a new one removed. */
 	async function decline(folder: "connections" | "tools", name: string, ctx: Context = context): Promise<void> {
+		if (folder === "connections" && definitions.has(name))
+			throw new BadRequest(`${name} is a connection banda ships: nothing in the box changes it`, 409);
 		const path = folder === "connections" ? connectionPath(name) : toolPath(name);
 		const file = await harness.commit(async (tx) => {
 			const found = (await tx.doc(Accepted)).files[path];
@@ -1820,8 +1853,9 @@ export function openCapabilities(options: CapabilityOptions) {
 		await withCredentials(home, name, async (locked) => {
 			await harness.commit(async (tx) => {
 				const accepted = await acceptedConnection(tx, name);
-				await unaccept(tx, connectionPath(name), now());
 				const doc = await tx.doc(Connected);
+				if (definitions.has(name)) delete doc.added[name];
+				else await unaccept(tx, connectionPath(name), now());
 				delete doc.connections[name];
 				delete doc.public[name];
 				for (const tool of Object.keys(doc.off)) if (tool.startsWith(`${name}__`)) delete doc.off[tool];
@@ -1833,6 +1867,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				);
 				await log(tx, { at: now(), what: `You removed ${accepted?.service ?? name}` });
 			}, ctx);
+			if (definitions.has(name)) fault("shipped:removed");
 			await locked.forget();
 		});
 		stopDevice(name);
@@ -1855,6 +1890,11 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	/** Remove what the owner no longer wants: the file in the box too, so it is not proposed again by itself. */
 	async function remove(folder: "connections" | "tools", name: string, ctx: Context = context): Promise<void> {
+		if (folder === "connections" && definitions.has(name)) {
+			fault("shipped:remove");
+			await forget(name, ctx);
+			return;
+		}
 		const path = folder === "connections" ? connectionPath(name) : toolPath(name);
 		const removed = await workspace.env().remove(`${workspace.root}/${path}`, { force: true }, ctx);
 		if (!removed.ok) throw removed.error;
@@ -2222,7 +2262,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			});
 		// A new account of a connection banda ships, signed in for no agent, is on for the lead: its tools are curated,
 		// and an account nobody can use reads as a broken connection. One added by URL waits for the owner's switch.
-		else if (!known && shaOf((await shippedFiles()).get(name)?.text ?? "") === connection.sha)
+		else if (!known && definitions.get(name)?.sha === connection.sha)
 			await switchAccount(LEAD, name, account, true, ctx, connection.sha).catch((error: unknown) => {
 				if (!(error instanceof BadRequest)) throw error;
 			});
@@ -2554,91 +2594,39 @@ export function openCapabilities(options: CapabilityOptions) {
 			: { ok: false, words: `Signed in, but ${connection.service} did not answer: ${problem}` };
 	}
 
-	/** The connections banda ships, as read now; one that does not parse is left out, and said in the log. */
-	async function shippedFiles(): Promise<Map<string, { readonly text: string; readonly connection: Connection }>> {
-		const dir = options.shipped ?? SHIPPED;
-		const files = new Map<string, { text: string; connection: Connection }>();
-		for (const file of (await readdir(dir).catch(() => [] as string[])).filter((f) => f.endsWith(".md")).sort()) {
-			const name = file.slice(0, -3);
-			const text = await readFile(join(dir, file), "utf8");
-			const parsed = parseConnection(name, text);
-			if ("errors" in parsed) say(`shipped/connections/${file} does not parse: ${parsed.errors.join("; ")}`);
-			else files.set(name, { text, connection: parsed.connection });
-		}
-		return files;
-	}
-
-	async function shippedView(present: ReadonlySet<string>, ctx: Context): Promise<ShippedView[]> {
-		const accepted = (await harness.snapshot(Accepted, ctx))?.files ?? {};
-		return [...(await shippedFiles())].map(([name, { text, connection }]) => {
-			const file = accepted[connectionPath(name)];
-			const update = file === undefined ? undefined : shippedUpdate(name, text, file.text);
-			return {
-				name,
-				connection: summaryOf(connection),
-				reads: connection.reads.length,
-				added: present.has(name),
-				...(update === undefined || file === undefined ? {} : { update: file.sha }),
-			};
-		});
+	async function shippedView(ctx: Context): Promise<ShippedView[]> {
+		const added = (await harness.snapshot(Connected, ctx))?.added ?? {};
+		return [...definitions].map(([name, connection]) => ({
+			name,
+			connection: summaryOf(connection),
+			about: connection.about ?? "",
+			...(connection.access === undefined ? {} : { access: connection.access }),
+			reads: connection.reads.length,
+			added: Object.hasOwn(added, name),
+		}));
 	}
 
 	/**
-	 * The shipped file `shipped` as the accepted one `accepted` would become by updating, whole: each account's access
-	 * lives with the account, and an account fits a file whose scopes include what it asked. Undefined when the same.
-	 */
-	function shippedUpdate(_name: string, shipped: string, accepted: string): string | undefined {
-		return shipped === accepted ? undefined : shipped;
-	}
-
-	/**
-	 * The owner updates a connection banda ships to the version this banda ships: its file rewritten in the workspace
-	 * and allowed at once, as adding it was, its accounts kept. `sha` is the version in effect they saw; refused
-	 * when it changed since, or while the box holds a change of its own to the file waiting to be allowed; a box that lost the file gets it again.
-	 */
-	async function updateShipped(name: string, sha: string, ctx: Context = context): Promise<void> {
-		const shipped = (await shippedFiles()).get(name);
-		if (shipped === undefined) throw new BadRequest(`banda ships no connection named ${name}`, 404);
-		const file = (await harness.snapshot(Accepted, ctx))?.files[connectionPath(name)];
-		if (file === undefined) throw new BadRequest(`there is no connection named ${name}`, 404);
-		if (file.sha !== sha) throw new BadRequest(`connections/${name}.md changed since you saw it: look again`, 409);
-		const box = (await boxedFiles("connections", ctx)).get(name) as
-			| { text: string }
-			| { unreadable: string }
-			| undefined;
-		// a box that lost the file is written again, as adding one writes it; a box that changed it waits on the owner
-		if (box !== undefined && ("unreadable" in box || box.text !== file.text))
-			throw new BadRequest("it proposes a change to this connection: allow or decline that first", 409);
-		const next = shippedUpdate(name, shipped.text, file.text);
-		if (next === undefined) return;
-		await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, next, ctx);
-		fault("shipped:written");
-		await acceptConnection(name, shaOf(next), ctx);
-	}
-
-	/**
-	 * The owner adds a connection banda ships: its file is written into the workspace as shipped and allowed at once,
-	 * since banda wrote it and the owner chose it. One of that name already there is never replaced.
+	 * The owner adds a connection banda ships: it is on in this home, its definition the one this banda ships, with
+	 * nothing written to the workspace; then it is signed in to, and listed. Adding one already on is refused.
 	 */
 	async function addShipped(name: string, ctx: Context = context): Promise<void> {
-		const shipped = (await shippedFiles()).get(name);
-		if (shipped === undefined) throw new BadRequest(`banda ships no connection named ${name}`, 404);
-		const there = await harness.commit(
-			async (tx) => (await tx.doc(Accepted)).files[connectionPath(name)] !== undefined,
-			ctx,
-		);
-		if (there) throw new BadRequest(`there is a connection named ${name} already`, 409);
-		const box = (await boxedFiles("connections", ctx)).get(name) as
-			| { text: string }
-			| { unreadable: string }
-			| undefined;
-		if (box !== undefined && ("unreadable" in box || box.text !== shipped.text))
-			throw new BadRequest(`there is a connection named ${name} already`, 409);
-		if (box === undefined) {
-			await write(workspace.env(), workspace, `${workspace.root}/${connectionPath(name)}`, shipped.text, ctx);
-			fault("shipped:written");
-		}
-		await acceptConnection(name, shaOf(shipped.text), ctx);
+		const connection = definitions.get(name);
+		if (connection === undefined) throw new BadRequest(`banda ships no connection named ${name}`, 404);
+		fault("shipped:before");
+		const added = await harness.commit(async (tx) => {
+			const doc = await tx.doc(Connected);
+			if (Object.hasOwn(doc.added, name)) return false;
+			doc.added[name] = { at: now() };
+			await log(tx, { at: now(), what: `You added ${connection.service}` });
+			return true;
+		}, ctx);
+		if (!added) throw new BadRequest(`there is a connection named ${name} already`, 409);
+		fault("shipped:added");
+		problems.delete(name);
+		await install(ctx);
+		await connect(name, ctx);
+		options.changed?.();
 	}
 
 	/**
@@ -2647,9 +2635,10 @@ export function openCapabilities(options: CapabilityOptions) {
 	 * the workspace and allows it at once, since the owner wrote it. Its tools are listed once signed in (or at once,
 	 * with no sign-in); which only read, the owner says after.
 	 */
-	/** The connection names in use: accepted, or a file waiting in the box. */
+	/** The connection names in use: banda's own, accepted, or a file waiting in the box. */
 	async function connectionNames(ctx: Context): Promise<Set<string>> {
 		return new Set([
+			...definitions.keys(),
 			...(await harness.commit(
 				async (tx) =>
 					Object.keys((await tx.doc(Accepted)).files).flatMap(
@@ -2680,10 +2669,9 @@ export function openCapabilities(options: CapabilityOptions) {
 			}
 			// a server is connected once: a retry, or the same address again, finds the connection that has it
 			const existing = await harness.commit(async (tx) => {
-				for (const path of Object.keys((await tx.doc(Accepted)).files)) {
-					const named = /^connections\/(.+)\.md$/.exec(path)?.[1];
-					const connection = named === undefined ? undefined : await acceptedConnection(tx, named);
-					if (connection?.url === config.url) return { ...connection, name: named as string };
+				for (const named of await acceptedNames(tx)) {
+					const connection = await acceptedConnection(tx, named);
+					if (connection?.url === config.url) return { ...connection, name: named };
 				}
 				return undefined;
 			}, ctx);
@@ -3085,9 +3073,8 @@ export function openCapabilities(options: CapabilityOptions) {
 			return schema === undefined ? undefined : (JSON.parse(JSON.stringify(schema)) as JsonObject);
 		}, ctx);
 
-	/** The connections banda ships, as their files say. */
-	const shipped = async (): Promise<Connection[]> =>
-		[...(await shippedFiles()).values()].map((each) => each.connection);
+	/** The connections banda ships, as this banda ships them. */
+	const shipped = async (): Promise<Connection[]> => [...definitions.values()];
 
 	return {
 		readFor,
@@ -3107,7 +3094,6 @@ export function openCapabilities(options: CapabilityOptions) {
 		callback,
 		setKey,
 		addShipped,
-		updateShipped,
 		addByAddress,
 		addMcp,
 		refresh: connect,

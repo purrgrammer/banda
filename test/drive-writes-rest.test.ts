@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { type Credentials, givenFor, parseConnection } from "../src/core/connections.ts";
+import { type Credentials, givenFor } from "../src/core/connections.ts";
+import { readDefinition } from "../src/core/definitions.ts";
 import {
 	appendRequests,
 	DRIVE_TOOLS,
@@ -15,6 +15,7 @@ import {
 } from "../src/core/drive-rest.ts";
 import { REST_APIS, type RestApi } from "../src/core/rest.ts";
 import { fakeDrive } from "./fixtures/google-drive.ts";
+import { shippedText } from "./fixtures/shipped.ts";
 
 const FILE = "https://www.googleapis.com/auth/drive.file";
 const ALL = "https://www.googleapis.com/auth/drive";
@@ -30,10 +31,7 @@ const write = (fetcher: typeof fetch, name: string, args: Record<string, unknown
 const json = (body: unknown, status = 200) =>
 	new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const shipped = () => {
-	const parsed = parseConnection(
-		"drive",
-		readFileSync(new URL("../shipped/connections/drive.md", import.meta.url), "utf8"),
-	);
+	const parsed = readDefinition("drive", shippedText("drive"));
 	if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
 	return parsed.connection;
 };

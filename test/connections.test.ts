@@ -5,7 +5,7 @@
  * write is a draft that runs once, approved; a tool switched off is refused even mid-run; credentials reach nothing
  * but the server they were given for.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 import { AgentDoc, type ConversationId, type ToolExecutionApi } from "@earendil-works/pi-durable";
@@ -22,6 +22,7 @@ import {
 	parseConnection,
 	parseTool,
 } from "../src/core/connections.ts";
+import { readDefinition } from "../src/core/definitions.ts";
 import { OWNER } from "../src/core/gateway.ts";
 import { MAX_NOTES, notesOf } from "../src/core/mcp.ts";
 import { Permissions } from "../src/core/permissions.ts";
@@ -34,7 +35,7 @@ import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import { SHIPPED } from "../src/server/capabilities.ts";
 import { BadRequest } from "../src/server/http.ts";
-import { connectionFile, signInAsOwner } from "./fixtures/connected.ts";
+import { connectionFile, type Connected as Opened, openConnected, signInAsOwner } from "./fixtures/connected.ts";
 import { changeOf, closeAll, fakes, open, opened, web } from "./fixtures/connections-world.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { type FakeMcp, startFakeMcp } from "./fixtures/mcp-server.ts";
@@ -1036,8 +1037,8 @@ describe("Google accounts", () => {
 });
 
 describe("connections banda ships", () => {
-	it("GitHub's parses: its reads, the scope each tool needs, and a sign-in by code as banda's app", () => {
-		const parsed = parseConnection("github", readFileSync(join(SHIPPED, "github.md"), "utf8"));
+	it("GitHub's reads: its reads, the scope each tool needs, and a sign-in by code as banda's app", () => {
+		const parsed = readDefinition("github", readFileSync(join(SHIPPED, "github.json"), "utf8"));
 		if ("errors" in parsed) throw new Error(parsed.errors.join("\n"));
 		const { connection } = parsed;
 		expect(connection).toMatchObject({ service: "GitHub", auth: "oauth", scopes: ["repo", "read:org"] });
@@ -1048,44 +1049,80 @@ describe("connections banda ships", () => {
 		expect(connection.needs?.get_me).toBeUndefined();
 		expect(connection.needs?.search_pull_requests).toEqual(["repo"]);
 		expect(connection.needs?.get_code_scanning_alert).toEqual(["security_events", "repo"]);
-		expect(connection.why).not.toContain("```");
+		expect(connection.about).toBe("Pull requests, issues, checks");
 	});
 
-	const shipping = async (fake: FakeMcp) => {
-		const dir = join(await tempHome(), "shipped");
-		mkdirSync(dir, { recursive: true });
-		const file = connectionFile({
+	/** A definition of `cal`, at the fake server, as banda would ship it; `change` changes it. */
+	const calDefinition = (fake: FakeMcp, change: (definition: { [key: string]: unknown }) => void = () => {}) => {
+		const definition: { [key: string]: unknown } = {
+			service: "Calendar",
+			about: "Your days and invites",
 			url: fake.url,
 			auth: "oauth",
 			client: "banda-app",
 			scopes: ["read:user"],
-			reads: ["whoami"],
-		});
-		writeFileSync(join(dir, "cal.md"), `${file}\n\`\`\`json\n{"needs": {"whoami": ["repo"]}}\n\`\`\`\n`);
+			access: { choices: [{ label: "Your repositories", scopes: ["repo"] }], note: "Changing access signs in again." },
+			reads: ["whoami", "list_events"],
+			needs: { whoami: ["repo"] },
+		};
+		change(definition);
+		return `${JSON.stringify(definition, null, "\t")}\n`;
+	};
+	const shipping = async (fake: FakeMcp, change?: (definition: { [key: string]: unknown }) => void) => {
+		const dir = join(await tempHome(), "shipped");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(join(dir, "cal.json"), calDefinition(fake, change));
 		return dir;
 	};
+	/** The daemon started again on the same home, as a build that ships what `shipped` holds. */
+	const restart = async (s: Awaited<ReturnType<typeof open>>, shipped: string) => {
+		opened.splice(opened.indexOf(s), 1);
+		await s.close();
+		const again = await openConnected({ home: s.home, respond: s.model.respond as never, shipped });
+		opened.push(again);
+		return { ...s, ...again };
+	};
+	const cal = async (s: Opened) => (await s.capabilities.view()).connections.find((c) => c.name === "cal");
+	const switches = async (s: Opened) =>
+		Object.fromEntries(((await cal(s))?.tools ?? []).map((tool) => [tool.title, tool.on]));
 
-	it("the owner adds one as shipped: allowed at once, then signed in; never over one already there", async () => {
+	it("the owner adds one as a switch: on in this home, nothing written to the workspace or accepted; then signed in", async () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
 		fakes.push(fake);
 		const s = await open(fake, await shipping(fake));
 		expect((await s.capabilities.view()).shipped).toMatchObject([
-			{ name: "cal", added: false, reads: 1, connection: { service: "Calendar", needs: { repo: 1 } } },
+			{
+				name: "cal",
+				added: false,
+				about: "Your days and invites",
+				access: { choices: [{ label: "Your repositories" }] },
+				reads: 2,
+				connection: { service: "Calendar", needs: { repo: 1 } },
+			},
 		]);
+		expect(await cal(s)).toBeUndefined();
 		await s.capabilities.addShipped("cal");
 		const view = await s.capabilities.view();
 		expect(view.shipped?.[0]?.added).toBe(true);
-		expect(view.connections.find((c) => c.name === "cal")).toMatchObject({ state: "sign-in" });
-		expect(view.connections.find((c) => c.name === "cal")?.change).toBeUndefined();
+		expect(await cal(s)).toMatchObject({ state: "sign-in", accepted: { connection: { service: "Calendar" } } });
+		expect((await cal(s))?.change).toBeUndefined();
+		expect((await cal(s))?.accepted?.sha).toBe(shaOf(calDefinition(fake)));
+		expect(existsSync(join(s.box.workspace, "connections/cal.md"))).toBe(false);
+		expect(readdirSync(join(s.box.workspace, "connections"))).toEqual([]);
+		const files = (await s.harness.snapshot(Accepted, context))?.files ?? {};
+		expect(Object.keys(files).filter((path) => path.startsWith("connections/"))).toEqual([]);
+		expect(Object.keys((await s.harness.snapshot(Connected, context))?.added ?? {})).toEqual(["cal"]);
 		await expect(s.capabilities.addShipped("cal")).rejects.toThrow(/already/);
 		await expect(s.capabilities.addShipped("nope")).rejects.toThrow(/ships no connection/);
-		// a tool its file says needs a scope the sign-in was not given shows it, before any call
+		// a tool its definition says needs a scope the sign-in was not given shows it, before any call
 		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
-		const cal = (await s.capabilities.view()).connections.find((c) => c.name === "cal");
-		expect(cal?.tools.find((t) => t.title === "whoami")?.needs).toEqual(["repo"]);
-		expect(cal?.tools.find((t) => t.title === "list_events")?.needs).toBeUndefined();
+		const shown = await cal(s);
+		expect(shown?.tools.find((t) => t.title === "whoami")?.needs).toEqual(["repo"]);
+		expect(shown?.tools.find((t) => t.title === "list_events")?.needs).toBeUndefined();
 		// the account was not given it either: it says so, as its own
-		expect(cal?.accounts?.[0]?.missing).toEqual(["repo"]);
+		expect(shown?.accounts?.[0]?.missing).toEqual(["repo"]);
+		// what the definition names comes on; what the server lists that it does not name waits for the owner
+		expect(await switches(s)).toEqual({ create_event: false, list_events: true, send_payment: false, whoami: true });
 	});
 
 	it("a shipped connection signed in for no agent is on for the lead; signing in again keeps the owner's switch", async () => {
@@ -1094,7 +1131,7 @@ describe("connections banda ships", () => {
 		const s = await open(fake, await shipping(fake));
 		await s.capabilities.addShipped("cal");
 		expect(await signInAsOwner(s.capabilities, "cal", { fake, agent: null })).toEqual({ ok: true, words: "connected" });
-		const accounts = async () => (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.accounts;
+		const accounts = async () => (await cal(s))?.accounts;
 		const [account] = (await accounts()) ?? [];
 		expect(account?.agents).toEqual(["sancho"]);
 		await s.capabilities.switchAccount("sancho", "cal", account?.account, false);
@@ -1102,82 +1139,147 @@ describe("connections banda ships", () => {
 		expect((await accounts())?.[0]?.agents).toEqual([]);
 	});
 
-	it("a newer shipped file is offered as an update that keeps the sign-in", async () => {
+	it("a changed definition is taken at the next start with nothing asked: accounts, agents and switches kept", async () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
 		fakes.push(fake);
-		const shipped = await shipping(fake);
-		const s = await open(fake, shipped);
+		const first = await shipping(fake);
+		let s = await open(fake, first);
 		await s.capabilities.addShipped("cal");
 		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
-		const before = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.state;
-		// the file as shipped is no update
-		expect((await s.capabilities.view()).shipped?.[0]?.update).toBeUndefined();
-		// this banda ships a newer file
-		const newer = `${readFileSync(join(shipped, "cal.md"), "utf8")}\nIt can now be followed.\n`;
-		writeFileSync(join(shipped, "cal.md"), newer);
-		const offered = (await s.capabilities.view()).shipped?.[0]?.update;
-		expect(offered).toMatch(/^[0-9a-f]{64}$/);
-		await expect(s.capabilities.updateShipped("cal", "0".repeat(64))).rejects.toThrow(/changed since you saw it/);
-		// the box lost the file (it reads as a removal waiting): updating writes it again
-		rmSync(join(s.box.workspace, "connections/cal.md"));
-		await s.capabilities.updateShipped("cal", offered as string);
-		const view = await s.capabilities.view();
-		expect(view.shipped?.[0]?.update).toBeUndefined();
-		const cal = view.connections.find((c) => c.name === "cal");
-		expect(cal?.accepted?.sha).not.toBe(offered);
-		expect(readFileSync(join(s.box.workspace, "connections/cal.md"), "utf8")).toContain("It can now be followed.");
-		expect([before, cal?.state]).toEqual(["connected", "connected"]);
-		expect(cal?.change).toBeUndefined();
+		await s.capabilities.toggle("cal__list_events", false);
+		const before = await cal(s);
+		const newer = await shipping(fake, (definition) => {
+			definition.about = "Your days, and who comes";
+		});
+		s = await restart(s, newer);
+		const after = await cal(s);
+		expect(after?.accepted?.sha).not.toBe(before?.accepted?.sha);
+		expect(after?.accepted?.sha).toBe(shaOf(readFileSync(join(newer, "cal.json"), "utf8")));
+		expect(after?.state).toBe("connected");
+		expect(after?.accounts?.map(({ account, agents, stale }) => ({ account, agents, stale }))).toEqual(
+			before?.accounts?.map(({ account, agents, stale }) => ({ account, agents, stale })),
+		);
+		expect((await s.capabilities.view()).shipped?.[0]?.about).toBe("Your days, and who comes");
+		expect((await switches(s)).list_events).toBe(false);
+		// listed again for the new version, and offered to the lead as it was
+		const listed = (await s.harness.snapshot(Connected, context))?.connections.cal;
+		expect(listed?.sha).toBe(after?.accepted?.sha);
+		expect(s.offered()).toContain("cal__whoami");
+		expect(s.offered()).not.toContain("cal__list_events");
 	});
 
-	it("a tool the server adds later waits switched off within one file; one added before the file changes comes in on", async () => {
+	it("a narrowed definition makes an account beyond it stale, to sign in again; widening it does not", async () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
 		fakes.push(fake);
-		const shipped = await shipping(fake);
-		const s = await open(fake, shipped);
+		let s = await open(fake, await shipping(fake));
+		await s.capabilities.addShipped("cal");
+		expect(await signInAsOwner(s.capabilities, "cal", { fake, choice: { scopes: ["read:user", "repo"] } })).toEqual({
+			ok: true,
+			words: "connected",
+		});
+		s = await restart(
+			s,
+			await shipping(fake, (definition) => {
+				definition.access = {
+					choices: [
+						{ label: "Your repositories", scopes: ["repo"] },
+						{ label: "Gists", scopes: ["gist"] },
+					],
+					note: "Changing access signs in again.",
+				};
+				definition.needs = { whoami: ["repo"], list_events: ["gist"] };
+			}),
+		);
+		expect((await cal(s))?.accounts?.[0]?.stale).toBeUndefined();
+		// no tool needs repo any more, and the default does not ask for it: the account asked for more than may be asked
+		s = await restart(
+			s,
+			await shipping(fake, (definition) => {
+				delete definition.access;
+				delete definition.needs;
+			}),
+		);
+		expect((await cal(s))?.accounts?.[0]?.stale).toBe(true);
+		expect((await cal(s))?.state).toBe("sign-in");
+	});
+
+	it("a tool the server adds waits switched off at every listing, whatever the version; one the definition names comes on", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		let s = await open(fake, await shipping(fake));
 		await s.capabilities.addShipped("cal");
 		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
 		const tool = (name: string) => ({ name, description: `${name}.`, inputSchema: { type: "object", properties: {} } });
-		const on = async () =>
-			Object.fromEntries(
-				((await s.capabilities.view()).connections.find((c) => c.name === "cal")?.tools ?? []).map((t) => [
-					t.title,
-					t.on,
-				]),
-			);
-		// within one version of the file: a tool listed later waits for the owner
+		// within one version: a tool listed later waits for the owner
 		fake.tools.push(tool("later_tool"));
 		await s.capabilities.refresh("cal");
-		expect(await on()).toMatchObject({ list_events: true, whoami: true, later_tool: false });
-		// across a change of the file: one the server added meanwhile comes in switched on, the earlier switch kept
-		fake.tools.push(tool("added_before_change"));
-		writeFileSync(join(shipped, "cal.md"), `${readFileSync(join(shipped, "cal.md"), "utf8")}\nNewer.\n`);
-		await s.capabilities.updateShipped("cal", (await s.capabilities.view()).shipped?.[0]?.update as string);
-		expect(await on()).toMatchObject({ later_tool: false, added_before_change: true });
-	});
-
-	it("recovers a shipped definition left in the box before it was allowed", async () => {
-		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
-		fakes.push(fake);
-		const shipped = await shipping(fake);
-		const s = await open(fake, shipped);
-		s.writeBox("connections/cal.md", readFileSync(join(shipped, "cal.md"), "utf8"));
-
-		await s.capabilities.addShipped("cal");
-
-		expect((await s.capabilities.view()).connections.find((connection) => connection.name === "cal")).toMatchObject({
-			accepted: { connection: { auth: "oauth" } },
-			state: "sign-in",
+		expect(await switches(s)).toMatchObject({ list_events: true, whoami: true, later_tool: false });
+		await s.capabilities.toggle("cal__later_tool", true);
+		// across a change of version: one the server added meanwhile waits too, the owner's switch kept by name, and
+		// one the new definition names comes with it
+		fake.tools.push(tool("added_before_change"), tool("named_by_newer"));
+		s = await restart(
+			s,
+			await shipping(fake, (definition) => {
+				definition.reads = ["whoami", "list_events", "named_by_newer"];
+			}),
+		);
+		expect(await switches(s)).toMatchObject({
+			list_events: true,
+			later_tool: true,
+			added_before_change: false,
+			named_by_newer: true,
 		});
+		expect(s.offered()).toContain("cal__named_by_newer");
+		expect(s.offered()).not.toContain("cal__added_before_change");
 	});
 
-	it("one the companion proposed under the same name is never replaced by the shipped one", async () => {
+	it("a file of its name in the box changes nothing: it is not offered, and cannot be accepted or declined", async () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
 		fakes.push(fake);
 		const s = await open(fake, await shipping(fake));
-		s.writeBox("connections/cal.md", connectionFile({ url: fake.url, reads: [] }));
-		expect((await s.capabilities.view()).shipped?.[0]?.added).toBe(true);
-		await expect(s.capabilities.addShipped("cal")).rejects.toThrow(/already/);
+		const proposed = connectionFile({ url: fake.url, reads: ["create_event"] });
+		s.writeBox("connections/cal.md", proposed);
+		expect(await cal(s)).toBeUndefined();
+		expect((await s.capabilities.view()).shipped?.[0]?.added).toBe(false);
+		await expect(s.capabilities.acceptConnection("cal", shaOf(proposed))).rejects.toThrow(/banda ships/);
+		await expect(s.capabilities.decline("connections", "cal")).rejects.toThrow(/banda ships/);
+		await s.capabilities.addShipped("cal");
+		expect((await cal(s))?.change).toBeUndefined();
+		expect((await cal(s))?.accepted?.connection?.reads).toEqual(["whoami", "list_events"]);
+		// nor can a server the owner adds by address take its name
+		await expect(s.capabilities.addByAddress(fake.url, context, "cal")).rejects.toThrow(/not a free connection name/);
+	});
+
+	it("removing it signs its accounts out and ends its watches in one commit, and it is off in this home", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		const s = await open(fake, await shipping(fake));
+		await s.capabilities.addShipped("cal");
+		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
+		const [account] = (await cal(s))?.accounts ?? [];
+		await s.harness.commit(async (tx) => {
+			const text = "---\nobject: cal:event:day\n---\nTell me.\n";
+			(await tx.doc(Accepted)).files["watches/day.md"] = { sha: shaOf(text), text, at: 1 };
+			(await tx.doc(Watches)).watches.day = {
+				agent: "sancho",
+				since: 1,
+				connection: "cal",
+				key: `cal/${account?.account}/event:day`,
+			};
+		}, context);
+		await s.capabilities.remove("connections", "cal");
+		expect(await cal(s)).toBeUndefined();
+		const connected = await s.harness.snapshot(Connected, context);
+		expect(connected?.added).toEqual({});
+		expect(connected?.accounts.cal).toBeUndefined();
+		expect(connected?.connections.cal).toBeUndefined();
+		expect((await s.harness.snapshot(Watches, context))?.watches.day?.done?.why).toMatch(/you removed Calendar/);
+		expect(existsSync(join(s.home, "auth", "connections", "cal"))).toBe(false);
+		expect(s.offered()).toEqual([]);
+		// added again, it signs in afresh
+		await s.capabilities.addShipped("cal");
+		expect((await cal(s))?.state).toBe("sign-in");
 	});
 });
 

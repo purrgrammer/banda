@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
 	CALENDAR_TOOLS,
@@ -13,10 +12,11 @@ import {
 	eventRef,
 	MAX_LISTED,
 } from "../src/core/calendar-rest.ts";
-import { parseConnection } from "../src/core/connections.ts";
+import { readDefinition } from "../src/core/definitions.ts";
 import { discover } from "../src/core/oauth.ts";
 import { cardOf, readArgs, recognise } from "../src/core/objects.ts";
 import { REST_APIS, type RestApi } from "../src/core/rest.ts";
+import { refusal, shippedText } from "./fixtures/shipped.ts";
 
 const response = (body: unknown, status = 200) =>
 	new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -24,10 +24,7 @@ const NOW = Date.parse("2026-11-07T09:00:00Z");
 const call = (fetcher: typeof fetch, name: string, args: Record<string, unknown> = {}, token = "t") =>
 	calendarCall(token, name, args, undefined, fetcher, () => NOW);
 const shipped = () => {
-	const parsed = parseConnection(
-		"calendar",
-		readFileSync(new URL("../shipped/connections/calendar.md", import.meta.url), "utf8"),
-	);
+	const parsed = readDefinition("calendar", shippedText("calendar"));
 	if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
 	return parsed.connection;
 };
@@ -69,18 +66,17 @@ describe("Google Calendar REST connection", () => {
 			["respond_to_event", "Answer"],
 			["delete_event", "Delete"],
 		]);
-		const text = readFileSync(new URL("../shipped/connections/calendar.md", import.meta.url), "utf8");
-		const errors = (from: string, to: string) => {
-			const parsed = parseConnection("calendar", text.replace(from, to));
-			return "errors" in parsed ? parsed.errors.join() : "";
-		};
 		const read = "https://www.googleapis.com/auth/calendar.readonly";
-		expect(errors(`scopes: [${read}]`, `scopes: [${read}, https://www.googleapis.com/auth/calendar.events]`)).toBe("");
-		expect(errors(`scopes: [${read}]`, "scopes: [https://www.googleapis.com/auth/calendar]")).toContain(
-			"Google Calendar uses OAuth client",
-		);
+		const scoped = (scopes: string[]) =>
+			refusal("calendar", (each) => {
+				each.scopes = scopes;
+			});
+		expect(scoped([read, "https://www.googleapis.com/auth/calendar.events"])).toBe("");
+		expect(scoped(["https://www.googleapis.com/auth/calendar"])).toContain("Google Calendar uses OAuth client");
 		expect(
-			errors("url: https://www.googleapis.com/calendar/v3", "url: https://www.googleapis.com/calendar/v4"),
+			refusal("calendar", (each) => {
+				each.url = "https://www.googleapis.com/calendar/v4";
+			}),
 		).toContain("built-in API");
 	});
 

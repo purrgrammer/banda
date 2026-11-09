@@ -5,6 +5,7 @@ import type { BlobStore } from "../core/blobs.ts";
 import { type Attachment, hold, safeName } from "../core/blobs.ts";
 import {
 	acceptedConnection,
+	acceptedNames,
 	accountLabel,
 	accountsOn,
 	Connected,
@@ -78,7 +79,7 @@ export type ObjectShown =
 			readonly at: number;
 			readonly why: string;
 	  };
-type Known = Connection & { readonly accepted: boolean; readonly missing?: boolean };
+type Known = Connection & { readonly accepted: boolean };
 type Attempt = {
 	chat: number;
 	ref: ObjectRef;
@@ -106,18 +107,14 @@ export function openObjects({
 	async function known(ctx: Context): Promise<Known[]> {
 		const accepted = await harness.commit(async (tx) => {
 			const out: Known[] = [];
-			for (const path of Object.keys((await tx.doc(Accepted)).files).sort()) {
-				const name = /^connections\/(.+)\.md$/.exec(path)?.[1];
-				const connection = name === undefined ? undefined : await acceptedConnection(tx, name);
+			for (const name of await acceptedNames(tx)) {
+				const connection = await acceptedConnection(tx, name);
 				if (connection !== undefined) out.push({ ...connection, accepted: true });
 			}
 			return out;
 		}, ctx);
-		for (const shipped of await capabilities.shipped()) {
-			const old = accepted.findIndex((c) => c.name === shipped.name);
-			if (old < 0) accepted.push({ ...shipped, accepted: false });
-			else if (accepted[old]?.objects === undefined) accepted[old] = { ...shipped, accepted: true, missing: true };
-		}
+		for (const shipped of await capabilities.shipped())
+			if (!accepted.some((c) => c.name === shipped.name)) accepted.push({ ...shipped, accepted: false });
 		return accepted;
 	}
 	async function reading(
@@ -321,18 +318,6 @@ export function openObjects({
 			}
 			seen.add(identity);
 			count++;
-			if (connection.missing) {
-				out.push({
-					shown: "failed",
-					key: refKey(first, connection.objects ?? {}),
-					connection: connection.name,
-					service: connection.service,
-					name: nameOf(first, connection.objects ?? {}),
-					at: now(),
-					why: "This connection has no object definitions. Accept the current connection file to show cards.",
-				});
-				continue;
-			}
 			const selected = await harness.commit(async (tx) => {
 				const group = (await tx.doc(Groups)).groups[chat];
 				const direct = await agentOfChat(tx, chat);
