@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createServer, type ViteDevServer } from "vite";
@@ -77,6 +77,10 @@ for (const width of [390, 1440])
 					"deploy-41-migrations.log",
 					"2.3 MB",
 					"Slack is busy, back at 09:41",
+					"Direct message",
+					"1 earlier in Slack",
+					":white_check_mark:",
+					"Notifies only the message's author",
 				])
 					expect(await text(words), words).toBe(true);
 				// a post is on the floor: no permission is offered on its card; a reaction's offers its channel for the task
@@ -85,6 +89,15 @@ for (const width of [390, 1440])
 				expect(await text("React to messages in #general as @ana at Acme without asking until this task is done")).toBe(
 					true,
 				);
+				// a search with no matches says so once, never "About 0 matches"; a reaction's draft shows no raw arguments
+				expect(await text("About 0 matches")).toBe(false);
+				expect(await text("1700000300.000400")).toBe(false);
+				// a thread reads down the card as a conversation does, the latest last
+				expect(
+					await page.run<string[]>(
+						`[...${section}.querySelector('[data-slack-card="thread"]').querySelectorAll('[data-slack-bubble]')].map((bubble) => bubble.innerText.split("\\n").find((line) => line.startsWith("@")) ?? "")`,
+					),
+				).toEqual(["@ana", "@bob", "@olga (outside)", "@deploybot [bot]"]);
 				// a file in a message is named with its size
 				expect(await page.run(`${section}.querySelector('[data-slack-file="F0LOG"]') !== null`)).toBe(true);
 				expect(await page.run(`${section}.querySelector('[aria-label="Slack message"]') !== null`)).toBe(true);
@@ -123,6 +136,29 @@ for (const width of [390, 1440])
 				if (directory !== undefined) {
 					await mkdir(directory, { recursive: true });
 					await page.shoot(`${directory}/${width}.png`);
+					// each scheme's frame whole, in pieces a screen tall, at twice the pixels whatever the device: each piece is
+					// scrolled to the top of the viewport (the specimen scrolls inside its own pane) and shot there
+					const scale = 2 / (width < 768 ? 3 : 1);
+					const count = await page.run<number>(`${section}.querySelectorAll('[data-scheme]').length`);
+					for (let index = 0; index < count; index++) {
+						const frame = `${section}.querySelectorAll('[data-scheme]')[${index}]`;
+						const scheme = await page.run<string>(`${frame}.dataset.scheme`);
+						const tall = await page.run<number>(`${frame}.getBoundingClientRect().height`);
+						for (let top = 0, piece = 1; top < tall; top += 800, piece++) {
+							await page.run(
+								`(() => { const frame = ${frame}; let pane = frame.parentElement; while (pane && !(pane.scrollHeight > pane.clientHeight && /auto|scroll/.test(getComputedStyle(pane).overflowY))) pane = pane.parentElement; pane = pane ?? document.scrollingElement; const offset = frame.getBoundingClientRect().top - pane.getBoundingClientRect().top; pane.scrollTo({ top: pane.scrollTop + offset + ${top} - 16, behavior: "instant" }); })()`,
+							);
+							await new Promise((resolve) => setTimeout(resolve, 150));
+							const box = await page.run<{ x: number; y: number; width: number }>(
+								`(() => { const box = ${frame}.getBoundingClientRect(); return { x: box.x, y: box.y + ${top}, width: box.width }; })()`,
+							);
+							const { data } = (await page.input("Page.captureScreenshot", {
+								format: "png",
+								clip: { x: box.x, y: box.y, width: box.width, height: Math.min(800, tall - top), scale },
+							})) as { data: string };
+							await writeFile(`${directory}/${width}-${scheme}-${piece}.png`, Buffer.from(data, "base64"));
+						}
+					}
 				}
 			});
 		},
