@@ -442,7 +442,8 @@ naming one that is not there answers with those that are.
   owner's computer, outside the box. It runs under banda's supervisor, which watches every process group below it
   (a harness may run each command detached, in a group of its own) and kills them all when its session ends or the
   daemon dies; a later daemon uses the session marker and groups still anchored by a recorded process identity; a reused group number
-  alone never authorizes a kill.
+  alone never authorizes a kill, nor does a record that another home's daemon wrote: a copied store (a fork) names processes that
+  are not its own.
 - **The agent knows what it has.** It gets a tool per harness turned on for it (`harness__claude_code(prompt,
   project?, session?)`), whose description says where it works and the projects there, rebuilt when that changes.
   A call starts a session at once and answers with its number. Given an earlier `session`, it follows up: a running

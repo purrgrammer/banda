@@ -47,6 +47,7 @@ const Woke = defineDoc<{ keys: string[] }>({
 });
 
 const made = defineHarnesses({
+	home,
 	definitions: () =>
 		new Map([
 			["fake", { name: "fake", service: "Fake Code", command: process.execPath, args: [FAKE], mode: "acceptEdits" }],

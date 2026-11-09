@@ -170,6 +170,8 @@ export type HarnessSession = {
 	answers?: { [ask: string]: boolean };
 	/** The ask was sent: a restart past here reports it interrupted, never sends it again. */
 	prompted?: true;
+	/** The home whose daemon started the processes below: a record copied into another home's store is not its to kill. */
+	home?: string;
 	/** Set in the environment of the harness and of everything it starts: what a restart, or its end, kills. */
 	marker?: string;
 	/** The process groups the harness and what it started were seen in: what a restart kills, when it lost the tree. */
@@ -679,6 +681,8 @@ export const HARNESS_SYSTEM =
 	"watchers, background commands) is stopped, so leave nothing meant to keep running. Work only in that folder.";
 
 export type HarnessOptions = {
+	/** The home this daemon serves: only processes its own sessions recorded here are ever killed. */
+	readonly home: string;
 	readonly definitions: () => ReadonlyMap<string, HarnessDefinition>;
 	readonly followUp: (
 		tx: Tx,
@@ -701,6 +705,17 @@ class Stopped extends Error {}
 export function defineHarnesses(options: HarnessOptions) {
 	const now = () => options.now?.() ?? Date.now();
 	const fault = (point: string) => options.fault?.(point);
+	const home = resolve(options.home);
+
+	/**
+	 * What a daemon before this one left running goes. A store can be copied (a fork, a backup put elsewhere) and its
+	 * records come along, naming processes another home's daemon is running: those authorize no kill here.
+	 */
+	function killLeftovers(session: HarnessSession | undefined) {
+		if (session?.home !== home) return;
+		killMarked(session.marker);
+		killGroups(session.groups);
+	}
 
 	/**
 	 * End a session in its record, wake its agent, and drop the oldest ended sessions past the bound. `reason` is why it
@@ -714,6 +729,7 @@ export function defineHarnesses(options: HarnessOptions) {
 		session.ended = now();
 		delete session.asks;
 		delete session.answers;
+		delete session.home;
 		delete session.marker;
 		delete session.groups;
 		// a note the harness never took is not shown as on its way
@@ -798,8 +814,7 @@ export function defineHarnesses(options: HarnessOptions) {
 					const session = (await tx.doc(Harnesses)).sessions[id];
 					if (session === undefined || session.ended !== undefined) return terminal;
 					// what a process before this one left running goes, whatever happens next
-					killMarked(session.marker);
-					killGroups(session.groups);
+					killLeftovers(session);
 					if (session.prompted === true) {
 						await ending(tx, id, "interrupted", service);
 						return terminal;
@@ -818,7 +833,9 @@ export function defineHarnesses(options: HarnessOptions) {
 						);
 						return terminal;
 					}
+					session.home = home;
 					session.marker = `${id}-${session.at}-${randomUUID()}`;
+					delete session.groups;
 					start = copy(session);
 					return undefined;
 				}, ctx);
@@ -1176,8 +1193,7 @@ export function defineHarnesses(options: HarnessOptions) {
 		abort: (task, runtime, ctx) =>
 			runtime.commit(async (tx) => {
 				const session = (await tx.doc(Harnesses)).sessions[Number(runtime.taskId)];
-				killMarked(session?.marker);
-				killGroups(session?.groups);
+				killLeftovers(session);
 				await ending(tx, Number(runtime.taskId), "stopped", task.input.harness);
 				return { status: "terminal", outcome: { status: "aborted", reason: "aborted" } };
 			}, ctx),
@@ -1250,8 +1266,7 @@ export function defineHarnesses(options: HarnessOptions) {
 				const found = await tx.task(Number(task) as TaskId);
 				if (found !== undefined && found.state.status !== "terminal") continue;
 				const definition = options.definitions().get(session.harness);
-				killMarked(session.marker);
-				killGroups(session.groups);
+				killLeftovers(session);
 				await ending(tx, Number(task), "failed", definition?.service ?? session.harness, "banda stopped while it ran");
 				ended++;
 			}
