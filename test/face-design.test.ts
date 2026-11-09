@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { getExample } from "open-bot-avatar";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AVATAR_INSTRUCTIONS, SHEET_AVATAR_INSTRUCTIONS } from "../src/core/avatar-instructions.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
@@ -25,6 +25,13 @@ describe("designing a face in the sheet", () => {
 		// one set of design rules for both: only the delivery differs
 		const rules = AVATAR_INSTRUCTIONS.slice(AVATAR_INSTRUCTIONS.indexOf("## Output schema"));
 		expect(SHEET_AVATAR_INSTRUCTIONS.endsWith(rules)).toBe(true);
+	});
+
+	it("asks for minimal thinking, since an owner waits on the sheet", async () => {
+		const { models, model } = scripted(fauxAssistantMessage(MUG));
+		const complete = vi.spyOn(models, "completeSimple");
+		expect((await designFace({ models, model, description: "a mug" })).ok).toBe(true);
+		expect(complete.mock.calls[0]?.[2]).toMatchObject({ reasoning: "minimal" });
 	});
 
 	it("designs from the name alone when there is no description", async () => {
