@@ -116,13 +116,14 @@ const capabilities = (granted: boolean) => ({
 });
 /** A connection nothing signed in to yet, and the same once a sign-in its server did not name finished for Octo. */
 const unsigned = { connections: [{ name: "github", accepted: { connection: { service: "GitHub" } }, accounts: [] }] };
-const numberedSignIn = (label: string) => ({
+let refusedAfterName: { enabled?: boolean; problem?: string } = {};
+const numberedSignIn = (label: string, finished: { enabled?: boolean; problem?: string } = {}) => ({
 	connections: [
 		{
 			name: "github",
 			accepted: { connection: { service: "GitHub" } },
 			accounts: [{ account: "account-1", id: "account 1", label, numbered: true, agents: ["octo"] }],
-			finished: { account: "account-1", id: "account 1", label, agent: "octo", known: false, at: 1 },
+			finished: { account: "account-1", id: "account 1", agent: "octo", known: false, at: 1, ...finished },
 		},
 	],
 });
@@ -380,7 +381,7 @@ beforeAll(async () => {
 							if (path === "/api/capabilities/connections/github/signin") return json(res, { page: "about:blank" });
 							if (path === "/api/capabilities/connections/github/accounts/account-1/label") {
 								answers.push({ path, body: await bodyOf(req) });
-								return json(res, numberedSignIn("Work"));
+								return json(res, numberedSignIn("Work", refusedAfterName));
 							}
 							if (path === "/api/capabilities/connections/github/accounts/personal/switch") {
 								expect(await bodyOf(req)).toEqual({ agent: "octo", on: true });
@@ -813,6 +814,52 @@ for (const width of [390, 1440])
 		},
 		60_000,
 	);
+
+it.skipIf(!hasChrome())(
+	"names an account its server did not, when the agent's file does not name the connection yet",
+	async () => {
+		answers = [];
+		needsGrant = true;
+		const problem = "its file does not name this connection";
+		refusedAfterName = { enabled: false, problem };
+		try {
+			await withPage(
+				`${base}/objects-fixture?connect=name#token=objects-test`,
+				{ width: 390, height: 900 },
+				async (page) => {
+					const card = `[...document.querySelectorAll('[data-object="connect:github"] button')].find(b => b.textContent === 'Connect GitHub')`;
+					await page.until(card, 30_000);
+					needsGrant = false;
+					await page.run(`${card}.click()`);
+					const signIn = `[...document.querySelectorAll('[role="dialog"] button')].find(b => b.textContent === 'Sign in')`;
+					await page.until(signIn);
+					await page.run(`${signIn}.click()`);
+					await page.until(`document.querySelector('[role="dialog"][data-connect-step="starting"]') !== null`);
+					await page.run(
+						`window.showCapabilities(${JSON.stringify(numberedSignIn("github.example", refusedAfterName))})`,
+					);
+					const named = `document.querySelector('[role="dialog"][data-connect-step="name"]')`;
+					await page.until(named);
+					const input = `${named}.querySelector('input')`;
+					await page.run(
+						`(() => {const el=${input}; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'Work'); el.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+					);
+					await page.run(
+						`[...document.querySelectorAll('[role="dialog"] button')].find(b => b.textContent === 'Continue').click()`,
+					);
+					await page.until(`document.querySelector('[role="dialog"][data-connect-step="share"]') !== null`);
+					expect(answers).toEqual([
+						{ path: "/api/capabilities/connections/github/accounts/account-1/label", body: { label: "Work" } },
+					]);
+					expect(page.errors()).toEqual([]);
+				},
+			);
+		} finally {
+			refusedAfterName = {};
+		}
+	},
+	60_000,
+);
 
 it.skipIf(!hasChrome())(
 	"refreshes every ref represented by one connect card after one owner grant",

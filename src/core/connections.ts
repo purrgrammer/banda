@@ -24,7 +24,7 @@ import { Accepted, AGENT_NAME, type Agent, agentPath, frontmatter, LEAD, parseAg
 import { FLOORS, type Floor } from "./floor.ts";
 import { harnessToolsOf } from "./harness.ts";
 import { DEFAULT_GOOGLE_CLIENT_ID, type OAuthClient, type OAuthServer, type Pending, type Tokens } from "./oauth.ts";
-import { type ObjectKinds, parseObjects } from "./objects.ts";
+import { type ObjectKinds, parseObjects, plainLine } from "./objects.ts";
 import { REST_APIS, type RestApiName, restApiNamed } from "./rest.ts";
 
 export const connectionPath = (name: string) => `connections/${name}.md`;
@@ -513,14 +513,30 @@ export const numberedAccount = (n: number) => `account ${n}`;
 /** Whether a name reads as such a number, which says nothing about the account. */
 export const readsNumbered = (name: string) => /^account \d+$/i.test(name);
 
-/** The longest name the owner can give an account. */
-export const ACCOUNT_LABEL_MAX = 60;
-
 type Named = Pick<Account, "id" | "label">;
 
 /** An account as the owner and the model read it: its name when it has one, "@bandarra", or an address as it is. */
 export const accountLabel = (account: Named) =>
 	account.label ?? (/[@\s]/.test(account.id) ? account.id : `@${account.id}`);
+
+/** A name as names are compared: "@Work", "work" and " WORK " are one name. */
+export const nameForm = (name: string) => plainLine(name).replace(/^@/, "").toLowerCase();
+
+/**
+ * Which of `keys` goes by `asked`: what the model or the owner reads it as, or the id a watch's file keeps because a
+ * rename does not change it. Never its key: that is banda's own, and an owner's name may spell one.
+ */
+export function accountNamed(
+	known: { readonly [key: string]: Named },
+	keys: readonly string[],
+	asked: string,
+): string | undefined {
+	const wanted = nameForm(asked);
+	return keys.find((key) => {
+		const account = known[key];
+		return account !== undefined && (nameForm(accountLabel(account)) === wanted || nameForm(account.id) === wanted);
+	});
+}
 
 /**
  * The name a new account of the server at `url` goes by when its server does not say whose it is: the server's host,
@@ -528,9 +544,9 @@ export const accountLabel = (account: Named) =>
  */
 export function defaultAccountLabel(url: string, accounts: readonly Named[]): string {
 	const host = new URL(url).hostname;
-	const taken = new Set(accounts.map((account) => accountLabel(account).toLowerCase()));
+	const taken = new Set(accounts.map((account) => nameForm(accountLabel(account))));
 	let label = host;
-	for (let n = 2; taken.has(label.toLowerCase()); n++) label = `${host} ${n}`;
+	for (let n = 2; taken.has(nameForm(label)); n++) label = `${host} ${n}`;
 	return label;
 }
 

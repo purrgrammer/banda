@@ -80,6 +80,20 @@ await s.capabilities.switchAccount("mara", "cal", "bea", true);
 if ((await accounts()).ana !== undefined) await s.capabilities.signOut("cal", "ana");
 writeFileSync(done, "");
 
+// a server that does not say whom a sign-in is for: signed in once, then given the owner's name
+const notes = join(s.box.workspace, "connections", "notes.md");
+if (!existsSync(notes))
+	writeFileSync(notes, calendar.replace("service: Calendar", "service: Notes").replace("account: get_me.login\n", ""));
+const notesShown = (await s.capabilities.view()).connections.find((c) => c.name === "notes");
+if (notesShown?.change !== undefined && "sha" in notesShown.change && notesShown.change.sha !== undefined)
+	await s.capabilities.acceptConnection("notes", notesShown.change.sha);
+const noteAccounts = async () => (await s.harness.snapshot(Connected, context))?.accounts?.notes ?? {};
+if ((await noteAccounts())["account-1"] === undefined) {
+	const signed = await signInAsOwner(s.capabilities, "notes", { agent: null });
+	if (!signed.ok && (await noteAccounts())["account-1"] === undefined) throw new Error(signed.words);
+}
+await s.capabilities.labelAccount("notes", "account-1", "Work");
+
 // as a start finds it: credentials no account is named for are forgotten
 await s.capabilities.reconcile();
 const doc = await s.harness.snapshot(Connected, context);
@@ -92,8 +106,9 @@ const credentials = readdirSync(join(home, "auth", "connections", "cal"), { with
 console.log(
 	JSON.stringify({
 		accounts: Object.keys(doc?.accounts?.cal ?? {}).sort(),
+		named: Object.values(doc?.accounts?.notes ?? {}).map((account) => account.label),
 		on: doc?.on?.mara?.cal ?? [],
-		named: "agent" in parsed ? (parsed.agent.connections ?? []) : [],
+		connections: "agent" in parsed ? (parsed.agent.connections ?? []) : [],
 		box: readFileSync(join(s.box.workspace, "agents", "mara.md"), "utf8") === accepted,
 		credentials,
 		commits: faults.hits("commit:after"),

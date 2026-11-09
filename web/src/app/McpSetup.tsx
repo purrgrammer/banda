@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
+import { ACCOUNT_LABEL_MAX } from "../../../src/core/choices.ts";
 import type { McpConfig } from "../../../src/core/mcp-config.ts";
 import type { CapabilitiesView, ConnectionView } from "../../../src/server/api.ts";
 import { Confirm } from "../chat/Confirm.tsx";
@@ -153,12 +154,14 @@ export function McpSetup({
 		if (!view) return;
 		if (view.state === "connected") {
 			// a finished sign-in starts a new chapter: there is nothing before review to go back to
-			if (phase === "waiting" && view.finished?.at !== before) {
+			const finishedNow = phase === "waiting" && view.finished?.at !== before;
+			if (finishedNow) {
 				setPhase("review");
 				setTrail([]);
 				setLink(undefined);
 			}
-			if (!account || !freshAccounts(view).some((each) => each.account === account))
+			// the review after a sign-in is of the account it signed in, whichever was selected before
+			if (finishedNow || !account || !freshAccounts(view).some((each) => each.account === account))
 				setAccount(view.finished?.account ?? freshAccounts(view)[0]?.account ?? "");
 		} else if (
 			phase === "review" &&
@@ -521,7 +524,7 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 								id={`${id}-label`}
 								value={label}
 								placeholder={chosen.label}
-								maxLength={60}
+								maxLength={ACCOUNT_LABEL_MAX}
 								onChange={(event) => actions.setLabel(event.target.value)}
 								disabled={busy}
 							/>

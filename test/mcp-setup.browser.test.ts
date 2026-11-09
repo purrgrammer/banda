@@ -163,6 +163,24 @@ for (const width of [390, 1440])
 					await phase(page, "done");
 					connected = (await view()).connections.find((each) => each.name === connection.name)!;
 					expect(connected.accounts?.[0]?.agents).toEqual([]);
+					// another sign-in: the name asked for next is the new account's, never the one that was selected
+					await click(page, button("Sign in another account"));
+					await phase(page, "auth");
+					await click(page, button("Continue to sign in"));
+					await phase(page, "review");
+					await page.until(`${labelled("Account")}?.textContent.includes('127.0.0.1')`);
+					await fill(page, "Name this account", "Home");
+					await click(page, button("Save access"));
+					await phase(page, "done");
+					connected = (await view()).connections.find((each) => each.name === connection.name)!;
+					expect(connected.accounts?.map((each) => [each.account, each.label])).toEqual([
+						["account-1", "Work"],
+						["account-2", "Home"],
+					]);
+					await fetch(`${base}/api/capabilities/connections/${connection.name}/accounts/account-1/signout`, {
+						method: "POST",
+						headers: { authorization: `Bearer ${token}` },
+					});
 					await click(page, button("Sign out"));
 					await click(
 						page,

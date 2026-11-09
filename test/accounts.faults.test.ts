@@ -17,6 +17,7 @@ import { tempHome } from "./helpers.ts";
 type Summary = {
 	accounts: string[];
 	on: string[];
+	connections: string[];
 	named: string[];
 	box: boolean;
 	credentials: string[];
@@ -46,7 +47,8 @@ function storeText(home: string): string {
 function check(summary: Awaited<ReturnType<typeof run>>) {
 	expect(summary.accounts).toEqual(["bea"]);
 	expect(summary.on).toEqual(["bea"]);
-	expect(summary.named).toEqual(["cal"]);
+	expect(summary.connections).toEqual(["cal"]);
+	expect(summary.named).toEqual(["Work"]);
 	expect(summary.box).toBe(true);
 	expect(summary.credentials).toEqual(["bea"]);
 	const text = storeText(summary.home);
@@ -71,6 +73,7 @@ describe("accounts under faults", () => {
 			["account:switched", 2],
 			["account:switched", 3],
 			["account:signed-out", 1],
+			["account:named", 1],
 		];
 		const faults: Fault[] = points.map(([point, hit]) => ({ point, hit, kind: "kill" }));
 		for (let hit = 1; hit <= clean.commits; hit++)

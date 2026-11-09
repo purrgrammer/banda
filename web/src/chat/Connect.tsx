@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import type { AvatarFace } from "../../../src/core/avatar-face.ts";
+import { ACCOUNT_LABEL_MAX } from "../../../src/core/choices.ts";
 import { scopeChoicesOf } from "../lib/connect.ts";
 import { Tile } from "./Cards.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
@@ -237,7 +238,7 @@ export function ConnectDialog({
 							aria-label="Name this account"
 							value={name}
 							placeholder={step.login}
-							maxLength={60}
+							maxLength={ACCOUNT_LABEL_MAX}
 							disabled={busy}
 							onChange={(event) => setName(event.target.value)}
 						/>

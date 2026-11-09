@@ -150,7 +150,8 @@ export function ConnectFlow({
 			? undefined
 			: freshAccounts(view).find((each) => each.account === view.finished?.account);
 	// a sign-in its server did not name asks what to call it before the dialog moves on, wherever it started
-	const naming = login !== undefined && finishedNow && !used && !named && account?.numbered === true;
+	const signedIn = state.kind === "done" || state.kind === "already" || state.kind === "share";
+	const naming = signedIn && finishedNow && !used && !named && account?.numbered === true;
 	const finished = useRef(false);
 	useEffect(() => {
 		if (login === undefined || naming || finished.current) return;

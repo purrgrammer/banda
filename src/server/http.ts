@@ -834,7 +834,7 @@ export function handler(
 				return reply(res, 200, await routes.capability({ action: "signout", name, account: key }));
 			if (action === "label") {
 				const { label } = await json(req);
-				if (typeof label !== "string" || label.length > 200) throw new BadRequest("label is the account's name");
+				if (typeof label !== "string") throw new BadRequest("label is the account's name");
 				return reply(res, 200, await routes.capability({ action: "label", name, account: key, label }));
 			}
 			const { agent, on, sha } = await json(req);

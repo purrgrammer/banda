@@ -69,6 +69,7 @@ export type FaultPoint =
 	| "account:file"
 	| "account:switched"
 	| "account:signed-out"
+	| "account:named"
 	/** OAuth refresh networking and generation/version CAS of the private credential. */
 	| "credential:refresh"
 	| "credential:refreshed"
