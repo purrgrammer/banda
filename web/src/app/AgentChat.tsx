@@ -193,6 +193,7 @@ export function AgentChat({
 					onRoutine={onRoutine}
 					activity={activity}
 					onActivity={(entry) => setActivity({ anchor: entry })}
+					onWorkActivity={() => setActivity({})}
 					onCloseActivity={() => setActivity(undefined)}
 				/>
 			)}
@@ -213,12 +214,14 @@ function Timeline({
 	onRoutine,
 	activity,
 	onActivity,
+	onWorkActivity,
 	onCloseActivity,
 }: {
 	onAnswered: () => void;
 	chat: number;
 	activity: { anchor?: number } | undefined;
 	onActivity: (entry: number) => void;
+	onWorkActivity: () => void;
 	onCloseActivity: () => void;
 	mentionables: readonly ChatAgent[];
 	read: number;
@@ -233,6 +236,8 @@ function Timeline({
 }) {
 	const transcript = useTranscript(chat);
 	const context = useViewContext(chat);
+	// the working face that opened the sheet, for focus to go back to
+	const openedFrom = useRef<HTMLElement | undefined>(undefined);
 	const [outgoing, setOutgoing] = useState<PendingMessage[]>([]);
 	const deliver = (pending: PendingMessage) => {
 		void send(agent, pending.text, pending.files, pending.id).then(
@@ -383,6 +388,10 @@ function Timeline({
 						}}
 						onRoutine={onRoutine}
 						onActivity={onActivity}
+						onWorkingFace={(face) => {
+							openedFrom.current = face;
+							onWorkActivity();
+						}}
 					/>
 				</Mentionable.Provider>
 				{stopped(transcript.items, transcript.busy) ? (
@@ -417,7 +426,11 @@ function Timeline({
 				<ActivitySheet
 					targets={[{ chat, name: who.name, ...activity }]}
 					source={{ chat, transcript }}
-					onClose={onCloseActivity}
+					returnTo={openedFrom.current}
+					onClose={() => {
+						openedFrom.current = undefined;
+						onCloseActivity();
+					}}
 				/>
 			)}
 		</Conversation>

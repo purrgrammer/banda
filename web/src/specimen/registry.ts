@@ -146,7 +146,7 @@ export const SECTIONS: readonly Entry[] = [
 		status: "app",
 		sources: [APPROVAL, "web/src/chat/FileChanges.tsx"],
 	},
-	{ id: "working", title: "Working", group: "chat", status: "app", sources: [HEADER] },
+	{ id: "working", title: "Working", group: "chat", status: "app", sources: [HEADER, FEED] },
 	{ id: "lines", title: "Lines", group: "chat", status: "app", sources: [LINE] },
 	{
 		id: "routine-items",

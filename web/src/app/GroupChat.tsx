@@ -39,6 +39,7 @@ import { ActivitySheet, type ActivityTarget } from "./Activity.tsx";
 import { kindWords } from "./ArtifactPage.tsx";
 import { whoOf } from "./band.ts";
 import { DraftApproval } from "./DraftApproval.tsx";
+import { groupFaces, noTandas } from "./group-faces.ts";
 import { HarnessActivitySheet } from "./HarnessSession.tsx";
 import { chatActivity, harnessActivity } from "./harness-activity.ts";
 import { MessageObjects, MessageText } from "./Objects.tsx";
@@ -84,6 +85,9 @@ export function GroupChat({
 	// closed by default, like an agent's: the screen is the conversation; the face or the name opens it
 	const [panel, setPanel] = useState(false);
 	const [activity, setActivity] = useState<readonly ActivityTarget[]>();
+	// the working face that opened the sheet, for focus to go back to
+	const openedFrom = useRef<HTMLElement | undefined>(undefined);
+	const tandas = useRef(noTandas());
 	const latest = row?.latest;
 	const asking = row?.asking.join(",");
 	// biome-ignore lint/correctness/useExhaustiveDependencies: read again whenever the row says the log or its asks changed
@@ -120,6 +124,12 @@ export function GroupChat({
 	const name = row?.name ?? group?.name ?? "Group";
 	const working = members.filter((member) => member.state === "working");
 	const executions = row?.executions ?? group?.executions ?? {};
+	const faces = groupFaces(
+		tandas.current,
+		group,
+		working.flatMap((member) => (member.id === undefined ? [] : [member.id])),
+		latest,
+	);
 	const [delegatedOpen, setDelegatedOpen] = useState<readonly number[]>();
 	const delegated = harnessActivity(shell.harnesses?.sessions ?? [], Object.values(executions));
 	const status = chatActivity(
@@ -196,125 +206,147 @@ export function GroupChat({
 							<ChatLoading />
 						) : null}
 						{group !== undefined && group.messages.length === 0 ? <GroupEmpty name={name} faces={all} /> : null}
-						{logOf(group).map((line) => {
-							// a member's reaction shows on the owner's message it went on; alone, it is no line of its own
-							if ("message" in line && reactionOnly(line.message)) return null;
-							if ("notice" in line) {
-								const { notice } = line;
-								const who = notice.agent === undefined ? undefined : whoOf(known, notice.agent).name;
-								return (
-									<div key={`n${notice.entry}`} data-entry={notice.entry}>
-										{noticeLine(notice, who)}
-									</div>
-								);
-							}
-							const { message } = line;
-							const node = (() => {
-								if ("owner" in message.author)
+						{[
+							...logOf(group).map((line) => {
+								// a member's reaction shows on the owner's message it went on; alone, it is no line of its own
+								if ("message" in line && reactionOnly(line.message)) return null;
+								if ("notice" in line) {
+									const { notice } = line;
+									const who = notice.agent === undefined ? undefined : whoOf(known, notice.agent).name;
 									return (
+										<div key={`n${notice.entry}`} data-entry={notice.entry}>
+											{noticeLine(notice, who)}
+										</div>
+									);
+								}
+								const { message } = line;
+								const node = (() => {
+									if ("owner" in message.author)
+										return (
+											<Run
+												key={message.entry}
+												time={new Date(message.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+											>
+												{message.text.trim() === "" ? null : (
+													<Bubble mine copy={message.text} reaction={reactionsOn(group, message.entry)}>
+														<Mentionable.Provider value={known}>
+															<MessageText chat={room} text={linkedMentions(message.text, message.mentions, known)} />
+														</Mentionable.Provider>
+													</Bubble>
+												)}
+												{message.loaded?.map((name) => (
+													<SkillFeedItem key={name} name={name} href={`#/skills/${name}`} />
+												))}
+											</Run>
+										);
+									const member = whoOf(known, message.author.agent);
+									const chat = executions[message.author.agent];
+									const anchor = message.activity;
+									const inspect =
+										anchor === undefined || chat === undefined
+											? undefined
+											: () => setActivity([{ chat, name: member.name, anchor, heading: message.text || name }]);
+									// what the member's message published to the Library, opened at that version
+									const artifacts = message.artifacts ?? [];
+									const objects = (
+										<MessageObjects
+											chat={room}
+											objects={message.objects}
+											agent={{ id: message.author.agent, name: member.name }}
+										/>
+									);
+									return (
+										// no key of its own: the message's row carries the working face's, so the face goes on
 										<Run
-											key={message.entry}
+											who={member}
 											time={new Date(message.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
 										>
 											{message.text.trim() === "" ? null : (
-												<Bubble mine copy={message.text} reaction={reactionsOn(group, message.entry)}>
+												<Bubble copy={message.text} onActivity={inspect}>
 													<Mentionable.Provider value={known}>
-														<MessageText chat={room} text={linkedMentions(message.text, message.mentions, known)} />
+														<MessageText
+															chat={room}
+															text={linkedMentions(message.text, message.mentions, known)}
+															agent={{ id: message.author.agent, name: member.name }}
+															shown={message.objects}
+														/>
 													</Mentionable.Provider>
 												</Bubble>
 											)}
-											{message.loaded?.map((name) => (
-												<SkillFeedItem key={name} name={name} href={`#/skills/${name}`} />
+											{message.text.trim() === "" && inspect ? (
+												<MessageActions onActivity={inspect}>
+													<div className="min-w-0">{objects}</div>
+												</MessageActions>
+											) : (
+												objects
+											)}
+											{artifacts.map((artifact) => (
+												<ArtifactCard
+													key={`${artifact.id}:${artifact.n}`}
+													title={artifact.title}
+													kind={kindWords(artifact.kind)}
+													version={`Version ${artifact.n}`}
+													onOpen={() => {
+														location.hash = `#/artifact/${artifact.id}?v=${artifact.n}`;
+													}}
+												/>
 											))}
 										</Run>
 									);
-								const member = whoOf(known, message.author.agent);
-								const chat = executions[message.author.agent];
-								const anchor = message.activity;
-								const inspect =
-									anchor === undefined || chat === undefined
-										? undefined
-										: () => setActivity([{ chat, name: member.name, anchor, heading: message.text || name }]);
-								// what the member's message published to the Library, opened at that version
-								const artifacts = message.artifacts ?? [];
-								const objects = (
-									<MessageObjects
-										chat={room}
-										objects={message.objects}
-										agent={{ id: message.author.agent, name: member.name }}
-									/>
-								);
+								})();
 								return (
-									<Run
-										key={message.entry}
-										who={member}
-										time={new Date(message.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+									<div
+										key={tandas.current.taken.get(message.entry) ?? message.entry}
+										data-entry={message.entry}
+										className="scroll-my-24 rounded-tile transition-[background-color] duration-700 data-[found]:bg-paper-3"
 									>
-										{message.text.trim() === "" ? null : (
-											<Bubble copy={message.text} onActivity={inspect}>
-												<Mentionable.Provider value={known}>
-													<MessageText
-														chat={room}
-														text={linkedMentions(message.text, message.mentions, known)}
-														agent={{ id: message.author.agent, name: member.name }}
-														shown={message.objects}
-													/>
-												</Mentionable.Provider>
-											</Bubble>
-										)}
-										{message.text.trim() === "" && inspect ? (
-											<MessageActions onActivity={inspect}>
-												<div className="min-w-0">{objects}</div>
-											</MessageActions>
-										) : (
-											objects
-										)}
-										{artifacts.map((artifact) => (
-											<ArtifactCard
-												key={`${artifact.id}:${artifact.n}`}
-												title={artifact.title}
-												kind={kindWords(artifact.kind)}
-												version={`Version ${artifact.n}`}
-												onOpen={() => {
-													location.hash = `#/artifact/${artifact.id}?v=${artifact.n}`;
-												}}
-											/>
-										))}
-									</Run>
+										{node}
+									</div>
 								);
-							})();
-							return (
-								<div
-									key={message.entry}
-									data-entry={message.entry}
-									className="scroll-my-24 rounded-tile transition-[background-color] duration-700 data-[found]:bg-paper-3"
-								>
-									{node}
-								</div>
-							);
-						})}
-						{(group?.asks ?? []).map(({ agent, wait }) => (
-							<Run key={wait.key} who={whoOf(known, agent)}>
-								{wait.ask.type === "question" ? (
-									<QuestionCard
-										question={wait.ask.question}
-										choices={wait.ask.options ?? []}
-										onChoose={(choice) =>
-											void attempt("send your answer", () => answerWait(wait.key, choice, "question"))
-										}
-										onDismiss={() => void attempt("dismiss the question", () => dismissQuestion(wait.key))}
-									/>
-								) : (
-									<DraftApproval
-										chat={room}
-										agent={{ id: agent, name: whoOf(known, agent).name }}
-										ask={wait.ask}
-										label={wait.label ?? wait.ask.label ?? wait.ask.tool}
-										wait={wait.key}
-									/>
-								)}
-							</Run>
-						))}
+							}),
+							...(group?.asks ?? []).map(({ agent, wait }) => (
+								<Run key={wait.key} who={whoOf(known, agent)}>
+									{wait.ask.type === "question" ? (
+										<QuestionCard
+											question={wait.ask.question}
+											choices={wait.ask.options ?? []}
+											onChoose={(choice) =>
+												void attempt("send your answer", () => answerWait(wait.key, choice, "question"))
+											}
+											onDismiss={() => void attempt("dismiss the question", () => dismissQuestion(wait.key))}
+										/>
+									) : (
+										<DraftApproval
+											chat={room}
+											agent={{ id: agent, name: whoOf(known, agent).name }}
+											ask={wait.ask}
+											label={wait.label ?? wait.ask.label ?? wait.ask.tool}
+											wait={wait.key}
+										/>
+									)}
+								</Run>
+							)),
+							...faces.map(({ member: id, key }) => {
+								const member = whoOf(known, id);
+								const chat = executions[id];
+								return (
+									<div key={key}>
+										<Run
+											who={member}
+											work={{
+												onOpen:
+													chat === undefined
+														? undefined
+														: (face) => {
+																openedFrom.current = face;
+																setActivity([{ chat, name: member.name, heading: name }]);
+															},
+											}}
+										/>
+									</div>
+								);
+							}),
+						]}
 					</ConversationContent>
 					<OpenAt at={at} ready={group !== undefined} />
 					<div className="relative">
@@ -346,7 +378,16 @@ export function GroupChat({
 			{delegatedOpen === undefined ? null : (
 				<HarnessActivitySheet tasks={delegatedOpen} onClose={() => setDelegatedOpen(undefined)} />
 			)}
-			{activity === undefined ? null : <ActivitySheet targets={activity} onClose={() => setActivity(undefined)} />}
+			{activity === undefined ? null : (
+				<ActivitySheet
+					targets={activity}
+					returnTo={openedFrom.current}
+					onClose={() => {
+						openedFrom.current = undefined;
+						setActivity(undefined);
+					}}
+				/>
+			)}
 			{!phone && panel ? panelView : null}
 		</>
 	);

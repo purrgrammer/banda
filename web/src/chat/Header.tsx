@@ -1,7 +1,7 @@
 /**
  * The chat's header: the agent's face and name, centred and floating over the feed, and under them what it does now
  * ("Using its browser…", "Thinking…"; in a group, "Mara and Sancho are working…"), shimmering while it works, or its
- * presence (waiting on you, routines paused). Said here once: the feed has no working line. It has no bar and no
+ * presence (waiting on you, routines paused). Said here once: of the work, the feed shows the face alone. It has no bar and no
  * border: they sit on one small frosted shape, so the conversation scrolls around and beneath it and keeps the screen. The face and the
  * name open the panel; on the phone a back control leads to the band. Its parent is `relative feed-scope`, and the
  * feed's scroller `feed-scroll` and clears it with `HEADER_CLEARANCE`.

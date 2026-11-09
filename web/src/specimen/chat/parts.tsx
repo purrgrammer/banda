@@ -542,6 +542,20 @@ export function Parts() {
 						/>
 					</HeaderStage>
 				</Group>
+				<Group label="In the feed: the face alone, which opens the activity">
+					<Run who={OCTO} compact faced work={{ onOpen: () => {} }} />
+				</Group>
+				<Group label="The reply comes beside the same face">
+					<Run who={OCTO} compact faced time="10:42">
+						<Bubble>The 09:00 is the one I'd take: direct, €46, in Madrid by 11:45.</Bubble>
+					</Run>
+				</Group>
+				<Group label="A group: one face for each member at work">
+					<div className="flex flex-col gap-3">
+						<Run who={MARA} work={{ onOpen: () => {} }} />
+						<Run who={SANCHO} work={{ onOpen: () => {} }} />
+					</div>
+				</Group>
 			</Section>
 			<Section id="lines" note="What no one said: a routine ran, a sign-in to finish, a failure, a run you stopped.">
 				<div className="flex flex-col gap-3">

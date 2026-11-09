@@ -66,11 +66,14 @@ export function ActivitySheet({
 	targets,
 	source,
 	onClose,
+	returnTo,
 	style,
 }: {
 	targets: readonly ActivityTarget[];
 	source?: Source;
 	onClose: () => void;
+	/** Opened from the working face: focus goes back to it, or to its slot if the work ended meanwhile. */
+	returnTo?: HTMLElement | undefined;
 	/** The specimen's frame passes its colour scheme to the sheet, which opens outside the frame. */
 	style?: CSSProperties;
 }) {
@@ -100,7 +103,14 @@ export function ActivitySheet({
 					event.preventDefault();
 					heading.current?.focus();
 				}}
-				onCloseAutoFocus={returnFocus}
+				onCloseAutoFocus={(event) => {
+					if (returnTo === undefined) {
+						returnFocus(event);
+						return;
+					}
+					event.preventDefault();
+					(returnTo.querySelector("button") ?? returnTo).focus();
+				}}
 			>
 				<SheetHeader className="gap-2 border-b border-line-soft pr-12">
 					{depth === "transcript" ? (

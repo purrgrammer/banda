@@ -4,7 +4,7 @@
  * Cards sit in the agent's column, outside the bubbles.
  */
 import { ArrowDownIcon, CheckIcon, CopyIcon, ListTreeIcon } from "lucide-react";
-import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { Children, createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { Face } from "./Face.tsx";
 import type { Who } from "./Row.tsx";
@@ -12,19 +12,60 @@ import type { Who } from "./Row.tsx";
 /** Whose run a bubble is in: the owner's, or an agent's. */
 const Mine = createContext(false);
 
+/** A run the agent is still at: its face moves and, when `onOpen` is given, opens the activity from the slot it sits in. */
+export type RunWork = { readonly onOpen?: ((face: HTMLElement) => void) | undefined };
+
+/**
+ * A run's face. It stays one element from the working indicator to the reply, so the state change reaches the scene on
+ * screen and the motion eases to rest. The button lies over the face, 44px to the touch; the slot is where focus can
+ * still return once the work ended and the button went.
+ */
+function RunFace({ who, work }: { who: Who; work: RunWork | undefined }) {
+	const slot = useRef<HTMLSpanElement>(null);
+	const onOpen = work?.onOpen;
+	return (
+		<span
+			ref={slot}
+			tabIndex={-1}
+			data-run-face={work === undefined ? "" : "working"}
+			className="relative -mt-0.5 inline-flex shrink-0 self-start rounded-full outline-none"
+		>
+			<span aria-hidden={onOpen === undefined ? undefined : true} className="inline-flex">
+				<Face face={who.face} name={who.name} size="message" state={work === undefined ? "idle" : "working"} />
+			</span>
+			{onOpen === undefined ? null : (
+				<button
+					type="button"
+					aria-label={`${who.name} is working`}
+					className="absolute -inset-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ink"
+					onClick={() => {
+						if (slot.current !== null) onOpen(slot.current);
+					}}
+				/>
+			)}
+		</span>
+	);
+}
+
 /** A run of consecutive messages from one side. In a 1:1 chat the agent's run has no face or name, its time below. */
 export function Run({
 	who,
 	time,
 	children,
 	compact = false,
+	faced = false,
+	work,
 }: {
 	/** The agent who spoke, or undefined for the owner. */
 	who?: Who | undefined;
 	time?: string | undefined;
-	children: ReactNode;
+	children?: ReactNode;
 	/** A 1:1 chat: neither face nor name, which the header already shows. */
 	compact?: boolean;
+	/** A 1:1 run the working face stood on: it keeps the face, still without the name. */
+	faced?: boolean;
+	/** The agent is at work on this run: the face alone says so. */
+	work?: RunWork | undefined;
 }) {
 	if (who === undefined)
 		return (
@@ -33,22 +74,27 @@ export function Run({
 				{time === undefined ? null : <span className="px-1 text-meta text-ink-2">{time}</span>}
 			</div>
 		);
-	if (compact)
+	if (compact && !faced)
 		return (
 			<div className="flex flex-col items-start gap-1.5 pr-12">
 				{children}
 				{time === undefined ? null : <span className="px-1 text-meta text-ink-2">{time}</span>}
 			</div>
 		);
+	// nothing said yet: the face alone, no name beside it
+	const named = !compact && Children.toArray(children).length > 0;
 	return (
-		<div className="flex gap-2.5 pr-6">
-			<Face face={who.face} name={who.name} size="message" className="-mt-0.5" />
+		<div className={cn("flex gap-2.5", compact ? "pr-12" : "pr-6")}>
+			<RunFace who={who} work={work} />
 			<div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
-				<span className="flex items-baseline gap-2">
-					<span className="text-body font-semibold text-ink">{who.name}</span>
-					{time === undefined ? null : <span className="text-meta text-ink-2">{time}</span>}
-				</span>
+				{named ? (
+					<span className="flex items-baseline gap-2">
+						<span className="text-body font-semibold text-ink">{who.name}</span>
+						{time === undefined ? null : <span className="text-meta text-ink-2">{time}</span>}
+					</span>
+				) : null}
 				{children}
+				{compact && time !== undefined ? <span className="px-1 text-meta text-ink-2">{time}</span> : null}
 			</div>
 		</div>
 	);
