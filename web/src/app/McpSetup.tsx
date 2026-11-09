@@ -175,8 +175,8 @@ export function McpSetup({
 		initialized.current = key;
 		setSelected([...new Set([...active, ...(agent === undefined ? [] : [agent.id])])]);
 		setReads(view?.tools.filter((tool) => tool.kind === "read").map((tool) => tool.title) ?? []);
-		setLabel(chosen?.ownerLabel ?? "");
-	}, [name, account, view, active, agent, chosen]);
+		setLabel("");
+	}, [name, account, view, active, agent]);
 	const update = (next: CapabilitiesView) => {
 		showCapabilities(next);
 		return next.connections.find((each) => each.name === name);
@@ -223,9 +223,9 @@ export function McpSetup({
 			if (!view?.accepted || !name) return;
 			if (view.state !== "connected") throw new Error("Finish connecting before giving access.");
 			if (!anonymous && !chosen) throw new Error("Choose a signed-in account first.");
-			if (chosen?.numbered && !label.trim()) throw new Error("Name this account first.");
 			let current: ConnectionView = view;
-			if (chosen?.numbered && label.trim() !== chosen.ownerLabel) {
+			// left empty, the account keeps the name it has
+			if (chosen?.numbered && label.trim() && label.trim() !== chosen.label) {
 				const next = update(await labelAccount(name, account, label));
 				if (!next) throw new Error("This connection was removed. Return to Connections.");
 				current = next;
@@ -520,13 +520,13 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 							<Input
 								id={`${id}-label`}
 								value={label}
+								placeholder={chosen.label}
 								maxLength={60}
 								onChange={(event) => actions.setLabel(event.target.value)}
 								disabled={busy}
-								required
 							/>
 							<p className="text-meta text-ink-2">
-								The server doesn’t say which account this is. Choose a name you’ll recognize.
+								The server doesn’t say which account this is. Leave this empty to keep {chosen.label}.
 							</p>
 						</Field>
 					) : null}
@@ -550,12 +550,7 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 							</p>
 							<Button
 								className="self-start"
-								disabled={
-									busy ||
-									view.state !== "connected" ||
-									(!anonymous && !chosen) ||
-									(chosen?.numbered === true && !label.trim())
-								}
+								disabled={busy || view.state !== "connected" || (!anonymous && !chosen)}
 								onClick={actions.save}
 							>
 								{busy ? "Saving…" : "Save access"}

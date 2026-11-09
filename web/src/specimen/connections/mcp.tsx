@@ -59,9 +59,8 @@ const NOTES =
 const ACCOUNT = {
 	account: "account-1",
 	id: "account 1",
-	label: "Personal",
+	label: "ernesto.example",
 	numbered: true,
-	ownerLabel: "Personal",
 	at: Date.UTC(2026, 10, 13, 9, 30),
 };
 
@@ -224,7 +223,7 @@ function McpExample({
 					error,
 					credential,
 					account: ACCOUNT.account,
-					label: ACCOUNT.ownerLabel,
+					label: "",
 					selected,
 					reads,
 					back,

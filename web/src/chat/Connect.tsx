@@ -16,6 +16,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import type { AvatarFace } from "../../../src/core/avatar-face.ts";
@@ -43,6 +44,8 @@ export type ConnectStep =
 	| ConnectState
 	| { readonly kind: "permissions" }
 	| { readonly kind: "starting" }
+	/** Signed in to an account its server did not name: what to call it, `login` unless the owner says otherwise. */
+	| { readonly kind: "name"; readonly login: string; readonly why?: string | undefined }
 	| {
 			readonly kind: "agents";
 			readonly login: string;
@@ -127,6 +130,7 @@ export function ConnectDialog({
 	onPermissions,
 	onUse,
 	onAgent,
+	onName,
 	style,
 }: {
 	open: boolean;
@@ -152,10 +156,13 @@ export function ConnectDialog({
 	onUse?: ((login: string) => void) | undefined;
 	/** Switch the account just signed in on or off for an agent. */
 	onAgent?: ((agent: string, on: boolean) => void) | undefined;
+	/** Call the account just signed in this; empty keeps the name it has. */
+	onName?: ((name: string) => void) | undefined;
 	/** The specimen's frame passes its colour scheme to the dialog, which opens outside the frame. */
 	style?: CSSProperties | undefined;
 }) {
 	const [copied, setCopied] = useState(false);
+	const [name, setName] = useState("");
 	const close = () => onOpenChange(false);
 	const copy = (code: string) => {
 		void navigator.clipboard?.writeText(code).then(
@@ -171,12 +178,17 @@ export function ConnectDialog({
 				}
 			: step.kind === "starting"
 				? { title: `Sign in on ${connection}`, detail: `Waiting for ${connection}…` }
-				: step.kind === "agents"
+				: step.kind === "name"
 					? {
-							title: `Use ${connection} with`,
-							detail: `Signed in as ${step.login}. The agents switched on may read with it; they ask before anything they write.`,
+							title: `Name this ${connection} account`,
+							detail: `${connection} doesn’t say which account this is. Leave this empty to keep ${step.login}.`,
 						}
-					: { title: title(agent, connection, step), detail: detail(agent, connection, step) };
+					: step.kind === "agents"
+						? {
+								title: `Use ${connection} with`,
+								detail: `Signed in as ${step.login}. The agents switched on may read with it; they ask before anything they write.`,
+							}
+						: { title: title(agent, connection, step), detail: detail(agent, connection, step) };
 	// a sign-in again starts where the first did: on the access to grant, when the connection has choices
 	const again = onPermissions ?? onSignIn;
 	const signInAnother = (
@@ -212,6 +224,29 @@ export function ConnectDialog({
 						<Spinner className="size-3.5" />
 						Starting…
 					</span>
+				) : step.kind === "name" ? (
+					<form
+						id="connect-account-name"
+						className="flex flex-col gap-2"
+						onSubmit={(event) => {
+							event.preventDefault();
+							onName?.(name);
+						}}
+					>
+						<Input
+							aria-label="Name this account"
+							value={name}
+							placeholder={step.login}
+							maxLength={60}
+							disabled={busy}
+							onChange={(event) => setName(event.target.value)}
+						/>
+						{step.why === undefined ? null : (
+							<p role="alert" className="break-words text-meta text-destructive">
+								{step.why}
+							</p>
+						)}
+					</form>
 				) : step.kind === "agents" ? (
 					<span className="flex flex-col">
 						{step.agents.map((each) => (
@@ -290,6 +325,11 @@ export function ConnectDialog({
 								Close
 							</Button>
 						</>
+					) : step.kind === "name" ? (
+						<Button type="submit" form="connect-account-name" disabled={busy}>
+							{busy ? <Spinner className="size-3.5" /> : null}
+							Continue
+						</Button>
 					) : step.kind === "agents" ? (
 						<Button onClick={close}>Done</Button>
 					) : step.kind === "failed" ? (

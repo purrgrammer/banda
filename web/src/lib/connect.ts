@@ -48,9 +48,7 @@ export function connectState(
 		const mine = fresh.filter((account) => account.agents.includes(agent));
 		if (mine.length > 0) return { kind: "done", login: mine.map((account) => account.label).join(", ") };
 		if (fresh.length === 1) return { kind: "share", login: (fresh[0] as AccountView).label };
-		// unnamed accounts all read the same, so a choice among them could pick the wrong one: only named ones are offered
-		const named = fresh.filter((account) => account.numbered !== true || account.ownerLabel !== undefined);
-		if (fresh.length > 1 && named.length > 0) return { kind: "known", logins: named.map((account) => account.label) };
+		if (fresh.length > 1) return { kind: "known", logins: fresh.map((account) => account.label) };
 	}
 	return { kind: "connect", why };
 }

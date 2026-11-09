@@ -50,7 +50,6 @@ import {
 	ACCOUNT_LABEL_MAX,
 	type Account,
 	acceptedConnection,
-	accountAddress,
 	accountKey,
 	accountLabel,
 	accountsOn,
@@ -62,12 +61,12 @@ import {
 	connectionTools,
 	credentialed,
 	credentialsOf,
+	defaultAccountLabel,
 	fits,
 	givenFor,
 	grantedScopes,
 	type InEffect,
 	inEffect,
-	isNumbered,
 	keepPending,
 	type Listed,
 	MAX_DEFINITION_BYTES,
@@ -81,6 +80,7 @@ import {
 	prunePending,
 	publicOn,
 	readsFor,
+	readsNumbered,
 	remoteUrl,
 	requiredOf,
 	scrub,
@@ -89,7 +89,6 @@ import {
 	takePending,
 	toolName,
 	toolPath,
-	UNNAMED_ACCOUNT,
 	withCredentials,
 	withList,
 	withoutSignIn,
@@ -184,6 +183,7 @@ export type CapabilityOptions = {
 type Finished = {
 	readonly account: string;
 	readonly id: string;
+	readonly label?: string;
 	readonly agent?: string;
 	readonly enabled?: boolean;
 	readonly problem?: string;
@@ -315,10 +315,10 @@ export function openCapabilities(options: CapabilityOptions) {
 	const finished = new Map<string, Finished>();
 	/** Accounts' names by connection and key, as last installed: what a draft's words name them by. */
 	let ids: { readonly [connection: string]: { readonly [account: string]: Pick<Account, "id" | "label"> } } = {};
-	const labelOf = (connection: string, account: string) => accountLabel(ids[connection]?.[account] ?? { id: account });
-	/** " as @bandarra" for a sign-in the service named; a numbered one has no name yet to say. */
-	const asWhom = (id: string) => (isNumbered(id) ? "" : ` as ${accountLabel({ id })}`);
-	/** Scopes a tool turned out to need, by the model's name for it, as its server's last challenge said. */
+	const labelOf = (connection: string, account: string) =>
+		accountLabel(
+			ids[connection]?.[account] ?? { id: account },
+		); /** Scopes a tool turned out to need, by the model's name for it, as its server's last challenge said. */
 	const needs = new Map<string, readonly string[]>();
 	/** The scopes a connection's server says it can grant, by connection, once asked; what the owner picks from. */
 	const offered = new Map<string, readonly string[]>();
@@ -559,7 +559,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		}
 		const on = [...held.keys()];
 		const known = (await tx.doc(Connected)).accounts?.[connection.name] ?? {};
-		const labelOfKey = (key: string) => accountAddress(known[key] ?? { id: key });
+		const labelOfKey = (key: string) => accountLabel(known[key] ?? { id: key });
 		const labels = on.map(labelOfKey);
 		if (on.length === 0)
 			return {
@@ -1510,8 +1510,7 @@ export function openCapabilities(options: CapabilityOptions) {
 					account: key,
 					id: account.id,
 					label: accountLabel(account),
-					...(isNumbered(account.id) ? { numbered: true } : {}),
-					...(account.label === undefined ? {} : { ownerLabel: account.label }),
+					...(account.label === undefined ? {} : { numbered: true }),
 					at: account.at,
 					agents: Object.entries(connected.on ?? {})
 						.filter(([, on]) => (on[name] ?? []).includes(key))
@@ -1907,19 +1906,19 @@ export function openCapabilities(options: CapabilityOptions) {
 	}
 
 	/**
-	 * The owner names numbered account `account` of connection `name`: what it goes by from now on, to them and to the
-	 * models that act as it. Its key, and so its credentials and who may use it, stay as they are.
+	 * The owner names account `account` of connection `name`, one its server did not: what it goes by from now on, to
+	 * them and to the models that act as it. Its key, and so its credentials and who may use it, stay as they are.
 	 */
 	async function labelAccount(name: string, account: string, label: unknown, ctx: Context = context): Promise<void> {
 		const wanted = plainLine(label, ACCOUNT_LABEL_MAX);
 		if (wanted === "") throw new BadRequest("give the account a name");
-		if (isNumbered(wanted) || wanted.toLowerCase() === UNNAMED_ACCOUNT.toLowerCase())
+		if (readsNumbered(wanted))
 			throw new BadRequest(`"${wanted}" does not say which account this is: choose another name`);
 		await harness.commit(async (tx) => {
 			const accounts = (await tx.doc(Connected)).accounts?.[name] ?? {};
 			const known = accounts[account];
 			if (known === undefined) throw new BadRequest(`there is no such account of ${name}`, 404);
-			if (!isNumbered(known.id)) throw new BadRequest(`this account is already ${accountLabel(known)}`);
+			if (known.label === undefined) throw new BadRequest(`this account is already ${accountLabel(known)}`);
 			for (const [key, other] of Object.entries(accounts))
 				if (key !== account && accountLabel(other).toLowerCase() === wanted.toLowerCase())
 					throw new BadRequest(`another account is already called ${wanted}`);
@@ -2061,9 +2060,14 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	/**
 	 * Whom a sign-in is for, read once with its credentials: the field the connection's file names of its read tool's
-	 * answer ("bandarra"); without one, the next free number. Throws, in words, when the server says nothing usable.
+	 * answer ("bandarra"); without one, the next free number, `numbered`. Throws, in words, when the server says nothing
+	 * usable.
 	 */
-	async function readAccount(connection: Connection, credentials: Credentials, ctx: Context): Promise<string> {
+	async function readAccount(
+		connection: Connection,
+		credentials: Credentials,
+		ctx: Context,
+	): Promise<{ readonly id: string; readonly numbered?: true }> {
 		const read = connection.account;
 		const url = connection.url as string;
 		const bearer = "key" in credentials ? credentials.key : credentials.oauth.tokens.access;
@@ -2079,7 +2083,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			// a built-in adapter's error words hold no URL, body or token, and say why Google refused
 			if (answer.isError) throw new Error(`${connection.service} did not say who you are: ${plainLine(answer.text)}`);
 			if (id === "") throw new Error(`${connection.service} did not say who you are`);
-			return id;
+			return { id };
 		}
 		if (read === undefined) {
 			// a sign-in is kept only once the server took it: listing its tools with it proves that much
@@ -2101,7 +2105,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			);
 			let n = 1;
 			while (taken.some(({ key }) => key === accountKey(numberedAccount(n)))) n++;
-			return numberedAccount(n);
+			return { id: numberedAccount(n), numbered: true };
 		}
 		const answer = await remoteSession(
 			url,
@@ -2115,7 +2119,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			id = plainId((JSON.parse(answer.text) as { [field: string]: unknown })[read.field]);
 		} catch {}
 		if (answer.isError || id === "") throw new Error(`${connection.service} did not say who you are`);
-		return id;
+		return { id };
 	}
 
 	/**
@@ -2133,9 +2137,9 @@ export function openCapabilities(options: CapabilityOptions) {
 	): Promise<Finished> {
 		const connection = await harness.commit((tx) => acceptedConnection(tx, name), ctx);
 		if (connection?.url !== credentials.url) throw new Error("that connection changed while you signed in");
-		const { id, account, known } = await withCredentials(home, name, async (locked) => {
+		const { id, account, known, label } = await withCredentials(home, name, async (locked) => {
 			// Allocate unidentified sign-ins under the same connection lock as publication: concurrent callbacks must not share a number.
-			const id = await readAccount(connection, credentials, ctx);
+			const { id, numbered } = await readAccount(connection, credentials, ctx);
 			fault("account:read");
 			const account = accountKey(id);
 			const current = await harness.commit((tx) => acceptedConnection(tx, name), ctx);
@@ -2151,7 +2155,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			}
 			await locked.keep(account, credentials);
 			fault("oauth:kept");
-			const known = await harness.commit(async (tx) => {
+			const { known, label } = await harness.commit(async (tx) => {
 				if ((await acceptedConnection(tx, name))?.sha !== connection.sha)
 					throw new Error("that connection changed while you signed in");
 				const doc = await tx.doc(Connected);
@@ -2160,24 +2164,32 @@ export function openCapabilities(options: CapabilityOptions) {
 				// read back: the doc tracks changes through its own objects, not the one assigned
 				const accounts = doc.accounts[name];
 				const was = accounts[account] !== undefined;
-				accounts[account] = { id, at: now(), generation: crypto.randomUUID() };
+				// named in the commit that adds it, so concurrent sign-ins cannot take the same name
+				const label = numbered ? defaultAccountLabel(credentials.url, Object.values(accounts)) : undefined;
+				accounts[account] = {
+					id,
+					...(label === undefined ? {} : { label }),
+					at: now(),
+					generation: crypto.randomUUID(),
+				};
 				doc.epoch++;
 				await log(tx, {
 					at: now(),
-					what: `You ${was ? "signed in again" : "signed in"} to ${connection.service}${asWhom(id)}`,
+					what: `You ${was ? "signed in again" : "signed in"} to ${connection.service} as ${accountLabel({ id, ...(label === undefined ? {} : { label }) })}`,
 				});
 				// on for the agent it was for, in this commit when its file names the connection already
 				const file = agent === undefined ? undefined : await acceptedAgent(tx, agent);
 				if (agent !== undefined && file !== undefined && mayUse(file, name)) await turn(tx, agent, name, account, true);
-				return was;
+				return { known: was, label };
 			}, ctx);
-			return { id, account, known };
+			return { id, account, known, label };
 		});
 		fault("account:added");
 		problems.delete(name);
 		const done: Finished = {
 			account,
 			id,
+			...(label === undefined ? {} : { label }),
 			...(agent === undefined ? {} : { agent }),
 			known,
 			// signing one account in again and coming back as another: kept as the one it is, and said
@@ -2524,7 +2536,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				? ""
 				: ` That is not ${labelOf(pending.connection, done.expected)}, which you were signing in again: it is kept as an account of its own.`;
 		return problem === undefined
-			? { ok: true, words: `Signed in to ${connection.service}${asWhom(done.id)}.${other}` }
+			? { ok: true, words: `Signed in to ${connection.service} as ${accountLabel(done)}.${other}` }
 			: { ok: false, words: `Signed in, but ${connection.service} did not answer: ${problem}` };
 	}
 

@@ -94,20 +94,16 @@ describe("the connect card", () => {
 		expect(
 			connectState(view({ accounts: [account("a"), account("b"), account("c", [], true)] }), idle, "mara", "why"),
 		).toEqual({ kind: "known", logins: ["@a", "@b"] });
-		// unnamed accounts read the same, so only a named one can be picked
-		const numbered = (name: string, ownerLabel?: string): AccountView => ({
-			...account(name),
-			label: ownerLabel ?? "Unnamed account",
-			numbered: true,
-			...(ownerLabel === undefined ? {} : { ownerLabel }),
-		});
-		expect(connectState(view({ accounts: [numbered("x", "Work"), numbered("y")] }), idle, "mara", "why")).toEqual({
-			kind: "known",
-			logins: ["Work"],
-		});
-		expect(connectState(view({ accounts: [numbered("x"), numbered("y")] }), idle, "mara", "why")).toMatchObject({
-			kind: "connect",
-		});
+		// accounts their server did not name are offered by the names that tell them apart
+		const numbered = (name: string, label: string): AccountView => ({ ...account(name), label, numbered: true });
+		expect(
+			connectState(
+				view({ accounts: [numbered("account-1", "mcp.example.com"), numbered("account-2", "mcp.example.com 2")] }),
+				idle,
+				"mara",
+				"why",
+			),
+		).toEqual({ kind: "known", logins: ["mcp.example.com", "mcp.example.com 2"] });
 		// from Settings, for no agent: Connect another
 		expect(connectState(view({ accounts: [account("a")] }), idle, undefined, "why")).toMatchObject({
 			kind: "connect",

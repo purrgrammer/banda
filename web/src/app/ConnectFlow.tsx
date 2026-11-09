@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DEFAULT_FACE } from "../../../src/core/choices.ts";
 import { ConnectCard, ConnectDialog, type ConnectStep } from "../chat/Connect.tsx";
-import { actOnCapability, runsOnDevice, signIn, switchAccount } from "../lib/api.ts";
+import { actOnCapability, labelAccount, runsOnDevice, signIn, switchAccount } from "../lib/api.ts";
 import { connectState, freshAccounts, type Phase, scopeChoicesOf } from "../lib/connect.ts";
 import { chatAgents } from "../lib/navigation.ts";
 import { showCapabilities, useShell } from "../lib/shell.ts";
@@ -97,6 +97,8 @@ export function ConnectFlow({
 	const [phase, setPhase] = useState<Phase>({ kind: "idle" });
 	const [busy, setBusy] = useState(false);
 	const [used, setUsed] = useState(false);
+	const [named, setNamed] = useState(false);
+	const [nameProblem, setNameProblem] = useState<string>();
 	const [pickedScopes, setPickedScopes] = useState<readonly string[]>(currentScopes);
 	const state = connectState(view, phase, agent?.id, reason);
 	// a connection with choices starts on them, unless a sign-in is already under way or an account is there to use
@@ -143,18 +145,36 @@ export function ConnectFlow({
 		}
 	};
 	const login = (state.kind === "done" || state.kind === "already") && (finishedNow || used) ? state.login : undefined;
-	const finished = useRef(false);
-	useEffect(() => {
-		if (login === undefined || finished.current) return;
-		finished.current = true;
-		if (!quiet) toast.success(`${service} connected as ${login}`);
-		// signed in for no agent, it stays open on the agents that may use the account
-		if (agent !== undefined) onClose();
-	}, [agent, login, onClose, quiet, service]);
 	const account =
 		view?.finished === undefined
 			? undefined
 			: freshAccounts(view).find((each) => each.account === view.finished?.account);
+	// a sign-in its server did not name asks what to call it before the dialog moves on, wherever it started
+	const naming = login !== undefined && finishedNow && !used && !named && account?.numbered === true;
+	const finished = useRef(false);
+	useEffect(() => {
+		if (login === undefined || naming || finished.current) return;
+		finished.current = true;
+		if (!quiet) toast.success(`${service} connected as ${login}`);
+		// signed in for no agent, it stays open on the agents that may use the account
+		if (agent !== undefined) onClose();
+	}, [agent, login, naming, onClose, quiet, service]);
+	const nameAccount = async (name: string) => {
+		const wanted = name.trim();
+		if (account === undefined || wanted === "" || wanted === account.label) {
+			setNamed(true);
+			return;
+		}
+		setBusy(true);
+		try {
+			showCapabilities(await labelAccount(connection, account.account, wanted));
+			setNamed(true);
+		} catch (error) {
+			setNameProblem(wordsOf(error));
+		} finally {
+			setBusy(false);
+		}
+	};
 	const toggle = async (id: string, on: boolean) => {
 		if (account === undefined) return;
 		setBusy(true);
@@ -167,25 +187,27 @@ export function ConnectFlow({
 		}
 	};
 	const step: ConnectStep =
-		agent === undefined && login !== undefined && account !== undefined
-			? {
-					kind: "agents",
-					login,
-					agents: band.map((each) => ({
-						id: each.id,
-						name: each.name,
-						face: each.face,
-						on: account.agents.includes(each.id),
-					})),
-				}
-			: choosing
-				? { kind: "permissions" }
-				: busy && state.kind !== "known" && state.kind !== "share"
-					? { kind: "starting" }
-					: // until the daemon finishes this sign-in, what the agent had before is not its outcome
-						phase.kind === "started" && !finishedNow && state.kind !== "code" && state.kind !== "failed"
+		naming && account !== undefined
+			? { kind: "name", login: account.label, why: nameProblem }
+			: agent === undefined && login !== undefined && account !== undefined
+				? {
+						kind: "agents",
+						login,
+						agents: band.map((each) => ({
+							id: each.id,
+							name: each.name,
+							face: each.face,
+							on: account.agents.includes(each.id),
+						})),
+					}
+				: choosing
+					? { kind: "permissions" }
+					: busy && state.kind !== "known" && state.kind !== "share"
 						? { kind: "starting" }
-						: state;
+						: // until the daemon finishes this sign-in, what the agent had before is not its outcome
+							phase.kind === "started" && !finishedNow && state.kind !== "code" && state.kind !== "failed"
+							? { kind: "starting" }
+							: state;
 	return (
 		<ConnectDialog
 			open
@@ -206,6 +228,7 @@ export function ConnectFlow({
 			{...(choices ? { onPermissions: () => setChoosing(true) } : {})}
 			onUse={(login) => void use(login)}
 			onAgent={(id, on) => void toggle(id, on)}
+			onName={(name) => void nameAccount(name)}
 		/>
 	);
 }

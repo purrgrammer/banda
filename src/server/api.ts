@@ -825,6 +825,7 @@ export type ConnectionView = {
 	readonly finished?: {
 		readonly account: string;
 		readonly id: string;
+		readonly label?: string;
 		readonly agent?: string;
 		readonly enabled?: boolean;
 		readonly problem?: string;
@@ -846,10 +847,8 @@ export type AccountView = {
 	readonly account: string;
 	readonly id: string;
 	readonly label: string;
-	/** The server did not say whom this sign-in is for, so the owner names it. */
+	/** The server did not say whom this sign-in is for: its `label` is the owner's to change. */
 	readonly numbered?: boolean;
-	/** The name the owner gave it, when they did. */
-	readonly ownerLabel?: string;
 	readonly at: number;
 	readonly agents: readonly string[];
 	readonly stale?: boolean;

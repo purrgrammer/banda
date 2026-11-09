@@ -125,9 +125,9 @@ for (const width of [390, 1440])
 					await phase(page, "auth");
 					await click(page, button("Continue to sign in"));
 					await phase(page, "review");
-					await page.until(`${labelled("Account")}?.textContent.includes('Unnamed account')`);
-					expect(await page.run(`/account \\d/.test(document.body.textContent)`)).toBe(false);
-					expect(await page.run(`${button("Save access")}.disabled`)).toBe(true);
+					await page.until(`${labelled("Account")}?.textContent.includes('127.0.0.1')`);
+					expect(await page.run(`/account \\d/i.test(document.body.textContent)`)).toBe(false);
+					expect(await page.run(`${button("Save access")}.disabled`)).toBe(false);
 					await fill(page, "Name this account", "Work");
 					const connection = (await view()).connections.find((each) => each.name === "ernesto-test")!;
 					expect(connection.accounts).toEqual([expect.objectContaining({ id: "account 1", agents: [] })]);
@@ -148,6 +148,7 @@ for (const width of [390, 1440])
 					await phase(page, "done");
 					let connected = (await view()).connections.find((each) => each.name === connection.name)!;
 					expect(connected.accounts?.[0]?.agents).toEqual(["sancho"]);
+					expect(connected.accounts?.[0]).toMatchObject({ id: "account 1", label: "Work" });
 					expect(connected.tools.find((tool) => tool.title === "fs_read")?.kind).toBe("read");
 					expect(connected.tools.find((tool) => tool.title === "execute")?.kind).toBe("write");
 					// Same-home restart keeps only the access the owner actually granted.

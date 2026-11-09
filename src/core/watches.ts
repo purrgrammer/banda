@@ -31,7 +31,7 @@ import {
 } from "@earendil-works/pi-durable";
 import { log } from "./activity.ts";
 import { Accepted, AGENT_NAME, agentWords, ChatAgent, frontmatter, isArchived, LEAD, shaOf } from "./agents.ts";
-import { acceptedConnection, accountsOn, Connected, type Connection, isNumbered, signsIn } from "./connections.ts";
+import { acceptedConnection, accountsOn, Connected, type Connection, signsIn } from "./connections.ts";
 import {
 	BUSY_EVERY,
 	canonical,
@@ -1093,7 +1093,7 @@ export function defineWatches(options: WatchesOptions) {
 			delete record.burst;
 			delete record.held;
 			const held = (await tx.doc(Connected)).accounts[connection.name]?.[account];
-			const label = held?.label ?? (held === undefined || isNumbered(held.id) ? undefined : held.id);
+			const label = held?.label ?? held?.id;
 			const data: WatchWakeData = {
 				watch: name,
 				object: {

@@ -454,7 +454,7 @@ export type Listed = {
 export type Account = {
 	/** What the service calls the owner, as read once after sign-in ("bandarra"); numbered when it says nothing. */
 	id: string;
-	/** What the owner calls a numbered account: the name it goes by, its number being only a handle. */
+	/** The name of an account its server did not name: from its host until the owner chooses another. */
 	label?: string;
 	/** Each completed sign-in is a distinct generation, even when the same ID returns at the same time. */
 	generation?: string;
@@ -507,28 +507,32 @@ export function accountKey(id: string): string {
 		: `a-${createHash("sha256").update(id).digest("hex").slice(0, 16)}`;
 }
 
-/** The id of a sign-in whose server did not say whom it is for: a handle for banda and the model, never a name. */
+/** The id of a sign-in whose server did not say whom it is for: a handle for banda's keys, never a name. */
 export const numberedAccount = (n: number) => `account ${n}`;
 
-/** Whether `id` is such a number: its account has only the name the owner gives it. */
-export const isNumbered = (id: string) => /^account \d+$/.test(id);
-
-/** What a numbered account the owner has not named yet is called. */
-export const UNNAMED_ACCOUNT = "Unnamed account";
+/** Whether a name reads as such a number, which says nothing about the account. */
+export const readsNumbered = (name: string) => /^account \d+$/i.test(name);
 
 /** The longest name the owner can give an account. */
 export const ACCOUNT_LABEL_MAX = 60;
 
 type Named = Pick<Account, "id" | "label">;
 
-const handle = (id: string) => (/[@\s]/.test(id) ? id : `@${id}`);
-
-/** An account as the owner reads it: the name they gave it, "@bandarra", or an address as it is; never its number. */
+/** An account as the owner and the model read it: its name when it has one, "@bandarra", or an address as it is. */
 export const accountLabel = (account: Named) =>
-	account.label ?? (isNumbered(account.id) ? UNNAMED_ACCOUNT : handle(account.id));
+	account.label ?? (/[@\s]/.test(account.id) ? account.id : `@${account.id}`);
 
-/** An account as a model names it to act as it: unlike the owner's reading, this always tells accounts apart. */
-export const accountAddress = (account: Named) => account.label ?? handle(account.id);
+/**
+ * The name a new account of the server at `url` goes by when its server does not say whose it is: the server's host,
+ * then "host 2", "host 3", the first that none of `accounts` is called, so accounts can always be told apart.
+ */
+export function defaultAccountLabel(url: string, accounts: readonly Named[]): string {
+	const host = new URL(url).hostname;
+	const taken = new Set(accounts.map((account) => accountLabel(account).toLowerCase()));
+	let label = host;
+	for (let n = 2; taken.has(label.toLowerCase()); n++) label = `${host} ${n}`;
+	return label;
+}
 
 /** Whether connection `connection` is signed in to: its tools act as one of its accounts. */
 export const signsIn = (connection: Pick<Connection, "url" | "auth">) =>
@@ -565,7 +569,7 @@ export async function multiAccount(tx: Tx): Promise<{ [connection: string]: stri
 		for (const name of Object.keys(connections))
 			if ((await accountsOn(tx, agent, name)).length > 1)
 				found[name] = Object.values(doc.accounts?.[name] ?? {})
-					.map(accountAddress)
+					.map(accountLabel)
 					.sort();
 	}
 	return found;
