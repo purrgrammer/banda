@@ -51,6 +51,7 @@ export async function designFace({
 		attempts: FACE_ATTEMPTS,
 		deadlineMs,
 		maxTokens: 8192,
+		reasoning: "minimal",
 		signal,
 		read: async (text) => {
 			const json = answerJson(text);

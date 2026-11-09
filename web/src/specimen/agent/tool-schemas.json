@@ -190,7 +190,7 @@
 		}
 	},
 	"propose_avatar": {
-		"description": "Offer a generated face for yourself as a preview card. First read `read_avatar_instructions`. Validation may refuse it with errors to correct. Only the owner's Use this face button applies it; proposing changes nothing.",
+		"description": "Offer a generated face for yourself as a preview card, designed by the avatar geometry rules in your instructions. Validation may refuse it with errors to correct. Only the owner's Use this face button applies it; proposing changes nothing.",
 		"parameters": {
 			"type": "object",
 			"required": ["version", "id", "name", "body", "eyes"],
@@ -616,6 +616,38 @@
 			}
 		}
 	},
+	"watch": {
+		"description": "Follow something outside until it changes: when you tell the owner you will keep an eye on something (a pull request, an issue, a CI run, a repository's releases, an email thread or a search of the inbox, a calendar event, a Drive file or folder: \"I'll let you know when it merges\"), make it a watch, or it will not happen: you remember nothing between runs. banda reads it on its own and wakes you with what changed, in words, until what ends it. It writes watches/<name>.md, which runs once the owner allows it; the same object again changes it.",
+		"parameters": {
+			"type": "object",
+			"required": ["object", "ask"],
+			"properties": {
+				"object": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 500,
+					"description": "What to follow, as its link or the id its card names, on a connection the owner has: https://github.com/o/r/pull/1, https://github.com/o/r, gmail/thread/<id>, gmail/search/<query>, calendar/<id>, drive/<id>."
+				},
+				"until": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 32,
+					"description": "What ends it, in the kind's own word (a pull request: merged or closed; an event: cancelled; a file: trashed). Leave it out to end on any; some kinds (a repository, a search) never end, so leave it out."
+				},
+				"account": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 200,
+					"description": "Which account to look with, when you have more than one of that connection."
+				},
+				"ask": {
+					"type": "string",
+					"minLength": 1,
+					"description": "What matters and what to do when it changes, as a complete brief to yourself: you will remember nothing else."
+				}
+			}
+		}
+	},
 	"bash": {
 		"description": "Execute a bash command in the current working directory. Returns combined stdout and stderr. Output is truncated to last 2000 lines or 50KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.",
 		"parameters": {
@@ -931,14 +963,6 @@
 					"description": "The ticket a held request was given."
 				}
 			}
-		}
-	},
-	"read_avatar_instructions": {
-		"description": "Load banda's shipped open-bot-avatar geometry design instructions before creating a face from a description. Returns a bounded guide, not a generated face. Offer geometry using the avatar parameter in your direct chat, never JSON to the owner. The owner previews and explicitly accepts its card in your direct chat. No network, credentials or identity changes.",
-		"parameters": {
-			"type": "object",
-			"properties": {},
-			"additionalProperties": false
 		}
 	},
 	"skill": {

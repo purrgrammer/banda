@@ -1,5 +1,9 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getExample } from "open-bot-avatar";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	AVATAR_VALIDATION_QUEUE,
 	AVATAR_VALIDATORS,
@@ -10,6 +14,33 @@ describe("untrusted avatar validation", () => {
 	it("validates a built-in face without running geometry on the caller", async () => {
 		const result = await validateAvatarCandidate(JSON.stringify(getExample("chat")));
 		expect(result.ok).toBe(true);
+	});
+	it("validates when the process runs from a directory outside the app", () => {
+		const validator = new URL("../src/server/avatar-validation.ts", import.meta.url).href;
+		const output = execFileSync(
+			process.execPath,
+			[
+				"-e",
+				`import(${JSON.stringify(validator)})
+					.then(({ validateAvatarCandidate }) => validateAvatarCandidate(process.argv[1], 20_000))
+					.then((result) => console.log(JSON.stringify(result)));`,
+				JSON.stringify(getExample("chat")),
+			],
+			{ cwd: mkdtempSync(join(tmpdir(), "banda-outside-")), encoding: "utf8" },
+		);
+		expect(JSON.parse(output)).toEqual({ ok: true, definition: expect.anything() });
+	});
+	it("reports a validator that cannot load as banda's fault, and logs why", async () => {
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+		const result = await validateAvatarCandidate(
+			JSON.stringify(getExample("chat")),
+			20_000,
+			"file:///nowhere/open-bot-avatar.js",
+		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.errors.join(" ")).toMatch(/do not change the face/i);
+		expect(String(logged.mock.calls[0]?.[0])).toContain("ERR_MODULE_NOT_FOUND");
+		logged.mockRestore();
 	});
 	it("rejects malformed and oversized data", async () => {
 		expect((await validateAvatarCandidate("not json")).ok).toBe(false);

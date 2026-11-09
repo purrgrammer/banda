@@ -8,7 +8,6 @@ export const TOOLSETS: { readonly [name: string]: readonly string[] } = {
 	shell: ["bash"],
 	skills: ["skill"],
 	agents: ["message_agent", "read_agent_chat", "propose_agent", "propose_group", "propose_agent_change"],
-	avatar: ["read_avatar_instructions"],
 	requests: ["propose_send", "ask_hosts"],
 	routines: ["schedule"],
 	watches: ["watch"],

@@ -6,7 +6,7 @@
  * sees it; whatever the caller does with the value is the caller's own act. Work that must survive a restart, use tools
  * or answer to a chat is a turn, never an inference.
  */
-import type { Api, Message, Model, MutableModels } from "@earendil-works/pi-ai";
+import type { Api, Message, Model, MutableModels, ThinkingLevel } from "@earendil-works/pi-ai";
 import type { Harness, ModelRef } from "@earendil-works/pi-durable";
 import { Companion, type CompanionDoc } from "../core/companion.ts";
 import { context } from "../core/store.ts";
@@ -54,6 +54,7 @@ export async function infer<T>({
 	attempts = 1,
 	deadlineMs = INFERENCE_DEADLINE_MS,
 	maxTokens = 4096,
+	reasoning,
 	signal,
 }: {
 	models: Pick<MutableModels, "completeSimple">;
@@ -66,6 +67,7 @@ export async function infer<T>({
 	attempts?: number;
 	deadlineMs?: number;
 	maxTokens?: number;
+	reasoning?: ThinkingLevel;
 	signal?: AbortSignal | undefined;
 }): Promise<Inferred<T>> {
 	if (running >= INFERENCES) return { ok: false, why: "banda is busy thinking already. Try again in a moment." };
@@ -83,7 +85,7 @@ export async function infer<T>({
 			const answer = await models.completeSimple(
 				model,
 				{ systemPrompt: system, messages },
-				{ signal: aborted, maxTokens },
+				{ signal: aborted, maxTokens, ...(reasoning === undefined ? {} : { reasoning }) },
 			);
 			if (aborted.aborted) return stopped();
 			if (answer.stopReason === "error" || answer.stopReason === "aborted")

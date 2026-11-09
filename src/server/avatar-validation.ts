@@ -1,21 +1,26 @@
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import type { AvatarDefinition } from "open-bot-avatar";
 
 export type AvatarValidation = { ok: true; definition: AvatarDefinition } | { ok: false; errors: string[] };
 
+// An eval worker resolves a bare specifier from the process's working directory, which is `/` in the desktop app.
+const OPEN_BOT_AVATAR = pathToFileURL(createRequire(import.meta.url).resolve("open-bot-avatar")).href;
+
 // Fixed worker code: only JSON data crosses into it. Geometry validation can be CPU intensive even within the
 // library's limits, so it must not block the daemon's event loop or run beyond the caller's deadline.
 const VALIDATOR = `
 const { parentPort, workerData } = require("node:worker_threads");
-import("open-bot-avatar").then(({ validateAvatar }) => {
-  const input = JSON.parse(workerData);
+import(workerData.validator).then(({ validateAvatar }) => {
+  const input = JSON.parse(workerData.text);
   if (typeof input?.body?.path !== "string" || input.body.path.trim() === "") {
     parentPort.postMessage({ ok: false, errors: ["body.path must be a non-empty SVG path."] });
     return;
   }
   const result = validateAvatar(input);
   parentPort.postMessage(result.ok ? { ok: true, definition: result.value } : { ok: false, errors: result.errors });
-}).catch(() => parentPort.postMessage({ ok: false, errors: ["Face validation failed."] }));
+}, (error) => parentPort.postMessage({ broken: String(error) })).catch(() => parentPort.postMessage({ ok: false, errors: ["Face validation failed."] }));
 `;
 
 /** Across all callers, at most two geometry validators run and at most sixteen wait. */
@@ -30,7 +35,11 @@ function drain(): void {
 }
 
 /** Validate untrusted geometry off the event loop, with bounded input, concurrency, memory and elapsed time. */
-export async function validateAvatarCandidate(text: string, timeoutMs = 2_000): Promise<AvatarValidation> {
+export async function validateAvatarCandidate(
+	text: string,
+	timeoutMs = 2_000,
+	validator = OPEN_BOT_AVATAR,
+): Promise<AvatarValidation> {
 	if (text.length > 16_384 || new TextEncoder().encode(text).byteLength > 16_384)
 		return { ok: false, errors: ["The face definition is too large (16 KB maximum)."] };
 	if (running >= AVATAR_VALIDATORS && waiting.length >= AVATAR_VALIDATION_QUEUE)
@@ -44,10 +53,17 @@ export async function validateAvatarCandidate(text: string, timeoutMs = 2_000): 
 				try {
 					worker = new Worker(VALIDATOR, {
 						eval: true,
-						workerData: text,
+						workerData: { text, validator },
 						resourceLimits: { maxOldGenerationSizeMb: 64, maxYoungGenerationSizeMb: 16, stackSizeMb: 4 },
 					});
-					worker.once("message", (result: AvatarValidation) => finish(result));
+					worker.once("message", (result: AvatarValidation | { broken: string }) => {
+						if (!("broken" in result)) return finish(result);
+						console.error(`face validator did not load: ${result.broken}`);
+						finish({
+							ok: false,
+							errors: ["banda's face validator did not load. Do not change the face; tell the owner."],
+						});
+					});
 					worker.once("error", () => finish({ ok: false, errors: ["Face validation failed."] }));
 					worker.once("exit", () => finish({ ok: false, errors: ["Face validation stopped."] }));
 				} catch {
