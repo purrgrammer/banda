@@ -114,6 +114,7 @@ export async function openConnected({
 	});
 	// as the daemon does on start: what was in effect is installed before anything resumes
 	await revive(harness);
+	await capabilities.carryListings();
 	await capabilities.install();
 	harness.resume();
 	await capabilities.reconcile();

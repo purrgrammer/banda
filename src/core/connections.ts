@@ -360,6 +360,11 @@ type ConnectedValue = {
 			notes?: string;
 			/** The tool whose description carries them, chosen then: they never move to another. */
 			notesOn?: string;
+			/**
+			 * Carried over from an earlier build's definition at start, so a draft waiting on it can still finish. Its next
+			 * listing counts as a new version: shapes and notes as given then, a new tool waits.
+			 */
+			due?: true;
 			at: number;
 		};
 	};
@@ -518,6 +523,9 @@ async function activeAgent(tx: Tx, id: string): Promise<boolean> {
 	const parsed = parseAgent(id, file.text);
 	return "agent" in parsed && parsed.agent.state === "active";
 }
+
+/** The version a definition or record has before the owner's overlay: what an allowed read does not move. */
+export const definitionVersion = (version: string | undefined) => version?.replace(/\.r\d+$/, "");
 
 /** The name the model knows a connection's tool by: stable, `<connection>__<tool>`, within a model's 64 characters. */
 export function toolName(connection: string, tool: string): string {

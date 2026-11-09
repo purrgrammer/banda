@@ -29,7 +29,7 @@ import {
 } from "../src/core/tool-kinds.ts";
 import type { TurnResult } from "../src/core/turn.ts";
 import { answer } from "../src/core/wait.ts";
-import { type Connected as Opened, openConnected, signInAsOwner } from "./fixtures/connected.ts";
+import { define, type Connected as Opened, openConnected, signInAsOwner } from "./fixtures/connected.ts";
 import { type FakeMcp, startFakeMcp } from "./fixtures/mcp-server.ts";
 import { tempHome, until } from "./helpers.ts";
 import { pbtRuns } from "./pbt.ts";
@@ -536,5 +536,122 @@ describe("over versions, and on a server the owner added", () => {
 		await s.capabilities.remove("cal");
 		expect((await s.harness.snapshot(ToolSettings, context))?.set).toEqual({});
 		expect((await s.harness.snapshot(Connected, context))?.off).toEqual({});
+	});
+});
+
+describe("a draft waiting across a change", () => {
+	/** `create_event` drafted and waiting for approval: the wait. */
+	const drafted = async (s: Awaited<ReturnType<typeof open>>) => {
+		s.model.plan([{ tool: "cal__create_event", args: { title: "x", day: "mon" } }]);
+		await s.say("draft it");
+		return until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+	};
+	const writes = (fake: FakeMcp) => fake.calls.map((call) => call.tool).filter((tool) => tool === "create_event");
+
+	it("survives a restart onto a build that changed its definition, even a copy edit, and runs when approved", async () => {
+		const fake = await startFakeMcp(SIGNED);
+		fakes.push(fake);
+		let s = await added(fake);
+		await drafted(s);
+		s = await restart(
+			s,
+			await shipping(fake, (d) => {
+				d.about = "A newer build";
+			}),
+		);
+		// a wait kept open is not enough: it must still be answerable and the write must run
+		await new Promise((resolve) => setTimeout(resolve, 300));
+		const after = await openWaits(s.harness);
+		expect(after.map((w) => (w.ask as { tool?: string }).tool)).toEqual(["cal__create_event"]);
+		expect(await answer(s.harness, after[0]?.key as string, "approve", web, "bearer")).toMatchObject({
+			answered: expect.anything(),
+		});
+		await until(async () => writes(fake).length === 1);
+		expect(writes(fake)).toHaveLength(1);
+	});
+
+	it("a tool the new definition makes a floor asks as the floor from the first moment, with nothing listed yet", async () => {
+		const fake = await startFakeMcp(SIGNED);
+		fakes.push(fake);
+		let s = await added(fake);
+		await drafted(s);
+		// the server is gone: nothing can be listed again, so what is in effect is the listing carried over
+		await fake.close();
+		fakes.splice(fakes.indexOf(fake), 1);
+		s = await restart(
+			s,
+			await shipping(fake, (d) => {
+				d.reads = ["whoami"];
+				d.needs = {};
+				d.floors = { money: ["send_payment"], account: ["create_event"] };
+			}),
+		);
+		const tools = await inForce(s);
+		expect(tools.create_event).toEqual({ read: false, floor: "account" });
+		// a read the build stopped naming is no read any more, carried over or not
+		expect(tools.list_events).toEqual({ read: false });
+		const [waiting] = await openWaits(s.harness);
+		expect((waiting?.ask as { tool?: string } | undefined)?.tool).toBe("cal__create_event");
+	});
+
+	it("the listing carried over is listed again as a changed version: shapes and notes as given then, a new tool waits", async () => {
+		const fake = await startFakeMcp(SIGNED);
+		fakes.push(fake);
+		fake.instructions = "Old notes.";
+		let s = await added(fake);
+		expect((await s.view()).notes).toBe("Old notes.");
+		fake.tools = [
+			...fake.tools.map((tool) =>
+				tool.name === "create_event" ? { ...tool, description: "Put an event in the calendar, now better." } : tool,
+			),
+			{ name: "lone_tool", description: "Added alone", inputSchema: { type: "object", properties: {} } },
+		];
+		fake.instructions = "New notes.";
+		s = await restart(
+			s,
+			await shipping(fake, (d) => {
+				d.about = "A newer build";
+			}),
+		);
+		await until(async () => (await s.harness.snapshot(Connected, context))?.connections.cal?.due === undefined);
+		expect((await s.tool("create_event"))?.description).toBe("Put an event in the calendar, now better.");
+		expect((await s.view()).notes).toBe("New notes.");
+		expect((await s.tool("lone_tool"))?.waiting).toBe(true);
+		expect((await s.harness.snapshot(Connected, context))?.off.cal__lone_tool).toBe("waiting");
+	});
+
+	it("a draft approved after the owner Allows an unrelated read runs: an overlay is no change to a write", async () => {
+		const fake = await startFakeMcp(SIGNED);
+		fakes.push(fake);
+		fake.tools = [
+			...fake.tools,
+			{ name: "ping_stuff", description: "pings", inputSchema: { type: "object", properties: {} } },
+		];
+		const s = await added(fake);
+		const wait = await drafted(s);
+		const before = await s.version();
+		await s.set({ ping_stuff: "allow" });
+		expect(await s.version()).not.toBe(before);
+		expect(await answer(s.harness, wait.key, "approve", web, "bearer")).toMatchObject({ answered: expect.anything() });
+		await until(async () => writes(fake).length === 1);
+		expect(writes(fake)).toHaveLength(1);
+	});
+
+	it("a held write is still refused when the definition itself changed under it", async () => {
+		const fake = await startFakeMcp(SIGNED);
+		fakes.push(fake);
+		const s = await added(fake);
+		const wait = await drafted(s);
+		// a release mid-run, as a test can make one: the base version moved, not an overlay
+		await define(
+			s,
+			"cal",
+			definition(fake, (d) => {
+				d.about = "Another build";
+			}),
+		);
+		expect(await answer(s.harness, wait.key, "approve", web, "bearer")).toMatchObject({ answered: expect.anything() });
+		await new Promise((resolve) => setTimeout(resolve, 300));
+		expect(writes(fake)).toEqual([]);
 	});
 });

@@ -537,6 +537,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			agentChanged: core.agentChanged,
 			...(options.shipped === undefined ? {} : { shipped: options.shipped }),
 		});
+		await capabilities.carryListings();
 		await capabilities.install();
 		stopListing = capabilities.close;
 		reader = capabilities;

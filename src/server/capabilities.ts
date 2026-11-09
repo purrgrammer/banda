@@ -60,6 +60,7 @@ import {
 	credentialed,
 	credentialsOf,
 	defaultAccountLabel,
+	definitionVersion,
 	fits,
 	givenFor,
 	grantedScopes,
@@ -608,7 +609,13 @@ export function openCapabilities(options: CapabilityOptions) {
 	/** The commit check every call makes: the tool is in effect now. */
 	const allowed = (name: string, connection?: Connection & { version: string }) => async (tx: Tx) => {
 		if (!(await inEffect(tx, name))) return "the owner switched it off or took it back";
-		if (connection !== undefined && (await acceptedConnection(tx, connection.name))?.version !== connection.version)
+		// the base version: a read the owner allows moves the whole version, yet changes no write; what is in effect now
+		// is read just above and by `floorNow` in the commit that asks
+		if (
+			connection !== undefined &&
+			definitionVersion((await acceptedConnection(tx, connection.name))?.version) !==
+				definitionVersion(connection.version)
+		)
 			return "the connection changed since this tool was offered; use its current tools";
 		return undefined;
 	};
@@ -1135,9 +1142,11 @@ export function openCapabilities(options: CapabilityOptions) {
 			// reads are no definition: they do not switch a waiting tool on
 			const definition = definitions.get(name);
 			const named = definition === undefined ? undefined : namedTools(definition);
+			// a listing carried over from an earlier build is due: this one counts as a new version, not a relisting
+			const same = was?.version === version && was.due !== true;
 			const fresh = Object.keys(proposed).filter((tool) =>
 				named === undefined
-					? was?.version === version && !Object.hasOwn(was.tools, tool)
+					? same && !Object.hasOwn(was.tools, tool)
 					: !named.has(tool) && (was === undefined || !Object.hasOwn(was.tools, tool)),
 			);
 			// A server's relisting may remove a tool, but never rewrite the prompt authority of an existing one.
@@ -1146,12 +1155,11 @@ export function openCapabilities(options: CapabilityOptions) {
 				: Object.fromEntries(
 						Object.entries(proposed).map(([tool, shape]) => [
 							tool,
-							(was?.version === version && Object.hasOwn(was.tools, tool) ? was.tools[tool] : undefined) ?? shape,
+							(same && Object.hasOwn(was.tools, tool) ? was.tools[tool] : undefined) ?? shape,
 						]),
 					);
 			// notes too are kept as first listed for this file, on the tool chosen then to carry them: a relisting never
 			// rewrites what the model was told, and switching other tools never moves them from one description to another
-			const same = was?.version === version;
 			const kept = same ? was.notes : notes;
 			const on = same ? was.notesOn : Object.keys(tools).sort()[0];
 			doc.connections[name] = {
@@ -1174,7 +1182,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				listed.map((tool) => toolName(name, tool.name)).filter((tool) => doc.off[tool] === undefined),
 				name,
 			);
-			if (was?.version !== version) await log(tx, { at: now(), what: `Connected to ${accepted.service}` });
+			if (!same) await log(tx, { at: now(), what: `Connected to ${accepted.service}` });
 			return true;
 		}, ctx);
 		await install(ctx);
@@ -1237,14 +1245,34 @@ export function openCapabilities(options: CapabilityOptions) {
 		}
 	}
 
-	/** Whether connection `name` has tools that need listing again: it is remote, and listed for no version or another. */
+	/** Whether connection `name` has tools that need listing again: remote, and listed for no version, another, or carried over. */
 	const listingDue = (name: string, ctx: Context) =>
 		harness.commit(async (tx) => {
 			const connection = await acceptedConnection(tx, name);
-			return (
-				connection?.url !== undefined && (await tx.doc(Connected)).connections[name]?.version !== connection.version
-			);
+			const listing = (await tx.doc(Connected)).connections[name];
+			return connection?.url !== undefined && (listing?.version !== connection.version || listing.due === true);
 		}, ctx);
+
+	/**
+	 * At start, before the first install and before anything resumes: a listing an earlier build took for a definition this
+	 * build ships differently moves to the version in effect, due to be listed again, so a draft waiting on one of its
+	 * tools can still finish. In one commit. Only the listing is carried: what each tool may do is read from the
+	 * definition in effect, so a tool that is a write or on the floor now asks as one from the first moment. A server
+	 * record is left alone: its version moves only by the owner, and a listing for an older record is no release's.
+	 */
+	async function carryListings(ctx: Context = context): Promise<void> {
+		await harness.commit(async (tx) => {
+			const doc = await tx.doc(Connected);
+			for (const name of await acceptedNames(tx)) {
+				if (!definitions.has(name)) continue;
+				const connection = await acceptedConnection(tx, name);
+				const listing = doc.connections[name];
+				if (connection === undefined || listing === undefined || listing.version === connection.version) continue;
+				listing.version = connection.version;
+				listing.due = true;
+			}
+		}, ctx);
+	}
 
 	/**
 	 * A due listing that failed is tried again on its own, a little later each time up to the last delay, until it is
@@ -1299,7 +1327,9 @@ export function openCapabilities(options: CapabilityOptions) {
 				// the model with no version moving
 				if (
 					connection?.url !== undefined &&
-					(connections[name]?.version !== connection.version || connection.api !== undefined)
+					(connections[name]?.version !== connection.version ||
+						connections[name]?.due === true ||
+						connection.api !== undefined)
 				)
 					names.push(name);
 			}
@@ -1996,10 +2026,10 @@ export function openCapabilities(options: CapabilityOptions) {
 			...(expected === undefined || expected === account ? {} : { expected }),
 			at: now(),
 		};
-		const listed = await harness.commit(
-			async (tx) => (await tx.doc(Connected)).connections[name]?.version === connection.version,
-			ctx,
-		);
+		const listed = await harness.commit(async (tx) => {
+			const listing = (await tx.doc(Connected)).connections[name];
+			return listing?.version === connection.version && listing.due !== true;
+		}, ctx);
 		if (!listed) await connect(name, ctx);
 		// An agent's file may need the connection added. A refusal leaves the account signed in, but must not say the
 		// agent can use it; the connect card will offer the account switch and show why it was refused.
@@ -2794,6 +2824,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		readAttachment,
 		listedSchema,
 		shipped,
+		carryListings,
 		install,
 		reconcile,
 		view,

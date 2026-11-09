@@ -1313,7 +1313,10 @@ describe("connections banda ships", () => {
 			}),
 			{ fetch: flaky, retryDelays: [1, 2] },
 		);
-		await until(async () => (await cal(s))?.state === "connected" && (await switches(s)).list_events === true);
+		// the listing carried over keeps it connected; what this waits for is the one listed again
+		await until(async () => (await s.harness.snapshot(Connected, context))?.connections.cal?.due === undefined);
+		expect((await cal(s))?.state).toBe("connected");
+		expect((await switches(s)).list_events).toBe(true);
 		expect(s.offered()).toContain("cal__list_events");
 		expect(failing).toBe(0);
 		const settled = attempts;
