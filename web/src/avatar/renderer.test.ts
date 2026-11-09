@@ -5,16 +5,23 @@ import { AvatarRenderer } from "./Renderer.tsx";
 
 const hooks = vi.hoisted(() => ({
 	host: { innerHTML: "", textContent: "" },
+	refs: [] as { current: unknown }[],
+	nextRef: 0,
 	cleanup: undefined as undefined | (() => void),
 }));
 vi.mock("react", async (original) => ({
 	...(await original<typeof import("react")>()),
-	useRef: () => ({ current: hooks.host }),
-	useEffect: (effect: () => () => void) => {
-		hooks.cleanup = effect();
+	// React's refs live across renders: the component's two, in call order
+	useRef: (initial: unknown) => {
+		const at = hooks.nextRef++ % 2;
+		hooks.refs[at] ??= { current: initial === null ? hooks.host : initial };
+		return hooks.refs[at];
+	},
+	useEffect: (effect: () => (() => void) | undefined) => {
+		hooks.cleanup = effect() ?? hooks.cleanup;
 	},
 }));
-vi.mock("open-bot-avatar/dom", () => ({ mountAvatar: vi.fn(() => ({ destroy: vi.fn() })) }));
+vi.mock("open-bot-avatar/dom", () => ({ mountAvatar: vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() })) }));
 
 const face = defaultAvatarFace();
 let visibility: (entries: { isIntersecting: boolean }[]) => void;
@@ -23,6 +30,8 @@ const disconnect = vi.fn();
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	hooks.refs = [];
+	hooks.nextRef = 0;
 	page = Object.assign(new EventTarget(), { hidden: false });
 	vi.stubGlobal("document", page);
 	vi.stubGlobal(
@@ -71,6 +80,17 @@ describe("avatar rendering lifecycle", () => {
 		expect(mountAvatar).toHaveBeenCalledTimes(2);
 		visibility([{ isIntersecting: false }]);
 		expect(vi.mocked(mountAvatar).mock.results[1]?.value.destroy).toHaveBeenCalledTimes(1);
+	});
+
+	it("sends a change of state to the scene on screen instead of mounting the face again", () => {
+		AvatarRenderer({ ...face, size: 40, animated: true, mood: "thinking" });
+		visibility([{ isIntersecting: true }]);
+		const mounted = vi.mocked(mountAvatar).mock.results[0]?.value;
+		AvatarRenderer({ ...face, size: 40, animated: true, mood: "happy" });
+		AvatarRenderer({ ...face, size: 40, animated: false, mood: "idle" });
+		expect(mountAvatar).toHaveBeenCalledTimes(1);
+		expect(mounted?.destroy).not.toHaveBeenCalled();
+		expect(mounted?.update).toHaveBeenCalledTimes(2);
 	});
 
 	it("falls back for malformed raw geometry without breaking the chat or retrying it on visibility", () => {

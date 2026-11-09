@@ -7,13 +7,41 @@ import { AvatarChoices } from "./Choices.tsx";
 import { COLORS, customColors, SHAPES } from "./choices.ts";
 
 vi.mock("./Renderer.tsx", () => ({
-	AvatarRenderer: ({ color, animated, size }: { color: string; animated: boolean; size: number }) =>
-		createElement("span", { "data-color": color, "data-animated": String(animated), "data-size": size }),
+	AvatarRenderer: ({
+		color,
+		animated,
+		size,
+		mood,
+	}: {
+		color: string;
+		animated: boolean;
+		size: number;
+		mood?: string;
+	}) =>
+		createElement("span", {
+			"data-color": color,
+			"data-animated": String(animated),
+			"data-size": size,
+			"data-mood": mood,
+		}),
 }));
 
 const face = { ...defaultAvatarFace(), color: "#123456" };
 
 describe("avatar identity UI", () => {
+	it("moves the face for working and happy, and names only what the owner must know", () => {
+		const html = (state: "idle" | "working" | "happy" | "waiting") =>
+			renderToStaticMarkup(createElement(Face, { face, name: "Otto", state }));
+		expect(html("working")).toContain('data-mood="thinking"');
+		expect(html("working")).toContain('data-animated="true"');
+		expect(html("happy")).toContain('data-mood="happy"');
+		expect(html("happy")).toContain('data-animated="true"');
+		expect(html("happy")).toContain('aria-label="Otto"');
+		expect(html("idle")).toContain('data-mood="idle"');
+		expect(html("idle")).toContain('data-animated="false"');
+		expect(html("waiting")).toContain('data-animated="false"');
+	});
+
 	it("draws every real face from its colour at all five sizes, with accessible status", () => {
 		for (const [size, pixels] of [
 			["mention", 20],

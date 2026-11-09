@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { Item } from "../src/server/api.ts";
-import { type Live, tryAgainAfter, view } from "../web/src/lib/chat.ts";
+import { answeredWell, type Live, tryAgainAfter, view } from "../web/src/lib/chat.ts";
 
 const IDLE: Live = { busy: false, running: [], thinking: false };
 const asked: Item = { id: 1, role: "user", text: "Find a train" };
@@ -76,5 +76,23 @@ describe("Try again", () => {
 		expect(tryAgainAfter(view(questioned, [], IDLE))).toBeUndefined();
 		const edited: Item = { id: 1, role: "user", text: "I changed the plan", artifact: { id: "a1", n: 2 } };
 		expect(tryAgainAfter(view([edited, notes], [], IDLE))).toBeUndefined();
+	});
+});
+
+describe("A reply that finished well", () => {
+	const delivered: Item[] = [asked, message(2, "m1"), result(3, "m1", "delivered", false)];
+	it("is the newest thing shown, delivered", () => {
+		expect(answeredWell(view(delivered, [], IDLE))).toBe(true);
+	});
+	it("is not a failure, a stop, an undelivered message or a run that only took notes", () => {
+		expect(answeredWell(view([asked, failed], [], IDLE))).toBe(false);
+		expect(answeredWell(view([...delivered, { ...failed, id: 4 }], [], IDLE))).toBe(false);
+		expect(answeredWell(view([asked, { ...failed, error: "interrupted" }], [], IDLE))).toBe(false);
+		expect(
+			answeredWell(
+				view([asked, message(2, "m1"), result(3, "m1", "Not delivered: the connection closed", true)], [], IDLE),
+			),
+		).toBe(false);
+		expect(answeredWell(view([asked, notes], [], IDLE))).toBe(false);
 	});
 });
