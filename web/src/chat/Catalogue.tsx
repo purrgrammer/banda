@@ -1,12 +1,10 @@
 /**
  * Connections: what the band can work with, one tile per service. Reached from the band's foot and from Settings, so
- * the owner can connect before any agent needs it. A service shows its accounts once signed in; one not shipped yet
- * says so, and is not a button. What waits on the owner (an account to sign in to again, a server not reached) shows on
- * its tile with the band menu's dot.
+ * the owner can connect before any agent needs it. A service shows its accounts once signed in. What waits on the owner
+ * (an account to sign in to again, a server not reached) shows on its tile with the band menu's dot.
  */
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/cn";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
 
 export type Service = {
@@ -15,8 +13,8 @@ export type Service = {
 	readonly url?: string | undefined;
 	/** What it lets the band do, in a few words. */
 	readonly does: string;
-	/** Accounts signed in to it; undefined when the service is not shipped yet. */
-	readonly accounts?: readonly string[] | undefined;
+	/** Accounts signed in to it. */
+	readonly accounts: readonly string[];
 	readonly managed?: boolean;
 	/** Accounts whose sign-in no longer fits the connection: the owner signs in again. */
 	readonly stale?: readonly string[] | undefined;
@@ -33,7 +31,7 @@ export function Catalogue({
 	extra = [],
 }: {
 	services: readonly Service[];
-	/** Whole cards of their own in the grid (a harness on this computer), after what can be connected, before what is coming. */
+	/** Whole cards of their own in the grid (a harness on this computer), after what can be connected. */
 	extra?: readonly { readonly key: string; readonly card: ReactNode }[];
 	onManage?: (id: string) => void;
 	/** The connect dialog for a service, opened by its tile's Connect, Sign in again, Manage access or Add account. */
@@ -42,11 +40,7 @@ export function Catalogue({
 	const [open, setOpen] = useState<string | undefined>(undefined);
 	return (
 		<ul className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2">
-			{[
-				...services.filter((each) => each.accounts !== undefined),
-				...extra,
-				...services.filter((each) => each.accounts === undefined),
-			].map((item) => {
+			{[...services, ...extra].map((item) => {
 				if ("card" in item)
 					return (
 						// a card of its own fills its cell: every tile in the grid the same size
@@ -55,20 +49,16 @@ export function Catalogue({
 						</li>
 					);
 				const service = item;
-				const soon = service.accounts === undefined;
-				const stale = soon ? [] : (service.stale ?? []);
-				const problem = soon ? undefined : service.problem;
+				const stale = service.stale ?? [];
+				const problem = service.problem;
 				return (
-					<li
-						key={service.id}
-						className={cn("flex flex-col gap-3 rounded-tile border border-line-soft p-4", soon && "bg-paper-2")}
-					>
+					<li key={service.id} className="flex flex-col gap-3 rounded-tile border border-line-soft p-4">
 						<span className="flex items-center gap-3">
 							<span className="flex size-10 shrink-0 items-center justify-center rounded-field bg-paper-3">
 								<ConnectionIcon connection={service.id} url={service.url} className="size-5" />
 							</span>
 							<span className="flex min-w-0 flex-col">
-								<span className={cn("text-ui font-semibold", soon ? "text-ink-2" : "text-ink")}>{service.name}</span>
+								<span className="text-ui font-semibold text-ink">{service.name}</span>
 								<span className="text-meta text-ink-2">{service.does}</span>
 							</span>
 						</span>
@@ -81,9 +71,7 @@ export function Catalogue({
 								</span>
 							</span>
 						) : null}
-						{soon ? (
-							<span className="text-meta text-ink-2">Coming soon</span>
-						) : service.managed ? (
+						{service.managed ? (
 							<>
 								<span className="text-meta text-ink-2">{service.accounts.join(", ")}</span>
 								<Button variant="outline" size="sm" className="self-start" onClick={() => onManage?.(service.id)}>

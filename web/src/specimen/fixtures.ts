@@ -372,10 +372,7 @@ export const SERVICES: readonly Service[] = [
 		accounts: ["@bandarra"],
 		problem: "The server did not answer",
 	},
-	{ id: "calendar", name: "Google Calendar", does: "Your days and invites" },
-	{ id: "linear", name: "Linear", does: "Issues and cycles" },
-	{ id: "slack", name: "Slack", does: "Channels and messages" },
-	{ id: "notion", name: "Notion", does: "Pages and databases" },
+	{ id: "calendar", name: "Google Calendar", does: "Your days and invites", accounts: [] },
 ];
 
 /** A provider's ways to sign in, as the app words them. */
