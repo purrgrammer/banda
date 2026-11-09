@@ -49,7 +49,10 @@ for where a definition lives. That they are Markdown too is a separate cleanup, 
 ## What PR #28 already does
 
 PR #28 ("agents earn trust per agent; connections only narrow") is open and moves the same way, stopping short of
-removing the file. This design lands after it and names its shapes. Read on its branch:
+removing the file. It is to be reworked, so this design does not wait for it: it takes from its branch what its
+slices need (the owner's per-tool setting in the store and its check when a call starts, the tool list and its
+review, `groups` as data of a definition) and leaves the rest there (trust per agent, grains, earned permissions,
+the mark of foreign content, and banda's guesses for a server that says nothing of its tools). Read on its branch:
 
 - **A shipped connection already follows banda's version.** At each start a file the store says is banda's
   (`Accepted.shipped`) is written again as shipped now, with the owner's scopes, accounts and switches kept
@@ -67,7 +70,8 @@ removing the file. This design lands after it and names its shapes. Read on its 
   is added (`ToolSettings`, `ToolReview` in web/src/chat/ToolKinds.tsx). Slice 4 completes that screen; it does not
   build another.
 
-Where the two disagree, on the file's reads and groups, this is the later word.
+Where the two disagree, on the file's reads and groups, this is the later word, and the rework of PR #28 builds on
+what lands here.
 
 ## The design
 
@@ -205,8 +209,8 @@ and what following each does, which is new in the API, since the kinds and their
 The review on adding and the details afterwards are one component, so the two cannot say different things.
 Acceptance: every connection of a forked home opens its details at both widths; a tool's setting, an access choice
 and an agent's switch changed there hold at the next call; a kind's line says what following it wakes for and what
-it only tells; every state in the specimen, light and dark. It depends on PR #28, not on slices 1 to 3, so it can
-land as soon as that does.
+it only tells; every state in the specimen, light and dark. It is built after slices 1 and 2, so what it changes is
+the store's from the first day.
 
 Pre-release rules apply: stored shapes change in place, with no migration, and a home made by an earlier build need
 not open.
@@ -223,9 +227,9 @@ not open.
 - [ ] Slice 2: the owner's accepted reads and groups, and a server added by address, in the store; no text rewriting
 - [ ] Slice 3: the box's folders, a box's change to a connection, and agent-built connections and tools deleted;
   DESIGN.md, AGENTS.md and the status doc rewritten
-- [ ] Slice 4: a connection's details, to check and to change, on PR #28's tool list; lands after PR #28
+- [ ] Slice 4: a connection's details, to check and to change, on the tool list taken from PR #28
 - [ ] Slack lands as a `.md` file under today's convention and moves with the others in slice 1, `pages` with it;
-  its reaction permission, which binds a channel, becomes a `place` grain once PR #28 is in
+  its reaction permission, which binds a channel, becomes a `place` grain when grains land with the rework of PR #28
 - [ ] Revisit connections and tools an owner or an agent defines themselves. They are out of scope here and their
   code goes in slice 3; DESIGN.md "Open" keeps the line. A file an agent writes and the owner accepts is the shape to
   start from, beside the shipped definitions, passing the same schema
