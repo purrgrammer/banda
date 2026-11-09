@@ -41,6 +41,7 @@ export async function openConnected({
 	install,
 	shipped,
 	fetch: fetcher,
+	retryDelays,
 	registry = createRegistry(),
 }: {
 	home: string;
@@ -56,6 +57,8 @@ export async function openConnected({
 	shipped?: string;
 	/** How the daemon reaches services, when a test fakes one that is not on this machine (Google's). */
 	fetch?: typeof fetch;
+	/** How long before a failed listing is tried again, when a test does not want to wait. */
+	retryDelays?: readonly number[];
 }) {
 	const box = openBox(hostBox(home), () => {});
 	const faux = fauxProvider();
@@ -103,6 +106,7 @@ export async function openConnected({
 		...(fault === undefined ? {} : { fault }),
 		...(shipped === undefined ? {} : { shipped }),
 		...(fetcher === undefined ? {} : { fetch: fetcher }),
+		...(retryDelays === undefined ? {} : { retryDelays }),
 		// the fake servers are on this machine: the tests probe them as they are
 		probe: fetch,
 		agentChanged: core.agentChanged,
@@ -130,6 +134,7 @@ export async function openConnected({
 				.map(({ tool }) => tool.name)
 				.sort(),
 		close: async () => {
+			capabilities.close();
 			box.close();
 			await harness.close(context);
 		},

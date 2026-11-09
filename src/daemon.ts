@@ -176,6 +176,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 	const ended = new Promise<{ failed: boolean }>((resolve) => (stopped = resolve));
 	const gateways = new Map<string, Gateway>();
 	let areas: readonly Area[] = [];
+	let stopListing: (() => void) | undefined;
 	const close = () =>
 		(stop ??= (async () => {
 			const step = async (what: string, run: () => unknown) => {
@@ -212,6 +213,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						}),
 				);
 			}
+			if (stopListing !== undefined) await step("listings", async () => stopListing?.());
 			// the writes the proxy sent under a host permission are logged before the store goes
 			const sweepingLast = sweepSentNow;
 			if (sweepingLast !== undefined) await step("sent", sweepingLast);
@@ -539,6 +541,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			...(options.shipped === undefined ? {} : { shipped: options.shipped }),
 		});
 		await capabilities.install();
+		stopListing = capabilities.close;
 		reader = capabilities;
 		const objects = openObjects({ harness: open, capabilities, blobs });
 		// the lead proposes a new agent by writing its before-file into the box; the owner reviews and accepts it in Agents

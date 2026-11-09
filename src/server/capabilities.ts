@@ -12,6 +12,7 @@
  */
 import { fileURLToPath } from "node:url";
 import type { Context } from "@earendil-works/chord";
+import { withAbortSignal } from "@earendil-works/chord/context";
 import {
 	AgentDoc,
 	type ConversationId,
@@ -179,6 +180,8 @@ export type CapabilityOptions = {
 	readonly shipped?: string;
 	/** Apply what is in effect to agent `id`'s chats, in the commit that changed it: its tools, as its accounts allow. */
 	readonly agentChanged?: AgentChanged;
+	/** How long after a listing failed it is tried again, in ms; the last repeats until it is listed, unless a test says. */
+	readonly retryDelays?: readonly number[];
 };
 
 /** A sign-in that just finished, for the card that started it: whom it signed in as, for which agent, and when. */
@@ -226,6 +229,25 @@ export const SHIPPED = fileURLToPath(new URL("../../shipped/connections/", impor
 
 /** The extension the tools are installed as; replaced whole whenever what is in effect changes. */
 const EXTENSION = "banda.capabilities";
+
+/** How long after a due listing failed it is asked again; the last repeats. Bounded so a server gone for good is cheap. */
+const LISTING_RETRIES = [15_000, 60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000];
+
+/** Wait `ms`, or until `signal` ends. */
+const pause = (ms: number, signal: AbortSignal) =>
+	new Promise<void>((resolve) => {
+		if (signal.aborted) return resolve();
+		const timer = setTimeout(resolve, ms);
+		timer.unref?.();
+		signal.addEventListener(
+			"abort",
+			() => {
+				clearTimeout(timer);
+				resolve();
+			},
+			{ once: true },
+		);
+	});
 
 /** How long a tool the agent built may run, in seconds, and what of its output is kept. */
 const OWN_SECONDS = 120;
@@ -346,6 +368,9 @@ export function openCapabilities(options: CapabilityOptions) {
 	};
 	/** What a server in the box listed, by the hash of its file: listing it means running it. */
 	const boxListings = new Map<string, readonly McpTool[] | { readonly failed: string }>();
+	/** The listings being tried again on their own, and what ends that at shutdown. */
+	const retrying = new Set<string>();
+	const closing = new AbortController();
 
 	// ---- calling servers
 
@@ -1276,18 +1301,21 @@ export function openCapabilities(options: CapabilityOptions) {
 		return undefined;
 	}
 
-	/** List remote connection `name`'s tools now, with an account's credentials, and keep them; a failure is its problem. */
-	async function connect(name: string, ctx: Context = context): Promise<void> {
+	/**
+	 * List remote connection `name`'s tools now, with an account's credentials, and keep them; a failure is its problem,
+	 * and it is tried again on its own while still due. Whether it failed.
+	 */
+	async function connect(name: string, ctx: Context = context): Promise<boolean> {
 		const connection = await harness.commit((tx) => acceptedConnection(tx, name), ctx);
-		if (connection === undefined || connection.url === undefined) return;
+		if (connection === undefined || connection.url === undefined) return false;
 		const account = await listingAccount(connection, ctx);
-		if (signsIn(connection) && account === undefined) return;
+		if (signsIn(connection) && account === undefined) return false;
 		if (connection.api !== undefined) {
 			fault("connect:listed");
 			await keepListing(name, connection.sha, REST_APIS[connection.api].tools, ctx, undefined, new Set(), true);
 			problems.delete(name);
 			options.changed?.();
-			return;
+			return false;
 		}
 		const used = new Set<string>();
 		try {
@@ -1302,13 +1330,48 @@ export function openCapabilities(options: CapabilityOptions) {
 			fault("connect:listed");
 			problems.delete(name);
 			await keepListing(name, connection.sha, listed.tools, ctx, listed.instructions, used);
+			return false;
 		} catch (error) {
 			problems.set(
 				name,
 				scrub(error instanceof Error ? error.message : String(error), [...used, ...(await secrets(home))]),
 			);
 			options.changed?.();
+			retryListing(name);
+			return true;
 		}
+	}
+
+	/** Whether connection `name` has tools that need listing again: it is remote, and listed for no version or another. */
+	const listingDue = (name: string, ctx: Context) =>
+		harness.commit(async (tx) => {
+			const connection = await acceptedConnection(tx, name);
+			return connection?.url !== undefined && (await tx.doc(Connected)).connections[name]?.sha !== connection.sha;
+		}, ctx);
+
+	/**
+	 * A due listing that failed is tried again on its own, a little later each time up to the last delay, until it is
+	 * listed or no longer due. Nothing waits for it: start goes on as it did, and at shutdown the pause ends and so does
+	 * this.
+	 */
+	function retryListing(name: string): void {
+		if (retrying.has(name) || closing.signal.aborted) return;
+		retrying.add(name);
+		const delays = options.retryDelays ?? LISTING_RETRIES;
+		const ctx = withAbortSignal(closing.signal, context);
+		void (async () => {
+			try {
+				for (let attempt = 0; !closing.signal.aborted; attempt++) {
+					await pause(delays[Math.min(attempt, delays.length - 1)] as number, closing.signal);
+					if (closing.signal.aborted || !(await listingDue(name, ctx))) return;
+					if (!(await connect(name, ctx))) return;
+				}
+			} catch (error) {
+				if (!closing.signal.aborted) options.log?.(`listing ${name} again: ${(error as Error).message}`);
+			} finally {
+				retrying.delete(name);
+			}
+		})();
 	}
 
 	/**
@@ -1346,6 +1409,11 @@ export function openCapabilities(options: CapabilityOptions) {
 			return names;
 		}, ctx);
 		for (const name of due) await connect(name, ctx);
+	}
+
+	/** The daemon is stopping: a due listing waiting to be tried again is not. */
+	function close(): void {
+		closing.abort();
 	}
 
 	/**
@@ -3100,6 +3168,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		addMcp,
 		refresh: connect,
 		trustReads,
+		close,
 		connect,
 		signOut,
 		labelAccount,

@@ -1229,10 +1229,14 @@ describe("connections banda ships", () => {
 		return dir;
 	};
 	/** The daemon started again on the same home, as a build that ships what `shipped` holds. */
-	const restart = async (s: Awaited<ReturnType<typeof open>>, shipped: string) => {
+	const restart = async (
+		s: Awaited<ReturnType<typeof open>>,
+		shipped: string,
+		more: { fetch?: typeof fetch; retryDelays?: readonly number[] } = {},
+	) => {
 		opened.splice(opened.indexOf(s), 1);
 		await s.close();
-		const again = await openConnected({ home: s.home, respond: s.model.respond as never, shipped });
+		const again = await openConnected({ home: s.home, respond: s.model.respond as never, shipped, ...more });
 		opened.push(again);
 		return { ...s, ...again };
 	};
@@ -1386,6 +1390,160 @@ describe("connections banda ships", () => {
 		});
 		expect(s.offered()).toContain("cal__named_by_newer");
 		expect(s.offered()).not.toContain("cal__added_before_change");
+	});
+
+	it("a tool waiting off comes on when a definition names it; the owner's own off stays, and the owner settles one waiting", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		let s = await open(fake, await shipping(fake));
+		await s.capabilities.addShipped("cal");
+		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
+		// both listed alone, so both wait; the owner decides one of them
+		expect(await switches(s)).toMatchObject({ create_event: false, send_payment: false });
+		await s.capabilities.toggle("cal__send_payment", false);
+		const off = (await s.harness.snapshot(Connected, context))?.off;
+		expect(off?.cal__create_event).toBe("waiting");
+		expect(off?.cal__send_payment).toBe("owner");
+		s = await restart(
+			s,
+			await shipping(fake, (definition) => {
+				definition.reads = ["whoami", "list_events", "create_event", "send_payment"];
+			}),
+		);
+		expect(await switches(s)).toMatchObject({ create_event: true, send_payment: false });
+		expect((await s.harness.snapshot(Connected, context))?.off.cal__send_payment).toBe("owner");
+		// the owner switches a waiting tool on and it is settled: a later listing leaves it on though nothing names it
+		await s.capabilities.toggle("cal__create_event", true);
+		s = await restart(
+			s,
+			await shipping(fake, (definition) => {
+				definition.about = "changed again";
+			}),
+		);
+		expect(await switches(s)).toMatchObject({ create_event: true });
+	});
+
+	it("a listing due at start that fails is tried again on its own, backing off, and stops once listed or at shutdown", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		let s = await open(fake, await shipping(fake));
+		await s.capabilities.addShipped("cal");
+		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
+		let failing = 2;
+		let attempts = 0;
+		const flaky: typeof fetch = async (input, init) => {
+			if (String(input).startsWith(fake.url)) {
+				attempts++;
+				if (failing > 0) {
+					failing--;
+					throw new TypeError("network down");
+				}
+			}
+			return fetch(input, init);
+		};
+		s = await restart(
+			s,
+			await shipping(fake, (definition) => {
+				definition.about = "changed";
+			}),
+			{ fetch: flaky, retryDelays: [1, 2] },
+		);
+		await until(async () => (await cal(s))?.state === "connected" && (await switches(s)).list_events === true);
+		expect(s.offered()).toContain("cal__list_events");
+		expect(failing).toBe(0);
+		const settled = attempts;
+		await new Promise((resolve) => setTimeout(resolve, 60));
+		expect(attempts).toBe(settled);
+
+		// a server that stays down is asked again, and shutdown ends the asking
+		let down = 0;
+		const never: typeof fetch = async (input, init) => {
+			if (String(input).startsWith(fake.url)) {
+				down++;
+				throw new TypeError("network down");
+			}
+			return fetch(input, init);
+		};
+		s = await restart(
+			s,
+			await shipping(fake, (definition) => {
+				definition.about = "changed once more";
+			}),
+			{ fetch: never, retryDelays: [1] },
+		);
+		await until(async () => down >= 2);
+		opened.splice(opened.indexOf(s), 1);
+		await s.close();
+		const after = down;
+		await new Promise((resolve) => setTimeout(resolve, 60));
+		expect(down).toBe(after);
+	});
+
+	it("the owner allows a read on a shipped connection: an overlay in the store, kept across a newer build, with the version moving", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		let s = await open(fake, await shipping(fake));
+		await s.capabilities.addShipped("cal");
+		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
+		const version = (await cal(s))?.accepted?.sha as string;
+		const unchanged = readdirSync(join(s.box.workspace, "connections"));
+		await s.capabilities.trustReads("cal", ["create_event"], context, version);
+		expect((await cal(s))?.tools.find((t) => t.title === "create_event")?.kind).toBe("read");
+		expect((await cal(s))?.accepted?.connection?.reads).toContain("create_event");
+		expect((await cal(s))?.accepted?.sha).not.toBe(version);
+		expect((await cal(s))?.state).toBe("connected");
+		expect(readdirSync(join(s.box.workspace, "connections"))).toEqual(unchanged);
+		expect((await s.harness.snapshot(Connected, context))?.reads.cal?.tools).toEqual(["create_event"]);
+		const files = (await s.harness.snapshot(Accepted, context))?.files ?? {};
+		expect(Object.keys(files).filter((path) => path.startsWith("connections/"))).toEqual([]);
+		// two edits that cross: the second, on the version the first moved, is refused
+		await expect(s.capabilities.trustReads("cal", ["send_payment"], context, version)).rejects.toThrow(/change/);
+		await expect(s.capabilities.trustReads("cal", ["nope"], context)).rejects.toThrow(/lists no tool named nope/);
+		const allowed = (await cal(s))?.accepted?.sha as string;
+		s = await restart(
+			s,
+			await shipping(fake, (definition) => {
+				definition.about = "A newer build";
+			}),
+		);
+		// the definition moved on and the read stays; the listing is taken again for the new version
+		expect((await cal(s))?.tools.find((t) => t.title === "create_event")?.kind).toBe("read");
+		expect((await cal(s))?.accepted?.sha).not.toBe(allowed);
+		expect((await cal(s))?.accepted?.connection?.reads).toEqual(expect.arrayContaining(["whoami", "create_event"]));
+		// taking the read back leaves the definition's alone, under a version of its own
+		const before = (await cal(s))?.accepted?.sha as string;
+		await s.capabilities.trustReads("cal", [], context, before, true);
+		expect((await cal(s))?.tools.find((t) => t.title === "create_event")?.kind).toBe("write");
+		expect((await cal(s))?.accepted?.sha).not.toBe(before);
+		expect((await cal(s))?.accepted?.connection?.reads).toEqual(["whoami", "list_events"]);
+		expect((await s.harness.snapshot(Connected, context))?.reads.cal).toMatchObject({ tools: [] });
+		// removing the connection forgets what the owner allowed
+		await s.capabilities.remove("connections", "cal");
+		expect((await s.harness.snapshot(Connected, context))?.reads.cal).toBeUndefined();
+	});
+
+	it("a read the owner allowed never beats a floor: refused on one now, and a later definition's floor wins", async () => {
+		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+		fakes.push(fake);
+		let s = await open(
+			fake,
+			await shipping(fake, (definition) => {
+				definition.floors = { money: ["send_payment"] };
+			}),
+		);
+		await s.capabilities.addShipped("cal");
+		expect(await signInAsOwner(s.capabilities, "cal", { fake })).toEqual({ ok: true, words: "connected" });
+		await expect(s.capabilities.trustReads("cal", ["send_payment"])).rejects.toThrow(/asks every time/);
+		await s.capabilities.trustReads("cal", ["create_event"]);
+		s = await restart(
+			s,
+			await shipping(fake, (definition) => {
+				definition.floors = { money: ["send_payment", "create_event"] };
+			}),
+		);
+		const tool = (await cal(s))?.tools.find((t) => t.title === "create_event");
+		expect(tool?.kind).toBe("write");
+		expect(tool?.floor).toBe("money");
 	});
 
 	it("a file of its name in the box changes nothing: it is not offered, and cannot be accepted or declined", async () => {
