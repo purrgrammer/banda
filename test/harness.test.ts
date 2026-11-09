@@ -159,6 +159,7 @@ describe("a harness session", () => {
 		onTestFinished(() => rm(folder, { recursive: true, force: true }));
 		const woke: { chat: number; key: string; text: string; state: unknown }[] = [];
 		const made = defineHarnesses({
+			home,
 			definitions: () =>
 				new Map([
 					[
@@ -587,6 +588,7 @@ describe("a session's end", () => {
 		onTestFinished(() => rm(folder, { recursive: true, force: true }));
 		const woke: string[] = [];
 		const made = defineHarnesses({
+			home,
 			definitions: () =>
 				new Map([
 					[
@@ -639,6 +641,7 @@ describe("following up on a session", () => {
 		});
 		const woke: { key: string; text: string }[] = [];
 		const made = defineHarnesses({
+			home,
 			definitions: () =>
 				new Map([["fake", { name: "fake", service: "Fake Code", command: process.execPath, args: [FAKE] }]]),
 			followUp: async (_tx, _chat, input) => {

@@ -291,6 +291,7 @@ export const harnessesArea: AreaModule = {
 		// what banda knows how to run but this computer has not installed: offered with how to install it
 		missing = harnessPlatform() ? files.filter((file) => !shipped.some((one) => one.name === file.name)) : [];
 		harnesses = defineHarnesses({
+			home: boot.home,
 			definitions,
 			followUp: (tx, chat, input) => boot.core.followUp(tx, chat, input),
 			log: boot.log,

@@ -285,6 +285,8 @@ it("reopens current harness authority, continuation and process identities uncha
 		notes: [{ text: "check", at: 2, from: "agent" as const, call: "n1", sent: true as const }],
 		continues: 9,
 		continuation: "native" as const,
+		home: "/home/owner/.banda",
+		marker: "10-1-uuid",
 		groups: [{ id: 42, members: [{ pid: 42, started: 1234 }] }],
 	};
 	await before.commit(async (tx) => {
