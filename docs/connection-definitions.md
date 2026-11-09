@@ -1,8 +1,8 @@
 # Connection definitions
 
-Priority: **Medium**, after Slack lands. Implementation status lives in [Status](status.md). This is a design under
-owner review; nothing here is code yet, and it changes rules DESIGN.md states today, so those change only when a
-slice proves its part ([Delivery](delivery.md)). It belongs to [Connections](connections.md).
+Priority: **Medium**. Implementation status lives in [Status](status.md). This is a design under owner review;
+nothing here is code yet, and it changes rules DESIGN.md states today, so those change only when a slice proves its
+part ([Delivery](delivery.md)). It belongs to [Connections](connections.md).
 
 A connection's definition stops being a file in the owner's workspace. What banda ships is read from the release,
 typed and checked against a schema; what the owner chose in this home lives in the store. Adding a shipped connection
@@ -13,29 +13,37 @@ is a switch, and nothing is ever updated, because the definition in effect is th
 A connection file was designed as something an agent writes and the owner accepts (commit 24b894b3: "the agent grows
 what it can do only through 'before' files the owner accepts ... the body says why"). That use is gone: agent-built
 connections are out of scope and their code is open work to delete ([Connections](connections.md)). What remains
-is configuration, and the file shape now costs more than it gives. Observed in the code and in a home with ten
+is configuration, and the file shape now costs more than it gives. Read in the code and in a home with ten
 connections:
 
-- **No agent and no person writes one.** The five built-in ones (Gmail, Calendar, Contacts, Drive, Slack) and GitHub
-  are written by a release (GitHub's by `scripts/shipped-github.ts`). The ones an owner adds by address are written by
-  the daemon, and rewritten by the daemon when the owner says which tools only read.
+- **No agent and no person writes one.** The built-in ones (Gmail, Calendar, Contacts, Drive, and Slack on its own
+  branch) and GitHub are written by a release (GitHub's by `scripts/shipped-github.ts`). The ones an owner adds by
+  address are written by the daemon (`addMcp`, `addByAddress`), and rewritten by the daemon when the owner says which
+  tools only read (`trustReads`) or a server turns out to need no sign-in (`needsNoSignIn`).
 - **Its prose reaches nobody.** The body becomes `why`, whose only use is a field of the API's connection summary
-  that the app never reads. No prompt and no tool description carries it.
+  (`summaryOf`) that nothing in the app reads. No prompt and no tool description carries it. Some bodies hold
+  instructions written for an agent (Drive's) that the tools' own descriptions repeat.
+- **Nothing shows the file.** No screen shows its text, its path or its hash; the hash is a concurrency token and
+  nothing more. What the app says about a connection (the line under its name, the labels of its access choices) is
+  written a second time in the app's own code (`SERVICES` in Shell.tsx, `SCOPE_CHOICES` in web/src/lib/connect.ts).
 - **There are two copies, and a mechanism only to sync them.** Adding copies the shipped file into the workspace and
   accepts its hash; a newer release is then offered as Update, compared by text, refused while the box holds a change.
   AGENTS.md principle 1 names this: a mechanism that only syncs two stores means one of them should not exist.
-- **Code and data that must agree are versioned apart.** The parser already refuses a built-in file that disagrees
-  with the code registry on its client, address or scopes, and the kinds' fields, `follow` rules and `pages` name
-  fields the adapter of the same release produces. A home that added a connection on an earlier build runs the new
-  adapter against the old file until its owner clicks Update.
-- **State is kept by editing text.** Marking a tool as a read rewrites one line of the file and accepts the whole
-  again by hash.
+- **Code and data that must agree are versioned apart.** The parser refuses a built-in file that disagrees with the
+  code registry on its client, address or scopes, and the kinds' fields and `follow` rules name what the adapter of
+  the same release produces. A home that added a connection on an earlier build runs the new adapter against the old
+  file until its owner clicks Update.
+- **State is kept by editing text.** Marking a tool as a read rewrites one line of the file (`withList`) and accepts
+  the whole again by hash.
+- **The box can write there.** The workspace is one writable volume, `connections/` and `tools/` are created in it,
+  and the box's own tools tell the model they are folders whose changes wait for the owner. Eight places in the
+  daemon compare the box's copy with what was accepted.
 - **The rule for data already says otherwise.** AGENTS.md principle 2: a file that holds data, not prose, is `.json`
-  with a TypeBox schema, `.md` only where free-form text is the point. Connection files are data with hand-written
-  checks.
+  with a TypeBox schema, `.md` only where free-form text is the point. `band.json` and `auth/providers.json` follow
+  it; connection files are data behind about ninety hand-written checks.
 
-Harnesses already work the way this proposes: `shipped/harnesses/` is read at start (`shippedHarnesses`), never
-copied, and the store holds which the owner connected.
+Shipped harnesses are already read from `shipped/harnesses/` and never copied into a home; they are still Markdown,
+so they are the precedent for where a definition lives, not for its format.
 
 ## The design
 
@@ -43,82 +51,139 @@ copied, and the store holds which the owner connected.
 
 | What | Where it lives | Who writes it |
 |---|---|---|
-| A definition banda ships: the service, how it signs in, its scopes and choices, which tools read, floors, `needs`, the kinds with their cards, writes and how each is followed | `shipped/connections/<name>.json` in the release, checked against one TypeBox schema at start and in the tests | banda's release; GitHub's by its generator |
-| A server the owner added by its address: its name, address, how it signs in, the client and scopes they gave, and which tools they said only read | the store, one typed record per connection | the daemon, in the commit that takes the owner's choice |
+| A definition banda ships: the service, a line about it, how it signs in, its scopes and the access choices with their words, which tools read, floors, `needs`, the kinds with their cards, writes and how each is followed | `shipped/connections/<name>.json` in the release, checked against one TypeBox schema | banda's release; GitHub's by its generator |
+| A server the owner added by its address: its name, address, how it signs in, the client and scopes they gave, which tools they said only read, and its version | the store, one typed record per connection | the daemon, in the commit that takes the owner's choice |
 | What this home chose: which connections are on, their accounts and each account's access, agent switches, tool switches, the tools a server listed | the store, where the rest of it already is (`Connected`) | the daemon |
 
-- **The definition in effect is the one this banda ships.** The daemon reads the shipped definitions when it starts
-  and never again; a definition that does not pass its schema is left out and said in the log, and the tests refuse
-  to ship one. A release that changes Slack's cards or rules takes effect at that start, with the adapter it belongs
-  to. The owner updated banda themselves, so nothing asks them to take the change a second time.
+- **The definition in effect is the one this banda ships.** The daemon reads the shipped definitions once, when it
+  starts (today it reads the folder again on every view). One that does not pass its schema or its checks is left out
+  and said in the log, and the tests refuse to ship it. A release that changes a connection's cards or rules takes
+  effect at that start, with the adapter it belongs to. The owner updated banda themselves, so nothing asks them to
+  take the change a second time.
 - **Add is a switch.** Turning a shipped connection on records that it is on in this home, and the connect flow goes
   on as today: sign in, pick the agents. Removing it signs its accounts out and ends its watches in that commit, as
   today, and flips the fact off. There is no Update and no "it proposes a change to this connection".
 - **A server the owner added is a record.** The address, the sign-in kind found by discovery and the owner's read
   declarations are fields the daemon sets in a transaction; "which tools only read" is a set in the record, not a line
-  in a file. Every tool still asks first until the owner says it reads.
-- **The box holds no connection definitions.** Nothing in the workspace names how a connection works, so nothing the
-  box writes can change one, and the daemon no longer compares the box's copy with what was accepted. An agent's own
-  file still names the connections it may use, by name.
-- **What a definition says is typed once.** One schema for the frontmatter's fields, `needs` and the kinds (`reads`,
-  `pages`, `fields`, `writes`, `follow`); the checks `parseObjects` and `parseFollow` make that a schema cannot
-  express (a rule's path exists, a placeholder is named, at most one read has `pages`) stay as code after it. The
-  prose body goes: what an agent needs to know is in the tools' own descriptions, which is where every built-in
-  adapter already says it, and the owner's one line about a connection (`about`) is a field shown in the connect
-  dialog.
-- **The owner can still look.** Details on a connection shows what the definition says in the owner's words: its
-  tools and which read, what each access choice adds, the kinds it draws and what following each does. This replaces
-  opening a file nobody opened; GitHub's is 1,413 lines.
+  in a file. Every tool still asks first until the owner says it reads. The two paths that add one today (one writes
+  `ask: always`, one does not) become one. The record holds no secret: a key or tokens stay with the account under
+  `auth/connections/`.
+- **The box holds no connection definitions.** Nothing in the workspace says how a connection works, so nothing the
+  box writes can change one: the folders are not made, the box's tools stop naming them, and the daemon stops
+  comparing copies. An agent's own file still names the connections it may use, by name, which was never checked
+  against a file.
+- **One version per definition.** A shipped definition's version is the hash of what was read at start; a record's is
+  a counter that moves with each change to it. Everything that binds to the accepted file's hash today binds to that
+  version: the tools a server listed, the stamp on an object's reading, the check each call makes before it runs, and
+  the token the app sends back so two edits do not cross.
+- **What a definition says is typed once.** One schema for the fields, `needs` and the kinds (`reads`, `fields`,
+  `writes`, `follow`, and what later connections add). It carries the closed key sets, enums, patterns and caps that
+  about half of today's checks spell out by hand. What a schema cannot say stays code after it: an address or a
+  command but not both, a built-in's client and scopes within its registry's ceiling, a read that is not also on a
+  floor, placeholders that agree across a kind's templates, a field's path that starts at one of its reads, and the
+  grammars of a condition and a period. It is read as `band.json` is: parsed, checked with `Value.Check`, and refused
+  whole with the first error.
+- **The words about a connection are the definition's.** The line under its name (`about`) and each access choice's
+  label and note move from the app's code into the definition, so a connection is described in one place. The prose
+  body goes, each one first compared with its tools' descriptions so no instruction an agent relies on is lost.
+
+**The rules a change of version follows.** Today these happen when the owner clicks Update; here they happen at the
+start after a release.
+
+- A remote server is listed again when its definition's version differs from the one its listing was taken for,
+  as the daemon's start already does when a file's hash differs. Tool shapes and the server's notes are taken as it
+  gives them then.
+- Tool switches are kept by name across versions. One for a tool that no longer exists is kept until the connection
+  is removed, so it returns if the tool does.
+- A tool the definition names comes with the release: switched on, a read if the definition says so, with nothing
+  asked. A tool a remote server lists that the definition does not name waits switched off, whatever the version.
+  This closes a gap in today's rule, which holds only between two listings of the same file: a tool a server added
+  before a file changed comes in switched on.
+- An account whose access the new definition no longer allows is stale: its credentials are forgotten and it signs
+  in again. Widening, or changing what a new account asks for, leaves accounts as they are. This is `fits`,
+  unchanged.
+- A reading taken under another version is not the current one: a card reads again, and a watch on the object takes
+  its next reading as it does after an Update today.
 
 **What does not change.** Credentials stay with accounts outside the store. A read runs and a write is a draft; the
-floor asks every time. What is offered is what was listed: a remote server's listing is kept in the store for the
-definition's version, so a tool the server adds later waits switched off, and a release that changes which tools
-read lists again at start. An account whose access the new definition no longer allows signs in again, as a narrowed
-file makes it today. Drafts, permissions, objects, readings and watches bind an account as they do now.
+floor asks every time. Drafts, permissions, objects, readings and watches bind an account as they do now.
 
-**What it asks of the rules.** DESIGN.md's "Core" row for Connection (`connections/<name>.md`, shipped with the app),
-the opening of "Connections" (the file written into the workspace and allowed at once, "an ordinary 'before' file"),
-Bet 2 and AGENTS.md principle 2 where they list connections among the files an owner or an agent edits: each is
+**What it asks of the rules.** DESIGN.md's Bet 2 (line 32) and AGENTS.md principle 2 (line 10), where they list
+connections among the plain text files of the workspace; the "Core" row for Connection (`connections/<name>.md`,
+shipped with the app); the opening of "Connections" (its bytes written into the workspace and allowed at once, "an
+ordinary 'before' file") and "for that accepted file"; and the workspace section's lists of folders. Each is
 rewritten when its slice lands, to say that a connection is a definition banda ships and a choice the store holds.
 "Open" keeps its line on connections an agent builds itself: if that returns, an agent-written, owner-accepted file
-is the right shape for those alone, beside the shipped ones, and this design leaves room for it by keeping the
-schema the one both would pass.
+is the right shape for those alone, and the schema is the one both would pass.
+
+## What moves, and what goes
+
+Outside the daemon's capabilities module, nothing reads a connection file in the workspace: not the search index,
+the archive, the home fork, bringing your own, any prompt or any shipped skill. What reads a definition reads the
+`Accepted` doc's `connections/…` keys, and those readers move to one map of definitions, built at start from the
+shipped ones and the store's records, in the shape they get today (`{...connection, sha}`).
+
+| Moves | Where |
+|---|---|
+| Readers of the accepted definition | `acceptedConnection` and its roughly 25 callers; src/core/watches.ts, src/core/object-access.ts, src/server/objects.ts, src/server/watches.ts |
+| The app's concurrency token | McpSetup.tsx and ConnectFlow.tsx send the definition's version in place of the file's hash |
+| The words about a connection | `SERVICES` (Shell.tsx) and `SCOPE_CHOICES` (web/src/lib/connect.ts) into the definitions |
+| The generator | scripts/shipped-github.ts emits one object in place of a frontmatter template; the json block already is one |
+| Tests that read `shipped/connections/*.md` | about seventeen files and four fault workers; the specimen's import of `github.md?raw` and its regex |
+| Words the owner is told | "update … on the Connections page" (a kind that cannot be followed) and "Accept the current connection file" |
+
+| Goes | Where |
+|---|---|
+| Add as a copy, Update, the text comparison | `addShipped`, `updateShipped`, `shippedUpdate`, the `update` field of the shipped view; `UpdateOffer` in Catalogue.tsx |
+| Text rewriting | `withList`, `withReads`, `withoutSignIn`, the frontmatter parser for connections, the parse cache keyed by text |
+| The box's copy | `connections/` and `tools/` made in the workspace (src/server/agents.ts), named to the model (src/box/tools.ts), and the eight `boxedFiles("connections")` comparisons |
+| A box's change to a connection, offered to the owner | accepting and declining it; the approval card and its words in the feed |
+| Agent-built connections and tools | `command` connections, `OwnTool`, `TOOL_FIELDS`, `parseTool`, `ownTool`, `boxSession`, the tool routes: about 345 lines, which docs/status.md already calls deleted |
+
+Releases need nothing: the packers copy `shipped/` whole and assume no extension.
 
 ## Work and acceptance
 
-**Slice 1, shipped definitions from the release.** The schema; the six files as `.json` (GitHub's generator writes
-JSON); the daemon reading them at start; "on in this home" in the store; Add as a switch in Connections, Settings
-and the agent's card; Update, the hash comparison and the workspace copy gone for shipped connections. Acceptance: a
-fresh throwaway home connects each of the six through the app at both widths; a daemon restarted on a build with a
-changed definition draws the changed card with no step from the owner; an account beyond a narrowed definition is
-asked to sign in again; the stored shapes test covers the new records.
+**Slice 1, shipped definitions from the release.** The schema; the shipped files as `.json` with `about` and the
+access choices' words, each body checked against its tools' descriptions before it goes; the daemon reading them at
+start; the definitions map and the version every binding uses; "on in this home" in the store; Add as a switch in
+Connections, Settings and the agent's card; Update and the workspace copy gone for shipped connections. Acceptance: a
+fresh throwaway home connects each shipped connection through the app at both widths; a daemon restarted on a build
+with a changed definition draws the changed card with no step from the owner, a followed object keeps its watch and
+takes a new reading with no false wake, a tool the definition names is on and one a server added alone is off; an
+account beyond a narrowed definition is asked to sign in again; the stored shapes test covers the new records; the
+sweep kills at each new commit.
 
-**Slice 2, the owner's own servers in the store.** The record for a server added by address; discovery, sign-in and
-read declarations as transactions; `withList`, `withReads`, `needsNoSignIn`'s rewrite and the frontmatter parser for
-connections gone. Acceptance: adding a server by its address, marking its reads, a server that turns out to need no
-sign-in, and removing it, through the app; a kill at every commit of each under `test/fault/`.
+**Slice 2, the owner's own servers in the store.** The record and its version; one path that adds a server;
+discovery, sign-in and read declarations as transactions; the text rewriting gone. Acceptance: adding a server by its
+address, marking its reads, a server that turns out to need no sign-in, two edits that cross refused by version, and
+removing it, through the app; a kill at every commit of each under `test/fault/`.
 
-**Slice 3, what is left of the file.** The box's `connections/` and `tools/` folders, `boxedFiles("connections")`,
-accepting and declining a box's change to a connection, `command` connections, `OwnTool` and `TOOL_FIELDS` deleted
-(the open item in [Connections](connections.md)); DESIGN.md and AGENTS.md rewritten where they name connection files.
-Acceptance: the trust properties that speak of connection files are restated over the store and pass; an adversarial
-review of the three slices, since they touch what an agent may do.
+**Slice 3, what is left of the file.** The box's folders and their naming to the model, the comparisons, a box's
+change to a connection and its card, and agent-built connections and tools deleted; DESIGN.md, AGENTS.md and the
+status doc rewritten where they name connection files. Acceptance: the property "nothing the box wrote is offered or
+runs before the owner accepted it" is restated as "nothing the box writes reaches a definition" and passes; an
+adversarial review of the three slices, since they touch what an agent may do.
+
+**Slice 4, what a connection does, in the owner's words.** Details on a connection says its tools and which read,
+what each access choice adds, the kinds it draws and what following each does, from the definition: a new part of
+the API, since the kinds and their rules never reach the app today. This is a gain, not a replacement, as no screen
+shows the file now; it can follow the other three at any time.
 
 Pre-release rules apply: stored shapes change in place, with no migration, and a home made by an earlier build need
 not open.
 
-## Unknowns to settle before slice 1
+## Still to settle
 
-- [ ] How a remote server's listing is bound once there is no accepted file: by a hash of the shipped definition, read
-  at start, and what a changed hash does to tool switches the owner set (kept by tool name, a tool that no longer
-  exists dropped)
-- [ ] Whether anything outside the daemon reads `connections/*.md` in a workspace: a skill, a harness, the search index
-- [ ] What the app's Details needs from the definition to say it in the owner's words, checked in the specimen before
-  the file goes
+- [ ] What a watch does at the first look after its object's definition changed version, shown by a scenario before
+  slice 1's acceptance names it: the code path after an Update today is the one to keep, and no test pins it yet
+- [ ] No test pins "a tool the server adds later waits switched off" at all; slice 1 adds it with the rule above
 
 ## Open work
 
-- [ ] Slice 1: the schema, shipped `.json` read at start, "on" in the store, Add as a switch, no Update
-- [ ] Slice 2: a server added by address as a store record; no text rewriting
-- [ ] Slice 3: the box's connection and tool files and their acceptance deleted; DESIGN.md and AGENTS.md rewritten
-- [ ] Slack ([Slack](slack.md)) ships as a `.md` file under today's convention and moves with the other five in slice 1
+- [ ] Slice 1: the schema, shipped `.json` read at start, the version, "on" in the store, Add as a switch, no Update
+- [ ] Slice 2: a server added by address as a store record with a version; no text rewriting
+- [ ] Slice 3: the box's folders, a box's change to a connection, and agent-built connections and tools deleted;
+  DESIGN.md, AGENTS.md and the status doc rewritten
+- [ ] Slice 4: Details that says what a connection does, from its definition
+- [ ] Slack lands as a `.md` file under today's convention and moves with the others in slice 1, `pages` with it
