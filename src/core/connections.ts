@@ -521,7 +521,12 @@ type ConnectedValue = {
 			at: number;
 		};
 	};
-	off: { [tool: string]: true };
+	/**
+	 * Tools off, by the model's name for them, and why: `owner`, the owner switched it off, kept by name across versions;
+	 * `waiting`, a tool the server listed alone, waiting for the owner. A definition that comes to name a waiting tool
+	 * switches it on; the owner switching it, on or off, settles it.
+	 */
+	off: { [tool: string]: "owner" | "waiting" };
 	accounts: { [connection: string]: { [account: string]: Account } };
 	on: { [agent: string]: { [connection: string]: string[] } };
 	/** Owner-managed anonymous connections have explicit agent switches, not invented accounts. */
@@ -788,7 +793,7 @@ export async function connectionTools(tx: Tx): Promise<InEffect[]> {
 		if (connection === undefined || listed === undefined || listed.sha !== connection.sha) continue;
 		for (const [tool, shape] of Object.entries(listed.tools).sort(([a], [b]) => a.localeCompare(b))) {
 			const model = toolName(name, tool);
-			if (off[model] === true || found.some((other) => other.name === model)) continue;
+			if (off[model] !== undefined || found.some((other) => other.name === model)) continue;
 			const floor = Object.hasOwn(connection.floors, tool)
 				? connection.floors[tool]
 				: connection.ask === "always" && !connection.reads.includes(tool)
@@ -820,7 +825,7 @@ export async function ownTools(tx: Tx): Promise<OwnTool[]> {
 	const found: OwnTool[] = [];
 	for (const path of Object.keys(files).sort()) {
 		const name = /^tools\/(.+)\.md$/.exec(path)?.[1];
-		if (name === undefined || off[name] === true) continue;
+		if (name === undefined || off[name] !== undefined) continue;
 		const tool = await acceptedTool(tx, name);
 		if (tool !== undefined) found.push(tool);
 	}

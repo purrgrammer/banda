@@ -70,8 +70,19 @@ it("reopens current account authority and object readings without a migration", 
 		connected.accounts.github = { alice: { id: "alice", at: 123 } };
 		connected.accounts.notes = { "account-1": { id: "account 1", label: "Work", at: 124 } };
 		connected.on.reader = { github: ["alice"] };
-		connected.off.github__issue_read = true;
+		connected.off.github__issue_read = "owner";
+		connected.off.github__add_comment = "waiting";
 		connected.added.github = { at: 99 };
+		connected.versions = 5;
+		connected.servers.ernesto = {
+			service: "Ernesto",
+			url: "https://ernesto.example/mcp",
+			auth: "oauth",
+			scopes: ["mcp"],
+			version: 3,
+			at: 1,
+		};
+		connected.reads.github = { tools: ["list_notifications"], version: 5 };
 		await keepReading(tx, "github/alice/issue:org/repo#12", {
 			connection: "github",
 			account: "alice",
@@ -171,8 +182,20 @@ it("reopens current account authority and object readings without a migration", 
 				notes: { "account-1": { id: "account 1", label: "Work", at: 124 } },
 			},
 			on: { reader: { github: ["alice"] } },
-			off: { github__issue_read: true },
+			off: { github__issue_read: "owner", github__add_comment: "waiting" },
 			added: { github: { at: 99 } },
+			versions: 5,
+			servers: {
+				ernesto: {
+					service: "Ernesto",
+					url: "https://ernesto.example/mcp",
+					auth: "oauth",
+					scopes: ["mcp"],
+					version: 3,
+					at: 1,
+				},
+			},
+			reads: { github: { tools: ["list_notifications"], version: 5 } },
 		});
 		expect((await after.snapshot(Readings, context))?.readings["github/alice/issue:org/repo#12"]).toMatchObject({
 			account: "alice",

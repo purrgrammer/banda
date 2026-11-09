@@ -222,7 +222,7 @@ it("tool switches apply to cards including cached readings", async () => {
 	const s = await setup();
 	expect((await s.service.show(1, [{ ref: "a/b#1" }]))[0]?.shown).toBe("card");
 	await s.harness.commit(async (tx) => {
-		(await tx.doc(Connected)).off.example__get = true;
+		(await tx.doc(Connected)).off.example__get = "owner";
 	}, context);
 	expect((await s.service.show(1, [{ ref: "a/b#1" }]))[0]?.shown).not.toBe("card");
 	expect(s.calls()).toBe(1);

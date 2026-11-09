@@ -1241,10 +1241,17 @@ export function openCapabilities(options: CapabilityOptions) {
 				at: now(),
 			};
 			// a tool a server adds after it was connected waits for the owner to switch it on
-			for (const tool of fresh) doc.off[toolName(name, tool)] = true;
+			for (const tool of fresh) {
+				const model = toolName(name, tool);
+				if (doc.off[model] === undefined) doc.off[model] = "waiting";
+			}
+			// a tool that was waiting and the definition now names comes on with it
+			if (named !== undefined)
+				for (const tool of Object.keys(proposed))
+					if (named.has(tool) && doc.off[toolName(name, tool)] === "waiting") delete doc.off[toolName(name, tool)];
 			await offer(
 				tx,
-				listed.map((tool) => toolName(name, tool.name)).filter((tool) => doc.off[tool] !== true),
+				listed.map((tool) => toolName(name, tool.name)).filter((tool) => doc.off[tool] === undefined),
 				name,
 			);
 			if (was?.sha !== sha) await log(tx, { at: now(), what: `Connected to ${accepted.service}` });
@@ -1451,7 +1458,7 @@ export function openCapabilities(options: CapabilityOptions) {
 					connections: {
 						[name: string]: { sha: string; tools: { [tool: string]: Listed }; notes?: string; notesOn?: string };
 					};
-					off: { [tool: string]: true };
+					off: { [tool: string]: "owner" | "waiting" };
 					accounts?: { [name: string]: { [account: string]: Account } };
 					on?: { [agent: string]: { [name: string]: string[] } };
 					public: { [name: string]: string[] };
@@ -1785,7 +1792,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				doc.connections[name] = { sha: fileSha, tools: listedOf(listing), at: now() };
 				await offer(
 					tx,
-					listing.map((tool) => toolName(name, tool.name)).filter((tool) => doc.off[tool] !== true),
+					listing.map((tool) => toolName(name, tool.name)).filter((tool) => doc.off[tool] === undefined),
 					name,
 				);
 			}
@@ -1829,7 +1836,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		await harness.commit(async (tx) => {
 			(await tx.doc(Accepted)).files[toolPath(name)] = { sha, text: box.text, at: now() };
 			const { off } = await tx.doc(Connected);
-			if (off[name] !== true) await offer(tx, [name]);
+			if (off[name] === undefined) await offer(tx, [name]);
 			await log(tx, { at: now(), what: `You allowed a tool it made: ${parsed.tool.description}` });
 		}, ctx);
 		fault("accept:after");
@@ -2319,7 +2326,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			if (on) {
 				delete doc.off[name];
 				await offer(tx, [name], name.includes("__") ? connection : undefined);
-			} else doc.off[name] = true;
+			} else doc.off[name] = "owner";
 			doc.epoch++;
 			await log(tx, { at: now(), what: `You switched ${on ? "on" : "off"} ${name.replace("__", ": ")}` });
 			return true;
