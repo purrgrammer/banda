@@ -8,7 +8,7 @@
  *
  * argv: home, "react" for a reaction, fault schedule JSON (Fault[])
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { TaskId } from "@earendil-works/pi-durable";
@@ -21,7 +21,7 @@ import { openConnected } from "../fixtures/connected.ts";
 import { answerNudge } from "../fixtures/models.ts";
 import { fakeSlack, ROOT_TS } from "../fixtures/slack.ts";
 import { type Fault, type FaultPoint, Faults } from "./faults.ts";
-import { ownerAnswer } from "./owner.ts";
+import { answersGiven, noteAnswer, ownerAnswer } from "./owner.ts";
 
 const [home, ...rest] = process.argv.slice(2) as [string, ...string[]];
 const scheduleJson = rest.at(-1) ?? "[]";
@@ -108,14 +108,14 @@ while (!(await Promise.race([ended, new Promise<false>((r) => setTimeout(r, 10, 
 		faults.hit("answer");
 		// a post a kill may have sent is asked again, and the owner skips it
 		const again = wait.ask.interrupted === true;
-		appendFileSync(join(home, "answers.txt"), `${again ? "asked-again" : "approve"}\n`);
+		noteAnswer(home, again ? "asked-again" : "approve", wait.key);
 		await ownerAnswer(s.harness, wait.key, again ? "deny" : "approve", web, "bearer", { type: "approval" });
 	}
 }
 
 const outcome = (await s.harness.getTask(received.turn as TaskId<TurnResult>, context))?.state.outcome;
 const { parked } = await status(s.harness);
-const answers = readFileSync(join(home, "answers.txt"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean);
+const answers = answersGiven(home);
 console.log(
 	JSON.stringify({
 		outcome,
