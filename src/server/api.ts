@@ -850,7 +850,7 @@ export type ConnectionView = {
 
 /**
  * An account of a connection: one sign-in, named by what the service calls the owner ("@bandarra"), the agents that may
- * use it, and whether its credentials no longer fit the connection's file (it signs in again).
+ * use it, and whether its credentials no longer fit the connection's definition (it signs in again).
  */
 export type AccountView = {
 	/** Its key in the API's paths. */

@@ -1856,7 +1856,7 @@ export function openCapabilities(options: CapabilityOptions) {
 	}
 
 	/**
-	 * Whom a sign-in is for, read once with its credentials: the field the connection's file names of its read tool's
+	 * Whom a sign-in is for, read once with its credentials: the field the connection's definition names of its read tool's
 	 * answer ("bandarra"); without one, the next free number, `numbered`. Throws, in words, when the server says nothing
 	 * usable.
 	 */
@@ -2193,7 +2193,7 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	/**
 	 * Ask, at the pace the server set, whether the owner typed the code, until they did, it expired, it was declined or
-	 * the sign-in was stopped (signed in again, disconnected, removed). The tokens are kept only while the accepted file
+	 * the sign-in was stopped (signed in again, disconnected, removed). The tokens are kept only while the definition
 	 * still names the URL the sign-in was for; then its tools are listed, as after a callback. Nothing of a sign-in by
 	 * code outlives the process: after a restart the owner starts it again.
 	 */
@@ -2615,7 +2615,7 @@ export function openCapabilities(options: CapabilityOptions) {
 	}
 
 	/**
-	 * Read for the owner's eyes (an object's card): `tool`, one its accepted file says only reads, called with `args`
+	 * Read for the owner's eyes (an object's card): `tool`, one its definition says only reads, called with `args`
 	 * as account `account`. Its answer as text, or why there is none. Nothing of it reaches a model.
 	 */
 	async function readFor(

@@ -71,13 +71,13 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 - [x] Create `src/core/definitions.ts`. The TypeBox schema of a definition, `readDefinition` (parse, `Value.Check`, then the checks a schema cannot say), the definitions map built at start, and a definition's version.
 - [x] Create `shipped/connections/{github,gmail,calendar,contacts,drive,slack}.json` and delete the six `.md` files. Each carries `about` and its access choices' labels and notes.
 - [x] Edit `scripts/shipped-github.ts` to emit one JSON object.
-- [ ] Edit `src/core/connections.ts`. `acceptedConnection` and its callers read the definitions map and the store's records. The frontmatter parser for connections, `withList`, `withReads`, the parse cache, `connectionPath` and the tool file code go.
-- [ ] Edit `src/server/capabilities.ts`. "On in this home" and Add as a switch. A server added by address as a record with a version, through one path. Accepted reads and groups in the store. `addShipped`'s copy, `updateShipped`, `shippedUpdate`, `needsNoSignIn`'s rewrite, the eight `boxedFiles("connections")` comparisons, and the box's change to a connection go.
-- [ ] Edit `src/core/watches.ts`, `src/core/object-access.ts`, `src/server/objects.ts`, `src/server/watches.ts` to read the definitions map and bind to the version.
+- [x] Edit `src/core/connections.ts`. `acceptedConnection` and its callers read the definitions map and the store's records. The frontmatter parser for connections, `withList`, `withReads`, the parse cache, `connectionPath` and the tool file code go. `withList` stays for agent files (agents.ts).
+- [x] Edit `src/server/capabilities.ts`. "On in this home" and Add as a switch. A server added by address as a record with a version, through one path. Accepted reads and groups in the store. `addShipped`'s copy, `updateShipped`, `shippedUpdate`, `needsNoSignIn`'s rewrite, the eight `boxedFiles("connections")` comparisons, and the box's change to a connection go.
+- [x] Edit `src/core/watches.ts`, `src/core/object-access.ts`, `src/server/objects.ts`, `src/server/watches.ts` to read the definitions map and bind to the version.
 - [x] Create `src/core/tool-kinds.ts` and the `ToolSettings` doc, taken from PR #28 and rewritten here. A tool's kind (read, write, floor), the settings each kind allows, and the check when a call starts.
-- [ ] Edit `src/server/api.ts` and `src/server/http.ts`. The connection view carries the definition's version in place of a file's hash, `about`, the access choices with their words, each tool's kind, source and setting, and the kinds with what following each does. The routes that accept or decline a box's connection file and the tool routes go.
+- [x] Edit `src/server/api.ts` and `src/server/http.ts`. The connection view carries the definition's version in place of a file's hash, `about`, the access choices with their words, each tool's kind, source and setting, and the kinds with what following each does. The routes that accept or decline a box's connection file and the tool routes go.
 - [ ] Create `web/src/chat/ConnectionDetails.tsx` with the tool list taken from PR #28's `web/src/chat/ToolKinds.tsx`. Edit `web/src/app/McpSetup.tsx`, `web/src/app/ConnectFlow.tsx`, `web/src/chat/Catalogue.tsx`, `web/src/chat/Settings.tsx` and `web/src/app/Access.tsx` to use it and to send the version. Delete `SERVICES` from `web/src/app/Shell.tsx`, `SCOPE_CHOICES` from `web/src/lib/connect.ts`, `UpdateOffer`, and the approval card for a box's connection change.
-- [ ] Edit `src/server/agents.ts` and `src/box/tools.ts` so `connections/` and `tools/` are neither made nor named to the model.
+- [x] Edit `src/server/agents.ts` and `src/box/tools.ts` so `connections/` and `tools/` are neither made nor named to the model.
 - [ ] Edit `web/src/specimen/agent/toolsets.tsx` to import the JSON definition. Add the details view and its states to the specimen.
 - [ ] Create `test/definitions.test.ts`, `test/tool-settings.test.ts`, `test/connection-details.browser.test.ts`. Edit `test/connections.test.ts`, `test/connections.faults.test.ts`, `test/fault/connection-worker.ts`, `test/stored-shapes.test.ts`, `test/watch-accept.test.ts` and every test that reads `shipped/connections/*.md` or seeds `Accepted.files["connections/…"]`.
 - [ ] Edit `DESIGN.md`, `AGENTS.md`, `docs/connections.md`, `docs/status.md`, `docs/connection-definitions.md` as each stage lands, and delete this plan when the program closes.
@@ -96,7 +96,7 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 - [x] Stage 3, a connection's details, to check and to change. `ToolSettings` and `tool-kinds.ts` taken from PR #28, with the check in the commit that starts a call. A connection only narrows.
   - [x] `ConnectionDetails` with the tool list in groups, each tool's kind, source and setting, changed in place. Each account with its access, changed by signing in again. The agents that use it. The kinds it draws and what following each does.
   - [x] The review on adding a connection and the details afterwards are the same component, reached from Settings → Connections and from an agent's Access.
-- [ ] Stage 4, what is left of the file. The box's folders and their naming to the model, a box's change to a connection and its card, and agent-built connections and tools deleted. DESIGN.md, AGENTS.md and the status doc rewritten where they name connection files.
+- [x] Stage 4, what is left of the file. The box's folders and their naming to the model, a box's change to a connection and its card, and agent-built connections and tools deleted. DESIGN.md, AGENTS.md and the status doc rewritten where they name connection files.
 
 **You see.**
 
@@ -115,7 +115,7 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 - [x] `test/watch-slack.test.ts`, `test/watches.test.ts`, `test/objects.test.ts`. A watch and a card across a version change, with no false wake. Run `npm run test:fast -- test/watch-slack.test.ts test/watches.test.ts test/objects.test.ts`.
 - [x] `test/stored-shapes.test.ts`. The new records and docs as they are. Run `npm run test:fast -- test/stored-shapes.test.ts`.
 - [ ] `test/connections.faults.test.ts`. Kills at turning a connection on, adding a server, accepting its tools, changing a setting, and removing it. Dispatch the `ci` workflow with faults on the branch and record the run id.
-- [ ] The property "nothing the box writes reaches a definition" in `test/connections.test.ts`, in place of "nothing the box wrote is offered or runs before the owner accepted it".
+- [x] The property "nothing the box writes reaches a definition" in `test/connections.test.ts`, in place of "nothing the box wrote is offered or runs before the owner accepted it".
 - [ ] `npm run check && npm run typecheck && npm test` green at the head.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `sonnet` at the PR head, per the boot recipe.

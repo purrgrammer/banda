@@ -3,11 +3,13 @@
 Priority: **High**. Implementation status lives in [Status](status.md).
 
 Stored drafts, permissions and attempt admission use transactions. Credentials belong to accounts, never to the box;
-GitHub ships as a file with its reads, scopes and object definitions. DESIGN.md "Connections" defines accounts, one
+GitHub ships as a definition with its reads, scopes and objects, typed data read from the release
+([Connection definitions](connection-definitions.md)). DESIGN.md "Connections" defines accounts, one
 connect flow and daemon-read objects; DESIGN.md "Watches" follows an object through the same declaration, reading and
-card. Agent-built connections and `propose_connection` are out of scope.
+card. Agent-built connections and tools are gone; revisiting them is open work in
+[Connection definitions](connection-definitions.md).
 
-Gmail is a built-in daemon REST adapter: the accepted file declares scoped reads and approval-required writes, while
+Gmail is a built-in daemon REST adapter: its definition declares scoped reads and approval-required writes, while
 the adapter calls Gmail's API directly. Its public desktop OAuth client id and client secret ship with Banda; both can be
 overridden with `BANDA_GOOGLE_CLIENT_ID` and `BANDA_GOOGLE_CLIENT_SECRET` for development. Desktop clients cannot keep
 their secret confidential, and the flow still uses PKCE. The first sign-in asks for read-only access; send and mailbox changes have separate scope
@@ -23,7 +25,7 @@ Entry points: ../src/core/connections.ts, ../src/core/mcp.ts, ../src/core/mcp-re
 ## Work and acceptance
 
 **Accounts.** Credentials per account under `auth/connections/<connection>/<account>/`, the id read once after sign-in
-(the file's `account: tool.field`). Settings lists every account (sign in another, sign out, which agents use
+(the definition's `account: tool.field`). Settings lists every account (sign in another, sign out, which agents use
 it); agent settings has one switch per account, in effect at once; the `account` parameter is added to a connection's
 tools only when the agent has more than one; drafts and permissions bind one account; signing out ends everything
 on it.
@@ -32,7 +34,7 @@ on it.
 site opens, done when the daemon sees the grant, the account on for that agent. OAuth with PKCE where a server
 registers clients. Reads run free; a write is a draft; the floor asks every time.
 
-**Objects.** `objects:` in the connection file (and its generator for GitHub): for each kind the URL and id shapes, the
+**Objects.** `objects` in the connection's definition (and its generator for GitHub): for each kind the URL and id shapes, the
 read that fetches it, the fields the card shows and the writes that act on it. A readings doc in the store, bounded,
 by (connection, account, object), with its time. Links in agent messages unfurl to cards, few per message, never retried
 in a loop; owner references stay compact inside their words (service icon, object-type icon, linked title), without
@@ -72,7 +74,7 @@ in a throwaway home, at desktop and phone width.
 - [ ] Slice 8's owner review
 - [ ] The `account` parameter is offered to every agent once one has two accounts of a connection: the registry has
   one schema per tool name; an agent with one account may leave it out
-- [ ] A connection without `account:` numbers its sign-ins and cannot tell one already known
+- [ ] A connection whose definition names no `account` numbers its sign-ins and cannot tell one already known
 - [x] `objects:` and bounded account-bound readings; owner/agent/group unfurls; editable drafts on objects
 - [x] GitHub PRs, issues, Actions jobs and notification subjects, generated with the tool table
 - [x] Slice 9's final layout rechecks and full/deep qualification
@@ -80,10 +82,9 @@ in a throwaway home, at desktop and phone width.
 - [x] Owner-inline references: owner review
 - [ ] Slice 9's owner acceptance
 - [ ] Real notification-card acceptance with the hosted MCP server's required `notifications` scope
-- [ ] Delete agent-built connections, `propose_connection`, extensions and agent-built tools (slice 3 of
-  [Connection definitions](connection-definitions.md))
-- [ ] A connection is a definition banda ships and a choice the store holds, never a file in the workspace: designed in
-  [Connection definitions](connection-definitions.md), under owner review
+- [x] Delete agent-built connections, `propose_connection`, extensions and agent-built tools
+- [ ] A connection is a definition banda ships and a choice the store holds, never a file in the workspace: built in
+  [Connection definitions](connection-definitions.md), waiting on its acceptance through the app
 - [ ] Logos as shipped assets on every card, event and draft of a connection; initials as the fallback
 - [ ] Drafts show hashes of referenced files: the first effect tool that refers to a box file stores it as a blob in its draft
 - [ ] Approvals on the floor confirmed with a passkey (DESIGN.md "Open"); today a tap approves them
@@ -135,7 +136,3 @@ in a throwaway home, at desktop and phone width.
 - [ ] Harnesses: their asks reach the owner only in the web app, not on other gateways; the agent still hears the end
 - [ ] Harnesses: a step may flicker between flushes (a note the harness has not taken yet); sessions are keyed by the model's call id, as artifacts and groups are
 - [ ] Harnesses: the adapters are not in a release (Claude Code's SDK is Anthropic's, all rights reserved); Connections says how to install them
-- [x] A shipped file newer than the accepted one is offered as Update on its tile, keeping the owner's scopes and
-  accounts; refused over a box change waiting to be allowed
-- [ ] Updating a shipped file the owner never edited is still a tap: the store does not know which shipped version a
-  file came from

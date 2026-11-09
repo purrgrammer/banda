@@ -1,10 +1,9 @@
 # Connection definitions
 
-Priority: **Medium**. Implementation status lives in [Status](status.md). This is a design under owner review. Its
-first three stages, the six shipped connections as definitions read from the release, the owner's servers and reads as
-records in the store, and a connection's details to check and change, are built on the branch and not yet accepted
-through the app; the rest is not code yet. It changes rules DESIGN.md states today, so those change only when a
-slice proves its part ([Delivery](delivery.md)). It belongs to [Connections](connections.md).
+Priority: **Medium**. Implementation status lives in [Status](status.md). This is a design under owner review. All four
+stages, the six shipped connections as definitions read from the release, the owner's servers and reads as records in
+the store, a connection's details to check and change, and the deletion of what was left of the file, are built on the
+branch and not yet accepted through the app. It belongs to [Connections](connections.md).
 
 A connection's definition stops being a file in the owner's workspace. What banda ships is read from the release,
 typed and checked against a schema; what the owner chose in this home lives in the store. Adding a shipped connection
@@ -236,14 +235,14 @@ not open.
   start, the version, "on" in the store, Add as a switch, no Update
 - [ ] Slice 2, built on the branch and waiting on its acceptance through the app: a server added by address as a
   record with a version counter (one path adds it, discovery and sign-in in commits), the owner's accepted reads as
-  an overlay in the store; a due listing that fails is tried again on its own; the frontmatter parser stays for what
-  a box proposes until slice 3
-- [ ] Slice 3: the box's folders, a box's change to a connection, and agent-built connections and tools deleted;
-  DESIGN.md, AGENTS.md and the status doc rewritten
+  an overlay in the store; a due listing that fails is tried again on its own
+- [ ] Slice 3, built on the branch and waiting on its acceptance through the app: the box's folders, a box's change to
+  a connection, the frontmatter parser for connections and agent-built connections and tools deleted; nothing the box
+  writes reaches a definition (test/connections.test.ts); DESIGN.md, AGENTS.md and the status doc rewritten
 - [ ] Slice 4, built on the branch and waiting on its acceptance through the app: a connection's details, to check and
   to change, on the tool list taken from PR #28 (groups as definition data, `ToolSettings`, a setting read at the
   commit that starts a call), the same component as the review on adding
 - [ ] Slack's reaction permission, which binds a channel, becomes a `place` grain when grains land with the rework of PR #28
 - [ ] Revisit connections and tools an owner or an agent defines themselves. They are out of scope here and their
-  code goes in slice 3; DESIGN.md "Open" keeps the line. A file an agent writes and the owner accepts is the shape to
+  code went in slice 3; DESIGN.md "Open" keeps the line. A file an agent writes and the owner accepts is the shape to
   start from, beside the shipped definitions, passing the same schema

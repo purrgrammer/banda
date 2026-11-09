@@ -643,7 +643,7 @@ export type InEffect = {
 };
 
 /**
- * Every connection tool in effect now: its connection's file accepted, listed for that very file, and not switched
+ * Every connection tool in effect now: its connection on, listed for that very version, and not switched
  * off. Reads only.
  */
 export async function connectionTools(tx: Tx): Promise<InEffect[]> {
@@ -761,9 +761,9 @@ export const requiredOf = (connection: Pick<Connection, "api">): readonly string
 	connection.api === undefined ? [] : REST_APIS[connection.api].required;
 
 /**
- * Whether `credentials` were given for `connection` as its accepted file says it now: the same URL, and for a sign-in,
+ * Whether `credentials` were given for `connection` as its definition says it now: the same URL, and for a sign-in,
  * the client it names, the scope every account asks for, and nothing beyond what the file lets an account ask for.
- * Each account asks for its own scopes: changing the file's default leaves them be, while narrowing what may be asked
+ * Each account asks for its own scopes: changing the definition's default leaves them be, while narrowing what may be asked
  * or changing the client needs a new sign-in; the old token is never stretched to cover it.
  */
 export function fits(credentials: Credentials | undefined, connection: Connection): credentials is Credentials {

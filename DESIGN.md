@@ -29,9 +29,10 @@ code holds the details. If a sentence here only restates code, delete it.
 1. **The agent is the object; the chat is its surface.** Every agent has one chat, its identity, personality, memory,
    connections, routines and watches, and the owner talks to it directly. The owner never manages threads: a routine's
    run, an ask and a result all land in the agent's one conversation.
-2. **What the agent is made of is files.** Agents, connections, routines, watches and memory are plain text files in the
-   workspace, inspectable and editable by the owner or an agent. The store holds what runs and what is in effect, never
-   a second copy of a definition.
+2. **What the agent is made of is files.** Agents, routines, watches and memory are plain text files in the workspace,
+   inspectable and editable by the owner or an agent. The store holds what runs and what is in effect, never a second
+   copy of a definition. A connection is the exception: a definition banda ships and a choice the store holds, so nothing
+   the box writes can reach one.
 3. **An agent speaks only through its speaking tools.** The only way to reach the owner is a speaking tool, one per
    act: `message_user` for words, `ask_user`, `react`, `publish`, …; in a group, `message_group` posts the words to its
    room in `message_user`'s place. Proactive
@@ -377,17 +378,15 @@ banda ships, so nothing is ever updated: a new release takes effect at its first
 owner updated banda themselves. Its version is the hash of what was read, and what binds to a connection binds to
 that. A server the owner adds by its address is a record in the store, every tool asking first until they say it
 reads; its version is a counter that moves with each change, and the reads they allow lie over its definition or
-over one banda ships, kept by name across versions, never on a floor or a write the definition names. One an agent
-built is an accepted "before" file until that code goes. It
-is first class in the UI (a logo and a name on every card, event and draft of its) and secondary in the hierarchy: it
+over one banda ships, kept by name across versions, never on a floor or a write the definition names. It is first class in the UI (a logo and a name on every card, event and draft of its) and secondary in the hierarchy: it
 lives inside agents' settings and the app's Settings, never as a screen of its own.
 - **Accounts.** An account is one sign-in: `auth/connections/<connection>/<account>/` holds its credentials, bound to
   the URL they were given for, so a changed URL never carries them along. Its id is what the service calls the owner,
-  read once after sign-in and shown ("@bandarra"). Each account has its own access: the file's scopes are what a new
-  account asks for, and the owner may pick others for one account from what the file allows (its scopes and every
-  scope its tools need), so a personal mailbox can read while a work one sends; what an account was given is what its
-  credentials record, and a tool it was not given access for is refused in words before any request. Narrowing what
-  the file allows makes the accounts beyond it sign in again. The owner signs in another at any time; signing out forgets the
+  read once after sign-in and shown ("@bandarra"). Each account has its own access: the definition's scopes are what a
+  new account asks for, and the owner may pick others for one account from what the definition allows (its scopes and
+  every scope its tools need), so a personal mailbox can read while a work one sends; what an account was given is what
+  its credentials record, and a tool it was not given access for is refused in words before any request. Narrowing what
+  the definition allows makes the accounts beyond it sign in again. The owner signs in another at any time; signing out forgets the
   credentials and switches the account off for every agent. Credentials never reach the
   box, a prompt, an entry, the store or a log; what a server echoes of one is hidden.
 - **One flow everywhere: enable, sign in, done.** From an agent's panel (Permissions), from Settings, or from a card the agent
@@ -860,11 +859,11 @@ valid stamp.
   site that checks for bots does not serve the agent's browser, whoever clicks, so the agent goes elsewhere or says so.
 
 ## The workspace
-The workspace is the band's folder, in the box: `agents/`, `connections/`, `routines/`, `watches/`, `skills/`,
-`memory/`, and the files the agents work on. The daemon reads it over the box's connection, so no folder the box writes
+The workspace is the band's folder, in the box: `agents/`, `routines/`, `watches/`, `skills/`, `memory/`, and the files
+the agents work on. The daemon reads it over the box's connection, so no folder the box writes
 sits on the owner's machine. The agent writes it and the owner edits it, so the daemon decides when a change takes
 effect:
-- **Before**: `agents/`, `connections/`, `routines/`, `watches/` and skill instructions take effect once the owner
+- **Before**: `agents/`, `routines/`, `watches/` and skill instructions take effect once the owner
   accepts the change. Accepting binds the hash of the bytes shown; the daemon keeps the accepted version in the store,
   and prompts and loading read only from there. Until then the accepted version stays in effect, and the tool that made
   the change tells the model so. The owner's own write through the app is accepted in the commit that stores it. The app

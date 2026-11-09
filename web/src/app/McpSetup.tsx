@@ -78,7 +78,7 @@ export type McpSetupActions = {
 };
 
 /**
- * The sign-in made before can't be used now: its account no longer fits the connection's file, or the last sign-in
+ * The sign-in made before can't be used now: its account no longer fits the connection's definition, or the last sign-in
  * did not finish (the daemon says so as its problem). Said plainly before asking to sign in again.
  */
 export const signInExpired = (view: ConnectionView): boolean =>
