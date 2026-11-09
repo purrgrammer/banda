@@ -5,6 +5,7 @@
  * says where the link is. In the phone's native shell no token is kept: the shell's paired device identity is what
  * lets a request in.
  */
+import type { Setting } from "../../../src/core/tool-kinds.ts";
 import type {
 	AgentView,
 	Answer,
@@ -345,10 +346,11 @@ export const addMcp = (config: import("../../../src/core/mcp-config.ts").McpConf
 	});
 export const refreshConnection = (name: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/refresh`, { method: "POST", body: "{}" });
-export const setConnectionReads = (name: string, tools: readonly string[], sha: string) =>
-	api<CapabilitiesView>(`/capabilities/connections/${name}/reads`, {
+/** Set connection `name`'s tools, each as given, for the version `sha` the owner saw: a stale view changes nothing. */
+export const setConnectionTools = (name: string, settings: { readonly [tool: string]: Setting }, sha: string) =>
+	api<CapabilitiesView>(`/capabilities/connections/${name}/tools`, {
 		method: "POST",
-		body: JSON.stringify({ tools, sha }),
+		body: JSON.stringify({ settings, sha }),
 	});
 export const switchPublicConnection = (name: string, agent: string, on: boolean, sha?: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/public`, {

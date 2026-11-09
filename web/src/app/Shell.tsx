@@ -33,6 +33,7 @@ import { BringOnboarding, BringSettings, useBring } from "./Bring.tsx";
 import { bandRows, titleOf, whoOf } from "./band.ts";
 import { ChatThinking } from "./ChatThinking.tsx";
 import { ConnectFlow, freshAccounts } from "./ConnectFlow.tsx";
+import { ConnectionPage } from "./ConnectionPage.tsx";
 import { saveEdit, setAgentState } from "./edits.ts";
 import { GroupChat } from "./GroupChat.tsx";
 import { AddHarnessButton, HarnessConnectionTile } from "./HarnessConnections.tsx";
@@ -663,6 +664,7 @@ function Main() {
 						onPause={(paused) => void setPaused(paused)}
 						onConnect={() => go({ name: "connections" })}
 						onSignOut={(agent, site) => void signOutSite(agent, site).then(showCapabilities)}
+						onDetails={(connection) => go({ name: "connections", connection })}
 						onAccountSignOut={(account) => {
 							const [name = "", key = ""] = account.id.split("/");
 							void signOutAccount(name, key)
@@ -676,14 +678,21 @@ function Main() {
 				</SettingsPage>
 			);
 		if (where.name === "connections") {
-			if (where.add || where.connection)
+			// adding keeps the setup, its route and its phases, through to the review; a connection there is one that is added
+			if (where.add)
 				return (
 					<SettingsPage title="Connections" phone={phone} onBack={() => go({ name: "connections" })}>
 						<McpSetup
-							{...(where.connection ? { connection: where.connection } : {})}
-							onCreated={(connection) => go({ name: "connections", connection })}
+							{...(where.connection === undefined ? {} : { connection: where.connection })}
+							onCreated={(connection) => go({ name: "connections", connection, add: true })}
 							onClose={() => go({ name: "connections" })}
 						/>
+					</SettingsPage>
+				);
+			if (where.connection)
+				return (
+					<SettingsPage title="Connections" phone={phone} onBack={() => go({ name: "connections" })}>
+						<ConnectionPage connection={where.connection} onClose={() => go({ name: "connections" })} />
 					</SettingsPage>
 				);
 			const capabilities = shell.capabilities;

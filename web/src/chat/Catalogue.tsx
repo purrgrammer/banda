@@ -75,7 +75,7 @@ export function Catalogue({
 							<>
 								<span className="text-meta text-ink-2">{service.accounts.join(", ")}</span>
 								<Button variant="outline" size="sm" className="self-start" onClick={() => onManage?.(service.id)}>
-									Manage connection
+									Details
 								</Button>
 							</>
 						) : service.accounts.length === 0 ? (
@@ -85,10 +85,15 @@ export function Catalogue({
 						) : (
 							<span className="flex flex-wrap items-center gap-2">
 								<span className="text-meta text-ink-2">{service.accounts.join(", ")}</span>
+								{onManage === undefined ? null : (
+									<Button variant="outline" size="xs" className="ml-auto" onClick={() => onManage(service.id)}>
+										Details
+									</Button>
+								)}
 								<Button
 									variant={stale.length > 0 ? "outline" : "ghost"}
 									size="xs"
-									className="ml-auto"
+									{...(onManage === undefined ? { className: "ml-auto" } : {})}
 									onClick={() => setOpen(service.id)}
 								>
 									{stale.length > 0 ? "Sign in again" : service.choices ? "Manage access" : "Add account"}

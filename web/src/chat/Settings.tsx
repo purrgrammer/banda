@@ -286,6 +286,7 @@ export function Connections({
 	agent,
 	rows,
 	onSwitch,
+	onDetails,
 	empty = "Nothing to connect yet.",
 }: {
 	agent: string;
@@ -294,6 +295,8 @@ export function Connections({
 	empty?: string | undefined;
 	/** The owner took an account away from the agent (or gave it back). */
 	onSwitch?: ((row: ConnectionRow, account: ConnectionRow["accounts"][number], on: boolean) => void) | undefined;
+	/** Open the connection's details. */
+	onDetails?: ((row: ConnectionRow) => void) | undefined;
 }) {
 	const used = rows.flatMap((row) => row.accounts.filter((account) => account.on).map((account) => ({ row, account })));
 	return (
@@ -317,6 +320,11 @@ export function Connections({
 									<span className="truncate text-ui text-ink">{row.connection}</span>
 									{as === undefined ? null : <span className="truncate text-meta text-ink-2">{as}</span>}
 								</span>
+								{onDetails === undefined || row.id === undefined ? null : (
+									<Button variant="ghost" size="xs" className="text-ink-2" onClick={() => onDetails(row)}>
+										Details
+									</Button>
+								)}
 								<Confirm
 									title={`Remove ${row.connection}?`}
 									body={`${agent} stops using ${what}. The account stays signed in for the others; add it back at any time.`}
@@ -631,6 +639,8 @@ export type SettingsActions = {
 	readonly onSignOut?: (agent: string, site: string) => void;
 	/** Sign an account of a connection out: off for every agent, its permissions taken back. */
 	readonly onAccountSignOut?: (account: Account) => void;
+	/** Open a connection's details. */
+	readonly onDetails?: (connection: string) => void;
 	/** Restore an archived agent; a refusal rejects with why. */
 	readonly onRestore?: (who: Who & { readonly id?: string }) => Promise<unknown> | undefined;
 	/** Restore an archived group; a refusal rejects with why. */
@@ -1360,21 +1370,28 @@ function Accounts({ accounts, act }: { accounts: readonly Account[]; act: Settin
 									: `Used by ${account.agents.join(", ")}`
 						}
 						end={
-							<Confirm
-								title={`Sign out of ${account.connection} as ${account.login}?`}
-								body={
-									account.agents.length === 0
-										? "Its sign-in is forgotten. You can sign in again any time."
-										: `${account.agents.join(", ")} will lose it: what they were allowed to do as ${account.login} is taken back, and what waits for your approval is dropped.`
-								}
-								action="Sign out"
-								keep="Stay signed in"
-								onConfirm={act.onAccountSignOut === undefined ? undefined : () => act.onAccountSignOut?.(account)}
-							>
-								<Button variant="outline" size="xs">
-									Sign out
-								</Button>
-							</Confirm>
+							<span className="flex items-center gap-1.5">
+								{account.name === undefined || act.onDetails === undefined ? null : (
+									<Button variant="ghost" size="xs" onClick={() => act.onDetails?.(account.name as string)}>
+										Details
+									</Button>
+								)}
+								<Confirm
+									title={`Sign out of ${account.connection} as ${account.login}?`}
+									body={
+										account.agents.length === 0
+											? "Its sign-in is forgotten. You can sign in again any time."
+											: `${account.agents.join(", ")} will lose it: what they were allowed to do as ${account.login} is taken back, and what waits for your approval is dropped.`
+									}
+									action="Sign out"
+									keep="Stay signed in"
+									onConfirm={act.onAccountSignOut === undefined ? undefined : () => act.onAccountSignOut?.(account)}
+								>
+									<Button variant="outline" size="xs">
+										Sign out
+									</Button>
+								</Confirm>
+							</span>
 						}
 					/>
 				))}

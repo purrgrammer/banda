@@ -54,6 +54,8 @@ export type FaultPoint =
 	/** A connection allowed: before the store holds it, and after. */
 	| "accept:before"
 	| "accept:after"
+	/** The owner's setting of a connection's tool, committed, before the tools are offered again. */
+	| "settings:after"
 	/** Signing in: the sign-in taken at the callback, the code traded for tokens, the tokens kept. */
 	| "oauth:taken"
 	| "oauth:exchanged"

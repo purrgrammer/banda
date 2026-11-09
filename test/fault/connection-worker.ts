@@ -170,6 +170,10 @@ if (state === "sign-in") {
 if (mode === "address" || mode === "mcp") {
 	const hinted = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.hinted ?? [];
 	if (hinted.includes("list_events")) await s.capabilities.trustReads("cal", ["list_events"]);
+	// and sets one of them to ask: the same after a kill, whichever side of the commit it died on
+	const current = (await s.capabilities.view()).connections.find((c) => c.name === "cal");
+	if (current?.accepted?.sha !== undefined)
+		await s.capabilities.setTools("cal", { whoami: "ask" }, current.accepted.sha);
 }
 
 const received = await s.core.receive(s.harness, {

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/cn";
+import type { Setting } from "../../../../src/core/tool-kinds.ts";
 import type { ConnectionToolView, ConnectionView } from "../../../../src/server/api.ts";
 import { type McpPhase, type McpSetupActions, McpSetupView } from "../../app/McpSetup.tsx";
 import type { ChatAgent } from "../../lib/navigation.ts";
@@ -48,6 +49,16 @@ const tool = (
 	on: true,
 	parameters: { type: "object", properties: { uri: { type: "string" } }, required: ["uri"] },
 	...(hint === undefined ? {} : { hint }),
+	classed:
+		hint === "reads"
+			? { kind: "read", from: "server" }
+			: hint === "changes"
+				? { kind: "write", from: "server" }
+				: { kind: "unknown", from: "nobody" },
+	group: "Tools",
+	setting: hint === "reads" ? "ask" : "always",
+	options:
+		hint === "reads" ? ["allow", "ask", "off"] : hint === "changes" ? ["always", "off"] : ["allow", "always", "off"],
 });
 const TOOLS: readonly ConnectionToolView[] = [
 	tool("fs_read", "Read files", "Read files and browse directories in Ernesto.", "reads"),
@@ -77,7 +88,7 @@ function connection(
 	const auth = scenario === "key" ? "key" : scenario === "anonymous" ? "none" : "oauth";
 	return {
 		name: "ernesto",
-		groups: [],
+		groups: ["Tools"],
 		draws: [],
 		accepted: {
 			sha: "specimen",
@@ -130,7 +141,7 @@ function McpExample({
 	const [error, setError] = useState("");
 	const [credential, setCredential] = useState("");
 	const [selected, setSelected] = useState<string[]>([]);
-	const [reads, setReads] = useState<string[]>([]);
+	const [chosen, setChosen] = useState<{ readonly [tool: string]: Setting }>({});
 	const [granted, setGranted] = useState<string[]>([]);
 	// the server's tools were listed: once the setup reached review, until the owner signs out
 	const [connected, setConnected] = useState(phase === "review" || phase === "done");
@@ -192,7 +203,8 @@ function McpExample({
 		retry: () => {},
 		setAccount: () => {},
 		setLabel: () => {},
-		setReads,
+		setChosen,
+		setTools: () => {},
 		switchAgent: (agent, on) => {
 			const set = phase === "done" ? setGranted : setSelected;
 			set((old) => (on ? [...new Set([...old, agent])] : old.filter((each) => each !== agent)));
@@ -227,7 +239,7 @@ function McpExample({
 					account: ACCOUNT.account,
 					label: "",
 					selected,
-					reads,
+					chosen,
 					back,
 				}}
 				actions={actions}
