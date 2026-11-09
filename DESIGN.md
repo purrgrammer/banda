@@ -414,9 +414,15 @@ lives inside agents' settings and the app's Settings, never as a screen of its o
   Objects, events, drafts and permissions carry their account; a permission binds one account and never covers
   another. A draft may edit its text, never its acting account. Nothing is on by default: an agent gets an account
   when the owner switches it on. Replacing a sign-in does not lend its authority to work still using the old one.
-- **Switches.** The owner switches any tool off, signs an account out or removes a connection from Settings. Whether a
-  tool is in effect is checked in the commit that starts each call, so one taken back is refused even mid-run, a write
-  waiting for approval included.
+- **Switches and settings.** The owner switches any tool off, signs an account out or removes a connection from
+  Settings. Whether a tool is in effect is checked in the commit that starts each call, so one taken back is refused
+  even mid-run, a write waiting for approval included. Each tool has a kind, said by its definition, by the owner, by
+  the server's own annotations, or by nobody, and then it is unknown and asks; banda never guesses one. The owner
+  sets each tool in a connection's details: Allow or Ask on a read, Ask or Always ask on a write, Always ask on the
+  floor, Off on any. A connection only narrows: a setting never lets a known write run unasked, and the store holds
+  only what narrows. A setting that puts a tool on the floor applies in the same commit, so a permission given before
+  does not cover it. A stale view changes nothing: each change names the version the owner saw. A connection's tools,
+  accounts, agents and what it draws are checked and changed in its details, the same component as the review on adding it.
 
 **Objects.** An object is a thing in a connection the owner recognises. In the owner's words, a recognised link is a
 compact inline reference: the service's icon, the object's type icon and its linked title, aligned with the owner's

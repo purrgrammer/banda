@@ -1,8 +1,9 @@
 # Connection definitions
 
 Priority: **Medium**. Implementation status lives in [Status](status.md). This is a design under owner review. Its
-first two stages, the six shipped connections as definitions read from the release and the owner's servers and reads
-as records in the store, are built on the branch and not yet tried through the app; the rest is not code yet. It changes rules DESIGN.md states today, so those change only when a
+first three stages, the six shipped connections as definitions read from the release, the owner's servers and reads as
+records in the store, and a connection's details to check and change, are built on the branch and not yet accepted
+through the app; the rest is not code yet. It changes rules DESIGN.md states today, so those change only when a
 slice proves its part ([Delivery](delivery.md)). It belongs to [Connections](connections.md).
 
 A connection's definition stops being a file in the owner's workspace. What banda ships is read from the release,
@@ -97,10 +98,11 @@ what lands here.
   in a file. Every tool still asks first until the owner says it reads. The two paths that add one today (one writes
   `ask: always`, one does not) become one. The record holds no secret: a key or tokens stay with the account under
   `auth/connections/`.
-- **The owner's choices lie over the definition.** A tool's setting, a read the owner allowed that the definition
-  did not name, and the groups they accepted are the store's, for a shipped connection and for their own server
-  alike. A shipped definition is never the owner's to have changed, so it never stops following banda's version, and
-  a connection still only narrows: nothing set on one lets a write run unasked.
+- **The owner's choices lie over the definition.** A tool's setting and a read the owner allowed that the definition
+  did not name are the store's, for a shipped connection and for their own server alike. Groups are data of a
+  definition, not of a home. A shipped definition is never the owner's to have changed, so it never stops following
+  banda's version, and a connection still only narrows: nothing set on one lets a write run unasked, and a later
+  definition that names a tool as a write takes it back from what the owner allowed.
 - **The box holds no connection definitions.** Nothing in the workspace says how a connection works, so nothing the
   box writes can change one: the folders are not made, the box's tools stop naming them, and the daemon stops
   comparing copies. An agent's own file still names the connections it may use, by name, which was never checked
@@ -189,8 +191,8 @@ account beyond a narrowed definition is asked to sign in again; the stored shape
 sweep kills at each new commit.
 
 **Slice 2, the owner's choices and their own servers in the store.** The record and its version; one path that adds
-a server; discovery and sign-in as transactions; the reads and groups the owner accepted, for every connection, in
-the store beside `ToolSettings`; `keepWithFile` and the text rewriting gone. Acceptance: adding a server by its
+a server; discovery and sign-in as transactions; the reads the owner accepted, for every connection, in the store
+beside `ToolSettings`; `keepWithFile` and the text rewriting gone. Acceptance: adding a server by its
 address, reviewing and accepting its tools, allowing a read on a shipped connection that then still follows banda's
 version, a server that turns out to need no sign-in, two edits that cross refused by version, and removing it,
 through the app; a kill at every commit of each under `test/fault/`.
@@ -225,8 +227,8 @@ not open.
 - [x] A tool waiting off comes on when a later definition names it: `off[tool]` says `waiting` or `owner`, the owner's
   own off stays and the owner switching a waiting tool settles it (test/connections.test.ts)
 - [x] The owner allows a read on a shipped connection (`trustReads`): an overlay in the store, kept by name across
-  versions, never over a floor or a write the definition names (test/connections.test.ts); the app offers it only on
-  a server added by address until slice 4's details view
+  versions, never over a floor or a write the definition names (test/connections.test.ts, test/tool-settings.test.ts);
+  offered in a connection's details, on every connection
 
 ## Open work
 
@@ -234,11 +236,13 @@ not open.
   start, the version, "on" in the store, Add as a switch, no Update
 - [ ] Slice 2, built on the branch and waiting on its acceptance through the app: a server added by address as a
   record with a version counter (one path adds it, discovery and sign-in in commits), the owner's accepted reads as
-  an overlay in the store; a due listing that fails is tried again on its own. Groups wait for slice 4 and PR #28's
-  list; the frontmatter parser stays for what a box proposes until slice 3
+  an overlay in the store; a due listing that fails is tried again on its own; the frontmatter parser stays for what
+  a box proposes until slice 3
 - [ ] Slice 3: the box's folders, a box's change to a connection, and agent-built connections and tools deleted;
   DESIGN.md, AGENTS.md and the status doc rewritten
-- [ ] Slice 4: a connection's details, to check and to change, on the tool list taken from PR #28
+- [ ] Slice 4, built on the branch and waiting on its acceptance through the app: a connection's details, to check and
+  to change, on the tool list taken from PR #28 (groups as definition data, `ToolSettings`, a setting read at the
+  commit that starts a call), the same component as the review on adding
 - [ ] Slack's reaction permission, which binds a channel, becomes a `place` grain when grains land with the rework of PR #28
 - [ ] Revisit connections and tools an owner or an agent defines themselves. They are out of scope here and their
   code goes in slice 3; DESIGN.md "Open" keeps the line. A file an agent writes and the owner accepts is the shape to

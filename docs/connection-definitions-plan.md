@@ -74,7 +74,7 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 - [ ] Edit `src/core/connections.ts`. `acceptedConnection` and its callers read the definitions map and the store's records. The frontmatter parser for connections, `withList`, `withReads`, the parse cache, `connectionPath` and the tool file code go.
 - [ ] Edit `src/server/capabilities.ts`. "On in this home" and Add as a switch. A server added by address as a record with a version, through one path. Accepted reads and groups in the store. `addShipped`'s copy, `updateShipped`, `shippedUpdate`, `needsNoSignIn`'s rewrite, the eight `boxedFiles("connections")` comparisons, and the box's change to a connection go.
 - [ ] Edit `src/core/watches.ts`, `src/core/object-access.ts`, `src/server/objects.ts`, `src/server/watches.ts` to read the definitions map and bind to the version.
-- [ ] Create `src/core/tool-kinds.ts` and the `ToolSettings` doc, taken from PR #28 and rewritten here. A tool's kind (read, write, floor), the settings each kind allows, and the check when a call starts.
+- [x] Create `src/core/tool-kinds.ts` and the `ToolSettings` doc, taken from PR #28 and rewritten here. A tool's kind (read, write, floor), the settings each kind allows, and the check when a call starts.
 - [ ] Edit `src/server/api.ts` and `src/server/http.ts`. The connection view carries the definition's version in place of a file's hash, `about`, the access choices with their words, each tool's kind, source and setting, and the kinds with what following each does. The routes that accept or decline a box's connection file and the tool routes go.
 - [ ] Create `web/src/chat/ConnectionDetails.tsx` with the tool list taken from PR #28's `web/src/chat/ToolKinds.tsx`. Edit `web/src/app/McpSetup.tsx`, `web/src/app/ConnectFlow.tsx`, `web/src/chat/Catalogue.tsx`, `web/src/chat/Settings.tsx` and `web/src/app/Access.tsx` to use it and to send the version. Delete `SERVICES` from `web/src/app/Shell.tsx`, `SCOPE_CHOICES` from `web/src/lib/connect.ts`, `UpdateOffer`, and the approval card for a box's connection change.
 - [ ] Edit `src/server/agents.ts` and `src/box/tools.ts` so `connections/` and `tools/` are neither made nor named to the model.
@@ -91,11 +91,11 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
   - [x] "On in this home" in the store, Add as a switch in Connections, Settings and the agent's card. The copy and Update gone.
   - [x] The rule at a change of version. A tool the definition names comes on, a tool a server lists alone waits off whatever the version, switches kept by name.
 - [x] Stage 2, the owner's choices and their own servers in the store. A record per server added by address with a version counter, one path that adds one, discovery and sign-in as transactions.
-  - [ ] The reads and groups the owner accepted, for every connection, in the store, as an overlay on the definition. Nothing rewrites text.
+  - [x] The reads the owner accepted, for every connection, in the store, as an overlay on the definition. Nothing rewrites text. Groups are a definition's data (`groups` in the schema), so they are not in the overlay.
   - [x] The app's concurrency token is the version.
-- [ ] Stage 3, a connection's details, to check and to change. `ToolSettings` and `tool-kinds.ts` taken from PR #28, with the check in the commit that starts a call. A connection only narrows.
-  - [ ] `ConnectionDetails` with the tool list in groups, each tool's kind, source and setting, changed in place. Each account with its access, changed by signing in again. The agents that use it. The kinds it draws and what following each does.
-  - [ ] The review on adding a connection and the details afterwards are the same component, reached from Settings → Connections and from an agent's Access.
+- [x] Stage 3, a connection's details, to check and to change. `ToolSettings` and `tool-kinds.ts` taken from PR #28, with the check in the commit that starts a call. A connection only narrows.
+  - [x] `ConnectionDetails` with the tool list in groups, each tool's kind, source and setting, changed in place. Each account with its access, changed by signing in again. The agents that use it. The kinds it draws and what following each does.
+  - [x] The review on adding a connection and the details afterwards are the same component, reached from Settings → Connections and from an agent's Access.
 - [ ] Stage 4, what is left of the file. The box's folders and their naming to the model, a box's change to a connection and its card, and agent-built connections and tools deleted. DESIGN.md, AGENTS.md and the status doc rewritten where they name connection files.
 
 **You see.**
@@ -111,7 +111,7 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 
 - [x] `test/definitions.test.ts`. Every shipped definition passes the schema and the checks, a round trip over generated definitions, each refusal the old parsers made still refused, and the version stable for the same bytes. Run `npm run test:fast -- test/definitions.test.ts`.
 - [x] `test/connections.test.ts`. Add as a switch, no file in the workspace, a changed definition taken at start with accounts and switches kept, a narrowed one making an account stale, a tool named by the definition on and one a server added alone off across versions, a server added by address as a record, two edits crossing refused by version. Run `npm run test:fast -- test/connections.test.ts`.
-- [ ] `test/tool-settings.test.ts`. The settings each kind allows, Ask on a read and Always ask on a write putting it on the floor, the check at the call's start, an allowed read kept across a definition change, and nothing set on a connection letting a write run unasked. Run `npm run test:fast -- test/tool-settings.test.ts`.
+- [x] `test/tool-settings.test.ts`. The settings each kind allows, Ask on a read and Always ask on a write putting it on the floor, the check at the call's start, an allowed read kept across a definition change, and nothing set on a connection letting a write run unasked. Run `npm run test:fast -- test/tool-settings.test.ts`.
 - [x] `test/watch-slack.test.ts`, `test/watches.test.ts`, `test/objects.test.ts`. A watch and a card across a version change, with no false wake. Run `npm run test:fast -- test/watch-slack.test.ts test/watches.test.ts test/objects.test.ts`.
 - [x] `test/stored-shapes.test.ts`. The new records and docs as they are. Run `npm run test:fast -- test/stored-shapes.test.ts`.
 - [ ] `test/connections.faults.test.ts`. Kills at turning a connection on, adding a server, accepting its tools, changing a setting, and removing it. Dispatch the `ci` workflow with faults on the branch and record the run id.
