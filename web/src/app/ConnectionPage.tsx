@@ -7,7 +7,13 @@ import { Button } from "@/components/ui/button";
 import type { AccountView } from "../../../src/server/api.ts";
 import { Confirm } from "../chat/Confirm.tsx";
 import { type AgentsFor, ConnectionDetailsView } from "../chat/ConnectionDetails.tsx";
-import { setConnectionTools, signOutAccount, switchAccount, switchPublicConnection } from "../lib/api.ts";
+import {
+	actOnCapability,
+	setConnectionTools,
+	signOutAccount,
+	switchAccount,
+	switchPublicConnection,
+} from "../lib/api.ts";
 import { scopeChoicesOf } from "../lib/connect.ts";
 import { chatAgents } from "../lib/navigation.ts";
 import { showCapabilities, useShell } from "../lib/shell.ts";
@@ -99,6 +105,14 @@ export function ConnectionPage({ connection, onClose }: { connection: string; on
 					else setChanging(account);
 				}}
 				onSignOut={setLeaving}
+				onRemove={() =>
+					void run(async () => {
+						const next = await actOnCapability({ action: "remove", name: connection });
+						// the page goes first: without its connection in the shell's view, it has nothing to draw
+						onClose();
+						showCapabilities(next);
+					})
+				}
 			/>
 			{changing !== undefined ? (
 				<ConnectFlow connection={connection} account={changing} onClose={() => setChanging(undefined)} />

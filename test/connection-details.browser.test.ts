@@ -125,6 +125,18 @@ for (const width of [390, 1440])
 						`!document.querySelector('[data-tool="archive_events"]').textContent.includes('Waiting for you')`,
 					);
 					expect((await view()).tools.find((tool) => tool.title === "archive_events")?.waiting).toBeUndefined();
+					// Remove, confirmed, takes it whole and comes back to the list
+					await page.run(
+						`[...document.querySelectorAll('button')].find(el => el.textContent.trim().startsWith('Remove ')).click()`,
+					);
+					await page.until(`document.querySelector('[role="alertdialog"]')?.textContent.includes('Its tool settings')`);
+					await page.run(
+						`[...document.querySelector('[role="alertdialog"]').querySelectorAll('button')].find(el => el.textContent.trim() === 'Remove').click()`,
+					);
+					await page.until(
+						`!document.querySelector('[data-tool-list]') && document.body.textContent.includes('Add MCP server')`,
+					);
+					expect(await view()).toBeUndefined();
 					expect(page.errors()).toEqual([]);
 				});
 			} finally {

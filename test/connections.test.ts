@@ -1443,6 +1443,8 @@ describe("connections banda ships", () => {
 		expect((await s.harness.snapshot(Watches, context))?.watches.day?.done?.why).toMatch(/you removed Calendar/);
 		expect(existsSync(join(s.home, "auth", "connections", "cal"))).toBe(false);
 		expect(s.offered()).toEqual([]);
+		// it is offered again on the Connections list, which draws what banda ships
+		expect((await s.capabilities.view()).shipped?.map((each) => each.name)).toContain("cal");
 		// added again, it signs in afresh
 		await s.capabilities.addShipped("cal");
 		expect((await cal(s))?.state).toBe("sign-in");

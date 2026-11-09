@@ -527,3 +527,34 @@ it("a tool a kind reads says so; Ask leaves a read under way alone, Off does not
 	await s.capabilities.setTools("github", { issue_read: "off" }, version);
 	expect(await epoch()).toBe(start + 1);
 });
+
+it("removing a connection drops a draft waiting on it, and the turn that asked goes on", async () => {
+	let planned = true;
+	const s = await setup(() => {
+		if (!planned) return fauxAssistantMessage("done");
+		planned = false;
+		return fauxAssistantMessage(
+			[
+				fauxToolCall("github__add_issue_comment", {
+					owner: "acme",
+					repo: "banda",
+					issue_number: 34,
+					body: "x",
+					account: "alice",
+				}),
+			],
+			{ stopReason: "toolUse" },
+		);
+	});
+	const received = await s.core.receive(s.harness, {
+		id: crypto.randomUUID(),
+		origin: { gateway: "fake", peer: OWNER, thread: "reader" },
+		agent: "reader",
+		text: "comment",
+	});
+	if (!("turn" in received)) throw new Error("no turn");
+	await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+	await s.capabilities.remove("github");
+	expect((await openWaits(s.harness)).filter((w) => w.ask.type === "approval")).toEqual([]);
+	await s.harness.waitForTask(received.turn as TaskId, context);
+});

@@ -138,6 +138,7 @@ function Live({ view, mode }: { view: ConnectionView; mode: "details" | "review"
 			access={ACCESS}
 			onChangeAccess={() => {}}
 			onSignOut={() => {}}
+			onRemove={() => {}}
 		/>
 	);
 }

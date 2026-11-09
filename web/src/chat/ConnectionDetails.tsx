@@ -27,6 +27,7 @@ import {
 } from "../../../src/core/tool-kinds.ts";
 import type { AccountView, ConnectionToolView, ConnectionView, KindView } from "../../../src/server/api.ts";
 import type { ScopeChoices } from "../lib/connect.ts";
+import { Confirm } from "./Confirm.tsx";
 import { McpAgents } from "./McpConnection.tsx";
 import type { Who } from "./Row.tsx";
 
@@ -338,6 +339,7 @@ export function ConnectionDetailsView({
 	access,
 	onChangeAccess,
 	onSignOut,
+	onRemove,
 	busy = false,
 	error = "",
 }: {
@@ -353,6 +355,8 @@ export function ConnectionDetailsView({
 	access?: ScopeChoices | undefined;
 	onChangeAccess?: ((account: AccountView) => void) | undefined;
 	onSignOut?: ((account: AccountView) => void) | undefined;
+	/** Remove the connection whole; absent in the review on adding, where there is nothing yet to remove. */
+	onRemove?: (() => void) | undefined;
 	busy?: boolean | undefined;
 	error?: string | undefined;
 }) {
@@ -457,6 +461,21 @@ export function ConnectionDetailsView({
 					</ul>
 				</Part>
 			)}
+			{onRemove === undefined || review ? null : (
+				<div className="border-t border-line-soft pt-4">
+					<Confirm
+						title={`Remove ${service}?`}
+						body={removeWords(view.accounts ?? [])}
+						action="Remove"
+						keep={`Keep ${service}`}
+						onConfirm={onRemove}
+					>
+						<Button variant="ghost" size="sm" disabled={busy}>
+							Remove {service}
+						</Button>
+					</Confirm>
+				</div>
+			)}
 			{busy ? (
 				<p role="status" className="flex items-center gap-2 text-meta text-ink-2">
 					<Spinner /> Saving…
@@ -464,4 +483,13 @@ export function ConnectionDetailsView({
 			) : null}
 		</div>
 	);
+}
+
+/** What removing a connection takes with it, in plain words: what `POST …/remove` does. */
+function removeWords(accounts: readonly AccountView[]): string {
+	const signIns =
+		accounts.length === 0
+			? ""
+			: `${accounts.length === 1 ? "The sign-in" : "The sign-ins"} for ${accounts.map((each) => each.label).join(", ")} ${accounts.length === 1 ? "is" : "are"} forgotten. `;
+	return `${signIns}Its tool settings and which agents use it go too, the watches on it end, and drafts waiting on it are dropped. You can add it again.`;
 }
