@@ -885,7 +885,12 @@ export type MessageLine = {
 };
 
 /** A file in a message, as its row names it. */
-export type MessageFile = { readonly id: string; readonly name: string; readonly size: number };
+export type MessageFile = {
+	readonly id: string;
+	readonly name: string;
+	readonly size: number;
+	readonly mimetype?: string;
+};
 
 /** Emails together: a conversation's (titled by its subject) or a search's (titled by its query), the newest first. */
 export type MessagesCard = {
@@ -1162,7 +1167,14 @@ function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: strin
 			const avatar = slackAvatar(each.avatar);
 			const files = (Array.isArray(each.files) ? each.files : []).flatMap((file): MessageFile[] =>
 				plain(file) && typeof file.id === "string" && /^F[A-Z0-9]{2,40}$/.test(file.id)
-					? [{ id: file.id, name: plainLine(file.name, 200) || file.id, size: count(file.size) ?? 0 }]
+					? [
+							{
+								id: file.id,
+								name: plainLine(file.name, 200) || file.id,
+								size: count(file.size) ?? 0,
+								...(plainLine(file.mimetype, 100) === "" ? {} : { mimetype: plainLine(file.mimetype, 100) }),
+							},
+						]
 					: [],
 			);
 			return [
@@ -1189,16 +1201,19 @@ function slackMessagesCard(kind: ObjectKind, ref: ObjectRef, field: (name: strin
 			? plainLine(first?.text, 120)
 			: channel;
 	const url = slackUrl(field("url"));
-	const newest = all.slice(0, MESSAGES_SHOWN);
+	// a thread's card holds the message that started it and the one its link names, then the newest of the rest
+	const kept = [...new Set([first, all.find((each) => each.id === ref.values.ts)])].filter(
+		(each) => each !== undefined,
+	);
+	const newest = all.filter((each) => !kept.includes(each)).slice(0, MESSAGES_SHOWN - kept.length);
 	return {
 		card: "messages",
 		title: title || (search ? "Search" : place === "thread" ? "Thread" : "Slack"),
 		search,
-		// a thread's card opens with the message that started it, however many replies came after
 		messages:
-			place === "thread" && first !== undefined && !newest.includes(first)
-				? [...newest.slice(0, MESSAGES_SHOWN - 1), first]
-				: newest,
+			place === "thread"
+				? [...newest, ...kept].sort((a, b) => Number(b.id) - Number(a.id))
+				: all.slice(0, MESSAGES_SHOWN),
 		total: count(field("total")),
 		...(url === undefined ? {} : { url }),
 		service: "slack",

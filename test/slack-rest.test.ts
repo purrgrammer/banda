@@ -158,6 +158,15 @@ it("reads a thread once per message, its first message first, even when Slack re
 	expect(slack.calls.find((call) => call.method === "conversations.replies")?.params).toMatchObject({ ts: ROOT_TS });
 });
 
+it("reads the whole thread when asked about one of its replies", async () => {
+	const { read } = world();
+	const thread = (await read("get_thread", { channel: "C0GENERAL", ts: "1700000150.000150" })) as {
+		messages: SlackMessage[];
+	} & Record<string, unknown>;
+	expect(thread).toMatchObject({ root: ROOT_TS, total: 3 });
+	expect(thread.messages.map((each) => each.ts)).toEqual([ROOT_TS, "1700000150.000150", "1700000160.000160"]);
+});
+
 it("searches newest first, each match with its channel and permalink, and reads a person", async () => {
 	const { slack, read } = world();
 	const found = (await read("search_messages", { query: "deploy" })) as {

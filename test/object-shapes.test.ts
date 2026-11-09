@@ -462,11 +462,11 @@ it("draws Slack's thread, channel, search and person from the adapter's readings
 		place: "thread",
 		channel: "#general",
 	});
-	// a long thread's card still opens with its first message, and a message keeps its lines (quotes are lines)
+	// a long thread's card holds its first message and the reply its link names, and a message keeps its lines
 	const replies = [1, 2, 3, 4, 5, 6].map((n) => message(`170000000${n}.000200`, "@ana", `reply ${n}`));
 	const long = cardOf(
 		kinds.thread!,
-		{ connection: "slack", kind: "thread", values: { channel: "C0GENERAL", root: "1700000000.000100" } },
+		{ connection: "slack", kind: "thread", values: { channel: "C0GENERAL", ts: "1700000001.000200" } },
 		{
 			thread: {
 				channel: "C0GENERAL",
@@ -482,7 +482,7 @@ it("draws Slack's thread, channel, search and person from the adapter's readings
 		"1700000006.000200",
 		"1700000005.000200",
 		"1700000004.000200",
-		"1700000003.000200",
+		"1700000001.000200",
 		"1700000000.000100",
 	]);
 	expect(long.messages.at(-1)?.text).toBe("> quoted\nanswer");

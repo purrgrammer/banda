@@ -108,6 +108,12 @@ for (const width of [390, 1440])
 						`${section}.querySelector('[data-slack-replies]').querySelectorAll('[data-slack-bubble]').length`,
 					),
 				).toBe(4);
+				// a reference to a reply names its channel as a link, as one to a thread does
+				expect(
+					await page.run<string>(
+						`${section}.querySelector('[data-slack-reply] [data-slack-where] a')?.textContent ?? ""`,
+					),
+				).toBe("#general");
 				// a file in a message is named with its size
 				expect(await page.run(`${section}.querySelector('[data-slack-file="F0LOG"]') !== null`)).toBe(true);
 				expect(await page.run(`${section}.querySelector('[aria-label="Slack message"]') !== null`)).toBe(true);

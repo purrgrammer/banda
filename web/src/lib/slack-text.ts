@@ -48,3 +48,9 @@ export function slackBlocks(text: string): SlackBlock[] {
 	}
 	return blocks;
 }
+
+/** A message as one line, for a reference: its emoji drawn, its quote marks gone. */
+export const slackLine = (text: string): string =>
+	slackBlocks(slackEmoji(text))
+		.flatMap((block) => block.lines)
+		.join(" ");

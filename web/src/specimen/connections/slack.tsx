@@ -61,7 +61,10 @@ export const SLACK_THREAD: Messages = {
 			date: at(10, 12),
 			text: "@ana can you check #deploys before we ship?",
 			avatar: FACE.bob,
-			files: [{ id: "F0LOG", name: "deploy-41-migrations.log", size: 2 * 1024 * 1024 + 300_000 }],
+			files: [
+				{ id: "F0LOG", name: "deploy-41-migrations.log", size: 2 * 1024 * 1024 + 300_000, mimetype: "text/plain" },
+				{ id: "F0SHOT", name: "error-rate.png", size: 180_000, mimetype: "image/png" },
+			],
 		},
 		{
 			id: "1700000200.000300",

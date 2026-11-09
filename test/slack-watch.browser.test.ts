@@ -152,7 +152,7 @@ for (const width of [390, 1440])
 					await page.until(shows("Mara"));
 					await page.run(`location.hash='#/a/mara'`);
 					await api("/messages", "POST", { id: randomUUID(), thread: agentMainThread("mara"), text: "show #general" });
-					await page.until(`document.querySelector('[data-slack-card="channel"]')?.innerText.includes('Company-wide')`);
+					await page.until(`document.querySelector('[data-slack-card="channel"]')?.innerText.includes('12 members')`);
 
 					// the card's quiet actions, opened from the keyboard as the trigger shows on hover or focus
 					const trigger = `[...document.querySelectorAll('button[aria-label^="Actions for"]')].find(el => el.closest('[data-object]')?.querySelector('[data-slack-card="channel"]'))`;

@@ -398,7 +398,15 @@ export function fakeSlack({
 				case "conversations.replies": {
 					const channel = String(params.channel);
 					const root = (history[channel] ?? []).find((each) => each.ts === params.ts);
-					if (root === undefined) return json({ ok: false, error: "thread_not_found" });
+					if (root === undefined) {
+						// asked about a reply, Slack answers that reply alone
+						const reply = Object.entries(replies)
+							.filter(([thread]) => thread.startsWith(`${channel}/`))
+							.flatMap(([, messages]) => messages)
+							.find((each) => each.ts === params.ts);
+						if (reply === undefined) return json({ ok: false, error: "thread_not_found" });
+						return json({ ok: true, messages: [reply], has_more: false, response_metadata: { next_cursor: "" } });
+					}
 					// the thread's first message on every page, then the replies oldest first; `limit` counts replies
 					const under = (replies[`${channel}/${String(params.ts)}`] ?? []).filter(
 						(each) => params.oldest === undefined || later(each.ts, params.oldest),

@@ -376,6 +376,24 @@ type Call = (
 ) => Promise<Json>;
 
 /** What one read or write of one account works with: its calls under the budget, who it is, and its names. */
+/** Which message started a thread, by a message in it: learned once, since it never changes. */
+const THREAD_ROOTS = new Map<string, string>();
+
+/**
+ * The message that started the thread `ts` is in. Asked about a reply, `conversations.replies` answers that reply alone,
+ * so a link to a reply has to be read through its thread's first message.
+ */
+async function threadRoot(s: Session, channel: string, ts: string): Promise<string> {
+	const key = `${channel}/${ts}`;
+	const known = THREAD_ROOTS.get(key);
+	if (known !== undefined) return known;
+	const [head] = list((await s.call("conversations.replies", { channel, ts, limit: 1 })).messages);
+	const root = (typeof head?.thread_ts === "string" ? slackTs(head.thread_ts) : undefined) ?? ts;
+	if (THREAD_ROOTS.size >= 5000) THREAD_ROOTS.clear();
+	THREAD_ROOTS.set(key, root);
+	return root;
+}
+
 type Session = {
 	readonly call: Call;
 	readonly me: () => Promise<Identity>;
@@ -740,7 +758,7 @@ export async function slackCall(
 			}
 			case "get_thread": {
 				const id = channelArg(args.channel);
-				const root = tsArg(args.ts);
+				const root = await threadRoot(s, id, tsArg(args.ts));
 				const me = await s.me();
 				const body = await s.call("conversations.replies", {
 					channel: id,
