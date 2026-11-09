@@ -889,6 +889,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						else if (act.action === "account")
 							await capabilities.switchAccount(act.agent, act.name, act.account, act.on, context, act.sha);
 						else if (act.action === "signout") await capabilities.signOut(act.name, act.account);
+						else if (act.action === "label") await capabilities.labelAccount(act.name, act.account, act.label);
 						else if (act.action === "add") await capabilities.addShipped(act.name);
 						else if (act.action === "update") await capabilities.updateShipped(act.name, act.sha);
 						else if (act.action === "address") await capabilities.addByAddress(act.url);

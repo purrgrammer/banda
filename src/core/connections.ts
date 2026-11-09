@@ -24,7 +24,7 @@ import { Accepted, AGENT_NAME, type Agent, agentPath, frontmatter, LEAD, parseAg
 import { FLOORS, type Floor } from "./floor.ts";
 import { harnessToolsOf } from "./harness.ts";
 import { DEFAULT_GOOGLE_CLIENT_ID, type OAuthClient, type OAuthServer, type Pending, type Tokens } from "./oauth.ts";
-import { type ObjectKinds, parseObjects } from "./objects.ts";
+import { type ObjectKinds, parseObjects, plainLine } from "./objects.ts";
 import { REST_APIS, type RestApiName, restApiNamed } from "./rest.ts";
 
 export const connectionPath = (name: string) => `connections/${name}.md`;
@@ -454,6 +454,8 @@ export type Listed = {
 export type Account = {
 	/** What the service calls the owner, as read once after sign-in ("bandarra"); numbered when it says nothing. */
 	id: string;
+	/** The name of an account its server did not name: from its host until the owner chooses another. */
+	label?: string;
 	/** Each completed sign-in is a distinct generation, even when the same ID returns at the same time. */
 	generation?: string;
 	/** When it was signed in, and last signed in again. */
@@ -505,8 +507,48 @@ export function accountKey(id: string): string {
 		: `a-${createHash("sha256").update(id).digest("hex").slice(0, 16)}`;
 }
 
-/** An account as the owner reads it: "@bandarra", or an address as it is. */
-export const accountLabel = (id: string) => (/[@\s]/.test(id) ? id : `@${id}`);
+/** The id of a sign-in whose server did not say whom it is for: a handle for banda's keys, never a name. */
+export const numberedAccount = (n: number) => `account ${n}`;
+
+/** Whether a name reads as such a number, which says nothing about the account. */
+export const readsNumbered = (name: string) => /^account \d+$/i.test(name);
+
+type Named = Pick<Account, "id" | "label">;
+
+/** An account as the owner and the model read it: its name when it has one, "@bandarra", or an address as it is. */
+export const accountLabel = (account: Named) =>
+	account.label ?? (/[@\s]/.test(account.id) ? account.id : `@${account.id}`);
+
+/** A name as names are compared: "@Work", "work" and " WORK " are one name. */
+export const nameForm = (name: string) => plainLine(name).replace(/^@/, "").toLowerCase();
+
+/**
+ * Which of `keys` goes by `asked`: what the model or the owner reads it as, or the id a watch's file keeps because a
+ * rename does not change it. Never its key: that is banda's own, and an owner's name may spell one.
+ */
+export function accountNamed(
+	known: { readonly [key: string]: Named },
+	keys: readonly string[],
+	asked: string,
+): string | undefined {
+	const wanted = nameForm(asked);
+	return keys.find((key) => {
+		const account = known[key];
+		return account !== undefined && (nameForm(accountLabel(account)) === wanted || nameForm(account.id) === wanted);
+	});
+}
+
+/**
+ * The name a new account of the server at `url` goes by when its server does not say whose it is: the server's host,
+ * then "host 2", "host 3", the first that none of `accounts` is called, so accounts can always be told apart.
+ */
+export function defaultAccountLabel(url: string, accounts: readonly Named[]): string {
+	const host = new URL(url).hostname;
+	const taken = new Set(accounts.map((account) => nameForm(accountLabel(account))));
+	let label = host;
+	for (let n = 2; taken.has(nameForm(label)); n++) label = `${host} ${n}`;
+	return label;
+}
 
 /** Whether connection `connection` is signed in to: its tools act as one of its accounts. */
 export const signsIn = (connection: Pick<Connection, "url" | "auth">) =>
@@ -531,7 +573,7 @@ export async function accountsOn(tx: Tx, agent: string, name: string): Promise<s
 }
 
 /**
- * The connections whose tools need an `account` argument to tell their accounts apart, with those accounts' ids: a
+ * The connections whose tools need an `account` argument to tell their accounts apart, with what a model calls them: a
  * connection some active agent has more than one account of. One tool set per connection serves every agent, so the
  * argument is offered to each once one of them needs it; an agent with one account may leave it out. Reads only.
  */
@@ -543,7 +585,7 @@ export async function multiAccount(tx: Tx): Promise<{ [connection: string]: stri
 		for (const name of Object.keys(connections))
 			if ((await accountsOn(tx, agent, name)).length > 1)
 				found[name] = Object.values(doc.accounts?.[name] ?? {})
-					.map((account) => account.id)
+					.map(accountLabel)
 					.sort();
 	}
 	return found;

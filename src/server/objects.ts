@@ -235,7 +235,9 @@ export function openObjects({
 		const label =
 			account === ""
 				? undefined
-				: accountLabel((await harness.snapshot(Connected, ctx))?.accounts[connection.name]?.[account]?.id ?? account);
+				: accountLabel(
+						(await harness.snapshot(Connected, ctx))?.accounts[connection.name]?.[account] ?? { id: account },
+					);
 		const base = {
 			key: refKey(ref, kinds),
 			connection: connection.name,

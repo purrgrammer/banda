@@ -68,6 +68,7 @@ it("reopens current account authority and object readings without a migration", 
 		const connected = await tx.doc(Connected);
 		connected.epoch = 7;
 		connected.accounts.github = { alice: { id: "alice", at: 123 } };
+		connected.accounts.notes = { "account-1": { id: "account 1", label: "Work", at: 124 } };
 		connected.on.reader = { github: ["alice"] };
 		connected.off.github__issue_read = true;
 		await keepReading(tx, "github/alice/issue:org/repo#12", {
@@ -164,7 +165,10 @@ it("reopens current account authority and object readings without a migration", 
 	try {
 		expect(await after.snapshot(Connected, context)).toMatchObject({
 			epoch: 7,
-			accounts: { github: { alice: { id: "alice", at: 123 } } },
+			accounts: {
+				github: { alice: { id: "alice", at: 123 } },
+				notes: { "account-1": { id: "account 1", label: "Work", at: 124 } },
+			},
 			on: { reader: { github: ["alice"] } },
 			off: { github__issue_read: true },
 		});

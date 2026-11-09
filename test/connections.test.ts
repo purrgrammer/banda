@@ -19,7 +19,16 @@ import { AgentDoc, type ConversationId, type TaskId, type ToolExecutionApi } fro
 import fc from "fast-check";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Accepted, parseAgent, shaOf } from "../src/core/agents.ts";
-import { Connected, connectionTools, connectionToolsOf, parseConnection, parseTool } from "../src/core/connections.ts";
+import {
+	accountNamed,
+	Connected,
+	type Connection,
+	connectionTools,
+	connectionToolsOf,
+	nameForm,
+	parseConnection,
+	parseTool,
+} from "../src/core/connections.ts";
 import { OWNER } from "../src/core/gateway.ts";
 import { MAX_NOTES, notesOf } from "../src/core/mcp.ts";
 import { Permissions } from "../src/core/permissions.ts";
@@ -29,7 +38,7 @@ import { context } from "../src/core/store.ts";
 import { toolDiscoveryExtension, toolRegistry, toolSearchExtension } from "../src/core/tool-discovery.ts";
 import type { TurnResult } from "../src/core/turn.ts";
 import { answer } from "../src/core/wait.ts";
-import { Watches } from "../src/core/watches.ts";
+import { accountFor as accountForWatch, Watches } from "../src/core/watches.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import { SHIPPED } from "../src/server/capabilities.ts";
@@ -391,7 +400,7 @@ describe("a remote connection", () => {
 		expect(s.offered()).toEqual([]);
 		expect(await signInAsOwner(s.capabilities, "cal")).toEqual({
 			ok: true,
-			words: "Signed in to Calendar as account 1.",
+			words: "Signed in to Calendar as 127.0.0.1.",
 		});
 		await expect(s.capabilities.setKey("notes", "wrong-key-0123456789")).rejects.toThrow(/did not take it/);
 		await s.capabilities.setKey("notes", "sk-SEEDED-0123456789abcdef", context, "sancho");
@@ -598,7 +607,7 @@ describe("signing in by code, as a file's named client", () => {
 		);
 		expect(await signInAsOwner(s.capabilities, "cal")).toEqual({
 			ok: true,
-			words: "Signed in to Calendar as account 1.",
+			words: "Signed in to Calendar as 127.0.0.1.",
 		});
 		expect(fake.scopesAsked).toEqual(["read:user"]);
 	});
@@ -777,6 +786,192 @@ describe("adding a server", () => {
 			expect.objectContaining({ id: "account 1", agents: ["sancho"] }),
 			expect.objectContaining({ id: "account 2", agents: [] }),
 		]);
+	});
+
+	it("an account its server does not name goes by its host, then by what its owner calls it, never its number", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const s = await open();
+		const name = await s.capabilities.addMcp({ url: fake.url });
+		const host = new URL(fake.url).hostname;
+		expect((await signInAsOwner(s.capabilities, name, { agent: null })).words).toContain(`as ${host}.`);
+		expect((await signInAsOwner(s.capabilities, name, { agent: null })).words).toContain(`as ${host} 2.`);
+		const accounts = async () =>
+			(await s.capabilities.view()).connections.find((each) => each.name === name)?.accounts ?? [];
+		// the key its credentials and grants are held under is the number, and only the key
+		expect(await accounts()).toEqual([
+			expect.objectContaining({ account: "account-1", id: "account 1", label: host, numbered: true }),
+			expect.objectContaining({ account: "account-2", id: "account 2", label: `${host} 2`, numbered: true }),
+		]);
+		await s.capabilities.labelAccount(name, "account-1", "  Work  ");
+		expect((await accounts())[0]).toMatchObject({ account: "account-1", id: "account 1", label: "Work" });
+		expect((await s.harness.snapshot(Connected, context))?.accounts[name]).toMatchObject({
+			"account-1": { id: "account 1", label: "Work" },
+			"account-2": { id: "account 2", label: `${host} 2` },
+		});
+		await expect(s.capabilities.labelAccount(name, "account-2", "   ")).rejects.toThrow(/give the account a name/);
+		await expect(s.capabilities.labelAccount(name, "account-2", "Account 3")).rejects.toThrow(/another name/);
+		await expect(s.capabilities.labelAccount(name, "account-2", "work")).rejects.toThrow(/already called/);
+		await expect(s.capabilities.labelAccount(name, "nobody", "Home")).rejects.toThrow(/no such account/);
+		// the first free name, so a renamed account's host is taken up again and no two read the same
+		expect((await signInAsOwner(s.capabilities, name, { agent: null })).words).toContain(`as ${host}.`);
+		// a model is offered the names, never the numbers, and acts as an account by its name
+		await s.capabilities.trustReads(name, ["list_events"]);
+		await s.capabilities.switchAccount("sancho", name, "account-1", true);
+		await s.capabilities.switchAccount("sancho", name, "account-2", true);
+		const listed = s.registry
+			.snapshot()
+			.tools()
+			.find(({ tool }) => tool.name === `${name}__list_events`)!.tool;
+		expect(JSON.stringify(listed.parameters)).toContain(`${host} 2 or`);
+		expect(JSON.stringify(listed.parameters)).not.toMatch(/account \d/);
+		s.model.plan(
+			[{ tool: `${name}__list_events`, args: { account: "work", day: "mon" } }],
+			[{ tool: `${name}__list_events`, args: { account: `${host} 2`, day: "tue" } }],
+		);
+		await s.done((await s.say("hello")).turn);
+		expect(fake.calls).toEqual([
+			{ tool: "list_events", args: { day: "mon" } },
+			{ tool: "list_events", args: { day: "tue" } },
+		]);
+	});
+
+	it("an account switched off stays off, even when another account's name spells its key", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const s = await open();
+		const name = await s.capabilities.addMcp({ url: fake.url });
+		await signInAsOwner(s.capabilities, name, { agent: null });
+		await signInAsOwner(s.capabilities, name, { agent: null });
+		await s.capabilities.labelAccount(name, "account-1", "Personal");
+		await s.capabilities.labelAccount(name, "account-2", "account-1");
+		await s.capabilities.switchAccount("sancho", name, "account-1", true);
+		await s.capabilities.switchAccount("sancho", name, "account-2", true);
+		s.model.plan([{ tool: `${name}__create_event`, args: { title: "Tea", day: "mon", account: "Personal" } }]);
+		const said = await s.say("tea");
+		const asked = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+		await s.capabilities.switchAccount("sancho", name, "account-1", false);
+		await answer(s.harness, asked.key, "approve", web, "bearer");
+		await s.done(said.turn);
+		expect(fake.calls).toEqual([]);
+	});
+
+	it("the next request of a chat already running offers an account by its new name", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const s = await open();
+		const name = await s.capabilities.addMcp({ url: fake.url });
+		await signInAsOwner(s.capabilities, name, { agent: null });
+		await signInAsOwner(s.capabilities, name, { agent: null });
+		await s.capabilities.trustReads(name, ["list_events"]);
+		await s.capabilities.switchAccount("sancho", name, "account-1", true);
+		await s.capabilities.switchAccount("sancho", name, "account-2", true);
+		await s.done((await s.say("hello")).turn);
+		await s.capabilities.labelAccount(name, "account-1", "Work");
+		await s.done((await s.say("again")).turn);
+		const offered = getCurrentTools(s.model.requests.at(-1)!.messages).find(
+			(tool) => tool.name === `${name}__list_events`,
+		);
+		expect(JSON.stringify(offered?.parameters)).toContain("Work");
+	});
+
+	it("a name finds its own account and a key finds none, whatever the owner calls them", () => {
+		const label = fc.oneof(
+			fc.constantFrom("Work", "account-1", "account-2", "@home", "mcp.example.com 2"),
+			fc.string({ minLength: 1, maxLength: 12 }).filter((text) => nameForm(text) !== ""),
+		);
+		fc.assert(
+			fc.property(fc.uniqueArray(label, { minLength: 1, maxLength: 5, selector: nameForm }), (labels) => {
+				const known = Object.fromEntries(
+					labels.map((each, n) => [`account-${n + 1}`, { id: `account ${n + 1}`, label: each }]),
+				);
+				const keys = Object.keys(known);
+				labels.forEach((each, n) => {
+					expect(accountNamed(known, keys, each)).toBe(`account-${n + 1}`);
+					expect(accountNamed(known, keys, `@${each.toUpperCase()}`)).toBe(
+						nameForm(`@${each.toUpperCase()}`) === nameForm(each) ? `account-${n + 1}` : undefined,
+					);
+				});
+				for (const key of keys)
+					if (!labels.some((each) => nameForm(each) === key)) expect(accountNamed(known, keys, key)).toBeUndefined();
+			}),
+			{ numRuns: pbtRuns(100) },
+		);
+	});
+
+	it("a name longer than the limit is refused, never cut short", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const s = await open();
+		const name = await s.capabilities.addMcp({ url: fake.url });
+		await signInAsOwner(s.capabilities, name, { agent: null });
+		await expect(s.capabilities.labelAccount(name, "account-1", "x".repeat(61))).rejects.toThrow(/60 characters/);
+		await s.capabilities.labelAccount(name, "account-1", "x".repeat(60));
+	});
+
+	it("names that differ only by @ or case are one name", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const s = await open();
+		const name = await s.capabilities.addMcp({ url: fake.url });
+		await signInAsOwner(s.capabilities, name, { agent: null });
+		await signInAsOwner(s.capabilities, name, { agent: null });
+		await s.capabilities.labelAccount(name, "account-1", "Work");
+		await expect(s.capabilities.labelAccount(name, "account-2", "@work")).rejects.toThrow(/already called/);
+	});
+
+	it("a watch knows an account by the name everyone else reads", async () => {
+		const s = await open();
+		await s.harness.commit(async (tx) => {
+			const doc = await tx.doc(Connected);
+			doc.accounts.cal = {
+				"account-1": { id: "account 1", label: "Work", at: 1 },
+				"account-2": { id: "account 2", label: "mcp.example.com 2", at: 1 },
+				bea: { id: "bea", at: 1 },
+			};
+			doc.on.sancho = { cal: ["account-1", "account-2", "bea"] };
+		}, context);
+		const connection = {
+			name: "cal",
+			service: "Calendar",
+			url: "https://mcp.example.com",
+			auth: "oauth",
+		} as Connection;
+		const look = (named?: string) =>
+			s.harness.commit((tx) => accountForWatch(tx, "sancho", connection, named), context);
+		expect(await look("Work")).toEqual({ account: "account-1", id: "account 1", name: "Work" });
+		expect(await look("@work")).toMatchObject({ account: "account-1" });
+		expect(await look("@bea")).toEqual({ account: "bea", id: "bea", name: "bea" });
+		// what a watch's file keeps: a rename does not move the watch to another account or lose it
+		expect(await look("account 2")).toMatchObject({ account: "account-2" });
+		expect(await look("account-2")).toHaveProperty("refused");
+		const choose = (await look()) as { refused: string };
+		expect(choose.refused).toContain("Work, mcp.example.com 2, @bea");
+		expect(choose.refused).not.toMatch(/account \d/);
+	});
+
+	it("concurrent sign-ins an unnaming server gives still read differently", async () => {
+		const fake = await startFakeMcp({ auth: "key" });
+		fakes.push(fake);
+		const s = await open();
+		const name = await s.capabilities.addMcp({ url: fake.url });
+		await Promise.all([
+			s.capabilities.setKey(name, "fake-key-0123456789"),
+			s.capabilities.setKey(name, "fake-key-0123456789"),
+		]);
+		const accounts = (await s.capabilities.view()).connections.find((each) => each.name === name)?.accounts ?? [];
+		const host = new URL(fake.url).hostname;
+		expect(accounts.map((each) => each.label).sort()).toEqual([host, `${host} 2`]);
+	});
+
+	it("an account a server names cannot be renamed", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const s = await open();
+		await s.harness.commit(async (tx) => {
+			(await tx.doc(Connected)).accounts.cal = { alice: { id: "alice", at: 1 } };
+		}, context);
+		await expect(s.capabilities.labelAccount("cal", "alice", "Work")).rejects.toThrow(/already @alice/);
 	});
 
 	it("by its address: banda finds how it signs in, names it by its host and allows it", async () => {

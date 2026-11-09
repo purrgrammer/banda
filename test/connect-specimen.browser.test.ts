@@ -50,6 +50,7 @@ const STEPS: readonly { readonly step: string; readonly words: readonly string[]
 	{ step: "code", words: ["Enter this code on GitHub", "WDJB-MJHT", "Copy code", "Open GitHub"] },
 	{ step: "failed", words: ["Google Calendar isn't connected", "SERVICE_DISABLED", "Try again"] },
 	{ step: "known", words: ["GitHub is already signed in", "Use @bandarra", "Use @purrgrammer"] },
+	{ step: "name", words: ["Name this Ernesto account", "keep ernesto.example 2", "Continue"] },
 	{ step: "agents", words: ["Use Google Calendar with", "bandarra@example.com", "Sancho", "Mara", "Done"] },
 	{ step: "share", words: ["Let Mara use GitHub as @bandarra?", "Allow", "Don't"] },
 ];

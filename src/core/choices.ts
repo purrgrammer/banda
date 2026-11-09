@@ -46,6 +46,9 @@ export const DEFAULT_PERSONALITY =
 /** The longest personality: a paragraph or two. */
 export const MAX_PERSONALITY = 2000;
 
+/** The longest name the owner can give an account. */
+export const ACCOUNT_LABEL_MAX = 60;
+
 const HEADING = "## Personality";
 const SECTION = /\n*^## Personality[ \t]*\r?\n[\s\S]*?(?=^## |(?![\s\S]))/m;
 

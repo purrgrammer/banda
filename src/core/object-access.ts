@@ -41,6 +41,8 @@ export async function objectAccess(tx: Tx, chat: number, ref: ObjectRef, account
 		reads[as] = read;
 		listedWith[as] = tool.schema;
 	}
-	const source = JSON.stringify([connection.sha, doc.accounts[ref.connection]?.[account], schemas]);
+	// the sign-in the read is made with, not what the account is called: a rename changes no access
+	const held = doc.accounts[ref.connection]?.[account];
+	const source = JSON.stringify([connection.sha, held && [held.id, held.generation, held.at], schemas]);
 	return { connection, kind, reads, schemas: listedWith, source, stamp: JSON.stringify([source, agent, doc.epoch]) };
 }

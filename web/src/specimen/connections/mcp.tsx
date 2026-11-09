@@ -56,7 +56,13 @@ const TOOLS: readonly ConnectionToolView[] = [
 ];
 const NOTES =
 	"Ernesto exposes files and actions through three tools. Read files with fs_read, change files with fs_write, and use execute for routes such as search. Inspect a route before running it.";
-const ACCOUNT = { account: "1", id: "account 1", label: "account 1", at: Date.UTC(2026, 10, 13, 9, 30) };
+const ACCOUNT = {
+	account: "account-1",
+	id: "account 1",
+	label: "ernesto.example",
+	numbered: true,
+	at: Date.UTC(2026, 10, 13, 9, 30),
+};
 
 /**
  * The daemon's view of the fixture server for a scenario: connected once its tools were listed (and still, while another
@@ -183,6 +189,7 @@ function McpExample({
 		useConnected: () => go("review"),
 		retry: () => {},
 		setAccount: () => {},
+		setLabel: () => {},
 		setReads,
 		switchAgent: (agent, on) => {
 			const set = phase === "done" ? setGranted : setSelected;
@@ -216,6 +223,7 @@ function McpExample({
 					error,
 					credential,
 					account: ACCOUNT.account,
+					label: "",
 					selected,
 					reads,
 					back,

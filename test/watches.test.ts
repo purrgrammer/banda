@@ -7,7 +7,9 @@ import { Accepted } from "../src/core/agents.ts";
 import { Connected } from "../src/core/connections.ts";
 import { pause as pauseAll, resume as resumeAll } from "../src/core/control.ts";
 import { BUSY_EVERY, type Json } from "../src/core/follow.ts";
+import { objectAccess } from "../src/core/object-access.ts";
 import { context } from "../src/core/store.ts";
+import { Routes } from "../src/core/turn.ts";
 import { endWatches, parseWatch, Watches, type WatchRecord, watchPath, watchText } from "../src/core/watches.ts";
 import { pause } from "../src/server/watches.ts";
 import { Faults } from "./fault/faults.ts";
@@ -246,6 +248,32 @@ describe("a watch on a pull request", () => {
 		expect(summary.wakes).toHaveLength(2);
 		expect(summary.wakes.flatMap((wake) => wake.changes).some((change) => change.includes("bob"))).toBe(false);
 	}, 60_000);
+
+	it("renaming an account does not change what a look was allowed to read", async () => {
+		let stamps: (string | undefined)[] = [];
+		await watchScenario(await tempHome(), new Faults(), {
+			act: async (step, { harness }) => {
+				if (step !== 2) return;
+				const routes = (await harness.snapshot(Routes, context))?.routes ?? {};
+				const chat = Object.values(routes)[0]?.chat as number;
+				const ref = {
+					connection: "github",
+					kind: "pull_request",
+					values: { owner: "acme", repo: "banda", number: "142" },
+				};
+				const stamp = () =>
+					harness.commit(async (tx) => (await objectAccess(tx, chat, ref, "bandarra"))?.stamp, context);
+				const before = await stamp();
+				await harness.commit(async (tx) => {
+					const account = (await tx.doc(Connected)).accounts.github?.bandarra;
+					if (account !== undefined) account.label = "Work";
+				}, context);
+				stamps = [before, await stamp()];
+			},
+		});
+		expect(stamps[0]).toBeDefined();
+		expect(stamps[1]).toBe(stamps[0]);
+	});
 
 	it("an account switched off ends the watch in that commit, saying why; it never wakes after", async () => {
 		const summary = await watchScenario(await tempHome(), new Faults(), {

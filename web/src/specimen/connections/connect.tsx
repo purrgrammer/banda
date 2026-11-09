@@ -88,6 +88,13 @@ const CONNECT_STEPS: readonly {
 		step: { kind: "known", logins: ["@bandarra", "@purrgrammer"] },
 	},
 	{
+		label: "Naming an account its server didn't",
+		agent: "Octo",
+		connection: "Ernesto",
+		id: "ernesto",
+		step: { kind: "name", login: "ernesto.example 2" },
+	},
+	{
 		label: "Signed in for no agent",
 		connection: "Google Calendar",
 		id: "calendar",

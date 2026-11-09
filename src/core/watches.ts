@@ -31,7 +31,15 @@ import {
 } from "@earendil-works/pi-durable";
 import { log } from "./activity.ts";
 import { Accepted, AGENT_NAME, agentWords, ChatAgent, frontmatter, isArchived, LEAD, shaOf } from "./agents.ts";
-import { acceptedConnection, accountsOn, Connected, type Connection, signsIn } from "./connections.ts";
+import {
+	acceptedConnection,
+	accountLabel,
+	accountNamed,
+	accountsOn,
+	Connected,
+	type Connection,
+	signsIn,
+} from "./connections.ts";
 import {
 	BUSY_EVERY,
 	canonical,
@@ -505,24 +513,25 @@ export async function cannotFollow(tx: Tx, object: string): Promise<string> {
 }
 
 /**
- * The account a watch looks with, among those agent `agent` has of `connection`: the one the watch names (by what the
- * service calls the owner), or the agent's one account; "" for a connection nobody signs in to.
+ * The account a watch looks with, among those agent `agent` has of `connection`: the one the watch names, or the
+ * agent's one account; "" for a connection nobody signs in to. With it, its `id`, which a watch's file keeps because a
+ * rename does not change it, and the `name` to show the owner.
  */
 export async function accountFor(
 	tx: Tx,
 	agent: string,
 	connection: Connection,
 	named: string | undefined,
-): Promise<{ account: string; id?: string } | { refused: string }> {
+): Promise<{ account: string; id?: string; name?: string } | { refused: string }> {
 	if (!signsIn(connection)) return { account: "" };
 	const accounts = await accountsOn(tx, agent, connection.name);
 	const known = (await tx.doc(Connected)).accounts[connection.name] ?? {};
 	const picked = (key: string) => {
-		const id = known[key]?.id;
-		return id === undefined ? { account: key } : { account: key, id };
+		const held = known[key];
+		return held === undefined ? { account: key } : { account: key, id: held.id, name: held.label ?? held.id };
 	};
 	if (named !== undefined) {
-		const found = accounts.find((key) => known[key]?.id === named || key === named);
+		const found = accountNamed(known, accounts, named);
 		return found === undefined
 			? { refused: `${await agentWords(tx, agent)} has no ${connection.service} account named ${named}` }
 			: picked(found);
@@ -530,7 +539,7 @@ export async function accountFor(
 	if (accounts.length === 1) return picked(accounts[0] as string);
 	if (accounts.length === 0) return { refused: `${await agentWords(tx, agent)} has no ${connection.service} account` };
 	return {
-		refused: `say which ${connection.service} account: ${accounts.map((key) => known[key]?.id ?? key).join(", ")}`,
+		refused: `say which ${connection.service} account: ${accounts.map((key) => accountLabel(known[key] ?? { id: key })).join(", ")}`,
 	};
 }
 
@@ -804,7 +813,7 @@ export function defineWatches(options: WatchesOptions) {
 				name: nameOf(ref, connection.objects ?? {}),
 				connection: connection.name,
 				service: connection.service,
-				...(picked.id === undefined ? {} : { account: picked.id }),
+				...(picked.name === undefined ? {} : { account: picked.name }),
 				...(watch.until === undefined ? {} : { until: watch.until }),
 			},
 			stamp: access.stamp,
@@ -1092,7 +1101,8 @@ export function defineWatches(options: WatchesOptions) {
 			delete record.resumed;
 			delete record.burst;
 			delete record.held;
-			const label = (await tx.doc(Connected)).accounts[connection.name]?.[account]?.id;
+			const held = (await tx.doc(Connected)).accounts[connection.name]?.[account];
+			const label = held?.label ?? held?.id;
 			const data: WatchWakeData = {
 				watch: name,
 				object: {
