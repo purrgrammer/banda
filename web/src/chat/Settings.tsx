@@ -12,7 +12,7 @@ import {
 	PlusIcon,
 	XIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -34,6 +34,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,6 +49,7 @@ import { ProviderAccountForm, ProviderAccountRename } from "./ProviderAccountFor
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
 import { ProviderSignIn, type SignInWay } from "./ProviderSignIn.tsx";
 import type { Who } from "./Row.tsx";
+import { shownTier, tierPicks } from "./tier-picks.ts";
 
 /** A settings page: a bar with back and the title, then sections at a reading width. */
 export function SettingsPage({
@@ -338,15 +340,17 @@ export function Connections({
 /** Three tiers of thinking, picked by name; the exact model lives beside them. */
 function Thinking({
 	value,
+	saving,
 	disabled,
 	onPick,
 }: {
 	value: Tier | undefined;
+	saving: boolean;
 	disabled: boolean;
 	onPick: (tier: Tier) => void;
 }) {
 	return (
-		<div role="radiogroup" aria-label="Thinking" className="flex rounded-field bg-paper-3 p-0.5">
+		<div role="radiogroup" aria-label="Thinking" aria-busy={saving} className="flex rounded-field bg-paper-3 p-0.5">
 			{TIERS.map((one) => (
 				// biome-ignore lint/a11y/useSemanticElements: a segment of a segmented control
 				<button
@@ -359,11 +363,17 @@ function Thinking({
 						if (one !== value) onPick(one);
 					}}
 					className={cn(
-						"flex-1 rounded-[6px] px-3 py-1.5 text-ui text-ink-2 disabled:opacity-60",
+						"relative flex-1 rounded-[6px] px-3 py-1.5 text-ui text-ink-2 disabled:opacity-60",
 						one === value && "bg-paper font-medium text-ink shadow-[0_0_0_1px_var(--line-soft)]",
 					)}
 				>
 					{TIER_WORDS[one].name}
+					{saving && one === value ? (
+						// after a beat, so a save the daemon answers at once does not flash it
+						<span className="absolute inset-y-0 right-1.5 flex items-center duration-150 animate-in fade-in-0 delay-150 fill-mode-backwards">
+							<Spinner aria-label="Saving" className="size-3 text-ink-3" />
+						</span>
+					) : null}
 				</button>
 			))}
 		</div>
@@ -371,19 +381,31 @@ function Thinking({
 }
 
 /**
- * How hard the agent thinks, by name: the model behind each tier is the provider's, set in Settings. It shows only the
- * tier the store holds, which comes back on the chat's row: a pick that fails leaves the one that is really in effect.
+ * How hard the agent thinks, by name: the model behind each tier is the provider's, set in Settings. A pick shows at
+ * once and only this selector renders for it; `save` rejecting puts back the tier the store holds and calls `onFailed`.
  */
 export function ThinkingTiers({
 	tier,
 	custom,
-	onPick,
+	save,
+	onFailed,
 }: {
+	/** What the store holds. */
 	tier: Tier | undefined;
 	custom: boolean;
-	onPick: (tier: Tier) => Promise<unknown>;
+	save: (tier: Tier) => Promise<unknown>;
+	onFailed: (error: unknown, retry: () => void) => void;
 }) {
-	const [saving, setSaving] = useState(false);
+	const latest = useRef({ tier, save, onFailed });
+	latest.current = { tier, save, onFailed };
+	const [picks] = useState(() =>
+		tierPicks({
+			save: (picked) => latest.current.save(picked),
+			failed: (error, retry) => latest.current.onFailed(error, retry),
+			stored: () => latest.current.tier,
+		}),
+	);
+	const view = useSyncExternalStore(picks.subscribe, picks.view, picks.view);
 	const note = custom
 		? "This agent's file names its own model, so it thinks the same whatever is picked here."
 		: tier === undefined
@@ -392,12 +414,10 @@ export function ThinkingTiers({
 	return (
 		<Block title="Thinking" note={note}>
 			<Thinking
-				value={tier}
-				disabled={saving || custom || tier === undefined}
-				onPick={(picked) => {
-					setSaving(true);
-					void onPick(picked).finally(() => setSaving(false));
-				}}
+				value={shownTier(view, tier)}
+				saving={view.saving}
+				disabled={custom || tier === undefined}
+				onPick={picks.pick}
 			/>
 		</Block>
 	);
