@@ -39,6 +39,8 @@ const calendar = connectionDefinition({
 	auth: "oauth",
 	// "rule": the read is list_events only for day=mon, the call the model makes; any other day would ask
 	reads: [mode === "rule" ? "list_events(day=mon)" : "list_events"],
+	// the write the run makes, named: a tool the server lists and the definition does not name waits off
+	needs: { create_event: ["calendar"] },
 	...(byCode ? { client: "banda-app", scopes: ["calendar"] } : {}),
 });
 // what banda ships, in a folder of its own: every mode but the servers the owner adds
