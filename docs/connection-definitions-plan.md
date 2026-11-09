@@ -68,9 +68,9 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 
 **Files.**
 
-- [ ] Create `src/core/definitions.ts`. The TypeBox schema of a definition, `readDefinition` (parse, `Value.Check`, then the checks a schema cannot say), the definitions map built at start, and a definition's version.
-- [ ] Create `shipped/connections/{github,gmail,calendar,contacts,drive,slack}.json` and delete the six `.md` files. Each carries `about` and its access choices' labels and notes.
-- [ ] Edit `scripts/shipped-github.ts` to emit one JSON object.
+- [x] Create `src/core/definitions.ts`. The TypeBox schema of a definition, `readDefinition` (parse, `Value.Check`, then the checks a schema cannot say), the definitions map built at start, and a definition's version.
+- [x] Create `shipped/connections/{github,gmail,calendar,contacts,drive,slack}.json` and delete the six `.md` files. Each carries `about` and its access choices' labels and notes.
+- [x] Edit `scripts/shipped-github.ts` to emit one JSON object.
 - [ ] Edit `src/core/connections.ts`. `acceptedConnection` and its callers read the definitions map and the store's records. The frontmatter parser for connections, `withList`, `withReads`, the parse cache, `connectionPath` and the tool file code go.
 - [ ] Edit `src/server/capabilities.ts`. "On in this home" and Add as a switch. A server added by address as a record with a version, through one path. Accepted reads and groups in the store. `addShipped`'s copy, `updateShipped`, `shippedUpdate`, `needsNoSignIn`'s rewrite, the eight `boxedFiles("connections")` comparisons, and the box's change to a connection go.
 - [ ] Edit `src/core/watches.ts`, `src/core/object-access.ts`, `src/server/objects.ts`, `src/server/watches.ts` to read the definitions map and bind to the version.
@@ -84,12 +84,12 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 
 **Build.**
 
-- [ ] Stage 1, shipped definitions from the release. First two scenario tests that pin today's behaviour, written before any change. What a watch does at its first look after its object's definition changed, and that a tool a server adds later waits switched off.
-  - [ ] The schema in `src/core/definitions.ts`, with the cross-field checks of `parseConnectionText`, `parseObjects` and `parseFollow` kept as code after `Value.Check`.
-  - [ ] The six shipped files as `.json`, each body compared with its tools' descriptions before it goes, with `about` and the access choices' words moved in from the app.
-  - [ ] The definitions map read once at start, and a definition's version, the hash of what was read. Every site that compares the accepted file's hash binds to it.
-  - [ ] "On in this home" in the store, Add as a switch in Connections, Settings and the agent's card. The copy and Update gone.
-  - [ ] The rule at a change of version. A tool the definition names comes on, a tool a server lists alone waits off whatever the version, switches kept by name.
+- [x] Stage 1, shipped definitions from the release. First two scenario tests that pin today's behaviour, written before any change. What a watch does at its first look after its object's definition changed, and that a tool a server adds later waits switched off.
+  - [x] The schema in `src/core/definitions.ts`, with the cross-field checks of `parseConnectionText`, `parseObjects` and `parseFollow` kept as code after `Value.Check`.
+  - [x] The six shipped files as `.json`, each body compared with its tools' descriptions before it goes, with `about` and the access choices' words moved in from the app.
+  - [x] The definitions map read once at start, and a definition's version, the hash of what was read. Every site that compares the accepted file's hash binds to it.
+  - [x] "On in this home" in the store, Add as a switch in Connections, Settings and the agent's card. The copy and Update gone.
+  - [x] The rule at a change of version. A tool the definition names comes on, a tool a server lists alone waits off whatever the version, switches kept by name.
 - [ ] Stage 2, the owner's choices and their own servers in the store. A record per server added by address with a version counter, one path that adds one, discovery and sign-in as transactions.
   - [ ] The reads and groups the owner accepted, for every connection, in the store, as an overlay on the definition. Nothing rewrites text.
   - [ ] The app's concurrency token is the version.
@@ -109,10 +109,10 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `test/definitions.test.ts`. Every shipped definition passes the schema and the checks, a round trip over generated definitions, each refusal the old parsers made still refused, and the version stable for the same bytes. Run `npm run test:fast -- test/definitions.test.ts`.
+- [x] `test/definitions.test.ts`. Every shipped definition passes the schema and the checks, a round trip over generated definitions, each refusal the old parsers made still refused, and the version stable for the same bytes. Run `npm run test:fast -- test/definitions.test.ts`.
 - [ ] `test/connections.test.ts`. Add as a switch, no file in the workspace, a changed definition taken at start with accounts and switches kept, a narrowed one making an account stale, a tool named by the definition on and one a server added alone off across versions, a server added by address as a record, two edits crossing refused by version. Run `npm run test:fast -- test/connections.test.ts`.
 - [ ] `test/tool-settings.test.ts`. The settings each kind allows, Ask on a read and Always ask on a write putting it on the floor, the check at the call's start, an allowed read kept across a definition change, and nothing set on a connection letting a write run unasked. Run `npm run test:fast -- test/tool-settings.test.ts`.
-- [ ] `test/watch-slack.test.ts`, `test/watches.test.ts`, `test/objects.test.ts`. A watch and a card across a version change, with no false wake. Run `npm run test:fast -- test/watch-slack.test.ts test/watches.test.ts test/objects.test.ts`.
+- [x] `test/watch-slack.test.ts`, `test/watches.test.ts`, `test/objects.test.ts`. A watch and a card across a version change, with no false wake. Run `npm run test:fast -- test/watch-slack.test.ts test/watches.test.ts test/objects.test.ts`.
 - [ ] `test/stored-shapes.test.ts`. The new records and docs as they are. Run `npm run test:fast -- test/stored-shapes.test.ts`.
 - [ ] `test/connections.faults.test.ts`. Kills at turning a connection on, adding a server, accepting its tools, changing a setting, and removing it. Dispatch the `ci` workflow with faults on the branch and record the run id.
 - [ ] The property "nothing the box writes reaches a definition" in `test/connections.test.ts`, in place of "nothing the box wrote is offered or runs before the owner accepted it".

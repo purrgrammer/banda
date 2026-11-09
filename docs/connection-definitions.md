@@ -1,8 +1,9 @@
 # Connection definitions
 
-Priority: **Medium**. Implementation status lives in [Status](status.md). This is a design under owner review;
-nothing here is code yet, and it changes rules DESIGN.md states today, so those change only when a slice proves its
-part ([Delivery](delivery.md)). It belongs to [Connections](connections.md).
+Priority: **Medium**. Implementation status lives in [Status](status.md). This is a design under owner review. Its
+first stage, the six shipped connections as definitions read from the release, is built on the branch and not yet
+tried through the app; the rest is not code yet. It changes rules DESIGN.md states today, so those change only when a
+slice proves its part ([Delivery](delivery.md)). It belongs to [Connections](connections.md).
 
 A connection's definition stops being a file in the owner's workspace. What banda ships is read from the release,
 typed and checked against a schema; what the owner chose in this home lives in the store. Adding a shipped connection
@@ -217,19 +218,24 @@ not open.
 
 ## Still to settle
 
-- [ ] What a watch does at the first look after its object's definition changed version, shown by a scenario before
-  slice 1's acceptance names it: the code path after an Update today is the one to keep, and no test pins it yet
-- [ ] No test pins "a tool the server adds later waits switched off" at all; slice 1 adds it with the rule above
+- [x] What a watch does at the first look after its object's definition changed version: it stays live, takes no
+  reading made under the version before, reads again and wakes on nothing (test/watches.test.ts)
+- [x] "A tool the server adds later waits switched off": pinned, and for a shipped connection it now holds across
+  versions (test/connections.test.ts). A tool a new definition starts to name stays off if it was already listed and
+  waiting: the store does not tell a tool waiting from one the owner switched off
+- [ ] A tool waiting off comes on when a later definition names it, which needs the store to tell the two apart
+- [ ] Marking a read on a shipped connection (`trustReads`) is refused until slice 2 keeps the owner's reads in the
+  store; the app offers it only on a server added by address
 
 ## Open work
 
-- [ ] Slice 1: the schema, shipped `.json` read at start, the version, "on" in the store, Add as a switch, no Update
+- [ ] Slice 1, built on the branch and waiting on its acceptance through the app: the schema, shipped `.json` read at
+  start, the version, "on" in the store, Add as a switch, no Update
 - [ ] Slice 2: the owner's accepted reads and groups, and a server added by address, in the store; no text rewriting
 - [ ] Slice 3: the box's folders, a box's change to a connection, and agent-built connections and tools deleted;
   DESIGN.md, AGENTS.md and the status doc rewritten
 - [ ] Slice 4: a connection's details, to check and to change, on the tool list taken from PR #28
-- [ ] Slack lands as a `.md` file under today's convention and moves with the others in slice 1, `pages` with it;
-  its reaction permission, which binds a channel, becomes a `place` grain when grains land with the rework of PR #28
+- [ ] Slack's reaction permission, which binds a channel, becomes a `place` grain when grains land with the rework of PR #28
 - [ ] Revisit connections and tools an owner or an agent defines themselves. They are out of scope here and their
   code goes in slice 3; DESIGN.md "Open" keeps the line. A file an agent writes and the owner accepts is the shape to
   start from, beside the shipped definitions, passing the same schema

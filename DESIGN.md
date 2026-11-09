@@ -91,7 +91,7 @@ The words the rules lean on:
 | **Permission** | a stored approval with a scope; an effect within an open permission runs without asking |
 | **Routine** | `routines/<name>.md` in the workspace: when it runs (a timer) and what it asks; its task submits those inputs to its agent's chat |
 | **Watch** | `watches/<name>.md` in the workspace: the object it follows, the account it looks with, what ends it and what matters; its task keeps the reading and submits each change to its agent's chat |
-| **Connection** | `connections/<name>.md`, shipped with the app: a service's tools, which only read, and its objects; its accounts' credentials stay with the daemon |
+| **Connection** | A definition banda ships (`shipped/connections/<name>.json`, one schema), on in a home by a switch: a service's tools, which only read, and its objects; its accounts' credentials stay with the daemon. A server the owner adds by its address is still a file, `connections/<name>.md` |
 | **Harness** | `shipped/harnesses/<name>.md`, or a command line the owner gave: an ACP agent on the owner's computer (or banda's own adapter around one that speaks something else), connected in the owner's code folder, for the agents the owner turns it on for |
 | **Object** | the daemon's rendering of one thing in a connection, read with an account's credentials for the owner's eyes |
 | **Gateway** | where the owner reaches the band: the app and the CLI |
@@ -212,7 +212,7 @@ one that gives them one more thing to manage stays out.
   defaulted, a name and a personality that three tappable starters fill (Researcher, Writer, Keeper of the calendar):
   naming a friend, not filling a form. No description, no interview.
 - **Connections** is a page from the band's menu and from Settings: every service the band can work with, a tile each
-  (its accounts, or Connect; one not shipped yet says so), so the owner connects before any agent needs it. A chat
+  (its accounts, or Connect), so the owner connects before any agent needs it. A chat
   that needs a connection carries the connect card instead of pointing elsewhere.
 - **Settings** is one page: the model providers (connect another, add another account of one by name, switch the
   band to one account, sign out of each; the models the tiers use); connections (every account across
@@ -367,11 +367,15 @@ execution chats remain; Settings lists it, to restore, and a restored group goes
 comes back.
 
 ## Connections
-A connection is how the band works with the owner's services without holding them. It ships as a file
-(`shipped/connections/<name>.md`): the service in plain words, its logo, where it is, how the daemon signs in (OAuth
-with PKCE, or by code where the server registers no clients, as GitHub), the scopes it asks for, which tools only
-read and its objects. The owner adds one with a tap: its bytes are written into the workspace and
-allowed at once, since the app wrote them and the owner chose them; from then on it is an ordinary "before" file. It
+A connection is how the band works with the owner's services without holding them. What banda ships is a definition
+in its release (`shipped/connections/<name>.json`, checked against one schema): the service in plain words, a line
+about it, where it is, how the daemon signs in (OAuth with PKCE, or by code where the server registers no clients, as
+GitHub), the scopes it asks for and the access the owner chooses among, which tools only read and its objects. The
+daemon reads them when it starts, and one that does not pass is left out and said in the log. The owner adds one with
+a switch, a fact in the store: nothing is written to the workspace, and the definition in effect is the one this
+banda ships, so nothing is ever updated: a new release takes effect at its first start, asking nothing, since the
+owner updated banda themselves. Its version is the hash of what was read, and what binds to a connection binds to
+that. A server the owner adds by its address is still an accepted file, an ordinary "before" file. It
 is first class in the UI (a logo and a name on every card, event and draft of its) and secondary in the hierarchy: it
 lives inside agents' settings and the app's Settings, never as a screen of its own.
 - **Accounts.** An account is one sign-in: `auth/connections/<connection>/<account>/` holds its credentials, bound to
@@ -394,8 +398,10 @@ lives inside agents' settings and the app's Settings, never as a screen of its o
   tap and no sign-in: "Let Mara use GitHub as @bandarra?". From then on reads run freely; a write is a draft. The
   agent is never asked for permission to use a connection it has: the draft is the only ask.
 - **What is offered is what was listed.** On connecting, the daemon lists the server's tools and keeps them in the
-  store for that accepted file; the model is offered exactly those, under stable names (`<connection>__<tool>`). A
-  tool the server adds later waits switched off.
+  store for that version of the connection; the model is offered exactly those, under stable names
+  (`<connection>__<tool>`). A tool the server adds later waits switched off. For a connection banda ships a tool its
+  definition names comes with the release, switched on, and one it does not name waits switched off at every listing,
+  whatever the version; the owner's switches stay by name across versions.
 - **A read runs, a write is a draft.** A read runs when called, and its answer comes back framed as foreign data. A
   tool that runs many routes may read for some exact arguments only, `tool(arg=value)` in the file; any other call of
   it is a write. Every other tool is a write: a draft the owner approves, run once as approved; one the file puts on
