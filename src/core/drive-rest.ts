@@ -82,7 +82,7 @@ export const DRIVE_TOOLS: McpTool[] = [
 	tool("get_profile", "Read the signed-in Google account's address.", {}),
 	tool(
 		"search_files",
-		"Find files in Google Drive, newest first (by when they changed, or were made) unless text is given (then by relevance); trashed files are left out. Returns a ref for each file. Name each in your answer as a link, [its name](drive/<id>); to show cards, give them in the message's objects. Use page_token with a returned nextPageToken to continue.",
+		"Find files in Google Drive, newest first (by when they changed, or were made) unless text is given (then by relevance); trashed files are left out. Returns a ref for each file. Name each in your answer as a link, [its name](drive/<id>); to show cards, give them in the message's objects. A folder followed for the files new in it is drive/folder/<id>. Use page_token with a returned nextPageToken to continue.",
 		{
 			text: { type: "string", maxLength: 200, description: "Words to find in the files' names and contents" },
 			query: {
