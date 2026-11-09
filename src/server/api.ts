@@ -846,6 +846,10 @@ export type AccountView = {
 	readonly account: string;
 	readonly id: string;
 	readonly label: string;
+	/** The server did not say whom this sign-in is for, so the owner names it. */
+	readonly numbered?: boolean;
+	/** The name the owner gave it, when they did. */
+	readonly ownerLabel?: string;
 	readonly at: number;
 	readonly agents: readonly string[];
 	readonly stale?: boolean;

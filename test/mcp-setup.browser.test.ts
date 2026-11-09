@@ -125,7 +125,10 @@ for (const width of [390, 1440])
 					await phase(page, "auth");
 					await click(page, button("Continue to sign in"));
 					await phase(page, "review");
-					await page.until(`${labelled("Account")}?.textContent.includes('account 1')`);
+					await page.until(`${labelled("Account")}?.textContent.includes('Unnamed account')`);
+					expect(await page.run(`/account \\d/.test(document.body.textContent)`)).toBe(false);
+					expect(await page.run(`${button("Save access")}.disabled`)).toBe(true);
+					await fill(page, "Name this account", "Work");
 					const connection = (await view()).connections.find((each) => each.name === "ernesto-test")!;
 					expect(connection.accounts).toEqual([expect.objectContaining({ id: "account 1", agents: [] })]);
 					expect(connection.tools.every((tool) => tool.kind === "write")).toBe(true);

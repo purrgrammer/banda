@@ -17,6 +17,7 @@ import { McpAgents, McpDetails, McpReadChoices, McpServerForm } from "../chat/Mc
 import {
 	actOnCapability,
 	addMcp,
+	labelAccount,
 	refreshConnection,
 	setConnectionReads,
 	signIn,
@@ -39,6 +40,8 @@ export type McpSetupState = {
 	readonly error: string;
 	readonly credential: string;
 	readonly account: string;
+	/** The name typed for an account whose server did not say whom it is for. */
+	readonly label: string;
 	readonly selected: readonly string[];
 	readonly reads: readonly string[];
 	/** The sign-in page this visit opened, while waiting. */
@@ -59,6 +62,7 @@ export type McpSetupActions = {
 	readonly useConnected: () => void;
 	readonly retry: () => void;
 	readonly setAccount: (account: string) => void;
+	readonly setLabel: (label: string) => void;
 	readonly setReads: (reads: string[]) => void;
 	readonly switchAgent: (agent: string, on: boolean) => void;
 	readonly save: () => void;
@@ -111,6 +115,7 @@ export function McpSetup({
 	const [error, setError] = useState("");
 	const [credential, setCredential] = useState("");
 	const [account, setAccount] = useState("");
+	const [label, setLabel] = useState("");
 	const [selected, setSelected] = useState<string[]>([]);
 	const [reads, setReads] = useState<string[]>([]);
 	const [link, setLink] = useState<string>();
@@ -170,7 +175,8 @@ export function McpSetup({
 		initialized.current = key;
 		setSelected([...new Set([...active, ...(agent === undefined ? [] : [agent.id])])]);
 		setReads(view?.tools.filter((tool) => tool.kind === "read").map((tool) => tool.title) ?? []);
-	}, [name, account, view, active, agent]);
+		setLabel(chosen?.ownerLabel ?? "");
+	}, [name, account, view, active, agent, chosen]);
 	const update = (next: CapabilitiesView) => {
 		showCapabilities(next);
 		return next.connections.find((each) => each.name === name);
@@ -217,7 +223,13 @@ export function McpSetup({
 			if (!view?.accepted || !name) return;
 			if (view.state !== "connected") throw new Error("Finish connecting before giving access.");
 			if (!anonymous && !chosen) throw new Error("Choose a signed-in account first.");
+			if (chosen?.numbered && !label.trim()) throw new Error("Name this account first.");
 			let current: ConnectionView = view;
+			if (chosen?.numbered && label.trim() !== chosen.ownerLabel) {
+				const next = update(await labelAccount(name, account, label));
+				if (!next) throw new Error("This connection was removed. Return to Connections.");
+				current = next;
+			}
 			const old = view.tools
 				.filter((tool) => tool.kind === "read")
 				.map((tool) => tool.title)
@@ -282,6 +294,7 @@ export function McpSetup({
 			});
 		},
 		setAccount,
+		setLabel,
 		setReads,
 		switchAgent: (agent, on) =>
 			phase === "done"
@@ -319,7 +332,7 @@ export function McpSetup({
 	};
 	return (
 		<McpSetupView
-			state={{ phase, view, agents, busy, error, credential, account, selected, reads, link, back }}
+			state={{ phase, view, agents, busy, error, credential, account, label, selected, reads, link, back }}
 			actions={actions}
 		/>
 	);
@@ -327,7 +340,7 @@ export function McpSetup({
 
 /** The setup as the owner sees it, from its state alone: no daemon, no network, nothing kept. */
 export function McpSetupView({ state, actions }: { state: McpSetupState; actions: McpSetupActions }) {
-	const { phase, view, agents, busy, error, credential, account, selected, reads, link, back } = state;
+	const { phase, view, agents, busy, error, credential, account, label, selected, reads, link, back } = state;
 	const id = useId();
 	const heading = useRef<HTMLHeadingElement>(null);
 	const summary = view?.accepted?.connection;
@@ -499,13 +512,24 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 									</SelectGroup>
 								</SelectContent>
 							</Select>
-							{chosen?.id.startsWith("account ") ? (
-								<p className="text-meta text-ink-2">
-									The server hasn’t supplied an account name. Each sign-in is numbered.
-								</p>
-							) : null}
 						</Field>
 					)}
+					{phase === "review" && chosen?.numbered ? (
+						<Field>
+							<FieldLabel htmlFor={`${id}-label`}>Name this account</FieldLabel>
+							<Input
+								id={`${id}-label`}
+								value={label}
+								maxLength={60}
+								onChange={(event) => actions.setLabel(event.target.value)}
+								disabled={busy}
+								required
+							/>
+							<p className="text-meta text-ink-2">
+								The server doesn’t say which account this is. Choose a name you’ll recognize.
+							</p>
+						</Field>
+					) : null}
 					<McpDetails view={view} />
 					{phase === "review" ? (
 						<McpReadChoices view={view} reads={reads} onChange={actions.setReads} disabled={busy} />
@@ -526,7 +550,12 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 							</p>
 							<Button
 								className="self-start"
-								disabled={busy || view.state !== "connected" || (!anonymous && !chosen)}
+								disabled={
+									busy ||
+									view.state !== "connected" ||
+									(!anonymous && !chosen) ||
+									(chosen?.numbered === true && !label.trim())
+								}
 								onClick={actions.save}
 							>
 								{busy ? "Saving…" : "Save access"}

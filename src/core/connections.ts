@@ -454,6 +454,8 @@ export type Listed = {
 export type Account = {
 	/** What the service calls the owner, as read once after sign-in ("bandarra"); numbered when it says nothing. */
 	id: string;
+	/** What the owner calls a numbered account: the name it goes by, its number being only a handle. */
+	label?: string;
 	/** Each completed sign-in is a distinct generation, even when the same ID returns at the same time. */
 	generation?: string;
 	/** When it was signed in, and last signed in again. */
@@ -505,8 +507,28 @@ export function accountKey(id: string): string {
 		: `a-${createHash("sha256").update(id).digest("hex").slice(0, 16)}`;
 }
 
-/** An account as the owner reads it: "@bandarra", or an address as it is. */
-export const accountLabel = (id: string) => (/[@\s]/.test(id) ? id : `@${id}`);
+/** The id of a sign-in whose server did not say whom it is for: a handle for banda and the model, never a name. */
+export const numberedAccount = (n: number) => `account ${n}`;
+
+/** Whether `id` is such a number: its account has only the name the owner gives it. */
+export const isNumbered = (id: string) => /^account \d+$/.test(id);
+
+/** What a numbered account the owner has not named yet is called. */
+export const UNNAMED_ACCOUNT = "Unnamed account";
+
+/** The longest name the owner can give an account. */
+export const ACCOUNT_LABEL_MAX = 60;
+
+type Named = Pick<Account, "id" | "label">;
+
+const handle = (id: string) => (/[@\s]/.test(id) ? id : `@${id}`);
+
+/** An account as the owner reads it: the name they gave it, "@bandarra", or an address as it is; never its number. */
+export const accountLabel = (account: Named) =>
+	account.label ?? (isNumbered(account.id) ? UNNAMED_ACCOUNT : handle(account.id));
+
+/** An account as a model names it to act as it: unlike the owner's reading, this always tells accounts apart. */
+export const accountAddress = (account: Named) => account.label ?? handle(account.id);
 
 /** Whether connection `connection` is signed in to: its tools act as one of its accounts. */
 export const signsIn = (connection: Pick<Connection, "url" | "auth">) =>
@@ -531,7 +553,7 @@ export async function accountsOn(tx: Tx, agent: string, name: string): Promise<s
 }
 
 /**
- * The connections whose tools need an `account` argument to tell their accounts apart, with those accounts' ids: a
+ * The connections whose tools need an `account` argument to tell their accounts apart, with what a model calls them: a
  * connection some active agent has more than one account of. One tool set per connection serves every agent, so the
  * argument is offered to each once one of them needs it; an agent with one account may leave it out. Reads only.
  */
@@ -543,7 +565,7 @@ export async function multiAccount(tx: Tx): Promise<{ [connection: string]: stri
 		for (const name of Object.keys(connections))
 			if ((await accountsOn(tx, agent, name)).length > 1)
 				found[name] = Object.values(doc.accounts?.[name] ?? {})
-					.map((account) => account.id)
+					.map(accountAddress)
 					.sort();
 	}
 	return found;

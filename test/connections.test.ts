@@ -391,7 +391,7 @@ describe("a remote connection", () => {
 		expect(s.offered()).toEqual([]);
 		expect(await signInAsOwner(s.capabilities, "cal")).toEqual({
 			ok: true,
-			words: "Signed in to Calendar as account 1.",
+			words: "Signed in to Calendar.",
 		});
 		await expect(s.capabilities.setKey("notes", "wrong-key-0123456789")).rejects.toThrow(/did not take it/);
 		await s.capabilities.setKey("notes", "sk-SEEDED-0123456789abcdef", context, "sancho");
@@ -598,7 +598,7 @@ describe("signing in by code, as a file's named client", () => {
 		);
 		expect(await signInAsOwner(s.capabilities, "cal")).toEqual({
 			ok: true,
-			words: "Signed in to Calendar as account 1.",
+			words: "Signed in to Calendar.",
 		});
 		expect(fake.scopesAsked).toEqual(["read:user"]);
 	});
@@ -777,6 +777,63 @@ describe("adding a server", () => {
 			expect.objectContaining({ id: "account 1", agents: ["sancho"] }),
 			expect.objectContaining({ id: "account 2", agents: [] }),
 		]);
+	});
+
+	it("a numbered account goes by the name its owner gives it, and its number is never its name", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const s = await open();
+		const name = await s.capabilities.addMcp({ url: fake.url });
+		expect(await signInAsOwner(s.capabilities, name, { agent: null })).toMatchObject({ ok: true });
+		expect((await signInAsOwner(s.capabilities, name, { agent: null })).words).not.toMatch(/account \d/);
+		const accounts = async () =>
+			(await s.capabilities.view()).connections.find((each) => each.name === name)?.accounts ?? [];
+		expect((await accounts())[0]).toMatchObject({
+			account: "account-1",
+			id: "account 1",
+			label: "Unnamed account",
+			numbered: true,
+		});
+		expect((await accounts())[0]).not.toHaveProperty("ownerLabel");
+		await s.capabilities.labelAccount(name, "account-1", "  Work  ");
+		// the key its credentials and grants are held under does not move
+		expect((await accounts())[0]).toMatchObject({
+			account: "account-1",
+			id: "account 1",
+			label: "Work",
+			ownerLabel: "Work",
+		});
+		expect((await s.harness.snapshot(Connected, context))?.accounts[name]).toMatchObject({
+			"account-1": { id: "account 1", label: "Work" },
+			"account-2": { id: "account 2" },
+		});
+		await expect(s.capabilities.labelAccount(name, "account-2", "   ")).rejects.toThrow(/give the account a name/);
+		await expect(s.capabilities.labelAccount(name, "account-2", "account 3")).rejects.toThrow(/another name/);
+		await expect(s.capabilities.labelAccount(name, "account-2", "unnamed account")).rejects.toThrow(/another name/);
+		await expect(s.capabilities.labelAccount(name, "account-2", "work")).rejects.toThrow(/already called/);
+		await expect(s.capabilities.labelAccount(name, "nobody", "Home")).rejects.toThrow(/no such account/);
+		// a model is offered the name and acts as the account by it
+		await s.capabilities.trustReads(name, ["list_events"]);
+		await s.capabilities.switchAccount("sancho", name, "account-1", true);
+		await s.capabilities.switchAccount("sancho", name, "account-2", true);
+		const listed = s.registry
+			.snapshot()
+			.tools()
+			.find(({ tool }) => tool.name === `${name}__list_events`)!.tool;
+		expect(JSON.stringify(listed.parameters)).toContain("Work or");
+		s.model.plan([{ tool: `${name}__list_events`, args: { account: "work", day: "mon" } }]);
+		await s.done((await s.say("hello")).turn);
+		expect(fake.calls).toEqual([{ tool: "list_events", args: { day: "mon" } }]);
+	});
+
+	it("an account a server names cannot be renamed", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const s = await open();
+		await s.harness.commit(async (tx) => {
+			(await tx.doc(Connected)).accounts.cal = { alice: { id: "alice", at: 1 } };
+		}, context);
+		await expect(s.capabilities.labelAccount("cal", "alice", "Work")).rejects.toThrow(/already @alice/);
 	});
 
 	it("by its address: banda finds how it signs in, names it by its host and allows it", async () => {

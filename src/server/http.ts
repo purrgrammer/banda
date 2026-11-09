@@ -216,6 +216,7 @@ export type CapabilityAction =
 			readonly on: boolean;
 	  }
 	| { readonly action: "signout"; readonly name: string; readonly account: string }
+	| { readonly action: "label"; readonly name: string; readonly account: string; readonly label: string }
 	| { readonly action: "add"; readonly name: string }
 	/** Update a shipped connection to the version this banda ships; `sha` is the version in effect the owner saw. */
 	| { readonly action: "update"; readonly name: string; readonly sha: string }
@@ -817,9 +818,8 @@ export function handler(
 			return reply(res, 404, { error: "not found" });
 		}
 		// an account of a connection: switched on or off for an agent, or signed out
-		const account = /^\/capabilities\/connections\/([a-z0-9-]{1,64})\/accounts\/([^/]{1,300})\/(switch|signout)$/.exec(
-			path,
-		);
+		const account =
+			/^\/capabilities\/connections\/([a-z0-9-]{1,64})\/accounts\/([^/]{1,300})\/(switch|signout|label)$/.exec(path);
 		if (account !== null && req.method === "POST") {
 			const [, name = "", encodedKey = "", action] = account;
 			let key: string;
@@ -832,6 +832,11 @@ export function handler(
 				throw new BadRequest("account key is invalid");
 			if (action === "signout")
 				return reply(res, 200, await routes.capability({ action: "signout", name, account: key }));
+			if (action === "label") {
+				const { label } = await json(req);
+				if (typeof label !== "string" || label.length > 200) throw new BadRequest("label is the account's name");
+				return reply(res, 200, await routes.capability({ action: "label", name, account: key, label }));
+			}
 			const { agent, on, sha } = await json(req);
 			if (sha !== undefined && (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)))
 				throw new BadRequest("sha is the reviewed connection hash");

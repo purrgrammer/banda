@@ -474,6 +474,13 @@ export const switchAccount = (name: string, account: string, agent: string, on: 
 		body: JSON.stringify({ agent, on, sha }),
 	});
 
+/** Name numbered account `account` of connection `name`, whose server did not say whom it is for. */
+export const labelAccount = (name: string, account: string, label: string) =>
+	api<CapabilitiesView>(`/capabilities/connections/${name}/accounts/${encodeURIComponent(account)}/label`, {
+		method: "POST",
+		body: JSON.stringify({ label }),
+	});
+
 /** Sign account `account` of connection `name` out: off for every agent, its permissions and drafts ended. */
 export const signOutAccount = (name: string, account: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/accounts/${encodeURIComponent(account)}/signout`, {
