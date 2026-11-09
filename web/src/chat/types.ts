@@ -1,7 +1,7 @@
 /** The chat's shared shapes, with no imports, so pure code and the tests can name them. */
 
-/** What an agent's face says around it: at work, waiting on the owner, or neither. */
-export type FaceState = "idle" | "working" | "waiting";
+/** What an agent's face says around it: at work, waiting on the owner, glad of an answer just given, or none of these. */
+export type FaceState = "idle" | "working" | "waiting" | "happy";
 
 export type Who = {
 	readonly face: import("../../../src/core/avatar-face.ts").AvatarFace;

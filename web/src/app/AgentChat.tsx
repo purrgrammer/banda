@@ -4,7 +4,7 @@
  * What was rendered is read once the window has focus, so a row's unread follows what the owner saw.
  */
 import { SquareIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	Conversation,
 	ConversationContent,
@@ -13,6 +13,7 @@ import {
 } from "@/components/ai-elements/conversation";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import { agentMainThread } from "../../../src/core/gateway.ts";
+import { MOOD_BEAT_MS } from "../avatar/scene.ts";
 import { WaitingPill } from "../chat/Approval.tsx";
 import { Composer } from "../chat/Composer.tsx";
 import { Bubble, Run } from "../chat/Feed.tsx";
@@ -23,7 +24,7 @@ import { ChatLoading } from "../chat/Loading.tsx";
 import type { Who } from "../chat/Row.tsx";
 import { type ChatRow, type Item, type Posted, postMessage, readChat, stopChat, upload } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
-import { view } from "../lib/chat.ts";
+import { answeredWell, view } from "../lib/chat.ts";
 import { linkMentions } from "../lib/mentions.ts";
 import { useShell } from "../lib/shell.ts";
 import { useTranscript } from "../lib/transcript.ts";
@@ -106,6 +107,17 @@ export function AgentChat({
 	const [delegatedOpen, setDelegatedOpen] = useState<readonly number[]>();
 	const delegated = harnessActivity(shell.harnesses?.sessions ?? [], row === undefined ? [] : [row.chat]);
 	const status = chatActivity(state, doing, delegated);
+	// a reply just finished well; what the agent is really doing always wins over it
+	const [happy, setHappy] = useState(false);
+	const happyEnds = useRef<ReturnType<typeof setTimeout>>(undefined);
+	const onAnswered = useCallback(() => {
+		setHappy(true);
+		clearTimeout(happyEnds.current);
+		happyEnds.current = setTimeout(() => setHappy(false), MOOD_BEAT_MS.happy);
+	}, []);
+	useEffect(() => {
+		return () => clearTimeout(happyEnds.current);
+	}, []);
 	const openDelegated = () => setDelegatedOpen(delegated.sessions.map((session) => session.task));
 	// the lead gets every tool; another agent, what its accepted file names
 	const tools =
@@ -123,7 +135,7 @@ export function AgentChat({
 			<Header
 				name={who.name}
 				faces={[who]}
-				state={status.state}
+				state={happy && status.state === "idle" ? "happy" : status.state}
 				doing={status.doing}
 				attention={status.attention}
 				delegated={
@@ -172,6 +184,7 @@ export function AgentChat({
 					tools={tools}
 					at={at}
 					onDoing={setDoing}
+					onAnswered={onAnswered}
 					onRoutine={onRoutine}
 					activity={activity}
 					onActivity={(entry) => setActivity({ anchor: entry })}
@@ -191,11 +204,13 @@ function Timeline({
 	tools,
 	at,
 	onDoing,
+	onAnswered,
 	onRoutine,
 	activity,
 	onActivity,
 	onCloseActivity,
 }: {
+	onAnswered: () => void;
 	chat: number;
 	activity: { anchor?: number } | undefined;
 	onActivity: (entry: number) => void;
@@ -319,6 +334,14 @@ function Timeline({
 	useEffect(() => {
 		onDoing(doing);
 	}, [doing, onDoing]);
+	// the view is one snapshot, so the run's end and how it ended are read together
+	const wasWorking = useRef({ chat, working: false });
+	useEffect(() => {
+		const finished =
+			wasWorking.current.chat === chat && wasWorking.current.working && working === undefined && answeredWell(segments);
+		wasWorking.current = { chat, working: working !== undefined };
+		if (finished) onAnswered();
+	}, [chat, working, segments, onAnswered]);
 	const ask = segments.find(
 		(segment) => (segment.kind === "question" || segment.kind === "approval") && segment.open !== undefined,
 	);

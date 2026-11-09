@@ -1,5 +1,6 @@
 /** An agent's accepted shape and colour. Motion lives in the face, never an orbit or working icon. */
 import { UsersIcon } from "lucide-react";
+import type { AvatarMotion } from "open-bot-avatar";
 import { cn } from "@/lib/cn";
 import type { AvatarFace } from "../../../src/core/avatar-face.ts";
 import { AvatarRenderer } from "../avatar/Renderer.tsx";
@@ -9,6 +10,9 @@ export type { FaceState } from "./types.ts";
 
 export const FACE_SIZE = { mention: 20, message: 28, row: 40, panel: 64, hero: 96 } as const;
 export type FaceSize = keyof typeof FACE_SIZE;
+
+const moodOf = (state: FaceState | undefined): AvatarMotion =>
+	state === "working" ? "thinking" : state === "happy" ? "happy" : "idle";
 
 export function Face({
 	face,
@@ -39,8 +43,8 @@ export function Face({
 					definition={face.definition}
 					color={face.color}
 					size={FACE_SIZE[size]}
-					animated={state === "working"}
-					mood={state === "working" ? "thinking" : "idle"}
+					animated={moodOf(state) !== "idle"}
+					mood={moodOf(state)}
 				/>
 			</span>
 			{state === "waiting" && (
@@ -99,8 +103,8 @@ export function FaceStack({
 						definition={who.face.definition}
 						color={who.face.color}
 						size={faceSize}
-						animated={who.state === "working"}
-						mood={who.state === "working" ? "thinking" : "idle"}
+						animated={moodOf(who.state) !== "idle"}
+						mood={moodOf(who.state)}
 					/>
 				</span>
 			))}

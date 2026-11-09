@@ -25,15 +25,17 @@ export function Faces() {
 				<Face {...SANCHO} size="message" />
 				<Face {...SANCHO} size="mention" />
 			</Group>
-			<Group label="States: idle · working · waiting on you · routines paused" className="gap-6">
+			<Group label="States: idle · working · happy · waiting on you · routines paused" className="gap-6">
 				<Face {...MARA} />
 				<Face {...MARA} state="working" />
+				<Face {...MARA} state="happy" />
 				<Face {...MARA} state="waiting" />
 				<Face {...MARA} paused />
 			</Group>
 			<Group label="The same at panel size" className="gap-6">
 				<Face {...OCTO} size="panel" />
 				<Face {...OCTO} size="panel" state="working" />
+				<Face {...OCTO} size="panel" state="happy" />
 				<Face {...OCTO} size="panel" state="waiting" />
 				<Face {...OCTO} size="panel" paused />
 			</Group>
