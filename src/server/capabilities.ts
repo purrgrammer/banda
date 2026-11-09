@@ -726,7 +726,10 @@ export function openCapabilities(options: CapabilityOptions) {
 						Object.keys((await tx.doc(EffectRun, api.taskId)).started).length > 0,
 					ctx,
 				);
-				if (wasWrite) return writeTool(tool, accounts).execute(args as never, api, ctx);
+				if (wasWrite) {
+					fault("connection:stays-write");
+					return writeTool(tool, accounts).execute(args as never, api, ctx);
+				}
 				const chat = Number(api.conversationId);
 				const resolved = await api.commit(async (tx) => {
 					const off = (await allowed(tool.name, tool.connection)(tx)) ?? (await asksNow(tx, args));
@@ -1259,6 +1262,7 @@ export function openCapabilities(options: CapabilityOptions) {
 	 * record is left alone: its version moves only by the owner, and a listing for an older record is no release's.
 	 */
 	async function carryListings(ctx: Context = context): Promise<void> {
+		fault("connection:carry");
 		await harness.commit(async (tx) => {
 			const doc = await tx.doc(Connected);
 			for (const name of await acceptedNames(tx)) {
@@ -1270,6 +1274,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				listing.due = true;
 			}
 		}, ctx);
+		fault("connection:carried");
 	}
 
 	/**

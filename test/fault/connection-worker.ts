@@ -8,12 +8,16 @@
  * With "code", the definition names its client and the owner signs in by code, typed on the fake server's page; a sign-in by
  * code dies with the process that waited for it, so a restart starts it again.
  *
+ * With "carry", the run reaches its draft for the event, and the store is opened again on a build whose definition says
+ * create_event only reads: the listing is carried, the draft stays the draft it was, and the owner still decides it.
+ * With "carry-deny" the owner says no, so a call that went on as a read, unasked, is seen at once: it reached the server.
+ *
  * With "shipped", the calendar is a definition banda ships, the owner adds it as a switch. With "remove", the owner adds
  * it, signs in, and removes it: the process ends with no fact, no account and no credential of it, whatever was killed.
  *
  * argv: home, the fake server's URL, "callback" or "code" or another mode, fault schedule JSON (Fault[])
  */
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { TaskId } from "@earendil-works/pi-durable";
@@ -25,15 +29,16 @@ import type { TurnResult } from "../../src/core/turn.ts";
 import { connectionDefinition, openConnected, signInAsOwner, typingAt } from "../fixtures/connected.ts";
 import { answerNudge } from "../fixtures/models.ts";
 import { type Fault, type FaultPoint, Faults } from "./faults.ts";
-import { ownerAnswer } from "./owner.ts";
+import { answersGiven, noteAnswer, ownerAnswer } from "./owner.ts";
 
 const [home, url, mode, scheduleJson] = process.argv.slice(2) as [
 	string,
 	string,
-	"callback" | "code" | "shipped" | "remove" | "remove-server" | "rule" | "address" | "mcp",
+	"callback" | "code" | "shipped" | "remove" | "remove-server" | "rule" | "address" | "mcp" | "carry" | "carry-deny",
 	string,
 ];
-const byCode = mode === "code" || mode === "shipped" || mode === "remove";
+const carrying = mode === "carry" || mode === "carry-deny";
+const byCode = mode === "code" || mode === "shipped" || mode === "remove" || carrying;
 const calendar = connectionDefinition({
 	url,
 	auth: "oauth",
@@ -42,6 +47,14 @@ const calendar = connectionDefinition({
 	// the write the run makes, named: a tool the server lists and the definition does not name waits off
 	needs: { create_event: ["calendar"] },
 	...(byCode ? { client: "banda-app", scopes: ["calendar"] } : {}),
+});
+// "carry": what the next build ships, which says the tool of the waiting draft only reads
+const nextBuild = connectionDefinition({
+	url,
+	auth: "oauth",
+	reads: ["list_events", "create_event"],
+	client: "banda-app",
+	scopes: ["calendar"],
 });
 // what banda ships, in a folder of its own: every mode but the servers the owner adds
 const shipped = join(home, "shipped");
@@ -84,13 +97,15 @@ const respond = (ctx: { messages: readonly { role: string; content: unknown }[] 
 	return fauxAssistantMessage("Done.");
 };
 
-const s = await openConnected({
-	home,
-	respond: respond as never,
-	wrapStorage: (storage) => faults.storage(storage),
-	fault: (point) => faults.hit(point as FaultPoint),
-	...(shipping ? { shipped } : {}),
-});
+const open = () =>
+	openConnected({
+		home,
+		respond: respond as never,
+		wrapStorage: (storage) => faults.storage(storage),
+		fault: (point) => faults.hit(point as FaultPoint),
+		...(shipping ? { shipped } : {}),
+	});
+let s = await open();
 
 const hasRecord = async () => (await s.harness.snapshot(Connected, context))?.servers.cal !== undefined;
 
@@ -179,6 +194,15 @@ const received = await s.core.receive(s.harness, {
 	text: "tea on monday",
 });
 if (!("turn" in received)) throw new Error(`the message started no Turn: ${JSON.stringify(received)}`);
+const onNextBuild = join(home, "on-next-build");
+if (carrying && !existsSync(onNextBuild)) {
+	while (!(await openWaits(s.harness)).some((wait) => wait.ask.type === "approval"))
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	writeFileSync(join(shipped, "cal.json"), nextBuild);
+	writeFileSync(onNextBuild, "");
+	await s.close();
+	s = await open();
+}
 const ended = s.harness.waitForTask(received.turn as TaskId<TurnResult>, context).then(() => true);
 const web = { gateway: "web", peer: OWNER };
 while (!(await Promise.race([ended, new Promise<false>((r) => setTimeout(r, 10, false))]))) {
@@ -186,8 +210,9 @@ while (!(await Promise.race([ended, new Promise<false>((r) => setTimeout(r, 10, 
 		if (wait.ask.type !== "approval") continue;
 		faults.hit("answer");
 		const again = wait.ask.interrupted === true;
-		appendFileSync(join(home, "answers.txt"), `${again ? "no-again" : "approve"}\n`);
-		await ownerAnswer(s.harness, wait.key, again ? "deny" : "approve", web, "bearer");
+		const no = again || mode === "carry-deny";
+		noteAnswer(home, again ? "no-again" : no ? "deny" : "approve", wait.key);
+		await ownerAnswer(s.harness, wait.key, no ? "deny" : "approve", web, "bearer");
 	}
 }
 
@@ -195,7 +220,8 @@ const outcome = (await s.harness.getTask(received.turn as TaskId<TurnResult>, co
 const { parked } = await status(s.harness);
 const accepted = (await s.harness.snapshot(Connected, context))?.added.cal !== undefined || (await hasRecord());
 const connected = (await s.harness.snapshot(Connected, context))?.connections.cal !== undefined;
-const answers = readFileSync(join(home, "answers.txt"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean);
+const answers = answersGiven(home);
+const due = (await s.harness.snapshot(Connected, context))?.connections.cal?.due === true;
 console.log(
 	JSON.stringify({
 		outcome,
@@ -203,8 +229,22 @@ console.log(
 		accepted,
 		connected,
 		answers,
+		due,
 		open: (await openWaits(s.harness)).length,
 		commits: faults.hits("commit:after"),
+		points: Object.fromEntries(
+			(
+				[
+					"connection:carry",
+					"connection:carried",
+					"connection:stays-write",
+					"connection:call",
+					"connection:answered",
+					"answer",
+					"model",
+				] as const
+			).map((point) => [point, faults.hits(point)]),
+		),
 	}),
 );
 await s.close();

@@ -4,7 +4,9 @@
  * listing, each call to the server, before and after it answered). Whatever was killed and when, the connection ends
  * allowed and connected, the Turn ends with nothing parked or open, the write reaches the server at most once and only
  * as approved, and no credential is in the store. The same again signing in by code, as a file's named client, with a
- * kill once the code was given, once the owner's tokens came, and once they were kept.
+ * kill once the code was given, once the owner's tokens came, and once they were kept. And a draft waiting across a
+ * new build that says its tool only reads: one kill at every commit and at the listing carried and the call found to
+ * stay a write, and the owner's answer still decides it, once.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -20,14 +22,16 @@ type Summary = {
 	accepted: boolean;
 	connected: boolean;
 	answers: string[];
+	due?: boolean;
 	open: number;
 	commits: number;
+	points?: Record<string, number>;
 };
 
 /** One scenario, against a fake server of its own, which outlives the processes killed. */
 const run = async (
 	schedules: readonly (readonly Fault[])[],
-	mode: "callback" | "code" | "shipped" | "remove" | "rule" | "address" | "mcp" = "callback",
+	mode: "callback" | "code" | "shipped" | "remove" | "rule" | "address" | "mcp" | "carry" | "carry-deny" = "callback",
 ) => {
 	const home = await tempHome();
 	const fake = await startFakeMcp(
@@ -55,7 +59,7 @@ function storeText(home: string): string {
 		.join("\n");
 }
 
-function check(summary: Awaited<ReturnType<typeof run>>) {
+function check(summary: Awaited<ReturnType<typeof run>>, { denied = false } = {}) {
 	expect(summary.outcome.status).toBe("completed");
 	expect(summary.parked).toEqual([]);
 	expect(summary.open).toBe(0);
@@ -64,7 +68,8 @@ function check(summary: Awaited<ReturnType<typeof run>>) {
 	// once, as approved; never again after an interruption, which the owner declined
 	expect(summary.creates).toBeLessThanOrEqual(1);
 	expect(summary.answers.filter((a) => a === "approve").length).toBeGreaterThanOrEqual(summary.creates);
-	if (!summary.answers.includes("no-again")) expect(summary.creates).toBe(1);
+	if (denied) expect(summary.creates).toBe(0);
+	else if (!summary.answers.includes("no-again")) expect(summary.creates).toBe(1);
 	const text = storeText(summary.home);
 	for (const token of summary.tokens) expect(text.includes(token)).toBe(false);
 }
@@ -133,6 +138,48 @@ describe("connections under faults", () => {
 			}),
 		);
 	}, 300_000);
+
+	for (const [mode, denied] of [
+		["carry", false],
+		["carry-deny", true],
+	] as const)
+		it(`sweep, a draft waiting across a new build (${denied ? "denied" : "approved"}): one kill at every commit, at the listing carried and at the call that stays a write`, async () => {
+			const clean = await run([], mode);
+			check(clean, { denied });
+			expect(clean.creates).toBe(denied ? 0 : 1);
+			expect(clean.answers).toEqual([denied ? "deny" : "approve"]);
+			expect(clean.due).toBe(false);
+			// the guard ran: the call went through the read path of the new build, and on as the write it was
+			expect(clean.points?.["connection:stays-write"]).toBeGreaterThan(0);
+			const points = [
+				"connection:carry",
+				"connection:carried",
+				"connection:stays-write",
+				"connection:call",
+				"connection:answered",
+				"answer",
+			] as const satisfies readonly FaultPoint[];
+			const faults: Fault[] = [];
+			for (const point of points)
+				for (let hit = 1; hit <= (clean.points?.[point] ?? 0); hit++) faults.push({ point, hit, kind: "kill" });
+			for (let hit = 1; hit <= clean.commits; hit++)
+				faults.push({ point: "commit:before", hit, kind: "kill" }, { point: "commit:after", hit, kind: "kill" });
+			await pool(
+				2,
+				faults.map((fault) => async () => {
+					const killed = await run([[fault]], mode);
+					try {
+						expect(killed.kills).toBe(1);
+						// nothing ran unapproved, and the owner decided this draft once, however the build changed around it
+						check(killed, { denied });
+						expect(killed.answers.filter((a) => a === (denied ? "deny" : "approve")).length).toBeLessThanOrEqual(1);
+						expect(killed.due).toBe(false);
+					} catch (error) {
+						throw new Error(`killed at ${fault.point} #${fault.hit}: ${(error as Error).message}`);
+					}
+				}),
+			);
+		}, 600_000);
 
 	it("sweep, adding what banda ships: one kill before it is on, and once it is", async () => {
 		const clean = await run([], "shipped");

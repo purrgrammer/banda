@@ -89,6 +89,11 @@ export type FaultPoint =
 	/** A call to a remote server: before it goes, and once it answered, before the store records it. */
 	| "connection:call"
 	| "connection:answered"
+	/** The listings carried to the build's versions at start: before the commit, and once it is kept. */
+	| "connection:carry"
+	| "connection:carried"
+	/** A read's call that already asked the owner, found so: before it goes on as the write it was. */
+	| "connection:stays-write"
 	/** An object read for its card: before the read goes, and once its reading is in the store. */
 	| "object:read"
 	| "object:answered"

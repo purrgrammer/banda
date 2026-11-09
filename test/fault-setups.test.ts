@@ -26,14 +26,28 @@ describe("a fault worker's setup, run with no fault", () => {
 			expect(summary.calls.length).toBeGreaterThan(0);
 		});
 
-	for (const mode of ["callback", "code", "rule"] as const)
+	for (const mode of ["callback", "code", "rule", "carry", "carry-deny"] as const)
 		it(`a connection's run reads and writes as approved: ${mode}`, async () => {
 			const fake = await startFakeMcp(
-				mode === "code" ? { auth: "oauth", registeredClient: "banda-app", device: true } : { auth: "oauth" },
+				mode === "code" || mode === "carry" || mode === "carry-deny"
+					? { auth: "oauth", registeredClient: "banda-app", device: true }
+					: { auth: "oauth" },
 			);
 			fakes.push(fake);
 			const { last } = await runWorker("test/fault/connection-worker.ts", [await tempHome(), fake.url, mode], []);
-			expect(last).toMatchObject({ outcome: { status: "completed" }, answers: ["approve"], open: 0, parked: [] });
-			expect(fake.calls.filter((call) => call.tool === "create_event")).toHaveLength(1);
+			const denied = mode === "carry-deny";
+			expect(last).toMatchObject({
+				outcome: { status: "completed" },
+				answers: [denied ? "deny" : "approve"],
+				open: 0,
+				parked: [],
+			});
+			expect(fake.calls.filter((call) => call.tool === "create_event")).toHaveLength(denied ? 0 : 1);
+			// "carry": it went through the new build's read path and on as the write it was, and it did not stay due
+			if (mode.startsWith("carry")) {
+				const { due, points } = last as { due: boolean; points: Record<string, number> };
+				expect(due).toBe(false);
+				expect(points["connection:stays-write"]).toBeGreaterThan(0);
+			}
 		});
 });
