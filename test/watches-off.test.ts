@@ -6,6 +6,8 @@ import { Connected, ToolSettings } from "../src/core/connections.ts";
 import type { Json } from "../src/core/follow.ts";
 import { context } from "../src/core/store.ts";
 import { Watches } from "../src/core/watches.ts";
+import type { Workspace } from "../src/server/agents.ts";
+import { watches } from "../src/server/watches.ts";
 import { Faults } from "./fault/faults.ts";
 import {
 	NOW,
@@ -121,6 +123,37 @@ describe("a watch whose tool is off", () => {
 		expect(summary.record.done?.why).toBe("merged");
 		expect(summary.record.failed).toBeUndefined();
 		expect(watchInvariants(summary)).toEqual([]);
+	}, 60_000);
+
+	it("the row says Stopped from the tool as it is now: back on it is not, off before any look it already is", async () => {
+		const home = await tempHome();
+		const view = async (harness: Harness) =>
+			(await watches(harness, {} as Workspace, context)).find((watch) => watch.name === "banda-142");
+		let fresh: Awaited<ReturnType<typeof view>>;
+		let held: Awaited<ReturnType<typeof view>>;
+		let back: Awaited<ReturnType<typeof view>>;
+		await watchScenario(home, new Faults(), {
+			tasks: false,
+			world: () => world(0),
+			clicks: Array.from({ length: 5 }, () => undefined),
+			at: (step) => NOW + step * 2 * HOUR,
+			act: async (step, { harness, core }) => {
+				if (step === 2) {
+					await off(harness, "pull_request_read");
+					fresh = await view(harness);
+				}
+				await core.lookWatch(harness, "banda-142");
+				if (step === 3) {
+					held = await view(harness);
+					await on(harness, "pull_request_read");
+					back = await view(harness);
+				}
+			},
+		});
+		expect(fresh?.failed).toMatchObject({ off: true });
+		expect(fresh?.failed?.why).toContain("You turned off");
+		expect(held?.failed?.off).toBe(true);
+		expect(back?.failed).toBeUndefined();
 	}, 60_000);
 
 	it("says so in other words when the tool waits for the owner to turn it on", async () => {

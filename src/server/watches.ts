@@ -8,7 +8,9 @@ import type { Context } from "@earendil-works/chord";
 import type { Harness } from "@earendil-works/pi-durable";
 import { log } from "../core/activity.ts";
 import { Accepted, activeAgents, agentWords, isArchived, shaOf, unaccept } from "../core/agents.ts";
+import { Connected, toolName } from "../core/connections.ts";
 import { shippedDefinition } from "../core/definitions.ts";
+import { type OffRead, offWords } from "../core/object-access.ts";
 import { nameOf, Readings, readingKey, refKey } from "../core/objects.ts";
 import { withAsk } from "../core/routines.ts";
 import { context } from "../core/store.ts";
@@ -66,8 +68,25 @@ function stateOf(view: Omit<WatchView, "state">, record: WatchRecord): WatchStat
 	if (view.change !== undefined) return "allow";
 	if (record.done !== undefined) return "done";
 	if (record.paused !== undefined) return "paused";
-	if (record.failed !== undefined) return "failing";
+	if (view.failed !== undefined) return "failing";
 	return "active";
+}
+
+/** The read of the object switched off now, as its next look would find it: what its row says, whatever its last look was. */
+function offRead(
+	off: { readonly [tool: string]: "owner" | "waiting" },
+	connection: string,
+	ref: string,
+): OffRead | undefined {
+	const definition = shippedDefinition(connection);
+	const kind = definition?.objects?.[ref.split(":")[1] ?? ""];
+	if (definition === undefined || kind === undefined) return undefined;
+	for (const read of Object.values(kind.reads)) {
+		if (read.optional === true) continue;
+		const why = off[toolName(connection, read.tool)];
+		if (why !== undefined) return { tool: read.tool, why, service: definition.service };
+	}
+	return undefined;
 }
 
 /** Every watch, accepted or only in the box, with the change the box holds and its state; by name. */
@@ -75,6 +94,8 @@ export async function watches(harness: Harness, workspace: Workspace, ctx: Conte
 	const accepted = (await harness.snapshot(Accepted, ctx))?.files ?? {};
 	const records = (await harness.snapshot(Watches, ctx))?.watches ?? {};
 	const readings = (await harness.snapshot(Followed, ctx))?.objects ?? {};
+	const offNow = (await harness.snapshot(Connected, ctx))?.off ?? {};
+	const now = Date.now();
 	let boxed: Map<string, { text: string } | { unreadable: string }> | undefined;
 	try {
 		boxed = (await watchFiles(workspace, ctx)).files;
@@ -122,6 +143,11 @@ export async function watches(harness: Harness, workspace: Workspace, ctx: Conte
 						...(ends === undefined ? {} : { ends }),
 						...(version === undefined ? {} : { version }),
 					};
+		// the owner's switch as it is now: a row never says Stopped once the tool is back on, nor waits a look to say so
+		const off =
+			record.done !== undefined || record.connection === undefined || ref === undefined
+				? undefined
+				: offRead(offNow, record.connection, ref);
 		const view = {
 			name,
 			...(file === undefined ? {} : { accepted: fileView(name, file.sha, file.text) }),
@@ -134,17 +160,25 @@ export async function watches(harness: Harness, workspace: Workspace, ctx: Conte
 				: { next: record.next }),
 			...(record.saw === undefined ? {} : { saw: [...record.saw] }),
 			...(record.sawAt === undefined ? {} : { sawAt: record.sawAt }),
-			...(record.failed === undefined
-				? {}
-				: {
+			...(off !== undefined
+				? {
 						failed: {
-							at: record.failed.at,
-							why: record.failed.why,
-							since: record.failed.since,
-							...(record.failed.run === undefined ? {} : { run: true as const }),
-							...(record.failed.off === undefined ? {} : { off: true as const }),
+							at: record.failed?.off === true ? record.failed.at : now,
+							why: offWords(off),
+							since: record.failed?.off === true ? record.failed.since : now,
+							off: true as const,
 						},
-					}),
+					}
+				: record.failed === undefined || record.failed.off === true
+					? {}
+					: {
+							failed: {
+								at: record.failed.at,
+								why: record.failed.why,
+								since: record.failed.since,
+								...(record.failed.run === undefined ? {} : { run: true as const }),
+							},
+						}),
 			...(record.last === undefined ? {} : { lastRun: record.last }),
 			...(record.behind === undefined || record.done !== undefined ? {} : { behind: record.behind }),
 			...(record.paused === undefined ? {} : { paused: record.paused }),
