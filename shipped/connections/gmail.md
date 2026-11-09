@@ -1,0 +1,151 @@
+---
+service: Gmail
+url: https://gmail.googleapis.com/gmail/v1/users/me
+api: gmail
+auth: oauth
+client: google
+scopes: [https://www.googleapis.com/auth/gmail.readonly]
+ask: always
+private: [send_message]
+account: get_profile.emailAddress
+reads: [get_profile, get_labels, search_messages, get_message, get_thread]
+---
+Read your Gmail inbox and conversations. Search with bounded pagination, inspect message headers and plain text, and read
+a complete thread. Reference messages as `gmail/<id>` in the answer to show their email cards in chat. A conversation is
+`gmail/thread/<threadId>` and new mail matching a search is `gmail/search/<query>` (`gmail/search/from:boss is:unread`):
+either can be followed, as an email can.
+The owner starts with read-only access. Sending and mailbox changes are separate tools that always ask for approval;
+they require the owner to add the matching Google scope and sign in again. The daemon keeps credentials outside the
+store and the agent's computer.
+
+```json
+{
+	"needs": {
+		"send_message": ["https://www.googleapis.com/auth/gmail.send"],
+		"mailbox_archive": ["https://www.googleapis.com/auth/gmail.modify"],
+		"mailbox_trash": ["https://www.googleapis.com/auth/gmail.modify"],
+		"mailbox_mark_read": ["https://www.googleapis.com/auth/gmail.modify"],
+		"mailbox_mark_unread": ["https://www.googleapis.com/auth/gmail.modify"],
+		"mailbox_add_label": ["https://www.googleapis.com/auth/gmail.modify"],
+		"mailbox_remove_label": ["https://www.googleapis.com/auth/gmail.modify"]
+	},
+	"objects": {
+		"email": {
+			"card": "email",
+			"name": "{id}",
+			"ids": ["gmail/{id}"],
+			"reads": { "message": { "tool": "get_message", "args": { "message_id": "{id}" } } },
+			"follow": {
+				"ignore": ["message.unread", "message.snippet", "message.body", "message.attachments"],
+				"rules": [
+					{ "on": "message.labels[*]", "kind": "added", "to": "UNREAD", "does": "nothing", "says": "unread" },
+					{ "on": "message.labels[*]", "kind": "removed", "from": "UNREAD", "does": "nothing", "says": "read" },
+					{ "on": "message.labels[*]", "kind": "added", "to": "SENT", "does": "nothing", "says": "sent" },
+					{ "on": "message.labels[*]", "kind": "added", "to": "DRAFT", "does": "nothing", "says": "drafted" },
+					{ "on": "message.labels[*]", "kind": "removed", "from": "DRAFT", "does": "nothing", "says": "draft gone" },
+					{ "on": "message.labels[*]", "kind": "added", "to": "INBOX", "does": "tell", "says": "moved to the inbox" },
+					{ "on": "message.labels[*]", "kind": "removed", "from": "INBOX", "does": "tell", "says": "archived" },
+					{ "on": "message.labels[*]", "kind": "added", "to": "STARRED", "does": "tell", "says": "starred" },
+					{ "on": "message.labels[*]", "kind": "removed", "from": "STARRED", "does": "tell", "says": "unstarred" },
+					{ "on": "message.labels[*]", "kind": "added", "to": "IMPORTANT", "does": "tell", "says": "marked important" },
+					{ "on": "message.labels[*]", "kind": "removed", "from": "IMPORTANT", "does": "tell", "says": "marked not important" },
+					{ "on": "message.labels[*]", "kind": "added", "to": "SPAM", "does": "tell", "says": "marked as spam" },
+					{ "on": "message.labels[*]", "kind": "added", "to": "TRASH", "does": "tell", "says": "moved to Trash" },
+					{ "on": "message.labels[*]", "kind": "removed", "from": "TRASH", "does": "tell", "says": "restored from Trash" },
+					{ "on": "message.labels[*]", "kind": "added", "does": "tell", "says": "labelled {to}" },
+					{ "on": "message.labels[*]", "kind": "removed", "does": "tell", "says": "unlabelled {from}" }
+				],
+				"ends": { "read": "message.unread = false", "trashed": "message.labels[*] = TRASH" },
+				"every": "10m",
+				"settle": "1m"
+			},
+			"fields": {
+				"from": "message.from",
+				"to": "message.to",
+				"subject": "message.subject",
+				"date": "message.date",
+				"snippet": "message.snippet",
+				"body": "message.body",
+				"attachments": "message.attachments",
+				"unread": "message.unread"
+			},
+			"writes": [
+				{ "tool": "mailbox_archive", "id": { "id": "message_id" }, "verb": "Archive" },
+				{ "tool": "mailbox_trash", "id": { "id": "message_id" }, "verb": "Move to Trash" },
+				{ "tool": "mailbox_mark_read", "id": { "id": "message_id" }, "verb": "Mark read" },
+				{ "tool": "mailbox_mark_unread", "id": { "id": "message_id" }, "verb": "Mark unread" },
+				{ "tool": "mailbox_add_label", "id": { "id": "message_id" }, "verb": "Add label" },
+				{ "tool": "mailbox_remove_label", "id": { "id": "message_id" }, "verb": "Remove label" }
+			]
+		},
+		"thread": {
+			"card": "messages",
+			"name": "conversation {id}",
+			"ids": ["gmail/thread/{id}"],
+			"reads": { "thread": { "tool": "get_thread", "args": { "thread_id": "{id}" } } },
+			"follow": {
+				"totals": { "thread.messages": "thread.total" },
+				"ignore": [
+					"thread.total",
+					"thread.messages[*].labels",
+					"thread.messages[*].unread",
+					"thread.messages[*].snippet",
+					"thread.messages[*].body",
+					"thread.messages[*].attachments"
+				],
+				"authors": { "thread.messages": "fromAddress" },
+				"rules": [
+					{ "on": "thread.messages[*]", "kind": "added", "does": "wake", "says": "{from} replied" },
+					{ "on": "thread.messages[*]", "kind": "removed", "does": "tell", "says": "a message from {from} was deleted" },
+					{ "on": "thread.labels[*]", "kind": "added", "to": "UNREAD", "does": "nothing", "says": "unread" },
+					{ "on": "thread.labels[*]", "kind": "removed", "from": "UNREAD", "does": "nothing", "says": "read" },
+					{ "on": "thread.labels[*]", "kind": "added", "to": "SENT", "does": "nothing", "says": "sent" },
+					{ "on": "thread.labels[*]", "kind": "added", "to": "DRAFT", "does": "nothing", "says": "drafted" },
+					{ "on": "thread.labels[*]", "kind": "removed", "from": "DRAFT", "does": "nothing", "says": "draft gone" },
+					{ "on": "thread.labels[*]", "kind": "added", "to": "INBOX", "does": "tell", "says": "moved to the inbox" },
+					{ "on": "thread.labels[*]", "kind": "removed", "from": "INBOX", "does": "tell", "says": "archived" },
+					{ "on": "thread.labels[*]", "kind": "added", "to": "STARRED", "does": "tell", "says": "starred" },
+					{ "on": "thread.labels[*]", "kind": "removed", "from": "STARRED", "does": "tell", "says": "unstarred" },
+					{ "on": "thread.labels[*]", "kind": "added", "to": "IMPORTANT", "does": "tell", "says": "marked important" },
+					{ "on": "thread.labels[*]", "kind": "removed", "from": "IMPORTANT", "does": "tell", "says": "marked not important" },
+					{ "on": "thread.labels[*]", "kind": "added", "to": "SPAM", "does": "tell", "says": "marked as spam" },
+					{ "on": "thread.labels[*]", "kind": "added", "to": "TRASH", "does": "tell", "says": "moved to Trash" },
+					{ "on": "thread.labels[*]", "kind": "removed", "from": "TRASH", "does": "tell", "says": "restored from Trash" },
+					{ "on": "thread.labels[*]", "kind": "added", "does": "tell", "says": "labelled {to}" },
+					{ "on": "thread.labels[*]", "kind": "removed", "does": "tell", "says": "unlabelled {from}" }
+				],
+				"ends": {},
+				"every": "5m",
+				"settle": "1m"
+			},
+			"fields": { "title": "thread.subject", "messages": "thread.messages", "total": "thread.total" }
+		},
+		"search": {
+			"card": "messages",
+			"normalize": { "query": "text" },
+			"name": "mail matching {query}",
+			"urls": ["https://mail.google.com/mail/u/*/#search/{query}"],
+			"ids": ["gmail/search/{query}"],
+			"reads": { "search": { "tool": "search_messages", "args": { "query": "{query}", "max_results": 25 } } },
+			"follow": {
+				"ignore": [
+					"search.resultSizeEstimate",
+					"search.nextPageToken",
+					"search.messages[*].snippet",
+					"search.messages[*].date",
+					"search.messages[*].threadId"
+				],
+				"authors": { "search.messages": "fromAddress" },
+				"rules": [
+					{ "on": "search.messages[*]", "kind": "added", "does": "wake", "says": "{from}: {subject}" },
+					{ "on": "search.messages[*]", "kind": "removed", "does": "nothing", "says": "{from}: {subject} no longer matches" }
+				],
+				"ends": {},
+				"every": "5m",
+				"settle": "1m"
+			},
+			"fields": { "messages": "search.messages", "total": "search.resultSizeEstimate" }
+		}
+	}
+}
+```

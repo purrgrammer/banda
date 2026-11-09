@@ -1,0 +1,43 @@
+name: refresh landing downloads
+
+on:
+  release:
+    types: [published, edited, deleted, unpublished]
+  workflow_dispatch:
+  # Also reconcile asset changes and releases published by another workflow's GITHUB_TOKEN.
+  schedule:
+    - cron: "43 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: site-downloads
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: Refresh direct links from published release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
+          node scripts/site-downloads.ts "$RUNNER_TEMP/releases.json"
+      - name: Publish the updated landing through its existing Vercel Git deployment
+        run: |
+          if git diff --quiet -- site/index.html; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/index.html
+          git commit -m "fix: refresh landing release downloads"
+          git pull --rebase origin main
+          git push origin HEAD:main

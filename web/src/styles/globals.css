@@ -1,0 +1,495 @@
+/*
+ * The stylesheet: Tailwind v4 over the `--sa-*` tokens of theme.css. `@theme inline` keeps each var reference, so
+ * dark mode re-resolves at runtime; `dark:` follows the same rule as the tokens.
+ */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "./theme.css";
+@import "./tokens.css";
+
+/* Streamdown writes Tailwind classes at runtime; keep them in the build. */
+@source "../../../node_modules/streamdown/dist/*.js";
+
+/* dark: the root's choice, or the device's; an element with its own `data-scheme` (the specimen's frames) decides for
+   what it holds */
+@custom-variant dark {
+	&:where(.dark, .dark *, [data-scheme="dark"], [data-scheme="dark"] *):not([data-scheme="light"] *) {
+		@slot;
+	}
+	@media (prefers-color-scheme: dark) {
+		&:where(:not(.light, .light *, [data-scheme="light"], [data-scheme="light"] *)) {
+			@slot;
+		}
+	}
+}
+
+/*
+ * The state variants shadcn's radix components are written with (`data-open:`, `data-checked:`…): Radix marks state as
+ * `data-state` and `data-orientation`, so each matches that, or the bare attribute where a component sets one itself.
+ */
+@custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
+@custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
+@custom-variant data-checked (&:where([data-state="checked"], [data-checked]:not([data-checked="false"])));
+@custom-variant data-unchecked (&:where([data-state="unchecked"], [data-unchecked]:not([data-unchecked="false"])));
+@custom-variant data-active (&:where([data-state="active"], [data-active]:not([data-active="false"])));
+@custom-variant data-horizontal (&:where([data-orientation="horizontal"]));
+@custom-variant data-vertical (&:where([data-orientation="vertical"]));
+
+@theme inline {
+	--color-sa-bg: var(--sa-bg);
+	--color-sa-rail: var(--sa-rail);
+	--color-sa-surface: var(--sa-surface);
+	--color-sa-border: var(--sa-border);
+	--color-sa-divider: var(--sa-divider);
+	--color-sa-text: var(--sa-text);
+	--color-sa-muted: var(--sa-muted);
+	--color-sa-faint: var(--sa-faint);
+	--color-sa-focus: var(--sa-focus);
+	--color-sa-accent: var(--sa-accent);
+	--color-sa-error: var(--sa-error);
+	--color-sa-add: var(--sa-add);
+	--color-sa-del: var(--sa-del);
+	--color-sa-face-ochre: var(--sa-face-ochre);
+	--color-sa-face-clay: var(--sa-face-clay);
+	--color-sa-face-rose: var(--sa-face-rose);
+	--color-sa-face-plum: var(--sa-face-plum);
+	--color-sa-face-blue: var(--sa-face-blue);
+	--color-sa-face-sage: var(--sa-face-sage);
+
+	--radius-control: var(--sa-radius);
+	--radius-block: var(--sa-radius-block);
+	--radius-card: var(--sa-radius-card);
+	--radius-chip: var(--sa-radius-chip);
+
+	--font-sans: var(--sa-font-sans);
+	--font-mono: var(--sa-font-mono);
+	--text-label: var(--sa-text-label);
+	--text-label--line-height: 1rem;
+	--text-label--letter-spacing: 0.06em;
+	--text-xs: var(--sa-text-xs);
+	--text-xs--line-height: 1rem;
+	--text-sm: var(--sa-text-sm);
+	--text-sm--line-height: 1.25rem;
+	--text-title: var(--sa-text-title);
+	--text-title--line-height: 1.25rem;
+	--text-base: var(--sa-text-base);
+	--text-base--line-height: 1.5rem;
+	--text-lg: var(--sa-text-lg);
+	--text-lg--line-height: 1.75rem;
+	--text-lg--letter-spacing: -0.018em;
+
+	--shadow-field: var(--sa-shadow-field);
+	--shadow-field-focus: var(--sa-shadow-field-focus);
+	--ease-sa: var(--sa-ease);
+	--duration-hover: var(--sa-duration-hover);
+	--duration-enter: var(--sa-duration-enter);
+
+	/* shadcn's radii on banda's: controls (buttons, fields, rows) at the control radius, cards at the block radius */
+	--radius-sm: calc(var(--sa-radius) - 2px);
+	--radius-md: var(--sa-radius);
+	--radius-lg: var(--sa-radius);
+	--radius-xl: var(--sa-radius-block);
+	--radius-2xl: var(--sa-radius-block);
+
+	/* shadcn's tokens as colours; their values are the palette's, below */
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-sidebar: var(--sidebar);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* shadcn's semantic tokens, on banda's theme (tokens.css): its primitives look like the rest, in both themes. */
+:root {
+	--background: var(--paper);
+	--foreground: var(--ink);
+	--card: var(--paper);
+	--card-foreground: var(--ink);
+	--popover: var(--paper);
+	--popover-foreground: var(--ink);
+	--primary: var(--ink);
+	--primary-foreground: var(--paper);
+	--secondary: var(--paper-2);
+	--secondary-foreground: var(--ink);
+	--muted: var(--paper-3);
+	--muted-foreground: var(--ink-2);
+	--accent: var(--paper-3);
+	--accent-foreground: var(--ink);
+	--destructive: var(--danger);
+	--border: var(--line);
+	--input: var(--line);
+	--ring: var(--focus);
+	--sidebar: var(--paper-2);
+	--sidebar-foreground: var(--ink);
+	--sidebar-primary: var(--ink);
+	--sidebar-primary-foreground: var(--paper);
+	--sidebar-accent: var(--paper-3);
+	--sidebar-accent-foreground: var(--ink);
+	--sidebar-border: var(--line-soft);
+	--sidebar-ring: var(--focus);
+	--radius-md: 8px;
+}
+
+@layer base {
+	* {
+		border-color: var(--sa-border);
+		scrollbar-width: thin;
+		scrollbar-color: var(--sa-border) transparent;
+	}
+	html {
+		font-family: var(--sa-font-sans);
+		font-size: 16px;
+		-webkit-text-size-adjust: 100%;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+	html,
+	body,
+	#root {
+		height: 100%;
+	}
+	body {
+		margin: 0;
+		background-color: var(--paper);
+		color: var(--ink);
+		font-size: var(--sa-text-sm);
+		line-height: 1.25rem;
+		font-variant-numeric: tabular-nums;
+		overflow: hidden;
+		overscroll-behavior-y: none;
+	}
+	p {
+		text-wrap: pretty;
+	}
+	code,
+	kbd,
+	pre {
+		font-family: var(--sa-font-mono);
+		font-size: var(--sa-text-code);
+		font-variant-ligatures: none;
+	}
+	/* One focus outline for everything focusable, off the edge; the composer draws its own and opts out. */
+	:focus-visible {
+		outline: 1.5px solid var(--sa-focus);
+		outline-offset: 2px;
+	}
+	::selection {
+		background: color-mix(in oklch, var(--sa-text) 16%, transparent);
+	}
+}
+
+/* The one column: every region pads itself so its content lands on the same edges. */
+@utility sa-column {
+	width: 100%;
+	padding-inline: max(var(--sa-gutter), calc((100% - var(--sa-column)) / 2));
+}
+
+/* A link keeps its ink and gains its line on hover; a painted underline, never a border. */
+@utility sa-link {
+	color: inherit;
+	text-decoration-line: underline;
+	text-decoration-color: var(--line);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 3px;
+	transition: text-decoration-color var(--sa-duration-hover) var(--sa-ease);
+	&:hover {
+		text-decoration-color: currentColor;
+	}
+}
+
+/* Replies: the transcript's own type, not Streamdown's defaults (unlayered, so it wins). */
+.sa-markdown {
+	max-width: var(--sa-measure);
+	font-size: var(--sa-text-base);
+	line-height: 1.625rem;
+	overflow-wrap: anywhere;
+}
+.sa-markdown > * {
+	margin-block: 0;
+}
+/* Chat is written line by line: a single newline is a line break, as typed. */
+.sa-markdown :is(p, li) {
+	white-space: pre-line;
+}
+.sa-markdown > * + * {
+	margin-top: 0.75rem;
+}
+.sa-markdown strong {
+	font-weight: 600;
+}
+/* Plain links inherit the bubble's ink; rich links (mentions, objects, files) own their colors. */
+.sa-markdown a[data-markdown-link] {
+	@apply sa-link;
+}
+.sa-markdown ul,
+.sa-markdown ol {
+	list-style-position: outside;
+	padding-left: 1.25rem;
+}
+.sa-markdown li {
+	padding-left: 0.25rem;
+}
+.sa-markdown ul {
+	list-style-type: disc;
+}
+.sa-markdown ol {
+	list-style-type: decimal;
+}
+.sa-markdown li + li {
+	margin-top: 0.375rem;
+}
+.sa-markdown li::marker {
+	color: var(--ink-3);
+}
+.sa-markdown blockquote {
+	border-left: 2px solid var(--line);
+	padding-left: 0.875rem;
+	color: var(--ink-2);
+}
+.sa-markdown hr {
+	border: 0;
+	border-top: 1px solid var(--line-soft);
+	margin-block: 1.5rem;
+}
+.sa-markdown :not(pre) > code,
+.sa-markdown [data-streamdown="inline-code"] {
+	font-size: 0.84em;
+	padding: 0.15em 0.35em;
+	border-radius: 4px;
+	background: var(--paper-3);
+	box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+.sa-markdown [data-streamdown="code-block"] {
+	margin-block: 1rem;
+	border: 0;
+	border-radius: var(--sa-radius-block);
+	background: var(--paper-3);
+	box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+.sa-markdown pre {
+	max-width: 100%;
+	overflow-x: auto;
+}
+/* One flat block, the language a quiet caption inside it: no frame within the frame. */
+.sa-markdown [data-streamdown="code-block-header"] {
+	height: 2rem;
+	padding-inline: 0.875rem;
+	font-size: var(--sa-text-xs);
+	color: var(--ink-2);
+}
+.sa-markdown [data-streamdown="code-block-body"] {
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	padding: 0 0.875rem 0.75rem;
+	font-size: var(--sa-text-code);
+	line-height: 1.25rem;
+}
+.sa-markdown [data-streamdown="code-block-body"] pre {
+	background: transparent;
+}
+/* The block is its own frame: no padding or gap of its own around the caption and the code. */
+.sa-markdown [data-streamdown="code-block"] {
+	padding: 0;
+	gap: 0;
+}
+/* A fence that names no language has no caption, so no empty row above its code. */
+.sa-markdown [data-streamdown="code-block"][data-language=""] [data-streamdown="code-block-header"] {
+	display: none;
+}
+.sa-markdown [data-streamdown="code-block"][data-language=""] [data-streamdown="code-block-body"] {
+	padding-top: 0.75rem;
+}
+.sa-markdown table {
+	font-size: var(--sa-text-sm);
+	border-collapse: collapse;
+}
+.sa-markdown th,
+.sa-markdown td {
+	padding: 0.5rem 0.875rem;
+	text-align: left;
+	border-bottom: 1px solid var(--line-soft);
+}
+.sa-markdown th {
+	font-size: var(--sa-text-xs);
+	font-weight: 600;
+	color: var(--ink-2);
+}
+/* Headings in replies stay below the screen's one title: hierarchy by weight, not size. */
+.sa-markdown :is(h1, h2, h3, h4, h5, h6) {
+	font-size: var(--sa-text-base);
+	line-height: 1.5rem;
+	font-weight: 600;
+	margin-top: 1.5rem;
+}
+
+/* A bubble already supplies its top inset. Only a leading heading loses its own space; later headings and
+   document/artifact typography retain their separation. */
+[data-message-bubble] .sa-markdown > :is(h1, h2, h3):first-child {
+	margin-top: 0;
+	padding-top: 0;
+}
+
+/* "Working now": an opacity pulse, still under reduced motion. */
+@keyframes sa-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.4;
+	}
+}
+/* The persona at work: the disc swells a little, its glow more, on the same pulse. */
+@keyframes sa-breathe {
+	0%,
+	100% {
+		transform: scale(1);
+	}
+	50% {
+		transform: scale(1.12);
+	}
+}
+@keyframes sa-glow {
+	0%,
+	100% {
+		opacity: 0.4;
+		transform: scale(1);
+	}
+	50% {
+		opacity: 1;
+		transform: scale(1.6);
+	}
+}
+/*
+ * The companion at work: a slow arc of the accent turning around its face. Under reduced motion the arc stands still
+ * as a whole ring, which still says "working" without moving.
+ */
+@keyframes sa-orbit {
+	to {
+		transform: rotate(1turn);
+	}
+}
+.sa-orbit {
+	background: conic-gradient(from 0deg, transparent 0 35%, var(--sa-accent) 100%);
+	mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+	animation: sa-orbit var(--sa-duration-orbit) linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+	.sa-orbit {
+		background: var(--sa-accent);
+		animation: none;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}
+
+svg.lucide {
+	stroke-width: 1.5;
+}
+
+/* The owner's bubble is the page's other scheme: everything inside it (code, chips, links) resolves its colours for
+   the bubble it sits on, not for the page. */
+@media (prefers-color-scheme: light) {
+	:root:not(.dark) [data-message-bubble][data-mine] {
+		color-scheme: dark;
+	}
+}
+@media (prefers-color-scheme: dark) {
+	:root:not(.light) [data-message-bubble][data-mine] {
+		color-scheme: light;
+	}
+}
+:root.light [data-message-bubble][data-mine] {
+	color-scheme: dark;
+}
+:root.dark [data-message-bubble][data-mine] {
+	color-scheme: light;
+}
+
+/* A dialog enters: its scrim fades in, the dialog rises a little and settles; under reduced motion, a fade alone. */
+@keyframes sa-fade-in {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes sa-dialog-in {
+	from {
+		opacity: 0;
+		transform: translate(-50%, -48%) scale(0.97);
+	}
+}
+
+/* react-medium-image-zoom: a zoomed image over the page's own background, rounded, with a soft shadow */
+[data-rmiz-modal-overlay="visible"] {
+	background-color: color-mix(in oklch, var(--sa-bg) 92%, transparent) !important;
+}
+[data-rmiz-modal-img] {
+	border-radius: 10px;
+	box-shadow: 0 0 40px color-mix(in oklch, var(--sa-text) 18%, transparent);
+}
+
+/* ai-elements' Shimmer: the light sweeps from the right to the left */
+@keyframes sa-shimmer {
+	from {
+		background-position: 100% center;
+	}
+	to {
+		background-position: 0% center;
+	}
+}
+
+/*
+ * The floating header lifts only while the feed is under it: the feed's scroller names its scroll `--feed`, the chat
+ * shares the name with the header (`feed-scope`), and the header's shape takes its shadow over the first 24px of
+ * scrolling. With no feed scrolled, or no timeline, it lies flat in the chat's own paper.
+ */
+@utility feed-scroll {
+	scroll-timeline: --feed y;
+}
+@utility feed-scope {
+	timeline-scope: --feed;
+}
+@keyframes header-lift {
+	from {
+		filter: drop-shadow(0 4px 14px transparent);
+	}
+	to {
+		filter: drop-shadow(0 4px 14px light-dark(oklch(0 0 0 / 9%), oklch(0 0 0 / 45%)));
+	}
+}
+@utility header-lift {
+	animation: header-lift linear both;
+	animation-timeline: --feed;
+	animation-range: 0 24px;
+}

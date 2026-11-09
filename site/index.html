@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>banda: a band of AI agents that work for you</title>
+<meta name="description" content="A band of AI agents that work for you. Each has a computer of its own, and nothing goes out without your OK. Open source, for macOS, Linux and Windows.">
+<link rel="canonical" href="https://banda.rocks/">
+<meta name="theme-color" content="#fdfdfd" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="../web/public/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../web/public/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="banda">
+<meta property="og:url" content="https://banda.rocks/">
+<meta property="og:title" content="banda: a band of AI agents that work for you">
+<meta property="og:description" content="A band of AI agents that work for you. Each has a computer of its own, and nothing goes out without your OK. Open source, for macOS, Linux and Windows.">
+<meta property="og:image" content="https://banda.rocks/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Mara, Octo, Sancho, Atlas and Otto above the words: A band of AI agents that work for you.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="banda: a band of AI agents that work for you">
+<meta name="twitter:description" content="A band of AI agents that work for you. Each has a computer of its own, and nothing goes out without your OK. Open source, for macOS, Linux and Windows.">
+<meta name="twitter:image" content="https://banda.rocks/og.png">
+<meta name="twitter:image:alt" content="Mara, Octo, Sancho, Atlas and Otto above the words: A band of AI agents that work for you.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono&display=swap" rel="stylesheet">
+<style>
+/* banda.rocks. The band's layout is site/band-layout.ts. The app's tokens (web/src/styles/tokens.css): neutrals at chroma 0; the agents' faces are the only colour. */
+:root {
+	color-scheme: light dark;
+	--paper: light-dark(oklch(0.995 0 0), oklch(0.165 0 0));
+	--paper-2: light-dark(oklch(0.972 0 0), oklch(0.198 0 0));
+	--paper-3: light-dark(oklch(0.948 0 0), oklch(0.236 0 0));
+	--line: light-dark(oklch(0.875 0 0), oklch(0.3 0 0));
+	--line-soft: light-dark(oklch(0.938 0 0), oklch(0.245 0 0));
+	--ink: light-dark(oklch(0.2 0 0), oklch(0.955 0 0));
+	--ink-2: light-dark(oklch(0.48 0 0), oklch(0.73 0 0));
+	--focus: light-dark(oklch(0.56 0 0), oklch(0.64 0 0));
+	--alive: light-dark(oklch(0.5 0.14 152), oklch(0.74 0.15 152));
+	--font-text: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	--font-code: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--measure: 64rem;
+	--gutter: clamp(20px, 5vw, 40px);
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+	margin: 0; background: var(--paper); color: var(--ink); font: 400 17px/1.55 var(--font-text);
+	-webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 6px; }
+img { display: block; max-width: 100%; height: auto; }
+.wrap { max-width: calc(var(--measure) + 2 * var(--gutter)); margin: 0 auto; padding: 0 var(--gutter); }
+
+/* header */
+header .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+.mark { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 18px; text-decoration: none; }
+.mark img { width: 28px; height: 28px; }
+nav { display: flex; gap: 20px; font-size: 15px; color: var(--ink-2); }
+nav a { text-decoration: none; white-space: nowrap; }
+nav a:hover { color: var(--ink); }
+
+/* hero */
+.hero { text-align: center; padding-block: 56px 40px; }
+.band { display: flex; justify-content: center; align-items: flex-end; min-height: 168px; margin-bottom: 20px; }
+.band span {
+	width: var(--size); height: var(--size); margin-bottom: var(--lift); rotate: var(--tilt);
+	animation: arrive 600ms cubic-bezier(0.2, 0.9, 0.3, 1.2) backwards;
+}
+.band span > * { width: 100%; height: 100%; }
+@keyframes arrive { from { opacity: 0; translate: 0 16px; scale: 0.8; } }
+h1 { font-size: clamp(34px, 8vw, 64px); line-height: 1.05; letter-spacing: -0.03em; font-weight: 700; margin: 0 auto 16px; text-wrap: pretty; }
+.lede { font-size: clamp(17px, 2.4vw, 20px); color: var(--ink-2); max-width: 38rem; margin: 0 auto 32px; text-wrap: pretty; }
+.badge {
+	display: inline-flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-2);
+	border: 1px solid var(--line); border-radius: 999px; padding: 4px 14px 4px 4px; margin-bottom: 24px;
+}
+.alpha {
+	display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px;
+	background: var(--alive); color: var(--paper); font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+.mark .alpha { height: 20px; padding: 0 8px; font-size: 11px; margin-left: -2px; }
+
+.cta { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.button {
+	display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 24px; border-radius: 12px;
+	background: var(--ink); color: var(--paper); font-weight: 600; font-size: 16px; text-decoration: none;
+	transition: transform 120ms ease-out;
+}
+.button:active { transform: scale(0.97); }
+.button svg { width: 18px; height: 18px; }
+.sub { font-size: 14px; color: var(--ink-2); }
+.sub a { text-underline-offset: 3px; }
+
+/* the big screenshot */
+.shot {
+	margin: 48px auto 0; border-radius: 14px; overflow: hidden; border: 1px solid var(--line);
+	box-shadow: 0 1px 2px light-dark(oklch(0 0 0 / 4%), oklch(0 0 0 / 30%)), 0 24px 60px -24px light-dark(oklch(0 0 0 / 22%), oklch(0 0 0 / 60%));
+}
+.caption { text-align: center; font-size: 14px; color: var(--ink-2); margin-top: 14px; }
+
+/* features */
+section { padding: 72px 0 0; }
+h2 { font-size: clamp(26px, 4vw, 34px); letter-spacing: -0.02em; line-height: 1.15; margin: 0 0 8px; font-weight: 650; }
+.section-lede { color: var(--ink-2); margin: 0 0 32px; max-width: 40rem; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 28px; }
+.feature figure { margin: 0 0 14px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: var(--paper-2); }
+.feature h3 { font-size: 18px; margin: 0 0 4px; font-weight: 600; }
+.feature p { margin: 0; color: var(--ink-2); font-size: 16px; }
+
+/* install */
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.step { border: 1px solid var(--line); border-radius: 12px; padding: 20px; background: var(--paper-2); }
+.step b { display: block; font-size: 13px; color: var(--ink-2); font-weight: 500; margin-bottom: 6px; }
+.step h3 { font-size: 17px; margin: 0 0 6px; font-weight: 600; }
+.step p { margin: 0; font-size: 15px; color: var(--ink-2); }
+
+/* every file of the newest release, grouped by what it is */
+.downloads { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.downloads > div { border: 1px solid var(--line); border-radius: 12px; padding: 20px; background: var(--paper-2); }
+.downloads h3 { font-size: 17px; margin: 0 0 2px; font-weight: 600; }
+.downloads > div > p { margin: 0 0 12px; font-size: 14px; color: var(--ink-2); }
+.downloads ul { list-style: none; margin: 0; padding: 0; }
+.downloads li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line-soft); font-size: 15px; }
+.downloads li[hidden] { display: none; }
+.downloads li a { text-underline-offset: 3px; }
+.downloads li span { color: var(--ink-2); font-family: var(--font-code); font-size: 13px; white-space: nowrap; }
+code {
+	font: 13.5px/1.5 var(--font-code); background: var(--paper-3); border-radius: 6px; padding: 2px 6px;
+	overflow-wrap: anywhere;
+}
+.providers { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+.providers span { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px 5px 9px; color: var(--ink-2); }
+.providers i { width: 18px; height: 18px; background: var(--ink); mask-position: center; mask-size: contain; mask-repeat: no-repeat; }
+.p-anthropic { mask-image: url(../web/public/providers/anthropic.svg); }
+.p-openai { mask-image: url(../web/public/providers/openai.svg); }
+.p-github-copilot { mask-image: url(../web/public/providers/github-copilot.svg); }
+.p-openrouter { mask-image: url(../web/public/providers/openrouter.svg); }
+.p-xai { mask-image: url(../web/public/providers/xai.svg); }
+.p-meta { mask-image: url(../web/public/providers/meta.svg); }
+.p-google { mask-image: url(../web/public/providers/google.svg); }
+.p-azure { mask-image: url(../web/public/providers/azure.svg); }
+.p-google-vertex { mask-image: url(../web/public/providers/google-vertex.svg); }
+.p-amazon-bedrock { mask-image: url(../web/public/providers/amazon-bedrock.svg); }
+.p-mistral { mask-image: url(../web/public/providers/mistral.svg); }
+.p-deepseek { mask-image: url(../web/public/providers/deepseek.svg); }
+.p-groq { mask-image: url(../web/public/providers/groq.svg); }
+.p-cerebras { mask-image: url(../web/public/providers/cerebras.svg); }
+
+.note {
+	margin-top: 28px; border-left: 3px solid var(--line); padding: 4px 0 4px 16px; color: var(--ink-2); font-size: 15px;
+}
+
+footer { margin-top: 96px; border-top: 1px solid var(--line-soft); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; padding-top: 24px; padding-bottom: 40px; font-size: 14px; color: var(--ink-2); }
+footer nav { gap: 16px; }
+
+@media (max-width: 720px) {
+	header nav a:not(:last-child) { display: none; }
+	.hero { padding-top: 32px; }
+	.band { zoom: 0.6; }
+	.grid, .steps, .downloads { grid-template-columns: 1fr; }
+	section { padding-top: 56px; }
+	.shot { border-radius: 10px; margin-top: 36px; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.band span { animation: none; }
+	.button { transition: none; }
+}
+</style>
+</head>
+<body>
+<header>
+	<div class="wrap">
+		<a class="mark" href="/"><img src="../web/public/icon.svg" alt="">banda<span class="alpha">Alpha</span></a>
+		<nav>
+			<a href="#what" class="hide-sm">What it does</a>
+			<a href="#start">Get started</a>
+			<a href="https://github.com/purrgrammer/banda">GitHub</a>
+		</nav>
+	</div>
+</header>
+
+<main>
+	<div class="wrap hero">
+		<div class="band" aria-hidden="true"></div>
+		<div class="badge"><span class="alpha">Alpha</span>macOS, Linux and Windows, with Android</div>
+		<h1>A band of AI agents that work for you.</h1>
+		<p class="lede">Each with a computer of its own. Nothing goes out without your OK.</p>
+		<div class="cta">
+			<a class="button" id="download" href="#downloads">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg>
+				<span id="download-label">Download banda</span>
+			</a>
+			<div class="sub" id="download-sub">Open source · <a href="#downloads">All downloads</a></div>
+		</div>
+		<div class="shot">
+			<img src="../docs/screenshots/group.png" width="2560" height="1600" alt="A group chat: Mara finds the trains, Sancho plans the food, and Otto turns both into a printable itinerary">
+		</div>
+		<p class="caption">Mara finds trains, Sancho plans food, Otto makes the itinerary.</p>
+	</div>
+
+	<section id="what">
+		<div class="wrap">
+			<h2>Your agents, your rules.</h2>
+			<p class="section-lede">Each agent is a chat. Group them and they work together.</p>
+			<div class="grid">
+				<div class="feature">
+					<figure><img src="../docs/screenshots/connect.png" alt="Adding an MCP server: its tools listed, and access given to Mara only" loading="lazy"></figure>
+					<h3>Connect anything</h3>
+					<p>GitHub or any MCP server, for the agents you pick.</p>
+				</div>
+				<div class="feature">
+					<figure><img src="../docs/screenshots/approval.png" alt="Sancho asks before opening a GitHub issue, showing exactly what will be sent" loading="lazy"></figure>
+					<h3>It asks before it acts</h3>
+					<p>You see exactly what it will send, then say yes or no.</p>
+				</div>
+				<div class="feature">
+					<figure><img src="../docs/screenshots/browser.png" alt="Mara's browser, live, reading Wikipedia's article on the Dom Luís I Bridge" loading="lazy"></figure>
+					<h3>A computer of its own</h3>
+					<p>Watch its browser live, take over, or stop it.</p>
+				</div>
+				<div class="feature">
+					<figure><img src="../docs/screenshots/routine.png" alt="Sancho asks to set up a routine that summarises new GitHub issues every Monday at 9:00, Lisbon time" loading="lazy"></figure>
+					<h3>Routines</h3>
+					<p>Agents wake on a schedule and report back.</p>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<section id="start">
+		<div class="wrap">
+			<h2>Get started</h2>
+			<p class="section-lede">It runs on your computer, and your data stays there.</p>
+			<div class="steps">
+				<div class="step">
+					<b>1</b>
+					<h3>Install banda</h3>
+					<p>Download the app and start Docker: each agent's computer is a container.</p>
+				</div>
+				<div class="step">
+					<b>2</b>
+					<h3>Choose a provider</h3>
+					<p>Sign in with your account or paste an API key.</p>
+				</div>
+				<div class="step">
+					<b>3</b>
+					<h3>Meet Sancho</h3>
+					<p>Your first agent. Ask it anything, then grow the band.</p>
+				</div>
+			</div>
+			<div class="providers">
+				<span><i class="p-anthropic" aria-hidden="true"></i>Anthropic</span>
+				<span><i class="p-openai" aria-hidden="true"></i>OpenAI</span>
+				<span><i class="p-github-copilot" aria-hidden="true"></i>GitHub Copilot</span>
+				<span><i class="p-openrouter" aria-hidden="true"></i>OpenRouter</span>
+				<span><i class="p-xai" aria-hidden="true"></i>xAI</span>
+				<span><i class="p-meta" aria-hidden="true"></i>Meta</span>
+				<span><i class="p-google" aria-hidden="true"></i>Google</span>
+				<span><i class="p-azure" aria-hidden="true"></i>Azure</span>
+				<span><i class="p-google-vertex" aria-hidden="true"></i>Vertex AI</span>
+				<span><i class="p-amazon-bedrock" aria-hidden="true"></i>Amazon Bedrock</span>
+				<span><i class="p-mistral" aria-hidden="true"></i>Mistral</span>
+				<span><i class="p-deepseek" aria-hidden="true"></i>DeepSeek</span>
+				<span><i class="p-groq" aria-hidden="true"></i>Groq</span>
+				<span><i class="p-cerebras" aria-hidden="true"></i>Cerebras</span>
+			</div>
+			<p class="note">Prefer a terminal?
+				<a href="#downloads">Get the CLI</a> and run <code>banda serve</code>.</p>
+		</div>
+	</section>
+	<section id="downloads">
+		<div class="wrap">
+			<h2>Downloads</h2>
+			<p class="section-lede" id="downloads-lede">The latest download for each platform. All need Docker on the computer that runs banda.</p>
+			<div class="downloads">
+				<div>
+					<h3>Desktop app</h3>
+					<p>The app, with banda inside.</p>
+					<ul>
+						<li><a data-file="desktop/mac/arm64/dmg" href="https://github.com/purrgrammer/banda/releases/download/v0.1.0-alpha.8/banda-0.1.0-alpha.8-mac-arm64.dmg">macOS, Apple silicon</a><span>.dmg</span></li>
+						<li><a data-file="desktop/mac/x64/dmg" href="https://github.com/purrgrammer/banda/releases/download/v0.1.0-alpha.8/banda-0.1.0-alpha.8-mac-x64.dmg">macOS, Intel</a><span>.dmg</span></li>
+						<li><a data-file="desktop/win/x64/exe" href="https://github.com/purrgrammer/banda/releases/download/v0.1.0-alpha.8/banda-0.1.0-alpha.8-win-x64.exe">Windows</a><span>.exe</span></li>
+						<li><a data-file="desktop/linux/x64/AppImage" href="https://github.com/purrgrammer/banda/releases/download/v0.1.0-alpha.8/banda-0.1.0-alpha.8-linux-x86_64.AppImage">Linux</a><span>.AppImage</span></li>
+						<li><a data-file="desktop/linux/x64/deb" href="https://github.com/purrgrammer/banda/releases/download/v0.1.0-alpha.8/banda-0.1.0-alpha.8-linux-amd64.deb">Linux</a><span>.deb</span></li>
+						<li><a data-file="desktop/linux/arm64/AppImage" href="https://github.com/purrgrammer/banda/releases/download/v0.1.0-alpha.8/banda-0.1.0-alpha.8-linux-arm64.AppImage">Linux on ARM</a><span>.AppImage</span></li>
+						<li><a data-file="desktop/linux/arm64/deb" href="https://github.com/purrgrammer/banda/releases/download/v0.1.0-alpha.8/banda-0.1.0-alpha.8-linux-arm64.deb">Linux on ARM</a><span>.deb</span></li>
+					</ul>
+				</div>
+				<div>
+					<h3>Command line</h3>
+					<p>Unpack, put <code>banda/bin</code> on your PATH, run <code>banda serve</code>.</p>
+					<ul>
+						<li><a data-file="cli/mac/arm64/tar.gz" href="https://github.com/purrgrammer/banda/releases/download/v0.1.0-alpha.8/banda-cli-0.1.0-alpha.8-mac-arm64.tar.gz">macOS, Apple silicon</a><span>.tar.gz</span></li>
+						<li><a data-file="cli/mac/x64/tar.gz" href="https://github.com/purrgrammer/banda/releases/download/v0.1.0-alpha.8/banda-cli-0.1.0-alpha.8-mac-x64.tar.gz">macOS, Intel</a><span>.tar.gz</span></li>
+						<li><a data-file="cli/win/x64/zip" href="https://github.com/purrgrammer/banda/releases/download/v0.1.0-alpha.8/banda-cli-0.1.0-alpha.8-win-x64.zip">Windows</a><span>.zip</span></li>
+						<li><a data-file="cli/linux/x64/tar.gz" href="https://github.com/purrgrammer/banda/releases/download/v0.1.0-alpha.8/banda-cli-0.1.0-alpha.8-linux-x64.tar.gz">Linux</a><span>.tar.gz</span></li>
+						<li><a data-file="cli/linux/arm64/tar.gz" href="https://github.com/purrgrammer/banda/releases/download/v0.1.0-alpha.8/banda-cli-0.1.0-alpha.8-linux-arm64.tar.gz">Linux on ARM</a><span>.tar.gz</span></li>
+					</ul>
+				</div>
+				<div>
+					<h3>Phone</h3>
+					<p>Pair it in Settings → Devices on your computer, then reach your band from anywhere.</p>
+					<ul>
+						<li><a data-file="phone/android/arm64/apk" href="https://github.com/purrgrammer/banda/releases/download/v0.1.0-alpha.8/banda-0.1.0-alpha.8-android-arm64.apk">Android</a><span>.apk</span></li>
+					</ul>
+				</div>
+			</div>
+			<p class="note"><!-- checksums:start --><a href="https://github.com/purrgrammer/banda/releases/download/v0.1.0-alpha.8/SHA256SUMS">Checksums (v0.1.0-alpha.8)</a><!-- checksums:end --> · <a id="downloads-notes" href="https://github.com/purrgrammer/banda/releases">Release notes</a> · macOS: the first time, System Settings → Privacy &amp; Security → Open Anyway.</p>
+		</div>
+	</section>
+</main>
+
+<footer>
+	<div class="wrap">
+		<span>banda · AGPL-3.0</span>
+		<nav>
+			<a href="https://github.com/purrgrammer/banda">Source</a>
+			<a href="https://github.com/purrgrammer/banda/releases">Releases</a>
+			<a href="https://github.com/purrgrammer/banda/blob/main/DESIGN.md">How it works</a>
+			<a href="https://github.com/purrgrammer/banda/blob/main/SECURITY.md">Security</a>
+		</nav>
+	</div>
+</footer>
+
+<script type="module" src="./band.ts"></script>
+<script>
+// Download links are published in the HTML by scripts/site-downloads.ts. Device detection only picks a shortcut.
+(async () => {
+	const label = document.getElementById("download-label");
+	const button = document.getElementById("download");
+	const ua = navigator.userAgent;
+	const data = navigator.userAgentData;
+	const platform = (data?.platform || navigator.platform || "").toLowerCase();
+	let os = /mac/.test(platform) || /Mac OS X/.test(ua) ? "mac" : /win/.test(platform) || /Windows/.test(ua) ? "win" : /linux/.test(platform) || /Linux/.test(ua) ? "linux" : null;
+	if (/Android/.test(ua)) os = "android";
+	else if (/iPhone|iPad/.test(ua) || (/mac/.test(platform) && navigator.maxTouchPoints > 1)) os = null;
+	if (!os) return;
+	let arch = os === "win" ? "x64" : os === "mac" || os === "android" ? "arm64" : /aarch64|arm64/i.test(ua) ? "arm64" : "x64";
+	const choose = () => {
+		const ext = { mac: "dmg", win: "exe", linux: "AppImage", android: "apk" }[os];
+		const kind = os === "android" ? "phone" : "desktop";
+		const link = document.querySelector(`a[data-file="${kind}/${os}/${arch}/${ext}"]`);
+		if (!link) return;
+		button.href = link.href;
+		label.textContent = `Download for ${{ mac: "macOS", win: "Windows", linux: "Linux", android: "Android" }[os]}`;
+	};
+	choose();
+	try {
+		const high = await data?.getHighEntropyValues?.(["architecture"]);
+		if (high?.architecture && os !== "android") {
+			arch = high.architecture === "arm" ? "arm64" : "x64";
+			choose();
+		}
+	} catch {}
+})();
+</script>
+</body>
+</html>

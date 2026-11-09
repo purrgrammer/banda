@@ -1,0 +1,43 @@
+{
+	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+	"plugins": ["./biome/effects.grit"],
+	"files": {
+		"includes": [
+			"src/**",
+			"test/**",
+			"web/**",
+			"!web/dist",
+			"!web/src/assets/providers",
+			"!!.local",
+			"!!.worktrees",
+			"evals/**",
+			"scripts/**",
+			"site/**",
+			"desktop/**",
+			"!desktop/dist",
+			"!desktop/node_modules",
+			"!desktop/package-lock.json",
+			"mobile/**",
+			"!mobile/android",
+			"!mobile/node_modules",
+			"!mobile/package-lock.json",
+			"*.json",
+			"!package-lock.json",
+			"!.claude"
+		]
+	},
+	"formatter": { "indentStyle": "tab", "lineWidth": 120 },
+	"css": { "parser": { "tailwindDirectives": true } },
+	"assist": { "actions": { "source": { "organizeImports": "on" } } },
+	"overrides": [
+		{
+			"includes": ["web/src/styles/**"],
+			"linter": { "rules": { "complexity": { "noImportantStyles": "off" } } }
+		},
+		{ "includes": ["test/**"], "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } } },
+		{
+			"includes": ["web/src/components/ui/**", "web/src/components/ai-elements/**", "web/src/hooks/**"],
+			"linter": { "enabled": false }
+		}
+	]
+}

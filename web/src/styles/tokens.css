@@ -1,0 +1,158 @@
+/*
+ * banda's theme. Sober and plain: neutrals at chroma 0, ink-filled primary actions, one colour that means alive, one
+ * that means a failure. The agents' emojis are the only other colour on screen.
+ *
+ * Each colour is defined once, as `light-dark(light, dark)`, and resolves by the `color-scheme` of the element that uses
+ * it: the page follows the device unless `.light` or `.dark` on the root picks one, and any element can set its own (the
+ * specimen shows both side by side). `npm run web:contrast` audits every pair; change a value, run it.
+ */
+
+:root {
+	color-scheme: light dark;
+
+	/* paper: the page; the sidebar and the owner's bubbles; a pressed or hovered row, a well inside a card */
+	--paper: light-dark(oklch(0.995 0 0), oklch(0.165 0 0));
+	--paper-2: light-dark(oklch(0.972 0 0), oklch(0.198 0 0));
+	--paper-3: light-dark(oklch(0.948 0 0), oklch(0.236 0 0));
+	/* line: a hairline around a card or a field; a divider between rows */
+	--line: light-dark(oklch(0.875 0 0), oklch(0.3 0 0));
+	--line-soft: light-dark(oklch(0.938 0 0), oklch(0.245 0 0));
+	/* ink: what people read; what is secondary (still 4.5:1); what only decorates (markers, a separator dot), never text */
+	--ink: light-dark(oklch(0.2 0 0), oklch(0.955 0 0));
+	--ink-2: light-dark(oklch(0.48 0 0), oklch(0.73 0 0));
+	--ink-3: light-dark(oklch(0.68 0 0), oklch(0.5 0 0));
+	/* the focus outline: a boundary, 3:1 on every paper */
+	--focus: light-dark(oklch(0.56 0 0), oklch(0.64 0 0));
+	/* alive: an agent at work; and lines a change adds, as text, so 4.5:1 */
+	--alive: light-dark(oklch(0.5 0.14 152), oklch(0.74 0.15 152));
+	/* danger: a failure, and lines a change removes, as text */
+	--danger: light-dark(oklch(0.52 0.17 32), oklch(0.7 0.15 32));
+
+	/* code: a file's lines and a reply's blocks, coloured by Shiki's CSS-variables theme; text, so 4.5:1, and quiet hues
+	   far from alive and danger, so a keyword never reads as a state */
+	--code-foreground: var(--ink);
+	--code-background: transparent;
+	--code-token-keyword: light-dark(oklch(0.48 0.12 300), oklch(0.77 0.1 300));
+	--code-token-string: light-dark(oklch(0.48 0.09 230), oklch(0.77 0.08 230));
+	--code-token-string-expression: light-dark(oklch(0.48 0.09 230), oklch(0.77 0.08 230));
+	--code-token-constant: light-dark(oklch(0.5 0.1 85), oklch(0.79 0.09 85));
+	--code-token-function: light-dark(oklch(0.45 0.1 262), oklch(0.79 0.08 262));
+	--code-token-link: light-dark(oklch(0.45 0.1 262), oklch(0.79 0.08 262));
+	--code-token-comment: light-dark(oklch(0.5 0 0), oklch(0.72 0 0));
+	--code-token-punctuation: light-dark(oklch(0.45 0 0), oklch(0.76 0 0));
+	--code-token-parameter: light-dark(oklch(0.33 0 0), oklch(0.88 0 0));
+	--code-token-inserted: var(--alive);
+	--code-token-deleted: var(--danger);
+	--code-token-changed: var(--ink-2);
+
+	--font-text: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	--font-code: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+	/* layout: the sidebar, the panel, the chat's header, a row of the band, the measure of a bubble's prose */
+	--sidebar-width: 18rem;
+	--panel-width: 20rem;
+	--header-height: 48px;
+	--row-height: 56px;
+	--measure: 36rem;
+
+	/* what floats over the chat: the composer, and the face and the name at its top */
+	--shadow-composer:
+		0 0 0 1px var(--line), 0 1px 2px light-dark(oklch(0 0 0 / 4%), oklch(0 0 0 / 30%)),
+		0 6px 20px light-dark(oklch(0 0 0 / 5%), oklch(0 0 0 / 30%));
+
+	--ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+	--duration-fast: 120ms;
+	--duration-base: 200ms;
+	/* one turn of the ring around an agent at work: slow, so it reads as alive, not busy */
+	--duration-orbit: 2400ms;
+}
+
+:root.light {
+	color-scheme: light;
+}
+:root.dark {
+	color-scheme: dark;
+}
+
+@theme inline {
+	--color-paper: var(--paper);
+	--color-paper-2: var(--paper-2);
+	--color-paper-3: var(--paper-3);
+	--color-line: var(--line);
+	--color-line-soft: var(--line-soft);
+	--color-ink: var(--ink);
+	--color-ink-2: var(--ink-2);
+	--color-ink-3: var(--ink-3);
+	--color-focus: var(--focus);
+	--color-alive: var(--alive);
+	--color-danger: var(--danger);
+
+	--font-text: var(--font-text);
+	--font-code: var(--font-code);
+
+	/* type, each size one role: meta (times, counts), ui (rows, controls), body (what is said), heading, display */
+	--text-meta: 0.75rem;
+	--text-meta--line-height: 1rem;
+	--text-ui: 0.8125rem;
+	--text-ui--line-height: 1.125rem;
+	--text-body: 0.9375rem;
+	--text-body--line-height: 1.4rem;
+	--text-heading: 1.0625rem;
+	--text-heading--line-height: 1.5rem;
+	--text-heading--letter-spacing: -0.01em;
+	--text-display: 1.5rem;
+	--text-display--line-height: 1.875rem;
+	--text-display--letter-spacing: -0.02em;
+
+	/* radius: a field or a button; a card or a sheet; a bubble */
+	--radius-field: 8px;
+	--radius-tile: 14px;
+	--radius-bubble: 20px;
+
+	--shadow-composer: var(--shadow-composer);
+	--ease-out: var(--ease-out);
+}
+
+/* An agent at work: a slow arc of `alive` turning around its emoji; under reduced motion, a still whole ring. */
+@keyframes orbit {
+	to {
+		transform: rotate(1turn);
+	}
+}
+.orbit {
+	background: conic-gradient(from 0deg, transparent 0 30%, var(--alive) 100%);
+	mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+	animation: orbit var(--duration-orbit) linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+	.orbit {
+		background: var(--alive);
+		animation: none;
+	}
+}
+
+/* An artifact read whole (the main pane): a document's own hierarchy, where a chat's replies keep theirs flat. */
+.banda-document .sa-markdown {
+	max-width: none;
+	font-size: var(--text-body);
+	line-height: 1.7;
+}
+.banda-document .sa-markdown :is(h1, h2, h3) {
+	font-weight: 600;
+	color: var(--ink);
+	letter-spacing: -0.01em;
+}
+.banda-document .sa-markdown h1 {
+	font-size: 1.75rem;
+	line-height: 1.25;
+	margin-top: 0;
+}
+.banda-document .sa-markdown h2 {
+	font-size: 1.25rem;
+	line-height: 1.35;
+	margin-top: 2rem;
+}
+.banda-document .sa-markdown h3 {
+	font-size: var(--text-heading);
+	margin-top: 1.5rem;
+}

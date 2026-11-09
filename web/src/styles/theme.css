@@ -1,0 +1,119 @@
+/*
+ * banda's design tokens, namespaced `--sa-*`. Neutrals at chroma 0; one accent, which means alive (working now, and
+ * the one primary action on screen); one error red. Light is the default; dark is designed, not inverted, and applies
+ * under `.dark` and under the OS preference unless `.light` forces light. `npm run web:contrast` audits every colour
+ * here against its target: change a token, re-run it. A token joins this file with the first thing that uses it.
+ */
+
+:root {
+	color-scheme: light;
+
+	/* neutrals: page, sidebar rail, raised surface, hairline, divider, ink, muted ink, faint ink */
+	--sa-bg: oklch(0.99 0 0);
+	--sa-rail: oklch(0.975 0 0);
+	--sa-surface: oklch(0.962 0 0);
+	--sa-border: oklch(0.905 0 0);
+	--sa-divider: oklch(0.935 0 0);
+	--sa-text: oklch(0.22 0 0);
+	--sa-muted: oklch(0.54 0 0);
+	--sa-faint: oklch(0.66 0 0);
+	/* the focus outline is a boundary: 3:1 on every surface (WCAG 1.4.11) */
+	--sa-focus: oklch(0.6 0 0);
+	--sa-accent: oklch(0.47 0.06 180);
+	--sa-error: oklch(0.55 0.1 25);
+	/* a diff's two sides, for diffs alone: a removed line is not a failure, an added one is not the accent */
+	--sa-add: oklch(0.52 0.12 145);
+	--sa-del: oklch(0.52 0.15 27);
+	/* the companion's face: an emoji on one of these, which the owner picks. Mid-tones, so one value holds the face
+	   apart from every surface (3:1) in light and in dark alike; the dark blocks do not repeat them */
+	--sa-face-ochre: oklch(0.63 0.12 75);
+	--sa-face-clay: oklch(0.58 0.12 40);
+	--sa-face-rose: oklch(0.6 0.12 0);
+	--sa-face-plum: oklch(0.56 0.1 320);
+	--sa-face-blue: oklch(0.58 0.1 255);
+	--sa-face-sage: oklch(0.6 0.08 145);
+
+	/* type: Geist for what people read, Geist Mono for what machines typed */
+	--sa-font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	--sa-font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	/* scale, each size one role: 11 labels (uppercase), 12 meta, 13 chrome, 14 the header title, 15 reading, 22 the
+	   one page title */
+	--sa-text-label: 0.6875rem;
+	--sa-text-xs: 0.75rem;
+	--sa-text-sm: 0.8125rem;
+	--sa-text-title: 0.875rem;
+	--sa-text-base: 0.9375rem;
+	--sa-text-lg: 1.375rem;
+	--sa-text-code: 0.8125rem;
+
+	/* radius: controls, blocks (code, cards), the composer and bubbles, chips */
+	--sa-radius: 6px;
+	--sa-radius-block: 10px;
+	--sa-radius-card: 16px;
+	--sa-radius-chip: 999px;
+
+	/* layout: the one content column every region aligns to, and the measure of prose (34em is ~70 characters) */
+	--sa-column: 42rem;
+	--sa-measure: 34em;
+	--sa-gutter: 16px;
+	--sa-header: 40px;
+	--sa-sidebar: 16rem;
+
+	--sa-shadow-field: 0 0 0 1px var(--sa-border), 0 1px 2px oklch(0 0 0 / 4%), 0 4px 12px oklch(0 0 0 / 3%);
+	--sa-shadow-field-focus: 0 0 0 1px var(--sa-muted), 0 0 0 4px oklch(0.54 0 0 / 14%), 0 4px 12px oklch(0 0 0 / 4%);
+
+	--sa-duration-hover: 120ms;
+	--sa-duration-enter: 200ms;
+	--sa-duration-pulse: 1800ms;
+	/* one turn of the ring around the face while the companion works: slow, so it reads as alive, not busy */
+	--sa-duration-orbit: 2400ms;
+	--sa-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (min-width: 640px) {
+	:root {
+		--sa-gutter: 24px;
+	}
+}
+
+/* dark, by the OS preference ... */
+@media (prefers-color-scheme: dark) {
+	:root:not(.light) {
+		color-scheme: dark;
+		--sa-bg: oklch(0.17 0 0);
+		--sa-rail: oklch(0.155 0 0);
+		--sa-surface: oklch(0.215 0 0);
+		--sa-border: oklch(1 0 0 / 10%);
+		--sa-divider: oklch(1 0 0 / 6%);
+		--sa-text: oklch(0.95 0 0);
+		--sa-muted: oklch(0.69 0 0);
+		--sa-faint: oklch(0.56 0 0);
+		--sa-focus: oklch(0.62 0 0);
+		--sa-accent: oklch(0.78 0.065 180);
+		--sa-error: oklch(0.62 0.1 25);
+		--sa-add: oklch(0.68 0.13 148);
+		--sa-del: oklch(0.66 0.14 22);
+		--sa-shadow-field: 0 0 0 1px oklch(1 0 0 / 10%), 0 1px 2px oklch(0 0 0 / 30%), 0 4px 12px oklch(0 0 0 / 20%);
+		--sa-shadow-field-focus: 0 0 0 1px oklch(1 0 0 / 28%), 0 0 0 4px oklch(1 0 0 / 7%), 0 4px 12px oklch(0 0 0 / 20%);
+	}
+}
+
+/* ... or by the class; the audit checks the two copies agree. */
+:root.dark {
+	color-scheme: dark;
+	--sa-bg: oklch(0.17 0 0);
+	--sa-rail: oklch(0.155 0 0);
+	--sa-surface: oklch(0.215 0 0);
+	--sa-border: oklch(1 0 0 / 10%);
+	--sa-divider: oklch(1 0 0 / 6%);
+	--sa-text: oklch(0.95 0 0);
+	--sa-muted: oklch(0.69 0 0);
+	--sa-faint: oklch(0.56 0 0);
+	--sa-focus: oklch(0.62 0 0);
+	--sa-accent: oklch(0.78 0.065 180);
+	--sa-error: oklch(0.62 0.1 25);
+	--sa-add: oklch(0.68 0.13 148);
+	--sa-del: oklch(0.66 0.14 22);
+	--sa-shadow-field: 0 0 0 1px oklch(1 0 0 / 10%), 0 1px 2px oklch(0 0 0 / 30%), 0 4px 12px oklch(0 0 0 / 20%);
+	--sa-shadow-field-focus: 0 0 0 1px oklch(1 0 0 / 28%), 0 0 0 4px oklch(1 0 0 / 7%), 0 4px 12px oklch(0 0 0 / 20%);
+}

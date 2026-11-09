@@ -1,0 +1,17 @@
+node_modules
+dist/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+.claude/
+.local/
+
+# local secrets for a manual banda serve
+.env
+__pycache__/
+
+release/
+
+# git worktrees of feature branches
+.worktrees/
