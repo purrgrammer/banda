@@ -103,6 +103,26 @@ describe("a watch whose tool is off", () => {
 		expect(watchInvariants(summary)).toEqual([]);
 	}, 60_000);
 
+	it("a watch back from Off on an object that ended meanwhile ends, by the normal done path", async () => {
+		const home = await tempHome();
+		const summary = await watchScenario(home, new Faults(), {
+			tasks: false,
+			// merged while the tool is off (step 4)
+			world: (step) => world(step >= 4 ? 3 : 0),
+			clicks: Array.from({ length: 9 }, () => undefined),
+			at: (step) => NOW + step * 2 * HOUR,
+			act: async (step, { harness, core }) => {
+				if (step === 2) await off(harness, "pull_request_read");
+				if (step === 6) await on(harness, "pull_request_read");
+				await core.lookWatch(harness, "banda-142");
+			},
+		});
+		expect(summary.wakes.map((wake) => wake.ended)).toEqual(["merged"]);
+		expect(summary.record.done?.why).toBe("merged");
+		expect(summary.record.failed).toBeUndefined();
+		expect(watchInvariants(summary)).toEqual([]);
+	}, 60_000);
+
 	it("says so in other words when the tool waits for the owner to turn it on", async () => {
 		const home = await tempHome();
 		let stopped: Awaited<ReturnType<typeof record>>;

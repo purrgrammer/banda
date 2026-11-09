@@ -227,6 +227,8 @@ export type WatchRecord = {
 	turn?: number;
 	/** When it woke, within the last day. */
 	wakes?: number[];
+	/** The owner's switch held it off: its first look back also says whether the object ended meanwhile. */
+	back?: true;
 	/** The optional reads off at its newest look, by name: when they move, its next look is a baseline. */
 	skipped?: string[];
 	/** When it last woke, kept past the day. */
@@ -689,7 +691,7 @@ export function decide(look: {
 	/** The watch's cursor: the version it last saw, none before its baseline. */
 	readonly seen: number | undefined;
 	/** What the record held from the looks before, when its burst began, and when it woke today. */
-	readonly record: Pick<WatchRecord, "held" | "burst" | "wakes">;
+	readonly record: Pick<WatchRecord, "held" | "burst" | "wakes" | "back">;
 	/** The reading kept before this look, if any, and what this look read. */
 	readonly kept: FollowedReading | undefined;
 	readonly after: Item;
@@ -710,13 +712,16 @@ export function decide(look: {
 	readonly every: number;
 }): Decision {
 	const { seen, record, kept, after, same, version, follow, now, click } = look;
+	// the first look back from the owner's Off: the object may have ended while it could not look. Its reading is no
+	// change to report, but an end is an end
+	const endedBack = seen === undefined && record.back === true ? endedBy(follow, look.until, after) : undefined;
 	// the watch's first look is its baseline: only what changes after it is a change, whoever else follows
-	if (seen === undefined) return { does: "baseline" };
-	if (kept === undefined || (same && seen === version)) return { does: "nothing" };
-	const sorted = sort(follow, look.me, readingAt(kept, seen), after);
+	if (seen === undefined && endedBack === undefined) return { does: "baseline" };
+	if (seen !== undefined && (kept === undefined || (same && seen === version))) return { does: "nothing" };
+	const sorted = seen === undefined || kept === undefined ? [] : sort(follow, look.me, readingAt(kept, seen), after);
 	const wake = sorted.filter((each) => each.does === "wake");
 	const tell = sorted.filter((each) => each.does === "tell");
-	const ended = endedBy(follow, look.until, after);
+	const ended = endedBack ?? endedBy(follow, look.until, after);
 	// what the looks that held saw, with what this one sees: a change once seen to wake still wakes, though the
 	// newest reading no longer shows it (a failed check a new push made run again), and each is said once
 	const union = (before: readonly string[] | undefined, latest: readonly string[]) => [
@@ -766,7 +771,7 @@ export function decide(look: {
 		ids: held.ids,
 		...(ended === undefined ? {} : { ended }),
 		...(record.burst === undefined ? {} : { burst: record.burst }),
-		gap: fellOff(kept, seen),
+		gap: seen !== undefined && kept !== undefined && fellOff(kept, seen),
 	};
 }
 
@@ -792,6 +797,7 @@ function stop(record: WatchRecord, off: OffRead, now: number) {
 	afresh(record);
 	const since = record.failed?.off === true ? record.failed.since : now;
 	record.failed = { at: now, why: offWords(off), since, off: true };
+	record.back = true;
 	record.looked = now;
 	record.next = now + lookEvery({}, {});
 }
@@ -1124,6 +1130,7 @@ export function defineWatches(options: WatchesOptions) {
 				case "nothing":
 					record.seen = version;
 					delete record.resumed;
+					delete record.back;
 					await taken();
 					outcome = decision.does === "baseline" ? { outcome: "baseline" } : { outcome: "looked", changes: [] };
 					return;
@@ -1155,11 +1162,10 @@ export function defineWatches(options: WatchesOptions) {
 				default:
 					break;
 			}
-			// past the baseline, the watch has a cursor to say what changed from
-			if (seen === undefined) return;
 			const { changes, ended, burst, gap } = decision;
 			record.seen = version;
 			delete record.resumed;
+			delete record.back;
 			delete record.burst;
 			delete record.held;
 			const held = (await tx.doc(Connected)).accounts[connection.name]?.[account];
@@ -1176,7 +1182,7 @@ export function defineWatches(options: WatchesOptions) {
 				},
 				changes: [...changes],
 				at: now,
-				seen,
+				seen: seen ?? version,
 				version,
 				...(ended === undefined ? {} : { ended }),
 				...(resumed ? { resumed: true as const } : {}),
@@ -1187,7 +1193,7 @@ export function defineWatches(options: WatchesOptions) {
 			else if (changes.length > 0) delete record.behind;
 			if (decision.does === "wake") {
 				record.turn = await options.followUp(tx, chat, {
-					key: wakeKey(name, record.since, seen, decision.ids, ended),
+					key: wakeKey(name, record.since, seen ?? version, decision.ids, ended),
 					text: wakeText(watch, data.object.name, connection.service, changes, {
 						...(ended === undefined ? {} : { ended }),
 						resumed,
