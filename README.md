@@ -2,7 +2,7 @@
 
 <h1 align="center">banda</h1>
 
-<p align="center">A band of AI agents that work for you.<br><a href="https://banda.rocks">banda.rocks</a></p>
+<p align="center">A band of agents that work with you.<br><a href="https://banda.rocks">banda.rocks</a></p>
 
 Sancho is your first agent, and you can add more. Each one has a computer of its own to browse, write and run
 routines in. Connect GitHub or any MCP server and choose which agents may use it. Reading is free; anything that

@@ -2,7 +2,7 @@
 	"name": "banda",
 	"version": "0.1.0-alpha.8",
 	"private": true,
-	"description": "A band of personal agents.",
+	"description": "A band of agents that work with you.",
 	"license": "AGPL-3.0-only",
 	"repository": {
 		"type": "git",

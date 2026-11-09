@@ -1,6 +1,6 @@
 # banda: design
 
-banda is a band of agents the owner runs on their own machine, the bots that get things done for them. Each agent is an
+banda is a band of agents that work with the owner, running on the owner's own machine. Each agent is an
 face and a name, with one conversation that never ends, a personality in the owner's words, the connections it may use
 and the routines and watches it keeps; the owner talks to each directly, or to several at once in a group. They
 research, write, keep track of things and work with the owner's services in a computer of their own, keep working while
