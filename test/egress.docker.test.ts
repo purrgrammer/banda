@@ -298,6 +298,8 @@ describe.skipIf(!docker)("the box's closed network", { timeout: 180_000 }, () =>
 		});
 		// held, not sent: the server has seen nothing
 		expect(echoed().length).toBe(before);
+		// the card opens in the commit that stores the ticket, before the command's result is stored
+		await until(async () => (await results(first.chat)).length > 0);
 		const [bash] = await results(first.chat);
 		expect(bash).toMatch(/^banda: this request writes, so it waits for the owner: ticket t[0-9a-f]{10}/);
 		expect(bash).toContain(`Held, not sent: POST http://${ECHO_HOST}:8080/v1/things/42?x=1`);

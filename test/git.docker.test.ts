@@ -410,7 +410,9 @@ describe.skipIf(!docker)("git through the box's proxy", { timeout: 180_000 }, ()
 		const pushesBefore = receives();
 		const held = await say("push, held", pushing);
 		const { wait } = await nextAsk(held.turn);
-		// git failed, held; the chat is told how to make the next one go: allow the host, then run it again
+		// git failed, held; the chat is told how to make the next one go: allow the host, then run it again. The card
+		// opens in the commit that stores the ticket, before the command's result is stored
+		await until(async () => (await results(held.chat)).at(-1)?.includes("Held, not sent"));
 		const said = (await results(held.chat)).at(-1) ?? "";
 		expect(said).not.toMatch(/code=0/);
 		expect(said).toContain(`ask the owner to allow ${host} with ask_hosts`);
