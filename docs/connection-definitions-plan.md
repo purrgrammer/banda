@@ -90,9 +90,9 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
   - [x] The definitions map read once at start, and a definition's version, the hash of what was read. Every site that compares the accepted file's hash binds to it.
   - [x] "On in this home" in the store, Add as a switch in Connections, Settings and the agent's card. The copy and Update gone.
   - [x] The rule at a change of version. A tool the definition names comes on, a tool a server lists alone waits off whatever the version, switches kept by name.
-- [ ] Stage 2, the owner's choices and their own servers in the store. A record per server added by address with a version counter, one path that adds one, discovery and sign-in as transactions.
+- [x] Stage 2, the owner's choices and their own servers in the store. A record per server added by address with a version counter, one path that adds one, discovery and sign-in as transactions.
   - [ ] The reads and groups the owner accepted, for every connection, in the store, as an overlay on the definition. Nothing rewrites text.
-  - [ ] The app's concurrency token is the version.
+  - [x] The app's concurrency token is the version.
 - [ ] Stage 3, a connection's details, to check and to change. `ToolSettings` and `tool-kinds.ts` taken from PR #28, with the check in the commit that starts a call. A connection only narrows.
   - [ ] `ConnectionDetails` with the tool list in groups, each tool's kind, source and setting, changed in place. Each account with its access, changed by signing in again. The agents that use it. The kinds it draws and what following each does.
   - [ ] The review on adding a connection and the details afterwards are the same component, reached from Settings → Connections and from an agent's Access.
@@ -110,10 +110,10 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
 - [x] `test/definitions.test.ts`. Every shipped definition passes the schema and the checks, a round trip over generated definitions, each refusal the old parsers made still refused, and the version stable for the same bytes. Run `npm run test:fast -- test/definitions.test.ts`.
-- [ ] `test/connections.test.ts`. Add as a switch, no file in the workspace, a changed definition taken at start with accounts and switches kept, a narrowed one making an account stale, a tool named by the definition on and one a server added alone off across versions, a server added by address as a record, two edits crossing refused by version. Run `npm run test:fast -- test/connections.test.ts`.
+- [x] `test/connections.test.ts`. Add as a switch, no file in the workspace, a changed definition taken at start with accounts and switches kept, a narrowed one making an account stale, a tool named by the definition on and one a server added alone off across versions, a server added by address as a record, two edits crossing refused by version. Run `npm run test:fast -- test/connections.test.ts`.
 - [ ] `test/tool-settings.test.ts`. The settings each kind allows, Ask on a read and Always ask on a write putting it on the floor, the check at the call's start, an allowed read kept across a definition change, and nothing set on a connection letting a write run unasked. Run `npm run test:fast -- test/tool-settings.test.ts`.
 - [x] `test/watch-slack.test.ts`, `test/watches.test.ts`, `test/objects.test.ts`. A watch and a card across a version change, with no false wake. Run `npm run test:fast -- test/watch-slack.test.ts test/watches.test.ts test/objects.test.ts`.
-- [ ] `test/stored-shapes.test.ts`. The new records and docs as they are. Run `npm run test:fast -- test/stored-shapes.test.ts`.
+- [x] `test/stored-shapes.test.ts`. The new records and docs as they are. Run `npm run test:fast -- test/stored-shapes.test.ts`.
 - [ ] `test/connections.faults.test.ts`. Kills at turning a connection on, adding a server, accepting its tools, changing a setting, and removing it. Dispatch the `ci` workflow with faults on the branch and record the run id.
 - [ ] The property "nothing the box writes reaches a definition" in `test/connections.test.ts`, in place of "nothing the box wrote is offered or runs before the owner accepted it".
 - [ ] `npm run check && npm run typecheck && npm test` green at the head.

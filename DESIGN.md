@@ -91,7 +91,7 @@ The words the rules lean on:
 | **Permission** | a stored approval with a scope; an effect within an open permission runs without asking |
 | **Routine** | `routines/<name>.md` in the workspace: when it runs (a timer) and what it asks; its task submits those inputs to its agent's chat |
 | **Watch** | `watches/<name>.md` in the workspace: the object it follows, the account it looks with, what ends it and what matters; its task keeps the reading and submits each change to its agent's chat |
-| **Connection** | A definition banda ships (`shipped/connections/<name>.json`, one schema), on in a home by a switch: a service's tools, which only read, and its objects; its accounts' credentials stay with the daemon. A server the owner adds by its address is still a file, `connections/<name>.md` |
+| **Connection** | A definition banda ships (`shipped/connections/<name>.json`, one schema), on in a home by a switch: a service's tools, which only read, and its objects; its accounts' credentials stay with the daemon. A server the owner adds by its address is a record in the store |
 | **Harness** | `shipped/harnesses/<name>.md`, or a command line the owner gave: an ACP agent on the owner's computer (or banda's own adapter around one that speaks something else), connected in the owner's code folder, for the agents the owner turns it on for |
 | **Object** | the daemon's rendering of one thing in a connection, read with an account's credentials for the owner's eyes |
 | **Gateway** | where the owner reaches the band: the app and the CLI |
@@ -375,7 +375,10 @@ daemon reads them when it starts, and one that does not pass is left out and sai
 a switch, a fact in the store: nothing is written to the workspace, and the definition in effect is the one this
 banda ships, so nothing is ever updated: a new release takes effect at its first start, asking nothing, since the
 owner updated banda themselves. Its version is the hash of what was read, and what binds to a connection binds to
-that. A server the owner adds by its address is still an accepted file, an ordinary "before" file. It
+that. A server the owner adds by its address is a record in the store, every tool asking first until they say it
+reads; its version is a counter that moves with each change, and the reads they allow lie over its definition or
+over one banda ships, kept by name across versions, never on a floor or a write the definition names. One an agent
+built is an accepted "before" file until that code goes. It
 is first class in the UI (a logo and a name on every card, event and draft of its) and secondary in the hierarchy: it
 lives inside agents' settings and the app's Settings, never as a screen of its own.
 - **Accounts.** An account is one sign-in: `auth/connections/<connection>/<account>/` holds its credentials, bound to

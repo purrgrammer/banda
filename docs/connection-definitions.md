@@ -1,8 +1,8 @@
 # Connection definitions
 
 Priority: **Medium**. Implementation status lives in [Status](status.md). This is a design under owner review. Its
-first stage, the six shipped connections as definitions read from the release, is built on the branch and not yet
-tried through the app; the rest is not code yet. It changes rules DESIGN.md states today, so those change only when a
+first two stages, the six shipped connections as definitions read from the release and the owner's servers and reads
+as records in the store, are built on the branch and not yet tried through the app; the rest is not code yet. It changes rules DESIGN.md states today, so those change only when a
 slice proves its part ([Delivery](delivery.md)). It belongs to [Connections](connections.md).
 
 A connection's definition stops being a file in the owner's workspace. What banda ships is read from the release,
@@ -221,17 +221,21 @@ not open.
 - [x] What a watch does at the first look after its object's definition changed version: it stays live, takes no
   reading made under the version before, reads again and wakes on nothing (test/watches.test.ts)
 - [x] "A tool the server adds later waits switched off": pinned, and for a shipped connection it now holds across
-  versions (test/connections.test.ts). A tool a new definition starts to name stays off if it was already listed and
-  waiting: the store does not tell a tool waiting from one the owner switched off
-- [ ] A tool waiting off comes on when a later definition names it, which needs the store to tell the two apart
-- [ ] Marking a read on a shipped connection (`trustReads`) is refused until slice 2 keeps the owner's reads in the
-  store; the app offers it only on a server added by address
+  versions (test/connections.test.ts)
+- [x] A tool waiting off comes on when a later definition names it: `off[tool]` says `waiting` or `owner`, the owner's
+  own off stays and the owner switching a waiting tool settles it (test/connections.test.ts)
+- [x] The owner allows a read on a shipped connection (`trustReads`): an overlay in the store, kept by name across
+  versions, never over a floor or a write the definition names (test/connections.test.ts); the app offers it only on
+  a server added by address until slice 4's details view
 
 ## Open work
 
 - [ ] Slice 1, built on the branch and waiting on its acceptance through the app: the schema, shipped `.json` read at
   start, the version, "on" in the store, Add as a switch, no Update
-- [ ] Slice 2: the owner's accepted reads and groups, and a server added by address, in the store; no text rewriting
+- [ ] Slice 2, built on the branch and waiting on its acceptance through the app: a server added by address as a
+  record with a version counter (one path adds it, discovery and sign-in in commits), the owner's accepted reads as
+  an overlay in the store; a due listing that fails is tried again on its own. Groups wait for slice 4 and PR #28's
+  list; the frontmatter parser stays for what a box proposes until slice 3
 - [ ] Slice 3: the box's folders, a box's change to a connection, and agent-built connections and tools deleted;
   DESIGN.md, AGENTS.md and the status doc rewritten
 - [ ] Slice 4: a connection's details, to check and to change, on the tool list taken from PR #28
