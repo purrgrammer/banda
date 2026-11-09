@@ -15,7 +15,7 @@ import { DRIVE_DRAFT, DriveDraftPreview } from "./DriveDraftPreview.tsx";
 import { EmailDraftPreview } from "./EmailDraftPreview.tsx";
 import { CALENDAR_DRAFT, EventDraftPreview, eventDraftWhat } from "./EventDraftPreview.tsx";
 import { ObjectPreviews } from "./Objects.tsx";
-import { SLACK_DRAFT, SlackDraftPreview } from "./SlackDraftPreview.tsx";
+import { SLACK_DRAFT, SLACK_REACTION, SlackDraftPreview, SlackReactionPreview } from "./SlackDraftPreview.tsx";
 
 type Props = {
 	chat: number;
@@ -52,6 +52,7 @@ function Draft({ chat, agent, ask, label, wait, state, drawn }: Props) {
 	const eventDraft = CALENDAR_DRAFT.test(ask.tool) && !interrupted;
 	const contactDraft = CONTACT_DRAFT.test(ask.tool) && !interrupted;
 	const slackDraft = SLACK_DRAFT.test(ask.tool) && !interrupted;
+	const slackReaction = SLACK_REACTION.test(ask.tool) && !interrupted;
 	const what =
 		emailRecipient !== undefined
 			? `Send email to ${emailRecipient}`
@@ -104,6 +105,8 @@ function Draft({ chat, agent, ask, label, wait, state, drawn }: Props) {
 							readOnly={readOnly || busy}
 							onEdit={(name, value) => setEdits((prior) => ({ ...prior, [name]: value }))}
 						/>
+					) : slackReaction ? (
+						<SlackReactionPreview args={ask.args} />
 					) : contactDraft ? (
 						<ContactDraftPreview tool={ask.tool} args={ask.args} />
 					) : driveDraft ? (
