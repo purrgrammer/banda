@@ -108,11 +108,28 @@ export function startAcp(start: AcpStart): AcpConnection {
 		});
 	});
 	child.stdin?.on("error", () => {});
-	if (child.stderr !== null) jsonLines(child.stderr, (line) => start.log?.(line));
+	// a harness is another program: nothing it sends, and nothing a handler makes of it, may reach the stream's event,
+	// where a throw is uncaught and takes the daemon with it. What could not be taken is dropped and said.
+	const guarded = (take: (line: string) => void) => (line: string) => {
+		try {
+			take(line);
+		} catch (error) {
+			try {
+				start.log?.(`acp: a line it could not take: ${(error as Error).message}`);
+			} catch {
+				// the log itself failed: nothing is left to tell
+			}
+		}
+	};
+	if (child.stderr !== null)
+		jsonLines(
+			child.stderr,
+			guarded((line) => start.log?.(line)),
+		);
 	if (child.stdout !== null)
 		jsonLines(
 			child.stdout,
-			(line) => {
+			guarded((line) => {
 				let message: {
 					id?: number | string;
 					method?: string;
@@ -130,7 +147,8 @@ export function startAcp(start: AcpStart): AcpConnection {
 					const waiting = typeof message.id === "number" ? pending.get(message.id) : undefined;
 					if (waiting === undefined) return;
 					pending.delete(message.id as number);
-					if (message.error !== undefined)
+					// `"error": null` beside a result is how some JSON-RPC peers say there was none
+					if (message.error !== undefined && message.error !== null)
 						waiting.reject(
 							new AcpError(message.error.message ?? "the harness refused", message.error.code, message.error.data),
 						);
@@ -146,14 +164,17 @@ export function startAcp(start: AcpStart): AcpConnection {
 				if (message.id === undefined) return; // a notification the client has no use for
 				const id = message.id;
 				if (message.method === "session/request_permission") {
-					start.handlers.permission(message.params as AcpPermissionRequest).then(
+					// in a promise, so a handler that throws at once is answered as one that rejects: the harness never waits on it
+					new Promise<AcpPermissionOutcome>((resolve) =>
+						resolve(start.handlers.permission(message.params as AcpPermissionRequest)),
+					).then(
 						(outcome) => write({ id, result: { outcome } }),
 						() => write({ id, result: { outcome: { outcome: "cancelled" } } }),
 					);
 					return;
 				}
 				write({ id, error: { code: -32601, message: `${message.method} is not offered` } });
-			},
+			}),
 			{
 				over: () => {
 					start.log?.("acp: a message over the limit; ending the harness");
@@ -231,7 +252,7 @@ export type OpenedSession = {
 
 /**
  * Initialize, then open a session in `cwd` (reopening `resume` by `session/resume`, with no history replayed, when the
- * agent offers it, else by `session/load`), then set its mode. `system` is banda's own instructions, appended to the
+ * agent offers it, else by `session/load`; a new session when it refuses), then set its mode. `system` is banda's own instructions, appended to the
  * agent's (never replacing them: mode `override` is never used) when it announces `sessionCapabilities.systemPrompt`;
  * an agent that does not is opened exactly as before, the instructions left unsent.
  */
@@ -262,21 +283,34 @@ export async function openSession(
 		system === undefined || !offered(capabilities.systemPrompt)
 			? {}
 			: { systemPrompt: { mode: "append", content: [{ type: "text", text: system }] } };
-	let sessionId: string;
+	// the same session again: by session/resume, nothing replayed since what it did before is already this side's
+	// record, else by session/load
+	const reopen =
+		resume === undefined
+			? undefined
+			: offered(capabilities.resume)
+				? "session/resume"
+				: init.agentCapabilities?.loadSession === true
+					? "session/load"
+					: undefined;
 	let loaded = false;
-	if (resume !== undefined && offered(capabilities.resume)) {
-		// the same session again, nothing replayed: what it did before is already this side's record
-		await connection.request("session/resume", { sessionId: resume, cwd, mcpServers: [], ...instructed });
-		sessionId = resume;
-		loaded = true;
-	} else if (resume !== undefined && init.agentCapabilities?.loadSession === true) {
-		await connection.request("session/load", { sessionId: resume, cwd, mcpServers: [], ...instructed });
-		sessionId = resume;
-		loaded = true;
-	} else {
-		const made = await connection.request<{ sessionId: string }>("session/new", { cwd, mcpServers: [], ...instructed });
-		sessionId = made.sessionId;
+	if (reopen !== undefined) {
+		try {
+			await connection.request(reopen, { sessionId: resume, cwd, mcpServers: [], ...instructed });
+			loaded = true;
+		} catch (error) {
+			// it answered that it will not (the session is gone, or not its to reopen): a new one, told what the old did.
+			// One that never answered, because it died, has no new session to give
+			if (!(error instanceof AcpError) || error.code === undefined) throw error;
+		}
 	}
+	const sessionId =
+		loaded && resume !== undefined
+			? resume
+			: (await connection.request<{ sessionId: string }>("session/new", { cwd, mcpServers: [], ...instructed }))
+					.sessionId;
+	// everything after this names the session: a harness that named none has none to prompt, or to stop
+	if (typeof sessionId !== "string" || sessionId === "") throw new AcpError("The harness did not name its session.");
 	// the harness starts in the owner's own default (which may ask nothing): the connection's mode is set, always
 	if (mode !== undefined) await connection.request("session/set_mode", { sessionId, modeId: mode });
 	return { sessionId, loaded, canClose: offered(capabilities.close) };

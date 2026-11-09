@@ -17,7 +17,8 @@
  * history first, as real harnesses do; FAKE_ACP_NO_LOAD=1 makes it one that cannot reopen a session. FAKE_ACP_RESUME,
  * FAKE_ACP_CLOSE and FAKE_ACP_SYSTEM (=1) announce the matching sessionCapabilities: session/resume reopens with no
  * replay, session/close forgets the session (-32002 for one it does not have), and a systemPrompt given on
- * new/load/resume goes into the log beside the session it opened.
+ * new/load/resume goes into the log beside the session it opened. FAKE_ACP_REFUSE_REOPEN=1 answers session/resume and
+ * session/load with -32002, a session it no longer has; FAKE_ACP_WEDGE=1 ignores session/cancel.
  * Prompts run one at a time, in order: one sent mid-turn waits (as claude-agent-acp queues it). Every prompt received,
  * permission answered and turn ended is appended to $FAKE_ACP_LOG (jsonl), so it survives a kill.
  */
@@ -207,6 +208,8 @@ jsonLines(process.stdin, (line) => {
 			return send({ id: message.id, result: { sessionId, modes: { currentModeId: "auto", availableModes: [] } } });
 		}
 		case "session/resume": {
+			if (process.env.FAKE_ACP_REFUSE_REOPEN === "1")
+				return send({ id: message.id, error: { code: -32002, message: "no such session" } });
 			// the session again, nothing replayed (unlike session/load)
 			const sessionId = String(params.sessionId);
 			sessions.add(sessionId);
@@ -225,6 +228,8 @@ jsonLines(process.stdin, (line) => {
 			return send({ id: message.id, result: {} });
 		}
 		case "session/load": {
+			if (process.env.FAKE_ACP_REFUSE_REOPEN === "1")
+				return send({ id: message.id, error: { code: -32002, message: "no such session" } });
 			const sessionId = String(params.sessionId);
 			sessions.add(sessionId);
 			record({
@@ -261,6 +266,7 @@ jsonLines(process.stdin, (line) => {
 			return;
 		}
 		case "session/cancel": {
+			if (process.env.FAKE_ACP_WEDGE === "1") return;
 			const sessionId = String(params.sessionId);
 			cancelled.add(sessionId);
 			wake?.();

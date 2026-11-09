@@ -486,7 +486,8 @@ naming one that is not there answers with those that are.
   with approval attention and a way to open its activity; several sessions have a picker. The agent's own active reply
   takes priority, with a compact delegated indicator alongside it. Stop answers them all, and before the ask was sent,
   stops it from being sent. The owner steers in their own words: a note is sent to the harness as a
-  prompt it takes after its current step. Stop cancels the turn. Stop acts at once, with no confirmation: a stopped
+  prompt it takes after its current step. Stop cancels the turn, and a harness that has not ended it within seconds is
+  ended, with all it started. Stop acts at once, with no confirmation: a stopped
   session keeps its record, and the agent can follow it up (native resume where the harness supports it, otherwise a
   fresh session handed a summary of what happened), so stopping loses nothing the owner cannot take up again.
 - **Once, and then the agent hears.** The ask is sent at most once: a restart after it was sent ends the session

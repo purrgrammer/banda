@@ -48,6 +48,7 @@ function sweep(commits: number): Fault[] {
 		{ point: "harness:update", hit: 1, kind: "kill" },
 		{ point: "harness:ask", hit: 1, kind: "kill" },
 		{ point: "harness:spawn", hit: 1, kind: "error" },
+		{ point: "harness:update", hit: 1, kind: "error" },
 		{ point: "harness:ask", hit: 1, kind: "error" },
 	];
 	for (let hit = 1; hit <= commits; hit++)

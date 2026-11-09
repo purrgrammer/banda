@@ -153,7 +153,7 @@ describe("keepUpdate", () => {
 describe("a harness session", () => {
 	const FAKE = join(import.meta.dirname, "fixtures/fake-acp-agent.ts");
 
-	async function setup(definition: { args?: string[]; openMs?: number } = {}) {
+	async function setup(definition: { args?: string[]; openMs?: number; stopMs?: number } = {}) {
 		const home = await tempHome();
 		const folder = await mkdtemp(join(homedir(), ".banda-test-folder-"));
 		onTestFinished(() => rm(folder, { recursive: true, force: true }));
@@ -180,6 +180,7 @@ describe("a harness session", () => {
 			log: () => {},
 			// short only where a test waits on it: a loaded machine starts a harness slowly
 			openMs: definition.openMs ?? 20_000,
+			...(definition.stopMs === undefined ? {} : { stopMs: definition.stopMs }),
 		});
 		const registry = createRegistry();
 		registry.install(defineExtension({ name: "test.harness", tasks: [made.Session] }));
@@ -193,6 +194,27 @@ describe("a harness session", () => {
 		const session = async () => (await harness.snapshot(Harnesses, context))?.sessions ?? {};
 		return { harness, made, chat, folder, woke, session };
 	}
+
+	it("ends a session whose harness ignores Stop: it says stopped and its agent hears", async () => {
+		vi.stubEnv("FAKE_ACP_WEDGE", "1");
+		onTestFinished(() => {
+			vi.unstubAllEnvs();
+		});
+		const s = await setup({ stopMs: 200 });
+		try {
+			const task = await s.harness.commit(
+				(tx) =>
+					s.made.begin(tx, { chat: s.chat, agent: "sancho", harness: "fake", folder: s.folder, ask: "sleep 600000" }),
+				context,
+			);
+			await until(async () => (await s.session())[task]?.state === "working");
+			await s.harness.commit((tx) => stopSession(tx, task), context);
+			await until(() => s.woke.length === 1);
+			expect((await s.session())[task]?.state).toBe("stopped");
+		} finally {
+			await s.harness.close(context);
+		}
+	});
 
 	it("shows the complete command before allowing a long native request", async () => {
 		const s = await setup();
@@ -765,6 +787,20 @@ describe("following up on a session", () => {
 		expect(prompts[1]).toContain("<earlier-work>");
 		expect(prompts[1]).toContain("You said: done the first part");
 		expect(prompts[1]).toContain("You changed: src/a.ts");
+		expect(prompts[1]?.endsWith("say second")).toBe(true);
+		await s.harness.close(context);
+	});
+
+	it("starts fresh with what it did before when the harness refuses to reopen its session", async () => {
+		const s = await setup();
+		const first = await s.begin("edit src/a.ts +1 -0\nsay done the first part");
+		await until(() => s.woke.length === 1);
+		vi.stubEnv("FAKE_ACP_REFUSE_REOPEN", "1");
+		const second = await s.begin("say second", first);
+		await until(() => s.woke.length === 2);
+		expect((await s.sessions())[second]).toMatchObject({ state: "done", continuation: "summary" });
+		const prompts = (await s.logged()).flatMap((entry) => (entry.prompt === undefined ? [] : [entry.prompt]));
+		expect(prompts[1]).toContain("<earlier-work>");
 		expect(prompts[1]?.endsWith("say second")).toBe(true);
 		await s.harness.close(context);
 	});

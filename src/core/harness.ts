@@ -220,6 +220,8 @@ const SHOWN_FILES = 30;
 export const MAX_NOTES = 50;
 /** How long a harness gets to start a session (initialize, session/new, its mode) before it ends as failed. */
 const OPEN_MS = 60_000;
+/** How long a harness told to stop has to end its turn before it is ended, its process and all it started with it. */
+const STOP_MS = 15_000;
 /** The last lines of a harness's stderr kept, for the reason a failed session gives. */
 const TAIL = 6;
 
@@ -695,6 +697,7 @@ export type HarnessOptions = {
 	readonly fault?: (point: string) => void;
 	/** How long a harness gets to start a session; a minute unless a test says. */
 	readonly openMs?: number;
+	readonly stopMs?: number;
 };
 
 type SessionInput = { readonly harness: string };
@@ -964,12 +967,20 @@ export function defineHarnesses(options: HarnessOptions) {
 				let short: string | undefined;
 				const taken = new Set<number>(start.notes.flatMap((note, index) => (note.sent === true ? [index] : [])));
 				let finished: (state: HarnessState) => void = () => {};
+				let stopClock: NodeJS.Timeout | undefined;
 				const over = new Promise<HarnessState>((resolve) => {
 					finished = (state) => {
+						clearTimeout(stopClock);
 						closing = true;
 						resolve(state);
 					};
 				});
+				// Stop asks the harness to end its turn and does not depend on its answer: one that ignores it is ended
+				const stopTurn = () => {
+					if (closing || connection === undefined || sessionId === undefined) return;
+					cancel(connection, sessionId);
+					stopClock = setTimeout(() => finished("stopped"), options.stopMs ?? STOP_MS);
+				};
 				let stopped: () => void = () => {};
 				const stopping = new Promise<"stopped">((resolve) => {
 					stopped = () => resolve("stopped");
@@ -1005,7 +1016,7 @@ export function defineHarnesses(options: HarnessOptions) {
 						cancelled = true;
 						cancelAsks();
 						stopped();
-						if (connection !== undefined && sessionId !== undefined) cancel(connection, sessionId);
+						stopTurn();
 					}
 					// the owner's notes, each once, none once the session is closing or before the harness has its session
 					const unsent =
@@ -1144,6 +1155,8 @@ export function defineHarnesses(options: HarnessOptions) {
 					fault("harness:prompted");
 					// a harness that reopened its session remembers; one that could not is told what it did
 					send(opened.loaded || start.recap === undefined ? start.prompt : `${start.recap}\n${start.prompt}`);
+					// a Stop that came while the session opened had no turn to stop yet
+					if (cancelled) stopTurn();
 					runtime.signal.addEventListener("abort", () => finished("stopped"), { once: true });
 					const state = await over;
 					cancelAsks();

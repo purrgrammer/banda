@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
 	type AcpConnection,
 	AcpError,
+	type AcpHandlers,
 	type AcpPermissionOutcome,
 	type AcpUpdate,
 	cancel,
@@ -147,6 +148,55 @@ describe("acp session capabilities", () => {
 		}
 	});
 
+	it.each([
+		["session/resume", { FAKE_ACP_RESUME: "1", FAKE_ACP_NO_LOAD: "1" }],
+		["session/load", {}],
+	])("starts a new session when the harness refuses %s, and says it does not remember", async (_method, env) => {
+		const { connection, entries } = fake(() => ({ outcome: "cancelled" }), { ...env, FAKE_ACP_REFUSE_REOPEN: "1" });
+		try {
+			const opened = await openSession(connection, { cwd: tmpdir(), resume: "gone-1" });
+			expect(opened.loaded).toBe(false);
+			expect(opened.sessionId).not.toBe("gone-1");
+			expect(entries()).toContainEqual(expect.objectContaining({ made: opened.sessionId }));
+		} finally {
+			await connection.close();
+		}
+	});
+
+	it("refuses a harness that opens a session without naming it", async () => {
+		const connection = startAcp({
+			command: process.execPath,
+			args: [
+				"-e",
+				`process.stdin.once("data", () => {
+					process.stdout.write(JSON.stringify({ id: 1, result: { protocolVersion: 1 } }) + "\\n");
+					process.stdin.once("data", () => process.stdout.write(JSON.stringify({ id: 2, result: {} }) + "\\n"));
+				});`,
+			],
+			cwd: tmpdir(),
+			handlers: { update: () => {}, permission: async () => ({ outcome: "cancelled" }) },
+		});
+		await expect(openSession(connection, { cwd: tmpdir() })).rejects.toThrow("did not name its session");
+		await connection.close();
+	});
+
+	it("does not start anew when the harness died while reopening: that is no refusal", async () => {
+		const connection = startAcp({
+			command: process.execPath,
+			args: [
+				"-e",
+				`process.stdin.once("data", () => {
+					process.stdout.write(JSON.stringify({ id: 1, result: { protocolVersion: 1, agentCapabilities: { loadSession: true } } }) + "\\n");
+					process.stdin.once("data", () => process.exit(3));
+				});`,
+			],
+			cwd: tmpdir(),
+			handlers: { update: () => {}, permission: async () => ({ outcome: "cancelled" }) },
+		});
+		await expect(openSession(connection, { cwd: tmpdir(), resume: "gone-2" })).rejects.toThrow("the harness ended");
+		await connection.close();
+	});
+
 	it("closes a session when the agent announces close, and one already gone (-32002) counts as closed", async () => {
 		const { connection, entries } = fake(deny, { FAKE_ACP_CLOSE: "1" });
 		try {
@@ -206,6 +256,94 @@ describe("acp session capabilities", () => {
 					systemPrompt: { mode: "append", content: [{ type: "text", text: "banda's rules" }] },
 				}),
 			);
+		} finally {
+			await connection.close();
+		}
+	});
+});
+
+describe("acp, when a harness misbehaves", () => {
+	/** A harness that, asked `go`, sends `lines` and then answers: as a script, so the lines are exactly these. */
+	const scripted = (lines: readonly string[], handlers: Partial<AcpHandlers> = {}) => {
+		const said: string[] = [];
+		const script = `
+			let buffer = "";
+			process.stdin.setEncoding("utf8");
+			process.stdin.on("data", (chunk) => {
+				buffer += chunk;
+				for (let at = buffer.indexOf("\\n"); at >= 0; at = buffer.indexOf("\\n")) {
+					const message = JSON.parse(buffer.slice(0, at));
+					buffer = buffer.slice(at + 1);
+					if (message.method !== "go") continue;
+					for (const each of ${JSON.stringify(lines)}) process.stdout.write(each + "\\n");
+					process.stdout.write(JSON.stringify({ id: message.id, result: { went: true } }) + "\\n");
+				}
+			});
+		`;
+		const connection = startAcp({
+			command: process.execPath,
+			args: ["-e", script],
+			cwd: tmpdir(),
+			handlers: {
+				update: handlers.update ?? (() => {}),
+				permission: handlers.permission ?? (async () => ({ outcome: "cancelled" })),
+			},
+			log: (line) => said.push(line),
+		});
+		return { connection, said };
+	};
+	const update = JSON.stringify({
+		method: "session/update",
+		params: { sessionId: "s", update: { sessionUpdate: "x" } },
+	});
+
+	it.each(["null", "[]", "5", '"words"', "true"])(
+		"takes the line %s as nothing, and goes on answering",
+		async (line) => {
+			const { connection } = scripted([line]);
+			try {
+				await expect(connection.request("go", {})).resolves.toEqual({ went: true });
+			} finally {
+				await connection.close();
+			}
+		},
+	);
+
+	it('takes "error": null beside a result as no error', async () => {
+		const { connection } = scripted(['{"id":1,"result":{"early":true},"error":null}']);
+		try {
+			await expect(connection.request("go", {})).resolves.toEqual({ early: true });
+		} finally {
+			await connection.close();
+		}
+	});
+
+	it("drops an update whose handler throws, says so, and goes on", async () => {
+		const seen: string[] = [];
+		const { connection, said } = scripted([update, update], {
+			update: (_session, each) => {
+				seen.push(each.sessionUpdate);
+				throw new TypeError("content.filter is not a function");
+			},
+		});
+		try {
+			await expect(connection.request("go", {})).resolves.toEqual({ went: true });
+			expect(seen).toEqual(["x", "x"]);
+			expect(said.join("\n")).toContain("content.filter is not a function");
+		} finally {
+			await connection.close();
+		}
+	});
+
+	it("survives a permission handler that throws at once", async () => {
+		const asked = JSON.stringify({ id: 77, method: "session/request_permission", params: {} });
+		const { connection } = scripted([asked], {
+			permission: () => {
+				throw new TypeError("no options");
+			},
+		});
+		try {
+			await expect(connection.request("go", {})).resolves.toEqual({ went: true });
 		} finally {
 			await connection.close();
 		}
