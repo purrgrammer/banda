@@ -759,11 +759,15 @@ describe("adding a server", () => {
 		const s = await open(fake);
 		const name = await s.capabilities.addByAddress(fake.url);
 		const cal = async () => (await s.capabilities.view()).connections.find((c) => c.name === name);
-		expect((await cal())?.hinted).toEqual(["list_events", "whoami"]);
+		const proposed = async () =>
+			((await cal())?.tools ?? [])
+				.filter((t) => t.classed?.kind === "read" && t.classed.from === "server")
+				.map((t) => t.title);
+		expect(await proposed()).toEqual(["list_events", "whoami"]);
 		expect((await cal())?.tools.find((t) => t.title === "list_events")?.kind).toBe("write");
 		await expect(allowReads(s, name, ["send_rocket"])).rejects.toThrow(/lists no tool named send_rocket/);
 		await allowReads(s, name, ["list_events"]);
-		expect((await cal())?.hinted).toEqual(["whoami"]);
+		expect(await proposed()).toEqual(["whoami"]);
 		expect((await cal())?.tools.find((t) => t.title === "list_events")?.kind).toBe("read");
 		// on for no agent until the owner says, like every server they add
 		await s.capabilities.switchAccount("sancho", name, undefined, true);
@@ -1342,6 +1346,8 @@ describe("connections banda ships", () => {
 		await until(async () => down >= 2);
 		opened.splice(opened.indexOf(s), 1);
 		await s.close();
+		// one attempt under way as it closed may still reach the server; none starts after it
+		await new Promise((resolve) => setTimeout(resolve, 30));
 		const after = down;
 		await new Promise((resolve) => setTimeout(resolve, 60));
 		expect(down).toBe(after);

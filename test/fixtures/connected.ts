@@ -108,8 +108,6 @@ export async function openConnected({
 		...(shipped === undefined ? {} : { shipped }),
 		...(fetcher === undefined ? {} : { fetch: fetcher }),
 		...(retryDelays === undefined ? {} : { retryDelays }),
-		// the fake servers are on this machine: the tests probe them as they are
-		probe: fetch,
 		agentChanged: core.agentChanged,
 	});
 	// as the daemon does on start: what was in effect is installed before anything resumes

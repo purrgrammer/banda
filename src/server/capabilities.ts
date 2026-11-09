@@ -121,7 +121,6 @@ import {
 	refKey,
 } from "../core/objects.ts";
 import { agentOfChat, canonical, Permissions } from "../core/permissions.ts";
-import { publicFetch } from "../core/public-fetch.ts";
 import { REST_APIS, type RestApi } from "../core/rest.ts";
 import { context } from "../core/store.ts";
 import {
@@ -167,8 +166,6 @@ export type CapabilityOptions = {
 	readonly fetch?: typeof fetch;
 	readonly now?: () => number;
 	readonly fault?: (point: string) => void;
-	/** How a server the companion named is probed: the public internet only (`publicFetch`), unless a test says otherwise. */
-	readonly probe?: typeof fetch;
 	/** Where the connections banda ships are: `shipped/connections/` of its install, unless a test says otherwise. */
 	readonly shipped?: string;
 	/** Apply what is in effect to agent `id`'s chats, in the commit that changed it: its tools, as its accounts allow. */
@@ -207,15 +204,6 @@ const plainId = (value: unknown) =>
 		.replace(/[\p{C}\s]+/gu, " ")
 		.trim()
 		.slice(0, 100);
-
-/** The host of `url`, or undefined when it is none. */
-const _hostOf = (url: string) => {
-	try {
-		return new URL(url).host;
-	} catch {
-		return undefined;
-	}
-};
 
 /** The connections banda ships; the same path from `src/server` and `dist/server`. */
 export const SHIPPED = fileURLToPath(new URL("../../shipped/connections/", import.meta.url));
@@ -1520,10 +1508,10 @@ export function openCapabilities(options: CapabilityOptions) {
 			const first = fresh[0];
 			const held1 = connection?.auth === "oauth" && first !== undefined ? await heldBy(name, first.account) : undefined;
 			const granted = held1 === undefined ? [] : grantedScopes(held1);
-			const missingFor = (model: string) => {
+			const missingFor = (model: string, tool: string) => {
 				// what the server's challenge said, and what the file says the tool always needs (any one of them)
 				const challenged = (needs.get(model) ?? []).filter((scope) => !granted.includes(scope));
-				const anyOf = connection?.needs?.[model.slice(name.length + 2)];
+				const anyOf = connection?.needs?.[tool];
 				const listed =
 					held1 === undefined || anyOf === undefined || anyOf.some((scope) => granted.includes(scope))
 						? []
@@ -1582,7 +1570,7 @@ export function openCapabilities(options: CapabilityOptions) {
 										: {}),
 									...(floor === undefined ? {} : { floor }),
 									on: inEffectNow.some((each) => each.name === model),
-									...(missingFor(model).length === 0 ? {} : { needs: missingFor(model) }),
+									...(missingFor(model, tool).length === 0 ? {} : { needs: missingFor(model, tool) }),
 								};
 							});
 			const offeredScopes = offered.get(name);
@@ -1611,20 +1599,6 @@ export function openCapabilities(options: CapabilityOptions) {
 						listed !== undefined && listed.version === file?.version ? (listed as { at?: number }).at : undefined;
 					const at = Math.max(file?.at ?? 0, relisted ?? 0);
 					return at === 0 ? {} : { at };
-				})(),
-				...(() => {
-					if (connection === undefined || listed?.version !== file?.version) return {};
-					const hinted = Object.entries(listed?.tools ?? {})
-						.filter(
-							([tool, shape]) =>
-								shape.readOnlyHint === true &&
-								!connection.reads.includes(tool) &&
-								connection.readsWhen?.[tool] === undefined &&
-								connection.floors[tool] === undefined,
-						)
-						.map(([tool]) => tool)
-						.sort();
-					return hinted.length === 0 ? {} : { hinted };
 				})(),
 				...(listed?.version === file?.version && listed?.notes !== undefined ? { notes: listed.notes } : {}),
 				...(connectionProblem === undefined ? {} : { problem: connectionProblem }),
@@ -2613,37 +2587,6 @@ export function openCapabilities(options: CapabilityOptions) {
 		fault("settings:after");
 		await install(ctx);
 		options.changed?.();
-	}
-
-	/**
-	 * How a server answers a probe: how it signs in, and, when it lists its tools to anyone, which; or why it is not one
-	 * banda can connect to. The probe asks what anyone on the internet could: no credential, the public internet only.
-	 */
-	async function _probeServer(
-		url: string,
-		ctx: Context,
-	): Promise<
-		{ readonly auth: "oauth" | "key" | "none"; readonly tools?: readonly McpTool[] } | { readonly refused: string }
-	> {
-		const probe = options.probe ?? publicFetch;
-		const server = await discover(url, probe).catch(() => undefined);
-		if (server !== undefined)
-			return server.register === undefined
-				? { refused: "it wants a sign-in, but lets no app register itself: it needs an app made for banda first" }
-				: { auth: "oauth" };
-		try {
-			const listed = await remoteSession(
-				url,
-				async () => undefined,
-				probe,
-				ctx.abortSignal,
-				(client) => remoteListing(client, ctx.abortSignal),
-			);
-			return { auth: "none", tools: listed.tools };
-		} catch (error) {
-			if (error instanceof Unauthorized) return { auth: "key" };
-			return { refused: `it did not answer as an MCP server (${await problemOf(error)})` };
-		}
 	}
 
 	/** The key the owner typed for connection `name`, kept by the daemon alone; then its tools are listed. */

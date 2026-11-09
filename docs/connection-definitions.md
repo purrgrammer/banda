@@ -126,16 +126,18 @@ start after a release.
 
 - A remote server is listed again when its definition's version differs from the one its listing was taken for,
   as the daemon's start already does when a file's hash differs. Tool shapes and the server's notes are taken as it
-  gives them then.
+  gives them then. Until then the old listing is carried to the new version and marked due, in the commit before
+  anything resumes, so a draft waiting on one of its tools can still finish; what each tool may do is read from the new
+  definition from that first moment.
 - Tool switches are kept by name across versions. One for a tool that no longer exists is kept until the connection
   is removed, so it returns if the tool does.
 - A tool the definition names comes with the release: switched on, a read if the definition says so, with nothing
   asked. A tool a remote server lists that the definition does not name waits switched off, whatever the version.
   This closes a gap in today's rule, which holds only between two listings of the same file: a tool a server added
   before a file changed comes in switched on.
-- An account whose access the new definition no longer allows is stale: its credentials are forgotten and it signs
-  in again. Widening, or changing what a new account asks for, leaves accounts as they are. This is `fits`,
-  unchanged.
+- An account whose access the new definition no longer allows is stale: `fits` refuses its credentials, which stay
+  beside it unused, and it signs in again, which replaces them. Widening, or changing what a new account asks for,
+  leaves accounts as they are.
 - A reading taken under another version is not the current one: a card reads again, and a watch on the object takes
   its next reading as it does after an Update today.
 

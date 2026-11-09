@@ -10,7 +10,7 @@ import { type AssistantMessage, fauxAssistantMessage, fauxToolCall } from "@eare
 import type { TaskId, ToolExecutionApi } from "@earendil-works/pi-durable";
 import fc from "fast-check";
 import { afterEach, describe, expect, it } from "vitest";
-import { Connected, connectionTools, ToolSettings } from "../src/core/connections.ts";
+import { Connected, connectionTools, ToolSettings, toolName } from "../src/core/connections.ts";
 import { OWNER } from "../src/core/gateway.ts";
 import { offeredScopes } from "../src/core/permissions.ts";
 import { openWaits } from "../src/core/status.ts";
@@ -579,6 +579,21 @@ describe("over versions, and on a server the owner added", () => {
 		// the tool's own control still may
 		await s.capabilities.setTools("cal", { no_word: "allow" }, version);
 		expect((await s.tool("no_word"))?.classed).toEqual({ kind: "read", from: "you" });
+	});
+});
+
+describe("a tool's name for the model", () => {
+	it("a name left as it is unless it needed cutting or cleaning; two tools never share one", () => {
+		expect(toolName("cal", "list_events")).toBe("cal__list_events");
+		const prefix = "a".repeat(60);
+		const one = toolName("server", `${prefix}_one`);
+		const two = toolName("server", `${prefix}_two`);
+		expect(one).not.toBe(two);
+		expect(one.length).toBeLessThanOrEqual(64);
+		expect(two.length).toBeLessThanOrEqual(64);
+		expect(toolName("cal", "a.b")).not.toBe(toolName("cal", "a-b"));
+		expect(toolName("server", `${prefix}_one`)).toBe(one);
+		expect(toolName("cal", "a.b")).toBe(toolName("cal", "a.b"));
 	});
 });
 

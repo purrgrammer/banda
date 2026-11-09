@@ -527,9 +527,16 @@ async function activeAgent(tx: Tx, id: string): Promise<boolean> {
 /** The version a definition or record has before the owner's overlay: what an allowed read does not move. */
 export const definitionVersion = (version: string | undefined) => version?.replace(/\.r\d+$/, "");
 
-/** The name the model knows a connection's tool by: stable, `<connection>__<tool>`, within a model's 64 characters. */
+/**
+ * The name the model knows a connection's tool by: stable, `<connection>__<tool>`, within a model's 64 characters. A name
+ * that had to be cut or cleaned ends in a short hash of the whole, so two tools never come to share one.
+ */
 export function toolName(connection: string, tool: string): string {
-	return `${connection}__${tool.replace(/[^A-Za-z0-9_-]/g, "_")}`.slice(0, 64);
+	const cleaned = tool.replace(/[^A-Za-z0-9_-]/g, "_");
+	const whole = `${connection}__${cleaned}`;
+	if (cleaned === tool && whole.length <= 64) return whole;
+	const hash = `_${createHash("sha256").update(`${connection}__${tool}`).digest("hex").slice(0, 8)}`;
+	return `${whole.slice(0, 64 - hash.length)}${hash}`;
 }
 
 /** The connection a server's record is: every tool asks until the owner says it reads; its version is the record's. */

@@ -159,7 +159,9 @@ if (state === "sign-in") {
 }
 // "address": its reads are none at first; the owner lets what the server says only reads run without asking
 if (mode === "address" || mode === "mcp") {
-	const hinted = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.hinted ?? [];
+	const hinted = ((await s.capabilities.view()).connections.find((c) => c.name === "cal")?.tools ?? [])
+		.filter((t) => t.classed?.kind === "read" && t.classed.from === "server")
+		.map((t) => t.title);
 	const seen = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.accepted?.version;
 	if (hinted.includes("list_events") && seen !== undefined)
 		await s.capabilities.setTools("cal", { list_events: "allow" }, seen);
