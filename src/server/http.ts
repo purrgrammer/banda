@@ -220,6 +220,7 @@ export type CapabilityAction =
 	| { readonly action: "add"; readonly name: string }
 	| { readonly action: "address"; readonly url: unknown }
 	| { readonly action: "trust" | "reads"; readonly name: string; readonly tools: unknown; readonly sha?: string }
+	| { readonly action: "tools"; readonly name: string; readonly settings: unknown; readonly sha: string }
 	| {
 			readonly action: "public";
 			readonly name: string;
@@ -743,7 +744,7 @@ export function handler(
 		if (route === "POST /capabilities/connections")
 			return reply(res, 200, await routes.capability({ action: "address", url: (await json(req)).url }));
 		const capability =
-			/^\/capabilities\/(connections|tools)\/([a-z0-9-]{1,64})\/(accept|decline|remove|signin|key|add|trust|disconnect|public|refresh|reads)$/.exec(
+			/^\/capabilities\/(connections|tools)\/([a-z0-9-]{1,64})\/(accept|decline|remove|signin|key|add|trust|disconnect|public|refresh|reads|tools)$/.exec(
 				path,
 			);
 		if (capability !== null && req.method === "POST") {
@@ -794,6 +795,12 @@ export function handler(
 					200,
 					await routes.capability({ action, name, tools, ...(sha === undefined ? {} : { sha: sha as string }) }),
 				);
+			}
+			if (action === "tools" && kind === "connections") {
+				const { settings, sha } = await json(req);
+				if (typeof sha !== "string" || !VERSION.test(sha))
+					throw new BadRequest("sha is the version of the connection you saw");
+				return reply(res, 200, await routes.capability({ action, name, settings, sha: sha as string }));
 			}
 			if (action === "public" && kind === "connections") {
 				const { agent, on, sha } = await json(req);

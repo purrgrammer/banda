@@ -29,6 +29,7 @@ import {
 import { log } from "./activity.ts";
 import { AgentChats, agentWords, ChatAgent, LEAD } from "./agents.ts";
 import { Companion } from "./companion.ts";
+import { connectionTool } from "./connections.ts";
 
 import { FLOOR_WORDS, type Floor } from "./floor.ts";
 import { allowedHost, hostCovers } from "./hosts.ts";
@@ -237,6 +238,18 @@ export async function allowHostIn(
 }
 
 /**
+ * The floor a draft is on: as drafted, or else as its tool stands in this commit (its definition's floor, or the owner's
+ * Always ask on a write and Ask on a read), so a draft made before the owner changed a setting never runs under one.
+ * Reads only.
+ */
+export async function floorNow(
+	tx: Tx,
+	draft: { readonly tool: string; readonly floor?: Floor | undefined },
+): Promise<Floor | undefined> {
+	return draft.floor ?? (await connectionTool(tx, draft.tool))?.floor;
+}
+
+/**
  * The open permission covering a call of `tool` with `args` from `chat`, if any: never one for a draft on the floor,
  * and a host permission only from the chats of the agent it was allowed for. Reads only.
  */
@@ -246,7 +259,7 @@ export async function covering(
 	chat: number,
 	now: number,
 ): Promise<{ readonly id: string; readonly permission: Permission } | undefined> {
-	if (draft.floor !== undefined) return undefined;
+	if ((await floorNow(tx, draft)) !== undefined) return undefined;
 	// a host is allowed for one agent: it covers only that agent's chats, as the proxy is told
 	const agent = await agentOfChat(tx, chat);
 	const { permissions } = await tx.doc(Permissions);

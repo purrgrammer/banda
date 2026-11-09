@@ -22,11 +22,12 @@ import { join, resolve } from "node:path";
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
 import { Accepted, AGENT_NAME, type Agent, agentPath, frontmatter, LEAD, parseAgent } from "./agents.ts";
 import { shippedDefinition, shippedDefinitions } from "./definitions.ts";
-import { FLOORS, type Floor } from "./floor.ts";
+import { type DefinedFloor, FLOORS, type Floor } from "./floor.ts";
 import { harnessToolsOf } from "./harness.ts";
 import { DEFAULT_GOOGLE_CLIENT_ID, type OAuthClient, type OAuthServer, type Pending, type Tokens } from "./oauth.ts";
 import { type ObjectKinds, parseObjects, plainLine } from "./objects.ts";
 import { REST_APIS, type RestApiName, restApiNamed } from "./rest.ts";
+import type { Said } from "./tool-kinds.ts";
 
 export const connectionPath = (name: string) => `connections/${name}.md`;
 export const toolPath = (name: string) => `tools/${name}.md`;
@@ -87,6 +88,8 @@ export type Connection = {
 	readonly why?: string;
 	/** What it lets the band do, in a line for the owner: a definition banda ships says it. */
 	readonly about?: string;
+	/** Its tools in groups, in order, as a definition says: a tool in none goes by its name. */
+	readonly groups?: { readonly [group: string]: readonly string[] };
 	/** The access the owner chooses among before signing in, in words: a definition banda ships says them. */
 	readonly access?: Access;
 };
@@ -179,7 +182,7 @@ function parseConnectionText(name: string, text: string): ParsedConnection {
 		return { errors: [...named, "a connection file starts with its frontmatter between two --- lines"] };
 	}
 	const errors = [...read.errors];
-	const floors: { [floor in Floor]?: readonly string[] } = {};
+	const floors: { [floor in DefinedFloor]?: readonly string[] } = {};
 	for (const floor of FLOORS) floors[floor] = read.list(floor);
 	const fields: ConnectionFields = {
 		service: read.one("service"),
@@ -259,11 +262,12 @@ export type ConnectionFields = {
 	/** The read and the field of its answer that name the account: `get_me.login`. */
 	readonly account?: string | undefined;
 	readonly reads: readonly string[];
-	readonly floors: { readonly [floor in Floor]?: readonly string[] };
+	readonly floors: { readonly [floor in DefinedFloor]?: readonly string[] };
 	readonly needs?: { readonly [tool: string]: readonly string[] };
 	readonly objects?: unknown;
 	readonly why?: string;
 	readonly about?: string;
+	readonly groups?: { readonly [group: string]: readonly string[] };
 	readonly access?: Access;
 };
 
@@ -364,6 +368,9 @@ export function connectionOf(
 			if (readsWhen[tool] !== undefined)
 				errors.push(`"${tool}" reads for some arguments and is on the floor: it asks every time, so drop its rules`);
 		}
+	const grouped = Object.values(fields.groups ?? {}).flat();
+	for (const tool of new Set(grouped.filter((tool, index) => grouped.indexOf(tool) !== index)))
+		errors.push(`"${tool}" is in two groups: keep it in one`);
 	const needs = fields.needs;
 	let objects: ObjectKinds | undefined;
 	if (fields.objects !== undefined) {
@@ -408,6 +415,7 @@ export function connectionOf(
 			...(client === undefined ? {} : { client }),
 			...(scopes === undefined ? {} : { scopes }),
 			...(needs === undefined ? {} : { needs }),
+			...(fields.groups === undefined ? {} : { groups: fields.groups }),
 			...(objects === undefined ? {} : { objects }),
 			...(Object.keys(readsWhen).length === 0 ? {} : { readsWhen }),
 			reads,
@@ -470,6 +478,8 @@ export type Listed = {
 	schema: JsonObject;
 	/** The server's own word that it only reads, shown, never trusted. */
 	readOnlyHint?: boolean;
+	/** The server's own word that it can destroy something: it is at least a write. */
+	destructiveHint?: boolean;
 };
 
 /** An account: one sign-in to a connection, as the store knows it. */
@@ -560,6 +570,21 @@ export const Connected = defineDoc<ConnectedValue>({
 		versions: 0,
 	}),
 	migrate: (value, from) => (from >= 2 ? value : { ...value, public: {} }) as unknown as ConnectedValue,
+	checkpointWhen: () => true,
+});
+
+/**
+ * What the owner set each connection's tool to, by the model's name for it, beside its switch (`off` in `Connected`).
+ * Only what narrows: Ask, or Always ask. A tool with none is as its kind says; Allow is the absence of one, so nothing
+ * here can ever widen what a definition says. Kept by name across versions, like a switch, and gone with the connection.
+ */
+export type ToolSettingsValue = { set: { [tool: string]: "ask" | "always" } };
+
+export const ToolSettings = defineDoc<ToolSettingsValue>({
+	kind: "banda.tool-settings",
+	version: 1,
+	scope: "session",
+	initial: () => ({ set: {} }),
 	checkpointWhen: () => true,
 });
 
@@ -703,6 +728,22 @@ function withOwnerReads(
 }
 
 /**
+ * What connection `name`'s definition says of its tools, as `classOf` needs it: a server the owner added says nothing
+ * and asks every time; else as banda ships it, else as its accepted file says.
+ */
+export function saidOf(name: string, connection: Connection, server: boolean): Said {
+	if (server) return { reads: [], floors: {}, named: new Set(), ask: "always" };
+	const base = shippedDefinition(name) ?? connection;
+	return {
+		reads: base.reads,
+		...(base.readsWhen === undefined ? {} : { readsWhen: base.readsWhen }),
+		floors: base.floors,
+		named: namedTools(base),
+		...(base.ask === undefined ? {} : { ask: base.ask }),
+	};
+}
+
+/**
  * The connection `name` in effect: one banda ships, as this banda ships it, while the owner has it added; a server the
  * owner added, from its record; else an accepted file an agent built, if it parses. Its `sha` is its version: a
  * definition's hash or a record's counter, with the owner's reads' own counter when they laid any over it. Reads only.
@@ -786,6 +827,7 @@ export type InEffect = {
  */
 export async function connectionTools(tx: Tx): Promise<InEffect[]> {
 	const { connections, off } = await tx.doc(Connected);
+	const { set } = await tx.doc(ToolSettings);
 	const found: InEffect[] = [];
 	for (const name of await acceptedNames(tx)) {
 		const connection = await acceptedConnection(tx, name);
@@ -794,11 +836,16 @@ export async function connectionTools(tx: Tx): Promise<InEffect[]> {
 		for (const [tool, shape] of Object.entries(listed.tools).sort(([a], [b]) => a.localeCompare(b))) {
 			const model = toolName(name, tool);
 			if (off[model] !== undefined || found.some((other) => other.name === model)) continue;
+			const reads = connection.reads.includes(tool) || connection.readsWhen?.[tool] !== undefined;
+			// the owner's Ask on a read, or Always ask on anything, puts it on the floor; a definition's own floor stays
+			const narrowed = connection.command === undefined && (set[model] === "always" || (set[model] === "ask" && reads));
 			const floor = Object.hasOwn(connection.floors, tool)
 				? connection.floors[tool]
-				: connection.ask === "always" && !connection.reads.includes(tool)
-					? "private"
-					: undefined;
+				: narrowed
+					? "owner"
+					: connection.ask === "always" && !connection.reads.includes(tool)
+						? "private"
+						: undefined;
 			const carried = tool === listed.notesOn ? listed.notes : undefined;
 			found.push({
 				name: model,
@@ -806,8 +853,8 @@ export async function connectionTools(tx: Tx): Promise<InEffect[]> {
 				tool,
 				listed: JSON.parse(JSON.stringify(shape)) as Listed,
 				// a server in the box runs there like any command: nothing it does leaves but through the proxy
-				read: connection.command !== undefined || connection.reads.includes(tool),
-				...(connection.command === undefined && connection.readsWhen?.[tool] !== undefined
+				read: connection.command !== undefined || (connection.reads.includes(tool) && !narrowed),
+				...(connection.command === undefined && connection.readsWhen?.[tool] !== undefined && !narrowed
 					? { readsWhen: connection.readsWhen[tool] }
 					: {}),
 				...(floor === undefined ? {} : { floor }),
@@ -830,6 +877,12 @@ export async function ownTools(tx: Tx): Promise<OwnTool[]> {
 		if (tool !== undefined) found.push(tool);
 	}
 	return found;
+}
+
+/** Tool `name` of the connection tools in effect now, if it is one. Reads only. */
+export async function connectionTool(tx: Tx, name: string): Promise<InEffect | undefined> {
+	if (!name.includes("__")) return undefined;
+	return (await connectionTools(tx)).find((tool) => tool.name === name);
 }
 
 /** Whether the tool the model knows as `name` is in effect now, checked in the commit that starts a call. */

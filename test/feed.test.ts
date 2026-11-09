@@ -181,12 +181,18 @@ describe("changes to before files", () => {
 		};
 		expect(
 			lines(write("connections/notion.md"), {
-				capabilities: { tools: [], connections: [{ ...base, change: { kind: "added", sha: "a", connection } }] },
+				capabilities: {
+					tools: [],
+					connections: [{ ...base, groups: [], draws: [], change: { kind: "added", sha: "a", connection } }],
+				},
 			}),
 		).toEqual([["pending", "Allow this change? A connection to Notion"]]);
 		expect(
 			lines(write("connections/notion.md"), {
-				capabilities: { tools: [], connections: [{ ...base, state: "connected", accepted: { sha: "a", connection } }] },
+				capabilities: {
+					tools: [],
+					connections: [{ ...base, groups: [], draws: [], state: "connected", accepted: { sha: "a", connection } }],
+				},
 			}),
 		).toEqual([["done", "Allowed: a connection to Notion"]]);
 	});

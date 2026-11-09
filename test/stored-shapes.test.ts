@@ -9,7 +9,7 @@ import { createModels } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc } from "@earendil-works/pi-durable";
 import { expect, it } from "vitest";
 import { LEAD } from "../src/core/agents.ts";
-import { Connected } from "../src/core/connections.ts";
+import { Connected, ToolSettings } from "../src/core/connections.ts";
 import { Devices, INVITE_MS, pairingState } from "../src/core/devices.ts";
 import { Harnesses } from "../src/core/harness.ts";
 import { keepReading, Readings } from "../src/core/objects.ts";
@@ -83,6 +83,7 @@ it("reopens current account authority and object readings without a migration", 
 			at: 1,
 		};
 		connected.reads.github = { tools: ["list_notifications"], version: 5 };
+		(await tx.doc(ToolSettings)).set.github__issue_write = "always";
 		await keepReading(tx, "github/alice/issue:org/repo#12", {
 			connection: "github",
 			account: "alice",
@@ -197,6 +198,8 @@ it("reopens current account authority and object readings without a migration", 
 			},
 			reads: { github: { tools: ["list_notifications"], version: 5 } },
 		});
+		expect(await after.snapshot(ToolSettings, context)).toEqual({ set: { github__issue_write: "always" } });
+		expect(await after.snapshot(Connected, context)).toMatchObject({});
 		expect((await after.snapshot(Readings, context))?.readings["github/alice/issue:org/repo#12"]).toMatchObject({
 			account: "alice",
 			source: "accepted-definition-and-account-generation",

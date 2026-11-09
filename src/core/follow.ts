@@ -369,6 +369,41 @@ function atPath(follow: Pick<Follow, "keys">, value: Json | undefined, path: Pat
 	return here;
 }
 
+/** A kind's name in the owner's words: `pull_request` is "Pull request". */
+export const kindLabel = (kind: string) => {
+	const words = kind.replaceAll("_", " ");
+	return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+};
+
+/** A rule's words with its placeholders as an ellipsis, trimmed of a leading one: "{from} replied" is "replied". */
+function saysWords(says: string): string {
+	return says
+		.replace(/\{[^}]*\}/g, "…")
+		.replace(/^…\s*/, "")
+		.trim();
+}
+
+/**
+ * What following a kind wakes for and what it only tells, in the rules' own words, each once: a rule whose words are a
+ * lookup (`{to}` with `words`) says each value. What no rule matches is said too, when something happens for it.
+ */
+export function followWords(follow: Pick<Follow, "rules" | "otherwise">): {
+	readonly wakes: readonly string[];
+	readonly tells: readonly string[];
+} {
+	const said = (does: Rule["does"]) => {
+		const phrases = follow.rules.flatMap((rule) => {
+			if (rule.does !== does) return [];
+			if (rule.says === "{to}" && rule.words !== undefined) return Object.values(rule.words);
+			const words = saysWords(rule.says);
+			return words === "" ? [] : [words];
+		});
+		if (follow.otherwise === does) phrases.push("anything else that changes");
+		return [...new Set(phrases)];
+	};
+	return { wakes: said("wake"), tells: said("tell") };
+}
+
 /** Whether `a` comes after `b`: numbers by size, ISO times and other strings by their order. */
 const past = (a: Json | undefined, b: Json | undefined) =>
 	(typeof a === "number" && typeof b === "number") || (typeof a === "string" && typeof b === "string") ? a > b : false;

@@ -77,6 +77,8 @@ function connection(
 	const auth = scenario === "key" ? "key" : scenario === "anonymous" ? "none" : "oauth";
 	return {
 		name: "ernesto",
+		groups: [],
+		draws: [],
 		accepted: {
 			sha: "specimen",
 			connection: {

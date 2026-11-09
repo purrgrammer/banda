@@ -22,6 +22,7 @@ import {
 	type Errand,
 	errandOf,
 	type Floor,
+	floorNow,
 	give,
 	HOST_ARG,
 	HOST_TOOL,
@@ -354,7 +355,7 @@ export async function fill(
 			draft = edited.draft;
 		}
 		if (permission !== undefined) {
-			const why = refusal(permission, shapeFor(permission, ask), ask.floor, now, offeredScopes(ask));
+			const why = refusal(permission, shapeFor(permission, ask), await floorNow(tx, ask), now, offeredScopes(ask));
 			if (why !== undefined) return { refused: why };
 		}
 	}
@@ -443,7 +444,7 @@ async function coveredAsks(
 		const { ask } = wait.input;
 		if (wait.id === id || ask.type !== "approval" || now >= wait.input.deadline) continue;
 		const host = permission.scope === "host";
-		if (ask.floor !== undefined || ask.permission === undefined || ask.interrupted === true) continue;
+		if ((await floorNow(tx, ask)) !== undefined || ask.permission === undefined || ask.interrupted === true) continue;
 		if (!matches(permission, ask.tool, ask.args)) continue;
 		// a host covers only the chats of the agent it was allowed for
 		if (host && (permission.agent === undefined || (await agentOfChat(tx, wait.chat)) !== permission.agent)) continue;

@@ -187,6 +187,13 @@ export const Definition = Type.Object(
 			{ maxItems: 500, uniqueItems: true },
 		),
 		needs: Type.Optional(map(Type.Array(Scope, { minItems: 1, maxItems: 16 }))),
+		groups: Type.Optional(
+			Type.Record(
+				Type.String({ minLength: 1, maxLength: 40 }),
+				Type.Array(ToolName, { minItems: 1, maxItems: 200, uniqueItems: true }),
+				{ maxProperties: 12, description: "Its tools in groups, in order: a tool in none goes by its name" },
+			),
+		),
 		objects: Type.Optional(Type.Record(Type.String({ pattern: Name }), Kind, { maxProperties: 12 })),
 	},
 	{ ...closed, title: "A connection banda ships" },
@@ -232,6 +239,7 @@ export function readDefinition(name: string, text: string): { connection: Shippe
 		reads: value.reads,
 		floors: value.floors ?? {},
 		...(value.needs === undefined ? {} : { needs: value.needs }),
+		...(value.groups === undefined ? {} : { groups: value.groups }),
 		...(value.objects === undefined ? {} : { objects: value.objects }),
 		...(value.access === undefined ? {} : { access: value.access }),
 	});

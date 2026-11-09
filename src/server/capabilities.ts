@@ -61,6 +61,7 @@ import {
 	ceilingOf,
 	connectionOf,
 	connectionPath,
+	connectionTool,
 	connectionTools,
 	credentialed,
 	credentialsOf,
@@ -88,9 +89,11 @@ import {
 	readsNumbered,
 	remoteUrl,
 	requiredOf,
+	saidOf,
 	scrub,
 	secrets,
 	signsIn,
+	ToolSettings,
 	takePending,
 	toolName,
 	toolPath,
@@ -98,6 +101,7 @@ import {
 } from "../core/connections.ts";
 import { readDefinitions, setDefinitions } from "../core/definitions.ts";
 import { type HoldingEgress, intake } from "../core/egress.ts";
+import { followWords, kindLabel } from "../core/follow.ts";
 import { gmailAttachment, MAX_GMAIL_ATTACHMENT_BYTES, MAX_GMAIL_SEND_ATTACHMENT_BYTES } from "../core/gmail-rest.ts";
 import {
 	boxSession,
@@ -140,6 +144,17 @@ import { agentOfChat, canonical, Permissions } from "../core/permissions.ts";
 import { publicFetch } from "../core/public-fetch.ts";
 import { REST_APIS, type RestApi } from "../core/rest.ts";
 import { context } from "../core/store.ts";
+import {
+	type Classed,
+	classOf,
+	defaultOf,
+	inGroup,
+	isSetting,
+	nameGroups,
+	optionsOf,
+	SETTING_WORDS,
+	type Setting,
+} from "../core/tool-kinds.ts";
 import { liveWaits } from "../core/wait.ts";
 import { endWatches } from "../core/watches.ts";
 import { type AgentChanged, boxFiles, type Workspace, write } from "./agents.ts";
@@ -149,6 +164,7 @@ import type {
 	ConnectionSummary,
 	ConnectionToolView,
 	ConnectionView,
+	KindView,
 	OwnToolView,
 	ShippedView,
 } from "./api.ts";
@@ -306,6 +322,7 @@ const listedOf = (tools: readonly McpTool[]): { [tool: string]: Listed } =>
 				description: tool.description,
 				schema: JSON.parse(JSON.stringify(tool.inputSchema)) as JsonObject,
 				...(tool.readOnlyHint === undefined ? {} : { readOnlyHint: tool.readOnlyHint }),
+				...(tool.destructiveHint === undefined ? {} : { destructiveHint: tool.destructiveHint }),
 			},
 		]),
 	);
@@ -725,10 +742,18 @@ export function openCapabilities(options: CapabilityOptions) {
 		return schema;
 	};
 
-	/** A remote server's read, or any tool of a server in the box: it runs when called. */
+	/**
+	 * A remote server's read, or any tool of a server in the box: it runs when called, while the store still has it as a
+	 * read for those arguments in the commit that lets it reach the server.
+	 */
 	function readTool(tool: InEffect, accounts?: readonly string[]): ToolRegistration {
 		const boxed = tool.connection.command !== undefined;
 		const arg = accountArg(tool.listed.schema);
+		const asksNow = async (tx: Tx, args: unknown) => {
+			const current = await connectionTool(tx, tool.name);
+			if (current === undefined || current.read || readsFor(current.readsWhen, args)) return undefined;
+			return "the owner set it to ask first since it was offered: call it again and it asks them";
+		};
 		return defineTool({
 			name: tool.name,
 			description:
@@ -742,7 +767,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			execute: async (args, api, ctx) => {
 				const chat = Number(api.conversationId);
 				const resolved = await api.commit(async (tx) => {
-					const off = await allowed(tool.name, tool.connection)(tx);
+					const off = (await allowed(tool.name, tool.connection)(tx)) ?? (await asksNow(tx, args));
 					if (off !== undefined) return { refused: off };
 					return accountFor(tx, tool.connection, chat, { name: (args as JsonObject)[arg] }, tool.tool);
 				}, ctx);
@@ -785,7 +810,9 @@ export function openCapabilities(options: CapabilityOptions) {
 								: remoteCall(client as McpClient, tool.tool, sent, ctx.abortSignal),
 						async () => {
 							const refused = await api.commit(
-								(tx) => allowedAs(tool, arg)(tx, account === undefined ? {} : { [arg]: account }, chat),
+								async (tx) =>
+									(await allowedAs(tool, arg)(tx, account === undefined ? {} : { [arg]: account }, chat)) ??
+									(await asksNow(tx, args)),
 								ctx,
 							);
 							if (refused !== undefined) throw new Error(refused);
@@ -1514,6 +1541,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			names: inEffectNames,
 			connected,
 			inEffectNow,
+			settings,
 			own,
 			current,
 		} = await harness.commit(
@@ -1532,6 +1560,10 @@ export function openCapabilities(options: CapabilityOptions) {
 					public: { [name: string]: string[] };
 					added: { [name: string]: { at: number } };
 					servers: { [name: string]: { at: number } };
+					reads: { [name: string]: { tools: string[] } };
+				},
+				settings: JSON.parse(JSON.stringify(await tx.doc(ToolSettings))) as {
+					set: { [tool: string]: "ask" | "always" };
 				},
 				inEffectNow: await connectionTools(tx),
 				own: await ownTools(tx),
@@ -1673,6 +1705,11 @@ export function openCapabilities(options: CapabilityOptions) {
 						: [anyOf[0] as string];
 				return [...new Set([...challenged, ...listed])];
 			};
+			// what each tool does, who said so, and what it is set to; a connection in its computer has no settings
+			const said = connection === undefined ? undefined : saidOf(name, connection, server !== undefined);
+			const settable = connection !== undefined && connection.command === undefined && own;
+			const overlay = connected.reads[name]?.tools ?? [];
+			const toolGroups = listed === undefined ? {} : groupsOf(connection, Object.keys(listed.tools));
 			const tools: ConnectionToolView[] =
 				connection === undefined || listed === undefined || listed.sha !== file?.sha
 					? []
@@ -1681,7 +1718,24 @@ export function openCapabilities(options: CapabilityOptions) {
 							.map(([tool, shape]) => {
 								const model = toolName(name, tool);
 								const floor = Object.hasOwn(connection.floors, tool) ? connection.floors[tool] : undefined;
+								const classed = said === undefined ? undefined : classOf(said, tool, overlay, shape);
+								const options = settable && classed !== undefined ? optionsOf(classed, said?.ask) : undefined;
+								const off = connected.off[model];
+								const stored = settings.set[model];
+								const setting =
+									classed === undefined || options === undefined
+										? undefined
+										: off !== undefined
+											? ("off" as const)
+											: stored === undefined
+												? defaultOf(classed, said?.ask)
+												: (inGroup(stored, options) ?? defaultOf(classed, said?.ask));
 								return {
+									...(classed === undefined ? {} : { classed }),
+									...(toolGroups[tool] === undefined ? {} : { group: toolGroups[tool] }),
+									...(setting === undefined ? {} : { setting }),
+									...(options === undefined ? {} : { options }),
+									...(off === "waiting" ? { waiting: true as const } : {}),
 									name: model,
 									title: tool,
 									words: toolWords(tool),
@@ -1759,6 +1813,8 @@ export function openCapabilities(options: CapabilityOptions) {
 				...(listed?.sha === file?.sha && listed?.notes !== undefined ? { notes: listed.notes } : {}),
 				...(connectionProblem === undefined ? {} : { problem: connectionProblem }),
 				tools,
+				groups: [...new Set(tools.flatMap((tool) => (tool.group === undefined ? [] : [tool.group])))],
+				draws: drawsOf(connection),
 			});
 		}
 		const taken = takenNames();
@@ -1954,6 +2010,8 @@ export function openCapabilities(options: CapabilityOptions) {
 				delete doc.public[name];
 				delete doc.reads[name];
 				for (const tool of Object.keys(doc.off)) if (tool.startsWith(`${name}__`)) delete doc.off[tool];
+				const settings = await tx.doc(ToolSettings);
+				for (const tool of Object.keys(settings.set)) if (tool.startsWith(`${name}__`)) delete settings.set[tool];
 				await endAccounts(
 					tx,
 					name,
@@ -2921,8 +2979,9 @@ export function openCapabilities(options: CapabilityOptions) {
 				return { status: 409, why: `${name} is not connected yet: sign in first, then its tools are known` };
 			const unknown = named.filter((tool) => !Object.hasOwn(listing.tools, tool));
 			if (unknown.length > 0) return { status: 400, why: `${name} lists no tool named ${unknown.join(", ")}` };
+			const said = saidOf(name, connection, doc.servers[name] !== undefined);
 			const asks = named.filter(
-				(tool) => connection.floors[tool] !== undefined || (definition !== undefined && writes(definition).has(tool)),
+				(tool) => !optionsOf(classOf(said, tool, [], listing.tools[tool]), said.ask).includes("allow"),
 			);
 			if (asks.length > 0)
 				return { status: 400, why: `${asks.join(", ")} of ${name} asks every time: it cannot be made a read` };
@@ -2940,6 +2999,80 @@ export function openCapabilities(options: CapabilityOptions) {
 		}, ctx);
 		if (refused !== undefined) throw new BadRequest(refused.why, refused.status);
 		fault("accept:after");
+		await install(ctx);
+		options.changed?.();
+	}
+
+	/**
+	 * The owner's settings for connection `name`'s tools, each changed in place: Off is its switch, Allow the absence of
+	 * a setting (and, on a tool neither the definition nor the owner has called a read, the owner saying it reads), the
+	 * rest what narrows. `expected` is the version the owner saw: a stale view changes nothing. A setting never moves the
+	 * version, or every card would read again for it; only a new read does, as it always has.
+	 */
+	async function setTools(name: string, given: unknown, expected: unknown, ctx: Context = context): Promise<void> {
+		if (typeof expected !== "string") throw new BadRequest("give the version of the connection you saw");
+		if (typeof given !== "object" || given === null || Array.isArray(given) || Object.keys(given).length > 500)
+			throw new BadRequest("give the settings as tool names, each with allow, ask, always or off");
+		const refused = await harness.commit(async (tx) => {
+			const doc = await tx.doc(Connected);
+			const settings = await tx.doc(ToolSettings);
+			const connection = await acceptedConnection(tx, name);
+			if (connection === undefined) return { status: 404, why: `there is no connection named ${name}` };
+			if (connection.command !== undefined)
+				return { status: 400, why: `${name} runs in its computer: switch its tools on or off` };
+			const server = doc.servers[name] !== undefined;
+			if (!definitions.has(name) && !server)
+				return { status: 409, why: `${name}'s tools are in its file: change that, and allow it again` };
+			if (expected !== connection.sha)
+				return { status: 409, why: "This connection changed meanwhile. Review it again." };
+			const listing = doc.connections[name];
+			if (listing === undefined || listing.sha !== connection.sha)
+				return { status: 409, why: `${name} is not connected yet: sign in first, then its tools are known` };
+			const said = saidOf(name, connection, server);
+			const overlay = doc.reads[name]?.tools ?? [];
+			const reading: string[] = [];
+			const on: string[] = [];
+			const checked: [string, Setting, Classed][] = [];
+			for (const [tool, setting] of Object.entries(given)) {
+				if (!Object.hasOwn(listing.tools, tool)) return { status: 400, why: `${name} lists no tool named ${tool}` };
+				if (!isSetting(setting)) return { status: 400, why: `${tool}: give allow, ask, always or off` };
+				const classed = classOf(said, tool, overlay, listing.tools[tool]);
+				if (!optionsOf(classed, said.ask).includes(setting))
+					return {
+						status: 400,
+						why: `${tool} cannot be set to ${SETTING_WORDS[setting]}: a connection only narrows what its definition says`,
+					};
+				checked.push([tool, setting, classed]);
+			}
+			for (const [tool, setting, classed] of checked) {
+				const model = toolName(name, tool);
+				if (setting === "off") {
+					doc.off[model] = "owner";
+					continue;
+				}
+				if (doc.off[model] !== undefined) on.push(model);
+				delete doc.off[model];
+				if (setting !== "allow") settings.set[model] = setting;
+				else {
+					delete settings.set[model];
+					// a server's proposal, or a tool nobody spoke for: this is the owner saying it only reads
+					if (classed.from === "server" || classed.from === "nobody") reading.push(tool);
+				}
+			}
+			if (reading.length > 0) {
+				doc.versions++;
+				doc.reads[name] = { tools: [...new Set([...overlay, ...reading])], version: doc.versions };
+				// the tools keep their first-listed shape: allowing a read is not a new listing
+				listing.sha = (await acceptedConnection(tx, name))?.sha ?? listing.sha;
+			}
+			// one in flight as a read does not finish as one once it was narrowed
+			doc.epoch++;
+			await offer(tx, on, name);
+			await log(tx, { at: now(), what: `You changed what ${connection.service}'s tools may do` });
+			return undefined;
+		}, ctx);
+		if (refused !== undefined) throw new BadRequest(refused.why, refused.status);
+		fault("settings:after");
 		await install(ctx);
 		options.changed?.();
 	}
@@ -3135,13 +3268,28 @@ export function openCapabilities(options: CapabilityOptions) {
 		}, ctx);
 
 	/** The tools `definition`'s kinds say write or create: a read the owner allows is never one of these. */
-	const writes = (definition: Connection) =>
-		new Set(
-			Object.values(definition.objects ?? {}).flatMap((kind) => [
-				...(kind.writes ?? []).map((write) => write.tool),
-				...(kind.creates ?? []).map((create) => create.tool),
-			]),
-		);
+	/** Each tool's group: as the definition says, else by its name. */
+	const groupsOf = (connection: Connection | undefined, tools: readonly string[]): { [tool: string]: string } => {
+		const said = connection?.groups ?? {};
+		const inSaid = new Set(Object.values(said).flat());
+		const named = nameGroups(tools.filter((tool) => !inSaid.has(tool)));
+		return {
+			...Object.fromEntries(
+				Object.entries(said).flatMap(([group, members]) =>
+					members.filter((tool) => tools.includes(tool)).map((tool) => [tool, group] as const),
+				),
+			),
+			...named,
+		};
+	};
+
+	/** The kinds connection `connection` draws as cards, and what following each does, in the owner's words. */
+	const drawsOf = (connection: Connection | undefined): KindView[] =>
+		Object.entries(connection?.objects ?? {}).map(([kind, object]) => ({
+			kind,
+			label: kindLabel(kind),
+			...(object.follow === undefined ? {} : { follow: followWords(object.follow) }),
+		}));
 
 	/** The connections banda ships, as this banda ships them. */
 	const shipped = async (): Promise<Connection[]> => [...definitions.values()];
@@ -3168,6 +3316,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		addMcp,
 		refresh: connect,
 		trustReads,
+		setTools,
 		close,
 		connect,
 		signOut,

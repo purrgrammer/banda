@@ -7,6 +7,7 @@ import {
 	canonical,
 	endedBy,
 	type Follow,
+	followWords,
 	heldBack,
 	holds,
 	type Json,
@@ -55,6 +56,25 @@ function withoutEmptyLists(value: Json): Json {
 		),
 	);
 }
+
+describe("what following a kind does, in words", () => {
+	it("says each rule's words once, a lookup by its values, and what no rule matches only when it does something", () => {
+		const follow: Pick<Follow, "rules" | "otherwise"> = {
+			rules: [
+				{ on: "state", does: "wake", says: "{from} replied" },
+				{ on: "state2", does: "wake", says: "{to}", words: { review: "review requested", assign: "assigned" } },
+				{ on: "x", does: "tell", says: "renamed: {to}" },
+				{ on: "y", does: "tell", says: "renamed: {to}" },
+				{ on: "z", does: "nothing", says: "quiet" },
+			],
+		};
+		expect(followWords(follow)).toEqual({
+			wakes: ["replied", "review requested", "assigned"],
+			tells: ["renamed: …"],
+		});
+		expect(followWords({ ...follow, otherwise: "tell" }).tells).toContain("anything else that changes");
+	});
+});
 
 describe("following an object", () => {
 	it("the shipped pull request kind follows: comments are read only when followed, and it ends when merged or closed", () => {

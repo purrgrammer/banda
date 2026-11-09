@@ -11,6 +11,7 @@ export type { AvatarFace } from "../core/avatar-face.ts";
 import type { Origin, Received } from "../core/gateway.ts";
 import type { Floor, PermissionScope, Serves } from "../core/permissions.ts";
 import type { OpenWait, Parked, State } from "../core/status.ts";
+import type { Classed, Setting } from "../core/tool-kinds.ts";
 import type { Answer, WaitEnded } from "../core/wait.ts";
 
 export type { BrowserView, OwnerInput, ViewEvent } from "../box/browser.ts";
@@ -772,6 +773,26 @@ export type ConnectionToolView = {
 	readonly needs?: readonly string[];
 	/** What the server says of it (`readOnlyHint`): only reads, or changes something; absent when it said nothing. */
 	readonly hint?: "reads" | "changes";
+	/**
+	 * What it does and who said so: its definition, the owner, the server's annotations, or nobody. A server's "reads" is
+	 * only proposed until the owner allows it. Absent for a connection without definition or record (one in its computer).
+	 */
+	readonly classed?: Classed;
+	/** Its group: as the definition says, else by its name. */
+	readonly group?: string;
+	/** What the owner set it to now, of `options`: absent where it has no settings (`POST …/connections/:name/tools`). */
+	readonly setting?: Setting;
+	/** What it may be set to; none widens what a known write or floor does. */
+	readonly options?: readonly Setting[];
+	/** Switched off because the server listed it alone and no definition names it: waiting for the owner, not their off. */
+	readonly waiting?: true;
+};
+
+/** A kind a connection draws as cards, and what following one does, in words. Absent `follow`: it cannot be followed. */
+export type KindView = {
+	readonly kind: string;
+	readonly label: string;
+	readonly follow?: { readonly wakes: readonly string[]; readonly tells: readonly string[] };
 };
 
 /**
@@ -836,6 +857,10 @@ export type ConnectionView = {
 	};
 	readonly problem?: string;
 	readonly tools: readonly ConnectionToolView[];
+	/** Its tools' groups, in the order they are shown. */
+	readonly groups: readonly string[];
+	/** The kinds it draws as cards. */
+	readonly draws: readonly KindView[];
 };
 
 /**

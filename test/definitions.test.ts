@@ -54,6 +54,27 @@ describe("the definitions banda ships", () => {
 		expect(definition("github").objects).toEqual(GITHUB_OBJECTS);
 	});
 
+	it("groups its tools in the definition: a tool in two groups is refused, and they are its version's", () => {
+		const base = {
+			service: "Cal",
+			about: "Your days",
+			url: "https://cal.example/mcp",
+			auth: "none",
+			reads: ["list_events"],
+		};
+		const grouped = readDefinition(
+			"cal",
+			JSON.stringify({ ...base, groups: { Events: ["list_events", "create_event"] } }),
+		);
+		expect("connection" in grouped && grouped.connection.groups).toEqual({ Events: ["list_events", "create_event"] });
+		const twice = readDefinition(
+			"cal",
+			JSON.stringify({ ...base, groups: { Events: ["list_events"], Other: ["list_events"] } }),
+		);
+		expect("errors" in twice && twice.errors).toEqual(['"list_events" is in two groups: keep it in one']);
+		expect("errors" in readDefinition("cal", JSON.stringify({ ...base, groups: { Events: [] } }))).toBe(true);
+	});
+
 	it("a built-in's required access names what every account of it asks for", () => {
 		for (const name of NAMES) {
 			const read = readDefinition(name, text(name));
