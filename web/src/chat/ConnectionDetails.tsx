@@ -4,7 +4,7 @@
  * same component is the review when a connection is added, where nothing changes until Save, and the place to check and
  * change it afterwards, where each change is at once.
  */
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -21,8 +21,6 @@ import {
 	SETTING_WORDS,
 	SETTINGS,
 	type Setting,
-	tally,
-	tallyWords,
 } from "../../../src/core/tool-kinds.ts";
 import type { AccountView, ConnectionToolView, ConnectionView, KindView } from "../../../src/server/api.ts";
 import type { ScopeChoices } from "../lib/connect.ts";
@@ -114,8 +112,8 @@ const groupOptions = (tools: readonly Settable[]) =>
 	SETTINGS.filter((setting) => tools.some((tool) => groupValue(setting, tool.classed, tool.options) !== undefined));
 
 /**
- * The setting the group's control is at: one whose effect every tool already shows (a tool it cannot set counts as
- * unmoved), so Allow on a mix of reads and writes reads as Allow, not Mixed. Undefined when the tools differ.
+ * The setting the group's control is at: one every tool in it is at. Undefined when the tools differ, or when one
+ * cannot take it (a write in a group of reads), so the control never says Allow over a tool that asks.
  */
 const groupCommon = (tools: readonly Settable[], settingOf: (tool: Settable) => Setting) =>
 	SETTINGS.find((setting) => {
@@ -123,16 +121,8 @@ const groupCommon = (tools: readonly Settable[], settingOf: (tool: Settable) => 
 			near: groupValue(setting, tool.classed, tool.options),
 			now: settingOf(tool),
 		}));
-		return (
-			applied.some(({ near }) => near !== undefined) &&
-			applied.every(({ near, now }) => near === undefined || near === now)
-		);
+		return applied.every(({ near, now }) => near !== undefined && near === now);
 	});
-
-/** The line that says how a connection's tools are set: "34 run freely · 20 ask first". */
-export function toolTally(tools: readonly ConnectionToolView[], settingOf: (tool: Settable) => Setting) {
-	return tallyWords(tally(settable(tools).map((tool) => ({ setting: settingOf(tool) }))));
-}
 
 /** A connection's tools in their groups, each set as `settingOf` says; a tool with no settings is shown as it is. */
 export function ToolList({
@@ -188,26 +178,31 @@ function ToolRow({ tool, children }: { tool: ConnectionToolView; children?: Reac
 			data-tool={tool.title}
 			className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 py-2.5 pr-3.5 pl-9"
 		>
-			<div className="flex min-w-0 flex-1 basis-48 flex-col gap-0.5">
-				<p className="flex flex-wrap items-center gap-1.5 break-words text-ui text-ink">
-					{tool.words}
-					{tool.waiting ? <Badge variant="secondary">Off until you choose</Badge> : null}
-				</p>
-				<p className="text-meta text-ink-2">
-					{classed === undefined
-						? tool.on
-							? "On"
-							: "Off"
-						: `${fromWords(classed.from)} · ${kindWords(classed.kind, classed.floor)}`}
-					{tool.needs ? " · needs more access" : ""}
-				</p>
-				<details className="text-meta text-ink-2">
-					<summary className="cursor-pointer max-sm:flex max-sm:min-h-10 max-sm:items-center">Tool details</summary>
+			<details className="group/tool min-w-0 flex-1 basis-48">
+				<summary className="flex cursor-pointer list-none flex-col gap-0.5 rounded-field focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink max-sm:min-h-10 [&::-webkit-details-marker]:hidden">
+					<span className="flex flex-wrap items-center gap-1.5 break-words text-ui text-ink">
+						{tool.words}
+						<ChevronRightIcon
+							aria-hidden="true"
+							className="size-3.5 shrink-0 text-ink-2 transition-transform group-open/tool:rotate-90"
+						/>
+						{tool.waiting ? <Badge variant="secondary">Off until you choose</Badge> : null}
+					</span>
+					<span className="text-meta text-ink-2">
+						{classed === undefined
+							? tool.on
+								? "On"
+								: "Off"
+							: `${fromWords(classed.from)} · ${kindWords(classed.kind, classed.floor)}`}
+						{tool.needs ? " · needs more access" : ""}
+					</span>
+				</summary>
+				<div className="text-meta text-ink-2">
 					<p className="mt-1 break-all font-mono">{tool.title}</p>
 					<p className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap break-words">{tool.description}</p>
 					{tool.readsWhen ? <p className="mt-1">Reads when {tool.readsWhen.join(" or ")}</p> : null}
-				</details>
-			</div>
+				</div>
+			</details>
 			{children}
 		</div>
 	);
@@ -375,7 +370,6 @@ export function ConnectionDetailsView({
 	const settingOf = (tool: Settable): Setting => (review ? (chosen[tool.title] ?? tool.setting) : tool.setting);
 	const onTools = (settings: { readonly [tool: string]: Setting }, group?: boolean) =>
 		review ? onChoose?.({ ...chosen, ...settings }) : onSetTools?.(settings, group);
-	const line = toolTally(view.tools, settingOf);
 	const hasTools = view.tools.length > 0;
 	return (
 		<div className="flex min-w-0 flex-col gap-6" data-connection-details={view.name} data-mode={mode}>
@@ -400,7 +394,6 @@ export function ConnectionDetailsView({
 				note={
 					hasTools ? (
 						<>
-							{line === "" ? null : `${line}. `}
 							Allow lets a tool that reads run without asking, for every agent with {service}. Ask shows you each change
 							first; Always ask never lets an agent skip that. Nothing here makes a tool that changes something run
 							unasked.

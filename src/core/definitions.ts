@@ -187,6 +187,7 @@ export const Definition = Type.Object(
 			{ maxItems: 500, uniqueItems: true },
 		),
 		needs: Type.Optional(map(Type.Array(Scope, { minItems: 1, maxItems: 16 }))),
+		words: Type.Optional(map(Type.String({ minLength: 1, maxLength: 60 }), "^[A-Za-z0-9_.-]{1,64}$")),
 		groups: Type.Optional(
 			Type.Record(
 				Type.String({ minLength: 1, maxLength: 40 }),
@@ -240,6 +241,7 @@ export function readDefinition(name: string, text: string): { connection: Shippe
 		floors: value.floors ?? {},
 		...(value.needs === undefined ? {} : { needs: value.needs }),
 		...(value.groups === undefined ? {} : { groups: value.groups }),
+		...(value.words === undefined ? {} : { words: value.words }),
 		...(value.objects === undefined ? {} : { objects: value.objects }),
 		...(value.access === undefined ? {} : { access: value.access }),
 	});

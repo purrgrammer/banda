@@ -89,6 +89,8 @@ export type Ask =
 			readonly on?: { readonly refs: readonly string[]; readonly account?: string };
 			/** The account it acts as, in words: "@bandarra on GitHub". */
 			readonly as?: string;
+			/** Arguments the card says another way (the account, the object it draws): not listed as well. */
+			readonly hidden?: readonly string[];
 			/** The effect's own verb, the card's button: "Comment". */
 			readonly verb?: string;
 			/** On the floor: it asks every time, and no permission is given for it or covers it. */

@@ -582,7 +582,7 @@ export type EffectTool<P extends TSchema, A extends EffectApi = ToolExecutionApi
 	/** The arguments that are the effect in full (a request's headers, its raw body): shown behind a disclosure. */
 	readonly details?: readonly string[];
 	/** What the approval card draws beside its words: the object it acts on, the account it acts as, its verb. */
-	readonly drawn?: (args: Static<P>) => Pick<Draft, "on" | "as" | "verb">;
+	readonly drawn?: (args: Static<P>) => Pick<Draft, "on" | "as" | "verb" | "hidden">;
 	readonly floor?: Floor | ((args: Static<P>) => Floor | undefined);
 	readonly permission?: {
 		/** Structural identity arguments: always bound, never editable, regardless of presentation metadata. */

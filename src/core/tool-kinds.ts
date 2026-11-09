@@ -149,27 +149,3 @@ export function nameGroups(tools: readonly string[]): { readonly [tool: string]:
 		}),
 	);
 }
-
-/** How many tools of a connection, as their rows say: Allow runs freely, Ask asks first, Always ask, Off. */
-export function tally(tools: readonly { readonly setting: Setting }[]) {
-	const count = { free: 0, first: 0, every: 0, off: 0 };
-	for (const { setting } of tools) {
-		if (setting === "off") count.off++;
-		else if (setting === "always") count.every++;
-		else if (setting === "allow") count.free++;
-		else count.first++;
-	}
-	return count;
-}
-
-/** The tally in a line: "34 run freely · 20 ask first · 2 always ask". */
-export function tallyWords(count: ReturnType<typeof tally>): string {
-	return [
-		count.free === 0 ? undefined : `${count.free} run freely`,
-		count.first === 0 ? undefined : `${count.first} ask first`,
-		count.every === 0 ? undefined : `${count.every} always ask`,
-		count.off === 0 ? undefined : `${count.off} off`,
-	]
-		.filter((part) => part !== undefined)
-		.join(" · ");
-}

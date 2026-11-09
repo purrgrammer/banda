@@ -80,6 +80,8 @@ export type Connection = {
 	readonly about?: string;
 	/** Its tools in groups, in order, as a definition says: a tool in none goes by its name. */
 	readonly groups?: { readonly [group: string]: readonly string[] };
+	/** What its tools do, in the owner's words, as a definition says: a tool with none goes by its name. */
+	readonly words?: { readonly [tool: string]: string };
 	/** The access the owner chooses among before signing in, in words: a definition banda ships says them. */
 	readonly access?: Access;
 };
@@ -132,6 +134,7 @@ const nameError = (name: string) =>
  * schema has checked each field's shape already, or from a server's record.
  */
 export type ConnectionFields = {
+	readonly words?: { readonly [tool: string]: string };
 	readonly service: string | undefined;
 	readonly url: string | undefined;
 	readonly api?: string | undefined;
@@ -283,6 +286,7 @@ export function connectionOf(name: string, fields: ConnectionFields): ParsedConn
 			...(scopes === undefined ? {} : { scopes }),
 			...(needs === undefined ? {} : { needs }),
 			...(fields.groups === undefined ? {} : { groups: fields.groups }),
+			...(fields.words === undefined ? {} : { words: fields.words }),
 			...(objects === undefined ? {} : { objects }),
 			...(Object.keys(readsWhen).length === 0 ? {} : { readsWhen }),
 			reads,

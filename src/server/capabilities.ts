@@ -118,6 +118,7 @@ import {
 	type ObjectRef,
 	plainLine,
 	readArgs,
+	readOn,
 	refKey,
 } from "../core/objects.ts";
 import { agentOfChat, canonical, Permissions } from "../core/permissions.ts";
@@ -805,7 +806,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			const object = on(args);
 			const first = object?.refs[0];
 			return object === undefined || first === undefined || kinds === undefined
-				? `Use ${tool.connection.service}'s ${tool.tool}${as(args)}`
+				? `${tool.connection.words?.[tool.tool] ?? `Use ${tool.connection.service}'s ${tool.tool}`}${as(args)}`
 				: `${object.what} ${nameOf(first, kinds)}`;
 		};
 		const editable = [
@@ -831,7 +832,13 @@ export function openCapabilities(options: CapabilityOptions) {
 				const account = signed && typeof given[arg] === "string" ? (given[arg] as string) : undefined;
 				const object = on(given);
 				const created = made(given);
+				const reading = kinds === undefined ? undefined : readOn(tool.connection.name, tool.tool, given, kinds);
+				const hidden = [...(signed ? [arg] : []), ...(reading?.args ?? [])];
 				return {
+					...(hidden.length === 0 ? {} : { hidden }),
+					...(object === undefined && reading !== undefined && kinds !== undefined
+						? { on: { refs: [refKey(reading.ref, kinds)], ...(account === undefined ? {} : { account }) } }
+						: {}),
 					...(object === undefined || kinds === undefined
 						? {}
 						: {
@@ -1557,7 +1564,7 @@ export function openCapabilities(options: CapabilityOptions) {
 									...(read.has(tool) ? { cards: true as const } : {}),
 									name: model,
 									title: tool,
-									words: toolWords(tool),
+									words: connection?.words?.[tool] ?? toolWords(tool),
 									description: shape.description,
 									parameters: shape.schema,
 									...(connection.ask === "always" && !connection.reads.includes(tool)

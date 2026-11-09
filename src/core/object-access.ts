@@ -9,15 +9,17 @@ import { agentOfChat } from "./permissions.ts";
 /** A read a kind needs that the owner's switch holds off (`Connected.off`), for either reason it can be off. */
 export type OffRead = {
 	readonly tool: string;
+	/** The tool in the owner's words, as its definition says them. */
+	readonly words?: string;
 	readonly why: "owner" | "waiting";
 	readonly service: string;
 };
 
 /** Why a card or a watch stands still for an off tool, and how to change it, in the owner's words. */
-export const offWords = ({ tool, why, service }: OffRead): string =>
+export const offWords = ({ tool, words, why, service }: OffRead): string =>
 	why === "owner"
-		? `You turned off "${toolWords(tool)}" for ${service}. Turn it back on in ${service}'s details, under Connections.`
-		: `"${toolWords(tool)}" is off until you turn it on in ${service}'s details, under Connections.`;
+		? `You turned off "${words ?? toolWords(tool)}" for ${service}. Turn it back on in ${service}'s details, under Connections.`
+		: `"${words ?? toolWords(tool)}" is off until you turn it on in ${service}'s details, under Connections.`;
 
 /** One member's authority, never the union of a room's members. Also used at each remote call and publication. */
 export async function objectAccess(tx: Tx, chat: number, ref: ObjectRef, account: string) {
@@ -68,7 +70,13 @@ export async function objectStanding(tx: Tx, chat: number, ref: ObjectRef, accou
 			continue;
 		}
 		if (switched !== undefined) {
-			const found = { tool: read.tool, why: switched, service: connection.service };
+			const words = connection.words?.[read.tool];
+			const found = {
+				tool: read.tool,
+				...(words === undefined ? {} : { words }),
+				why: switched,
+				service: connection.service,
+			};
 			if (read.optional) skipped.push(as);
 			else if (read.follow === true) stopped ??= found;
 			else off ??= found;

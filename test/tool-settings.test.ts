@@ -28,7 +28,6 @@ import {
 	type Said,
 	SETTINGS,
 	type Setting,
-	tally,
 } from "../src/core/tool-kinds.ts";
 import type { TurnResult } from "../src/core/turn.ts";
 import { answer } from "../src/core/wait.ts";
@@ -239,18 +238,6 @@ describe("a tool's kind, as said", () => {
 		// the other settings narrow as ever
 		expect(groupValue("ask", unknown, options(unknown))).toBe("ask");
 		expect(groupValue("off", proposed, options(proposed))).toBe("off");
-	});
-
-	it("the tally counts by the rows' words: a read set to Ask asks first, not always", () => {
-		expect(
-			tally([
-				{ setting: "allow" },
-				{ setting: "ask" }, // a read set to Ask, as its row says
-				{ setting: "ask" },
-				{ setting: "always" },
-				{ setting: "off" },
-			]),
-		).toEqual({ free: 1, first: 2, every: 1, off: 1 });
 	});
 
 	it("a property: no write or floor is ever offered Allow, and a setting a tool may take keeps it", () => {

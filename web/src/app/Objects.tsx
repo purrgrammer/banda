@@ -416,7 +416,11 @@ export function ObjectReading({
 	if (shown.shown === "failed")
 		return (
 			<ObjectUnavailable
-				what={shown.off === true ? `${shown.name} can't be shown` : `Couldn't read ${shown.name}`}
+				what={
+					shown.off === true
+						? `${shown.name.charAt(0).toUpperCase()}${shown.name.slice(1)} can't be shown`
+						: `Couldn't read ${shown.name}`
+				}
 				why={
 					shown.off === true
 						? shown.why
