@@ -1324,7 +1324,8 @@ export function defineCore(options: CoreOptions) {
 	/**
 	 * Tell the agent, in its proposal's chat, that the owner decided its proposal: a `PROPOSAL_DECIDED` entry carrying the
 	 * daemon's words as a user message, in the caller's commit with the decision. It starts no turn: the agent reads it
-	 * at its next, and it is nobody's input (`rowOf`), so an unanswered owner is still unanswered.
+	 * at its next model request, in a run under way or else its next turn, and it is nobody's input (`rowOf`), so an
+	 * unanswered owner is still unanswered.
 	 */
 	async function proposalDecided(tx: Tx, proposal: Proposal, state: "accepted" | "declined"): Promise<void> {
 		await tx.appendEntry(proposal.chat as ConversationId, {

@@ -4,7 +4,15 @@ import { pool, runWorker } from "./fault/kill.ts";
 import { tempHome } from "./helpers.ts";
 
 const worker = "test/fault/proposals-worker.ts";
-type State = { state: string; rooms: number; room: number; proposals: number; results: number; commits: number };
+type State = {
+	state: string;
+	rooms: number;
+	room: number;
+	proposals: number;
+	results: number;
+	decided: number;
+	commits: number;
+};
 const run = async (faults: readonly Fault[]) => {
 	const { last, kills } = await runWorker(worker, [await tempHome()], [faults]);
 	return { state: last as State, kills };
@@ -15,6 +23,7 @@ const expectAcceptedOnce = ({ state }: Awaited<ReturnType<typeof run>>) => {
 	expect(state.room).toBeGreaterThan(0);
 	expect(state.proposals).toBe(1);
 	expect(state.results).toBe(1);
+	expect(state.decided).toBe(1);
 };
 
 describe("accepting a group proposal under faults", () => {

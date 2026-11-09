@@ -84,8 +84,10 @@ describe("the unanswered rule", () => {
 			model: [{ role: "user" as const, content: "The owner declined your proposal.", timestamp: 1 }],
 		} as unknown as Parameters<typeof rowOf>[0];
 		expect(rowOf(decided)).toBeUndefined();
-		// so a run that ended without answering the owner after one is still unanswered, and one that answered still did
-		expect(unanswered([end, wrote])).toEqual({ nudged: 0 });
+		// so the walk over a chat holding one reads as if it were not there: an owner unanswered is still unanswered
+		const walked = (rows: readonly (Row | undefined)[]) => rows.filter((row): row is Row => row !== undefined);
+		expect(unanswered(walked([end, rowOf(decided), wrote]))).toEqual({ nudged: 0 });
+		expect(unanswered(walked([end, rowOf(decided), ...acted("message_user", "m"), wrote]))).toBeUndefined();
 	});
 
 	it("a run answering no one's input of the owner's (a wake, another person) may stay silent", () => {
