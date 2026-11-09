@@ -337,7 +337,7 @@ app walkthrough ([the plan](slack-plan.md)). The spikes below are stage 0.
 3. **Search and people.** `search_messages` followed, the person kind, `add_reaction` with its choice and
    permission (and `authors` scoped so a reaction on the owner's message counts), and files in messages read through
    the daemon. Built: the scenarios in test/watch-slack.test.ts, the draft in test/slack-writes.test.ts, the adapter
-   in test/slack-rest.test.ts, the file route in test/gmail-attachments.test.ts, a reaction's kill sweep in
+   in test/slack-rest.test.ts, the file route in test/attachments.test.ts, a reaction's kill sweep in
    test/slack.faults.test.ts (CI).
 
 ## What the spikes found
