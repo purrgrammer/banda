@@ -80,7 +80,10 @@ in a throwaway home, at desktop and phone width.
 - [x] Owner-inline references: owner review
 - [ ] Slice 9's owner acceptance
 - [ ] Real notification-card acceptance with the hosted MCP server's required `notifications` scope
-- [ ] Delete agent-built connections, `propose_connection`, extensions and agent-built tools
+- [ ] Delete agent-built connections, `propose_connection`, extensions and agent-built tools (slice 3 of
+  [Connection definitions](connection-definitions.md))
+- [ ] A connection is a definition banda ships and a choice the store holds, never a file in the workspace: designed in
+  [Connection definitions](connection-definitions.md), under owner review
 - [ ] Logos as shipped assets on every card, event and draft of a connection; initials as the fallback
 - [ ] Drafts show hashes of referenced files: the first effect tool that refers to a box file stores it as a blob in its draft
 - [ ] Approvals on the floor confirmed with a passkey (DESIGN.md "Open"); today a tap approves them
