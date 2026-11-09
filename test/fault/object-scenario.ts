@@ -7,6 +7,7 @@ import { Connected } from "../../src/core/connections.ts";
 import { MAX_READINGS, type Reading, Readings } from "../../src/core/objects.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { openObjects } from "../../src/server/objects.ts";
+import { added, definition, shipping } from "../fixtures/shipped.ts";
 import type { Faults } from "./faults.ts";
 
 export type ObjectScenario = { count: number; failed: boolean; revoke: boolean };
@@ -33,14 +34,22 @@ export async function objectScenario(home: string, scenario: ObjectScenario, fau
 			reads: { issue: { tool: "get", args: { number: "{number}" } } },
 			fields: { title: "issue.title", state: "issue.state" },
 		};
-		const text = `---\nservice: Example\nurl: https://example.com/mcp\nauth: key\nreads: [get]\n---\n\`\`\`json\n${JSON.stringify({ objects: { issue: kind } })}\n\`\`\`\n`;
+		const text = JSON.stringify({
+			service: "Example",
+			about: "An example",
+			url: "https://example.com/mcp",
+			auth: "key",
+			reads: ["get"],
+			objects: { issue: kind },
+		});
+		shipping(definition("example", text));
 		await harness.commit(async (tx) => {
 			const accepted = await tx.doc(Accepted);
-			if (accepted.files["connections/example.md"] !== undefined) return;
-			accepted.files["connections/example.md"] = { sha: shaOf(text), text, at: 1 };
+			if (accepted.files["agents/reader.md"] !== undefined) return;
 			const agent = "---\nname: Reader\ndescription: Reads objects\nconnections: [example]\n---\nRead.";
 			accepted.files["agents/reader.md"] = { sha: shaOf(agent), text: agent, at: 1 };
 			(await tx.doc(AgentChats)).chats[1] = "reader";
+			await added(tx, "example");
 			const connected = await tx.doc(Connected);
 			connected.connections.example = {
 				version: shaOf(text),
