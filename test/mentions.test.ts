@@ -46,6 +46,8 @@ describe("mentions in the composer", () => {
 		expect(linkMentions("hi @Ana Lu!", ["ana", "analu"], agents)).toBe("hi [@Ana Lu](#/a/analu)!");
 		expect(linkMentions("mail@Writer", ["writer"], agents)).toBe("mail@Writer");
 		expect(linkMentions("@Writers", ["writer"], agents)).toBe("@Writers");
+		// whatever the case it was typed in, under the agent's own name
+		expect(linkMentions("@writer go", ["writer"], agents)).toBe("[@Writer](#/a/writer) go");
 	});
 });
 

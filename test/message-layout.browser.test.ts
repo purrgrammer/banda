@@ -13,14 +13,26 @@ const words = [
 	),
 ];
 const agents = [{ id: "mara", name: "Mara", face: defaultAvatarFace() }];
+const longName = "Ana María de la Vega Ortega Fernández Hidalgo";
+// the band as the shell says it, for a real 1:1 chat with Cervantes: nothing but AgentChat tells it who can be named
+const shellAgents = [
+	...agents,
+	{ id: "ana", name: "Ana María", face: defaultAvatarFace() },
+	{ id: "long", name: longName, face: defaultAvatarFace() },
+	{ id: "cervantes", name: "Cervantes", face: defaultAvatarFace() },
+].map((agent) => ({ name: agent.id, accepted: { sha: agent.id, text: "", agent: { ...agent, state: "active" } } }));
+const directChat = 30;
+const directText = `Ask @Mara, then @mara, and @Ana María about @${longName}, @Cervantes too, but not @Nobody.`;
+const live = (event: object) => `data: ${JSON.stringify({ type: "live", chat: directChat, event })}\n\n`;
+const groupMention = words.length + 2;
 const group = {
 	room: 20,
 	name: "Layout group",
 	members: ["mara"],
 	working: [],
 	at,
-	latest: words.length + 1,
-	read: words.length + 1,
+	latest: groupMention,
+	read: groupMention,
 	unread: 0,
 	executions: { mara: 21 },
 	asking: [],
@@ -40,6 +52,7 @@ const group = {
 				{ id: "0f1e2d3c4b5a6978", n: 1, title: "Launch checklist", kind: "markdown" },
 			],
 		},
+		{ entry: groupMention, text: "Ask @Mara about it.", author: { owner: true }, mentions: ["mara"], at },
 	],
 };
 let server: WebServer;
@@ -59,13 +72,16 @@ beforeAll(async () => {
 				import { Markdown } from '/src/components/Markdown.tsx'; import '/src/styles/globals.css';
 				import { Mentionable } from '/src/components/MentionChip.tsx';
 				import { Bubble } from '/src/chat/Feed.tsx';
+				import { AgentChat } from '/src/app/AgentChat.tsx'; import { showAgents } from '/src/lib/shell.ts';
 				const who={name:'Mara',face:${JSON.stringify(defaultAvatarFace())}};
+				showAgents(${JSON.stringify(shellAgents)});
 				createRoot(document.getElementById('root')).render(<main style={{padding:16,maxWidth:1000,margin:'auto'}}>
 				{${JSON.stringify(words)}.map((text,i)=><section id={'direct-'+i} key={i}><FeedView chat={10} who={who} compact={false} segments={[{kind:'owner',key:String(i+1),text,files:[],at:${at}}]} /></section>)}
 				<div id="group" style={{height:1200,display:'flex'}}><GroupChat room={20} phone={innerWidth<768} agents={${JSON.stringify(agents)}} onBack={()=>{}} /></div>
 				{[1,2,3].map(level=><section data-heading={level} key={level}><FeedView chat={10} who={who} compact={false} segments={[{kind:'companion',key:'h'+level,text:'#'.repeat(level)+' Leading heading\\n\\nParagraph\\n\\n'+'#'.repeat(level)+' Later heading',files:[],undelivered:false}]} /></section>)}
 				<Mentionable.Provider value={${JSON.stringify(agents)}}>{[true,false].map(mine=><section data-mentions={mine?'owner':'agent'} key={String(mine)}><Bubble mine={mine}><Markdown>{'Ask [@Mara](#/a/mara) about [this page](https://example.com) and \`POST /coupon\`.'}</Markdown></Bubble></section>)}</Mentionable.Provider>
 				<div className="banda-document">{[1,2,3].map(level=><section data-document={level} key={level}><Markdown>{'#'.repeat(level)+' Document heading'}</Markdown></section>)}</div>
+				<div id="direct-chat" style={{height:800,display:'flex',position:'relative'}}><AgentChat agent="cervantes" who={{id:'cervantes',name:'Cervantes',face:${JSON.stringify(defaultAvatarFace())}}} row={{chat:${directChat},read:1,state:'idle'}} phone={innerWidth<768} panelOpen={false} onBack={()=>{}} onPanel={()=>{}} /></div>
 				</main>);`;
 				},
 				configureServer(vite) {
@@ -86,11 +102,28 @@ beforeAll(async () => {
 						if (path === "/api/events") {
 							res.setHeader("content-type", "text/event-stream");
 							res.write(": fixture\n\n");
+							if ((req.url ?? "").includes(`chat=${directChat}`)) {
+								res.write(live({ type: "ready", tail: 1, busy: false, partial: [], running: [] }));
+								res.write(live({ type: "queued", queued: [{ id: "q1", text: "Later, @Mara." }] }));
+							}
 							return;
 						}
+						// a message being sent stays on its way, for the test to see it there
+						if (path === "/api/messages") return;
 						if (path?.startsWith("/api/")) {
 							res.setHeader("content-type", "application/json");
-							res.end(JSON.stringify(path === "/api/groups/20" ? group : path === "/api/skills" ? [] : {}));
+							const items = { items: [{ id: 1, role: "user", text: directText, at }] };
+							res.end(
+								JSON.stringify(
+									path === "/api/groups/20"
+										? group
+										: path === "/api/skills"
+											? []
+											: path === `/api/chats/${directChat}/items`
+												? items
+												: {},
+								),
+							);
 							return;
 						}
 						next();
@@ -188,6 +221,68 @@ for (const width of [390, 1440])
 	);
 
 for (const width of [320, 390, 1440]) {
+	it.skipIf(!hasChrome())(
+		`every agent the owner names shows as a whole chip with its face, in a chat and a group, at ${width}px`,
+		async () => {
+			await withLayoutPage(width, async (page) => {
+				const bubble = (words: string) =>
+					`[...document.querySelectorAll('#direct-chat [data-message-bubble]')].find(b=>b.textContent.includes(${JSON.stringify(words)}))`;
+				const chips = (root: string) => `[...${root}.querySelectorAll('a[href^="#/a/"]')]`;
+				// each chip as it stands: its name's text, the agent its face names, the lines its words take, inside its bubble
+				const read = (root: string) =>
+					page.run<
+						{ name: string; face: string; faceWidth: number; lines: number; inside: boolean }[]
+					>(`${chips(root)}.map(chip=>{
+						const words=chip.lastElementChild;
+						const range=document.createRange();range.selectNodeContents(words);
+						const face=chip.querySelector('[role="img"]');
+						const box=chip.getBoundingClientRect(),holder=chip.closest('[data-message-bubble]').getBoundingClientRect();
+						return {name:words.textContent,face:face.getAttribute('aria-label'),faceWidth:face.getBoundingClientRect().width,lines:new Set([...range.getClientRects()].map(r=>Math.round(r.top))).size,inside:box.right<=holder.right+0.5&&box.left>=holder.left-0.5};
+					})`);
+				const whole = (seen: Awaited<ReturnType<typeof read>>) => {
+					for (const chip of seen) {
+						expect(chip.face, JSON.stringify(chip)).toBe(chip.name);
+						expect(chip.faceWidth, JSON.stringify(chip)).toBeGreaterThan(0);
+						expect(chip.lines, JSON.stringify(chip)).toBe(1);
+						expect(chip.inside, JSON.stringify(chip)).toBe(true);
+					}
+				};
+				const taken = bubble("but not");
+				await page.until(`${taken} && ${chips(taken)}.length===5`);
+				const direct = await read(taken);
+				// whatever the case it was typed in, under the agent's own name; this chat's own agent too
+				expect(direct.map((chip) => chip.name)).toEqual(["Mara", "Mara", "Ana María", longName, "Cervantes"]);
+				whole(direct);
+				const said = await page.run<string>(`${taken}.textContent`);
+				expect(said).toContain("@Nobody");
+				expect(said).not.toContain("](#/a/");
+				// Copy gives what the owner wrote, not the link drawn for the eye
+				await page.run(
+					`Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>{window.copied=t}}});${taken}.parentElement.querySelector('button[aria-label="Copy the message"]').click()`,
+				);
+				await page.until("window.copied");
+				expect(await page.run<string>("window.copied")).toBe(directText);
+				// on its way as much as taken: queued, and sending
+				const queued = bubble("Later,");
+				await page.until(`${queued} && ${chips(queued)}.length===1`);
+				whole(await read(queued));
+				await page.run(`document.querySelector('#direct-chat textarea').focus()`);
+				await page.input("Input.insertText", { text: "Now @Mara" });
+				await page.until(`!document.querySelector('#direct-chat button[aria-label="Send"]').disabled`);
+				await page.run(`document.querySelector('#direct-chat button[aria-label="Send"]').click()`);
+				const sending = bubble("Now");
+				await page.until(`${sending} && ${chips(sending)}.length===1`);
+				whole(await read(sending));
+				const inGroup = `document.querySelector('#group [data-entry="${groupMention}"]')`;
+				await page.until(`${inGroup} && ${chips(inGroup)}.length===1`);
+				const named = await read(inGroup);
+				expect(named.map((chip) => chip.name)).toEqual(["Mara"]);
+				whole(named);
+				expect(await page.run<boolean>("document.documentElement.scrollWidth <= innerWidth")).toBe(true);
+			});
+		},
+		60_000,
+	);
 	it.skipIf(!hasChrome())(
 		`mention chips and inline code keep readable ink in both themes at ${width}px`,
 		async () => {

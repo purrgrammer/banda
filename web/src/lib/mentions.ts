@@ -19,18 +19,19 @@ const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * `text` with each `@Name` of the agents named in `ids` written as a mention link, `[@Name](#/a/<id>)`, for
- * the message to draw as a chip; any other `@` is left as words. Longer names first, so "@Ana Lu" wins over "@Ana".
+ * the message to draw as a chip, under the agent's own name whatever the case it was typed in; any other `@` is left
+ * as words. Longer names first, so "@Ana Lu" wins over "@Ana".
  */
 export function linkMentions(text: string, ids: readonly string[], agents: readonly ChatAgent[]): string {
 	const named = agents.filter((agent) => ids.includes(agent.id)).sort((a, b) => b.name.length - a.name.length);
 	if (named.length === 0) return text;
 	const pattern = new RegExp(
 		`(^|\\s)@(${named.map((agent) => escaped(agent.name)).join("|")})(?![\\p{L}\\p{N}])`,
-		"gu",
+		"giu",
 	);
-	return text.replace(pattern, (_all, before: string, name: string) => {
-		const agent = named.find((each) => each.name === name);
-		return agent === undefined ? `${before}@${name}` : `${before}[@${name}](#/a/${agent.id})`;
+	return text.replace(pattern, (all, before: string, name: string) => {
+		const agent = named.find((each) => each.name.toLowerCase() === name.toLowerCase());
+		return agent === undefined ? all : `${before}[@${agent.name}](#/a/${agent.id})`;
 	});
 }
 

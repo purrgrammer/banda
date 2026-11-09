@@ -219,12 +219,13 @@ export function Mention({ who }: { who: Who & { readonly id?: string | undefined
 		<a
 			href={`#/a/${who.id ?? who.name.toLowerCase()}`}
 			className={cn(
-				"mx-px inline-flex rounded-[6px] bg-paper-3 font-medium text-ink no-underline hover:underline",
+				"mx-px inline-flex max-w-full rounded-[6px] bg-paper-3 font-medium text-ink no-underline hover:underline",
 				"items-center gap-0.5 py-px pr-1.5 align-middle leading-none -translate-y-[0.1em]",
 			)}
 		>
 			<Face face={who.face} name={who.name} size="mention" />
-			{who.name}
+			{/* one piece, however the bubble wraps; a name too long for it ends in an ellipsis, its descenders whole */}
+			<span className="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap">{who.name}</span>
 		</a>
 	);
 }
