@@ -4,7 +4,7 @@
  */
 import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import { PairPhone } from "../chat/PairPhone.tsx";
-import { api, type PairingView } from "../lib/api.ts";
+import { api, onDeviceRefused, type PairingView } from "../lib/api.ts";
 import { type Pairing, pairing } from "../lib/pairing.ts";
 import type { BandaPlugin, ScannerPlugin } from "../lib/transport.ts";
 
@@ -34,6 +34,12 @@ export function PairDevice({
 			void listening.then((handle) => handle.remove()).catch(() => undefined);
 		};
 	}, [flow, shell]);
+	useEffect(() => {
+		const stopListening = onDeviceRefused(() => void flow.refused());
+		return () => {
+			stopListening();
+		};
+	}, [flow]);
 	if (step.step === "paired") return children;
 	return (
 		<PairPhone

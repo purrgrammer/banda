@@ -287,6 +287,48 @@ describe("pairing a phone", () => {
 		expect(answered.flow.get()).toMatchObject({ step: "scan", note: NOTES.revoked });
 	});
 
+	it("a refused request on a paired phone asks where it stands, and only a revoked answer forgets its key", async () => {
+		const paired = rig({
+			state: { daemon: "c".repeat(64), device: "d", name: "P" },
+			checks: [async () => "paired", async () => "paired", async () => "revoked"],
+		});
+		await paired.flow.start();
+		expect(paired.flow.get()).toEqual({ step: "paired" });
+		// another 403 of the daemon's: the app stays
+		await paired.flow.refused();
+		expect(paired.flow.get()).toEqual({ step: "paired" });
+		await paired.flow.refused();
+		expect(paired.flow.get()).toMatchObject({ step: "scan", note: NOTES.revoked });
+	});
+
+	it("stays open when it cannot learn where it stands, and asks once for requests refused together", async () => {
+		let reply: (state: PairingState) => void = () => {};
+		let looks = 0;
+		const phone = rig({
+			state: { daemon: "c".repeat(64), device: "d", name: "P" },
+			checks: [
+				async () => "paired",
+				async () => {
+					throw new Error("away");
+				},
+				() => {
+					looks++;
+					return new Promise<PairingState>((resolve) => {
+						reply = resolve;
+					});
+				},
+			],
+		});
+		await phone.flow.start();
+		await phone.flow.refused();
+		expect(phone.flow.get()).toEqual({ step: "paired" });
+		const together = [phone.flow.refused(), phone.flow.refused(), phone.flow.refused()];
+		await vi.waitFor(() => expect(looks).toBe(1));
+		reply("paired");
+		await Promise.all(together);
+		expect(looks).toBe(1);
+	});
+
 	it("keeps its key whatever a rejection says: only the daemon's answer that it was revoked forgets it", async () => {
 		// a connection closed under it (the daemon restarting, or letting go of it) is no answer about this device
 		for (const code of ["REFUSED", "BROKEN", "UNREACHABLE"]) {

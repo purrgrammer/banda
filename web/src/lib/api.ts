@@ -84,6 +84,16 @@ export function onUnauthorized(listener: () => void): () => void {
 	return () => unauthorized.delete(listener);
 }
 
+const deviceRefused = new Set<() => void>();
+/**
+ * This device's request was refused (403). Only a reason to ask the daemon where the device stands: other refusals are
+ * 403s too, and what the device is comes from the pairing route alone.
+ */
+export function onDeviceRefused(listener: () => void): () => void {
+	deviceRefused.add(listener);
+	return () => deviceRefused.delete(listener);
+}
+
 async function call(path: string, init: RequestInit = {}, as: "request" | "stream" = "request"): Promise<Response> {
 	if (!transport.identified && token === undefined) throw new Unauthorized("no token");
 	const response = await transport[as](`/api${path}`, {
@@ -98,6 +108,7 @@ async function call(path: string, init: RequestInit = {}, as: "request" | "strea
 		for (const listener of unauthorized) listener();
 		throw new Unauthorized("the daemon refused the token");
 	}
+	if (response.status === 403 && transport.identified) for (const listener of deviceRefused) listener();
 	return response;
 }
 

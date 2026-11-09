@@ -47,9 +47,9 @@ defect. Remove it only when its fix and acceptance evidence are recorded in a co
   installing over the one before
 - [ ] The phone's shell on iOS: out of scope for now. It implements the same plugin contract as Android's
   (`BandaPlugin` in `web/src/lib/transport.ts`) with iroh-ffi's Swift bindings, and needs a real iPhone to try
-- [ ] The phone's shell, once paired: a device revoked while the app is open sees requests fail rather than the
-  pairing screen (it shows on the next start), and the app's files come with the shell, so a new build reaches the
-  phone only as a new APK
+- [ ] The phone's shell, once paired: a device revoked while the app is open goes to the pairing screen (covered by
+  tests, not yet tried on a phone), and the app's files come with the shell, so a new build reaches the phone only as
+  a new APK
 - [ ] Windows endpoint-key publication: Node flushes the key file before rename, but does not expose directory
   fsync on Windows; qualify power-loss recovery on a Windows filesystem
 - [ ] Push notifications that carry no content

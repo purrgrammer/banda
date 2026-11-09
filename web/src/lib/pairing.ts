@@ -185,8 +185,29 @@ export function pairing({ shell, scanner, ask, check, every = 2000 }: PairingDep
 		});
 	};
 
+	let refusal: Promise<void> | undefined;
+
 	return {
 		get: () => current,
+		/**
+		 * A request of this paired device was refused: ask where it stands, once however many were refused together, and
+		 * leave the app only on the daemon's answer. Not learning it changes nothing: the next refusal asks again.
+		 */
+		refused(): Promise<void> {
+			if (current.step !== "paired") return Promise.resolve();
+			refusal ??= (async () => {
+				const at = attempt;
+				try {
+					const state = await check();
+					if (state !== "paired" && active(at)) await settle(state, false, at);
+				} catch {
+					// the daemon away for a moment
+				} finally {
+					refusal = undefined;
+				}
+			})();
+			return refusal;
+		},
 		subscribe(listener: () => void) {
 			listeners.add(listener);
 			return () => listeners.delete(listener);
