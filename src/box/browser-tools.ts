@@ -32,7 +32,7 @@ import {
 import { log } from "../core/activity.ts";
 import { AgentChats } from "../core/agents.ts";
 import type { EffectTool } from "../core/ask.ts";
-import { type EgressControl, intake, ownCredential } from "../core/egress.ts";
+import { type HoldingEgress, intake, ownCredential } from "../core/egress.ts";
 import { OWNER } from "../core/gateway.ts";
 import { covering } from "../core/permissions.ts";
 import { addressWords, bodyFields, bodyWords, headersWords } from "../core/request-words.ts";
@@ -48,7 +48,7 @@ export type KeyPlace =
 export type BrowserToolOptions = {
 	/** The browser of the agent chat `chat` runs. */
 	readonly browser: (chat: number) => Promise<Browser>;
-	readonly egress?: EgressControl & { pass(chat: number, hash: string): Promise<void> };
+	readonly egress?: HoldingEgress & { pass(chat: number, hash: string): Promise<void> };
 	readonly effect: <P extends TSchema>(tool: EffectTool<P>) => ToolRegistration;
 	readonly ask: (
 		api: ToolExecutionApi,

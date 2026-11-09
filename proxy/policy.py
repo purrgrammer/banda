@@ -347,8 +347,9 @@ def held_words(ticket, scheme, host, port, headers, path=""):
             "ask_hosts (with every other host the task needs), then run the command again."
         )
     return (
-        f"{said} Ask the owner to allow {allowed} (propose_send with this ticket offers 'Always allow {allowed}'; "
-        "ask_hosts asks for several hosts at once), then run the command again."
+        f"{said} The owner is asked about it, and you will be told how it ended. Before writing more there, ask the "
+        f"owner to allow {allowed} with ask_hosts (it takes several hosts at once): once allowed, writes there go "
+        "straight through."
     )
 
 

@@ -30,11 +30,12 @@ defect. Remove it only when its fix and acceptance evidence are recorded in a co
 
 - [ ] Credential swap for signing schemes (SigV4, HMAC bodies, OAuth refresh)
 - [ ] Credentials for the proxy's hosts are written by hand into `auth/egress.json`: the app adds connections' credentials, not these
-- [ ] A ticket is listed only in the result of the command that held it: a kill between intake and that result stores a ticket the model never hears of
 - [ ] The proxy holds tickets in memory-backed state: a proxy made again forgets tickets not yet taken (the box was told 403 with the ticket)
 - [ ] A replayed response is cut at 1 MB; a WebSocket upgrade, approved, is sent and its 101 returned, but no socket stays open
-- [ ] An approved `git push` lands once, but git itself was answered 403 and reported failure: the chat hears the send
-  only from `propose_send`
+- [ ] An approved `git push` lands once, but git itself was answered 403 and reported failure: the agent hears the send
+  only when woken with how it ended
+- [ ] Rethink how a held request is shown to the owner (issue #49): the card is still its method, address, headers and
+  body; one command can hold several requests, one card each
 - [ ] Git over SSH (the box reaches only the proxy) and Nostr (NIP-34: relays over WebSocket, events signed with a key
   that stays outside the box) are not carried
 - [ ] Enforce explicit read/disclosure authority for queries, redirects and browser subresources (egress.md)

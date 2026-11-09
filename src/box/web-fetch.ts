@@ -22,7 +22,7 @@ import {
 } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { log } from "../core/activity.ts";
-import { type EgressControl, intake } from "../core/egress.ts";
+import { type HoldingEgress, intake } from "../core/egress.ts";
 import { htmlToText } from "../core/html-text.ts";
 import { MAX_RESULT_CHARS } from "../core/mcp.ts";
 import { publicAddress } from "../core/public-fetch.ts";
@@ -230,7 +230,7 @@ export type WebFetchOptions = {
 	/** One GET; the box's curl through the chat's environment unless a test gives its own. */
 	readonly fetchOne?: FetchOne;
 	/** The egress proxy: after the reads, what it saw is taken into the store, as after a command. */
-	readonly egress?: EgressControl;
+	readonly egress?: HoldingEgress;
 	readonly fault?: (point: string) => void;
 };
 

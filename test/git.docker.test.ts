@@ -11,13 +11,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
-import {
-	type ConversationId,
-	createRegistry,
-	defineExtension,
-	type Harness,
-	type TaskId,
-} from "@earendil-works/pi-durable";
+import { type ConversationId, createRegistry, type Harness, type TaskId } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type Box, openBox } from "../src/box/box.ts";
@@ -25,9 +19,10 @@ import { boxParts, containerBox, dockerAvailable, removeContainerBox } from "../
 import { boxEnv, boxTools } from "../src/box/tools.ts";
 import { fetchIn } from "../src/box/web-fetch.ts";
 import { ActivityLog } from "../src/core/activity.ts";
-import { proposeSendTool, proxyKnows, sweepSent } from "../src/core/egress.ts";
+import { proxyKnows, sweepSent } from "../src/core/egress.ts";
 import { OWNER, type Received } from "../src/core/gateway.ts";
 import { onPermissions, Permissions, revoke } from "../src/core/permissions.ts";
+import { RELEASE, RELEASED } from "../src/core/release.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
@@ -138,7 +133,7 @@ describe.skipIf(!docker)("git through the box's proxy", { timeout: 180_000 }, ()
 	const faux = fauxProvider();
 	const gateway = new FakeGateway();
 	const core = defineCore({ blobs: blobStore(), gateway: () => gateway, model: () => FAUX_MODEL, retryDelay: () => 5 });
-	/** What the model runs for each owner message: bash with that command, then propose_send for a held ticket. */
+	/** What the model runs for each owner message: bash with that command, and a held request asks by itself. */
 	const commands = new Map<string, string>();
 
 	beforeAll(async () => {
@@ -170,11 +165,6 @@ describe.skipIf(!docker)("git through the box's proxy", { timeout: 180_000 }, ()
 				const command = last?.role === "user" ? commands.get(text) : undefined;
 				if (command !== undefined)
 					return fauxAssistantMessage([fauxToolCall("bash", { command }, { id: `b${n}` })], { stopReason: "toolUse" });
-				const ticket = /\(ticket (t[0-9a-f]{10})\)/.exec(text)?.[1];
-				if (last?.role === "toolResult" && ticket !== undefined)
-					return fauxAssistantMessage([fauxToolCall("propose_send", { ticket }, { id: `r${n}` })], {
-						stopReason: "toolUse",
-					});
 				return fauxAssistantMessage("Done.");
 			}) as never,
 		);
@@ -183,11 +173,10 @@ describe.skipIf(!docker)("git through the box's proxy", { timeout: 180_000 }, ()
 		registry.install(
 			boxTools({
 				workspace: box.workspace,
-				...(box.egress === undefined ? {} : { egress: box.egress }),
+				...(box.egress === undefined ? {} : { egress: core.held(box.egress) }),
 				ready: (chat) => knows.ready(chat),
 			}),
 		);
-		registry.install(defineExtension({ name: "effects", tools: [core.effect(proposeSendTool(box.egress!))] }));
 		harness = await openStore(home, { models, registry, env: boxEnv(box) });
 		harness.resume();
 		// as the daemon does: the proxy learns of a host allowed or taken back
@@ -289,7 +278,27 @@ describe.skipIf(!docker)("git through the box's proxy", { timeout: 180_000 }, ()
 		if (!("turn" in received)) throw new Error(JSON.stringify(received));
 		return received;
 	};
-	const done = async (turn: number) => (await harness.getTask(turn as TaskId, context))?.state.status === "terminal";
+	const done = async (turn: number) => {
+		if ((await harness.getTask(turn as TaskId, context))?.state.status !== "terminal") return false;
+		const graph = await harness.taskGraph(context);
+		try {
+			return !Object.values(graph.value.tasks).some((node) => node.kind === RELEASE || node.kind === "banda.turn");
+		} finally {
+			graph.dispose();
+		}
+	};
+	/** What the agent was woken with about the held requests of `chat`. */
+	const told = async (chat: number) => {
+		const page = await (await harness.conversation(chat as ConversationId, context))!.entries(
+			{ order: "ascending" },
+			1000,
+			undefined,
+			context,
+		);
+		return page.items
+			.filter((e) => e.kind === RELEASED)
+			.map((e) => JSON.stringify((e.model?.[0] as { content?: unknown } | undefined)?.content));
+	};
 	const nextAsk = (turn: number) =>
 		until(async () => {
 			const [wait] = await openWaits(harness);
@@ -382,7 +391,7 @@ describe.skipIf(!docker)("git through the box's proxy", { timeout: 180_000 }, ()
 		await until(() => done(push.turn));
 		expect(forgeMain()).toBe(mine);
 		// and the chat hears that it was sent
-		expect((await results(push.chat)).at(-1)).toContain("Sent.");
+		expect((await told(push.chat)).at(-1)).toContain("Sent.");
 	});
 
 	it("a push held says to allow its host; once the owner does, git push goes straight through and lands once", async () => {
@@ -404,9 +413,7 @@ describe.skipIf(!docker)("git through the box's proxy", { timeout: 180_000 }, ()
 		// git failed, held; the chat is told how to make the next one go: allow the host, then run it again
 		const said = (await results(held.chat)).at(-1) ?? "";
 		expect(said).not.toMatch(/code=0/);
-		expect(said).toContain(
-			`Ask the owner to allow ${host} (propose_send with this ticket offers 'Always allow ${host}'; ask_hosts asks for several hosts at once), then run the command again`,
-		);
+		expect(said).toContain(`ask the owner to allow ${host} with ask_hosts`);
 		expect(forgeMain()).toBe(before);
 		expect(wait?.ask).toMatchObject({
 			tool: "propose_send",

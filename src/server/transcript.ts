@@ -42,6 +42,7 @@ import { type Origin, type Outbound, OWNER } from "../core/gateway.ts";
 import { HARNESS_ENDED } from "../core/harness.ts";
 import { Permissions } from "../core/permissions.ts";
 import { PROPOSAL_DECIDED, PROPOSAL_ENTRY, PROPOSAL_RESULT, type Proposal } from "../core/proposals.ts";
+import { RELEASED } from "../core/release.ts";
 import { Control, ROUTINE_TASK, Routines, TROUBLE, type TroubleData, WAKE, type WakeData } from "../core/routines.ts";
 import { localTime } from "../core/schedule.ts";
 import { openWaits, status } from "../core/status.ts";
@@ -266,6 +267,8 @@ export function itemOf(entry: EntryRecord): Item | undefined {
 	}
 	// a harness's end wakes its agent; the session's card already says how it ended
 	if (entry.kind === HARNESS_ENDED) return undefined;
+	// a held request's end wakes its agent; its approval's card and the activity already say how it ended
+	if (entry.kind === RELEASED) return undefined;
 	if (entry.kind === AGENT_MESSAGE) {
 		const data = entry.data as { from?: unknown; text?: unknown; at?: unknown } | undefined;
 		if (typeof data?.from !== "string" || typeof data.text !== "string") return undefined;

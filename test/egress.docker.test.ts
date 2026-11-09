@@ -11,20 +11,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
-import {
-	type ConversationId,
-	createRegistry,
-	defineExtension,
-	type Harness,
-	type TaskId,
-} from "@earendil-works/pi-durable";
+import { type ConversationId, createRegistry, type Harness, type TaskId } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type Box, openBox } from "../src/box/box.ts";
 import { boxParts, containerBox, dockerAvailable, removeContainerBox } from "../src/box/container.ts";
 import { boxEnv, boxTools } from "../src/box/tools.ts";
-import { proposeSendTool, Tickets } from "../src/core/egress.ts";
+import { Tickets } from "../src/core/egress.ts";
 import { OWNER, type Received } from "../src/core/gateway.ts";
+import { RELEASE, RELEASED } from "../src/core/release.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
@@ -81,7 +76,7 @@ describe.skipIf(!docker)("the box's closed network", { timeout: 180_000 }, () =>
 	const faux = fauxProvider();
 	const gateway = new FakeGateway();
 	const core = defineCore({ blobs: blobStore(), gateway: () => gateway, model: () => FAUX_MODEL, retryDelay: () => 5 });
-	/** What the model runs for each owner message: bash with that command, then propose_send for a held ticket. */
+	/** What the model runs for each owner message: bash with that command, and a held request asks by itself. */
 	const commands = new Map<string, string>();
 
 	beforeAll(async () => {
@@ -100,20 +95,14 @@ describe.skipIf(!docker)("the box's closed network", { timeout: 180_000 }, () =>
 				const command = last?.role === "user" ? commands.get(text) : undefined;
 				if (command !== undefined)
 					return fauxAssistantMessage([fauxToolCall("bash", { command }, { id: `b${n}` })], { stopReason: "toolUse" });
-				const ticket = /\(ticket (t[0-9a-f]{10})\)/.exec(text)?.[1];
-				if (last?.role === "toolResult" && ticket !== undefined)
-					return fauxAssistantMessage([fauxToolCall("propose_send", { ticket }, { id: `r${n}` })], {
-						stopReason: "toolUse",
-					});
 				return fauxAssistantMessage("Done.");
 			}) as never,
 		);
 		const registry = createRegistry();
 		registry.install(core.extension);
 		registry.install(
-			boxTools({ workspace: box.workspace, ...(box.egress === undefined ? {} : { egress: box.egress }) }),
+			boxTools({ workspace: box.workspace, ...(box.egress === undefined ? {} : { egress: core.held(box.egress) }) }),
 		);
-		registry.install(defineExtension({ name: "effects", tools: [core.effect(proposeSendTool(box.egress!))] }));
 		harness = await openStore(home, { models, registry, env: boxEnv(box) });
 		harness.resume();
 		// the box up (the first run builds both images), then the stand-in internet beside its proxy
@@ -198,7 +187,27 @@ describe.skipIf(!docker)("the box's closed network", { timeout: 180_000 }, () =>
 		if (!("turn" in received)) throw new Error(JSON.stringify(received));
 		return received;
 	};
-	const done = async (turn: number) => (await harness.getTask(turn as TaskId, context))?.state.status === "terminal";
+	const done = async (turn: number) => {
+		if ((await harness.getTask(turn as TaskId, context))?.state.status !== "terminal") return false;
+		const graph = await harness.taskGraph(context);
+		try {
+			return !Object.values(graph.value.tasks).some((node) => node.kind === RELEASE || node.kind === "banda.turn");
+		} finally {
+			graph.dispose();
+		}
+	};
+	/** What the agent was woken with about the held requests of `chat`. */
+	const told = async (chat: number) => {
+		const page = await (await harness.conversation(chat as ConversationId, context))!.entries(
+			{ order: "ascending" },
+			1000,
+			undefined,
+			context,
+		);
+		return page.items
+			.filter((e) => e.kind === RELEASED)
+			.map((e) => JSON.stringify((e.model?.[0] as { content?: unknown } | undefined)?.content));
+	};
 	const nextAsk = (turn: number) =>
 		until(async () => {
 			const [wait] = await openWaits(harness);
@@ -305,7 +314,7 @@ describe.skipIf(!docker)("the box's closed network", { timeout: 180_000 }, () =>
 		expect(sent[0]).toMatch(/^POST \/v1\/things\/42\?x=1 HTTP\/1\.1\r\n/);
 		expect(sent[0]).toContain("X-Custom: a b\r\n");
 		expect(sent[0]?.endsWith("\r\n\r\nhello\nworld")).toBe(true);
-		expect((await results(first.chat))[1]).toContain("Sent. The server answered 200 OK (text/plain).");
+		expect((await told(first.chat))[0]).toContain("Sent. The server answered 200 OK (text/plain).");
 
 		// what came back changes nothing the chat may do: the same route goes within the permission, unasked, and its
 		// reads still pass
