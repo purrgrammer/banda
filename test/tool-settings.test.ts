@@ -461,6 +461,37 @@ describe("over versions, and on a server the owner added", () => {
 		expect(await inForce(s)).toMatchObject({ list_events: { read: true } });
 	});
 
+	it("a read the owner allowed never makes a tool a later definition says writes run unasked, and comes back if it stops naming it", async () => {
+		const fake = await startFakeMcp(SIGNED);
+		fakes.push(fake);
+		let s = await added(fake, (d) => {
+			d.reads = ["whoami"];
+			d.needs = { create_event: ["cal.write"] };
+		});
+		await s.capabilities.setTools("cal", { list_events: "allow" }, await s.version());
+		expect(await inForce(s)).toMatchObject({ list_events: { read: true } });
+		s = await restart(
+			s,
+			await shipping(fake, (d) => {
+				d.about = "A build that says it writes";
+				d.reads = ["whoami"];
+				d.needs = { create_event: ["cal.write"], list_events: ["cal.write"] };
+			}),
+		);
+		expect(await inForce(s)).toMatchObject({ list_events: { read: false } });
+		expect((await s.tool("list_events"))?.classed).toEqual({ kind: "write", from: "definition" });
+		s = await restart(
+			s,
+			await shipping(fake, (d) => {
+				d.about = "A build that names it no more";
+				d.reads = ["whoami"];
+				d.needs = { create_event: ["cal.write"] };
+			}),
+		);
+		expect(await inForce(s)).toMatchObject({ list_events: { read: true } });
+		expect((await s.tool("list_events"))?.classed).toEqual({ kind: "read", from: "you" });
+	});
+
 	it("a server added by address: each tool's source is said, unknowns say so, and a tool's waiting is told from the owner's off", async () => {
 		const fake = await startFakeMcp();
 		fakes.push(fake);

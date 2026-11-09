@@ -709,13 +709,20 @@ export function serverConnection(name: string, server: Server): Connection & { s
 	};
 }
 
-/** `connection` with the owner's reads laid over it, in no way the definition's: a floor it names still asks. */
+/**
+ * `connection` with the owner's reads laid over it, in no way the definition's: a floor it names still asks, and a tool
+ * a later definition names and does not read is a write it says it is, whatever the owner allowed before. Kept in the
+ * store by name, so it returns if the definition stops naming it.
+ */
 function withOwnerReads(
 	connection: Connection & { sha: string },
 	overlay: OwnerReads | undefined,
 ): Connection & { sha: string } {
 	if (overlay === undefined) return connection;
-	const reads = overlay.tools.filter((tool) => connection.floors[tool] === undefined);
+	const named = namedTools(connection);
+	const reads = overlay.tools.filter(
+		(tool) => connection.floors[tool] === undefined && (!named.has(tool) || connection.reads.includes(tool)),
+	);
 	const readsWhen = Object.fromEntries(
 		Object.entries(connection.readsWhen ?? {}).filter(([tool]) => !reads.includes(tool)),
 	);

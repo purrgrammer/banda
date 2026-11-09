@@ -1813,7 +1813,9 @@ export function openCapabilities(options: CapabilityOptions) {
 				...(listed?.sha === file?.sha && listed?.notes !== undefined ? { notes: listed.notes } : {}),
 				...(connectionProblem === undefined ? {} : { problem: connectionProblem }),
 				tools,
-				groups: [...new Set(tools.flatMap((tool) => (tool.group === undefined ? [] : [tool.group])))],
+				groups: [
+					...new Set([...Object.keys(connection?.groups ?? {}), ...tools.flatMap((tool) => tool.group ?? [])]),
+				].filter((group) => tools.some((tool) => tool.group === group)),
 				draws: drawsOf(connection),
 			});
 		}

@@ -40,18 +40,18 @@ export type Said = {
 };
 
 /**
- * What tool `tool` does: as the definition says (a floor, then a read, then any tool it names is a write), else as the
- * owner said (a read they allowed), else as the server's annotations say (a read there is only proposed until the owner
+ * What tool `tool` does: as the definition says (a floor, then a read, then any tool it names is a write), which a
+ * read the owner allowed never beats, else as the owner said, else as the server's annotations say (a read there is only proposed until the owner
  * allows it), else unknown.
  */
 export function classOf(said: Said, tool: string, allowed: readonly string[], hints: Hints | undefined): Classed {
 	if (Object.hasOwn(said.floors, tool)) return { kind: "floor", floor: said.floors[tool] as Floor, from: "definition" };
-	if (allowed.includes(tool)) return { kind: "read", from: "you" };
 	if (said.reads.includes(tool) || said.readsWhen?.[tool] !== undefined) return { kind: "read", from: "definition" };
 	if (said.named.has(tool))
 		return said.ask === "always"
 			? { kind: "floor", floor: "private", from: "definition" }
 			: { kind: "write", from: "definition" };
+	if (allowed.includes(tool)) return { kind: "read", from: "you" };
 	if (hints?.destructiveHint === true || hints?.readOnlyHint === false) return { kind: "write", from: "server" };
 	if (hints?.readOnlyHint === true) return { kind: "read", from: "server" };
 	return { kind: "unknown", from: "nobody" };
