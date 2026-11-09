@@ -15,6 +15,7 @@ import {
 	type ShownWait,
 	Unauthorized,
 } from "./api.ts";
+import { orderedWork } from "./ordered-work.ts";
 
 export type Transcript = {
 	readonly items: readonly Item[];
@@ -97,7 +98,7 @@ export function useTranscript(chat: number): Transcript {
 		};
 		void (async () => {
 			while (!stop.signal.aborted) {
-				let queue = Promise.resolve();
+				const queue = orderedWork(stop.signal);
 				try {
 					await events(
 						chat,
@@ -108,9 +109,9 @@ export function useTranscript(chat: number): Transcript {
 								setPartial(event.partial);
 								setRunning(event.running);
 								// events after `ready` wait for its fetch, so they land on a whole transcript
-								queue = queue.then(() => sync(event.tail));
+								queue.fill(() => sync(event.tail));
 							} else if (event.type === "entry") {
-								queue = queue.then(() => add([event.item]));
+								queue.step(() => add([event.item]));
 								if (event.item.role === "assistant") setPartial([]);
 							} else if (event.type === "start") setPartial(event.partial);
 							else if (event.type === "delta")
@@ -122,7 +123,7 @@ export function useTranscript(chat: number): Transcript {
 								});
 							else if (event.type === "waits") setWaits(event.waits);
 							// in line with the entries, so the entry a run took it as lands before it leaves the queue
-							else if (event.type === "queued") queue = queue.then(() => setQueued(event.queued));
+							else if (event.type === "queued") queue.step(() => setQueued(event.queued));
 							else if (event.type === "tool")
 								setRunning((now) => [
 									...now.filter((tool) => tool.call !== event.call),
@@ -143,7 +144,7 @@ export function useTranscript(chat: number): Transcript {
 								);
 							else if (event.type === "toolEnd")
 								// its result entry follows in the same commit's events
-								queue = queue.then(() => setRunning((now) => now.filter((tool) => tool.call !== event.call)));
+								queue.step(() => setRunning((now) => now.filter((tool) => tool.call !== event.call)));
 							else if (event.type === "busy") {
 								setBusy(event.busy);
 								setInput(event.input);
@@ -155,7 +156,7 @@ export function useTranscript(chat: number): Transcript {
 						},
 						stop.signal,
 					);
-					await queue;
+					await queue.settled();
 				} catch (error) {
 					if (stop.signal.aborted || error instanceof Unauthorized) return;
 					if (error instanceof Error && error.message === "no such chat") {
