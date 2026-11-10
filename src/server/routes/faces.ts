@@ -4,6 +4,7 @@
  * agent's file only when the owner adds it.
  */
 import type { AvatarDefinition } from "open-bot-avatar";
+import { usageRecorder } from "../../core/system-usage.ts";
 import { designFace } from "../face-design.ts";
 import { BadRequest } from "../http.ts";
 import { inferenceModel } from "../inference.ts";
@@ -25,7 +26,14 @@ export const faces: AreaModule = {
 				"balanced",
 			);
 			if (model === undefined) throw new BadRequest("No model is set up to design a face: pick one in Settings.");
-			const designed = await designFace({ models: deps.models, model, description, name, signal: request.signal });
+			const designed = await designFace({
+				models: deps.models,
+				model,
+				description,
+				name,
+				record: usageRecorder(deps.harness, "inference.face", deps.log),
+				signal: request.signal,
+			});
 			if (!designed.ok) throw new BadRequest(designed.why);
 			const reply: DesignedFace = { definition: designed.value };
 			return { body: reply };

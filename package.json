@@ -18,6 +18,8 @@
 	"scripts": {
 		"eval:journeys": "node scripts/journeys.ts",
 		"home:fork": "node scripts/fork-home.ts",
+		"cache:audit": "node scripts/cache-audit.ts",
+		"cache:probe": "node scripts/cache-probe.ts",
 		"build": "tsc -p tsconfig.json && npm run build:web",
 		"build:web": "vite build web",
 		"build:site": "vite build site --outDir ../dist/site --emptyOutDir",

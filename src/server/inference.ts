@@ -2,14 +2,15 @@
  * Inference: one bounded model request outside any chat, for a part of the app that needs a model's judgment on the
  * spot (a face from a description, a name, a summary for a card) and nothing durable. It runs on a tier's model, under
  * a deadline and a daemon-wide cap, and its answer is data: `read` turns the text into a value or says what is wrong
- * with it, and a request with those errors follows while attempts remain. Nothing is stored, no tool runs and no chat
- * sees it; whatever the caller does with the value is the caller's own act. Work that must survive a restart, use tools
- * or answer to a chat is a turn, never an inference.
+ * with it, and a request with those errors follows while attempts remain. Nothing is stored but what each attempt cost
+ * (`system-usage.ts`), no tool runs and no chat sees it; whatever the caller does with the value is the caller's own
+ * act. Work that must survive a restart, use tools or answer to a chat is a turn, never an inference.
  */
-import type { Api, Message, Model, MutableModels, ThinkingLevel } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, Message, Model, MutableModels, ThinkingLevel } from "@earendil-works/pi-ai";
 import type { Harness, ModelRef } from "@earendil-works/pi-durable";
 import { Companion, type CompanionDoc } from "../core/companion.ts";
 import { context } from "../core/store.ts";
+import type { RecordUsage } from "../core/system-usage.ts";
 import { modelFor, type Tier } from "../core/tiers.ts";
 
 /** Inferences at once in this daemon; another is refused as busy rather than queued behind a slow provider. */
@@ -51,6 +52,7 @@ export async function infer<T>({
 	system,
 	ask,
 	read,
+	record,
 	attempts = 1,
 	deadlineMs = INFERENCE_DEADLINE_MS,
 	maxTokens = 4096,
@@ -64,6 +66,8 @@ export async function infer<T>({
 	/** The request, with the owner's words in it as data. */
 	ask: string;
 	read: (text: string) => Read<T> | Promise<Read<T>>;
+	/** Hears every attempt, a failed one too: required, so that no inference spends unrecorded. */
+	record: RecordUsage;
 	attempts?: number;
 	deadlineMs?: number;
 	maxTokens?: number;
@@ -82,11 +86,18 @@ export async function infer<T>({
 		const messages: Message[] = [{ role: "user", content: ask, timestamp: Date.now() }];
 		let errors: readonly string[] = [];
 		for (let attempt = 0; attempt < attempts; attempt++) {
-			const answer = await models.completeSimple(
-				model,
-				{ systemPrompt: system, messages },
-				{ signal: aborted, maxTokens, ...(reasoning === undefined ? {} : { reasoning }) },
-			);
+			let answer: AssistantMessage;
+			try {
+				answer = await models.completeSimple(
+					model,
+					{ systemPrompt: system, messages },
+					{ signal: aborted, maxTokens, ...(reasoning === undefined ? {} : { reasoning }) },
+				);
+			} catch (error) {
+				await record({ provider: model.provider, model: model.id });
+				throw error;
+			}
+			await record(answer);
 			if (aborted.aborted) return stopped();
 			if (answer.stopReason === "error" || answer.stopReason === "aborted")
 				return { ok: false, why: `The model couldn't answer: ${answer.errorMessage ?? "it failed"}.` };

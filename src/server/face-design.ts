@@ -7,6 +7,7 @@
 import type { Api, Model, MutableModels } from "@earendil-works/pi-ai";
 import type { AvatarDefinition } from "open-bot-avatar";
 import { SHEET_AVATAR_INSTRUCTIONS } from "../core/avatar-instructions.ts";
+import type { RecordUsage } from "../core/system-usage.ts";
 import { type AvatarValidation, validateAvatarCandidate } from "./avatar-validation.ts";
 import { answerJson, type Inferred, infer } from "./inference.ts";
 
@@ -22,6 +23,7 @@ export async function designFace({
 	model,
 	description,
 	name,
+	record,
 	signal,
 	deadlineMs = FACE_DEADLINE_MS,
 	validate = validateAvatarCandidate,
@@ -30,6 +32,7 @@ export async function designFace({
 	model: Model<Api>;
 	description: string;
 	name?: string | undefined;
+	record: RecordUsage;
 	signal?: AbortSignal | undefined;
 	deadlineMs?: number;
 	validate?: (text: string) => Promise<AvatarValidation>;
@@ -52,6 +55,7 @@ export async function designFace({
 		deadlineMs,
 		maxTokens: 8192,
 		reasoning: "minimal",
+		record,
 		signal,
 		read: async (text) => {
 			const json = answerJson(text);
