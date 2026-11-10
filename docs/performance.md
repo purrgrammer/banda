@@ -30,7 +30,9 @@ Follow [Delivery](delivery.md) and the relevant gates in [Verification](verifica
 Recheck these items against current code before implementation; an unchecked item is not a freshly verified
 defect. Remove it only when its fix and acceptance evidence are recorded in a commit.
 
-- [ ] Warm the prompt cache while the owner types: prepare the request when the composer gets focus
+- [ ] After a few weeks of heavy use (around 2026-12-01), run `npm run cache:audit -- --home <fork> --window 60` on a fork and
+  decide with real numbers: the one-hour cache against the five-minute one, and whether warming earns a place (it was removed:
+  it can only buy a faster first reply, never save money)
 - [ ] Compaction eval: three agents' chats through three successive compactions keep names, dates, promises and open work (a journey eval); it settles the 50% share in `src/core/compaction.ts`
 - [ ] A window under about ten times the prompt (banda's is 5–10k tokens; a 32–64k model) compacts every band of growth: raise its budget, or warn when the owner picks one
 - [ ] Raw transcript, still missing: a stacked breakdown of the context (prefix, summary, kept messages, tool results), "what the model saw" at a checkpoint via `context({ at })`, cache writes held 1h, and a compaction's cost (upstream, Substrate)

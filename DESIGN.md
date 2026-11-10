@@ -72,7 +72,7 @@ The words the rules lean on:
 - **notice**: an entry telling the owner something went wrong, such as a message that was not delivered.
 - **attachment**: a file a message carries, in either direction; **blob**: its bytes, stored once by their sha256.
 - **inference**: one bounded model request outside any chat, on a tier's model, whose answer the app reads on the spot
-  (a face from a description); nothing is stored and no tool runs. Work that uses tools, answers to a chat or must
+  (a face from a description); nothing is stored but what it cost, and no tool runs. Work that uses tools, answers to a chat or must
   survive a restart is a turn.
 - **device**: a phone (or another computer) the owner paired, known by its Iroh endpoint id; it reaches the daemon
   from anywhere and acts as the owner.
@@ -324,9 +324,7 @@ them to models of pi-ai's catalog, and Quick is the default, so it answers fast.
 words and lets the owner pick another (only one with a key is offered) or run one tier on another of its models; a
 provider without presets runs the configured model on every tier. An agent's tier is set in its panel's About tab and
 nowhere in the chat: the owner who wants depth says so in words. A run asks for its model at every request, so a change
-takes effect between runs, never inside one. When the owner starts to write in a chat idle long enough for the
-provider's prompt cache to go cold, the daemon sends the provider what the chat's next request starts with, for one
-token, so the reply comes sooner; nothing is stored.
+takes effect between runs, never inside one.
 
 **A provider has accounts.** The owner may connect several of one provider (two sign-ins, a personal key and a work
 one), each named by the owner, and picks one account for the whole band, as they pick a provider. A provider's first
