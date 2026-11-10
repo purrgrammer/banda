@@ -1,8 +1,7 @@
 /**
  * Model tiers (DESIGN.md "The companion"): Quick, Balanced and Deep. The tier new chats start on is a pick of the
  * companion's (`PUT /api/companion`); here are the models the tiers run on (`GET` and `PUT /api/tiers`) and a chat's own
- * tier (`POST /api/chats/:id/tier`), which changes from the chat's next run on (`defineTierSwitch`); and warming a chat's
- * prompt cache as the owner starts to write (`POST /api/chats/:id/warm`, `../warm.ts`).
+ * tier (`POST /api/chats/:id/tier`), which changes from the chat's next run on (`defineTierSwitch`).
  */
 import type { ModelRef } from "@earendil-works/pi-durable";
 import { accountsOf } from "../../core/account-provider.ts";
@@ -15,7 +14,6 @@ import { isTier, modelFor, PRESETS, presetOf, providerOf, TIERS, type Tier } fro
 import { DEFAULT_MODEL } from "../../home.ts";
 import type { TiersView } from "../api.ts";
 import { BadRequest } from "../http.ts";
-import { defineWarm } from "../warm.ts";
 import type { AreaModule, Deps } from "./area.ts";
 import { credentialOf } from "./providers.ts";
 
@@ -157,7 +155,6 @@ export const tiers: AreaModule = {
 	start: (deps) => {
 		const tierSwitch = switches.get(deps.core);
 		if (tierSwitch === undefined) throw new Error("the tiers area started before it was installed");
-		const warmer = defineWarm({ harness: deps.harness, models: deps.models, log: deps.log });
 		return {
 			// a chat's tier shows on its row
 			watch: [ChatTier],
@@ -166,13 +163,6 @@ export const tiers: AreaModule = {
 				if (request.path === "/tiers" && request.method === "PUT") {
 					await change(deps, await request.json());
 					return { body: await view(deps) };
-				}
-				// the owner is about to write: the chat's prompt cache warms meanwhile, if it went cold
-				const warming = /^\/chats\/(\d+)\/warm$/.exec(request.path);
-				if (warming !== null && request.method === "POST") {
-					const started = await warmer.warm(Number(warming[1]));
-					if ("skipped" in started && started.skipped === "unknown") throw new BadRequest("no such chat", 404);
-					return { status: 202, body: "skipped" in started ? { skipped: started.skipped } : { warming: true } };
 				}
 				const chat = /^\/chats\/(\d+)\/tier$/.exec(request.path);
 				if (chat !== null && request.method === "POST") {

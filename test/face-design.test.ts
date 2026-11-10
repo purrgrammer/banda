@@ -12,11 +12,12 @@ import { said, scripted } from "./fixtures/scripted.ts";
 import { FAUX_MODEL, tempHome } from "./helpers.ts";
 
 const MUG = JSON.stringify(getExample("mug"));
+const record = async () => {};
 
 describe("designing a face in the sheet", () => {
 	it("asks with the sheet's instructions, not the chat's, and the owner's words and the agent's name", async () => {
 		const { models, model, asked } = scripted(fauxAssistantMessage(`Here:\n\`\`\`json\n${MUG}\n\`\`\``));
-		const designed = await designFace({ models, model, description: "a mug of tea", name: "Earl" });
+		const designed = await designFace({ models, model, record, description: "a mug of tea", name: "Earl" });
 		expect(designed).toMatchObject({ ok: true, value: { id: "mug" } });
 		expect(said(asked[0])).toContain("Never ask a follow-up");
 		expect(said(asked[0])).not.toContain("message_user");
@@ -30,30 +31,30 @@ describe("designing a face in the sheet", () => {
 	it("asks for minimal thinking, since an owner waits on the sheet", async () => {
 		const { models, model } = scripted(fauxAssistantMessage(MUG));
 		const complete = vi.spyOn(models, "completeSimple");
-		expect((await designFace({ models, model, description: "a mug" })).ok).toBe(true);
+		expect((await designFace({ models, model, record, description: "a mug" })).ok).toBe(true);
 		expect(complete.mock.calls[0]?.[2]).toMatchObject({ reasoning: "minimal" });
 	});
 
 	it("designs from the name alone when there is no description", async () => {
 		const { models, model, asked } = scripted(fauxAssistantMessage(MUG));
-		expect((await designFace({ models, model, description: " ", name: "Kettle" })).ok).toBe(true);
+		expect((await designFace({ models, model, record, description: " ", name: "Kettle" })).ok).toBe(true);
 		expect(said(asked[0])).toContain('"Kettle"');
 	});
 
 	it("revises geometry the validator refused, and never passes on markup", async () => {
 		const bad = JSON.stringify({ ...JSON.parse(MUG), html: "<script>globalThis.pwned=true</script>" });
 		const revised = scripted(fauxAssistantMessage(bad), fauxAssistantMessage(MUG));
-		expect((await designFace({ ...revised, description: "a mug" })).ok).toBe(true);
+		expect((await designFace({ ...revised, record, description: "a mug" })).ok).toBe(true);
 		expect(revised.asked).toHaveLength(2);
 		const failing = scripted(fauxAssistantMessage("no face here"), fauxAssistantMessage(bad));
-		expect((await designFace({ ...failing, description: "a mug" })).ok).toBe(false);
+		expect((await designFace({ ...failing, record, description: "a mug" })).ok).toBe(false);
 		expect(globalThis).not.toHaveProperty("pwned");
 	});
 
 	it("refuses an empty or oversized description without asking the model", async () => {
 		const { models, model, asked } = scripted();
-		expect(await designFace({ models, model, description: "" })).toMatchObject({ ok: false });
-		expect(await designFace({ models, model, description: "x".repeat(DESCRIPTION_MAX + 1) })).toMatchObject({
+		expect(await designFace({ models, model, record, description: "" })).toMatchObject({ ok: false });
+		expect(await designFace({ models, model, record, description: "x".repeat(DESCRIPTION_MAX + 1) })).toMatchObject({
 			ok: false,
 		});
 		expect(asked).toHaveLength(0);

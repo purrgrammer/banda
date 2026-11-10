@@ -1,6 +1,6 @@
 /**
  * Model tiers in the app: the tier new chats start on, the models the tiers run on (read when a page that shows them
- * opens, and after each change), a chat's own tier, and warming a chat's prompt cache as the owner starts to write.
+ * opens, and after each change), and a chat's own tier.
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Tier } from "../../../src/core/tiers.ts";
@@ -302,11 +302,3 @@ export function useProviderConnect() {
 /** Put a chat on `tier`, from its next run on; rejects with why not. */
 export const setChatTier = (chat: number, tier: Tier) =>
 	api<{ tier: Tier }>(`/chats/${chat}/tier`, { method: "POST", body: JSON.stringify({ tier }) });
-
-/**
- * The owner is about to write in `chat`: the daemon warms its prompt cache if it went cold, so the reply comes sooner.
- * Best effort: whatever happens, nothing changes but the wait.
- */
-export function warmChat(chat: number): void {
-	void api(`/chats/${chat}/warm`, { method: "POST" }).catch(() => {});
-}

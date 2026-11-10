@@ -58,13 +58,7 @@ describe("a chat's prompt", () => {
 			);
 			const { status, body } = await api<ChatPrompt>(`/chats/${chat}/prompt`);
 			expect(status).toBe(200);
-			// the status line rides each request on its own, beside the prompt, never in it
-			const last = sent
-				.at(-1)!
-				.filter(
-					(message) =>
-						!(message.role === "system" && message.sections === undefined && message.toolsAdded === undefined),
-				);
+			const last = sent.at(-1)!;
 			expect(body.system).toBe(getCurrentSystemPrompt(last));
 			expect(body.system.length).toBeGreaterThan(0);
 			expect(body.tools).toEqual(

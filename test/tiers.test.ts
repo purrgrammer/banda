@@ -584,9 +584,6 @@ describe("tiers in the app", () => {
 			expect(row.tier).toBe("balanced");
 			await until(() => s.requests.length >= 2);
 			expect(s.requests).toEqual(["claude-sonnet-5-5", "claude-sonnet-5-5"]);
-			// the owner starts to write: the chat just spoke, so its cache is warm already
-			expect(await s.api(`/chats/${row.chat}/warm`, { method: "POST" })).toEqual({ skipped: "warm" });
-			await expect(s.api("/chats/999/warm", { method: "POST" })).rejects.toThrow(/404/);
 			// the owner switches it: the next run asks the new model
 			expect(
 				await s.api(`/chats/${row.chat}/tier`, { method: "POST", body: JSON.stringify({ tier: "deep" }) }),

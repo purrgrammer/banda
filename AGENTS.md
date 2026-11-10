@@ -36,6 +36,10 @@ docs/status.md (current work and acceptance) and the relevant section's open wor
    that holds whatever the provider, the platform or the timing does, and a test reproduces the cause before it
    changes.
 13. **Pin exact versions; prefer no new dependency.** pi-durable, pi-ai, pi-env and chord move in lockstep.
+14. **Measure performance on the code that ships.** A claim that something is faster or cheaper carries a number taken
+   on the commit being shipped, with its baseline and sample size, in the commit message; an assumed cost is a hypothesis
+   to run, not a fact to record. A change to what a provider is sent (prompt, tools, message order, request options)
+   compares `npm run cache:audit` on a fork before and after, or `npm run cache:probe` where history cannot answer.
 
 ## Words
 agent, band, group, chat, turn, queue, message, part, tool, wait, draft, permission, routine, watch, event, connection,
@@ -97,6 +101,9 @@ A banda daemon may be running from another checkout, possibly the one you are ru
   proxy credentials and the box's volumes into a temporary home, links the provider sign-in, and pauses routines there;
   then serve it as it prints, on a port of its own. It only reads the source home. `--browser` also copies signed-in
   sites.
+- `npm run cache:audit -- --home <fork>` reports how a fork's real history used the prompt cache; `npm run cache:probe`
+  sends invented text through a fork's sign-ins and spends real tokens, so it runs only when needed. Both refuse the live
+  home. `test/cache-prefix.test.ts` guards the request's cached prefix offline.
 
 ## Changes
 - Work lands on `main` as small commits; push and open pull requests only when the owner says so.

@@ -1,13 +1,11 @@
 /**
  * The model's runtime status line, not the owner's words: its stable agent id, the date, hour and time zone, and how
- * full its memory is. It is a system message appended after everything else on every request, for that request only:
- * the system prompt and the transcript never hold it, so the cached prefix stays whatever the line says, and the model
- * reads it last, next to the turn it answers. A model that cannot take a system message mid-conversation gets it folded
- * into its system prompt by pi-ai.
+ * full its memory is. It is a prompt section rendered before each request, after the fixed prompt prefix. When its words
+ * change, pi-durable appends a small system entry with the new value where the conversation then stands, so everything
+ * before it stays a cached prefix and nothing the owner wrote is touched. The time changes at most once an hour and
+ * memory's fill in steps of ten percent, so a chat gains few such entries, and only while it runs.
  */
-import type { Context } from "@earendil-works/chord";
-import type { Message } from "@earendil-works/pi-ai";
-import { defineExtension, GenerationTask, type HookApi, hook } from "@earendil-works/pi-durable";
+import { defineExtension, type PromptSection } from "@earendil-works/pi-durable";
 import { AgentChats } from "./agents.ts";
 import { type MemoryFiles, memoryFill } from "./memory.ts";
 
@@ -45,51 +43,18 @@ export function nowLine(at: number, timeZone?: string, agentId?: string, fill?: 
 	);
 }
 
-/** The status line for this conversation now; with `memory`, it says how full the agent's memory is, unless unreadable. */
-export async function statusLine(
-	api: Pick<HookApi, "conversationId" | "snapshot">,
-	context: Context,
-	clock: () => number = Date.now,
-	memory?: Pick<MemoryFiles, "read">,
-): Promise<string> {
-	const agent = (await api.snapshot(AgentChats, context))?.chats[api.conversationId];
-	const fill =
-		memory === undefined || agent === undefined
-			? undefined
-			: await memoryFill(memory, agent, context).catch(() => undefined);
-	return nowLine(clock(), undefined, agent, fill);
-}
-
-/**
- * `messages` with the status line as a system message just before the last user message: the turn's input, or the
- * latest nudge or steer. It sits in one place for every request of a turn, so the turn's later requests reuse the cached
- * prefix; only the next turn moves it. Anthropic emits a later system message just before the next assistant message,
- * so there it reads right after that input.
- */
-export async function withStatus(
-	messages: readonly Message[],
-	api: Pick<HookApi, "conversationId" | "snapshot">,
-	context: Context,
-	clock: () => number = Date.now,
-	memory?: Pick<MemoryFiles, "read">,
-): Promise<readonly Message[]> {
-	const status: Message = {
-		role: "system",
-		content: await statusLine(api, context, clock, memory),
-		timestamp: clock(),
-	};
-	const at = messages.length - 1 - [...messages].reverse().findIndex((message) => message.role === "user");
-	return at === messages.length ? [...messages, status] : [...messages.slice(0, at), status, ...messages.slice(at)];
-}
+/** With `memory`, the line says how full the agent's memory is; memory it cannot read leaves that out. */
+export const nowSection = (clock: () => number = Date.now, memory?: Pick<MemoryFiles, "read">): PromptSection => ({
+	key: "now",
+	render: async ({ conversationId, read }, ctx) => {
+		const agent = (await read.snapshot(AgentChats, ctx))?.chats[conversationId];
+		const fill =
+			memory === undefined || agent === undefined
+				? undefined
+				: await memoryFill(memory, agent, ctx).catch(() => undefined);
+		return nowLine(clock(), undefined, agent, fill);
+	},
+});
 
 export const nowExtension = (clock: () => number = Date.now, memory?: Pick<MemoryFiles, "read">) =>
-	defineExtension({
-		name: "banda.now",
-		hooks: [
-			hook(GenerationTask, {
-				beforeRequest: async ({ messages }, api, context) => ({
-					messages: await withStatus(messages, api, context, clock, memory),
-				}),
-			}),
-		],
-	});
+	defineExtension({ name: "banda.now", sections: [nowSection(clock, memory)] });

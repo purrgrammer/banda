@@ -1,13 +1,24 @@
-import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { createRegistry } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
+import { context, openStore } from "../src/core/store.ts";
+import { SystemUsage, usageRecorder } from "../src/core/system-usage.ts";
 import { answerJson, INFERENCES, infer, type Read } from "../src/server/inference.ts";
 import { said, scripted } from "./fixtures/scripted.ts";
+import { tempHome } from "./helpers.ts";
 
 /** A reader that takes a number and refuses anything else. */
 const number = (text: string): Read<number> =>
 	/^\d+$/.test(text.trim()) ? { ok: true, value: Number(text) } : { ok: false, errors: ["answer with digits alone"] };
 
-const base = { system: "Answer with a number.", ask: "How many legs has a cat?", read: number };
+const base = {
+	system: "Answer with a number.",
+	ask: "How many legs has a cat?",
+	read: number,
+	record: async () => {},
+};
+
+const store = () => tempHome().then((home) => openStore(home, { models: createModels(), registry: createRegistry() }));
 
 describe("inference", () => {
 	it("asks once with banda's instructions and the request, and reads the answer", async () => {
@@ -73,6 +84,48 @@ describe("inference", () => {
 		for (const done of release) done();
 		for (const one of await Promise.all(running)) expect(one).toEqual({ ok: true, value: 4 });
 		expect(await infer({ ...base, ...scripted(fauxAssistantMessage("4")) })).toEqual({ ok: true, value: 4 });
+	});
+
+	it("records every attempt of a retried inference", async () => {
+		const harness = await store();
+		try {
+			const fixed = scripted(fauxAssistantMessage("four"), fauxAssistantMessage("4"));
+			const record = usageRecorder(harness, "inference.face");
+			expect(await infer({ ...base, ...fixed, record, attempts: 2 })).toEqual({ ok: true, value: 4 });
+			const key = `${fixed.model.provider}/${fixed.model.id}`;
+			expect((await harness.snapshot(SystemUsage, context))?.systems["inference.face"]?.[key]).toMatchObject({
+				requests: 2,
+				unreported: 0,
+			});
+		} finally {
+			await harness.close(context);
+		}
+	});
+
+	it("records an attempt that failed, as a request that reported nothing", async () => {
+		const harness = await store();
+		try {
+			const { model } = scripted();
+			const throwing = { completeSimple: () => Promise.reject(new Error("offline")) };
+			const record = usageRecorder(harness, "inference.face");
+			expect(await infer({ ...base, models: throwing, model, record })).toMatchObject({ ok: false });
+			const failed = scripted(fauxAssistantMessage("", { stopReason: "error", errorMessage: "rate limited" }));
+			expect(await infer({ ...base, ...failed, record })).toMatchObject({ ok: false });
+			const line = (await harness.snapshot(SystemUsage, context))?.systems["inference.face"]?.[
+				`${model.provider}/${model.id}`
+			];
+			expect(line).toMatchObject({ requests: 2, unreported: 1 });
+		} finally {
+			await harness.close(context);
+		}
+	});
+
+	it("still answers when the record fails, and says so in the log", async () => {
+		const lines: string[] = [];
+		const broken = { commit: () => Promise.reject(new Error("store gone")) } as never;
+		const record = usageRecorder(broken, "inference.face", (line) => lines.push(line));
+		expect(await infer({ ...base, ...scripted(fauxAssistantMessage("4")), record })).toEqual({ ok: true, value: 4 });
+		expect(lines).toEqual([expect.stringContaining("store gone")]);
 	});
 
 	it("finds a JSON object in an answer", () => {
