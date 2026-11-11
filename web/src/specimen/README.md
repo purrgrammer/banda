@@ -12,6 +12,8 @@ what exists, what is proposed and what is only a spike.
 - `contents.tsx` maps each group to the components that render its sections, in page order.
 - Each group has a folder (`foundation/`, `chat/`, `screens/`, `agent/`, `connections/`, `harness/`, `states/`,
   `explorations/`); `stage.tsx` holds `Section`, `Group` and `Labelled`; `fixtures.ts` holds the band's data.
+- A section's contents mount the first time it comes near the view, so opening the page costs only what is on screen;
+  a browser test that reads one section opens it with `only=1`.
 - `registry.test.ts` renders the page on the server and fails when a rendered section is not registered, a registered
   one does not render at the width it says, ids repeat, or a source path does not exist.
 

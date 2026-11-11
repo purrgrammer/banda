@@ -4,7 +4,7 @@
  * A section's title, status and sources come from the registry; a section not registered there refuses to render.
  */
 
-import { createContext, type ReactNode, useContext } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 import { type Entry, STATUS_WORDS, sectionOf } from "./registry.ts";
@@ -27,6 +27,29 @@ function entryOf(id: string): Entry {
 	return entry;
 }
 
+/**
+ * How far below the view a section's contents mount. Below only: a jump to a section leaves those above it as they
+ * were, so it stays where it landed.
+ */
+const AHEAD = "0px 0px 800px 0px";
+
+/** Whether a section's contents have come near the view, once and for good. With no observer (the server), all have. */
+function useNear(element: HTMLElement | null): boolean {
+	const [near, setNear] = useState(typeof IntersectionObserver === "undefined");
+	useEffect(() => {
+		if (near || element === null) return;
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) setNear(true);
+			},
+			{ root: element.closest("main"), rootMargin: AHEAD },
+		);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [element, near]);
+	return near;
+}
+
 /** One section: its title and badges from the registry, a line saying what it is for, and its specimens in each frame. */
 export function Section({
 	id,
@@ -45,10 +68,12 @@ export function Section({
 }) {
 	const entry = entryOf(id);
 	const { scheme, width, only } = useContext(StageContext);
+	const [element, setElement] = useState<HTMLElement | null>(null);
+	const near = useNear(element);
 	if (only !== undefined && only !== id) return null;
 	const schemes: ("light" | "dark")[] = scheme === "both" ? ["light", "dark"] : [scheme];
 	return (
-		<section id={id} aria-labelledby={`${id}-title`} className="flex flex-col gap-3">
+		<section ref={setElement} id={id} aria-labelledby={`${id}-title`} className="flex flex-col gap-3">
 			<header className="flex flex-col gap-1">
 				<div className="flex flex-wrap items-center gap-x-3 gap-y-1">
 					<h2 id={`${id}-title`} className="text-heading font-semibold text-ink">
@@ -77,20 +102,24 @@ export function Section({
 					))}
 				</p>
 			</header>
-			<div
-				className={cn(
-					"grid min-w-0 grid-cols-1 gap-3",
-					schemes.length === 2 &&
-						!(wide && width === "desktop") &&
-						(width === "desktop" ? "xl:grid-cols-2" : "md:grid-cols-[repeat(2,390px)]"),
-				)}
-			>
-				{schemes.map((one) => (
-					<Frame key={one} scheme={one} width={width} bleed={bleed}>
-						{children}
-					</Frame>
-				))}
-			</div>
+			{near || only === id ? (
+				<div
+					className={cn(
+						"grid min-w-0 grid-cols-1 gap-3",
+						schemes.length === 2 &&
+							!(wide && width === "desktop") &&
+							(width === "desktop" ? "xl:grid-cols-2" : "md:grid-cols-[repeat(2,390px)]"),
+					)}
+				>
+					{schemes.map((one) => (
+						<Frame key={one} scheme={one} width={width} bleed={bleed}>
+							{children}
+						</Frame>
+					))}
+				</div>
+			) : (
+				<div className="h-96 rounded-tile border border-line-soft bg-paper" />
+			)}
 		</section>
 	);
 }
