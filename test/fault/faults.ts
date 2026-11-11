@@ -49,6 +49,8 @@ export type FaultPoint =
 	| "release:run"
 	| "release:ran"
 	| "release:told"
+	/** A chat with no home told outside the commit that ends its release: once submitted, before that end. */
+	| "release:submitted"
 	/** A connection allowed: before the store holds it, and after. */
 	| "accept:before"
 	| "accept:after"

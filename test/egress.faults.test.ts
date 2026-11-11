@@ -11,6 +11,8 @@ type Summary = {
 	tickets: string[];
 	/** The tickets the agent was woken about, one each. */
 	released: string[];
+	/** How many times the agent was woken about held requests. */
+	wakeUps: number;
 	/** Releases and Turns still live when the worker stopped. */
 	live: number;
 	sent: string[];
@@ -29,12 +31,15 @@ const run = async (schedules: readonly (readonly Fault[])[]) => {
 
 const FIRST = "t0000000010";
 const SECOND = "t0000000020";
+const THIRD = "t0000000030";
+/** The requests the route's permission can cover, by the path an unasked run names. */
+const COVERED: { [ticket: string]: string } = { [SECOND]: "/v1/issues/2/comments", [THIRD]: "/v1/issues/3/comments" };
 
 /**
  * Whatever was killed: nothing is sent but as an approved draft or within the permission the first approval gave, and
  * a held request is sent again only when a kill interrupted its send and the owner said to run it again. Only the
- * second request, of the route the owner allowed, runs within the permission, once at most, and only once it was
- * given. A request is stored once, by its ticket, before the proxy forgets it. No ask stays open and nothing is parked.
+ * second command's requests, of the route the owner allowed, run within the permission, once each at most, and only
+ * once it was given. A request is stored once, by its ticket, before the proxy forgets it. No ask stays open and nothing is parked.
  */
 function check(summary: Summary) {
 	const approvals = (ticket: string) =>
@@ -49,7 +54,8 @@ function check(summary: Summary) {
 	expect(summary.open).toBe(0);
 	expect(summary.parked).toEqual([]);
 	expect(summary.live).toBe(0);
-	const within = (ticket: string) => (ticket === SECOND ? unasked.length : 0);
+	const within = (ticket: string) =>
+		COVERED[ticket] === undefined ? 0 : unasked.filter((what) => what.includes(COVERED[ticket] ?? "")).length;
 	for (const ticket of summary.tickets) {
 		const firsts = summary.waits.filter(
 			(w) => w.ask.type === "approval" && w.ask.args._ticket === ticket && w.ask.interrupted !== true,
@@ -66,15 +72,17 @@ function check(summary: Summary) {
 	// no approval, and no word to the agent, about a request the store does not hold
 	for (const w of summary.waits) if (w.ask.type === "approval") expect(summary.tickets).toContain(w.ask.args._ticket);
 	for (const ticket of summary.released) expect(summary.tickets).toContain(ticket);
-	expect(unasked.length).toBeLessThanOrEqual(1);
-	for (const what of unasked) expect(what).toContain("/v1/issues/2/comments");
+	for (const ticket of [SECOND, THIRD]) expect(within(ticket), `unasked runs of ${ticket}`).toBeLessThanOrEqual(1);
+	expect(unasked.length).toBe(within(SECOND) + within(THIRD));
 	if (unasked.length > 0) expect(summary.permissions).toBe(1);
-	for (const ticket of [FIRST, SECOND]) {
+	for (const ticket of [FIRST, SECOND, THIRD]) {
 		const sent = summary.sends.filter((t) => t === ticket).length;
-		const within = ticket === SECOND ? unasked.length : 0;
-		expect(sent, `sends of ${ticket}`).toBeLessThanOrEqual(approvals(ticket) + within);
+		expect(sent, `sends of ${ticket}`).toBeLessThanOrEqual(approvals(ticket) + within(ticket));
 	}
-	expect(summary.sends.every((t) => t === FIRST || t === SECOND)).toBe(true);
+	// the second command's two leave in the order they were held
+	const order = summary.sends.filter((t) => t === SECOND || t === THIRD);
+	if (order.includes(THIRD)) expect(order.indexOf(SECOND)).toBeLessThan(order.indexOf(THIRD));
+	expect(summary.sends.every((t) => t === FIRST || t === SECOND || t === THIRD)).toBe(true);
 	// every ticket the proxy handed over is in the store; none twice
 	expect(new Set(summary.tickets).size).toBe(summary.tickets.length);
 	// a write the proxy sent straight through is logged at most once, and only in the commit that keeps it
@@ -83,13 +91,17 @@ function check(summary: Summary) {
 	expect(direct.length).toBe(summary.sent.length);
 }
 
-/** With no fault: one ask, one send each, the second within the permission the first gave, the agent told of both. */
+/**
+ * With no fault: one ask, one send each, the second command's two within the permission the first gave, one after the
+ * other, and the agent told of all three, the two in one wake-up.
+ */
 async function cleanRun() {
 	const clean = await run([]);
 	check(clean);
-	expect(clean.sends).toEqual([FIRST, SECOND]);
-	expect(clean.tickets).toEqual([FIRST, SECOND]);
-	expect(clean.released).toEqual([FIRST, SECOND]);
+	expect(clean.sends).toEqual([FIRST, SECOND, THIRD]);
+	expect(clean.tickets).toEqual([FIRST, SECOND, THIRD]);
+	expect(clean.released).toEqual([FIRST, SECOND, THIRD]);
+	expect(clean.wakeUps).toBe(2);
 	expect(clean.sent).toEqual(["s0000000001"]);
 	expect(clean.activity).toContain(
 		"Sent POST git.example.com/me/repo.git/git-receive-pack under your permission (HTTP 200)",
@@ -101,7 +113,7 @@ async function cleanRun() {
 		asked.map((w) => (w.ask.type === "approval" ? w.ask.scopes?.map((offered) => offered.scope) : undefined)),
 	).toEqual([["task", "hour", "today", "always", "host"]]);
 	expect(clean.permissions).toBe(1);
-	expect(clean.activity.filter((what) => what.startsWith("Ran without asking"))).toHaveLength(1);
+	expect(clean.activity.filter((what) => what.startsWith("Ran without asking"))).toHaveLength(2);
 	return clean;
 }
 
@@ -164,6 +176,9 @@ describe("egress under faults", () => {
 				try {
 					if (fault.kind === "kill") expect(hit.kills).toBe(1);
 					check(hit);
+					// once how a send ended is stored, nothing asks to send it again
+					if (fault.point === "release:ran")
+						expect(hit.waits.filter((w) => w.ask.type === "approval" && w.ask.interrupted === true)).toEqual([]);
 				} catch (error) {
 					throw new Error(`${fault.kind} at ${fault.point}: ${(error as Error).message}`);
 				}

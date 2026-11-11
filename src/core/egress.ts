@@ -493,6 +493,19 @@ function responseText(replayed: Extract<Replayed, { status: number }>): string {
 	);
 }
 
+/** How a held request's send ended, kept by the task that sent it in the commit that logs it. */
+export const SendOutcome = defineDoc<{ said?: string }>({
+	kind: "banda.send-outcome",
+	version: 1,
+	scope: "task",
+	initial: () => ({}),
+	checkpointWhen: () => false,
+});
+
+/** A tool result's words. */
+export const wordsOf = (result: ToolExecutionResult) =>
+	(result.output ?? []).map((part) => (part.type === "text" ? part.text : "")).join("");
+
 /** The draft's arguments: what `expand` made of the call's ticket. */
 const drafted = (args: unknown) => args as JsonObject;
 
@@ -554,6 +567,23 @@ export function proposeSendTool(
 				"status" in replayed
 					? `Sent ${held.method} ${addressWords(addressOf(held))}: it answered ${replayed.status}`
 					: `${unknown ? "May have sent" : "Did not send"} ${held.method} ${addressWords(addressOf(held))}: ${"refused" in replayed ? replayed.refused : replayed.failed}`;
+			const result: ToolExecutionResult =
+				"refused" in replayed
+					? { output: [{ type: "text", text: `Not sent: ${replayed.refused}.` }], isError: true }
+					: "failed" in replayed
+						? {
+								output: [
+									{
+										type: "text",
+										text: unknown
+											? `It may or may not have been sent: ${replayed.failed}. Do not send it again unless you find it did not arrive.`
+											: `Not sent: ${replayed.failed}. Nothing left, so you may run the command again.`,
+									},
+								],
+								isError: true,
+							}
+						: { output: [{ type: "text", text: responseText(replayed) }] };
+			// how it ended is kept in the commit that logs it: a restart after it tells this, and never asks to send again
 			await api.commit(async (tx) => {
 				await log(tx, {
 					at: now,
@@ -561,22 +591,9 @@ export function proposeSendTool(
 					chat,
 					...("status" in replayed || unknown ? { outside: "sent" as const, hash: requestHash(held) } : {}),
 				});
+				(await tx.doc(SendOutcome, api.taskId)).said = wordsOf(result);
 			}, ctx);
-			if ("refused" in replayed)
-				return { output: [{ type: "text", text: `Not sent: ${replayed.refused}.` }], isError: true };
-			if ("failed" in replayed)
-				return {
-					output: [
-						{
-							type: "text",
-							text: unknown
-								? `It may or may not have been sent: ${replayed.failed}. Do not send it again unless you find it did not arrive.`
-								: `Not sent: ${replayed.failed}. Nothing left, so you may run the command again.`,
-						},
-					],
-					isError: true,
-				};
-			return { output: [{ type: "text", text: responseText(replayed) }] };
+			return result;
 		},
 	};
 }

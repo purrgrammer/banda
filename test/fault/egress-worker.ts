@@ -2,8 +2,8 @@
  * The process the egress fault suite kills. The owner says "send" twice in one chat. Each run calls `bash`,
  * after which the daemon takes what the proxy held: the first time, one POST (and the chat's first read), opening its
  * release and asking the owner in the commit that stores it. The owner approves, allowing its route always, and the
- * agent is woken with how it ended. The second run holds the same route again: it runs within that permission,
- * unasked, though the chat read from outside; had a kill kept the permission from being given, it asks, and the owner
+ * agent is woken with how it ended. The second run holds the same route twice: both run within that permission, one
+ * after the other and told in one wake-up, unasked, though the chat read from outside; had a kill kept the permission from being given, they ask, and the owner
  * approves. A send interrupted by a kill asks to run again, and the owner says yes. Every step is safe to repeat, as the worker
  * does it again from the start in each process; it prints a summary as its last line.
  *
@@ -50,11 +50,11 @@ const fault = (point: string) => faults.hit(point as FaultPoint);
 
 type ProxyState = { held: { [round: string]: HeldRequest[] }; taken: string[]; reads: string[] };
 
-/** A request of round `round` (1 or 2): the same route, another id. */
+/** Request `n` (1, then 2 and 3 in the second command): the same route, another id, held in that order. */
 const request = (round: number): HeldRequest => ({
 	ticket: `t00000000${round}0`,
 	chat: 0,
-	at: Date.now(),
+	at: Date.now() + round,
 	method: "POST",
 	scheme: "https",
 	host: "api.example.com",
@@ -87,7 +87,7 @@ if (!existsSync(statePath))
 	writeFileSync(
 		statePath,
 		JSON.stringify({
-			held: { 1: [request(1)], 2: [request(2)] },
+			held: { 1: [request(1)], 2: [request(2), request(3)] },
 			taken: [],
 			reads: ["example.com"],
 		} satisfies ProxyState),
@@ -232,6 +232,7 @@ console.log(
 		results: page.items.filter((e) => e.kind === "pi.tool-result").length,
 		tickets: Object.keys((await harness.snapshot(Tickets, context))?.tickets ?? {}).sort(),
 		released: page.items.filter((e) => e.kind === RELEASED).flatMap((e) => (e.data as { tickets: string[] }).tickets),
+		wakeUps: page.items.filter((e) => e.kind === RELEASED).length,
 		live: await settledReleases(),
 		sent: Object.keys((await harness.snapshot(Sent, context))?.sent ?? {}),
 		chat,

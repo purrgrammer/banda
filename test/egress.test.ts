@@ -23,7 +23,7 @@ import { ActivityLog } from "../src/core/activity.ts";
 import { Accepted, AgentChats, agentPath, LEAD } from "../src/core/agents.ts";
 import { stopArchived } from "../src/core/archive.ts";
 import { EFFECT } from "../src/core/ask.ts";
-import { allowHost } from "../src/core/ask-hosts.ts";
+import { allowHost, askHostsTool } from "../src/core/ask-hosts.ts";
 import {
 	addressOf,
 	draftArgs,
@@ -53,7 +53,7 @@ import { covering, Permissions, revoke } from "../src/core/permissions.ts";
 import { MAX_OPEN_ASKS, RELEASE, RELEASED, releasedText } from "../src/core/release.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context, openStore } from "../src/core/store.ts";
-import { defineCore } from "../src/core/turn.ts";
+import { defineCore, stop } from "../src/core/turn.ts";
 import { type Approving, answer } from "../src/core/wait.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { answerNudge } from "./fixtures/models.ts";
@@ -846,6 +846,79 @@ describe("a held write's release", () => {
 		}
 	});
 
+	it("one that starts waiting on the owner while others wait behind it holds them up no longer", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const go = heldBack(s.proxy);
+			const first = await s.say(harness);
+			const now = Date.now();
+			const sending = held(first.chat, { path: "/v1/issues/1/comments", at: now - 10 });
+			s.proxy.pending.set(first.chat, [sending]);
+			const { wait } = await nextAsk(harness, first.turn);
+			await approve(harness, wait!.key, { permission: { scope: "always" } });
+			await until(() => s.proxy.sent.length === 1);
+			// a second command holds one the route's permission covers, and one the owner approves: both wait their turn
+			const second = await s.say(harness);
+			const covered = held(first.chat, { path: "/v1/issues/2/comments", at: now - 5 });
+			const approved = held(first.chat, { path: "/b", at: now });
+			s.proxy.pending.set(first.chat, [approved, covered]);
+			await until(async () => (await openWaits(harness)).length === 1);
+			await approve(harness, (await openWaits(harness))[0]!.key);
+			await until(() => turnOver(harness, second.turn)());
+			// the permission is taken back while the covered one waits: once its turn comes, it asks
+			const [id] = Object.keys((await harness.snapshot(Permissions, context))!.permissions);
+			expect(await revoke(harness, id!, Date.now())).toBe(true);
+			go[0]?.();
+			await until(async () => (await asked(harness)).includes(covered.ticket));
+			// and the approved one behind it goes, and the agent is told of it with the one that went before
+			await until(() => s.proxy.sent.length === 2);
+			expect(s.proxy.sent[1]?.ticket).toBe(approved.ticket);
+			go[1]?.();
+			await until(async () => (await wakeUps(harness, first.chat)).length === 1);
+			expect(await wakeUps(harness, first.chat)).toEqual([[sending.ticket, approved.ticket]]);
+			await answer(harness, (await openWaits(harness))[0]!.key, "deny", web, "bearer");
+			await until(() => done(harness, second.turn));
+			expect(s.proxy.sent.map((one) => one.ticket)).toEqual([sending.ticket, approved.ticket]);
+			expect(await wakeUps(harness, first.chat)).toEqual([[sending.ticket, approved.ticket], [covered.ticket]]);
+		} finally {
+			await close();
+		}
+	});
+
+	it("Stop ends those about to go unasked, keeps the owner's cards, and the agent is still told what left", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const go = heldBack(s.proxy);
+			const first = await s.say(harness);
+			const now = Date.now();
+			const sending = held(first.chat, { path: "/v1/issues/1/comments", at: now - 10 });
+			const covered = held(first.chat, { path: "/v1/issues/2/comments", at: now - 5 });
+			const asking = held(first.chat, { path: "/c", at: now });
+			s.proxy.pending.set(first.chat, [sending]);
+			const { wait } = await nextAsk(harness, first.turn);
+			await approve(harness, wait!.key, { permission: { scope: "always" } });
+			await until(() => s.proxy.sent.length === 1);
+			const second = await s.say(harness);
+			s.proxy.pending.set(first.chat, [covered, asking]);
+			await until(async () => (await asked(harness)).includes(asking.ticket));
+			await until(() => turnOver(harness, second.turn)());
+			expect(await stop(harness, first.chat)).toBe(true);
+			go[0]?.();
+			// the one already sending ends and is told; the one that would have gone unasked never goes
+			await until(async () => (await wakeUps(harness, first.chat)).length === 1);
+			expect(await wakeUps(harness, first.chat)).toEqual([[sending.ticket]]);
+			expect(await asked(harness)).toEqual([asking.ticket]);
+			await answer(harness, (await openWaits(harness))[0]!.key, "deny", web, "bearer");
+			await until(() => done(harness, second.turn));
+			expect(s.proxy.sent.map((one) => one.ticket)).toEqual([sending.ticket]);
+			expect(await wakeUps(harness, first.chat)).toEqual([[sending.ticket], [asking.ticket]]);
+		} finally {
+			await close();
+		}
+	});
+
 	it("what one wake-up carries stays a size a model can take", () => {
 		const told = Array.from({ length: 200 }, (_, i) => ({
 			ticket: `t${i}`,
@@ -867,7 +940,24 @@ describe("a held write's release", () => {
 			const secret = held(first.chat, { path: "/s", headers: [["Authorization", "Bearer x"]] });
 			s.proxy.pending.set(first.chat, [plain, secret]);
 			await until(async () => (await openWaits(harness)).length === 2);
-			expect(await allowHost(harness, LEAD, "api.example.com", Date.now())).toMatchObject({ host: "api.example.com" });
+			// as ask_hosts allows it, once approved: the agent is told which held requests go now, and to run the rest again
+			const said = await askHostsTool().run(
+				{ hosts: "api.example.com", why: "post" } as never,
+				{
+					key: "k",
+					api: {
+						taskId: first.turn as TaskId,
+						conversationId: first.chat as ConversationId,
+						now: () => Date.now(),
+						commit: (change: never) => harness.commit(change, context),
+					} as never,
+				},
+				context,
+			);
+			const words = said.output?.map((part) => (part.type === "text" ? part.text : "")).join("") ?? "";
+			expect(words).toContain(`["send POST https://api.example.com/v1/issues/42/comments?x=1"]`);
+			expect(words).toContain("run again anything else that was held");
+			expect(words).not.toContain("/s");
 			await until(() => s.proxy.sent.length === 1);
 			expect(s.proxy.sent).toEqual([plain]);
 			// a credential of its own is on the floor: no host covers it, so its card stays

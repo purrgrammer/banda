@@ -86,7 +86,7 @@ import {
 import { defineGroups, Groups, groupSection } from "./groups.ts";
 import { FLOOR_WORDS } from "./permissions.ts";
 import { decidedText, makeProposal, PROPOSAL_DECIDED, type Proposal, proposalTools } from "./proposals.ts";
-import { defineReleases } from "./release.ts";
+import { defineReleases, RELEASED, stoppable } from "./release.ts";
 import { defineRoutines, failureKey, Routines, troubleIn, WAKE, type WakeData } from "./routines.ts";
 import { skillTokens } from "./skill-tokens.ts";
 import { acceptedSkills, ownerSkillEntry, type Skill } from "./skills.ts";
@@ -581,7 +581,13 @@ export async function stop(harness: Harness, target: Origin | number, ctx = cont
 		(node) => node.kind === "banda.admit" && Number(node.conversationId) === id,
 	);
 	graph.dispose();
-	for (const admit of admits) await harness.abortTask(admit.id, ctx);
+	// what left in the agent's name is still told: else it would not know, and might send it again
+	for (const admit of admits)
+		if (((await harness.getTask(admit.id, ctx))?.input as Partial<Input> | undefined)?.internal?.kind !== RELEASED)
+			await harness.abortTask(admit.id, ctx);
+	// the held requests about to go unasked go no further; one waiting on the owner stays, for the owner to answer
+	for (const release of await harness.commit((tx) => stoppable(tx, id), ctx))
+		await harness.abortTask(release as TaskId, ctx);
 	await chat?.abort(ctx);
 	return chat !== undefined;
 }
@@ -1646,7 +1652,11 @@ export function defineCore(options: CoreOptions) {
 		asking,
 		askTarget,
 		placeAsk,
-		hasHome: async (tx, chat) => (await tx.doc(Routes)).chats[chat] !== undefined,
+		hasHome: async (tx, chat) => {
+			if ((await tx.doc(Routes)).chats[chat] === undefined) return false;
+			const runs = (await tx.doc(AgentChats)).chats[chat];
+			return runs === undefined || !(await isArchived(tx, runs));
+		},
 		followUp,
 		retryDelay,
 	});
