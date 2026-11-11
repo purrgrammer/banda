@@ -49,8 +49,13 @@ account, object, harness, session, artifact, memory, box, workspace, gateway, in
 - Node 26, as `mise.toml` says (`mise install` gets it). `npm ci`, then `npm run check` (Biome: format and lint;
   `npm run fix` applies it), `npm run typecheck` and `npm test` (the fast ordinary suites). All green before every commit.
 - Fast tests only locally: `npm test` and `npm run test:fast` run the ordinary suites without Docker tests or
-  process-kill sweeps. During edits use `npm run test:fast -- <test-file>`. Keep at most two test workers and use
-  unique temp homes and OS-assigned ports. Do not run full/deep fault sweeps or Docker suites on development machines.
+  process-kill sweeps. During edits use `npm run test:fast -- <test-file>`. Do not run full/deep fault sweeps or
+  Docker suites on development machines.
+- Many runs share one machine, so a test owns what it uses: its temp home (each run has a temp folder of its own,
+  removed after it), ports the system assigns at bind, Vite through `webServer` (test/helpers.ts), Chrome through
+  `withPage` or `openChrome` (test/smoke/chrome.ts). What the machine has only so much of, or one of, is held through
+  test/slots.ts: every file `npm test` runs waits for a slot before its clock starts (`BANDA_TEST_FILES`, `BANDA_TEST_BROWSERS`),
+  and a fixed port a dependency binds gets a slot of its own. Wait on state with `until`, never read async UI once.
 - Fault suites run nightly in CI; Docker suites run in CI on pushes to main. For an additional fault or Docker check,
   dispatch the `ci` workflow on the candidate ref. `npm run test:faults` and `npm run test:docker` are CI commands,
   not local pre-commit gates. Fault suites run one file at a time with at most two child jobs per runner.

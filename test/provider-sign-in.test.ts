@@ -6,11 +6,14 @@
 import { spawn } from "node:child_process";
 import { connect } from "node:net";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { FileCredentialStore } from "../src/core/provider-credentials.ts";
 import type { Area, Deps } from "../src/server/routes/area.ts";
 import { providersArea } from "../src/server/routes/providers.ts";
 import { tempHome, until } from "./helpers.ts";
+import { hold, SIGN_IN } from "./slots.ts";
+
+afterAll(await hold(SIGN_IN));
 
 type Row = {
 	id: string;
@@ -163,7 +166,7 @@ it("a daemon stopping with a sign-in pending exits, its callback port free", asy
 	try {
 		let err = "";
 		child.stderr.on("data", (chunk: Buffer) => (err += chunk.toString()));
-		await until(() => /web: (http:\/\/\S+)/.test(err), 30_000);
+		await until(() => /web: (http:\/\/\S+)/.test(err));
 		const web = new URL(/web: (http:\/\/\S+)/.exec(err)![1]!);
 		const token = new URLSearchParams(web.hash.slice(1)).get("token")!;
 		const started = await fetch(`${web.origin}/api/providers/anthropic`, {
