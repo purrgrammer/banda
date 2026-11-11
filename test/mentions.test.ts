@@ -49,6 +49,38 @@ describe("mentions in the composer", () => {
 		// whatever the case it was typed in, under the agent's own name
 		expect(linkMentions("@writer go", ["writer"], agents)).toBe("[@Writer](#/a/writer) go");
 	});
+
+	it("leaves a name in code as written, a span or a fence, and links it after", () => {
+		const ids = ["writer"];
+		expect(linkMentions("run `say @Writer` then @Writer", ids, [writer])).toBe(
+			"run `say @Writer` then [@Writer](#/a/writer)",
+		);
+		expect(linkMentions("a ``x @Writer`` b", ids, [writer])).toBe("a ``x @Writer`` b");
+		expect(linkMentions("Try:\n```sh\nping @Writer\n```\n@Writer, did it work?", ids, [writer])).toBe(
+			"Try:\n```sh\nping @Writer\n```\n[@Writer](#/a/writer), did it work?",
+		);
+		// a fence never closed runs to the end, as markdown draws it
+		expect(linkMentions("~~~\n@Writer", ids, [writer])).toBe("~~~\n@Writer");
+		// a lone backtick opens nothing
+		expect(linkMentions("it's ` @Writer", ids, [writer])).toBe("it's ` [@Writer](#/a/writer)");
+	});
+
+	it("keeps code as written and takes nothing else from the words but a linked name's case, whatever the text", () => {
+		const piece = fc.constantFrom("@Writer", "@writer", " ", "\n", "`", "``", "```", "~~~", "go", "\n```\n");
+		const words = fc.array(piece, { maxLength: 12 }).map((pieces) => pieces.join(""));
+		const inner = fc.array(fc.constantFrom("@Writer", "@writer", " ", "go"), { maxLength: 6 }).map((p) => p.join(""));
+		fc.assert(
+			fc.property(words, inner, words, (before, said, after) => {
+				const span = ` \`${said}x\` `;
+				const text = before + span + after;
+				const linked = linkMentions(text, ["writer"], [writer]);
+				expect(linked.replaceAll("[@Writer](#/a/writer)", "@Writer").toLowerCase()).toBe(text.toLowerCase());
+				// a span after words with no backtick or fence in them is code, and stays as typed
+				if (!/[`~]/.test(before)) expect(linked).toContain(span);
+			}),
+			{ numRuns: pbtRuns(200) },
+		);
+	});
 });
 
 describe("mentions whatever the case", () => {
@@ -85,6 +117,13 @@ describe("a group message's mentions, shown", () => {
 			{ mention: "rosa" },
 			{ text: " " },
 			{ text: "Rosalind and Sancho" },
+		]);
+		// a name in code is shown as written: the mention stands where it is next named outside, else before the words
+		expect(mentionParts("`@rosa` or @Rosa", ["rosa"], agents)).toEqual([{ text: "`@rosa` or " }, { mention: "rosa" }]);
+		expect(mentionParts("```\nRosa\n```", ["rosa"], agents)).toEqual([
+			{ mention: "rosa" },
+			{ text: " " },
+			{ text: "```\nRosa\n```" },
 		]);
 	});
 });

@@ -17,10 +17,20 @@ export function mentionQuery(
 
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/** A fenced block (to its closing fence, or the end) or a code span: words shown as written, never a mention. */
+const CODE =
+	/^ {0,3}((`|~)\2{2,})[^\n]*(?:\n[\s\S]*?\n {0,3}\1\2*[ \t]*(?=\n|$)|[\s\S]*)|(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\3(?!`)/gm;
+
+/** Whether `at` falls inside code in `text`: fenced or a span. */
+function inCode(text: string): (at: number) => boolean {
+	const spans = [...text.matchAll(CODE)].map((code) => [code.index, code.index + code[0].length] as const);
+	return (at) => spans.some(([start, end]) => at >= start && at < end);
+}
+
 /**
  * `text` with each `@Name` of the agents named in `ids` written as a mention link, `[@Name](#/a/<id>)`, for
  * the message to draw as a chip, under the agent's own name whatever the case it was typed in; any other `@` is left
- * as words. Longer names first, so "@Ana Lu" wins over "@Ana".
+ * as words, and so is code. Longer names first, so "@Ana Lu" wins over "@Ana".
  */
 export function linkMentions(text: string, ids: readonly string[], agents: readonly ChatAgent[]): string {
 	const named = agents.filter((agent) => ids.includes(agent.id)).sort((a, b) => b.name.length - a.name.length);
@@ -29,9 +39,10 @@ export function linkMentions(text: string, ids: readonly string[], agents: reado
 		`(^|\\s)@(${named.map((agent) => escaped(agent.name)).join("|")})(?![\\p{L}\\p{N}])`,
 		"giu",
 	);
-	return text.replace(pattern, (all, before: string, name: string) => {
+	const code = inCode(text);
+	return text.replace(pattern, (all, before: string, name: string, at: number) => {
 		const agent = named.find((each) => each.name.toLowerCase() === name.toLowerCase());
-		return agent === undefined ? all : `${before}[@${agent.name}](#/a/${agent.id})`;
+		return agent === undefined || code(at + before.length) ? all : `${before}[@${agent.name}](#/a/${agent.id})`;
 	});
 }
 
@@ -50,7 +61,7 @@ export type MentionPart = { readonly text: string } | { readonly mention: string
 /**
  * The parts of a group message with every agent it mentions (`ids`, the message's own) shown once, the same way
  * whoever wrote it: at its first `@Name`, else at the first time its name stands as a word ("Sancho, send me…"), else
- * before the words, so a mention is never invisible. Whatever the case, a whole name only. Pure.
+ * before the words, so a mention is never invisible. Whatever the case, a whole name only, and never inside code. Pure.
  */
 export function mentionParts(
 	text: string,
@@ -62,12 +73,15 @@ export function mentionParts(
 	const spans: { start: number; end: number; id: string }[] = [];
 	const leading: string[] = [];
 	const free = (start: number, end: number) => spans.every((span) => end <= span.start || start >= span.end);
+	// the first time a pattern stands outside code: a name in code is shown as written
+	const code = inCode(text);
+	const first = (pattern: string) => [...text.matchAll(new RegExp(pattern, "giu"))].find((found) => !code(found.index));
 	for (const agent of [...named].sort((a, b) => b.name.length - a.name.length)) {
 		const name = escaped(agent.name);
-		const at = new RegExp(`(?<![\\p{L}\\p{N}_])@${name}(?![\\p{L}\\p{N}_])`, "iu").exec(text);
-		const bare = at === null ? new RegExp(`(?<![\\p{L}\\p{N}_@])${name}(?![\\p{L}\\p{N}_])`, "iu").exec(text) : null;
+		const at = first(`(?<![\\p{L}\\p{N}_])@${name}(?![\\p{L}\\p{N}_])`);
+		const bare = at === undefined ? first(`(?<![\\p{L}\\p{N}_@])${name}(?![\\p{L}\\p{N}_])`) : undefined;
 		const found = at ?? bare;
-		if (found !== null && free(found.index, found.index + found[0].length))
+		if (found !== undefined && free(found.index, found.index + found[0].length))
 			spans.push({ start: found.index, end: found.index + found[0].length, id: agent.id });
 		else leading.push(agent.id);
 	}
