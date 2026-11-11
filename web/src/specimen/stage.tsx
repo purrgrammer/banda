@@ -19,6 +19,9 @@ export const StageContext = createContext<{
 	only?: string;
 }>({ scheme: "both", width: "desktop" });
 
+/** The scheme of the frame a specimen is drawn in: one drawn in both is two of it, and each keeps what is its own. */
+export const FrameContext = createContext<"light" | "dark">("light");
+
 /** The registered section, or an error naming the file to add it to. */
 function entryOf(id: string): Entry {
 	const entry = sectionOf(id);
@@ -136,20 +139,22 @@ function Frame({
 	children: ReactNode;
 }) {
 	return (
-		<div
-			style={{ colorScheme: scheme }}
-			data-scheme={scheme}
-			className={cn(
-				"overflow-hidden rounded-tile border border-line bg-paper text-ink",
-				width === "phone" && "w-[390px] max-w-full",
-			)}
-		>
-			{bleed ? (
-				<div className={cn("flex", width === "phone" ? "h-[780px]" : "h-[720px]")}>{children}</div>
-			) : (
-				<div className="flex flex-col gap-6 p-5">{children}</div>
-			)}
-		</div>
+		<FrameContext.Provider value={scheme}>
+			<div
+				style={{ colorScheme: scheme }}
+				data-scheme={scheme}
+				className={cn(
+					"overflow-hidden rounded-tile border border-line bg-paper text-ink",
+					width === "phone" && "w-[390px] max-w-full",
+				)}
+			>
+				{bleed ? (
+					<div className={cn("flex", width === "phone" ? "h-[780px]" : "h-[720px]")}>{children}</div>
+				) : (
+					<div className="flex flex-col gap-6 p-5">{children}</div>
+				)}
+			</div>
+		</FrameContext.Provider>
 	);
 }
 

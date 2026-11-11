@@ -12,7 +12,7 @@ import {
 	ShieldCheckIcon,
 	SquareIcon,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useContext, useState } from "react";
 import { ApprovalCard, ChangeCard, Details, Facts, WaitingPill } from "../../chat/Approval.tsx";
 import { ArtifactCard, Browsed, QuestionCard, SignInCard, ViewCard } from "../../chat/Cards.tsx";
 import { Composer } from "../../chat/Composer.tsx";
@@ -64,7 +64,7 @@ import {
 	SANCHO,
 	VOICE,
 } from "../fixtures.ts";
-import { Group, HeaderStage, Section } from "../stage.tsx";
+import { FrameContext, Group, HeaderStage, Section } from "../stage.tsx";
 
 /** The objects a watch's lines name, one of each kind banda ships can follow, drawn as the owner's references are. */
 const EMAIL: EmailMessage = {
@@ -722,6 +722,7 @@ export function Parts() {
 
 /** A composer while Octo works, live: what is sent steers (listed under it), Stop stops, and its draft is kept. */
 function SteerComposer() {
+	const scheme = useContext(FrameContext);
 	const [sent, setSent] = useState<readonly string[]>([]);
 	const [stopped, setStopped] = useState(false);
 	return (
@@ -729,7 +730,7 @@ function SteerComposer() {
 			<Composer
 				to="Octo"
 				state={stopped ? "ready" : "working"}
-				keep="specimen:steer"
+				keep={`specimen:steer:${scheme}`}
 				onSend={async (text, files) => {
 					// on its way a moment, as over a network: words written meanwhile stay in the composer
 					await new Promise((resolve) => setTimeout(resolve, 600));

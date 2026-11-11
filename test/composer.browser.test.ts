@@ -21,7 +21,7 @@ const sent = `[...(${root}?.querySelectorAll('[data-sent] li') ?? [])].map(li =>
 const attached = `[...(${root}?.querySelectorAll('[data-attachment]') ?? [])].map(el => el.dataset.attachment)`;
 
 /** How many files the draft keeps in IndexedDB, once saved. */
-const keptFiles = `new Promise((resolve) => { const db = indexedDB.open('banda-drafts', 1); db.onsuccess = () => { try { const got = db.result.transaction('files').objectStore('files').get('specimen:steer'); got.onsuccess = () => { resolve((got.result ?? []).length); db.result.close(); }; } catch { resolve(-1); } }; db.onerror = () => resolve(-1); })`;
+const keptFiles = `new Promise((resolve) => { const db = indexedDB.open('banda-drafts', 1); db.onsuccess = () => { try { const got = db.result.transaction('files').objectStore('files').get('specimen:steer:light'); got.onsuccess = () => { resolve((got.result ?? []).length); db.result.close(); }; } catch { resolve(-1); } }; db.onerror = () => resolve(-1); })`;
 
 /** Wait until the draft keeps `count` files. */
 const keeps = (page: Page, count: number) => page.until(`(${keptFiles}).then((kept) => kept === ${count})`);
