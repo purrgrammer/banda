@@ -6,7 +6,16 @@ import { ActivityLog } from "../src/core/activity.ts";
 import { Accepted, shaOf } from "../src/core/agents.ts";
 import { pause, pauseRoutine, resume } from "../src/core/control.ts";
 import { OWNER } from "../src/core/gateway.ts";
-import { Control, parseRoutine, Routines, routinePath, TROUBLE, type TroubleData, WAKE } from "../src/core/routines.ts";
+import {
+	Control,
+	failureKey,
+	parseRoutine,
+	Routines,
+	routinePath,
+	TROUBLE,
+	type TroubleData,
+	WAKE,
+} from "../src/core/routines.ts";
 import { hostZone, nextDue, parseAt, parseCron, whenWords } from "../src/core/schedule.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore, Routes } from "../src/core/turn.ts";
@@ -304,6 +313,60 @@ describe("Routines", () => {
 		expect(row?.unread).toBe(told.length);
 		expect(row?.excerpt).toMatch(/^Routine "(Slow|Flaky) check"/);
 		await harness.close(context);
+	});
+
+	it("a routine failing the same way again is told once; an answered run or a new reason tells it again", async () => {
+		const home = await tempHome();
+		const faux = fauxProvider();
+		const models = createModels();
+		models.setProvider(faux.provider);
+		let next: "overloaded" | "rate" | "ok" = "overloaded";
+		let request = 0;
+		faux.setResponses(
+			Array.from({ length: 50 }, () => async () => {
+				request++;
+				if (next === "ok") return fauxAssistantMessage("nothing to say");
+				const errorMessage = next === "rate" ? "rate limited" : `overloaded (request ${request})`;
+				return fauxAssistantMessage("", { stopReason: "error", errorMessage });
+			}),
+		);
+		const s = setup(home, models);
+		const harness = await s.open();
+		await s.allow(harness, "flaky", "---\ndescription: Flaky check\nevery: 10m\n---\nCheck.");
+		const fire = async (count: number) => {
+			s.clock.now += 10 * MINUTE;
+			await until(async () => (await wakes(harness)).length === count);
+			await idle(harness);
+		};
+		const told = async () =>
+			(await troubles(harness)).filter((each) => each.trouble === "failed").map((each) => each.why);
+		const said = () => s.gateway.sent.filter((sent) => sent.out.text.startsWith("The run failed:")).length;
+		await fire(1);
+		// the same failure, its request number aside: the row moves on, the chat hears nothing new
+		await fire(2);
+		expect(await told()).toEqual([expect.stringMatching(/overloaded \(request 1\)/)]);
+		expect(said()).toBe(1);
+		expect((await harness.snapshot(Routines, context))?.routines.flaky?.failed).toBe(s.clock.now);
+		next = "ok";
+		await fire(3);
+		expect((await harness.snapshot(Routines, context))?.routines.flaky?.failing).toBeUndefined();
+		// failing again after it answered is news again, and so is failing another way
+		next = "overloaded";
+		await fire(4);
+		next = "rate";
+		await fire(5);
+		expect(await told()).toEqual([
+			expect.stringMatching(/overloaded/),
+			expect.stringMatching(/overloaded/),
+			expect.stringMatching(/rate limited/),
+		]);
+		expect(said()).toBe(3);
+		await harness.close(context);
+	});
+
+	it("a failure's words ignore its numbers", () => {
+		expect(failureKey("Overloaded (request 12)")).toBe(failureKey("overloaded  (request 7)"));
+		expect(failureKey("overloaded")).not.toBe(failureKey("rate limited"));
 	});
 
 	it("Pause stops every run and every routine; on resume, the due times missed come as one wake", async () => {

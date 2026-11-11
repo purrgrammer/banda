@@ -86,7 +86,7 @@ import {
 import { defineGroups, Groups, groupSection } from "./groups.ts";
 import { FLOOR_WORDS } from "./permissions.ts";
 import { decidedText, makeProposal, PROPOSAL_DECIDED, type Proposal, proposalTools } from "./proposals.ts";
-import { defineRoutines, Routines, troubleIn, WAKE, type WakeData } from "./routines.ts";
+import { defineRoutines, failureKey, Routines, troubleIn, WAKE, type WakeData } from "./routines.ts";
 import { skillTokens } from "./skill-tokens.ts";
 import { acceptedSkills, ownerSkillEntry, type Skill } from "./skills.ts";
 import { context } from "./store.ts";
@@ -1157,21 +1157,30 @@ export function defineCore(options: CoreOptions) {
 				}
 				await runtime.commit(async (tx) => {
 					if (answer !== undefined) await check(tx, task.input, answer);
+					const { chat, internal } = task.input;
+					const wake = internal?.kind === WAKE ? (internal.data as WakeData) : undefined;
+					const routine = wake === undefined ? undefined : (await tx.doc(Routines)).routines[wake.routine];
+					// a routine's run that answered ends its failing streak; one the owner stopped neither ends nor adds to it
+					if (routine?.failing !== undefined && "ended" in result && result.ended === "answered")
+						delete routine.failing;
 					// the run failed: its sender is told, as nothing else would tell them
 					if ("failed" in result) {
-						const { chat, internal } = task.input;
-						const origin = task.input.replyTo ?? task.input.origin;
-						await enqueueMessage(tx, {
-							chat,
-							origin,
-							out: { text: `The run failed: ${result.failed}` },
-							notify: true,
-						});
+						const why = failureKey(result.failed);
+						// a routine failing the same way again was already told: its row still says when it last failed
+						const told = routine?.failing === why;
+						if (routine !== undefined) {
+							routine.failed = runtime.now();
+							routine.failing = why;
+						}
+						if (!told)
+							await enqueueMessage(tx, {
+								chat,
+								origin: task.input.replyTo ?? task.input.origin,
+								out: { text: `The run failed: ${result.failed}` },
+								notify: true,
+							});
 						// a routine whose run fails says so on its row, and in its chat as trouble, which counts as unread
-						if (internal?.kind === WAKE) {
-							const wake = internal.data as WakeData;
-							const record = (await tx.doc(Routines)).routines[wake.routine];
-							if (record !== undefined) record.failed = runtime.now();
+						if (wake !== undefined && !told)
 							await troubleIn(tx, chat, {
 								routine: wake.routine,
 								description: wake.description,
@@ -1179,11 +1188,10 @@ export function defineCore(options: CoreOptions) {
 								trouble: "failed",
 								why: result.failed,
 							});
-						}
 						// a watch whose run fails says so on its row
 						if (internal?.kind === WATCH_WAKE) {
-							const wake = internal.data as unknown as WatchWakeData;
-							const record = (await tx.doc(Watches)).watches[wake.watch];
+							const watched = internal.data as unknown as WatchWakeData;
+							const record = (await tx.doc(Watches)).watches[watched.watch];
 							if (record !== undefined)
 								record.failed = {
 									at: runtime.now(),

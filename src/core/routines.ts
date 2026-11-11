@@ -222,6 +222,11 @@ export type RoutineRecord = {
 	last?: number;
 	/** When its newest run failed. */
 	failed?: number;
+	/**
+	 * Why its runs fail, as `failureKey` words, while they keep failing: a run that fails the same way again is not told
+	 * again. A run that answers clears it; a run the owner stopped leaves it.
+	 */
+	failing?: string;
 	/** The keys of the owner's newest "Run now" clicks, so a click sent twice runs once. */
 	ranNow?: string[];
 	/**
@@ -308,6 +313,9 @@ export type TroubleData = {
 	| { readonly trouble: "limit"; readonly runsADay: number }
 );
 export const TROUBLE = "banda.routine-trouble";
+
+/** A run's failure as words that stay the same when only its numbers change (ids, counts, times). */
+export const failureKey = (why: string): string => why.toLowerCase().replace(/\d+/g, "#").replace(/\s+/g, " ").trim();
 
 /** Tell chat `chat` that a routine is in trouble, in the commit that decided it. */
 export async function troubleIn(tx: Tx, chat: number, data: TroubleData): Promise<void> {

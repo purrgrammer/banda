@@ -556,7 +556,7 @@ gives it, the open asks it covers, and an ask a permission covers by the time it
 - **Routines are files**: the `schedule` tool and the app write them like any other workspace file, and
   the accepted file is what runs; the store holds only each routine's task (its next due time, its runs). A promise
   the agent makes ("I'll check tomorrow") is a routine or a Wait, so it is kept whether or not the model remembers it.
-  A routine that stalls or fails is itself news.
+  A routine that stalls or fails is itself news, told once while it keeps failing the same way.
 - **A routine belongs to one agent and runs in that agent's chat**, never in a chat of its own. The agent writes one
   (a card in its chat the owner accepts) or the owner does from the panel, in effect at once. A `schedule` call is
   that card, never a tool row.
