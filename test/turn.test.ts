@@ -1,6 +1,7 @@
-import { createModels, fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { createRegistry, type Harness, type TaskId } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
+import { CUT_OFF } from "../src/core/cut-off.ts";
 import { type Inbound, messageKey, type Origin, OWNER, type Received, routeKey } from "../src/core/gateway.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore, MessageRefs, Routes, type TurnResult } from "../src/core/turn.ts";
@@ -227,6 +228,43 @@ describe("Turn", () => {
 		expect(outcome).toMatchObject({ status: "completed", result: { failed: expect.stringContaining("overloaded") } });
 		await until(() => gateway.sent.length > 0);
 		expect(gateway.sent.map((sent) => sent.out.text)).toEqual([expect.stringMatching(/^The run failed: .*overloaded/)]);
+		await harness.close(context);
+	});
+
+	it("a reply cut off mid tool call fails its run and says why; a cut reply of words alone stands", async () => {
+		const gateway = new FakeGateway();
+		const faux = fauxProvider();
+		const models = createModels();
+		models.setProvider(faux.provider);
+		faux.setResponses([
+			fauxAssistantMessage([fauxToolCall("message_user", { text: "The first half of" }, { id: "c1" })], {
+				stopReason: "length",
+			}),
+			fauxAssistantMessage("Notes cut short", { stopReason: "length" }),
+		]);
+		const core = defineCore({
+			blobs: blobStore(),
+			gateway: () => gateway,
+			model: () => FAUX_MODEL,
+			retryDelay: () => 5,
+		});
+		const registry = createRegistry();
+		registry.install(core.extension);
+		const harness = await openStore(await tempHome(), { models, registry, settings: { retry: { maxRetries: 0 } } });
+		harness.resume();
+		const cut = await turnOf(core.receive(harness, msg("m1", "hello")));
+		expect((await harness.waitForTask(cut, context)).state.outcome).toMatchObject({
+			status: "completed",
+			result: { failed: CUT_OFF },
+		});
+		await until(() => gateway.sent.length > 0);
+		// the call never ran: the half message was not sent, the failure was
+		expect(gateway.sent.map((sent) => sent.out.text)).toEqual([`The run failed: ${CUT_OFF}`]);
+		const words = await turnOf(core.receive(harness, msg("m2", "again")));
+		expect((await harness.waitForTask(words, context)).state.outcome).toMatchObject({
+			status: "completed",
+			result: { ended: "answered" },
+		});
 		await harness.close(context);
 	});
 

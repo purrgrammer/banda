@@ -68,7 +68,7 @@ import { type Attachment, attachmentLine, type BlobStore, hold } from "./blobs.t
 import { DEFAULT_NAME } from "./choices.ts";
 import { nameOf } from "./companion.ts";
 import { connectionToolsOf } from "./connections.ts";
-
+import { CUT_OFF, cutOff } from "./cut-off.ts";
 import {
 	agentMainThread,
 	type Gateway,
@@ -1146,6 +1146,7 @@ export function defineCore(options: CoreOptions) {
 					const stop = message?.role === "assistant" ? message.stopReason : undefined;
 					if (stop === "error")
 						result = { failed: (message?.role === "assistant" && message.errorMessage) || "the model failed" };
+					else if (message?.role === "assistant" && cutOff(message)) result = { failed: CUT_OFF };
 					else if (stop !== "aborted") {
 						result = { ended: "answered" };
 						answer = Number(settled.answer);

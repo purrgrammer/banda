@@ -132,6 +132,7 @@ describe("activity scopes", () => {
 		expect(end([user(1)])).toBe("No recorded answer");
 		expect(end([user(1), { ...answer(2), stop: "aborted" }])).toBe("Stopped");
 		expect(end([user(1), { ...answer(2), stop: "error", error: "provider failed" }])).toBe("Failed");
+		expect(end([user(1), { ...answer(2), stop: "length" }])).toBe("Cut off");
 		expect(
 			end([
 				user(1),

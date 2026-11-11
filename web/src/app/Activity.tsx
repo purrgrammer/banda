@@ -349,7 +349,7 @@ function ActivityTimeline({
 }) {
 	const called = new Map(activityCalls(work).map((call) => [`${call.entry}:${call.call.id}`, call]));
 	const end = activityEnd(work);
-	const error = end === "Stopped" || end === "Failed";
+	const error = end === "Stopped" || end === "Failed" || end === "Cut off";
 	const waiting = new Set(waits.map((wait) => wait.call));
 	return (
 		<ChainOfThought defaultOpen>

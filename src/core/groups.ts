@@ -32,6 +32,7 @@ import { ASK_WORDS } from "./ask.ts";
 import { type Attachment, blobLink, hold } from "./blobs.ts";
 import { nameOf } from "./companion.ts";
 import { connectionToolsOf } from "./connections.ts";
+import { CUT_OFF, cutOff } from "./cut-off.ts";
 import { skillTokens } from "./skill-tokens.ts";
 import { acceptedSkills, ownerSkillEntry, type Skill } from "./skills.ts";
 import { context } from "./store.ts";
@@ -101,6 +102,7 @@ async function endOf(
 	if (message?.role !== "assistant") return undefined;
 	if (message.stopReason === "aborted") return { stopped: true };
 	if (message.stopReason === "error") return { failed: message.errorMessage ?? "the model failed" };
+	if (cutOff(message)) return { failed: CUT_OFF };
 	return undefined;
 }
 

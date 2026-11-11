@@ -88,7 +88,7 @@ export function findActivity(
 	return works.find((work) => work.items.some((item) => item.id === anchor));
 }
 
-export function activityEnd(work: ActivityWork): "Finished" | "Stopped" | "Failed" | "No recorded answer" {
+export function activityEnd(work: ActivityWork): "Finished" | "Stopped" | "Failed" | "Cut off" | "No recorded answer" {
 	const last = [...work.items].reverse().find((item) => item.role === "assistant");
 	if (!last) return "No recorded answer";
 	if (
@@ -98,6 +98,7 @@ export function activityEnd(work: ActivityWork): "Finished" | "Stopped" | "Faile
 	)
 		return "Stopped";
 	if (last.stop === "error" || last.error) return "Failed";
+	if (last.stop === "length") return "Cut off";
 	return "Finished";
 }
 
