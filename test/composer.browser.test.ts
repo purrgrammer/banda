@@ -113,6 +113,8 @@ for (const width of [390, 1440]) {
 
 				// empty, and only blanks: Send is off, and neither Enter nor the form itself sends
 				expect(await page.run(`${send}.disabled`)).toBe(true);
+				// Send off does not dim the composer: it is still the place to write
+				expect(await page.run(`getComputedStyle(${field}.closest('[data-slot=input-group]')).opacity`)).toBe("1");
 				await type(page, "   \n  ");
 				expect(await page.run(`${send}.disabled`)).toBe(true);
 				await enter();
