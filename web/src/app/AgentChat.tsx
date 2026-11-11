@@ -125,12 +125,16 @@ export function AgentChat({
 		agent === "sancho"
 			? undefined
 			: (agents.find(({ accepted }) => accepted?.agent?.id === agent)?.accepted?.agent?.tools ?? []);
-	const mentionables = agents.flatMap(({ accepted }) => {
-		const other = accepted?.agent;
-		return other !== undefined && other.state === "active" && other.id !== agent
-			? [{ id: other.id, name: other.name, face: other.face }]
-			: [];
-	});
+	const mentionables = useMemo(
+		() =>
+			agents.flatMap(({ accepted }) => {
+				const other = accepted?.agent;
+				return other !== undefined && other.state === "active" && other.id !== agent
+					? [{ id: other.id, name: other.name, face: other.face }]
+					: [];
+			}),
+		[agents, agent],
+	);
 	return (
 		<div className="feed-scope relative flex min-w-0 flex-1 flex-col bg-paper">
 			<Header
@@ -247,6 +251,11 @@ function Timeline({
 		if (shown.size > 0) setOutgoing((items) => stillPending(items, shown));
 	}, [shown]);
 	const visibleOutgoing = stillPending(outgoing, shown);
+	// every agent the owner can name here, this one too: each named shows as its chip
+	const named = useMemo(
+		() => [{ id: agent, name: who.name, face: who.face }, ...mentionables],
+		[agent, who.name, who.face, mentionables],
+	);
 	const segments = useMemo(
 		() =>
 			view(
@@ -352,8 +361,7 @@ function Timeline({
 						<Bubble>{firstWords(who.name, tools)}</Bubble>
 					</Run>
 				) : null}
-				{/* every agent the owner can name here, this one too: each named shows as its chip */}
-				<Mentionable.Provider value={[{ id: agent, name: who.name, face: who.face }, ...mentionables]}>
+				<Mentionable.Provider value={named}>
 					<FeedView
 						chat={chat}
 						outgoing={visibleOutgoing}
