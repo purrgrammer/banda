@@ -62,6 +62,7 @@ import {
 	REPLY_VOICE,
 	REPOSITORY,
 	SANCHO,
+	sampleFace,
 	VOICE,
 } from "../fixtures.ts";
 import { FrameContext, Group, HeaderStage, Section } from "../stage.tsx";
@@ -176,6 +177,9 @@ function saw(
 	);
 }
 
+/** An agent's name too long for a phone's bubble. */
+const LONG_NAME = "Ana María de la Vega Ortega Fernández Hidalgo";
+
 export function Parts() {
 	return (
 		<>
@@ -184,8 +188,12 @@ export function Parts() {
 					<DaySeparator>Today</DaySeparator>
 					<Run time="10:20">
 						<Bubble>Can you look at flights to Lisbon for the long weekend? Mornings, window seat.</Bubble>
-						<Bubble reaction="👍" copy="And ask Atlas whether Friday is free.">
-							And ask Atlas whether Friday is free.
+						<Bubble reaction="👍" copy="And ask @Atlas whether Friday is free.">
+							And ask <Mention who={ATLAS} /> whether Friday is free.
+						</Bubble>
+						{/* a name never wraps inside its chip; one too long for the bubble ends in an ellipsis */}
+						<Bubble copy="Loop in @Ana María de la Vega Ortega Fernández Hidalgo too.">
+							Loop in <Mention who={{ face: sampleFace("sprout", "#56a875"), name: LONG_NAME }} /> too.
 						</Bubble>
 					</Run>
 					<Run who={MARA} time="10:21">
