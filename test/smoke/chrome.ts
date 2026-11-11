@@ -27,6 +27,12 @@ export type Page = {
 	readonly errors: () => readonly string[];
 };
 
+/**
+ * How long one DevTools command may take: under a test's own timeout (vitest.config.ts), so a page that stops answering
+ * fails naming the command, not as a test that timed out with no word on why.
+ */
+export const COMMAND_MS = 20_000;
+
 export type Chrome = { readonly cdp: Cdp; readonly stop: () => Promise<void> };
 
 /** A Chrome of its own. It exits when its pipe closes, so a test process that dies, however it dies, takes Chrome along. */
@@ -74,7 +80,7 @@ export async function withPage<T>(
 				errors.push((event.args ?? []).map((a) => String(a.value ?? a.description)).join(" "));
 		});
 		const send = <R>(method: string, params: object = {}, sessionId?: string) =>
-			chrome.cdp.send<R>(method, params, sessionId, 120_000);
+			chrome.cdp.send<R>(method, params, sessionId, COMMAND_MS);
 		const { targetId } = await send<{ targetId: string }>("Target.createTarget", { url: "about:blank" });
 		const { sessionId } = await send<{ sessionId: string }>("Target.attachToTarget", { targetId, flatten: true });
 		await send("Runtime.enable", {}, sessionId);
@@ -121,8 +127,11 @@ export async function withPage<T>(
 			},
 			goto: async (to) => {
 				await send("Page.navigate", { url: to }, sessionId);
-				while ((await run<string>("document.readyState")) !== "complete")
+				const end = Date.now() + 20_000;
+				while ((await run<string>("document.readyState")) !== "complete") {
+					if (Date.now() > end) throw new Error(`${to} did not finish loading`);
 					await new Promise((resolve) => setTimeout(resolve, 25));
+				}
 			},
 		};
 		await page.goto(url);

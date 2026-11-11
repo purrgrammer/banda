@@ -7,8 +7,8 @@ check or owner review still pending means the gate is open.
 ## Required checks
 
 Local development runs the fast ordinary suites only: `npm test`, or `npm run test:fast -- <test-file>` during
-edits. Keep at most two test workers and use unique temp homes and OS-assigned ports. Fault sweeps and Docker
-suites run in CI, never as local pre-commit gates.
+edits. Runs share the machine through test/slots.ts, so many agents can run them at once (AGENTS.md says what a test
+owns). Fault sweeps and Docker suites run in CI, never as local pre-commit gates.
 
 Use the version in `mise.toml` and a clean lockfile install. Before a slice commit, run:
 

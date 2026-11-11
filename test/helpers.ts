@@ -3,6 +3,7 @@ import { cp, mkdtemp, rm } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
 import type { Harness } from "@earendil-works/pi-durable";
 import type { InlineConfig, ViteDevServer } from "vite";
@@ -124,6 +125,12 @@ export async function webServer(config: InlineConfig = {}): Promise<WebServer> {
 	// here and not at the top: every test imports this file and few start a server
 	const { createServer } = await import("vite");
 	const listener = createHttpServer((req, res) => vite.middlewares(req, res));
+	// a WebSocket is no longer the server's connection once upgraded: closeAllConnections does not reach it
+	const upgraded = new Set<Duplex>();
+	listener.on("upgrade", (_request, socket: Duplex) => {
+		upgraded.add(socket);
+		socket.once("close", () => upgraded.delete(socket));
+	});
 	const vite = await createServer({
 		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
 		...config,
@@ -146,6 +153,7 @@ export async function webServer(config: InlineConfig = {}): Promise<WebServer> {
 				listener.close((error) => (error ? reject(error) : resolve()));
 				// a page's open stream would otherwise hold the close; Vite does this for a server of its own
 				listener.closeAllConnections();
+				for (const socket of upgraded) socket.destroy();
 			});
 		},
 	};

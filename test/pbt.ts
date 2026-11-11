@@ -13,4 +13,6 @@ const SCALE = scale(process.env.BANDA_PBT_RUNS, 1);
 const FAULT_SCALE = scale(process.env.BANDA_PBT_FAULT_RUNS, SCALE);
 
 export const pbtRuns = (base: number): number => Math.max(1, Math.round(base * SCALE));
+/** A property's time budget: `ms` at the baseline run count, scaled as `pbtRuns` scales its runs. */
+export const pbtTimeout = (ms: number): number => Math.round(ms * SCALE);
 export const pbtFaultRuns = (base: number): number => Math.max(1, Math.round(base * FAULT_SCALE));

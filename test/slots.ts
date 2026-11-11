@@ -61,13 +61,21 @@ function bind(port: number): Promise<Server | undefined> {
 
 /** Wait for a slot and hold it until the returned function runs or this process ends. */
 export async function hold({ first, size, patience = Number.POSITIVE_INFINITY }: Slots): Promise<() => Promise<void>> {
-	const end = Date.now() + patience;
+	const started = Date.now();
+	const end = started + patience;
+	let told = false;
 	for (;;) {
 		// from a different place each time, so waiters do not all ask for the same port first
 		const start = Math.floor(Math.random() * size);
 		for (let offset = 0; offset < size; offset++) {
 			const server = await bind(first + ((start + offset) % size));
 			if (server !== undefined) return () => new Promise((resolve) => server.close(() => resolve()));
+		}
+		if (!told && Date.now() - started > 60_000) {
+			told = true;
+			console.error(
+				`waiting for a test slot on 127.0.0.1:${first}-${first + size - 1}: other runs on this machine hold them all`,
+			);
 		}
 		if (Date.now() > end)
 			throw new Error(

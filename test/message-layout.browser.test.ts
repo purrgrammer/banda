@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { defaultAvatarFace } from "../src/core/avatar-face.ts";
 import { type WebServer, webServer } from "./helpers.ts";
-import { hasChrome, openChrome } from "./smoke/chrome.ts";
+import { COMMAND_MS, hasChrome, openChrome } from "./smoke/chrome.ts";
 
 const fixture = fileURLToPath(new URL("../web/message-layout-fixture.tsx", import.meta.url));
 const at = Date.UTC(2026, 10, 4, 10, 42);
@@ -115,7 +115,7 @@ async function withLayoutPage(width: number, use: (page: LayoutPage) => Promise<
 	const chrome = await openChrome();
 	try {
 		const send = <T>(method: string, params: object = {}, sessionId?: string) =>
-			chrome.cdp.send<T>(method, params, sessionId, 120_000);
+			chrome.cdp.send<T>(method, params, sessionId, COMMAND_MS);
 		const { targetId } = await send<{ targetId: string }>("Target.createTarget", { url: "about:blank" });
 		const { sessionId } = await send<{ sessionId: string }>("Target.attachToTarget", { targetId, flatten: true });
 		const input = (method: string, params: object) => send(method, params, sessionId);

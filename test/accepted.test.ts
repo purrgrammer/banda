@@ -23,7 +23,7 @@ import { BadRequest } from "../src/server/http.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { heedNudge, newestSaid } from "./fixtures/models.ts";
 import { blobStore, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
-import { pbtRuns } from "./pbt.ts";
+import { pbtRuns, pbtTimeout } from "./pbt.ts";
 
 const boxes: Box[] = [];
 afterAll(() => {
@@ -136,88 +136,92 @@ async function succeeds(run: () => Promise<unknown>): Promise<boolean> {
 }
 
 describe("before files", () => {
-	it("a chat starts from the accepted agent file alone, whatever the box writes and the owner does", async () => {
-		const s = await open();
-		let run = 0;
-		await fc.assert(
-			fc.asyncProperty(ops, async (steps) => {
-				// an agent of its own per run, so the runs share one box and store
-				const name = `agent${++run}`;
-				const path = join(s.box.workspace, "agents", `${name}.md`);
-				let box: string | undefined;
-				let accepted: string | undefined;
-				const markers: string[] = [];
-				const fresh = (tools: readonly string[], malformed: boolean) => {
-					const marker = `mark-${name}-${markers.length}-x`;
-					markers.push(marker);
-					return fileOf(marker, tools, malformed);
-				};
-				const parses = (t: string) => "agent" in parseAgent(name, t, { tools: NAMEABLE });
-				for (const step of steps) {
-					switch (step.op) {
-						case "write":
-							box = fresh(step.tools, step.malformed);
-							writeFileSync(path, box);
-							break;
-						case "remove":
-							box = undefined;
-							rmSync(path, { force: true });
-							break;
-						case "accept": {
-							// the owner accepts what they saw: the box's bytes now, or a version the box has since replaced
-							const sha = box === undefined ? null : step.stale ? shaOf(`${box}stale`) : shaOf(box);
-							const ok = await succeeds(() => accept(s.harness, s.workspace, name, sha, s.core.agentChanged));
-							const expected = sha === null ? true : !step.stale && box !== undefined && parses(box);
-							expect(ok).toBe(expected);
-							if (ok) accepted = sha === null ? undefined : box;
-							break;
-						}
-						case "decline":
-							await decline(s.harness, s.workspace, name);
-							box = accepted;
-							break;
-						case "save": {
-							const written = fresh(step.tools, step.malformed);
-							const base = step.stale ? shaOf("stale") : accepted === undefined ? null : shaOf(accepted);
-							const ok = await succeeds(() => save(s.harness, s.workspace, name, written, base, s.core.agentChanged));
-							const boxSha = box === undefined ? null : shaOf(box);
-							const acceptedSha = accepted === undefined ? null : shaOf(accepted);
-							// base null is a new agent: refused only when one is already accepted, and otherwise supersedes an
-							// unaccepted proposal the box wrote; base set must still match both the accepted and the box bytes
-							const allowed = base === null ? accepted === undefined : acceptedSha === base && boxSha === base;
-							expect(ok).toBe(parses(written) && allowed);
-							if (ok) box = accepted = written;
-							break;
-						}
-						case "start": {
-							const before = s.seen.length;
-							const got = await s.core.receive(s.harness, {
-								id: crypto.randomUUID(),
-								origin: { gateway: "fake", peer: OWNER, thread: crypto.randomUUID() },
-								text: "hello",
-								agent: name,
-							});
-							if (accepted === undefined || !parses(accepted)) {
-								expect(got).toEqual({ refused: `there is no agent named ${name}` });
+	it(
+		"a chat starts from the accepted agent file alone, whatever the box writes and the owner does",
+		async () => {
+			const s = await open();
+			let run = 0;
+			await fc.assert(
+				fc.asyncProperty(ops, async (steps) => {
+					// an agent of its own per run, so the runs share one box and store
+					const name = `agent${++run}`;
+					const path = join(s.box.workspace, "agents", `${name}.md`);
+					let box: string | undefined;
+					let accepted: string | undefined;
+					const markers: string[] = [];
+					const fresh = (tools: readonly string[], malformed: boolean) => {
+						const marker = `mark-${name}-${markers.length}-x`;
+						markers.push(marker);
+						return fileOf(marker, tools, malformed);
+					};
+					const parses = (t: string) => "agent" in parseAgent(name, t, { tools: NAMEABLE });
+					for (const step of steps) {
+						switch (step.op) {
+							case "write":
+								box = fresh(step.tools, step.malformed);
+								writeFileSync(path, box);
+								break;
+							case "remove":
+								box = undefined;
+								rmSync(path, { force: true });
+								break;
+							case "accept": {
+								// the owner accepts what they saw: the box's bytes now, or a version the box has since replaced
+								const sha = box === undefined ? null : step.stale ? shaOf(`${box}stale`) : shaOf(box);
+								const ok = await succeeds(() => accept(s.harness, s.workspace, name, sha, s.core.agentChanged));
+								const expected = sha === null ? true : !step.stale && box !== undefined && parses(box);
+								expect(ok).toBe(expected);
+								if (ok) accepted = sha === null ? undefined : box;
 								break;
 							}
-							if (!("turn" in got)) throw new Error(JSON.stringify(got));
-							await s.harness.waitForTask(got.turn as never, context);
-							const request = s.seen[before];
-							if (request === undefined) throw new Error("the model was never asked");
-							const agent = parseAgent(name, accepted);
-							if (!("agent" in agent)) throw new Error("unreachable");
-							for (const marker of markers)
-								expect(request.prompt.includes(marker), marker).toBe(accepted.includes(marker));
-							// the box's tools are every agent's; a tool outside the base comes from the accepted file alone
-							const offered = request.tools.filter((tool) => NAMEABLE.includes(tool));
-							expect(new Set(offered)).toEqual(new Set([...BOX_TOOLS, ...agent.agent.tools]));
-							break;
+							case "decline":
+								await decline(s.harness, s.workspace, name);
+								box = accepted;
+								break;
+							case "save": {
+								const written = fresh(step.tools, step.malformed);
+								const base = step.stale ? shaOf("stale") : accepted === undefined ? null : shaOf(accepted);
+								const ok = await succeeds(() => save(s.harness, s.workspace, name, written, base, s.core.agentChanged));
+								const boxSha = box === undefined ? null : shaOf(box);
+								const acceptedSha = accepted === undefined ? null : shaOf(accepted);
+								// base null is a new agent: refused only when one is already accepted, and otherwise supersedes an
+								// unaccepted proposal the box wrote; base set must still match both the accepted and the box bytes
+								const allowed = base === null ? accepted === undefined : acceptedSha === base && boxSha === base;
+								expect(ok).toBe(parses(written) && allowed);
+								if (ok) box = accepted = written;
+								break;
+							}
+							case "start": {
+								const before = s.seen.length;
+								const got = await s.core.receive(s.harness, {
+									id: crypto.randomUUID(),
+									origin: { gateway: "fake", peer: OWNER, thread: crypto.randomUUID() },
+									text: "hello",
+									agent: name,
+								});
+								if (accepted === undefined || !parses(accepted)) {
+									expect(got).toEqual({ refused: `there is no agent named ${name}` });
+									break;
+								}
+								if (!("turn" in got)) throw new Error(JSON.stringify(got));
+								await s.harness.waitForTask(got.turn as never, context);
+								const request = s.seen[before];
+								if (request === undefined) throw new Error("the model was never asked");
+								const agent = parseAgent(name, accepted);
+								if (!("agent" in agent)) throw new Error("unreachable");
+								for (const marker of markers)
+									expect(request.prompt.includes(marker), marker).toBe(accepted.includes(marker));
+								// the box's tools are every agent's; a tool outside the base comes from the accepted file alone
+								const offered = request.tools.filter((tool) => NAMEABLE.includes(tool));
+								expect(new Set(offered)).toEqual(new Set([...BOX_TOOLS, ...agent.agent.tools]));
+								break;
+							}
 						}
 					}
-				}
-			}),
-			{ numRuns: pbtRuns(25) },
-		);
-	}, 600_000);
+				}),
+				{ numRuns: pbtRuns(25) },
+			);
+		},
+		pbtTimeout(30_000),
+	);
 });

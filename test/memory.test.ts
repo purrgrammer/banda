@@ -44,7 +44,7 @@ import { view } from "../web/src/lib/chat.ts";
 import { memoryWords } from "../web/src/lib/segments/memory.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { allowTools, blobStore, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
-import { pbtRuns } from "./pbt.ts";
+import { pbtRuns, pbtTimeout } from "./pbt.ts";
 
 const boxes: Box[] = [];
 afterAll(() => {
@@ -580,83 +580,87 @@ const ops: fc.Arbitrary<Op[]> = fc.array(
 );
 
 describe("search", () => {
-	it("property: a deletion leaves no trace in the files or the index; caught up bit by bit equals rebuilt", async () => {
-		const s = await open();
-		let run = 0;
-		await fc.assert(
-			fc.asyncProperty(ops, async (steps) => {
-				run++;
-				for (const fact of (await memory(s.desk, Date.now())).facts) await remove(s.desk, fact.id);
-				let n = 0;
-				const marker = () => `zq${run}x${++n}marker`;
-				const deleted: string[] = [];
-				for (const step of steps) {
-					const facts = (await memory(s.desk, Date.now())).facts;
-					const picked = facts.length === 0 ? undefined : facts[("pick" in step ? step.pick : 0) % facts.length];
-					switch (step.op) {
-						case "add":
-							await add(
-								s.desk,
-								{
-									text: `likes ${marker()}`,
-									scope: step.scope,
-									...(step.scope === "agent" ? { agent: "sancho" } : {}),
-								},
-								Date.now(),
-							);
-							break;
-						case "agent": {
-							// the agent writes a line by hand, with no source
-							const path = step.scope === "global" ? GLOBAL_MEMORY : agentMemoryPath("sancho");
-							await mkdir(join(s.box.workspace, "memory/agents"), { recursive: true });
-							writeFileSync(join(s.box.workspace, path), `${s.read(path)}\n- noted ${marker()}\n`);
-							break;
+	it(
+		"property: a deletion leaves no trace in the files or the index; caught up bit by bit equals rebuilt",
+		async () => {
+			const s = await open();
+			let run = 0;
+			await fc.assert(
+				fc.asyncProperty(ops, async (steps) => {
+					run++;
+					for (const fact of (await memory(s.desk, Date.now())).facts) await remove(s.desk, fact.id);
+					let n = 0;
+					const marker = () => `zq${run}x${++n}marker`;
+					const deleted: string[] = [];
+					for (const step of steps) {
+						const facts = (await memory(s.desk, Date.now())).facts;
+						const picked = facts.length === 0 ? undefined : facts[("pick" in step ? step.pick : 0) % facts.length];
+						switch (step.op) {
+							case "add":
+								await add(
+									s.desk,
+									{
+										text: `likes ${marker()}`,
+										scope: step.scope,
+										...(step.scope === "agent" ? { agent: "sancho" } : {}),
+									},
+									Date.now(),
+								);
+								break;
+							case "agent": {
+								// the agent writes a line by hand, with no source
+								const path = step.scope === "global" ? GLOBAL_MEMORY : agentMemoryPath("sancho");
+								await mkdir(join(s.box.workspace, "memory/agents"), { recursive: true });
+								writeFileSync(join(s.box.workspace, path), `${s.read(path)}\n- noted ${marker()}\n`);
+								break;
+							}
+							case "delete":
+								if (picked === undefined) break;
+								await remove(s.desk, picked.id);
+								deleted.push(...(picked.text.match(/zq\d+x\d+marker/g) ?? []));
+								break;
+							case "edit": {
+								if (picked === undefined) break;
+								await edit(s.desk, picked.id, `now ${marker()}`, Date.now());
+								deleted.push(...(picked.text.match(/zq\d+x\d+marker/g) ?? []));
+								break;
+							}
+							case "catchUp":
+								await s.search.memory(s.files, context);
+								await s.search.messages(s.harness, context);
+								break;
+							case "say":
+								await s.say(`about ${marker()}`);
+								break;
 						}
-						case "delete":
-							if (picked === undefined) break;
-							await remove(s.desk, picked.id);
-							deleted.push(...(picked.text.match(/zq\d+x\d+marker/g) ?? []));
-							break;
-						case "edit": {
-							if (picked === undefined) break;
-							await edit(s.desk, picked.id, `now ${marker()}`, Date.now());
-							deleted.push(...(picked.text.match(/zq\d+x\d+marker/g) ?? []));
-							break;
-						}
-						case "catchUp":
-							await s.search.memory(s.files, context);
-							await s.search.messages(s.harness, context);
-							break;
-						case "say":
-							await s.say(`about ${marker()}`);
-							break;
 					}
-				}
-				await s.search.memory(s.files, context);
-				await s.search.messages(s.harness, context);
-				// what the owner deleted or edited away is nowhere: not in the workspace, not in search.db
-				const workspace = bytesUnder(join(s.box.workspace, "memory"));
-				const index = readFileSync(join(s.home, "search.db")).toString("latin1");
-				for (const gone of deleted) {
-					expect(workspace.includes(gone), `${gone} in the files`).toBe(false);
-					expect(index.includes(gone), `${gone} in search.db`).toBe(false);
-					expect(s.search.find(gone, 5), `${gone} found`).toEqual([]);
-				}
-				// the index caught up bit by bit is the index rebuilt from scratch
-				const incremental = s.search.rows();
-				const fresh = new Search(join(s.home, `rebuilt-${run}.db`));
-				await fresh.memory(s.files, context);
-				await fresh.messages(s.harness, context);
-				expect(incremental).toEqual(fresh.rows());
-				fresh.close();
-				s.search.rebuild();
-				await s.search.memory(s.files, context);
-				await s.search.messages(s.harness, context);
-				expect(s.search.rows()).toEqual(incremental);
-			}),
-			{ numRuns: pbtRuns(15) },
-		);
-	}, 600_000);
+					await s.search.memory(s.files, context);
+					await s.search.messages(s.harness, context);
+					// what the owner deleted or edited away is nowhere: not in the workspace, not in search.db
+					const workspace = bytesUnder(join(s.box.workspace, "memory"));
+					const index = readFileSync(join(s.home, "search.db")).toString("latin1");
+					for (const gone of deleted) {
+						expect(workspace.includes(gone), `${gone} in the files`).toBe(false);
+						expect(index.includes(gone), `${gone} in search.db`).toBe(false);
+						expect(s.search.find(gone, 5), `${gone} found`).toEqual([]);
+					}
+					// the index caught up bit by bit is the index rebuilt from scratch
+					const incremental = s.search.rows();
+					const fresh = new Search(join(s.home, `rebuilt-${run}.db`));
+					await fresh.memory(s.files, context);
+					await fresh.messages(s.harness, context);
+					expect(incremental).toEqual(fresh.rows());
+					fresh.close();
+					s.search.rebuild();
+					await s.search.memory(s.files, context);
+					await s.search.messages(s.harness, context);
+					expect(s.search.rows()).toEqual(incremental);
+				}),
+				{ numRuns: pbtRuns(15) },
+			);
+		},
+		pbtTimeout(30_000),
+	);
 });
 
 describe("memory in the chat's feed, from what memory holds", () => {

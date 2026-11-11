@@ -24,7 +24,7 @@ import { readDaemonFile } from "../src/home.ts";
 import type { GroupView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { tempHome, until } from "./helpers.ts";
-import { pbtRuns } from "./pbt.ts";
+import { pbtRuns, pbtTimeout } from "./pbt.ts";
 
 const AGENTS = ["ana", "bo", "cy", "di"] as const;
 
@@ -190,37 +190,41 @@ describe("agents asking each other in a group", () => {
 		}
 	}, 30_000);
 
-	it("whoever asks whom, a chain settles within its depth and its turns", async () => {
-		const graph = fc.integer({ min: 2, max: 4 }).chain((size) => {
-			const members = AGENTS.slice(0, size);
-			return fc.record({
-				members: fc.constant(members),
-				asks: fc.record(
-					Object.fromEntries(
-						members.map((agent) => [agent, fc.subarray(members.filter((other) => other !== agent))]),
-					) as { [agent: string]: fc.Arbitrary<string[]> },
-				),
-				first: fc.subarray([...members], { minLength: 1 }),
+	it(
+		"whoever asks whom, a chain settles within its depth and its turns",
+		async () => {
+			const graph = fc.integer({ min: 2, max: 4 }).chain((size) => {
+				const members = AGENTS.slice(0, size);
+				return fc.record({
+					members: fc.constant(members),
+					asks: fc.record(
+						Object.fromEntries(
+							members.map((agent) => [agent, fc.subarray(members.filter((other) => other !== agent))]),
+						) as { [agent: string]: fc.Arbitrary<string[]> },
+					),
+					first: fc.subarray([...members], { minLength: 1 }),
+				});
 			});
-		});
-		await fc.assert(
-			fc.asyncProperty(graph, async ({ members, asks, first }) => {
-				const { daemon, api, room: id, turns } = await openRoom(members, asks);
-				try {
-					await api(`/groups/${id}/messages`, {
-						method: "POST",
-						body: JSON.stringify({ key: randomUUID(), text: "go", mentions: first }),
-					});
-					await quiet(api, id);
-					// the owner's mentions, then at most MAX_CHAIN started by agents' asks
-					expect(turns.length).toBeLessThanOrEqual(first.length + MAX_CHAIN);
-					// each agent asked at least once ran
-					for (const agent of first) expect(turns).toContain(agent);
-				} finally {
-					await daemon.close();
-				}
-			}),
-			{ numRuns: pbtRuns(4) },
-		);
-	}, 300_000);
+			await fc.assert(
+				fc.asyncProperty(graph, async ({ members, asks, first }) => {
+					const { daemon, api, room: id, turns } = await openRoom(members, asks);
+					try {
+						await api(`/groups/${id}/messages`, {
+							method: "POST",
+							body: JSON.stringify({ key: randomUUID(), text: "go", mentions: first }),
+						});
+						await quiet(api, id);
+						// the owner's mentions, then at most MAX_CHAIN started by agents' asks
+						expect(turns.length).toBeLessThanOrEqual(first.length + MAX_CHAIN);
+						// each agent asked at least once ran
+						for (const agent of first) expect(turns).toContain(agent);
+					} finally {
+						await daemon.close();
+					}
+				}),
+				{ numRuns: pbtRuns(4) },
+			);
+		},
+		pbtTimeout(30_000),
+	);
 });

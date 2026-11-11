@@ -39,7 +39,7 @@ import { changeOf, closeAll, fakes, open, opened, web } from "./fixtures/connect
 import { hostBox } from "./fixtures/host-box.ts";
 import { type FakeMcp, startFakeMcp } from "./fixtures/mcp-server.ts";
 import { echoModels, tempHome, until } from "./helpers.ts";
-import { pbtRuns } from "./pbt.ts";
+import { pbtRuns, pbtTimeout } from "./pbt.ts";
 
 afterEach(closeAll);
 
@@ -1258,89 +1258,97 @@ describe("before files, for connections and tools", () => {
 		{ minLength: 1, maxLength: 8 },
 	);
 
-	it("nothing the box wrote is offered or runs before the owner accepted it; the accepted version is what runs", async () => {
-		const fake = await startFakeMcp();
-		fakes.push(fake);
-		await fc.assert(
-			fc.asyncProperty(ops, async (steps) => {
-				const s = await open(fake);
-				fake.calls.splice(0);
-				// the reference: what the owner accepted, the box's file, what is switched off
-				let accepted: string[] | undefined;
-				let boxed: string[] | undefined;
-				let shownSha: string | undefined;
-				const off = new Set<string>();
-				for (const step of steps) {
-					if (step.op === "write") {
-						boxed = step.reads;
-						s.writeBox("connections/cal.md", connectionFile({ url: fake.url, reads: step.reads }));
-						const change = await changeOf(s, "cal");
-						shownSha = change !== undefined && "sha" in change ? change.sha : shownSha;
-					} else if (step.op === "accept") {
-						// the owner allows only what was shown
-						if (!step.stale && shownSha === undefined) continue;
-						const sha = step.stale ? shaOf("stale") : shownSha;
-						const ok = await s.capabilities.acceptConnection("cal", sha ?? null).then(
-							() => true,
-							(error: unknown) => {
-								if (!(error instanceof BadRequest)) throw error;
-								return false;
-							},
-						);
-						const expected =
-							!step.stale && boxed !== undefined && shownSha === shaOf(connectionFile({ url: fake.url, reads: boxed }));
-						expect(ok).toBe(expected);
-						if (ok) accepted = boxed;
-					} else if (step.op === "decline") {
-						await s.capabilities.decline("connections", "cal");
-						boxed = accepted;
-					} else if (step.op === "switch") {
-						const known = accepted !== undefined;
-						const ok = await s.capabilities.toggle(`cal__${step.tool}`, step.on).then(
-							() => true,
-							() => false,
-						);
-						expect(ok).toBe(known);
-						if (ok && step.on) off.delete(step.tool);
-						if (ok && !step.on) off.add(step.tool);
-					} else {
-						const before = fake.calls.length;
-						s.model.plan([{ tool: `cal__${step.tool}`, args: { day: "mon", title: "t" } }]);
-						const { turn } = await s.say(`call ${step.tool}`);
-						const live = accepted !== undefined && !off.has(step.tool);
-						if (live && !accepted?.includes(step.tool)) {
-							// a write asks: declined, it runs nothing
-							const wait = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
-							await answer(s.harness, wait.key, "deny", web, "bearer");
+	it(
+		"nothing the box wrote is offered or runs before the owner accepted it; the accepted version is what runs",
+		async () => {
+			const fake = await startFakeMcp();
+			fakes.push(fake);
+			await fc.assert(
+				fc.asyncProperty(ops, async (steps) => {
+					const s = await open(fake);
+					fake.calls.splice(0);
+					// the reference: what the owner accepted, the box's file, what is switched off
+					let accepted: string[] | undefined;
+					let boxed: string[] | undefined;
+					let shownSha: string | undefined;
+					const off = new Set<string>();
+					for (const step of steps) {
+						if (step.op === "write") {
+							boxed = step.reads;
+							s.writeBox("connections/cal.md", connectionFile({ url: fake.url, reads: step.reads }));
+							const change = await changeOf(s, "cal");
+							shownSha = change !== undefined && "sha" in change ? change.sha : shownSha;
+						} else if (step.op === "accept") {
+							// the owner allows only what was shown
+							if (!step.stale && shownSha === undefined) continue;
+							const sha = step.stale ? shaOf("stale") : shownSha;
+							const ok = await s.capabilities.acceptConnection("cal", sha ?? null).then(
+								() => true,
+								(error: unknown) => {
+									if (!(error instanceof BadRequest)) throw error;
+									return false;
+								},
+							);
+							const expected =
+								!step.stale &&
+								boxed !== undefined &&
+								shownSha === shaOf(connectionFile({ url: fake.url, reads: boxed }));
+							expect(ok).toBe(expected);
+							if (ok) accepted = boxed;
+						} else if (step.op === "decline") {
+							await s.capabilities.decline("connections", "cal");
+							boxed = accepted;
+						} else if (step.op === "switch") {
+							const known = accepted !== undefined;
+							const ok = await s.capabilities.toggle(`cal__${step.tool}`, step.on).then(
+								() => true,
+								() => false,
+							);
+							expect(ok).toBe(known);
+							if (ok && step.on) off.delete(step.tool);
+							if (ok && !step.on) off.add(step.tool);
+						} else {
+							const before = fake.calls.length;
+							s.model.plan([{ tool: `cal__${step.tool}`, args: { day: "mon", title: "t" } }]);
+							const { turn } = await s.say(`call ${step.tool}`);
+							const live = accepted !== undefined && !off.has(step.tool);
+							if (live && !accepted?.includes(step.tool)) {
+								// a write asks: declined, it runs nothing
+								const wait = await until(async () =>
+									(await openWaits(s.harness)).find((w) => w.ask.type === "approval"),
+								);
+								await answer(s.harness, wait.key, "deny", web, "bearer");
+							}
+							await s.done(turn);
+							expect(fake.calls.length - before).toBe(live && accepted?.includes(step.tool) ? 1 : 0);
 						}
-						await s.done(turn);
-						expect(fake.calls.length - before).toBe(live && accepted?.includes(step.tool) ? 1 : 0);
+						// offered: exactly the accepted connection's tools not switched off
+						expect(s.offered()).toEqual(
+							accepted === undefined
+								? []
+								: TOOLS.concat("send_payment")
+										.filter((t) => !off.has(t))
+										.map((t) => `cal__${t}`)
+										.sort(),
+						);
+						const reads = (await s.harness.commit((tx) => connectionTools(tx), context))
+							.filter((t) => t.read)
+							.map((t) => t.tool);
+						expect(reads.sort()).toEqual((accepted ?? []).filter((t) => !off.has(t)).sort());
 					}
-					// offered: exactly the accepted connection's tools not switched off
-					expect(s.offered()).toEqual(
-						accepted === undefined
-							? []
-							: TOOLS.concat("send_payment")
-									.filter((t) => !off.has(t))
-									.map((t) => `cal__${t}`)
-									.sort(),
-					);
-					const reads = (await s.harness.commit((tx) => connectionTools(tx), context))
-						.filter((t) => t.read)
-						.map((t) => t.tool);
-					expect(reads.sort()).toEqual((accepted ?? []).filter((t) => !off.has(t)).sort());
-				}
-				// nothing the box wrote reached the store but through an accept
-				const stored = (await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"]?.text;
-				expect(stored).toBe(accepted === undefined ? undefined : connectionFile({ url: fake.url, reads: accepted }));
-				const listed = (await s.harness.snapshot(Connected, context))?.connections.cal;
-				expect(listed === undefined).toBe(accepted === undefined);
-				await s.close();
-				opened.splice(opened.indexOf(s as never), 1);
-			}),
-			{ numRuns: pbtRuns(6) },
-		);
-	}, 300_000);
+					// nothing the box wrote reached the store but through an accept
+					const stored = (await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"]?.text;
+					expect(stored).toBe(accepted === undefined ? undefined : connectionFile({ url: fake.url, reads: accepted }));
+					const listed = (await s.harness.snapshot(Connected, context))?.connections.cal;
+					expect(listed === undefined).toBe(accepted === undefined);
+					await s.close();
+					opened.splice(opened.indexOf(s as never), 1);
+				}),
+				{ numRuns: pbtRuns(6) },
+			);
+		},
+		pbtTimeout(30_000),
+	);
 });
 
 describe("through the daemon's API", () => {
