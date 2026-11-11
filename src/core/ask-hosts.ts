@@ -14,7 +14,7 @@ import { OWNER } from "./gateway.ts";
 import { allowedHost } from "./hosts.ts";
 import { agentOfChat, allowHostIn } from "./permissions.ts";
 import { context } from "./store.ts";
-import { answerAsksOfHost, asksHostCovers } from "./wait.ts";
+import { answerAsksOfHost, asksHostCovers, liveWaits } from "./wait.ts";
 
 /** The most hosts one ask names. */
 export const MAX_ASKED_HOSTS = 32;
@@ -40,20 +40,27 @@ const linesOf = (text: unknown) =>
 /**
  * In a commit: allow `agent` each of `typed`, and answer the held requests already waiting on the owner that they
  * cover. A request has one way out: left waiting, the card would send it again after the agent, now let through, had.
- * Each host's permission id, or why not.
+ * Each host's permission id and what those answered asks were, as their cards name them; or why not.
  */
 async function allowing(
 	tx: Tx,
 	agent: string,
 	typed: readonly string[],
 	now: number,
-): Promise<readonly { readonly id: string; readonly host: string }[] | { readonly refused: string }> {
+): Promise<
+	| { readonly given: readonly { readonly id: string; readonly host: string }[]; readonly sending: readonly string[] }
+	| { readonly refused: string }
+> {
 	// reads first: a transaction reads tables only until its first write
 	const covers = new Map<string, number[]>();
 	for (const one of typed) {
 		const host = allowedHost(one);
 		if (host !== undefined) covers.set(host, await asksHostCovers(tx, agent, host, now));
 	}
+	const answered = new Set([...covers.values()].flat());
+	const sending = (await liveWaits(tx))
+		.filter((wait) => answered.has(wait.id))
+		.map(({ input: { ask } }) => (ask.type === "approval" ? (ask.label ?? ask.tool) : ""));
 	const given = [];
 	for (const one of typed) {
 		const allowed = await allowHostIn(tx, agent, one, now, 0);
@@ -61,7 +68,7 @@ async function allowing(
 		await answerAsksOfHost(tx, covers.get(allowed.host) ?? [], { gateway: "web", peer: OWNER }, now, allowed.id);
 		given.push(allowed);
 	}
-	return given;
+	return { given, sending };
 }
 
 /** Allow agent `agent` a host, as the owner directly and not through any ask (`allowing`). */
@@ -75,7 +82,7 @@ export async function allowHost(
 	return harness.commit(async (tx) => {
 		if (agent !== LEAD && (await acceptedAgent(tx, agent)) === undefined) return { refused: "no such agent" };
 		const given = await allowing(tx, agent, [typed], now);
-		return "refused" in given ? given : (given[0] as { id: string; host: string });
+		return "refused" in given ? given : (given.given[0] as { id: string; host: string });
 	}, ctx);
 }
 
@@ -121,17 +128,22 @@ export function askHostsTool(): EffectTool<typeof parameters> {
 				if (agent === undefined) return "this chat runs no agent a host could be allowed for";
 				if (hosts.length === 0) return "the owner left no host on the list";
 				const given = await allowing(tx, agent, hosts, now);
-				return "refused" in given ? given.refused : given.map((one) => one.host);
+				return "refused" in given
+					? given.refused
+					: { hosts: given.given.map((one) => one.host), sending: given.sending };
 			}, ctx);
 			if (typeof done === "string") return { output: [{ type: "text", text: `Not allowed: ${done}.` }], isError: true };
+			// only the held requests that waited on the owner are sent now: any other (a WebSocket, one nobody was asked
+			// about) is run again
+			const sending =
+				done.sending.length === 0
+					? "Run the command again."
+					: `These held requests, which waited on the owner, are being sent now, and you will be told how they ended: ${JSON.stringify(done.sending).replaceAll("<", "\\u003c")}. Do not send those again; run again anything else that was held.`;
 			return {
 				output: [
 					{
 						type: "text",
-						text:
-							`The owner allowed ${done.join(", ")}: what you send there now goes straight through, ` +
-							"WebSockets included. A request already held for one of them is being sent now, and you will be told how " +
-							"it ended: do not send that one again. Run again only what was not held.",
+						text: `The owner allowed ${done.hosts.join(", ")}: what you send there now goes straight through, WebSockets included. ${sending}`,
 					},
 				],
 			};
