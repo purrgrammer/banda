@@ -22,8 +22,8 @@ permissions and removes it from the band and from mentions, keeping its chat and
 re-establishes only accepted authority.
 
 Groups: none up to the owner's members limit, chosen and changed by the owner alone, without rewriting history; the
-limits on members, ask depth and chained turns in Settings; `@name` and everyone in the composer; per-agent Stop and
-Stop all; unread per group; a member's asks in the room; the group's panel lists its members; archive and restore.
+limits on members, ask depth and chained turns in Settings; `@name` and everyone in the composer; stopping one
+member's work or everyone's through the daemon (`POST /groups/<room>/stop`), with no Stop in the app; unread per group; a member's asks in the room; the group's panel lists its members; archive and restore.
 Each member keeps its own memory, permissions and browser.
 
 Acceptance includes group snapshot properties and a fault sweep at every append, fan-out, reply, ask, chained mention,

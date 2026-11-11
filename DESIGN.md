@@ -315,8 +315,11 @@ and from groups' mentions. Its definition, chat, memory and artifacts remain; Se
 it shows its current connections for review; old permissions and paused routines and watches do not silently return.
 
 The agent climbs a ladder before it asks the owner: what it already knows, a connection, a search, the browser, and
-the owner last. **Pause routines** on an agent holds its routines and watches and says so in its chat's header; Stop
-ends a run; Pause all routines, in Settings, holds every agent's. The owner's own messages always run.
+the owner last. **Pause routines** on an agent holds its routines and watches and says so in its chat's header; Pause
+all routines, in Settings, holds every agent's. The owner's own messages always run. The daemon stops a chat's run when
+asked (`POST /chats/<chat>/stop`), and in a group one member's work or everyone's (`POST /groups/<room>/stop`); the
+app offers no Stop for a chat or a group; the browser's take-over and a harness session keep theirs (see The browser,
+Harnesses).
 
 Agents may send one another messages only from direct chats, through `message_agent`; the recipient gets a feed entry and a turn, and decides what to do. Another agent may read a bounded page of a direct chat through `read_agent_chat`. The read is untrusted data; tools, results and hidden group execution chats are not exposed. Agents may propose an agent, a group or a change to an existing agent. Agent proposals follow the agent definition's identity, face, description, model, tier and instructions; the owner still chooses tools and connections, and new agents start active. Existing-agent proposals can change identity, face, description, model, tier and instructions, but not state, tools, connections or permissions. Proposals are cards in the proposing chat; only the owner's acceptance makes a definition or group effective. An existing-agent change shows the resulting file and the previous file and is bound to the accepted version it started from. The owner's decision reaches the proposing agent as the daemon's notice in that chat, in the same commit as the decision: it starts no turn (the agent reads it at its next model request, in a run under way or else its next turn), and it is nobody's input, so it neither answers the owner nor counts as the owner writing.
 

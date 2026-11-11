@@ -112,6 +112,7 @@ About five weeks of agent work in all; slices 8 and 9 can run beside 6 and 7 onc
 - [ ] The panel's tab when switching agents: the one that fits what happens in that chat
 - [ ] A page handed over that the owner cannot get through in the agent's browser (a bot check that keeps checking) offers "Open in your browser": the same address in the owner's own browser
 - [ ] Long chats: "Earlier messages" and opening at a search hit, tried on a chat of hundreds of entries
+- [ ] Stop has no control in the app: a chat's or a group's run stops only through the daemon (`POST /chats/<chat>/stop`, `POST /groups/<room>/stop`), the browser's Stop or archiving; the owner decides whether and where it returns
 
 ## Search tools
 
