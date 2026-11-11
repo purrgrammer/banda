@@ -406,6 +406,9 @@ export function ThinkingTiers({
 		}),
 	);
 	const view = useSyncExternalStore(picks.subscribe, picks.view, picks.view);
+	useEffect(() => {
+		picks.saw(tier);
+	}, [picks, tier]);
 	const note = custom
 		? "This agent's file names its own model, so it thinks the same whatever is picked here."
 		: tier === undefined

@@ -28,8 +28,14 @@ function selector(held: Tier = "balanced") {
 				});
 			}),
 	});
+	/** The stream says the store holds `tier` now, as the selector hears it. */
+	const move = (tier: Tier) => {
+		store.held = tier;
+		picks.saw(tier);
+	};
 	return {
 		store,
+		move,
 		saves,
 		failed,
 		picks,
@@ -75,11 +81,48 @@ describe("a pick of a chat's tier", () => {
 		expect(it_.saving()).toBe(false);
 		// answered, and the stream has not said so yet: no flash of the old tier
 		expect(it_.shown()).toBe("deep");
-		it_.store.held = "deep";
+		it_.move("deep");
 		expect(it_.shown()).toBe("deep");
 		// another device moved it afterwards
-		it_.store.held = "quick";
+		it_.move("quick");
 		expect(it_.shown()).toBe("quick");
+	});
+
+	it("follows the store back to the tier it held before the pick, once the pick was confirmed", async () => {
+		const it_ = selector();
+		it_.picks.pick("deep");
+		await it_.saves[0]?.ok();
+		it_.move("deep");
+		// another device, or an accepted proposal, puts it back
+		it_.move("balanced");
+		expect(it_.shown()).toBe("balanced");
+	});
+
+	it("does not flash a tier the owner passed through when its echo comes after the last save was answered", async () => {
+		const it_ = selector();
+		it_.picks.pick("deep");
+		it_.picks.pick("quick");
+		await it_.saves[0]?.ok();
+		await it_.saves[1]?.ok();
+		expect(it_.shown()).toBe("quick");
+		// the stream, behind, says deep and then quick
+		it_.move("deep");
+		expect(it_.shown()).toBe("quick");
+		it_.move("quick");
+		expect(it_.shown()).toBe("quick");
+		// and after that it follows the store, whatever the tier
+		it_.move("deep");
+		expect(it_.shown()).toBe("deep");
+	});
+
+	it("follows the store at once when it already said the pick before the save was answered", async () => {
+		const it_ = selector();
+		it_.picks.pick("deep");
+		it_.move("deep");
+		await it_.saves[0]?.ok();
+		expect(it_.picks.view().pick).toBeUndefined();
+		it_.move("balanced");
+		expect(it_.shown()).toBe("balanced");
 	});
 
 	it("sends one save at a time and ends the store on the owner's last pick", async () => {

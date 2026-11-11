@@ -174,6 +174,12 @@ it.runIf(hasChrome()).each([
 		expect(await screens(page)).toBe(before + 1);
 		expect(await checked(page)).toEqual(["Deep"]);
 
+		// confirmed, the selector follows the store wherever it goes next, back to the old tier too
+		tell([row("balanced", "Newer words")]);
+		await page.until(`${radio("Balanced")}.getAttribute('aria-checked') === 'true'`);
+		tell([row("deep", "Newer words")]);
+		await page.until(`${radio("Deep")}.getAttribute('aria-checked') === 'true'`);
+
 		// the sidebar closed and reopened shows the saved tier, from the store
 		await page.run(`window.setOpen(false)`);
 		await page.until(`${group} === null`);

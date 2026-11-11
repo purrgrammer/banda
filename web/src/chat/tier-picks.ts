@@ -6,18 +6,21 @@
 import type { Tier } from "../../../src/core/tiers.ts";
 
 export type TierPicksView = {
-	/** The tier to show instead of the stored one; none once a save failed. */
+	/** The tier to show instead of the stored one; none once a save failed or the store said where it stands. */
 	readonly pick: Tier | undefined;
 	readonly saving: boolean;
-	/** What the store held when the last save was answered: the saved pick holds until the store says something else. */
-	readonly over: Tier | undefined;
+	/**
+	 * Once saved, what the store may still say before it says the pick: what it held when the save was answered and the
+	 * tiers sent on the way. The pick holds over these, so a late echo flashes neither the old tier nor one passed through.
+	 */
+	readonly held: readonly (Tier | undefined)[];
 };
 
-const NONE: TierPicksView = { pick: undefined, saving: false, over: undefined };
+const NONE: TierPicksView = { pick: undefined, saving: false, held: [] };
 
 /** The tier the selector shows, given what the store holds now. */
 export const shownTier = (view: TierPicksView, stored: Tier | undefined): Tier | undefined =>
-	view.pick !== undefined && (view.saving || stored === view.over) ? view.pick : stored;
+	view.pick !== undefined && (view.saving || view.held.includes(stored)) ? view.pick : stored;
 
 export function tierPicks({
 	save,
@@ -41,8 +44,10 @@ export function tierPicks({
 	};
 
 	async function send(first: Tier) {
+		const sent: Tier[] = [];
 		for (let tier = first; ; ) {
 			sending = tier;
+			sent.push(tier);
 			let failure: { readonly error: unknown } | undefined;
 			try {
 				await save(tier);
@@ -57,7 +62,8 @@ export function tierPicks({
 			}
 			sending = undefined;
 			if (failure === undefined) {
-				show({ pick: tier, saving: false, over: stored() });
+				const now = stored();
+				show(now === tier ? NONE : { pick: tier, saving: false, held: [now, ...sent] });
 				return;
 			}
 			show(NONE);
@@ -68,13 +74,23 @@ export function tierPicks({
 	}
 
 	function pick(tier: Tier) {
-		show({ pick: tier, saving: true, over: undefined });
+		show({ pick: tier, saving: true, held: [] });
 		if (sending === undefined) void send(tier);
 		else newer = tier === sending ? undefined : tier;
 	}
 
+	/**
+	 * The store says `tier` now. A saved pick it confirms, or a tier it was not holding over, ends the hold: from then on
+	 * the selector shows what the store says, whoever moved it.
+	 */
+	function saw(tier: Tier | undefined) {
+		if (view.saving || view.pick === undefined) return;
+		if (tier === view.pick || !view.held.includes(tier)) show(NONE);
+	}
+
 	return {
 		pick,
+		saw,
 		view: () => view,
 		subscribe: (listener: () => void) => {
 			listeners.add(listener);
