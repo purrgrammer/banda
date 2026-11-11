@@ -15,6 +15,7 @@ import {
 	type Context as ModelContext,
 } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
+import { CUT_OFF } from "../src/core/cut-off.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { GroupRow, GroupView, SearchHit } from "../src/server/api.ts";
@@ -57,6 +58,12 @@ describe("groups", () => {
 			}
 			const text = textOf(last?.content);
 			runs.push({ agent, text, prompt });
+			// first, as the last message posted: a reply that hit the length limit mid call (the room reads as data
+			// every message since an agent last worked, PUBLISH IT among them)
+			if (text.includes("CUT ME"))
+				return fauxAssistantMessage([fauxToolCall("message_group", { text: "The first half of" })], {
+					stopReason: "length",
+				});
 			// a file the owner sent: the agent sends it back, from where the turn says it is in its box (first: a turn
 			// reads every message since it last worked, an earlier FAIL ME among them)
 			// publishing to the Library from the room (first, like a file: a turn reads every message since it last worked)
@@ -288,6 +295,17 @@ describe("groups", () => {
 				return view.messages.find((m) => m.text === "Here it is again.");
 			});
 			expect(again.artifacts).toMatchObject([{ id: card.artifacts?.[0]?.id, title: "Launch post", n: 1 }]);
+
+			// a reply cut off mid call fails its run and says so in the room; the half message never posts
+			await post(room, { key: randomUUID(), text: "CUT ME", mentions: ["writer"] });
+			const cut = await until(async () => {
+				const view = await api<GroupView>(`/groups/${room}`);
+				return view.notices.find((notice) => notice.agent === "writer" && notice.failed !== undefined);
+			});
+			expect(cut.failed).toBe(CUT_OFF);
+			expect(by(await api<GroupView>(`/groups/${room}`), "writer").map((m) => m.text)).not.toContain(
+				"The first half of",
+			);
 
 			// stop: nothing works there after
 			const stopped = await api<GroupView>(`/groups/${room}/stop`, { method: "POST", body: "{}" });
