@@ -472,7 +472,10 @@ export function memoryExtension({ files, search, lock, changed }: MemoryOptions)
 	const remember = defineTool({
 		name: "remember",
 		description:
-			'Save one compact durable fact, as a statement ("The owner prefers short replies"), not an order. ' +
+			"Save one compact durable fact, as a statement, not an order. Save only what this conversation shows: what the " +
+			"owner said or confirmed, or what you checked yourself. A request about the task at hand is not a standing " +
+			"preference unless the owner said it applies from now on, or said what they like or dislike. Never save that " +
+			"something failed or does not work: a failure today is not a fact about tomorrow, and saved it becomes a refusal. " +
 			"Choose scope: agent means you, across your chats; global means every agent " +
 			"in the band. Prefer agent unless the fact clearly applies to the whole band. Saved facts enter the appropriate " +
 			"agents' context at their next model boundary. Use replaces with the current fact id to correct it in the same " +
