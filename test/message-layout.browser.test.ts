@@ -1,13 +1,8 @@
-import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { defaultAvatarFace } from "../src/core/avatar-face.ts";
-import { freePort, viteCacheDir } from "./helpers.ts";
-import { CHROME, hasChrome } from "./smoke/chrome.ts";
+import { type WebServer, webServer } from "./helpers.ts";
+import { hasChrome, openChrome } from "./smoke/chrome.ts";
 
 const fixture = fileURLToPath(new URL("../web/message-layout-fixture.tsx", import.meta.url));
 const at = Date.UTC(2026, 10, 4, 10, 42);
@@ -47,15 +42,12 @@ const group = {
 		},
 	],
 };
-let server: ViteDevServer;
+let server: WebServer;
 let base: string;
 
 beforeAll(async () => {
 	if (!hasChrome()) return;
-	server = await createServer({
-		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		cacheDir: await viteCacheDir(),
-		server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
+	server = await webServer({
 		plugins: [
 			{
 				name: "message-layout-fixture",
@@ -107,10 +99,7 @@ beforeAll(async () => {
 			},
 		],
 	});
-	await server.listen();
-	const address = server.httpServer?.address();
-	if (!address || typeof address === "string") throw new Error("fixture did not listen");
-	base = `http://127.0.0.1:${address.port}`;
+	base = server.origin;
 });
 afterAll(async () => {
 	await server?.close();
@@ -121,47 +110,12 @@ type LayoutPage = {
 	until(expression: string): Promise<void>;
 	input(method: string, params: object): Promise<unknown>;
 };
-/** Same OS-assigned headless/CDP mechanism as smoke/chrome; adds real pointer and keyboard input for CSS hover/focus. */
+/** The same Chrome as smoke/chrome; adds real pointer and keyboard input for CSS hover/focus. */
 async function withLayoutPage(width: number, use: (page: LayoutPage) => Promise<void>) {
-	const profile = await mkdtemp(join(tmpdir(), "banda-message-layout-"));
-	const chrome = spawn(
-		CHROME,
-		["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "about:blank"],
-		{ stdio: ["ignore", "ignore", "pipe"] },
-	);
-	let socket: WebSocket | undefined;
+	const chrome = await openChrome();
 	try {
-		const endpoint = await new Promise<string>((resolve, reject) => {
-			let output = "";
-			chrome.stderr.on("data", (chunk: Buffer) => {
-				output += chunk.toString();
-				const found = /DevTools listening on (ws:\/\/\S+)/.exec(output)?.[1];
-				if (found) resolve(found);
-			});
-			chrome.once("exit", () => reject(new Error(output)));
-		});
-		socket = new WebSocket(endpoint);
-		const ws = socket;
-		await new Promise((resolve, reject) => {
-			ws.onopen = resolve;
-			ws.onerror = reject;
-		});
-		let next = 0;
-		const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
-		ws.onmessage = (event) => {
-			const data = JSON.parse(String(event.data));
-			const waiter = pending.get(data.id);
-			if (!waiter) return;
-			pending.delete(data.id);
-			if (data.error) waiter.reject(new Error(data.error.message));
-			else waiter.resolve(data.result);
-		};
 		const send = <T>(method: string, params: object = {}, sessionId?: string) =>
-			new Promise<T>((resolve, reject) => {
-				const id = ++next;
-				pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
-				ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
-			});
+			chrome.cdp.send<T>(method, params, sessionId, 120_000);
 		const { targetId } = await send<{ targetId: string }>("Target.createTarget", { url: "about:blank" });
 		const { sessionId } = await send<{ sessionId: string }>("Target.attachToTarget", { targetId, flatten: true });
 		const input = (method: string, params: object) => send(method, params, sessionId);
@@ -199,9 +153,7 @@ async function withLayoutPage(width: number, use: (page: LayoutPage) => Promise<
 		await run("document.fonts.ready.then(()=>true)");
 		await use(page);
 	} finally {
-		socket?.close();
-		chrome.kill();
-		await rm(profile, { recursive: true, force: true }).catch(() => {});
+		await chrome.stop();
 	}
 }
 

@@ -1,9 +1,11 @@
 import { mkdtempSync } from "node:fs";
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import { createServer as listen } from "node:net";
+import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Harness } from "@earendil-works/pi-durable";
+import type { InlineConfig, ViteDevServer } from "vite";
 import { afterEach, onTestFinished } from "vitest";
 import { Accepted, agentPath, shaOf } from "../src/core/agents.ts";
 import { BlobStore } from "../src/core/blobs.ts";
@@ -96,30 +98,55 @@ export class FakeGateway implements Gateway {
 }
 
 /**
- * A port the system has free now, for a Vite dev server: Vite takes `port: 0` as "count up from 5173", so tests side by
- * side met on the same few ports; pass this with `strictPort: true`, and a clash fails rather than moving next door.
- */
-export function freePort(): Promise<number> {
-	return new Promise((resolve, reject) => {
-		const server = listen();
-		server.once("error", reject);
-		server.listen(0, "127.0.0.1", () => {
-			const address = server.address();
-			const port = typeof address === "object" && address !== null ? address.port : 0;
-			server.close(() => resolve(port));
-		});
-	});
-}
-
-/**
  * A dependency cache of its own for a Vite dev server. Servers sharing `node_modules/.vite` deleted it from under each
  * other: one whose config hashes differently (a fixture's plugin) removes the cache and rebuilds it while another serves
  * a page from it, and that page stays blank. Seeded from the shared cache, so a server with the app's config starts warm.
  */
 export async function viteCacheDir(): Promise<string> {
-	const dir = await mkdtemp(join(process.env.BANDA_VITE_CACHES ?? tmpdir(), "vite-"));
+	const dir = await mkdtemp(join(tmpdir(), "banda-vite-"));
 	await cp(join(import.meta.dirname, "../node_modules/.vite/deps"), join(dir, "deps"), { recursive: true }).catch(
 		() => {},
 	);
 	return dir;
+}
+
+export interface WebServer {
+	readonly vite: ViteDevServer;
+	readonly origin: string;
+	close(): Promise<void>;
+}
+
+/**
+ * The web app's Vite dev server, on a port the kernel assigns as it binds. Vite takes `port: 0` as "count up from 5173",
+ * and a port found free and bound later can be taken in between, so Vite runs as middleware of a server that binds port 0.
+ */
+export async function webServer(config: InlineConfig = {}): Promise<WebServer> {
+	// here and not at the top: every test imports this file and few start a server
+	const { createServer } = await import("vite");
+	const listener = createHttpServer((req, res) => vite.middlewares(req, res));
+	const vite = await createServer({
+		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
+		...config,
+		cacheDir: await viteCacheDir(),
+		// `middlewareMode.server` is what lets a `ws` entry of `server.proxy` see upgrades
+		server: { ...config.server, middlewareMode: { server: listener }, hmr: { server: listener }, open: false },
+	});
+	await new Promise<void>((resolve, reject) => {
+		listener.once("error", reject);
+		listener.listen(0, "127.0.0.1", resolve);
+	});
+	const address = listener.address();
+	if (!address || typeof address === "string") throw new Error("the web server did not listen");
+	return {
+		vite,
+		origin: `http://127.0.0.1:${address.port}`,
+		close: async () => {
+			await vite.close();
+			await new Promise<void>((resolve, reject) => {
+				listener.close((error) => (error ? reject(error) : resolve()));
+				// a page's open stream would otherwise hold the close; Vite does this for a server of its own
+				listener.closeAllConnections();
+			});
+		},
+	};
 }

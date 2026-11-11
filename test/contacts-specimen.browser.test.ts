@@ -1,20 +1,14 @@
 import { mkdir } from "node:fs/promises";
-import { createServer as createHttpServer, type Server } from "node:http";
-import { fileURLToPath } from "node:url";
-import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
-let server: ViteDevServer;
-let listener: Server;
+let server: WebServer;
 let url: string;
 
 beforeAll(async () => {
 	if (!hasChrome()) return;
-	listener = createHttpServer((req, res) => server.middlewares(req, res));
-	server = await createServer({
-		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		server: { middlewareMode: true, hmr: { server: listener }, open: false },
+	server = await webServer({
 		plugins: [
 			{
 				name: "contacts-specimen:no-daemon",
@@ -30,16 +24,11 @@ beforeAll(async () => {
 			},
 		],
 	});
-	await new Promise<void>((resolve) => listener.listen(0, "127.0.0.1", resolve));
-	const address = listener.address();
-	if (!address || typeof address === "string") throw new Error("No specimen port");
-	url = `http://127.0.0.1:${address.port}/#/specimen`;
+	url = `${server.origin}/#/specimen?section=contacts&only=1`;
 });
 
 afterAll(async () => {
 	await server?.close();
-	if (listener)
-		await new Promise<void>((resolve, reject) => listener.close((error) => (error ? reject(error) : resolve())));
 });
 
 for (const width of [390, 1440])

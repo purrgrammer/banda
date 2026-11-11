@@ -1,22 +1,13 @@
-import { fileURLToPath } from "node:url";
-import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { freePort, viteCacheDir } from "./helpers.ts";
+import { type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
-let server: ViteDevServer;
+let server: WebServer;
 let url: string;
 beforeAll(async () => {
 	if (!hasChrome()) return;
-	server = await createServer({
-		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		cacheDir: await viteCacheDir(),
-		server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
-	});
-	await server.listen();
-	const address = server.httpServer?.address();
-	if (!address || typeof address === "string") throw new Error("No specimen port");
-	url = `http://127.0.0.1:${address.port}/#/specimen?section=skills`;
+	server = await webServer();
+	url = `${server.origin}/#/specimen?section=skills`;
 });
 afterAll(async () => {
 	await server?.close();
@@ -92,7 +83,10 @@ for (const width of [390, 1440]) {
 				),
 			).toBe(true);
 			await page.run(`document.querySelector('[data-skill-detail-page] header a')?.click()`);
-			await page.until(`document.querySelector('#skills-about [data-slot="collapsible-trigger"]')`);
+			// scrolled to until it mounts: the page may still be scrolling back to the section it links to
+			await page.until(
+				`(() => { const about = document.querySelector('#skills-about'); about?.scrollIntoView(); return about?.querySelector('[data-slot="collapsible-trigger"]'); })()`,
+			);
 			await page.run(`document.querySelector('#skills-about [data-slot="collapsible-trigger"]')?.click()`);
 			await page.until(`document.querySelector('#skills-about li a[href$="/research"]')`);
 			await page.run(`document.querySelector('#skills-about li a[href$="/research"]')?.click()`);

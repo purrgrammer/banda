@@ -1,17 +1,14 @@
 /** The owner flow against a real throwaway daemon and a local OAuth/MCP service. No live provider or credentials. */
 import { writeFile } from "node:fs/promises";
-import { createServer } from "node:http";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
-import { createServer as createViteServer } from "vite";
 import { expect, it } from "vitest";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { CapabilitiesView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { startFakeMcp } from "./fixtures/mcp-server.ts";
-import { skipShippedSkills, tempHome, viteCacheDir } from "./helpers.ts";
+import { skipShippedSkills, tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const button = (text: string) =>
@@ -82,14 +79,8 @@ for (const width of [390, 1440])
 				(await (
 					await fetch(`${base}/api/capabilities`, { headers: { authorization: `Bearer ${token}` } })
 				).json()) as CapabilitiesView;
-			let vite: Awaited<ReturnType<typeof createViteServer>>;
-			const listener = createServer((req, res) => vite.middlewares(req, res));
-			vite = await createViteServer({
-				configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-				cacheDir: await viteCacheDir(),
+			const web = await webServer({
 				server: {
-					middlewareMode: true,
-					hmr: { server: listener },
 					proxy: {
 						"/api": { target: base, changeOrigin: true, headers: { origin: base } },
 						"^/(?:icon(?:-maskable)?\\.svg|icon-(?:192|512|maskable-512)\\.png|apple-touch-icon\\.png|manifest\\.webmanifest)$":
@@ -98,10 +89,7 @@ for (const width of [390, 1440])
 				},
 			});
 			try {
-				await new Promise<void>((resolve) => listener.listen(0, "127.0.0.1", resolve));
-				const address = listener.address();
-				if (!address || typeof address === "string") throw new Error("No app port");
-				await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
+				await withPage(`${web.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
 					await page.until(`document.body.textContent.includes('Sancho')`);
 					await page.run(`location.hash='#/connections'`);
 					// at desktop width Connections is the agent's Access, which shows only what it has: the rest is behind "Show more"
@@ -121,7 +109,7 @@ for (const width of [390, 1440])
 					await phase(page, "auth");
 					expect((await view()).connections.filter((each) => each.name === "ernesto-test").length).toBe(1);
 					const currentHash = await page.run<string>("location.hash");
-					await page.goto(`http://127.0.0.1:${address.port}/?reload=1${currentHash}`);
+					await page.goto(`${web.origin}/?reload=1${currentHash}`);
 					await phase(page, "auth");
 					await click(page, button("Continue to sign in"));
 					await phase(page, "review");
@@ -155,7 +143,7 @@ for (const width of [390, 1440])
 					const port = daemon.port;
 					await daemon.close();
 					daemon = await startDaemon({ home, port, models, box: hostBox(home), log: () => {} });
-					await page.goto(`http://127.0.0.1:${address.port}/?reload=2${currentHash}`);
+					await page.goto(`${web.origin}/?reload=2${currentHash}`);
 					await phase(page, "review");
 					await page.until(`${labelled("Sancho")}?.getAttribute('aria-checked') === 'true'`);
 					await click(page, labelled("Sancho"));
@@ -206,8 +194,7 @@ for (const width of [390, 1440])
 					expect(page.errors()).toEqual([]);
 				});
 			} finally {
-				await vite.close();
-				await new Promise<void>((resolve) => listener.close(() => resolve()));
+				await web.close();
 				await daemon.close();
 				await fake.close();
 			}

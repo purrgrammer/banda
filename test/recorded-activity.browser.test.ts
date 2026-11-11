@@ -1,14 +1,12 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import type { RecordedActivity } from "../web/src/specimen/agent/recorded-types.ts";
-import { freePort, viteCacheDir } from "./helpers.ts";
+import { type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
-let server: ViteDevServer;
+let server: WebServer;
 let home: string;
 let base: string;
 const fixture: RecordedActivity = {
@@ -69,19 +67,12 @@ beforeAll(async () => {
 	const before = process.env.BANDA_ACTIVITY_FIXTURE;
 	process.env.BANDA_ACTIVITY_FIXTURE = path;
 	try {
-		server = await createServer({
-			configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-			cacheDir: await viteCacheDir(),
-			server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
-		});
+		server = await webServer();
 	} finally {
 		if (before === undefined) delete process.env.BANDA_ACTIVITY_FIXTURE;
 		else process.env.BANDA_ACTIVITY_FIXTURE = before;
 	}
-	await server.listen();
-	const address = server.httpServer?.address();
-	if (!address || typeof address === "string") throw new Error("No preview port");
-	base = `http://127.0.0.1:${address.port}`;
+	base = server.origin;
 });
 afterAll(async () => {
 	await server?.close();

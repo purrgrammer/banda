@@ -1,12 +1,11 @@
 import { fileURLToPath } from "node:url";
 import type { EntryRecord } from "@earendil-works/pi-durable";
-import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { agentText } from "../src/core/agents.ts";
 import { defaultAvatarFace } from "../src/core/avatar-face.ts";
 import { PROPOSAL_ENTRY } from "../src/core/proposals.ts";
 import { itemOf } from "../src/server/transcript.ts";
-import { freePort, viteCacheDir } from "./helpers.ts";
+import { type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
 const fixture = fileURLToPath(new URL("./fixtures/meta-tools-browser.tsx", import.meta.url));
@@ -56,15 +55,12 @@ const change = itemOf({
 	},
 } as unknown as EntryRecord);
 if (change?.role !== "proposal") throw new Error("change fixture did not produce a review");
-let server: ViteDevServer;
+let server: WebServer;
 let url: string;
 
 beforeAll(async () => {
 	if (!hasChrome()) return;
-	server = await createServer({
-		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		cacheDir: await viteCacheDir(),
-		server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
+	server = await webServer({
 		plugins: [
 			{
 				name: "meta-tools-fixture",
@@ -103,10 +99,7 @@ beforeAll(async () => {
 			},
 		],
 	});
-	await server.listen();
-	const address = server.httpServer?.address();
-	if (!address || typeof address === "string") throw new Error("meta-tools fixture did not listen");
-	url = `http://127.0.0.1:${address.port}/meta-tools`;
+	url = `${server.origin}/meta-tools`;
 });
 afterAll(async () => {
 	await server?.close();

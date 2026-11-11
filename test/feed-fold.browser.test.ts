@@ -1,8 +1,7 @@
 import type { ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
-import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { freePort, viteCacheDir } from "./helpers.ts";
+import { type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
 /**
@@ -104,7 +103,7 @@ const segments = (settled: boolean) => [
 	},
 ];
 
-let server: ViteDevServer;
+let server: WebServer;
 let base = "";
 
 function json(res: ServerResponse, body: unknown) {
@@ -114,10 +113,7 @@ function json(res: ServerResponse, body: unknown) {
 
 beforeAll(async () => {
 	if (!hasChrome()) return;
-	server = await createServer({
-		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		cacheDir: await viteCacheDir(),
-		server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
+	server = await webServer({
 		plugins: [
 			{
 				name: "feed-fold-fixture",
@@ -187,11 +183,7 @@ beforeAll(async () => {
 			},
 		],
 	});
-	await server.listen();
-	const address = server.httpServer?.address();
-	if (address === null || typeof address !== "object" || address === undefined)
-		throw new Error("fixture did not listen");
-	base = `http://127.0.0.1:${address.port}`;
+	base = server.origin;
 });
 afterAll(async () => {
 	await server?.close();

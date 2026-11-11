@@ -5,16 +5,14 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { createModels, fauxProvider } from "@earendil-works/pi-ai";
-import { createServer } from "vite";
 import { expect, it } from "vitest";
 import { MAX_MEMORY_BYTES } from "../src/core/memory.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { MemoryView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { freePort, skipShippedSkills, tempHome, viteCacheDir } from "./helpers.ts";
+import { skipShippedSkills, tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const button = (text: string) =>
@@ -25,22 +23,21 @@ const input = (label: string) => `document.querySelector('input[aria-label="${la
 const visible = (text: string) =>
 	`[...document.querySelectorAll('span,p')].some(el => el.getClientRects().length > 0 && el.textContent.trim() === ${JSON.stringify(text)})`;
 async function click(page: Page, selector: string) {
-	await page.until(selector);
-	await page.run(
-		`(() => {const el=${selector}; el.scrollIntoView({block:'nearest'}); el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:0})); el.click();})()`,
+	// found and acted on at once, once enabled, as a person would: a re-render in between would leave nothing to act on
+	await page.until(
+		`(() => {const el=${selector}; if (!el || el.disabled) return false; el.scrollIntoView({block:'nearest'}); el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:0})); el.click(); return true;})()`,
 	);
 }
 /** Radix menu triggers open on pointerdown, not click. */
 async function tap(page: Page, selector: string) {
-	await page.until(selector);
-	await page.run(
-		`(() => {const el=${selector}; el.scrollIntoView({block:'nearest'}); el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerId:1})); el.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,button:0,pointerId:1})); el.click();})()`,
+	// found and acted on at once, once enabled, as a person would: a re-render in between would leave nothing to act on
+	await page.until(
+		`(() => {const el=${selector}; if (!el || el.disabled) return false; el.scrollIntoView({block:'nearest'}); el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerId:1})); el.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,button:0,pointerId:1})); el.click(); return true;})()`,
 	);
 }
 async function fill(page: Page, label: string, value: string) {
-	await page.until(input(label));
-	await page.run(
-		`(() => {const el=${input(label)}; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+	await page.until(
+		`(() => {const el=${input(label)}; if (!el || el.disabled) return false; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true})); return true;})()`,
 	);
 }
 
@@ -66,14 +63,8 @@ for (const width of [390, 1440])
 				if (!response.ok) throw new Error(await response.text());
 				return response.json() as Promise<T>;
 			};
-			const server = await createServer({
-				configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-				cacheDir: await viteCacheDir(),
+			const server = await webServer({
 				server: {
-					host: "127.0.0.1",
-					port: await freePort(),
-					strictPort: true,
-					open: false,
 					proxy: {
 						"/api": { target: base, changeOrigin: true, headers: { origin: base } },
 						"^/(?:icon(?:-maskable)?\\.svg|icon-(?:192|512|maskable-512)\\.png|apple-touch-icon\\.png|manifest\\.webmanifest)$":
@@ -87,10 +78,7 @@ for (const width of [390, 1440])
 						base: null,
 						text: `---\nname: ${id === "mara" ? "Mara" : "Atlas"}\ndescription: Memory test\n---\nBe brief.\n`,
 					});
-				await server.listen();
-				const address = server.httpServer!.address();
-				if (!address || typeof address === "string") throw new Error("No app port");
-				await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
+				await withPage(`${server.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
 					/** Open a fact's editor: in place on the desktop, behind the row's menu and a drawer on the phone. */
 					const edit = async (text: string) => {
 						if (phone) {

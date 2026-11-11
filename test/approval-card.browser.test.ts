@@ -1,8 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
-import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { freePort, until, viteCacheDir } from "./helpers.ts";
+import { until, type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
 /**
@@ -20,7 +19,7 @@ const ask = (title: string) => ({
 	scopes: [{ scope: "task", words: "Use GitHub's issue_write as @purrgrammer without asking until this task is done" }],
 });
 
-let server: ViteDevServer;
+let server: WebServer;
 let base = "";
 let answers: { path: string; body: { [key: string]: unknown } }[] = [];
 
@@ -36,10 +35,7 @@ function json(res: ServerResponse, body: unknown) {
 
 beforeAll(async () => {
 	if (!hasChrome()) return;
-	server = await createServer({
-		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		cacheDir: await viteCacheDir(),
-		server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
+	server = await webServer({
 		plugins: [
 			{
 				name: "approval-card-fixture",
@@ -96,11 +92,7 @@ beforeAll(async () => {
 			},
 		],
 	});
-	await server.listen();
-	const address = server.httpServer?.address();
-	if (address === null || typeof address !== "object" || address === undefined)
-		throw new Error("fixture did not listen");
-	base = `http://127.0.0.1:${address.port}`;
+	base = server.origin;
 });
 afterAll(async () => {
 	await server?.close();

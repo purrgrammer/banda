@@ -1,28 +1,19 @@
-import { fileURLToPath } from "node:url";
-import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { freePort, viteCacheDir } from "./helpers.ts";
+import { type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
-let server: ViteDevServer;
+let server: WebServer;
 let url: string;
 beforeAll(async () => {
 	if (!hasChrome()) return;
-	server = await createServer({
-		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		cacheDir: await viteCacheDir(),
-		server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
-	});
-	await server.listen();
-	const address = server.httpServer?.address();
-	if (!address || typeof address === "string") throw new Error("No specimen port");
-	url = `http://127.0.0.1:${address.port}/#/specimen?section=composer`;
+	server = await webServer();
+	url = `${server.origin}/#/specimen?section=composer&scheme=light&only=1`;
 });
 afterAll(async () => {
 	await server?.close();
 });
 
-// the specimen draws each section in light and in dark: the first composer is the one used
+// one frame: a composer in each of light and dark would keep the same draft, and the empty one overwrite it
 const root = `document.querySelector('#composer-steer')`;
 const at = (selector: string) => (selector === "" ? root : `${root}?.querySelector('${selector}')`);
 const field = at(`textarea[name="message"]`);
@@ -32,14 +23,8 @@ const attached = `[...(${root}?.querySelectorAll('[data-attachment]') ?? [])].ma
 /** How many files the draft keeps in IndexedDB, once saved. */
 const keptFiles = `new Promise((resolve) => { const db = indexedDB.open('banda-drafts', 1); db.onsuccess = () => { try { const got = db.result.transaction('files').objectStore('files').get('specimen:steer'); got.onsuccess = () => { resolve((got.result ?? []).length); db.result.close(); }; } catch { resolve(-1); } }; db.onerror = () => resolve(-1); })`;
 
-/** Wait until the draft keeps `count` files (`until` reads a value, so a promise is polled here). */
-async function keeps(page: Page, count: number) {
-	for (let tries = 0; tries < 50; tries++) {
-		if ((await page.run<number>(keptFiles)) === count) return;
-		await new Promise((resolve) => setTimeout(resolve, 100));
-	}
-	throw new Error(`the draft never kept ${count} files`);
-}
+/** Wait until the draft keeps `count` files. */
+const keeps = (page: Page, count: number) => page.until(`(${keptFiles}).then((kept) => kept === ${count})`);
 
 async function open(page: Page) {
 	await page.until(field);

@@ -6,8 +6,6 @@
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createServer } from "vite";
 import { expect, it } from "vitest";
 import { INVITE_MS } from "../src/core/devices.ts";
 import { startDaemon } from "../src/daemon.ts";
@@ -15,7 +13,7 @@ import { readDaemonFile } from "../src/home.ts";
 import type { DevicesView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { testDevice } from "./fixtures/iroh-client.ts";
-import { echoModels, freePort, skipShippedSkills, tempHome, viteCacheDir } from "./helpers.ts";
+import { echoModels, skipShippedSkills, tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const labelled = (label: string) =>
@@ -64,22 +62,13 @@ for (const width of [390, 1280])
 					await fetch(`${base}/api/devices`, { headers: { authorization: `Bearer ${token}` } })
 				).json()) as DevicesView;
 			const phone = await testDevice();
-			const server = await createServer({
-				configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-				cacheDir: await viteCacheDir(),
+			const server = await webServer({
 				server: {
-					host: "127.0.0.1",
-					port: await freePort(),
-					strictPort: true,
-					open: false,
 					proxy: { "/api": { target: base, changeOrigin: true, headers: { origin: base } } },
 				},
 			});
 			try {
-				await server.listen();
-				const address = server.httpServer!.address();
-				if (!address || typeof address === "string") throw new Error("No app port");
-				await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
+				await withPage(`${server.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
 					await page.until(`document.body.textContent.includes('Sancho')`);
 					await page.until(
 						`(location.hash.startsWith('#/settings') || (location.hash='#/settings', false)) && ${tab("Devices")}`,

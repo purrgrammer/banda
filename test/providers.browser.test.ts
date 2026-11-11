@@ -1,16 +1,14 @@
 /** Settings' providers through the app against a throwaway daemon: connect a second with a key, use it, sign out. */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { createModels, fauxProvider } from "@earendil-works/pi-ai";
-import { createServer } from "vite";
 import { expect, it } from "vitest";
 import { presetOf, TIERS } from "../src/core/tiers.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { TiersView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { freePort, skipShippedSkills, tempHome, viteCacheDir } from "./helpers.ts";
+import { skipShippedSkills, tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const ANTHROPIC = presetOf("anthropic")!;
@@ -91,22 +89,13 @@ for (const width of [390, 1440])
 				(await (
 					await fetch(`${base}/api/tiers`, { headers: { authorization: `Bearer ${token}` } })
 				).json()) as TiersView;
-			const server = await createServer({
-				configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-				cacheDir: await viteCacheDir(),
+			const server = await webServer({
 				server: {
-					host: "127.0.0.1",
-					port: await freePort(),
-					strictPort: true,
-					open: false,
 					proxy: { "/api": { target: base, changeOrigin: true, headers: { origin: base } } },
 				},
 			});
 			try {
-				await server.listen();
-				const address = server.httpServer!.address();
-				if (!address || typeof address === "string") throw new Error("No app port");
-				await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
+				await withPage(`${server.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
 					await page.until(`document.body.textContent.includes('Sancho')`);
 					// the app may route to the first agent's chat once it has loaded: ask for Settings until it shows
 					await page.until(

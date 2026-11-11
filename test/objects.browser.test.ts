@@ -1,10 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
-import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { defaultAvatarFace } from "../src/core/avatar-face.ts";
 import type { ObjectAsk, ObjectShown } from "../src/server/objects.ts";
-import { freePort, viteCacheDir } from "./helpers.ts";
+import { type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 async function openObjectMenu(page: Page, selector: string, keyboard = true) {
@@ -160,7 +159,7 @@ const group = {
 };
 
 type Asked = { chat: number; asks: (ObjectAsk & { agent?: string })[]; refresh?: boolean };
-let server: ViteDevServer;
+let server: WebServer;
 let base = "";
 let requests: Asked[] = [];
 let answers: { path: string; body: unknown }[] = [];
@@ -308,10 +307,7 @@ function json(res: ServerResponse, body: unknown) {
 
 beforeAll(async () => {
 	if (!hasChrome()) return;
-	server = await createServer({
-		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		cacheDir: await viteCacheDir(),
-		server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
+	server = await webServer({
 		plugins: [
 			{
 				name: "objects-browser-fixture",
@@ -439,11 +435,7 @@ beforeAll(async () => {
 			},
 		],
 	});
-	await server.listen();
-	const address = server.httpServer?.address();
-	if (address === null || typeof address !== "object" || address === undefined)
-		throw new Error("fixture did not listen");
-	base = `http://127.0.0.1:${address.port}`;
+	base = server.origin;
 });
 afterAll(async () => {
 	release?.();
@@ -983,11 +975,9 @@ it.skipIf(!hasChrome())(
 				`document.body.textContent.includes('Daemon PR title') && document.querySelector('[data-entry="2"] button[aria-label^="Actions for"]')`,
 				30_000,
 			);
-			expect(
-				await page.run(
-					`document.querySelectorAll('[data-entry="1"] [data-message-bubble] [data-object-inline]').length`,
-				),
-			).toBe(1);
+			await page.until(
+				`document.querySelectorAll('[data-entry="1"] [data-message-bubble] [data-object-inline]').length === 1`,
+			);
 			expect(await page.run(`document.querySelector('[data-entry="1"] [data-object-previews]') === null`)).toBe(true);
 			expect(await page.run(`document.querySelector('[data-entry="2"]').textContent`)).not.toContain("Read as");
 			await openObjectMenu(page, '[data-entry="2"] button[aria-label^="Actions for"]');

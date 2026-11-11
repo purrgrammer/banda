@@ -2,7 +2,6 @@
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
 	createAssistantMessageEventStream,
 	createModels,
@@ -12,18 +11,17 @@ import {
 	fauxToolCall,
 	getCurrentTools,
 } from "@earendil-works/pi-ai";
-import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { agentMainThread } from "../src/core/gateway.ts";
 import { type Daemon, startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { ChatRow, GroupView, Item, ItemPage, Posted } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { freePort, skipShippedSkills, tempHome, until, viteCacheDir } from "./helpers.ts";
+import { skipShippedSkills, tempHome, until, type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 let daemon: Daemon;
-let web: ViteDevServer;
+let web: WebServer;
 let base: string;
 let token: string;
 let chat: number;
@@ -32,6 +30,10 @@ let firstMessage: number;
 let api: <T>(path: string, body?: unknown, method?: string) => Promise<T>;
 let release: () => void = () => {};
 let gate: Promise<void> | undefined;
+
+/** Whether a draft's files in IndexedDB hold one named `name`; a promise, which `until` awaits. */
+const keptFile = (name: string) =>
+	`new Promise((resolve) => { const open = indexedDB.open('banda-drafts', 1); open.onerror = () => resolve(false); open.onsuccess = () => { try { const all = open.result.transaction('files').objectStore('files').getAll(); all.onsuccess = () => { resolve(all.result.some((files) => (files ?? []).some((file) => file.name === ${JSON.stringify(name)}))); open.result.close(); }; } catch { resolve(false); } }; })`;
 let streamGate: Promise<void> | undefined;
 let entered = false;
 const thread = agentMainThread("sancho");
@@ -159,14 +161,8 @@ beforeAll(async () => {
 			);
 		});
 	}
-	web = await createServer({
-		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		cacheDir: await viteCacheDir(),
+	web = await webServer({
 		server: {
-			host: "127.0.0.1",
-			port: await freePort(),
-			strictPort: true,
-			open: false,
 			proxy: {
 				"/api": {
 					target: `http://127.0.0.1:${daemon.port}`,
@@ -178,10 +174,7 @@ beforeAll(async () => {
 			},
 		},
 	});
-	await web.listen();
-	const address = web.httpServer!.address();
-	if (!address || typeof address === "string") throw new Error("web did not listen");
-	base = `http://127.0.0.1:${address.port}`;
+	base = web.origin;
 }, 30000);
 afterAll(async () => {
 	release();
@@ -352,14 +345,10 @@ it.skipIf(!hasChrome())(
 				await page.until(
 					`document.querySelector('[data-raw-content]')?.textContent.includes('Recorded final model note.')`,
 				);
-				expect(
-					await page.run(
-						`window.callNode.isConnected && document.activeElement===window.callNode && window.callNode.getAttribute('aria-expanded')==='false'`,
-					),
-				).toBe(true);
-				expect(
-					await page.run(`window.contextNode.isConnected && window.contextNode.getAttribute('aria-expanded')==='true'`),
-				).toBe(true);
+				await page.until(
+					`window.callNode.isConnected && document.activeElement===window.callNode && window.callNode.getAttribute('aria-expanded')==='false'`,
+				);
+				await page.until(`window.contextNode.isConnected && window.contextNode.getAttribute('aria-expanded')==='true'`);
 				await noOverflow(page);
 				expect(page.errors()).toEqual([]);
 			});
@@ -492,8 +481,11 @@ it.skipIf(!hasChrome())(
 					input.dispatchEvent(new Event("change", { bubbles: true }));
 				})()`);
 				await page.until(`${attached}.includes('group-notes.txt')`);
-				await new Promise((resolve) => setTimeout(resolve, 500));
-				await page.run(`location.reload()`);
+				// the draft is kept once its words are in localStorage and its file in IndexedDB: reloaded sooner, it is not
+				await page.until(`Object.values(localStorage).includes('GROUP_STEER_NOTE') && ${keptFile("group-notes.txt")}`);
+				// marked, so what is read next is the page the reload made, not the one it replaced
+				await page.run(`window.beforeReload = true; location.reload()`);
+				await page.until(`!window.beforeReload && document.readyState === 'complete'`);
 				await page.until(`${field}?.value === 'GROUP_STEER_NOTE'`);
 				await page.until(`${attached}.includes('group-notes.txt')`);
 				// sent while the member works: in the room at once, the composer empty, Stop back

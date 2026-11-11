@@ -1,14 +1,12 @@
 /** A throwaway daemon, not the specimen: owner creation, acceptance, invocation, feed and Activity at both widths. */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
-import { createServer } from "vite";
 import { expect, it } from "vitest";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { freePort, tempHome, viteCacheDir } from "./helpers.ts";
+import { tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const button = (label: string) =>
@@ -52,22 +50,13 @@ for (const width of [390, 1440])
 		const daemon = await startDaemon({ home, port: 0, models, box: hostBox(home), log: () => {} });
 		const base = `http://127.0.0.1:${daemon.port}`;
 		const token = (await readDaemonFile(home))!.token!;
-		const server = await createServer({
-			configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-			cacheDir: await viteCacheDir(),
+		const server = await webServer({
 			server: {
-				host: "127.0.0.1",
-				port: await freePort(),
-				strictPort: true,
-				open: false,
 				proxy: { "/api": { target: base, changeOrigin: true, headers: { origin: base } } },
 			},
 		});
 		try {
-			await server.listen();
-			const address = server.httpServer!.address();
-			if (!address || typeof address === "string") throw new Error("No app port");
-			await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
+			await withPage(`${server.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
 				// first run offers the skills banda ships, once: the owner turns one off and adds the rest
 				await page.until(`document.body.textContent.includes('Skills to start with')`);
 				await click(page, `document.querySelector('#first-skill-unslop')`);

@@ -1,8 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
-import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { freePort, viteCacheDir } from "./helpers.ts";
+import { type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 /**
@@ -12,15 +11,12 @@ import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
  */
 const fixturePath = fileURLToPath(new URL("../web/return-focus-fixture.tsx", import.meta.url));
 
-let server: ViteDevServer;
+let server: WebServer;
 let base = "";
 
 beforeAll(async () => {
 	if (!hasChrome()) return;
-	server = await createServer({
-		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		cacheDir: await viteCacheDir(),
-		server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
+	server = await webServer({
 		plugins: [
 			{
 				name: "return-focus-fixture",
@@ -76,11 +72,7 @@ beforeAll(async () => {
 			},
 		],
 	});
-	await server.listen();
-	const address = server.httpServer?.address();
-	if (address === null || typeof address !== "object" || address === undefined)
-		throw new Error("fixture did not listen");
-	base = `http://127.0.0.1:${address.port}/return-focus-fixture#token=return-focus-test`;
+	base = `${server.origin}/return-focus-fixture#token=return-focus-test`;
 });
 afterAll(async () => {
 	await server?.close();

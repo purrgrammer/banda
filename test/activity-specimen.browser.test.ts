@@ -1,22 +1,13 @@
-import { fileURLToPath } from "node:url";
-import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { freePort, viteCacheDir } from "./helpers.ts";
+import { type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
-let server: ViteDevServer;
+let server: WebServer;
 let url: string;
 beforeAll(async () => {
 	if (!hasChrome()) return;
-	server = await createServer({
-		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		cacheDir: await viteCacheDir(),
-		server: { port: await freePort(), strictPort: true, host: "127.0.0.1", open: false },
-	});
-	await server.listen();
-	const address = server.httpServer?.address();
-	if (!address || typeof address === "string") throw new Error("No specimen port");
-	url = `http://127.0.0.1:${address.port}/#/specimen/activity`;
+	server = await webServer();
+	url = `${server.origin}/#/specimen/activity`;
 });
 afterAll(async () => {
 	await server?.close();
