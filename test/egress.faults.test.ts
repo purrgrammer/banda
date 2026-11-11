@@ -79,9 +79,11 @@ function check(summary: Summary) {
 		const sent = summary.sends.filter((t) => t === ticket).length;
 		expect(sent, `sends of ${ticket}`).toBeLessThanOrEqual(approvals(ticket) + within(ticket));
 	}
-	// the second command's two leave in the order they were held
+	// the second command's two leave in the order they were held, unless the first of them waited on the owner (asked,
+	// or asked to run again after a kill), which holds nothing up behind it
 	const order = summary.sends.filter((t) => t === SECOND || t === THIRD);
-	if (order.includes(THIRD)) expect(order.indexOf(SECOND)).toBeLessThan(order.indexOf(THIRD));
+	const secondAsked = summary.waits.some((w) => w.ask.type === "approval" && w.ask.args._ticket === SECOND);
+	if (order.includes(THIRD) && !secondAsked) expect(order.indexOf(SECOND)).toBeLessThan(order.indexOf(THIRD));
 	expect(summary.sends.every((t) => t === FIRST || t === SECOND || t === THIRD)).toBe(true);
 	// every ticket the proxy handed over is in the store; none twice
 	expect(new Set(summary.tickets).size).toBe(summary.tickets.length);
