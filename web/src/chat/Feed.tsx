@@ -57,11 +57,6 @@ export function Run({
 /** Whether what is being drawn sits in the owner's run. */
 export const useMine = () => useContext(Mine);
 
-/** Under the owner's message while it waits for the agent to take it; it goes when the agent does. */
-export function QueuedNote() {
-	return <span className="px-1 text-meta text-ink-2">Queued</span>;
-}
-
 /** One message's words. The owner's bubble is ink, so theirs stand apart; an agent's is framed by a hairline. */
 export function Bubble({
 	mine: told,

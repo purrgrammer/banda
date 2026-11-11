@@ -1,13 +1,12 @@
 /**
  * The chat's header: the agent's face and name, centred and floating over the feed, and under them what it does now
  * ("Using its browser…", "Thinking…"; in a group, "Mara and Sancho are working…"), shimmering while it works, or its
- * presence (waiting on you, routines paused), with Stop beside it while there is work to stop. Said here once: the
- * feed has no working line. It has no bar and no border: they sit on one small frosted shape, so the conversation
- * scrolls around and beneath it and keeps the screen. The face and the name open the panel; on the phone a back
- * control leads to the band. Its parent is `relative feed-scope`, and the feed's scroller `feed-scroll` and clears it
- * with `HEADER_CLEARANCE`.
+ * presence (waiting on you, routines paused). Said here once: the feed has no working line. It has no bar and no
+ * border: they sit on one small frosted shape, so the conversation scrolls around and beneath it and keeps the screen. The face and the
+ * name open the panel; on the phone a back control leads to the band. Its parent is `relative feed-scope`, and the
+ * feed's scroller `feed-scroll` and clears it with `HEADER_CLEARANCE`.
  */
-import { ChevronLeftIcon, PanelRightIcon, SquareIcon, TerminalIcon } from "lucide-react";
+import { ChevronLeftIcon, PanelRightIcon, TerminalIcon } from "lucide-react";
 import { useId } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
@@ -26,7 +25,6 @@ export function Header({
 	onBack,
 	onPanel,
 	onActivity,
-	onStop,
 	attention = false,
 	delegated,
 }: {
@@ -45,14 +43,11 @@ export function Header({
 	onPanel?: () => void;
 	/** The status opens the current work's activity, not the panel. */
 	onActivity?: (() => void) | undefined;
-	/** Stop the work under way and what is queued behind it; given only while there is work to stop. */
-	onStop?: (() => void) | undefined;
 }) {
 	const [first] = faces;
 	const line = paused
 		? "Routines paused"
-		: (doing ??
-			(state === "waiting" ? "Waiting on you" : state === "working" || onStop !== undefined ? "Working…" : undefined));
+		: (doing ?? (state === "working" ? "Working…" : state === "waiting" ? "Waiting on you" : undefined));
 	const face =
 		faces.length > 1 || first === undefined ? (
 			<FaceStack faces={faces} name={name} size="panel" waiting={attention || state === "waiting"} />
@@ -73,7 +68,7 @@ export function Header({
 				</Button>
 			) : null}
 			<div className="pointer-events-auto relative isolate flex max-w-[min(20rem,calc(100%-6rem))] min-w-0 flex-col items-center">
-				<Contour name={name} line={line} stop={onStop !== undefined} />
+				<Contour name={name} line={line} />
 				<button
 					type="button"
 					className="flex min-w-0 max-w-full flex-col items-center text-ink outline-none focus-visible:[&>span:first-child]:ring-2 focus-visible:[&>span:first-child]:ring-line rounded-full"
@@ -86,30 +81,21 @@ export function Header({
 					</span>
 				</button>
 				{line === undefined ? null : (
-					<div className="flex max-w-full min-w-0 items-center justify-center px-3 pb-1.5">
-						<button
-							type="button"
-							onClick={onActivity}
-							disabled={onActivity === undefined || paused}
-							aria-label={onActivity === undefined || paused ? undefined : `Activity: ${line}`}
-							className="min-w-0 truncate text-center text-meta text-ink-2 enabled:hover:text-ink"
-						>
-							{state === "working" && !paused ? (
-								<Shimmer as="span" aria-live="polite" duration={2.4}>
-									{line}
-								</Shimmer>
-							) : (
-								line
-							)}
-						</button>
-						{onStop === undefined ? null : (
-							// as tall as the words beside it, so the header keeps its height as a run starts and ends
-							<Button variant="ghost" size="xs" className="-my-1.5 ml-1 text-ink-2" onClick={onStop}>
-								<SquareIcon className="fill-current" />
-								Stop
-							</Button>
+					<button
+						type="button"
+						onClick={onActivity}
+						disabled={onActivity === undefined || paused}
+						aria-label={onActivity === undefined || paused ? undefined : `Activity: ${line}`}
+						className="max-w-full min-w-0 truncate px-3 pb-1.5 text-center text-meta text-ink-2 enabled:hover:text-ink"
+					>
+						{state === "working" && !paused ? (
+							<Shimmer as="span" aria-live="polite" duration={2.4}>
+								{line}
+							</Shimmer>
+						) : (
+							line
 						)}
-					</div>
+					</button>
 				)}
 			</div>
 			<div className="pointer-events-auto absolute top-2.5 right-1.5 flex items-center gap-1">
@@ -149,7 +135,7 @@ export function Header({
  * no line round it. It lifts with a soft shadow only once the feed scrolls under it (`header-lift`). It lays out the
  * same boxes as what it sits behind, words hidden, so it fits any name without measuring.
  */
-function Contour({ name, line, stop }: { name: string; line: string | undefined; stop: boolean }) {
+function Contour({ name, line }: { name: string; line: string | undefined }) {
 	const id = useId();
 	return (
 		<div aria-hidden="true" className="header-lift pointer-events-none absolute inset-0 -z-10">
@@ -163,17 +149,7 @@ function Contour({ name, line, stop }: { name: string; line: string | undefined;
 				<span className="size-20 shrink-0 rounded-full bg-paper" />
 				<span className="-mt-2 flex max-w-full flex-col items-center rounded-full bg-paper px-3 pt-2 pb-1.5 text-transparent select-none">
 					<span className="max-w-full truncate text-ui font-semibold">{name}</span>
-					{line === undefined ? null : (
-						<span className="flex max-w-full min-w-0 items-center text-meta">
-							<span className="min-w-0 truncate">{line}</span>
-							{stop ? (
-								<span className="ml-1 inline-flex shrink-0 items-center gap-1 px-2">
-									<SquareIcon className="size-3" />
-									Stop
-								</span>
-							) : null}
-						</span>
-					)}
+					{line === undefined ? null : <span className="max-w-full truncate text-meta">{line}</span>}
 				</span>
 			</div>
 		</div>

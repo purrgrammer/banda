@@ -178,11 +178,6 @@ export function GroupChat({
 								? () => setActivity(activityTargets)
 								: undefined
 					}
-					onStop={
-						working.length > 0
-							? () => void attempt("stop them", () => api(`/groups/${room}/stop`, { method: "POST", body: "{}" }))
-							: undefined
-					}
 				/>
 				<Conversation className="flex flex-col">
 					<ConversationContent

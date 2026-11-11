@@ -161,9 +161,9 @@ one that gives them one more thing to manage stays out.
   Previews are drawn by the daemon from the bytes, never by code the box wrote; a file the daemon cannot preview
   shows its card.
 - **The composer** is ai-elements' `prompt-input`: text, attachments (previewed as above), send. It stays the
-  same while the agent works: what is sent shows in the chat at once, marked queued until the run takes it (see Queue),
-  so writing never waits on the agent or stops it. Stopping is apart from writing: Stop sits beside what the agent does
-  in the chat's header. `@` autocomplete everywhere. In a direct chat it inserts
+  same while the agent works: what is sent shows in the chat at once, as any message, until the run takes it (see
+  Queue), so writing never waits on the agent or stops it. Send is offered only once there is something to send, words
+  or files: an empty message never goes, however often Send is tapped. `@` autocomplete everywhere. In a direct chat it inserts
   a reference to an agent; in a group it targets members for work. Its draft, words and files, is kept per chat on
   the device until sent, through navigation and reloads; a send takes back only what it sent, so whatever is written
   or attached while it is on its way stays. Enter sends and Shift+Enter breaks a line. No transcript mode, model or

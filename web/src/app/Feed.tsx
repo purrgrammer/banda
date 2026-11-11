@@ -24,7 +24,7 @@ import { AgentMessage } from "../chat/AgentMessage.tsx";
 import { ApprovalCard, ChangeCard, Facts } from "../chat/Approval.tsx";
 import { ArtifactCard, Browsed, QuestionCard } from "../chat/Cards.tsx";
 import { Done, Settling } from "../chat/Done.tsx";
-import { Bubble, DaySeparator, MessageActions, QueuedNote, Run, UnreadDivider } from "../chat/Feed.tsx";
+import { Bubble, DaySeparator, MessageActions, Run, UnreadDivider } from "../chat/Feed.tsx";
 import { Line } from "../chat/Line.tsx";
 import { ProposalCard } from "../chat/Proposal.tsx";
 import { RoutineProposal } from "../chat/Routine.tsx";
@@ -638,7 +638,6 @@ function partOf(
 					{segment.files.map((file) => (
 						<FilePart key={`${file.name}-${"sha" in file ? file.sha : ""}`} chat={chat} file={file} />
 					))}
-					{segment.queued === true ? <QueuedNote /> : null}
 				</>
 			);
 		case "owner-message":

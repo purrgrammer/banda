@@ -31,7 +31,7 @@ Each step is reviewed in the browser before the next. Estimates are for an agent
    object, reaction, sign-in); the approval card (the verb, Don't, one scope row; on an object; editable); the change
    card (the text in full, What it was); every event line (a routine's run, a failure, a change to accept, a sign-in to
    finish); the "waiting on you" pill; Try again on a failed send; the transcript view. The composer: `prompt-input`
-   with attachment previews, Stop, the menu, mentions in a group ("To everyone · @ to pick one"; a mention as the emoji
+   with attachment previews, the menu, mentions in a group ("To everyone · @ to pick one"; a mention as the emoji
    and name, a link). First run: the first agent's screen with the providers to pick from; the first words and starters.
    A group chat with members' messages and a member's ask.
 3. **The panel, settings and connections** (2 to 3 days). The agent's panel: its face and name over

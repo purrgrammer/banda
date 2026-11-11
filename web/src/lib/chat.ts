@@ -699,7 +699,7 @@ export function troubleWords(data: TroubleData): string {
 }
 
 /**
- * The owner's queued messages, last, as their own words, marked queued. One the transcript already holds (its entry came
+ * The owner's queued messages, last, as their own words. One the transcript already holds (its entry came
  * before the queue said it left) is shown once, as the entry.
  */
 function queuedSegments(items: readonly Item[], queued: readonly Queued[]): Segment[] {

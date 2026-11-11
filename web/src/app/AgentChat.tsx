@@ -22,7 +22,7 @@ import { HEADER_CLEARANCE, Header } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { ChatLoading } from "../chat/Loading.tsx";
 import type { Who } from "../chat/Row.tsx";
-import { type ChatRow, type Item, type Posted, postMessage, readChat, stopChat, upload } from "../lib/api.ts";
+import { type ChatRow, type Item, type Posted, postMessage, readChat, upload } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { answeredWell, view } from "../lib/chat.ts";
 import { linkMentions } from "../lib/mentions.ts";
@@ -101,7 +101,6 @@ export function AgentChat({
 }) {
 	const state = row?.state === "running" ? "working" : row?.state === "waiting" ? "waiting" : "idle";
 	const [doing, setDoing] = useState<string | undefined>(undefined);
-	const [stoppable, setStoppable] = useState(false);
 	const [activity, setActivity] = useState<{ anchor?: number }>();
 	const shell = useShell();
 	const agents = shell.agents;
@@ -149,7 +148,6 @@ export function AgentChat({
 				onBack={onBack}
 				onPanel={onPanel}
 				onActivity={status.delegatedPrimary ? openDelegated : row === undefined ? undefined : () => setActivity({})}
-				onStop={stoppable && row !== undefined ? () => void attempt("stop it", () => stopChat(row.chat)) : undefined}
 			/>
 			{delegatedOpen === undefined ? null : (
 				<HarnessActivitySheet tasks={delegatedOpen} onClose={() => setDelegatedOpen(undefined)} />
@@ -186,7 +184,6 @@ export function AgentChat({
 					tools={tools}
 					at={at}
 					onDoing={setDoing}
-					onStoppable={setStoppable}
 					onAnswered={onAnswered}
 					onRoutine={onRoutine}
 					activity={activity}
@@ -207,7 +204,6 @@ function Timeline({
 	tools,
 	at,
 	onDoing,
-	onStoppable,
 	onAnswered,
 	onRoutine,
 	activity,
@@ -224,8 +220,6 @@ function Timeline({
 	onRoutine?: ((name: string) => void) | undefined;
 	/** What it does now, for the header: "Using its browser…". */
 	onDoing: (doing: string | undefined) => void;
-	/** Whether a run is at work, not waiting on the owner: what the header's Stop follows. */
-	onStoppable: (stoppable: boolean) => void;
 	who: Who;
 	agent: string;
 	/** Its tools, for its first words; undefined for the lead. */
@@ -277,7 +271,7 @@ function Timeline({
 					busy: transcript.busy,
 					running: transcript.running,
 					thinking: transcript.thinking,
-					// the owner's messages waiting for the run (a steer, or a follow-up), marked queued until the agent takes them
+					// the owner's messages waiting for the run (a steer, or a follow-up), shown as any message until the agent takes them
 					queued: transcript.queued,
 				},
 				context,
@@ -351,10 +345,6 @@ function Timeline({
 	const ask = segments.find(
 		(segment) => (segment.kind === "question" || segment.kind === "approval") && segment.open !== undefined,
 	);
-	const stoppable = transcript.busy && ask === undefined;
-	useEffect(() => {
-		onStoppable(stoppable);
-	}, [stoppable, onStoppable]);
 	return (
 		<Conversation className="flex flex-col">
 			<ConversationContent

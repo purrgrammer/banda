@@ -300,7 +300,7 @@ describe("the chat, derived", () => {
 		).toBeUndefined();
 	});
 
-	it("the owner's queued messages come last, marked queued; one the transcript already holds shows once, as its entry", () => {
+	it("the owner's queued messages come last; one the transcript already holds shows once, as its entry", () => {
 		const busy: Live = { busy: true, running: [], thinking: false };
 		const queued = [
 			{ id: "s2", text: "make it Saturday", message: "m2" },

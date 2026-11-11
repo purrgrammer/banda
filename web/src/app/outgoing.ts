@@ -1,7 +1,7 @@
 /**
  * The owner's messages on their way: each shows from the moment it is sent until the daemon accounts for it,
  * and never after. The daemon accounts for one in one of three ways: as an entry in the transcript, as an input queued
- * behind the run (marked queued until the run takes it), or, when the chat held an open question, as that question's answer
+ * behind the run (shown as any message until the run takes it), or, when the chat held an open question, as that question's answer
  * (shown on its card). Only the first two carry the message's id, so the third is settled by the post's own answer.
  */
 import type { Item, Posted, Queued } from "../lib/api.ts";

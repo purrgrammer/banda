@@ -1,8 +1,8 @@
 /**
  * The composer, on ai-elements' prompt-input: words, files (photos, documents, video, dropped or pasted anywhere), a
  * voice message (transcribed here, sent as words with its audio), send. It is the same while the agent works: what is
- * sent then waits in the chat's queue, and stopping lives in the header. One quiet menu holds the rest. In a group it
- * says who a message goes to. Its draft, words and files, is kept per chat until it is sent.
+ * sent then waits in the chat's queue. Send is off until there is something to send. One quiet menu holds the rest. In
+ * a group it says who a message goes to. Its draft, words and files, is kept per chat until it is sent.
  */
 import { ArrowUpIcon, PaperclipIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -141,9 +141,7 @@ export function Composer({
 							{state === "ready" ? (
 								<SpeechInput variant="ghost" size="icon-sm" aria-label="Record a voice message" />
 							) : null}
-							<PromptInputSubmit className="rounded-full bg-ink text-paper hover:bg-ink/85" aria-label="Send">
-								<ArrowUpIcon className="size-4" />
-							</PromptInputSubmit>
+							<Send shown={files.length} />
 						</span>
 					</PromptInputFooter>
 				</PromptInput>
@@ -155,6 +153,20 @@ export function Composer({
 				{group ? <GroupHint members={mentionables ?? []} /> : null}
 			</div>
 		</PromptInputProvider>
+	);
+}
+
+/**
+ * Send, on only once there is something to send: words that are not all blanks, or a file. The form refuses an empty
+ * message whatever submits it (`prompt-input`); this says so before it is tried.
+ */
+function Send({ shown }: { shown: number }) {
+	const { textInput, attachments } = usePromptInputController();
+	const empty = textInput.value.trim() === "" && attachments.files.length === 0 && shown === 0;
+	return (
+		<PromptInputSubmit className="rounded-full bg-ink text-paper hover:bg-ink/85" aria-label="Send" disabled={empty}>
+			<ArrowUpIcon className="size-4" />
+		</PromptInputSubmit>
 	);
 }
 

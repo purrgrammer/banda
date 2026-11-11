@@ -71,10 +71,10 @@ for (const width of [390, 1440]) {
 				await page.until(`${field}.value === 'Take the 10:40'`);
 				await page.until(`${attached}.some(text => text.includes('notes.txt'))`, 5000);
 
-				// sent, it goes in the queue; words written while it is on its way stay in the composer
+				// sent, it goes; words written while it is on its way stay in the composer
 				await page.run(`${at(`button[aria-label="Send"]`)}.click()`);
 				await type(page, " and the bags");
-				await page.until(`${sent}.includes('Queued: Take the 10:40 + notes.txt')`);
+				await page.until(`${sent}.includes('Sent: Take the 10:40 + notes.txt')`);
 				await page.until(`${field}.value === 'and the bags'`);
 				expect(await page.run(`${attached}.length`)).toBe(0);
 
@@ -89,6 +89,60 @@ for (const width of [390, 1440]) {
 				await new Promise((resolve) => setTimeout(resolve, 500));
 				expect(await page.run(`${field}.value`)).toBe("");
 				expect(await page.run(`${attached}.length`)).toBe(0);
+				expect(page.errors()).toEqual([]);
+			});
+		},
+		60_000,
+	);
+
+	it.skipIf(!hasChrome())(
+		`Send is off with nothing to send: blanks, Enter and a second tap send nothing more, a file alone goes, at ${width}px`,
+		async () => {
+			await withPage(url, { width, height: 900 }, async (page) => {
+				await open(page);
+				const send = at(`button[aria-label="Send"]`);
+				const form = `${field}.closest('form')`;
+				const enter = async () => {
+					await page.run(`${field}.focus()`);
+					const key = { key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" };
+					await page.input("Input.dispatchKeyEvent", { type: "keyDown", ...key });
+					await page.input("Input.dispatchKeyEvent", { type: "keyUp", ...key });
+				};
+				// longer than a send takes here (600ms), so a message that went would be listed
+				const settle = () => new Promise((resolve) => setTimeout(resolve, 1200));
+
+				// empty, and only blanks: Send is off, and neither Enter nor the form itself sends
+				expect(await page.run(`${send}.disabled`)).toBe(true);
+				await type(page, "   \n  ");
+				expect(await page.run(`${send}.disabled`)).toBe(true);
+				await enter();
+				await page.run(`${form}.requestSubmit()`);
+				await settle();
+				expect(await page.run(sent)).toEqual([]);
+
+				// words: Send is on; tapped twice at once, one message goes, and the emptied composer sends nothing more
+				await page.run(
+					`(() => { const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(${field}, ''); ${field}.dispatchEvent(new Event('input', { bubbles: true })); })()`,
+				);
+				await type(page, "Window seat, please");
+				await page.until(`${send}.disabled === false`);
+				await page.run(`(() => { const button = ${send}; button.click(); button.click(); })()`);
+				await page.until(`${sent}.includes('Sent: Window seat, please')`);
+				await page.until(`${field}.value === '' && ${send}.disabled`);
+				await page.run(`${send}.click()`);
+				await enter();
+				await page.run(`${form}.requestSubmit()`);
+				await settle();
+				expect(await page.run(sent)).toEqual(["Sent: Window seat, please"]);
+
+				// a file and no words is something to send
+				await attach(page, "ticket.txt", "coach 4");
+				await page.until(`${attached}.some(text => text.includes('ticket.txt'))`);
+				await page.until(`${send}.disabled === false`);
+				await page.run(`${send}.click()`);
+				await page.until(`${sent}.includes('Sent: ticket.txt')`);
+				await page.until(`${attached}.length === 0 && ${send}.disabled`);
+				expect(await page.run(sent)).toEqual(["Sent: Window seat, please", "Sent: ticket.txt"]);
 				expect(page.errors()).toEqual([]);
 			});
 		},

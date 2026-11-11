@@ -10,7 +10,7 @@ describe("the owner's messages on their way", () => {
 	it("stays on its way until the transcript shows it, as an entry or a queued input, and never shows twice", () => {
 		const outgoing = [pending("a"), pending("b"), pending("c")];
 		expect(stillPending(outgoing, shownMessages([], []))).toEqual(outgoing);
-		// queued behind the run: the queue shows it, marked queued, so the copy on its way goes
+		// queued behind the run: the queue shows it, so the copy on its way goes
 		expect(stillPending(outgoing, shownMessages([entry("a")], [queued("b")])).map((one) => one.id)).toEqual(["c"]);
 	});
 

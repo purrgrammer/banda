@@ -16,7 +16,7 @@ import { type ReactNode, useContext, useState } from "react";
 import { ApprovalCard, ChangeCard, Details, Facts, WaitingPill } from "../../chat/Approval.tsx";
 import { ArtifactCard, Browsed, QuestionCard, SignInCard, ViewCard } from "../../chat/Cards.tsx";
 import { Composer } from "../../chat/Composer.tsx";
-import { Bubble, DaySeparator, JumpToLatest, Mention, QueuedNote, Run, UnreadDivider } from "../../chat/Feed.tsx";
+import { Bubble, DaySeparator, JumpToLatest, Mention, Run, UnreadDivider } from "../../chat/Feed.tsx";
 import { FileChanges } from "../../chat/FileChanges.tsx";
 import {
 	AudioFile,
@@ -516,11 +516,6 @@ export function Parts() {
 						<Header name="Octo" faces={[OCTO]} state="working" />
 					</HeaderStage>
 				</Group>
-				<Group label="With Stop, while there is a run to stop">
-					<HeaderStage>
-						<Header name="Octo" faces={[OCTO]} state="working" doing="Reading the checks on #34…" onStop={() => {}} />
-					</HeaderStage>
-				</Group>
 				<Group label="A group: who is at work">
 					<HeaderStage>
 						<Header
@@ -698,18 +693,12 @@ export function Parts() {
 			</Section>
 			<Section
 				id="composer"
-				note="Words, files and a voice message, the same while the agent works: what is sent shows at once, marked Queued until the agent takes it; Stop is in the header. The last one keeps its draft across a reload."
+				note="Words, files and a voice message, the same while the agent works: what is sent shows at once. Send is off until there is something to send. The last one keeps its draft across a reload."
 			>
 				<div className="flex max-w-2xl flex-col gap-5">
 					<Composer to="Mara" />
 					<Composer to="Mara" files={ATTACHED} draft="Here are the photos and the terms. Which hotel is closer?" />
 					<Composer to="Octo" draft="Also check the 10:40, it might be cheaper." />
-					<Run>
-						<div className="flex flex-col items-end gap-1">
-							<Bubble mine>Also check the 10:40, it might be cheaper.</Bubble>
-							<QueuedNote />
-						</div>
-					</Run>
 					<Composer to="Mara" state="recording" />
 					<Composer to="Trip" group />
 					<div className="flex justify-center">
@@ -748,7 +737,7 @@ function SteerComposer() {
 			<ul data-sent className="px-3 text-meta text-ink-2">
 				{sent.map((each, index) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: a fixture's log, appended only
-					<li key={index}>Queued: {each}</li>
+					<li key={index}>Sent: {each}</li>
 				))}
 			</ul>
 		</div>
