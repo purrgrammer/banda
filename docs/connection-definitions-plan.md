@@ -3,7 +3,7 @@
 A connection stops being a file in the owner's workspace ([Connection definitions](connection-definitions.md)). What
 banda ships is read from the release, typed and schema-checked, and what the owner chose lives in the store. The
 program enforces one rule. A definition is never copied, and nothing the box writes can reach one. One PR,
-`connection-definitions`, stacked on the Slack branch and landed by the operator after it. Its commits come in four
+`connection-definitions`, on `main` and landed by the operator. Its commits come in four
 stages, shipped definitions from the release, then the owner's choices and their own servers in the store, then a
 connection's details to check and change, then the deletion of what is left of the file. It takes from PR #28's
 branch what the stages need and does not wait for that PR.
@@ -15,7 +15,7 @@ above it. Check a box only when its evidence exists, a file, a log line, a scree
 body is a how-to. The appendices explain and record.
 
 The program runs `playbooks/autopilot-stack.md` with one PR. One owner at a time builds and verifies it, stage by
-stage, and the operator lands it after the Slack PR. The PR is neither pushed nor opened until the operator says so
+stage, and the operator lands it. The PR is neither pushed nor opened until the operator says so
 (AGENTS.md "Changes"). The swarm lanes the playbook names run here as browser tests and walkthroughs against a
 throwaway daemon, since this repository has no cloud lane machinery.
 
@@ -28,7 +28,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [x] State the protocol and this plan to the operator, then stop. Start execution only on the operator's explicit go. Given on 2026-11-09, "take whatever you need from PR 28 to build it".
 - [ ] Read these from trunk at program start. Re-read them at every tick.
   - [ ] `git show origin/main:AGENTS.md`, `git show origin/main:DESIGN.md` ("Connections", "Watches", "Trust", "The workspace"), `docs/connection-definitions.md`, `docs/connections.md`.
-- [ ] The base is the Slack branch `worktree-purring-orbiting-ritchie` at the SHA the status message records. When the Slack PR lands, rebase onto `origin/main` and record the new base.
+- [x] The base is `origin/main`. The Slack connection is not on main, so nothing here ships, reads or tests it.
 - [ ] PR #28's branch `origin/feat/agent-trust` is fetched and read-only. Pieces are taken from it by reading and rewriting, never by merging it.
 
 ### Spawn owners
@@ -49,7 +49,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 
 - [ ] The root re-runs the **Verify, unit** block, the **Verify, live** lanes and the **Verify, perf** block at the exact head SHA, and two audit lanes read the diff and the receipts distrusting the PR body. One audit lane is an adversarial review for trust and durability (AGENTS.md principle 11), since the stages change what an agent may do. Its findings are triaged fix now, implementation note or dismiss, in the PR.
 - [ ] A finding blocks when it breaks a Trust law, lets a box's write reach a definition, loses an owner's choice, or changes which tools run unasked without the definition or the owner saying so. A failure recorded against trunk in the lane marked "Regression lane against trunk." does not block the PR.
-- [ ] At merge-ready the PR goes to the operator with its receipts. The operator lands the Slack PR first, then this one. A new head gets a fresh verdict unless its patch-id is unchanged (`playbooks/shipping.md`).
+- [ ] At merge-ready the PR goes to the operator with its receipts. The operator lands it. A new head gets a fresh verdict unless its patch-id is unchanged (`playbooks/shipping.md`).
 
 ### Boot recipe, for every live lane
 
@@ -64,12 +64,12 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 
 ## Make a connection a shipped definition and a stored choice (connection-definitions)
 
-**Depends on.** The Slack branch as the base, and read access to `origin/feat/agent-trust`.
+**Depends on.** `origin/main` as the base, and read access to `origin/feat/agent-trust`.
 
 **Files.**
 
 - [x] Create `src/core/definitions.ts`. The TypeBox schema of a definition, `readDefinition` (parse, `Value.Check`, then the checks a schema cannot say), the definitions map built at start, and a definition's version.
-- [x] Create `shipped/connections/{github,gmail,calendar,contacts,drive,slack}.json` and delete the six `.md` files. Each carries `about` and its access choices' labels and notes.
+- [x] Create `shipped/connections/{github,gmail,calendar,contacts,drive}.json` and delete the five `.md` files. Each carries `about` and its access choices' labels and notes.
 - [x] Edit `scripts/shipped-github.ts` to emit one JSON object.
 - [x] Edit `src/core/connections.ts`. `acceptedConnection` and its callers read the definitions map and the store's records. The frontmatter parser for connections, `withList`, `withReads`, the parse cache, `connectionPath` and the tool file code go. `withList` stays for agent files (agents.ts).
 - [x] Edit `src/server/capabilities.ts`. "On in this home" and Add as a switch. A server added by address as a record with a version, through one path. Accepted reads and groups in the store. `addShipped`'s copy, `updateShipped`, `shippedUpdate`, `needsNoSignIn`'s rewrite, the eight `boxedFiles("connections")` comparisons, and the box's change to a connection go.
@@ -86,7 +86,7 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 
 - [x] Stage 1, shipped definitions from the release. First two scenario tests that pin today's behaviour, written before any change. What a watch does at its first look after its object's definition changed, and that a tool a server adds later waits switched off.
   - [x] The schema in `src/core/definitions.ts`, with the cross-field checks of `parseConnectionText`, `parseObjects` and `parseFollow` kept as code after `Value.Check`.
-  - [x] The six shipped files as `.json`, each body compared with its tools' descriptions before it goes, with `about` and the access choices' words moved in from the app.
+  - [x] The five shipped files as `.json`, each body compared with its tools' descriptions before it goes, with `about` and the access choices' words moved in from the app.
   - [x] The definitions map read once at start, and a definition's version, the hash of what was read. Every site that compares the accepted file's hash binds to it.
   - [x] "On in this home" in the store, Add as a switch in Connections, Settings and the agent's card. The copy and Update gone.
   - [x] The rule at a change of version. A tool the definition names comes on, a tool a server lists alone waits off whatever the version, switches kept by name.
@@ -100,7 +100,7 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 
 **You see.**
 
-- [ ] Stage 1. A fresh home's Connections lists the six shipped connections with their line from the definition, and turning one on starts sign-in with no file written to the workspace. A daemon restarted on a build with a changed definition draws the changed card with no step from the owner.
+- [ ] Stage 1. A fresh home's Connections lists the five shipped connections with their line from the definition, and turning one on starts sign-in with no file written to the workspace. A daemon restarted on a build with a changed definition draws the changed card with no step from the owner.
 - [ ] Stage 1. A followed object keeps its watch across that restart and wakes on nothing. An account beyond a narrowed definition is asked to sign in again.
 - [ ] Stage 2. A server added by its address shows its tools, the owner marks which read, and nothing in the workspace changes. Allowing a read on a shipped connection survives a restart on a newer build.
 - [ ] Stage 3. Settings → Connections → a connection opens its details. Tools in groups with their kind and setting, accounts with their access, the agents that use it, and what it draws with what following each wakes for. Setting a read to Ask makes its next call ask.
@@ -112,7 +112,7 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 - [x] `test/definitions.test.ts`. Every shipped definition passes the schema and the checks, a round trip over generated definitions, each refusal the old parsers made still refused, and the version stable for the same bytes. Run `npm run test:fast -- test/definitions.test.ts`.
 - [x] `test/connections.test.ts`. Add as a switch, no file in the workspace, a changed definition taken at start with accounts and switches kept, a narrowed one making an account stale, a tool named by the definition on and one a server added alone off across versions, a server added by address as a record, two edits crossing refused by version. Run `npm run test:fast -- test/connections.test.ts`.
 - [x] `test/tool-settings.test.ts`. The settings each kind allows, Ask on a read and Always ask on a write putting it on the floor, the check at the call's start, an allowed read kept across a definition change, and nothing set on a connection letting a write run unasked. Run `npm run test:fast -- test/tool-settings.test.ts`.
-- [x] `test/watch-slack.test.ts`, `test/watches.test.ts`, `test/objects.test.ts`. A watch and a card across a version change, with no false wake. Run `npm run test:fast -- test/watch-slack.test.ts test/watches.test.ts test/objects.test.ts`.
+- [x] `test/watches.test.ts`, `test/objects.test.ts`. A watch and a card across a version change, with no false wake. Run `npm run test:fast -- test/watches.test.ts test/objects.test.ts`.
 - [x] `test/stored-shapes.test.ts`. The new records and docs as they are. Run `npm run test:fast -- test/stored-shapes.test.ts`.
 - [ ] `test/connections.faults.test.ts`. Kills at turning a connection on, adding a server, accepting its tools, changing a setting, and removing it. Dispatch the `ci` workflow with faults on the branch and record the run id.
 - [x] The property "nothing the box writes reaches a definition" in `test/connections.test.ts`, in place of "nothing the box wrote is offered or runs before the owner accepted it".
@@ -120,10 +120,10 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `sonnet` at the PR head, per the boot recipe.
 
-- [ ] Lane 1. Regression lane against trunk. Connect Gmail and GitHub by their fakes and read a card at trunk (the Slack branch) and head. Save `regression-connect-read.png`. Pass when both sign in and draw the same cards at trunk and head.
-- [ ] Lane 2. A fresh home at 1440 and 390 turns each of the six shipped connections on. Save `six-on.png`. Pass when each starts its sign-in, the workspace holds no `connections/` folder, and each tile shows its line from the definition.
+- [ ] Lane 1. Regression lane against trunk. Connect Gmail and GitHub by their fakes and read a card at trunk (`origin/main`) and head. Save `regression-connect-read.png`. Pass when both sign in and draw the same cards at trunk and head.
+- [ ] Lane 2. A fresh home at 1440 and 390 turns each of the five shipped connections on. Save `five-on.png`. Pass when each starts its sign-in, the workspace holds no `connections/` folder, and each tile shows its line from the definition.
 - [ ] Lane 3. Restart the daemon on a build whose Gmail definition renames a card field and adds a read. Save `changed-definition.png`. Pass when the card draws the new field, the added read is on, accounts and switches are kept, and nothing was asked.
-- [ ] Lane 4. A followed GitHub pull request and a followed Slack channel across that restart. Save `watch-across-version.png`. Pass when both watches are live, neither woke, and each row's last look is after the restart.
+- [ ] Lane 4. A followed GitHub pull request and a followed Gmail thread across that restart. Save `watch-across-version.png`. Pass when both watches are live, neither woke, and each row's last look is after the restart.
 - [ ] Lane 5. A fake server adds a tool the definition does not name, before and after a version change. Save `tool-waits-off.png`. Pass when the tool is listed switched off both times.
 - [ ] Lane 6. Add a server by its address, review its tools, mark two as reads, then cross two edits from two tabs. Save `own-server-record.png`. Pass when the reads hold, the second edit is refused by version in words, and the workspace is unchanged.
 - [ ] Lane 7. Open a shipped connection's details at 1440 and 390, set a read to Ask and a write to Off. Save `details-settings.png`. Pass when the read's next call asks, the write is gone from the agent's tools, and both survive a restart.
@@ -133,7 +133,7 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] Metric. Definition parses per watch look and per `/api/objects` request, and the daemon's start time with six shipped definitions, at trunk and head.
+- [ ] Metric. Definition parses per watch look and per `/api/objects` request, and the daemon's start time with five shipped definitions, at trunk and head.
 - [ ] Probe. One followed pull request looked at ten times and fifty object requests against the fakes, counting calls to the parser, interleaved at trunk and head. Start time over five starts each.
 - [ ] Baseline. Record trunk first. PR #24 measured 0.86 ms per parse of GitHub's file, a dozen times per look before its cache.
 - [ ] Rule. Head parses a definition zero times after start. Any parse per look or per request fails. A start slower than trunk's by more than 50 ms fails.
@@ -148,8 +148,8 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or b
 
 - [ ] Root's clean verdict at the exact head SHA, the adversarial review triaged.
 - [ ] DESIGN.md and AGENTS.md say a connection is a definition banda ships and a choice the store holds, with every unit box checked.
-- [ ] Rebased onto the current base after the verdict, patch-id unchanged. After the Slack PR lands, rebased onto `origin/main`.
-- [ ] Handed to the operator at merge-ready. The operator lands it after the Slack PR.
+- [ ] Rebased onto `origin/main` after the verdict, patch-id unchanged.
+- [ ] Handed to the operator at merge-ready.
 
 ## Close the program
 
@@ -181,14 +181,13 @@ The open questions were closed by reading the code, recorded in `docs/connection
 
 - A definition's version changes at every release that touches it, so readings and listings taken under the old one are stale at start. The owner watches lanes 3 and 4.
 - About seventeen test files and four fault workers read the shipped `.md` files or seed `Accepted` with connection paths. Stage 1 rewrites their fixtures, and a missed one fails loudly.
-- The reaction permission on the Slack branch binds a channel by its own small mechanism. It stays until grains land with the rework of PR #28.
 - A body's instruction that no tool description repeats would be lost with the body. Stage 1 compares each before deleting.
 - The property test for box-written files is restated, not removed. The adversarial lane reads the restatement.
-- One PR carries four stages on top of the Slack branch's thirty-nine commits. The ordered commits and per-stage unit boxes keep each stage checkable.
+- One PR carries four stages. The ordered commits and per-stage unit boxes keep each stage checkable.
 
 ## Appendix D. Links and reading list
 
-- `AGENTS.md`, `DESIGN.md` "Connections", "Watches", "Trust", "The workspace", `docs/connection-definitions.md`, `docs/connections.md`, `docs/slack.md`, `docs/delivery.md`.
+- `AGENTS.md`, `DESIGN.md` "Connections", "Watches", "Trust", "The workspace", `docs/connection-definitions.md`, `docs/connections.md`, `docs/delivery.md`.
 - Code to read before editing. `src/core/connections.ts`, `src/core/objects.ts`, `src/core/follow.ts`, `src/core/rest.ts`, `src/core/band.ts` (the typed-file pattern), `src/server/capabilities.ts`, `src/core/watches.ts`, `src/core/object-access.ts`, `src/server/objects.ts`, `web/src/app/McpSetup.tsx`, `web/src/chat/McpConnection.tsx`, `web/src/chat/Connect.tsx`, `web/src/chat/Catalogue.tsx`, `web/src/lib/connect.ts`.
 - On `origin/feat/agent-trust`, read-only. `src/core/tool-kinds.ts`, the `ToolSettings` doc in `src/core/connections.ts`, the call-start check in `src/server/capabilities.ts`, `web/src/chat/ToolKinds.tsx`, `test/tool-settings.test.ts`, `web/src/specimen/agent/tool-kinds.tsx`.
 - Stages 1 and 2 get the `how` skill over the listing binding and the accept path before editing, and `interrogate` on the version rule before stage 1 ships. The decision trail lives in the commit messages.

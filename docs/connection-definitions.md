@@ -1,7 +1,7 @@
 # Connection definitions
 
 Priority: **Medium**. Implementation status lives in [Status](status.md). This is a design under owner review. All four
-stages, the six shipped connections as definitions read from the release, the owner's servers and reads as records in
+stages, the five shipped connections as definitions read from the release, the owner's servers and reads as records in
 the store, a connection's details to check and change, and the deletion of what was left of the file, are built on the
 branch and not yet accepted through the app. It belongs to [Connections](connections.md).
 
@@ -17,8 +17,8 @@ connections are out of scope and their code is open work to delete ([Connections
 is configuration, and the file shape now costs more than it gives. Read in the code and in a home with ten
 connections:
 
-- **No agent and no person writes one.** The built-in ones (Gmail, Calendar, Contacts, Drive, and Slack on its own
-  branch) and GitHub are written by a release (GitHub's by `scripts/shipped-github.ts`). The ones an owner adds by
+- **No agent and no person writes one.** The built-in ones (Gmail, Calendar, Contacts, Drive) and GitHub are written
+  by a release (GitHub's by `scripts/shipped-github.ts`). The ones an owner adds by
   address are written by the daemon (`addMcp`, `addByAddress`), and rewritten by the daemon when the owner says which
   tools only read (`trustReads` on main, `keepWithFile` in PR #28) or a server turns out to need no sign-in
   (`needsNoSignIn`).
@@ -251,7 +251,6 @@ not open.
 - [ ] Slice 4, built on the branch and waiting on its acceptance through the app: a connection's details, to check and
   to change, on the tool list taken from PR #28 (groups as definition data, `ToolSettings`, a setting read at the
   commit that starts a call), the same component as the review on adding
-- [ ] Slack's reaction permission, which binds a channel, becomes a `place` grain when grains land with the rework of PR #28
 - [ ] Revisit connections and tools an owner or an agent defines themselves. They are out of scope here and their
   code went in slice 3; DESIGN.md "Open" keeps the line. A file an agent writes and the owner accepts is the shape to
   start from, beside the shipped definitions, passing the same schema
