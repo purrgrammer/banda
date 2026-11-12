@@ -62,6 +62,7 @@ import {
 	REPLY_VOICE,
 	REPOSITORY,
 	SANCHO,
+	sampleFace,
 	VOICE,
 } from "../fixtures.ts";
 import { FrameContext, Group, HeaderStage, Section } from "../stage.tsx";
@@ -176,6 +177,9 @@ function saw(
 	);
 }
 
+/** An agent's name too long for a phone's bubble. */
+const LONG_NAME = "Ana María de la Vega Ortega Fernández Hidalgo";
+
 export function Parts() {
 	return (
 		<>
@@ -184,8 +188,12 @@ export function Parts() {
 					<DaySeparator>Today</DaySeparator>
 					<Run time="10:20">
 						<Bubble>Can you look at flights to Lisbon for the long weekend? Mornings, window seat.</Bubble>
-						<Bubble reaction="👍" copy="And ask Atlas whether Friday is free.">
-							And ask Atlas whether Friday is free.
+						<Bubble reaction="👍" copy="And ask @Atlas whether Friday is free.">
+							And ask <Mention who={ATLAS} /> whether Friday is free.
+						</Bubble>
+						{/* a mention never breaks across lines; a name too long for the bubble ends in an ellipsis */}
+						<Bubble copy="Loop in @Ana María de la Vega Ortega Fernández Hidalgo too.">
+							Loop in <Mention who={{ face: sampleFace("sprout", "#56a875"), name: LONG_NAME }} /> too.
 						</Bubble>
 					</Run>
 					<Run who={MARA} time="10:21">
@@ -193,6 +201,11 @@ export function Parts() {
 							<p>On it. I'll check the three airlines you use and keep to €300.</p>
 							<p>
 								I asked <Mention who={ATLAS} /> about Friday.
+							</p>
+							{/* a mention near the end of a line moves to the next one whole, face and name together */}
+							<p>
+								Friday is clear for now, but before I book anything I want <Mention who={ATLAS} /> and{" "}
+								<Mention who={{ face: sampleFace("sprout", "#56a875"), name: LONG_NAME }} /> to agree on the train back.
 							</p>
 						</Bubble>
 					</Run>

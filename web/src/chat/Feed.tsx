@@ -213,17 +213,20 @@ export function CopyButton({ text, shown = false, onDone }: { text: string; show
 	);
 }
 
-/** A mention: the agent's face and name, a link to its chat. */
+/**
+ * A mention: the agent's face and name, a link to its chat, set in the line as words are. The link is an inline block
+ * whose baseline is its name's, so the name sits on the sentence's baseline at the line's own height; the face is
+ * sized from the text and centred on its capitals (`Face` size `text`), so it stays within the words' height at any
+ * size. It moves to the next line whole, and a name too long for the line ends in an ellipsis (`clip`, not `hidden`,
+ * so the block keeps the name's baseline).
+ */
 export function Mention({ who }: { who: Who & { readonly id?: string | undefined } }) {
 	return (
 		<a
 			href={`#/a/${who.id ?? who.name.toLowerCase()}`}
-			className={cn(
-				"mx-px inline-flex rounded-[6px] bg-paper-3 font-medium text-ink no-underline hover:underline",
-				"items-center gap-0.5 py-px pr-1.5 align-middle leading-none -translate-y-[0.1em]",
-			)}
+			className="inline-block max-w-full overflow-x-clip text-ellipsis whitespace-nowrap align-baseline font-semibold text-ink no-underline hover:underline"
 		>
-			<Face face={who.face} name={who.name} size="mention" />
+			<Face face={who.face} name={who.name} size="text" className="mr-[0.25em]" />
 			{who.name}
 		</a>
 	);
