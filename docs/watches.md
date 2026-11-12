@@ -104,10 +104,14 @@ returned to and merged, at desktop and phone width.
   whether a deleted (not cancelled) event ends its watch, label names for user labels, a calendar's upcoming events
   (needs a sync token, not a moving window); a contact followed (the pass's account had no saved contacts); a
   calendar event's link carries its id encoded, so an event is followed from its card alone (#35)
-- [ ] A watch's file has no editor field and the `watch` tool no parameter for `wakes_a_day`; an issue's and a pull
-  request's comments and reviews are read one page of a hundred, so what is past the hundredth is never seen (the
-  object's own counts are the totals for issue and pull request comments, so a comment off the page is never said
-  gone; reviews have no such count) (#39, #34)
+- [ ] A watch's file has no editor field and the `watch` tool no parameter for `wakes_a_day` (#39)
+- [x] A pull request's reviews and comments and an issue's comments are read at their tail (a read's `tail`): the last
+  pages, by the object's count (`pr.comments`, `issue.comments`) or the length the last look found (reviews), three
+  pages a look at most; what leaves the old end is pushed off, never gone, and what slides back is not new; 150
+  comments and 150 reviews wake for the newest (test/watch-tail.test.ts) (#34)
+- [ ] A discussion's comments are still one page of a hundred, oldest first: `get_discussion_comments` pages by cursor
+  only, so its tail needs a walk of cursors; its `totalCount` keeps a comment off the page from being said gone (#34)
+- [ ] The tail of a pull request's reviews and comments against real GitHub, through the app (#35)
 - [ ] Reads cost: a pull request is four requests a look (pr, checks, reviews, comments), every two minutes while
   busy, so twenty busy pull requests are ~2,400 requests an hour against GitHub's 5,000 per token, and sharing a
   reading saves only on one object. Either a `when` on a read (checks only while a check runs or the head moved,

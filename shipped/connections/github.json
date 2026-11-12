@@ -466,8 +466,10 @@
 						"owner": "{owner}",
 						"repo": "{repo}",
 						"pullNumber": "{number}",
-						"perPage": 100,
-						"page": 1
+						"perPage": 100
+					},
+					"tail": {
+						"by": "id"
 					}
 				},
 				"comments": {
@@ -479,8 +481,11 @@
 						"owner": "{owner}",
 						"repo": "{repo}",
 						"pullNumber": "{number}",
-						"perPage": 100,
-						"page": 1
+						"perPage": 100
+					},
+					"tail": {
+						"by": "id",
+						"total": "pr.comments"
 					}
 				}
 			},
@@ -489,13 +494,11 @@
 					"checks.check_runs": "name"
 				},
 				"totals": {
-					"checks.check_runs": "checks.total_count",
-					"comments": "pr.review_comments"
+					"checks.check_runs": "checks.total_count"
 				},
 				"ignore": [
 					"pr.updated_at",
 					"pr.comments",
-					"pr.review_comments",
 					"pr.commits",
 					"pr.changed_files",
 					"pr.mergeable",
@@ -760,8 +763,11 @@
 						"owner": "{owner}",
 						"repo": "{repo}",
 						"issue_number": "{number}",
-						"perPage": 100,
-						"page": 1
+						"perPage": 100
+					},
+					"tail": {
+						"by": "id",
+						"total": "issue.comments"
 					}
 				}
 			},

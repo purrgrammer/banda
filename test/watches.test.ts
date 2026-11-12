@@ -680,10 +680,12 @@ describe("a watch on a pull request", () => {
 	it("a thousand changes in one look are one wake, its words bounded, in bounded time", async () => {
 		const flood = (step: number): World =>
 			changed(Math.min(step, 1), (at) => {
-				if (step >= 1)
-					at.get_comments.push(
-						...Array.from({ length: 1000 }, (_, n) => ({ id: 1000 + n, user: { login: `bob${n}` }, body: "+1" })),
-					);
+				if (step < 1) return;
+				at.get_comments.push(
+					...Array.from({ length: 1000 }, (_, n) => ({ id: 1000 + n, user: { login: `bob${n}` }, body: "+1" })),
+				);
+				// as GitHub counts them on the pull request: a look reads the newest pages of them, by that count
+				(at as unknown as { get: { comments: number } }).get.comments = at.get_comments.length;
 			});
 		let took = 0;
 		const summary = await watchScenario(await tempHome(), new Faults(), {
@@ -698,9 +700,11 @@ describe("a watch on a pull request", () => {
 		expect(watchInvariants(summary)).toEqual([]);
 		expect(summary.wakes).toHaveLength(1);
 		const changes = summary.wakes[0]?.changes ?? [];
-		// ana's approval, lint failing and the checks finishing, and a thousand comments: twenty named, the rest counted
+		// ana's approval, lint failing and the checks finishing, and the newest comments a look reads of a thousand (its
+		// pages from the one before the last): twenty named, the rest counted, and the ones between said to be missing
 		expect(changes).toHaveLength(21);
-		expect(changes.at(-1)).toBe("and 983 more");
+		expect(changes.at(-1)).toBe("and 84 more");
+		expect(summary.wakes[0]?.gap).toBe(true);
 		expect(changes.join(", ").length).toBeLessThan(2000);
 		expect(summary.sent.every((text) => text.length < 4000)).toBe(true);
 		expect(took).toBeLessThan(5000);
