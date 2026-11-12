@@ -50,6 +50,8 @@ for (const width of [390, 1440])
 				const section = `document.getElementById('slack')`;
 				await page.until(section);
 				await page.run(`${section}.scrollIntoView({block:'center'})`);
+				// the specimen mounts a section as it comes near the view: wait for it, rather than read it once
+				await page.until(`${section}.innerText.includes("Thread in #general")`);
 				const text = (words: string) => page.run(`${section}.innerText.includes(${JSON.stringify(words)})`);
 				for (const words of [
 					"Thread in #general",
