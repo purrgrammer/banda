@@ -19,7 +19,9 @@ describe("staging a release", () => {
 		expect(targetName({ platform: "darwin", arch: "arm64" })).toBe("mac-arm64");
 		expect(targetName({ platform: "win32", arch: "x64" })).toBe("win-x64");
 		expect(targetName({ platform: "linux", arch: "arm64" })).toBe("linux-arm64");
-		expect(nodeArchive({ platform: "darwin", arch: "x64" })).toBe(`node-v${NODE_VERSION}-darwin-x64.tar.gz`);
+		expect(nodeArchive({ platform: "darwin", arch: "arm64" })).toBe(`node-v${NODE_VERSION}-darwin-arm64.tar.gz`);
+		expect(() => targetName({ platform: "darwin", arch: "x64" })).toThrow(/Apple silicon/);
+		expect(() => nodeArchive({ platform: "darwin", arch: "x64" })).toThrow(/Apple silicon/);
 		expect(nodeArchive({ platform: "linux", arch: "arm64" })).toBe(`node-v${NODE_VERSION}-linux-arm64.tar.gz`);
 		expect(nodeArchive({ platform: "win32", arch: "x64" })).toBe(`node-v${NODE_VERSION}-win-x64.zip`);
 		expect(() => nodeArchive({ platform: "freebsd", arch: "x64" })).toThrow(/no Node.js build/);

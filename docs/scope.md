@@ -4,14 +4,17 @@ The release keeps the browser and current feature scope, including groups, memor
 connections and current provider choices. Qualify their existing supported behavior rather than
 hiding features to obtain a passing release. Keep the one-daemon architecture and product vocabulary.
 
+The desktop and CLI release targets are macOS on Apple silicon, Windows x64, and Linux x64 and ARM64.
+The phone release targets Android ARM64. Intel Macs are unsupported.
+
 ## Work
 
 - Inventory every exposed UI action, API route, model tool and resumable task. Name the supported operations,
   protocol subsets, provider models, authentication modes and platform/runtime combinations.
 - Recheck recent provider setup work before treating app-based provider selection as missing. Validate setup,
   disconnect, restart and missing credentials through the actual app and API.
-- Select a first packaged platform through a clean-machine spike. macOS arm64 is a candidate, not an accepted
-  restriction on the existing product. Define model latency and per-workflow cost budgets from measurements.
+- Qualify the packaged platforms through clean-machine spikes. Define model latency and per-workflow cost
+  budgets from measurements.
 - Repair lint traversal of nested worktrees and make toolchain, install, build and test commands reproducible.
   Pin exact dependencies and keep pi-durable, pi-ai, pi-env and chord in lockstep.
 - Preserve current capabilities while resolving their blockers. An unsupported operation must explain its limits;

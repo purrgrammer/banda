@@ -34,7 +34,8 @@ for (const width of [390, 1440]) {
 			expect(
 				await page.run(`document.querySelector('#download').href.endsWith('${width === 390 ? ".apk" : ".exe"}')`),
 			).toBe(true);
-			expect(await page.run(`document.querySelectorAll('a[data-file]').length`)).toBe(13);
+			expect(await page.run(`document.querySelectorAll('a[data-file]').length`)).toBe(11);
+			expect(await page.run(`document.querySelectorAll('a[data-file*="/mac/x64/"]').length`)).toBe(0);
 			expect(
 				await page.run(
 					`[...document.querySelectorAll('a[data-file]')].every(a => a.href.includes('/releases/download/') && a.getBoundingClientRect().height > 0)`,

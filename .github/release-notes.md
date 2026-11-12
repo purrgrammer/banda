@@ -15,12 +15,11 @@ the app says so, rename `~/.banda` to keep it and start fresh, or go back to the
 | You have | Download |
 |---|---|
 | Mac with Apple silicon | `banda-<version>-mac-arm64.dmg` |
-| Mac with Intel | `banda-<version>-mac-x64.dmg` |
 | Windows | `banda-<version>-win-x64.exe` |
 | Linux | `banda-<version>-linux-x64.AppImage` or `.deb` |
 | Linux on ARM | `banda-<version>-linux-arm64.AppImage` or `.deb` |
 
-- **macOS:** open the `.dmg` and drag banda onto Applications. The app is not notarized yet, so the first time, open
+- **macOS requires Apple silicon.** Open the `.dmg` and drag banda onto Applications. The app is not notarized yet, so the first time, open
   it, then go to System Settings → Privacy & Security → Open Anyway. Or run
   `xattr -dr com.apple.quarantine /Applications/banda.app`.
 - **Windows:** the installer is unsigned: SmartScreen → More info → Run anyway.
@@ -30,7 +29,6 @@ the app says so, rename `~/.banda` to keep it and start fresh, or go back to the
 | You have | Download |
 |---|---|
 | Mac with Apple silicon | `banda-cli-<version>-mac-arm64.tar.gz` |
-| Mac with Intel | `banda-cli-<version>-mac-x64.tar.gz` |
 | Windows | `banda-cli-<version>-win-x64.zip` |
 | Linux | `banda-cli-<version>-linux-x64.tar.gz` |
 | Linux on ARM | `banda-cli-<version>-linux-arm64.tar.gz` |
@@ -48,5 +46,4 @@ running, the app opens it instead of starting another, and quitting the app stop
 Install the APK on an Android phone (allow installs from your browser or files app when it asks). Open it, then on
 the computer that runs banda open Settings → Devices → Pair a phone and scan the code. Approve the phone there and it
 opens your band, at home or away: it reaches your computer through Iroh's relays, never through an open port. A newer
-APK installs over this one. Your computer reaches no relay until you pair a phone. A Mac with Intel can't be reached
-from a phone yet: Iroh has no build for it.
+APK installs over this one. Your computer reaches no relay until you pair a phone.

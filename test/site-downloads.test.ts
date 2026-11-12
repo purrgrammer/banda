@@ -54,10 +54,12 @@ describe("landing downloads", () => {
 				names.filter((name) => !name.includes("android")),
 			),
 			release("phone2", "2026-11-03", ["banda-2-android-arm64.apk"]),
+			release("old-intel", "2026-10-01", ["banda-1-mac-x64.dmg", "banda-cli-1-mac-x64.tar.gz"]),
 		];
 		const result = updateDownloads(html, releases);
 		const links = [...result.matchAll(/data-file="([^"]+)" href="([^"]+)"/g)];
-		expect(links).toHaveLength(13);
+		expect(links).toHaveLength(11);
+		expect(result).not.toContain("mac-x64");
 		for (const [, key, url] of links)
 			expect(url).toContain(`/releases/download/${key.startsWith("phone") ? "phone2" : "v2"}/`);
 		expect(result).toContain("/v2/SHA256SUMS");

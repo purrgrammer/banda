@@ -24,12 +24,14 @@ export type Target = { readonly platform: NodeJS.Platform; readonly arch: string
 
 /** The name a target goes by in release file names, as electron-builder names the desktop installers. */
 export function targetName({ platform, arch }: Target): string {
+	if (platform === "darwin" && arch !== "arm64") throw new Error("banda on macOS requires Apple silicon.");
 	const os = platform === "darwin" ? "mac" : platform === "win32" ? "win" : platform;
 	return `${os}-${arch}`;
 }
 
 /** The official Node.js archive for a target, as nodejs.org/dist names it. */
 export function nodeArchive({ platform, arch }: Target, version = NODE_VERSION): string {
+	targetName({ platform, arch });
 	if (platform === "win32") return `node-v${version}-win-${arch}.zip`;
 	if (platform === "darwin" || platform === "linux") return `node-v${version}-${platform}-${arch}.tar.gz`;
 	throw new Error(`no Node.js build is bundled for ${platform}`);
@@ -159,6 +161,7 @@ const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex
 /** Stage `release/banda/` for this computer, and with `archive`, pack it; returns the archive's path, if any. */
 export async function stage(root: string, options: { archive?: boolean } = {}): Promise<string | undefined> {
 	const target: Target = { platform: process.platform, arch: process.arch };
+	const name = targetName(target);
 	const release = join(root, "release");
 	const out = join(release, "banda");
 	await rm(out, { recursive: true, force: true });
@@ -167,10 +170,10 @@ export async function stage(root: string, options: { archive?: boolean } = {}): 
 	await stageNode(out, target, join(release, "cache"));
 	await stageLaunchers(out, target);
 	const { version } = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as { version: string };
-	console.log(`staged banda ${version} for ${targetName(target)} in ${out}`);
+	console.log(`staged banda ${version} for ${name} in ${out}`);
 	if (!options.archive) return undefined;
 	const extension = target.platform === "win32" ? "zip" : "tar.gz";
-	const archive = join(release, `banda-cli-${version}-${targetName(target)}.${extension}`);
+	const archive = join(release, `banda-cli-${version}-${name}.${extension}`);
 	await rm(archive, { force: true });
 	run(
 		tar,
