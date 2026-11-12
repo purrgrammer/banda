@@ -108,7 +108,8 @@ returned to and merged, at desktop and phone width.
 - [x] A pull request's reviews and comments and an issue's comments are read at their tail (a read's `tail`): the last
   pages, by the object's count (`pr.comments`, `issue.comments`) or the length the last look found (reviews), three
   pages a look at most; what leaves the old end is pushed off, never gone, and what slides back is not new; 150
-  comments and 150 reviews wake for the newest (test/watch-tail.test.ts) (#34)
+  comments and 150 reviews wake for the newest (test/watch-tail.test.ts); through the app against a throwaway daemon
+  and a fake GitHub that pages oldest first, at desktop and phone width (test/watch-tail.browser.test.ts) (#34)
 - [ ] A discussion's comments are still one page of a hundred, oldest first: `get_discussion_comments` pages by cursor
   only, so its tail needs a walk of cursors; its `totalCount` keeps a comment off the page from being said gone (#34)
 - [ ] The tail of a pull request's reviews and comments against real GitHub, through the app (#35)
