@@ -25,6 +25,16 @@ it("the working face never lands on an earlier reply: it goes alone to the foot,
 	expect(html).toContain('aria-label="Mara is working"');
 });
 
+// what the owner sent while it works waits below the face: the reply to the words the agent took comes before them
+it("the face stands above the owner's words still waiting for the agent, where its reply will come", () => {
+	const asked: Segment = { kind: "owner", key: "42", text: "Find me a train", files: [] };
+	const waiting: Segment = { kind: "owner", key: "queued:q1", text: "Before noon", files: [], queued: true };
+	const html = render([asked, working, waiting]);
+	expect(faces(html)).toEqual(['data-run-face="working"']);
+	expect(html.indexOf("Find me a train")).toBeLessThan(html.indexOf('data-run-face="working"'));
+	expect(html.indexOf('data-run-face="working"')).toBeLessThan(html.indexOf("Before noon"));
+});
+
 it("says nothing of the work when nobody is working", () => {
 	const html = render([reply]);
 	expect(faces(html)).toEqual([]);

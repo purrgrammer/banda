@@ -104,7 +104,8 @@ export function ActivitySheet({
 					heading.current?.focus();
 				}}
 				onCloseAutoFocus={(event) => {
-					if (returnTo === undefined) {
+					// the face's slot went with the run when no reply came to take it: back to what opened the sheet, as anywhere
+					if (returnTo === undefined || !returnTo.isConnected) {
 						returnFocus(event);
 						return;
 					}

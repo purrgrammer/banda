@@ -149,10 +149,11 @@ one that gives them one more thing to manage stays out.
   asks draw as lines in the feed, in place: a routine's run, a change to accept, a connection to finish signing in to,
   an error. Work in progress is said in the header, under the name, once: the face's motion and what it does now
   ("Using its browser…"; in a group, who is at work), cut to the width; the feed has no working line, never a tool
-  row, never typing dots, with one exception: the **working face**. While an agent works, its face alone (28px, no dots
-  and no words; in a group, one for each member at work; still under reduced motion) stands at the foot of the feed,
-  and it is the face of the run that follows, so the reply comes beside it without a jump. A tap opens the activity.
-  Any message can be copied. Every destructive action (forgetting a fact, removing a member,
+  row, never typing dots, but for the **working face**: while an agent works, its face alone (28px, no dots and no
+  words; in a group, one for each member at work; still under reduced motion) stands at the foot of the feed, above
+  the owner's messages still waiting for it, where its reply will come. The reply takes that same face, so nothing
+  jumps; in a direct chat it keeps the face, still with no name, while the chat is open. A tap on the face opens the
+  activity. Any message can be copied. Every destructive action (forgetting a fact, removing a member,
   taking back a permission, archiving an agent) asks first, in its own verb, with a way to keep things as they are. A reply that
   failed, a message that was not delivered, or an agent that did not answer, ends in one tap, "Try again", which sends
   the owner's "Try again." in their own words: what they asked stays where it was, and the agent answers it.

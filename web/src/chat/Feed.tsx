@@ -37,6 +37,7 @@ function RunFace({ who, work }: { who: Who; work: RunWork | undefined }) {
 				<button
 					type="button"
 					aria-label={`${who.name} is working`}
+					aria-haspopup="dialog"
 					className="absolute -inset-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ink"
 					onClick={() => {
 						if (slot.current !== null) onOpen(slot.current);

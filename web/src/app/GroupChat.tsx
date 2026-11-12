@@ -39,7 +39,7 @@ import { ActivitySheet, type ActivityTarget } from "./Activity.tsx";
 import { kindWords } from "./ArtifactPage.tsx";
 import { whoOf } from "./band.ts";
 import { DraftApproval } from "./DraftApproval.tsx";
-import { groupFaces, noTandas } from "./group-faces.ts";
+import { groupFaces, noFaceKeys } from "./group-faces.ts";
 import { HarnessActivitySheet } from "./HarnessSession.tsx";
 import { chatActivity, harnessActivity } from "./harness-activity.ts";
 import { MessageObjects, MessageText } from "./Objects.tsx";
@@ -87,7 +87,7 @@ export function GroupChat({
 	const [activity, setActivity] = useState<readonly ActivityTarget[]>();
 	// the working face that opened the sheet, for focus to go back to
 	const openedFrom = useRef<HTMLElement | undefined>(undefined);
-	const tandas = useRef(noTandas());
+	const faceKeys = useRef(noFaceKeys());
 	const latest = row?.latest;
 	const asking = row?.asking.join(",");
 	// biome-ignore lint/correctness/useExhaustiveDependencies: read again whenever the row says the log or its asks changed
@@ -125,8 +125,9 @@ export function GroupChat({
 	const working = members.filter((member) => member.state === "working");
 	const executions = row?.executions ?? group?.executions ?? {};
 	const faces = groupFaces(
-		tandas.current,
-		group,
+		faceKeys.current,
+		// a reaction alone draws nothing in the feed: it is no reply for a face to become
+		group && { latest: group.latest, messages: group.messages.filter((message) => !reactionOnly(message)) },
 		working.flatMap((member) => (member.id === undefined ? [] : [member.id])),
 		latest,
 	);
@@ -296,7 +297,7 @@ export function GroupChat({
 								})();
 								return (
 									<div
-										key={tandas.current.taken.get(message.entry) ?? message.entry}
+										key={faceKeys.current.taken.get(message.entry) ?? message.entry}
 										data-entry={message.entry}
 										className="scroll-my-24 rounded-tile transition-[background-color] duration-700 data-[found]:bg-paper-3"
 									>

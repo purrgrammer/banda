@@ -2,20 +2,18 @@
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, getCurrentTools } from "@earendil-works/pi-ai";
-import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { agentMainThread } from "../src/core/gateway.ts";
 import { type Daemon, startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { ChatRow, GroupView, Posted } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { freePort, skipShippedSkills, tempHome, until, viteCacheDir } from "./helpers.ts";
+import { skipShippedSkills, tempHome, until, type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 let daemon: Daemon;
-let web: ViteDevServer;
+let web: WebServer;
 let base: string;
 let token: string;
 let chat: number;
@@ -86,14 +84,8 @@ beforeAll(async () => {
 		"PUT",
 	);
 	room = (await api<{ room: number }>("/groups", { members: ["sancho", "mara"], name: "Face group" })).room;
-	web = await createServer({
-		configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-		cacheDir: await viteCacheDir(),
+	web = await webServer({
 		server: {
-			host: "127.0.0.1",
-			port: await freePort(),
-			strictPort: true,
-			open: false,
 			proxy: {
 				"/api": {
 					target: `http://127.0.0.1:${daemon.port}`,
@@ -103,10 +95,7 @@ beforeAll(async () => {
 			},
 		},
 	});
-	await web.listen();
-	const address = web.httpServer!.address();
-	if (!address || typeof address === "string") throw new Error("web did not listen");
-	base = `http://127.0.0.1:${address.port}`;
+	base = web.origin;
 }, 60_000);
 afterAll(async () => {
 	letGo();
