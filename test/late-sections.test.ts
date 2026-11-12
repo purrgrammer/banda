@@ -11,6 +11,7 @@ import {
 	fauxAssistantMessage,
 	fauxProvider,
 	fauxToolCall,
+	getCurrentSystemPrompt,
 	type Message,
 	type Context as ModelContext,
 } from "@earendil-works/pi-ai";
@@ -119,36 +120,25 @@ describe("a section that changes mid-chat", () => {
 			expect(saved.flatMap((patch) => Object.values(patch))).not.toContain(null);
 			expect(saved.map((patch) => patch.memory).join()).toContain("Prefers window seats");
 
+			// before the tool loads, the guide's section is there, empty, and so not in the prompt
+			expect(baseline.avatar_design).toBe("");
+			expect(getCurrentSystemPrompt(d.sent.at(-1) ?? [])).not.toContain("Avatar geometry designer");
+
 			await d.say(`call:tool_search:${JSON.stringify({ query: "propose_avatar", limit: 1 })}`);
 			const loaded = d.systems();
 			const avatar = patches(remembered, loaded);
 			expect(avatar.flatMap((patch) => Object.keys(patch))).not.toContain("instructions");
 			expect(avatar.flatMap((patch) => Object.values(patch))).not.toContain(null);
-			// the guide is no section: it came, whole, with the tool that loaded propose_avatar
-			expect(JSON.stringify(loaded)).not.toContain("Avatar geometry designer");
-			const messages = d.sent.at(-1) ?? [];
-			const search = messages.find((message) => message.role === "toolResult" && message.toolName === "tool_search") as
-				| Message
-				| undefined;
-			expect(textOf(search)).toContain("propose_avatar");
-			expect(textOf(search)).toContain(AVATAR_INSTRUCTIONS);
-			// and propose_avatar is offered from the next request
+			// loading it changes the section's words to the whole guide, and the tool is offered
+			expect(avatar.map((patch) => patch.avatar_design ?? "").join()).toContain(AVATAR_INSTRUCTIONS);
+			expect(getCurrentSystemPrompt(d.sent.at(-1) ?? [])).toContain(AVATAR_INSTRUCTIONS);
 			const added = loaded.flatMap((message) => (message as { toolsAdded?: { name: string }[] }).toolsAdded ?? []);
 			expect(added.map((tool) => tool.name)).toContain("propose_avatar");
-		} finally {
-			await d.close();
-		}
-	});
-
-	it("tool_search carries the face guide only when it loads propose_avatar", async () => {
-		const d = await daemon();
-		try {
-			await d.say(`call:tool_search:${JSON.stringify({ query: "connect", limit: 1 })}`);
+			// once, as a section: the search's result does not repeat it
 			const search = (d.sent.at(-1) ?? []).find(
 				(message) => message.role === "toolResult" && message.toolName === "tool_search",
 			) as Message | undefined;
-			expect(textOf(search)).toContain("connect");
-			expect(textOf(search)).not.toContain("propose_avatar");
+			expect(textOf(search)).toContain("propose_avatar");
 			expect(textOf(search)).not.toContain("Avatar geometry designer");
 		} finally {
 			await d.close();

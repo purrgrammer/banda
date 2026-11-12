@@ -546,9 +546,9 @@ export function proposeAvatarTool({ asking, sending, blobs, limit }: Speaking): 
 	return defineTool({
 		name: PROPOSE_AVATAR,
 		description:
-			"Offer a generated face for yourself as a preview card, designed by the avatar geometry rules that came with " +
-			"it when it loaded. Validation may refuse it with errors to correct. Only the owner's Use this face button " +
-			"applies it; proposing changes nothing.",
+			"Offer a generated face for yourself as a preview card, designed by the avatar geometry rules in your " +
+			"instructions. Validation may refuse it with errors to correct. Only the owner's Use this face button applies " +
+			"it; proposing changes nothing.",
 		parameters: AVATAR_GEOMETRY,
 		replay: "safe",
 		executionMode: "sequential",

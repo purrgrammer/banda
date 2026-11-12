@@ -1,5 +1,4 @@
-import { defineExtension, type PromptSection, type ToolRegistration, wrapTool } from "@earendil-works/pi-durable";
-import { TOOL_SEARCH_TOOL_NAME } from "@earendil-works/pi-durable/tool-search";
+import { defineExtension, type PromptSection } from "@earendil-works/pi-durable";
 import { PROPOSE_AVATAR } from "./toolsets.ts";
 
 /**
@@ -96,39 +95,24 @@ export const AVATAR_INSTRUCTIONS = CHAT_DELIVERY + DESIGN;
 export const SHEET_AVATAR_INSTRUCTIONS = SHEET_DELIVERY + DESIGN;
 
 /**
- * The guide reaches a chat with `propose_avatar` itself, in the result of the `tool_search` that loaded it: a trusted
- * tool result, as the old read tool's was. Not a section from the moment it loads: pi-durable can only append a new
- * section at the end, and one that appears anywhere else re-adds every section; nor the tool's description, which
- * `tool_search` indexes in full, so its words would load the tool for unrelated queries.
- */
-export function withAvatarGuide(tool: ToolRegistration): ToolRegistration {
-	return {
-		...tool,
-		execute: async (args, api, context) => {
-			const result = await tool.execute(args, api, context);
-			const loaded = (result.details as { readonly loaded?: unknown } | undefined)?.loaded;
-			if (!Array.isArray(loaded) || !loaded.includes(PROPOSE_AVATAR)) return result;
-			return { ...result, output: [...(result.output ?? []), { type: "text", text: `\n\n${AVATAR_INSTRUCTIONS}` }] };
-		},
-	};
-}
-
-/**
- * The guide as a section only when the prompt is written whole, which costs no re-add: after a compaction, whose summary
- * may have replaced the search result that brought it while `propose_avatar` stays loaded. A prompt written whole lacks
- * `instructions` among the sections shown, which is otherwise always there; once in, it stays while the tool does.
+ * The guide reaches a chat with `propose_avatar` itself, as a section that is there from the chat's start, empty and so
+ * not in the prompt, while the tool waits to load; loading it changes the section's words in place. pi-durable can only
+ * append a new section at the end, so one that appeared mid-chat would re-add every section; and once in, the guide is
+ * in every prompt written after, a compaction's or a re-add's. Not the tool's description: `tool_search` indexes it in
+ * full, so its words would load the tool for unrelated queries.
  */
 export const avatarSection: PromptSection = {
 	key: "avatar_design",
-	render: ({ agent, shown }) =>
-		agent.tools.some((tool) => tool.name === PROPOSE_AVATAR) &&
-		(shown.avatar_design !== undefined || shown.instructions === undefined)
-			? AVATAR_INSTRUCTIONS
-			: undefined,
+	// untagged, so the empty one adds nothing to the prompt; the guide brings its own tags
+	tag: false,
+	render: ({ agent }) => {
+		if (agent.tools.some((tool) => tool.name === PROPOSE_AVATAR))
+			return `<avatar_design>\n${AVATAR_INSTRUCTIONS}\n</avatar_design>`;
+		return agent.deferred.some((tool) => tool.name === PROPOSE_AVATAR) ? "" : undefined;
+	},
 };
 
 export const avatarInstructionsExtension = defineExtension({
 	name: "banda.avatar-instructions",
 	sections: [avatarSection],
-	wraps: [wrapTool({ name: TOOL_SEARCH_TOOL_NAME } as ToolRegistration, withAvatarGuide)],
 });

@@ -756,10 +756,9 @@ index, whose pages are scrubbed; what was said in chats stays.
 A chat's prompt is built for the cache in a fixed order. An accepted change to its agent updates the prefix at the next
 request and deliberately starts that cache cold; otherwise every request repeats it and only the newest messages are
 new. Sections are the agent's personality and its facts, in a fixed order. Anything that changes during a chat arrives
-as an entry, not as an edit of the prefix. A section is there from a chat's start (memory says nothing is saved yet)
-or joins only a prompt written whole, after a compaction: one appearing mid-chat anywhere but last re-adds them all.
-So `propose_avatar`'s design guide comes in the result of the search that loads it. Long outputs go to files the agent
-reads back.
+as an entry, not as an edit of the prefix. A section is there from a chat's start and changes only its words: one
+appearing mid-chat anywhere but last re-adds them all. So memory says nothing is saved yet, and `propose_avatar`'s
+design guide is an empty section until the tool loads. Long outputs go to files the agent reads back.
 
 **Compaction** is pi-durable's: a summary entry replaces older entries in what the model sees, and every entry stays
 in the store. That entry is the checkpoint; the app keeps no record of its own. pi-durable's thresholds decide when: a
