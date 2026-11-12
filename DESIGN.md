@@ -647,7 +647,10 @@ or not the model remembers it.
   edit or a deletion in it is seen, and merges only then; what it fetched meanwhile is the watch's, for that object
   as that account, kept across a crash, and the watch is behind until the merge. A walk that cannot reach the window
   within an hour, or within the window's bytes, merges what it read, and its wake says what may be missing. What leaves the window from its old end was pushed off, never
-  removed. Every call a connection makes for one account and one method, whoever makes it (a watch, an agent, a
+  removed. A list the service hands only oldest first, by numbered pages (GitHub's reviews and comments), is read at
+  its tail: the last pages, found by the object's own count of it or else by how long the last look found it, at most
+  three pages a look. A look that cannot reach the end in those pages keeps the list as it was and the watch is behind
+  until one does; one whose pages do not reach back to the newest item the reading held says what may be missing. Every call a connection makes for one account and one method, whoever makes it (a watch, an agent, a
   card), waits its turn in one queue, and a refusal that says when to come back holds that queue until then. The
   refusal also teaches the queue the method's limit, as many calls a minute as the service answered before it, so for
   the hour after, a call past it is answered "busy" without being sent: a service meets one refusal an hour from banda,

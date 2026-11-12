@@ -40,8 +40,9 @@ export const GITHUB_OBJECTS = {
 					repo: "{repo}",
 					pullNumber: "{number}",
 					perPage: 100,
-					page: 1,
 				},
+				// oldest first, and no count of them on the pull request: its last pages, found by the last look
+				tail: { by: "id" },
 			},
 			comments: {
 				optional: true,
@@ -53,19 +54,19 @@ export const GITHUB_OBJECTS = {
 					repo: "{repo}",
 					pullNumber: "{number}",
 					perPage: 100,
-					page: 1,
 				},
+				// the conversation's comments (an issue's, not review comments), oldest first: the pull request counts them
+				tail: { by: "id", total: "pr.comments" },
 			},
 		},
 		// how a watch follows it: reviews and comments by id, check runs by name (every push gives them new ids), what
 		// is noise, whose items are the account's own, what wakes and what only tells, and what ends the watch
 		follow: {
 			keys: { "checks.check_runs": "name" },
-			totals: { "checks.check_runs": "checks.total_count", comments: "pr.review_comments" },
+			totals: { "checks.check_runs": "checks.total_count" },
 			ignore: [
 				"pr.updated_at",
 				"pr.comments",
-				"pr.review_comments",
 				"pr.commits",
 				"pr.changed_files",
 				"pr.mergeable",
@@ -215,8 +216,8 @@ export const GITHUB_OBJECTS = {
 					repo: "{repo}",
 					issue_number: "{number}",
 					perPage: 100,
-					page: 1,
 				},
+				tail: { by: "id", total: "issue.comments" },
 			},
 		},
 		// how a watch follows it: closed or reopened and others' comments wake; labels, assignees and the title only
