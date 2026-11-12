@@ -316,8 +316,8 @@ describe("a watch on a discussion", () => {
 		});
 		expect(watchInvariants(summary)).toEqual([]);
 		expect(summary.wakes.map((wake) => [[...wake.changes].sort(), wake.ended ?? null])).toEqual([
-			[["new comment", "retitled: How should a paused watch report?"], null],
-			[["new reply"], null],
+			[["new comment (author not known)", "retitled: How should a paused watch report?"], null],
+			[["new reply (author not known)"], null],
 			[["answered"], "answered"],
 		]);
 		expect(summary.wakes[0]?.object).toMatchObject({ name: "acme/banda · discussion #52", service: "GitHub" });
@@ -341,6 +341,31 @@ describe("a watch on a discussion", () => {
 		expect(watchInvariants(summary)).toEqual([]);
 		expect(summary.tells).toEqual([]);
 		expect(summary.wakes.map((wake) => [wake.changes, wake.ended ?? null])).toEqual([[["closed"], "closed"]]);
+	}, 60_000);
+
+	it("the account's own comment and reply, which GitHub's answer names no author of, wake saying so", async () => {
+		// a scripted mock in github-mcp-server's shape: its MinimalDiscussionComment is an id, a body, isAnswer and the
+		// replies, with no author, so what the account itself wrote reads as anyone's: its comment, then its reply
+		const own = (id: string): Item => ({ id, body: "Written as bandarra, the watch's own account" });
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: await github(),
+			object: "acme/banda/discussions/52",
+			answer: (tool, args, step) => {
+				const answer = discussion(tool, args, 0);
+				if (tool !== "get_discussion_comments") return answer;
+				const [first] = (answer as Item).comments as Item[];
+				const comments = [
+					step >= 2 ? { ...first, replies: [own("DC_10")], replyTotalCount: 1 } : first,
+					...(step >= 1 ? [own("DC_9")] : []),
+				] as Item[];
+				return { ...(answer as Item), comments, totalCount: comments.length };
+			},
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(summary.wakes.map((wake) => wake.changes)).toEqual([
+			["new comment (author not known)"],
+			["new reply (author not known)"],
+		]);
 	}, 60_000);
 });
 
