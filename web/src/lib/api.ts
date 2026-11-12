@@ -308,6 +308,9 @@ export type FactAct =
 	| { readonly action: "edit"; readonly id: string; readonly text: string }
 	| { readonly action: "delete"; readonly id: string };
 
+/** Read the current files again without replacing an owner's unsaved drafts. */
+export const readMemory = () => api<MemoryView>("/memory");
+
 /** Act on memory as the owner; memory as it is after, or rejects with why. */
 export const actOnFact = (act: FactAct) =>
 	act.action === "add"

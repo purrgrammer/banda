@@ -69,7 +69,7 @@ function Example({ phone = false }: { phone?: boolean }) {
 }
 
 export function MemorySection() {
-	const inactive = { onAdd: async () => {}, onEdit: async () => {}, onForget: async () => {} };
+	const inactive = { onAdd: async () => {}, onEdit: async () => {}, onForget: async () => {}, onRetry: async () => {} };
 	return (
 		<Section id="scoped-memory" note="Mara's Memory tab beside Settings' Memory: the same facts, never a copy.">
 			<Example />

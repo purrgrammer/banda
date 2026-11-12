@@ -6,7 +6,7 @@
 import { posix } from "node:path";
 import type { Context } from "@earendil-works/chord";
 import type { Harness, ModelRef, Tx } from "@earendil-works/pi-durable";
-import type { ExecutionEnv, FileWatcher } from "@earendil-works/pi-durable/env";
+import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import {
 	Accepted,
 	type AcceptedFile,
@@ -273,51 +273,37 @@ export async function save(
 
 /**
  * Write the accepted agent files into the box until the store records it done: a new box starts with the lead. Until
- * then each accepted file the box lacks is written, whatever else made the folder first (an owner's save, the watcher, a
+ * then each accepted file the box lacks is written, whatever else made the folder first (an owner's save, a
  * cut seed); once done, a file missing there is the box's own removal. A box made anew, its agents folder gone, is
  * seeded again. Idempotent; a failure is thrown, and the next call goes on.
  */
 export async function seed(harness: Harness, workspace: Workspace, ctx: Context = context): Promise<void> {
 	const env = workspace.env();
 	// The first owner edit can arrive before a chat starts and initializes the accepted definition.
-	await harness.commit(async (tx) => {
-		await tx.doc(Accepted);
-	}, ctx);
-	const doc = await harness.snapshot(Accepted, ctx);
+	let doc = await harness.snapshot(Accepted, ctx);
+	if (doc === undefined) {
+		await harness.commit(async (tx) => {
+			await tx.doc(Accepted);
+		}, ctx);
+		doc = await harness.snapshot(Accepted, ctx);
+	}
 	const there = await env.exists(dirOf(workspace), ctx);
 	if (!there.ok) throw there.error;
 	if (doc?.seeded === true && there.value) return;
+	// Persist the unfinished restoration before its first write recreates the folder.
+	if (doc?.seeded === true)
+		await harness.commit(async (tx) => {
+			delete (await tx.doc(Accepted)).seeded;
+		}, ctx);
 	const { files: boxed } = await boxFiles(workspace, ctx);
 	for (const [path, file] of Object.entries(doc?.files ?? {})) {
 		const name = /^agents\/(.+)\.md$/.exec(path)?.[1];
 		if (name !== undefined && !boxed.has(name))
 			await write(env, workspace, `${workspace.root}/${path}`, file.text, ctx);
 	}
-	if (doc?.seeded !== true)
-		await harness.commit(async (tx) => {
-			(await tx.doc(Accepted)).seeded = true;
-		}, ctx);
-}
-
-/** `seed`, tried again every `every` ms until it is done or `stopped`; each failure logged. */
-export async function seedUntilDone(
-	harness: Harness,
-	workspace: Workspace,
-	log: (line: string) => void,
-	stopped: () => boolean,
-	every = 15_000,
-	ctx: Context = context,
-): Promise<void> {
-	for (;;) {
-		try {
-			return await seed(harness, workspace, ctx);
-		} catch (error) {
-			log(`agents: ${(error as Error).message}`);
-		}
-		if (stopped()) return;
-		await new Promise((resolve) => setTimeout(resolve, every).unref());
-		if (stopped()) return;
-	}
+	await harness.commit(async (tx) => {
+		(await tx.doc(Accepted)).seeded = true;
+	}, ctx);
 }
 
 /** Write a workspace file, its folder made first. */
@@ -326,60 +312,4 @@ export async function write(env: ExecutionEnv, _workspace: Workspace, path: stri
 	if (!made.ok) throw made.error;
 	const written = await env.writeFile(path, text, ctx);
 	if (!written.ok) throw written.error;
-}
-
-/**
- * Watch the folders of "before" files (agents, routines, watches) and memory, and call `changed` on every change, so the app
- * shows a change the box made as it happens. Retries while the box is down.
- */
-export function watchAgents(
-	workspace: Workspace,
-	changed: () => void,
-	log: (line: string) => void,
-	ctx: Context = context,
-	folders: readonly string[] = ["agents", "routines", "watches", "memory", "memory/agents"],
-): () => Promise<void> {
-	let closed = false;
-	let watcher: FileWatcher | undefined;
-	let retry: NodeJS.Timeout | undefined;
-	const open = async (): Promise<void> => {
-		if (closed || watcher !== undefined) return;
-		try {
-			const env = workspace.env();
-			for (const folder of folders) {
-				const made = await env.createDir(dirOf(workspace, folder), { recursive: true }, ctx);
-				if (!made.ok) throw made.error;
-			}
-			const watched = await env.watch(
-				folders.map((folder) => ({ path: dirOf(workspace, folder) })),
-				(change) => {
-					if ("error" in change) {
-						log(`agents: watch stopped: ${change.error.message}`);
-						void reopen();
-					}
-					changed();
-				},
-				ctx,
-			);
-			if (!watched.ok) throw watched.error;
-			watcher = watched.value;
-			if (closed) await watcher.close(ctx);
-		} catch (error) {
-			log(`agents: ${(error as Error).message}; watching again in 5 s`);
-			retry = setTimeout(() => void open(), 5000);
-			retry.unref();
-		}
-	};
-	const reopen = async () => {
-		const old = watcher;
-		watcher = undefined;
-		await old?.close(ctx);
-		await open();
-	};
-	void open();
-	return async () => {
-		closed = true;
-		clearTimeout(retry);
-		await watcher?.close(ctx);
-	};
 }

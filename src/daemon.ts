@@ -70,7 +70,7 @@ import { CliGateway } from "./gateways/cli.ts";
 import { WebGateway } from "./gateways/web.ts";
 import { daemonFile, egressCredentials, keepEgressCredential, maxFileBytes, ownerToken, readConfig } from "./home.ts";
 
-import { accept, agents, decline, save, seed, seedUntilDone, type Workspace, watchAgents } from "./server/agents.ts";
+import { accept, agents, decline, save, seed, type Workspace } from "./server/agents.ts";
 import type { ComputerView, OwnerInput, Posted, PostMessage, ViewEvent } from "./server/api.ts";
 import { acceptedIconFace } from "./server/avatar-icon-face.ts";
 import { bringable, chooseBring } from "./server/bring.ts";
@@ -168,7 +168,6 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 	portKnown.catch(() => undefined);
 	// the box tools' hook before a command: the proxy knows what its chat may send straight through
 	let egressReady: (chat: number) => Promise<void> = async () => {};
-	let unwatch: (() => Promise<void>) | undefined;
 	let unwatchPermissions: (() => Promise<void>) | undefined;
 	let unwatchBox: (() => void) | undefined;
 	let drain: ((ms: number) => Promise<void>) | undefined;
@@ -191,7 +190,6 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			clearInterval(sweeping);
 			notListening(new Error("the daemon stopped before it listened"));
 			clearInterval(sweepingSent);
-			if (unwatch !== undefined) await step("agents watch", unwatch);
 			if (unwatchPermissions !== undefined) await step("permissions watch", unwatchPermissions);
 			unwatchBox?.();
 			// sends the gateways have taken are recorded before the gateways and the store go, so none goes twice
@@ -309,12 +307,14 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		registry.install(skillsExtension);
 		// what the proxy holds opens a release in the commit that stores it; only those releases send it
 		const holding = agentBox.egress === undefined ? undefined : core.held(agentBox.egress);
+		let workspaceChanged = () => {};
 		registry.install(
 			boxTools({
 				images,
 				box: agentBox,
 				...(holding === undefined ? {} : { egress: holding }),
 				ready: (chat) => egressReady(chat),
+				changed: () => workspaceChanged(),
 			}),
 		);
 		// reading the web: a GET from the box, through the proxy as the chat, acting as nobody; it asks no one
@@ -603,15 +603,19 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		void capabilities.reconcile().catch((error: unknown) => log(`capabilities: ${(error as Error).message}`));
 		// a new box starts with the accepted agents, the lead among them; the agents are read once the first try is over,
 		// and a box that was not up for it is seeded when it comes up (until then no missing file is offered as removed)
-		const seeded = seed(open, workspace).then(
-			() => true,
-			(error: unknown) => {
-				log(`agents: ${(error as Error).message}`);
-				return false;
-			},
-		);
-		void seeded.then((done) => (done ? undefined : seedUntilDone(open, workspace, log, () => stop !== undefined)));
-		const listAgents = () => seeded.then(() => agents(open, workspace));
+		let seeding: Promise<void> | undefined;
+		const seedWorkspace = () =>
+			(seeding ??= seed(open, workspace)
+				.catch((error: unknown) => log(`agents: ${(error as Error).message}`))
+				.finally(() => {
+					seeding = undefined;
+				}));
+		void seedWorkspace()
+			.then(() => index.memory(memoryFiles, context))
+			.catch((error: unknown) => {
+				log(`memory: ${(error as Error).message}`);
+			});
+		const listAgents = () => seedWorkspace().then(() => agents(open, workspace));
 		// the owner reaches a chat's tab, in the browser of the agent it runs; or signs an agent the store knows out of a site
 		const tabOf = async (all: Browsers, chat: number) => {
 			try {
@@ -630,12 +634,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		// past their day, and search catches up
 		const sweep = () => {
 			void blobs.sweep(open).catch((error: unknown) => log(`blobs: sweep failed: ${(error as Error).message}`));
-			void seeded
-				.then(async () => {
-					await index.memory(memoryFiles, context);
-					await index.messages(open, context);
-				})
-				.catch((error: unknown) => log(`memory: ${(error as Error).message}`));
+			void index.messages(open, context).catch((error: unknown) => log(`memory: ${(error as Error).message}`));
 		};
 		sweep();
 		sweeping = setInterval(sweep, SWEEP_EVERY_MS);
@@ -647,8 +646,18 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		const changed = () => {
 			for (const listener of listeners) listener();
 		};
+		const changingWorkspace = async <T>(run: () => Promise<T>): Promise<T> => {
+			try {
+				return await run();
+			} finally {
+				changed();
+			}
+		};
 		// the app hears at once when the companion's computer comes up or goes offline
-		const unwatchState = agentBox.watch(changed);
+		const unwatchState = agentBox.watch(() => {
+			if (agentBox.state().state === "up") void seedWorkspace().then(changed);
+			else changed();
+		});
 		unwatchBox = () => {
 			unwatchState();
 			sweepAtBringUp();
@@ -665,10 +674,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		memoryChanged = changed;
 		capabilitiesChanged = changed;
 		browserChanged = changed;
-		// what an agent writes in the agents folder reaches the app as it happens
-		void seeded.then(() => {
-			if (stop === undefined) unwatch = watchAgents(workspace, changed, log);
-		});
+		workspaceChanged = changed;
 
 		// a message as the owner: the blobs are checked and the message that holds them received under one lock, so no
 		// sweep comes between
@@ -717,11 +723,30 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 							control: async () => control(open, workspace, Date.now()),
 							agents: listAgents,
 							memory: () => memory(desk, Date.now()),
-							capabilities: () => seeded.then(() => capabilitiesView()),
+							capabilities: () => seedWorkspace().then(() => capabilitiesView()),
 							post,
 						}),
 					],
-		).concat(devices.area);
+		)
+			.concat(devices.area)
+			.map((area): Area => {
+				const route = area.route;
+				if (route === undefined) return area;
+				return {
+					...area,
+					route: async (request) => {
+						if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return route(request);
+						let handled = true;
+						try {
+							const reply = await route(request);
+							handled = reply !== undefined;
+							return reply;
+						} finally {
+							if (handled) changed();
+						}
+					},
+				};
+			});
 		const token = await ownerToken(home);
 		server = createServer(
 			handler(
@@ -729,13 +754,14 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 					status: () => status(open),
 					iconFace: () => acceptedIconFace(open),
 					companion: async () => companion(open),
-					change: async (body) => {
-						// every pick checked before any is stored; a personality waits for a new box to have the lead's file
-						const picks = validPicks(body);
-						if (picks.personality !== undefined || picks.face !== undefined) await seeded;
-						await change(open, workspace, picks, core.agentChanged);
-						return companion(open);
-					},
+					change: (body) =>
+						changingWorkspace(async () => {
+							// every pick checked before any is stored; a personality waits for a new box to have the lead's file
+							const picks = validPicks(body);
+							if (picks.personality !== undefined || picks.face !== undefined) await seedWorkspace();
+							await change(open, workspace, picks, core.agentChanged);
+							return companion(open);
+						}),
 					say: async ({ text, thread }, signal, heard) => ({ ended: await cli.say(text, thread, signal, heard) }),
 					answer: async (key, value, via, type, approving) => {
 						const filled = await answer(open, key, value, { gateway: via, peer: OWNER }, "bearer", {
@@ -806,7 +832,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 								agents: listAgents,
 								memory: () => memory(desk, Date.now()),
 								control: () => control(open, workspace, Date.now()),
-								capabilities: () => seeded.then(() => capabilitiesView()),
+								capabilities: () => seedWorkspace().then(() => capabilitiesView()),
 								...(agentBrowsers === undefined ? {} : { browsers: () => agentBrowsers.views() }),
 								computer,
 								areas,
@@ -821,71 +847,74 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 					stop: (chat) => stopChat(open, chat),
 					agents: listAgents,
 					skills: () => skills(open, workspace),
-					acceptSkill: (name, sha) => acceptSkill(open, workspace, name, sha),
-					acceptSkills: (wanted) => acceptSkills(open, workspace, wanted),
-					saveSkill: (name, text, base) => saveSkill(open, workspace, name, text, base),
+					acceptSkill: (name, sha) => changingWorkspace(() => acceptSkill(open, workspace, name, sha)),
+					acceptSkills: (wanted) => changingWorkspace(() => acceptSkills(open, workspace, wanted)),
+					saveSkill: (name, text, base) => changingWorkspace(() => saveSkill(open, workspace, name, text, base)),
 					shippedSkills: () => shippedSkills(open, workspace),
-					chooseShippedSkills: (names) => chooseShippedSkills(open, workspace, names),
+					chooseShippedSkills: (names) => changingWorkspace(() => chooseShippedSkills(open, workspace, names)),
 					bringable: () => bringable(open, workspace),
-					chooseBring: async (picks) => {
-						const view = await chooseBring(open, workspace, picks, core.agentChanged);
-						await settleAgents();
-						return view;
-					},
-					accept: async (name, sha) => {
-						const views = await accept(open, workspace, name, sha, core.agentChanged);
-						await settleAgents();
-						return views;
-					},
-					decline: (name) => decline(open, workspace, name),
-					saveAgent: async (name, text, base) => {
-						const views = await save(open, workspace, name, text, base, core.agentChanged);
-						await settleAgents();
-						return views;
-					},
+					chooseBring: (picks) =>
+						changingWorkspace(async () => {
+							const view = await chooseBring(open, workspace, picks, core.agentChanged);
+							await settleAgents();
+							return view;
+						}),
+					accept: (name, sha) =>
+						changingWorkspace(async () => {
+							const views = await accept(open, workspace, name, sha, core.agentChanged);
+							await settleAgents();
+							return views;
+						}),
+					decline: (name) => changingWorkspace(() => decline(open, workspace, name)),
+					saveAgent: (name, text, base) =>
+						changingWorkspace(async () => {
+							const views = await save(open, workspace, name, text, base, core.agentChanged);
+							await settleAgents();
+							return views;
+						}),
 					control: async () => control(open, workspace, Date.now()),
 					pause: async (paused) => {
 						if (paused) await pause(open, core.reconcile, Date.now());
 						else await resume(open, core.reconcile, Date.now());
 						return control(open, workspace, Date.now());
 					},
-					routine: async (name, act) => {
-						const now = Date.now();
-						if (act.action === "accept")
-							await acceptRoutine(
-								open,
-								workspace,
-								core.reconcile,
-								name,
-								act.sha,
-								now,
-								undefined,
-								act.change,
-								(tx, agent, fields) => core.routineEdited(tx, agent, name, fields),
-							);
-						else if (act.action === "decline") await declineRoutine(open, workspace, name);
-						else if (act.action === "remove") await removeRoutine(open, workspace, core.reconcile, name, now);
-						else {
-							const found = await pauseRoutine(open, core.reconcile, name, act.action === "pause", now).catch(
-								(error: unknown) => {
-									if (error instanceof RoutineRefused) throw new BadRequest(error.message, error.status);
-									throw error;
-								},
-							);
-							if (!found) throw new BadRequest(`there is no routine named ${name}`, 404);
-						}
-						changed();
-						return control(open, workspace, now);
-					},
+					routine: (name, act) =>
+						changingWorkspace(async () => {
+							const now = Date.now();
+							if (act.action === "accept")
+								await acceptRoutine(
+									open,
+									workspace,
+									core.reconcile,
+									name,
+									act.sha,
+									now,
+									undefined,
+									act.change,
+									(tx, agent, fields) => core.routineEdited(tx, agent, name, fields),
+								);
+							else if (act.action === "decline") await declineRoutine(open, workspace, name);
+							else if (act.action === "remove") await removeRoutine(open, workspace, core.reconcile, name, now);
+							else {
+								const found = await pauseRoutine(open, core.reconcile, name, act.action === "pause", now).catch(
+									(error: unknown) => {
+										if (error instanceof RoutineRefused) throw new BadRequest(error.message, error.status);
+										throw error;
+									},
+								);
+								if (!found) throw new BadRequest(`there is no routine named ${name}`, 404);
+							}
+							return control(open, workspace, now);
+						}),
 					memory: () => memory(desk, Date.now()),
-					fact: async (act) => {
-						const now = Date.now();
-						if (act.action === "add") await addFact(desk, act.body, now);
-						else if (act.action === "edit") await editFact(desk, act.id, act.text, now);
-						else await removeFact(desk, act.id);
-						changed();
-						return memory(desk, now);
-					},
+					fact: (act) =>
+						changingWorkspace(async () => {
+							const now = Date.now();
+							if (act.action === "add") await addFact(desk, act.body, now);
+							else if (act.action === "edit") await editFact(desk, act.id, act.text, now);
+							else await removeFact(desk, act.id);
+							return memory(desk, now);
+						}),
 					item: (chat, entry) => item(open, chat, entry),
 					capabilities: () => capabilitiesView(),
 					addMcp: async (config) => ({

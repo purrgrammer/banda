@@ -138,9 +138,14 @@ for (const width of [390, 1440])
 					const file = join(home, "workspace", "memory", "global.md");
 					const saved = await readFile(file, "utf8");
 					await writeFile(file, "x".repeat(MAX_MEMORY_BYTES + 1));
+					// An explicit owner action discovers the fault; there is no filesystem polling.
+					await click(page, button("Save"));
 					await page.until(`document.body.textContent.includes("Can't read memory")`);
+					if (phone) await click(page, button("Close"));
 					await writeFile(file, saved);
+					await click(page, button("Try again"));
 					await page.until(`!document.body.textContent.includes("Can't read memory")`);
+					if (phone) await edit("Use metric units");
 					expect(await page.run(`${input("The fact")}?.value`)).toBe("Use kilometres");
 					expect(await page.run(`${input("New shared fact")}?.value`)).toBe("Keep this unsaved draft");
 					// a stale edit reports the conflict and keeps the draft, never overwriting newer words

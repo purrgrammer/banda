@@ -720,7 +720,7 @@ export type ShellSources = {
 /**
  * Write the shell to `write`: the chat list, the companion, the control room, the agents, memory, the computer, the
  * capabilities, the browsers and each area's events, each when it changed since last written; then again whenever the
- * task graph (a task that is not a timer), the docs the shell reads or `subscribe` (the agents folder) say something
+ * task graph (a task that is not a timer), the docs the shell reads or `subscribe` (tool and owner changes) say something
  * changed, until `signal` aborts. A change to a doc an area owns (`Area.own`) writes that area's events alone. Changes
  * in a burst are written once.
  */

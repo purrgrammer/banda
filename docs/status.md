@@ -8,6 +8,8 @@ ARM64 packaging and adapter work is under local verification; a native KVM run r
 Windows retains the existing backend while its native runtime boundaries are unresolved ([Operations](operations.md)).
 macOS support requires Apple silicon; Intel Macs are no longer a release target. Public browser download delivery
 and clean-machine distribution remain open.
+Workspace refreshes now come from tool completion and owner actions; startup and explicit reads reconcile missed
+changes. Recovery and reliability checks are in progress, including native proxy loss and concurrent homes.
 
 Agent search is in review on `feat/agent-search`: messages, shared group histories and artifacts use the same
 retrieval as Cmd+K, with bounded results and source reads. Recall now searches saved facts only. Validation and

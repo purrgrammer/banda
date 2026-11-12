@@ -45,6 +45,7 @@ export function boxTools({
 	egress,
 	ready,
 	fault,
+	changed,
 }: {
 	images?: ImageProcessor;
 	box?: Pick<Box, "kind" | "workspace" | "attachments">;
@@ -55,6 +56,8 @@ export function boxTools({
 	 */
 	ready?: (chat: number) => Promise<void>;
 	fault?: (point: string) => void;
+	/** A mutation finished, including failures whose partial writes must be reconciled. */
+	changed?: () => void;
 } = {}): Extension {
 	const workspace = box?.workspace;
 	const shell = telling(bash(), workspace);
@@ -62,8 +65,8 @@ export function boxTools({
 		egress === undefined ? shell : taking(shell, egress, fault, ready),
 		accepting(createWriteTool() as ToolRegistration, workspace),
 		accepting(createEditTool() as ToolRegistration, workspace),
-		createReadTool(images === undefined ? {} : { images }),
-	];
+	].map((tool) => notifying(tool, changed));
+	tools.push(createReadTool(images === undefined ? {} : { images }) as ToolRegistration);
 	const sections: PromptSection[] =
 		box === undefined
 			? []
@@ -77,6 +80,19 @@ export function boxTools({
 					},
 				];
 	return defineExtension({ name: "banda.box", sections, tools: tools as ToolRegistration[] });
+}
+
+function notifying(tool: ToolRegistration, changed: (() => void) | undefined): ToolRegistration {
+	return {
+		...tool,
+		execute: async (args, api, ctx) => {
+			try {
+				return await tool.execute(args, api, ctx);
+			} finally {
+				changed?.();
+			}
+		},
+	};
 }
 
 /**

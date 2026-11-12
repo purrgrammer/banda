@@ -72,6 +72,7 @@ export function MemorySettings({
 	memory,
 	phone = false,
 	originOf,
+	onRetry,
 	...actions
 }: {
 	/** The agent whose Memory tab this is: only its facts. Without one: Settings, every scope. */
@@ -81,7 +82,9 @@ export function MemorySettings({
 	memory: MemoryView | undefined;
 	phone?: boolean;
 	originOf?: OriginOf | undefined;
+	onRetry?: () => Promise<void>;
 } & MemoryActions) {
+	const [retrying, setRetrying] = useState(false);
 	const available = memory !== undefined && !memory.unavailable;
 	const facts = memory?.facts ?? [];
 	const ofAgent = (id: string) => facts.filter((fact) => fact.scope === "agent" && fact.agent === id);
@@ -97,9 +100,23 @@ export function MemorySettings({
 		<>
 			{available ? null : (
 				<p role={memory === undefined ? "status" : "alert"} className="text-ui text-ink-2">
-					{memory === undefined
-						? "Reading memory…"
-						: "Can't read memory right now. Your draft is kept; try again when memory is available."}
+					{memory === undefined ? "Reading memory…" : "Can't read memory right now. Your draft is kept."}
+					{memory !== undefined && onRetry !== undefined && (
+						<Button
+							type="button"
+							aria-label="Try again reading memory"
+							variant="ghost"
+							disabled={retrying}
+							onClick={() => {
+								setRetrying(true);
+								void onRetry()
+									.catch(() => undefined)
+									.finally(() => setRetrying(false));
+							}}
+						>
+							Try again
+						</Button>
+					)}
 				</p>
 			)}
 			{/* Keep editors mounted through read failures: availability is not the lifetime of an owner's draft. */}

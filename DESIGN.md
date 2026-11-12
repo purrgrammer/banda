@@ -910,8 +910,8 @@ valid stamp.
 
 ## The workspace
 The workspace is the band's folder, in the box: `agents/`, `routines/`, `watches/`, `skills/`, `memory/`, and the files
-the agents work on. The daemon reads it over the box's connection, so no folder the box writes
-sits on the owner's machine. The agent writes it and the owner edits it, so the daemon decides when a change takes
+the agents work on. The daemon reads it over the box's connection, and the box reaches only the folders explicitly
+mounted into it. The agent writes it and the owner edits it, so the daemon decides when a change takes
 effect:
 - **Before**: `agents/`, `routines/`, `watches/` and skill instructions take effect once the owner
   accepts the change. Accepting binds the hash of the bytes shown; the daemon keeps the accepted version in the store,
@@ -921,6 +921,8 @@ effect:
 - **After**: everything else, memory included, takes effect at once. Admission still guards every effect that leaves
   the box.
 - The daemon opens workspace files without following symlinks.
+- Workspace changes are reported at tool completion and by the owner's app actions, never by filesystem watching or
+  polling. Startup and explicit reads reconcile the current files, including changes made before a crash or outside a tool.
 
 Data the workspace holds is typed: `.json` with a schema the daemon checks on every read, and `.md` only where
 free-form text is the point (instructions, personality, memory). `band.json` at the root is the band's own file: the

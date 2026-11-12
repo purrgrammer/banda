@@ -21,7 +21,7 @@ import { MemorySettings, type NewFactSpec } from "../chat/MemorySettings.tsx";
 import { AgentPanel, firstTab, Panel, Routines, Watching } from "../chat/Panel.tsx";
 import { AppSettings, Archive, Personality, SettingsPage } from "../chat/Settings.tsx";
 import { SkillCatalogue } from "../chat/Skill.tsx";
-import { actOnFact, setPaused, signOutSite } from "../lib/api.ts";
+import { actOnFact, readMemory, setPaused, signOutSite } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { agentMainOf } from "../lib/chats.ts";
 import { useMidnight } from "../lib/midnight.ts";
@@ -196,6 +196,9 @@ function Main() {
 		return from.routine === undefined ? `Saved by ${name}` : `Saved by ${name}'s routine`;
 	};
 	const factActions = {
+		onRetry: async () => {
+			showMemory(await readMemory());
+		},
 		onAdd: async (fact: NewFactSpec) => {
 			showMemory(await actOnFact({ action: "add", ...fact }));
 		},

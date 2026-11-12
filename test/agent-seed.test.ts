@@ -2,12 +2,12 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { createRegistry } from "@earendil-works/pi-durable";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { openBox } from "../src/box/box.ts";
 import { Accepted, agentPath, LEAD_TEXT } from "../src/core/agents.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
-import { accept, agents, save, seed, seedUntilDone, type Workspace } from "../src/server/agents.ts";
+import { accept, agents, save, seed, type Workspace } from "../src/server/agents.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { blobStore, echoModels, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
 
@@ -35,7 +35,7 @@ describe("seeding a new box with the accepted agents", () => {
 	it("writes the lead into a fresh box whose agents folder something else made first, and offers no removal", async () => {
 		const { harness, workspace, close } = await fresh();
 		try {
-			// a first seed that failed while the box came up, then the watcher (or any writer) made the folder
+			// a first seed that failed while the box came up, then another writer made the folder
 			await mkdir(join(workspace.root, "agents"), { recursive: true });
 			await harness.commit(async (tx) => {
 				await tx.doc(Accepted);
@@ -98,7 +98,7 @@ describe("seeding a new box with the accepted agents", () => {
 		}
 	});
 
-	it("an agent the daemon has yet to write is never removed; a seed that failed is tried again until done", async () => {
+	it("an agent not yet written is never removed; a failed seed resumes on the next explicit attempt", async () => {
 		const { harness, workspace, close } = await fresh();
 		try {
 			await save(
@@ -119,17 +119,45 @@ describe("seeding a new box with the accepted agents", () => {
 					return workspace.env();
 				},
 			};
-			const logged: string[] = [];
-			await seedUntilDone(
-				harness,
-				flaky,
-				(line) => logged.push(line),
-				() => false,
-				1,
-			);
-			expect(logged).toEqual(["agents: the box is not up", "agents: the box is not up"]);
+			await expect(seed(harness, flaky)).rejects.toThrow("the box is not up");
+			await expect(seed(harness, flaky)).rejects.toThrow("the box is not up");
+			await seed(harness, flaky);
 			expect(await read(workspace, agentPath("sancho"))).toBe(LEAD_TEXT);
 			expect(await read(workspace, agentPath("mira"))).toContain("Be practical.");
+		} finally {
+			await close();
+		}
+	});
+
+	it("resumes a partial restoration after an already seeded agents folder is lost", async () => {
+		const { harness, workspace, close } = await fresh();
+		try {
+			await save(
+				harness,
+				workspace,
+				"mira",
+				"---\ndescription: Plans trips\n---\nBe practical.\n",
+				null,
+				async () => {},
+			);
+			await seed(harness, workspace);
+			await rm(join(workspace.root, "agents"), { recursive: true });
+			const env = workspace.env();
+			const write = env.writeFile.bind(env);
+			let failed = false;
+			vi.spyOn(env, "writeFile").mockImplementation(async (path, ...args) => {
+				if (path.endsWith("/mira.md") && !failed) {
+					failed = true;
+					throw new Error("restoration interrupted");
+				}
+				return write(path, ...args);
+			});
+			const interrupted: Workspace = { ...workspace, env: () => env };
+			await expect(seed(harness, interrupted)).rejects.toThrow("restoration interrupted");
+			expect((await agents(harness, workspace)).every((row) => row.change === undefined)).toBe(true);
+			await seed(harness, interrupted);
+			expect(await read(workspace, agentPath("mira"))).toContain("Be practical.");
+			expect((await agents(harness, workspace)).every((row) => row.change === undefined)).toBe(true);
 		} finally {
 			await close();
 		}
