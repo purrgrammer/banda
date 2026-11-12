@@ -8,7 +8,7 @@ import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { CompanionView, ControlView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { tempHome, until } from "./helpers.ts";
+import { tempHome, until, whenAsked } from "./helpers.ts";
 
 /** A daemon whose model, asked anything, writes a routine with `schedule`, then says it waits for the owner. */
 async function start() {
@@ -20,6 +20,7 @@ async function start() {
 	const faux = fauxProvider();
 	const models = createModels();
 	models.setProvider(faux.provider);
+	const told = whenAsked(fauxAssistantMessage("Asked them to allow it."));
 	faux.setResponses([
 		fauxAssistantMessage([fauxToolCall("tool_search", { query: "schedule", limit: 1 })], { stopReason: "toolUse" }),
 		fauxAssistantMessage(
@@ -32,7 +33,7 @@ async function start() {
 			],
 			{ stopReason: "toolUse" },
 		),
-		fauxAssistantMessage("Asked them to allow it."),
+		told.response,
 	]);
 	const daemon = await startDaemon({ home, port: 0, models, log: () => {}, box: hostBox(home), web });
 	const token = (await readDaemonFile(home))!.token!;
@@ -45,19 +46,20 @@ async function start() {
 		if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
 		return (await response.json()) as T;
 	};
-	return { home, daemon, api };
+	/** Once `schedule` returned: the routine's file is whole. */
+	return { home, daemon, api, scheduled: told.asked };
 }
 
 describe("the control room", () => {
 	it("a routine the agent writes waits to be allowed, then is scheduled; Pause and resume; the owner removes it", async () => {
-		const { home, daemon, api } = await start();
+		const { home, daemon, api, scheduled } = await start();
 		try {
 			await api("/messages", {
 				method: "POST",
 				body: JSON.stringify({ id: randomUUID(), thread: randomUUID(), text: "remind me about tea daily" }),
 			});
 			const file = join(home, "workspace", "routines", "tea.md");
-			await until(async () => existsSync(file));
+			await scheduled;
 			expect(await readFile(file, "utf8")).toBe(
 				"---\ndescription: Tea time\nevery: 1d\n---\nRemind the owner to drink tea.\n",
 			);
