@@ -23,6 +23,13 @@ describe("where a line keeps its end", () => {
 		expect(commandEnds(`echo 'a | b'`)).toEqual({ head: "", end: "echo 'a | b'" });
 	});
 
+	it("never keeps a separator with nothing after it, nor an escaped one, as the last step", () => {
+		// `npm test;` is one step: its `;` is not a step to keep while the command itself gives way
+		expect(commandEnds("npm run build && npm test;").end).toBe("&& npm test;");
+		expect(commandEnds("npm run build | ").end).not.toBe("| ");
+		expect(commandEnds("find src -name '*.tmp' -exec rm {} \\;").end).not.toBe(";");
+		expect(commandEnds("find src -name '*.tmp' -exec rm {} \\; && git status").end).toBe("&& git status");
+	});
 	it("keeps a one-step command's last path part, as a path, or else what follows a cut", () => {
 		expect(commandEnds("node scripts/sweep-boxes.ts")).toEqual({ head: "node scripts/", end: "sweep-boxes.ts" });
 		expect(commandEnds("NODE_OPTIONS=x npm run…web --sourcemap")).toEqual({

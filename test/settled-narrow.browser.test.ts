@@ -67,37 +67,60 @@ const cutEnds = (section: string) => `[...${section}.querySelectorAll('[data-kee
 }).map((line) => line.title)`;
 
 const SECTIONS: Record<string, readonly string[]> = {
-	cards: ["You answered in the chat", "No answer in time", "Stopped before an answer", "text-overflow"],
-	approvals: ["No answer in time; it did not run", "Stopped before your answer was used"],
+	cards: ["You answered in the chat", "No answer in time", "Stopped before an answer", "text-overflow", "opaque-ref-"],
+	approvals: [
+		"No answer in time; it did not run",
+		"Stopped before your answer was used",
+		"without asking until this task is done",
+	],
 	done: ["Answered in the chat", "No answer in time", "Stopped before it ran: comment on purrgrammer/banda #34"],
 	"harness-headlines": ["QuietHoursEditor.tsx", "&& git push origin main"],
 };
 
-for (const width of [390, 1440])
-	for (const [id, words] of Object.entries(SECTIONS))
-		it.skipIf(!hasChrome())(
-			`the ${id} section's settled lines say what happened and fit ${width}px`,
-			async () => {
-				await withPage(
-					`${base}/#/specimen?section=${id}&only=1`,
-					{ width, height: process.env.BANDA_SETTLED_SHOTS === undefined ? 1000 : 3200 },
-					async (page) => {
-						const section = `document.getElementById(${JSON.stringify(id)})`;
-						await page.until(`${section}?.innerText.includes(${JSON.stringify(words[0])})`);
-						await page.run(`${section}.scrollIntoView({block:'start'})`);
-						const directory = process.env.BANDA_SETTLED_SHOTS;
-						if (directory !== undefined) {
-							await mkdir(directory, { recursive: true });
-							await page.shoot(`${directory}/${id}-${width}.png`);
-						}
-						for (const said of words)
-							expect(await page.run(`${section}.innerText.includes(${JSON.stringify(said)})`), said).toBe(true);
-						expect(await page.run<string[]>(spills(section))).toEqual([]);
-						expect(await page.run<string[]>(cutEnds(section))).toEqual([]);
-						expect(await page.run(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
-						expect(page.errors()).toEqual([]);
-					},
-				);
-			},
-			60_000,
-		);
+/** What each section must mark, by selector: a row that did not happen shows its card's mark, never a no's. */
+const MARKS: Record<string, readonly string[]> = {
+	done: ['[data-done="expired"] .lucide-clock', '[data-done="stopped"] .lucide-circle-slash'],
+};
+
+/**
+ * A harness card inside the specimen's frame at 320 leaves less room than its kept end ("&& git push origin main")
+ * needs, and that end then cuts at its own end, as designed: the card's line is tried at 390 and up.
+ */
+const NARROWEST: Record<string, number> = { "harness-headlines": 390 };
+
+// 320 is the narrowest phone the app supports; dark as well as light, since a theme changes no width but is checked
+for (const theme of ["light", "dark"] as const)
+	for (const width of [320, 390, 1440])
+		for (const [id, words] of Object.entries(SECTIONS))
+			it.skipIf(!hasChrome() || width < (NARROWEST[id] ?? 0))(
+				`the ${id} section's settled lines say what happened and fit ${width}px, ${theme}`,
+				async () => {
+					await withPage(
+						`${base}/#/specimen?section=${id}&only=1`,
+						{ width, height: process.env.BANDA_SETTLED_SHOTS === undefined ? 1000 : 3200 },
+						async (page) => {
+							await page.run(`localStorage.setItem('banda.theme', ${JSON.stringify(theme)}); location.reload()`);
+							const section = `document.getElementById(${JSON.stringify(id)})`;
+							await page.until(`${section}?.innerText.includes(${JSON.stringify(words[0])})`);
+							expect(await page.run(`document.documentElement.classList.contains('dark')`)).toBe(theme === "dark");
+							await page.run(`${section}.scrollIntoView({block:'start'})`);
+							const directory = process.env.BANDA_SETTLED_SHOTS;
+							if (directory !== undefined) {
+								await mkdir(directory, { recursive: true });
+								await page.shoot(`${directory}/${id}-${width}-${theme}.png`);
+							}
+							for (const said of words)
+								expect(await page.run(`${section}.innerText.includes(${JSON.stringify(said)})`), said).toBe(true);
+							for (const mark of MARKS[id] ?? [])
+								expect(await page.run(`${section}.querySelectorAll(${JSON.stringify(mark)}).length > 0`), mark).toBe(
+									true,
+								);
+							expect(await page.run<string[]>(spills(section))).toEqual([]);
+							expect(await page.run<string[]>(cutEnds(section))).toEqual([]);
+							expect(await page.run(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
+							expect(page.errors()).toEqual([]);
+						},
+					);
+				},
+				60_000,
+			);

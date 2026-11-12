@@ -74,20 +74,23 @@ export function ToolIcon({ name }: { name: string }) {
 	return <Icon aria-hidden="true" data-tool-icon={name} className="size-4" />;
 }
 
-/**
- * Text on one line, at most `max` long. Cut at its end, unless `ends` says what must stay (a command's last step, a
- * path's file name, a trailing " · submit"): then the cut is before it.
- */
-export function shortPreview(text: string, ends?: (text: string) => Ends, max = 180): string {
+export function shortPreview(text: string): string {
 	const one = text.replace(/\s+/g, " ").trim();
-	const { head, end } = capEnds(ends === undefined ? { head: one, end: "" } : ends(one), max);
-	return head + end;
+	return one.length > 180 ? `${one.slice(0, 179)}…` : one;
 }
 
-/** How long a preview whose end matters may be: two lines on a phone, so the clamp under it never takes the end. */
-const KEPT = 88;
-
+/** A call's preview as one line of text, at most 180 long, cut before what must stay (see `toolPreviewEnds`). */
 export function toolPreview(name: string, args: Readonly<Record<string, unknown>>): string | undefined {
+	const ends = toolPreviewEnds(name, args);
+	return ends === undefined ? undefined : ends.head + ends.end;
+}
+
+/**
+ * A call's preview split for the eye: `end` is what must stay when the line runs out of room (a command's last step,
+ * a path's file name, a trailing " · submit"), empty when nothing must. Drawn with chat/KeepEnd.tsx, the head gives way
+ * on screen at any width; the cap in characters only bounds how much text there is.
+ */
+export function toolPreviewEnds(name: string, args: Readonly<Record<string, unknown>>): Ends | undefined {
 	const text = (...keys: string[]) =>
 		keys.flatMap((key) => (typeof args[key] === "string" && args[key] !== "" ? [String(args[key])] : [])).join(" · ");
 	let value: string;
@@ -179,5 +182,7 @@ export function toolPreview(name: string, args: Readonly<Record<string, unknown>
 		default:
 			value = text("path", "url", "query");
 	}
-	return value ? (ends === undefined ? shortPreview(value) : shortPreview(value, ends, KEPT)) : undefined;
+	if (!value) return undefined;
+	const one = value.replace(/\s+/g, " ").trim();
+	return capEnds(ends === undefined ? { head: one, end: "" } : ends(one), 180);
 }

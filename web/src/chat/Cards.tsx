@@ -154,7 +154,13 @@ export function QuestionCard({
 				<>
 					<div className="flex flex-wrap gap-2">
 						{choices.map((choice) => (
-							<Button key={choice} variant="outline" onClick={() => onChoose?.(choice)}>
+							// a long choice (a link, a token) wraps inside its button rather than pushing the card off the screen
+							<Button
+								key={choice}
+								variant="outline"
+								onClick={() => onChoose?.(choice)}
+								className="h-auto min-h-9 max-w-full py-1.5 text-left whitespace-normal [overflow-wrap:anywhere]"
+							>
 								{choice}
 							</Button>
 						))}

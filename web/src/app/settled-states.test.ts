@@ -3,8 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ApprovalCard } from "../chat/Approval.tsx";
 import { QuestionCard } from "../chat/Cards.tsx";
+import { Done } from "../chat/Done.tsx";
 import type { Ended } from "../lib/chat.ts";
-import { approvalState, questionState } from "./settled-states.ts";
+import { approvalState, notDoneKind, questionState } from "./settled-states.ts";
 
 /**
  * A settled ask's card says what happened, as the store recorded it: answered on the card or in the chat, dismissed,
@@ -70,5 +71,50 @@ describe("a settled approval's card", () => {
 		expect(approval({ outcome: "answered", answer: "approve", said: "Approved as you edited it" })).toContain(
 			"Approved as you edited it",
 		);
+	});
+});
+
+describe("a settled ask folded into a row", () => {
+	it("marks what did not happen as its card does: a clock for no answer in time, a stop for a stopped run", () => {
+		expect(notDoneKind({ outcome: "expired", said: "No answer in time" })).toBe("expired");
+		expect(notDoneKind({ outcome: "cancelled", said: "Stopped before an answer" })).toBe("stopped");
+		expect(notDoneKind({ outcome: "cancelled", answer: "approve", said: "Stopped before your answer was used" })).toBe(
+			"stopped",
+		);
+		expect(notDoneKind({ outcome: "dismissed", said: "Dismissed" })).toBe("declined");
+		expect(notDoneKind({ outcome: "answered", answer: "deny", said: "Declined" })).toBe("declined");
+		const row = (kind: "expired" | "stopped" | "declined") =>
+			renderToStaticMarkup(
+				createElement(Done, { kind, action: "no answer in time", reference: { where: "Book it?" } }),
+			);
+		expect(row("expired")).toContain("lucide-clock");
+		expect(row("stopped")).toContain("lucide-circle-slash");
+		expect(row("declined")).toContain("lucide-x");
+		for (const kind of ["expired", "stopped", "declined"] as const) {
+			expect(row(kind)).not.toContain(kind === "declined" ? "lucide-clock" : "lucide-x ");
+			// not done: what it was about is struck through
+			expect(row(kind)).toContain("line-through");
+		}
+	});
+});
+
+describe("an open ask with long words", () => {
+	it("lets a long choice wrap inside its button, and a long scope inside the card", () => {
+		const long = `https://example.test/${"segment/".repeat(20)}`;
+		const open = renderToStaticMarkup(
+			createElement(QuestionCard, { question: "Which?", choices: [long], state: { kind: "open" } }),
+		);
+		expect(open).toMatch(/<button[^>]*whitespace-normal[^>]*\[overflow-wrap:anywhere\][^>]*>https:/);
+		expect(open).not.toMatch(/<button[^>]*whitespace-nowrap[^>]*>https:/);
+		const approval = renderToStaticMarkup(
+			createElement(ApprovalCard, {
+				agent: "Sancho",
+				what: "Send a message",
+				verb: "Send",
+				scope: `Send messages to ${"a".repeat(80)}@example.test without asking`,
+				state: { kind: "open" },
+			}),
+		);
+		expect(approval).toMatch(/<label[^>]*\[overflow-wrap:anywhere\][^>]*>Send messages to/);
 	});
 });

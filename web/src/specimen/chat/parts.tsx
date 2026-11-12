@@ -354,6 +354,17 @@ export function Parts() {
 						choices={[]}
 						state={{ kind: "answered", answer: "TP 1351 at 9:15" }}
 					/>
+					<Group label="Open, with choices too long for a line: each wraps inside its button">
+						<QuestionCard
+							question="Which release notes should I quote?"
+							choices={[
+								"https://docs.example.test/releases/2026/november/very-long-path-segment-without-breaks/notes?tab=files",
+								"opaque-ref-aVeryLongOpaqueTokenWithoutAnySpacesThatWouldOverflowTheCard_0123456789abcdef",
+								"Neither",
+							]}
+							state={{ kind: "open" }}
+						/>
+					</Group>
 					<Group label="Settled, each as it ended: answered in the chat, a long answer, no answer in time, stopped">
 						<QuestionCard
 							question="Where should the notes go?"
@@ -434,6 +445,18 @@ export function Parts() {
 						as="@bandarra on GitHub"
 						state={{ kind: "done", words: "Merged · 10:52" }}
 					/>
+					<Group
+						label="Open, with a scope too long for a line: it wraps inside the card"
+						className="flex-col items-start"
+					>
+						<ApprovalCard
+							agent="Sancho"
+							what="send a message to someone.with.a.really.long.address@subdomain.of.an.example-organisation.test"
+							verb="Allow"
+							scope="Send messages to someone.with.a.really.long.address@subdomain.of.an.example-organisation.test without asking until this task is done"
+							state={{ kind: "open" }}
+						/>
+					</Group>
 					<Group label="Neither yes nor no: no answer in time, stopped before it ran" className="flex-col items-start">
 						<ApprovalCard
 							agent="Octo"

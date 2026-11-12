@@ -10,6 +10,8 @@ import {
 	ChevronRightIcon,
 	CircleCheckIcon,
 	CircleDotIcon,
+	CircleSlashIcon,
+	ClockIcon,
 	FilePenIcon,
 	GitCommitHorizontalIcon,
 	GitMergeIcon,
@@ -47,7 +49,11 @@ export type DoneKind =
 	| "answer"
 	| "send"
 	| "book"
-	| "declined";
+	| "declined"
+	/** Not done: no answer came in time. */
+	| "expired"
+	/** Not done: its run stopped before an answer was used. */
+	| "stopped";
 
 const KIND: Record<DoneKind, { icon: LucideIcon; tone: string }> = {
 	comment: { icon: MessageSquareIcon, tone: "text-ink-2" },
@@ -66,7 +72,13 @@ const KIND: Record<DoneKind, { icon: LucideIcon; tone: string }> = {
 	send: { icon: SendIcon, tone: "text-ink-2" },
 	book: { icon: TicketIcon, tone: "text-alive" },
 	declined: { icon: XIcon, tone: "text-ink-3" },
+	// the marks its card shows, so a row never reads as a no the owner did not say
+	expired: { icon: ClockIcon, tone: "text-ink-3" },
+	stopped: { icon: CircleSlashIcon, tone: "text-ink-3" },
 };
+
+/** Kinds of a row for something that did not happen: what it was about is struck through. */
+const NOT_DONE: ReadonlySet<DoneKind> = new Set(["declined", "expired", "stopped"]);
 
 /** A plain thing it was about: an agent, a site, a routine. */
 export type DoneRef = {
@@ -125,7 +137,7 @@ export function Done({
 	const [open, setOpen] = useState(initiallyOpen);
 	const panel = useId();
 	const { icon: Icon, tone } = KIND[kind];
-	const declined = kind === "declined";
+	const declined = NOT_DONE.has(kind);
 	const said = who === undefined ? action.charAt(0).toUpperCase() + action.slice(1) : action;
 	const ref =
 		reference === undefined ? null : "node" in reference ? (

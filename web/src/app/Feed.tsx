@@ -50,7 +50,7 @@ import { HarnessSessionPart } from "./HarnessSession.tsx";
 import { LiveView } from "./LiveBrowser.tsx";
 import { FollowedObject, MessageObjects, MessageText } from "./Objects.tsx";
 import { AskRef, approvalKind, didNotWords, didWords, sawOpen, wasOpen } from "./Settled.tsx";
-import { approvalState, questionState } from "./settled-states.ts";
+import { approvalState, notDoneKind, questionState } from "./settled-states.ts";
 import { routineTitle } from "./titles.ts";
 
 const day = (at: number) => new Date(at).toDateString();
@@ -728,7 +728,7 @@ function partOf(
 					<Done kind="answer" action="answered" reference={{ where: ended.said, title: ask.question }} card={card} />
 				) : (
 					<Done
-						kind={answered ? "answer" : "declined"}
+						kind={answered ? "answer" : notDoneKind(ended)}
 						action={answered ? "answered in the chat" : (ended?.said ?? "dismissed").toLowerCase()}
 						reference={{ where: ask.question }}
 						card={card}
@@ -766,7 +766,7 @@ function partOf(
 					card={card}
 					row={
 						<Done
-							kind={yes ? approvalKind(verb, label) : "declined"}
+							kind={yes ? approvalKind(verb, label) : notDoneKind(ended)}
 							action={yes ? didWords(label, verb) : didNotWords(label, outcome)}
 							note={how === "" ? undefined : how}
 							reference={on === undefined ? undefined : { node: <AskRef chat={chat} on={on} agent={agent} /> }}

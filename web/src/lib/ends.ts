@@ -7,9 +7,10 @@
 /** A line split for the eye: `head` gives way first, `end` stays as long as anything does. `head + end` is the text. */
 export type Ends = { readonly head: string; readonly end: string };
 
-/** The text with each quoted string's insides blanked, same length: what the shell reads as structure. */
+/** The text with each quoted string's insides and each escaped character blanked, same length: what the shell reads as structure. */
 const bare = (text: string) =>
 	text
+		.replace(/\\./g, "  ")
 		.replace(/"(?:\\.|[^"\\])*"/g, (quoted) => `"${" ".repeat(quoted.length - 2)}"`)
 		.replace(/'[^']*'/g, (quoted) => `'${" ".repeat(quoted.length - 2)}'`);
 
@@ -21,7 +22,9 @@ const bare = (text: string) =>
 export function commandEnds(command: string): Ends {
 	const shape = bare(command);
 	let at = -1;
-	for (const match of shape.matchAll(/&&|\|\||;|\|/g)) at = match.index;
+	// a separator with nothing after it (`npm test;`) ends no step: the step before it is the last
+	for (const match of shape.matchAll(/&&|\|\||;|\|/g))
+		if (shape.slice(match.index + match[0].length).trim() !== "") at = match.index;
 	if (at > 0) return { head: command.slice(0, at), end: command.slice(at) };
 	const path = pathEnds(command);
 	const cut = command.lastIndexOf("…");

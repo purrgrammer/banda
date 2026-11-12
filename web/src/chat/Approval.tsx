@@ -102,7 +102,9 @@ export function ApprovalCard({
 								disabled={busy}
 								onCheckedChange={(on) => setScoped(on === true)}
 							/>
-							<label htmlFor={scopeId}>{scope}</label>
+							<label htmlFor={scopeId} className="min-w-0 [overflow-wrap:anywhere]">
+								{scope}
+							</label>
 						</span>
 					)}
 					<span className="flex flex-wrap items-center gap-2">

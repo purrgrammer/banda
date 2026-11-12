@@ -8,7 +8,7 @@ import {
 	WrenchIcon,
 } from "lucide-react";
 import { describe, expect, it } from "vitest";
-import { shortPreview, toolIcon, toolPreview } from "./tool-presentation.tsx";
+import { shortPreview, toolIcon, toolPreview, toolPreviewEnds } from "./tool-presentation.tsx";
 
 describe("tool identity and literal previews", () => {
 	it("distinguishes tools, with a generic icon for unknown tools", () => {
@@ -41,20 +41,26 @@ describe("tool identity and literal previews", () => {
 		expect(args.text).toBe(original);
 		expect(shortPreview(" one\n two \t three ")).toBe("one two three");
 	});
-	it("cuts a command before its last step, a path before its file name, and keeps a trailing submit", () => {
+	it("splits a command before its last step, a path before its file name, and keeps a trailing submit", () => {
 		const chain = `npm ci && npm run build && npm test -- ${"--flag ".repeat(30)}&& git push origin main`;
-		const command = toolPreview("bash", { command: chain }) ?? "";
-		expect(command.length).toBeLessThanOrEqual(88);
-		expect(command.endsWith("&& git push origin main")).toBe(true);
-		expect(command).toContain("…");
-		const path = toolPreview("edit", { path: `/workspace/${"nested/".repeat(20)}Settled.tsx` }) ?? "";
-		expect(path.length).toBeLessThanOrEqual(88);
-		expect(path.endsWith("/Settled.tsx") || path.endsWith("…Settled.tsx")).toBe(true);
-		const typed = toolPreview("browser_type", { ref: "e4", text: "word ".repeat(60), submit: true }) ?? "";
-		expect(typed.endsWith(" · submit")).toBe(true);
-		expect(typed.length).toBeLessThanOrEqual(88);
-		// short enough to show whole: unchanged
+		const command = toolPreviewEnds("bash", { command: chain });
+		// the end that must show, whole, whatever the width: the head gives way on screen (KeepEnd), not here
+		expect(command?.end).toBe("&& git push origin main");
+		expect(command?.head.startsWith("npm ci && npm run build")).toBe(true);
+		expect((command?.head ?? "").length + (command?.end ?? "").length).toBeLessThanOrEqual(180);
+		expect(toolPreviewEnds("edit", { path: `/workspace/${"nested/".repeat(40)}Settled.tsx` })).toMatchObject({
+			end: "Settled.tsx",
+		});
+		expect(toolPreviewEnds("edit", { path: `/workspace/${"nested/".repeat(40)}Settled.tsx` })?.head).toContain("…");
+		const typed = toolPreviewEnds("browser_type", { ref: "e4", text: "word ".repeat(60), submit: true });
+		expect(typed?.end).toBe(" · submit");
+		// the string form is the same text, joined
+		expect(toolPreview("browser_type", { ref: "e4", text: "word ".repeat(60), submit: true })).toBe(
+			`${typed?.head}${typed?.end}`,
+		);
+		// short enough to show whole: unchanged; a call with nothing to keep keeps nothing
 		expect(toolPreview("bash", { command: "npm test && git push" })).toBe("npm test && git push");
+		expect(toolPreviewEnds("message_user", { text: "hello" })).toEqual({ head: "hello", end: "" });
 	});
 	it("does not put credentials or unknown arguments in a collapsed preview", () => {
 		expect(toolPreview("propose_key", { key: "private", connection: "GitHub", host: "api.github.com" })).toBe(

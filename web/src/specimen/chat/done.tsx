@@ -262,13 +262,14 @@ export function DoneSection() {
 				>
 					<div className="flex flex-col">
 						<Done kind="answer" action="answered in the chat" reference={{ where: "Where should the notes go?" }} />
-						<Done kind="declined" action="no answer in time" reference={{ where: "Should I hold the 9:15?" }} />
-						<Done kind="declined" action="stopped before an answer" reference={{ where: "Which seat?" }} />
+						<Done kind="expired" action="no answer in time" reference={{ where: "Should I hold the 9:15?" }} />
+						<Done kind="stopped" action="stopped before an answer" reference={{ where: "Which seat?" }} />
+						<Done kind="declined" action="dismissed" reference={{ where: "Tea or coffee?" }} />
 						<Done
-							kind="declined"
+							kind="expired"
 							action="not done, no answer in time: run npm run build && npm test && git push origin fix/quiet-hours"
 						/>
-						<Done kind="declined" action="stopped before it ran: comment on purrgrammer/banda #34" />
+						<Done kind="stopped" action="stopped before it ran: comment on purrgrammer/banda #34" />
 					</div>
 				</Group>
 				<Group label="Every kind · declined stays, struck" className="flex-col flex-nowrap items-stretch">
