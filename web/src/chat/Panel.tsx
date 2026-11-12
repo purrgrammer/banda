@@ -287,6 +287,7 @@ export function Routines({
 	onAllPaused,
 	onAdd,
 	onOpen,
+	onEdit,
 }: {
 	routines: readonly RoutineRowView[];
 	agent: string;
@@ -301,8 +302,10 @@ export function Routines({
 	onAllPaused?: (paused: boolean) => void;
 	/** Make one: the editor, empty. */
 	onAdd?: () => void;
-	/** Open a routine's editor. */
+	/** Open a routine: its detail and runs (its editor, when no `onEdit`). */
 	onOpen?: (id: string) => void;
+	/** Open a routine's editor. */
+	onEdit?: (id: string) => void;
 }) {
 	return (
 		<PanelSection>
@@ -341,6 +344,7 @@ export function Routines({
 							paused={allPaused || routine.paused === true}
 							{...(onRunNow === undefined ? {} : { onRunNow: () => onRunNow(routine.id) })}
 							{...(onOpen === undefined ? {} : { onOpen: () => onOpen(routine.id) })}
+							{...(onEdit === undefined ? {} : { onEdit: () => onEdit(routine.id) })}
 							{...(onPause === undefined || allPaused
 								? {}
 								: { onPause: () => onPause(routine.id, routine.paused !== true) })}
@@ -358,12 +362,14 @@ function RoutineRow({
 	onRunNow,
 	onPause,
 	onOpen,
+	onEdit = onOpen,
 }: {
 	routine: RoutineRowView;
 	paused: boolean;
 	onRunNow?: () => void;
 	onPause?: () => void;
 	onOpen?: () => void;
+	onEdit?: (() => void) | undefined;
 }) {
 	if (routine.waiting !== undefined)
 		return (
@@ -390,7 +396,7 @@ function RoutineRow({
 				type="button"
 				onClick={onOpen}
 				disabled={onOpen === undefined}
-				aria-label={`${routine.name}: edit`}
+				aria-label={onEdit === onOpen ? `${routine.name}: edit` : routine.name}
 				className="flex min-w-0 flex-1 flex-col text-left"
 			>
 				<span className={cn("truncate text-ui font-medium", paused ? "text-ink-2" : "text-ink")}>{routine.name}</span>
@@ -407,7 +413,7 @@ function RoutineRow({
 					</Button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end">
-					<DropdownMenuItem onSelect={onOpen} disabled={onOpen === undefined}>
+					<DropdownMenuItem onSelect={onEdit} disabled={onEdit === undefined}>
 						<PencilIcon />
 						Edit
 					</DropdownMenuItem>

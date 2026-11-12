@@ -1,14 +1,18 @@
 /**
- * An agent's routines in its panel, on the daemon's data: the rows (`routineRows`, pure, for the tests) and the owner's
- * own editor (`EditRoutine`), which saves at once as the owner's file. A row's next run is read from the time the
- * daemon last pushed its routines, so it never ticks on its own: the daemon pushes again when a routine fires.
+ * An agent's routines in its panel, on the daemon's data: the rows (`routineRows`, pure, for the tests), a routine's
+ * detail with its runs (`RoutineHistory`; its lines from `../lib/routine-runs.ts`) and the owner's own editor (`EditRoutine`),
+ * which saves at once as the owner's file. A row's next run is read from the time the daemon last pushed its routines,
+ * so it never ticks on its own: the daemon pushes again when a routine fires.
  */
 
+import { useEffect, useRef, useState } from "react";
 import { hostZone, parseSchedule, pickOf } from "../../../src/core/schedule.ts";
-import type { RoutineView } from "../../../src/server/api.ts";
-import { actOnRoutine, clickKey, makeRoutine } from "../areas/routines.ts";
+import type { RoutineRunView, RoutineView } from "../../../src/server/api.ts";
+import { actOnRoutine, clickKey, makeRoutine, routineRuns } from "../areas/routines.ts";
 import type { RoutineRowView } from "../chat/Panel.tsx";
+import { RoutineDetail } from "../chat/RoutineDetail.tsx";
 import { type RoutineDraft, RoutineEditor } from "../chat/RoutineEditor.tsx";
+import { runRows } from "../lib/routine-runs.ts";
 import { showControl } from "../lib/shell.ts";
 import { nearTime, routineTitle } from "./titles.ts";
 
@@ -67,6 +71,131 @@ export function routineRows(all: readonly RoutineView[], agent: string, now: num
 				},
 			];
 		});
+}
+
+/** Its newest runs and the page before them, kept as the owner reads back. */
+type Runs = {
+	readonly runs: readonly RoutineRunView[];
+	readonly earlier?: number | undefined;
+	readonly full?: boolean | undefined;
+};
+
+/**
+ * Routine `routine`'s detail, wired to the daemon: its runs read when it opens and again whenever the daemon pushes a
+ * change of it (a run fired or ended, it was paused), keeping the earlier pages the owner read; Pause and Resume in
+ * effect at once; Edit, Back and a run's line handed up.
+ */
+export function RoutineHistory({
+	routine,
+	agent,
+	chat,
+	now,
+	focusRun,
+	allPaused = false,
+	onBack,
+	onEdit,
+	onOpenRun,
+}: {
+	routine: RoutineView;
+	/** Routines are off for every agent. */
+	allPaused?: boolean;
+	/** The agent's name. */
+	agent: string;
+	/** The agent's chat beside the panel, where a run's line is opened. */
+	chat: number | undefined;
+	now: number;
+	focusRun?: number | undefined;
+	onBack: () => void;
+	onEdit: () => void;
+	/** Show a run's line in the chat: the run's `at`, and its entry there. */
+	onOpenRun: (at: number, entry: number) => void;
+}) {
+	const [runs, setRuns] = useState<Runs>();
+	const [error, setError] = useState<string>();
+	const [earlierError, setEarlierError] = useState<string>();
+	const [acting, setActing] = useState<string>();
+	const kept = useRef<Runs | undefined>(undefined);
+	kept.current = runs;
+	// what the daemon says of it that moves its runs: a run fired, ended, or it was paused
+	const moved = JSON.stringify([routine.lastRun, routine.running, routine.last, routine.paused, routine.state]);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a push of its runs is what reads them again
+	useEffect(() => {
+		let live = true;
+		routineRuns(routine.name).then(
+			(newest) => {
+				if (!live) return;
+				setError(undefined);
+				const was = kept.current;
+				const oldest = newest.runs.at(-1)?.at;
+				// the pages read further back stay, past the newest page
+				const older = was === undefined || oldest === undefined ? [] : was.runs.filter((run) => run.at < oldest);
+				setRuns({
+					runs: [...newest.runs, ...older],
+					earlier: older.length > 0 ? was?.earlier : newest.earlier,
+					full: newest.full === true,
+				});
+			},
+			(failed: unknown) => {
+				if (live) setError(failed instanceof Error ? failed.message : String(failed));
+			},
+		);
+		return () => {
+			live = false;
+		};
+	}, [routine.name, moved]);
+	const file = routine.accepted?.routine;
+	const paused = routine.paused !== undefined;
+	const when = file?.when ?? "";
+	return (
+		<RoutineDetail
+			routine={{
+				title: routineTitle(routine.name, file?.description),
+				when: paused || routine.next === undefined ? when : `${when} · next ${near(routine.next, now)}`,
+				paused,
+				pausedWhy: routine.paused === "limit" ? "it ran the most times a day it may" : undefined,
+				allPaused,
+				waiting:
+					routine.change === undefined
+						? undefined
+						: routine.change.kind === "removed"
+							? `${agent} asks to stop it. Answer in the chat or the list.`
+							: `${agent} asks to change it. Answer in the chat or the list.`,
+				runs:
+					runs === undefined
+						? undefined
+						: runRows(runs.runs, now, agent, chat, (run, entry) => onOpenRun(run.at, entry)),
+				error,
+				refused: acting,
+				earlierError,
+				earlier: runs?.earlier !== undefined,
+				full: runs?.full,
+			}}
+			focusRun={focusRun}
+			onBack={onBack}
+			{...(routine.accepted?.sha === undefined ? {} : { onEdit })}
+			onPause={(pause) => {
+				setActing(undefined);
+				void actOnRoutine(routine.name, { action: pause ? "pause" : "resume" }).then(showControl, (failed: unknown) =>
+					setActing(failed instanceof Error ? failed.message : String(failed)),
+				);
+			}}
+			onEarlier={() => {
+				const before = runs?.earlier;
+				if (before === undefined) return;
+				setEarlierError(undefined);
+				void routineRuns(routine.name, before).then(
+					(page) =>
+						setRuns((was) => ({
+							runs: [...(was?.runs ?? []), ...page.runs],
+							earlier: page.earlier,
+							full: page.full === true,
+						})),
+					// the runs already read stay; the owner can ask again
+					(failed: unknown) => setEarlierError(failed instanceof Error ? failed.message : String(failed)),
+				);
+			}}
+		/>
+	);
 }
 
 /** A routine in effect as its editor opens on it; undefined while it has no version in effect. */

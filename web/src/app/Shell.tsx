@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FACE } from "../../../src/core/choices.ts";
 import type { CompanionView, FactView } from "../../../src/server/api.ts";
@@ -44,7 +45,7 @@ import { useAskNotifications, useNotify } from "./notify.ts";
 import { FollowedObject } from "./Objects.tsx";
 import { Onboarding, SkillsOnboarding, useShippedSkills } from "./Onboarding.tsx";
 import { ownerEdits } from "./owner-edits.ts";
-import { EditRoutine, routineRows } from "./routines.tsx";
+import { EditRoutine, RoutineHistory, routineRows } from "./routines.tsx";
 import { SearchDialog } from "./SearchDialog.tsx";
 import { SettingsDevices } from "./SettingsDevices.tsx";
 import { SettingsProviders } from "./SettingsProviders.tsx";
@@ -145,6 +146,8 @@ function Main() {
 	);
 	/** The agents whose panel opened on Access this session: connecting there does not move it to About. */
 	const onAccess = useRef(new Set<string>());
+	// the entry a routine's run opened the chat at: when the feed draws nothing there, the owner is told
+	const runLine = useRef<number | undefined>(undefined);
 	/** Back from a page: to the chat shown last on this device, else home. */
 	const back = () => {
 		let stored: string | null = null;
@@ -162,8 +165,15 @@ function Main() {
 	const [searching, setSearching] = useState(false);
 	const [shortcuts, setShortcuts] = useState(false);
 	const [making, setMaking] = useState(false);
-	// the routine open in the panel's editor (none: a new one), and a routine's line asking for the agent's routines
-	const [editing, setEditing] = useState<{ agent: string; routine?: string; watch?: string }>();
+	// the routine open in the panel (its detail; its editor when `edit`, a new one when none), the run whose line the
+	// owner last opened from it, and a routine's line asking for the agent's routines
+	const [editing, setEditing] = useState<{
+		agent: string;
+		routine?: string;
+		watch?: string;
+		edit?: true;
+		run?: number;
+	}>();
 	const [focus, setFocus] = useState<{ agent: string; n: number }>();
 	// when the daemon last pushed the routines or the watches, or the day turned: their next runs and looks are read
 	// then, so they never tick on their own
@@ -382,6 +392,12 @@ function Main() {
 					key={where.id}
 					agent={where.id}
 					at={where.at}
+					onMissing={(at) => {
+						if (runLine.current !== at) return;
+						toast.message("That run's line isn't in the chat", {
+							description: "Showing what came after it.",
+						});
+					}}
 					who={who}
 					row={row}
 					phone={phone}
@@ -407,6 +423,11 @@ function Main() {
 			};
 			const openWatch =
 				editing?.watch === undefined ? undefined : shell.watches?.find((each) => each.name === editing.watch);
+			// a routine gone since it was opened (deleted, or its removal allowed) leaves the list
+			const openRoutine =
+				editing?.routine === undefined
+					? undefined
+					: shell.control?.routines.find((each) => each.name === editing.routine && each.accepted !== undefined);
 			const editor =
 				editing?.agent !== where.id ? undefined : openWatch !== undefined ? (
 					<WatchDetail
@@ -416,13 +437,45 @@ function Main() {
 						now={pushedAt}
 						onDone={backToRoutines}
 					/>
-				) : editing.watch !== undefined ? undefined : (
+				) : editing.watch !== undefined ? undefined : editing.routine === undefined ? (
+					<EditRoutine agent={where.id} name={who.name} now={pushedAt} onDone={backToRoutines} />
+				) : openRoutine === undefined ? undefined : editing.edit === true ? (
 					<EditRoutine
 						agent={where.id}
 						name={who.name}
-						routine={shell.control?.routines.find((each) => each.name === editing.routine)}
+						routine={openRoutine}
 						now={pushedAt}
-						onDone={backToRoutines}
+						// saved, deleted or Back: its detail again, or the list once it is gone
+						onDone={() => setEditing({ agent: where.id, routine: openRoutine.name })}
+					/>
+				) : (
+					<RoutineHistory
+						routine={openRoutine}
+						agent={who.name}
+						chat={row?.chat}
+						now={pushedAt}
+						focusRun={editing.run}
+						allPaused={shell.control?.paused !== undefined}
+						onBack={backToRoutines}
+						onEdit={() => setEditing({ agent: where.id, routine: openRoutine.name, edit: true })}
+						onOpenRun={(at, entry) => {
+							setEditing({ agent: where.id, routine: openRoutine.name, run: at });
+							runLine.current = entry;
+							// on the phone the sheet closes so the chat shows; the detail waits beneath for it to open again
+							if (phone) setSheet(false);
+							if (where.at !== entry) {
+								go({ name: "agent", id: where.id, at: entry });
+								return;
+							}
+							// opened at it already: show it again, or what came after it when it draws nothing
+							const exact = document.querySelector(`[data-entry="${entry}"]`);
+							const after = [...document.querySelectorAll<HTMLElement>("[data-entry]")].find(
+								(each) => Number(each.dataset.entry) >= entry,
+							);
+							(exact ?? after)?.scrollIntoView({ block: "center", behavior: "smooth" });
+							if (exact === null)
+								toast.message("That run's line isn't in the chat", { description: "Showing what came after it." });
+						}}
 					/>
 				);
 			const agentFile = shell.agents.find((each) => each.accepted?.agent?.id === where.id)?.accepted;
@@ -456,6 +509,7 @@ function Main() {
 										onAllPaused={(paused) => void setPaused(paused).then(showControl)}
 										onAdd={() => setEditing({ agent: where.id })}
 										onOpen={(id) => setEditing({ agent: where.id, routine: id })}
+										onEdit={(id) => setEditing({ agent: where.id, routine: id, edit: true })}
 										onRunNow={(id) => void actOnRoutine(id, { action: "run", key: clickKey() }).then(showControl)}
 										onPause={(id, paused) =>
 											void actOnRoutine(id, { action: paused ? "pause" : "resume" }).then(showControl)
