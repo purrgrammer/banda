@@ -4,13 +4,19 @@ import { mkdir, mkdtemp, realpath, rename, rm, stat, symlink, writeFile } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { microvmTarget, stageMicrovmBundle, verifiedMicrovmImages } from "../scripts/microvm-bundle.ts";
+import {
+	archiveImageDigest,
+	microvmTarget,
+	stageMicrovmBundle,
+	verifiedMicrovmImages,
+} from "../scripts/microvm-bundle.ts";
 import { imageSpecs } from "../src/box/container.ts";
 import {
 	fileSha256,
 	installedMicrovmAssets,
 	MICROSANDBOX_ARCHIVE_SHA256,
 	MICROSANDBOX_VERSION,
+	MICROVM_PLATFORMS,
 	type MicrovmManifest,
 	readMicrovmAssets,
 } from "../src/box/microvm-assets.ts";
@@ -122,54 +128,87 @@ describe("installed computer assets", () => {
 		}
 	});
 	it("leaves other release targets operational without microVM inputs", async () => {
-		for (const platform of ["linux", "win32"] as const) {
-			expect(microvmTarget({ platform, arch: "arm64" })).toBe(false);
+		for (const platform of ["freebsd", "win32"] as const) {
+			expect(microvmTarget({ platform, arch: "arm64" })).toBeUndefined();
 			await stageMicrovmBundle({
 				root: "/missing-source",
 				out: "/missing-output",
 				target: { platform, arch: "arm64" },
 			});
 		}
-		expect(microvmTarget({ platform: "darwin", arch: "x64" })).toBe(false);
+		expect(microvmTarget({ platform: "darwin", arch: "x64" })).toBeUndefined();
 	});
-	it("accepts current-source archives and refuses old source identities", async () => {
-		const { root } = await fixture();
-		const specs = [
-			...(await imageSpecs({ arch: "arm64", boxTarget: "boot" })),
-			...(await imageSpecs({ arch: "arm64", boxTarget: "browser" })),
-		];
-		const tagged = async (role: "box" | "proxy" | "browser") => {
-			const ref = specs.find((spec) => spec.tag.startsWith(`banda-${role}:`))?.tag;
-			const context = join(root, `${role}-export`);
-			await mkdir(context);
-			const config = JSON.stringify({ architecture: "arm64", os: "linux" });
-			const digest = sum(config);
-			await writeFile(join(context, `${digest}.json`), config);
-			await writeFile(join(context, "manifest.json"), JSON.stringify([{ Config: `${digest}.json`, RepoTags: [ref] }]));
-			execFileSync("tar", ["-cf", join(root, `${role}.tar`), "-C", context, "manifest.json", `${digest}.json`]);
-			const sha256 = await fileSha256(join(root, `${role}.tar`));
-			if (role === "browser") {
-				const archive = `banda-browser-${sha256}.tar`;
-				await rename(join(root, "browser.tar"), join(root, archive));
-				return { archive, ref, sha256, digest: `sha256:${digest}`, bytes: (await stat(join(root, archive))).size };
-			}
-			return { ...image(role), ref, sha256, digest: `sha256:${digest}` };
-		};
-		await writeFile(
-			join(root, "images.json"),
-			JSON.stringify({
-				target: "linux-arm64",
-				box: await tagged("box"),
-				proxy: await tagged("proxy"),
-				browser: await tagged("browser"),
-			}),
-		);
-		await expect(verifiedMicrovmImages(root)).resolves.toHaveProperty("target", "linux-arm64");
-		const value = await verifiedMicrovmImages(root);
-		await writeFile(
-			join(root, "images.json"),
-			JSON.stringify({ ...value, box: { ...value.box, ref: `banda-box:${"0".repeat(12)}` } }),
-		);
-		await expect(verifiedMicrovmImages(root)).rejects.toThrow(/different sources/);
-	});
+	it.each(["arm64", "x64"] as const)(
+		"accepts %s archives and refuses wrong CPUs and source identities",
+		async (arch) => {
+			const { root } = await fixture();
+			const specs = [
+				...(await imageSpecs({ arch, boxTarget: "boot" })),
+				...(await imageSpecs({ arch, boxTarget: "browser" })),
+			];
+			const tagged = async (role: "box" | "proxy" | "browser") => {
+				const ref = specs.find((spec) => spec.tag.startsWith(`banda-${role}:`))?.tag;
+				const context = join(root, `${role}-export`);
+				await mkdir(context);
+				const config = JSON.stringify({ architecture: arch === "arm64" ? "arm64" : "amd64", os: "linux" });
+				const digest = sum(config);
+				await writeFile(join(context, `${digest}.json`), config);
+				await writeFile(
+					join(context, "manifest.json"),
+					JSON.stringify([{ Config: `${digest}.json`, RepoTags: [ref] }]),
+				);
+				execFileSync("tar", ["-cf", join(root, `${role}.tar`), "-C", context, "manifest.json", `${digest}.json`]);
+				const sha256 = await fileSha256(join(root, `${role}.tar`));
+				if (role === "browser") {
+					const archive = `banda-browser-${sha256}.tar`;
+					await rename(join(root, "browser.tar"), join(root, archive));
+					return { archive, ref, sha256, digest: `sha256:${digest}`, bytes: (await stat(join(root, archive))).size };
+				}
+				return { ...image(role), ref, sha256, digest: `sha256:${digest}` };
+			};
+			await writeFile(
+				join(root, "images.json"),
+				JSON.stringify({
+					target: `linux-${arch}`,
+					box: await tagged("box"),
+					proxy: await tagged("proxy"),
+					browser: await tagged("browser"),
+				}),
+			);
+			await expect(verifiedMicrovmImages(root)).resolves.toHaveProperty("target", `linux-${arch}`);
+			const value = await verifiedMicrovmImages(root);
+			expect(() =>
+				archiveImageDigest(join(root, "box.tar"), value.box.ref, arch === "arm64" ? "x64" : "arm64"),
+			).toThrow(/not a Linux/);
+			await writeFile(
+				join(root, "images.json"),
+				JSON.stringify({ ...value, box: { ...value.box, ref: `banda-box:${"0".repeat(12)}` } }),
+			);
+			await expect(verifiedMicrovmImages(root)).rejects.toThrow(/different sources/);
+		},
+	);
+	it.each(["linux-arm64", "linux-x64"] as const)(
+		"loads a relocated %s bundle and refuses it on another host",
+		async (target) => {
+			const { root, manifest } = await fixture();
+			if (manifest.target !== "darwin-arm64") throw new Error("Expected a Mac fixture");
+			const { entitlements, ...common } = manifest;
+			expect(entitlements.hypervisor).toBe(true);
+			const vendor = MICROVM_PLATFORMS[target];
+			await writeFile(join(root, vendor.firmware), vendor.firmware);
+			await writeFile(
+				join(root, "manifest.json"),
+				JSON.stringify({
+					...common,
+					target,
+					vendorArchiveSha256: vendor.sha256,
+					firmware: { path: vendor.firmware, sha256: sum(vendor.firmware) },
+				}),
+			);
+			const loaded = await readMicrovmAssets(root, target);
+			expect(loaded.target).toBe(target);
+			expect(loaded.firmware).toBe(join(await realpath(root), vendor.firmware));
+			await expect(readMicrovmAssets(root, "darwin-arm64")).rejects.toThrow(/different operating system or CPU/);
+		},
+	);
 });

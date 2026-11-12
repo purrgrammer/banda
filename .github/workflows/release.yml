@@ -7,6 +7,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      native_computer:
+        description: Verify the staged Linux computer through the app (requires KVM and Chrome on the runner)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,8 +22,14 @@ concurrency:
 
 jobs:
   computer-images:
-    name: build computer images (linux-arm64)
-    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+          - { arch: x64, runner: ubuntu-latest }
+    name: build computer images (linux-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -29,10 +40,10 @@ jobs:
           node-version: 26
           cache: npm
       - run: npm ci
-      - run: node scripts/microvm-bundle.ts --images --out release/computer-images
+      - run: node scripts/microvm-bundle.ts --images --arch ${{ matrix.arch }} --out release/computer-images
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: computer-images-arm64
+          name: computer-images-${{ matrix.arch }}
           path: release/computer-images
           if-no-files-found: error
           compression-level: 0
@@ -43,11 +54,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { runner: macos-latest, target: mac-arm64 }
-          - { runner: macos-26-intel, target: mac-x64 }
-          - { runner: windows-latest, target: win-x64 }
-          - { runner: ubuntu-latest, target: linux-x64 }
-          - { runner: ubuntu-24.04-arm, target: linux-arm64 }
+          - { runner: macos-latest, target: mac-arm64, computer: arm64 }
+          - { runner: macos-26-intel, target: mac-x64, computer: "" }
+          - { runner: windows-latest, target: win-x64, computer: "" }
+          - { runner: ubuntu-latest, target: linux-x64, computer: x64 }
+          - { runner: ubuntu-24.04-arm, target: linux-arm64, computer: arm64 }
     name: build (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
@@ -74,19 +85,30 @@ jobs:
         if: matrix.target == 'linux-x64'
         run: npm run check && npm run typecheck && npm run test:fast
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        if: matrix.target == 'mac-arm64'
+        if: matrix.computer != ''
         with:
-          name: computer-images-arm64
+          name: computer-images-${{ matrix.computer }}
           path: ${{ runner.temp }}/computer-images
       - run: npm run cli:pack
         env:
-          BANDA_COMPUTER_IMAGES: ${{ matrix.target == 'mac-arm64' && format('{0}/computer-images', runner.temp) || '' }}
+          BANDA_COMPUTER_IMAGES: ${{ matrix.computer != '' && format('{0}/computer-images', runner.temp) || '' }}
       - name: Bundled computer distribution qualification
-        if: matrix.target == 'mac-arm64' && startsWith(github.ref, 'refs/tags/v')
+        if: matrix.computer != '' && startsWith(github.ref, 'refs/tags/v')
         run: |
           echo "::error::Bundled computer redistribution review is pending: corresponding source, dependency notices and guest-image requirements must be qualified before a tagged release."
           exit 1
       - run: node scripts/smoke-release.ts
+      - name: Verify the native Linux computer through the app
+        if: inputs.native_computer && startsWith(matrix.target, 'linux-')
+        run: |
+          export CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          node scripts/verify-computer.ts "${{ runner.temp }}/native-computer-evidence"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && inputs.native_computer && startsWith(matrix.target, 'linux-')
+        with:
+          name: native-computer-${{ matrix.target }}
+          path: ${{ runner.temp }}/native-computer-evidence
+          if-no-files-found: ignore
       - run: npm --prefix desktop ci
       - run: npm --prefix desktop run dist
         env:

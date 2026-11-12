@@ -2,6 +2,12 @@
 
 ## Current work
 
+The bundled computer is in `prototype/microvm-box`. The macOS ARM64 candidate has packaged desktop/phone-width
+walkthrough evidence, including lazy browser preparation, guarded sends and restart persistence. Linux x64 and
+ARM64 packaging and adapter work is under local verification; a native KVM run remains before either is accepted.
+Windows and Intel Macs retain the existing backend while their native runtime boundaries are unresolved
+([Operations](operations.md)). Public browser download delivery and clean-machine distribution remain open.
+
 Agent search is in review on `feat/agent-search`: messages, shared group histories and artifacts use the same
 retrieval as Cmd+K, with bounded results and source reads. Recall now searches saved facts only. Validation and
 owner acceptance remain pending; definition and attachment coverage is tracked in [Chat](chat.md). The local tool-access

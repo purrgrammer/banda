@@ -25,6 +25,16 @@ Follow [Delivery](delivery.md) and the relevant gates in [Verification](verifica
 
 ## Open work
 
+- [ ] Qualify the bundled Linux computer on x64 and ARM64 with KVM: staged runtime and image hashes,
+  guarded networking, persistent folders, lazy browser loading, desktop/phone-width use and complete cleanup.
+  The release workflow's optional native-computer check runs `scripts/verify-computer.ts`; ordinary release
+  smoke checks do not exercise the VM. The browser archive is supplied locally with its exact pinned bytes,
+  so public download delivery remains separate.
+- [ ] Spike the Windows native computer's directory ACLs, local named-pipe permissions and VM mount isolation
+  before selecting it in the desktop app. The current runtime ships Windows binaries and requires WHP;
+  the banda adapter is not qualified for Windows. Intel Macs need a different runtime: the pinned upstream
+  release has no Intel macOS build.
+
 Recheck these items against current code before implementation; an unchecked item is not a freshly verified
 defect. Remove it only when its fix and acceptance evidence are recorded in a commit.
 

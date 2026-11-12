@@ -5,7 +5,7 @@
  * the shell crashes, the daemon lives on and the next launch attaches to it.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { closeSync, mkdirSync, mkdtempSync, openSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
@@ -143,7 +143,9 @@ async function ensureDaemon(): Promise<Published> {
 			BANDA_HOME: home,
 			BANDA_BOX:
 				process.env.BANDA_BOX ??
-				(app.isPackaged && process.platform === "darwin" && process.arch === "arm64" ? "microvm" : "container"),
+				(app.isPackaged && existsSync(join(process.resourcesPath, "banda/app/computer/manifest.json"))
+					? "microvm"
+					: "container"),
 			PATH: dockerPath(path),
 		},
 		stdio: ["ignore", output, output],

@@ -1,6 +1,7 @@
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { chmod, lstat, mkdir, readdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, chmod, lstat, mkdir, readdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
@@ -10,7 +11,7 @@ import { Value } from "typebox/value";
 import type { BoxSetup } from "./box.ts";
 import { BROWSER_UID, browserStart } from "./browser-start.ts";
 import { guardedProxy, type ProxyTransport, proxyReady, TRUST, TRUST_ENV } from "./guarded-proxy.ts";
-import { installedMicrovmAssets, type MicrovmAssets } from "./microvm-assets.ts";
+import { installedMicrovmAssets, type MicrovmAssets, microvmTarget } from "./microvm-assets.ts";
 import { downloadMicrovmBrowser } from "./microvm-download.ts";
 
 const CacheHome = Type.Object({ home: Type.String() }, { additionalProperties: false });
@@ -28,15 +29,16 @@ const Listing = Type.Array(Type.Object({ name: Type.String(), status: Type.Strin
 const Image = Type.Object({
 	digest: Type.String(),
 	config: Type.Object({ digest: Type.String() }),
-	architecture: Type.Literal("arm64"),
+	architecture: Type.Union([Type.Literal("arm64"), Type.Literal("amd64")]),
 	os: Type.Literal("linux"),
 });
 const VM_NAME = /^banda-microvm-[a-f0-9]{10}-([a-f0-9]{12})(?:-(?:proxy|browser))?$/;
 const uid = process.getuid?.() ?? 0;
 const cachePrefix = `banda-msb-${uid}-`;
 const endpoint = "127.0.0.1:80";
+const cacheRoot = process.platform === "darwin" ? "/private/tmp" : "/tmp";
 const cachePath = (home: string) =>
-	join("/private/tmp", `${cachePrefix}${createHash("sha256").update(home).digest("hex").slice(0, 16)}`);
+	join(cacheRoot, `${cachePrefix}${createHash("sha256").update(home).digest("hex").slice(0, 16)}`);
 
 function parse<T extends TSchema>(schema: T, text: string): Static<T> {
 	const value: unknown = JSON.parse(text);
@@ -119,6 +121,13 @@ type Runtime = ReturnType<typeof runtime>;
 
 async function openRuntime(home: string): Promise<Runtime> {
 	const assets = await installedMicrovmAssets();
+	if (process.platform === "linux") {
+		await access("/dev/kvm", constants.R_OK | constants.W_OK).catch(() => {
+			throw new Error(
+				"The computer needs access to /dev/kvm. Enable hardware virtualization and give your account access to KVM, then reopen banda.",
+			);
+		});
+	}
 	const storage = join(home, "computer");
 	for (const path of [assets.root, assets.msb, assets.firmware, assets.box.archive, assets.proxy.archive]) {
 		const below = relative(storage, await realpath(path));
@@ -150,6 +159,8 @@ async function image(computer: Runtime, asset: MicrovmAssets["box"], building: (
 		present = parse(Image, await computer.run(["image", "inspect", asset.ref, "--format", "json"]));
 	}
 	if (present.config.digest !== asset.digest) throw new Error("The computer image differs from its verified bundle.");
+	if (present.architecture !== (computer.assets.target === "linux-x64" ? "amd64" : "arm64"))
+		throw new Error("The computer image was built for a different CPU.");
 	return present.digest;
 }
 
@@ -605,12 +616,12 @@ export async function launchMicrovm(argv: readonly string[]): Promise<void> {
 
 /** Only abandoned caches of this OS user, bound to their exact absent home, are swept. */
 export async function sweepMicrovmBoxes(): Promise<void> {
-	if (process.platform !== "darwin" || process.arch !== "arm64") return;
-	const entries = await readdir("/private/tmp", { withFileTypes: true });
+	if (microvmTarget(process) === undefined) return;
+	const entries = await readdir(cacheRoot, { withFileTypes: true });
 	let assets: MicrovmAssets | undefined;
 	for (const entry of entries) {
 		if (!entry.isDirectory() || !entry.name.startsWith(cachePrefix)) continue;
-		const cache = join("/private/tmp", entry.name);
+		const cache = join(cacheRoot, entry.name);
 		try {
 			const stat = await lstat(cache);
 			if (stat.uid !== uid) continue;
