@@ -116,3 +116,110 @@ it("fetches only an attachment named by the same authorized Gmail message and ho
 	await connected.capabilities.signOut("gmail", "alice");
 	expect((await connected.harness.snapshot(Blobs, context))?.blobs[file!.sha]?.holders["1"]).toBeUndefined();
 });
+
+it("fetches a file only when a Slack thread's card shows it, at most 10 MB, and the chat holds its blob", async () => {
+	const home = await tempHome();
+	const connected = await openConnected({ home, respond: () => fauxAssistantMessage("done") });
+	opened.push(connected);
+	const blobs = new BlobStore(join(home, "blobs"));
+	const definition = shippedText("slack");
+	const parsed = { connection: shipped("slack", definition) };
+	shipping(parsed.connection);
+	let chat = 0;
+	const agent = "---\nname: Reader\ndescription: Reads Slack\nstate: active\nconnections: [slack]\n---\nReader";
+	const schema = (properties: string[]) => ({
+		type: "object",
+		properties: Object.fromEntries(properties.map((each) => [each, { type: "string" }])),
+	});
+	await connected.harness.commit(async (tx) => {
+		await added(tx, "slack");
+		(await tx.doc(Accepted)).files["agents/reader.md"] = { text: agent, sha: shaOf(agent), at: 1 };
+		const conversation = await tx.createConversation({ ownership: { kind: "ownerless" } });
+		chat = Number(conversation.id);
+		(await tx.doc(AgentChats)).chats[chat] = "reader";
+		const store = await tx.doc(Connected);
+		store.connections.slack = {
+			version: shaOf(definition),
+			at: 1,
+			tools: Object.fromEntries(
+				parsed.connection.reads.map((tool) => [tool, { description: tool, schema: schema(["channel", "ts"]) }]),
+			),
+		};
+		store.accounts.slack = { ana: { id: "@ana at Acme", at: 1 } };
+		store.on.reader = { slack: ["ana"] };
+	}, context);
+	const fetched: string[] = [];
+	let reads = 0;
+	const message = (ts: string, text: string, files?: unknown[]) => ({
+		ts,
+		from: "@bob",
+		author: "@bob at Acme",
+		user: "U0BOB",
+		text,
+		date: "2023-11-14T22:13:20.000Z",
+		mentions_me: false,
+		...(files === undefined ? {} : { files }),
+	});
+	const service = openObjects({
+		harness: connected.harness,
+		blobs,
+		capabilities: {
+			shipped: async () => [parsed.connection],
+			listedSchema: async () => schema(["channel", "ts"]),
+			readFor: async () => ({
+				text: JSON.stringify({
+					read: ++reads,
+					channel: "C0GENERAL",
+					channel_name: "general",
+					root: "1700000000.000100",
+					messages: [
+						message("1700000000.000100", "Release notes draft"),
+						message("1700000160.000160", "the log", [
+							{ id: "F0LOG", name: "deploy-41.log", size: 5, mimetype: "text/plain" },
+							{ id: "F0BIG", name: "dump.bin", size: 11 * 1024 * 1024, mimetype: "application/octet-stream" },
+						]),
+					],
+					total: 2,
+				}),
+			}),
+			readSlackFile: async (_account, fileId) => {
+				fetched.push(fileId);
+				return { bytes: Buffer.from("hello"), name: "deploy-41.log" };
+			},
+		},
+	});
+	const shown = (await service.show(chat, [{ ref: "slack/C0GENERAL/p1700000000000100", agent: "reader" }]))[0];
+	if (shown?.shown !== "card" || shown.card.card !== "messages") throw new Error(JSON.stringify(shown));
+	expect(shown.card.messages.find((each) => each.id === "1700000160.000160")?.files).toEqual([
+		{ id: "F0LOG", name: "deploy-41.log", size: 5, mimetype: "text/plain" },
+		{ id: "F0BIG", name: "dump.bin", size: 11 * 1024 * 1024, mimetype: "application/octet-stream" },
+	]);
+	// the app names the object by its card's own id
+	const ref = shown.key.split(":").slice(2).join(":");
+	expect(await service.attachment(chat, ref, "F0OTHER", "reader", "ana")).toBeUndefined();
+	await expect(service.attachment(chat, ref, "F0BIG", "reader", "ana")).rejects.toThrow(
+		"dump.bin is larger than 10 MB.",
+	);
+	expect(fetched).toEqual([]);
+	const file = await service.attachment(chat, ref, "F0LOG", "reader", "ana");
+	expect(file).toMatchObject({ name: "deploy-41.log", size: 5 });
+	expect(await blobs.read(file!.sha)).toEqual(Buffer.from("hello"));
+	expect((await connected.harness.snapshot(Blobs, context))?.blobs[file!.sha]?.holders[String(chat)]).toMatchObject({
+		from: "connection",
+		connection: "slack",
+		account: "ana",
+	});
+	expect(fetched).toEqual(["F0LOG"]);
+	// a message linking the thread and one of its replies: read once, and both links drawn from the one reading
+	const before = reads;
+	const both = await service.show(chat, [
+		{ ref: "https://acme.slack.com/archives/C0GENERAL/p1700000000000100", agent: "reader" },
+		{
+			ref: "https://acme.slack.com/archives/C0GENERAL/p1700000160000160?thread_ts=1700000000.000100&cid=C0GENERAL",
+			agent: "reader",
+		},
+	]);
+	expect(both.map((each) => each.shown)).toEqual(["card", "card"]);
+	expect(both[1]).toBe(both[0]);
+	expect(reads - before).toBeLessThanOrEqual(1);
+});

@@ -4,6 +4,7 @@ import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
 import { cardOf, draftedOn, parseObjects, plainLine, readArgs, recognise, refKey } from "../src/core/objects.ts";
 import { objects } from "../src/core/parts/objects.ts";
 import { githubObjectTools } from "./fixtures/github-objects.ts";
+import { definition } from "./fixtures/shipped.ts";
 import { pbtRuns } from "./pbt.ts";
 
 const github = { name: "github", objects: GITHUB_OBJECTS };
@@ -333,7 +334,9 @@ it("words go last in a template: only its end tells where they stop", () => {
 	const parsed = parseObjects({ search: { ...SEARCH.search, urls: [], ids: ["mail/search/{query}/x"] } }, () => true);
 	expect("errors" in parsed ? parsed.errors : []).toContainEqual(expect.stringContaining("must end with {query}"));
 	const rule = parseObjects({ search: { ...SEARCH.search, normalize: { query: "words" } } }, () => true);
-	expect("errors" in rule ? rule.errors : []).toContainEqual(expect.stringContaining("lowercase, integer or text"));
+	expect("errors" in rule ? rule.errors : []).toContainEqual(
+		expect.stringContaining("lowercase, integer, text or slack-ts"),
+	);
 });
 
 it("any words survive a round trip through a ref's key", () => {
@@ -349,4 +352,212 @@ it("any words survive a round trip through a ref's key", () => {
 		}),
 		{ numRuns: pbtRuns(100) },
 	);
+});
+
+function slackKinds() {
+	return definition("slack").objects ?? {};
+}
+
+it("names a Slack thread by its link, a reply's link or its id, one object, its p-digits read as Slack's timestamp", () => {
+	const kinds = slackKinds();
+	const slack = { name: "slack", objects: kinds };
+	const thread = { connection: "slack", kind: "thread", values: { channel: "C0GENERAL", ts: "1700000000.000100" } };
+	for (const name of [
+		"https://acme.slack.com/archives/C0GENERAL/p1700000000000100",
+		"https://acme.slack.com/archives/C0GENERAL/p1700000500000900?thread_ts=1700000000.000100&cid=C0GENERAL",
+		"slack/C0GENERAL/p1700000000000100",
+		"slack/C0GENERAL/p1700000000.000100",
+	])
+		expect(recognise(name, [slack])[0], name).toEqual(thread);
+	expect(refKey(thread, kinds)).toBe("slack:thread:slack/C0GENERAL/p1700000000.000100");
+	expect(recognise(refKey(thread, kinds), [slack])).toEqual([thread]);
+	// a thread's link is first a thread; drawn as its channel only when the thread cannot be read
+	expect(recognise("https://acme.slack.com/archives/C0GENERAL/p1700000000000100", [slack]).map((r) => r.kind)).toEqual([
+		"thread",
+		"channel",
+	]);
+	const channel = { connection: "slack", kind: "channel", values: { channel: "C0GENERAL" } };
+	expect(recognise("https://acme.slack.com/archives/C0GENERAL", [slack])).toEqual([channel]);
+	expect(recognise("slack/C0GENERAL", [slack])).toEqual([channel]);
+	expect(recognise(refKey(channel, kinds), [slack])).toEqual([channel]);
+	const person = { connection: "slack", kind: "person", values: { user: "U0BOB" } };
+	expect(recognise("https://acme.slack.com/team/U0BOB", [slack])).toEqual([person]);
+	expect(recognise("slack/user/U0BOB", [slack])).toEqual([person]);
+	const search = recognise("slack/search/from:@bob failed", [slack]);
+	expect(search).toEqual([{ connection: "slack", kind: "search", values: { query: "from:@bob failed" } }]);
+	expect(recognise(refKey(search[0]!, kinds), [slack])).toEqual(search);
+	for (const lookalike of [
+		"https://acme.slack.com.evil.test/archives/C0GENERAL",
+		"https://slack.com.evil/archives/C0GENERAL",
+		"http://acme.slack.com/archives/C0GENERAL",
+	])
+		expect(recognise(lookalike, [slack]), lookalike).toEqual([]);
+	expect(recognise("https://acme.slack.com/archives/C0GENERAL/pnot-a-ts", [slack]).map((r) => r.kind)).toEqual([
+		"channel",
+	]);
+	// a post names the thread it replies in, else the channel, and says so in the owner's words
+	expect(
+		draftedOn("slack", "post_message", { channel: "C0GENERAL", text: "x", thread_ts: "1700000000.000100" }, kinds),
+	).toMatchObject({ refs: [thread, channel], verb: "Send", what: "Reply in", text: "text" });
+	expect(draftedOn("slack", "post_message", { channel: "C0GENERAL", text: "x" }, kinds)).toMatchObject({
+		refs: [channel],
+		what: "Post in",
+	});
+});
+
+it("draws Slack's thread, channel, search and person from the adapter's readings", () => {
+	const kinds = slackKinds();
+	const message = (ts: string, from: string, text: string, avatar?: string) => ({
+		ts,
+		from,
+		user: "U0",
+		text,
+		date: "2023-11-14T22:13:20.000Z",
+		mentions_me: false,
+		...(avatar === undefined ? {} : { avatar }),
+	});
+	const thread = cardOf(
+		kinds.thread!,
+		{ connection: "slack", kind: "thread", values: { channel: "C0GENERAL", ts: "1700000000.000100" } },
+		{
+			thread: {
+				channel: "C0GENERAL",
+				channel_name: "general",
+				root: "1700000000.000100",
+				messages: [
+					message("1700000000.000100", "@bob", "Release notes", "https://avatars.slack-edge.com/bob_48.png"),
+					// a face off Slack's image host is never drawn, whatever the reading says
+					message("1700000150.000150", "@deploybot [bot]", "Deploy\u0007 done", "https://evil.test/bot.png"),
+				],
+				total: 2,
+				url: "https://acme.slack.com/archives/C0GENERAL/p1700000000000100",
+			},
+		},
+		"slack",
+	);
+	expect(thread).toEqual({
+		card: "messages",
+		title: "Release notes",
+		search: false,
+		messages: [
+			{
+				id: "1700000150.000150",
+				from: "@deploybot [bot]",
+				subject: "",
+				date: "2023-11-14T22:13:20.000Z",
+				text: "Deploy done",
+			},
+			{
+				id: "1700000000.000100",
+				from: "@bob",
+				subject: "",
+				date: "2023-11-14T22:13:20.000Z",
+				text: "Release notes",
+				avatar: "https://avatars.slack-edge.com/bob_48.png",
+			},
+		],
+		total: 2,
+		url: "https://acme.slack.com/archives/C0GENERAL/p1700000000000100",
+		service: "slack",
+		place: "thread",
+		channel: "#general",
+	});
+	// a long thread's card holds its first message and the reply its link names, and a message keeps its lines
+	const replies = [1, 2, 3, 4, 5, 6].map((n) => message(`170000000${n}.000200`, "@ana", `reply ${n}`));
+	const long = cardOf(
+		kinds.thread!,
+		{ connection: "slack", kind: "thread", values: { channel: "C0GENERAL", ts: "1700000001.000200" } },
+		{
+			thread: {
+				channel: "C0GENERAL",
+				channel_name: "general",
+				root: "1700000000.000100",
+				messages: [message("1700000000.000100", "@bob", "> quoted\nanswer"), ...replies],
+				total: 7,
+			},
+		},
+		"slack",
+	) as { messages: { id: string; text: string }[] };
+	expect(long.messages.map((each) => each.id)).toEqual([
+		"1700000006.000200",
+		"1700000005.000200",
+		"1700000004.000200",
+		"1700000001.000200",
+		"1700000000.000100",
+	]);
+	expect(long.messages.at(-1)?.text).toBe("> quoted\nanswer");
+	const dm = cardOf(
+		kinds.channel!,
+		{ connection: "slack", kind: "channel", values: { channel: "D0BOB" } },
+		{
+			channel: { id: "D0BOB", name: "@bob", topic: "", member_count: null, private: true, is_member: true },
+			history: { channel: "D0BOB", messages: [], url: "https://evil.test/archives/D0BOB" },
+		},
+		"slack",
+	);
+	expect(dm).toEqual({
+		card: "messages",
+		title: "@bob",
+		search: false,
+		messages: [],
+		total: null,
+		service: "slack",
+		place: "channel",
+		topic: "",
+		members: null,
+	});
+	const search = cardOf(
+		kinds.search!,
+		{ connection: "slack", kind: "search", values: { query: "in:#deploys failed" } },
+		{
+			search: {
+				query: "in:#deploys failed",
+				messages: [message("1700000300.000400", "@ana", "failed again")],
+				total: 9,
+			},
+		},
+		"slack",
+	);
+	expect(search).toMatchObject({
+		card: "messages",
+		title: "in:#deploys failed",
+		search: true,
+		total: 9,
+		service: "slack",
+	});
+	const person = cardOf(
+		kinds.person!,
+		{ connection: "slack", kind: "person", values: { user: "U0OLGA" } },
+		{
+			person: {
+				id: "U0OLGA",
+				name: "olga",
+				display_name: "Olga Ivanova",
+				real_name: "Olga Ivanova",
+				title: "Partner",
+				tz: "Europe/Berlin",
+				status_text: "Away",
+				outside: true,
+				url: "https://acme.slack.com/team/U0OLGA",
+				avatar: "https://avatars.slack-edge.com/olga_72.png",
+			},
+		},
+		"slack",
+	);
+	expect(person).toEqual({
+		card: "contact",
+		name: "Olga Ivanova",
+		emails: "",
+		phones: "",
+		organization: "",
+		title: "Partner",
+		other: false,
+		photo: "https://avatars.slack-edge.com/olga_72.png",
+		url: "https://acme.slack.com/team/U0OLGA",
+		service: "slack",
+		handle: "@olga",
+		status: "Away",
+		timezone: "Europe/Berlin",
+		outside: true,
+	});
 });

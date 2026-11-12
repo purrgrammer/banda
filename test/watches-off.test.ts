@@ -9,6 +9,7 @@ import { Watches } from "../src/core/watches.ts";
 import type { Workspace } from "../src/server/agents.ts";
 import { watches } from "../src/server/watches.ts";
 import { Faults } from "./fault/faults.ts";
+import { CHANNEL, SLACK, said, slackWorld } from "./fault/slack-world.ts";
 import {
 	NOW,
 	type ScenarioConnection,
@@ -265,5 +266,48 @@ describe("a watch whose tool is off", () => {
 		expect(made).toEqual([4, 4, 4]);
 		expect(summary.record.failed).toBeUndefined();
 		expect(summary.wakes).toEqual([]);
+	}, 60_000);
+});
+
+describe("a Slack channel's watch turned off in the middle of a walk of pages", () => {
+	it("drops the walk: back on, its first look is a baseline from the newest page, neither behind nor stopped", async () => {
+		const asked: { tool: string; oldest?: unknown; cursor?: unknown }[] = [];
+		const earlier = Array.from({ length: 5 }, (_, n) => said(10 + n, "@bob at Acme", `earlier ${n}`));
+		const burst = Array.from({ length: 40 }, (_, n) => said(100 + n, "@cy at Acme", `burst ${n}`));
+		let walking: Awaited<ReturnType<typeof record>>;
+		let stopped: Awaited<ReturnType<typeof record>>;
+		let resumedAt = 0;
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			tasks: false,
+			connection: SLACK,
+			object: `slack/${CHANNEL}`,
+			answer: slackWorld((step) => ({ channel: step >= 2 ? [...earlier, ...burst] : earlier }), 15, asked),
+			clicks: Array.from({ length: 6 }, () => undefined),
+			at: (step) => NOW + step * 2 * HOUR,
+			act: async (step, { harness, core }) => {
+				if (step === 3) await off(harness, "channel_history", "owner", "slack");
+				if (step === 5) {
+					await on(harness, "channel_history", "slack");
+					resumedAt = asked.length;
+				}
+				await core.lookWatch(harness, "banda-142");
+				if (step === 2) walking = await record(harness);
+				if (step === 3) stopped = await record(harness);
+			},
+		});
+		// the burst is more than a page: the look at step 2 started a walk
+		expect(Object.keys(walking?.pages ?? {})).toEqual(["history"]);
+		// stopped, it keeps no walk to go on from, and its row is not behind
+		expect(stopped?.failed).toMatchObject({ off: true });
+		expect(stopped?.pages).toBeUndefined();
+		expect(stopped?.behind).toBeUndefined();
+		// back on: the newest page, with no cursor from before; a baseline, so nothing fires and nothing is missing
+		const back = asked.slice(resumedAt).find((each) => each.tool === "channel_history");
+		expect(back).toEqual({ tool: "channel_history", oldest: undefined, cursor: undefined });
+		expect(summary.record.failed).toBeUndefined();
+		expect(summary.record.behind).toBeUndefined();
+		expect(summary.wakes).toEqual([]);
+		expect(summary.tells).toEqual([]);
+		expect(watchInvariants(summary)).toEqual([]);
 	}, 60_000);
 });

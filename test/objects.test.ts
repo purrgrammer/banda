@@ -78,7 +78,7 @@ async function setup() {
 		},
 	};
 }
-it("URL, ambiguous shorthand and canonical aliases draw once without spending the remaining card budget", async () => {
+it("URL, ambiguous shorthand and canonical aliases are read once, each given the card, without spending the card budget", async () => {
 	const s = await setup();
 	const next = definitionText({
 		pull_request: {
@@ -99,7 +99,10 @@ it("URL, ambiguous shorthand and canonical aliases draw once without spending th
 		{ ref: "https://example.com/a/b/issues/2" },
 		{ ref: "https://example.com/a/b/issues/3" },
 	]);
-	expect(shown.map((one) => one.shown)).toEqual(["card", "link", "link", "card", "card"]);
+	// read once, and each link given the reading: the prose draws each, the cards beneath each object once by its key
+	expect(shown.map((one) => one.shown)).toEqual(["card", "card", "card", "card", "card"]);
+	expect(shown[1]).toBe(shown[0]);
+	expect(shown[2]).toBe(shown[0]);
 	expect(s.calls()).toBe(3);
 });
 
@@ -142,7 +145,8 @@ it("refreshes each fallback candidate at most once per request, including failur
 		[{ ref: "https://example.com/a/b/issues/35" }, { ref: "https://example.com/a/b/pull/35" }, { ref: "a/b#35" }],
 		true,
 	);
-	expect(shown.map((one) => one.shown)).toEqual(["card", "failed", "link"]);
+	expect(shown.map((one) => one.shown)).toEqual(["card", "failed", "card"]);
+	expect(shown[2]).toBe(shown[0]);
 	expect(calls).toEqual(["get", "pull"]);
 });
 

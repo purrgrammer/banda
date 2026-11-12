@@ -9,6 +9,7 @@ import { context } from "../src/core/store.ts";
 import { connectionDefinition, define, signInAsOwner } from "./fixtures/connected.ts";
 import { closeAll, fakes, open } from "./fixtures/connections-world.ts";
 import { type FakeMcp, startFakeMcp } from "./fixtures/mcp-server.ts";
+import { definition, refusal } from "./fixtures/shipped.ts";
 import { until } from "./helpers.ts";
 
 afterEach(closeAll);
@@ -31,6 +32,37 @@ describe("signing in by code, as a file's named client", () => {
 		expect(read(JSON.stringify({ ...signed, client: "a b" }))).toEqual({
 			errors: ['"client: a b" is not a client id: letters, digits, dots, dashes and underscores'],
 		});
+	});
+
+	it("Slack's shipped definition reads as its built-in API with its own client; any other client or scope is refused", () => {
+		expect(definition("slack")).toMatchObject({
+			api: "slack",
+			client: "slack",
+			auth: "oauth",
+			floors: { post_message: "private" },
+			account: { tool: "whoami", field: "handle" },
+			reads: [
+				"whoami",
+				"list_channels",
+				"get_channel",
+				"channel_history",
+				"get_thread",
+				"search_messages",
+				"get_person",
+				"get_file",
+			],
+		});
+		expect(Object.keys(definition("slack").objects ?? {})).toEqual(["thread", "channel", "search", "person"]);
+		expect(
+			refusal("slack", (value) => {
+				value.client = "google";
+			}),
+		).toMatch(/^Slack uses OAuth client "slack", asks for channels:read/);
+		expect(
+			refusal("slack", (value) => {
+				value.scopes = [...(value.scopes ?? []), "admin"];
+			}),
+		).not.toBe("");
 	});
 
 	it("registers nothing, asks for the file's scopes, shows the code until typed, then connects and reads", async () => {

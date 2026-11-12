@@ -1,0 +1,521 @@
+# Slack
+
+Priority: **High**. Implementation status lives in [Status](status.md). The connection is built through stage 3
+(the stages and what remains are below); what the spikes observed is in "What the spikes found", and what is still
+marked *spike* is not yet a DESIGN.md rule ([Delivery](delivery.md)). An adversarial review of the first draft is
+folded in; what it changed is in the commit that added this file.
+
+Slack is a built-in connection, as Gmail is ([Connections](connections.md)): a shipped file declares the reads, the
+scopes, the objects and how each is followed; a daemon adapter calls Slack's Web API. An account is the owner in one
+Slack team ("Slack · @alejandro at Bitrefill"; Slack's API says team, and "workspace" is already banda's word for the
+box's files), signed in with Slack's own OAuth as a user, so every read sees what the owner sees and every write is
+the owner's, drafted and approved as every write is. Slack is not a gateway here: the owner reaches the band in the
+app and the CLI, not by messaging a bot, and the band has no bot user in anyone's team. That would be a different app
+configuration (bot scopes, a server-side redirect, events through a relay) and waits for its own design.
+
+## Why a user token and not a bot
+
+Slack's PKCE flow treats a loopback redirect as a desktop redirect, exchanges the code without a client secret, and
+refuses bot scopes on a desktop redirect ("Desktop redirects are not allowed to request bot scopes", Slack's PKCE
+guide). That is a fit, not a limit: banda's daemon runs on the owner's computer, its OAuth client is public (Google's
+already is), and what it does in Slack it does as the owner. The consequences:
+
+- One shipped app, PKCE enabled (a one-way switch on Slack's side), its public client id in the daemon with
+  `BANDA_SLACK_CLIENT_ID` to override in development, no secret anywhere.
+- Credentials are user tokens (`xoxp-`). With PKCE on, Slack's refresh tokens expire after 30 days, and when token
+  rotation is on each access token lasts twelve hours and the daemon refreshes it as it does Google's. Whether the
+  30 days run from the last refresh or from the sign-in is unknown (spike); either way an account the daemon could not
+  refresh says "sign in again" in its row, the state a revoked grant already has.
+- No Socket Mode and no Events API: Socket Mode wants an app-level token that belongs to the app, not the team, and
+  allows ten connections for the whole app; the Events API wants a public URL. Push stays in DESIGN.md "Open" (a
+  relay). Watches poll, as every connection's do.
+
+## The connection file
+
+`shipped/connections/slack.json`, a definition checked against its schema as Gmail's is ([Connections](connections.md)).
+Its top level, the kinds below:
+
+```json
+{
+	"service": "Slack",
+	"about": "Channels and messages",
+	"url": "https://slack.com/api",
+	"api": "slack",
+	"auth": "oauth",
+	"client": "slack",
+	"scopes": ["channels:read", "groups:read", "channels:history", "groups:history", "users:read"],
+	"access": { "required": "Read your channels and who people are", "choices": ["…the table below"] },
+	"floors": { "private": ["post_message"] },
+	"account": "whoami.handle",
+	"reads": ["whoami", "list_channels", "get_channel", "channel_history", "get_thread", "search_messages", "get_person", "get_file"]
+}
+```
+
+A definition has no prose: what the model is told about Slack is in its tools' descriptions, such as how to name a
+thread, a channel and a person so the app draws their cards. Posting and reacting as the owner are separate tools that
+ask first, each with its own access, added by choice when signing in.
+
+The scopes are user scopes. The required set is the owner's channels, public and private, and who people are. The
+choices, each a scope bundle the owner adds when signing in or later, re-consenting in place:
+
+| Choice | Scopes | What it allows |
+|---|---|---|
+| Direct messages and search | `im:read`, `mpim:read`, `im:history`, `mpim:history`, `search:read` | `search_messages`; direct and group messages in `list_channels`, `get_channel`, `channel_history`, `get_thread` |
+| Send messages as you | `chat:write` | `post_message` |
+| React as you | `reactions:write` | `add_reaction` |
+| Read files you can see | `files:read` | `get_file`, and the owner opening a file from a card |
+
+Direct messages and search are one choice because a search returns from everything the owner can see, direct
+messages included: a "search but not my DMs" choice would promise what Slack does not keep. The owner decided they
+stay a choice rather than required, so an account without it never sends a direct message to the model provider.
+
+`whoami` is `auth.test`; its `handle` is `@<user name> at <team name>`, read once after sign-in as
+the account's id: what the service calls the owner, as DESIGN.md asks, and it tells two teams apart (one account per
+team). The adapter writes every author it returns in the same form, so "the account's own" (DESIGN.md "Watches":
+an agent never wakes on its own work, the owner's approved post included) is a plain comparison. The adapter keeps
+the user id and team id beside the credentials, so `mentions_me` never depends on a display name. A renamed user or
+team is a new account at the next sign-in, as a renamed GitHub login is today.
+
+## Objects
+
+Four kinds, each named by the links Slack hands out and by a `slack/…` id, each drawn by a card that exists.
+
+| Kind | Names it | Card | Read | Followed |
+|---|---|---|---|---|
+| thread | `https://<team>.slack.com/archives/<C>/p<ts>`, with or without `thread_ts`; `slack/<C>/p<ts>` | `messages` | `get_thread` (`conversations.replies`: the message first, its replies after) | a reply wakes; an edit, a deletion or a reaction tells; never ends |
+| channel | `https://<team>.slack.com/archives/<C>`, `slack/<C>` | `messages` | `get_channel` and `channel_history` (`conversations.info`, `conversations.history`) | a message that mentions the owner wakes; any other message tells; never ends |
+| search | `slack/search/<query>` | `messages` | `search_messages` (`search.messages`, newest first) | a match newer than any it had wakes; never ends |
+| person | `https://<team>.slack.com/team/<U>`, `slack/user/<U>` | `contact` | `get_person` (`users.info`) | a status or title change tells; never ends |
+
+A message carries its reactions, `{name, count}` by emoji name (a name not shaped as Slack's is left out), and its
+files, `{id, name, size, mimetype}`. A followed thread keys a message's reactions by name: one added tells
+"2 reacted :tada:", on the owner's own message too; one taken back, or more people giving the same one, is nothing. A
+channel's watch ignores reactions. A search match is keyed by its permalink, since one `ts` names messages in two
+channels; it is new only when its `ts` is past every match the reading had, so a match Slack indexes late with an
+older time is not new (its `newest`). A person's face changing is nothing.
+
+A message and a thread are one kind, with one placeholder for its message, `{ts}`, normalized as `slack-ts`. A link
+to a reply carries `thread_ts` in its query, and `slack-ts` takes the thread's root from it in place of the reply's
+own `p…`, so a link to a reply and a link to its root name the same object and share one reading; the
+`p1700000000000100` in a link or an id becomes Slack's `1700000000.000100` there too (test/object-shapes.test.ts). Following a message means following
+what is said under it. Mentions inside threads are not in a channel's history (Slack lists a reply there only when
+it was also sent to the channel), so a channel watch does not see them; the Follow card on a channel says so and
+offers a search watch on the owner's mention (`slack/search/<@U…>`) for that.
+
+The `messages` card (Gmail's conversation and search) takes a list of `{from, text, date}` items. The adapter renders
+Slack's mrkdwn as plain text, resolves `<@U…>` to names (`users.info`, cached per account) and `<#C…>` to channel
+names, writes a bot's author as `<name>[bot]` (a message with no `user`, or whose subtype says so; the owner's own posts carry a `bot_id` too), and marks an author
+from another team (Slack Connect, a guest) as outside. A file in a message is a row with its name and size; the owner
+opens it from the card, and the daemon fetches it as the account the card was read as, at most 10 MB, into the chat's
+files, as Gmail's attachments are (below). The account that reads a link is the one whose team the channel
+belongs to; a shared channel lives in several teams at once, and which account answers for it is a spike.
+
+The kinds' entries, as the definition's `objects` has them:
+
+```json
+{
+	"thread": {
+		"card": "messages",
+		"name": "a thread in Slack",
+		"normalize": { "ts": "slack-ts" },
+		"urls": ["https://*.slack.com/archives/{channel}/p{ts}"],
+		"ids": ["slack/{channel}/p{ts}"],
+		"reads": {
+			"thread": {
+				"tool": "get_thread",
+				"args": { "channel": "{channel}", "ts": "{ts}" },
+				"pages": { "list": "thread.messages", "by": "ts", "keep": 200 }
+			}
+		},
+		"fields": {
+			"channel": "thread.channel_name",
+			"root": "thread.root",
+			"messages": "thread.messages",
+			"total": "thread.total",
+			"url": "thread.url"
+		},
+		"follow": {
+			"keys": { "thread.messages": "ts", "thread.messages[*].reactions": "name" },
+			"authors": { "thread.messages": "author" },
+			"ignore": [
+				"thread.active",
+				"thread.total",
+				"thread.messages[*].reply_count",
+				"thread.messages[*].avatar"
+			],
+			"rules": [
+				{
+					"on": "thread.messages[*].reactions[*]",
+					"kind": "added",
+					"does": "tell",
+					"says": "{count} reacted :{name}:"
+				},
+				{
+					"on": "thread.messages[*].reactions[*]",
+					"kind": "removed",
+					"does": "nothing",
+					"says": "a reaction :{name}: was taken back"
+				},
+				{ "on": "thread.messages[*]", "kind": "added", "does": "wake", "says": "{from} replied" },
+				{
+					"on": "thread.messages[*].text",
+					"kind": "changed",
+					"does": "tell",
+					"says": "{from} edited a message"
+				},
+				{
+					"on": "thread.messages[*]",
+					"kind": "removed",
+					"does": "tell",
+					"says": "a message from {from} was deleted"
+				}
+			],
+			"ends": {},
+			"every": "5m",
+			"busy": "thread.active = true",
+			"busy_every": "1m",
+			"settle": "2m"
+		},
+		"writes": [
+			{
+				"tool": "post_message",
+				"id": { "channel": "channel", "ts": "thread_ts" },
+				"verb": "Send",
+				"what": "Reply in",
+				"text": "text"
+			},
+			{
+				"tool": "add_reaction",
+				"id": { "channel": "channel", "ts": "ts" },
+				"verb": "React",
+				"what": "React in"
+			}
+		]
+	},
+	"channel": {
+		"card": "messages",
+		"name": "a channel in Slack",
+		"urls": ["https://*.slack.com/archives/{channel}"],
+		"ids": ["slack/{channel}"],
+		"reads": {
+			"channel": { "tool": "get_channel", "args": { "channel": "{channel}" } },
+			"history": {
+				"tool": "channel_history",
+				"args": { "channel": "{channel}", "limit": 100 },
+				"pages": { "list": "history.messages", "by": "ts", "keep": 100 }
+			}
+		},
+		"fields": {
+			"title": "channel.name",
+			"topic": "channel.topic",
+			"members": "channel.member_count",
+			"messages": "history.messages",
+			"url": "history.url"
+		},
+		"follow": {
+			"keys": { "history.messages": "ts" },
+			"authors": { "history.messages": "author" },
+			"ignore": [
+				"history.active",
+				"channel.member_count",
+				"history.messages[*].reply_count",
+				"history.messages[*].avatar",
+				"history.messages[*].reactions"
+			],
+			"rules": [
+				{
+					"on": "history.messages[*]",
+					"kind": "added",
+					"where": "mentions_me = true",
+					"does": "wake",
+					"says": "{from} mentioned you"
+				},
+				{ "on": "history.messages[*]", "kind": "added", "does": "tell", "says": "{from}: {text}" },
+				{
+					"on": "history.messages[*].text",
+					"kind": "changed",
+					"does": "nothing",
+					"says": "{from} edited a message"
+				},
+				{
+					"on": "history.messages[*]",
+					"kind": "removed",
+					"does": "nothing",
+					"says": "a message from {from} was deleted"
+				},
+				{ "on": "channel.topic", "kind": "changed", "does": "tell", "says": "topic: {to}" }
+			],
+			"ends": {},
+			"every": "5m",
+			"busy": "history.active = true",
+			"busy_every": "1m",
+			"settle": "2m"
+		},
+		"writes": [
+			{
+				"tool": "post_message",
+				"id": { "channel": "channel" },
+				"verb": "Send",
+				"what": "Post in",
+				"text": "text"
+			}
+		]
+	},
+	"search": {
+		"card": "messages",
+		"name": "{query}",
+		"normalize": { "query": "text" },
+		"ids": ["slack/search/{query}"],
+		"reads": {
+			"search": {
+				"tool": "search_messages",
+				"args": { "query": "{query}", "count": 50, "sort": "timestamp", "sort_dir": "desc" }
+			}
+		},
+		"fields": { "messages": "search.messages", "total": "search.total" },
+		"follow": {
+			"keys": { "search.messages": "permalink" },
+			"newest": { "search.messages": "ts" },
+			"authors": { "search.messages": "author" },
+			"ignore": [
+				"search.total",
+				"search.messages[*].avatar",
+				"search.messages[*].reactions",
+				"search.messages[*].reply_count"
+			],
+			"rules": [
+				{
+					"on": "search.messages[*]",
+					"kind": "added",
+					"does": "wake",
+					"says": "{from} in #{channel_name}: {text}"
+				}
+			],
+			"ends": {},
+			"every": "5m",
+			"settle": "2m"
+		}
+	},
+	"person": {
+		"card": "contact",
+		"name": "a person in Slack",
+		"urls": ["https://*.slack.com/team/{user}"],
+		"ids": ["slack/user/{user}"],
+		"reads": { "person": { "tool": "get_person", "args": { "user": "{user}" } } },
+		"fields": {
+			"name": "person.display_name",
+			"handle": "person.name",
+			"title": "person.title",
+			"emails": "person.email",
+			"status": "person.status_text",
+			"timezone": "person.tz",
+			"outside": "person.outside",
+			"photo": "person.avatar",
+			"url": "person.url"
+		},
+		"follow": {
+			"ignore": ["person.avatar"],
+			"rules": [
+				{
+					"on": "person.status_text",
+					"kind": "changed",
+					"does": "tell",
+					"says": "status: {to}",
+					"words": { "": "cleared" }
+				},
+				{
+					"on": "person.title",
+					"kind": "changed",
+					"does": "tell",
+					"says": "title: {to}",
+					"words": { "": "cleared" }
+				}
+			],
+			"ends": {},
+			"every": "30m"
+		}
+	}
+}
+```
+
+Faces are Slack's own: `users.info`'s `image_48` beside each message (from the names cache, a bot's from its
+`bot_profile`) and `image_72` on a person, taken only when https on a `*.slack-edge.com` host, by the adapter and again
+by the card, since the app fetches them as it draws (with no referrer). A message's `avatar` follows the names cache,
+so a follow ignores it.
+
+The rules name `{from}`, `{channel_name}`, `mentions_me` and `active`: fields the adapter puts on what it returns
+(authors as handles, `[bot]` and outside marked; mention computed against the account's own user id; `active` when
+the newest message is less than ten minutes old at the time of the read, and ignored for changes since it depends on
+when the read happened). So the rules stay data, the event lines never show a raw `U0123`, and `busy` is a condition
+over the reading as the Follow type takes it. A `{text}` in a `says` is one line, cut by the daemon, as Gmail's
+`{subject}` is; it is a member's words shown to the owner, never to the model, which gets the change as data at the
+wake. The default for a channel is that a mention wakes and everything else tells: a channel that woke the agent on
+every message would run a model every two minutes all day; words to watch for are a search watch's job
+(`slack/search/in:#deploys failed`), which is also cheaper for Slack (below). A reaction on the owner's own message
+is not the owner's change: an `authors` entry over a list speaks for an item's coming and going and its own fields,
+and a change inside a list the item holds (its reactions) is judged by that list's own entry, else by the rules
+alone (DESIGN.md "Watches"); an entry over one object (Drive's file) still covers every change in it.
+
+## Following under Slack's limits
+
+Slack moved `conversations.history` and `conversations.replies` to one request a minute and at most 15 messages
+per request for apps distributed outside its Marketplace and created or newly installed after May 29, 2025
+(Slack's changelog of that date). banda's app is such an app; it is not listed, by the owner's decision. `search.messages` stays at twenty
+a minute with a hundred per page. Two things follow for the daemon, both new, both data a connection declares:
+
+- **A paged list.** A read may say that one list in its reading is a page of more (`pages`: the list, the field that
+  orders it, how many to keep). The reading holds the newest `keep` items, a window, and is still one whole reading:
+  the card draws it and every watch diffs it, as DESIGN.md "Watches" asks. A look reads one page of overlap and
+  walks on, one page a look, with the service's own cursor: for history (newest first) the newest page with no
+  `oldest`, then back until a page reaches the window's items; for replies (oldest first) from the window's item one
+  full page back from its newest end (the page size read from a page that came back full: 100 on an unclamped team,
+  15 on a clamped one, never assumed), then forward until Slack has no more. It merges only then: a burst of forty
+  messages at fifteen a page lands as one reading, one wake, three looks later, with nothing skipped. Within the
+  pages fetched an item whose text changed is an edit and an item in that range missing from them is a deletion;
+  items older than the fetched range are never read again, so their edits and deletions are not seen, and a
+  thread's first message is seen because Slack sends it on every page. Pages fetched but not yet merged are the
+  watch's record, kept across a crash, and only for the object and account it was read for (a watch whose file,
+  object or account changed starts afresh); the row says "behind" while the walk is open, and a walk that cannot
+  reach the window within an hour merges what it read (deleting nothing it did not reach) with the wake or tell that
+  says changes may be missing. A walk whose page keeps failing for an hour stops asking from its cursor, and the next
+  look merges it the same way. The window is bounded in bytes too (half a reading): past that its oldest are pushed
+  off, and a walk that outgrows it merges as far as it read, with the same words. The first look is one page and the
+  baseline (oldest first with more, the walk to the end). An item older than the window's oldest that leaves it was
+  pushed off, never deleted. This is the "feed with a
+  cursor" Watches left for the mail connection: Gmail's history id can take the same declaration later; Gmail's
+  search and GitHub's releases stay `newest` pages, which fit them.
+- **A budget per account and method.** Every call of a method on an account, from a watch's look, an agent's read
+  or a card's unfurl alike, goes through one queue for that (account, method): one call in flight at a time, and a
+  refusal with `Retry-After` holds the queue until it passes, said in words where the call came from ("Slack is
+  busy, back at 10:43" on a card, "can't reach Slack, back at 10:43" in a watch's row), never a retry loop. The
+  owner's own team was not clamped (stage 0), so no rate is declared for it. A refusal teaches the queue the method's
+  limit instead (as many calls a minute as Slack answered before it: one on a clamped team's history), and for an hour
+  a call past it is answered "busy" without being sent; test/slack-limits.test.ts runs six watches and an agent for an
+  hour against Slack's own tiers and meets one refusal for each clamped method. Whether Slack counts a limit per team or per user token is
+  still open (no second team was available). A watch whose look the held queue
+  refused looks again when the queue opens (sooner than its cadence, never later), so watches sharing an account
+  take turns a minute apart rather than meeting the refusal together every five minutes.
+
+What this means for the owner: a followed channel wakes within a minute or two while it is busy and within five when
+quiet; a channel busier than fifteen messages a minute is read behind, and the row says so until the daemon catches
+up, never silently incomplete. A thread is one request a look, so a thread watch and a channel watch on the same
+team share the minute. Search has room to spare, so a search watch is the way to follow words across many channels,
+and the Follow card on a channel says so.
+
+## Writes and permissions
+
+| Tool | Does | Draft | Floor | Effect |
+|---|---|---|---|---|
+| `post_message(channel, text, thread_ts?)` | `chat.postMessage` as the owner, in a channel or as a reply | the card of the channel or thread it goes to, the text editable, with `@channel`, `@here` and every mention resolved and shown as they will notify | **private**: a message to other people asks every time, like Gmail's send; no permission covers it | unsafe: Slack has no idempotency key, so a crash between approval and the send asks the owner again, as adding a contact does |
+| `add_reaction(channel, ts, name)` | `reactions.add` as the owner; the name is Slack's emoji (`thumbsup`, `wave::skin-tone-3`), colons dropped, anything else refused | "React :name: to a message in #channel" on the message's thread card, nothing editable | ordinary: a permission binds the channel (and the account), "react to messages in #general", so one given for the task covers the run's next reaction there | idempotent: adding a reaction already there is the same end state (`already_reacted` is success), so it runs again unasked after a crash |
+
+Posting is on the floor because a Slack message reaches people the owner never approved as recipients, exactly the
+case the floor names. A reaction notifies only the message's author and adds nothing anyone reads as the owner's
+words, so it is ordinary. Marking as read, setting a status, uploading a file and editing or deleting the owner's own
+message are later stages, each a tool with its scope under `needs`.
+
+Files are read, never written. `get_file(file_id)` (`files.info`) tells the agent what a file is: its name, title,
+type, size and the message it is in; never its download address or its bytes. The owner opens a file from a card's
+message row: the daemon checks the file is one the card's reading shows and is at most 10 MB, fetches it from
+`files.slack.com` with the account's token as the card was read, refusing Slack's sign-in page served in its place
+(what Slack answers without `files:read`), and keeps it as a blob the chat holds, through the route Gmail's
+attachments use. It never enters a box or a model. Unlike Gmail's, a card keeps no hash of a fetched file, so
+opening it again fetches it again.
+
+## Sign-in
+
+One flow as every connection's: Connect Slack from an agent's Permissions, Settings or the agent's card; the daemon
+opens Slack's authorize URL with `user_scope` set to the required scopes plus the owner's choices, a PKCE challenge and
+`redirect_uri` on the daemon's loopback callback (`/oauth/callback`, as Google's); Slack asks which team and shows
+the owner what the app will see; the callback trades the code (no secret) for the user token; `whoami` reads the
+handle; the account is on for that agent. Signing in to a second team is "Sign in another"; an account already known
+says so. Scopes added later (a choice) re-consent in place, keeping the agent switches, as GitHub and Gmail do today.
+
+What the Slack app needs, for whoever configures it:
+
+- PKCE enabled (one-way). Token rotation as Slack decides for PKCE (spike: whether a loopback redirect gets rotating
+  tokens without the setting).
+- Redirect URLs: `http://127.0.0.1:<port>/oauth/callback` for the ports banda uses. Whether Slack lets the port vary
+  on loopback (RFC 8252) or wants each registered is the second spike; if each, banda's default port is registered
+  and a daemon on another port says so in the connect card and offers the default.
+- User scopes only: the five required, the five of the direct-messages choice, `chat:write`, `reactions:write` and
+  `files:read`; no bot scopes, no bot user, no event subscriptions, no Socket Mode. The shipped app does not request
+  `files:read` yet; until it does, opening a file says the owner must allow it.
+- Distribution on, so other teams can install it. A Marketplace listing would lift the history limit; the owner
+  decided not now, and the design holds without it.
+
+## Stages
+
+One PR on `main` (begun on `watches`, PR #24, since merged), in ordered commits by stage, each with its own tests and
+app walkthrough ([the plan](slack-plan.md)). The spikes below are stage 0.
+
+1. **Connect and read.** The file, the adapter's reads behind the per-account budget (every caller), sign-in by PKCE
+   on loopback, the account's handle, the four kinds' cards drawn from held readings, unfurls in agent prose and the
+   owner's inline references, and `post_message` as a floor draft on its object with mentions resolved. Fake Slack
+   for tests; a real team the owner owns for the walkthrough, desktop and phone width.
+2. **Follow a thread and a channel.** The paged list in the daemon (declared as data; Slack is its only user at
+   first), the thread and channel kinds followed, the scenario tests through the watch harness (a burst past the
+   page, a gap the budget closes late, three watches sharing one budget, a `Retry-After` refusal, pages held across a
+   kill), the fault sweep at the new effect boundaries, a real busy channel followed in a forked home.
+3. **Search and people.** `search_messages` followed, the person kind, `add_reaction` with its choice and
+   permission (and `authors` scoped so a reaction on the owner's message counts), and files in messages read through
+   the daemon. Built: the scenarios in test/watch-slack.test.ts, the draft in test/slack-writes.test.ts, the adapter
+   in test/slack-rest.test.ts, the file route in test/attachments.test.ts, a reaction's kill sweep in
+   test/slack.faults.test.ts (CI).
+
+## What the spikes found
+
+Stage 0 ran on 2026-11-08 against the owner's own team with `scripts/spike-slack.ts` (its log is the recorded run;
+AGENTS.md principle 6). Observed, not inferred:
+
+- **PKCE on a loopback redirect works, and only with PKCE.** Before PKCE was enabled the grant came back but the
+  exchange answered `bad_client_secret`; after, the exchange without a secret answered `authed_user.access_token`
+  alone (no bot token), `team.id` and `team.name`. A loopback port other than the registered one is refused on
+  Slack's own page ("redirect_uri did not match any configured URIs") before any redirect, so banda registers its
+  default port and a daemon on another port says so in the connect card.
+- **Tokens rotate.** The grant carries a refresh token and a twelve-hour access token whether or not the setting was
+  touched; a refresh without a secret answers new tokens of both kinds. Whether the refresh token's 30 days slide is
+  still unknown and needs a month.
+- **The handle needs no extra scope.** `team.info` wants `team:read`, which the file does not ask for; `auth.test`
+  already answers the user name, the team id and the team name, so `whoami` is `auth.test` alone.
+- **The owner's team is not clamped.** `conversations.history` with a limit of 100 answered the channel's 60 messages
+  twice within a second, no `Retry-After`; the app's own team counts as an internal install. Whether another team
+  installing the shipped app gets the one-a-minute, fifteen-message limit is still unknown; the budget stays declared
+  as data, and its number comes from a second-team spike before stage 2's rules enter DESIGN.md.
+- **Page order.** `conversations.history` answers newest first, with `oldest` too. `conversations.replies` answers
+  the parent first and then replies oldest first, `limit` counts replies only (fifteen replies come as sixteen
+  messages), and every page repeats the parent, so the thread's list is keyed by `ts` and the parent deduplicated.
+- **Search is fresh.** A message posted was found by `search.messages` ten seconds later, sorted by timestamp.
+- **A post as the owner carries the app's mark.** A message sent with the user token has `user` (the owner), and
+  also `bot_id`, `app_id` and a `bot_profile` named after the app. The adapter marks an author `[bot]` only when a
+  message has no `user` or its subtype says so, never on `bot_id` alone, or the owner's own posts would read as a
+  bot's.
+- **A channel list is not an index.** `conversations.list` over all 758 channels did not include a public channel the
+  owner is a member of and created in May; `conversations.info` by id answered it at once. Cards and links resolve by
+  id, never through a list.
+- **Still open**, in the plan's Appendix A: the limit a second team meets, a Slack Connect channel seen from two
+  teams, and whether the 30 days slide.
+
+## Open work
+
+- [x] Stage 0: the spikes, recorded by `scripts/spike-slack.ts`; a second team's limit, a shared channel and the
+  refresh token's 30 days remain
+- [ ] Stage 1: the file, the adapter's reads under the budget, PKCE sign-in, the handle, cards and unfurls,
+  `post_message` on the floor; fake Slack in tests; the owner's team through the app at both widths
+- [ ] Stage 2: the paged list as connection data, thread and channel followed, scenarios and the sweep's Slack
+  scenarios are built, three watches sharing one budget among them (test/watch-slack.test.ts,
+  test/slack-watch.browser.test.ts); the sweep run in CI and a real busy channel in a forked home remain
+- [ ] Stage 3: search and person followed, `add_reaction`, files through the daemon are built and tested; the
+  reaction's kill sweep run in CI, `files:read` added to the shipped app, and the owner's walkthrough (a search watch
+  over a day, a reaction approved for a task, a file opened at both widths) remain
+- [x] The queue spaces calls before Slack refuses: learned from Slack's first refusal (test/slack-limits.test.ts),
+  rather than a rate the definition declares
+- [ ] The names an account looked up (a person's handle, a channel's name) are kept for the daemon's life: a rename
+  shows its old name in cards and a post's mentions until a restart; they want an age
+- [ ] A file whose own type is `text/html` is taken as Slack answered it, so without `files:read` Slack's sign-in page
+  could be kept as that file (served only as a download); a check of the bytes' start would close it
+- [ ] A look that went on from a walk while another look merged it keeps its page only over the walk it began from;
+  no deterministic test interleaves two looks there, the fault sweep's kills come nearest
+- [ ] Logo: Slack's mark as a shipped asset, with the others ([Connections](connections.md))
+- [ ] Slack as a gateway (the owner messaging the band from Slack) is not designed; it needs bot scopes and a
+  server-side flow, so a second app configuration

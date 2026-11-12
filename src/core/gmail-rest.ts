@@ -2,6 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { googleRequest, MAX_RESPONSE_BYTES } from "./google-rest.ts";
 import { type McpResult, type McpTool, Unauthorized } from "./mcp.ts";
+import { retryOf } from "./retry-after.ts";
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 const LIMIT = 1_000_000;
@@ -544,6 +545,10 @@ export async function gmailCall(
 			: { text, isError: false };
 	} catch (error) {
 		if (error instanceof Unauthorized) throw error;
-		return { text: error instanceof Error ? error.message : "Gmail could not be read.", isError: true };
+		return {
+			text: error instanceof Error ? error.message : "Gmail could not be read.",
+			isError: true,
+			...retryOf(error),
+		};
 	}
 }

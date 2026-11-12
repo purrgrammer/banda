@@ -364,6 +364,13 @@ export const SECTIONS: readonly Entry[] = [
 	{ id: "contacts", title: "Google Contacts", group: "connections", status: "app", sources: [OBJECT, DRAFT] },
 	{ id: "drive", title: "Google Drive", group: "connections", status: "app", sources: [OBJECT, DRAFT] },
 	{
+		id: "slack",
+		title: "Slack",
+		group: "connections",
+		status: "app",
+		sources: [OBJECT, "web/src/app/SlackDraftPreview.tsx", DRAFT, CONNECT],
+	},
+	{
 		id: "mcp",
 		title: "Add an MCP connection",
 		group: "connections",

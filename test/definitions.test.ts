@@ -15,7 +15,7 @@ import { REST_APIS } from "../src/core/rest.ts";
 import { SHIPPED } from "../src/server/capabilities.ts";
 import { pbtRuns } from "./pbt.ts";
 
-const NAMES = ["calendar", "contacts", "drive", "github", "gmail"];
+const NAMES = ["calendar", "contacts", "drive", "github", "gmail", "slack"];
 const text = (name: string) => readFileSync(join(SHIPPED, `${name}.json`), "utf8");
 const definition = (name: string) => JSON.parse(text(name)) as Definition;
 const errorsOf = (name: string, value: unknown) => {
@@ -24,7 +24,7 @@ const errorsOf = (name: string, value: unknown) => {
 };
 
 describe("the definitions banda ships", () => {
-	it("are the five, each passing its schema and its checks, with the line and the access the app shows", () => {
+	it("are the six, each passing its schema and its checks, with the line and the access the app shows", () => {
 		expect(
 			readdirSync(SHIPPED)
 				.filter((file) => file.endsWith(".json"))
@@ -308,7 +308,51 @@ describe("a definition", () => {
 		for (const [name, api] of Object.entries(REST_APIS)) {
 			const read = readDefinition(name, text(name));
 			if ("errors" in read) throw new Error(read.errors.join("; "));
-			expect(read.connection).toMatchObject({ api: name, url: api.url, client: "google", service: api.service });
+			expect(read.connection).toMatchObject({ api: name, url: api.url, client: api.client, service: api.service });
 		}
+	});
+});
+
+describe("a read with pages, in a definition", () => {
+	const slack = definition("slack");
+	const withChannel = (change: (channel: Record<string, unknown>) => void) => {
+		const value = structuredClone(slack) as unknown as { objects: Record<string, Record<string, unknown>> };
+		change(value.objects.channel as Record<string, unknown>);
+		return errorsOf("slack", value);
+	};
+	const history = (channel: Record<string, unknown>) =>
+		(channel.reads as Record<string, Record<string, unknown>>).history as Record<string, unknown>;
+
+	it("is Slack's as shipped, and refused when its list is not in its own answer, it asks for its page, or two have pages", () => {
+		expect(withChannel(() => {})).toEqual([]);
+		expect(
+			withChannel((channel) => {
+				history(channel).pages = { list: "channel.messages", by: "ts", keep: 100 };
+			}).join(),
+		).toContain("pages is");
+		expect(
+			withChannel((channel) => {
+				history(channel).args = { channel: "{channel}", cursor: "c1" };
+			}).join(),
+		).toContain("leaves oldest and cursor to the daemon");
+		expect(
+			withChannel((channel) => {
+				const reads = channel.reads as Record<string, Record<string, unknown>>;
+				(reads.channel as Record<string, unknown>).pages = { list: "channel.messages", by: "ts", keep: 10 };
+			}).join(),
+		).toContain("at most one read has pages");
+		expect(
+			withChannel((channel) => {
+				history(channel).pages = { list: "history.messages", by: "ts", keep: 100_000 };
+			}),
+		).toHaveLength(1);
+	});
+
+	it("is refused on a kind no watch follows: its window is a watch's", () => {
+		expect(
+			withChannel((channel) => {
+				delete channel.follow;
+			}).join(),
+		).toContain('its kind needs a "follow"');
 	});
 });

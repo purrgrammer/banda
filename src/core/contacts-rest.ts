@@ -5,6 +5,7 @@
 import { EMAIL, hasControl } from "./calendar-rest.ts";
 import { GoogleError, type GoogleMethod, googleRequest } from "./google-rest.ts";
 import { type McpResult, type McpTool, Unauthorized } from "./mcp.ts";
+import { retryOf } from "./retry-after.ts";
 
 const PEOPLE = { service: "Google Contacts", base: "https://people.googleapis.com/v1" };
 /** Who signed in: the People API refuses people/me's address to a contacts sign-in; OpenID's userinfo gives it. */
@@ -273,7 +274,11 @@ export async function contactsCall(
 			: { text: json, isError: false };
 	} catch (error) {
 		if (error instanceof Unauthorized) throw error;
-		return { text: error instanceof Error ? error.message : "Google Contacts could not be read.", isError: true };
+		return {
+			text: error instanceof Error ? error.message : "Google Contacts could not be read.",
+			isError: true,
+			...retryOf(error),
+		};
 	}
 }
 

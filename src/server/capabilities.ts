@@ -96,11 +96,11 @@ import { connectionWord, type McpConfig, mcpConfig, serviceOf } from "../core/mc
 import { remoteCall, remoteListing, remoteSession } from "../core/mcp-remote.ts";
 import {
 	begin,
-	DEFAULT_GOOGLE_CLIENT_ID,
+	CLIENTS,
+	clientNamed,
 	type Device,
 	discover,
 	exchange,
-	googleOAuthClient,
 	type OAuthClient,
 	type OAuthServer,
 	pollDevice,
@@ -123,6 +123,8 @@ import {
 } from "../core/objects.ts";
 import { agentOfChat, canonical, Permissions } from "../core/permissions.ts";
 import { REST_APIS, type RestApi } from "../core/rest.ts";
+import { retryOf } from "../core/retry-after.ts";
+import { slackFile } from "../core/slack-rest.ts";
 import { context } from "../core/store.ts";
 import {
 	type Classed,
@@ -197,6 +199,17 @@ const accountArg = (schema: JsonObject) =>
 const without = (args: unknown, arg: string): JsonObject => {
 	const { [arg]: _taken, ...rest } = (args ?? {}) as JsonObject;
 	return rest;
+};
+
+/**
+ * A paged read's arguments without the page a watch's walk asks for (`oldest`, `cursor`), which the daemon fills; a
+ * page argument that is not a short plain string leaves an argument that matches no read.
+ */
+const unpaged = (args: JsonObject): JsonObject => {
+	const { oldest, cursor, ...rest } = args;
+	const plain = (value: unknown) =>
+		value === undefined || (typeof value === "string" && /^[\w.=+/-]{1,500}$/.test(value));
+	return plain(oldest) && plain(cursor) ? rest : args;
 };
 
 /** What a server says names the owner, as one plain line: no control or invisible characters, a hundred at most. */
@@ -524,10 +537,10 @@ export function openCapabilities(options: CapabilityOptions) {
 		}
 	}
 
-	/** Resolve Banda's shipped Google desktop client, with daemon environment overrides for development. */
+	/** The client a file names: a shipped one by its row, with daemon environment overrides for development; else its id. */
 	function oauthClient(connection: Connection): OAuthClient {
-		if (connection.client !== "google") return { id: connection.client as string };
-		return googleOAuthClient(process.env.BANDA_GOOGLE_CLIENT_ID, process.env.BANDA_GOOGLE_CLIENT_SECRET);
+		const shipped = clientNamed(connection.client);
+		return shipped === undefined ? { id: connection.client as string } : CLIENTS[shipped].client();
 	}
 
 	/**
@@ -813,9 +826,11 @@ export function openCapabilities(options: CapabilityOptions) {
 				: `${object.what} ${nameOf(first, kinds)}`;
 		};
 		const editable = [
-			...editableOf(tool.tool, kinds).filter((field) => !signed || field !== arg),
-			...(tool.connection.api === "gmail" && tool.tool === "send_message" ? ["to", "subject", "body"] : []),
-			...(builtIn?.drafts?.editable(tool.tool) ?? []),
+			...new Set([
+				...editableOf(tool.tool, kinds).filter((field) => !signed || field !== arg),
+				...(tool.connection.api === "gmail" && tool.tool === "send_message" ? ["to", "subject", "body"] : []),
+				...(builtIn?.drafts?.editable(tool.tool) ?? []),
+			]),
 		];
 		return options.effect({
 			name: tool.name,
@@ -866,9 +881,13 @@ export function openCapabilities(options: CapabilityOptions) {
 			...(tool.floor === undefined ? {} : { floor: tool.floor }),
 			permission: {
 				...(signed ? { bind: [arg] } : {}),
+				...(() => {
+					const binds = builtIn?.drafts?.binds?.(tool.tool);
+					return binds === undefined ? {} : { args: binds };
+				})(),
 				what: (args) => {
 					const given = args as JsonObject;
-					const said = words(given);
+					const said = own(given)?.permit ?? words(given);
 					// the neutral words say the account already
 					const full =
 						made(given) !== undefined || on(given) !== undefined || own(given) !== undefined
@@ -918,7 +937,28 @@ export function openCapabilities(options: CapabilityOptions) {
 				);
 				if ("refused" in resolved) return resolved.refused;
 				const account = await api.memo("account", resolved.account ?? "", ctx);
-				return { ...expanded, [arg]: account };
+				const resolve = builtIn?.drafts?.resolve;
+				if (resolve === undefined) return { ...expanded, [arg]: account };
+				// read once as it is drafted, so a rerun shows the owner the same draft whatever changed at the service since
+				let shown = await api.memo<JsonObject>("drafted", ctx);
+				if (shown === undefined) {
+					const approved = without(expanded, arg);
+					try {
+						const read = await withServer(
+							tool.connection,
+							account === "" ? undefined : account,
+							ctx,
+							(_client, bearer) =>
+								resolve(bearer ?? "", tool.tool, approved as Record<string, unknown>, ctx.abortSignal, fetcher),
+						);
+						shown = await api.memo("drafted", JSON.parse(JSON.stringify(read)) as JsonObject, ctx);
+					} catch (error) {
+						if (error instanceof Unauthorized)
+							return `${tool.connection.service} is not signed in: the owner signs in again.`;
+						return error instanceof Error ? error.message : `${tool.connection.service} could not be read.`;
+					}
+				}
+				return { ...expanded, ...shown, [arg]: account };
 			},
 			allowed: allowedAs(tool, arg),
 			run: async (args, { api, key }, ctx) => {
@@ -2102,7 +2142,15 @@ export function openCapabilities(options: CapabilityOptions) {
 				throw new BadRequest(
 					"Start sign-in on the computer Banda runs on; accounts connected there are available on this device.",
 				);
-			const redirect = connection.client === "google" ? new URL(options.redirect()).origin : options.redirect();
+			const shipped = clientNamed(connection.client);
+			const row = shipped === undefined ? undefined : CLIENTS[shipped];
+			const callback = options.redirect();
+			const port = new URL(callback).port;
+			if (row?.port !== undefined && row.shipped() && port !== String(row.port))
+				throw new BadRequest(
+					`${connection.service} signs in only to a banda on port ${row.port}, and this one runs on port ${port}: start banda with --port ${row.port} to connect ${connection.service}.`,
+				);
+			const redirect = row?.redirectAsOrigin === true ? new URL(callback).origin : callback;
 			const client =
 				connection.client !== undefined ? oauthClient(connection) : await register(server, redirect, fetcher);
 			const started = begin(name, connection.url, server, client, redirect, now(), agent, again);
@@ -2297,14 +2345,15 @@ export function openCapabilities(options: CapabilityOptions) {
 		const connection = await harness.commit((tx) => acceptedConnection(tx, pending.connection), ctx);
 		if (connection?.url !== pending.resource)
 			return { ok: false, words: "That connection changed while you signed in. Start again from the app." };
-		if (
-			connection.client === "google" &&
-			pending.client.id !== (process.env.BANDA_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID)
-		)
-			return { ok: false, words: "The Google OAuth client changed during sign-in. Start again from the app." };
+		const shipped = clientNamed(connection.client);
+		if (shipped !== undefined && pending.client.id !== CLIENTS[shipped].client().id)
+			return {
+				ok: false,
+				words: `The ${connection.service} OAuth client changed during sign-in. Start again from the app.`,
+			};
+		const client = shipped === undefined ? pending.client : oauthClient(connection);
 		let tokens: Awaited<ReturnType<typeof exchange>>;
 		try {
-			const client = connection.client === "google" ? oauthClient(connection) : pending.client;
 			tokens = await exchange({ ...pending, client }, query.code, now(), fetcher);
 		} catch (error) {
 			return { ok: false, words: `Signing in did not finish: ${await problemOf(error)}` };
@@ -2318,7 +2367,7 @@ export function openCapabilities(options: CapabilityOptions) {
 					url: pending.resource,
 					oauth: {
 						server: pending.server,
-						client: connection.client === "google" ? oauthClient(connection) : pending.client,
+						client,
 						tokens,
 					},
 				},
@@ -2630,7 +2679,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		args: JsonObject,
 		authority: { readonly chat: number; readonly ref: ObjectRef; readonly stamp: string },
 		ctx: Context = context,
-	): Promise<{ readonly text: string } | { readonly failed: string }> {
+	): Promise<{ readonly text: string } | { readonly failed: string; readonly until?: number }> {
 		const found = await harness.commit(async (tx) => {
 			const access = await objectAccess(tx, authority.chat, authority.ref, account ?? "");
 			if (access?.stamp !== authority.stamp || access.connection.name !== name) return undefined;
@@ -2640,7 +2689,8 @@ export function openCapabilities(options: CapabilityOptions) {
 				!Object.values(access.reads).some(
 					(read) =>
 						read.tool === tool &&
-						canonical(readArgs(read, authority.ref, doc.connections[name]?.tools[tool]?.schema)) === canonical(args),
+						canonical(readArgs(read, authority.ref, doc.connections[name]?.tools[tool]?.schema)) ===
+							canonical(read.pages === undefined ? args : unpaged(args)),
 				)
 			)
 				return undefined;
@@ -2684,13 +2734,20 @@ export function openCapabilities(options: CapabilityOptions) {
 				usedSecrets,
 			);
 			const said = scrub(answer.text, [...usedSecrets, ...(await secrets(home))]);
-			return answer.isError ? { failed: `${found.connection.service} said: ${said.slice(0, 300)}` } : { text: said };
+			return answer.isError
+				? {
+						failed: `${found.connection.service} said: ${said.slice(0, 300)}`,
+						...(answer.retryAt === undefined ? {} : { until: answer.retryAt }),
+					}
+				: { text: said };
 		} catch (error) {
+			const later = retryOf(error).retryAt;
 			return {
 				failed: scrub(error instanceof Error ? error.message : String(error), [
 					...usedSecrets,
 					...(await secrets(home)),
 				]).slice(0, 300),
+				...(later === undefined ? {} : { until: later }),
 			};
 		}
 	}
@@ -2752,6 +2809,53 @@ export function openCapabilities(options: CapabilityOptions) {
 		}
 	}
 
+	/**
+	 * Fetch a file's bytes for the owner, as the account a Slack object it is shown in was read as, only while that
+	 * object's access holds: the bytes go to the chat's blobs, never to a box or a model.
+	 */
+	async function readSlackFile(
+		account: string,
+		fileId: string,
+		authority: { readonly chat: number; readonly ref: ObjectRef; readonly stamp: string },
+		ctx: Context = context,
+	): Promise<{ readonly bytes: Uint8Array; readonly name: string } | { readonly failed: string }> {
+		const found = await harness.commit(async (tx) => {
+			const access = await objectAccess(tx, authority.chat, authority.ref, account);
+			return access?.stamp === authority.stamp && access.connection.api === "slack"
+				? { connection: access.connection }
+				: undefined;
+		}, ctx);
+		if (found === undefined) return { failed: "This Slack message is not available as that account." };
+		const usedSecrets = new Set(await secrets(home));
+		try {
+			const check = async () => {
+				const access = await harness.commit((tx) => objectAccess(tx, authority.chat, authority.ref, account), ctx);
+				if (access?.stamp !== authority.stamp) throw new Error("Object access was taken back.");
+			};
+			const file = await withServer(
+				found.connection,
+				account,
+				ctx,
+				async (_client, bearer) => {
+					await check();
+					const got = await slackFile(bearer ?? "", fileId, ctx.abortSignal, fetcher);
+					await check();
+					return got;
+				},
+				check,
+				usedSecrets,
+			);
+			return { bytes: file.bytes, name: file.name };
+		} catch (error) {
+			return {
+				failed: scrub(error instanceof Error ? error.message : String(error), [
+					...usedSecrets,
+					...(await secrets(home)),
+				]).slice(0, 300),
+			};
+		}
+	}
+
 	/** The schema a connection's tool was listed with, for the file accepted now. */
 	const listedSchema = (name: string, tool: string, ctx: Context = context) =>
 		harness.commit(async (tx) => {
@@ -2792,6 +2896,7 @@ export function openCapabilities(options: CapabilityOptions) {
 	return {
 		readFor,
 		readAttachment,
+		readSlackFile,
 		listedSchema,
 		shipped,
 		carryListings,

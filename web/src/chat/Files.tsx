@@ -169,6 +169,7 @@ export function DocumentFile({
 	file: FileMeta;
 	lines: readonly string[];
 	kind?: string;
+	icon?: ReactNode;
 	onOpen?: (() => void) | undefined;
 }) {
 	return (
@@ -274,8 +275,18 @@ export function CodeFile({
 }
 
 /** A file there is nothing to show of: its name and size, and a tap downloads or opens it. */
-export function PlainFile({ file, kind = "File", onOpen }: { file: FileMeta; kind?: string; onOpen?: () => void }) {
-	return <Card file={file} detail={kind} icon={<FileIcon />} onOpen={onOpen} />;
+export function PlainFile({
+	file,
+	kind = "File",
+	icon = <FileIcon />,
+	onOpen,
+}: {
+	file: FileMeta;
+	kind?: string;
+	icon?: ReactNode;
+	onOpen?: (() => void) | undefined;
+}) {
+	return <Card file={file} detail={kind} icon={icon} onOpen={onOpen} />;
 }
 
 /** Audio as the device plays it: the bytes are here, so its own controls work, keyboard and screen reader included. */

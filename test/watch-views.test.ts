@@ -238,5 +238,9 @@ describe("watches in the app", () => {
 				NOW,
 			),
 		).toBe('Stopped: You turned off "issue read" for GitHub.');
+		// reading behind: a walk of pages is open, and the row says since when until it reaches what it kept
+		const walking = { agent: "mara", name: "x", state: "active" as const, looked: NOW, pages: { since: NOW } };
+		expect(sawWords(walking, NOW)).toMatch(/^Behind since today 09:00.*: more came than a page holds/);
+		expect(watchRows([{ ...walking, accepted: { sha: SHA, watch: summary } }], "mara", NOW)[0]?.behind).toBe(true);
 	});
 });

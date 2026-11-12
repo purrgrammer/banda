@@ -618,11 +618,12 @@ or not the model remembers it.
 - **A connection says how each kind of object is followed**, in that kind's entry beside the read that fetches it,
   the fields its card shows and the writes that act on it, as data, never code: the further reads a following needs
   (only tools listed under `reads`), how each list in the reading is keyed (comments by id; check runs by name, since
-  every push gives them new ids), what is noise, whose items are the account's own, conditions derived from the whole
-  ("all checks green again", so it wakes once), which changes wake and which only tell, each said in words from the
-  reading's fields, what ends it, and when it is busy. The daemon makes the reads with the account's credentials, in
-  the daemon: no box, no model. Any link the connection recognises as that kind can be followed; a kind without the
-  declaration cannot, and the card says so.
+  every push gives them new ids), what is noise, whose items are the account's own (an item's author owns its coming,
+  going and own fields, not a list inside it: a reaction on the owner's message is the reactor's), conditions derived
+  from the whole ("all checks green again", so it wakes once), which changes wake and which only tell, each said in
+  words from the reading's fields, what ends it, and when it is busy. The daemon makes the reads with the account's
+  credentials, in the daemon: no box, no model. Any link the connection recognises as that kind can be followed; a
+  kind without the declaration cannot, and the card says so.
 - **One reading per object, a cursor per watch.** The daemon keeps one reading per (connection, account, object)
   while any watch holds it, with the few before it, and the same reading draws the object's card, so a followed
   object's card is always current, and five watches on one object ask the service once: a look takes the reading
@@ -637,6 +638,21 @@ or not the model remembers it.
   change itself, so a read repeated after a crash yields the same events and the same wake key, which the chat's queue
   deduplicates. A short page never counts as removal. Push (a server's notification, a webhook) only says when to
   look, never what happened.
+- **A list too long for one answer is a window.** A connection may say that a list in a reading is a page of more
+  (a channel's history): the reading keeps its newest items, as many as its count and its bytes allow, still one
+  reading that every watch and the card share.
+  A look walks the service's own pages, one a look, until they reach the window, reading the newest page again so an
+  edit or a deletion in it is seen, and merges only then; what it fetched meanwhile is the watch's, for that object
+  as that account, kept across a crash, and the watch is behind until the merge. A walk that cannot reach the window
+  within an hour, or within the window's bytes, merges what it read, and its wake says what may be missing. What leaves the window from its old end was pushed off, never
+  removed. Every call a connection makes for one account and one method, whoever makes it (a watch, an agent, a
+  card), waits its turn in one queue, and a refusal that says when to come back holds that queue until then. The
+  refusal also teaches the queue the method's limit, as many calls a minute as the service answered before it, so for
+  the hour after, a call past it is answered "busy" without being sent: a service meets one refusal an hour from banda,
+  not one each time two callers meet.
+- **"Ask again later" is honoured.** Any service that refuses for now with `Retry-After` (Slack, Google, a remote MCP
+  server) is asked again no sooner than it said, by any watch, card or agent. A watch it refused looks again exactly
+  then, sooner or later than its cadence, so watches sharing a queue take turns and none asks early.
 - **The first look comes before the watch is live.** Making a watch reads the object once, and that reading is its
   baseline: only what changes after it is an event; what came before, the agent can read for itself. A watch whose
   first look fails is not made, and the card says why.

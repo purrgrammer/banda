@@ -43,6 +43,9 @@ const STEPS: readonly { readonly step: string; readonly words: readonly string[]
 	{ step: "agents", words: ["Use Google Calendar with", "bandarra@example.com", "Sancho", "Mara", "Done"] },
 	{ step: "share", words: ["Let Mara use GitHub as @bandarra?", "Allow", "Don't"] },
 	{ step: "permissions", words: ["Google Calendar access", "as @bandarra"] },
+	{ step: "permissions", words: ["Slack access", "Direct messages and search", "Send messages as you"] },
+	{ step: "failed", words: ["Slack isn't connected", "port 7788", "Try again"] },
+	{ step: "done", words: ["Slack connected"] },
 ];
 
 for (const width of [390, 1440])

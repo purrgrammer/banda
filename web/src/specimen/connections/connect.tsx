@@ -123,6 +123,24 @@ const CONNECT_STEPS: readonly {
 		account: "@bandarra",
 		step: { kind: "permissions" },
 	},
+	{ label: "Slack's access", agent: "Mara", connection: "Slack", id: "slack", step: { kind: "permissions" } },
+	{
+		label: "Slack on another port",
+		agent: "Mara",
+		connection: "Slack",
+		id: "slack",
+		step: {
+			kind: "failed",
+			why: "could not start signing in to Slack: Slack signs in only to a banda on port 7788, and this one runs on port 7799: start banda with --port 7788 to connect Slack.",
+		},
+	},
+	{
+		label: "Slack signed in",
+		agent: "Mara",
+		connection: "Slack",
+		id: "slack",
+		step: { kind: "done", login: "@ana at Acme" },
+	},
 ];
 
 /** Each step of the connect dialog, opened by its button; the dialog takes the frame's colour scheme. */

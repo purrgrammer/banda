@@ -13,6 +13,7 @@ import {
 	MAX_RESPONSE_BYTES,
 } from "./google-rest.ts";
 import { type McpResult, type McpTool, Unauthorized } from "./mcp.ts";
+import { retryOf } from "./retry-after.ts";
 
 const DRIVE = { service: "Google Drive", base: "https://www.googleapis.com/drive/v3" };
 /** A Sheet's tabs are read through the Sheets API, which takes Drive's read-only scope; Drive's export gives only the first. */
@@ -736,7 +737,11 @@ export async function driveCall(
 			: { text: json, isError: false };
 	} catch (error) {
 		if (error instanceof Unauthorized) throw error;
-		return { text: error instanceof Error ? error.message : "Google Drive could not be read.", isError: true };
+		return {
+			text: error instanceof Error ? error.message : "Google Drive could not be read.",
+			isError: true,
+			...retryOf(error),
+		};
 	}
 }
 

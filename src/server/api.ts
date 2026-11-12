@@ -699,6 +699,8 @@ export type WatchView = {
 	readonly lastRun?: number;
 	/** Behind since then: its newest wake said some changes may be missing, until a later one without a gap. */
 	readonly behind?: number;
+	/** Reading behind since then: more came than a page holds, and it walks the service's pages to what it kept, one a look. */
+	readonly pages?: { readonly since: number };
 	/** Paused alone: by the owner, or by waking the most times a day it may (`limit`). */
 	readonly paused?: "owner" | "limit";
 	/** Done: when, and what ended it; `authority` when it was its account or connection taken away. */

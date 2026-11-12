@@ -1,0 +1,422 @@
+{
+	"service": "Slack",
+	"about": "Channels and messages",
+	"url": "https://slack.com/api",
+	"api": "slack",
+	"auth": "oauth",
+	"client": "slack",
+	"scopes": [
+		"channels:read",
+		"groups:read",
+		"channels:history",
+		"groups:history",
+		"users:read"
+	],
+	"access": {
+		"required": "Read your channels and who people are",
+		"choices": [
+			{
+				"label": "Direct messages and search",
+				"scopes": [
+					"im:read",
+					"mpim:read",
+					"im:history",
+					"mpim:history",
+					"search:read"
+				]
+			},
+			{
+				"label": "Send messages as you",
+				"scopes": [
+					"chat:write"
+				]
+			},
+			{
+				"label": "React as you",
+				"scopes": [
+					"reactions:write"
+				]
+			},
+			{
+				"label": "Read files you can see",
+				"scopes": [
+					"files:read"
+				]
+			}
+		],
+		"note": "Changing access signs in again. Every message banda sends as you still asks you to approve it, every time."
+	},
+	"floors": {
+		"private": [
+			"post_message"
+		]
+	},
+	"account": "whoami.handle",
+	"reads": [
+		"whoami",
+		"list_channels",
+		"get_channel",
+		"channel_history",
+		"get_thread",
+		"search_messages",
+		"get_person",
+		"get_file"
+	],
+	"needs": {
+		"list_channels": [
+			"channels:read",
+			"groups:read",
+			"im:read",
+			"mpim:read"
+		],
+		"get_channel": [
+			"channels:read",
+			"groups:read",
+			"im:read",
+			"mpim:read"
+		],
+		"channel_history": [
+			"channels:history",
+			"groups:history",
+			"im:history",
+			"mpim:history"
+		],
+		"get_thread": [
+			"channels:history",
+			"groups:history",
+			"im:history",
+			"mpim:history"
+		],
+		"search_messages": [
+			"search:read"
+		],
+		"post_message": [
+			"chat:write"
+		],
+		"add_reaction": [
+			"reactions:write"
+		],
+		"get_file": [
+			"files:read"
+		]
+	},
+	"objects": {
+		"thread": {
+			"card": "messages",
+			"name": "a thread in Slack",
+			"normalize": {
+				"ts": "slack-ts"
+			},
+			"urls": [
+				"https://*.slack.com/archives/{channel}/p{ts}"
+			],
+			"ids": [
+				"slack/{channel}/p{ts}"
+			],
+			"reads": {
+				"thread": {
+					"tool": "get_thread",
+					"args": {
+						"channel": "{channel}",
+						"ts": "{ts}"
+					},
+					"pages": {
+						"list": "thread.messages",
+						"by": "ts",
+						"keep": 200
+					}
+				}
+			},
+			"fields": {
+				"channel": "thread.channel_name",
+				"root": "thread.root",
+				"messages": "thread.messages",
+				"total": "thread.total",
+				"url": "thread.url"
+			},
+			"follow": {
+				"keys": {
+					"thread.messages": "ts",
+					"thread.messages[*].reactions": "name"
+				},
+				"authors": {
+					"thread.messages": "author"
+				},
+				"ignore": [
+					"thread.active",
+					"thread.total",
+					"thread.messages[*].reply_count",
+					"thread.messages[*].avatar"
+				],
+				"rules": [
+					{
+						"on": "thread.messages[*].reactions[*]",
+						"kind": "added",
+						"does": "tell",
+						"says": "{count} reacted :{name}:"
+					},
+					{
+						"on": "thread.messages[*].reactions[*]",
+						"kind": "removed",
+						"does": "nothing",
+						"says": "a reaction :{name}: was taken back"
+					},
+					{
+						"on": "thread.messages[*]",
+						"kind": "added",
+						"does": "wake",
+						"says": "{from} replied"
+					},
+					{
+						"on": "thread.messages[*].text",
+						"kind": "changed",
+						"does": "tell",
+						"says": "{from} edited a message"
+					},
+					{
+						"on": "thread.messages[*]",
+						"kind": "removed",
+						"does": "tell",
+						"says": "a message from {from} was deleted"
+					}
+				],
+				"ends": {},
+				"every": "5m",
+				"busy": "thread.active = true",
+				"busy_every": "1m",
+				"settle": "2m"
+			},
+			"writes": [
+				{
+					"tool": "post_message",
+					"id": {
+						"channel": "channel",
+						"ts": "thread_ts"
+					},
+					"verb": "Send",
+					"what": "Reply in",
+					"text": "text"
+				},
+				{
+					"tool": "add_reaction",
+					"id": {
+						"channel": "channel",
+						"ts": "ts"
+					},
+					"verb": "React",
+					"what": "React in"
+				}
+			]
+		},
+		"channel": {
+			"card": "messages",
+			"name": "a channel in Slack",
+			"urls": [
+				"https://*.slack.com/archives/{channel}"
+			],
+			"ids": [
+				"slack/{channel}"
+			],
+			"reads": {
+				"channel": {
+					"tool": "get_channel",
+					"args": {
+						"channel": "{channel}"
+					}
+				},
+				"history": {
+					"tool": "channel_history",
+					"args": {
+						"channel": "{channel}",
+						"limit": 100
+					},
+					"pages": {
+						"list": "history.messages",
+						"by": "ts",
+						"keep": 100
+					}
+				}
+			},
+			"fields": {
+				"title": "channel.name",
+				"topic": "channel.topic",
+				"members": "channel.member_count",
+				"messages": "history.messages",
+				"url": "history.url"
+			},
+			"follow": {
+				"keys": {
+					"history.messages": "ts"
+				},
+				"authors": {
+					"history.messages": "author"
+				},
+				"ignore": [
+					"history.active",
+					"channel.member_count",
+					"history.messages[*].reply_count",
+					"history.messages[*].avatar",
+					"history.messages[*].reactions"
+				],
+				"rules": [
+					{
+						"on": "history.messages[*]",
+						"kind": "added",
+						"where": "mentions_me = true",
+						"does": "wake",
+						"says": "{from} mentioned you"
+					},
+					{
+						"on": "history.messages[*]",
+						"kind": "added",
+						"does": "tell",
+						"says": "{from}: {text}"
+					},
+					{
+						"on": "history.messages[*].text",
+						"kind": "changed",
+						"does": "nothing",
+						"says": "{from} edited a message"
+					},
+					{
+						"on": "history.messages[*]",
+						"kind": "removed",
+						"does": "nothing",
+						"says": "a message from {from} was deleted"
+					},
+					{
+						"on": "channel.topic",
+						"kind": "changed",
+						"does": "tell",
+						"says": "topic: {to}"
+					}
+				],
+				"ends": {},
+				"every": "5m",
+				"busy": "history.active = true",
+				"busy_every": "1m",
+				"settle": "2m"
+			},
+			"writes": [
+				{
+					"tool": "post_message",
+					"id": {
+						"channel": "channel"
+					},
+					"verb": "Send",
+					"what": "Post in",
+					"text": "text"
+				}
+			]
+		},
+		"search": {
+			"card": "messages",
+			"name": "{query}",
+			"normalize": {
+				"query": "text"
+			},
+			"ids": [
+				"slack/search/{query}"
+			],
+			"reads": {
+				"search": {
+					"tool": "search_messages",
+					"args": {
+						"query": "{query}",
+						"count": 50,
+						"sort": "timestamp",
+						"sort_dir": "desc"
+					}
+				}
+			},
+			"fields": {
+				"messages": "search.messages",
+				"total": "search.total"
+			},
+			"follow": {
+				"keys": {
+					"search.messages": "permalink"
+				},
+				"newest": {
+					"search.messages": "ts"
+				},
+				"authors": {
+					"search.messages": "author"
+				},
+				"ignore": [
+					"search.total",
+					"search.messages[*].avatar",
+					"search.messages[*].reactions",
+					"search.messages[*].reply_count"
+				],
+				"rules": [
+					{
+						"on": "search.messages[*]",
+						"kind": "added",
+						"does": "wake",
+						"says": "{from} in #{channel_name}: {text}"
+					}
+				],
+				"ends": {},
+				"every": "5m",
+				"settle": "2m"
+			}
+		},
+		"person": {
+			"card": "contact",
+			"name": "a person in Slack",
+			"urls": [
+				"https://*.slack.com/team/{user}"
+			],
+			"ids": [
+				"slack/user/{user}"
+			],
+			"reads": {
+				"person": {
+					"tool": "get_person",
+					"args": {
+						"user": "{user}"
+					}
+				}
+			},
+			"fields": {
+				"name": "person.display_name",
+				"handle": "person.name",
+				"title": "person.title",
+				"emails": "person.email",
+				"status": "person.status_text",
+				"timezone": "person.tz",
+				"outside": "person.outside",
+				"photo": "person.avatar",
+				"url": "person.url"
+			},
+			"follow": {
+				"ignore": [
+					"person.avatar"
+				],
+				"rules": [
+					{
+						"on": "person.status_text",
+						"kind": "changed",
+						"does": "tell",
+						"says": "status: {to}",
+						"words": {
+							"": "cleared"
+						}
+					},
+					{
+						"on": "person.title",
+						"kind": "changed",
+						"does": "tell",
+						"says": "title: {to}",
+						"words": {
+							"": "cleared"
+						}
+					}
+				],
+				"ends": {},
+				"every": "30m"
+			}
+		}
+	}
+}

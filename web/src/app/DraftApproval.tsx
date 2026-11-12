@@ -15,6 +15,7 @@ import { DRIVE_DRAFT, DriveDraftPreview } from "./DriveDraftPreview.tsx";
 import { EmailDraftPreview } from "./EmailDraftPreview.tsx";
 import { CALENDAR_DRAFT, EventDraftPreview, eventDraftWhat } from "./EventDraftPreview.tsx";
 import { ObjectPreviews } from "./Objects.tsx";
+import { SLACK_DRAFT, SLACK_REACTION, SlackDraftPreview, SlackReactionPreview } from "./SlackDraftPreview.tsx";
 
 type Props = {
 	chat: number;
@@ -50,6 +51,8 @@ function Draft({ chat, agent, ask, label, wait, state, drawn }: Props) {
 		: undefined;
 	const eventDraft = CALENDAR_DRAFT.test(ask.tool) && !interrupted;
 	const contactDraft = CONTACT_DRAFT.test(ask.tool) && !interrupted;
+	const slackDraft = SLACK_DRAFT.test(ask.tool) && !interrupted;
+	const slackReaction = SLACK_REACTION.test(ask.tool) && !interrupted;
 	const what =
 		emailRecipient !== undefined
 			? `Send email to ${emailRecipient}`
@@ -57,7 +60,7 @@ function Draft({ chat, agent, ask, label, wait, state, drawn }: Props) {
 				? eventDraftWhat(ask.args, edits)
 				: label;
 	const driveDraft = DRIVE_DRAFT.test(ask.tool) && !interrupted;
-	const preview = emailDraft || eventDraft || contactDraft;
+	const preview = emailDraft || eventDraft || contactDraft || slackDraft;
 	// the daemon's verb, where the effect has one of its own; never a word of the label, which may be a tool's name
 	const verb = interrupted ? "Retry" : (ask.verb ?? "Allow");
 	const scope = !interrupted && ask.floor === undefined ? scopesOf(ask)[0] : undefined;
@@ -95,6 +98,15 @@ function Draft({ chat, agent, ask, label, wait, state, drawn }: Props) {
 							readOnly={readOnly || busy}
 							onEdit={(name, value) => setEdits((prior) => ({ ...prior, [name]: value }))}
 						/>
+					) : slackDraft ? (
+						<SlackDraftPreview
+							args={ask.args}
+							edits={edits}
+							readOnly={readOnly || busy}
+							onEdit={(name, value) => setEdits((prior) => ({ ...prior, [name]: value }))}
+						/>
+					) : slackReaction ? (
+						<SlackReactionPreview args={ask.args} />
 					) : contactDraft ? (
 						<ContactDraftPreview tool={ask.tool} args={ask.args} />
 					) : driveDraft ? (

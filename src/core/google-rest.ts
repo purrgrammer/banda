@@ -1,5 +1,6 @@
 /** One bounded request to a Google REST API, shared by the built-in adapters. Errors never hold a URL, body or token. */
 import { Unauthorized } from "./mcp.ts";
+import { parseRetryAfter, retryAtOf } from "./retry-after.ts";
 
 export const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 
@@ -44,10 +45,13 @@ async function reasonOf(response: Response): Promise<string | undefined> {
 export class GoogleError extends Error {
 	readonly status: number;
 	readonly reason: string | undefined;
-	constructor(message: string, status: number, reason: string | undefined) {
+	/** When Google said to ask again (its `Retry-After` on a 429 or 503), so the caller waits until then. */
+	readonly retryAt?: number;
+	constructor(message: string, status: number, reason: string | undefined, retryAt?: number) {
 		super(message);
 		this.status = status;
 		this.reason = reason;
+		if (retryAt !== undefined) this.retryAt = retryAt;
 	}
 }
 
@@ -89,10 +93,11 @@ async function googleResponse(
 		// A GET retries safely; a change never does, because Google may have applied it (a free/busy query is a POST that
 		// only reads, and it is cheap enough to fail and be asked again).
 		if (method !== "GET" || attempt >= 2 || ![429, 500, 502, 503, 504].includes(response.status)) break;
+		// never sooner than Google said: a wait longer than a moment is the caller's, as `retryAt`
+		const said = parseRetryAfter(response.headers.get("retry-after"));
+		if (said !== undefined && said > 2000) break;
 		await response.body?.cancel();
-		const retryAfter = Number(response.headers.get("retry-after"));
-		const wait =
-			Number.isFinite(retryAfter) && retryAfter >= 0 ? Math.min(2000, retryAfter * 1000) : 200 * (attempt + 1);
+		const wait = said ?? 200 * (attempt + 1);
 		if (signal?.aborted) throw signal.reason ?? new Error(`${service} request was cancelled.`);
 		if (wait > 0)
 			await new Promise<void>((resolve, reject) => {
@@ -114,7 +119,12 @@ async function googleResponse(
 		const reason = await reasonOf(response);
 		const meaning = reason === undefined ? undefined : REASONS[reason]?.replace("{service}", service);
 		const said = reason === undefined ? "" : ` (${reason})${meaning === undefined ? "" : `: ${meaning}`}`;
-		throw new GoogleError(`${service} answered ${response.status}${said}`, response.status, reason);
+		throw new GoogleError(
+			`${service} answered ${response.status}${said}`,
+			response.status,
+			reason,
+			retryAtOf(response.status, response.headers.get("retry-after")),
+		);
 	}
 	return response;
 }
@@ -123,7 +133,7 @@ async function googleResponse(
  * At most `limit` bytes of an answer. A cut answer is refused, unless `cut` says the caller takes the bytes up to the
  * limit (a file's text, which says it was truncated).
  */
-async function boundedBytes(
+export async function boundedBytes(
 	response: Response,
 	service: string,
 	limit: number,

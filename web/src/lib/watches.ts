@@ -64,7 +64,8 @@ export function untilWords(watch: WatchView): string | undefined {
  * since when, never "nothing new" ("Can't reach GitHub since today 09:10: …"); stopped by the owner's switch on a tool
  * it reads ("Stopped: You turned off …"); paused at its wakes a day ("Paused
  * itself: it woke 24 times today, the most it may"); behind, that some may be missing
- * ("Saw today 09:10: lint failed; some changes may be missing").
+ * ("Saw today 09:10: lint failed; some changes may be missing"); reading behind, a page a look ("Behind since today
+ * 09:10: more came than a page holds, reading a page a look").
  */
 export function sawWords(watch: WatchView, now: number): string | undefined {
 	if (watch.done !== undefined)
@@ -79,6 +80,8 @@ export function sawWords(watch: WatchView, now: number): string | undefined {
 	if (watch.failed?.run === true) return watch.failed.why.replace(/^./, (first) => first.toUpperCase());
 	if (watch.failed !== undefined)
 		return `Can't reach ${watch.object?.service ?? "it"} since ${near(watch.failed.since, now)}: ${watch.failed.why}`;
+	if (watch.pages !== undefined)
+		return `Behind since ${near(watch.pages.since, now)}: more came than a page holds, reading a page a look`;
 	if (watch.saw !== undefined && watch.sawAt !== undefined)
 		return `Saw ${near(watch.sawAt, now)}: ${watch.saw.join(", ")}${watch.behind === undefined ? "" : "; some changes may be missing"}`;
 	if (watch.looked !== undefined) return `Looked ${near(watch.looked, now)}, nothing new`;
@@ -126,7 +129,10 @@ export function watchRows(
 					ended: watch.done?.authority === true,
 					failing: watch.done === undefined && watch.failed !== undefined,
 					stopped: watch.done === undefined && watch.failed?.off === true,
-					behind: watch.done === undefined && watch.behind !== undefined,
+					behind:
+						watch.done === undefined &&
+						watch.failed?.off !== true &&
+						(watch.behind !== undefined || watch.pages !== undefined),
 					...(change === undefined
 						? {}
 						: {

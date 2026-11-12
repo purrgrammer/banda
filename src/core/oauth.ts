@@ -40,6 +40,9 @@ export function googleOAuthClient(id: string | undefined, secret: string | undef
 	return { id: clientId, ...(clientSecret === "" ? {} : { secret: clientSecret }) };
 }
 
+/** Banda's public Slack app; with PKCE on, Slack trades its codes and refreshes its tokens without a secret. */
+export const DEFAULT_SLACK_CLIENT_ID = "3393283510.12540783162114";
+
 export type Tokens = {
 	readonly access: string;
 	readonly refresh?: string;
@@ -144,15 +147,10 @@ async function resourceMetadata(fetcher: typeof fetch, resource: string): Promis
 
 /** Find where to sign in for `resource` (an MCP server's URL). */
 export async function discover(resource: string, fetcher: typeof fetch = fetch): Promise<OAuthServer> {
-	// A built-in API is a first-party Google resource, not an RFC 9728 MCP server. Its user consent and token
-	// endpoints are fixed by Google; tool access remains restricted to the scopes in the shipped connection file.
-	if (Object.values(REST_APIS).some((api) => api.url === resource))
-		return {
-			issuer: "https://accounts.google.com",
-			authorize: "https://accounts.google.com/o/oauth2/v2/auth",
-			token: "https://oauth2.googleapis.com/token",
-			resourceParameter: false,
-		};
+	// A built-in API is a first-party resource, not an RFC 9728 MCP server. Its consent and token endpoints are fixed by
+	// its client's row; tool access remains restricted to the scopes in the shipped connection file.
+	const builtIn = Object.values(REST_APIS).find((api) => api.url === resource);
+	if (builtIn !== undefined) return CLIENTS[builtIn.client].server;
 	const metadata = await resourceMetadata(fetcher, resource);
 	const servers = Array.isArray(metadata?.authorization_servers) ? metadata.authorization_servers : [];
 	const issuer = typeof servers[0] === "string" ? servers[0] : new URL(resource).origin;
@@ -228,20 +226,17 @@ export function begin(
 	const verifier = base64url(randomBytes(48));
 	const challenge = base64url(createHash("sha256").update(verifier).digest());
 	const url = new URL(server.authorize);
-	url.searchParams.set("response_type", "code");
+	const row = rowOf(server);
+	if (row?.responseType !== false) url.searchParams.set("response_type", "code");
 	url.searchParams.set("client_id", client.id);
 	url.searchParams.set("redirect_uri", redirect);
 	url.searchParams.set("code_challenge", challenge);
 	url.searchParams.set("code_challenge_method", "S256");
 	url.searchParams.set("state", state);
 	if (server.resourceParameter !== false) url.searchParams.set("resource", resource);
-	if (server.issuer === "https://accounts.google.com") {
-		url.searchParams.set("access_type", "offline");
-		url.searchParams.set("prompt", "consent");
-		// signing an account in again: Google offers that account first (a hint, never a promise)
-		if (again !== undefined) url.searchParams.set("login_hint", again.id);
-	}
-	if (server.scopes !== undefined) url.searchParams.set("scope", server.scopes.join(" "));
+	for (const [key, value] of Object.entries(row?.authorizeParams(again) ?? {})) url.searchParams.set(key, value);
+	if (server.scopes !== undefined)
+		url.searchParams.set(row?.scopeParam ?? "scope", server.scopes.join(row?.scopeSeparator ?? " "));
 	return {
 		pending: {
 			connection,
@@ -274,6 +269,95 @@ function tokensOf(body: Record<string, unknown>, now: number, previous?: Tokens)
 	};
 }
 
+/**
+ * Slack's token endpoint answers 200 whatever happened, `{ok: false, error}` when it refused. A sign-in's tokens are the
+ * user's (`authed_user`): banda asks for no bot scopes, so there is no bot token to take. A refresh answers at the top.
+ */
+function slackTokensOf(body: Record<string, unknown>, now: number, previous?: Tokens): Tokens {
+	if (body.ok !== true) {
+		const code = typeof body.error === "string" && /^[a-z0-9_]{1,80}$/.test(body.error) ? ` (${body.error})` : "";
+		throw new Error(`slack.com refused the sign-in${code}`);
+	}
+	const user = body.authed_user;
+	const held =
+		typeof user === "object" && user !== null && !Array.isArray(user) ? (user as Record<string, unknown>) : body;
+	return tokensOf(held, now, previous);
+}
+
+export type ClientName = "google" | "slack";
+
+/**
+ * An OAuth client banda ships, by the name a connection file gives as its `client`: who the daemon is at that server,
+ * where the server is, and how that server's flow departs from the RFC.
+ */
+export type ClientRow = {
+	/** The public client, the environment's override first. */
+	readonly client: () => OAuthClient;
+	readonly server: OAuthServer;
+	/** The authorize parameter the scopes go in, and what separates them. */
+	readonly scopeParam: "scope" | "user_scope";
+	readonly scopeSeparator: " " | ",";
+	readonly responseType: boolean;
+	/** The authorize parameters it adds; `again` is the account signed in again, by its id. */
+	readonly authorizeParams: (again?: { readonly account: string; readonly id: string }) => Record<string, string>;
+	readonly tokens: (body: Record<string, unknown>, now: number, previous?: Tokens) => Tokens;
+	/** Whether the redirect it was registered with is the daemon's origin, not its callback path. */
+	readonly redirectAsOrigin: boolean;
+	/** The one loopback port the shipped app registered, when it registered one: Slack refuses any other on its page. */
+	readonly port?: number;
+	/** Whether the client is the shipped one, not a developer's own app (which registers its own redirects). */
+	readonly shipped: () => boolean;
+};
+
+export const CLIENTS: { readonly [name in ClientName]: ClientRow } = {
+	google: {
+		client: () => googleOAuthClient(process.env.BANDA_GOOGLE_CLIENT_ID, process.env.BANDA_GOOGLE_CLIENT_SECRET),
+		server: {
+			issuer: "https://accounts.google.com",
+			authorize: "https://accounts.google.com/o/oauth2/v2/auth",
+			token: "https://oauth2.googleapis.com/token",
+			resourceParameter: false,
+		},
+		scopeParam: "scope",
+		scopeSeparator: " ",
+		responseType: true,
+		// signing an account in again: Google offers that account first (a hint, never a promise)
+		authorizeParams: (again) => ({
+			access_type: "offline",
+			prompt: "consent",
+			...(again === undefined ? {} : { login_hint: again.id }),
+		}),
+		tokens: tokensOf,
+		redirectAsOrigin: true,
+		shipped: () => !process.env.BANDA_GOOGLE_CLIENT_ID,
+	},
+	slack: {
+		client: () => ({ id: process.env.BANDA_SLACK_CLIENT_ID || DEFAULT_SLACK_CLIENT_ID }),
+		server: {
+			issuer: "https://slack.com",
+			authorize: "https://slack.com/oauth/v2/authorize",
+			token: "https://slack.com/api/oauth.v2.access",
+			resourceParameter: false,
+		},
+		scopeParam: "user_scope",
+		scopeSeparator: ",",
+		responseType: false,
+		authorizeParams: () => ({}),
+		tokens: slackTokensOf,
+		redirectAsOrigin: false,
+		port: 7788,
+		shipped: () => !process.env.BANDA_SLACK_CLIENT_ID,
+	},
+};
+
+/** The name of a client banda ships a row for. */
+export const clientNamed = (name: string | undefined): ClientName | undefined =>
+	name !== undefined && Object.hasOwn(CLIENTS, name) ? (name as ClientName) : undefined;
+
+/** The shipped client whose server this is, by its issuer. */
+const rowOf = (server: OAuthServer): ClientRow | undefined =>
+	Object.values(CLIENTS).find((row) => row.server.issuer === server.issuer);
+
 async function tokenRequest(
 	fetcher: typeof fetch,
 	server: OAuthServer,
@@ -298,7 +382,7 @@ export async function exchange(pending: Pending, code: string, now: number, fetc
 		code_verifier: pending.verifier,
 		...(pending.server.resourceParameter === false ? {} : { resource: pending.resource }),
 	});
-	return tokensOf(body, now);
+	return (rowOf(pending.server)?.tokens ?? tokensOf)(body, now);
 }
 
 /** New tokens from the refresh token. */
@@ -316,7 +400,7 @@ export async function refresh(
 		refresh_token: tokens.refresh,
 		...(server.resourceParameter === false ? {} : { resource }),
 	});
-	return tokensOf(body, now, tokens);
+	return (rowOf(server)?.tokens ?? tokensOf)(body, now, tokens);
 }
 
 /** A sign-in by code in progress: what the owner types, where, and what the daemon asks with until then. */

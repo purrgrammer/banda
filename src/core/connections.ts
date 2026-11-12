@@ -20,7 +20,7 @@ import { Accepted, AGENT_NAME, type Agent, agentPath, LEAD, parseAgent } from ".
 import { shippedDefinition, shippedDefinitions } from "./definitions.ts";
 import { type DefinedFloor, FLOORS, type Floor } from "./floor.ts";
 import { harnessToolsOf } from "./harness.ts";
-import { DEFAULT_GOOGLE_CLIENT_ID, type OAuthClient, type OAuthServer, type Pending, type Tokens } from "./oauth.ts";
+import { CLIENTS, clientNamed, type OAuthClient, type OAuthServer, type Pending, type Tokens } from "./oauth.ts";
 import { type ObjectKinds, parseObjects, plainLine } from "./objects.ts";
 import { REST_APIS, type RestApiName, restApiNamed } from "./rest.ts";
 import type { Said } from "./tool-kinds.ts";
@@ -184,20 +184,20 @@ export function connectionOf(name: string, fields: ConnectionFields): ParsedConn
 	if (
 		builtIn !== undefined &&
 		(auth !== "oauth" ||
-			client !== "google" ||
+			client !== builtIn.client ||
 			scopes === undefined ||
 			!builtIn.required.every((scope) => scopes.includes(scope)) ||
 			!scopes.every((scope) => (builtIn.scopes as readonly string[]).includes(scope)) ||
 			new Set(scopes).size !== scopes.length)
 	)
 		errors.push(
-			`${builtIn.service} uses OAuth client "google", asks for ${builtIn.required.join(" and ")}, and may add ${builtIn.scopes
+			`${builtIn.service} uses OAuth client "${builtIn.client}", asks for ${builtIn.required.join(" and ")}, and may add ${builtIn.scopes
 				.filter((scope) => !(builtIn.required as readonly string[]).includes(scope))
 				.join(" or ")}`,
 		);
 	if (auth !== "oauth" && (client !== undefined || scopes !== undefined))
 		errors.push(`"client" and "scopes" are for a server the owner signs in to: add "auth: oauth" or drop them`);
-	if (client !== undefined && client !== "google" && !/^[\w.-]{1,200}$/.test(client))
+	if (client !== undefined && clientNamed(client) === undefined && !/^[\w.-]{1,200}$/.test(client))
 		errors.push(`"client: ${client}" is not a client id: letters, digits, dots, dashes and underscores`);
 	for (const scope of scopes ?? [])
 		if (!/^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/.test(scope)) errors.push(`"${scope}" is not a scope`);
@@ -789,8 +789,9 @@ export function fits(credentials: Credentials | undefined, connection: Connectio
 	if (credentials === undefined || credentials.url !== connection.url) return false;
 	if (!("oauth" in credentials)) return connection.auth === "key";
 	if (connection.auth !== "oauth") return false;
-	if (connection.client === "google") {
-		if (credentials.oauth.client.id !== (process.env.BANDA_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID)) return false;
+	const shipped = clientNamed(connection.client);
+	if (shipped !== undefined) {
+		if (credentials.oauth.client.id !== CLIENTS[shipped].client().id) return false;
 	} else if (connection.client !== undefined && credentials.oauth.client.id !== connection.client) return false;
 	// what was asked, not what was granted: a scope the owner left out at the consent screen is theirs to add again
 	const asked = credentials.oauth.server.scopes ?? [];

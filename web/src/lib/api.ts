@@ -418,8 +418,11 @@ export const signIn = (
 		},
 	);
 
-/** Fetch one file named by a Gmail card. The daemon verifies the message, account and attachment before storing it. */
-export const gmailAttachment = (
+/**
+ * Fetch one file named by a card: a Gmail message's attachment, or a file a Slack message in a thread's or channel's
+ * card shares. The daemon verifies the object, account and file before storing it in the chat's files.
+ */
+export const objectAttachment = (
 	chat: number,
 	ref: string,
 	attachmentId: string,
@@ -432,6 +435,7 @@ export const gmailAttachment = (
 			body: JSON.stringify({ chat, ref, attachmentId, ...options }),
 		},
 	);
+export const gmailAttachment = objectAttachment;
 
 /** What the daemon drew of a blob, by the name it is shown by (its kind follows the name); `full` for the viewer. */
 export const blobPreview = (sha: string, name: string, full = false) =>
