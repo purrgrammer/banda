@@ -700,14 +700,16 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 export type Unless = { readonly same: readonly string[]; readonly while?: string; readonly every?: string };
 
 /**
- * When a look last made a read an `Unless` guards (by the look's clock), and the value at its `same` then, when the
- * reading kept before that look already had it and was taken a minute or more before: the answer holds every change
- * up to that value. A service's times have a grain (GitHub's, a second), so an answer made at the look that first saw
- * a value may miss a change in the same second after it, which leaves the value as it was; the next look makes it again.
+ * When a look last made a read an `Unless` guards (by the look's clock), and the values at its `same` then, when the
+ * reading kept before that look already had them, its condition held over it, and its reads had ended a minute or
+ * more before: the answer holds every change up to those values. A service's times have a grain (GitHub's, a second),
+ * so an answer made at the look that first saw a value may miss a change in the same second after it, which leaves the
+ * value as it was; and a condition just come true may not stay so (a check that starts as the others finish): the next
+ * look makes it again.
  */
 export type Made = { readonly at: number; readonly sure?: string };
 
-/** How long before a look the reading it compares with must have been taken for its answers to be sure. */
+/** How long before a look the reads of the reading it compares with must have ended for its answers to be sure. */
 export const SURE_AFTER = 60_000;
 
 /** The value at `path` in `reading`, in canonical words; undefined when the reading has none there. */
@@ -731,22 +733,27 @@ export function mayCarry(unless: Unless, answers: Item, kept: Item, made: Made |
 	if (value === undefined || made?.sure !== value || valuesOf(kept, unless.same) !== value) return false;
 	if (unless.while !== undefined && !holds(unless.while, kept)) return false;
 	const every = unless.every === undefined ? undefined : parseEvery(unless.every);
-	return every === undefined || now - made.at < every;
+	// a clock that went back carries nothing: the answer's age is not known
+	return now >= made.at && (every === undefined || now - made.at < every);
 }
 
-/** What a look that made a read `unless` guards keeps of it: when, and the value at `same` if it is sure. */
+/**
+ * What a look that made a read `unless` guards keeps of it: when, and the values at `same` if it is sure. `kept` is the
+ * reading kept as the look began, and `through` when the reads that took it had ended (the look's start, else).
+ */
 export function madeNow(
 	unless: Unless,
 	answers: Item,
-	kept: { answers: Item; at: number } | undefined,
+	kept: { answers: Item; at: number; through?: number } | undefined,
 	now: number,
 ): Made {
 	const value = valuesOf(answers, unless.same);
 	const sure =
 		value !== undefined &&
 		kept !== undefined &&
-		now - kept.at >= SURE_AFTER &&
-		valuesOf(kept.answers, unless.same) === value;
+		now - (kept.through ?? kept.at) >= SURE_AFTER &&
+		valuesOf(kept.answers, unless.same) === value &&
+		(unless.while === undefined || holds(unless.while, kept.answers));
 	return sure ? { at: now, sure: value } : { at: now };
 }
 

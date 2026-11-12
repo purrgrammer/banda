@@ -454,7 +454,7 @@
 							"pr.updated_at"
 						],
 						"while": "derived.checks_done = true",
-						"every": "30m"
+						"every": "10m"
 					},
 					"tool": "pull_request_read",
 					"args": {

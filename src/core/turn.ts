@@ -1534,6 +1534,7 @@ export function defineCore(options: CoreOptions) {
 		...(options.workspace === undefined ? {} : { workspace: options.workspace }),
 		...(options.read === undefined ? {} : { read: options.read }),
 		...(options.fault === undefined ? {} : { fault: options.fault }),
+		...(options.now === undefined ? {} : { now: options.now }),
 	});
 
 	const RefreshAgent = defineTask<{ readonly chat: number; readonly agent: string }, { phase: "wait" }, null>({

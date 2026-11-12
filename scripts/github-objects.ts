@@ -21,11 +21,11 @@ export const GITHUB_OBJECTS = {
 			},
 			// a quiet look is one request: the checks are read while they run, when the head or `updated_at` moved (a check
 			// moves nothing on the pull request; a label, a reopen or ready for review starts workflows on the same head),
-			// and every half hour besides for a re-run; reviews and comments when `updated_at` moved, which a review and a
+			// and every ten minutes besides for a re-run; reviews and comments when `updated_at` moved, which a review and a
 			// comment move to their second, and every two hours besides
 			checks: {
 				optional: true,
-				unless: { same: ["pr.head.sha", "pr.updated_at"], while: "derived.checks_done = true", every: "30m" },
+				unless: { same: ["pr.head.sha", "pr.updated_at"], while: "derived.checks_done = true", every: "10m" },
 				tool: "pull_request_read",
 				args: {
 					method: "get_check_runs",

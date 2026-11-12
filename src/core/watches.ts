@@ -329,6 +329,8 @@ export type FollowedReading = {
 	page?: { [read: string]: number };
 	/** When each read an `unless` guards was last made, which a look that carries its answer forward goes by. */
 	made?: { [read: string]: Made };
+	/** When the reads of the newest look that read it had ended: what a read is sure of a minute after. */
+	through?: number;
 };
 
 /** How many earlier readings of a followed object are kept beside the newest. */
@@ -635,6 +637,8 @@ export type WatchesOptions = {
 	) => Promise<{ readonly text: string } | { readonly failed: string; readonly until?: number }>;
 	/** A fault point, for the fault suites. */
 	readonly fault?: (point: string) => void;
+	/** The clock, read again once a look's reads end; `Date.now` unless given. */
+	readonly now?: () => number;
 };
 
 type WatchState = { phase: "wait" } | { phase: "look" };
@@ -975,7 +979,14 @@ export function defineWatches(options: WatchesOptions) {
 		 * and whether this look may carry its answers forward at all.
 		 */
 		let base:
-			| { version: number; at: number; answers: Item; made: { [read: string]: Made }; carry: boolean }
+			| {
+					version: number;
+					at: number;
+					through?: number;
+					answers: Item;
+					made: { [read: string]: Made };
+					carry: boolean;
+			  }
 			| undefined;
 		await commit(async (tx) => {
 			const record = (await tx.doc(Watches)).watches[name];
@@ -1036,6 +1047,7 @@ export function defineWatches(options: WatchesOptions) {
 				base = {
 					version: kept.version,
 					at: kept.at,
+					...(kept.through === undefined ? {} : { through: kept.through }),
 					// copies of the doc's values: the reads happen outside this commit
 					answers: JSON.parse(JSON.stringify(kept.answers)) as Item,
 					made: JSON.parse(JSON.stringify(kept.made ?? {})) as { [read: string]: Made },
@@ -1153,6 +1165,8 @@ export function defineWatches(options: WatchesOptions) {
 			const { next_cursor: _cursor, ...rest } = body;
 			answers[as] = withList(rest, pages.list, step.list);
 		}
+		/** When this look's reads ended, by the clock: a look a minute after may be sure of what they found. */
+		const through = Math.max(now, options.now?.() ?? Date.now());
 		options.fault?.("watch:read");
 		if (failed !== undefined) return await failing(failed, retry);
 		if (walked !== undefined) return await walking(walked);
@@ -1250,7 +1264,11 @@ export function defineWatches(options: WatchesOptions) {
 			if (stored !== undefined && Object.keys(page).length > 0) stored.page = page;
 			// when each guarded read was made: a read made by this look, else as kept (a read another definition made is not)
 			const when = { ...(kept?.source === source ? kept.made : {}), ...made };
-			if (stored !== undefined && shared === undefined && Object.keys(when).length > 0) stored.made = when;
+			if (stored !== undefined && shared === undefined) {
+				if (Object.keys(when).length > 0) stored.made = when;
+				else delete stored.made;
+				stored.through = through;
+			}
 			// the owner's click is taken in the commit that keeps what it looked at: a kill before leaves it to look again
 			const taken = async () => {
 				if (click === undefined) return;
