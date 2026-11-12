@@ -67,7 +67,7 @@ async function open(setup: (home: string) => BoxSetup, maxFileBytes?: number) {
 	});
 	const registry = createRegistry();
 	registry.install(core.extension);
-	registry.install(boxTools({ workspace: box.workspace }));
+	registry.install(boxTools({ box }));
 	const harness = await openStore(home, { models, registry, env: boxEnv(box) });
 	harness.resume();
 	const script = (...replies: ReturnType<typeof fauxAssistantMessage>[]) =>

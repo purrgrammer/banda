@@ -84,7 +84,7 @@ export async function openConnected({
 		workspace: () => box.workspace,
 	});
 	registry.install(core.extension);
-	registry.install(boxTools({ workspace: box.workspace }));
+	registry.install(boxTools({ box }));
 	install?.(core, registry);
 	const harness = await openStore(home, {
 		models,

@@ -13,6 +13,7 @@ import {
 	defineExtension,
 	type Extension,
 	type HarnessOptions,
+	type PromptSection,
 	type ToolExecutionApi,
 	type ToolRegistration,
 } from "@earendil-works/pi-durable";
@@ -40,13 +41,13 @@ export const BOX_TOOLS = ["bash", "read", "write", "edit"] as const;
  */
 export function boxTools({
 	images,
-	workspace,
+	box,
 	egress,
 	ready,
 	fault,
 }: {
 	images?: ImageProcessor;
-	workspace?: string;
+	box?: Pick<Box, "kind" | "workspace" | "attachments">;
 	egress?: HoldingEgress;
 	/**
 	 * Before a command of `chat` runs: the proxy knows what the store says this chat may send straight through (a chat
@@ -55,6 +56,7 @@ export function boxTools({
 	ready?: (chat: number) => Promise<void>;
 	fault?: (point: string) => void;
 } = {}): Extension {
+	const workspace = box?.workspace;
 	const shell = telling(bash(), workspace);
 	const tools = [
 		egress === undefined ? shell : taking(shell, egress, fault, ready),
@@ -62,7 +64,19 @@ export function boxTools({
 		accepting(createEditTool() as ToolRegistration, workspace),
 		createReadTool(images === undefined ? {} : { images }),
 	];
-	return defineExtension({ name: "banda.box", tools: tools as ToolRegistration[] });
+	const sections: PromptSection[] =
+		box === undefined
+			? []
+			: [
+					{
+						key: "computer",
+						render: () =>
+							box.kind === "host"
+								? `Commands run directly on the owner's computer. Shared workspace: ${JSON.stringify(box.workspace)}. Incoming files: ${JSON.stringify(box.attachments)}.`
+								: `Your Linux computer is shared by the band. ${JSON.stringify(box.workspace)} holds shared work and definitions; /work is your home (incoming files: ${JSON.stringify(box.attachments)}); /tools holds installed software. These folders persist; /tmp is temporary. Check existing tools, install missing software under /tools without root, and reuse it. /tools/bin is on PATH.`,
+					},
+				];
+	return defineExtension({ name: "banda.box", sections, tools: tools as ToolRegistration[] });
 }
 
 /**

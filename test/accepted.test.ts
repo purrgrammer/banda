@@ -97,7 +97,7 @@ async function open() {
 	const core = defineCore({ blobs: blobStore(), gateway: () => new FakeGateway(), model: () => FAUX_MODEL });
 	const registry = createRegistry();
 	registry.install(core.extension);
-	registry.install(boxTools({ workspace: box.workspace }));
+	registry.install(boxTools({ box }));
 	registry.install(
 		defineExtension({
 			name: "accepted.test",

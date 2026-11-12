@@ -99,7 +99,7 @@ async function open(wrap: (files: MemoryFiles) => MemoryFiles = (files) => files
 	const registry = createRegistry();
 	registry.install(core.extension);
 	const groups = core.groups;
-	registry.install(boxTools({ workspace: box.workspace }));
+	registry.install(boxTools({ box }));
 	registry.install(memoryExtension({ files, search, lock }));
 	const harness = await openStore(home, { models, registry, env: boxEnv(box) });
 	harness.resume();

@@ -100,9 +100,7 @@ describe.skipIf(!docker)("the box's closed network", { timeout: 180_000 }, () =>
 		);
 		const registry = createRegistry();
 		registry.install(core.extension);
-		registry.install(
-			boxTools({ workspace: box.workspace, ...(box.egress === undefined ? {} : { egress: core.held(box.egress) }) }),
-		);
+		registry.install(boxTools({ box, ...(box.egress === undefined ? {} : { egress: core.held(box.egress) }) }));
 		harness = await openStore(home, { models, registry, env: boxEnv(box) });
 		harness.resume();
 		// the box up (the first run builds both images), then the stand-in internet beside its proxy

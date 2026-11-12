@@ -172,7 +172,7 @@ describe.skipIf(!docker)("git through the box's proxy", { timeout: 180_000 }, ()
 		registry.install(core.extension);
 		registry.install(
 			boxTools({
-				workspace: box.workspace,
+				box,
 				...(box.egress === undefined ? {} : { egress: core.held(box.egress) }),
 				ready: (chat) => knows.ready(chat),
 			}),

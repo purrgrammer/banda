@@ -118,7 +118,7 @@ faux.setResponses(Array.from({ length: 1000 }, () => respond as never));
 
 const registry = createRegistry();
 registry.install(core.extension);
-registry.install(boxTools({ workspace: box.workspace }));
+registry.install(boxTools({ box }));
 registry.install(memoryExtension({ files, search, lock: new MemoryLock() }));
 const retrieval = searchService({ index: search, blobs, groups: core.groups, harness: () => harness });
 registry.install(searchExtension(retrieval));

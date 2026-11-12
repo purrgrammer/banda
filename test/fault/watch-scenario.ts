@@ -322,7 +322,7 @@ export async function watchScenario(
 	const { models } = echoModels(faults, undefined, options.gate);
 	const registry = createRegistry();
 	registry.install(core.extension);
-	registry.install(boxTools({ workspace: box.workspace }));
+	registry.install(boxTools({ box }));
 	const harness = await openStore(home, {
 		models,
 		registry,

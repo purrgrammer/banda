@@ -21,7 +21,7 @@ import { hostBox } from "./fixtures/host-box.ts";
 import { echoModels, tempHome, until } from "./helpers.ts";
 
 describe("a chat's prompt", () => {
-	it("is the system prompt and tools the chat's last request sent, and holds no credential", async () => {
+	it.each(["host", "container", "microvm"] as const)("describes %s files to the provider", async (kind) => {
 		const home = await tempHome();
 		await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
 		const web = join(home, "web");
@@ -35,7 +35,8 @@ describe("a chat's prompt", () => {
 			sent.push(structuredClone(context.messages));
 			return stream(model, context, options);
 		}) as typeof models.streamSimple;
-		const daemon = await startDaemon({ home, port: 0, models, log: () => {}, box: hostBox(home), web });
+		const box = { ...hostBox(home), kind };
+		const daemon = await startDaemon({ home, port: 0, models, log: () => {}, box, web });
 		try {
 			const token = (await readDaemonFile(home))!.token!;
 			const api = async <T>(path: string, init: RequestInit = {}) => {
@@ -61,6 +62,18 @@ describe("a chat's prompt", () => {
 			const last = sent.at(-1)!;
 			expect(body.system).toBe(getCurrentSystemPrompt(last));
 			expect(body.system.length).toBeGreaterThan(0);
+			expect(body.system).toContain(JSON.stringify(box.workspace));
+			expect(body.system).toContain(JSON.stringify(box.attachments));
+			if (kind === "host") {
+				expect(body.system).toContain("Commands run directly on the owner's computer");
+				expect(body.system).not.toContain("/tools/bin");
+			} else {
+				expect(body.system).toContain("shared by the band");
+				expect(body.system).toContain("/work is your home");
+				expect(body.system).toContain("These folders persist; /tmp is temporary");
+				expect(body.system).toContain("install missing software under /tools without root");
+				expect(body.system).toContain("/tools/bin is on PATH");
+			}
 			expect(body.tools).toEqual(
 				getCurrentTools(last).map((tool) => ({
 					name: tool.name,
@@ -141,6 +154,11 @@ describe("a chat's prompt", () => {
 			expect(after.system).not.toMatch(/On demand: .*\bavatar\b/);
 			expect(after.system).toMatch(/On demand: .*\bconnections\b/);
 			expect(entries.filter((item) => item.role === "tool" && item.error)).toEqual([]);
+			const computer = sent.map(
+				(messages) => getCurrentSystemPrompt(messages).match(/<computer>[\s\S]*?<\/computer>/)?.[0],
+			);
+			expect(computer.every((section) => section !== undefined)).toBe(true);
+			expect(new Set(computer).size).toBe(1);
 		} finally {
 			await daemon.close();
 		}

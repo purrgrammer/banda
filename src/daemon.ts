@@ -312,7 +312,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		registry.install(
 			boxTools({
 				images,
-				workspace: agentBox.workspace,
+				box: agentBox,
 				...(holding === undefined ? {} : { egress: holding }),
 				ready: (chat) => egressReady(chat),
 			}),
