@@ -563,8 +563,13 @@ many attempts, fails the call and leaves a notice. Messages to one origin go in 
 draft, opens an approval Wait, and blocks. The daemon renders the draft, never the model: the card shows exactly what
 will run, on its object where it has one, and the owner may edit a draft's text before approving it, which binds the
 edited bytes. Approved, the daemon runs the stored draft once and the tool returns its result; declined, the tool
-returns that. Outgoing messages on the owner's behalf (an email, a comment) are always drafts. Wait ids never reach
-the model.
+returns that. What the owner may edit is what the agent wrote for a person or as its own instructions (a comment, a
+review, an issue's or a pull request's title and description, a merge's commit message, an agent's description and
+personality, what a routine asks and when), never an order for a machine (a held request, a coding agent's command
+or diff), which runs exactly as stored or not at all, nor an argument that names what a write acts on or picks its
+verb. Edited text reads as the owner's on the card ("Edited by you"), and the agent is told which text the owner
+changed. Outgoing messages on the owner's behalf (an email, a comment) are always drafts. Wait ids never reach the
+model.
 
 **Permissions.** An approval can be given with a scope: this once, for this task, for an hour, always. A permission is
 stored; an effect within an open permission runs without asking and is listed in the activity log, and the owner revokes
@@ -572,8 +577,9 @@ a permission from the agent's panel. A permission belongs to one agent, one acco
 permission sits a floor no permission covers: money, credentials and account changes, and anything that sends private
 data to a recipient the owner has not approved, ask every time. A tool declares its floor class and the daemon enforces
 it: a draft on the floor offers no permission, a permission asked for it is refused, and no permission covers it. A
-permission binds one tool and the values of the arguments the tool names (by default all but the text the owner may
-edit): a later call is within it only with exactly those values. "For this task" lasts while the run answers the same
+permission binds one tool and the values of the arguments the tool names (by default all but the free text the owner
+may edit, such as a comment's body; text a tool says stays bound, such as a title, it binds as the owner approved it):
+a later call is within it only with exactly those values. "For this task" lasts while the run answers the same
 input, so the owner's next message ends it. An effect checks its permission in the commit that records its start, so a
 revoked permission covers nothing after it. The daemon offers at most one scope on a card, the task's where it applies,
 worded as its consequence ("Don't ask again for this task"); every other scope is granted from the agent's permissions;

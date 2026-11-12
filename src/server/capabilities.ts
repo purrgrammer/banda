@@ -834,9 +834,13 @@ export function openCapabilities(options: CapabilityOptions) {
 				? `${tool.connection.words?.[tool.tool] ?? `Use ${tool.connection.service}'s ${tool.tool}`}${as(args)}`
 				: `${object.what} ${nameOf(first, kinds)}`;
 		};
+		// text a permission binds at the owner's words (a title), besides the text it leaves free (a body)
+		const declared = editableOf(tool.tool, kinds);
+		const bindEdits = declared.bound.filter((field) => !signed || field !== arg);
 		const editable = [
 			...new Set([
-				...editableOf(tool.tool, kinds).filter((field) => !signed || field !== arg),
+				...declared.free.filter((field) => !signed || field !== arg),
+				...bindEdits,
 				...(tool.connection.api === "gmail" && tool.tool === "send_message" ? ["to", "subject", "body"] : []),
 				...(builtIn?.drafts?.editable(tool.tool) ?? []),
 			]),
@@ -890,6 +894,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			...(tool.floor === undefined ? {} : { floor: tool.floor }),
 			permission: {
 				...(signed ? { bind: [arg] } : {}),
+				...(bindEdits.length === 0 ? {} : { bindEdits }),
 				...(() => {
 					const binds = builtIn?.drafts?.binds?.(tool.tool);
 					return binds === undefined ? {} : { args: binds };

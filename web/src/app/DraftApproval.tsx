@@ -1,9 +1,9 @@
 /** One approval view for direct chats and groups: the daemon's verb, account, stored facts and editable bytes. */
 
-import { type ReactNode, useId, useState } from "react";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Textarea } from "@/components/ui/textarea";
+import { type ReactNode, useState } from "react";
+import { FieldGroup } from "@/components/ui/field";
 import { ApprovalCard, type ApprovalState, Details, Facts, HostsWarning } from "../chat/Approval.tsx";
+import { EditableText } from "../chat/EditableText.tsx";
 import { FileChanges } from "../chat/FileChanges.tsx";
 import { type Ask, answerWait } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
@@ -26,7 +26,25 @@ type Props = {
 	state?: ApprovalState | undefined;
 	/** The object the draft acts on, drawn already (the specimen's), instead of read from the daemon. */
 	drawn?: ReactNode;
+	/**
+	 * Approved as the owner edited it, what the agent drafted: `ask` holds what ran, and each field the owner changed
+	 * says so against this.
+	 */
+	drafted?: { readonly [arg: string]: unknown } | undefined;
 };
+
+/** The text arguments that are one line: a title, a commit's title. */
+const TITLES = new Set(["title", "commit_title", "subject"]);
+
+/**
+ * A text argument as the card names it: a body is what will be sent, or a description beside a title (a pull request,
+ * an issue); any other its name in words.
+ */
+function fieldLabel(name: string, fields: readonly string[]): string {
+	if (name === "body") return fields.includes("title") ? "Description" : "What will be sent";
+	const words = name.replaceAll("_", " ");
+	return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+}
 
 /**
  * What the owner does on a card (the scope ticked, the text edited) is that ask's alone: a card is drawn afresh for
@@ -36,8 +54,7 @@ export function DraftApproval(props: Props) {
 	return <Draft key={props.wait ?? "answered"} {...props} />;
 }
 
-function Draft({ chat, agent, ask, label, wait, state, drawn }: Props) {
-	const id = useId();
+function Draft({ chat, agent, ask, label, wait, state, drawn, drafted }: Props) {
 	const [edits, setEdits] = useState<Record<string, string>>({});
 	const [busy, setBusy] = useState(false);
 	const interrupted = ask.interrupted === true;
@@ -119,26 +136,24 @@ function Draft({ chat, agent, ask, label, wait, state, drawn }: Props) {
 					{preview || fields.length === 0 ? null : (
 						<FieldGroup>
 							{fields.map((name) => {
-								const value = edits[name] ?? String(ask.args[name]);
+								// answered, `ask` is what ran: the owner's text where they edited it, said against the agent's
+								const given = String(ask.args[name]);
+								const original = typeof drafted?.[name] === "string" ? (drafted[name] as string) : given;
+								const value = readOnly ? given : (edits[name] ?? given);
 								// `*` on an ask_hosts draft is every destination: flagged in red, on the text as edited
 								const warning = name === "hosts" ? wildcardWarning(ask.tool, value) : undefined;
 								return (
-									<Field key={name}>
-										<FieldLabel htmlFor={readOnly ? undefined : `${id}-${name}`}>
-											{name === "body" ? "What will be sent" : name.replaceAll("_", " ")}
-										</FieldLabel>
-										{readOnly ? (
-											<p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere]">{String(ask.args[name])}</p>
-										) : (
-											<Textarea
-												id={`${id}-${name}`}
-												value={value}
-												disabled={busy}
-												onChange={(event) => setEdits((prior) => ({ ...prior, [name]: event.target.value }))}
-											/>
-										)}
+									<EditableText
+										key={name}
+										label={fieldLabel(name, fields)}
+										value={value}
+										original={original}
+										line={!original.includes("\n") && TITLES.has(name)}
+										disabled={busy}
+										onChange={readOnly ? undefined : (next) => setEdits((prior) => ({ ...prior, [name]: next }))}
+									>
 										{warning === undefined ? null : <HostsWarning warning={warning} />}
-									</Field>
+									</EditableText>
 								);
 							})}
 						</FieldGroup>

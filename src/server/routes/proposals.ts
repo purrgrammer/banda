@@ -1,7 +1,7 @@
 /** Owner review and acceptance for agent-authored proposals. Nothing in a pending proposal is effective. */
 import type { ConversationId, Harness, JsonObject, Tx } from "@earendil-works/pi-durable";
 import { Accepted, type Agent, agentPath, agentText, shaOf } from "../../core/agents.ts";
-import { PROPOSAL_RESULT, type Proposal, Proposals, proposalSummary } from "../../core/proposals.ts";
+import { editProposal, PROPOSAL_RESULT, type Proposal, Proposals, proposalSummary } from "../../core/proposals.ts";
 import { context } from "../../core/store.ts";
 import type { defineCore } from "../../core/turn.ts";
 import { boxFiles, save, type Workspace } from "../agents.ts";
@@ -15,18 +15,37 @@ const proposalOf = (value: unknown): Proposal | undefined => {
 
 type Core = ReturnType<typeof defineCore>;
 
-/** Record the owner's decision: the card's result for the UI, and the daemon's word to the agent, in one commit. */
+/**
+ * Record the owner's decision: the card's result for the UI, and the daemon's word to the agent, in one commit. An
+ * accepted `proposal` with text the owner edited is recorded as they accepted it, their text with it.
+ */
 async function finish(tx: Tx, proposal: Proposal, state: "accepted" | "declined", core: Core): Promise<boolean> {
 	const doc = await tx.doc(Proposals);
 	const current = proposalOf(doc.proposals[proposal.id]);
 	if (current === undefined || current.state !== "pending") return false;
-	doc.proposals[proposal.id] = { ...current, state } as unknown as JsonObject;
+	const decided = state === "accepted" ? proposal : current;
+	const edited = decided.kind === "group" ? [] : (decided.edited ?? []);
+	doc.proposals[proposal.id] = { ...decided, state } as unknown as JsonObject;
 	await tx.appendEntry(current.chat as ConversationId, {
 		kind: PROPOSAL_RESULT,
-		data: { proposal: proposal.id, state },
+		data: {
+			proposal: proposal.id,
+			state,
+			...(edited.length === 0 || decided.kind === "group"
+				? {}
+				: { edited: Object.fromEntries(edited.map((field) => [field, decided[field] ?? ""])) }),
+		},
 	});
-	await core.proposalDecided(tx, current, state);
+	await core.proposalDecided(tx, decided, state);
 	return true;
+}
+
+/** The owner's text for a proposal, from a request: absent, or text by field (`editProposal` says which fields). */
+function editsOf(value: unknown): { readonly [field: string]: unknown } {
+	if (value === undefined) return {};
+	if (typeof value !== "object" || value === null || Array.isArray(value))
+		throw new BadRequest("edits are the proposal's text, by field");
+	return value as { readonly [field: string]: unknown };
 }
 
 export const proposals: AreaModule = {
@@ -62,10 +81,17 @@ export const proposals: AreaModule = {
 				if (body.action !== "accept" && body.action !== "decline") throw new BadRequest("action is accept or decline");
 				const action = body.action;
 				const state = action === "accept" ? "accepted" : "declined";
+				const edits = editsOf(body.edits);
+				if (action === "decline" && Object.keys(edits).length > 0)
+					throw new BadRequest("only an accepted proposal carries edits");
 				return serialized(id, async () => {
-					const proposal = proposalOf((await harness.snapshot(Proposals, context))?.proposals[id]);
-					if (proposal === undefined) throw new BadRequest("no such proposal", 404);
-					if (proposal.state !== "pending") return { body: { state: proposal.state } };
+					const stored = proposalOf((await harness.snapshot(Proposals, context))?.proposals[id]);
+					if (stored === undefined) throw new BadRequest("no such proposal", 404);
+					if (stored.state !== "pending") return { body: { state: stored.state } };
+					// what is accepted is the proposal as the owner edited it, checked as the agent's own text is
+					const edited = editProposal(stored, edits);
+					if ("refused" in edited) throw new BadRequest(edited.refused);
+					const proposal = edited.proposal;
 					if (action === "accept") {
 						const saved = await accept(proposal, harness, workspace, core);
 						if (saved) {

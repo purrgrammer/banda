@@ -587,6 +587,11 @@ export type EffectTool<P extends TSchema, A extends EffectApi = ToolExecutionApi
 	readonly permission?: {
 		/** Structural identity arguments: always bound, never editable, regardless of presentation metadata. */
 		readonly bind?: readonly string[];
+		/**
+		 * Editable arguments a permission binds all the same, at the text the owner approved (a pull request's title): the
+		 * rest of `editable` it leaves free (a comment's body), as it always did.
+		 */
+		readonly bindEdits?: readonly string[];
 		readonly args?: readonly string[];
 		readonly what?: (args: Static<P>) => string;
 		readonly host?: { readonly arg: string; readonly what: (host: string) => string };
@@ -651,6 +656,19 @@ function withValues(words: string, match: JsonObject): string {
 	return values.length === 0 ? words : `${words}, ${values.join(", ")}`;
 }
 
+/**
+ * The result of an effect that ran as the owner edited it, with the model told so: which arguments they changed and
+ * their text, the owner's own words, so the agent goes on from what was done rather than what it drafted.
+ */
+export function withEdits(result: ToolExecutionResult, drafted: JsonObject, ran: JsonObject): ToolExecutionResult {
+	// only text is ever edited; anything else equal in value is no edit, whatever copy of it ran
+	const changed = Object.keys(ran).filter((arg) => typeof ran[arg] === "string" && ran[arg] !== drafted[arg]);
+	if (changed.length === 0) return result;
+	const lines = changed.map((arg) => `${arg}:\n${String(ran[arg])}`).join("\n\n");
+	const note = `The owner edited ${changed.join(", ")} before approving; it ran as they wrote it:\n\n${lines}`;
+	return { ...result, output: [...(result.output ?? []), { type: "text", text: note }] };
+}
+
 /** The draft for a call of `tool` with `args`: what the approval shows, and what a permission from it would bind. */
 export function draftOf<P extends TSchema, A extends EffectApi>(tool: EffectTool<P, A>, args: JsonObject): Draft {
 	const typed = args as Static<P>;
@@ -658,8 +676,9 @@ export function draftOf<P extends TSchema, A extends EffectApi>(tool: EffectTool
 	const label = tool.describe?.(typed) ?? toolWords(tool.name);
 	const identity = tool.permission?.bind ?? [];
 	const editable = (tool.editable ?? []).filter((arg) => typeof args[arg] === "string" && !identity.includes(arg));
+	const free = editable.filter((arg) => !(tool.permission?.bindEdits ?? []).includes(arg));
 	const bound = new Set([
-		...(tool.permission?.args ?? Object.keys(args).filter((arg) => !editable.includes(arg))),
+		...(tool.permission?.args ?? Object.keys(args).filter((arg) => !free.includes(arg))),
 		...identity,
 	]);
 	const match: JsonObject = {};
@@ -807,7 +826,7 @@ export function effectRun<P extends TSchema, A extends EffectApi>(
 			const final = answer.draft ?? draft.args;
 			const refused = await start(api, 1, { wait: answer.wait }, final, ctx);
 			if (refused !== undefined) return notAllowed(refused);
-			return run(final);
+			return withEdits(await run(final), draft.args, final);
 		}
 		// a restart interrupted attempt `last`: what runs is the draft stored when it started, never the call's words
 		const stored = before.draft ?? draft.args;
@@ -815,10 +834,10 @@ export function effectRun<P extends TSchema, A extends EffectApi>(
 		if (tool.effect === "idempotent") {
 			// the same key makes a second run a no-op: again unasked, if what let it run still does
 			const by = before.started[last];
-			if (by?.permission === undefined) return run(stored);
+			if (by?.permission === undefined) return withEdits(await run(stored), draft.args, stored);
 			const permitted = await withinPermission(api, last, shown, ctx);
 			if (typeof permitted === "object") return notAllowed(permitted.refused);
-			if (permitted !== undefined) return run(stored);
+			if (permitted !== undefined) return withEdits(await run(stored), draft.args, stored);
 		}
 		const { permission: _permission, host: _host, ...again } = shown;
 		const answer = await approved(api, `interrupted:${last}`, again, ctx);
@@ -827,6 +846,6 @@ export function effectRun<P extends TSchema, A extends EffectApi>(
 		await inTurn(api, ctx);
 		const refused = await start(api, last + 1, { wait: answer.wait }, stored, ctx);
 		if (refused !== undefined) return notAllowed(refused);
-		return run(stored);
+		return withEdits(await run(stored), draft.args, stored);
 	};
 }

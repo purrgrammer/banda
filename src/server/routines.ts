@@ -5,7 +5,7 @@
  * one, when it runs, running it now) take effect at once.
  */
 import type { Context } from "@earendil-works/chord";
-import type { Harness, TaskId } from "@earendil-works/pi-durable";
+import type { Harness, TaskId, Tx } from "@earendil-works/pi-durable";
 import { ActivityLog, log } from "../core/activity.ts";
 import { Accepted, activeAgents, agentWords, isArchived, shaOf, unaccept } from "../core/agents.ts";
 import { fileNameFor } from "../core/names.ts";
@@ -147,6 +147,7 @@ export async function routines(
 
 				agent: routineAgent(record),
 				...(record.allowed?.length ? { allowed: [...record.allowed] } : {}),
+				...(record.edited?.length ? { edited: [...record.edited] } : {}),
 			};
 			return { ...view, state: stateOf(view, record) };
 		}),
@@ -162,6 +163,11 @@ const named = (name: string) => {
 /**
  * Allow the box's change to routine `name`, as the owner saw it: `sha` is the hash of the text shown, or null for a
  * removal. A file changed since is refused, as is one that does not parse. Its task follows at once.
+ *
+ * `change` is the owner's edit of what the agent wrote, made before allowing it (what it is for, when it runs, what it
+ * does each run, `changeRoutine`'s words): what runs is the file as they edited it, every other byte as the agent wrote
+ * it. The store accepts the edited file and notes the box still needs it, as for any edit of the owner's, so the agent
+ * finds its file as the owner left it; the version it wrote counts as allowed, edited.
  */
 export async function accept(
 	harness: Harness,
@@ -171,9 +177,13 @@ export async function accept(
 	sha: string | null,
 	now: number,
 	ctx: Context = context,
+	change: RoutineChange = {},
+	/** Tell the routine's agent, in the commit that allows it, which of its text the owner edited. */
+	told?: (tx: Tx, agent: string, fields: readonly string[]) => Promise<void>,
 ): Promise<void> {
 	const box = (await routineFiles(workspace, ctx)).files.get(named(name));
 	if (sha === null) {
+		if (Object.keys(change).length > 0) throw new BadRequest("a removal has nothing to edit");
 		if (box !== undefined) throw new BadRequest(`${routinePath(name)} is back in the box: look again`, 409);
 		await harness.commit(async (tx) => {
 			await unaccept(tx, routinePath(name), now);
@@ -184,18 +194,66 @@ export async function accept(
 			throw new BadRequest(`${routinePath(name)} changed since you saw it: look again`, 409);
 		const parsed = parseRoutine(name, box.text);
 		if ("errors" in parsed) throw new BadRequest(parsed.errors.join("\n"));
+		const { text, fields } = editedText(name, box.text, parsed.routine, change, now);
+		const runs = shaOf(text);
 		await harness.commit(async (tx) => {
 			const files = (await tx.doc(Accepted)).files;
 			const known = files[routinePath(name)] !== undefined;
-			files[routinePath(name)] = { sha, text: box.text, at: now };
+			files[routinePath(name)] = { sha: runs, text, at: now };
 			const { routines } = await tx.doc(Routines);
 			routines[name] ??= {};
 			const record = routines[name] as RoutineRecord;
 			record.allowed = [...(record.allowed ?? []).filter((each) => each !== sha), sha].slice(-ALLOWED_KEPT);
-			await log(tx, { at: now, routine: name, what: known ? "You allowed its change" : "You allowed it" });
+			if (runs !== sha) {
+				record.edited = [...(record.edited ?? []).filter((each) => each !== sha), sha].slice(-ALLOWED_KEPT);
+				// the box holds the agent's version: it gets the owner's, as after any edit of theirs
+				record.edit = { sha: runs, base: sha };
+			}
+			if (runs !== sha) await told?.(tx, routineAgent(record), fields);
+			const how = runs === sha ? "" : ", edited";
+			await log(tx, { at: now, routine: name, what: known ? `You allowed its change${how}` : `You allowed it${how}` });
 		}, ctx);
+		if (runs !== sha) await finishEdit(harness, workspace, name, ctx);
 	}
 	await reconcile(harness, ctx);
+}
+
+/**
+ * The box's routine file `text` with the owner's `change` in it, every other byte as the agent wrote it, checked as any
+ * routine file is, and which of what the agent wrote it changes (an edit that gives the same words back changes nothing);
+ * `text` itself when they changed nothing.
+ */
+function editedText(
+	name: string,
+	text: string,
+	routine: Routine,
+	change: RoutineChange,
+	now: number,
+): { readonly text: string; readonly fields: readonly string[] } {
+	if (change.when === undefined && change.description === undefined && change.ask === undefined)
+		return { text, fields: [] };
+	const description = change.description === undefined ? undefined : descriptionOf(change.description);
+	const ask = change.ask === undefined ? undefined : askOf(change.ask);
+	// the owner's times are on the wall the agent named: its zone stays as it was
+	const zone = "every" in routine.when ? undefined : routine.when.zone;
+	const schedule = change.when === undefined ? undefined : scheduleOf(change.when, now, zone);
+	let next: string | undefined = text;
+	if (schedule !== undefined) next = withWhen(next, scheduleText(schedule));
+	if (description !== undefined && next !== undefined) next = withDescription(next, description);
+	if (ask !== undefined && next !== undefined) next = withAsk(next, ask);
+	const parsed = next === undefined ? undefined : parseRoutine(name, next);
+	if (next === undefined || parsed === undefined || "errors" in parsed)
+		throw new BadRequest(
+			parsed !== undefined && "errors" in parsed ? parsed.errors.join("; ") : "it has no frontmatter",
+		);
+	const after = parsed.routine;
+	const fields = [
+		...(after.description === routine.description ? [] : ["description"]),
+		...(JSON.stringify(after.when) === JSON.stringify(routine.when) ? [] : ["schedule"]),
+		...(after.ask === routine.ask ? [] : ["ask"]),
+	];
+	// the same routine in other bytes is no edit: what the agent wrote runs, as it wrote it
+	return fields.length === 0 ? { text, fields } : { text: next, fields };
 }
 
 /** Decline the box's change to routine `name`: the accepted file is written back, or a new one removed. */

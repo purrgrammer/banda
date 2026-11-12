@@ -10,7 +10,14 @@ export const shell: ShellHandlers = {};
 
 /** What the owner does to a routine. */
 export type RoutineAct =
-	| { readonly action: "accept"; readonly sha: string | null }
+	/** Allow the box's change, as seen; with the owner's edit of what the agent wrote, made before allowing it. */
+	| {
+			readonly action: "accept";
+			readonly sha: string | null;
+			readonly when?: string;
+			readonly description?: string;
+			readonly ask?: string;
+	  }
 	| { readonly action: "decline" | "pause" | "resume" | "remove" }
 	/** Change when it runs: one schedule line, and the hash of the version they saw. */
 	| { readonly action: "when"; readonly when: string; readonly sha: string }

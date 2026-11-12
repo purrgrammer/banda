@@ -851,7 +851,18 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 					},
 					routine: async (name, act) => {
 						const now = Date.now();
-						if (act.action === "accept") await acceptRoutine(open, workspace, core.reconcile, name, act.sha, now);
+						if (act.action === "accept")
+							await acceptRoutine(
+								open,
+								workspace,
+								core.reconcile,
+								name,
+								act.sha,
+								now,
+								undefined,
+								act.change,
+								(tx, agent, fields) => core.routineEdited(tx, agent, name, fields),
+							);
 						else if (act.action === "decline") await declineRoutine(open, workspace, name);
 						else if (act.action === "remove") await removeRoutine(open, workspace, core.reconcile, name, now);
 						else {

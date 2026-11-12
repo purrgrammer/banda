@@ -245,6 +245,8 @@ export type RoutineRecord = {
 	 * says it was allowed, whatever changed since, and one never allowed was declined.
 	 */
 	allowed?: string[];
+	/** Of those, the ones the owner edited before allowing them (at most `ALLOWED_KEPT`): what runs is their version. */
+	edited?: string[];
 };
 
 /**
