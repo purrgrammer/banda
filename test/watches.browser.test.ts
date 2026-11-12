@@ -3,7 +3,7 @@
  * ships, a pull request is followed from the agent's panel, its end is
  * edited, a change wakes the agent's chat, and the watch is paused, resumed and stopped. No live provider or network.
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { expect, it } from "vitest";
@@ -37,7 +37,7 @@ async function click(page: Page, expression: string) {
 		`(() => {const el=${expression}; const moving=el.closest('[role="dialog"],[role="alertdialog"],[data-radix-popper-content-wrapper]'); return !moving || moving.getAnimations({subtree:true}).every(a => a.playState !== 'running');})()`,
 	);
 	const point = await page.run<{ x: number; y: number }>(
-		`(() => {const el=${expression}; const r=el.getBoundingClientRect(); const x=r.x+r.width/2,y=r.y+r.height/2; if(!el.contains(document.elementFromPoint(x,y))) throw new Error('Control is not hit-testable: '+el.outerHTML.slice(0,120)); return {x,y};})()`,
+		`(() => {const el=${expression}; const r=el.getBoundingClientRect(); const x=r.x+r.width/2,y=r.y+r.height/2; if(!el.contains(document.elementFromPoint(x,y))) throw new Error('Control is not hit-testable: '+el.outerHTML.slice(0,120)); window.__watchClick={el,expression:${JSON.stringify(expression)},point:{x,y},before:{x:r.x,y:r.y,width:r.width,height:r.height}}; return {x,y};})()`,
 	);
 	await page.input("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", clickCount: 1, ...point });
 	await page.input("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", clickCount: 1, ...point });
@@ -120,7 +120,26 @@ for (const width of [390, 1440])
 				while ((await connection())?.state !== "connected") await new Promise((resolve) => setTimeout(resolve, 50));
 				expect((await connection())?.accounts).toEqual([expect.objectContaining({ id: "bandarra", agents: ["mara"] })]);
 
-				await withPage(`${server.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
+				await withPage(`${server.origin}/#token=${token}`, { width, height: 900 }, async (raw) => {
+					await raw.run(`(() => {
+						window.__watchClicks=[];
+						for(const type of ['pointerdown','pointerup','mousedown','mouseup','click']) addEventListener(type,event=>{
+							const planned=window.__watchClick;if(!planned)return;
+							const r=planned.el.getBoundingClientRect();
+							window.__watchClicks.push({type,expression:planned.expression,point:planned.point,before:planned.before,after:{x:r.x,y:r.y,width:r.width,height:r.height},correct:planned.el.contains(event.target),connected:planned.el.isConnected,target:event.target.outerHTML?.slice(0,240)});
+						},true);
+					})()`);
+					const page: Page = {
+						...raw,
+						until: async (...args) => {
+							try {
+								await raw.until(...args);
+							} catch (error) {
+								const trace = await raw.run("window.__watchClicks.slice(-20)");
+								throw new Error(`${String(error)}; input trace: ${JSON.stringify(trace)}`);
+							}
+						},
+					};
 					const shot = async (name: string) => {
 						expect(
 							await page.run("document.documentElement.scrollWidth <= innerWidth"),
@@ -167,6 +186,17 @@ for (const width of [390, 1440])
 
 					// its first look is its baseline: GitHub changing before it would be no change at all
 					await page.until(shows("nothing new"));
+					const watchFile = (await readdir(join(home, "workspace/watches"))).find((file) => file.endsWith(".md"));
+					if (watchFile === undefined) throw new Error("the followed watch has no file");
+					const watchName = watchFile.slice(0, -3);
+					const controlY = () => page.run<number>(`(${button("Check now")}).getBoundingClientRect().y`);
+					const beforeStatus = await controlY();
+					await api(`/watches/${watchName}/pause`, "POST", {});
+					await page.until(button("Resume"));
+					expect(await controlY(), "status rows do not move the owner's controls").toBe(beforeStatus);
+					await api(`/watches/${watchName}/resume`, "POST", {});
+					await page.until(button("Pause"));
+					expect(await controlY()).toBe(beforeStatus);
 					step = 1;
 					await click(page, button("Check now"));
 					if (phone) await click(page, named("Close the panel"));

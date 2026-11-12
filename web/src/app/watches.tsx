@@ -100,7 +100,7 @@ export function WatchDetail({
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			<PanelBar title={title} detail={watch.object?.service} onBack={onDone} />
-			<div className="flex flex-col gap-5 overflow-y-auto px-4 py-5">
+			<div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-5">
 				{watch.object === undefined || chat === undefined ? null : (
 					<ObjectPreviews chat={chat} asks={[{ ref: watch.object.ref }]} agent={agent} />
 				)}
@@ -140,6 +140,13 @@ export function WatchDetail({
 						Details
 					</Button>
 				) : null}
+				<p className="text-meta text-ink-2">
+					{watch.done !== undefined
+						? `It ended: ${watch.done.why}. What it saw stays in the chat.`
+						: `banda reads it on its own and wakes ${agent.name} with what changed; ${agent.name} says something only when it matters.`}
+				</p>
+			</div>
+			<div data-watch-controls className="max-h-[70%] shrink-0 overflow-y-auto border-t border-line-soft px-4 py-4">
 				{edit.step === "closed" ? null : (
 					<form
 						className="flex flex-col gap-4"
@@ -199,13 +206,8 @@ export function WatchDetail({
 						</span>
 					</form>
 				)}
-				<p className="text-meta text-ink-2">
-					{watch.done !== undefined
-						? `It ended: ${watch.done.why}. What it saw stays in the chat.`
-						: `banda reads it on its own and wakes ${agent.name} with what changed; ${agent.name} says something only when it matters.`}
-				</p>
 				{edit.step !== "closed" ? null : (
-					<span className="flex flex-wrap items-center gap-2">
+					<span className="grid grid-cols-2 gap-2">
 						{file === undefined ||
 						sha === undefined ||
 						watch.done !== undefined ||
