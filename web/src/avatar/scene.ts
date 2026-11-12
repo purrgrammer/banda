@@ -135,8 +135,9 @@ export function createFaceScene(element: HTMLElement): FaceScene {
 			visible = true;
 			return;
 		}
-		observer = new IntersectionObserver(([entry]) => {
-			visible = entry?.isIntersecting ?? false;
+		// one call brings every change since the last, oldest first: the face is where the newest says
+		observer = new IntersectionObserver((entries) => {
+			visible = entries.at(-1)?.isIntersecting ?? false;
 			sync();
 		});
 		observer.observe(element);

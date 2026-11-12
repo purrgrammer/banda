@@ -99,6 +99,15 @@ describe("a face changing state", () => {
 		expect(moods()).toEqual(["idle", "thinking"]);
 	});
 
+	// the browser queues the changes since its last call: off screen when watched, on screen once the feed scrolled to it
+	it("goes by the newest of the changes one call of the observer brings", () => {
+		show("thinking");
+		visibility([{ isIntersecting: false }, { isIntersecting: true }]);
+		expect(mountAvatar).toHaveBeenCalledTimes(1);
+		visibility([{ isIntersecting: true }, { isIntersecting: false }]);
+		expect(live().destroy).toHaveBeenCalledTimes(1);
+	});
+
 	it("stays live at rest while on screen, and only then goes still and stops watching", () => {
 		show("thinking");
 		visibility([{ isIntersecting: true }]);
