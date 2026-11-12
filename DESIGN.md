@@ -312,7 +312,9 @@ its chat at the next model boundary and deliberately starts its prompt cache col
 
 The workspace starts with one agent, which is ordinary: renameable and archivable like any other, except
 that the last active agent cannot be archived, since the app opens in a chat. The owner makes another from the sheet:
-a face, a name, a personality, connections; nothing runs before the file is written. The default face is the chat
+a face, a name, a personality, connections; nothing runs before the file is written. The owner never writes a
+description: it is the personality's first sentence (the name while there is none), and the owner's edit of either
+carries it along, unless it was written otherwise (an accepted proposal's). The default face is the chat
 bubble. The owner can choose a shape and colour or accept a generated candidate; generated geometry is data, validated
 and previewed before acceptance, never code or markup from the box. The sheet designs one in place, from the owner's
 description or the name alone, by an inference on the Balanced tier; it is the owner's pick, written with the file.
@@ -328,7 +330,7 @@ asked (`POST /chats/<chat>/stop`), and in a group one member's work or everyone'
 app offers no Stop for a chat or a group; the browser's take-over and a harness session keep theirs (see The browser,
 Harnesses).
 
-Agents may send one another messages only from direct chats, through `message_agent`; the recipient gets a feed entry and a turn, and decides what to do. Another agent may read a bounded page of a direct chat through `read_agent_chat`. The read is untrusted data; tools, results and hidden group execution chats are not exposed. Agents may propose an agent, a group or a change to an existing agent. Agent proposals follow the agent definition's identity, face, description, model, tier and instructions; the owner still chooses tools and connections, and new agents start active. Existing-agent proposals can change identity, face, description, model, tier and instructions, but not state, tools, connections or permissions. Proposals are cards in the proposing chat; only the owner's acceptance makes a definition or group effective. An existing-agent change shows the resulting file and the previous file and is bound to the accepted version it started from. The owner's decision reaches the proposing agent as the daemon's notice in that chat, in the same commit as the decision: it starts no turn (the agent reads it at its next model request, in a run under way or else its next turn), and it is nobody's input, so it neither answers the owner nor counts as the owner writing.
+Agents may send one another messages only from direct chats, through `message_agent`; the recipient gets a feed entry and a turn, and decides what to do. A direct chat's prompt holds the roster: the band's other active agents, each as the id these tools take, the name the owner calls it and its description, cut short, and nothing else of its file; it follows the accepted files, so an agent made, renamed or archived changes it at the next request, and a group member's chat has its group's members instead. Another agent may read a bounded page of a direct chat through `read_agent_chat`. The read is untrusted data; tools, results and hidden group execution chats are not exposed. Agents may propose an agent, a group or a change to an existing agent. Agent proposals follow the agent definition's identity, face, description, model, tier and instructions; the owner still chooses tools and connections, and new agents start active. Existing-agent proposals can change identity, face, description, model, tier and instructions, but not state, tools, connections or permissions. Proposals are cards in the proposing chat; only the owner's acceptance makes a definition or group effective. An existing-agent change shows the resulting file and the previous file and is bound to the accepted version it started from. The owner's decision reaches the proposing agent as the daemon's notice in that chat, in the same commit as the decision: it starts no turn (the agent reads it at its next model request, in a run under way or else its next turn), and it is nobody's input, so it neither answers the owner nor counts as the owner writing.
 
 **How hard it thinks is three words.** Quick, Balanced and Deep, never a model string: each provider the app knows maps
 them to models of pi-ai's catalog, and Quick is the default, so it answers fast. Advanced names the provider in plain
@@ -654,7 +656,10 @@ or not the model remembers it.
   edit or a deletion in it is seen, and merges only then; what it fetched meanwhile is the watch's, for that object
   as that account, kept across a crash, and the watch is behind until the merge. A walk that cannot reach the window
   within an hour, or within the window's bytes, merges what it read, and its wake says what may be missing. What leaves the window from its old end was pushed off, never
-  removed. Every call a connection makes for one account and one method, whoever makes it (a watch, an agent, a
+  removed. A list the service hands only oldest first, by numbered pages (GitHub's reviews and comments), is read at
+  its tail: the last pages, found by the object's own count of it or else by how long the last look found it, at most
+  three pages a look. A look that cannot reach the end in those pages keeps the list as it was and the watch is behind
+  until one does; one whose pages do not reach back to the newest item the reading held says what may be missing. Every call a connection makes for one account and one method, whoever makes it (a watch, an agent, a
   card), waits its turn in one queue, and a refusal that says when to come back holds that queue until then. The
   refusal also teaches the queue the method's limit, as many calls a minute as the service answered before it, so for
   the hour after, a call past it is answered "busy" without being sent: a service meets one refusal an hour from banda,

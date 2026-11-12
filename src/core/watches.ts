@@ -81,6 +81,7 @@ import {
 import { Control } from "./routines.ts";
 import { localTime, parseEvery } from "./schedule.ts";
 import { context } from "./store.ts";
+import { missed, newestWithin, readTail } from "./tail.ts";
 
 /** A watch's name, which is its file's: lowercase words joined by `-`, as an agent's. */
 export const WATCH_NAME = AGENT_NAME;
@@ -95,6 +96,8 @@ export const MAX_READING_BYTES = 512 * 1024;
  * A window past it pushes off its oldest; a walk past it merges as far as it read.
  */
 export const MAX_WINDOW_BYTES = MAX_READING_BYTES / 2;
+/** The most bytes a tail read's list may hold (a pull request has two): a quarter of a reading, its oldest pushed off. */
+export const MAX_TAIL_BYTES = MAX_READING_BYTES / 4;
 const DAY = 24 * 60 * 60_000;
 /** The most changes one wake or tell names, in its line and the model's text; the rest are counted. */
 export const CHANGES_SAID = 20;
@@ -303,6 +306,16 @@ function listIn(answer: Json | undefined, path: string): Item[] | undefined {
 		: undefined;
 }
 
+/** The count at `path` (a read's name, then plain keys) of `answers`, when it is a whole number. */
+function countAt(answers: Item, path: string | undefined): number | undefined {
+	let here: Json | undefined = answers;
+	for (const key of path?.split(".") ?? []) {
+		if (here === null || typeof here !== "object" || Array.isArray(here)) return undefined;
+		here = here[key];
+	}
+	return path !== undefined && typeof here === "number" && Number.isInteger(here) && here >= 0 ? here : undefined;
+}
+
 /** A read's answer with the list at `path` (the read's name, then plain keys) put in its place. */
 function withList(answer: Item, path: string, list: Item[]): Item {
 	const [key, ...rest] = path.split(".").slice(1);
@@ -331,6 +344,11 @@ export type FollowedReading = {
 	made?: { [read: string]: Made };
 	/** When the reads of the newest look that read it had ended: what a read is sure of a minute after. */
 	through?: number;
+	/**
+	 * How long each tail read's list was when a look last read it (at least, when the look did not reach its end): where
+	 * the next look starts when the reading gives no count of its own.
+	 */
+	lengths?: { [read: string]: number };
 };
 
 /** How many earlier readings of a followed object are kept beside the newest. */
@@ -988,6 +1006,8 @@ export function defineWatches(options: WatchesOptions) {
 					carry: boolean;
 			  }
 			| undefined;
+		/** How long each tail read's list was when it was last read. */
+		let lengthsBefore: { readonly [read: string]: number } = {};
 		await commit(async (tx) => {
 			const record = (await tx.doc(Watches)).watches[name];
 			// a done watch never looks again, whatever its authority says now
@@ -1028,6 +1048,7 @@ export function defineWatches(options: WatchesOptions) {
 			// time), its baseline (only what changes after it is a change), the first look after a resume (what changed
 			// while paused is diffed, not an older reading), and the owner's Check now, as they asked.
 			const kept = (await tx.doc(Followed)).objects[found.key];
+			lengthsBefore = { ...kept?.lengths };
 			const settled = record?.burst === undefined ? undefined : record.burst + settleOf(found.kind.follow);
 			if (
 				click === undefined &&
@@ -1070,7 +1091,8 @@ export function defineWatches(options: WatchesOptions) {
 		if (done) return { outcome: "held", why: "done" };
 		if (resolved === undefined) return why === "gone" ? { outcome: "gone" } : { outcome: "failed", why: why ?? "" };
 		const { watch, chat, ref, kind, connection, account, me, key, stamp, source, reads, schemas, seen } = resolved;
-		if (options.read === undefined) return await failing("banda cannot read for a watch here");
+		const reader = options.read;
+		if (reader === undefined) return await failing("banda cannot read for a watch here");
 		const answers: Item = {};
 		const unanswered: string[] = [];
 		let failed: string | undefined;
@@ -1086,11 +1108,15 @@ export function defineWatches(options: WatchesOptions) {
 		/** The reads an `unless` guards this look carried forward, and when it made the others. */
 		const carried: string[] = [];
 		const made: { [read: string]: Made } = {};
-		// the paged read first: while its walk has not reached the window, the others wait for the look that merges; a read
-		// an `unless` guards last, after the read its `same` is in
-		const rank = (read: ObjectRead) => (read.pages !== undefined ? 0 : read.unless === undefined ? 1 : 2);
+		/** How long each tail read's list was found to be. */
+		const lengths: { [read: string]: number } = {};
+		// the paged read first: while its walk has not reached the window, the others wait for the look that merges; the
+		// tail reads and a read an `unless` guards last, after the reads that give their counts and their `same`
+		const rank = (read: ObjectRead) =>
+			read.pages !== undefined ? 0 : read.tail !== undefined || read.unless !== undefined ? 2 : 1;
 		const order = Object.entries(shared === undefined ? reads : {}).sort(([, a], [, b]) => rank(a) - rank(b));
 		for (const [as, read] of order) {
+			// first whether its kept answer may be carried; then, when it is read, the tail's own pages
 			if (read.unless !== undefined && base !== undefined) {
 				const last = base.answers[as];
 				if (base.carry && last !== undefined && mayCarry(read.unless, answers, base.answers, base.made[as], now)) {
@@ -1099,10 +1125,62 @@ export function defineWatches(options: WatchesOptions) {
 					continue;
 				}
 			}
+			if (read.tail !== undefined) {
+				const total = countAt(answers, read.tail.total);
+				const tailed = await readTail(
+					async (page) => {
+						const answer = await reader(
+							connection.name,
+							account === "" ? undefined : account,
+							read.tool,
+							{ ...readArgs(read, ref, schemas[as]), page },
+							{ chat, ref, stamp },
+							ctx,
+						);
+						if ("failed" in answer) return answer;
+						try {
+							const list = JSON.parse(answer.text) as Json;
+							if (Array.isArray(list) && list.every((item) => item !== null && typeof item === "object"))
+								return list as Item[];
+						} catch {}
+						return { failed: `${connection.service} did not return a list.` };
+					},
+					Number(read.args.perPage),
+					total ?? lengthsBefore[as],
+					total !== undefined,
+				);
+				if ("failed" in tailed) {
+					if ("until" in tailed && tailed.until !== undefined) retry = Math.max(retry ?? 0, tailed.until);
+					if (read.optional) {
+						unanswered.push(as);
+						continue;
+					}
+					failed = tailed.failed;
+					break;
+				}
+				lengths[as] = tailed.length;
+				// past the pages a look reads, its end was not reached: the list stands as last read, and the watch is
+				// behind until a look reaches it (only a look after the baseline is behind)
+				if ("behind" in tailed) {
+					unanswered.push(as);
+					gapped = true;
+					continue;
+				}
+				const list = newestWithin(tailed.items, MAX_TAIL_BYTES);
+				bytes += JSON.stringify(list).length;
+				if (bytes > MAX_READING_BYTES) {
+					failed = "The reading was too large.";
+					break;
+				}
+				answers[as] = list;
+				// a complete tail read is made: never one refused, nor one behind (its list stands as last read)
+				if (read.unless !== undefined) made[as] = madeNow(read.unless, answers, base, now);
+				continue;
+			}
 			const pages = paging === undefined ? undefined : read.pages;
 			const asked =
 				pages === undefined || paging === undefined ? {} : pageArgs(paging.walk, paging.window, pages.by, paging.size);
-			const answer = await options.read(
+			const answer = await reader(
 				connection.name,
 				account === "" ? undefined : account,
 				read.tool,
@@ -1269,6 +1347,17 @@ export function defineWatches(options: WatchesOptions) {
 				else delete stored.made;
 				stored.through = through;
 			}
+			const counted = { ...kept?.lengths, ...lengths };
+			if (stored !== undefined && Object.keys(counted).length > 0 && canonical(counted) !== canonical(stored.lengths))
+				stored.lengths = counted;
+			// a tail's newest reading that does not reach back to what this watch last saw of it: what came between was
+			// never read, by this look or by the other watch's whose reading it shares, and may be missing
+			const seenReading = seen === undefined || kept === undefined ? undefined : readingAt(kept, seen);
+			const missing =
+				seenReading !== undefined &&
+				Object.entries(reads).some(
+					([as, read]) => read.tail !== undefined && missed(seenReading[as], after[as], read.tail.by, counted[as]),
+				);
 			// the owner's click is taken in the commit that keeps what it looked at: a kill before leaves it to look again
 			const taken = async () => {
 				if (click === undefined) return;
@@ -1292,7 +1381,7 @@ export function defineWatches(options: WatchesOptions) {
 				click: click !== undefined,
 				running: last !== undefined && last.state.status !== "terminal",
 				every,
-				gapped,
+				gapped: gapped || missing,
 			});
 			const copy = (held: Held) => ({ wake: [...held.wake], tell: [...held.tell], ids: [...held.ids] });
 			switch (decision.does) {

@@ -112,7 +112,11 @@ export const byMethod =
 	(tool, args, step) => {
 		if (!["pull_request_read", "issue_read"].includes(tool)) return failure("not that");
 		const answer = worldAt(step)[String(args.method)];
-		return answer === undefined ? failure(`no ${String(args.method)}`) : answer;
+		if (answer === undefined) return failure(`no ${String(args.method)}`);
+		// a list asked by numbered page (a tail read's) is that page of it, as GitHub hands it
+		if (!Array.isArray(answer) || typeof args.page !== "number") return answer;
+		const size = typeof args.perPage === "number" ? args.perPage : 30;
+		return answer.slice((args.page - 1) * size, args.page * size);
 	};
 
 /** A watch file on `object` as `account`, with `ask` below. */

@@ -262,16 +262,16 @@ describe("following an object", () => {
 		expect(sort(PR, undefined, reading(PR, before), reading(PR, after)).map((each) => each.change.kind)).toContain(
 			"removed",
 		);
-		// the comments read is one page of a hundred: the pull request's own count says whether the page is whole
+		// the comments read is the newest pages of more: the pull request's own count says whether the reading is whole
 		const comment = (id: number) => ({ id, user: { login: "ana" }, body: `c${id}` });
 		const base = open() as { [key: string]: Json };
 		const pr = base.pr as { [key: string]: Json };
-		const full = { ...base, comments: [comment(1), comment(2)], pr: { ...pr, review_comments: 3 } };
+		const full = { ...base, comments: [comment(1), comment(2)], pr: { ...pr, comments: 3 } };
 		const short = { ...full, comments: [comment(1)] };
 		expect(sort(PR, undefined, reading(PR, full), reading(PR, short)).map((each) => each.change.kind)).not.toContain(
 			"removed",
 		);
-		const whole = { ...short, pr: { ...pr, review_comments: 1 } };
+		const whole = { ...short, pr: { ...pr, comments: 1 } };
 		expect(sort(PR, undefined, reading(PR, full), reading(PR, whole)).map((each) => each.change.kind)).toContain(
 			"removed",
 		);

@@ -14,6 +14,7 @@
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
 import { type Follow, MAX_KEEP, type Pages, parseCondition, parseFollow, parseUnless, type Unless } from "./follow.ts";
 import { slackAvatar, slackTs } from "./slack-text.ts";
+import { MAX_TAIL_PAGE, type Tail } from "./tail.ts";
 
 type JsonValue = JsonObject[string];
 
@@ -51,6 +52,12 @@ export type ObjectRead = {
 	readonly pages?: Pages;
 	/** When a watch's look may leave it unmade and carry its kept answer forward. */
 	readonly unless?: Unless;
+	/**
+	 * Its answer is a list the service hands oldest first by numbered pages (a pull request's reviews): a watch reads
+	 * its last pages, ordered by `by`, finding the end by the count at `total` (another read's) or by its last look. Its
+	 * tool takes `page`, which the daemon fills, and its arguments give `perPage`.
+	 */
+	readonly tail?: Tail;
 };
 
 /** A write that acts on an object: how its arguments name it, and the words its draft says. */
@@ -315,6 +322,20 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					);
 				if (unless !== undefined && pages !== undefined)
 					errors.push(`${where}.reads.${as}: a read with pages is made at every look`);
+				const tailed = (read as { tail?: unknown } | null)?.tail;
+				const tail = tailed === undefined ? undefined : parseTail(tailed, as);
+				if (tailed !== undefined && tail === undefined)
+					errors.push(`${where}.reads.${as}.tail is {"by": "<field>", "total": "<read>.<path>"}, its total optional`);
+				if (tail !== undefined && pages !== undefined) errors.push(`${where}.reads.${as}: pages or tail, not both`);
+				if (tail !== undefined && "page" in ((args as object | null) ?? {}))
+					errors.push(`${where}.reads.${as}: a read with tail leaves page to the daemon`);
+				const perPage = (args as { perPage?: unknown } | null)?.perPage;
+				// a page larger than the service hands would look short, and end every walk at its first page
+				if (
+					tail !== undefined &&
+					!(typeof perPage === "number" && Number.isInteger(perPage) && perPage >= 1 && perPage <= MAX_TAIL_PAGE)
+				)
+					errors.push(`${where}.reads.${as}: a read with tail gives perPage, 1 to ${MAX_TAIL_PAGE} items`);
 				if (
 					!NAME.test(as) ||
 					reserved(as) ||
@@ -355,6 +376,7 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					...(follow === true ? { follow: true } : {}),
 					...(pages === undefined ? {} : { pages }),
 					...(unless === undefined ? {} : { unless }),
+					...(tail === undefined ? {} : { tail }),
 				};
 			}
 		// what a read is skipped by is read at every look, before it
@@ -520,8 +542,29 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 		}
 		const windows = Object.values(reads).flatMap((read) => (read.pages === undefined ? [] : [read.pages]));
 		if (windows.length > 1) errors.push(`${where}: at most one read has pages`);
-		if (follow !== undefined && windows.length > 0)
-			follow = { ...follow, windows: Object.fromEntries(windows.map(({ list, by }) => [list, by])) };
+		const tails = Object.entries(reads).flatMap(([as, read]) =>
+			read.tail === undefined ? [] : [{ as, ...read.tail }],
+		);
+		for (const { as, total } of tails)
+			if (total !== undefined && reads[total.split(".")[0] ?? ""] === undefined)
+				errors.push(`${where}.reads.${as}.tail.total names ${total}, which no other read gives`);
+		// a tail is a window too: what leaves it from its old end was pushed off, and what comes back was there before
+		if (follow !== undefined && windows.length + tails.length > 0)
+			follow = {
+				...follow,
+				windows: Object.fromEntries([
+					...windows.map(({ list, by }) => [list, by]),
+					...tails.map(({ as, by }) => [as, by]),
+				]),
+				...(tails.some(({ total }) => total !== undefined)
+					? {
+							totals: {
+								...follow.totals,
+								...Object.fromEntries(tails.flatMap(({ as, total }) => (total === undefined ? [] : [[as, total]]))),
+							},
+						}
+					: {}),
+			};
 		objects[kind] = {
 			card: card as CardKind,
 			name: typeof name === "string" ? name : kind,
@@ -536,6 +579,24 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 		};
 	}
 	return errors.length > 0 ? { errors } : { objects };
+}
+
+/** A read's `tail`, or undefined when it is not one: its order's field, and a count another read gives, if any. */
+function parseTail(value: unknown, as: string): Tail | undefined {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+	const { by, total, ...rest } = value as { by?: unknown; total?: unknown };
+	if (Object.keys(rest).length > 0) return undefined;
+	if (typeof by !== "string" || !/^[A-Za-z0-9_]{1,64}$/.test(by) || reserved(by)) return undefined;
+	if (total === undefined) return { by };
+	if (
+		typeof total !== "string" ||
+		!PATH.test(total) ||
+		!total.includes(".") ||
+		total.startsWith(`${as}.`) ||
+		total.split(".").some(reserved)
+	)
+		return undefined;
+	return { by, total };
 }
 
 /** A read's `pages`, or undefined when it is not one: a list inside the read's own answer, by plain keys. */

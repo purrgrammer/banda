@@ -17,6 +17,34 @@ export type RoutineRun = {
 };
 
 /**
+ * One line of a routine's history (`GET /api/routines/:name/runs`), from its durable record and its chat: a run waiting
+ * its turn behind the chat's other inputs, running, ended having said something (`said`, its first line), ended saying
+ * nothing, failed (`why`), stopped, or a due time it skipped (`skipped`: its last run still went, its agent was not
+ * active, or it reached its runs a day and paused itself). `line` is where the chat draws it, when it does: a quiet run
+ * draws nothing (DESIGN.md "Routines"), so it has none.
+ */
+export type RoutineRunView = {
+	readonly at: number;
+	/** The owner's own Run now. */
+	readonly owner?: true;
+	readonly state: "waiting" | "running" | "said" | "quiet" | "failed" | "stopped" | "skipped";
+	readonly said?: string;
+	readonly why?: string;
+	readonly skipped?: "running" | "inactive" | "limit";
+	readonly line?: { readonly chat: number; readonly entry: number };
+};
+
+/**
+ * A page of a routine's history, newest first; `earlier` is the `before` that reads the page older than it, while
+ * there is one; `full` when the record keeps no more runs than these, so older ones are in the chat alone.
+ */
+export type RoutineRunsPage = {
+	readonly runs: readonly RoutineRunView[];
+	readonly earlier?: number;
+	readonly full?: true;
+};
+
+/**
  * The owner changes when a routine runs (`POST /api/routines/:name/when`): `when` as one line (`every 4h`,
  * `at 2026-11-02 09:00`, `cron 0 8 * * 1-5`), and `sha`, the hash of the version in effect the owner saw. In effect at
  * once, as the owner's own edit; refused (409) when the file changed since, or the box holds a change of its own

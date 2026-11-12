@@ -83,6 +83,7 @@ export function AgentChat({
 	phone,
 	panelOpen,
 	at,
+	onMissing,
 	onBack,
 	onPanel,
 	onRoutine,
@@ -90,6 +91,8 @@ export function AgentChat({
 	agent: string;
 	/** Open at this entry, as a search result does. */
 	at?: number | undefined;
+	/** The entry it opened at draws nothing: the nearest after it is shown instead. */
+	onMissing?: ((at: number) => void) | undefined;
 	who: Who;
 	/** Its chat, once its first message started it. */
 	row: ChatRow | undefined;
@@ -188,6 +191,7 @@ export function AgentChat({
 					agent={agent}
 					tools={tools}
 					at={at}
+					onMissing={onMissing}
 					onDoing={setDoing}
 					onAnswered={onAnswered}
 					onRoutine={onRoutine}
@@ -216,6 +220,7 @@ function Timeline({
 	onActivity,
 	onWorkActivity,
 	onCloseActivity,
+	onMissing,
 }: {
 	onAnswered: () => void;
 	chat: number;
@@ -233,6 +238,7 @@ function Timeline({
 	agent: string;
 	/** Its tools, for its first words; undefined for the lead. */
 	tools: readonly string[] | undefined;
+	onMissing?: ((at: number) => void) | undefined;
 	at?: number | undefined;
 }) {
 	const transcript = useTranscript(chat);
@@ -401,6 +407,7 @@ function Timeline({
 			</ConversationContent>
 			<OpenAt
 				at={at}
+				onMissing={onMissing}
 				loaded={transcript.loaded}
 				first={transcript.items[0]?.id}
 				older={transcript.older}
@@ -444,11 +451,13 @@ function Timeline({
  */
 function OpenAt({
 	at,
+	onMissing,
 	loaded,
 	first,
 	older,
 	loadOlder,
 }: {
+	onMissing?: ((at: number) => void) | undefined;
 	at: number | undefined;
 	loaded: boolean;
 	first: number | undefined;
@@ -457,6 +466,9 @@ function OpenAt({
 }) {
 	const { stopScroll } = useConversation();
 	const found = useRef<number | undefined>(undefined);
+	// the latest callback, read when it is needed: a new one is no reason to look again
+	const missing = useRef(onMissing);
+	missing.current = onMissing;
 	useEffect(() => {
 		if (at === undefined || found.current === at || !loaded) return;
 		if (first !== undefined && first > at && older) {
@@ -467,6 +479,8 @@ function OpenAt({
 		const target = entries.find((each) => Number(each.dataset.entry) >= at) ?? entries.at(-1);
 		if (target === undefined) return;
 		found.current = at;
+		// an entry the feed draws nothing for (a step of a run, a line it no longer shows): the nearest after it, said
+		if (Number(target.dataset.entry) !== at) missing.current?.(at);
 		stopScroll();
 		target.scrollIntoView({ block: "center" });
 		target.setAttribute("data-found", "");

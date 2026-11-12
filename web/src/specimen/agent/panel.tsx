@@ -2,6 +2,7 @@
 import { isValidElement, type ReactNode, useContext } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
+import type { RoutineRunView } from "../../../../src/server/api.ts";
 import { MakeTabsList } from "../../app/NewSheet.tsx";
 import { WatchDetail } from "../../app/watches.tsx";
 import { Band } from "../../chat/Band.tsx";
@@ -19,6 +20,7 @@ import {
 	Watching,
 	type WatchRowView,
 } from "../../chat/Panel.tsx";
+import { RoutineDetail } from "../../chat/RoutineDetail.tsx";
 import { RoutineEditor } from "../../chat/RoutineEditor.tsx";
 import type { Who } from "../../chat/Row.tsx";
 import {
@@ -39,6 +41,7 @@ import {
 import { SkillCatalogue } from "../../chat/Skill.tsx";
 import { ArtifactViewer, FileViewer, Versions } from "../../chat/Viewer.tsx";
 import { sayFailed } from "../../lib/attempt.ts";
+import { runRows } from "../../lib/routine-runs.ts";
 import {
 	ATLAS,
 	FACTS,
@@ -91,6 +94,25 @@ const GITHUB_ROWS = [
 
 /** A fixed time the specimen's next runs are read from: Monday 2 November 2026, 09:00. */
 const SPECIMEN_NOW = new Date(2026, 10, 2, 9, 0).getTime();
+
+/** A routine's runs as the daemon reads them: Morning brief, weekdays at 08:00, Mara's chat 12. */
+const at = (daysAgo: number) => SPECIMEN_NOW - daysAgo * 86_400_000 - 60 * 60_000;
+const MORNING_RUNS: readonly RoutineRunView[] = [
+	{ at: at(0), state: "said", said: "2 PRs need you: #34 has red checks", line: { chat: 12, entry: 40 } },
+	{ at: at(3), state: "quiet" },
+	{ at: at(4), state: "quiet" },
+	{ at: at(5), state: "said", said: "CI is red on #34", line: { chat: 12, entry: 31 } },
+	{ at: at(5) + 3 * 60 * 60_000, owner: true, state: "quiet" },
+	{ at: at(6), state: "skipped", skipped: "running" },
+	{ at: at(7), state: "quiet" },
+];
+const FAILED_RUNS: readonly RoutineRunView[] = [
+	{ at: SPECIMEN_NOW - 60_000, state: "running" },
+	{ at: at(1), state: "failed", why: "the model failed: rate limited", line: { chat: 12, entry: 52 } },
+	{ at: at(2), state: "said", said: "Nothing on your plate before 11:00", line: { chat: 12, entry: 47 } },
+	{ at: at(3), state: "quiet" },
+];
+const rows = (runs: readonly RoutineRunView[]) => runRows(runs, SPECIMEN_NOW, "Mara", 12, () => {});
 /** A save slow enough to see the selector's saving state. */
 const slowly = () => new Promise<void>((resolve) => setTimeout(resolve, 1500));
 
@@ -314,6 +336,118 @@ export function PanelSections() {
 					<Specimen label="A group at the most Settings allows">
 						<Panel name="Desk">
 							<GroupPanel name="Desk" members={[SANCHO, MARA]} others={[OCTO, ATLAS]} most={2} onRemove={() => {}} />
+						</Panel>
+					</Specimen>
+				</div>
+			</Section>
+			<Section
+				id="routine-detail"
+				note="A routine's row opens it in the same panel: Pause or Resume, Edit, and its runs in words. A run that spoke opens its line in the chat; silence is quiet."
+			>
+				<div className="flex flex-wrap items-start gap-4">
+					<Specimen label="With runs">
+						<Panel name="Mara">
+							<RoutineDetail
+								routine={{
+									title: "Morning brief",
+									when: "Weekdays at 08:00 · next tomorrow 08:00",
+									paused: false,
+									runs: rows(MORNING_RUNS),
+									earlier: true,
+								}}
+								onBack={() => {}}
+								onEdit={() => {}}
+								onPause={() => {}}
+								onEarlier={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="None yet">
+						<Panel name="Mara">
+							<RoutineDetail
+								routine={{
+									title: "Portugal fun fact",
+									when: "Mondays at 09:00 · next Mon 09:00",
+									paused: false,
+									runs: [],
+									earlier: false,
+								}}
+								onBack={() => {}}
+								onEdit={() => {}}
+								onPause={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="Paused">
+						<Panel name="Mara">
+							<RoutineDetail
+								routine={{
+									title: "PR watch",
+									when: "Every 2 hours",
+									paused: true,
+									runs: rows(MORNING_RUNS.slice(1, 4)),
+									earlier: false,
+								}}
+								onBack={() => {}}
+								onEdit={() => {}}
+								onPause={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="One failed, one running">
+						<Panel name="Mara">
+							<RoutineDetail
+								routine={{
+									title: "Morning brief",
+									when: "Weekdays at 08:00 · next tomorrow 08:00",
+									paused: false,
+									runs: rows(FAILED_RUNS),
+									earlier: false,
+								}}
+								onBack={() => {}}
+								onEdit={() => {}}
+								onPause={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="A change waits; routines are off">
+						<Panel name="Mara">
+							<RoutineDetail
+								routine={{
+									title: "Morning brief",
+									when: "Weekdays at 08:00",
+									paused: false,
+									allPaused: true,
+									waiting: "Mara asks to change it. Answer in the chat or the list.",
+									runs: rows(MORNING_RUNS.slice(0, 2)),
+									earlier: false,
+									full: true,
+								}}
+								onBack={() => {}}
+								onEdit={() => {}}
+								onPause={() => {}}
+							/>
+						</Panel>
+					</Specimen>
+					<Specimen label="Paused itself; Resume refused">
+						<Panel name="Mara">
+							<RoutineDetail
+								routine={{
+									title: "Inbox sweep",
+									when: "Every 15 minutes",
+									paused: true,
+									pausedWhy: "it ran the most times a day it may",
+									runs: rows([
+										{ at: at(0), state: "skipped", skipped: "limit" },
+										{ at: at(0) - 15 * 60_000, state: "quiet" },
+									]),
+									refused: "Mara is archived: restore it to run its routines",
+									earlier: false,
+								}}
+								onBack={() => {}}
+								onEdit={() => {}}
+								onPause={() => {}}
+							/>
 						</Panel>
 					</Specimen>
 				</div>
