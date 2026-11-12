@@ -22,7 +22,7 @@ import { tempHome } from "./helpers.ts";
 const web = { gateway: "web", peer: OWNER };
 const opened: Awaited<ReturnType<typeof openConnected>>[] = [];
 beforeEach(() => {
-	// a developer's own Slack app registers its own redirects; the shipped one only port 7788's
+	// a developer's own Slack app registers its own redirects; the shipped one only those of ports 7787 and 7788
 	process.env.BANDA_SLACK_CLIENT_ID = "dev.slack";
 });
 afterEach(async () => {
@@ -31,7 +31,10 @@ afterEach(async () => {
 });
 
 /** A daemon with Slack shipped and added, whose lead makes each call in turn (when given), then says it is done. */
-async function connectedWith(call?: { tool: string; args: JsonObject } | { tool: string; args: JsonObject }[]) {
+async function connectedWith(
+	call?: { tool: string; args: JsonObject } | { tool: string; args: JsonObject }[],
+	port?: number,
+) {
 	const calls = call === undefined ? [] : Array.isArray(call) ? call : [call];
 	const home = await tempHome();
 	const shipped = join(home, "shipped");
@@ -44,6 +47,7 @@ async function connectedWith(call?: { tool: string; args: JsonObject } | { tool:
 	const s = await openConnected({
 		home,
 		shipped,
+		port,
 		fetch: slack.fetch,
 		respond: ((ctx: { messages: readonly { role: string; content: unknown }[] }) => {
 			const heed = answerNudge(ctx.messages);
@@ -126,8 +130,16 @@ describe("Slack through the daemon", () => {
 		delete process.env.BANDA_SLACK_CLIENT_ID;
 		const { s } = await connectedWith();
 		await expect(s.capabilities.signIn("slack", context, LEAD, {})).rejects.toThrow(
-			"Slack signs in only to a banda on port 7788, and this one runs on port 9: start banda with --port 7788 to connect Slack.",
+			"Slack signs in only to a banda on port 7787 or 7788, and this one runs on port 9: start banda with --port 7787 to connect Slack.",
 		);
+	});
+
+	it.each([7787, 7788])("starts the shipped app's sign-in on port %i, which Slack registered", async (port) => {
+		delete process.env.BANDA_SLACK_CLIENT_ID;
+		const { s } = await connectedWith(undefined, port);
+		const started = await s.capabilities.signIn("slack", context, LEAD, {});
+		if (!("url" in started)) throw new Error("a Slack sign-in opens a page");
+		expect(new URL(started.url).searchParams.get("redirect_uri")).toBe(`http://127.0.0.1:${port}/oauth/callback`);
 	});
 
 	it("a reply is a draft on the private floor, in the owner's words, its text editable; approved as edited, it posts once", async () => {

@@ -303,8 +303,8 @@ export type ClientRow = {
 	readonly tokens: (body: Record<string, unknown>, now: number, previous?: Tokens) => Tokens;
 	/** Whether the redirect it was registered with is the daemon's origin, not its callback path. */
 	readonly redirectAsOrigin: boolean;
-	/** The one loopback port the shipped app registered, when it registered one: Slack refuses any other on its page. */
-	readonly port?: number;
+	/** The loopback ports the shipped app registered, banda's default first, when it registered any: Slack refuses any other on its page. */
+	readonly ports?: readonly number[];
 	/** Whether the client is the shipped one, not a developer's own app (which registers its own redirects). */
 	readonly shipped: () => boolean;
 };
@@ -345,7 +345,7 @@ export const CLIENTS: { readonly [name in ClientName]: ClientRow } = {
 		authorizeParams: () => ({}),
 		tokens: slackTokensOf,
 		redirectAsOrigin: false,
-		port: 7788,
+		ports: [7787, 7788],
 		shipped: () => !process.env.BANDA_SLACK_CLIENT_ID,
 	},
 };

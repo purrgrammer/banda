@@ -2146,9 +2146,9 @@ export function openCapabilities(options: CapabilityOptions) {
 			const row = shipped === undefined ? undefined : CLIENTS[shipped];
 			const callback = options.redirect();
 			const port = new URL(callback).port;
-			if (row?.port !== undefined && row.shipped() && port !== String(row.port))
+			if (row?.ports !== undefined && row.shipped() && !row.ports.some((each) => String(each) === port))
 				throw new BadRequest(
-					`${connection.service} signs in only to a banda on port ${row.port}, and this one runs on port ${port}: start banda with --port ${row.port} to connect ${connection.service}.`,
+					`${connection.service} signs in only to a banda on port ${row.ports.join(" or ")}, and this one runs on port ${port}: start banda with --port ${row.ports[0]} to connect ${connection.service}.`,
 				);
 			const redirect = row?.redirectAsOrigin === true ? new URL(callback).origin : callback;
 			const client =

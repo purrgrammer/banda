@@ -44,6 +44,7 @@ export async function openConnected({
 	shipped,
 	fetch: fetcher,
 	retryDelays,
+	port = 9,
 	registry = createRegistry(),
 }: {
 	home: string;
@@ -55,6 +56,8 @@ export async function openConnected({
 	respond: FauxResponseFactory;
 	wrapStorage?: (storage: Storage) => Storage;
 	fault?: (point: string) => void;
+	/** The port the daemon's sign-in callback is on, when a test cares which. */
+	port?: number;
 	/** Where the connections banda ships are, for this test. */
 	shipped?: string;
 	/** How the daemon reaches services, when a test fakes one that is not on this machine (Google's). */
@@ -102,7 +105,7 @@ export async function openConnected({
 		workspace,
 		registry,
 		effect: core.effect,
-		redirect: () => "http://127.0.0.1:9/oauth/callback",
+		redirect: () => `http://127.0.0.1:${port}/oauth/callback`,
 		log: (line) => logs.push(line),
 		...(fault === undefined ? {} : { fault }),
 		...(shipped === undefined ? {} : { shipped }),

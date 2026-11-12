@@ -131,7 +131,7 @@ const CONNECT_STEPS: readonly {
 		id: "slack",
 		step: {
 			kind: "failed",
-			why: "could not start signing in to Slack: Slack signs in only to a banda on port 7788, and this one runs on port 7799: start banda with --port 7788 to connect Slack.",
+			why: "could not start signing in to Slack: Slack signs in only to a banda on port 7787 or 7788, and this one runs on port 7799: start banda with --port 7787 to connect Slack.",
 		},
 	},
 	{
