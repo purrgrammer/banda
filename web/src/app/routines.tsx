@@ -74,7 +74,11 @@ export function routineRows(all: readonly RoutineView[], agent: string, now: num
 }
 
 /** Its newest runs and the page before them, kept as the owner reads back. */
-type Runs = { readonly runs: readonly RoutineRunView[]; readonly earlier?: number | undefined };
+type Runs = {
+	readonly runs: readonly RoutineRunView[];
+	readonly earlier?: number | undefined;
+	readonly full?: boolean | undefined;
+};
 
 /**
  * Routine `routine`'s detail, wired to the daemon: its runs read when it opens and again whenever the daemon pushes a
@@ -87,11 +91,14 @@ export function RoutineHistory({
 	chat,
 	now,
 	focusRun,
+	allPaused = false,
 	onBack,
 	onEdit,
 	onOpenRun,
 }: {
 	routine: RoutineView;
+	/** Routines are off for every agent. */
+	allPaused?: boolean;
 	/** The agent's name. */
 	agent: string;
 	/** The agent's chat beside the panel, where a run's line is opened. */
@@ -105,6 +112,7 @@ export function RoutineHistory({
 }) {
 	const [runs, setRuns] = useState<Runs>();
 	const [error, setError] = useState<string>();
+	const [earlierError, setEarlierError] = useState<string>();
 	const [acting, setActing] = useState<string>();
 	const kept = useRef<Runs | undefined>(undefined);
 	kept.current = runs;
@@ -124,6 +132,7 @@ export function RoutineHistory({
 				setRuns({
 					runs: [...newest.runs, ...older],
 					earlier: older.length > 0 ? was?.earlier : newest.earlier,
+					full: newest.full === true,
 				});
 			},
 			(failed: unknown) => {
@@ -144,13 +153,22 @@ export function RoutineHistory({
 				when: paused || routine.next === undefined ? when : `${when} · next ${near(routine.next, now)}`,
 				paused,
 				pausedWhy: routine.paused === "limit" ? "it ran the most times a day it may" : undefined,
+				allPaused,
+				waiting:
+					routine.change === undefined
+						? undefined
+						: routine.change.kind === "removed"
+							? `${agent} asks to stop it. Answer in the chat or the list.`
+							: `${agent} asks to change it. Answer in the chat or the list.`,
 				runs:
 					runs === undefined
 						? undefined
 						: runRows(runs.runs, now, agent, chat, (run, entry) => onOpenRun(run.at, entry)),
 				error,
 				refused: acting,
+				earlierError,
 				earlier: runs?.earlier !== undefined,
+				full: runs?.full,
 			}}
 			focusRun={focusRun}
 			onBack={onBack}
@@ -164,9 +182,16 @@ export function RoutineHistory({
 			onEarlier={() => {
 				const before = runs?.earlier;
 				if (before === undefined) return;
+				setEarlierError(undefined);
 				void routineRuns(routine.name, before).then(
-					(page) => setRuns((was) => ({ runs: [...(was?.runs ?? []), ...page.runs], earlier: page.earlier })),
-					(failed: unknown) => setError(failed instanceof Error ? failed.message : String(failed)),
+					(page) =>
+						setRuns((was) => ({
+							runs: [...(was?.runs ?? []), ...page.runs],
+							earlier: page.earlier,
+							full: page.full === true,
+						})),
+					// the runs already read stay; the owner can ask again
+					(failed: unknown) => setEarlierError(failed instanceof Error ? failed.message : String(failed)),
 				);
 			}}
 		/>

@@ -229,6 +229,8 @@ export type RoutineRecord = {
 	failing?: string;
 	/** The keys of the owner's newest "Run now" clicks, so a click sent twice runs once. */
 	ranNow?: string[];
+	/** Its newest runs and the due times it skipped, newest last (at most `RUNS_KEPT`): its history in the panel. */
+	runs?: RoutineRunRecord[];
 	/**
 	 * The owner made or changed it: the accepted file's new hash, and the hash the box held before (null: none). The store took the
 	 * change first; until the box holds it too, this says to write it there (again, after a restart).
@@ -243,8 +245,6 @@ export type RoutineRecord = {
 	 * says it was allowed, whatever changed since, and one never allowed was declined.
 	 */
 	allowed?: string[];
-	/** Its newest runs and the due times it skipped, newest last (at most `RUNS_KEPT`): its history in the panel. */
-	runs?: RoutineRunRecord[];
 };
 
 /**

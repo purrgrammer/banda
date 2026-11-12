@@ -12,7 +12,7 @@ import { addRun, type RoutineRecord, Routines, RUNS_KEPT, routinePath, WAKE } fr
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore, Routes } from "../src/core/turn.ts";
 import type { Item, RoutineRunView } from "../src/server/api.ts";
-import { RUNS_PAGE, routineRuns, runSaid } from "../src/server/routines.ts";
+import { RUNS_PAGE, routineRuns, runSaid } from "../src/server/routine-runs.ts";
 import { runRows, runTime, runWords } from "../web/src/lib/routine-runs.ts";
 import { FAUX_MODEL } from "./fixtures/models.ts";
 import { blobStore, FakeGateway, tempHome, until } from "./helpers.ts";
@@ -27,23 +27,34 @@ describe("what a run left in its chat", () => {
 	];
 
 	it("says the first line of the first message that went through, and draws its line", () => {
-		expect(runSaid(spoke(2, "a", { text: "  2 PRs need you\n#34 has red checks" }))).toEqual({
+		expect(runSaid(spoke(2, "a", { text: "  2 PRs need you\n#34 has red checks" }), "tea")).toEqual({
 			said: "2 PRs need you",
 			shown: true,
 		});
-		expect(runSaid([...spoke(2, "a", { text: "first" }), ...spoke(4, "b", { text: "second" })]).said).toBe("first");
+		expect(runSaid([...spoke(2, "a", { text: "first" }), ...spoke(4, "b", { text: "second" })], "tea").said).toBe(
+			"first",
+		);
 		// a message that never reached the owner said nothing
-		expect(runSaid(spoke(2, "a", { text: "lost" }, true))).toEqual({ shown: false });
+		expect(runSaid(spoke(2, "a", { text: "lost" }, true), "tea")).toEqual({ shown: false });
 		// a reaction alone says itself
-		expect(runSaid(spoke(2, "a", { reaction: "👍" })).said).toBe("👍");
+		expect(runSaid(spoke(2, "a", { reaction: "👍" }), "tea").said).toBe("👍");
 		// a long line is cut
-		expect(runSaid(spoke(2, "a", { text: "x".repeat(300) })).said).toHaveLength(140);
+		expect(runSaid(spoke(2, "a", { text: "x".repeat(300) }), "tea").said).toHaveLength(140);
 	});
 
 	it("a quiet run draws no line; a failed one draws its trouble", () => {
-		expect(runSaid([{ id: 2, role: "assistant", text: "nothing to say" }])).toEqual({ shown: false });
-		expect(runSaid([])).toEqual({ shown: false });
-		expect(runSaid([{ id: 2, role: "assistant", text: "", error: "overloaded" }])).toEqual({ shown: true });
+		expect(runSaid([{ id: 2, role: "assistant", text: "nothing to say" }], "tea")).toEqual({ shown: false });
+		expect(runSaid([], "tea")).toEqual({ shown: false });
+		expect(runSaid([{ id: 2, role: "assistant", text: "", error: "overloaded" }], "tea")).toEqual({ shown: true });
+		// trouble is this routine's own: another routine's notice in the window draws no line for it
+		const trouble = (routine: string): Item => ({
+			id: 3,
+			role: "notice",
+			text: "stalled",
+			routine: { routine, description: routine, at: 1, trouble: "stalled", due: 1 },
+		});
+		expect(runSaid([trouble("coffee")], "tea")).toEqual({ shown: false });
+		expect(runSaid([trouble("tea")], "tea")).toEqual({ shown: true });
 	});
 
 	it("keeps a routine's newest runs, at most RUNS_KEPT", () => {
@@ -214,6 +225,9 @@ describe("a routine's runs in its detail", () => {
 		).toMatch(/^Failed: the model provider refused its key/);
 		expect(words({ state: "failed", why: 'model_error: {"error":{"message":"Something odd"}}' })).toBe(
 			"Failed: Something odd",
+		);
+		expect(words({ state: "failed", why: "model_error: Provider is not configured: anthropic" })).toBe(
+			"Failed: Provider is not configured: anthropic",
 		);
 		expect(words({ state: "running" })).toBe("Running now");
 		expect(words({ state: "waiting" })).toBe("Waiting its turn in the chat");

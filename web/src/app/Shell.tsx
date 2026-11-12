@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FACE } from "../../../src/core/choices.ts";
 import type { CompanionView, FactView } from "../../../src/server/api.ts";
@@ -145,6 +146,8 @@ function Main() {
 	);
 	/** The agents whose panel opened on Access this session: connecting there does not move it to About. */
 	const onAccess = useRef(new Set<string>());
+	// the entry a routine's run opened the chat at: when the feed draws nothing there, the owner is told
+	const runLine = useRef<number | undefined>(undefined);
 	/** Back from a page: to the chat shown last on this device, else home. */
 	const back = () => {
 		let stored: string | null = null;
@@ -389,6 +392,12 @@ function Main() {
 					key={where.id}
 					agent={where.id}
 					at={where.at}
+					onMissing={(at) => {
+						if (runLine.current !== at) return;
+						toast.message("That run's line isn't in the chat", {
+							description: "Showing what came after it.",
+						});
+					}}
 					who={who}
 					row={row}
 					phone={phone}
@@ -446,17 +455,26 @@ function Main() {
 						chat={row?.chat}
 						now={pushedAt}
 						focusRun={editing.run}
+						allPaused={shell.control?.paused !== undefined}
 						onBack={backToRoutines}
 						onEdit={() => setEditing({ agent: where.id, routine: openRoutine.name, edit: true })}
 						onOpenRun={(at, entry) => {
 							setEditing({ agent: where.id, routine: openRoutine.name, run: at });
+							runLine.current = entry;
 							// on the phone the sheet closes so the chat shows; the detail waits beneath for it to open again
 							if (phone) setSheet(false);
-							if (where.at === entry)
-								document
-									.querySelector(`[data-entry="${entry}"]`)
-									?.scrollIntoView({ block: "center", behavior: "smooth" });
-							else go({ name: "agent", id: where.id, at: entry });
+							if (where.at !== entry) {
+								go({ name: "agent", id: where.id, at: entry });
+								return;
+							}
+							// opened at it already: show it again, or what came after it when it draws nothing
+							const exact = document.querySelector(`[data-entry="${entry}"]`);
+							const after = [...document.querySelectorAll<HTMLElement>("[data-entry]")].find(
+								(each) => Number(each.dataset.entry) >= entry,
+							);
+							(exact ?? after)?.scrollIntoView({ block: "center", behavior: "smooth" });
+							if (exact === null)
+								toast.message("That run's line isn't in the chat", { description: "Showing what came after it." });
 						}}
 					/>
 				);

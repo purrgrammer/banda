@@ -36,9 +36,13 @@ export type RoutineRunView = {
 
 /**
  * A page of a routine's history, newest first; `earlier` is the `before` that reads the page older than it, while
- * there is one.
+ * there is one; `full` when the record keeps no more runs than these, so older ones are in the chat alone.
  */
-export type RoutineRunsPage = { readonly runs: readonly RoutineRunView[]; readonly earlier?: number };
+export type RoutineRunsPage = {
+	readonly runs: readonly RoutineRunView[];
+	readonly earlier?: number;
+	readonly full?: true;
+};
 
 /**
  * The owner changes when a routine runs (`POST /api/routines/:name/when`): `when` as one line (`every 4h`,

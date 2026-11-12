@@ -43,12 +43,13 @@ export function runWords(run: RoutineRunView, agent: string): Pick<RunRowView, "
 		case "quiet":
 			return { words: "Said nothing", tone: "quiet" };
 		case "failed":
-			// in the feed's words: a provider's raw error (after the daemon's "model_error: ") reads as what it means
+			// in the feed's words, without the daemon's reason code ("model_error: "): a provider's raw error reads as
+			// what it means
 			return {
 				words:
 					run.why === undefined
 						? "Failed"
-						: `Failed: ${failureWords(run.why.replace(/^[a-z_]+: (?=[{[])/, "")).replace(/\.$/, "")}`,
+						: `Failed: ${failureWords(run.why.replace(/^[a-z]+(?:_[a-z]+)+: /, "")).replace(/\.$/, "")}`,
 				tone: "trouble",
 			};
 		case "stopped":

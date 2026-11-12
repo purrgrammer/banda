@@ -5,7 +5,7 @@
  * one, when it runs, running it now) take effect at once.
  */
 import type { Context } from "@earendil-works/chord";
-import type { ConversationId, EntryId, Harness, TaskId } from "@earendil-works/pi-durable";
+import type { Harness, TaskId } from "@earendil-works/pi-durable";
 import { ActivityLog, log } from "../core/activity.ts";
 import { Accepted, activeAgents, agentWords, isArchived, shaOf, unaccept } from "../core/agents.ts";
 import { fileNameFor } from "../core/names.ts";
@@ -21,7 +21,6 @@ import {
 	type Routine,
 	type RoutineRecord,
 	RoutineRefused,
-	type RoutineRunRecord,
 	Routines,
 	routineAgent,
 	routinePath,
@@ -32,22 +31,17 @@ import {
 } from "../core/routines.ts";
 import { isZone, nextRuns, parseSchedule, scheduleField, scheduleText, whenWords } from "../core/schedule.ts";
 import { context } from "../core/store.ts";
-import { isOwnerMessage, messageArgs } from "../core/toolsets.ts";
 import { boxFiles, type Workspace, write } from "./agents.ts";
 import type {
 	ControlView,
-	Item,
 	PermissionView,
 	RoutineFileView,
 	RoutineRun,
-	RoutineRunsPage,
-	RoutineRunView,
 	RoutineState,
 	RoutineSummary,
 	RoutineView,
 } from "./api.ts";
 import { BadRequest } from "./http.ts";
-import { itemOf } from "./transcript.ts";
 
 type Reconcile = (harness: Harness, ctx?: Context) => Promise<void>;
 
@@ -158,108 +152,6 @@ export async function routines(
 		}),
 	);
 	return views.sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/** How many runs a page of a routine's history holds: ten in view, and "Show earlier" for the next ten. */
-export const RUNS_PAGE = 10;
-/** How far a run's history reads into its chat past its wake, at most, looking for what it said. */
-const RUN_SCAN = 400;
-
-/** A said line as the history shows it: its first line, short. */
-const firstLine = (text: string) => {
-	const line = text.trim().split("\n")[0]?.trim() ?? "";
-	return line.length > 140 ? `${line.slice(0, 139)}…` : line;
-};
-
-/**
- * What a run left in its chat, from the items after its wake up to the next run (the owner's words, another wake, a
- * watch's): the first thing it said to the owner (a speaking call that went through, read as the feed reads it), and
- * whether the chat draws its line at all: it said something, or it failed or stopped there.
- */
-export function runSaid(items: readonly Item[]): { said?: string; shown: boolean } {
-	const delivered = new Set(items.flatMap((item) => (item.role === "tool" && !item.error ? [item.call] : [])));
-	let said: string | undefined;
-	for (const item of items) {
-		if (item.role !== "assistant" || said !== undefined) continue;
-		for (const call of item.calls ?? []) {
-			if (!isOwnerMessage(call.name) || !delivered.has(call.id)) continue;
-			const args = messageArgs(call.name, call.args);
-			const text = typeof args.text === "string" && args.text.trim() !== "" ? firstLine(args.text) : undefined;
-			const reaction = typeof args.reaction === "string" ? args.reaction : undefined;
-			said = text ?? reaction ?? "a message";
-			break;
-		}
-	}
-	const trouble = items.some(
-		(item) => (item.role === "assistant" && item.error !== undefined) || (item.role === "notice" && "routine" in item),
-	);
-	return { ...(said === undefined ? {} : { said }), shown: said !== undefined || trouble };
-}
-
-/** The items of chat `chat` from entry `entry`'s next up to the next run there, at most `RUN_SCAN` entries. */
-async function runItems(harness: Harness, chat: number, entry: number, ctx: Context): Promise<Item[]> {
-	const conversation = await harness.conversation(chat as ConversationId, ctx);
-	if (conversation === undefined) return [];
-	const page = await conversation.entries(
-		{ order: "ascending", minEntryId: (entry + 1) as EntryId },
-		RUN_SCAN,
-		undefined,
-		ctx,
-	);
-	const found: Item[] = [];
-	for (const record of page.items) {
-		const item = itemOf(record);
-		if (item === undefined) continue;
-		if (item.role === "user" || item.role === "wake" || (item.role === "watch" && item.tell === undefined)) break;
-		found.push(item);
-	}
-	return found;
-}
-
-/** One run of a routine as its history says it, its Turn and chat read now. */
-async function runView(harness: Harness, run: RoutineRunRecord, ctx: Context): Promise<RoutineRunView> {
-	const base = { at: run.at, ...(run.owner === true ? { owner: true as const } : {}) };
-	if (run.skipped !== undefined) return { ...base, state: "skipped", skipped: run.skipped };
-	if (run.ended === undefined) {
-		const turn = run.turn === undefined ? undefined : await harness.getTask(run.turn as TaskId, ctx);
-		// a run whose Turn is gone, or ended with no word of how (stopped before it began), is said as stopped
-		if (turn === undefined || turn.state.status === "terminal") return { ...base, state: "stopped" };
-		// it waits on its admission: queued behind the chat's other inputs
-		return { ...base, state: turn.state.status === "waiting" ? "waiting" : "running" };
-	}
-	const left =
-		run.chat === undefined || run.entry === undefined
-			? { shown: false }
-			: runSaid(await runItems(harness, run.chat, run.entry, ctx));
-	const line =
-		left.shown && run.chat !== undefined && run.entry !== undefined
-			? { line: { chat: run.chat, entry: run.entry } }
-			: {};
-	if (run.result === "failed")
-		return { ...base, state: "failed", ...(run.why === undefined ? {} : { why: run.why }), ...line };
-	if (run.result === "stopped") return { ...base, state: "stopped", ...line };
-	return left.said === undefined ? { ...base, state: "quiet" } : { ...base, state: "said", said: left.said, ...line };
-}
-
-/**
- * Routine `name`'s history, newest first, a page at a time: the runs before `before` (when it ran), from its durable
- * record. Undefined when there is no such routine.
- */
-export async function routineRuns(
-	harness: Harness,
-	name: string,
-	before: number | undefined,
-	ctx: Context = context,
-): Promise<RoutineRunsPage | undefined> {
-	const records = (await harness.snapshot(Routines, ctx))?.routines ?? {};
-	const accepted = (await harness.snapshot(Accepted, ctx))?.files ?? {};
-	const record = records[named(name)];
-	if (record === undefined && accepted[routinePath(name)] === undefined) return undefined;
-	const older = (record?.runs ?? []).filter((run) => before === undefined || run.at < before).reverse();
-	const page = older.slice(0, RUNS_PAGE);
-	const runs = await Promise.all(page.map((run) => runView(harness, run, ctx)));
-	const oldest = page.at(-1);
-	return { runs, ...(older.length > RUNS_PAGE && oldest !== undefined ? { earlier: oldest.at } : {}) };
 }
 
 const named = (name: string) => {

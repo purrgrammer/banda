@@ -36,7 +36,8 @@ by asking and from the panel, leave, return to its event and reply, inspect its 
   earlier", a run that spoke opening its line in the chat
 - [ ] The row says what the last run said ("Said: 2 PRs need you", "Said nothing"): the record now keeps each run, so
   the control view can say it; reading the chat on every push is the cost to weigh
-- [ ] Tried through the app at phone width (the editor, pause and delete were tried at desktop width; the phone
-  pass needs a resizable browser)
+- [x] Tried through the app at phone and desktop width, light and dark: a routine's detail, its runs opening the
+  chat at their line (one the feed does not draw says so), Pause, Edit and Back (test/routine-detail-app.browser.test.ts;
+  screenshots in screenshots/routine-detail-review-*.png)
 - [x] Watches return on their design (DESIGN.md "Watches"); the object side is in [Connections](connections.md);
   monitors wait for theirs (DESIGN.md "Open")

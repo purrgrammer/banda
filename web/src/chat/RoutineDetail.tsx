@@ -19,14 +19,28 @@ export type RoutineDetailView = {
 	readonly paused: boolean;
 	/** Why it is paused, when not by the owner: "it ran the most times a day it may". */
 	readonly pausedWhy?: string | undefined;
+	/**
+	 * Routines are off for every agent (the list's switch): nothing runs, and its own Pause waits until they are on
+	 * again, as the list's rows do.
+	 */
+	readonly allPaused?: boolean | undefined;
+	/**
+	 * A change the agent asked for waits for the owner ("Mara asks to change it"): it is allowed or declined where it
+	 * asked, and Edit waits until then, since the daemon would refuse an edit over it.
+	 */
+	readonly waiting?: string | undefined;
 	/** Its runs, newest first; undefined while they load. */
 	readonly runs: readonly RunRowView[] | undefined;
 	/** Why its runs could not be read, in the daemon's words. */
 	readonly error?: string | undefined;
 	/** Why the daemon refused Pause or Resume, in its words. */
 	readonly refused?: string | undefined;
+	/** Why the earlier runs could not be read, in the daemon's words: the runs already read stay. */
+	readonly earlierError?: string | undefined;
 	/** There are runs older than these. */
 	readonly earlier: boolean;
+	/** Its record keeps no older runs than these: older ones are in the chat alone. */
+	readonly full?: boolean | undefined;
 };
 
 export function RoutineDetail({
@@ -65,22 +79,34 @@ export function RoutineDetail({
 					<span className="flex min-w-0 flex-col gap-0.5">
 						<h2 className="text-body font-semibold text-ink">{routine.title}</h2>
 						<span className="text-meta text-ink-2">{routine.when}</span>
-						{routine.paused ? (
+						{routine.allPaused === true ? (
+							<span className="text-meta font-medium text-ink">
+								Paused: routines are off. Turn them on in the list to run it.
+							</span>
+						) : routine.paused ? (
 							<span className="text-meta font-medium text-ink">
 								{routine.pausedWhy === undefined ? "Paused" : `Paused: ${routine.pausedWhy}`}
 							</span>
 						) : null}
+						{routine.waiting === undefined ? null : (
+							<span className="text-meta font-medium text-ink">Waiting for you: {routine.waiting}</span>
+						)}
 					</span>
 					<span className="flex gap-2">
 						<Button
 							variant="outline"
 							size="sm"
-							disabled={onPause === undefined}
+							disabled={onPause === undefined || routine.allPaused === true}
 							onClick={() => onPause?.(!routine.paused)}
 						>
 							{routine.paused ? "Resume" : "Pause"}
 						</Button>
-						<Button variant="outline" size="sm" disabled={onEdit === undefined} onClick={onEdit}>
+						<Button
+							variant="outline"
+							size="sm"
+							disabled={onEdit === undefined || routine.waiting !== undefined}
+							onClick={onEdit}
+						>
 							Edit
 						</Button>
 					</span>
@@ -112,6 +138,14 @@ export function RoutineDetail({
 							))}
 						</ul>
 					)}
+					{routine.earlierError === undefined ? null : (
+						<p role="alert" className="text-meta text-danger">
+							Couldn't read earlier runs: {routine.earlierError}
+						</p>
+					)}
+					{routine.full === true && !routine.earlier && routine.runs !== undefined ? (
+						<p className="mt-2 text-meta text-ink-2">Older runs are in the chat.</p>
+					) : null}
 					{routine.earlier && routine.runs !== undefined ? (
 						<button
 							type="button"

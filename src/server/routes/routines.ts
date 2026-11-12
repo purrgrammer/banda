@@ -6,7 +6,8 @@
  */
 
 import { BadRequest } from "../http.ts";
-import { changeRoutine, createRoutine, finishEdits, routineRuns, runNow } from "../routines.ts";
+import { routineRuns } from "../routine-runs.ts";
+import { changeRoutine, createRoutine, finishEdits, runNow } from "../routines.ts";
 import type { AreaModule } from "./area.ts";
 
 const PATH = /^\/routines\/([a-z0-9-]+)\/(when|edit|run)$/;

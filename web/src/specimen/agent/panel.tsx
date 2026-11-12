@@ -410,6 +410,25 @@ export function PanelSections() {
 							/>
 						</Panel>
 					</Specimen>
+					<Specimen label="A change waits; routines are off">
+						<Panel name="Mara">
+							<RoutineDetail
+								routine={{
+									title: "Morning brief",
+									when: "Weekdays at 08:00",
+									paused: false,
+									allPaused: true,
+									waiting: "Mara asks to change it. Answer in the chat or the list.",
+									runs: rows(MORNING_RUNS.slice(0, 2)),
+									earlier: false,
+									full: true,
+								}}
+								onBack={() => {}}
+								onEdit={() => {}}
+								onPause={() => {}}
+							/>
+						</Panel>
+					</Specimen>
 					<Specimen label="Paused itself; Resume refused">
 						<Panel name="Mara">
 							<RoutineDetail
