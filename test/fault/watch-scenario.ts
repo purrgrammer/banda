@@ -753,11 +753,11 @@ function fromThePause(summary: WatchSummary): string[] {
  * A quiet pull request whose reads are skipped while what they guard stays the same (its `unless`), a look every five
  * minutes, the act's own: the baseline at step 1 (every read), at step 2 the same again (every read once more: the
  * baseline's answers were made at the look that first saw its `updated_at`), at step 3 bob comments and `updated_at`
- * moves (the pull request, its reviews and comments; the checks stay done on the same head, carried; the comment is
- * held for the kind's settling minute), at step 4 ana approves within the same second, so `updated_at` stays (the
- * reviews and comments are read once more, since step 3's were made at the look that first saw it, and the approval
- * wakes with the comment), at step 5 the same again (one read, the pull request's), at step 6 it is merged (held to
- * settle) and at step 7 the merge wakes and ends the watch.
+ * moves (every read: the checks too, since a label or a reopen starts workflows on the same head; the comment is held
+ * for the kind's settling minute), at step 4 ana approves within the same second, so `updated_at` stays (every read
+ * once more, since step 3's were made at the look that first saw it, and the approval wakes with the comment), at
+ * step 5 the same again (one read, the pull request's), at step 6 it is merged (held to settle) and at step 7 the
+ * merge wakes and ends the watch.
  */
 export function quietWorld(step: number): World {
 	const at = world(0) as { [read: string]: Json } & { get: { [key: string]: Json } };
@@ -779,11 +779,11 @@ export function quietWorld(step: number): World {
 export const QUIET_READS = [
 	["get", "get_check_runs", "get_reviews", "get_comments"],
 	["get", "get_check_runs", "get_reviews", "get_comments"],
-	["get", "get_reviews", "get_comments"],
-	["get", "get_reviews", "get_comments"],
+	["get", "get_check_runs", "get_reviews", "get_comments"],
+	["get", "get_check_runs", "get_reviews", "get_comments"],
 	["get"],
-	["get", "get_reviews", "get_comments"],
-	["get", "get_reviews", "get_comments"],
+	["get", "get_check_runs", "get_reviews", "get_comments"],
+	["get", "get_check_runs", "get_reviews", "get_comments"],
 ];
 
 /**

@@ -98,25 +98,28 @@ describe("a read's unless", () => {
 				),
 			);
 		expect(reads(() => {})).toBe("");
-		expect(reads((r) => Object.assign(r.reviews as object, { unless: { same: "pr" } }))).toMatch(/unless/);
+		expect(reads((r) => Object.assign(r.reviews as object, { unless: { same: ["pr"] } }))).toMatch(/unless/);
 		expect(
-			reads((r) => Object.assign(r.reviews as object, { unless: { same: "pr.updated_at", every: "soon" } })),
+			reads((r) => Object.assign(r.reviews as object, { unless: { same: ["pr.updated_at"], every: "soon" } })),
 		).toMatch(/unless/);
 		expect(
-			reads((r) => Object.assign(r.reviews as object, { unless: { same: "pr.updated_at", while: "nonsense" } })),
+			reads((r) => Object.assign(r.reviews as object, { unless: { same: ["pr.updated_at"], while: "nonsense" } })),
 		).toMatch(/unless/);
-		expect(reads((r) => Object.assign(r.reviews as object, { unless: { same: "pr.updated_at", also: 1 } }))).not.toBe(
+		expect(reads((r) => Object.assign(r.reviews as object, { unless: { same: ["pr.updated_at"], also: 1 } }))).not.toBe(
 			"",
 		);
+		// a list of paths, one at least
+		expect(reads((r) => Object.assign(r.reviews as object, { unless: { same: "pr.updated_at" } }))).toMatch(/unless/);
+		expect(reads((r) => Object.assign(r.reviews as object, { unless: { same: [] } }))).toMatch(/unless/);
 		// what skips a read is a read made at every look, never another the same may skip, nor one the kind lacks
-		expect(reads((r) => Object.assign(r.reviews as object, { unless: { same: "comments.length" } }))).toMatch(
+		expect(
+			reads((r) => Object.assign(r.reviews as object, { unless: { same: ["pr.updated_at", "comments.length"] } })),
+		).toMatch(/made at every look/);
+		expect(reads((r) => Object.assign(r.reviews as object, { unless: { same: ["nothing.here"] } }))).toMatch(
 			/made at every look/,
 		);
-		expect(reads((r) => Object.assign(r.reviews as object, { unless: { same: "nothing.here" } }))).toMatch(
-			/made at every look/,
-		);
-		expect(parseUnless({ same: "pr.head.sha", while: "derived.checks_done = true", every: "30m" })).toEqual({
-			same: "pr.head.sha",
+		expect(parseUnless({ same: ["pr.head.sha"], while: "derived.checks_done = true", every: "30m" })).toEqual({
+			same: ["pr.head.sha"],
 			while: "derived.checks_done = true",
 			every: "30m",
 		});
@@ -125,20 +128,24 @@ describe("a read's unless", () => {
 	it("GitHub's pull request reads its checks, reviews and comments only when what they move moved", () => {
 		const reads = definition("github").objects?.pull_request?.reads ?? {};
 		expect(reads.pr?.unless).toBeUndefined();
-		expect(reads.checks?.unless).toEqual({ same: "pr.head.sha", while: "derived.checks_done = true", every: "30m" });
-		expect(reads.reviews?.unless).toEqual({ same: "pr.updated_at", every: "2h" });
-		expect(reads.comments?.unless).toEqual({ same: "pr.updated_at", every: "2h" });
+		expect(reads.checks?.unless).toEqual({
+			same: ["pr.head.sha", "pr.updated_at"],
+			while: "derived.checks_done = true",
+			every: "30m",
+		});
+		expect(reads.reviews?.unless).toEqual({ same: ["pr.updated_at"], every: "2h" });
+		expect(reads.comments?.unless).toEqual({ same: ["pr.updated_at"], every: "2h" });
 	});
 
 	it("carries an answer only when it was made after the value was already known, the condition holds and it is young", () => {
-		const unless = { same: "pr.updated_at", while: "derived.done = true", every: "30m" };
+		const unless = { same: ["pr.updated_at"], while: "derived.done = true", every: "30m" };
 		const kept: Item = { pr: { updated_at: "x" }, reviews: [], derived: { done: true } };
 		const answers: Item = { pr: { updated_at: "x" } };
 		const t = NOW;
 		// made at the look that first saw "x": a change in the same second after it would leave "x", so read again
 		expect(mayCarry(unless, answers, kept, { at: t }, t + 5 * MINUTE)).toBe(false);
 		expect(mayCarry(unless, answers, kept, undefined, t + 5 * MINUTE)).toBe(false);
-		const sure = { at: t, sure: '["x"]' };
+		const sure = { at: t, sure: JSON.stringify(['["x"]']) };
 		expect(mayCarry(unless, answers, kept, sure, t + 5 * MINUTE)).toBe(true);
 		// moved, not there, the condition does not hold, or the answer is too old: read
 		expect(mayCarry(unless, { pr: { updated_at: "y" } }, kept, sure, t + 5 * MINUTE)).toBe(false);
@@ -150,6 +157,16 @@ describe("a read's unless", () => {
 		expect(madeNow(unless, answers, { answers: kept, at: t - SURE_AFTER + 1 }, t)).toEqual({ at: t });
 		expect(madeNow(unless, { pr: { updated_at: "y" } }, { answers: kept, at: t - MINUTE }, t)).toEqual({ at: t });
 		expect(madeNow(unless, answers, undefined, t)).toEqual({ at: t });
+		// with more than one path, every one must be as kept, and there
+		const both = { ...unless, same: ["pr.head.sha", "pr.updated_at"] };
+		const head = (sha: string, updated: string): Item => ({ pr: { head: { sha }, updated_at: updated } });
+		const keptBoth: Item = { ...head("a", "x"), derived: { done: true } };
+		const sureBoth = madeNow(both, head("a", "x"), { answers: keptBoth, at: t - MINUTE }, t);
+		expect(sureBoth.sure).toBeDefined();
+		expect(mayCarry(both, head("a", "x"), keptBoth, sureBoth, t + 5 * MINUTE)).toBe(true);
+		expect(mayCarry(both, head("a", "y"), keptBoth, sureBoth, t + 5 * MINUTE)).toBe(false);
+		expect(mayCarry(both, head("b", "x"), keptBoth, sureBoth, t + 5 * MINUTE)).toBe(false);
+		expect(mayCarry(both, { pr: { updated_at: "x" } }, keptBoth, sureBoth, t + 5 * MINUTE)).toBe(false);
 	});
 });
 
@@ -214,6 +231,31 @@ describe("a watch's looks with conditional reads", () => {
 		expect(checked).toEqual([1, 2, 8]);
 		// seen at +35m, held for the kind's settling minute, woken at the look after
 		expect(summary.wakes.map((wake) => [wake.at, wake.changes])).toEqual([[NOW + 40 * MINUTE, ["lint failed"]]]);
+		expect(watchInvariants(summary)).toEqual([]);
+	}, 60_000);
+
+	it("a workflow a label starts on the same head moves updated_at: its checks are read at that look", async () => {
+		// green at the baseline and confirmed at +5m; at +10m a label starts a workflow on the same head, which fails at
+		// +15m. The label moved `updated_at` (the head did not): the checks are read again at once, and while they run
+		const labelled = (step: number): World => {
+			const at = quietWorld(1) as { get: { [key: string]: Json }; get_check_runs: { check_runs: Json[] } };
+			if (step >= 3) {
+				at.get.updated_at = "2026-11-02T09:10:00Z";
+				at.get.labels = ["deploy"];
+				at.get_check_runs.check_runs.push({ id: 20, name: "deploy", status: "in_progress", conclusion: null });
+			}
+			if (step >= 4)
+				Object.assign(at.get_check_runs.check_runs[2] as object, { status: "completed", conclusion: "failure" });
+			return at as unknown as World;
+		};
+		const { perLook, summary } = await looked(labelled, 6, 5 * MINUTE);
+		const checked = perLook.flatMap((each, i) => (each.includes("get_check_runs") ? [i + 1] : []));
+		// read at the look that saw `updated_at` move and at the next (the deploy check ran, and that answer was not yet
+		// sure); that one finds it failed, done on a value already kept, so the look after carries it
+		expect(checked).toEqual([1, 2, 3, 4]);
+		expect(summary.wakes.map((wake) => [wake.at, wake.changes])).toEqual([
+			[NOW + 20 * MINUTE, ["deploy failed", "checks finished"]],
+		]);
 		expect(watchInvariants(summary)).toEqual([]);
 	}, 60_000);
 

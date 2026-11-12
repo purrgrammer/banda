@@ -449,7 +449,10 @@
 				"checks": {
 					"optional": true,
 					"unless": {
-						"same": "pr.head.sha",
+						"same": [
+							"pr.head.sha",
+							"pr.updated_at"
+						],
 						"while": "derived.checks_done = true",
 						"every": "30m"
 					},
@@ -466,7 +469,9 @@
 				"reviews": {
 					"optional": true,
 					"unless": {
-						"same": "pr.updated_at",
+						"same": [
+							"pr.updated_at"
+						],
 						"every": "2h"
 					},
 					"tool": "pull_request_read",
@@ -483,7 +488,9 @@
 					"optional": true,
 					"follow": true,
 					"unless": {
-						"same": "pr.updated_at",
+						"same": [
+							"pr.updated_at"
+						],
 						"every": "2h"
 					},
 					"tool": "pull_request_read",

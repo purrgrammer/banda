@@ -691,12 +691,13 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 
 /**
  * When a look may leave a read unmade and carry its kept answer forward (DESIGN.md "Watches"), so a quiet object costs
- * one request: the value at `same`, a path into a read made at every look, is the kept reading's; `while`, a condition
+ * one request: the values at `same`, paths into reads made at every look, are the kept reading's; `while`, a condition
  * over the kept reading, holds; and the kept answer is younger than `every`. A pull request's reviews and comments
- * move its `updated_at`; its checks move nothing on it, so they are read while they run or the head moved, and at least
- * every `every` besides (a re-run, or a check that starts late, on the same head).
+ * move its `updated_at`; its checks move nothing on it, so they are read while they run, when the head or `updated_at`
+ * moved (a label, a reopen or ready for review starts workflows on the same head), and at least every `every` besides
+ * (a re-run, or a check that starts late, on the same head).
  */
-export type Unless = { readonly same: string; readonly while?: string; readonly every?: string };
+export type Unless = { readonly same: readonly string[]; readonly while?: string; readonly every?: string };
 
 /**
  * When a look last made a read an `Unless` guards (by the look's clock), and the value at its `same` then, when the
@@ -715,13 +716,19 @@ export function valueAt(reading: Json | undefined, path: string): string | undef
 	return values.length === 0 ? undefined : canonical(values as Json[]);
 }
 
+/** The values at every path of `same` in `reading`, in canonical words; undefined when any is missing. */
+function valuesOf(reading: Json | undefined, same: readonly string[]): string | undefined {
+	const values = same.map((path) => valueAt(reading, path));
+	return values.some((value) => value === undefined) ? undefined : JSON.stringify(values);
+}
+
 /**
  * Whether a look may carry the kept answer of a read `unless` guards: `answers` is what the look has read so far,
  * `kept` the reading kept (its derived conditions with it), `made` when its answer was made.
  */
 export function mayCarry(unless: Unless, answers: Item, kept: Item, made: Made | undefined, now: number): boolean {
-	const value = valueAt(answers, unless.same);
-	if (value === undefined || made?.sure !== value || valueAt(kept, unless.same) !== value) return false;
+	const value = valuesOf(answers, unless.same);
+	if (value === undefined || made?.sure !== value || valuesOf(kept, unless.same) !== value) return false;
 	if (unless.while !== undefined && !holds(unless.while, kept)) return false;
 	const every = unless.every === undefined ? undefined : parseEvery(unless.every);
 	return every === undefined || now - made.at < every;
@@ -734,12 +741,12 @@ export function madeNow(
 	kept: { answers: Item; at: number } | undefined,
 	now: number,
 ): Made {
-	const value = valueAt(answers, unless.same);
+	const value = valuesOf(answers, unless.same);
 	const sure =
 		value !== undefined &&
 		kept !== undefined &&
 		now - kept.at >= SURE_AFTER &&
-		valueAt(kept.answers, unless.same) === value;
+		valuesOf(kept.answers, unless.same) === value;
 	return sure ? { at: now, sure: value } : { at: now };
 }
 
@@ -748,12 +755,19 @@ export function parseUnless(value: unknown): Unless | undefined {
 	if (!object(value as Json)) return undefined;
 	const { same, while: during, every, ...rest } = value as { same?: unknown; while?: unknown; every?: unknown };
 	if (Object.keys(rest).length > 0) return undefined;
-	if (typeof same !== "string" || !/^[A-Za-z0-9_+-]{1,64}(?:\.[A-Za-z0-9_+-]{1,64}){1,7}$/.test(same)) return undefined;
+	const path = /^[A-Za-z0-9_+-]{1,64}(?:\.[A-Za-z0-9_+-]{1,64}){1,7}$/;
+	if (
+		!Array.isArray(same) ||
+		same.length === 0 ||
+		same.length > 4 ||
+		!same.every((each) => typeof each === "string" && path.test(each))
+	)
+		return undefined;
 	if (during !== undefined && (typeof during !== "string" || during.length > 200 || "error" in parseCondition(during)))
 		return undefined;
 	if (every !== undefined && (typeof every !== "string" || parseEvery(every) === undefined)) return undefined;
 	return {
-		same,
+		same: same as string[],
 		...(during === undefined ? {} : { while: during as string }),
 		...(every === undefined ? {} : { every: every as string }),
 	};

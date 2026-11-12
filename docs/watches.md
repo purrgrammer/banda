@@ -109,8 +109,8 @@ returned to and merged, at desktop and phone width.
   object's own counts are the totals for issue and pull request comments, so a comment off the page is never said
   gone; reviews have no such count) (#39, #34)
 - [x] Reads cost: a pull request was four requests a look (pr, checks, reviews, comments). A read's `unless` now
-  leaves it unmade while what moves it stayed: the checks while they are done on the same head (every half hour
-  besides), the reviews and comments while `updated_at` stayed (every two hours besides). Against the scenario's
+  leaves it unmade while what moves it stayed: the checks while they are done with the head and `updated_at` the
+  same (every half hour besides), the reviews and comments while `updated_at` stayed (every two hours besides). Against the scenario's
   fake GitHub, a quiet pull request is 14 requests an hour (48 before), 15 on average over two; a busy one 70 (120
   before) with a comment and a review in the hour (test/watch-conditional-reads.test.ts); the `carried` fault
   scenario covers the carry-forward (#33)

@@ -311,7 +311,7 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 				const unless = given === undefined ? undefined : parseUnless(given);
 				if (given !== undefined && unless === undefined)
 					errors.push(
-						`${where}.reads.${as}.unless is {"same": "<read>.<path>", "while"?: "<condition>", "every"?: "<period>"}`,
+						`${where}.reads.${as}.unless is {"same": ["<read>.<path>"], "while"?: "<condition>", "every"?: "<period>"}`,
 					);
 				if (unless !== undefined && pages !== undefined)
 					errors.push(`${where}.reads.${as}: a read with pages is made at every look`);
@@ -358,11 +358,12 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 				};
 			}
 		// what a read is skipped by is read at every look, before it
-		for (const [as, read] of Object.entries(reads)) {
-			const by = read.unless === undefined ? undefined : reads[read.unless.same.split(".")[0] ?? ""];
-			if (read.unless !== undefined && (by === undefined || by.unless !== undefined))
-				errors.push(`${where}.reads.${as}.unless.same is a path into a read made at every look`);
-		}
+		for (const [as, read] of Object.entries(reads))
+			for (const path of read.unless?.same ?? []) {
+				const by = reads[path.split(".")[0] ?? ""];
+				if (by === undefined || by.unless !== undefined)
+					errors.push(`${where}.reads.${as}.unless.same: ${path} is not in a read made at every look`);
+			}
 		const fields: { [field: string]: string } = {};
 		const rawFields = given.fields;
 		if (typeof rawFields !== "object" || rawFields === null || Array.isArray(rawFields))
