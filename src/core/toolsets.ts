@@ -101,6 +101,8 @@ export const groupToolsName = (chat: number) => `${GROUP_TOOLS}:${chat}`;
 /** Whether extension `name` is a group's, which only its members' chats select. */
 export const isGroupTools = (name: string) => name === GROUP_TOOLS || name.startsWith(`${GROUP_TOOLS}:`);
 
+export const READ_USAGE = "read_usage";
+
 /**
  * The tools every agent chat gets, a group member's too: all of banda's own. Only a connection's tools stay outside, by
  * account. What leaves the box is held whatever a chat may run: `requests` (`ask_hosts`) is how the agent
@@ -112,5 +114,6 @@ export const EVERY_AGENT: readonly string[] = [
 	"tool_search",
 	"search",
 	"read_search_result",
+	READ_USAGE,
 	...Object.values(TOOLSETS).flat(),
 ];

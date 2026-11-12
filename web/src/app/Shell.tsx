@@ -12,7 +12,7 @@ import type { CompanionView, FactView } from "../../../src/server/api.ts";
 import { centreBand, pinRow, useBand } from "../areas/band.ts";
 import { archiveGroup, setGroupLimits } from "../areas/groups.ts";
 import { actOnRoutine, clickKey } from "../areas/routines.ts";
-import { useTiers } from "../areas/tiers.ts";
+import { changeModels, useTiers } from "../areas/tiers.ts";
 import { Band, BandNotice } from "../chat/Band.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
 import { Face, FaceStack } from "../chat/Face.tsx";
@@ -49,6 +49,7 @@ import { EditRoutine, RoutineHistory, routineRows } from "./routines.tsx";
 import { SearchDialog } from "./SearchDialog.tsx";
 import { SettingsDevices } from "./SettingsDevices.tsx";
 import { SettingsProviders } from "./SettingsProviders.tsx";
+import { SettingsUsage } from "./SettingsUsage.tsx";
 import { ShortcutsDialog, typing as typingIn } from "./Shortcuts.tsx";
 import { SkillsPage, useSkills, waitsOnOwner } from "./Skills.tsx";
 import { routineTitle } from "./titles.ts";
@@ -712,7 +713,26 @@ function Main() {
 							notify,
 						}}
 						onNotify={setNotify}
+						{...(tiers?.presets === true
+							? {
+									tierModels: {
+										catalog: tiers.catalog,
+										models: tiers.models,
+										onChange: (tier, modelId) =>
+											void attempt("change the model", () => changeModels({ override: { tier, modelId } })),
+									},
+								}
+							: {})}
 						providers={<SettingsProviders current={tiers?.provider.id ?? ""} />}
+						usage={
+							<SettingsUsage
+								modelName={(id) => tiers?.catalog.find((model) => model.id === id)?.name}
+								agent={(id) => {
+									const one = [...agents, ...archived].find((agent) => agent.id === id);
+									return { name: one?.name ?? id, ...(one === undefined ? {} : { face: one.face }) };
+								}}
+							/>
+						}
 						devices={<SettingsDevices />}
 						onTheme={setTheme}
 						onCentred={centreBand}

@@ -1,34 +1,103 @@
 /** Settings: the page, each of its tabs, and the provider accounts the band thinks with. */
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { Band } from "../../chat/Band.tsx";
 import { AppSettings, ModelProviders, SettingsPage } from "../../chat/Settings.tsx";
-import { ATLAS, ROWS, SETTINGS, SETTINGS_PROVIDERS } from "../fixtures.ts";
+import { UsagePanel } from "../../chat/Usage.tsx";
+import type { Tier, TiersView } from "../../lib/api.ts";
+import { ATLAS, ROWS, SANCHO, SETTINGS, SETTINGS_PROVIDERS } from "../fixtures.ts";
 import { Section, StageContext } from "../stage.tsx";
+
+const example = {
+	input: 120_000,
+	output: 8_240,
+	cacheRead: 640_000,
+	cacheWrite: 40_000,
+	estimatedUsd: 8.43,
+	cacheReadRate: 0.8,
+};
+const usage = (
+	<UsagePanel
+		agent={(id) => {
+			const one = id === "atlas" ? ATLAS : SANCHO;
+			return { name: one.name, face: one.face };
+		}}
+		report={{
+			total: example,
+			byAgent: [
+				{
+					...example,
+					id: "sancho",
+					input: 90_000,
+					output: 7_000,
+					cacheRead: 600_000,
+					cacheWrite: 10_000,
+					estimatedUsd: 6.2,
+					cacheReadRate: 6 / 7,
+				},
+				{
+					...example,
+					id: "atlas",
+					input: 30_000,
+					output: 1_240,
+					cacheRead: 40_000,
+					cacheWrite: 30_000,
+					estimatedUsd: 2.23,
+					cacheReadRate: 0.4,
+				},
+			],
+			byProvider: [{ ...example, id: "anthropic" }],
+			byModel: [{ ...example, id: "anthropic/claude-sonnet-5-5" }],
+			system: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, estimatedUsd: 0, cacheReadRate: null },
+		}}
+	/>
+);
+
+const defaultModels: TiersView["models"] = {
+	quick: { id: "claude-haiku-5-5", name: SETTINGS.models.quick },
+	balanced: { id: "claude-sonnet-5-5", name: SETTINGS.models.balanced },
+	deep: { id: "claude-opus-5-5", name: SETTINGS.models.deep },
+};
+const catalog = Object.values(defaultModels);
+
+function SettingsExample({ tab }: { tab?: "model" | "usage" | "connections" | "agents" }) {
+	const [models, setModels] = useState(defaultModels);
+	const onChange = (tier: Tier, id: string | null) => {
+		const selected = catalog.find((one) => one.id === id);
+		setModels((prior) => ({
+			...prior,
+			[tier]:
+				selected === undefined || selected.id === defaultModels[tier].id
+					? defaultModels[tier]
+					: { ...selected, own: true },
+		}));
+	};
+	return (
+		<AppSettings
+			{...(tab === undefined ? {} : { tab })}
+			data={{ ...SETTINGS, archived: [{ ...ATLAS, when: "2 Oct" }] }}
+			tierModels={{ models, catalog, onChange }}
+			usage={usage}
+			providers={<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} />}
+		/>
+	);
+}
 
 export function SettingsSections() {
 	const { width } = useContext(StageContext);
 	const phone = width === "phone";
 	return (
 		<>
-			<Section
-				id="settings"
-				note="One page in four tabs, as the agent's panel has them: General, Model, Connections, Agents."
-				bleed
-			>
+			<Section id="settings" note="General, Model, Usage, Connections and Agents, as in the app." bleed>
 				{phone ? null : <Band rows={ROWS} />}
 				<SettingsPage title="Settings" phone={phone}>
-					<AppSettings data={{ ...SETTINGS, archived: [{ ...ATLAS, when: "2 Oct" }] }} />
+					<SettingsExample />
 				</SettingsPage>
 			</Section>
-			<Section id="settings-tabs" note="Model, Connections and Agents, as each opens.">
-				{(["model", "connections", "agents"] as const).map((tab) => (
+			<Section id="settings-tabs" note="Model, Usage, Connections and Agents, as each opens.">
+				{(["model", "usage", "connections", "agents"] as const).map((tab) => (
 					<div key={tab} className="h-[30rem] overflow-hidden rounded-tile border border-line-soft">
 						<SettingsPage title="Settings" phone={phone}>
-							<AppSettings
-								tab={tab}
-								data={{ ...SETTINGS, archived: [{ ...ATLAS, when: "2 Oct" }] }}
-								providers={<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} />}
-							/>
+							<SettingsExample tab={tab} />
 						</SettingsPage>
 					</div>
 				))}

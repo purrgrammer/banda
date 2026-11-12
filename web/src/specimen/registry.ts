@@ -332,7 +332,13 @@ export const SECTIONS: readonly Entry[] = [
 		sources: ["web/src/app/Activity.tsx", "web/src/chat/ActivityDetail.tsx", HEADER, FEED],
 	},
 	{ id: "settings", title: "Settings", group: "agent", status: "app", sources: [SETTINGS] },
-	{ id: "settings-tabs", title: "Settings, each tab", group: "agent", status: "app", sources: [SETTINGS] },
+	{
+		id: "settings-tabs",
+		title: "Settings, each tab",
+		group: "agent",
+		status: "app",
+		sources: [SETTINGS, "web/src/chat/Usage.tsx", "web/src/chat/ModelPicker.tsx"],
+	},
 	{ id: "settings-providers", title: "Settings, providers", group: "agent", status: "app", sources: [SETTINGS] },
 	{ id: "devices", title: "Devices", group: "agent", status: "app", sources: [DEVICES, SETTINGS] },
 	{ id: "devices-states", title: "Devices, each state", group: "agent", status: "app", sources: [DEVICES] },
@@ -403,7 +409,7 @@ export const SECTIONS: readonly Entry[] = [
 	{ id: "harness-headlines", title: "The card's one line", group: "harness", status: "app", sources: [HARNESS] },
 	{
 		id: "harness-asks",
-		title: "Its asks, one at a time",
+		title: "Permissions in the coding card",
 		group: "harness",
 		status: "app",
 		sources: ["web/src/app/HarnessSession.tsx", HARNESS],

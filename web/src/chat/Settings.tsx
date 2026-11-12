@@ -42,9 +42,11 @@ import { cn } from "@/lib/cn";
 import { accountTitle, backendOf } from "../../../src/core/provider-accounts.ts";
 import { TIER_WORDS, TIERS, type Tier } from "../../../src/core/tiers.ts";
 import { AvatarChoices } from "../avatar/Choices.tsx";
+import type { ModelView, TiersView } from "../lib/api.ts";
 import { Confirm } from "./Confirm.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
 import { Face, FaceStack } from "./Face.tsx";
+import { ModelPicker } from "./ModelPicker.tsx";
 import { ProviderAccountForm, ProviderAccountRename } from "./ProviderAccountForm.tsx";
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
 import { ProviderSignIn, type SignInWay } from "./ProviderSignIn.tsx";
@@ -864,16 +866,18 @@ export function ArchivedAgents({
 /**
  * Settings, in tabs as the agent's panel has them: General (appearance, notifications, routines, the computer),
  * Memory (the shared facts and each agent's own, one set, never copies), Model (the provider and the models the
- * tiers use), Connections (every account), Agents (the limits on groups; the archived agents and groups, to restore),
+ * tiers use), Usage (model spend and caching), Connections (every account), Agents (the limits on groups; the archived agents and groups, to restore),
  * Devices (the phones paired, and pairing one).
  */
-export type SettingsTab = "general" | "memory" | "model" | "connections" | "agents" | "devices";
+export type SettingsTab = "general" | "memory" | "model" | "usage" | "connections" | "agents" | "devices";
 
 export function AppSettings({
 	data,
 	tab = "general",
 	memory,
 	providers,
+	usage,
+	tierModels,
 	devices,
 	bring,
 	...act
@@ -887,6 +891,12 @@ export function AppSettings({
 	devices?: ReactNode;
 	/** Every provider the band may think with, to connect, use or sign out of (`ModelProviders`). */
 	providers?: ReactNode;
+	usage?: ReactNode;
+	tierModels?: {
+		models: TiersView["models"];
+		catalog: readonly ModelView[];
+		onChange: (tier: Tier, id: string | null) => void;
+	};
 } & SettingsActions) {
 	return (
 		<Tabs defaultValue={tab} className="gap-6">
@@ -894,6 +904,7 @@ export function AppSettings({
 				<TabsTrigger value="general">General</TabsTrigger>
 				{memory === undefined ? null : <TabsTrigger value="memory">Memory</TabsTrigger>}
 				<TabsTrigger value="model">Model</TabsTrigger>
+				{usage === undefined ? null : <TabsTrigger value="usage">Usage</TabsTrigger>}
 				<TabsTrigger value="connections">Connections</TabsTrigger>
 				<TabsTrigger value="agents">Agents</TabsTrigger>
 				{devices === undefined ? null : <TabsTrigger value="devices">Devices</TabsTrigger>}
@@ -980,23 +991,40 @@ export function AppSettings({
 						/>
 						{(
 							[
-								["Quick", "Answers fast", data.models.quick],
-								["Balanced", "Most of the time", data.models.balanced],
-								["Deep", "Takes its time on hard things", data.models.deep],
+								["quick", "Quick", "Answers fast"],
+								["balanced", "Balanced", "Most of the time"],
+								["deep", "Deep", "Takes its time on hard things"],
 							] as const
-						).map(([tier, when, model]) => (
+						).map(([tier, label, when]) => (
 							<RowOf
 								key={tier}
 								className="pl-[2.875rem]"
-								title={tier}
+								title={label}
 								detail={when}
-								end={<span className="truncate text-meta text-ink-2">{model}</span>}
+								end={
+									tierModels === undefined || tierModels.catalog.length === 0 ? (
+										<span className="truncate text-meta text-ink-2">{data.models[tier]}</span>
+									) : (
+										<ModelPicker
+											tier={label}
+											provider={data.provider.id}
+											current={tierModels.models[tier]}
+											catalog={tierModels.catalog}
+											onChange={(id) => tierModels.onChange(tier, id)}
+										/>
+									)
+								}
 							/>
 						))}
 					</Rows>
 				</Block>
 				{providers}
 			</TabsContent>
+			{usage === undefined ? null : (
+				<TabsContent value="usage" className="flex flex-col gap-6">
+					{usage}
+				</TabsContent>
+			)}
 			<TabsContent value="connections" className="flex flex-col gap-8">
 				<ConnectionRows connections={data.connections} act={act} />
 				<SignedIn sites={data.signedIn ?? []} onSignOut={act.onSignOut} />
