@@ -62,7 +62,7 @@ const textOf = (message: Message | undefined): string =>
  * A core over a box on the host, with memory; the owner's `call:<tool>:<json>` makes the model call it, and each
  * request's system prompt and system messages are kept.
  */
-async function open() {
+async function open(wrap: (files: MemoryFiles) => MemoryFiles = (files) => files) {
 	const home = await tempHome();
 	const box = openBox(hostBox(home), () => {});
 	boxes.push(box);
@@ -93,7 +93,7 @@ async function open() {
 	};
 	faux.setResponses(Array.from({ length: 500 }, () => respond as never));
 	const core = defineCore({ blobs: blobStore(), gateway: () => new FakeGateway(), model: () => FAUX_MODEL });
-	const files = boxMemory({ env: () => box.env(), root: box.workspace });
+	const files = wrap(boxMemory({ env: () => box.env(), root: box.workspace }));
 	const search = new Search(join(home, "search.db"));
 	const lock = new MemoryLock();
 	const registry = createRegistry();
@@ -533,6 +533,31 @@ describe("memory files", () => {
 		expect((await memory(s.desk, Date.now())).facts).toEqual([]);
 		await s.say("later still");
 		expect(s.requests.at(-1)!.messages[0]).not.toContain(`[${id}]`);
+	});
+
+	it("is in a chat's prompt from its start even when memory could not be read then, so it never re-adds the rest", async () => {
+		let offline = true;
+		const s = await open((files) => ({
+			...files,
+			read: (path, ctx) => (offline ? Promise.reject(new Error("the box is offline")) : files.read(path, ctx)),
+		}));
+		const thread = crypto.randomUUID();
+		await s.say("hello", thread);
+		const first = s.requests.at(-1)!;
+		expect(first.messages[0]).toContain("<memory>\\nMemory could not be read just now.\\n</memory>");
+		offline = false;
+		await s.call("remember", { fact: "Prefers window seats", scope: "agent" }, thread);
+		const later = s.requests.at(-1)!;
+		// the box back, memory's words change in place: nothing removed, the prompt's start unchanged
+		expect(later.messages[0]).toBe(first.messages[0]);
+		const patches = later.messages.slice(1).map((m) => (JSON.parse(m) as { sections?: object }).sections ?? {});
+		expect(patches.flatMap((patch) => Object.values(patch))).not.toContain(null);
+		expect(patches.some((patch) => JSON.stringify(patch).includes("Prefers window seats"))).toBe(true);
+		// offline again, the chat keeps the facts it was shown rather than saying memory could not be read
+		offline = true;
+		await s.say("and now", thread);
+		const kept = s.requests.at(-1)!;
+		expect(kept.messages.slice(later.messages.length).join()).not.toContain("could not be read");
 	});
 
 	it("the owner's own changes are in effect at once; an edit keeps where the fact came from", async () => {
