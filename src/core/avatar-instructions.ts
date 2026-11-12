@@ -1,4 +1,4 @@
-import { defineExtension } from "@earendil-works/pi-durable";
+import { defineExtension, type PromptSection } from "@earendil-works/pi-durable";
 import { PROPOSE_AVATAR } from "./toolsets.ts";
 
 /**
@@ -94,14 +94,25 @@ export const AVATAR_INSTRUCTIONS = CHAT_DELIVERY + DESIGN;
 /** For a face designed in the "+" sheet, outside any chat. */
 export const SHEET_AVATAR_INSTRUCTIONS = SHEET_DELIVERY + DESIGN;
 
-/** The guide reaches a chat with `propose_avatar` itself, as a section: tool search indexes descriptions, not sections. */
+/**
+ * The guide reaches a chat with `propose_avatar` itself, as a section that is there from the chat's start, empty and so
+ * not in the prompt, while the tool waits to load; loading it changes the section's words in place. pi-durable can only
+ * append a new section at the end, so one that appeared mid-chat would re-add every section; and once in, the guide is
+ * in every prompt written after, a compaction's or a re-add's. Not the tool's description: `tool_search` indexes it in
+ * full, so its words would load the tool for unrelated queries.
+ */
+export const avatarSection: PromptSection = {
+	key: "avatar_design",
+	// untagged, so the empty one adds nothing to the prompt; the guide brings its own tags
+	tag: false,
+	render: ({ agent }) => {
+		if (agent.tools.some((tool) => tool.name === PROPOSE_AVATAR))
+			return `<avatar_design>\n${AVATAR_INSTRUCTIONS}\n</avatar_design>`;
+		return agent.deferred.some((tool) => tool.name === PROPOSE_AVATAR) ? "" : undefined;
+	},
+};
+
 export const avatarInstructionsExtension = defineExtension({
 	name: "banda.avatar-instructions",
-	sections: [
-		{
-			key: "avatar_design",
-			render: ({ agent }) =>
-				agent.tools.some((tool) => tool.name === PROPOSE_AVATAR) ? AVATAR_INSTRUCTIONS : undefined,
-		},
-	],
+	sections: [avatarSection],
 });
