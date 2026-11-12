@@ -5,6 +5,7 @@
 import { createHash } from "node:crypto";
 import { GoogleError, type GoogleMethod, googleRequest } from "./google-rest.ts";
 import { type McpResult, type McpTool, Unauthorized } from "./mcp.ts";
+import { retryOf } from "./retry-after.ts";
 
 const CALENDAR = { service: "Google Calendar", base: "https://www.googleapis.com/calendar/v3" };
 const LIMIT = 1_000_000;
@@ -460,7 +461,11 @@ export async function calendarCall(
 			: { text: json, isError: false };
 	} catch (error) {
 		if (error instanceof Unauthorized) throw error;
-		return { text: error instanceof Error ? error.message : "Google Calendar could not be read.", isError: true };
+		return {
+			text: error instanceof Error ? error.message : "Google Calendar could not be read.",
+			isError: true,
+			...retryOf(error),
+		};
 	}
 }
 

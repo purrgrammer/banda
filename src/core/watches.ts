@@ -1065,12 +1065,13 @@ export function defineWatches(options: WatchesOptions) {
 				ctx,
 			);
 			if ("failed" in answer) {
+				// a refusal for now holds the next look until the service said, though the read was optional
+				if ("until" in answer && answer.until !== undefined) retry = Math.max(retry ?? 0, answer.until);
 				if (read.optional) {
 					unanswered.push(as);
 					continue;
 				}
 				failed = answer.failed;
-				retry = "until" in answer ? answer.until : undefined;
 				break;
 			}
 			bytes += answer.text.length;
@@ -1184,7 +1185,7 @@ export function defineWatches(options: WatchesOptions) {
 			}
 			delete record.failed;
 			record.looked = now;
-			record.next = now + every;
+			record.next = Math.max(now + every, retry ?? 0);
 			// what a walk of pages fetched is in this reading now; one merged as far as it read leaves the watch behind
 			if (paging !== undefined && shared === undefined) delete record.pages;
 			// a baseline has nothing it may have missed: only a look after one is behind
@@ -1249,7 +1250,7 @@ export function defineWatches(options: WatchesOptions) {
 					// what each look saw is kept in the commit that holds, so a kill between looks loses none of it
 					record.burst = decision.burst;
 					record.held = copy(decision.held);
-					record.next = decision.next;
+					record.next = Math.max(decision.next, retry ?? 0);
 					outcome = { outcome: "held", why: "burst" };
 					return;
 				case "limit": {
@@ -1380,7 +1381,7 @@ export function defineWatches(options: WatchesOptions) {
 				delete record.failed;
 				record.looked = now;
 				const hurry = kind.follow.busy_every === undefined ? undefined : parseEvery(kind.follow.busy_every);
-				record.next = now + (hurry ?? BUSY_EVERY);
+				record.next = Math.max(now + (hurry ?? BUSY_EVERY), retry ?? 0);
 				const kept = (await tx.doc(Followed)).objects[key];
 				if (kept !== undefined && learned !== undefined) kept.page = { ...kept.page, [learned.as]: learned.size };
 				if (click !== undefined) {
@@ -1408,7 +1409,8 @@ export function defineWatches(options: WatchesOptions) {
 					await unable(tx, name, record, reason, now, chat);
 					record.looked = now;
 					const quiet = now + lookEvery(kind.follow, {});
-					record.next = until !== undefined && until > now ? Math.min(until, quiet) : quiet;
+					// never sooner than the service said to ask again; when that comes first, then and not at the cadence
+					record.next = until !== undefined && until > now ? until : quiet;
 					// a walk that could not go on for an hour (its cursor refused, say) is not asked from again: the next
 					// look reads the page a look without a walk reads, and merges it with what the walk read, with a gap
 					for (const walk of Object.values(record.pages ?? {}))

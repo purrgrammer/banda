@@ -15,6 +15,9 @@ import {
 	randomBytes,
 	sign,
 } from "node:crypto";
+import { parseRetryAfter } from "./retry-after.ts";
+
+export { parseRetryAfter };
 
 /** A VAPID key pair: `publicKey` is the uncompressed P-256 point (65 bytes), `privateKey` the scalar (32 bytes), both base64url. */
 export interface VapidKeys {
@@ -252,15 +255,6 @@ export function pushRequest(
 	};
 	if (options.topic !== undefined) headers.Topic = options.topic;
 	return { url: subscription.endpoint, method: "POST", headers, body };
-}
-
-/** `Retry-After` as milliseconds from `now`: delta-seconds or an HTTP-date (RFC 9110 §10.2.3). */
-export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | undefined {
-	if (!value) return undefined;
-	const trimmed = value.trim();
-	if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000;
-	const at = Date.parse(trimmed);
-	return Number.isNaN(at) ? undefined : Math.max(0, at - now);
 }
 
 /** What a push service's status (and `Retry-After`) means: ok, gone, retry, or rejected. */

@@ -123,6 +123,7 @@ import {
 } from "../core/objects.ts";
 import { agentOfChat, canonical, Permissions } from "../core/permissions.ts";
 import { REST_APIS, type RestApi } from "../core/rest.ts";
+import { retryOf } from "../core/retry-after.ts";
 import { slackFile } from "../core/slack-rest.ts";
 import { context } from "../core/store.ts";
 import {
@@ -2740,11 +2741,13 @@ export function openCapabilities(options: CapabilityOptions) {
 					}
 				: { text: said };
 		} catch (error) {
+			const later = retryOf(error).retryAt;
 			return {
 				failed: scrub(error instanceof Error ? error.message : String(error), [
 					...usedSecrets,
 					...(await secrets(home)),
 				]).slice(0, 300),
+				...(later === undefined ? {} : { until: later }),
 			};
 		}
 	}

@@ -9,6 +9,7 @@ import {
 	toolOf,
 	Unauthorized,
 } from "./mcp.ts";
+import { RetryLater, retryAtOf } from "./retry-after.ts";
 
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 
@@ -48,6 +49,8 @@ export async function remoteSession<T>(
 	const client = new McpClient({ name: "banda", version: "0.1.0", requestTimeoutMs: 60_000 });
 	// a scope challenge, noticed on the response itself: what the transport makes of a 403 says less
 	let challenged: readonly string[] | undefined;
+	// a refusal for now, noticed on the response: when the server said to ask again
+	let retryAt: number | undefined;
 	const transport = new StreamableHttpTransport({
 		url,
 		openGetStream: false, // server notifications are not durable connection events
@@ -59,6 +62,7 @@ export async function remoteSession<T>(
 				...(signal === undefined ? {} : { signal: init?.signal ? AbortSignal.any([init.signal, signal]) : signal }),
 			});
 			challenged ??= challengedScopes(response.status, response.headers.get("www-authenticate"));
+			retryAt ??= retryAtOf(response.status, response.headers.get("retry-after"));
 			return response;
 		},
 		authProvider: { token: async () => (await authorization())?.replace(/^Bearer /, "") },
@@ -69,6 +73,7 @@ export async function remoteSession<T>(
 	} catch (error) {
 		if (challenged !== undefined) throw new InsufficientScope(challenged);
 		if (error instanceof McpAuthRequiredError) throw new Unauthorized("the server did not take the credentials");
+		if (retryAt !== undefined) throw new RetryLater("the server is busy", retryAt);
 		throw error;
 	} finally {
 		await client.close();

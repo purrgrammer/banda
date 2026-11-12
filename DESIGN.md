@@ -646,8 +646,10 @@ or not the model remembers it.
   as that account, kept across a crash, and the watch is behind until the merge. A walk that cannot reach the window
   within an hour, or within the window's bytes, merges what it read, and its wake says what may be missing. What leaves the window from its old end was pushed off, never
   removed. Every call a connection makes for one account and one method, whoever makes it (a watch, an agent, a
-  card), waits its turn in one queue, and a refusal that says when to come back holds that queue until then; a watch
-  it refused looks again then, so watches sharing the queue take turns.
+  card), waits its turn in one queue, and a refusal that says when to come back holds that queue until then.
+- **"Ask again later" is honoured.** Any service that refuses for now with `Retry-After` (Slack, Google, a remote MCP
+  server) is asked again no sooner than it said, by any watch, card or agent. A watch it refused looks again exactly
+  then, sooner or later than its cadence, so watches sharing a queue take turns and none asks early.
 - **The first look comes before the watch is live.** Making a watch reads the object once, and that reading is its
   baseline: only what changes after it is an event; what came before, the agent can read for itself. A watch whose
   first look fails is not made, and the card says why.
