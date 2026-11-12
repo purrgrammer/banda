@@ -91,6 +91,15 @@ returned to and merged, at desktop and phone width.
 - [ ] GitHub's hosted server names no discussion comment's author (its answer is an id, a body and `isAnswer`), so
   there the account's own comments still wake, as by an author not known, until github-mcp-server's
   `get_discussion_comments` selects `author { login }` and GitHub deploys it (#38)
+- [ ] GitHub's hosted server at the shipped URL (`/mcp/`) lists its default toolsets alone, 49 tools without
+  `get_discussion`, `get_discussion_comments`, `actions_get`, `actions_list` or `get_notification_details`: a
+  discussion, a workflow run, a check run's job and a notification cannot be followed through the shipped connection,
+  and the refusal says "GitHub is not connected for Mara" though it is. `/mcp/x/all` lists all 118 (a Connections
+  change) (#38)
+- [ ] A read's answer is cut at 50,000 characters (`MAX_RESULT_CHARS`), so a discussion's page of a hundred comments
+  with their bodies (150 KB on a busy one) does not parse and the optional read is left unanswered without a word: the
+  watch never sees a comment there. Fields, a smaller page or a larger bound for reads, and a health line for a read
+  that keeps failing (#38)
 - [x] A repository's push says "the default branch", by decision: no fifth read for its name (the reads that answer it,
   `get_repository_tree` with no `tree_sha` and `search_repositories` for `repo:{owner}/{repo}`, would each be a fifth,
   past the four a kind may declare). A renamed default branch tells nothing, and a push after it tells as before (#38)
