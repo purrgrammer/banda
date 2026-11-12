@@ -9,7 +9,8 @@ import type { FaceState, Who } from "./types.ts";
 export type { FaceState } from "./types.ts";
 
 export const FACE_SIZE = { mention: 20, message: 28, row: 40, panel: 64, hero: 96 } as const;
-export type FaceSize = keyof typeof FACE_SIZE;
+/** A size in pixels, or `text`: as tall as the words it sits among, whatever their size (a mention in a message). */
+export type FaceSize = keyof typeof FACE_SIZE | "text";
 
 const moodOf = (state: FaceState | undefined): AvatarMotion =>
 	state === "working" ? "thinking" : state === "happy" ? "happy" : "idle";
@@ -29,6 +30,7 @@ export function Face({
 	paused?: boolean;
 	className?: string;
 }) {
+	const text = size === "text";
 	const words = [
 		name,
 		state === "working" ? "working" : state === "waiting" ? "waiting on you" : "",
@@ -37,12 +39,24 @@ export function Face({
 		.filter(Boolean)
 		.join(", ");
 	return (
-		<span role="img" aria-label={words} data-state={state} className={cn("relative inline-flex shrink-0", className)}>
-			<span className={cn("inline-flex", paused && "opacity-45 grayscale-[60%]")}>
+		<span
+			role="img"
+			aria-label={words}
+			data-state={state}
+			className={cn(
+				"relative inline-flex shrink-0",
+				// sized from the text, and centred on its capitals: an inline block with nothing in its lines has its
+				// baseline at its bottom edge, so lowering that edge by half of what the face exceeds the capitals by centres it
+				text && "inline-block size-[1.1em] align-[calc((1cap_-_1.1em)/2)]",
+				className,
+			)}
+		>
+			<span className={cn(text ? "block size-full" : "inline-flex", paused && "opacity-45 grayscale-[60%]")}>
 				<AvatarRenderer
 					definition={face.definition}
 					color={face.color}
-					size={FACE_SIZE[size]}
+					size={text ? FACE_SIZE.mention : FACE_SIZE[size]}
+					fill={text}
 					animated={moodOf(state) !== "idle"}
 					mood={moodOf(state)}
 				/>

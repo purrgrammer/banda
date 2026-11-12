@@ -191,7 +191,7 @@ export function Parts() {
 						<Bubble reaction="👍" copy="And ask @Atlas whether Friday is free.">
 							And ask <Mention who={ATLAS} /> whether Friday is free.
 						</Bubble>
-						{/* a name never wraps inside its chip; one too long for the bubble ends in an ellipsis */}
+						{/* a mention never breaks across lines; a name too long for the bubble ends in an ellipsis */}
 						<Bubble copy="Loop in @Ana María de la Vega Ortega Fernández Hidalgo too.">
 							Loop in <Mention who={{ face: sampleFace("sprout", "#56a875"), name: LONG_NAME }} /> too.
 						</Bubble>
@@ -201,6 +201,11 @@ export function Parts() {
 							<p>On it. I'll check the three airlines you use and keep to €300.</p>
 							<p>
 								I asked <Mention who={ATLAS} /> about Friday.
+							</p>
+							{/* a mention near the end of a line moves to the next one whole, face and name together */}
+							<p>
+								Friday is clear for now, but before I book anything I want <Mention who={ATLAS} /> and{" "}
+								<Mention who={{ face: sampleFace("sprout", "#56a875"), name: LONG_NAME }} /> to agree on the train back.
 							</p>
 						</Bubble>
 					</Run>

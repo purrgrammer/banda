@@ -14,6 +14,8 @@ const words = [
 ];
 const agents = [{ id: "mara", name: "Mara", face: defaultAvatarFace() }];
 const longName = "Ana María de la Vega Ortega Fernández Hidalgo";
+// every text size the app sets words in, from a line's small print to a display heading
+const sizes = ["text-meta", "text-ui", "text-body", "text-heading", "text-display"];
 // the band as the shell says it, for a real 1:1 chat with Cervantes: nothing but AgentChat tells it who can be named
 const shellAgents = [
 	...agents,
@@ -71,7 +73,7 @@ beforeAll(async () => {
 				import { FeedView } from '/src/app/Feed.tsx'; import { GroupChat } from '/src/app/GroupChat.tsx';
 				import { Markdown } from '/src/components/Markdown.tsx'; import '/src/styles/globals.css';
 				import { Mentionable } from '/src/components/MentionChip.tsx';
-				import { Bubble } from '/src/chat/Feed.tsx';
+				import { Bubble, Mention } from '/src/chat/Feed.tsx';
 				import { AgentChat } from '/src/app/AgentChat.tsx'; import { showAgents } from '/src/lib/shell.ts';
 				const who={name:'Mara',face:${JSON.stringify(defaultAvatarFace())}};
 				showAgents(${JSON.stringify(shellAgents)});
@@ -80,6 +82,7 @@ beforeAll(async () => {
 				<div id="group" style={{height:1200,display:'flex'}}><GroupChat room={20} phone={innerWidth<768} agents={${JSON.stringify(agents)}} onBack={()=>{}} /></div>
 				{[1,2,3].map(level=><section data-heading={level} key={level}><FeedView chat={10} who={who} compact={false} segments={[{kind:'companion',key:'h'+level,text:'#'.repeat(level)+' Leading heading\\n\\nParagraph\\n\\n'+'#'.repeat(level)+' Later heading',files:[],undelivered:false}]} /></section>)}
 				<Mentionable.Provider value={${JSON.stringify(agents)}}>{[true,false].map(mine=><section data-mentions={mine?'owner':'agent'} key={String(mine)}><Bubble mine={mine}><Markdown>{'Ask [@Mara](#/a/mara) about [this page](https://example.com) and \`POST /coupon\`.'}</Markdown></Bubble></section>)}</Mentionable.Provider>
+				<section data-mentions="sizes">{${JSON.stringify(sizes)}.map(size=><p key={size} className={size}>Ask <Mention who={${JSON.stringify(agents[0])}} /> today</p>)}</section>
 				<div className="banda-document">{[1,2,3].map(level=><section data-document={level} key={level}><Markdown>{'#'.repeat(level)+' Document heading'}</Markdown></section>)}</div>
 				<div id="direct-chat" style={{height:800,display:'flex',position:'relative'}}><AgentChat agent="cervantes" who={{id:'cervantes',name:'Cervantes',face:${JSON.stringify(defaultAvatarFace())}}} row={{chat:${directChat},read:1,state:'idle'}} phone={innerWidth<768} panelOpen={false} onBack={()=>{}} onPanel={()=>{}} /></div>
 				</main>);`;
@@ -233,7 +236,7 @@ for (const width of [320, 390, 1440]) {
 					page.run<
 						{ name: string; face: string; faceWidth: number; lines: number; inside: boolean }[]
 					>(`${chips(root)}.map(chip=>{
-						const words=chip.lastElementChild;
+						const words=chip.lastChild;
 						const range=document.createRange();range.selectNodeContents(words);
 						const face=chip.querySelector('[role="img"]');
 						const box=chip.getBoundingClientRect(),holder=chip.closest('[data-message-bubble]').getBoundingClientRect();
@@ -284,6 +287,54 @@ for (const width of [320, 390, 1440]) {
 		60_000,
 	);
 	it.skipIf(!hasChrome())(
+		`a mention sits on its line: its name on the words' baseline, its face within their height, at ${width}px`,
+		async () => {
+			await withLayoutPage(width, async (page) => {
+				const roots = {
+					owner: `document.querySelector('[data-mentions="owner"]')`,
+					agent: `document.querySelector('[data-mentions="agent"]')`,
+					chat: `[...document.querySelectorAll('#direct-chat [data-message-bubble]')].find(b=>b.textContent.includes('but not'))`,
+					group: `document.querySelector('#group [data-entry="${groupMention}"]')`,
+					sizes: `document.querySelector('[data-mentions="sizes"]')`,
+				};
+				for (const [where, root] of Object.entries(roots)) {
+					await page.until(`${root}?.querySelector('a[href^="#/a/"]')`);
+					// each mention against the words of its own line: the text's box (its font's ascent to descent) on that
+					// line, out of every text in the same paragraph but mentions and code
+					const seen = await page.run<
+						{ name: string; baseline: number; faceTop: number; faceBottom: number; height: number; line: number }[]
+					>(`[...${root}.querySelectorAll('a[href^="#/a/"]')].map(a=>{
+						const name=document.createRange();name.selectNodeContents(a.lastChild);
+						const said=[...name.getClientRects()].at(-1),face=a.querySelector('[role="img"]').getBoundingClientRect();
+						const block=a.closest('p')??a.parentElement;
+						const texts=document.createTreeWalker(block,NodeFilter.SHOW_TEXT),rects=[];
+						for(let node;(node=texts.nextNode());){
+							if(!node.textContent.trim()||node.parentElement.closest('a[href^="#/a/"],code'))continue;
+							const range=document.createRange();range.selectNodeContents(node);rects.push(...range.getClientRects());
+						}
+						const height=parseFloat(getComputedStyle(block).lineHeight);
+						// a name alone on its line (one too long to share it) is measured against its own words
+						const line=rects.filter(r=>Math.abs(r.top-said.top)<height/2).sort((x,y)=>Math.abs(x.top-said.top)-Math.abs(y.top-said.top))[0]??said;
+						return {name:a.lastChild.textContent,baseline:line.bottom-said.bottom,faceTop:face.top-line.top,faceBottom:line.bottom-face.bottom,height:a.getBoundingClientRect().height,line:height};
+					})`);
+					expect(seen.length, where).toBe(where === "chat" ? 5 : where === "sizes" ? sizes.length : 1);
+					for (const mention of seen) {
+						const said = `${where}: ${JSON.stringify(mention)}`;
+						// the same font on the same baseline ends at the same descent
+						expect(Math.abs(mention.baseline), said).toBeLessThanOrEqual(0.5);
+						expect(mention.faceTop, said).toBeGreaterThanOrEqual(-0.5);
+						expect(mention.faceBottom, said).toBeGreaterThanOrEqual(-0.5);
+						// centred on them, not riding high or low
+						expect(Math.abs(mention.faceTop - mention.faceBottom), said).toBeLessThanOrEqual(1);
+						// and it never pushes its line apart
+						expect(mention.height, said).toBeLessThanOrEqual(mention.line + 0.5);
+					}
+				}
+			});
+		},
+		60000,
+	);
+	it.skipIf(!hasChrome())(
 		`mention chips and inline code keep readable ink in both themes at ${width}px`,
 		async () => {
 			await withLayoutPage(width, async (page) => {
@@ -300,13 +351,21 @@ for (const width of [320, 390, 1440]) {
 							});
 							return rgb[0]*.2126 + rgb[1]*.7152 + rgb[2]*.0722;
 						};
-						const contrast = style => {
-							const fg = luminance(style.color), bg = luminance(style.backgroundColor);
+						// what an element's words are drawn on: its own fill, else the nearest one under it
+						const ground = element => {
+							for (let at = element; at; at = at.parentElement) {
+								const fill = getComputedStyle(at).backgroundColor;
+								if (!/^rgba\\(.*, 0\\)$|^transparent$/.test(fill)) return fill;
+							}
+							return 'white';
+						};
+						const contrast = element => {
+							const fg = luminance(getComputedStyle(element).color), bg = luminance(ground(element));
 							return (Math.max(fg,bg)+.05)/(Math.min(fg,bg)+.05);
 						};
-						return [...document.querySelectorAll('[data-mentions]')].map(root => {
-							return {contrast:contrast(getComputedStyle(root.querySelector('a[href="#/a/mara"]'))),
-								code:contrast(getComputedStyle(root.querySelector('[data-streamdown="inline-code"], :not(pre) > code'))),
+						return [...document.querySelectorAll('[data-mentions="owner"], [data-mentions="agent"]')].map(root => {
+							return {contrast:contrast(root.querySelector('a[href="#/a/mara"]')),
+								code:contrast(root.querySelector('[data-streamdown="inline-code"], :not(pre) > code')),
 								plainInherits:getComputedStyle(root.querySelector('a[href^="https://example.com"]')).color === getComputedStyle(root.querySelector('[data-message-bubble]')).color};
 						});
 					})()`);

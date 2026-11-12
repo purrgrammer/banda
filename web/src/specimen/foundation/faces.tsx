@@ -25,6 +25,16 @@ export function Faces() {
 				<Face {...SANCHO} size="message" />
 				<Face {...SANCHO} size="mention" />
 			</Group>
+			<Group
+				label="Text: as tall as the words around it, centred on their capitals (a mention)"
+				className="items-baseline gap-6"
+			>
+				{(["text-meta", "text-ui", "text-body", "text-heading", "text-display"] as const).map((size) => (
+					<span key={size} className={size}>
+						<Face {...SANCHO} size="text" /> Sancho
+					</span>
+				))}
+			</Group>
 			<Group label="States: idle · working · happy · waiting on you · routines paused" className="gap-6">
 				<Face {...MARA} />
 				<Face {...MARA} state="working" />
