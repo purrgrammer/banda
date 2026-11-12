@@ -130,6 +130,8 @@ describe("ask_hosts", () => {
 			]);
 			expect(await permittedHosts(harness)).toEqual({ [String(first.chat)]: ["*.damus.io", "nos.lol"] });
 			expect((await results(harness, first.chat)).at(-1)).toContain("The owner allowed nos.lol, *.damus.io");
+			// nothing held waited on the owner for them: what was held is run again
+			expect((await results(harness, first.chat)).at(-1)).toContain("Run the command again.");
 			const events = (await harness.snapshot(ActivityLog, context))!.events.map((e) => e.what);
 			expect(events).toContain("You allowed: Sancho may send anything to nos.lol");
 

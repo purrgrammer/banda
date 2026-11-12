@@ -54,6 +54,18 @@ export function engineTooOld(version: string): string | undefined {
 	return `Docker is too old: the computer needs Docker Engine ${DOCKER_MIN} or later, and this one is ${version.trim() || "unknown"}. Update Docker, and it starts by itself.`;
 }
 
+/**
+ * Why `docker exec` could not even start in the proxy, so that nothing it was asked to send left; undefined for anything
+ * else (a timeout, say, after which what it sent is not known).
+ */
+export function proxyDown(error: unknown): string | undefined {
+	return /No such container|is not running|is paused|Docker isn't (installed|running)|can't use Docker/i.test(
+		String(error),
+	)
+		? "the computer's proxy is not running"
+		: undefined;
+}
+
 /** Run docker; a failure says what it means (`dockerTrouble`), else the last `tail` lines docker wrote. */
 function docker(args: readonly string[], timeoutMs = 60_000, input?: string, tail = 1): Promise<string> {
 	return new Promise((resolve, reject) => {
@@ -425,7 +437,12 @@ export function containerBox(home: string): BoxSetup {
 		ack: async (chat, readBytes, tickets, _ctx) => {
 			await control(proxy, ["ack", String(chat), String(readBytes), ...tickets]);
 		},
-		replay: (request: HeldRequest, _ctx: Context) => control<Replayed>(proxy, ["replay"], request, 120_000),
+		replay: (request: HeldRequest, _ctx: Context) =>
+			control<Replayed>(proxy, ["replay"], request, 120_000).catch((error: unknown) => {
+				const down = proxyDown(error);
+				if (down === undefined) throw error;
+				return { failed: down };
+			}),
 	} satisfies BoxEgress & EgressControl;
 	return {
 		workspace: VOLUMES.workspace,

@@ -17,20 +17,23 @@ export function failureWords(error: unknown): string {
 	return "banda on this computer didn't answer. Check it's still running.";
 }
 
+/** A quiet note that `what` did not happen, why, and Try again, which calls `retry`. */
+export function sayFailed(what: string, error: unknown, retry: () => void): void {
+	toast.error(`Couldn't ${what}`, {
+		description: failureWords(error),
+		...(error instanceof Unauthorized ? {} : { action: { label: "Try again", onClick: retry } }),
+	});
+}
+
 /**
- * Run an action the owner took; on failure, a quiet note says `what` did not happen, why, and offers Try again. Resolves
- * with the action's result, or undefined when it failed.
+ * Run an action the owner took; on failure, says so (`sayFailed`). Resolves with the action's result, or undefined when
+ * it failed.
  */
 export async function attempt<T>(what: string, run: () => Promise<T>): Promise<T | undefined> {
 	try {
 		return await run();
 	} catch (error) {
-		const retry =
-			error instanceof Unauthorized ? undefined : { label: "Try again", onClick: () => void attempt(what, run) };
-		toast.error(`Couldn't ${what}`, {
-			description: failureWords(error),
-			...(retry === undefined ? {} : { action: retry }),
-		});
+		sayFailed(what, error, () => void attempt(what, run));
 		return undefined;
 	}
 }

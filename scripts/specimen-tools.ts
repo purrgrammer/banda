@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 import { browserTools } from "../src/box/browser-tools.ts";
 import { boxTools } from "../src/box/tools.ts";
 import { webFetchTool } from "../src/box/web-fetch.ts";
+import { askHostsTool } from "../src/core/ask-hosts.ts";
 import { BlobStore } from "../src/core/blobs.ts";
-import { proposeSendTool } from "../src/core/egress.ts";
 import { memoryExtension } from "../src/core/memory.ts";
 import { searchExtension } from "../src/core/search-tools.ts";
 import { skillsExtension } from "../src/core/skills.ts";
@@ -21,7 +21,7 @@ const tools = [
 	...(boxTools().tools ?? []),
 	...browserTools({ browser: unused, effect: core.effect, ask: unused, keep: unused, giveBack: unused }),
 	webFetchTool(),
-	core.effect(proposeSendTool({} as never)),
+	core.effect(askHostsTool()),
 	...(skillsExtension.tools ?? []),
 	...(memoryExtension({} as never).tools ?? []),
 	...(searchExtension({} as never).tools ?? []),

@@ -169,6 +169,7 @@ async function setup(
 					tools: browserTools({
 						browser: async () => page.browser,
 						egress: {
+							release: async () => [],
 							take: async (chat): Promise<Taken> => {
 								const read = reads.get(chat) ?? [];
 								reads.delete(chat);

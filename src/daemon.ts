@@ -37,7 +37,7 @@ import { ActivityLog } from "./core/activity.ts";
 import { Accepted, AgentChats, agentPath } from "./core/agents.ts";
 import { stopArchived } from "./core/archive.ts";
 import type { EffectTool } from "./core/ask.ts";
-import { askHostsTool } from "./core/ask-hosts.ts";
+import { allowHost, askHostsTool } from "./core/ask-hosts.ts";
 import { avatarInstructionsExtension } from "./core/avatar-instructions.ts";
 import { BlobStore, Blobs, safeName } from "./core/blobs.ts";
 import { ChatReads, readChat } from "./core/chat-reads.ts";
@@ -45,14 +45,14 @@ import { compactionExtension, compactionSettings } from "./core/compaction.ts";
 import { Companion } from "./core/companion.ts";
 import { Connected } from "./core/connections.ts";
 import { pause, pauseRoutine, resume } from "./core/control.ts";
-import { GIT_HOSTS, proposeSendTool, proxyKnows, sweepSent } from "./core/egress.ts";
+import { GIT_HOSTS, proxyKnows, sweepSent } from "./core/egress.ts";
 import { dropEmptyReplies } from "./core/empty-replies.ts";
 import { type Gateway, INLINE_IMAGES, mimeOf, OWNER, routeKey } from "./core/gateway.ts";
 import { guardImages } from "./core/images.ts";
 import { cacheLong } from "./core/long-cache.ts";
 import { MemoryLock, memoryExtension } from "./core/memory.ts";
 import { nowExtension } from "./core/now.ts";
-import { allowHost, onPermissions, Permissions, revoke } from "./core/permissions.ts";
+import { onPermissions, Permissions, revoke } from "./core/permissions.ts";
 import { FileCredentialStore } from "./core/provider-credentials.ts";
 import { Control, RoutineRefused, Routines } from "./core/routines.ts";
 import { Search } from "./core/search.ts";
@@ -303,11 +303,13 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		registry.install(compactionExtension);
 		registry.install(avatarInstructionsExtension);
 		registry.install(skillsExtension);
+		// what the proxy holds opens a release in the commit that stores it; only those releases send it
+		const holding = agentBox.egress === undefined ? undefined : core.held(agentBox.egress);
 		registry.install(
 			boxTools({
 				images,
 				workspace: agentBox.workspace,
-				...(agentBox.egress === undefined ? {} : { egress: agentBox.egress }),
+				...(holding === undefined ? {} : { egress: holding }),
 				ready: (chat) => egressReady(chat),
 			}),
 		);
@@ -315,7 +317,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		registry.install(
 			defineExtension({
 				name: "banda.web",
-				tools: [webFetchTool(agentBox.egress === undefined ? {} : { egress: agentBox.egress })],
+				tools: [webFetchTool(holding === undefined ? {} : { egress: holding })],
 			}),
 		);
 		// the browsers, in the box, one per agent: whose each one's requests are is what the proxy is told, with the rest
@@ -325,7 +327,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		};
 		let signedIn: (site: string, chat: number) => Promise<void> = async () => {};
 		let browserChanged = () => {};
-		const egressOf = agentBox.egress;
+		const egressOf = holding;
 		const setupOf = agentBox.browser;
 		const agentBrowsers =
 			setupOf === undefined
@@ -379,11 +381,8 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 					}),
 				}),
 			);
-		// a request the egress proxy held is sent only as an approved draft, or within a permission over its route
-		const effects = [
-			...(agentBox.egress === undefined ? [] : [proposeSendTool(agentBox.egress), askHostsTool()]),
-			...(options.effects ?? []),
-		];
+		// what an agent may ask for ahead of a command: a request the proxy held asks by itself
+		const effects = [...(agentBox.egress === undefined ? [] : [askHostsTool()]), ...(options.effects ?? [])];
 		if (effects.length > 0)
 			registry.install(defineExtension({ name: "banda.effects", tools: effects.map((tool) => core.effect(tool)) }));
 		// memory: files in the box, found through the one derived store
@@ -532,7 +531,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			effect: core.effect,
 			// a server the agent built is listed in its box, reading as nobody's chat (0)
 			listEnv: () => agentBox.env(undefined, agentBox.egress?.env(0)),
-			...(agentBox.egress === undefined ? {} : { egress: agentBox.egress }),
+			...(holding === undefined ? {} : { egress: holding }),
 			redirect: () => `http://127.0.0.1:${port}/oauth/callback`,
 			log,
 			changed: () => capabilitiesChanged(),

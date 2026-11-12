@@ -38,6 +38,7 @@ import {
 } from "../../chat/Settings.tsx";
 import { SkillCatalogue } from "../../chat/Skill.tsx";
 import { ArtifactViewer, FileViewer, Versions } from "../../chat/Viewer.tsx";
+import { sayFailed } from "../../lib/attempt.ts";
 import {
 	ATLAS,
 	FACTS,
@@ -90,6 +91,8 @@ const GITHUB_ROWS = [
 
 /** A fixed time the specimen's next runs are read from: Monday 2 November 2026, 09:00. */
 const SPECIMEN_NOW = new Date(2026, 10, 2, 9, 0).getTime();
+/** A save slow enough to see the selector's saving state. */
+const slowly = () => new Promise<void>((resolve) => setTimeout(resolve, 1500));
 
 /** An agent's panel with its four tabs filled; `tab` picks the one open. */
 function AgentPanelOf({
@@ -154,7 +157,7 @@ function AgentPanelOf({
 					<>
 						<Personality text="Warm and brief. Plans our family trips, keeps to the budget, and asks before booking anything." />
 						<SkillCatalogue skills={SKILLS} hrefFor={skillHref} />
-						<ThinkingTiers tier="balanced" custom={false} onPick={async () => {}} />
+						<ThinkingTiers tier="balanced" custom={false} save={slowly} onFailed={() => {}} />
 						<Archive agent={who.name} />
 					</>
 				}
@@ -177,6 +180,22 @@ export function PanelSections() {
 				{phone ? null : <Band rows={ROWS} selected="mara" />}
 				{phone ? null : <MaraChat panelOpen />}
 				<AgentPanelOf who={MARA} state="waiting" phone={phone} tab="routines" />
+			</Section>
+			<Section
+				id="thinking-tiers"
+				note="A pick shows at once with a spinner while it saves. The second one's save fails: it goes back to Balanced, with a notice and Try again."
+			>
+				<div className="flex max-w-md flex-col gap-6">
+					<ThinkingTiers tier="balanced" custom={false} save={slowly} onFailed={() => {}} />
+					<ThinkingTiers
+						tier="balanced"
+						custom={false}
+						save={() => slowly().then(() => Promise.reject(new Error("refused")))}
+						onFailed={(error, retry) => sayFailed("change how hard it thinks", error, retry)}
+					/>
+					<ThinkingTiers tier="deep" custom save={slowly} onFailed={() => {}} />
+					<ThinkingTiers tier={undefined} custom={false} save={slowly} onFailed={() => {}} />
+				</div>
 			</Section>
 			<Section
 				id="connections-signed-in"

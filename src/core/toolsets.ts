@@ -8,7 +8,7 @@ export const TOOLSETS: { readonly [name: string]: readonly string[] } = {
 	shell: ["bash"],
 	skills: ["skill"],
 	agents: ["message_agent", "read_agent_chat", "propose_agent", "propose_group", "propose_agent_change"],
-	requests: ["propose_send", "ask_hosts"],
+	requests: ["ask_hosts"],
 	routines: ["schedule"],
 	watches: ["watch"],
 	memory: ["remember", "recall", "forget"],
@@ -103,8 +103,8 @@ export const isGroupTools = (name: string) => name === GROUP_TOOLS || name.start
 
 /**
  * The tools every agent chat gets, a group member's too: all of banda's own. Only a connection's tools stay outside, by
- * account. What leaves the box is held whatever a chat may run: `requests` (`propose_send`, `ask_hosts`) is how the agent
- * asks the owner about it, so being base, it widens nothing.
+ * account. What leaves the box is held whatever a chat may run: `requests` (`ask_hosts`) is how the agent
+ * asks the owner ahead of it, so being base, it widens nothing.
  */
 export const EVERY_AGENT: readonly string[] = [
 	MESSAGE_USER,

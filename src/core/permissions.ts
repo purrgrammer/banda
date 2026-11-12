@@ -27,7 +27,7 @@ import {
 	type Tx,
 } from "@earendil-works/pi-durable";
 import { log } from "./activity.ts";
-import { AgentChats, acceptedAgent, agentWords, ChatAgent, LEAD } from "./agents.ts";
+import { AgentChats, agentWords, ChatAgent, LEAD } from "./agents.ts";
 import { Companion } from "./companion.ts";
 
 import { FLOOR_WORDS, type Floor } from "./floor.ts";
@@ -194,30 +194,16 @@ export function matches(permission: Permission, tool: string, args: { readonly [
 	);
 }
 
+/** The effect a host permission is over: sending what the proxy held. */
+export const HOST_TOOL = "propose_send";
 /** The argument of `propose_send` a host permission binds: the host as the proxy spells it. */
 export const HOST_ARG = "_host";
 
 /**
- * Allow agent `agent` to send anything to `typed` (a host, `*.example.com` or `*`), as the owner, not answering any ask:
- * a host permission of `propose_send` like the one an approval gives, so the proxy lets that agent's writes there
- * through, WebSockets included. The id of the permission (an equal one already given, if so), or why not.
- */
-export async function allowHost(
-	harness: Harness,
-	agent: string,
-	typed: string,
-	now: number,
-	ctx: Context = context,
-): Promise<{ readonly id: string } | { readonly refused: string }> {
-	return harness.commit(async (tx) => {
-		if (agent !== LEAD && (await acceptedAgent(tx, agent)) === undefined) return { refused: "no such agent" };
-		return allowHostIn(tx, agent, typed, now, 0);
-	}, ctx);
-}
-
-/**
- * `allowHost` in a commit already open, the agent already known; `wait` is the approval that gave it (0: the owner
- * directly). Logged as the owner's.
+ * Allow agent `agent` to send anything to `typed` (a host, `*.example.com` or `*`), in a commit already open: a host
+ * permission of `propose_send` like the one an approval gives, so the proxy lets that agent's writes there through,
+ * WebSockets included. `wait` is the approval that gave it (0: the owner directly). Logged as the owner's. The id of the
+ * permission (an equal one already given, if so), or why not.
  */
 export async function allowHostIn(
 	tx: Tx,
@@ -237,7 +223,7 @@ export async function allowHostIn(
 		([, permission]) =>
 			permission.scope === "host" &&
 			permission.agent === agent &&
-			permission.tool === "propose_send" &&
+			permission.tool === HOST_TOOL &&
 			canonical(permission.match) === canonical(match),
 	);
 	if (same !== undefined) return { id: same[0], host };
@@ -245,7 +231,7 @@ export async function allowHostIn(
 	const what = `${name} may send anything to ${host === "*" ? "any host" : host}`;
 	const id = String(doc.next);
 	doc.next += 1;
-	doc.permissions[id] = { tool: "propose_send", match, what, scope: "host", agent, at: now, wait };
+	doc.permissions[id] = { tool: HOST_TOOL, match, what, scope: "host", agent, at: now, wait };
 	await log(tx, { at: now, what: `You allowed: ${what}` });
 	return { id, host };
 }

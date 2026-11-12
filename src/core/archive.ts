@@ -10,6 +10,7 @@ import { type ConversationId, type Harness, LiveDoc, type TaskId, type Tx } from
 import { log } from "./activity.ts";
 import { Accepted, AgentChats, agentPath, agentWords, archivedFile } from "./agents.ts";
 import { Permissions } from "./permissions.ts";
+import { RELEASE } from "./release.ts";
 import { Routines, routineAgent } from "./routines.ts";
 import { context } from "./store.ts";
 import { Watches, watchAgent } from "./watches.ts";
@@ -66,7 +67,8 @@ export async function stopArchived(harness: Harness, ctx: Context = context): Pr
 	const graph = await harness.taskGraph(ctx);
 	const nodes = Object.values(graph.value.tasks).filter(
 		(node) =>
-			(node.kind === "banda.admit" && mine.has(Number(node.conversationId))) || node.kind === "banda.group-turn",
+			((node.kind === "banda.admit" || node.kind === RELEASE) && mine.has(Number(node.conversationId))) ||
+			node.kind === "banda.group-turn",
 	);
 	graph.dispose();
 	for (const node of nodes) {

@@ -232,6 +232,7 @@ export const SECTIONS: readonly Entry[] = [
 	{ id: "search", title: "Search", group: "screens", status: "app", sources: ["web/src/chat/Search.tsx"] },
 	// Agent and panel
 	{ id: "panel-app", title: "A chat and its panel", group: "agent", status: "app", sources: [PANEL] },
+	{ id: "thinking-tiers", title: "The thinking selector", group: "agent", status: "app", sources: [SETTINGS] },
 	{
 		id: "connections-signed-in",
 		title: "Connections after sign-in",

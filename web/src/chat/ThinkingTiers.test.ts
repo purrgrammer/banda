@@ -6,7 +6,7 @@ import type { Tier } from "../../../src/core/tiers.ts";
 import { ThinkingTiers } from "./Settings.tsx";
 
 const render = (tier: Tier | undefined, custom = false) =>
-	renderToStaticMarkup(createElement(ThinkingTiers, { tier, custom, onPick: async () => {} }));
+	renderToStaticMarkup(createElement(ThinkingTiers, { tier, custom, save: async () => {}, onFailed: () => {} }));
 
 const checked = (html: string) =>
 	[...html.matchAll(/<button[^>]*aria-checked="true"[^>]*>([^<]*)</g)].map((match) => match[1]);

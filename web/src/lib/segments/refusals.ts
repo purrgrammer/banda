@@ -24,7 +24,7 @@ declare module "./types.ts" {
 }
 
 /** The tools that propose something the owner answers, whose refusal is the only trace of the call. */
-export const PROPOSALS: ReadonlySet<string> = new Set(["propose_send", "propose_key"]);
+export const PROPOSALS: ReadonlySet<string> = new Set(["propose_key"]);
 
 export const refusalWords = (segment: Pick<RefusalSegment, "why">) => `Not proposed: ${segment.why}`;
 

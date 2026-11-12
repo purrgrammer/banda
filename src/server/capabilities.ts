@@ -96,7 +96,7 @@ import {
 	withoutSignIn,
 	withReads,
 } from "../core/connections.ts";
-import { type EgressControl, intake } from "../core/egress.ts";
+import { type HoldingEgress, intake } from "../core/egress.ts";
 import { gmailAttachment, MAX_GMAIL_ATTACHMENT_BYTES, MAX_GMAIL_SEND_ATTACHMENT_BYTES } from "../core/gmail-rest.ts";
 import {
 	boxSession,
@@ -164,7 +164,7 @@ export type CapabilityOptions = {
 	readonly effect: (tool: EffectTool<any>) => ToolRegistration;
 	/** The box as nobody's chat (0) sees it, reading only, to list a server the agent built before it is accepted. */
 	readonly listEnv: () => ExecutionEnv;
-	readonly egress?: EgressControl;
+	readonly egress?: HoldingEgress;
 	/** Where a sign-in comes back to: the daemon's callback on loopback. */
 	readonly redirect: () => string;
 	readonly log?: (line: string) => void;

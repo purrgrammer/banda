@@ -9,12 +9,15 @@ export function AvatarRenderer({
 	size,
 	animated = false,
 	mood = "idle",
+	fill = false,
 }: {
 	definition: AvatarDefinition;
 	color: string;
 	size: number;
 	animated?: boolean;
 	mood?: AvatarMotion;
+	/** Fill the box around it instead of `size` pixels: a face sized from the text it sits in. */
+	fill?: boolean;
 }) {
 	const host = useRef<HTMLSpanElement>(null);
 	const scene = useRef<FaceScene | undefined>(undefined);
@@ -30,5 +33,9 @@ export function AvatarRenderer({
 			scene.current = undefined;
 		};
 	}, []);
-	return <span ref={host} aria-hidden="true" className="inline-block shrink-0" style={{ width: size, height: size }} />;
+	return fill ? (
+		<span ref={host} aria-hidden="true" className="block size-full [&_svg]:block [&_svg]:size-full" />
+	) : (
+		<span ref={host} aria-hidden="true" className="inline-block shrink-0" style={{ width: size, height: size }} />
+	);
 }

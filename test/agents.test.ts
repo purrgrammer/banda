@@ -72,7 +72,6 @@ describe("agent files", () => {
 			"skill",
 			"bash",
 			"web_fetch",
-			"propose_send",
 			"ask_hosts",
 			...TOOLSETS.browser,
 			"schedule",

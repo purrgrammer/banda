@@ -56,7 +56,7 @@ const GROUPS: Record<string, { title: string; description: string }> = {
 	routines: { title: "Routines", description: "Schedule work for later or repeat it." },
 	skills: { title: "Skills", description: "Load instructions from accepted skills." },
 	agents: { title: "The band", description: "Contact agents, read their chats and propose changes." },
-	requests: { title: "Outgoing requests", description: "Prepare a held network request for your approval." },
+	requests: { title: "Outgoing requests", description: "Ask you to allow hosts before sending to them." },
 };
 const TOOL_LABELS: Record<string, string> = {
 	search: "Search banda",
@@ -76,7 +76,7 @@ const TOOL_LABELS: Record<string, string> = {
 	propose_agent: "Propose an agent",
 	propose_group: "Propose a group",
 	propose_agent_change: "Propose changes to an agent",
-	propose_send: "Prepare a network request",
+	ask_hosts: "Ask to allow hosts",
 	browser_snapshot: "Read the page",
 	browser_navigate: "Open a page",
 	browser_click: "Click an element",
@@ -98,7 +98,7 @@ const INVENTORY = Object.entries({
 	search: ["search", "read_search_result"],
 	skills: ["skill"],
 	agents: ["message_agent", "read_agent_chat", "propose_agent", "propose_group", "propose_agent_change"],
-	requests: ["propose_send"],
+	requests: ["ask_hosts"],
 }).map(([id, tools]) => ({
 	id,
 	...(GROUPS[id] ?? { title: id, description: "" }),

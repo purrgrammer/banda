@@ -3,6 +3,7 @@
  * every screen. A dropped stream reopens after a pause, and the app says it cannot reach the daemon meanwhile.
  */
 import { useSyncExternalStore } from "react";
+import type { Tier } from "../../../src/core/tiers.ts";
 import { AREA_HANDLERS } from "../areas/index.ts";
 import {
 	type AgentBrowserView,
@@ -27,7 +28,8 @@ import { checkForUpdate } from "./worker.ts";
  * `declare module "../lib/shell.ts" { interface Shell { … } }`), optional, and its handlers set them.
  */
 export interface Shell {
-	readonly rows: readonly ChatRow[];
+	/** The chat list. A chat's tier is not on its row here: `useChatTier` reads it. */
+	readonly rows: readonly Omit<ChatRow, "tier" | "custom">[];
 	readonly companion: CompanionView | undefined;
 	/** The control room (`ControlView`), as the daemon last said. */
 	readonly control: ControlView | undefined;
@@ -52,7 +54,7 @@ export type ShellHandlers = {
 };
 
 const CORE: ShellHandlers = {
-	chats: (event) => ({ rows: event.rows }),
+	chats: (event) => takeRows(event.rows),
 	// loaded once the companion came too, which the stream sends after the list: a screen never starts unnamed
 	companion: (event) => ({ companion: event.companion, loaded: true }),
 	control: (event) => ({ control: event.control }),
@@ -84,8 +86,34 @@ const listeners = new Set<() => void>();
 let started = false;
 
 function set(next: Partial<Shell>) {
-	state = { ...state, ...next };
+	// nothing of the shell changed (a tier did): the state keeps its identity, and no screen renders
+	if (Object.keys(next).length > 0) state = { ...state, ...next };
 	for (const listener of listeners) listener();
+}
+
+/** How hard a chat thinks: the tier it runs on, and whether its agent's file names a model of its own instead. */
+export type ChatTierView = { readonly tier: Tier | undefined; readonly custom: boolean };
+
+const NO_TIER: ChatTierView = { tier: undefined, custom: false };
+
+/**
+ * Each chat's tier, apart from `state`: only the selector reads it, so a tier changing renders that and no other screen
+ * that holds the shell.
+ */
+let tiers: ReadonlyMap<number, ChatTierView> = new Map();
+
+/** Split the daemon's rows: the tiers kept apart, and the rows only if something other than a tier changed. */
+function takeRows(rows: readonly ChatRow[]): Partial<Shell> {
+	tiers = new Map(
+		rows.flatMap((row): [number, ChatTierView][] => {
+			if (row.tier === undefined) return [];
+			const was = tiers.get(row.chat);
+			const custom = row.custom === true;
+			return [[row.chat, was?.tier === row.tier && was.custom === custom ? was : { tier: row.tier, custom }]];
+		}),
+	);
+	const bare = rows.map(({ tier: _tier, custom: _custom, ...row }) => row);
+	return JSON.stringify(bare) === JSON.stringify(state.rows) ? {} : { rows: bare };
 }
 
 async function run() {
@@ -155,6 +183,12 @@ export function useShell(): Shell {
 /** One string `pick` makes of the shell: a component re-renders only when it changes, not at every event. */
 export function useShellPick(pick: (shell: Shell) => string): string {
 	const picked = () => pick(state);
+	return useSyncExternalStore(subscribe, picked, picked);
+}
+
+/** Chat `chat`'s tier as the daemon last said; a component using it renders only when that changes. */
+export function useChatTier(chat: number | undefined): ChatTierView {
+	const picked = () => (chat === undefined ? undefined : tiers.get(chat)) ?? NO_TIER;
 	return useSyncExternalStore(subscribe, picked, picked);
 }
 

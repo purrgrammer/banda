@@ -11,13 +11,13 @@ import type { CompanionView, FactView } from "../../../src/server/api.ts";
 import { centreBand, pinRow, useBand } from "../areas/band.ts";
 import { archiveGroup, setGroupLimits } from "../areas/groups.ts";
 import { actOnRoutine, clickKey } from "../areas/routines.ts";
-import { setChatTier, useTiers } from "../areas/tiers.ts";
+import { useTiers } from "../areas/tiers.ts";
 import { Band, BandNotice } from "../chat/Band.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
 import { Face, FaceStack } from "../chat/Face.tsx";
 import { MemorySettings, type NewFactSpec } from "../chat/MemorySettings.tsx";
 import { AgentPanel, firstTab, Panel, Routines, Watching } from "../chat/Panel.tsx";
-import { AppSettings, Archive, Personality, SettingsPage, ThinkingTiers } from "../chat/Settings.tsx";
+import { AppSettings, Archive, Personality, SettingsPage } from "../chat/Settings.tsx";
 import { SkillCatalogue } from "../chat/Skill.tsx";
 import { actOnFact, setPaused, signOutAccount, signOutSite, updateConnection } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
@@ -31,6 +31,7 @@ import { AgentChat } from "./AgentChat.tsx";
 import { ArtifactPage } from "./ArtifactPage.tsx";
 import { BringOnboarding, BringSettings, useBring } from "./Bring.tsx";
 import { bandRows, titleOf, whoOf } from "./band.ts";
+import { ChatThinking } from "./ChatThinking.tsx";
 import { ConnectFlow, freshAccounts } from "./ConnectFlow.tsx";
 import { saveEdit, setAgentState } from "./edits.ts";
 import { GroupChat } from "./GroupChat.tsx";
@@ -523,15 +524,7 @@ function Main() {
 										text={personality}
 										onChange={(text) => edit(where.id, { personality: text })}
 									/>
-									<ThinkingTiers
-										key={`${where.id}-thinking`}
-										tier={row?.tier}
-										custom={row?.custom === true}
-										onPick={async (tier) => {
-											if (row !== undefined)
-												await attempt("change how hard it thinks", () => setChatTier(row.chat, tier));
-										}}
-									/>
+									<ChatThinking key={`${where.id}-thinking`} chat={row?.chat} />
 									<SkillCatalogue skills={skillSummaries} hrefFor={(name) => `#/skills/${name}`} />
 									<a href="#/skills" className="text-ui text-ink-2 underline underline-offset-4">
 										Manage shared skills

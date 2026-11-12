@@ -22,10 +22,11 @@ import { HEADER_CLEARANCE, Header } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { ChatLoading } from "../chat/Loading.tsx";
 import type { Who } from "../chat/Row.tsx";
+import { Mentionable } from "../components/MentionChip.tsx";
 import { type ChatRow, type Item, type Posted, postMessage, readChat, upload } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { answeredWell, view } from "../lib/chat.ts";
-import { linkMentions } from "../lib/mentions.ts";
+import type { ChatAgent } from "../lib/navigation.ts";
 import { useShell } from "../lib/shell.ts";
 import { useTranscript } from "../lib/transcript.ts";
 import { ActivitySheet } from "./Activity.tsx";
@@ -124,12 +125,16 @@ export function AgentChat({
 		agent === "sancho"
 			? undefined
 			: (agents.find(({ accepted }) => accepted?.agent?.id === agent)?.accepted?.agent?.tools ?? []);
-	const mentionables = agents.flatMap(({ accepted }) => {
-		const other = accepted?.agent;
-		return other !== undefined && other.state === "active" && other.id !== agent
-			? [{ id: other.id, name: other.name, face: other.face }]
-			: [];
-	});
+	const mentionables = useMemo(
+		() =>
+			agents.flatMap(({ accepted }) => {
+				const other = accepted?.agent;
+				return other !== undefined && other.state === "active" && other.id !== agent
+					? [{ id: other.id, name: other.name, face: other.face }]
+					: [];
+			}),
+		[agents, agent],
+	);
 	return (
 		<div className="feed-scope relative flex min-w-0 flex-1 flex-col bg-paper">
 			<Header
@@ -215,7 +220,7 @@ function Timeline({
 	activity: { anchor?: number } | undefined;
 	onActivity: (entry: number) => void;
 	onCloseActivity: () => void;
-	mentionables: readonly Who[];
+	mentionables: readonly ChatAgent[];
 	read: number;
 	onRoutine?: ((name: string) => void) | undefined;
 	/** What it does now, for the header: "Using its browser…". */
@@ -245,27 +250,16 @@ function Timeline({
 	useEffect(() => {
 		if (shown.size > 0) setOutgoing((items) => stillPending(items, shown));
 	}, [shown]);
-	const linkedItems = useMemo(
-		() =>
-			transcript.items.map((item) =>
-				item.role === "user" && mentionables.length > 0
-					? {
-							...item,
-							text: linkMentions(
-								item.text,
-								mentionables.flatMap((agent) => (agent.id ? [agent.id] : [])),
-								mentionables.flatMap((agent) => (agent.id ? [{ ...agent, id: agent.id }] : [])),
-							),
-						}
-					: item,
-			),
-		[transcript.items, mentionables],
-	);
 	const visibleOutgoing = stillPending(outgoing, shown);
+	// every agent the owner can name here, this one too: each named shows as its chip
+	const named = useMemo(
+		() => [{ id: agent, name: who.name, face: who.face }, ...mentionables],
+		[agent, who.name, who.face, mentionables],
+	);
 	const segments = useMemo(
 		() =>
 			view(
-				linkedItems,
+				transcript.items,
 				transcript.waits,
 				{
 					busy: transcript.busy,
@@ -277,7 +271,7 @@ function Timeline({
 				context,
 			),
 		[
-			linkedItems,
+			transcript.items,
 			transcript.waits,
 			transcript.busy,
 			transcript.running,
@@ -367,28 +361,30 @@ function Timeline({
 						<Bubble>{firstWords(who.name, tools)}</Bubble>
 					</Run>
 				) : null}
-				<FeedView
-					chat={chat}
-					outgoing={visibleOutgoing}
-					onRetry={(pending) => {
-						const retrying = { ...pending, state: "sending" as const };
-						setOutgoing((items) => items.map((item) => (item.id === pending.id ? retrying : item)));
-						deliver(retrying);
-					}}
-					who={who}
-					agent={agent}
-					segments={segments}
-					unreadAfter={unreadAfter}
-					compact
-					{...(transcript.busy
-						? {}
-						: { onTryAgain: () => void attempt("ask again", () => send(agent, "Try again.", [])) })}
-					onOpenArtifact={(id, n) => {
-						location.hash = `#/artifact/${id}${n === undefined ? "" : `?v=${n}`}`;
-					}}
-					onRoutine={onRoutine}
-					onActivity={onActivity}
-				/>
+				<Mentionable.Provider value={named}>
+					<FeedView
+						chat={chat}
+						outgoing={visibleOutgoing}
+						onRetry={(pending) => {
+							const retrying = { ...pending, state: "sending" as const };
+							setOutgoing((items) => items.map((item) => (item.id === pending.id ? retrying : item)));
+							deliver(retrying);
+						}}
+						who={who}
+						agent={agent}
+						segments={segments}
+						unreadAfter={unreadAfter}
+						compact
+						{...(transcript.busy
+							? {}
+							: { onTryAgain: () => void attempt("ask again", () => send(agent, "Try again.", [])) })}
+						onOpenArtifact={(id, n) => {
+							location.hash = `#/artifact/${id}${n === undefined ? "" : `?v=${n}`}`;
+						}}
+						onRoutine={onRoutine}
+						onActivity={onActivity}
+					/>
+				</Mentionable.Provider>
 				{stopped(transcript.items, transcript.busy) ? (
 					<Line icon={SquareIcon}>Stopped. Send a message to go on.</Line>
 				) : null}

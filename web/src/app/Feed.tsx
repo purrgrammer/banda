@@ -14,7 +14,7 @@ import {
 	FileXIcon,
 	RotateCwIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useContext } from "react";
 import { cn } from "@/lib/cn";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import { actOnRoutine } from "../areas/routines.ts";
@@ -32,9 +32,11 @@ import type { Who } from "../chat/Row.tsx";
 import { SkillFeedItem } from "../chat/Skill.tsx";
 import { WatchLine, WatchProposal } from "../chat/Watch.tsx";
 import { Markdown } from "../components/Markdown.tsx";
+import { Mentionable } from "../components/MentionChip.tsx";
 import { actOnCapability, actOnProposal, answerAgent, answerWait, dismissQuestion } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { type Segment, tryAgainAfter } from "../lib/chat.ts";
+import { linkMentions } from "../lib/mentions.ts";
 import { changeNoun, changeWords } from "../lib/segments/changes.ts";
 import { watchCallWords, watchObject } from "../lib/segments/watches.ts";
 import { showAgents, showCapabilities, showControl, showWatching, useShell } from "../lib/shell.ts";
@@ -58,6 +60,29 @@ const dayLabel = (at: number) => {
 	if (day(at) === new Date(now.getTime() - 86_400_000).toDateString()) return "Yesterday";
 	return new Date(at).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
 };
+
+/**
+ * The owner's words in a bubble, each `@Name` of an agent the chat knows drawn as its chip, however far the message
+ * has got: sending, queued or taken. The link is made here, for the eye alone, so the message stays what they wrote
+ * and Copy gives that. With `chat`, the objects it names show too (`MessageText`).
+ */
+function OwnerWords({
+	text,
+	chat,
+	agent,
+}: {
+	text: string;
+	chat?: number | undefined;
+	agent?: { readonly id: string; readonly name: string } | undefined;
+}) {
+	const agents = useContext(Mentionable);
+	const linked = linkMentions(
+		text,
+		agents.map(({ id }) => id),
+		agents,
+	);
+	return chat === undefined ? <Markdown>{linked}</Markdown> : <MessageText chat={chat} text={linked} agent={agent} />;
+}
 
 function ProposalFeedCard({ segment }: { segment: Extract<Segment, { kind: "proposal" }> }) {
 	const { proposal, state } = segment;
@@ -578,7 +603,7 @@ export function FeedView({
 				<div className="flex flex-col items-end gap-1">
 					{pending.text.trim() === "" ? null : (
 						<Bubble mine>
-							<Markdown>{pending.text}</Markdown>
+							<OwnerWords text={pending.text} />
 						</Bubble>
 					)}
 					{pending.files.map((file) => (
@@ -629,9 +654,9 @@ function partOf(
 					{segment.text.trim() === "" ? null : (
 						<Bubble mine copy={segment.text}>
 							{segment.queued ? (
-								<Markdown>{segment.text}</Markdown>
+								<OwnerWords text={segment.text} />
 							) : (
-								<MessageText chat={chat} text={segment.text} agent={objectAgent} />
+								<OwnerWords chat={chat} text={segment.text} agent={objectAgent} />
 							)}
 						</Bubble>
 					)}
@@ -645,7 +670,7 @@ function partOf(
 				<>
 					{segment.text.trim() === "" ? null : (
 						<Bubble mine reaction={segment.reaction} copy={segment.text}>
-							<MessageText chat={chat} text={segment.text} agent={objectAgent} />
+							<OwnerWords chat={chat} text={segment.text} agent={objectAgent} />
 						</Bubble>
 					)}
 					{segment.files.map((file) => (

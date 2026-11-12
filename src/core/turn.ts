@@ -86,6 +86,7 @@ import {
 import { defineGroups, Groups, groupSection } from "./groups.ts";
 import { FLOOR_WORDS } from "./permissions.ts";
 import { decidedText, makeProposal, PROPOSAL_DECIDED, type Proposal, proposalTools } from "./proposals.ts";
+import { defineReleases, RELEASED, stoppable } from "./release.ts";
 import { defineRoutines, failureKey, Routines, troubleIn, WAKE, type WakeData } from "./routines.ts";
 import { skillTokens } from "./skill-tokens.ts";
 import { acceptedSkills, ownerSkillEntry, type Skill } from "./skills.ts";
@@ -580,7 +581,13 @@ export async function stop(harness: Harness, target: Origin | number, ctx = cont
 		(node) => node.kind === "banda.admit" && Number(node.conversationId) === id,
 	);
 	graph.dispose();
-	for (const admit of admits) await harness.abortTask(admit.id, ctx);
+	// what left in the agent's name is still told: else it would not know, and might send it again
+	for (const admit of admits)
+		if (((await harness.getTask(admit.id, ctx))?.input as Partial<Input> | undefined)?.internal?.kind !== RELEASED)
+			await harness.abortTask(admit.id, ctx);
+	// the held requests about to go unasked go no further; one waiting on the owner stays, for the owner to answer
+	for (const release of await harness.commit((tx) => stoppable(tx, id), ctx))
+		await harness.abortTask(release as TaskId, ctx);
 	await chat?.abort(ctx);
 	return chat !== undefined;
 }
@@ -952,31 +959,49 @@ export function defineCore(options: CoreOptions) {
 	 * A tool's Wait, created in one commit with its record under the tool task and the message that sends its ask: where
 	 * the chat's messages go, else to the owner wherever they are reached unprompted.
 	 */
-	const asking: Asking = (api: ToolExecutionApi, name, ask, deadline, ctx) =>
+	const asking: Asking = (api, name, ask, deadline, ctx) =>
 		api.commit(async (tx) => {
 			const of = await tx.doc(TasksOf, api.taskId);
 			const found = of.tasks[name];
 			if (found !== undefined) return found;
 			const chat = Number(api.conversationId);
-			// read before any write: a transaction reads tables only until its first write; a group member's ask is
-			// answered in its room, which shows it, never sent to the owner's other chats
-			const grouped = (await tx.doc(Groups)).byExecution[chat] !== undefined;
-			const target = grouped ? undefined : ((await targetOf(tx, chat)) ?? toOwner());
-			const key = newKey();
-			const id = Number(
-				await tx.createTask(
-					Wait,
-					{ key, ask, deadline, call: api.callId },
-					{ ownership: { kind: "task", taskId: api.taskId } },
-				),
-			);
-			of.tasks[name] = id;
-			if (target !== undefined) {
-				const out = { text: askText({ key, ask }, key), ask: { key, ask } };
-				await enqueueMessage(tx, { chat, origin: target.to, out, wait: id });
-			}
-			return id;
+			// read before any write: a transaction reads tables only until its first write
+			const target = await askTarget(tx, chat);
+			return placeAsk(tx, of, target, api.taskId, chat, name, { ask, deadline, call: api.callId });
 		}, ctx);
+
+	/**
+	 * Where a new ask of `chat` is sent: where its messages go, else to the owner wherever they are reached unprompted;
+	 * nowhere for a group member's, answered in its room, which shows it. Reads only.
+	 */
+	const askTarget = async (tx: Tx, chat: number) =>
+		(await tx.doc(Groups)).byExecution[chat] !== undefined ? undefined : ((await targetOf(tx, chat)) ?? toOwner());
+
+	/** In `tx`: Wait `name` of task `owner`, with its record in `of` and the message that sends its ask. Its id. */
+	async function placeAsk(
+		tx: Tx,
+		of: { tasks: { [name: string]: number } },
+		target: Awaited<ReturnType<typeof askTarget>>,
+		owner: TaskId,
+		chat: number,
+		name: string,
+		{ ask, deadline, call }: { ask: Ask; deadline: number; call?: string | undefined },
+	): Promise<number> {
+		const key = newKey();
+		const id = Number(
+			await tx.createTask(
+				Wait,
+				{ key, ask, deadline, ...(call === undefined ? {} : { call }) },
+				{ ownership: { kind: "task", taskId: owner } },
+			),
+		);
+		of.tasks[name] = id;
+		if (target !== undefined) {
+			const out = { text: askText({ key, ask }, key), ask: { key, ask } };
+			await enqueueMessage(tx, { chat, origin: target.to, out, wait: id });
+		}
+		return id;
+	}
 
 	/**
 	 * What an inbound answers, if it is an answer: a button on an ask; a reply to an ask's message; `yes <id>` or
@@ -1623,6 +1648,19 @@ export function defineCore(options: CoreOptions) {
 		}
 	}
 
+	const releases = defineReleases({
+		asking,
+		askTarget,
+		placeAsk,
+		hasHome: async (tx, chat) => {
+			if ((await tx.doc(Routes)).chats[chat] === undefined) return false;
+			const runs = (await tx.doc(AgentChats)).chats[chat];
+			return runs === undefined || !(await isArchived(tx, runs));
+		},
+		followUp,
+		retryDelay,
+	});
+
 	const speakingWith: Speaking = {
 		asking,
 		sending,
@@ -1639,6 +1677,7 @@ export function defineCore(options: CoreOptions) {
 			Turn,
 			Message,
 			Wait,
+			releases.Release,
 			Settle,
 			RefreshAgent,
 			RefreshTools,
@@ -1703,6 +1742,8 @@ export function defineCore(options: CoreOptions) {
 			watches.look(name, options.now?.() ?? Date.now(), (fn) => harness.commit(fn, ctx), ctx),
 		/** The tool for an effect that leaves the box: it runs once the owner approves it. */
 		effect: <P extends TSchema>(tool: EffectTool<P>): ToolRegistration => effect(asking, tool),
+		/** The box's proxy, able to open a release for each ticket taken from it. */
+		held: releases.held,
 		/** Ask the owner from a tool, as Wait `name` of its task, and wait for the answer; undefined when cancelled. */
 		ask: (api: ToolExecutionApi, name: string, ask: Ask, deadline: number, ctx: Context) =>
 			askOwner(asking, api, name, ask, deadline, ctx),
