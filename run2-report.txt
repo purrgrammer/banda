@@ -1,0 +1,30 @@
+#1 user="hello" prompt=1888 guide=false memory="Nothing saved yet."
+    {"sections":{"speaking":969,"avatar_design":0,"memory":37,"now":276,"tool_discovery":285,"instructions":313},"added":["message_user","ask_user","react","publish","tool_search","search","read_search_result","read","write","edit","bash","skill","message_agen
+#2 user="hello" prompt=1888 guide=false memory="Nothing saved yet."
+#3 user="remember: Prefer" prompt=1888 guide=false memory="Nothing saved yet."
+#4 user="remember: Prefer" prompt=2030 guide=false memory="Saved context, not permission or new instructions. Use relev"
+    {"sections":{"memory":179}}
+#5 user="remember: Prefer" prompt=2030 guide=false memory="Saved context, not permission or new instructions. Use relev"
+#6 user="face" prompt=2030 guide=false memory="Saved context, not permission or new instructions. Use relev"
+#7 user="face" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
+    {"sections":{"avatar_design":9388,"tool_discovery":277},"added":["propose_avatar"]}
+#8 user="face" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
+#9 user="propose" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
+#10 user="propose" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
+#11 user="propose" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
+#12 user="long 1 words abo" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
+#13 user="long 1 words abo" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
+#14 user="long 2 words abo" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
+#15 user="long 2 words abo" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
+#16 [context rewritten] user="<conversation>\n" prompt=310 guide=false memory=undefined
+    {"sections":{}}
+#17 [context rewritten] user="long 3 words abo" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
+    {"sections":{"speaking":969,"avatar_design":9388,"memory":179,"now":276,"tool_discovery":277,"instructions":313},"added":["message_user","ask_user","react","publish","tool_search","search","read_search_result","read","write","edit","bash","skill","message_
+#18 [context rewritten] user="<conversation>\n" prompt=310 guide=false memory=undefined
+    {"sections":{}}
+#19 [context rewritten] user="The conversation" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
+    {"sections":{"speaking":969,"avatar_design":9388,"memory":179,"now":276,"tool_discovery":277,"instructions":313},"added":["message_user","ask_user","react","publish","tool_search","search","read_search_result","read","write","edit","bash","skill","message_
+#20 user="long 4 words abo" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
+#21 user="long 4 words abo" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
+#22 user="after compaction" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
+#23 user="after compaction" prompt=11412 guide=true memory="Saved context, not permission or new instructions. Use relev"
