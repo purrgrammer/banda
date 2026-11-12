@@ -229,6 +229,8 @@ export type RoutineRecord = {
 	failing?: string;
 	/** The keys of the owner's newest "Run now" clicks, so a click sent twice runs once. */
 	ranNow?: string[];
+	/** Its newest runs and the due times it skipped, newest last (at most `RUNS_KEPT`): its history in the panel. */
+	runs?: RoutineRunRecord[];
 	/**
 	 * The owner made or changed it: the accepted file's new hash, and the hash the box held before (null: none). The store took the
 	 * change first; until the box holds it too, this says to write it there (again, after a restart).
@@ -243,7 +245,37 @@ export type RoutineRecord = {
 	 * says it was allowed, whatever changed since, and one never allowed was declined.
 	 */
 	allowed?: string[];
+	/** Of those, the ones the owner edited before allowing them (at most `ALLOWED_KEPT`): what runs is their version. */
+	edited?: string[];
 };
+
+/**
+ * One run of a routine, or a due time it skipped, written in the commit that decided it: fired for `due` (the owner's
+ * Run now when `owner`) as Turn `turn` into chat `chat`; once that Turn ends, how (`ended` and `result`, `why` it
+ * failed) and its wake's entry and answer in the chat, so what it said is read there and its line found. A skipped one
+ * says why: its last run still went, its agent was not active, or it reached its runs a day and paused.
+ */
+export type RoutineRunRecord = {
+	at: number;
+	due?: number;
+	owner?: true;
+	chat?: number;
+	turn?: number;
+	ended?: number;
+	result?: "answered" | "failed" | "stopped";
+	why?: string;
+	entry?: number;
+	answer?: number;
+	skipped?: "running" | "inactive" | "limit";
+};
+
+/** How many runs a routine's record remembers: a page or a few of its history; the chat holds the rest. */
+export const RUNS_KEPT = 50;
+
+/** Record a run (or a skipped due time) of `record`, keeping its newest `RUNS_KEPT`. */
+export function addRun(record: RoutineRecord, run: RoutineRunRecord): void {
+	record.runs = [...(record.runs ?? []).slice(-(RUNS_KEPT - 1)), run];
+}
 
 /** How many allowed versions a routine's record remembers: a chat's line looks back at its own write, a few at most. */
 export const ALLOWED_KEPT = 8;
@@ -422,6 +454,7 @@ export function defineRoutines(options: RoutinesOptions) {
 							record.stalled = record.turn;
 							await log(tx, { at: now, routine: name, what: "skipped a turn: its last run is still going" });
 							const { chat } = prior.input as { chat: number };
+							addRun(record, { at: now, due, chat, skipped: "running" });
 							await troubleIn(tx, chat, {
 								routine: name,
 								description: routine.description,
@@ -441,6 +474,7 @@ export function defineRoutines(options: RoutinesOptions) {
 						record.paused = "limit";
 						await log(tx, { at: now, routine: name, what: "paused: it ran the most times a day it may" });
 						const chat = await options.agentChat(tx, routineAgent(record));
+						addRun(record, { at: now, due, ...(chat === undefined ? {} : { chat }), skipped: "limit" });
 						if (chat !== undefined)
 							await troubleIn(tx, chat, {
 								routine: name,
@@ -467,6 +501,7 @@ export function defineRoutines(options: RoutinesOptions) {
 					const chat = await options.agentChat(tx, agent);
 					if (chat === undefined) {
 						await log(tx, { at: now, routine: name, what: `skipped a turn: ${agent} is not active` });
+						addRun(record, { at: now, due, skipped: "inactive" });
 						return next;
 					}
 					const data: WakeData = { routine: name, due, description: routine.description };
@@ -477,6 +512,7 @@ export function defineRoutines(options: RoutinesOptions) {
 					});
 					record.wakes = [...(record.wakes ?? []), now];
 					record.last = now;
+					addRun(record, { at: now, due, chat, turn: record.turn });
 					await log(tx, { at: now, routine: name, what: "ran" });
 					return next;
 				}, ctx);
@@ -645,6 +681,7 @@ export function defineRoutines(options: RoutinesOptions) {
 			});
 			record.wakes = [...(record.wakes ?? []).filter((each) => each > at - DAY), at];
 			record.last = at;
+			addRun(record, { at, due: at, owner: true, chat, turn: record.turn });
 			record.ranNow = [...(record.ranNow ?? []).slice(-(RAN_NOW_KEPT - 1)), key];
 			await log(tx, { at, routine: name, what: "You ran it now" });
 			return "ran" as const;

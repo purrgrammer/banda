@@ -14,6 +14,7 @@
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
 import { type Follow, MAX_KEEP, type Pages, parseFollow } from "./follow.ts";
 import { slackAvatar, slackTs } from "./slack-text.ts";
+import { MAX_TAIL_PAGE, type Tail } from "./tail.ts";
 
 type JsonValue = JsonObject[string];
 
@@ -49,6 +50,12 @@ export type ObjectRead = {
 	 * answers `next_cursor` beside the list while it has more; the daemon fills both.
 	 */
 	readonly pages?: Pages;
+	/**
+	 * Its answer is a list the service hands oldest first by numbered pages (a pull request's reviews): a watch reads
+	 * its last pages, ordered by `by`, finding the end by the count at `total` (another read's) or by its last look. Its
+	 * tool takes `page`, which the daemon fills, and its arguments give `perPage`.
+	 */
+	readonly tail?: Tail;
 };
 
 /** A write that acts on an object: how its arguments name it, and the words its draft says. */
@@ -60,8 +67,10 @@ export type ObjectWrite = {
 	readonly verb: string;
 	/** What it does, before the object's name: "Comment on". Default the verb. */
 	readonly what?: string;
-	/** The argument the owner may edit before approving: the comment's body. */
+	/** The argument the owner may edit before approving: the comment's body. A permission leaves it free. */
 	readonly text?: string;
+	/** More text the owner may edit before approving (a title); unlike `text`, a permission binds each, as approved. */
+	readonly editable?: readonly string[];
 	/** Other words for some arguments: `{"when": {"state": "closed"}, "verb": "Close"}`, the first that matches. */
 	readonly verbs?: readonly {
 		readonly when: { readonly [arg: string]: string };
@@ -85,8 +94,10 @@ export type ObjectCreate = {
 	readonly verb: string;
 	/** What it does, with the placeholders `in` gives: "Create an issue on {owner}/{repo}". */
 	readonly what: string;
-	/** The argument the owner may edit before approving. */
+	/** The argument the owner may edit before approving. A permission leaves it free. */
 	readonly text?: string;
+	/** More text the owner may edit before approving (a title); unlike `text`, a permission binds each, as approved. */
+	readonly editable?: readonly string[];
 };
 
 export type ObjectKind = {
@@ -158,7 +169,23 @@ const CREATED = /^[A-Za-z][A-Za-z0-9 /#.:-]{0,79}$/;
 const plain = (value: unknown): value is { [key: string]: unknown } =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 const reserved = (key: string) => ["__proto__", "prototype", "constructor"].includes(key);
+/** A write's `editable`: absent, or a few argument names, each once and none its `text`. */
+const editableList = (value: unknown, text: unknown): boolean =>
+	value === undefined ||
+	(Array.isArray(value) &&
+		value.length > 0 &&
+		value.length <= 8 &&
+		value.every((arg) => typeof arg === "string" && NAME.test(arg) && arg !== text) &&
+		new Set(value).size === value.length);
 
+/**
+ * The text a write lets the owner edit that would steer it instead (an argument naming the object it acts on, or one its
+ * other verbs turn on): editing those is changing an order for a machine, never words for a person.
+ */
+const steers = (text: unknown, editable: unknown, ...steering: readonly unknown[][]): string | undefined => {
+	const edited = [...(typeof text === "string" ? [text] : []), ...(Array.isArray(editable) ? editable : [])];
+	return edited.find((arg) => steering.some((args) => args.includes(arg))) as string | undefined;
+};
 const placeholders = (template: string) => [...template.matchAll(PLACEHOLDER)].map((m) => m[1] as string);
 const escapePattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
@@ -305,6 +332,20 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					);
 				if (pages !== undefined && ["oldest", "cursor"].some((arg) => arg in ((args as object | null) ?? {})))
 					errors.push(`${where}.reads.${as}: a read with pages leaves oldest and cursor to the daemon`);
+				const tailed = (read as { tail?: unknown } | null)?.tail;
+				const tail = tailed === undefined ? undefined : parseTail(tailed, as);
+				if (tailed !== undefined && tail === undefined)
+					errors.push(`${where}.reads.${as}.tail is {"by": "<field>", "total": "<read>.<path>"}, its total optional`);
+				if (tail !== undefined && pages !== undefined) errors.push(`${where}.reads.${as}: pages or tail, not both`);
+				if (tail !== undefined && "page" in ((args as object | null) ?? {}))
+					errors.push(`${where}.reads.${as}: a read with tail leaves page to the daemon`);
+				const perPage = (args as { perPage?: unknown } | null)?.perPage;
+				// a page larger than the service hands would look short, and end every walk at its first page
+				if (
+					tail !== undefined &&
+					!(typeof perPage === "number" && Number.isInteger(perPage) && perPage >= 1 && perPage <= MAX_TAIL_PAGE)
+				)
+					errors.push(`${where}.reads.${as}: a read with tail gives perPage, 1 to ${MAX_TAIL_PAGE} items`);
 				if (
 					!NAME.test(as) ||
 					reserved(as) ||
@@ -344,6 +385,7 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					...(optional === true ? { optional: true } : {}),
 					...(follow === true ? { follow: true } : {}),
 					...(pages === undefined ? {} : { pages }),
+					...(tail === undefined ? {} : { tail }),
 				};
 			}
 		const fields: { [field: string]: string } = {};
@@ -381,11 +423,12 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					!WORDS.test(w.verb) ||
 					(w.what !== undefined && (typeof w.what !== "string" || !WORDS.test(w.what))) ||
 					(w.text !== undefined && (typeof w.text !== "string" || !NAME.test(w.text))) ||
+					!editableList(w.editable, w.text) ||
 					typeof id !== "object" ||
 					id === null ||
 					Array.isArray(id)
 				) {
-					errors.push(`${at} is {"tool", "id": {"placeholder": "arg"}, "verb", "what"?, "text"?}`);
+					errors.push(`${at} is {"tool", "id": {"placeholder": "arg"}, "verb", "what"?, "text"?, "editable"?}`);
 					continue;
 				}
 				const idArgs = id as { [placeholder: string]: unknown };
@@ -419,12 +462,21 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 						});
 				}
 				if (w.verbs !== undefined && !Array.isArray(w.verbs)) errors.push(`${at}.verbs is a list`);
+				const steering = steers(
+					w.text,
+					w.editable,
+					Object.values(idArgs),
+					verbs.flatMap((o) => Object.keys(o.when)),
+				);
+				if (steering !== undefined)
+					errors.push(`${at} lets the owner edit ${steering}, which says what it acts on or does`);
 				writes.push({
 					tool: w.tool,
 					id: idArgs as { [placeholder: string]: string },
 					verb: w.verb,
 					...(w.what === undefined ? {} : { what: w.what as string }),
 					...(w.text === undefined ? {} : { text: w.text as string }),
+					...(w.editable === undefined ? {} : { editable: [...(w.editable as string[])] }),
 					...(verbs.length === 0 ? {} : { verbs }),
 				});
 			}
@@ -446,11 +498,12 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					typeof c.what !== "string" ||
 					!CREATED.test(c.what.replace(PLACEHOLDER, "x")) ||
 					(c.text !== undefined && (typeof c.text !== "string" || !NAME.test(c.text))) ||
+					!editableList(c.editable, c.text) ||
 					!plain(into) ||
 					(when !== undefined && (!plain(when) || Object.values(when).some((v) => typeof v !== "string")))
 				) {
 					errors.push(
-						`${at} is {"tool", "when"?: {"arg": "value"}, "in": {"placeholder": "arg"}, "verb", "what", "text"?}`,
+						`${at} is {"tool", "when"?: {"arg": "value"}, "in": {"placeholder": "arg"}, "verb", "what", "text"?, "editable"?}`,
 					);
 					continue;
 				}
@@ -463,6 +516,11 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					errors.push(`${at}.in gives each placeholder its words name, of ${[...named].join(", ")}, from an argument`);
 					continue;
 				}
+				const steering = steers(c.text, c.editable, Object.values(into), Object.keys(when ?? {}));
+				if (steering !== undefined) {
+					errors.push(`${at} lets the owner edit ${steering}, which says what it acts on or does`);
+					continue;
+				}
 				creates.push({
 					tool: c.tool,
 					...(when === undefined ? {} : { when: when as { [arg: string]: string } }),
@@ -470,6 +528,7 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					verb: c.verb,
 					what: c.what,
 					...(c.text === undefined ? {} : { text: c.text as string }),
+					...(c.editable === undefined ? {} : { editable: [...(c.editable as string[])] }),
 				});
 			}
 		let follow: Follow | undefined;
@@ -484,8 +543,29 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 			errors.push(`${where}: a read with pages is a window a watch keeps, so its kind needs a "follow"`);
 		const windows = Object.values(reads).flatMap((read) => (read.pages === undefined ? [] : [read.pages]));
 		if (windows.length > 1) errors.push(`${where}: at most one read has pages`);
-		if (follow !== undefined && windows.length > 0)
-			follow = { ...follow, windows: Object.fromEntries(windows.map(({ list, by }) => [list, by])) };
+		const tails = Object.entries(reads).flatMap(([as, read]) =>
+			read.tail === undefined ? [] : [{ as, ...read.tail }],
+		);
+		for (const { as, total } of tails)
+			if (total !== undefined && reads[total.split(".")[0] ?? ""] === undefined)
+				errors.push(`${where}.reads.${as}.tail.total names ${total}, which no other read gives`);
+		// a tail is a window too: what leaves it from its old end was pushed off, and what comes back was there before
+		if (follow !== undefined && windows.length + tails.length > 0)
+			follow = {
+				...follow,
+				windows: Object.fromEntries([
+					...windows.map(({ list, by }) => [list, by]),
+					...tails.map(({ as, by }) => [as, by]),
+				]),
+				...(tails.some(({ total }) => total !== undefined)
+					? {
+							totals: {
+								...follow.totals,
+								...Object.fromEntries(tails.flatMap(({ as, total }) => (total === undefined ? [] : [[as, total]]))),
+							},
+						}
+					: {}),
+			};
 		objects[kind] = {
 			card: card as CardKind,
 			name: typeof name === "string" ? name : kind,
@@ -500,6 +580,24 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 		};
 	}
 	return errors.length > 0 ? { errors } : { objects };
+}
+
+/** A read's `tail`, or undefined when it is not one: its order's field, and a count another read gives, if any. */
+function parseTail(value: unknown, as: string): Tail | undefined {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+	const { by, total, ...rest } = value as { by?: unknown; total?: unknown };
+	if (Object.keys(rest).length > 0) return undefined;
+	if (typeof by !== "string" || !/^[A-Za-z0-9_]{1,64}$/.test(by) || reserved(by)) return undefined;
+	if (total === undefined) return { by };
+	if (
+		typeof total !== "string" ||
+		!PATH.test(total) ||
+		!total.includes(".") ||
+		total.startsWith(`${as}.`) ||
+		total.split(".").some(reserved)
+	)
+		return undefined;
+	return { by, total };
 }
 
 /** A read's `pages`, or undefined when it is not one: a list inside the read's own answer, by plain keys. */
@@ -753,13 +851,25 @@ export function draftedCreate(
 	return undefined;
 }
 
-/** The text arguments a connection's write lets the owner edit, as its objects declare them. */
-export function editableOf(tool: string, kinds: ObjectKinds | undefined): string[] {
-	const found = new Set<string>();
+/**
+ * The text arguments a connection's write lets the owner edit, as its objects declare them: `free`, which a permission
+ * leaves free (each write's `text`), and `bound`, which a permission binds at the text approved (its `editable`).
+ */
+export function editableOf(
+	tool: string,
+	kinds: ObjectKinds | undefined,
+): { readonly free: string[]; readonly bound: string[] } {
+	const free = new Set<string>();
+	const bound = new Set<string>();
 	for (const shape of Object.values(kinds ?? {}))
-		for (const write of [...(shape.writes ?? []), ...(shape.creates ?? [])])
-			if (write.tool === tool && write.text !== undefined) found.add(write.text);
-	return [...found];
+		for (const write of [...(shape.writes ?? []), ...(shape.creates ?? [])]) {
+			if (write.tool !== tool) continue;
+			if (write.text !== undefined) free.add(write.text);
+			for (const arg of write.editable ?? []) bound.add(arg);
+		}
+	// free in one write and bound in another of the same tool: bound, the narrower
+	for (const arg of bound) free.delete(arg);
+	return { free: [...free], bound: [...bound] };
 }
 
 // ---- the cards

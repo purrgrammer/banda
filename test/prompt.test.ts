@@ -98,6 +98,8 @@ describe("a chat's prompt", () => {
 			const discovery = body.tools.find((tool) => tool.name === "tool_search")!;
 			expect(Object.keys(discovery.parameters.properties ?? {}).sort()).toEqual(["limit", "query"]);
 			expect(body.system).toContain("When an instruction names a tool you do not have, search for it first.");
+			// the roster: the lead alone in the band
+			expect(body.system).toContain("<roster>\nNo other agent is active in the band");
 			// the daemon's own credential never reaches the model
 			expect(JSON.stringify(body)).not.toContain(token);
 			expect((await api(`/chats/999999/prompt`)).status).toBe(404);

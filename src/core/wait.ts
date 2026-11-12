@@ -344,9 +344,9 @@ export async function fill(
 	const normal = normalize(input.ask, answer);
 	if ("invalid" in normal) return { refused: normal.invalid };
 	const chat = Number(task.conversationId);
-	const { ask } = input;
 	const { edits, permission } = approving;
 	let draft: JsonObject | undefined;
+	let ask = input.ask;
 	if (edits !== undefined || permission !== undefined) {
 		if (ask.type !== "approval" || normal.answer !== "approve")
 			return { refused: "only an approval, approved, carries edits or a permission" };
@@ -355,6 +355,8 @@ export async function fill(
 			const edited = editsOf(ask, edits);
 			if ("refused" in edited) return edited;
 			draft = edited.draft;
+			// a permission given with it binds what the owner approved, never the words they replaced
+			if (draft !== undefined) ask = rebound(ask, draft);
 		}
 		if (permission !== undefined) {
 			const why = refusal(permission, shapeFor(permission, ask), await floorNow(tx, ask), now, offeredScopes(ask));
@@ -510,6 +512,17 @@ function editsOf(
 		draft[arg] = text;
 	}
 	return changed ? { draft } : {};
+}
+
+/**
+ * The approval as edited: what a permission given with it binds holds the owner's text wherever it binds an argument
+ * they edited (a title a permission binds); the text it leaves free stays free.
+ */
+function rebound(ask: Extract<Ask, { type: "approval" }>, draft: JsonObject): Extract<Ask, { type: "approval" }> {
+	if (ask.permission === undefined) return ask;
+	const match: JsonObject = { ...ask.permission.match };
+	for (const arg of Object.keys(match)) if ((ask.editable ?? []).includes(arg)) match[arg] = draft[arg] ?? null;
+	return { ...ask, permission: { ...ask.permission, match } };
 }
 
 /** The open Waits, in `chat` alone when given, oldest first. */

@@ -82,7 +82,10 @@ type CoreSegment =
 			readonly key: string;
 			/** The tool call that asked, when the transcript names it. */
 			readonly call?: string;
+			/** Its draft: answered as the owner edited it, what ran. */
 			readonly ask: Approval;
+			/** What the agent drafted, when the owner edited it before approving: what the card says they changed. */
+			readonly drafted?: { readonly [arg: string]: unknown };
 			/** What it would run, in words, as the daemon labels it. */
 			readonly label: string;
 			/** Its arguments as a labelled list, never JSON. */
@@ -122,6 +125,8 @@ type CoreSegment =
 			readonly key: string;
 			readonly proposal: Extract<Item, { role: "proposal" }>["proposal"];
 			readonly state: "pending" | "accepted" | "declined";
+			/** The text the owner edited before accepting, as accepted. */
+			readonly edited?: Extract<Item, { role: "proposalResult" }>["edited"];
 	  }
 	/** A message another agent sent to this direct chat, as an attributed feed entry. */
 	| {
@@ -545,7 +550,11 @@ export function view(
 			while (at >= 0) {
 				const proposal = segments[at];
 				if (proposal?.kind === "proposal" && proposal.proposal.id === item.proposal) {
-					segments[at] = { ...proposal, state: item.state };
+					segments[at] = {
+						...proposal,
+						state: item.state,
+						...(item.edited === undefined ? {} : { edited: item.edited }),
+					};
 					break;
 				}
 				at--;
@@ -741,6 +750,7 @@ function askSegment(
 		key,
 		...(call === undefined ? {} : { call }),
 		ask: one.item?.edited === undefined ? one.ask : { ...one.ask, args: one.item.edited },
+		...(one.item?.edited === undefined ? {} : { drafted: one.ask.args }),
 		label: one.label ?? one.ask.label ?? "this",
 		// what ran: the draft as the owner edited it
 		args: argList(one.item?.edited ?? one.ask.args),

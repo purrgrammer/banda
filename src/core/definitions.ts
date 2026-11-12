@@ -57,12 +57,24 @@ const Read = Type.Object(
 				{ ...closed, description: "A list newest first, kept to `keep` items, its pages walked to them" },
 			),
 		),
+		tail: Type.Optional(
+			Type.Object(
+				{
+					by: Type.String({ pattern: "^[A-Za-z0-9_]{1,64}$" }),
+					total: Type.Optional(Type.String({ maxLength: 200 })),
+				},
+				{ ...closed, description: "A list oldest first by numbered pages, its last pages read" },
+			),
+		),
 	},
 	closed,
 );
 
 const ArgOf = map(Type.String({ pattern: Arg }), "^[a-z_]{1,32}$");
 const When = map(Type.String());
+
+/** More text a write lets the owner edit, which a permission binds as approved (`ObjectWrite.editable`). */
+const Editable = Type.Array(Type.String({ pattern: Name }), { minItems: 1, maxItems: 8, uniqueItems: true });
 
 const Write = Type.Object(
 	{
@@ -71,6 +83,7 @@ const Write = Type.Object(
 		verb: Words,
 		what: Type.Optional(Words),
 		text: Type.Optional(Type.String({ pattern: Name })),
+		editable: Type.Optional(Editable),
 		verbs: Type.Optional(
 			Type.Array(Type.Object({ when: When, verb: Words, what: Type.Optional(Words) }, closed), { maxItems: 12 }),
 		),
@@ -86,6 +99,7 @@ const Create = Type.Object(
 		verb: Words,
 		what: Type.String({ maxLength: 200 }),
 		text: Type.Optional(Type.String({ pattern: Name })),
+		editable: Type.Optional(Editable),
 	},
 	closed,
 );

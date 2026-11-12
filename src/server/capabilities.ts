@@ -212,6 +212,15 @@ const unpaged = (args: JsonObject): JsonObject => {
 	return plain(oldest) && plain(cursor) ? rest : args;
 };
 
+/**
+ * A tail read's arguments without the page a watch asks for (`page`), which the daemon fills; a page that is not a
+ * whole number from 1 leaves an argument that matches no read.
+ */
+const untailed = (args: JsonObject): JsonObject => {
+	const { page, ...rest } = args;
+	return typeof page === "number" && Number.isInteger(page) && page >= 1 && page <= 100_000 ? rest : args;
+};
+
 /** What a server says names the owner, as one plain line: no control or invisible characters, a hundred at most. */
 const plainId = (value: unknown) =>
 	(typeof value === "string" || typeof value === "number" ? String(value) : "")
@@ -825,9 +834,13 @@ export function openCapabilities(options: CapabilityOptions) {
 				? `${tool.connection.words?.[tool.tool] ?? `Use ${tool.connection.service}'s ${tool.tool}`}${as(args)}`
 				: `${object.what} ${nameOf(first, kinds)}`;
 		};
+		// text a permission binds at the owner's words (a title), besides the text it leaves free (a body)
+		const declared = editableOf(tool.tool, kinds);
+		const bindEdits = declared.bound.filter((field) => !signed || field !== arg);
 		const editable = [
 			...new Set([
-				...editableOf(tool.tool, kinds).filter((field) => !signed || field !== arg),
+				...declared.free.filter((field) => !signed || field !== arg),
+				...bindEdits,
 				...(tool.connection.api === "gmail" && tool.tool === "send_message" ? ["to", "subject", "body"] : []),
 				...(builtIn?.drafts?.editable(tool.tool) ?? []),
 			]),
@@ -881,6 +894,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			...(tool.floor === undefined ? {} : { floor: tool.floor }),
 			permission: {
 				...(signed ? { bind: [arg] } : {}),
+				...(bindEdits.length === 0 ? {} : { bindEdits }),
 				...(() => {
 					const binds = builtIn?.drafts?.binds?.(tool.tool);
 					return binds === undefined ? {} : { args: binds };
@@ -2690,7 +2704,7 @@ export function openCapabilities(options: CapabilityOptions) {
 					(read) =>
 						read.tool === tool &&
 						canonical(readArgs(read, authority.ref, doc.connections[name]?.tools[tool]?.schema)) ===
-							canonical(read.pages === undefined ? args : unpaged(args)),
+							canonical(read.pages !== undefined ? unpaged(args) : read.tail !== undefined ? untailed(args) : args),
 				)
 			)
 				return undefined;

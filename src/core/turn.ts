@@ -87,7 +87,8 @@ import { defineGroups, Groups, groupSection } from "./groups.ts";
 import { FLOOR_WORDS } from "./permissions.ts";
 import { decidedText, makeProposal, PROPOSAL_DECIDED, type Proposal, proposalTools } from "./proposals.ts";
 import { defineReleases, RELEASED, stoppable } from "./release.ts";
-import { defineRoutines, failureKey, Routines, troubleIn, WAKE, type WakeData } from "./routines.ts";
+import { rosterSection } from "./roster.ts";
+import { defineRoutines, failureKey, Routines, routinePath, troubleIn, WAKE, type WakeData } from "./routines.ts";
 import { skillTokens } from "./skill-tokens.ts";
 import { acceptedSkills, ownerSkillEntry, type Skill } from "./skills.ts";
 import { context } from "./store.ts";
@@ -1185,6 +1186,16 @@ export function defineCore(options: CoreOptions) {
 					const { chat, internal } = task.input;
 					const wake = internal?.kind === WAKE ? (internal.data as WakeData) : undefined;
 					const routine = wake === undefined ? undefined : (await tx.doc(Routines)).routines[wake.routine];
+					// the run's history says how it ended, and where its wake and answer are in the chat
+					const run = [...(routine?.runs ?? [])].reverse().find((each) => each.turn === Number(task.id));
+					if (run !== undefined) {
+						run.ended = runtime.now();
+						run.result = "failed" in result ? "failed" : result.ended === "answered" ? "answered" : "stopped";
+						// the daemon's words, kept short: a provider's raw error can be pages long
+						if ("failed" in result) run.why = result.failed.slice(0, 1000);
+						if (settled?.entry !== undefined) run.entry = Number(settled.entry);
+						if (answer !== undefined) run.answer = answer;
+					}
 					// a routine's run that answered ends its failing streak; one the owner stopped neither ends nor adds to it
 					if (routine?.failing !== undefined && "ended" in result && result.ended === "answered")
 						delete routine.failing;
@@ -1366,6 +1377,24 @@ export function defineCore(options: CoreOptions) {
 			kind: PROPOSAL_DECIDED,
 			data: { proposal: proposal.id, state },
 			model: [{ role: "user", content: decidedText(proposal, state), timestamp: options.now?.() ?? Date.now() }],
+		});
+	}
+
+	/**
+	 * Tell agent `agent`, in its chat, that the owner edited routine `name` it wrote before allowing it: which of its text
+	 * they changed, never the text, which its file holds. A `PROPOSAL_DECIDED` entry, as a proposal's decision is: in the
+	 * caller's commit, read at the agent's next model request, starting no turn and nobody's input.
+	 */
+	async function routineEdited(tx: Tx, agent: string, name: string, fields: readonly string[]): Promise<void> {
+		const chat = await agentChat(tx, agent);
+		if (chat === undefined) return;
+		const words =
+			`The owner allowed your routine ${JSON.stringify(name)} after editing its ${fields.join(" and ")}: ` +
+			`${routinePath(name)} holds what runs. This notice is automatic, not from the owner.`;
+		await tx.appendEntry(chat as ConversationId, {
+			kind: PROPOSAL_DECIDED,
+			data: { routine: name, state: "accepted" },
+			model: [{ role: "user", content: words, timestamp: options.now?.() ?? Date.now() }],
 		});
 	}
 
@@ -1685,7 +1714,7 @@ export function defineCore(options: CoreOptions) {
 			watches.Watch,
 			groups.GroupTurn,
 		],
-		sections: [speaking, groupSection],
+		sections: [speaking, groupSection, rosterSection],
 		tools: [
 			messageTool(speakingWith),
 			askUserTool(speakingWith),
@@ -1726,6 +1755,7 @@ export function defineCore(options: CoreOptions) {
 		followUp,
 		/** Tell the agent the owner decided its proposal, in the caller's commit with the decision; it starts no turn. */
 		proposalDecided,
+		routineEdited,
 		/** Bring the routines' and the watches' tasks in line with their accepted files. */
 		reconcile: async (harness: Harness, ctx: Context = context) => {
 			await routines.reconcile(harness, options.now?.() ?? Date.now(), ctx);

@@ -466,8 +466,10 @@
 						"owner": "{owner}",
 						"repo": "{repo}",
 						"pullNumber": "{number}",
-						"perPage": 100,
-						"page": 1
+						"perPage": 100
+					},
+					"tail": {
+						"by": "id"
 					}
 				},
 				"comments": {
@@ -479,8 +481,11 @@
 						"owner": "{owner}",
 						"repo": "{repo}",
 						"pullNumber": "{number}",
-						"perPage": 100,
-						"page": 1
+						"perPage": 100
+					},
+					"tail": {
+						"by": "id",
+						"total": "pr.comments"
 					}
 				}
 			},
@@ -489,13 +494,11 @@
 					"checks.check_runs": "name"
 				},
 				"totals": {
-					"checks.check_runs": "checks.total_count",
-					"comments": "pr.review_comments"
+					"checks.check_runs": "checks.total_count"
 				},
 				"ignore": [
 					"pr.updated_at",
 					"pr.comments",
-					"pr.review_comments",
 					"pr.commits",
 					"pr.changed_files",
 					"pr.mergeable",
@@ -674,7 +677,11 @@
 						"repo": "repo",
 						"number": "pullNumber"
 					},
-					"verb": "Merge"
+					"verb": "Merge",
+					"editable": [
+						"commit_title",
+						"commit_message"
+					]
 				},
 				{
 					"tool": "pull_request_review_write",
@@ -709,6 +716,10 @@
 						"number": "pullNumber"
 					},
 					"verb": "Change",
+					"editable": [
+						"title",
+						"body"
+					],
 					"verbs": [
 						{
 							"when": {
@@ -722,6 +733,21 @@
 							},
 							"verb": "Reopen"
 						}
+					]
+				}
+			],
+			"creates": [
+				{
+					"tool": "create_pull_request",
+					"in": {
+						"owner": "owner",
+						"repo": "repo"
+					},
+					"verb": "Open",
+					"what": "Open a pull request on {owner}/{repo}",
+					"editable": [
+						"title",
+						"body"
 					]
 				}
 			]
@@ -760,8 +786,11 @@
 						"owner": "{owner}",
 						"repo": "{repo}",
 						"issue_number": "{number}",
-						"perPage": 100,
-						"page": 1
+						"perPage": 100
+					},
+					"tail": {
+						"by": "id",
+						"total": "issue.comments"
 					}
 				}
 			},
@@ -870,6 +899,9 @@
 					},
 					"verb": "Change",
 					"text": "body",
+					"editable": [
+						"title"
+					],
 					"verbs": [
 						{
 							"when": {
@@ -906,7 +938,10 @@
 					},
 					"verb": "Create",
 					"what": "Create an issue on {owner}/{repo}",
-					"text": "body"
+					"text": "body",
+					"editable": [
+						"title"
+					]
 				}
 			]
 		},

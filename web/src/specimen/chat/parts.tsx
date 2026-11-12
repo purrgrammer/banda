@@ -660,7 +660,10 @@ export function Parts() {
 							when: "Weekdays at 08:00",
 							next: ["Thu 08:00", "Fri 08:00", "Mon 08:00"],
 							ask: "Tell me what is on my plate today: meetings, deadlines, and anything waiting on me.",
+							schedule: "cron 0 8 * * 1-5",
 						}}
+						onAllow={() => {}}
+						onDecline={() => {}}
 					/>
 					<RoutineProposal
 						routine={{

@@ -312,7 +312,9 @@ its chat at the next model boundary and deliberately starts its prompt cache col
 
 The workspace starts with one agent, which is ordinary: renameable and archivable like any other, except
 that the last active agent cannot be archived, since the app opens in a chat. The owner makes another from the sheet:
-a face, a name, a personality, connections; nothing runs before the file is written. The default face is the chat
+a face, a name, a personality, connections; nothing runs before the file is written. The owner never writes a
+description: it is the personality's first sentence (the name while there is none), and the owner's edit of either
+carries it along, unless it was written otherwise (an accepted proposal's). The default face is the chat
 bubble. The owner can choose a shape and colour or accept a generated candidate; generated geometry is data, validated
 and previewed before acceptance, never code or markup from the box. The sheet designs one in place, from the owner's
 description or the name alone, by an inference on the Balanced tier; it is the owner's pick, written with the file.
@@ -328,7 +330,7 @@ asked (`POST /chats/<chat>/stop`), and in a group one member's work or everyone'
 app offers no Stop for a chat or a group; the browser's take-over and a harness session keep theirs (see The browser,
 Harnesses).
 
-Agents may send one another messages only from direct chats, through `message_agent`; the recipient gets a feed entry and a turn, and decides what to do. Another agent may read a bounded page of a direct chat through `read_agent_chat`. The read is untrusted data; tools, results and hidden group execution chats are not exposed. Agents may propose an agent, a group or a change to an existing agent. Agent proposals follow the agent definition's identity, face, description, model, tier and instructions; the owner still chooses tools and connections, and new agents start active. Existing-agent proposals can change identity, face, description, model, tier and instructions, but not state, tools, connections or permissions. Proposals are cards in the proposing chat; only the owner's acceptance makes a definition or group effective. An existing-agent change shows the resulting file and the previous file and is bound to the accepted version it started from. The owner's decision reaches the proposing agent as the daemon's notice in that chat, in the same commit as the decision: it starts no turn (the agent reads it at its next model request, in a run under way or else its next turn), and it is nobody's input, so it neither answers the owner nor counts as the owner writing.
+Agents may send one another messages only from direct chats, through `message_agent`; the recipient gets a feed entry and a turn, and decides what to do. A direct chat's prompt holds the roster: the band's other active agents, each as the id these tools take, the name the owner calls it and its description, cut short, and nothing else of its file; it follows the accepted files, so an agent made, renamed or archived changes it at the next request, and a group member's chat has its group's members instead. Another agent may read a bounded page of a direct chat through `read_agent_chat`. The read is untrusted data; tools, results and hidden group execution chats are not exposed. Agents may propose an agent, a group or a change to an existing agent. Agent proposals follow the agent definition's identity, face, description, model, tier and instructions; the owner still chooses tools and connections, and new agents start active. Existing-agent proposals can change identity, face, description, model, tier and instructions, but not state, tools, connections or permissions. Proposals are cards in the proposing chat; only the owner's acceptance makes a definition or group effective. An existing-agent change shows the resulting file and the previous file and is bound to the accepted version it started from. The owner's decision reaches the proposing agent as the daemon's notice in that chat, in the same commit as the decision: it starts no turn (the agent reads it at its next model request, in a run under way or else its next turn), and it is nobody's input, so it neither answers the owner nor counts as the owner writing.
 
 **How hard it thinks is three words.** Quick, Balanced and Deep, never a model string: each provider the app knows maps
 them to models of pi-ai's catalog, and Quick is the default, so it answers fast. Advanced names the provider in plain
@@ -561,8 +563,13 @@ many attempts, fails the call and leaves a notice. Messages to one origin go in 
 draft, opens an approval Wait, and blocks. The daemon renders the draft, never the model: the card shows exactly what
 will run, on its object where it has one, and the owner may edit a draft's text before approving it, which binds the
 edited bytes. Approved, the daemon runs the stored draft once and the tool returns its result; declined, the tool
-returns that. Outgoing messages on the owner's behalf (an email, a comment) are always drafts. Wait ids never reach
-the model.
+returns that. What the owner may edit is what the agent wrote for a person or as its own instructions (a comment, a
+review, an issue's or a pull request's title and description, a merge's commit message, an agent's description and
+personality, what a routine asks and when), never an order for a machine (a held request, a coding agent's command
+or diff), which runs exactly as stored or not at all, nor an argument that names what a write acts on or picks its
+verb. Edited text reads as the owner's on the card ("Edited by you"), and the agent is told which text the owner
+changed. Outgoing messages on the owner's behalf (an email, a comment) are always drafts. Wait ids never reach the
+model.
 
 **Permissions.** An approval can be given with a scope: this once, for this task, for an hour, always. A permission is
 stored; an effect within an open permission runs without asking and is listed in the activity log, and the owner revokes
@@ -570,8 +577,9 @@ a permission from the agent's panel. A permission belongs to one agent, one acco
 permission sits a floor no permission covers: money, credentials and account changes, and anything that sends private
 data to a recipient the owner has not approved, ask every time. A tool declares its floor class and the daemon enforces
 it: a draft on the floor offers no permission, a permission asked for it is refused, and no permission covers it. A
-permission binds one tool and the values of the arguments the tool names (by default all but the text the owner may
-edit): a later call is within it only with exactly those values. "For this task" lasts while the run answers the same
+permission binds one tool and the values of the arguments the tool names (by default all but the free text the owner
+may edit, such as a comment's body; text a tool says stays bound, such as a title, it binds as the owner approved it):
+a later call is within it only with exactly those values. "For this task" lasts while the run answers the same
 input, so the owner's next message ends it. An effect checks its permission in the commit that records its start, so a
 revoked permission covers nothing after it. The daemon offers at most one scope on a card, the task's where it applies,
 worded as its consequence ("Don't ask again for this task"); every other scope is granted from the agent's permissions;
@@ -645,7 +653,10 @@ or not the model remembers it.
   edit or a deletion in it is seen, and merges only then; what it fetched meanwhile is the watch's, for that object
   as that account, kept across a crash, and the watch is behind until the merge. A walk that cannot reach the window
   within an hour, or within the window's bytes, merges what it read, and its wake says what may be missing. What leaves the window from its old end was pushed off, never
-  removed. Every call a connection makes for one account and one method, whoever makes it (a watch, an agent, a
+  removed. A list the service hands only oldest first, by numbered pages (GitHub's reviews and comments), is read at
+  its tail: the last pages, found by the object's own count of it or else by how long the last look found it, at most
+  three pages a look. A look that cannot reach the end in those pages keeps the list as it was and the watch is behind
+  until one does; one whose pages do not reach back to the newest item the reading held says what may be missing. Every call a connection makes for one account and one method, whoever makes it (a watch, an agent, a
   card), waits its turn in one queue, and a refusal that says when to come back holds that queue until then. The
   refusal also teaches the queue the method's limit, as many calls a minute as the service answered before it, so for
   the hour after, a call past it is answered "busy" without being sent: a service meets one refusal an hour from banda,
@@ -756,7 +767,10 @@ index, whose pages are scrubbed; what was said in chats stays.
 A chat's prompt is built for the cache in a fixed order. An accepted change to its agent updates the prefix at the next
 request and deliberately starts that cache cold; otherwise every request repeats it and only the newest messages are
 new. Sections are the agent's personality and its facts, in a fixed order. Anything that changes during a chat arrives
-as an entry, not as an edit of the prefix. Long outputs go to files the agent reads back.
+as an entry, not as an edit of the prefix. A section is there from a chat's start and changes only its words: one
+appearing mid-chat anywhere but last re-adds them all. So memory says when nothing is saved yet or it could not be
+read, and `propose_avatar`'s design guide is an empty section until the tool loads. Long outputs go to files the agent
+reads back.
 
 **Compaction** is pi-durable's: a summary entry replaces older entries in what the model sees, and every entry stays
 in the store. That entry is the checkpoint; the app keeps no record of its own. pi-durable's thresholds decide when: a

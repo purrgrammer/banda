@@ -40,8 +40,9 @@ export const GITHUB_OBJECTS = {
 					repo: "{repo}",
 					pullNumber: "{number}",
 					perPage: 100,
-					page: 1,
 				},
+				// oldest first, and no count of them on the pull request: its last pages, found by the last look
+				tail: { by: "id" },
 			},
 			comments: {
 				optional: true,
@@ -53,19 +54,19 @@ export const GITHUB_OBJECTS = {
 					repo: "{repo}",
 					pullNumber: "{number}",
 					perPage: 100,
-					page: 1,
 				},
+				// the conversation's comments (an issue's, not review comments), oldest first: the pull request counts them
+				tail: { by: "id", total: "pr.comments" },
 			},
 		},
 		// how a watch follows it: reviews and comments by id, check runs by name (every push gives them new ids), what
 		// is noise, whose items are the account's own, what wakes and what only tells, and what ends the watch
 		follow: {
 			keys: { "checks.check_runs": "name" },
-			totals: { "checks.check_runs": "checks.total_count", comments: "pr.review_comments" },
+			totals: { "checks.check_runs": "checks.total_count" },
 			ignore: [
 				"pr.updated_at",
 				"pr.comments",
-				"pr.review_comments",
 				"pr.commits",
 				"pr.changed_files",
 				"pr.mergeable",
@@ -169,7 +170,12 @@ export const GITHUB_OBJECTS = {
 				what: "Comment on",
 				text: "body",
 			},
-			{ tool: "merge_pull_request", id: { owner: "owner", repo: "repo", number: "pullNumber" }, verb: "Merge" },
+			{
+				tool: "merge_pull_request",
+				id: { owner: "owner", repo: "repo", number: "pullNumber" },
+				verb: "Merge",
+				editable: ["commit_title", "commit_message"],
+			},
 			{
 				tool: "pull_request_review_write",
 				id: { owner: "owner", repo: "repo", number: "pullNumber" },
@@ -184,10 +190,20 @@ export const GITHUB_OBJECTS = {
 				tool: "update_pull_request",
 				id: { owner: "owner", repo: "repo", number: "pullNumber" },
 				verb: "Change",
+				editable: ["title", "body"],
 				verbs: [
 					{ when: { state: "closed" }, verb: "Close" },
 					{ when: { state: "open" }, verb: "Reopen" },
 				],
+			},
+		],
+		creates: [
+			{
+				tool: "create_pull_request",
+				in: { owner: "owner", repo: "repo" },
+				verb: "Open",
+				what: "Open a pull request on {owner}/{repo}",
+				editable: ["title", "body"],
 			},
 		],
 	},
@@ -215,8 +231,8 @@ export const GITHUB_OBJECTS = {
 					repo: "{repo}",
 					issue_number: "{number}",
 					perPage: 100,
-					page: 1,
 				},
+				tail: { by: "id", total: "issue.comments" },
 			},
 		},
 		// how a watch follows it: closed or reopened and others' comments wake; labels, assignees and the title only
@@ -280,6 +296,7 @@ export const GITHUB_OBJECTS = {
 				id: { owner: "owner", repo: "repo", number: "issue_number" },
 				verb: "Change",
 				text: "body",
+				editable: ["title"],
 				verbs: [
 					{ when: { state: "closed", state_reason: "not_planned" }, verb: "Close", what: "Close as not planned" },
 					{ when: { state: "closed" }, verb: "Close" },
@@ -295,6 +312,7 @@ export const GITHUB_OBJECTS = {
 				verb: "Create",
 				what: "Create an issue on {owner}/{repo}",
 				text: "body",
+				editable: ["title"],
 			},
 		],
 	},

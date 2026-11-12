@@ -240,6 +240,8 @@ export type Item =
 			readonly role: "proposalResult";
 			readonly proposal: string;
 			readonly state: "accepted" | "declined";
+			/** The text the owner edited before accepting, as accepted. */
+			readonly edited?: import("../core/proposals.ts").ProposalEdits;
 	  }
 	/** A message another agent sent here; the recipient's turn decides what to do with it. */
 	| {
@@ -592,6 +594,8 @@ export type RoutineView = {
 	readonly agent: string;
 	/** The hashes of the box's versions the owner allowed, newest last: a chat that wrote one of them says so. */
 	readonly allowed?: readonly string[];
+	/** Of those, the ones the owner edited before allowing them: what runs is their version. */
+	readonly edited?: readonly string[];
 };
 
 /** One thing a routine, an effect within a permission, or the owner in the control room, did; where, to open it. */

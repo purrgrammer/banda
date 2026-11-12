@@ -237,7 +237,12 @@ export type FactAction =
 
 /** What the owner does to a routine from the app. */
 export type RoutineAction =
-	| { readonly action: "accept"; readonly sha: string | null }
+	| {
+			readonly action: "accept";
+			readonly sha: string | null;
+			/** The owner's edit of what the agent wrote, made before allowing it (`RoutineChange`). */
+			readonly change?: { readonly when?: string; readonly description?: string; readonly ask?: string };
+	  }
 	| { readonly action: "decline" | "pause" | "resume" | "remove" };
 
 /** The built web UI (`npm run build:web`); the same path from `src/server` and `dist/server`. */
@@ -657,10 +662,24 @@ export function handler(
 		if (routine !== null && req.method === "POST") {
 			const [, name = "", action] = routine;
 			if (action === "accept") {
-				const { sha } = await json(req);
+				const body = await json(req);
+				const { sha, when, description, ask } = body;
+				// what the owner may edit of what an agent wrote is its text, never its limits or its name
+				const unknown = Object.keys(body).find((key) => !["sha", "when", "description", "ask"].includes(key));
+				if (unknown !== undefined) return reply(res, 400, { error: `${unknown} cannot be edited` });
 				if (sha !== null && (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)))
 					return reply(res, 400, { error: "sha is the hash of the text shown, or null for a removal" });
-				return reply(res, 200, await routes.routine(name, { action, sha }));
+				// the owner's edit before allowing: the same text an edit of a routine in effect takes
+				const text = (value: unknown, max: number): value is string | undefined =>
+					value === undefined || (typeof value === "string" && value.length <= max);
+				if (!text(when, 200) || !text(description, 200) || !text(ask, 8000))
+					return reply(res, 400, { error: "when, description and ask are text, as a routine's edit takes them" });
+				const change = {
+					...(when === undefined ? {} : { when }),
+					...(description === undefined ? {} : { description }),
+					...(ask === undefined ? {} : { ask }),
+				};
+				return reply(res, 200, await routes.routine(name, { action, sha, change }));
 			}
 
 			return reply(

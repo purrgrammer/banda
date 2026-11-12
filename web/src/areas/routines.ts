@@ -2,6 +2,7 @@
  * Routines in the app: what the owner does to a routine, as one call each: allow or decline the box's change, pause,
  * resume, remove, change when it runs, and run it now. Each answers with the control view, as it is after.
  */
+import type { RoutineRunsPage } from "../../../src/server/api.ts";
 import { api, type ControlView } from "../lib/api.ts";
 import type { ShellHandlers } from "../lib/shell.ts";
 
@@ -9,7 +10,14 @@ export const shell: ShellHandlers = {};
 
 /** What the owner does to a routine. */
 export type RoutineAct =
-	| { readonly action: "accept"; readonly sha: string | null }
+	/** Allow the box's change, as seen; with the owner's edit of what the agent wrote, made before allowing it. */
+	| {
+			readonly action: "accept";
+			readonly sha: string | null;
+			readonly when?: string;
+			readonly description?: string;
+			readonly ask?: string;
+	  }
 	| { readonly action: "decline" | "pause" | "resume" | "remove" }
 	/** Change when it runs: one schedule line, and the hash of the version they saw. */
 	| { readonly action: "when"; readonly when: string; readonly sha: string }
@@ -47,3 +55,7 @@ export const clickKey = (): string =>
 	typeof crypto.randomUUID === "function"
 		? crypto.randomUUID()
 		: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+/** Routine `name`'s history, newest first: its runs before `before` (when one ran), or its newest. */
+export const routineRuns = (name: string, before?: number) =>
+	api<RoutineRunsPage>(`/routines/${name}/runs${before === undefined ? "" : `?before=${before}`}`);
