@@ -345,6 +345,11 @@ export type FollowedReading = {
 	/** When the reads of the newest look that read it had ended: what a read is sure of a minute after. */
 	through?: number;
 	/**
+	 * The derived conditions that held over it but were held back, their steady path having just moved (`heldBack`): a
+	 * look that takes it as shared looks again at the busy cadence too, as the look that read it does.
+	 */
+	heldBack?: string[];
+	/**
 	 * How long each tail read's list was when a look last read it (at least, when the look did not reach its end): where
 	 * the next look starts when the reading gives no count of its own.
 	 */
@@ -353,6 +358,15 @@ export type FollowedReading = {
 
 /** How many earlier readings of a followed object are kept beside the newest. */
 export const EARLIER_KEPT = 3;
+
+/**
+ * How soon a reading wants looking at again: the kind's cadence for it, or at most the busy one while a derived condition
+ * held over it is held back (`heldBack`), so the look after lets it flip. What a look sharing the reading goes by too.
+ */
+function cadenceOf(follow: Follow, answers: Item, heldBack: readonly string[] | undefined): number {
+	const every = lookEvery(follow, answers);
+	return heldBack !== undefined && heldBack.length > 0 ? Math.min(every, BUSY_EVERY) : every;
+}
 
 /** The reading of `kept` at `version`: the newest, an earlier one, or, when that fell off, the oldest kept. */
 export function readingAt(kept: FollowedReading, version: number): Item {
@@ -1059,7 +1073,7 @@ export function defineWatches(options: WatchesOptions) {
 				kept.at > (record.looked ?? Number.NEGATIVE_INFINITY) &&
 				record.pages === undefined &&
 				(settled === undefined || kept.at >= settled) &&
-				now - kept.at < lookEvery(found.kind.follow, kept.answers)
+				now - kept.at < cadenceOf(found.kind.follow, kept.answers, kept.heldBack)
 			)
 				shared = { version: kept.version };
 			// a read an `unless` guards is left unmade only by a look that would diff the object as it stands anyway: never
@@ -1297,11 +1311,11 @@ export function defineWatches(options: WatchesOptions) {
 			// a shared reading is taken as it was kept, its derived conditions with it: deriving them again over itself
 			// would call a condition steady that the look which read it held back
 			const after = shared === undefined ? readingOf(kind.follow, looked, kept?.answers) : (kept?.answers ?? answers);
-			// a condition held back until its steady path stays is looked at again soon, not at the quiet cadence
-			const every =
-				shared === undefined && heldBack(kind.follow, looked, kept?.answers)
-					? Math.min(lookEvery(kind.follow, after), BUSY_EVERY)
-					: lookEvery(kind.follow, after);
+			// a condition held back until its steady path stays is looked at again soon, not at the quiet cadence; a look
+			// that shares the reading goes by what the look which read it held back, kept with it
+			const heldBackNames =
+				shared === undefined ? heldBack(kind.follow, looked, kept?.answers) : (kept?.heldBack ?? []);
+			const every = cadenceOf(kind.follow, after, heldBackNames);
 			if (shared === undefined) {
 				let card: ReturnType<typeof cardOf> | undefined;
 				try {
@@ -1346,6 +1360,8 @@ export function defineWatches(options: WatchesOptions) {
 				if (Object.keys(when).length > 0) stored.made = when;
 				else delete stored.made;
 				stored.through = through;
+				if (heldBackNames.length > 0) stored.heldBack = heldBackNames;
+				else delete stored.heldBack;
 			}
 			const counted = { ...kept?.lengths, ...lengths };
 			if (stored !== undefined && Object.keys(counted).length > 0 && canonical(counted) !== canonical(stored.lengths))

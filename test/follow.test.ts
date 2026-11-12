@@ -225,7 +225,8 @@ describe("following an object", () => {
 		const before = { head: "a1", runs: [{ ok: false }] };
 		const pushed = { head: "b2", runs: [{ ok: true }] };
 		expect(reading(follow, pushed, before).derived).toEqual({ green: false });
-		expect(heldBack(follow, pushed, before)).toBe(true);
+		expect(heldBack(follow, pushed, before)).toEqual(["green"]);
+		expect(heldBack(follow, pushed, pushed)).toEqual([]);
 		expect(reading(follow, pushed, pushed).derived).toEqual({ green: true });
 		expect(reading(follow, pushed).derived).toEqual({ green: true });
 		expect(parseFollow({ rules: [], ends: { x: "a = 1" }, derived: { g: { when: "a = 1" } } }, "k")).toHaveProperty(
