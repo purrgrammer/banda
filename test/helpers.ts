@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { Harness } from "@earendil-works/pi-durable";
 import type { InlineConfig, ViteDevServer } from "vite";
 import { afterEach, onTestFinished } from "vitest";
@@ -43,6 +44,27 @@ export async function until<T>(
 		if (ended) throw new Error("the test ended while waiting");
 		await new Promise((resolve) => setTimeout(resolve, every));
 	}
+}
+
+/**
+ * A faux reply that says when the model was asked for it. A turn asks the model again only once its tools returned, so
+ * by `asked` what they wrote is whole. A file existing says nothing of that: a write creates the file before it fills it.
+ */
+export function whenAsked(reply: AssistantMessage): {
+	readonly response: () => AssistantMessage;
+	readonly asked: Promise<void>;
+} {
+	let resolve: () => void = () => {};
+	const asked = new Promise<void>((done) => {
+		resolve = done;
+	});
+	return {
+		response: () => {
+			resolve();
+			return reply;
+		},
+		asked,
+	};
 }
 
 /** Skip first run's skills step, as the owner's Skip does, for a browser test about something else. */

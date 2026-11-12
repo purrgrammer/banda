@@ -31,6 +31,7 @@ import { RoutineProposal } from "../chat/Routine.tsx";
 import type { Who } from "../chat/Row.tsx";
 import { SkillFeedItem } from "../chat/Skill.tsx";
 import { WatchLine, WatchProposal } from "../chat/Watch.tsx";
+import { WorkingLine } from "../chat/WorkingLine.tsx";
 import { Markdown } from "../components/Markdown.tsx";
 import { Mentionable } from "../components/MentionChip.tsx";
 import { actOnCapability, actOnProposal, answerAgent, answerWait, dismissQuestion } from "../lib/api.ts";
@@ -398,6 +399,9 @@ const sideOf = (segment: Segment): "owner" | "agent" | "line" => {
 	return "line";
 };
 
+/** What begins an agent's turn in its chat: the working line stands after one until the agent shows something. */
+const TURN_STARTS: ReadonlySet<Segment["kind"]> = new Set(["owner", "owner-message", "wake", "agentMessage"]);
+
 /** The transcript entry a segment stands for, from its key ("41", "41:ask", "answer:41"). */
 const entryOf = (key: string): number | undefined => {
 	const found = /\d+/.exec(key)?.[0];
@@ -417,6 +421,7 @@ export function FeedView({
 	onTryAgain,
 	onRoutine,
 	onActivity,
+	onWorkingLine,
 	outgoing = [],
 	onRetry,
 }: {
@@ -436,6 +441,8 @@ export function FeedView({
 	/** A routine's event or trouble line was tapped: open the agent's routines. */
 	onRoutine?: ((name: string) => void) | undefined;
 	onActivity?: ((entry: number) => void) | undefined;
+	/** The working line was tapped: open the work's activity, and hand focus back to the line after. */
+	onWorkingLine?: ((line: HTMLElement) => void) | undefined;
 	outgoing?: readonly { id: string; text: string; files: readonly File[]; state: "sending" | "failed" }[];
 	onRetry?: (pending: { id: string; text: string; files: readonly File[]; state: "sending" | "failed" }) => void;
 }) {
@@ -458,6 +465,9 @@ export function FeedView({
 	const failed = tryAgainAfter(segments);
 	let run: { side: "owner" | "agent"; items: ReactNode[]; at?: number | undefined; key: string } | undefined;
 	let lastDay: string | undefined;
+	// whether the agent showed anything since its turn began: the working line
+	// stands only until it does, however long the turn goes on
+	let shown = false;
 	const flush = () => {
 		if (run === undefined) return;
 		nodes.push(
@@ -517,6 +527,15 @@ export function FeedView({
 			) : (
 				partOf(chat, who, segment, onOpenArtifact, agent, onRoutine, inspect, messageAuthor)
 			);
+		// what begins a turn: the owner's words, a routine's wake, another agent's message
+		if (TURN_STARTS.has(segment.kind)) shown = false;
+		else if (part !== null) shown = true;
+		if (segment.kind === "working") {
+			if (shown) return;
+			flush();
+			nodes.push(<WorkingLine key="working" who={[who]} onOpen={onWorkingLine} />);
+			return;
+		}
 		if (again && segment.kind === "companion") {
 			flush();
 			if (part !== null) {

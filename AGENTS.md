@@ -114,6 +114,13 @@ A banda daemon may be running from another checkout, possibly the one you are ru
 - Work lands on `main` as small commits; push and open pull requests only when the owner says so.
 - Small commits with conventional prefixes (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`).
 - The commit message carries the why: what changed, the decisions taken and the caveats left (principle 8).
+- A PR's proof is posted as one comment once checks, typecheck and tests are green: before (origin/main)
+  and after (the branch), at desktop and phone width. Screenshots for a visual change; a GIF (ffmpeg, under
+  8 MB) for an interaction. Record on a throwaway home with invented data and the faux provider, never
+  a `home:fork`: the repo is public. Media go on the orphan branch `pr-proof` under `pr-<N>/` and are linked
+  as `https://raw.githubusercontent.com/purrgrammer/banda/pr-proof/pr-<N>/<file>`.
+- Push to GitHub only (`git push https://github.com/purrgrammer/banda <branch>`): `origin` also pushes to
+  a nostr mirror that rejects force pushes.
 - Pre-release: no backwards-compatibility layers. Change stored shapes in place, with no `migrate` and no version
   bump: a home made by an earlier build need not open, and the owner starts a fresh one. test/stored-shapes.test.ts
   covers the shapes as they are now.

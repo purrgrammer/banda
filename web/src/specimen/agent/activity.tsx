@@ -1,6 +1,6 @@
 /**
- * Activity: the app's own sheet (`app/Activity.tsx`) over a fixture transcript, opened from the chat's status line and
- * a message's activity control, as in the app. The story: a morning train to Madrid, working, finished or failed, and
+ * Activity: the app's own sheet (`app/Activity.tsx`) over a fixture transcript, opened from a message's activity
+ * control, as in the app. The story: a morning train to Madrid, working, finished or failed, and
  * played as a stream by growing the transcript. No daemon and no model requests.
  */
 import { PauseIcon, PlayIcon } from "lucide-react";
@@ -202,14 +202,13 @@ const FAILED: readonly Item[] = [
 ];
 
 /** The run in progress at a moment of the stream: what is recorded, and what is still being generated. */
-function working(tick: number): { transcript: Transcript; doing: string } {
+function working(tick: number): { transcript: Transcript } {
 	if (tick < 5)
 		return {
 			transcript: transcriptOf(OPENING.slice(0, 4), {
 				input: 1,
 				running: [{ call: "b1", name: "browser_navigate", output: "", doing: "Opening renfe.com" }],
 			}),
-			doing: "Looking up trains…",
 		};
 	if (tick < 11)
 		return {
@@ -217,7 +216,6 @@ function working(tick: number): { transcript: Transcript; doing: string } {
 				input: 1,
 				running: [{ call: "b2", name: "browser_navigate", output: "", doing: "Opening thetrainline.com" }],
 			}),
-			doing: "Reading departure times…",
 		};
 	const thought = THINKING.slice(0, Math.max(0, (tick - 11) * 16));
 	return {
@@ -237,13 +235,12 @@ function working(tick: number): { transcript: Transcript; doing: string } {
 						]),
 			],
 		}),
-		doing: "Comparing the options…",
 	};
 }
 
-const SCENES: Readonly<Record<Exclude<Scenario, "working">, { transcript: Transcript; doing?: string }>> = {
+const SCENES: Readonly<Record<Exclude<Scenario, "working">, { transcript: Transcript }>> = {
 	finished: { transcript: transcriptOf(FINISHED) },
-	failed: { transcript: transcriptOf(FAILED), doing: "Couldn’t check fare conditions" },
+	failed: { transcript: transcriptOf(FAILED) },
 };
 
 /** The chat with its activity: the scenario and the stream are the specimen's controls above it. */
@@ -302,13 +299,7 @@ export function ActivityChat() {
 					{playing ? "Pause stream" : "Play stream"}
 				</Button>
 			</div>
-			<ChatScreen
-				name={MARA.name}
-				faces={[MARA]}
-				state={live ? "working" : "idle"}
-				doing={scene.doing}
-				onActivity={() => show()}
-			>
+			<ChatScreen name={MARA.name} faces={[MARA]} state={live ? "working" : "idle"}>
 				<DaySeparator>Today</DaySeparator>
 				<Run time="10:41">
 					<Bubble copy={REQUEST}>{REQUEST}</Bubble>
@@ -349,7 +340,7 @@ export function ActivitySection() {
 	return (
 		<Section
 			id="activity"
-			note="What an agent did, from the status line or a message. Play stream grows the transcript as a run would."
+			note="What an agent did, from a message. Play stream grows the transcript as a run would."
 			bleed
 			wide
 		>

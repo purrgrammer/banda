@@ -23,11 +23,12 @@ import { archiveGroup, groupOf, postToGroup } from "../areas/groups.ts";
 import { ArtifactCard, QuestionCard } from "../chat/Cards.tsx";
 import { Composer } from "../chat/Composer.tsx";
 import { Bubble, MessageActions, Run } from "../chat/Feed.tsx";
-import { HEADER_CLEARANCE, Header, workingWords } from "../chat/Header.tsx";
+import { HEADER_CLEARANCE, Header } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { ChatLoading, GroupEmpty } from "../chat/Loading.tsx";
 import { GroupPanel, Panel } from "../chat/Panel.tsx";
 import { SkillFeedItem } from "../chat/Skill.tsx";
+import { WorkingLine } from "../chat/WorkingLine.tsx";
 import { MENTION_LINK, Mentionable } from "../components/MentionChip.tsx";
 import { answerWait, api, dismissQuestion, type GroupNoticeView, type GroupView, upload } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
@@ -43,6 +44,7 @@ import { HarnessActivitySheet } from "./HarnessSession.tsx";
 import { chatActivity, harnessActivity } from "./harness-activity.ts";
 import { MessageObjects, MessageText } from "./Objects.tsx";
 import { useSkills } from "./Skills.tsx";
+import { noneWorking, workingMembers } from "./working-members.ts";
 
 /** A message's markdown with each agent it mentions as a link, which `Markdown` draws as its chip. */
 function linkedMentions(text: string, ids: readonly string[], known: readonly ChatAgent[]): string {
@@ -84,6 +86,9 @@ export function GroupChat({
 	// closed by default, like an agent's: the screen is the conversation; the face or the name opens it
 	const [panel, setPanel] = useState(false);
 	const [activity, setActivity] = useState<readonly ActivityTarget[]>();
+	// the working line that opened the sheet, for focus to go back to
+	const openedFrom = useRef<HTMLElement | undefined>(undefined);
+	const since = useRef(noneWorking());
 	const latest = row?.latest;
 	const asking = row?.asking.join(",");
 	// biome-ignore lint/correctness/useExhaustiveDependencies: read again whenever the row says the log or its asks changed
@@ -124,9 +129,33 @@ export function GroupChat({
 	const delegated = harnessActivity(shell.harnesses?.sessions ?? [], Object.values(executions));
 	const status = chatActivity(
 		(row?.asking ?? group?.asking ?? []).length ? "waiting" : working.length ? "working" : "idle",
-		workingWords(working.map((member) => member.name)),
+		undefined,
 		delegated,
 	);
+	// the working line: who works and has shown nothing yet. A reaction alone draws nothing, so it is not something shown
+	const onLine = workingMembers(
+		since.current,
+		group && {
+			latest: group.latest,
+			shown: [
+				...group.messages.flatMap((message) =>
+					"agent" in message.author && !reactionOnly(message)
+						? [{ entry: message.entry, agent: message.author.agent }]
+						: [],
+				),
+				...group.notices.flatMap((notice) =>
+					notice.agent === undefined ? [] : [{ entry: notice.entry, agent: notice.agent }],
+				),
+			],
+			asking: group.asks.map((ask) => ask.agent),
+		},
+		working.flatMap((member) => (member.id === undefined ? [] : [member.id])),
+		latest,
+	).map((id) => ({ ...whoOf(known, id), id }));
+	const lineTargets = onLine.flatMap((member) => {
+		const chat = executions[member.id];
+		return chat === undefined ? [] : [{ chat, name: member.name, heading: name }];
+	});
 	const openDelegated = () => setDelegatedOpen(delegated.sessions.map((session) => session.task));
 	const activityTargets = (working.length ? working : members).flatMap((member) => {
 		const chat = executions[member.id];
@@ -162,7 +191,7 @@ export function GroupChat({
 					state={status.state}
 					attention={status.attention}
 					delegated={
-						status.secondary
+						delegated.sessions.length > 0
 							? { count: delegated.sessions.length, waiting: delegated.waiting, onOpen: openDelegated }
 							: undefined
 					}
@@ -315,6 +344,17 @@ export function GroupChat({
 								)}
 							</Run>
 						))}
+						<WorkingLine
+							who={onLine}
+							onOpen={
+								lineTargets.length === 0
+									? undefined
+									: (line) => {
+											openedFrom.current = line;
+											setActivity(lineTargets);
+										}
+							}
+						/>
 					</ConversationContent>
 					<OpenAt at={at} ready={group !== undefined} />
 					<div className="relative">
@@ -346,7 +386,16 @@ export function GroupChat({
 			{delegatedOpen === undefined ? null : (
 				<HarnessActivitySheet tasks={delegatedOpen} onClose={() => setDelegatedOpen(undefined)} />
 			)}
-			{activity === undefined ? null : <ActivitySheet targets={activity} onClose={() => setActivity(undefined)} />}
+			{activity === undefined ? null : (
+				<ActivitySheet
+					targets={activity}
+					returnTo={openedFrom.current}
+					onClose={() => {
+						openedFrom.current = undefined;
+						setActivity(undefined);
+					}}
+				/>
+			)}
 			{!phone && panel ? panelView : null}
 		</>
 	);

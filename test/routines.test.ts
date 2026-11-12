@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
 	type AssistantMessage,
 	createModels,
+	type FauxResponseStep,
 	fauxAssistantMessage,
 	fauxProvider,
 	fauxToolCall,
@@ -47,7 +48,7 @@ import { view } from "../web/src/lib/chat.ts";
 import { routineWords } from "../web/src/lib/segments/routines.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { FAUX_MODEL } from "./fixtures/models.ts";
-import { blobStore, FakeGateway, tempHome, until } from "./helpers.ts";
+import { blobStore, FakeGateway, tempHome, until, whenAsked } from "./helpers.ts";
 import { pbtRuns } from "./pbt.ts";
 
 const MINUTE = 60_000;
@@ -241,6 +242,7 @@ describe("a routine's time zone", () => {
 	});
 
 	it("the agent names the place's zone; the card says it; the owner's edit and the panel keep to a wall", async () => {
+		const told = whenAsked(fauxAssistantMessage("Asked them to allow it."));
 		const asks = [
 			fauxAssistantMessage([fauxToolCall("tool_search", { query: "schedule", limit: 1 })], { stopReason: "toolUse" }),
 			fauxAssistantMessage(
@@ -259,13 +261,14 @@ describe("a routine's time zone", () => {
 				],
 				{ stopReason: "toolUse" },
 			),
-			fauxAssistantMessage("Asked them to allow it."),
+			told.response,
 		];
 		const { home, daemon: started, api, post } = await daemon(asks);
 		try {
 			await post("/messages", { id: randomUUID(), thread: randomUUID(), text: "Every weekday at 8, the weather" });
 			const file = join(home, "workspace", "routines", "weather.md");
-			await until(async () => existsSync(file));
+			// `schedule` returned: the file is whole
+			await told.asked;
 			expect(await readFile(file, "utf8")).toContain("cron: 0 8 * * 1-5\nzone: Europe/Lisbon\n");
 			const waiting = await until(async () =>
 				(await api<ControlView>("/control")).routines.find((each) => each.name === "weather" && each.change),
@@ -472,7 +475,7 @@ const writesTea = (id: string, cron: string, ask = "Remind the owner to drink te
 ];
 
 /** A daemon whose model writes a routine at 16:00 every day when asked (or does `script`), then answers its runs. */
-async function daemon(script = writesTea("c1", "0 16 * * *")) {
+async function daemon(script: readonly FauxResponseStep[] = writesTea("c1", "0 16 * * *")) {
 	const home = await tempHome();
 	await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
 	const web = join(home, "web");

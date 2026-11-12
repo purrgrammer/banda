@@ -136,8 +136,9 @@ one that gives them one more thing to manage stays out.
   connection's change is answered in the chat, so neither lights it: the dot never cries wolf. The footer holds only the
   daemon's notices. Collapsed, the rail shows faces alone, the menu below them.
 - **The chat** is one timeline where the owner's words, the agent's messages, events and cards share the transcript. The
-  header (48px) is the agent's face and name and, under it, its presence in a word or two (working, waiting on you,
-  routines paused): what it does is said once, at the foot; tapping the name opens the panel on the phone and toggles it on the desktop. The owner's messages sit on
+  header (48px) is the agent's face and name and, under it, its presence in a word or two (waiting on you, routines
+  paused); it never says that an agent works, in words or in the face's motion: the feed's working line does. Tapping
+  the name opens the panel on the phone and toggles it on the desktop. The owner's messages sit on
   the right in ink-filled bubbles, the agent's on the left as bubbles, its face and name above each run of consecutive
   messages (on the phone the face alone, the name once at the top); day separators; an unread divider where the owner
   last read; "jump to latest" when scrolled up; times on hover or tap; paged backwards from any point, so a search
@@ -147,9 +148,13 @@ one that gives them one more thing to manage stays out.
   words beneath it; a **draft** as the approval card (below); a **view** of the browser, live, with take-over; an
   **artifact** card that opens in the panel; an **object** card; a sign-in handed to the owner; a reaction. Events and
   asks draw as lines in the feed, in place: a routine's run, a change to accept, a connection to finish signing in to,
-  an error. Work in progress is said in the header, under the name, once: the face's motion and what it does now
-  ("Using its browser…"; in a group, who is at work), cut to the width; the feed has no working line, never a tool
-  row, never typing dots. Any message can be copied. Every destructive action (forgetting a fact, removing a member,
+  an error. Work in progress is said once, by the **working line** at the foot of the feed, above the owner's
+  messages still waiting: while agents work and have shown nothing since their turn began, their faces (28px, side by
+  side in a group, three and then a count; still under reduced motion) and "Working…" beside them, its label naming
+  who ("Mara and Sancho are working"). An agent leaves it the moment anything of its own shows in the feed, however
+  long its turn goes on, and what it shows takes the line's place; the line goes once no one is left on it. A tap
+  opens their activity. The feed has no other working sign, never a tool row, never typing dots, and a reply carries
+  no face it did not have before. Any message can be copied. Every destructive action (forgetting a fact, removing a member,
   taking back a permission, archiving an agent) asks first, in its own verb, with a way to keep things as they are. A reply that
   failed, a message that was not delivered, or an agent that did not answer, ends in one tap, "Try again", which sends
   the owner's "Try again." in their own words: what they asked stays where it was, and the agent answers it.
@@ -178,11 +183,11 @@ one that gives them one more thing to manage stays out.
   Keep as is. A "waiting on you" pill sits above the composer when an open ask is out of view; tapping it scrolls
   there. A card with nothing left to do folds into one row of the feed, what was done and to what, with the card
   behind it; who did it is said only in a group, as on messages.
-- **Activity has three depths**: the quiet status in chat; a readable timeline opened from that status or a quiet
+- **Activity has three depths**: the working line in the feed; a readable timeline opened from that line or a quiet
   action beside a message's Copy; the full transcript, opened by any timeline item in the same sheet, with a way back.
   Hover, focus or a phone's long press reveals a message's actions. The sheet is full-width on the phone. It inspects
   that work, not every chat on the device, and stays on it when more work arrives. In a group, the reply identifies
-  the member's own work; the group's working status lets the owner choose a member.
+  the member's own work; the group's working line lets the owner choose a member.
   The transcript starts with the recorded system prompt collapsed and the complete toolset offered to that model
   request, unused tools included, each description and schema available in full. Then come the input and chronological
   records: provider-exposed thinking, model notes, arguments, results, asks and errors. Thinking is never invented;
@@ -261,13 +266,14 @@ answered by a control, never by typing its id.
   faces carry the other colour on screen. Light and dark are designed, not inverted; every token passes the contrast audit.
 - Each agent has an open-bot-avatar face, never an emoji identity: 40px in rows, 28px beside a message group's name in a group
   (a 1:1 chat names no one above its messages: the header says who),
-  64px in the panel, 96px on the first-run screen. The face itself moves while working; a subtle dot marks waiting,
+  64px in the panel, 96px on the first-run screen. The face itself moves while working, in the band's rows and the
+  working line, never in a chat's header; a subtle dot marks waiting,
   and paused routines dim it. There is no disc or working icon. In voice mode its states include listening, thinking
   and speaking. The owner's face choice also supplies the first agent's favicon and installed app icons.
 - Surfaces: one hairline border, the card radius, no shadow; the composer alone casts one. One primary button per
   card; the rest are quiet. Cards from connections carry the service's logo, from shipped assets, never fetched.
 - Geist for people, Geist Mono for machines; the scale as it stands; prose at the measure; numbers tabular.
-- Motion says something changed or something is alive: the working face moves and entries fade in; reduced motion
+- Motion says something changed or something is alive: the working line's faces move and entries fade in; reduced motion
   is honoured.
 - A messaging app's density, not a dashboard's: 56px rows, bubbles, grouped messages, day separators, times on
   demand. Bubbles, never a flat transcript, because messages arrive out of turn.
@@ -484,9 +490,9 @@ naming one that is not there answers with those that are.
   follows the end while the session streams, stops following when the owner scrolls up and offers "Jump to latest"
   back; a step that arrives while it is open never arrives expanded, and opening one never jumps the view. Each ask
   is a card under the session's; several may be
-  open at once, and each lives as long as the harness's process. The header shows delegated work from its recorded state,
-  with approval attention and a way to open its activity; several sessions have a picker. The agent's own active reply
-  takes priority, with a compact delegated indicator alongside it. Stop answers them all, and before the ask was sent,
+  open at once, and each lives as long as the harness's process. The header shows delegated work from its recorded state
+  as a count of its sessions that opens their activity (several have a picker), and says when one waits on the owner;
+  like the agent's own work, a session at work is not said there. Stop answers them all, and before the ask was sent,
   stops it from being sent. The owner steers in their own words: a note is sent to the harness as a
   prompt it takes after its current step. Stop cancels the turn, and a harness that has not ended it within seconds is
   ended, with all it started. Stop acts at once, with no confirmation: a stopped

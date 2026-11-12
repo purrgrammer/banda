@@ -13,12 +13,13 @@ import { ImageFile } from "../../chat/Files.tsx";
 import { BringBlock, type BringHarness, FirstBring, pickKey } from "../../chat/FirstBring.tsx";
 import { FirstRun, Starters } from "../../chat/FirstRun.tsx";
 import { FirstSkills } from "../../chat/FirstSkills.tsx";
-import { HEADER_CLEARANCE, Header, workingWords } from "../../chat/Header.tsx";
+import { HEADER_CLEARANCE, Header } from "../../chat/Header.tsx";
 import { Line } from "../../chat/Line.tsx";
 import { PullRequestCard } from "../../chat/Object.tsx";
 import { ProposalCard } from "../../chat/Proposal.tsx";
 import { RowActions, type RowView, type Who } from "../../chat/Row.tsx";
 import { VoiceMessage } from "../../chat/Voice.tsx";
+import { WorkingLine } from "../../chat/WorkingLine.tsx";
 import {
 	ATLAS,
 	MARA,
@@ -356,9 +357,13 @@ export function Screens() {
 					<MaraChat keyboard />
 				</Section>
 			) : null}
-			<Section id="working-chat" note="One agent at work: the header says so, the foot says what it does." bleed>
+			<Section
+				id="working-chat"
+				note="One agent at work: its face and Working… at the foot of the feed, until it shows something. The header says nothing of it."
+				bleed
+			>
 				{phone ? null : <Band rows={ROWS} selected="octo" />}
-				<ChatScreen name="Octo" faces={[OCTO]} state="working" doing="Reading the checks on #34…">
+				<ChatScreen name="Octo" faces={[OCTO]} state="working">
 					<Line icon={CalendarClockIcon} time="8:00">
 						Routine "PR watch" ran
 					</Line>
@@ -369,6 +374,7 @@ export function Screens() {
 					<Run time="10:28">
 						<Bubble>Why is CI red on #34?</Bubble>
 					</Run>
+					<WorkingLine who={[OCTO]} onOpen={() => {}} />
 				</ChatScreen>
 			</Section>
 			<Section id="first-run" note="The first agent, and the providers to pick from: one screen." bleed>
@@ -457,7 +463,6 @@ export function Screens() {
 						{ ...MARA, state: "working" },
 					]}
 					group
-					doing={workingWords(["Mara", "Sancho"])}
 				>
 					<Run time="9:50">
 						<Bubble>Can we do Lisbon the weekend of the 14th? Check my calendar and flights.</Bubble>
@@ -478,6 +483,7 @@ export function Screens() {
 							<Mention who={MARA} /> book the 9:15. <Mention who={SANCHO} /> add it to my calendar.
 						</Bubble>
 					</Run>
+					<WorkingLine who={[MARA, SANCHO]} onOpen={() => {}} />
 				</ChatScreen>
 			</Section>
 			<Section

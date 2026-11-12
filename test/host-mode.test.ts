@@ -11,7 +11,7 @@ import { boxKind } from "../src/box/box.ts";
 import { type Daemon, type DaemonOptions, startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { ComputerView } from "../src/server/api.ts";
-import { echoModels, tempHome, until } from "./helpers.ts";
+import { echoModels, tempHome, whenAsked } from "./helpers.ts";
 
 const daemons: Daemon[] = [];
 afterEach(async () => {
@@ -80,6 +80,7 @@ describe("host mode", () => {
 		const faux = fauxProvider();
 		const models = createModels();
 		models.setProvider(faux.provider);
+		const done = whenAsked(fauxAssistantMessage("Done."));
 		faux.setResponses([
 			fauxAssistantMessage(
 				[
@@ -91,7 +92,7 @@ describe("host mode", () => {
 				],
 				{ stopReason: "toolUse" },
 			),
-			fauxAssistantMessage("Done."),
+			done.response,
 		]);
 		process.env.BANDA_HOST_TEST_SECRET = "leaked";
 		const logged: string[] = [];
@@ -103,7 +104,9 @@ describe("host mode", () => {
 			const posted = await post("where are you?");
 			expect(posted.ok).toBe(true);
 			const workspace = join(home, "workspace");
-			const where = await until(() => readFile(join(workspace, "where.txt"), "utf8").catch(() => undefined));
+			// bash returned: both files are whole
+			await done.asked;
+			const where = await readFile(join(workspace, "where.txt"), "utf8");
 			// macOS's temp folder is reached through a link: compare what each resolves to
 			expect(await realpath(where.trim())).toBe(await realpath(workspace));
 			expect(await readFile(join(workspace, "env.txt"), "utf8")).toBe("secret=\n");

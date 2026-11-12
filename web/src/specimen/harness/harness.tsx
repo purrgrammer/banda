@@ -458,13 +458,15 @@ export function HarnessSection() {
 					<HarnessAsks session={askSession(MANY_ASKS)} agentName="Mara" />
 				</div>
 			</Section>
-			<Section id="harness-header">
+			<Section
+				id="harness-header"
+				note="Coding sessions at work: their count at the right of the header, which opens them. The header says nothing of the work."
+			>
 				<HeaderStage>
 					<Header
 						name={MARA.name}
 						faces={[MARA]}
-						state="working"
-						doing="Claude Code is running a command…"
+						delegated={{ count: 1, waiting: false, onOpen: () => {} }}
 						onActivity={() => {}}
 					/>
 				</HeaderStage>
@@ -475,6 +477,7 @@ export function HarnessSection() {
 						state="waiting"
 						doing="Waiting on you · Claude Code"
 						attention
+						delegated={{ count: 1, waiting: true, onOpen: () => {} }}
 						onActivity={() => {}}
 					/>
 				</HeaderStage>
@@ -482,8 +485,7 @@ export function HarnessSection() {
 					<Header
 						name={MARA.name}
 						faces={[MARA]}
-						state="working"
-						doing="2 coding sessions running"
+						delegated={{ count: 2, waiting: false, onOpen: () => {} }}
 						onActivity={() => {}}
 					/>
 				</HeaderStage>
@@ -491,8 +493,6 @@ export function HarnessSection() {
 					<Header
 						name={MARA.name}
 						faces={[MARA]}
-						state="working"
-						doing="Thinking…"
 						attention
 						delegated={{ count: 2, waiting: true, onOpen: () => {} }}
 						phone

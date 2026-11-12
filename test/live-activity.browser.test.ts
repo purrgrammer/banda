@@ -292,8 +292,8 @@ it.skipIf(!hasChrome())(
 				);
 				await page.run(`document.querySelector('textarea').closest('form').requestSubmit()`);
 				await until(() => Promise.resolve(entered));
-				await page.until(`document.querySelector('header [aria-label^="Activity:"]')`);
-				await page.run(`document.querySelector('header [aria-label^="Activity:"]').click()`);
+				await page.until(`document.querySelector('[data-working-line] button')`);
+				await page.run(`document.querySelector('[data-working-line] button').click()`);
 				await drill(page);
 				await page.run(`document.querySelector('[data-slot="sheet-title"]').focus()`);
 				release();
@@ -335,8 +335,8 @@ it.skipIf(!hasChrome())(
 			await post("BROWSER_FOCUS");
 			await withPage(`${base}/#token=${token}`, { width: 390, height: 900 }, async (page) => {
 				await open(page, "#/a/sancho");
-				await page.until(`document.querySelector('header [aria-label^="Activity:"]')`);
-				await page.run(`document.querySelector('header [aria-label^="Activity:"]').click()`);
+				await page.until(`document.querySelector('[data-working-line] button')`);
+				await page.run(`document.querySelector('[data-working-line] button').click()`);
 				await drill(page);
 				await page.until(
 					`[...document.querySelectorAll('[data-raw-title]')].some(el=>el.textContent==='bash' && !el.closest('[aria-label="Tools"]'))`,
@@ -393,8 +393,8 @@ it.skipIf(!hasChrome())(
 			entered = false;
 			await api(`/groups/${room}/messages`, { key: randomUUID(), text: "GROUP_LIVE", mentions: ["sancho", "mara"] });
 			await until(() => Promise.resolve(entered));
-			await page.until(`document.querySelector('header [aria-label^="Activity:"]')`);
-			await page.run(`document.querySelector('header [aria-label^="Activity:"]').click()`);
+			await page.until(`document.querySelector('[data-working-line] button')`);
+			await page.run(`document.querySelector('[data-working-line] button').click()`);
 			await page.until(`document.querySelector('[aria-label="Agent activity"]')`);
 			expect(await page.run(`document.querySelectorAll('[aria-label="Agent activity"] [role="tab"]').length`)).toBe(2);
 			await page.run(`[...document.querySelectorAll('[aria-label="Agent activity"] [role="tab"]')].at(-1).click()`);

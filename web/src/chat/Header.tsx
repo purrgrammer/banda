@@ -1,14 +1,13 @@
 /**
- * The chat's header: the agent's face and name, centred and floating over the feed, and under them what it does now
- * ("Using its browser…", "Thinking…"; in a group, "Mara and Sancho are working…"), shimmering while it works, or its
- * presence (waiting on you, routines paused). Said here once: the feed has no working line. It has no bar and no
- * border: they sit on one small frosted shape, so the conversation scrolls around and beneath it and keeps the screen. The face and the
- * name open the panel; on the phone a back control leads to the band. Its parent is `relative feed-scope`, and the
- * feed's scroller `feed-scroll` and clears it with `HEADER_CLEARANCE`.
+ * The chat's header: the agent's face and name, centred and floating over the feed, and under them its presence
+ * (waiting on you, routines paused). It never says that an agent works, in words or in the face's motion: the feed's
+ * working line does. It has no bar and no border: they sit on one small frosted shape, so the conversation scrolls
+ * around and beneath it and keeps the screen. The face and the name open the panel; on the phone a back control leads
+ * to the band. Its parent is `relative feed-scope`, and the feed's scroller `feed-scroll` and clears it with
+ * `HEADER_CLEARANCE`.
  */
 import { ChevronLeftIcon, PanelRightIcon, TerminalIcon } from "lucide-react";
 import { useId } from "react";
-import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { Face, FaceStack, type FaceState } from "./Face.tsx";
@@ -30,7 +29,7 @@ export function Header({
 }: {
 	name: string;
 	faces: readonly (Who & { readonly state?: FaceState | undefined })[];
-	/** What it does now, or its presence, in words, when the state alone does not say it: "Using its browser…". */
+	/** Its presence in words, when "waiting" alone does not say it: "A coding session waits on you". */
 	doing?: string | undefined;
 	state?: FaceState | undefined;
 	attention?: boolean;
@@ -41,18 +40,20 @@ export function Header({
 	onBack?: () => void;
 	/** The name opens the panel (a sheet on the phone); the button at the right toggles it. */
 	onPanel?: () => void;
-	/** The status opens the current work's activity, not the panel. */
+	/** The presence line opens what it waits on, not the panel. */
 	onActivity?: (() => void) | undefined;
 }) {
-	const [first] = faces;
-	const line = paused
-		? "Routines paused"
-		: (doing ?? (state === "working" ? "Working…" : state === "waiting" ? "Waiting on you" : undefined));
+	// work is said in the feed, by the working line: here a working face rests, as an idle one does
+	const rest = (each: FaceState | undefined): FaceState => (each === "working" || each === undefined ? "idle" : each);
+	const shown = rest(state);
+	const resting = faces.map((each) => ({ ...each, state: rest(each.state) }));
+	const [first] = resting;
+	const line = paused ? "Routines paused" : shown === "waiting" ? (doing ?? "Waiting on you") : undefined;
 	const face =
-		faces.length > 1 || first === undefined ? (
-			<FaceStack faces={faces} name={name} size="panel" waiting={attention || state === "waiting"} />
+		resting.length > 1 || first === undefined ? (
+			<FaceStack faces={resting} name={name} size="panel" waiting={attention || shown === "waiting"} />
 		) : (
-			<Face face={first.face} name={name} size="panel" state={attention ? "waiting" : state} paused={paused} />
+			<Face face={first.face} name={name} size="panel" state={attention ? "waiting" : shown} paused={paused} />
 		);
 	return (
 		<header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center px-2.5 pt-2">
@@ -88,13 +89,7 @@ export function Header({
 						aria-label={onActivity === undefined || paused ? undefined : `Activity: ${line}`}
 						className="max-w-full min-w-0 truncate px-3 pb-1.5 text-center text-meta text-ink-2 enabled:hover:text-ink"
 					>
-						{state === "working" && !paused ? (
-							<Shimmer as="span" aria-live="polite" duration={2.4}>
-								{line}
-							</Shimmer>
-						) : (
-							line
-						)}
+						{line}
 					</button>
 				)}
 			</div>
@@ -158,10 +153,3 @@ function Contour({ name, line }: { name: string; line: string | undefined }) {
 
 /** How far the feed starts below the top, so its first message clears the floating header. */
 export const HEADER_CLEARANCE = "pt-32";
-
-/** What the header says while a group works: who, in words. */
-export function workingWords(names: readonly string[]): string | undefined {
-	if (names.length === 0) return undefined;
-	if (names.length === 1) return `${names[0]} is working…`;
-	return `${names.slice(0, -1).join(", ")} and ${names.at(-1)} are working…`;
-}
