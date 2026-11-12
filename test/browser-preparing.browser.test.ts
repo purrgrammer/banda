@@ -1,14 +1,12 @@
 /** The app's first browser use while its optional preparation waits, against an isolated daemon and faux model. */
-import { realpath, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, getCurrentTools } from "@earendil-works/pi-ai";
-import { createServer, type ViteDevServer } from "vite";
 import { expect, it } from "vitest";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { freePort, skipShippedSkills, tempHome, viteCacheDir } from "./helpers.ts";
+import { skipShippedSkills, tempHome, type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
 for (const width of [390, 1440]) {
@@ -56,7 +54,7 @@ for (const width of [390, 1440]) {
 				}),
 			},
 		});
-		let web: ViteDevServer | undefined;
+		let web: WebServer | undefined;
 		try {
 			const token = (await readDaemonFile(home))?.token;
 			if (token === undefined) throw new Error("The test daemon did not publish its token");
@@ -67,20 +65,8 @@ for (const width of [390, 1440]) {
 				body: JSON.stringify({ name: "Sancho", personality: "Brief." }),
 			});
 			if (!named.ok) throw new Error(`Naming the test companion: ${named.status}`);
-			web = await createServer({
-				configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-				cacheDir: await viteCacheDir(),
+			web = await webServer({
 				server: {
-					host: "127.0.0.1",
-					fs: {
-						allow: [
-							await realpath(new URL("..", import.meta.url)),
-							await realpath(new URL("../node_modules", import.meta.url)),
-						],
-					},
-					port: await freePort(),
-					strictPort: true,
-					open: false,
 					proxy: {
 						"/api": {
 							target: `http://127.0.0.1:${daemon.port}`,
@@ -90,10 +76,7 @@ for (const width of [390, 1440]) {
 					},
 				},
 			});
-			await web.listen();
-			const address = web.httpServer?.address();
-			if (!address || typeof address === "string") throw new Error("The test web server did not listen");
-			await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
+			await withPage(`${web.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
 				await page.until("localStorage.getItem('banda.token')");
 				await page.run("location.hash = '#/a/sancho'");
 				await page.until("document.querySelector('textarea[name=message]')", 15_000);

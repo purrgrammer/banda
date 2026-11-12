@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { cp, mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdtemp, realpath, rm } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -158,7 +158,21 @@ export async function webServer(config: InlineConfig = {}): Promise<WebServer> {
 		...config,
 		cacheDir: await viteCacheDir(),
 		// `middlewareMode.server` is what lets a `ws` entry of `server.proxy` see upgrades
-		server: { ...config.server, middlewareMode: { server: listener }, hmr: { server: listener }, open: false },
+		server: {
+			...config.server,
+			// A worktree may share dependencies through a symlink; Vite serves fonts from their real path.
+			fs: {
+				...config.server?.fs,
+				allow: [
+					await realpath(new URL("..", import.meta.url)),
+					await realpath(new URL("../node_modules", import.meta.url)),
+					...(config.server?.fs?.allow ?? []),
+				],
+			},
+			middlewareMode: { server: listener },
+			hmr: { server: listener },
+			open: false,
+		},
 	});
 	await new Promise<void>((resolve, reject) => {
 		listener.once("error", reject);
