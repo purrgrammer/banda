@@ -714,3 +714,77 @@ describe("the owner's own routine, from the panel", () => {
 		}
 	});
 });
+
+describe("the owner edits a routine an agent proposed, before allowing it", () => {
+	it("what runs is the owner's when and ask, every other byte as written; the box gets it; what is not its text is refused", async () => {
+		const { home, daemon: started, api, post } = await daemon();
+		try {
+			await post("/messages", { id: randomUUID(), thread: randomUUID(), text: "tea every day at four" });
+			const file = join(home, "workspace", "routines", "tea.md");
+			await until(async () => existsSync(file));
+			const waiting = await until(async () =>
+				(await api<ControlView>("/control")).routines.find(
+					(routine) => routine.name === "tea" && routine.change !== undefined,
+				),
+			);
+			const sha = (waiting.change as { sha: string }).sha;
+			const written = await readFile(file, "utf8");
+			// its limits, its name and its agent are not text the agent wrote for the owner; nor is a removal's
+			for (const [body, why] of [
+				[{ sha, runs_a_day: 1000 }, /400 .*runs_a_day cannot be edited/],
+				[{ sha, agent: "other" }, /400 .*agent cannot be edited/],
+				[{ sha, when: "soon" }, /400 .*not a schedule/],
+				[{ sha, when: "at 2001-01-01 09:00" }, /400 .*passed/],
+				[{ sha, ask: "  " }, /400/],
+				[{ sha, ask: 7 }, /400/],
+				[{ sha: null, ask: "Something else." }, /400/],
+				[{ sha: "0".repeat(64), ask: "Something else." }, /409/],
+			] as const)
+				await expect(post("/routines/tea/accept", body), JSON.stringify(body)).rejects.toThrow(why);
+			expect((await api<ControlView>("/control")).routines.find((each) => each.name === "tea")?.accepted).toBe(
+				undefined,
+			);
+			expect(await readFile(file, "utf8")).toBe(written);
+
+			const allowed = await post<ControlView>("/routines/tea/accept", {
+				sha,
+				when: "cron 0 9 * * *",
+				ask: "Remind the owner, kindly, to drink tea.",
+			});
+			const expected = withWhen(written, "cron 0 9 * * *")!.replace(
+				"Remind the owner to drink tea.",
+				"Remind the owner, kindly, to drink tea.",
+			);
+			const tea = allowed.routines.find((routine) => routine.name === "tea");
+			expect(tea).toMatchObject({
+				state: "active",
+				accepted: {
+					sha: shaOf(expected),
+					routine: {
+						schedule: "cron 0 9 * * *",
+						ask: "Remind the owner, kindly, to drink tea.",
+						description: "Tea time",
+					},
+				},
+				allowed: [sha],
+				edited: [sha],
+			});
+			expect(tea?.change).toBeUndefined();
+			// the agent finds its file as the owner left it, and is told which of its text they changed, never the text
+			expect(await readFile(file, "utf8")).toBe(expected);
+			// in the agent's own chat, where its routine wakes
+			const told: Item[] = [];
+			for (const { chat } of await api<ChatRow[]>("/chats"))
+				for (const item of (await api<{ items: Item[] }>(`/chats/${chat}/items?after=0`)).items)
+					if (item.role === "instruction" && item.text.includes("routine")) told.push(item);
+			expect(told).toMatchObject([
+				{
+					text: 'The owner allowed your routine "tea" after editing its schedule and ask: routines/tea.md holds what runs. This notice is automatic, not from the owner.',
+				},
+			]);
+			expect(tea?.nextRuns?.every((at) => new Date(at).getHours() === 9)).toBe(true);
+		} finally {
+			await started.close();
+		}
+	});
+});

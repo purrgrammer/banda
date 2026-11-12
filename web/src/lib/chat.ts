@@ -40,6 +40,8 @@ export type Ended = {
 	readonly inChat?: boolean;
 	/** What was picked or answered, or why there was no answer, as the card says it. */
 	readonly said: string;
+	/** An approval's draft as the owner edited it: what ran. */
+	readonly edited?: { readonly [arg: string]: unknown };
 };
 
 /** What the chat shows, part by part: the daemon's kinds here, and each area's own (`segments/`). */
@@ -122,6 +124,8 @@ type CoreSegment =
 			readonly key: string;
 			readonly proposal: Extract<Item, { role: "proposal" }>["proposal"];
 			readonly state: "pending" | "accepted" | "declined";
+			/** The text the owner edited before accepting, as accepted. */
+			readonly edited?: Extract<Item, { role: "proposalResult" }>["edited"];
 	  }
 	/** A message another agent sent to this direct chat, as an attributed feed entry. */
 	| {
@@ -226,7 +230,7 @@ function ended(ask: Ask, item: Extract<Item, { role: "wait" }>): Ended {
 		if (!yes) return { ...base, said: "Declined" };
 		const edited = item.edited === undefined ? "Approved" : "Approved as you edited it";
 		const permitted = item.permitted === undefined ? "" : `, and allowed ${permissionWhen(item.permitted)}`;
-		return { ...base, said: `${edited}${permitted}` };
+		return { ...base, said: `${edited}${permitted}`, ...(item.edited === undefined ? {} : { edited: item.edited }) };
 	}
 	return { ...base, said: item.answer === undefined ? "Answered" : answerWords(item.answer) };
 }
@@ -545,7 +549,11 @@ export function view(
 			while (at >= 0) {
 				const proposal = segments[at];
 				if (proposal?.kind === "proposal" && proposal.proposal.id === item.proposal) {
-					segments[at] = { ...proposal, state: item.state };
+					segments[at] = {
+						...proposal,
+						state: item.state,
+						...(item.edited === undefined ? {} : { edited: item.edited }),
+					};
 					break;
 				}
 				at--;

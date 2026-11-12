@@ -24,6 +24,7 @@ import { AgentMessage } from "../chat/AgentMessage.tsx";
 import { ChangeCard } from "../chat/Approval.tsx";
 import { ArtifactCard, Browsed, QuestionCard } from "../chat/Cards.tsx";
 import { Done, Settling } from "../chat/Done.tsx";
+import { EDITED_WORDS } from "../chat/EditableText.tsx";
 import { Bubble, DaySeparator, MessageActions, Run, UnreadDivider } from "../chat/Feed.tsx";
 import { Line } from "../chat/Line.tsx";
 import { ProposalCard } from "../chat/Proposal.tsx";
@@ -86,12 +87,13 @@ function OwnerWords({
 }
 
 function ProposalFeedCard({ segment }: { segment: Extract<Segment, { kind: "proposal" }> }) {
-	const { proposal, state } = segment;
+	const { proposal, state, edited } = segment;
 	const card = (
 		<ProposalCard
 			proposal={proposal}
 			state={state}
-			onAct={(action) => actOnProposal(proposal.id, action).then(({ state }) => state)}
+			edited={edited}
+			onAct={(action, edits) => actOnProposal(proposal.id, action, edits).then(({ state }) => state)}
 		/>
 	);
 	if (state === "pending") {
@@ -221,7 +223,11 @@ function RoutineLine({
 					next: (routine?.nextRuns ?? []).slice(0, 3).map(clock),
 					ask: set.ask,
 				}}
-				settled="Set up"
+				settled={
+					segment.sha !== undefined && routine?.edited?.includes(segment.sha) === true
+						? `Set up · ${EDITED_WORDS}`
+						: "Set up"
+				}
 			/>
 		);
 		return (
@@ -255,11 +261,15 @@ function RoutineLine({
 					when: shown?.when ?? "",
 					next: (routine.nextRuns ?? []).slice(0, 3).map(clock),
 					ask: shown?.ask ?? "",
+					...(change.kind === "removed" || shown === undefined
+						? {}
+						: { schedule: shown.schedule, ...(shown.zone === undefined ? {} : { zone: shown.zone }) }),
 				}}
-				onAllow={() =>
+				onAllow={(edit) =>
 					void actOnRoutine(name, {
 						action: "accept",
 						sha: change.kind === "removed" ? null : (change.sha ?? null),
+						...edit,
 					}).then(showControl)
 				}
 				onDecline={() => void actOnRoutine(name, { action: "decline" }).then(showControl)}
@@ -750,6 +760,7 @@ function partOf(
 					ask={segment.ask}
 					label={segment.label}
 					wait={open?.wait}
+					edited={segment.ended?.edited}
 					state={
 						open !== undefined
 							? { kind: "open" }

@@ -367,10 +367,13 @@ it("a draft that makes an object says it in the connection's words, never the to
 		label: "Create an issue on acme/banda",
 		verb: "Create",
 		as: "@alice on GitHub",
-		editable: ["body"],
+		editable: ["body", "title"],
 		permission: { what: "create an issue on acme/banda as @alice" },
 	});
 	if (wait.ask.type !== "approval") throw new Error("not an approval");
+	// the body stays free in a permission, as it was; the title the owner may now edit stays bound
+	expect(wait.ask.permission?.match).toMatchObject({ title: "Cards say tool names" });
+	expect(wait.ask.permission?.match).not.toHaveProperty("body");
 	expect(wait.ask.scopes?.[0]?.words).toBe(
 		"Create an issue on acme/banda as @alice without asking until this task is done",
 	);
@@ -557,4 +560,119 @@ it("removing a connection drops a draft waiting on it, and the turn that asked g
 	await s.capabilities.remove("github");
 	expect((await openWaits(s.harness)).filter((w) => w.ask.type === "approval")).toEqual([]);
 	await s.harness.waitForTask(received.turn as TaskId, context);
+});
+it("a pull request's title and description are the owner's to edit; a permission binds the title as approved and the agent hears the edit", async () => {
+	let called = false;
+	let heard = "";
+	const s = await setup((ctx) => {
+		const last = ctx.messages.at(-1);
+		if (last?.role === "toolResult")
+			heard = last.content.map((part) => (part.type === "text" ? part.text : "")).join("\n");
+		if (called) return fauxAssistantMessage("done");
+		called = true;
+		return fauxAssistantMessage(
+			[
+				fauxToolCall("github__update_pull_request", {
+					owner: "acme",
+					repo: "banda",
+					pullNumber: 34,
+					title: "Drafted title",
+					body: "Drafted description",
+				}),
+			],
+			{ stopReason: "toolUse" },
+		);
+	});
+	const received = await s.core.receive(s.harness, {
+		id: crypto.randomUUID(),
+		origin: { gateway: "fake", peer: OWNER, thread: "reader" },
+		agent: "reader",
+		text: "Retitle it",
+	});
+	if (!("turn" in received)) throw new Error("no turn");
+	const wait = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+	if (wait.ask.type !== "approval") throw new Error("not an approval");
+	expect(wait.ask).toMatchObject({ verb: "Change", editable: ["title", "body"] });
+	// editable, and bound all the same: a permission never covers a pull request retitled to anything else
+	expect(wait.ask.permission?.match).toMatchObject({ title: "Drafted title", body: "Drafted description" });
+	const owner = { gateway: "web", peer: OWNER };
+	// what is not text, or not offered as text, is never the owner's edit: the identity, the pull request, its state
+	for (const edits of [{ owner: "evil" }, { pullNumber: "35" }, { state: "closed" }, { as_account: "mallory" }] as {
+		[arg: string]: string;
+	}[])
+		expect(
+			await answer(s.harness, wait.key, "approve", owner, "bearer", { approving: { edits } }),
+			JSON.stringify(edits),
+		).toMatchObject({ refused: expect.stringMatching(/cannot be edited/) });
+	expect(s.fake.calls).toHaveLength(0);
+	expect(
+		await answer(s.harness, wait.key, "approve", owner, "bearer", {
+			approving: { edits: { title: "Owner's title", body: "Owner's description" }, permission: { scope: "task" } },
+		}),
+	).toMatchObject({ answered: expect.any(Number) });
+	await s.harness.waitForTask(received.turn as TaskId, context);
+	expect(s.fake.calls).toEqual([
+		{
+			tool: "update_pull_request",
+			args: { owner: "acme", repo: "banda", pullNumber: 34, title: "Owner's title", body: "Owner's description" },
+		},
+	]);
+	const given = Object.values((await s.harness.snapshot(Permissions, context))?.permissions ?? {});
+	expect(given).toHaveLength(1);
+	expect(given[0]?.match).toMatchObject({ title: "Owner's title", body: "Owner's description" });
+	expect(heard).toContain("The owner edited title, body before approving");
+	expect(heard).toContain("Owner's description");
+});
+it("opening a pull request and merging one draw their text as the owner's to edit, and nothing else", async () => {
+	let step = 0;
+	const s = await setup(() => {
+		step++;
+		if (step > 1) return fauxAssistantMessage("done");
+		return fauxAssistantMessage(
+			[
+				fauxToolCall("github__merge_pull_request", {
+					owner: "acme",
+					repo: "banda",
+					pullNumber: 34,
+					merge_method: "squash",
+					commit_title: "Drafted merge title",
+				}),
+			],
+			{ stopReason: "toolUse" },
+		);
+	});
+	const received = await s.core.receive(s.harness, {
+		id: crypto.randomUUID(),
+		origin: { gateway: "fake", peer: OWNER, thread: "reader" },
+		agent: "reader",
+		text: "Merge it",
+	});
+	if (!("turn" in received)) throw new Error("no turn");
+	const wait = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+	if (wait.ask.type !== "approval") throw new Error("not an approval");
+	// only the text the call gave: a commit message it left out is not invented for the owner to fill
+	expect(wait.ask).toMatchObject({ verb: "Merge", editable: ["commit_title"] });
+	const owner = { gateway: "web", peer: OWNER };
+	for (const edits of [{ merge_method: "merge" }, { commit_message: "added" }] as { [arg: string]: string }[])
+		expect(await answer(s.harness, wait.key, "approve", owner, "bearer", { approving: { edits } })).toMatchObject({
+			refused: expect.stringMatching(/cannot be edited/),
+		});
+	await answer(s.harness, wait.key, "approve", owner, "bearer", {
+		approving: { edits: { commit_title: "Owner's merge title" } },
+	});
+	await s.harness.waitForTask(received.turn as TaskId, context);
+	expect(s.fake.calls).toEqual([
+		{
+			tool: "merge_pull_request",
+			args: {
+				owner: "acme",
+				repo: "banda",
+				pullNumber: 34,
+				merge_method: "squash",
+				commit_title: "Owner's merge title",
+			},
+		},
+	]);
+	const create = GITHUB_OBJECTS.pull_request.creates?.find((each) => each.tool === "create_pull_request");
+	expect(create).toMatchObject({ verb: "Open", editable: ["title", "body"] });
 });

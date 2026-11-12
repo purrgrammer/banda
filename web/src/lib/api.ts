@@ -132,10 +132,15 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 /** Accept an agent-authored proposal, or keep things as they are. */
-export const actOnProposal = (id: string, action: "accept" | "decline") =>
+export const actOnProposal = (
+	id: string,
+	action: "accept" | "decline",
+	/** The owner's text for what it proposes, edited before accepting. */
+	edits?: { readonly description?: string; readonly instructions?: string },
+) =>
 	api<{ state: "accepted" | "declined" }>(`/proposals/${encodeURIComponent(id)}`, {
 		method: "POST",
-		body: JSON.stringify({ action }),
+		body: JSON.stringify({ action, ...(edits === undefined ? {} : { edits }) }),
 	});
 
 /** Stop a chat's run and the inputs queued behind it. */

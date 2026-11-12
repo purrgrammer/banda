@@ -87,7 +87,7 @@ import { defineGroups, Groups, groupSection } from "./groups.ts";
 import { FLOOR_WORDS } from "./permissions.ts";
 import { decidedText, makeProposal, PROPOSAL_DECIDED, type Proposal, proposalTools } from "./proposals.ts";
 import { defineReleases, RELEASED, stoppable } from "./release.ts";
-import { defineRoutines, failureKey, Routines, troubleIn, WAKE, type WakeData } from "./routines.ts";
+import { defineRoutines, failureKey, Routines, routinePath, troubleIn, WAKE, type WakeData } from "./routines.ts";
 import { skillTokens } from "./skill-tokens.ts";
 import { acceptedSkills, ownerSkillEntry, type Skill } from "./skills.ts";
 import { context } from "./store.ts";
@@ -1369,6 +1369,24 @@ export function defineCore(options: CoreOptions) {
 		});
 	}
 
+	/**
+	 * Tell agent `agent`, in its chat, that the owner edited routine `name` it wrote before allowing it: which of its text
+	 * they changed, never the text, which its file holds. A `PROPOSAL_DECIDED` entry, as a proposal's decision is: in the
+	 * caller's commit, read at the agent's next model request, starting no turn and nobody's input.
+	 */
+	async function routineEdited(tx: Tx, agent: string, name: string, fields: readonly string[]): Promise<void> {
+		const chat = await agentChat(tx, agent);
+		if (chat === undefined) return;
+		const words =
+			`The owner allowed your routine ${JSON.stringify(name)} after editing its ${fields.join(" and ")}: ` +
+			`${routinePath(name)} holds what runs. This notice is automatic, not from the owner.`;
+		await tx.appendEntry(chat as ConversationId, {
+			kind: PROPOSAL_DECIDED,
+			data: { routine: name, state: "accepted" },
+			model: [{ role: "user", content: words, timestamp: options.now?.() ?? Date.now() }],
+		});
+	}
+
 	/** Queue an input nobody wrote to `chat`, after its other inputs, watched by a Turn. */
 	async function followUp(
 		tx: Tx,
@@ -1726,6 +1744,7 @@ export function defineCore(options: CoreOptions) {
 		followUp,
 		/** Tell the agent the owner decided its proposal, in the caller's commit with the decision; it starts no turn. */
 		proposalDecided,
+		routineEdited,
 		/** Bring the routines' and the watches' tasks in line with their accepted files. */
 		reconcile: async (harness: Harness, ctx: Context = context) => {
 			await routines.reconcile(harness, options.now?.() ?? Date.now(), ctx);

@@ -64,6 +64,9 @@ const Read = Type.Object(
 const ArgOf = map(Type.String({ pattern: Arg }), "^[a-z_]{1,32}$");
 const When = map(Type.String());
 
+/** More text a write lets the owner edit, which a permission binds as approved (`ObjectWrite.editable`). */
+const Editable = Type.Array(Type.String({ pattern: Name }), { minItems: 1, maxItems: 8, uniqueItems: true });
+
 const Write = Type.Object(
 	{
 		tool: ToolName,
@@ -71,6 +74,7 @@ const Write = Type.Object(
 		verb: Words,
 		what: Type.Optional(Words),
 		text: Type.Optional(Type.String({ pattern: Name })),
+		editable: Type.Optional(Editable),
 		verbs: Type.Optional(
 			Type.Array(Type.Object({ when: When, verb: Words, what: Type.Optional(Words) }, closed), { maxItems: 12 }),
 		),
@@ -86,6 +90,7 @@ const Create = Type.Object(
 		verb: Words,
 		what: Type.String({ maxLength: 200 }),
 		text: Type.Optional(Type.String({ pattern: Name })),
+		editable: Type.Optional(Editable),
 	},
 	closed,
 );

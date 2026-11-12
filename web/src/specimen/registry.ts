@@ -103,6 +103,7 @@ const DEVICES = "web/src/chat/Devices.tsx";
 const LOADING = "web/src/chat/Loading.tsx";
 const APPROVAL = "web/src/chat/Approval.tsx";
 const FACE = "web/src/chat/Face.tsx";
+const EDITABLE = "web/src/chat/EditableText.tsx";
 
 /** Every section, in page order. Within a group the order is the order its components render in. */
 export const SECTIONS: readonly Entry[] = [
@@ -153,7 +154,7 @@ export const SECTIONS: readonly Entry[] = [
 		title: "Routines in the chat",
 		group: "chat",
 		status: "app",
-		sources: ["web/src/chat/Routine.tsx", LINE],
+		sources: ["web/src/chat/Routine.tsx", LINE, EDITABLE],
 	},
 	{
 		id: "watch-items",
@@ -351,7 +352,7 @@ export const SECTIONS: readonly Entry[] = [
 		title: "GitHub",
 		group: "connections",
 		status: "app",
-		sources: [OBJECT, "web/src/app/Objects.tsx", DRAFT, APPROVAL],
+		sources: [OBJECT, "web/src/app/Objects.tsx", DRAFT, APPROVAL, EDITABLE],
 	},
 	{
 		id: "gmail",

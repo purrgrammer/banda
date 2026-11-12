@@ -16,8 +16,6 @@ import {
 	type JsonObject,
 	type TaskId,
 } from "@earendil-works/pi-durable";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { openBox } from "../src/box/box.ts";
 import { Accepted, agentPath, shaOf } from "../src/core/agents.ts";
@@ -28,61 +26,13 @@ import { decidedText, PROPOSAL_DECIDED, PROPOSAL_ENTRY, type Proposal, Proposals
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore, NUDGE, type TurnResult } from "../src/core/turn.ts";
 import type { Workspace } from "../src/server/agents.ts";
-import { proposalView } from "../src/server/proposals.ts";
 import type { Deps } from "../src/server/routes/area.ts";
 import { proposals as proposalArea } from "../src/server/routes/proposals.ts";
 import { itemOf } from "../src/server/transcript.ts";
-import { ProposalCard } from "../web/src/chat/Proposal.tsx";
 import { hostBox } from "./fixtures/host-box.ts";
 import { blobStore, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
 
 describe("agent proposals", () => {
-	it("previews an agent update as field changes, with instructions behind details", () => {
-		const proposal: Proposal = {
-			id: "private-id",
-			chat: 1,
-			from: "mara",
-			kind: "agentChange",
-			agent: "private-agent-id",
-			displayName: "Mara",
-			base: "base-sha",
-			before: "---\nname: Mara\ndescription: Trip planner.\n---\nOld personality.\n",
-			result: "---\nname: Mara\ndescription: Travel planner.\n---\nNew personality.\n",
-			at: 1,
-			state: "pending",
-		};
-		const shown = proposalView(proposal);
-		if (shown === undefined) throw new Error("valid proposal did not produce a preview");
-		const html = renderToStaticMarkup(createElement(ProposalCard, { proposal: shown, state: "pending" }));
-		expect(html).toContain("Update Mara");
-		expect(html).toContain("Trip planner.");
-		expect(html).toContain("Travel planner.");
-		expect(html).toContain("New personality.");
-		expect(html).toContain("Old personality.");
-		expect(html).not.toContain("private-agent-id");
-		expect(html).toContain("Instructions");
-		expect(html).not.toContain("What it was");
-	});
-
-	it("labels declining a new agent proposal as Cancel", () => {
-		const proposal: Proposal = {
-			id: "new-agent",
-			chat: 1,
-			from: "mara",
-			kind: "agent",
-			agentId: "researcher",
-			name: "Researcher",
-			face: defaultAvatarFace(),
-			description: "Finds sources.",
-			instructions: "Research carefully.",
-			at: 1,
-			state: "pending",
-		};
-		const html = renderToStaticMarkup(createElement(ProposalCard, { proposal, state: "pending" }));
-		expect(html).toContain(">Cancel</button>");
-		expect(html).not.toContain("Keep as is");
-	});
-
 	it("stores an owner-reviewed proposal as a feed entry without making it effective", async () => {
 		const faux = fauxProvider();
 		const models = createModels();
@@ -586,5 +536,176 @@ describe("agent proposals", () => {
 		);
 		for (const text of [decidedText(agent, "declined"), decidedText(group, "accepted")])
 			expect(text).not.toContain("also says");
+	});
+
+	describe("the owner edits a proposal's text before accepting it", () => {
+		async function open(seed: (chat: number) => Proposal, before?: string) {
+			const home = await tempHome();
+			const box = openBox(hostBox(home), () => {});
+			const faux = fauxProvider();
+			const models = createModels();
+			models.setProvider(faux.provider);
+			faux.setResponses(Array.from({ length: 10 }, () => fauxAssistantMessage("done") as never));
+			const registry = createRegistry();
+			const core = defineCore({
+				blobs: blobStore(),
+				gateway: () => new FakeGateway(),
+				model: () => FAUX_MODEL,
+				registry,
+			});
+			registry.install(core.extension);
+			const harness = await openStore(home, { models, registry });
+			const workspace: Workspace = { env: () => box.env(), root: box.workspace, tools: () => [], known: () => true };
+			if (before !== undefined) {
+				await mkdir(join(box.workspace, "agents"), { recursive: true });
+				await writeFile(join(box.workspace, "agents", "reader.md"), before);
+			}
+			const proposal = await harness.commit(async (tx) => {
+				if (before !== undefined)
+					(await tx.doc(Accepted)).files[agentPath("reader")] = { text: before, sha: shaOf(before), at: 1 };
+				const chat = await tx.createConversation({ ownership: { kind: "ownerless" } });
+				const made = seed(Number(chat.id));
+				(await tx.doc(Proposals)).proposals[made.id] = made as unknown as JsonObject;
+				return made;
+			}, context);
+			const area = proposalArea.start?.({ harness, core, workspace, changed() {} } as unknown as Deps);
+			if (area?.route === undefined) throw new Error("proposal route is missing");
+			const route = area.route;
+			const act = (body: JsonObject) =>
+				route({
+					method: "POST",
+					path: `/proposals/${proposal.id}`,
+					url: new URL(`http://localhost/api/proposals/${proposal.id}`),
+					json: async () => body,
+					signal: AbortSignal.abort(),
+				});
+			const entries = async () =>
+				(
+					await harness.commit(
+						(tx) => tx.scanEntries({ conversationId: proposal.chat as ConversationId, order: "descending" }, 10),
+						context,
+					)
+				).items;
+			const close = async () => {
+				await harness.close(context);
+				box.close();
+			};
+			return { harness, box, proposal, act, entries, close };
+		}
+		const writer = (chat: number): Proposal => ({
+			id: "agent-1",
+			chat,
+			from: "sancho",
+			kind: "agent",
+			agentId: "writer",
+			name: "Writer",
+			face: defaultAvatarFace(),
+			description: "Writes drafts",
+			instructions: "Write clearly.",
+			at: 1,
+			state: "pending",
+		});
+
+		it("accepts the owner's description and instructions, records them, and tells the agent which it edited", async () => {
+			const s = await open(writer);
+			try {
+				expect(
+					await s.act({
+						action: "accept",
+						edits: { description: "Writes short drafts", instructions: "Write clearly, in plain words." },
+					}),
+				).toMatchObject({ body: { state: "accepted" } });
+				const accepted = (await s.harness.snapshot(Accepted, context))?.files[agentPath("writer")];
+				expect(accepted?.text).toContain("description: Writes short drafts");
+				expect(accepted?.text).toContain("Write clearly, in plain words.");
+				expect(accepted?.text).not.toContain("Writes drafts\n");
+				expect(await readFile(join(s.box.workspace, "agents", "writer.md"), "utf8")).toBe(accepted?.text);
+				expect((await s.harness.snapshot(Proposals, context))?.proposals["agent-1"]).toMatchObject({
+					state: "accepted",
+					description: "Writes short drafts",
+					instructions: "Write clearly, in plain words.",
+					edited: ["description", "instructions"],
+				});
+				const items = await s.entries();
+				const result = items.find((entry) => entry.kind === "banda.meta-proposal-result");
+				expect(itemOf(result!)).toMatchObject({
+					role: "proposalResult",
+					state: "accepted",
+					edited: { description: "Writes short drafts", instructions: "Write clearly, in plain words." },
+				});
+				// the agent hears which text the owner changed, in fixed words: never the text itself
+				const decided = items.find((entry) => entry.kind === PROPOSAL_DECIDED);
+				const words = decided?.model?.[0]?.content;
+				expect(words).toBe(
+					'The owner accepted your proposal: a new agent named "Writer", after editing its description and instructions: what is in effect is theirs. This notice is automatic, not from the owner.',
+				);
+			} finally {
+				await s.close();
+			}
+		});
+
+		it("refuses edits to what is not the proposal's text, or text that would not be accepted, and changes nothing", async () => {
+			const s = await open(writer);
+			try {
+				for (const [body, why] of [
+					[{ action: "accept", edits: { name: "Mallory" } }, /name cannot be edited/],
+					[{ action: "accept", edits: { tools: "[shell]" } }, /tools cannot be edited/],
+					[{ action: "accept", edits: { instructions: 7 } }, /instructions is text/],
+					[{ action: "accept", edits: { description: "two\nlines" } }, /one line/],
+					[{ action: "accept", edits: { instructions: "   " } }, /instructions/],
+					[{ action: "accept", edits: "everything" }, /by field/],
+					[{ action: "decline", edits: { description: "Other" } }, /only an accepted proposal carries edits/],
+				] as const)
+					await expect(s.act(body as unknown as JsonObject), JSON.stringify(body)).rejects.toThrow(why);
+				expect((await s.harness.snapshot(Accepted, context))?.files[agentPath("writer")]).toBeUndefined();
+				expect((await s.harness.snapshot(Proposals, context))?.proposals["agent-1"]).toMatchObject({
+					state: "pending",
+					description: "Writes drafts",
+				});
+			} finally {
+				await s.close();
+			}
+		});
+
+		it("edits only the fields a change to an agent proposes, rebuilding the file it accepts from them", async () => {
+			const before = "---\nname: Reader\ndescription: Reads things\n---\nRead carefully.\n";
+			const changed = "---\nname: Reader\ndescription: Reads things\n---\nRead carefully and verify claims.\n";
+			const s = await open(
+				(chat) => ({
+					id: "change-1",
+					chat,
+					from: "sancho",
+					kind: "agentChange",
+					agent: "reader",
+					displayName: "Reader",
+					base: shaOf(before),
+					before,
+					result: changed,
+					instructions: "Read carefully and verify claims.",
+					at: 1,
+					state: "pending",
+				}),
+				before,
+			);
+			try {
+				// the change proposes no description: accepting it never rewrites what the owner was not shown as proposed
+				await expect(s.act({ action: "accept", edits: { description: "Reads everything" } })).rejects.toThrow(
+					/not part of this change/,
+				);
+				await s.act({ action: "accept", edits: { instructions: "Read carefully; cite each claim." } });
+				const accepted = (await s.harness.snapshot(Accepted, context))?.files[agentPath("reader")];
+				// rebuilt as the agent's own change is (`agentText`), with the owner's words in place of the agent's
+				expect(accepted?.text).toContain("description: Reads things");
+				expect(accepted?.text).toMatch(/\nRead carefully; cite each claim\.\n$/);
+				expect(accepted?.text).not.toContain("verify claims");
+				expect((await s.harness.snapshot(Proposals, context))?.proposals["change-1"]).toMatchObject({
+					state: "accepted",
+					result: accepted?.text,
+					edited: ["instructions"],
+				});
+			} finally {
+				await s.close();
+			}
+		});
 	});
 });

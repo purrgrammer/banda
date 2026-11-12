@@ -252,6 +252,23 @@ function AgentToolsChat() {
 				state="pending"
 				onAct={async (action) => (action === "accept" ? "accepted" : "declined")}
 			/>
+			<ProposalCard
+				proposal={{
+					id: "specimen:propose-agent-edited",
+					chat: 1,
+					from: "mara",
+					kind: "agent",
+					agentId: "fact-checker",
+					name: "Fact checker",
+					face: OTTO.face,
+					description: "Checks claims.",
+					instructions: "Check each claim against two sources.",
+					at: 0,
+					state: "accepted",
+				}}
+				state="accepted"
+				edited={{ description: "Checks claims before they reach me." }}
+			/>
 		</ChatScreen>
 	);
 }

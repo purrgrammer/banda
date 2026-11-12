@@ -169,7 +169,12 @@ export const GITHUB_OBJECTS = {
 				what: "Comment on",
 				text: "body",
 			},
-			{ tool: "merge_pull_request", id: { owner: "owner", repo: "repo", number: "pullNumber" }, verb: "Merge" },
+			{
+				tool: "merge_pull_request",
+				id: { owner: "owner", repo: "repo", number: "pullNumber" },
+				verb: "Merge",
+				editable: ["commit_title", "commit_message"],
+			},
 			{
 				tool: "pull_request_review_write",
 				id: { owner: "owner", repo: "repo", number: "pullNumber" },
@@ -184,10 +189,20 @@ export const GITHUB_OBJECTS = {
 				tool: "update_pull_request",
 				id: { owner: "owner", repo: "repo", number: "pullNumber" },
 				verb: "Change",
+				editable: ["title", "body"],
 				verbs: [
 					{ when: { state: "closed" }, verb: "Close" },
 					{ when: { state: "open" }, verb: "Reopen" },
 				],
+			},
+		],
+		creates: [
+			{
+				tool: "create_pull_request",
+				in: { owner: "owner", repo: "repo" },
+				verb: "Open",
+				what: "Open a pull request on {owner}/{repo}",
+				editable: ["title", "body"],
 			},
 		],
 	},
@@ -280,6 +295,7 @@ export const GITHUB_OBJECTS = {
 				id: { owner: "owner", repo: "repo", number: "issue_number" },
 				verb: "Change",
 				text: "body",
+				editable: ["title"],
 				verbs: [
 					{ when: { state: "closed", state_reason: "not_planned" }, verb: "Close", what: "Close as not planned" },
 					{ when: { state: "closed" }, verb: "Close" },
@@ -295,6 +311,7 @@ export const GITHUB_OBJECTS = {
 				verb: "Create",
 				what: "Create an issue on {owner}/{repo}",
 				text: "body",
+				editable: ["title"],
 			},
 		],
 	},

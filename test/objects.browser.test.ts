@@ -544,9 +544,20 @@ for (const width of [390, 1280])
 								`Array.from(document.querySelectorAll('a[aria-label="Open on GitHub"]')).every(a => a.href.startsWith('https://github.com/') && a.rel.includes('noreferrer') && a.target === '_blank')`,
 							),
 						).toBe(true);
+						// the text reads as a block until the owner asks to edit it
+						expect(
+							await page.run(
+								`Array.from(document.querySelectorAll('textarea')).filter(t => t.name !== 'message').length`,
+							),
+						).toBe(0);
 						await page.run(
-							`const field = document.querySelector('textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(field,${JSON.stringify("Owner edited exact bytes\nsecond line")}); field.dispatchEvent(new Event('input',{bubbles:true}));`,
+							`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Edit').click()`,
 						);
+						await page.until(`Array.from(document.querySelectorAll('textarea')).some(t => t.name !== 'message')`);
+						await page.run(
+							`const field = Array.from(document.querySelectorAll('textarea')).find(t => t.name !== 'message'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(field,${JSON.stringify("Owner edited exact bytes\nsecond line")}); field.dispatchEvent(new Event('input',{bubbles:true}));`,
+						);
+						await page.until(`document.body.textContent.includes('Edited by you')`);
 						await page.run(`document.querySelector('[role="checkbox"]').click()`);
 						await page.run(
 							`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Comment').click()`,
@@ -736,7 +747,15 @@ for (const grouped of [false, true])
 									`fetch('/api/waits/${key}', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({answer:'approve',type:'approval',edits:{}})}).then(r=>r.status)`,
 								),
 							).toBe(400);
-							expect(await page.run(`document.querySelectorAll('[data-slot="field"] textarea').length`)).toBe(0);
+							// a run again is approved as it was: nothing to edit, not even a quiet Edit
+							expect(
+								await page.run(
+									`Array.from(document.querySelectorAll('textarea')).filter(t => t.name !== 'message').length`,
+								),
+							).toBe(0);
+							expect(
+								await page.run(`Array.from(document.querySelectorAll('button')).some(b => b.textContent === 'Edit')`),
+							).toBe(false);
 							expect(await page.run(`document.querySelectorAll('[role="checkbox"]').length`)).toBe(0);
 							expect(await page.run(`document.body.textContent`)).toContain("The earlier attempt may have happened");
 							expect(await page.run(`document.body.textContent`)).toContain("Original stored bytes\nsecond line");

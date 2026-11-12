@@ -41,7 +41,14 @@ import { Connected } from "../core/connections.ts";
 import { type Origin, type Outbound, OWNER } from "../core/gateway.ts";
 import { HARNESS_ENDED } from "../core/harness.ts";
 import { Permissions } from "../core/permissions.ts";
-import { PROPOSAL_DECIDED, PROPOSAL_ENTRY, PROPOSAL_RESULT, type Proposal } from "../core/proposals.ts";
+import {
+	PROPOSAL_DECIDED,
+	PROPOSAL_ENTRY,
+	PROPOSAL_RESULT,
+	PROPOSAL_TEXT,
+	type Proposal,
+	type ProposalEdits,
+} from "../core/proposals.ts";
 import { RELEASED } from "../core/release.ts";
 import { Control, ROUTINE_TASK, Routines, TROUBLE, type TroubleData, WAKE, type WakeData } from "../core/routines.ts";
 import { localTime } from "../core/schedule.ts";
@@ -254,10 +261,17 @@ export function itemOf(entry: EntryRecord): Item | undefined {
 		};
 	}
 	if (entry.kind === PROPOSAL_RESULT) {
-		const data = entry.data as { proposal?: unknown; state?: unknown } | undefined;
+		const data = entry.data as { proposal?: unknown; state?: unknown; edited?: unknown } | undefined;
 		if (typeof data?.proposal !== "string" || (data.state !== "accepted" && data.state !== "declined"))
 			return undefined;
-		return { id, role: "proposalResult", proposal: data.proposal, state: data.state };
+		const edited = proposalEdits(data.edited);
+		return {
+			id,
+			role: "proposalResult",
+			proposal: data.proposal,
+			state: data.state,
+			...(edited === undefined ? {} : { edited }),
+		};
 	}
 	if (entry.kind === PROPOSAL_ENTRY) {
 		const proposal = proposalView(entry.data as unknown as Proposal);
@@ -1265,4 +1279,16 @@ export async function live(
 		await inboxed;
 	}
 	return true;
+}
+
+/** The owner's text a decided proposal records, as stored: only the fields a proposal's text has, each text. */
+function proposalEdits(value: unknown): ProposalEdits | undefined {
+	if (typeof value !== "object" || value === null) return undefined;
+	const edits = Object.fromEntries(
+		PROPOSAL_TEXT.flatMap((field) => {
+			const text = (value as { [field: string]: unknown })[field];
+			return typeof text === "string" ? [[field, text]] : [];
+		}),
+	) as ProposalEdits;
+	return Object.keys(edits).length === 0 ? undefined : edits;
 }

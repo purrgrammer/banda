@@ -1,7 +1,16 @@
 import fc from "fast-check";
 import { expect, it } from "vitest";
 import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
-import { cardOf, draftedOn, parseObjects, plainLine, readArgs, recognise, refKey } from "../src/core/objects.ts";
+import {
+	cardOf,
+	draftedOn,
+	editableOf,
+	parseObjects,
+	plainLine,
+	readArgs,
+	recognise,
+	refKey,
+} from "../src/core/objects.ts";
 import { objects } from "../src/core/parts/objects.ts";
 import { githubObjectTools } from "./fixtures/github-objects.ts";
 import { definition } from "./fixtures/shipped.ts";
@@ -560,4 +569,25 @@ it("draws Slack's thread, channel, search and person from the adapter's readings
 		timezone: "Europe/Berlin",
 		outside: true,
 	});
+});
+it("a write's editable text is a few argument names, never its free text again; free and bound are told apart", () => {
+	const withWrite = (write: object) =>
+		parseObjects({ issue: { ...GITHUB_OBJECTS.issue, writes: [write], creates: [] } }, () => true);
+	const base = { tool: "issue_write", id: { owner: "owner", repo: "repo", number: "issue_number" }, verb: "Change" };
+	for (const editable of [[], "title", ["body"], ["title", "title"], ["Title"], [1], Array(9).fill("a")])
+		expect(withWrite({ ...base, text: "body", editable }), JSON.stringify(editable)).toHaveProperty("errors");
+	const parsed = withWrite({ ...base, text: "body", editable: ["title"] });
+	if (!("objects" in parsed)) throw new Error(parsed.errors.join("; "));
+	expect(editableOf("issue_write", parsed.objects)).toEqual({ free: ["body"], bound: ["title"] });
+	// the shipped GitHub objects: a comment's body stays free; a pull request's title and description are bound
+	const shipped = parseObjects(GITHUB_OBJECTS, () => true);
+	if (!("objects" in shipped)) throw new Error(shipped.errors.join("; "));
+	expect(editableOf("add_issue_comment", shipped.objects)).toEqual({ free: ["body"], bound: [] });
+	expect(editableOf("update_pull_request", shipped.objects)).toEqual({ free: [], bound: ["title", "body"] });
+	expect(editableOf("create_pull_request", shipped.objects)).toEqual({ free: [], bound: ["title", "body"] });
+	expect(editableOf("merge_pull_request", shipped.objects)).toEqual({
+		free: [],
+		bound: ["commit_title", "commit_message"],
+	});
+	expect(editableOf("dismiss_notification", shipped.objects)).toEqual({ free: [], bound: [] });
 });

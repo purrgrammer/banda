@@ -220,6 +220,42 @@ export function GithubSection() {
 						/>
 					</div>
 				</Labelled>
+				<Labelled label="Open a pull request: its title and description the owner's to edit · answered as edited">
+					<div className="flex flex-col gap-3">
+						{[undefined, "Keep the open file across reloads"].map((title) => {
+							const args = {
+								owner: "purrgrammer",
+								repo: "banda",
+								head: "fix/panel-reload",
+								base: "main",
+								title: "Fix panel reload",
+								body: "The panel lost the open file on reload. It keeps it now.\n\nCloses #33.",
+							};
+							return (
+								<DraftApproval
+									key={title ?? "open"}
+									chat={0}
+									agent={{ name: "Octo" }}
+									label="Open a pull request on purrgrammer/banda"
+									ask={{
+										type: "approval",
+										tool: "github__create_pull_request",
+										verb: "Open",
+										as: "@bandarra on GitHub",
+										args,
+										editable: ["title", "body"],
+									}}
+									{...(title === undefined
+										? { wait: "specimen" }
+										: {
+												state: { kind: "done", words: "Approved as you edited it" },
+												edited: { ...args, title },
+											})}
+								/>
+							);
+						})}
+					</div>
+				</Labelled>
 				<Labelled label="ask_hosts naming *: the wildcard flagged in red">
 					<DraftApproval
 						chat={0}
