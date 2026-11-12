@@ -9,10 +9,12 @@ import {
 	MessageSquareIcon,
 	SparklesIcon,
 } from "lucide-react";
-import { type CSSProperties, Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
+import type { Ends } from "@/lib/ends";
 import { ModelContext, RawRow, RawValue } from "../chat/ActivityDetail.tsx";
+import { KeepEnd } from "../chat/KeepEnd.tsx";
 import { SkillToolPreview } from "../chat/Skill.tsx";
-import { shortPreview, ToolIcon, toolIcon, toolPreview } from "../chat/tool-presentation.tsx";
+import { shortPreview, ToolIcon, toolIcon, toolPreview, toolPreviewEnds } from "../chat/tool-presentation.tsx";
 import {
 	ChainOfThought,
 	ChainOfThoughtContent,
@@ -320,27 +322,46 @@ function Inspect({
 	onClick,
 }: {
 	title: string;
-	preview?: string | undefined;
+	/** Text that wraps to two lines; or split, so that its end (a command's last step, a file's name) always shows. */
+	preview?: string | Ends | undefined;
 	state?: string;
 	onClick: () => void;
 }) {
+	const id = useId();
+	const shown = typeof preview === "string" ? preview : preview === undefined ? "" : preview.head + preview.end;
+	// the label names the step; what it ran on and how it went describe it, so a screen reader says them too
+	const described = [shown === "" ? "" : `${id}-preview`, state ? `${id}-state` : ""].filter(Boolean).join(" ");
 	return (
 		<button
 			type="button"
 			onClick={onClick}
 			className="flex min-h-11 w-full flex-col gap-1.5 rounded-field px-1 py-2 text-left hover:bg-paper-2"
 			aria-label={`Inspect ${title}`}
+			{...(described === "" ? {} : { "aria-describedby": described })}
 		>
 			<span className="flex w-full items-center justify-between gap-2">
 				<span>{title}</span>
 				<ChevronRightIcon aria-hidden="true" className="size-4 shrink-0 text-ink-2" />
 			</span>
-			{preview ? (
-				<span data-tool-preview="" className="line-clamp-2 break-words text-meta text-ink-2 [overflow-wrap:anywhere]">
-					{preview}
+			{shown === "" ? null : typeof preview === "object" && preview.end !== "" ? (
+				// one line whose head gives way, at any width: a clamp of two lines would take the end on a narrow screen
+				<span id={`${id}-preview`} data-tool-preview="" className="flex min-w-0 text-meta text-ink-2">
+					<KeepEnd ends={preview} />
+				</span>
+			) : (
+				<span
+					id={`${id}-preview`}
+					data-tool-preview=""
+					className="line-clamp-2 break-words text-meta text-ink-2 [overflow-wrap:anywhere]"
+				>
+					{shown}
+				</span>
+			)}
+			{state ? (
+				<span id={`${id}-state`} className="text-meta text-ink-2">
+					{state}
 				</span>
 			) : null}
-			{state ? <span className="text-meta text-ink-2">{state}</span> : null}
 		</button>
 	);
 }
@@ -392,7 +413,7 @@ function ActivityTimeline({
 										label={
 											<Inspect
 												title={titleOf(call)}
-												preview={toolPreview(call.name, call.args)}
+												preview={toolPreviewEnds(call.name, call.args)}
 												state={
 													result?.notes?.some((note) => note.code === "aborted")
 														? "Stopped"
@@ -454,7 +475,7 @@ function ActivityTimeline({
 								label={
 									<Inspect
 										title={block.call ? titleOf(block.call) : block.type === "thinking" ? "Thinking" : "Model note"}
-										preview={block.call ? toolPreview(block.call.name, block.call.args) : shortPreview(block.text)}
+										preview={block.call ? toolPreviewEnds(block.call.name, block.call.args) : shortPreview(block.text)}
 										onClick={onDrill}
 									/>
 								}

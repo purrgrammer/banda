@@ -423,7 +423,7 @@ export function HarnessSection() {
 			</Section>
 			<Section
 				id="harness-headlines"
-				note="Each step in the owner's words: a long command shortened in the middle, a read naming its file."
+				note="Each step in the owner's words: a long command shortened in the middle, a read naming its file. Short of room, a path keeps its file name and a chain its last step."
 			>
 				<div className="flex max-w-2xl flex-col gap-3">
 					<HarnessCard
@@ -442,6 +442,32 @@ export function HarnessSection() {
 							],
 							"working",
 							"0:07",
+						)}
+						onOpen={() => {}}
+					/>
+					<HarnessCard
+						session={midwork(
+							[
+								{ kind: "asked", text: PROMPT },
+								{ kind: "edit", path: "~/sancho/web/src/app/settings/notifications/QuietHoursEditor.tsx" },
+							],
+							"working",
+							"0:31",
+						)}
+						onOpen={() => {}}
+					/>
+					<HarnessCard
+						session={midwork(
+							[
+								{ kind: "asked", text: PROMPT },
+								{
+									kind: "run",
+									command: "npm run build && npm run test -- --reporter=dot --coverage && git push origin main",
+									running: false,
+								},
+							],
+							"working",
+							"1:12",
 						)}
 						onOpen={() => {}}
 					/>

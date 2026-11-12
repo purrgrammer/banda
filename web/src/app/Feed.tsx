@@ -51,6 +51,7 @@ import { HarnessSessionPart } from "./HarnessSession.tsx";
 import { LiveView } from "./LiveBrowser.tsx";
 import { FollowedObject, MessageObjects, MessageText } from "./Objects.tsx";
 import { AskRef, approvalKind, didNotWords, didWords, sawOpen, wasOpen } from "./Settled.tsx";
+import { approvalState, notDoneKind, questionState } from "./settled-states.ts";
 import { routineTitle } from "./titles.ts";
 
 const day = (at: number) => new Date(at).toDateString();
@@ -725,13 +726,7 @@ function partOf(
 				<QuestionCard
 					question={ask.question}
 					choices={ask.options ?? []}
-					state={
-						open !== undefined
-							? { kind: "open" }
-							: segment.ended?.outcome === "answered"
-								? { kind: "answered", answer: segment.ended.said }
-								: { kind: "dismissed" }
-					}
+					state={open !== undefined ? { kind: "open" } : questionState(segment.ended)}
 					{...(open === undefined
 						? {}
 						: {
@@ -752,8 +747,8 @@ function partOf(
 					<Done kind="answer" action="answered" reference={{ where: ended.said, title: ask.question }} card={card} />
 				) : (
 					<Done
-						kind={answered ? "answer" : "declined"}
-						action={answered ? "answered below" : (ended?.said ?? "dismissed").toLowerCase()}
+						kind={answered ? "answer" : notDoneKind(ended)}
+						action={answered ? "answered in the chat" : (ended?.said ?? "dismissed").toLowerCase()}
 						reference={{ where: ask.question }}
 						card={card}
 					/>
@@ -770,13 +765,7 @@ function partOf(
 					label={segment.label}
 					wait={open?.wait}
 					drafted={segment.drafted}
-					state={
-						open !== undefined
-							? { kind: "open" }
-							: segment.ended?.outcome === "answered" && segment.ended.answer === "approve"
-								? { kind: "done", words: segment.ended.said }
-								: { kind: "declined" }
-					}
+					state={open !== undefined ? { kind: "open" } : approvalState(segment.ended)}
 				/>
 			);
 			if (open !== undefined) {
@@ -797,7 +786,7 @@ function partOf(
 					card={card}
 					row={
 						<Done
-							kind={yes ? approvalKind(verb, label) : "declined"}
+							kind={yes ? approvalKind(verb, label) : notDoneKind(ended)}
 							action={yes ? didWords(label, verb) : didNotWords(label, outcome)}
 							note={how === "" ? undefined : how}
 							reference={on === undefined ? undefined : { node: <AskRef chat={chat} on={on} agent={agent} /> }}

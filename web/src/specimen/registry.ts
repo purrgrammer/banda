@@ -139,7 +139,13 @@ export const SECTIONS: readonly Entry[] = [
 	},
 	{ id: "files", title: "Files", group: "chat", status: "app", sources: ["web/src/chat/Files.tsx"] },
 	{ id: "voice", title: "Voice", group: "chat", status: "app", sources: ["web/src/chat/Voice.tsx"] },
-	{ id: "cards", title: "Cards", group: "chat", status: "app", sources: ["web/src/chat/Cards.tsx"] },
+	{
+		id: "cards",
+		title: "Cards",
+		group: "chat",
+		status: "app",
+		sources: ["web/src/chat/Cards.tsx", "web/src/chat/KeepEnd.tsx"],
+	},
 	{
 		id: "approvals",
 		title: "Approvals",
