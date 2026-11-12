@@ -1,6 +1,6 @@
 {
 	"name": "banda",
-	"version": "0.1.0-alpha.9",
+	"version": "0.1.0-alpha.10",
 	"private": true,
 	"description": "A band of agents that work with you.",
 	"license": "AGPL-3.0-only",
