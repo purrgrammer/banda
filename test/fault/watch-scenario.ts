@@ -750,6 +750,66 @@ function fromThePause(summary: WatchSummary): string[] {
 }
 
 /**
+ * A quiet pull request whose reads are skipped while what they guard stays the same (its `unless`), a look every five
+ * minutes, the act's own: the baseline at step 1 (every read), at step 2 the same again (every read once more: the
+ * baseline's answers were made at the look that first saw its `updated_at`), at step 3 bob comments and `updated_at`
+ * moves (the pull request, its reviews and comments; the checks stay done on the same head, carried; the comment is
+ * held for the kind's settling minute), at step 4 ana approves within the same second, so `updated_at` stays (the
+ * reviews and comments are read once more, since step 3's were made at the look that first saw it, and the approval
+ * wakes with the comment), at step 5 the same again (one read, the pull request's), at step 6 it is merged (held to
+ * settle) and at step 7 the merge wakes and ends the watch.
+ */
+export function quietWorld(step: number): World {
+	const at = world(0) as { [read: string]: Json } & { get: { [key: string]: Json } };
+	at.get.updated_at = step >= 6 ? "2026-11-02T09:30:00Z" : step >= 3 ? "2026-11-02T09:15:00Z" : "2026-11-02T08:00:00Z";
+	at.get_check_runs = {
+		total_count: 2,
+		check_runs: [
+			{ id: 10, name: "unit", status: "completed", conclusion: "success" },
+			{ id: 11, name: "lint", status: "completed", conclusion: "success" },
+		],
+	};
+	if (step >= 3) at.get_comments = [{ id: 5, user: { login: "bob" }, body: "one question" }];
+	if (step >= 4) at.get_reviews = [{ id: 1, user: { login: "ana" }, state: "APPROVED" }];
+	if (step >= 6) Object.assign(at.get, { merged: true, state: "closed" });
+	return at;
+}
+
+/** The reads `quietWorld`'s looks make, one list a step, by method. */
+export const QUIET_READS = [
+	["get", "get_check_runs", "get_reviews", "get_comments"],
+	["get", "get_check_runs", "get_reviews", "get_comments"],
+	["get", "get_reviews", "get_comments"],
+	["get", "get_reviews", "get_comments"],
+	["get"],
+	["get", "get_reviews", "get_comments"],
+	["get", "get_reviews", "get_comments"],
+];
+
+/**
+ * What must hold of a pull request looked at with its reads skipped: every change wakes once (a carried answer is never
+ * a change, and an approval in the same second as the comment is not missed: it wakes with it), and the watch ends
+ * merged.
+ */
+function carriedProblems(summary: WatchSummary): string[] {
+	const errors = watchInvariants(summary);
+	const say = (what: string, ok: boolean) => {
+		if (!ok) errors.push(what);
+	};
+	const said = summary.wakes.map((wake) => [...wake.changes].sort().join(", "));
+	say(
+		`two wakes, each change once: ${JSON.stringify(said)}`,
+		JSON.stringify(said) === '["ana approved, bob commented","closed, merged"]',
+	);
+	say("the last wake ends it: merged", summary.wakes[1]?.ended === "merged");
+	say("no tell beside the wakes", summary.tells.length === 0);
+	say("the watch is done: merged", summary.record.done?.why === "merged");
+	for (const turn of summary.turns) say("a run ended", turn?.status === "completed");
+	say("nothing is parked", summary.parked.length === 0);
+	return errors;
+}
+
+/**
  * The scenarios the fault worker runs by name, each with what must hold of it however the process was killed: the
  * pull request's life; the watch paused on its own, and with everything (Pause all), while the world changes, then
  * resumed; and the account switched off for the agent at step 2, which ends the watch in that commit.
@@ -801,6 +861,20 @@ export const SCENARIOS: {
 			},
 		},
 		problems: fromThePause,
+	},
+	// a quiet pull request's looks skip what did not move and carry it forward: the act's looks alone, five minutes apart
+	carried: {
+		options: {
+			tasks: false,
+			world: quietWorld,
+			clicks: QUIET_READS.map(() => undefined),
+			at: (step) => NOW + (step - 1) * 5 * 60_000,
+			act: async (_step, { harness, core }) => {
+				await runsEnded(harness);
+				await core.lookWatch(harness, "banda-142");
+			},
+		},
+		problems: carriedProblems,
 	},
 	"held-failure": {
 		options: {

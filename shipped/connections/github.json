@@ -448,6 +448,11 @@
 				},
 				"checks": {
 					"optional": true,
+					"unless": {
+						"same": "pr.head.sha",
+						"while": "derived.checks_done = true",
+						"every": "30m"
+					},
 					"tool": "pull_request_read",
 					"args": {
 						"method": "get_check_runs",
@@ -460,6 +465,10 @@
 				},
 				"reviews": {
 					"optional": true,
+					"unless": {
+						"same": "pr.updated_at",
+						"every": "2h"
+					},
 					"tool": "pull_request_read",
 					"args": {
 						"method": "get_reviews",
@@ -473,6 +482,10 @@
 				"comments": {
 					"optional": true,
 					"follow": true,
+					"unless": {
+						"same": "pr.updated_at",
+						"every": "2h"
+					},
 					"tool": "pull_request_read",
 					"args": {
 						"method": "get_comments",

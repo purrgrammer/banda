@@ -150,12 +150,14 @@ describe("a watch on a pull request", () => {
 			},
 		});
 		// step 1 is each watch's baseline, which says how the object stands now, so Otto reads too; at step 5 Otto's
-		// hold from step 4 wants a reading from after the settling time, and Mara's step-4 reading is from before it
+		// hold from step 4 wants a reading from after the settling time, and Mara's step-4 reading is from before it. At
+		// steps 3 and 4 the checks Mara read at step 2 are done on the same head: she carries them forward (the world's
+		// pull request has no `updated_at`, so its reviews and comments are read at every look)
 		expect(made).toEqual([
 			{ mara: 4, otto: 4 },
 			{ mara: 4, otto: 0 },
-			{ mara: 4, otto: 0 },
-			{ mara: 4, otto: 0 },
+			{ mara: 3, otto: 0 },
+			{ mara: 3, otto: 0 },
 			{ mara: 0, otto: 4 },
 		]);
 		expect(watchInvariants(summary)).toEqual([]);

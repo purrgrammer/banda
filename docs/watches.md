@@ -108,12 +108,15 @@ returned to and merged, at desktop and phone width.
   request's comments and reviews are read one page of a hundred, so what is past the hundredth is never seen (the
   object's own counts are the totals for issue and pull request comments, so a comment off the page is never said
   gone; reviews have no such count) (#39, #34)
-- [ ] Reads cost: a pull request is four requests a look (pr, checks, reviews, comments), every two minutes while
-  busy, so twenty busy pull requests are ~2,400 requests an hour against GitHub's 5,000 per token, and sharing a
-  reading saves only on one object. Either a `when` on a read (checks only while a check runs or the head moved,
-  the answer before carried forward), a cadence per read, or one read of a fixed query (GitHub's MCP server lists no
-  GraphQL tool, so that is a Connections change). Decide by how many watches a home is expected to hold (#33; the
-  readings doc's growth with many watches, #40)
+- [x] Reads cost: a pull request was four requests a look (pr, checks, reviews, comments). A read's `unless` now
+  leaves it unmade while what moves it stayed: the checks while they are done on the same head (every half hour
+  besides), the reviews and comments while `updated_at` stayed (every two hours besides). Against the scenario's
+  fake GitHub, a quiet pull request is 14 requests an hour (48 before), 15 on average over two; a busy one 70 (120
+  before) with a comment and a review in the hour (test/watch-conditional-reads.test.ts); the `carried` fault
+  scenario covers the carry-forward (#33)
+- [ ] One read of a fixed query in place of four (GitHub's MCP server lists no GraphQL tool, so that is a Connections
+  change), should a home hold more watches than that leaves room for (the readings doc's growth with many watches,
+  #40)
 - [x] **A look pushes the whole shell.** A watch's task waking and sleeping was a task-graph change the shell stream
   pushed everything for, every two to thirty minutes per watch and per client; `chats`, `control` and `agents` were
   written whether or not they changed, and the watches area watched no doc of its own. Now the area owns its state

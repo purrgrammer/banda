@@ -12,7 +12,7 @@
  * what keeps a chatty chat from making the daemon read a service again and again.
  */
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
-import { type Follow, MAX_KEEP, type Pages, parseFollow } from "./follow.ts";
+import { type Follow, MAX_KEEP, type Pages, parseFollow, parseUnless, type Unless } from "./follow.ts";
 import { slackAvatar, slackTs } from "./slack-text.ts";
 
 type JsonValue = JsonObject[string];
@@ -49,6 +49,8 @@ export type ObjectRead = {
 	 * answers `next_cursor` beside the list while it has more; the daemon fills both.
 	 */
 	readonly pages?: Pages;
+	/** When a watch's look may leave it unmade and carry its kept answer forward. */
+	readonly unless?: Unless;
 };
 
 /** A write that acts on an object: how its arguments name it, and the words its draft says. */
@@ -305,6 +307,14 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					);
 				if (pages !== undefined && ["oldest", "cursor"].some((arg) => arg in ((args as object | null) ?? {})))
 					errors.push(`${where}.reads.${as}: a read with pages leaves oldest and cursor to the daemon`);
+				const given = (read as { unless?: unknown } | null)?.unless;
+				const unless = given === undefined ? undefined : parseUnless(given);
+				if (given !== undefined && unless === undefined)
+					errors.push(
+						`${where}.reads.${as}.unless is {"same": "<read>.<path>", "while"?: "<condition>", "every"?: "<period>"}`,
+					);
+				if (unless !== undefined && pages !== undefined)
+					errors.push(`${where}.reads.${as}: a read with pages is made at every look`);
 				if (
 					!NAME.test(as) ||
 					reserved(as) ||
@@ -344,8 +354,15 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					...(optional === true ? { optional: true } : {}),
 					...(follow === true ? { follow: true } : {}),
 					...(pages === undefined ? {} : { pages }),
+					...(unless === undefined ? {} : { unless }),
 				};
 			}
+		// what a read is skipped by is read at every look, before it
+		for (const [as, read] of Object.entries(reads)) {
+			const by = read.unless === undefined ? undefined : reads[read.unless.same.split(".")[0] ?? ""];
+			if (read.unless !== undefined && (by === undefined || by.unless !== undefined))
+				errors.push(`${where}.reads.${as}.unless.same is a path into a read made at every look`);
+		}
 		const fields: { [field: string]: string } = {};
 		const rawFields = given.fields;
 		if (typeof rawFields !== "object" || rawFields === null || Array.isArray(rawFields))

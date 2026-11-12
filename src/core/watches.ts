@@ -50,6 +50,9 @@ import {
 	type Item,
 	type Json,
 	lookEvery,
+	type Made,
+	madeNow,
+	mayCarry,
 	type Pages,
 	pageArgs,
 	reading as readingOf,
@@ -324,6 +327,8 @@ export type FollowedReading = {
 	earlier?: { version: number; answers: Item }[];
 	/** How many items a full page of each paged read held, as the service answered: what a look reads again. */
 	page?: { [read: string]: number };
+	/** When each read an `unless` guards was last made, which a look that carries its answer forward goes by. */
+	made?: { [read: string]: Made };
 };
 
 /** How many earlier readings of a followed object are kept beside the newest. */
@@ -965,6 +970,13 @@ export function defineWatches(options: WatchesOptions) {
 		let shared: { readonly version: number } | undefined;
 		/** The paged read's window as kept, the walk this watch holds on it, and how many items a full page held. */
 		let paging: { window: Item[] | undefined; walk: Walk | undefined; size: number | undefined } | undefined;
+		/**
+		 * The reading kept as this look began, under the same definition: what a read an `unless` guards is compared with,
+		 * and whether this look may carry its answers forward at all.
+		 */
+		let base:
+			| { version: number; at: number; answers: Item; made: { [read: string]: Made }; carry: boolean }
+			| undefined;
 		await commit(async (tx) => {
 			const record = (await tx.doc(Watches)).watches[name];
 			// a done watch never looks again, whatever its authority says now
@@ -1018,6 +1030,17 @@ export function defineWatches(options: WatchesOptions) {
 				now - kept.at < lookEvery(found.kind.follow, kept.answers)
 			)
 				shared = { version: kept.version };
+			// a read an `unless` guards is left unmade only by a look that would diff the object as it stands anyway: never
+			// a baseline, the first look after a resume, the owner's Check now (they asked for every read), nor a walk
+			if (shared === undefined && kept !== undefined && kept.source === found.source && record?.pages === undefined)
+				base = {
+					version: kept.version,
+					at: kept.at,
+					// copies of the doc's values: the reads happen outside this commit
+					answers: JSON.parse(JSON.stringify(kept.answers)) as Item,
+					made: JSON.parse(JSON.stringify(kept.made ?? {})) as { [read: string]: Made },
+					carry: click === undefined && record?.seen !== undefined && record.resumed === undefined,
+				};
 			const paged = Object.entries(found.reads).find(([, read]) => read.pages !== undefined);
 			if (paged !== undefined) {
 				const [as, read] = paged;
@@ -1048,11 +1071,22 @@ export function defineWatches(options: WatchesOptions) {
 		let gapped = false;
 		/** How many items a full page of the paged read held, when this look's page was full. */
 		let learned: { readonly as: string; readonly size: number } | undefined;
-		// the paged read first: while its walk has not reached the window, the others wait for the look that merges
-		const order = Object.entries(shared === undefined ? reads : {}).sort(
-			([, a], [, b]) => Number(b.pages !== undefined) - Number(a.pages !== undefined),
-		);
+		/** The reads an `unless` guards this look carried forward, and when it made the others. */
+		const carried: string[] = [];
+		const made: { [read: string]: Made } = {};
+		// the paged read first: while its walk has not reached the window, the others wait for the look that merges; a read
+		// an `unless` guards last, after the read its `same` is in
+		const rank = (read: ObjectRead) => (read.pages !== undefined ? 0 : read.unless === undefined ? 1 : 2);
+		const order = Object.entries(shared === undefined ? reads : {}).sort(([, a], [, b]) => rank(a) - rank(b));
 		for (const [as, read] of order) {
+			if (read.unless !== undefined && base !== undefined) {
+				const last = base.answers[as];
+				if (base.carry && last !== undefined && mayCarry(read.unless, answers, base.answers, base.made[as], now)) {
+					answers[as] = last;
+					carried.push(as);
+					continue;
+				}
+			}
 			const pages = paging === undefined ? undefined : read.pages;
 			const asked =
 				pages === undefined || paging === undefined ? {} : pageArgs(paging.walk, paging.window, pages.by, paging.size);
@@ -1089,6 +1123,7 @@ export function defineWatches(options: WatchesOptions) {
 				failed = `${connection.service} did not return an object.`;
 				break;
 			}
+			if (read.unless !== undefined) made[as] = madeNow(read.unless, answers, base, now);
 			if (pages === undefined || paging === undefined) continue;
 			const body = answers[as];
 			const page = listIn(body, pages.list);
@@ -1160,8 +1195,10 @@ export function defineWatches(options: WatchesOptions) {
 			const resumed = record.resumed !== undefined;
 			const doc = await tx.doc(Followed);
 			const kept = doc.objects[key];
-			// the reading it shares moved on meanwhile: this look is stale, and the next diffs what is kept then
+			// the reading it shares moved on meanwhile: this look is stale, and the next diffs what is kept then; so too a look
+			// that carried answers forward from a reading another look has replaced since
 			if (shared !== undefined && kept?.version !== shared.version) return;
+			if (carried.length > 0 && (kept?.version !== base?.version || kept?.source !== source)) return;
 			// a moment's failure of a read that may fail is no change, and never a condition that went false and comes back
 			const looked =
 				kept?.source === source ? withLastAnswers(kind.follow, answers, kept.answers, unanswered) : answers;
@@ -1211,6 +1248,9 @@ export function defineWatches(options: WatchesOptions) {
 			const page = { ...kept?.page, ...(learned === undefined ? {} : { [learned.as]: learned.size }) };
 			const stored = doc.objects[key];
 			if (stored !== undefined && Object.keys(page).length > 0) stored.page = page;
+			// when each guarded read was made: a read made by this look, else as kept (a read another definition made is not)
+			const when = { ...(kept?.source === source ? kept.made : {}), ...made };
+			if (stored !== undefined && shared === undefined && Object.keys(when).length > 0) stored.made = when;
 			// the owner's click is taken in the commit that keeps what it looked at: a kill before leaves it to look again
 			const taken = async () => {
 				if (click === undefined) return;

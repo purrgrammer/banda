@@ -690,6 +690,76 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 }
 
 /**
+ * When a look may leave a read unmade and carry its kept answer forward (DESIGN.md "Watches"), so a quiet object costs
+ * one request: the value at `same`, a path into a read made at every look, is the kept reading's; `while`, a condition
+ * over the kept reading, holds; and the kept answer is younger than `every`. A pull request's reviews and comments
+ * move its `updated_at`; its checks move nothing on it, so they are read while they run or the head moved, and at least
+ * every `every` besides (a re-run, or a check that starts late, on the same head).
+ */
+export type Unless = { readonly same: string; readonly while?: string; readonly every?: string };
+
+/**
+ * When a look last made a read an `Unless` guards (by the look's clock), and the value at its `same` then, when the
+ * reading kept before that look already had it and was taken a minute or more before: the answer holds every change
+ * up to that value. A service's times have a grain (GitHub's, a second), so an answer made at the look that first saw
+ * a value may miss a change in the same second after it, which leaves the value as it was; the next look makes it again.
+ */
+export type Made = { readonly at: number; readonly sure?: string };
+
+/** How long before a look the reading it compares with must have been taken for its answers to be sure. */
+export const SURE_AFTER = 60_000;
+
+/** The value at `path` in `reading`, in canonical words; undefined when the reading has none there. */
+export function valueAt(reading: Json | undefined, path: string): string | undefined {
+	const values = valuesAt(reading, pattern(path)).filter((value) => value !== undefined && value !== null);
+	return values.length === 0 ? undefined : canonical(values as Json[]);
+}
+
+/**
+ * Whether a look may carry the kept answer of a read `unless` guards: `answers` is what the look has read so far,
+ * `kept` the reading kept (its derived conditions with it), `made` when its answer was made.
+ */
+export function mayCarry(unless: Unless, answers: Item, kept: Item, made: Made | undefined, now: number): boolean {
+	const value = valueAt(answers, unless.same);
+	if (value === undefined || made?.sure !== value || valueAt(kept, unless.same) !== value) return false;
+	if (unless.while !== undefined && !holds(unless.while, kept)) return false;
+	const every = unless.every === undefined ? undefined : parseEvery(unless.every);
+	return every === undefined || now - made.at < every;
+}
+
+/** What a look that made a read `unless` guards keeps of it: when, and the value at `same` if it is sure. */
+export function madeNow(
+	unless: Unless,
+	answers: Item,
+	kept: { answers: Item; at: number } | undefined,
+	now: number,
+): Made {
+	const value = valueAt(answers, unless.same);
+	const sure =
+		value !== undefined &&
+		kept !== undefined &&
+		now - kept.at >= SURE_AFTER &&
+		valueAt(kept.answers, unless.same) === value;
+	return sure ? { at: now, sure: value } : { at: now };
+}
+
+/** A read's `unless`, or undefined when it is not one. */
+export function parseUnless(value: unknown): Unless | undefined {
+	if (!object(value as Json)) return undefined;
+	const { same, while: during, every, ...rest } = value as { same?: unknown; while?: unknown; every?: unknown };
+	if (Object.keys(rest).length > 0) return undefined;
+	if (typeof same !== "string" || !/^[A-Za-z0-9_+-]{1,64}(?:\.[A-Za-z0-9_+-]{1,64}){1,7}$/.test(same)) return undefined;
+	if (during !== undefined && (typeof during !== "string" || during.length > 200 || "error" in parseCondition(during)))
+		return undefined;
+	if (every !== undefined && (typeof every !== "string" || parseEvery(every) === undefined)) return undefined;
+	return {
+		same,
+		...(during === undefined ? {} : { while: during as string }),
+		...(every === undefined ? {} : { every: every as string }),
+	};
+}
+
+/**
  * A list a read answers one page of (DESIGN.md "Watches"): the path of the list in the reading, the field that orders
  * it, and how many of its newest items the reading keeps, its window.
  */
