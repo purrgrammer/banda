@@ -1,9 +1,9 @@
 # Slack
 
-Priority: **High**, after watches land. Implementation status lives in [Status](status.md). This is a design under
-owner review; nothing here is code yet, and the mechanisms marked *spike* need evidence before they become DESIGN.md
-rules ([Delivery](delivery.md)). An adversarial review of the first draft is folded in; what it changed is in the
-commit that added this file.
+Priority: **High**. Implementation status lives in [Status](status.md). The connection is built through stage 3
+(the stages and what remains are below); what the spikes observed is in "What the spikes found", and what is still
+marked *spike* is not yet a DESIGN.md rule ([Delivery](delivery.md)). An adversarial review of the first draft is
+folded in; what it changed is in the commit that added this file.
 
 Slack is a built-in connection, as Gmail is ([Connections](connections.md)): a shipped file declares the reads, the
 scopes, the objects and how each is followed; a daemon adapter calls Slack's Web API. An account is the owner in one
@@ -94,9 +94,10 @@ channel's watch ignores reactions. A search match is keyed by its permalink, sin
 channels; it is new only when its `ts` is past every match the reading had, so a match Slack indexes late with an
 older time is not new (its `newest`). A person's face changing is nothing.
 
-A message and a thread are one kind. A link to a reply carries `thread_ts`, and the kind's `normalize` takes the
-thread's root from it, so a link to a reply and a link to its root name the same object and share one reading; the
-`p1700000000000100` in a link becomes Slack's `1700000000.000100` there too. Following a message means following
+A message and a thread are one kind, with one placeholder for its message, `{ts}`, normalized as `slack-ts`. A link
+to a reply carries `thread_ts` in its query, and `slack-ts` takes the thread's root from it in place of the reply's
+own `p…`, so a link to a reply and a link to its root name the same object and share one reading; the
+`p1700000000000100` in a link or an id becomes Slack's `1700000000.000100` there too (test/object-shapes.test.ts). Following a message means following
 what is said under it. Mentions inside threads are not in a channel's history (Slack lists a reply there only when
 it was also sent to the channel), so a channel watch does not see them; the Follow card on a channel says so and
 offers a search watch on the owner's mention (`slack/search/<@U…>`) for that.
@@ -109,33 +110,65 @@ opens it from the card, and the daemon fetches it as the account the card was re
 files, as Gmail's attachments are (below). The account that reads a link is the one whose team the channel
 belongs to; a shared channel lives in several teams at once, and which account answers for it is a spike.
 
-Sketch of the kinds' entries, in the definition's `objects`:
+The kinds' entries, as the definition's `objects` has them:
 
 ```json
 {
 	"thread": {
 		"card": "messages",
-		"name": "thread in #{channel_name}",
-		"normalize": { "ts": "slack-ts", "root": "thread_ts-or-ts" },
-		"urls": ["https://*.slack.com/archives/{channel}/p{ts}", "https://*.slack.com/archives/{channel}/p{ts}?thread_ts={root}"],
-		"ids": ["slack/{channel}/p{root}"],
+		"name": "a thread in Slack",
+		"normalize": { "ts": "slack-ts" },
+		"urls": ["https://*.slack.com/archives/{channel}/p{ts}"],
+		"ids": ["slack/{channel}/p{ts}"],
 		"reads": {
 			"thread": {
 				"tool": "get_thread",
-				"args": { "channel": "{channel}", "ts": "{root}" },
+				"args": { "channel": "{channel}", "ts": "{ts}" },
 				"pages": { "list": "thread.messages", "by": "ts", "keep": 200 }
 			}
+		},
+		"fields": {
+			"channel": "thread.channel_name",
+			"root": "thread.root",
+			"messages": "thread.messages",
+			"total": "thread.total",
+			"url": "thread.url"
 		},
 		"follow": {
 			"keys": { "thread.messages": "ts", "thread.messages[*].reactions": "name" },
 			"authors": { "thread.messages": "author" },
-			"ignore": ["thread.messages[*].reply_count", "thread.messages[*].latest_reply", "thread.active"],
+			"ignore": [
+				"thread.active",
+				"thread.total",
+				"thread.messages[*].reply_count",
+				"thread.messages[*].avatar"
+			],
 			"rules": [
-				{ "on": "thread.messages[*].reactions[*]", "kind": "added", "does": "tell", "says": "{count} reacted :{name}:" },
-				{ "on": "thread.messages[*].reactions[*]", "kind": "removed", "does": "nothing", "says": "a reaction :{name}: was taken back" },
+				{
+					"on": "thread.messages[*].reactions[*]",
+					"kind": "added",
+					"does": "tell",
+					"says": "{count} reacted :{name}:"
+				},
+				{
+					"on": "thread.messages[*].reactions[*]",
+					"kind": "removed",
+					"does": "nothing",
+					"says": "a reaction :{name}: was taken back"
+				},
 				{ "on": "thread.messages[*]", "kind": "added", "does": "wake", "says": "{from} replied" },
-				{ "on": "thread.messages[*].text", "kind": "changed", "does": "tell", "says": "{from} edited a message" },
-				{ "on": "thread.messages[*]", "kind": "removed", "does": "tell", "says": "a message from {from} was deleted" }
+				{
+					"on": "thread.messages[*].text",
+					"kind": "changed",
+					"does": "tell",
+					"says": "{from} edited a message"
+				},
+				{
+					"on": "thread.messages[*]",
+					"kind": "removed",
+					"does": "tell",
+					"says": "a message from {from} was deleted"
+				}
 			],
 			"ends": {},
 			"every": "5m",
@@ -143,34 +176,74 @@ Sketch of the kinds' entries, in the definition's `objects`:
 			"busy_every": "1m",
 			"settle": "2m"
 		},
-		"fields": { "title": "thread.channel_name", "messages": "thread.messages", "total": "thread.total" },
 		"writes": [
-			{ "tool": "post_message", "id": { "channel": "channel", "root": "thread_ts" }, "verb": "Reply in" },
-			{ "tool": "add_reaction", "id": { "channel": "channel", "ts": "ts" }, "verb": "React" }
+			{
+				"tool": "post_message",
+				"id": { "channel": "channel", "ts": "thread_ts" },
+				"verb": "Send",
+				"what": "Reply in",
+				"text": "text"
+			},
+			{
+				"tool": "add_reaction",
+				"id": { "channel": "channel", "ts": "ts" },
+				"verb": "React",
+				"what": "React in"
+			}
 		]
 	},
 	"channel": {
 		"card": "messages",
-		"name": "#{name}",
+		"name": "a channel in Slack",
 		"urls": ["https://*.slack.com/archives/{channel}"],
 		"ids": ["slack/{channel}"],
 		"reads": {
 			"channel": { "tool": "get_channel", "args": { "channel": "{channel}" } },
 			"history": {
 				"tool": "channel_history",
-				"args": { "channel": "{channel}" },
+				"args": { "channel": "{channel}", "limit": 100 },
 				"pages": { "list": "history.messages", "by": "ts", "keep": 100 }
 			}
+		},
+		"fields": {
+			"title": "channel.name",
+			"topic": "channel.topic",
+			"members": "channel.member_count",
+			"messages": "history.messages",
+			"url": "history.url"
 		},
 		"follow": {
 			"keys": { "history.messages": "ts" },
 			"authors": { "history.messages": "author" },
-			"ignore": ["history.active"],
+			"ignore": [
+				"history.active",
+				"channel.member_count",
+				"history.messages[*].reply_count",
+				"history.messages[*].avatar",
+				"history.messages[*].reactions"
+			],
 			"rules": [
-				{ "on": "history.messages[*]", "kind": "added", "where": "mentions_me = true", "does": "wake", "says": "{from} mentioned you" },
+				{
+					"on": "history.messages[*]",
+					"kind": "added",
+					"where": "mentions_me = true",
+					"does": "wake",
+					"says": "{from} mentioned you"
+				},
 				{ "on": "history.messages[*]", "kind": "added", "does": "tell", "says": "{from}: {text}" },
-				{ "on": "history.messages[*].text", "kind": "changed", "does": "nothing", "says": "{from} edited a message" },
-				{ "on": "history.messages[*]", "kind": "removed", "does": "nothing", "says": "a message was deleted" }
+				{
+					"on": "history.messages[*].text",
+					"kind": "changed",
+					"does": "nothing",
+					"says": "{from} edited a message"
+				},
+				{
+					"on": "history.messages[*]",
+					"kind": "removed",
+					"does": "nothing",
+					"says": "a message from {from} was deleted"
+				},
+				{ "on": "channel.topic", "kind": "changed", "does": "tell", "says": "topic: {to}" }
 			],
 			"ends": {},
 			"every": "5m",
@@ -178,45 +251,89 @@ Sketch of the kinds' entries, in the definition's `objects`:
 			"busy_every": "1m",
 			"settle": "2m"
 		},
-		"fields": { "title": "channel.name", "topic": "channel.topic", "members": "channel.member_count", "messages": "history.messages" },
-		"writes": [{ "tool": "post_message", "id": { "channel": "channel" }, "verb": "Post in" }]
+		"writes": [
+			{
+				"tool": "post_message",
+				"id": { "channel": "channel" },
+				"verb": "Send",
+				"what": "Post in",
+				"text": "text"
+			}
+		]
 	},
 	"search": {
 		"card": "messages",
+		"name": "{query}",
 		"normalize": { "query": "text" },
-		"name": "messages matching {query}",
 		"ids": ["slack/search/{query}"],
 		"reads": {
-			"search": { "tool": "search_messages", "args": { "query": "{query}", "count": 50, "sort": "timestamp", "sort_dir": "desc" } }
+			"search": {
+				"tool": "search_messages",
+				"args": { "query": "{query}", "count": 50, "sort": "timestamp", "sort_dir": "desc" }
+			}
 		},
+		"fields": { "messages": "search.messages", "total": "search.total" },
 		"follow": {
 			"keys": { "search.messages": "permalink" },
 			"newest": { "search.messages": "ts" },
 			"authors": { "search.messages": "author" },
-			"ignore": ["search.total", "search.messages[*].avatar"],
-			"rules": [{ "on": "search.messages[*]", "kind": "added", "does": "wake", "says": "{from} in #{channel_name}: {text}" }],
+			"ignore": [
+				"search.total",
+				"search.messages[*].avatar",
+				"search.messages[*].reactions",
+				"search.messages[*].reply_count"
+			],
+			"rules": [
+				{
+					"on": "search.messages[*]",
+					"kind": "added",
+					"does": "wake",
+					"says": "{from} in #{channel_name}: {text}"
+				}
+			],
 			"ends": {},
 			"every": "5m",
 			"settle": "2m"
-		},
-		"fields": { "messages": "search.messages", "total": "search.total" }
+		}
 	},
 	"person": {
 		"card": "contact",
-		"name": "{real_name}",
+		"name": "a person in Slack",
 		"urls": ["https://*.slack.com/team/{user}"],
 		"ids": ["slack/user/{user}"],
 		"reads": { "person": { "tool": "get_person", "args": { "user": "{user}" } } },
+		"fields": {
+			"name": "person.display_name",
+			"handle": "person.name",
+			"title": "person.title",
+			"emails": "person.email",
+			"status": "person.status_text",
+			"timezone": "person.tz",
+			"outside": "person.outside",
+			"photo": "person.avatar",
+			"url": "person.url"
+		},
 		"follow": {
 			"ignore": ["person.avatar"],
 			"rules": [
-				{ "on": "person.status_text", "kind": "changed", "does": "tell", "says": "status: {to}", "words": { "": "cleared" } },
-				{ "on": "person.title", "kind": "changed", "does": "tell", "says": "title: {to}", "words": { "": "cleared" } }
+				{
+					"on": "person.status_text",
+					"kind": "changed",
+					"does": "tell",
+					"says": "status: {to}",
+					"words": { "": "cleared" }
+				},
+				{
+					"on": "person.title",
+					"kind": "changed",
+					"does": "tell",
+					"says": "title: {to}",
+					"words": { "": "cleared" }
+				}
 			],
 			"ends": {},
 			"every": "30m"
-		},
-		"fields": { "name": "person.real_name", "handle": "person.name", "title": "person.title", "emails": "person.email", "status": "person.status_text", "timezone": "person.tz", "photo": "person.avatar" }
+		}
 	}
 }
 ```

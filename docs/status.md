@@ -93,7 +93,8 @@ owner on the floor, reacting as an approved draft whose permission covers a chan
 channel followed through a paged window under a per-account queue, a search and a person followed; files read through
 the daemon into the chat's blobs. The spikes ran against the owner's team; each stage had an adversarial review. The
 fault sweep in CI, `files:read` on the shipped app, the owner's UI pass over the specimen and the walkthrough at both
-widths, and owner acceptance remain.
+widths, and owner acceptance remain. On 2026-11-12 the owner said they had tried it live; which
+walkthroughs, widths and accounts that covered is not recorded, so the plan's live lanes stay unchecked.
 
 Bringing your own is in code ([Chat](chat.md)): at first run on the desktop, the skills and agents of Claude Code,
 Codex and pi on this computer, in place of banda's skills, and again from Settings; the band's menu with Skills and a
