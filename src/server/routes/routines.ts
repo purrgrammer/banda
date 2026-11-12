@@ -2,14 +2,15 @@
  * Routines in full: the owner makes one (`POST /api/routines`), changes one (`POST /api/routines/:name/edit`, or its
  * schedule alone with `/when`) and runs one now (`POST /api/routines/:name/run`), each in effect at once and answered
  * with the control view. On start it finishes an owner's edit a restart cut short, so the box holds what the store
- * accepted.
+ * accepted. Its history (`GET /api/routines/:name/runs?before=`) reads the runs its record keeps, a page at a time.
  */
 
 import { BadRequest } from "../http.ts";
-import { changeRoutine, createRoutine, finishEdits, runNow } from "../routines.ts";
+import { changeRoutine, createRoutine, finishEdits, routineRuns, runNow } from "../routines.ts";
 import type { AreaModule } from "./area.ts";
 
 const PATH = /^\/routines\/([a-z0-9-]+)\/(when|edit|run)$/;
+const RUNS = /^\/routines\/([a-z0-9-]+)\/runs$/;
 
 const SHA = /^[0-9a-f]{64}$/;
 
@@ -48,6 +49,15 @@ export const routines: AreaModule = {
 					);
 					deps.changed();
 					return { body: { name, control: await deps.control() } };
+				}
+				const history = RUNS.exec(request.path);
+				if (history !== null) {
+					if (request.method !== "GET") return { status: 405, body: { error: "method not allowed" } };
+					const given = request.url.searchParams.get("before");
+					const before = given === null ? undefined : Number(given);
+					if (before !== undefined && !Number.isSafeInteger(before)) throw new BadRequest("before is when a run was");
+					const page = await routineRuns(deps.harness, history[1] ?? "", before);
+					return page === undefined ? { status: 404, body: { error: "no such routine" } } : { body: page };
 				}
 				const match = PATH.exec(request.path);
 				if (match === null) return undefined;

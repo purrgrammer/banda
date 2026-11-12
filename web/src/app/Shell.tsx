@@ -44,7 +44,7 @@ import { useAskNotifications, useNotify } from "./notify.ts";
 import { FollowedObject } from "./Objects.tsx";
 import { Onboarding, SkillsOnboarding, useShippedSkills } from "./Onboarding.tsx";
 import { ownerEdits } from "./owner-edits.ts";
-import { EditRoutine, routineRows } from "./routines.tsx";
+import { EditRoutine, RoutineHistory, routineRows } from "./routines.tsx";
 import { SearchDialog } from "./SearchDialog.tsx";
 import { SettingsDevices } from "./SettingsDevices.tsx";
 import { SettingsProviders } from "./SettingsProviders.tsx";
@@ -162,8 +162,15 @@ function Main() {
 	const [searching, setSearching] = useState(false);
 	const [shortcuts, setShortcuts] = useState(false);
 	const [making, setMaking] = useState(false);
-	// the routine open in the panel's editor (none: a new one), and a routine's line asking for the agent's routines
-	const [editing, setEditing] = useState<{ agent: string; routine?: string; watch?: string }>();
+	// the routine open in the panel (its detail; its editor when `edit`, a new one when none), the run whose line the
+	// owner last opened from it, and a routine's line asking for the agent's routines
+	const [editing, setEditing] = useState<{
+		agent: string;
+		routine?: string;
+		watch?: string;
+		edit?: true;
+		run?: number;
+	}>();
 	const [focus, setFocus] = useState<{ agent: string; n: number }>();
 	// when the daemon last pushed the routines or the watches, or the day turned: their next runs and looks are read
 	// then, so they never tick on their own
@@ -407,6 +414,11 @@ function Main() {
 			};
 			const openWatch =
 				editing?.watch === undefined ? undefined : shell.watches?.find((each) => each.name === editing.watch);
+			// a routine gone since it was opened (deleted, or its removal allowed) leaves the list
+			const openRoutine =
+				editing?.routine === undefined
+					? undefined
+					: shell.control?.routines.find((each) => each.name === editing.routine && each.accepted !== undefined);
 			const editor =
 				editing?.agent !== where.id ? undefined : openWatch !== undefined ? (
 					<WatchDetail
@@ -416,13 +428,36 @@ function Main() {
 						now={pushedAt}
 						onDone={backToRoutines}
 					/>
-				) : editing.watch !== undefined ? undefined : (
+				) : editing.watch !== undefined ? undefined : editing.routine === undefined ? (
+					<EditRoutine agent={where.id} name={who.name} now={pushedAt} onDone={backToRoutines} />
+				) : openRoutine === undefined ? undefined : editing.edit === true ? (
 					<EditRoutine
 						agent={where.id}
 						name={who.name}
-						routine={shell.control?.routines.find((each) => each.name === editing.routine)}
+						routine={openRoutine}
 						now={pushedAt}
-						onDone={backToRoutines}
+						// saved, deleted or Back: its detail again, or the list once it is gone
+						onDone={() => setEditing({ agent: where.id, routine: openRoutine.name })}
+					/>
+				) : (
+					<RoutineHistory
+						routine={openRoutine}
+						agent={who.name}
+						chat={row?.chat}
+						now={pushedAt}
+						focusRun={editing.run}
+						onBack={backToRoutines}
+						onEdit={() => setEditing({ agent: where.id, routine: openRoutine.name, edit: true })}
+						onOpenRun={(at, entry) => {
+							setEditing({ agent: where.id, routine: openRoutine.name, run: at });
+							// on the phone the sheet closes so the chat shows; the detail waits beneath for it to open again
+							if (phone) setSheet(false);
+							if (where.at === entry)
+								document
+									.querySelector(`[data-entry="${entry}"]`)
+									?.scrollIntoView({ block: "center", behavior: "smooth" });
+							else go({ name: "agent", id: where.id, at: entry });
+						}}
 					/>
 				);
 			const agentFile = shell.agents.find((each) => each.accepted?.agent?.id === where.id)?.accepted;
@@ -456,6 +491,7 @@ function Main() {
 										onAllPaused={(paused) => void setPaused(paused).then(showControl)}
 										onAdd={() => setEditing({ agent: where.id })}
 										onOpen={(id) => setEditing({ agent: where.id, routine: id })}
+										onEdit={(id) => setEditing({ agent: where.id, routine: id, edit: true })}
 										onRunNow={(id) => void actOnRoutine(id, { action: "run", key: clickKey() }).then(showControl)}
 										onPause={(id, paused) =>
 											void actOnRoutine(id, { action: paused ? "pause" : "resume" }).then(showControl)

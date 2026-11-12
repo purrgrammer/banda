@@ -1185,6 +1185,16 @@ export function defineCore(options: CoreOptions) {
 					const { chat, internal } = task.input;
 					const wake = internal?.kind === WAKE ? (internal.data as WakeData) : undefined;
 					const routine = wake === undefined ? undefined : (await tx.doc(Routines)).routines[wake.routine];
+					// the run's history says how it ended, and where its wake and answer are in the chat
+					const run = [...(routine?.runs ?? [])].reverse().find((each) => each.turn === Number(task.id));
+					if (run !== undefined) {
+						run.ended = runtime.now();
+						run.result = "failed" in result ? "failed" : result.ended === "answered" ? "answered" : "stopped";
+						// the daemon's words, kept short: a provider's raw error can be pages long
+						if ("failed" in result) run.why = result.failed.slice(0, 1000);
+						if (settled?.entry !== undefined) run.entry = Number(settled.entry);
+						if (answer !== undefined) run.answer = answer;
+					}
 					// a routine's run that answered ends its failing streak; one the owner stopped neither ends nor adds to it
 					if (routine?.failing !== undefined && "ended" in result && result.ended === "answered")
 						delete routine.failing;

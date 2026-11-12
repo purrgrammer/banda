@@ -4,8 +4,11 @@ Priority: **High**. Implementation status lives in [Status](status.md).
 
 Routines, deduplicated wakes, runs a day, pause and run now are implemented, with timers. Every routine wakes in its
 agent's chat; a wake draws its event line only when the agent replied or the run failed, and trouble (a failed run, a
-skipped due time, the runs a day reached) is an error line that counts as unread. The panel's Routines tab lists them
-and opens the owner's own editor. Watches and monitors wait for their own design (DESIGN.md "Open").
+skipped due time, the runs a day reached) is an error line that counts as unread. The panel's Routines tab lists them;
+a row opens the routine's detail in the same panel: Pause or Resume, Edit (the owner's own editor, in its place), and
+its runs. Each run is recorded on the routine's record in the commit that fired or skipped it, and the commit that
+ended its Turn says how it ended and where its wake is in the chat; what it said is read from the chat as the feed
+reads it, so a run that spoke opens its line there and a quiet one opens nothing. Watches and monitors wait for their own design (DESIGN.md "Open").
 
 Entry points: ../src/core/routines.ts, ../src/core/schedule.ts, ../src/core/control.ts, ../src/server/routines.ts,
 ../web/src/app/routines.tsx and ../web/src/chat/RoutineEditor.tsx.
@@ -29,8 +32,10 @@ by asking and from the panel, leave, return to its event and reply, inspect its 
 - [x] `job` becomes `routine` everywhere
 - [x] The panel's routine list and editor
 - [x] The panel's "next in …" is computed when the daemon pushes, so it does not tick on its own
-- [ ] The row says what the last run said ("last ran 8:00, nothing to say"): the store does not yet record whether
-  a run said anything
+- [x] A routine's detail: its runs in words (said, said nothing, failed, skipped, waiting, running), ten and "Show
+  earlier", a run that spoke opening its line in the chat
+- [ ] The row says what the last run said ("Said: 2 PRs need you", "Said nothing"): the record now keeps each run, so
+  the control view can say it; reading the chat on every push is the cost to weigh
 - [ ] Tried through the app at phone width (the editor, pause and delete were tried at desktop width; the phone
   pass needs a resizable browser)
 - [x] Watches return on their design (DESIGN.md "Watches"); the object side is in [Connections](connections.md);
