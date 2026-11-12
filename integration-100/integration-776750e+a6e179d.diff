@@ -1,0 +1,1405 @@
+diff --git a/DESIGN.md b/DESIGN.md
+index d1cb27e..99ff51a 100644
+--- a/DESIGN.md
++++ b/DESIGN.md
+@@ -654,7 +654,10 @@ or not the model remembers it.
+   edit or a deletion in it is seen, and merges only then; what it fetched meanwhile is the watch's, for that object
+   as that account, kept across a crash, and the watch is behind until the merge. A walk that cannot reach the window
+   within an hour, or within the window's bytes, merges what it read, and its wake says what may be missing. What leaves the window from its old end was pushed off, never
+-  removed. Every call a connection makes for one account and one method, whoever makes it (a watch, an agent, a
++  removed. A list the service hands only oldest first, by numbered pages (GitHub's reviews and comments), is read at
++  its tail: the last pages, found by the object's own count of it or else by how long the last look found it, at most
++  three pages a look. A look that cannot reach the end in those pages keeps the list as it was and the watch is behind
++  until one does; one whose pages do not reach back to the newest item the reading held says what may be missing. Every call a connection makes for one account and one method, whoever makes it (a watch, an agent, a
+   card), waits its turn in one queue, and a refusal that says when to come back holds that queue until then. The
+   refusal also teaches the queue the method's limit, as many calls a minute as the service answered before it, so for
+   the hour after, a call past it is answered "busy" without being sent: a service meets one refusal an hour from banda,
+diff --git a/docs/watches.md b/docs/watches.md
+index fea8625..965ac6f 100644
+--- a/docs/watches.md
++++ b/docs/watches.md
+@@ -104,10 +104,15 @@ returned to and merged, at desktop and phone width.
+   whether a deleted (not cancelled) event ends its watch, label names for user labels, a calendar's upcoming events
+   (needs a sync token, not a moving window); a contact followed (the pass's account had no saved contacts); a
+   calendar event's link carries its id encoded, so an event is followed from its card alone (#35)
+-- [ ] A watch's file has no editor field and the `watch` tool no parameter for `wakes_a_day`; an issue's and a pull
+-  request's comments and reviews are read one page of a hundred, so what is past the hundredth is never seen (the
+-  object's own counts are the totals for issue and pull request comments, so a comment off the page is never said
+-  gone; reviews have no such count) (#39, #34)
++- [ ] A watch's file has no editor field and the `watch` tool no parameter for `wakes_a_day` (#39)
++- [x] A pull request's reviews and comments and an issue's comments are read at their tail (a read's `tail`): the last
++  pages, by the object's count (`pr.comments`, `issue.comments`) or the length the last look found (reviews), three
++  pages a look at most; what leaves the old end is pushed off, never gone, and what slides back is not new; 150
++  comments and 150 reviews wake for the newest (test/watch-tail.test.ts); through the app against a throwaway daemon
++  and a fake GitHub that pages oldest first, at desktop and phone width (test/watch-tail.browser.test.ts) (#34)
++- [ ] A discussion's comments are still one page of a hundred, oldest first: `get_discussion_comments` pages by cursor
++  only, so its tail needs a walk of cursors; its `totalCount` keeps a comment off the page from being said gone (#34)
++- [ ] The tail of a pull request's reviews and comments against real GitHub, through the app (#35)
+ - [x] Reads cost: a pull request was four requests a look (pr, checks, reviews, comments). A read's `unless` now leaves
+   it unmade while what moves it stayed: the checks while they are done with the head and `updated_at` the same (every
+   ten minutes besides, for a re-run on the same head), the reviews and comments while `updated_at` stayed (every two
+diff --git a/scripts/github-objects.ts b/scripts/github-objects.ts
+index 2a753c0..fa43ad1 100644
+--- a/scripts/github-objects.ts
++++ b/scripts/github-objects.ts
+@@ -46,8 +46,9 @@ export const GITHUB_OBJECTS = {
+ 					repo: "{repo}",
+ 					pullNumber: "{number}",
+ 					perPage: 100,
+-					page: 1,
+ 				},
++				// oldest first, and no count of them on the pull request: its last pages, found by the last look
++				tail: { by: "id" },
+ 			},
+ 			comments: {
+ 				optional: true,
+@@ -60,19 +61,19 @@ export const GITHUB_OBJECTS = {
+ 					repo: "{repo}",
+ 					pullNumber: "{number}",
+ 					perPage: 100,
+-					page: 1,
+ 				},
++				// the conversation's comments (an issue's, not review comments), oldest first: the pull request counts them
++				tail: { by: "id", total: "pr.comments" },
+ 			},
+ 		},
+ 		// how a watch follows it: reviews and comments by id, check runs by name (every push gives them new ids), what
+ 		// is noise, whose items are the account's own, what wakes and what only tells, and what ends the watch
+ 		follow: {
+ 			keys: { "checks.check_runs": "name" },
+-			totals: { "checks.check_runs": "checks.total_count", comments: "pr.review_comments" },
++			totals: { "checks.check_runs": "checks.total_count" },
+ 			ignore: [
+ 				"pr.updated_at",
+ 				"pr.comments",
+-				"pr.review_comments",
+ 				"pr.commits",
+ 				"pr.changed_files",
+ 				"pr.mergeable",
+@@ -222,8 +223,8 @@ export const GITHUB_OBJECTS = {
+ 					repo: "{repo}",
+ 					issue_number: "{number}",
+ 					perPage: 100,
+-					page: 1,
+ 				},
++				tail: { by: "id", total: "issue.comments" },
+ 			},
+ 		},
+ 		// how a watch follows it: closed or reopened and others' comments wake; labels, assignees and the title only
+diff --git a/shipped/connections/github.json b/shipped/connections/github.json
+index 9f2fc9b..46f84e8 100644
+--- a/shipped/connections/github.json
++++ b/shipped/connections/github.json
+@@ -480,8 +480,10 @@
+ 						"owner": "{owner}",
+ 						"repo": "{repo}",
+ 						"pullNumber": "{number}",
+-						"perPage": 100,
+-						"page": 1
++						"perPage": 100
++					},
++					"tail": {
++						"by": "id"
+ 					}
+ 				},
+ 				"comments": {
+@@ -499,8 +501,11 @@
+ 						"owner": "{owner}",
+ 						"repo": "{repo}",
+ 						"pullNumber": "{number}",
+-						"perPage": 100,
+-						"page": 1
++						"perPage": 100
++					},
++					"tail": {
++						"by": "id",
++						"total": "pr.comments"
+ 					}
+ 				}
+ 			},
+@@ -509,13 +514,11 @@
+ 					"checks.check_runs": "name"
+ 				},
+ 				"totals": {
+-					"checks.check_runs": "checks.total_count",
+-					"comments": "pr.review_comments"
++					"checks.check_runs": "checks.total_count"
+ 				},
+ 				"ignore": [
+ 					"pr.updated_at",
+ 					"pr.comments",
+-					"pr.review_comments",
+ 					"pr.commits",
+ 					"pr.changed_files",
+ 					"pr.mergeable",
+@@ -780,8 +783,11 @@
+ 						"owner": "{owner}",
+ 						"repo": "{repo}",
+ 						"issue_number": "{number}",
+-						"perPage": 100,
+-						"page": 1
++						"perPage": 100
++					},
++					"tail": {
++						"by": "id",
++						"total": "issue.comments"
+ 					}
+ 				}
+ 			},
+diff --git a/src/core/definitions.ts b/src/core/definitions.ts
+index 2b211ad..7afcb25 100644
+--- a/src/core/definitions.ts
++++ b/src/core/definitions.ts
+@@ -71,6 +71,15 @@ const Read = Type.Object(
+ 				},
+ 			),
+ 		),
++		tail: Type.Optional(
++			Type.Object(
++				{
++					by: Type.String({ pattern: "^[A-Za-z0-9_]{1,64}$" }),
++					total: Type.Optional(Type.String({ maxLength: 200 })),
++				},
++				{ ...closed, description: "A list oldest first by numbered pages, its last pages read" },
++			),
++		),
+ 	},
+ 	closed,
+ );
+diff --git a/src/core/objects.ts b/src/core/objects.ts
+index f6b0f96..568b1dc 100644
+--- a/src/core/objects.ts
++++ b/src/core/objects.ts
+@@ -14,6 +14,7 @@
+ import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
+ import { type Follow, MAX_KEEP, type Pages, parseCondition, parseFollow, parseUnless, type Unless } from "./follow.ts";
+ import { slackAvatar, slackTs } from "./slack-text.ts";
++import { MAX_TAIL_PAGE, type Tail } from "./tail.ts";
+ 
+ type JsonValue = JsonObject[string];
+ 
+@@ -51,6 +52,12 @@ export type ObjectRead = {
+ 	readonly pages?: Pages;
+ 	/** When a watch's look may leave it unmade and carry its kept answer forward. */
+ 	readonly unless?: Unless;
++	/**
++	 * Its answer is a list the service hands oldest first by numbered pages (a pull request's reviews): a watch reads
++	 * its last pages, ordered by `by`, finding the end by the count at `total` (another read's) or by its last look. Its
++	 * tool takes `page`, which the daemon fills, and its arguments give `perPage`.
++	 */
++	readonly tail?: Tail;
+ };
+ 
+ /** A write that acts on an object: how its arguments name it, and the words its draft says. */
+@@ -315,6 +322,20 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
+ 					);
+ 				if (unless !== undefined && pages !== undefined)
+ 					errors.push(`${where}.reads.${as}: a read with pages is made at every look`);
++				const tailed = (read as { tail?: unknown } | null)?.tail;
++				const tail = tailed === undefined ? undefined : parseTail(tailed, as);
++				if (tailed !== undefined && tail === undefined)
++					errors.push(`${where}.reads.${as}.tail is {"by": "<field>", "total": "<read>.<path>"}, its total optional`);
++				if (tail !== undefined && pages !== undefined) errors.push(`${where}.reads.${as}: pages or tail, not both`);
++				if (tail !== undefined && "page" in ((args as object | null) ?? {}))
++					errors.push(`${where}.reads.${as}: a read with tail leaves page to the daemon`);
++				const perPage = (args as { perPage?: unknown } | null)?.perPage;
++				// a page larger than the service hands would look short, and end every walk at its first page
++				if (
++					tail !== undefined &&
++					!(typeof perPage === "number" && Number.isInteger(perPage) && perPage >= 1 && perPage <= MAX_TAIL_PAGE)
++				)
++					errors.push(`${where}.reads.${as}: a read with tail gives perPage, 1 to ${MAX_TAIL_PAGE} items`);
+ 				if (
+ 					!NAME.test(as) ||
+ 					reserved(as) ||
+@@ -355,6 +376,7 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
+ 					...(follow === true ? { follow: true } : {}),
+ 					...(pages === undefined ? {} : { pages }),
+ 					...(unless === undefined ? {} : { unless }),
++					...(tail === undefined ? {} : { tail }),
+ 				};
+ 			}
+ 		// what a read is skipped by is read at every look, before it
+@@ -520,8 +542,29 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
+ 		}
+ 		const windows = Object.values(reads).flatMap((read) => (read.pages === undefined ? [] : [read.pages]));
+ 		if (windows.length > 1) errors.push(`${where}: at most one read has pages`);
+-		if (follow !== undefined && windows.length > 0)
+-			follow = { ...follow, windows: Object.fromEntries(windows.map(({ list, by }) => [list, by])) };
++		const tails = Object.entries(reads).flatMap(([as, read]) =>
++			read.tail === undefined ? [] : [{ as, ...read.tail }],
++		);
++		for (const { as, total } of tails)
++			if (total !== undefined && reads[total.split(".")[0] ?? ""] === undefined)
++				errors.push(`${where}.reads.${as}.tail.total names ${total}, which no other read gives`);
++		// a tail is a window too: what leaves it from its old end was pushed off, and what comes back was there before
++		if (follow !== undefined && windows.length + tails.length > 0)
++			follow = {
++				...follow,
++				windows: Object.fromEntries([
++					...windows.map(({ list, by }) => [list, by]),
++					...tails.map(({ as, by }) => [as, by]),
++				]),
++				...(tails.some(({ total }) => total !== undefined)
++					? {
++							totals: {
++								...follow.totals,
++								...Object.fromEntries(tails.flatMap(({ as, total }) => (total === undefined ? [] : [[as, total]]))),
++							},
++						}
++					: {}),
++			};
+ 		objects[kind] = {
+ 			card: card as CardKind,
+ 			name: typeof name === "string" ? name : kind,
+@@ -538,6 +581,24 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
+ 	return errors.length > 0 ? { errors } : { objects };
+ }
+ 
++/** A read's `tail`, or undefined when it is not one: its order's field, and a count another read gives, if any. */
++function parseTail(value: unknown, as: string): Tail | undefined {
++	if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
++	const { by, total, ...rest } = value as { by?: unknown; total?: unknown };
++	if (Object.keys(rest).length > 0) return undefined;
++	if (typeof by !== "string" || !/^[A-Za-z0-9_]{1,64}$/.test(by) || reserved(by)) return undefined;
++	if (total === undefined) return { by };
++	if (
++		typeof total !== "string" ||
++		!PATH.test(total) ||
++		!total.includes(".") ||
++		total.startsWith(`${as}.`) ||
++		total.split(".").some(reserved)
++	)
++		return undefined;
++	return { by, total };
++}
++
+ /** A read's `pages`, or undefined when it is not one: a list inside the read's own answer, by plain keys. */
+ function parsePages(value: unknown, as: string): Pages | undefined {
+ 	if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+diff --git a/src/core/tail.ts b/src/core/tail.ts
+new file mode 100644
+index 0000000..8f2a80a
+--- /dev/null
++++ b/src/core/tail.ts
+@@ -0,0 +1,96 @@
++/**
++ * A list a service hands oldest first, by numbered pages and with no way to ask for the newest first (GitHub's reviews
++ * and comments; DESIGN.md "Watches"): a watch reads its tail, the last pages, so what came last is always in the
++ * reading. Where the list ends is the count the reading gives (a pull request's `comments`), or else how long the last
++ * look found it; a look reads at most `TAIL_PAGES` pages, so its cost is bounded however long the list grows.
++ */
++import { type Item, type Json, later, newestOf } from "./follow.ts";
++
++/** A read's `tail`: the field that orders its list (oldest first), and the path of the list's full count, if any. */
++export type Tail = { readonly by: string; readonly total?: string };
++
++/** The most pages one look reads of a tail. */
++export const TAIL_PAGES = 3;
++/** The most items a tail's page may ask for: what services that number their pages hand at most (GitHub's 100). */
++export const MAX_TAIL_PAGE = 100;
++
++/**
++ * The page a tail's reading starts at, for a list `length` long in pages of `size`: the one before its last, so the
++ * reading holds at least a page of the newest even when the last page holds one item. Unknown, the first.
++ */
++export const tailStart = (length: number | undefined, size: number): number =>
++	length === undefined || length <= 0 ? 1 : Math.max(1, Math.ceil(length / size) - 1);
++
++/** What a read of a tail found. */
++export type TailRead =
++	/** It reached the end: the newest items, oldest first, and how long the whole list is. */
++	| { readonly items: Item[]; readonly length: number }
++	/** It read `TAIL_PAGES` full pages without reaching the end: the list is at least `length` long. */
++	| { readonly behind: true; readonly length: number }
++	/** A page could not be read: what the service said. */
++	| { readonly failed: string; readonly until?: number };
++
++/**
++ * Read the tail of a list in pages of `size`, from where `length` puts it, fetching page `n` (1 first) with `page`.
++ * `exact` says `length` is the list's own count, just read: a short page before the last it implies is not the end (a
++ * page the service filtered). A list shorter than the count said (items deleted since) steps back a page while
++ * nothing is read yet. Never more than `TAIL_PAGES` pages.
++ */
++export async function readTail(
++	page: (n: number) => Promise<Item[] | { readonly failed: string; readonly until?: number }>,
++	size: number,
++	length: number | undefined,
++	exact: boolean,
++): Promise<TailRead> {
++	let last = exact && length !== undefined && length > 0 ? Math.ceil(length / size) : undefined;
++	let n = tailStart(length, size);
++	const items: Item[] = [];
++	/** How long the list is up to the last page read that held any. */
++	let end = 0;
++	for (let reads = 0; reads < TAIL_PAGES; reads++) {
++		const got = await page(n);
++		if (!Array.isArray(got)) return got;
++		if (got.length === 0 && items.length === 0 && n > 1) {
++			// nothing from here on: the list is shorter than its count said, by little (deleted since) or by much (a count
++			// that is wrong); halving the page reaches its start within the pages a look reads either way
++			n = Math.floor(n / 2);
++			last = n;
++			continue;
++		}
++		items.push(...got);
++		if (got.length > 0) end = (n - 1) * size + got.length;
++		if (got.length === 0 || (got.length < size && (last === undefined || n >= last))) return { items, length: end };
++		n++;
++	}
++	// the last page read (n - 1) was full: the list may go on past it, so the next look starts at that page
++	return { behind: true, length: (n - 1) * size + 1 };
++}
++
++/**
++ * Whether a watch diffing a tail's list from `before` (the reading it last saw) to `after` (the newest, `length` long
++ * as read) may miss items: `after` is not the whole list and does not reach back to the newest item `before` held, so
++ * what came between was in neither (more came between two looks than a look's pages, or than a tail's bytes, hold).
++ * A list `before` did not hold (its first look, or one not read then) misses none: it is no change of its items.
++ */
++export function missed(before: Json | undefined, after: Json | undefined, by: string, length: number | undefined) {
++	if (!Array.isArray(before) || !Array.isArray(after) || length === undefined || after.length >= length) return false;
++	const items = (list: Json[]) =>
++		list.filter((item): item is Item => item !== null && typeof item === "object" && !Array.isArray(item));
++	const newest = newestOf(items(before), by);
++	const oldest = items(after)[0]?.[by];
++	if (oldest === undefined) return false;
++	return newest === undefined || later(oldest, newest);
++}
++
++/** The newest of `items` (oldest first) whose JSON fits in `maxBytes`: the oldest leave first, never the newest. */
++export function newestWithin(items: readonly Item[], maxBytes: number): Item[] {
++	const kept: Item[] = [];
++	let bytes = 2;
++	for (let i = items.length - 1; i >= 0; i--) {
++		const size = JSON.stringify(items[i]).length + 1;
++		if (bytes + size > maxBytes && kept.length > 0) break;
++		bytes += size;
++		kept.push(items[i] as Item);
++	}
++	return kept.reverse();
++}
+diff --git a/src/core/watches.ts b/src/core/watches.ts
+index 883bcbc..7802c55 100644
+--- a/src/core/watches.ts
++++ b/src/core/watches.ts
+@@ -81,6 +81,7 @@ import {
+ import { Control } from "./routines.ts";
+ import { localTime, parseEvery } from "./schedule.ts";
+ import { context } from "./store.ts";
++import { missed, newestWithin, readTail } from "./tail.ts";
+ 
+ /** A watch's name, which is its file's: lowercase words joined by `-`, as an agent's. */
+ export const WATCH_NAME = AGENT_NAME;
+@@ -95,6 +96,8 @@ export const MAX_READING_BYTES = 512 * 1024;
+  * A window past it pushes off its oldest; a walk past it merges as far as it read.
+  */
+ export const MAX_WINDOW_BYTES = MAX_READING_BYTES / 2;
++/** The most bytes a tail read's list may hold (a pull request has two): a quarter of a reading, its oldest pushed off. */
++export const MAX_TAIL_BYTES = MAX_READING_BYTES / 4;
+ const DAY = 24 * 60 * 60_000;
+ /** The most changes one wake or tell names, in its line and the model's text; the rest are counted. */
+ export const CHANGES_SAID = 20;
+@@ -303,6 +306,16 @@ function listIn(answer: Json | undefined, path: string): Item[] | undefined {
+ 		: undefined;
+ }
+ 
++/** The count at `path` (a read's name, then plain keys) of `answers`, when it is a whole number. */
++function countAt(answers: Item, path: string | undefined): number | undefined {
++	let here: Json | undefined = answers;
++	for (const key of path?.split(".") ?? []) {
++		if (here === null || typeof here !== "object" || Array.isArray(here)) return undefined;
++		here = here[key];
++	}
++	return path !== undefined && typeof here === "number" && Number.isInteger(here) && here >= 0 ? here : undefined;
++}
++
+ /** A read's answer with the list at `path` (the read's name, then plain keys) put in its place. */
+ function withList(answer: Item, path: string, list: Item[]): Item {
+ 	const [key, ...rest] = path.split(".").slice(1);
+@@ -331,6 +344,11 @@ export type FollowedReading = {
+ 	made?: { [read: string]: Made };
+ 	/** When the reads of the newest look that read it had ended: what a read is sure of a minute after. */
+ 	through?: number;
++	/**
++	 * How long each tail read's list was when a look last read it (at least, when the look did not reach its end): where
++	 * the next look starts when the reading gives no count of its own.
++	 */
++	lengths?: { [read: string]: number };
+ };
+ 
+ /** How many earlier readings of a followed object are kept beside the newest. */
+@@ -988,6 +1006,8 @@ export function defineWatches(options: WatchesOptions) {
+ 					carry: boolean;
+ 			  }
+ 			| undefined;
++		/** How long each tail read's list was when it was last read. */
++		let lengthsBefore: { readonly [read: string]: number } = {};
+ 		await commit(async (tx) => {
+ 			const record = (await tx.doc(Watches)).watches[name];
+ 			// a done watch never looks again, whatever its authority says now
+@@ -1028,6 +1048,7 @@ export function defineWatches(options: WatchesOptions) {
+ 			// time), its baseline (only what changes after it is a change), the first look after a resume (what changed
+ 			// while paused is diffed, not an older reading), and the owner's Check now, as they asked.
+ 			const kept = (await tx.doc(Followed)).objects[found.key];
++			lengthsBefore = { ...kept?.lengths };
+ 			const settled = record?.burst === undefined ? undefined : record.burst + settleOf(found.kind.follow);
+ 			if (
+ 				click === undefined &&
+@@ -1070,7 +1091,8 @@ export function defineWatches(options: WatchesOptions) {
+ 		if (done) return { outcome: "held", why: "done" };
+ 		if (resolved === undefined) return why === "gone" ? { outcome: "gone" } : { outcome: "failed", why: why ?? "" };
+ 		const { watch, chat, ref, kind, connection, account, me, key, stamp, source, reads, schemas, seen } = resolved;
+-		if (options.read === undefined) return await failing("banda cannot read for a watch here");
++		const reader = options.read;
++		if (reader === undefined) return await failing("banda cannot read for a watch here");
+ 		const answers: Item = {};
+ 		const unanswered: string[] = [];
+ 		let failed: string | undefined;
+@@ -1086,11 +1108,15 @@ export function defineWatches(options: WatchesOptions) {
+ 		/** The reads an `unless` guards this look carried forward, and when it made the others. */
+ 		const carried: string[] = [];
+ 		const made: { [read: string]: Made } = {};
+-		// the paged read first: while its walk has not reached the window, the others wait for the look that merges; a read
+-		// an `unless` guards last, after the read its `same` is in
+-		const rank = (read: ObjectRead) => (read.pages !== undefined ? 0 : read.unless === undefined ? 1 : 2);
++		/** How long each tail read's list was found to be. */
++		const lengths: { [read: string]: number } = {};
++		// the paged read first: while its walk has not reached the window, the others wait for the look that merges; the
++		// tail reads and a read an `unless` guards last, after the reads that give their counts and their `same`
++		const rank = (read: ObjectRead) =>
++			read.pages !== undefined ? 0 : read.tail !== undefined || read.unless !== undefined ? 2 : 1;
+ 		const order = Object.entries(shared === undefined ? reads : {}).sort(([, a], [, b]) => rank(a) - rank(b));
+ 		for (const [as, read] of order) {
++			// first whether its kept answer may be carried; then, when it is read, the tail's own pages
+ 			if (read.unless !== undefined && base !== undefined) {
+ 				const last = base.answers[as];
+ 				if (base.carry && last !== undefined && mayCarry(read.unless, answers, base.answers, base.made[as], now)) {
+@@ -1099,10 +1125,62 @@ export function defineWatches(options: WatchesOptions) {
+ 					continue;
+ 				}
+ 			}
++			if (read.tail !== undefined) {
++				const total = countAt(answers, read.tail.total);
++				const tailed = await readTail(
++					async (page) => {
++						const answer = await reader(
++							connection.name,
++							account === "" ? undefined : account,
++							read.tool,
++							{ ...readArgs(read, ref, schemas[as]), page },
++							{ chat, ref, stamp },
++							ctx,
++						);
++						if ("failed" in answer) return answer;
++						try {
++							const list = JSON.parse(answer.text) as Json;
++							if (Array.isArray(list) && list.every((item) => item !== null && typeof item === "object"))
++								return list as Item[];
++						} catch {}
++						return { failed: `${connection.service} did not return a list.` };
++					},
++					Number(read.args.perPage),
++					total ?? lengthsBefore[as],
++					total !== undefined,
++				);
++				if ("failed" in tailed) {
++					if ("until" in tailed && tailed.until !== undefined) retry = Math.max(retry ?? 0, tailed.until);
++					if (read.optional) {
++						unanswered.push(as);
++						continue;
++					}
++					failed = tailed.failed;
++					break;
++				}
++				lengths[as] = tailed.length;
++				// past the pages a look reads, its end was not reached: the list stands as last read, and the watch is
++				// behind until a look reaches it (only a look after the baseline is behind)
++				if ("behind" in tailed) {
++					unanswered.push(as);
++					gapped = true;
++					continue;
++				}
++				const list = newestWithin(tailed.items, MAX_TAIL_BYTES);
++				bytes += JSON.stringify(list).length;
++				if (bytes > MAX_READING_BYTES) {
++					failed = "The reading was too large.";
++					break;
++				}
++				answers[as] = list;
++				// a complete tail read is made: never one refused, nor one behind (its list stands as last read)
++				if (read.unless !== undefined) made[as] = madeNow(read.unless, answers, base, now);
++				continue;
++			}
+ 			const pages = paging === undefined ? undefined : read.pages;
+ 			const asked =
+ 				pages === undefined || paging === undefined ? {} : pageArgs(paging.walk, paging.window, pages.by, paging.size);
+-			const answer = await options.read(
++			const answer = await reader(
+ 				connection.name,
+ 				account === "" ? undefined : account,
+ 				read.tool,
+@@ -1269,6 +1347,17 @@ export function defineWatches(options: WatchesOptions) {
+ 				else delete stored.made;
+ 				stored.through = through;
+ 			}
++			const counted = { ...kept?.lengths, ...lengths };
++			if (stored !== undefined && Object.keys(counted).length > 0 && canonical(counted) !== canonical(stored.lengths))
++				stored.lengths = counted;
++			// a tail's newest reading that does not reach back to what this watch last saw of it: what came between was
++			// never read, by this look or by the other watch's whose reading it shares, and may be missing
++			const seenReading = seen === undefined || kept === undefined ? undefined : readingAt(kept, seen);
++			const missing =
++				seenReading !== undefined &&
++				Object.entries(reads).some(
++					([as, read]) => read.tail !== undefined && missed(seenReading[as], after[as], read.tail.by, counted[as]),
++				);
+ 			// the owner's click is taken in the commit that keeps what it looked at: a kill before leaves it to look again
+ 			const taken = async () => {
+ 				if (click === undefined) return;
+@@ -1292,7 +1381,7 @@ export function defineWatches(options: WatchesOptions) {
+ 				click: click !== undefined,
+ 				running: last !== undefined && last.state.status !== "terminal",
+ 				every,
+-				gapped,
++				gapped: gapped || missing,
+ 			});
+ 			const copy = (held: Held) => ({ wake: [...held.wake], tell: [...held.tell], ids: [...held.ids] });
+ 			switch (decision.does) {
+diff --git a/src/server/capabilities.ts b/src/server/capabilities.ts
+index cd25197..73e8d95 100644
+--- a/src/server/capabilities.ts
++++ b/src/server/capabilities.ts
+@@ -212,6 +212,15 @@ const unpaged = (args: JsonObject): JsonObject => {
+ 	return plain(oldest) && plain(cursor) ? rest : args;
+ };
+ 
++/**
++ * A tail read's arguments without the page a watch asks for (`page`), which the daemon fills; a page that is not a
++ * whole number from 1 leaves an argument that matches no read.
++ */
++const untailed = (args: JsonObject): JsonObject => {
++	const { page, ...rest } = args;
++	return typeof page === "number" && Number.isInteger(page) && page >= 1 && page <= 100_000 ? rest : args;
++};
++
+ /** What a server says names the owner, as one plain line: no control or invisible characters, a hundred at most. */
+ const plainId = (value: unknown) =>
+ 	(typeof value === "string" || typeof value === "number" ? String(value) : "")
+@@ -2690,7 +2699,7 @@ export function openCapabilities(options: CapabilityOptions) {
+ 					(read) =>
+ 						read.tool === tool &&
+ 						canonical(readArgs(read, authority.ref, doc.connections[name]?.tools[tool]?.schema)) ===
+-							canonical(read.pages === undefined ? args : unpaged(args)),
++							canonical(read.pages !== undefined ? unpaged(args) : read.tail !== undefined ? untailed(args) : args),
+ 				)
+ 			)
+ 				return undefined;
+diff --git a/test/fault/watch-scenario.ts b/test/fault/watch-scenario.ts
+index 1b66d27..2c9d892 100644
+--- a/test/fault/watch-scenario.ts
++++ b/test/fault/watch-scenario.ts
+@@ -112,7 +112,11 @@ export const byMethod =
+ 	(tool, args, step) => {
+ 		if (!["pull_request_read", "issue_read"].includes(tool)) return failure("not that");
+ 		const answer = worldAt(step)[String(args.method)];
+-		return answer === undefined ? failure(`no ${String(args.method)}`) : answer;
++		if (answer === undefined) return failure(`no ${String(args.method)}`);
++		// a list asked by numbered page (a tail read's) is that page of it, as GitHub hands it
++		if (!Array.isArray(answer) || typeof args.page !== "number") return answer;
++		const size = typeof args.perPage === "number" ? args.perPage : 30;
++		return answer.slice((args.page - 1) * size, args.page * size);
+ 	};
+ 
+ /** A watch file on `object` as `account`, with `ask` below. */
+diff --git a/test/follow.test.ts b/test/follow.test.ts
+index 18a6dcc..dc8fd37 100644
+--- a/test/follow.test.ts
++++ b/test/follow.test.ts
+@@ -262,16 +262,16 @@ describe("following an object", () => {
+ 		expect(sort(PR, undefined, reading(PR, before), reading(PR, after)).map((each) => each.change.kind)).toContain(
+ 			"removed",
+ 		);
+-		// the comments read is one page of a hundred: the pull request's own count says whether the page is whole
++		// the comments read is the newest pages of more: the pull request's own count says whether the reading is whole
+ 		const comment = (id: number) => ({ id, user: { login: "ana" }, body: `c${id}` });
+ 		const base = open() as { [key: string]: Json };
+ 		const pr = base.pr as { [key: string]: Json };
+-		const full = { ...base, comments: [comment(1), comment(2)], pr: { ...pr, review_comments: 3 } };
++		const full = { ...base, comments: [comment(1), comment(2)], pr: { ...pr, comments: 3 } };
+ 		const short = { ...full, comments: [comment(1)] };
+ 		expect(sort(PR, undefined, reading(PR, full), reading(PR, short)).map((each) => each.change.kind)).not.toContain(
+ 			"removed",
+ 		);
+-		const whole = { ...short, pr: { ...pr, review_comments: 1 } };
++		const whole = { ...short, pr: { ...pr, comments: 1 } };
+ 		expect(sort(PR, undefined, reading(PR, full), reading(PR, whole)).map((each) => each.change.kind)).toContain(
+ 			"removed",
+ 		);
+diff --git a/test/watch-tail-conditional.test.ts b/test/watch-tail-conditional.test.ts
+new file mode 100644
+index 0000000..0394d0b
+--- /dev/null
++++ b/test/watch-tail-conditional.test.ts
+@@ -0,0 +1,134 @@
++/**
++ * #100 (tail reads) with #102 (conditional reads), together: a read that has both a `tail` and an `unless` is carried
++ * forward only after a complete tail read, never after one that is `behind` (its end past the pages a look reads) or
++ * refused. Here a pull request whose `updated_at` never moves has a thousand reviews, ten pages: the baseline and the
++ * looks after must go on catching up three pages a look, each asking GitHub, until one reaches the end; only then may a
++ * look carry the reviews.
++ */
++import { describe, expect, it } from "vitest";
++import type { Item } from "../src/core/follow.ts";
++import { Faults } from "./fault/faults.ts";
++import { type Answer, failure, NOW, runsEnded, watchInvariants, watchScenario } from "./fault/watch-scenario.ts";
++import { tempHome } from "./helpers.ts";
++
++const MINUTE = 60_000;
++const reviews = (n: number, first = 10_001): Item[] =>
++	Array.from({ length: n }, (_, i) => ({ id: first + i, user: { login: `r${first + i}` }, state: "COMMENTED" }));
++
++/** GitHub as #100's tests fake it, its pull request's `updated_at` constant: the pages each look asked, by method. */
++const constant =
++	(
++		all: Item[] | ((step: number) => Item[]),
++		asked: { [method: string]: number[] }[],
++		updated = (_step: number) => "2026-11-02T08:00:00Z",
++	): Answer =>
++	(tool, args, step) => {
++		if (tool !== "pull_request_read") return failure("not that");
++		const method = String(args.method);
++		const look = asked.at(-1) as { [method: string]: number[] };
++		const n = Number(args.page ?? 1);
++		look[method] = [...(look[method] ?? []), n];
++		if (method === "get") {
++			const pr: Item = {
++				number: 142,
++				title: "Keep objects as data",
++				state: "open",
++				draft: false,
++				merged: false,
++				user: { login: "ana" },
++				head: { ref: "objects", sha: "a1" },
++				updated_at: updated(step),
++				html_url: "https://github.com/acme/banda/pull/142",
++			};
++			return pr;
++		}
++		if (method === "get_check_runs") {
++			const checks: Item = {
++				total_count: 1,
++				check_runs: [{ id: 1, name: "unit", status: "completed", conclusion: "success" }],
++			};
++			return checks;
++		}
++		const size = Number(args.perPage ?? 30);
++		if (method === "get_reviews") return (typeof all === "function" ? all(step) : all).slice((n - 1) * size, n * size);
++		if (method === "get_comments") return [];
++		return failure(`no ${method}`);
++	};
++
++describe("a tail read with an unless", () => {
++	it("a thousand reviews and updated_at never moving: every look catches up three pages until the end, then carries", async () => {
++		const asked: { [method: string]: number[] }[] = [];
++		const behind: boolean[] = [];
++		const looks = 8;
++		const summary = await watchScenario(await tempHome(), new Faults(), {
++			tasks: false,
++			answer: constant(reviews(1000), asked),
++			clicks: Array.from({ length: looks }, () => undefined),
++			at: (step) => NOW + (step - 1) * 5 * MINUTE,
++			act: async (_step, { harness, core }) => {
++				await runsEnded(harness);
++				asked.push({});
++				await core.lookWatch(harness, "banda-142");
++				const { Watches } = await import("../src/core/watches.ts");
++				const { context } = await import("../src/core/store.ts");
++				behind.push((await harness.snapshot(Watches, context))?.watches["banda-142"]?.behind !== undefined);
++			},
++		});
++		const pages = asked.map((look) => look.get_reviews ?? []);
++		// the baseline and the four looks after it catch up three pages a look, asking GitHub at every one (none carried
++		// while behind, though `updated_at` is as kept and the reading before had it); the fifth reaches the end, a
++		// complete read, and is made
++		expect(pages.slice(0, 5)).toEqual([
++			[1, 2, 3],
++			[3, 4, 5],
++			[5, 6, 7],
++			[7, 8, 9],
++			[9, 10, 11],
++		]);
++		expect(pages.slice(0, 5).every((each) => each.length > 0)).toBe(true);
++		// once a look reached the end, a later look with `updated_at` as kept carries the reviews, asking nothing
++		expect(pages.slice(5).some((each) => each.length === 0)).toBe(true);
++		// (the row's "behind" stays until a wake without a gap, as before either PR: this world never wakes)
++		console.log(`PAGES ${JSON.stringify(pages)} BEHIND ${JSON.stringify(behind)}`);
++		expect(summary.wakes).toEqual([]);
++		expect(summary.tells).toEqual([]);
++		expect(watchInvariants(summary)).toEqual([]);
++	}, 60_000);
++	it("reused reviews, then a burst past a look's pages with updated_at moving once: every look catches up, none reuses the old list", async () => {
++		// 150 reviews, read whole, confirmed and carried; at step 4, 700 more arrive and `updated_at` moves once, then
++		// stays. A look's three pages do not reach the end: it is behind, its list stands as last read (the old 150).
++		// Were a behind read taken as made, the next look would find it sure (the reading before had the same
++		// `updated_at`) and carry the old 150 for up to the read's period, the 700 unseen. Made only when whole, every
++		// look catches up until one reaches the end, and the new reviews wake.
++		const asked: { [method: string]: number[] }[] = [];
++		const looks = 9;
++		const summary = await watchScenario(await tempHome(), new Faults(), {
++			tasks: false,
++			answer: constant(
++				(step) => (step >= 4 ? reviews(850) : reviews(150)),
++				asked,
++				(step) => (step >= 4 ? "2026-11-02T09:15:00Z" : "2026-11-02T08:00:00Z"),
++			),
++			clicks: Array.from({ length: looks }, () => undefined),
++			at: (step) => NOW + (step - 1) * 5 * MINUTE,
++			act: async (_step, { harness, core }) => {
++				await runsEnded(harness);
++				asked.push({});
++				await core.lookWatch(harness, "banda-142");
++			},
++		});
++		const pages = asked.map((look) => look.get_reviews ?? []);
++		console.log(`PAGES ${JSON.stringify(pages)}`);
++		// the baseline and its confirmation read the 150 whole; the third look carries them
++		expect(pages.slice(0, 3).map((each) => each.length > 0)).toEqual([true, true, false]);
++		// from the burst until a look reaches the end of the 850, every look asks GitHub for reviews
++		const reached = pages.findIndex((each, i) => i >= 3 && each.includes(9));
++		expect(reached).toBeGreaterThan(3);
++		expect(pages.slice(3, reached + 1).every((each) => each.length > 0)).toBe(true);
++		// and once whole, a look with `updated_at` as kept carries them again
++		expect(pages.slice(reached + 1).some((each) => each.length === 0)).toBe(true);
++		// the new reviews woke the agent
++		expect(summary.wakes.length).toBeGreaterThan(0);
++		expect(watchInvariants(summary)).toEqual([]);
++	}, 60_000);
++});
+diff --git a/test/watch-tail.browser.test.ts b/test/watch-tail.browser.test.ts
+new file mode 100644
+index 0000000..168cb5a
+--- /dev/null
++++ b/test/watch-tail.browser.test.ts
+@@ -0,0 +1,277 @@
++/**
++ * A pull request with more reviews and comments than a page holds, followed through the app against a throwaway daemon
++ * and a fake GitHub that pages them oldest first as GitHub does (#34): the newest of each wakes the agent's chat, the
++ * window moving on or sliding back never says one is gone, and every look reads a bounded number of pages. The store
++ * and the requests GitHub got are what is asserted; the screenshots (`BANDA_WATCHES_SHOTS`) are for the eye.
++ */
++import { mkdir, writeFile } from "node:fs/promises";
++import { join } from "node:path";
++import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
++import { type ConversationId, createRegistry } from "@earendil-works/pi-durable";
++import { expect, it } from "vitest";
++import type { Item } from "../src/core/follow.ts";
++import { context, openStore } from "../src/core/store.ts";
++import { Routes } from "../src/core/turn.ts";
++import { Followed, TELL, WAKE, type WatchWakeData } from "../src/core/watches.ts";
++import { startDaemon } from "../src/daemon.ts";
++import { readDaemonFile } from "../src/home.ts";
++import type { CapabilitiesView, WatchView } from "../src/server/api.ts";
++import { githubObjectDefinition, startGithubObjects } from "./fixtures/github-objects.ts";
++import { hostBox } from "./fixtures/host-box.ts";
++import { echoModels, skipShippedSkills, tempHome, webServer } from "./helpers.ts";
++import { hasChrome, withPage } from "./smoke/chrome.ts";
++
++const SHOTS = process.env.BANDA_WATCHES_SHOTS;
++const LINK = "https://github.com/acme/banda/pull/142";
++const REPLY = "Read the newest review and comment on banda#142.";
++
++const visible = "el.getClientRects().length > 0";
++const shows = (text: string) => `document.body.innerText.includes(${JSON.stringify(text)})`;
++/** A feed line of the watch: the pull request as a reference, then the changes in the kind's words. */
++const line = (...words: string[]) =>
++	`[...document.querySelectorAll('p')].some(el => ${visible} && el.textContent.includes('Keep objects as data: ') && ${words
++		.map((word) => `el.textContent.includes(${JSON.stringify(word)})`)
++		.join(" && ")})`;
++
++const comments = (from: number, to: number, login?: string): Item[] =>
++	Array.from({ length: to - from + 1 }, (_, i) => ({
++		id: from + i,
++		user: { login: login ?? `c${from + i}` },
++		body: `comment ${from + i}`,
++		created_at: "2026-11-12T09:00:00Z",
++	}));
++const reviews = (from: number, to: number): Item[] =>
++	Array.from({ length: to - from + 1 }, (_, i) => ({
++		id: from + i,
++		user: { login: `r${from + i}` },
++		state: "COMMENTED",
++	}));
++
++/**
++ * GitHub at each step: 160 comments and 160 reviews; then bob's comment and carol's approval, the newest; then a
++ * hundred comments more from dana, so the reading moves on a page; then the seventy newest deleted, so it starts
++ * again at the first page and the hundred oldest come back into it.
++ */
++const BOB = { id: 161, user: { login: "bob" }, body: "The newest comment", created_at: "2026-11-12T10:00:00Z" };
++const CAROL = { id: 10_161, user: { login: "carol" }, state: "APPROVED" };
++function world(step: number): { comments: Item[]; reviews: Item[] } {
++	const all = [...comments(1, 160), BOB, ...comments(162, 261, "dana")];
++	const count = [160, 161, 261, 191][Math.min(step, 3)] ?? 160;
++	return { comments: all.slice(0, count), reviews: [...reviews(10_001, 10_160), ...(step >= 1 ? [CAROL] : [])] };
++}
++
++for (const width of [390, 1440])
++	it.skipIf(!hasChrome())(
++		`more reviews and comments than a page: the newest wake and none is said gone, through the app at ${width}`,
++		async () => {
++			const phone = width < 768;
++			const home = await tempHome();
++			if (SHOTS !== undefined) await mkdir(SHOTS, { recursive: true });
++			let step = 0;
++			/** Each page GitHub was asked, by step and method. */
++			const asked: { step: number; method: string; page: number }[] = [];
++			const github = await startGithubObjects({ auth: "oauth" });
++			github.user = "bandarra";
++			github.onCall = async (tool, args) => {
++				if (tool !== "pull_request_read") return { text: "not in this world", isError: true };
++				const at = world(step);
++				const method = String(args.method);
++				const paged = (items: Item[]) => {
++					const size = Number(args.perPage ?? 30);
++					const page = Number(args.page ?? 1);
++					asked.push({ step, method, page });
++					return { text: JSON.stringify(items.slice((page - 1) * size, page * size)) };
++				};
++				if (method === "get_comments") return paged(at.comments);
++				if (method === "get_reviews") return paged(at.reviews);
++				if (method === "get_check_runs")
++					return {
++						text: JSON.stringify({
++							total_count: 1,
++							check_runs: [{ id: 1, name: "unit", status: "completed", conclusion: "success" }],
++						}),
++					};
++				if (method === "get")
++					return {
++						text: JSON.stringify({
++							number: 142,
++							title: "Keep objects as data",
++							state: "open",
++							draft: false,
++							merged: false,
++							user: { login: "ana" },
++							head: { ref: "objects", sha: "a1" },
++							additions: 42,
++							deletions: 6,
++							comments: at.comments.length,
++							html_url: LINK,
++						}),
++					};
++				return { text: `no ${method}`, isError: true };
++			};
++			const shipped = join(home, "shipped");
++			await mkdir(shipped, { recursive: true });
++			await writeFile(join(shipped, "github.json"), githubObjectDefinition(github.url));
++			await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
++			const models = createModels();
++			const faux = fauxProvider();
++			models.setProvider(faux.provider);
++			faux.setResponses(
++				Array.from({ length: 10 }, () => [
++					() => fauxAssistantMessage([fauxToolCall("message_user", { text: REPLY })], { stopReason: "toolUse" }),
++					() => fauxAssistantMessage(""),
++				]).flat(),
++			);
++			const daemon = await startDaemon({ home, port: 0, models, box: hostBox(home), shipped, log: () => {} });
++			let closed = false;
++			const base = `http://127.0.0.1:${daemon.port}`;
++			const token = (await readDaemonFile(home))!.token!;
++			const server = await webServer({
++				server: {
++					proxy: {
++						"/api": { target: base, changeOrigin: true, headers: { origin: base } },
++						"^/(?:icon(?:-maskable)?\\.svg|icon-(?:192|512|maskable-512)\\.png|apple-touch-icon\\.png|manifest\\.webmanifest)$":
++							{ target: base, changeOrigin: true },
++					},
++				},
++			});
++			const api = async <T>(path: string, method = "GET", body?: object): Promise<T> => {
++				const response = await fetch(`${base}/api${path}`, {
++					method,
++					headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
++					...(body === undefined ? {} : { body: JSON.stringify(body) }),
++				});
++				if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);
++				return response.json() as Promise<T>;
++			};
++			const connection = async () =>
++				(await api<CapabilitiesView>("/capabilities")).connections.find((each) => each.name === "github");
++			/** Pages asked of `method` at `at`. */
++			const pages = (at: number, method: string) =>
++				asked.filter((each) => each.step === at && each.method === method).map((each) => each.page);
++			try {
++				await skipShippedSkills(daemon.port, token);
++				await api("/agents/mara", "PUT", {
++					base: null,
++					text: "---\nname: Mara\ndescription: Follows things\nconnections: [github]\n---\nFollow things for the owner.\n",
++				});
++				await api("/capabilities/connections/github/add", "POST", {});
++				const started = await api<{ url: string }>("/capabilities/connections/github/signin", "POST", {
++					agent: "mara",
++				});
++				const consent = await fetch(started.url, { redirect: "manual" });
++				await fetch(consent.headers.get("location") as string, { redirect: "manual" });
++				while ((await connection())?.state !== "connected") await new Promise((resolve) => setTimeout(resolve, 50));
++
++				// the owner follows it; its first look is the baseline: 160 of each, the newest in it, no wake
++				const made = await api<{ name: string }>("/watches", "POST", { agent: "mara", object: LINK });
++				const name = made.name;
++				const check = async (key: string) =>
++					(
++						await api<{ looked: unknown; watches: WatchView[] }>(`/watches/${name}/check`, "POST", { key })
++					).watches.find((each) => each.name === name);
++				// the baseline's look runs on its own; a look now waits for it, and changes nothing (the world has not moved)
++				const deadline = Date.now() + 20_000;
++				while (pages(0, "get_reviews").length < 2) {
++					// a tail read the daemon refuses (its page not taken as the definition's) never reaches GitHub
++					if (Date.now() > deadline) throw new Error(`the baseline read no pages of reviews: ${JSON.stringify(asked)}`);
++					await new Promise((resolve) => setTimeout(resolve, 20));
++				}
++				expect((await check("k0"))?.saw ?? []).toEqual([]);
++				expect(pages(0, "get_comments")).toEqual([1, 2, 1, 2]);
++				expect(pages(0, "get_reviews")).toEqual([1, 2, 1, 2]);
++
++				await withPage(`${server.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
++					const shot = async (shotName: string) => {
++						expect(
++							await page.run("document.documentElement.scrollWidth <= innerWidth"),
++							`${shotName}: no sideways scroll`,
++						).toBe(true);
++						expect(page.errors(), `${shotName}: no page errors`).toEqual([]);
++						await page.until(
++							"document.getAnimations().every(a => a.playState !== 'running' || !(a.effect?.getComputedTiming().endTime < 2000))",
++						);
++						if (SHOTS !== undefined) await page.shoot(join(SHOTS, `tail-${width}-${shotName}.png`));
++					};
++					await page.until(shows("Mara"));
++					await page.run(`location.hash='#/a/mara'`);
++
++					// the newest comment and review: one wake, for them alone
++					step = 1;
++					const first = await check("k1");
++					expect(first?.behind).toBeUndefined();
++					await page.until(line("bob commented", "carol approved"));
++					await page.until(shows(REPLY));
++					await shot("1-newest-wake");
++					expect(pages(1, "get_comments")).toEqual([1, 2]);
++					expect(pages(1, "get_reviews")).toEqual([1, 2]);
++
++					// a hundred more: the reading moves on to the last pages, its oldest hundred pushed off, not gone
++					step = 2;
++					const second = await check("k2");
++					expect(second?.behind).toBeUndefined();
++					await page.until(line("dana commented"));
++					await shot("2-window-moved");
++					expect(pages(2, "get_comments")).toEqual([2, 3]);
++
++					// the seventy newest deleted: the reading starts at the first page again, and nothing wakes or tells
++					step = 3;
++					const third = await check("k3");
++					expect(third?.behind).toBeUndefined();
++					expect(pages(3, "get_comments")).toEqual([1, 2]);
++					if (!phone) await page.until(shows("Keep objects as data"));
++					await shot("3-window-slid-back");
++					expect(asked.length).toBeLessThanOrEqual(4 * (2 + 3 + 3));
++				});
++				await server.close();
++				await daemon.close();
++				closed = true;
++
++				// the store, as the daemon left it: what woke, what told, and what the reading holds
++				const harness = await openStore(home, { models: echoModels().models, registry: createRegistry() });
++				try {
++					const routes = (await harness.snapshot(Routes, context))?.routes ?? {};
++					const wakes: WatchWakeData[] = [];
++					const tells: WatchWakeData[] = [];
++					for (const { chat } of Object.values(routes) as { chat: number }[]) {
++						const entries = await (await harness.conversation(chat as ConversationId, context))!.entries(
++							{ order: "ascending" },
++							1000,
++							undefined,
++							context,
++						);
++						for (const entry of entries.items) {
++							if (entry.kind === WAKE) wakes.push(entry.data as unknown as WatchWakeData);
++							if (entry.kind === TELL) tells.push(entry.data as unknown as WatchWakeData);
++						}
++					}
++					expect(wakes.map((wake) => [...wake.changes].sort())).toEqual([
++						["bob commented", "carol approved"],
++						["dana commented"],
++					]);
++					expect(wakes.some((wake) => wake.gap === true)).toBe(false);
++					expect(tells).toEqual([]);
++					const readings = Object.values((await harness.snapshot(Followed, context))?.objects ?? {});
++					expect(readings).toHaveLength(1);
++					const reading = readings[0]!;
++					const ids = (list: unknown) => (list as Item[]).map((item) => item.id);
++					// the newest reading: the first two pages of 191 comments, every review (161) from the first page on
++					expect(ids(reading.answers.comments)).toEqual([...Array.from({ length: 191 }, (_, i) => i + 1)]);
++					expect(ids(reading.answers.reviews)).toHaveLength(161);
++					expect(ids(reading.answers.reviews).at(-1)).toBe(10_161);
++					expect(reading.lengths).toEqual({ comments: 191, reviews: 161 });
++					// the reading before it held the window moved on: 101..261, never the first hundred
++					const before = reading.earlier?.at(-1)?.answers.comments as Item[] | undefined;
++					expect(before?.[0]?.id).toBe(101);
++					expect(before?.at(-1)?.id).toBe(261);
++				} finally {
++					await harness.close(context).catch(() => {});
++				}
++			} finally {
++				await server.close().catch(() => {});
++				if (!closed) await daemon.close();
++				await github.close();
++			}
++		},
++		120000,
++	);
+diff --git a/test/watch-tail.test.ts b/test/watch-tail.test.ts
+new file mode 100644
+index 0000000..2b64815
+--- /dev/null
++++ b/test/watch-tail.test.ts
+@@ -0,0 +1,303 @@
++import { describe, expect, it } from "vitest";
++import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
++import { type Item, sort } from "../src/core/follow.ts";
++import { parseObjects } from "../src/core/objects.ts";
++import { missed, newestWithin, readTail, TAIL_PAGES, tailStart } from "../src/core/tail.ts";
++import { Faults } from "./fault/faults.ts";
++import { type Answer, failure, watchInvariants, watchScenario } from "./fault/watch-scenario.ts";
++import { tempHome } from "./helpers.ts";
++
++/** A list of `n` items, ids from `first`, oldest first, read in pages of `size` as GitHub hands them. */
++const list = (n: number, first = 1): Item[] => Array.from({ length: n }, (_, i) => ({ id: first + i }));
++const pager = (items: readonly Item[], size: number) => {
++	const asked: number[] = [];
++	return {
++		asked,
++		page: async (n: number) => {
++			asked.push(n);
++			return items.slice((n - 1) * size, n * size);
++		},
++	};
++};
++const ids = (items: readonly Item[]) => items.map((item) => item.id);
++
++describe("a tail read", () => {
++	it("starts a page before the last, so it always holds at least a page of the newest", () => {
++		expect(tailStart(undefined, 100)).toBe(1);
++		expect(tailStart(0, 100)).toBe(1);
++		expect(tailStart(150, 100)).toBe(1);
++		expect(tailStart(200, 100)).toBe(1);
++		expect(tailStart(201, 100)).toBe(2);
++		expect(tailStart(250, 100)).toBe(2);
++	});
++
++	it("reads 150 from the start in two pages, and knows its length", async () => {
++		const { asked, page } = pager(list(150), 100);
++		const read = await readTail(page, 100, undefined, false);
++		expect(asked).toEqual([1, 2]);
++		expect("items" in read && ids(read.items)).toEqual(ids(list(150)));
++		expect(read).toMatchObject({ length: 150 });
++	});
++
++	it("jumps to the last pages by the list's own count", async () => {
++		const { asked, page } = pager(list(250), 100);
++		const read = await readTail(page, 100, 250, true);
++		expect(asked).toEqual([2, 3]);
++		expect("items" in read && ids(read.items)).toEqual(ids(list(150, 101)));
++		expect(read).toMatchObject({ length: 250 });
++	});
++
++	it("reads on past a count that is behind (comments came since it was read)", async () => {
++		const { asked, page } = pager(list(301), 100);
++		const read = await readTail(page, 100, 300, true);
++		expect(asked).toEqual([2, 3, 4]);
++		expect("items" in read && read.items.at(-1)?.id).toBe(301);
++	});
++
++	it("a short page before the last the count implies is not the end (the service filtered it)", async () => {
++		const items = list(250).filter((item) => item.id !== 150);
++		const asked: number[] = [];
++		// the service keeps positions: page 2 holds 99 though page 3 follows
++		const page = async (n: number) => {
++			asked.push(n);
++			return list(250)
++				.slice((n - 1) * 100, n * 100)
++				.filter((item) => item.id !== 150);
++		};
++		const read = await readTail(page, 100, 250, true);
++		expect(asked).toEqual([2, 3]);
++		expect("items" in read && read.items.length).toBe(items.length - 100);
++	});
++
++	it("steps back when the list got shorter than its count said, by little or by much", async () => {
++		const { asked, page } = pager(list(150), 100);
++		const read = await readTail(page, 100, 350, true);
++		expect(asked).toEqual([3, 1, 2]);
++		expect("items" in read && ids(read.items)).toEqual(ids(list(150)));
++		expect(read).toMatchObject({ length: 150 });
++		// a count far past the list (wrong, not stale): halving reaches its start within a look's pages
++		const far = pager(list(50), 100);
++		const wrong = await readTail(far.page, 100, 450, true);
++		expect(far.asked).toEqual([4, 2, 1]);
++		expect(wrong).toMatchObject({ length: 50 });
++	});
++
++	it("a watch may miss items only when the newest reading is not whole and does not reach back to what it saw", () => {
++		const of = (from: number, to: number) => list(to - from + 1, from);
++		// the newest reading overlaps what the watch saw: nothing between was unread
++		expect(missed(of(101, 250), of(151, 300), "id", 300)).toBe(false);
++		// more came between two looks than its pages hold
++		expect(missed(of(101, 250), of(301, 500), "id", 500)).toBe(true);
++		// a whole list misses nothing, whatever it no longer holds
++		expect(missed(of(101, 250), of(1, 40), "id", 40)).toBe(false);
++		// none before, and the newest reading starts past the list's first items
++		expect(missed([], of(101, 300), "id", 300)).toBe(true);
++		// a list the reading before did not hold, or a length never learned, is no change of its items
++		expect(missed(undefined, of(101, 300), "id", 300)).toBe(false);
++		expect(missed(of(1, 10), of(101, 300), "id", undefined)).toBe(false);
++	});
++
++	it("never reads more than its pages a look: a list longer says where the next look starts", async () => {
++		const items = list(1000);
++		let length: number | undefined;
++		const looks: number[][] = [];
++		for (let look = 0; look < 10; look++) {
++			const { asked, page } = pager(items, 100);
++			const read = await readTail(page, 100, length, false);
++			looks.push(asked);
++			expect(asked.length).toBeLessThanOrEqual(TAIL_PAGES);
++			if ("failed" in read) throw new Error(read.failed);
++			length = read.length;
++			if ("items" in read) {
++				expect(read.items.at(-1)?.id).toBe(1000);
++				break;
++			}
++		}
++		expect(looks).toEqual([
++			[1, 2, 3],
++			[3, 4, 5],
++			[5, 6, 7],
++			[7, 8, 9],
++			[9, 10, 11],
++		]);
++		expect(length).toBe(1000);
++	});
++
++	it("a page it cannot read is said as the service said it", async () => {
++		const read = await readTail(async () => ({ failed: "Bad credentials", until: 5 }), 100, undefined, false);
++		expect(read).toEqual({ failed: "Bad credentials", until: 5 });
++	});
++
++	it("keeps the newest within its bytes, the oldest pushed off first", () => {
++		const items = list(10).map((item) => ({ ...item, body: "x".repeat(100) }));
++		const kept = newestWithin(items, 400);
++		expect(ids(kept)).toEqual([8, 9, 10]);
++		expect(ids(newestWithin(items, 10))).toEqual([10]);
++	});
++});
++
++describe("GitHub's reviews and comments as tails", () => {
++	it("the pull request's and the issue's are windows; their comments are counted by the object", () => {
++		const objects = parseObjects(GITHUB_OBJECTS, () => true);
++		expect("objects" in objects).toBe(true);
++		if (!("objects" in objects)) return;
++		const pr = objects.objects.pull_request;
++		expect(pr?.reads.reviews?.tail).toEqual({ by: "id" });
++		expect(pr?.reads.comments?.tail).toEqual({ by: "id", total: "pr.comments" });
++		expect(pr?.follow?.windows).toMatchObject({ reviews: "id", comments: "id" });
++		expect(pr?.follow?.totals).toMatchObject({ comments: "pr.comments" });
++		expect(objects.objects.issue?.follow?.totals).toMatchObject({ comments: "issue.comments" });
++	});
++
++	it("a read with tail must leave page to the daemon, give perPage and count from another read", () => {
++		const kind = (read: object) => ({
++			card: "generic",
++			urls: ["https://example.com/x/{n}"],
++			reads: { x: { tool: "get_x", args: { n: "{n}" } }, list: { tool: "list_x", ...read } },
++			fields: {},
++			follow: { rules: [], ends: {} },
++		});
++		const errors = (read: object) => {
++			const found = parseObjects({ x: kind(read) }, () => true);
++			return "errors" in found ? found.errors.join("\n") : "";
++		};
++		expect(errors({ args: { perPage: 100 }, tail: { by: "id", total: "x.count" } })).not.toMatch(/tail/);
++		expect(errors({ args: { perPage: 100, page: 1 }, tail: { by: "id" } })).toMatch(/leaves page/);
++		expect(errors({ args: {}, tail: { by: "id" } })).toMatch(/perPage/);
++		expect(errors({ args: { perPage: 200 }, tail: { by: "id" } })).toMatch(/perPage, 1 to 100/);
++		expect(errors({ args: { perPage: 100 }, tail: { by: "id", total: "y.count" } })).toMatch(/no other read/);
++		expect(errors({ args: { perPage: 100 }, tail: { by: "id", total: "list.count" } })).toMatch(/tail is/);
++		expect(errors({ args: { perPage: 100 }, tail: { by: "id", more: 1 } })).toMatch(/tail is/);
++	});
++
++	it("an item pushed off the old end is never gone, and one that slides back is not new", () => {
++		const objects = parseObjects(GITHUB_OBJECTS, () => true);
++		if (!("objects" in objects)) throw new Error("no objects");
++		const follow = objects.objects.pull_request?.follow;
++		if (follow === undefined) throw new Error("no follow");
++		const comment = (id: number) => ({ id, user: { login: `u${id}` } });
++		const reading = (count: number, from: number, to: number) => ({
++			pr: { state: "open", comments: count },
++			comments: Array.from({ length: to - from + 1 }, (_, i) => comment(from + i)),
++		});
++		// the window moved on: 101..250, then 102..251 with 251 new
++		const moved = sort(follow, "me", reading(250, 101, 250), reading(251, 102, 251));
++		expect(moved.filter((each) => each.does !== "nothing").map((each) => each.says)).toEqual(["u251 commented"]);
++		// comments deleted at the newest end: the window starts at the first page again, the older ones back in it
++		const back = sort(follow, "me", reading(250, 101, 250), reading(199, 1, 199));
++		expect(back.filter((each) => each.does !== "nothing")).toEqual([]);
++		expect(back.filter((each) => each.change.kind === "added").length).toBe(100);
++	});
++});
++
++/** A pull request with `comments` and `reviews` (each a list of authors, oldest first), as GitHub pages them. */
++const pullRequest =
++	(worldAt: (step: number) => { comments: Item[]; reviews: Item[] }, asked: { [method: string]: number[] }): Answer =>
++	(tool, args, step) => {
++		if (tool !== "pull_request_read") return failure("not that");
++		const world = worldAt(step);
++		const method = String(args.method);
++		const paged = (items: Item[]) => {
++			const size = Number(args.perPage ?? 30);
++			const n = Number(args.page ?? 1);
++			asked[method] = [...(asked[method] ?? []), n];
++			return items.slice((n - 1) * size, n * size);
++		};
++		if (method === "get") {
++			const pr: Item = {
++				number: 142,
++				title: "Keep objects as data",
++				state: "open",
++				draft: false,
++				merged: false,
++				user: { login: "ana" },
++				head: { ref: "objects", sha: "a1" },
++				html_url: "https://github.com/acme/banda/pull/142",
++			};
++			// as GitHub leaves out a count of none
++			if (world.comments.length > 0) pr.comments = world.comments.length;
++			return pr;
++		}
++		if (method === "get_check_runs")
++			return { total_count: 1, check_runs: [{ id: 1, name: "unit", status: "completed", conclusion: "success" }] };
++		if (method === "get_reviews") return paged(world.reviews);
++		if (method === "get_comments") return paged(world.comments);
++		return failure(`no ${method}`);
++	};
++
++const comments = (n: number, first = 1): Item[] =>
++	Array.from({ length: n }, (_, i) => ({ id: first + i, user: { login: `c${first + i}` }, body: "a comment" }));
++const reviews = (n: number, first = 10_001): Item[] =>
++	Array.from({ length: n }, (_, i) => ({ id: first + i, user: { login: `r${first + i}` }, state: "COMMENTED" }));
++
++describe("a watch on a pull request with long reviews and comments", () => {
++	it("150 comments and 150 reviews: the newest of each wakes, and none past a page is said gone", async () => {
++		const asked: { [method: string]: number[] } = {};
++		const world = (step: number) =>
++			step === 0
++				? { comments: comments(150), reviews: reviews(150) }
++				: {
++						comments: [...comments(150), { id: 151, user: { login: "bob" }, body: "the newest" }],
++						reviews: [...reviews(150), { id: 10_151, user: { login: "carol" }, state: "APPROVED" }],
++					};
++		const summary = await watchScenario(await tempHome(), new Faults(), {
++			answer: pullRequest(world, asked),
++			clicks: ["k1"],
++		});
++		expect(watchInvariants(summary)).toEqual([]);
++		expect(summary.wakes).toHaveLength(1);
++		expect(summary.wakes[0]?.changes).toEqual(expect.arrayContaining(["bob commented", "carol approved"]));
++		expect(summary.wakes[0]?.changes).toHaveLength(2);
++		expect(summary.tells).toEqual([]);
++		// each look read both pages of each, and no more
++		expect(asked.get_comments).toEqual([1, 2, 1, 2]);
++		expect(asked.get_reviews).toEqual([1, 2, 1, 2]);
++	}, 60_000);
++
++	it("the window moves on, slides back when the newest are deleted, and only what is new wakes", async () => {
++		const asked: { [method: string]: number[] } = {};
++		const world = (step: number) => {
++			if (step === 0) return { comments: comments(250), reviews: reviews(250) };
++			const dana = { id: 251, user: { login: "dana" }, body: "new" };
++			const erin = { id: 10_251, user: { login: "erin" }, state: "CHANGES_REQUESTED" };
++			if (step === 1) return { comments: [...comments(250), dana], reviews: [...reviews(250), erin] };
++			// the newest fifty-two comments deleted: 199 left, so the reading starts at the first page again
++			if (step === 2) return { comments: comments(199), reviews: [...reviews(250), erin] };
++			return {
++				comments: [...comments(199), { id: 252, user: { login: "fay" }, body: "newer" }],
++				reviews: [...reviews(250), erin],
++			};
++		};
++		const summary = await watchScenario(await tempHome(), new Faults(), {
++			answer: pullRequest(world, asked),
++			clicks: ["k1", "k2", "k3"],
++		});
++		expect(watchInvariants(summary)).toEqual([]);
++		expect(summary.wakes.map((wake) => [...wake.changes].sort())).toEqual([
++			["dana commented", "erin requested changes"],
++			["fay commented"],
++		]);
++		expect(summary.tells).toEqual([]);
++		// comments by their count: pages 2-3 while there are 250 or 251, then 1-2 (and the empty third) at 199 and 200;
++		// reviews from the first page until a look learned how long they are, then from the one before the last
++		expect(asked.get_comments).toEqual([2, 3, 2, 3, 1, 2, 1, 2, 3]);
++		expect(asked.get_reviews).toEqual([1, 2, 3, 2, 3, 2, 3, 2, 3]);
++	}, 60_000);
++
++	it("a thousand reviews: the baseline and the looks after catch up a few pages a look, waking for none of them", async () => {
++		const asked: { [method: string]: number[] } = {};
++		const world = (step: number) => ({
++			comments: [],
++			reviews: step < 6 ? reviews(1000) : [...reviews(1000), { id: 20_000, user: { login: "gus" }, state: "APPROVED" }],
++		});
++		const summary = await watchScenario(await tempHome(), new Faults(), {
++			answer: pullRequest(world, asked),
++			clicks: ["k1", "k2", "k3", "k4", "k5", "k6"],
++		});
++		expect(watchInvariants(summary)).toEqual([]);
++		expect(summary.wakes.map((wake) => wake.changes)).toEqual([["gus approved"]]);
++		expect(summary.tells).toEqual([]);
++		// the baseline and four looks catch up, three pages each; then each look reads from the page before the last
++		expect(asked.get_reviews).toEqual([1, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9, 9, 10, 11, 9, 10, 11, 9, 10, 11]);
++	}, 60_000);
++});
+diff --git a/test/watches.test.ts b/test/watches.test.ts
+index 7bd3212..43659a8 100644
+--- a/test/watches.test.ts
++++ b/test/watches.test.ts
+@@ -680,10 +680,12 @@ describe("a watch on a pull request", () => {
+ 	it("a thousand changes in one look are one wake, its words bounded, in bounded time", async () => {
+ 		const flood = (step: number): World =>
+ 			changed(Math.min(step, 1), (at) => {
+-				if (step >= 1)
+-					at.get_comments.push(
+-						...Array.from({ length: 1000 }, (_, n) => ({ id: 1000 + n, user: { login: `bob${n}` }, body: "+1" })),
+-					);
++				if (step < 1) return;
++				at.get_comments.push(
++					...Array.from({ length: 1000 }, (_, n) => ({ id: 1000 + n, user: { login: `bob${n}` }, body: "+1" })),
++				);
++				// as GitHub counts them on the pull request: a look reads the newest pages of them, by that count
++				(at as unknown as { get: { comments: number } }).get.comments = at.get_comments.length;
+ 			});
+ 		let took = 0;
+ 		const summary = await watchScenario(await tempHome(), new Faults(), {
+@@ -698,9 +700,11 @@ describe("a watch on a pull request", () => {
+ 		expect(watchInvariants(summary)).toEqual([]);
+ 		expect(summary.wakes).toHaveLength(1);
+ 		const changes = summary.wakes[0]?.changes ?? [];
+-		// ana's approval, lint failing and the checks finishing, and a thousand comments: twenty named, the rest counted
++		// ana's approval, lint failing and the checks finishing, and the newest comments a look reads of a thousand (its
++		// pages from the one before the last): twenty named, the rest counted, and the ones between said to be missing
+ 		expect(changes).toHaveLength(21);
+-		expect(changes.at(-1)).toBe("and 983 more");
++		expect(changes.at(-1)).toBe("and 84 more");
++		expect(summary.wakes[0]?.gap).toBe(true);
+ 		expect(changes.join(", ").length).toBeLessThan(2000);
+ 		expect(summary.sent.every((text) => text.length < 4000)).toBe(true);
+ 		expect(took).toBeLessThan(5000);

@@ -1,0 +1,260 @@
+
+ RUN  v4.1.12 <integration worktree>
+
+ ✓ |unit| test/watch-conditional-reads.test.ts > a read's unless > is a path into a read made at every look, a condition and a period, or the definition is refused 70ms
+ ✓ |unit| test/watch-conditional-reads.test.ts > a read's unless > GitHub's pull request reads its checks, reviews and comments only when what they move moved 4ms
+ ✓ |unit| test/watch-conditional-reads.test.ts > a read's unless > carries an answer only when it was made after the value was already known, the condition holds and it is young 1ms
+stdout | test/watch-tail-conditional.test.ts > a tail read with an unless > reused reviews, then a burst past a look's pages with updated_at moving once: every look catches up, none reuses the old list
+PAGES [[1,2],[1,2],[1,2],[1,2,3],[3,4,5],[5,6,7],[7,8,9],[8,9],[8,9]]
+
+ × |unit| test/watch-tail-conditional.test.ts > a tail read with an unless > a thousand reviews and updated_at never moving: every look catches up three pages until the end, then carries 98ms
+   → expected false to be true // Object.is equality
+ × |unit| test/watch-tail-conditional.test.ts > a tail read with an unless > reused reviews, then a burst past a look's pages with updated_at moving once: every look catches up, none reuses the old list 122ms
+   → expected [ true, true, true ] to deeply equal [ true, true, false ]
+ × |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > skips what did not move and carries it forward: every change wakes once, an approval in the comment's second too 119ms
+   → expected [ …(7) ] to deeply equal [ …(7) ]
+ × |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > a quiet pull request is one request a look: 48 an hour before, 18 now, 19 on average over two hours 101ms
+   → expected 42 to be 18 // Object.is equality
+ × |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > a busy pull request reads its running checks every look, its reviews and comments when updated_at moved: 120 an hour before, 70 now 235ms
+   → expected 120 to be 70 // Object.is equality
+ ✓ |unit| test/watch-tail.test.ts > a tail read > starts a page before the last, so it always holds at least a page of the newest 1ms
+ ✓ |unit| test/watch-tail.test.ts > a tail read > reads 150 from the start in two pages, and knows its length 1ms
+ ✓ |unit| test/watch-tail.test.ts > a tail read > jumps to the last pages by the list's own count 0ms
+ ✓ |unit| test/watch-tail.test.ts > a tail read > reads on past a count that is behind (comments came since it was read) 0ms
+ ✓ |unit| test/watch-tail.test.ts > a tail read > a short page before the last the count implies is not the end (the service filtered it) 0ms
+ ✓ |unit| test/watch-tail.test.ts > a tail read > steps back when the list got shorter than its count said, by little or by much 0ms
+ ✓ |unit| test/watch-tail.test.ts > a tail read > a watch may miss items only when the newest reading is not whole and does not reach back to what it saw 0ms
+ ✓ |unit| test/watch-tail.test.ts > a tail read > never reads more than its pages a look: a list longer says where the next look starts 0ms
+ ✓ |unit| test/watch-tail.test.ts > a tail read > a page it cannot read is said as the service said it 0ms
+ ✓ |unit| test/watch-tail.test.ts > a tail read > keeps the newest within its bytes, the oldest pushed off first 0ms
+ ✓ |unit| test/watch-tail.test.ts > GitHub's reviews and comments as tails > the pull request's and the issue's are windows; their comments are counted by the object 2ms
+ ✓ |unit| test/watch-tail.test.ts > GitHub's reviews and comments as tails > a read with tail must leave page to the daemon, give perPage and count from another read 1ms
+ ✓ |unit| test/watch-tail.test.ts > GitHub's reviews and comments as tails > an item pushed off the old end is never gone, and one that slides back is not new 7ms
+ ✓ |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > a check run again on the same head moves nothing on the pull request: it is seen within the checks' ten minutes 164ms
+ ✓ |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > a workflow a label starts on the same head moves updated_at: its checks are read at that look 59ms
+ ✓ |unit| test/watch-tail.test.ts > a watch on a pull request with long reviews and comments > 150 comments and 150 reviews: the newest of each wakes, and none past a page is said gone 222ms
+ × |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > the owner's Check now reads everything, as they asked 38ms
+   → expected [ 4, 4, 3 ] to deeply equal [ 4, 4, 1 ]
+ × |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > a minute after the reads that saw a value ended, not sooner: a look within it reads again 16ms
+   → expected [ 4, 4, 4, 3 ] to deeply equal [ 4, 4, 4, 1 ]
+ ✓ |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > a guarded read that fails at the look where updated_at moved is read again at the next: the approval wakes 52ms
+ ✓ |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > a guarded read refused at two looks running is never taken as made: the approval wakes once GitHub answers 58ms
+ × |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > the first look after a resume reads everything 24ms
+   → expected [ 4, 4, 3 ] to deeply equal [ 4, 4, 1 ]
+ × |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > a look that carried answers keeps nothing when another watch's look replaced the reading meanwhile 45ms
+   → expected [ 'otto:baseline', 'mara:held', …(2) ] to deeply equal [ 'otto:baseline', 'mara:raced', …(2) ]
+ ✓ |unit| test/watch-tail.test.ts > a watch on a pull request with long reviews and comments > the window moves on, slides back when the newest are deleted, and only what is new wakes 147ms
+ ✓ |unit| test/watch-tail.test.ts > a watch on a pull request with long reviews and comments > a thousand reviews: the baseline and the looks after catch up a few pages a look, waking for none of them 63ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > skips what did not move and carries it forward: every change wakes once, an approval in the comment's second too
+AssertionError: expected [ …(7) ] to deeply equal [ …(7) ]
+
+- Expected
++ Received
+
+@@ -23,10 +23,12 @@
+      "get_reviews",
+      "get_comments",
+    ],
+    [
+      "get",
++     "get_reviews",
++     "get_comments",
+    ],
+    [
+      "get",
+      "get_check_runs",
+      "get_reviews",
+
+ ❯ test/watch-conditional-reads.test.ts:210:19
+    208|  it("skips what did not move and carries it forward: every change wake…
+    209|   const { perLook, summary } = await looked(quietWorld, QUIET_READS.le…
+    210|   expect(perLook).toEqual(QUIET_READS);
+       |                   ^
+    211|   expect(SCENARIOS.carried?.problems(summary)).toEqual([]);
+    212|   // each held for the kind's settling minute, so it wakes at the look…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > a quiet pull request is one request a look: 48 an hour before, 18 now, 19 on average over two hours
+AssertionError: expected 42 to be 18 // Object.is equality
+
+- Expected
++ Received
+
+- 18
++ 42
+
+ ❯ test/watch-conditional-reads.test.ts:224:31
+    222|   expect(hour(before.perLook)).toBe(48);
+    223|   // the pull request every look, the checks every ten minutes for a r…
+    224|   expect(hour(after.perLook)).toBe(18);
+       |                               ^
+    225|   expect(after.perLook.slice(2, 14).filter((each) => each.length === 1…
+    226|   // over two hours the reviews and comments are read once each, as th…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > a busy pull request reads its running checks every look, its reviews and comments when updated_at moved: 120 an hour before, 70 now
+AssertionError: expected 120 to be 70 // Object.is equality
+
+- Expected
++ Received
+
+- 70
++ 120
+
+ ❯ test/watch-conditional-reads.test.ts:244:31
+    242|   // 30 looks of the pull request and its checks; the reviews and comm…
+    243|   // at the looks that saw `updated_at` move (minutes 20 and 40) and a…
+    244|   expect(hour(after.perLook)).toBe(70);
+       |                               ^
+    245|   for (const { summary } of [after, before]) {
+    246|    expect(watchInvariants(summary)).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > the owner's Check now reads everything, as they asked
+AssertionError: expected [ 4, 4, 3 ] to deeply equal [ 4, 4, 1 ]
+
+- Expected
++ Received
+
+  [
+    4,
+    4,
+-   1,
++   3,
+  ]
+
+ ❯ test/watch-conditional-reads.test.ts:300:46
+    298|   // the last step's click looks after the act's look of that step: th…
+    299|   const { perLook, home } = await looked(quiet, 3, 5 * MINUTE, GITHUB,…
+    300|   expect(perLook.map((each) => each.length)).toEqual([4, 4, 1]);
+       |                                              ^
+    301|   expect(readsIn(home).slice(sum(perLook))).toEqual(["get", "get_check…
+    302|  }, 60_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > a minute after the reads that saw a value ended, not sooner: a look within it reads again
+AssertionError: expected [ 4, 4, 4, 3 ] to deeply equal [ 4, 4, 4, 1 ]
+
+- Expected
++ Received
+
+  [
+    4,
+    4,
+    4,
+-   1,
++   3,
+  ]
+
+ ❯ test/watch-conditional-reads.test.ts:320:18
+    318|    },
+    319|   });
+    320|   expect(counts).toEqual([4, 4, 4, 1]);
+       |                  ^
+    321|  }, 60_000);
+    322|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > the first look after a resume reads everything
+AssertionError: expected [ 4, 4, 3 ] to deeply equal [ 4, 4, 1 ]
+
+- Expected
++ Received
+
+  [
+    4,
+    4,
+-   1,
++   3,
+  ]
+
+ ❯ test/watch-conditional-reads.test.ts:417:30
+    415|   });
+    416|   // the baseline, its confirmation, a quiet look (one read), and the …
+    417|   expect(counts.slice(0, 3)).toEqual([4, 4, 1]);
+       |                              ^
+    418|   expect(counts[3]).toBe(4);
+    419|  }, 60_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  |unit| test/watch-conditional-reads.test.ts > a watch's looks with conditional reads > a look that carried answers keeps nothing when another watch's look replaced the reading meanwhile
+AssertionError: expected [ 'otto:baseline', 'mara:held', …(2) ] to deeply equal [ 'otto:baseline', 'mara:raced', …(2) ]
+
+- Expected
++ Received
+
+  [
+    "otto:baseline",
+-   "mara:raced",
+    "mara:held",
++   "mara:looked",
+    "mara:looked",
+  ]
+
+ ❯ test/watch-conditional-reads.test.ts:456:29
+    454|    },
+    455|   });
+    456|   expect(outcomes.slice(3)).toEqual(["otto:baseline", "mara:raced", "m…
+       |                             ^
+    457|   const said = summary.wakes.map((wake) => [wake.watch, wake.changes]);
+    458|   expect(said).toEqual([["banda-142", ["lint failed"]]]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  |unit| test/watch-tail-conditional.test.ts > a tail read with an unless > a thousand reviews and updated_at never moving: every look catches up three pages until the end, then carries
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ test/watch-tail-conditional.test.ts:90:60
+     88|   expect(pages.slice(0, 5).every((each) => each.length > 0)).toBe(true…
+     89|   // once a look reached the end, a later look with `updated_at` as ke…
+     90|   expect(pages.slice(5).some((each) => each.length === 0)).toBe(true);
+       |                                                            ^
+     91|   // (the row's "behind" stays until a wake without a gap, as before e…
+     92|   console.log(`PAGES ${JSON.stringify(pages)} BEHIND ${JSON.stringify(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  |unit| test/watch-tail-conditional.test.ts > a tail read with an unless > reused reviews, then a burst past a look's pages with updated_at moving once: every look catches up, none reuses the old list
+AssertionError: expected [ true, true, true ] to deeply equal [ true, true, false ]
+
+- Expected
++ Received
+
+  [
+    true,
+    true,
+-   false,
++   true,
+  ]
+
+ ❯ test/watch-tail-conditional.test.ts:123:60
+    121|   console.log(`PAGES ${JSON.stringify(pages)}`);
+    122|   // the baseline and its confirmation read the 150 whole; the third l…
+    123|   expect(pages.slice(0, 3).map((each) => each.length > 0)).toEqual([tr…
+       |                                                            ^
+    124|   // from the burst until a look reaches the end of the 850, every loo…
+    125|   const reached = pages.findIndex((each, i) => i >= 3 && each.includes…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  9 failed | 23 passed (32)
+   Start at  20:16:18
+   Duration  2.13s (transform 1.29s, setup 111ms, import 2.11s, tests 1.66s, environment 0ms)
+

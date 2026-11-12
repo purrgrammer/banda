@@ -1,0 +1,13 @@
+diff --git a<correct watches.ts> b/src/core/watches.ts
+index 7802c55..1f9d48a 100644
+--- a<correct watches.ts>
++++ b/src/core/watches.ts
+@@ -1173,8 +1173,6 @@ export function defineWatches(options: WatchesOptions) {
+ 					break;
+ 				}
+ 				answers[as] = list;
+-				// a complete tail read is made: never one refused, nor one behind (its list stands as last read)
+-				if (read.unless !== undefined) made[as] = madeNow(read.unless, answers, base, now);
+ 				continue;
+ 			}
+ 			const pages = paging === undefined ? undefined : read.pages;

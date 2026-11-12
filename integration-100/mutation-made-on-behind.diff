@@ -1,0 +1,21 @@
+diff --git a<correct watches.ts> b/src/core/watches.ts
+index 7802c55..fcf4658 100644
+--- a<correct watches.ts>
++++ b/src/core/watches.ts
+@@ -1159,6 +1159,7 @@ export function defineWatches(options: WatchesOptions) {
+ 					break;
+ 				}
+ 				lengths[as] = tailed.length;
++				if (read.unless !== undefined) made[as] = madeNow(read.unless, answers, base, now);
+ 				// past the pages a look reads, its end was not reached: the list stands as last read, and the watch is
+ 				// behind until a look reaches it (only a look after the baseline is behind)
+ 				if ("behind" in tailed) {
+@@ -1173,8 +1174,6 @@ export function defineWatches(options: WatchesOptions) {
+ 					break;
+ 				}
+ 				answers[as] = list;
+-				// a complete tail read is made: never one refused, nor one behind (its list stands as last read)
+-				if (read.unless !== undefined) made[as] = madeNow(read.unless, answers, base, now);
+ 				continue;
+ 			}
+ 			const pages = paging === undefined ? undefined : read.pages;

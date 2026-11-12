@@ -1,0 +1,21 @@
+diff --git a<correct watches.ts> b/src/core/watches.ts
+index 7802c55..9ed4d5e 100644
+--- a<correct watches.ts>
++++ b/src/core/watches.ts
+@@ -1126,6 +1126,7 @@ export function defineWatches(options: WatchesOptions) {
+ 				}
+ 			}
+ 			if (read.tail !== undefined) {
++				if (read.unless !== undefined) made[as] = madeNow(read.unless, answers, base, now);
+ 				const total = countAt(answers, read.tail.total);
+ 				const tailed = await readTail(
+ 					async (page) => {
+@@ -1173,8 +1174,6 @@ export function defineWatches(options: WatchesOptions) {
+ 					break;
+ 				}
+ 				answers[as] = list;
+-				// a complete tail read is made: never one refused, nor one behind (its list stands as last read)
+-				if (read.unless !== undefined) made[as] = madeNow(read.unless, answers, base, now);
+ 				continue;
+ 			}
+ 			const pages = paging === undefined ? undefined : read.pages;
