@@ -91,10 +91,9 @@ returned to and merged, at desktop and phone width.
 - [ ] GitHub's hosted server names no discussion comment's author (its answer is an id, a body and `isAnswer`), so
   there the account's own comments still wake, as by an author not known, until github-mcp-server's
   `get_discussion_comments` selects `author { login }` and GitHub deploys it (#38)
-- [ ] A repository's push says "the default branch", not its name: none of its four reads answers it, and the listed
-  reads that do (`get_repository_tree` with no `tree_sha`, its `tree_sha`; `search_repositories` for
-  `repo:{owner}/{repo}`, its `default_branch`, on the search quota) would be a fifth, past the four a kind may declare;
-  a fifth read carried a day by `unless`, or the name kept from the first look, is the owner's call (#38)
+- [x] A repository's push says "the default branch", by decision: no fifth read for its name (the reads that answer it,
+  `get_repository_tree` with no `tree_sha` and `search_repositories` for `repo:{owner}/{repo}`, would each be a fifth,
+  past the four a kind may declare). A renamed default branch tells nothing, and a push after it tells as before (#38)
 - [x] Every connection banda ships can be followed: GitHub's pull request, issue, check run, notification,
   repository, discussion and workflow run; Gmail's email (until read or trashed), conversation (others' replies wake)
   and search (new matches wake; never ends); Calendar's event (moved, cancelled, a guest's reply); Drive's file
