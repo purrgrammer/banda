@@ -57,6 +57,20 @@ const Read = Type.Object(
 				{ ...closed, description: "A list newest first, kept to `keep` items, its pages walked to them" },
 			),
 		),
+		unless: Type.Optional(
+			Type.Object(
+				{
+					same: Type.Array(Type.String({ maxLength: 200 }), { minItems: 1, maxItems: 4 }),
+					while: Type.Optional(Type.String({ maxLength: 200 })),
+					every: Type.Optional(Type.String({ maxLength: 16 })),
+				},
+				{
+					...closed,
+					description:
+						"A watch's look leaves the read unmade and keeps its answer while every path of `same` (into reads made at every look) is as kept, `while` holds over the kept reading, and the answer is younger than `every`",
+				},
+			),
+		),
 		tail: Type.Optional(
 			Type.Object(
 				{

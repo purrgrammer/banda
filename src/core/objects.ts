@@ -12,7 +12,7 @@
  * what keeps a chatty chat from making the daemon read a service again and again.
  */
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
-import { type Follow, MAX_KEEP, type Pages, parseFollow } from "./follow.ts";
+import { type Follow, MAX_KEEP, type Pages, parseCondition, parseFollow, parseUnless, type Unless } from "./follow.ts";
 import { slackAvatar, slackTs } from "./slack-text.ts";
 import { MAX_TAIL_PAGE, type Tail } from "./tail.ts";
 
@@ -50,6 +50,8 @@ export type ObjectRead = {
 	 * answers `next_cursor` beside the list while it has more; the daemon fills both.
 	 */
 	readonly pages?: Pages;
+	/** When a watch's look may leave it unmade and carry its kept answer forward. */
+	readonly unless?: Unless;
 	/**
 	 * Its answer is a list the service hands oldest first by numbered pages (a pull request's reviews): a watch reads
 	 * its last pages, ordered by `by`, finding the end by the count at `total` (another read's) or by its last look. Its
@@ -332,6 +334,14 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					);
 				if (pages !== undefined && ["oldest", "cursor"].some((arg) => arg in ((args as object | null) ?? {})))
 					errors.push(`${where}.reads.${as}: a read with pages leaves oldest and cursor to the daemon`);
+				const given = (read as { unless?: unknown } | null)?.unless;
+				const unless = given === undefined ? undefined : parseUnless(given);
+				if (given !== undefined && unless === undefined)
+					errors.push(
+						`${where}.reads.${as}.unless is {"same": ["<read>.<path>"], "while"?: "<condition>", "every"?: "<period>"}`,
+					);
+				if (unless !== undefined && pages !== undefined)
+					errors.push(`${where}.reads.${as}: a read with pages is made at every look`);
 				const tailed = (read as { tail?: unknown } | null)?.tail;
 				const tail = tailed === undefined ? undefined : parseTail(tailed, as);
 				if (tailed !== undefined && tail === undefined)
@@ -385,8 +395,16 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					...(optional === true ? { optional: true } : {}),
 					...(follow === true ? { follow: true } : {}),
 					...(pages === undefined ? {} : { pages }),
+					...(unless === undefined ? {} : { unless }),
 					...(tail === undefined ? {} : { tail }),
 				};
+			}
+		// what a read is skipped by is read at every look, before it
+		for (const [as, read] of Object.entries(reads))
+			for (const path of read.unless?.same ?? []) {
+				const by = reads[path.split(".")[0] ?? ""];
+				if (by === undefined || by.unless !== undefined)
+					errors.push(`${where}.reads.${as}.unless.same: ${path} is not in a read made at every look`);
 			}
 		const fields: { [field: string]: string } = {};
 		const rawFields = given.fields;
@@ -541,6 +559,24 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 			errors.push(`${where}: a read made only when followed needs a "follow"`);
 		if (follow === undefined && Object.values(reads).some((read) => read.pages !== undefined))
 			errors.push(`${where}: a read with pages is a window a watch keeps, so its kind needs a "follow"`);
+		if (follow === undefined && Object.values(reads).some((read) => read.unless !== undefined))
+			errors.push(`${where}: a read's unless is for a watch's look, so its kind needs a "follow"`);
+		// a condition over a value no read gives never holds as written, and `!=` over one always does: a misspelt path
+		// would carry an answer until its period ends, so each names one of its reads (as kept) or a derived condition
+		for (const [as, read] of Object.entries(reads)) {
+			const terms = read.unless?.while === undefined ? [] : parseCondition(read.unless.while);
+			for (const term of "error" in terms ? [] : terms) {
+				const [first, second] = term.path;
+				const known =
+					first === "derived"
+						? second !== undefined && follow?.derived?.[second] !== undefined
+						: first !== undefined && reads[first] !== undefined;
+				if (!known)
+					errors.push(
+						`${where}.reads.${as}.unless.while: ${term.path.join(".")} names neither one of its reads nor a derived condition`,
+					);
+			}
+		}
 		const windows = Object.values(reads).flatMap((read) => (read.pages === undefined ? [] : [read.pages]));
 		if (windows.length > 1) errors.push(`${where}: at most one read has pages`);
 		const tails = Object.entries(reads).flatMap(([as, read]) =>

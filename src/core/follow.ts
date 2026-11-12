@@ -690,6 +690,97 @@ export function parseFollow(value: unknown, where: string): { follow: Follow } |
 }
 
 /**
+ * When a look may leave a read unmade and carry its kept answer forward (DESIGN.md "Watches"), so a quiet object costs
+ * one request: the values at `same`, paths into reads made at every look, are the kept reading's; `while`, a condition
+ * over the kept reading, holds; and the kept answer is younger than `every`. A pull request's reviews and comments
+ * move its `updated_at`; its checks move nothing on it, so they are read while they run, when the head or `updated_at`
+ * moved (a label, a reopen or ready for review starts workflows on the same head), and at least every `every` besides
+ * (a re-run, or a check that starts late, on the same head).
+ */
+export type Unless = { readonly same: readonly string[]; readonly while?: string; readonly every?: string };
+
+/**
+ * When a look last made a read an `Unless` guards (by the look's clock), and the values at its `same` then, when the
+ * reading kept before that look already had them, its condition held over it, and its reads had ended a minute or
+ * more before: the answer holds every change up to those values. A service's times have a grain (GitHub's, a second),
+ * so an answer made at the look that first saw a value may miss a change in the same second after it, which leaves the
+ * value as it was; and a condition just come true may not stay so (a check that starts as the others finish): the next
+ * look makes it again.
+ */
+export type Made = { readonly at: number; readonly sure?: string };
+
+/** How long before a look the reads of the reading it compares with must have ended for its answers to be sure. */
+export const SURE_AFTER = 60_000;
+
+/** The value at `path` in `reading`, in canonical words; undefined when the reading has none there. */
+export function valueAt(reading: Json | undefined, path: string): string | undefined {
+	const values = valuesAt(reading, pattern(path)).filter((value) => value !== undefined && value !== null);
+	return values.length === 0 ? undefined : canonical(values as Json[]);
+}
+
+/** The values at every path of `same` in `reading`, in canonical words; undefined when any is missing. */
+function valuesOf(reading: Json | undefined, same: readonly string[]): string | undefined {
+	const values = same.map((path) => valueAt(reading, path));
+	return values.some((value) => value === undefined) ? undefined : JSON.stringify(values);
+}
+
+/**
+ * Whether a look may carry the kept answer of a read `unless` guards: `answers` is what the look has read so far,
+ * `kept` the reading kept (its derived conditions with it), `made` when its answer was made.
+ */
+export function mayCarry(unless: Unless, answers: Item, kept: Item, made: Made | undefined, now: number): boolean {
+	const value = valuesOf(answers, unless.same);
+	if (value === undefined || made?.sure !== value || valuesOf(kept, unless.same) !== value) return false;
+	if (unless.while !== undefined && !holds(unless.while, kept)) return false;
+	const every = unless.every === undefined ? undefined : parseEvery(unless.every);
+	// a clock that went back carries nothing: the answer's age is not known
+	return now >= made.at && (every === undefined || now - made.at < every);
+}
+
+/**
+ * What a look that made a read `unless` guards keeps of it: when, and the values at `same` if it is sure. `kept` is the
+ * reading kept as the look began, and `through` when the reads that took it had ended (the look's start, else).
+ */
+export function madeNow(
+	unless: Unless,
+	answers: Item,
+	kept: { answers: Item; at: number; through?: number } | undefined,
+	now: number,
+): Made {
+	const value = valuesOf(answers, unless.same);
+	const sure =
+		value !== undefined &&
+		kept !== undefined &&
+		now - (kept.through ?? kept.at) >= SURE_AFTER &&
+		valuesOf(kept.answers, unless.same) === value &&
+		(unless.while === undefined || holds(unless.while, kept.answers));
+	return sure ? { at: now, sure: value } : { at: now };
+}
+
+/** A read's `unless`, or undefined when it is not one. */
+export function parseUnless(value: unknown): Unless | undefined {
+	if (!object(value as Json)) return undefined;
+	const { same, while: during, every, ...rest } = value as { same?: unknown; while?: unknown; every?: unknown };
+	if (Object.keys(rest).length > 0) return undefined;
+	const path = /^[A-Za-z0-9_+-]{1,64}(?:\.[A-Za-z0-9_+-]{1,64}){1,7}$/;
+	if (
+		!Array.isArray(same) ||
+		same.length === 0 ||
+		same.length > 4 ||
+		!same.every((each) => typeof each === "string" && path.test(each))
+	)
+		return undefined;
+	if (during !== undefined && (typeof during !== "string" || during.length > 200 || "error" in parseCondition(during)))
+		return undefined;
+	if (every !== undefined && (typeof every !== "string" || parseEvery(every) === undefined)) return undefined;
+	return {
+		same: same as string[],
+		...(during === undefined ? {} : { while: during as string }),
+		...(every === undefined ? {} : { every: every as string }),
+	};
+}
+
+/**
  * A list a read answers one page of (DESIGN.md "Watches"): the path of the list in the reading, the field that orders
  * it, and how many of its newest items the reading keeps, its window.
  */

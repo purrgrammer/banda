@@ -50,6 +50,9 @@ import {
 	type Item,
 	type Json,
 	lookEvery,
+	type Made,
+	madeNow,
+	mayCarry,
 	type Pages,
 	pageArgs,
 	reading as readingOf,
@@ -337,6 +340,10 @@ export type FollowedReading = {
 	earlier?: { version: number; answers: Item }[];
 	/** How many items a full page of each paged read held, as the service answered: what a look reads again. */
 	page?: { [read: string]: number };
+	/** When each read an `unless` guards was last made, which a look that carries its answer forward goes by. */
+	made?: { [read: string]: Made };
+	/** When the reads of the newest look that read it had ended: what a read is sure of a minute after. */
+	through?: number;
 	/**
 	 * How long each tail read's list was when a look last read it (at least, when the look did not reach its end): where
 	 * the next look starts when the reading gives no count of its own.
@@ -648,6 +655,8 @@ export type WatchesOptions = {
 	) => Promise<{ readonly text: string } | { readonly failed: string; readonly until?: number }>;
 	/** A fault point, for the fault suites. */
 	readonly fault?: (point: string) => void;
+	/** The clock, read again once a look's reads end; `Date.now` unless given. */
+	readonly now?: () => number;
 };
 
 type WatchState = { phase: "wait" } | { phase: "look" };
@@ -983,6 +992,20 @@ export function defineWatches(options: WatchesOptions) {
 		let shared: { readonly version: number } | undefined;
 		/** The paged read's window as kept, the walk this watch holds on it, and how many items a full page held. */
 		let paging: { window: Item[] | undefined; walk: Walk | undefined; size: number | undefined } | undefined;
+		/**
+		 * The reading kept as this look began, under the same definition: what a read an `unless` guards is compared with,
+		 * and whether this look may carry its answers forward at all.
+		 */
+		let base:
+			| {
+					version: number;
+					at: number;
+					through?: number;
+					answers: Item;
+					made: { [read: string]: Made };
+					carry: boolean;
+			  }
+			| undefined;
 		/** How long each tail read's list was when it was last read. */
 		let lengthsBefore: { readonly [read: string]: number } = {};
 		await commit(async (tx) => {
@@ -1039,6 +1062,18 @@ export function defineWatches(options: WatchesOptions) {
 				now - kept.at < lookEvery(found.kind.follow, kept.answers)
 			)
 				shared = { version: kept.version };
+			// a read an `unless` guards is left unmade only by a look that would diff the object as it stands anyway: never
+			// a baseline, the first look after a resume, the owner's Check now (they asked for every read), nor a walk
+			if (shared === undefined && kept !== undefined && kept.source === found.source && record?.pages === undefined)
+				base = {
+					version: kept.version,
+					at: kept.at,
+					...(kept.through === undefined ? {} : { through: kept.through }),
+					// copies of the doc's values: the reads happen outside this commit
+					answers: JSON.parse(JSON.stringify(kept.answers)) as Item,
+					made: JSON.parse(JSON.stringify(kept.made ?? {})) as { [read: string]: Made },
+					carry: click === undefined && record?.seen !== undefined && record.resumed === undefined,
+				};
 			const paged = Object.entries(found.reads).find(([, read]) => read.pages !== undefined);
 			if (paged !== undefined) {
 				const [as, read] = paged;
@@ -1070,13 +1105,26 @@ export function defineWatches(options: WatchesOptions) {
 		let gapped = false;
 		/** How many items a full page of the paged read held, when this look's page was full. */
 		let learned: { readonly as: string; readonly size: number } | undefined;
+		/** The reads an `unless` guards this look carried forward, and when it made the others. */
+		const carried: string[] = [];
+		const made: { [read: string]: Made } = {};
 		/** How long each tail read's list was found to be. */
 		const lengths: { [read: string]: number } = {};
 		// the paged read first: while its walk has not reached the window, the others wait for the look that merges; the
-		// tail reads last, after the reads that give their counts
-		const rank = (read: ObjectRead) => (read.pages !== undefined ? 0 : read.tail !== undefined ? 2 : 1);
+		// tail reads and a read an `unless` guards last, after the reads that give their counts and their `same`
+		const rank = (read: ObjectRead) =>
+			read.pages !== undefined ? 0 : read.tail !== undefined || read.unless !== undefined ? 2 : 1;
 		const order = Object.entries(shared === undefined ? reads : {}).sort(([, a], [, b]) => rank(a) - rank(b));
 		for (const [as, read] of order) {
+			// first whether its kept answer may be carried; then, when it is read, the tail's own pages
+			if (read.unless !== undefined && base !== undefined) {
+				const last = base.answers[as];
+				if (base.carry && last !== undefined && mayCarry(read.unless, answers, base.answers, base.made[as], now)) {
+					answers[as] = last;
+					carried.push(as);
+					continue;
+				}
+			}
 			if (read.tail !== undefined) {
 				const total = countAt(answers, read.tail.total);
 				const tailed = await readTail(
@@ -1125,6 +1173,8 @@ export function defineWatches(options: WatchesOptions) {
 					break;
 				}
 				answers[as] = list;
+				// a complete tail read is made: never one refused, nor one behind (its list stands as last read)
+				if (read.unless !== undefined) made[as] = madeNow(read.unless, answers, base, now);
 				continue;
 			}
 			const pages = paging === undefined ? undefined : read.pages;
@@ -1163,6 +1213,7 @@ export function defineWatches(options: WatchesOptions) {
 				failed = `${connection.service} did not return an object.`;
 				break;
 			}
+			if (read.unless !== undefined) made[as] = madeNow(read.unless, answers, base, now);
 			if (pages === undefined || paging === undefined) continue;
 			const body = answers[as];
 			const page = listIn(body, pages.list);
@@ -1192,6 +1243,8 @@ export function defineWatches(options: WatchesOptions) {
 			const { next_cursor: _cursor, ...rest } = body;
 			answers[as] = withList(rest, pages.list, step.list);
 		}
+		/** When this look's reads ended, by the clock: a look a minute after may be sure of what they found. */
+		const through = Math.max(now, options.now?.() ?? Date.now());
 		options.fault?.("watch:read");
 		if (failed !== undefined) return await failing(failed, retry);
 		if (walked !== undefined) return await walking(walked);
@@ -1234,8 +1287,10 @@ export function defineWatches(options: WatchesOptions) {
 			const resumed = record.resumed !== undefined;
 			const doc = await tx.doc(Followed);
 			const kept = doc.objects[key];
-			// the reading it shares moved on meanwhile: this look is stale, and the next diffs what is kept then
+			// the reading it shares moved on meanwhile: this look is stale, and the next diffs what is kept then; so too a look
+			// that carried answers forward from a reading another look has replaced since
 			if (shared !== undefined && kept?.version !== shared.version) return;
+			if (carried.length > 0 && (kept?.version !== base?.version || kept?.source !== source)) return;
 			// a moment's failure of a read that may fail is no change, and never a condition that went false and comes back
 			const looked =
 				kept?.source === source ? withLastAnswers(kind.follow, answers, kept.answers, unanswered) : answers;
@@ -1285,6 +1340,13 @@ export function defineWatches(options: WatchesOptions) {
 			const page = { ...kept?.page, ...(learned === undefined ? {} : { [learned.as]: learned.size }) };
 			const stored = doc.objects[key];
 			if (stored !== undefined && Object.keys(page).length > 0) stored.page = page;
+			// when each guarded read was made: a read made by this look, else as kept (a read another definition made is not)
+			const when = { ...(kept?.source === source ? kept.made : {}), ...made };
+			if (stored !== undefined && shared === undefined) {
+				if (Object.keys(when).length > 0) stored.made = when;
+				else delete stored.made;
+				stored.through = through;
+			}
 			const counted = { ...kept?.lengths, ...lengths };
 			if (stored !== undefined && Object.keys(counted).length > 0 && canonical(counted) !== canonical(stored.lengths))
 				stored.lengths = counted;

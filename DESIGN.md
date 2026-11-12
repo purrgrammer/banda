@@ -641,6 +641,15 @@ or not the model remembers it.
   own last look; a cursor that fell off the readings kept diffs from the oldest kept and sees the changes since,
   coarser, never fewer. An object's card offers Follow among its quiet actions; a followed one says who follows it
   and until what, in one line, and never says "as of" while the daemon can look.
+- **A quiet look asks once.** A read may say when a look leaves it unmade and carries its kept answer forward
+  (`unless`): while values in reads made at every look are the kept reading's (a pull request's `updated_at`, which its
+  reviews and comments move to their second; for its checks, which move nothing on it, its head and `updated_at`, since
+  a label or a reopen starts workflows on the same head), while a condition holds over the kept reading (the checks are
+  done), and for no longer than a period, which bounds what the service's own fields do not move (a check run again on
+  the same head). A value the service leaves out is never the same. An answer is carried only if it was made a minute or
+  more after the reads that first found those values ended, and with the condition already holding then: a change in the
+  same second as the one before, or a check that starts as the last one finishes, is read at the next look. A baseline,
+  the first look after a resume and Check now make every read.
 - **The change is the event, and its identity is the change.** Each reading is compared with the one before, or
   read from a feed's cursor where the service keeps one; the events are the differences, and an event's id is the
   change itself, so a read repeated after a crash yields the same events and the same wake key, which the chat's queue

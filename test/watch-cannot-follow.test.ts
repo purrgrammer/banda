@@ -20,9 +20,12 @@ function olderGithubFile(): string {
 					follow: _,
 					reads,
 					...rest
-				} = entry as { follow?: unknown; reads: { [as: string]: { follow?: unknown } } };
+				} = entry as { follow?: unknown; reads: { [as: string]: { follow?: unknown; unless?: unknown } } };
+				// a read's `unless` is for a watch's look, which came with `follow`
 				const plain = Object.fromEntries(
-					Object.entries(reads).flatMap(([as, { follow, ...read }]) => (follow === undefined ? [[as, read]] : [])),
+					Object.entries(reads).flatMap(([as, { follow, unless: _, ...read }]) =>
+						follow === undefined ? [[as, read]] : [],
+					),
 				);
 				return [kind, { ...rest, reads: plain }];
 			}),
