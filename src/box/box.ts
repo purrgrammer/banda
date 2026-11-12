@@ -4,6 +4,7 @@
  * egress proxy's, when it has one; inside, tools run freely.
  */
 
+import { randomUUID } from "node:crypto";
 import type { Context } from "@earendil-works/chord";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { Connection, RemoteExecutionEnv } from "@earendil-works/pi-env";
@@ -111,6 +112,7 @@ export type Box = {
 };
 
 export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
+	const filesystemId = setup.kind === "host" ? "node:local" : `banda:box:${randomUUID()}`;
 	let running: Promise<void> | undefined;
 	let state: BoxState = { state: "starting" };
 	const listeners = new Set<() => void>();
@@ -155,12 +157,26 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 		},
 		onLog: (text) => log(`box: ${text.trimEnd()}`),
 	});
+	class ComputerEnv extends RemoteExecutionEnv {
+		override async exec(...args: Parameters<RemoteExecutionEnv["exec"]>) {
+			args[2].abortSignal?.throwIfAborted();
+			await ensure();
+			return super.exec(...args);
+		}
+	}
+	const Environment = setup.kind === "microvm" ? ComputerEnv : RemoteExecutionEnv;
+	const egress =
+		setup.egress === undefined
+			? undefined
+			: setup.kind === "microvm"
+				? recoveringEgress(setup.egress, ensure)
+				: setup.egress;
 	const browserOf = setup.browser;
 	return {
 		workspace: setup.workspace,
 		attachments: setup.attachments,
 		kind: setup.kind,
-		...(setup.egress === undefined ? {} : { egress: setup.egress }),
+		...(egress === undefined ? {} : { egress }),
 		...(browserOf === undefined
 			? {}
 			: {
@@ -179,9 +195,9 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 				}),
 		ensure,
 		env: (cwd, env) =>
-			new RemoteExecutionEnv({
+			new Environment({
 				connection,
-				id: "banda:box",
+				id: filesystemId,
 				cwd: cwd ?? setup.workspace,
 				...(env === undefined || Object.keys(env).length === 0 ? {} : { shellEnv: env }),
 			}),
@@ -206,6 +222,36 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 				await setup.close?.();
 			})();
 			return closing;
+		},
+	};
+}
+
+function recoveringEgress(egress: BoxEgress, ensure: () => Promise<void>): BoxEgress {
+	return {
+		...egress,
+		pass: async (chat, hash) => {
+			await ensure();
+			await egress.pass(chat, hash);
+		},
+		take: async (chat, ctx) => {
+			await ensure();
+			return egress.take(chat, ctx);
+		},
+		sentChats: async (ctx) => {
+			await ensure();
+			return egress.sentChats(ctx);
+		},
+		ack: async (chat, bytes, tickets, ctx) => {
+			await ensure();
+			await egress.ack(chat, bytes, tickets, ctx);
+		},
+		replay: async (request, ctx) => {
+			try {
+				await ensure();
+			} catch (error) {
+				return { failed: error instanceof Error ? error.message : String(error), reached: false };
+			}
+			return egress.replay(request, ctx);
 		},
 	};
 }

@@ -261,6 +261,7 @@ export function microvmBox(input: string): BoxSetup {
 	let closing: Promise<void> | undefined;
 	let closed = false;
 	let takenOver = false;
+	let takingOver: Promise<void> | undefined;
 	const startup = new AbortController();
 	const assertOpen = () => {
 		if (closed) throw new Error("This computer is closed.");
@@ -393,13 +394,12 @@ export function microvmBox(input: string): BoxSetup {
 		`${socket}:23456`,
 		...Object.entries(TRUST_ENV).flatMap(([key, value]) => ["--env", `${key}=${value}`]),
 	];
-	const ensure = async (building: () => void) => {
-		assertOpen();
-		const current = await loaded();
-		assertOpen();
-		const storage = await exportsFor(current.home);
-		assertOpen();
-		if (!takenOver) {
+	const retirePriorGenerations = () => {
+		if (takenOver) return Promise.resolve();
+		if (takingOver !== undefined) return takingOver;
+		takingOver = (async () => {
+			assertOpen();
+			const current = await loaded();
 			for (const prior of parse(Listing, await current.run(["list", "--format", "json"]))) {
 				if (!VM_NAME.test(prior.name) || Object.values(names).includes(prior.name)) continue;
 				const vm = await current.inspect(prior.name);
@@ -408,7 +408,18 @@ export function microvmBox(input: string): BoxSetup {
 				await current.remove(prior.name);
 			}
 			takenOver = true;
-		}
+		})().finally(() => {
+			takingOver = undefined;
+		});
+		return takingOver;
+	};
+	const ensure = async (building: () => void) => {
+		assertOpen();
+		const current = await loaded();
+		assertOpen();
+		const storage = await exportsFor(current.home);
+		assertOpen();
+		await retirePriorGenerations();
 		const manifests = {
 			box: await image(current, current.assets.box, building, startup.signal),
 			proxy: await image(current, current.assets.proxy, building, startup.signal),
@@ -508,7 +519,13 @@ export function microvmBox(input: string): BoxSetup {
 		workspace: "/workspace",
 		attachments: "/work/attachments",
 		command: [process.execPath, launcher, "env", homeArg, names.box],
-		egress: guarded.egress,
+		egress: {
+			...guarded.egress,
+			configure: async () => {
+				await retirePriorGenerations();
+				return guarded.egress.configure();
+			},
+		},
 		browser: (agent) => ({
 			...guarded.browser(agent),
 			command: async () => {
@@ -526,6 +543,7 @@ export function microvmBox(input: string): BoxSetup {
 				await bringing?.catch(() => undefined);
 				await browserBringing?.catch(() => undefined);
 				await loading?.catch(() => undefined);
+				await takingOver?.catch(() => undefined);
 				if (computer === undefined) return;
 				let failure: unknown;
 				for (const operation of [

@@ -25,6 +25,8 @@ Follow [Delivery](delivery.md) and the relevant gates in [Verification](verifica
 
 ## Open work
 
+- [ ] Qualify native recovery through host sleep/wake and prolonged outages, and reduce the preflight cost without
+  losing proxy recovery or retrying interrupted actions. Run the new restoration fault sweeps in CI.
 - [ ] Qualify the bundled Linux computer on x64 and ARM64 with KVM: staged runtime and image hashes,
   guarded networking, persistent folders, lazy browser loading, desktop/phone-width use and complete cleanup.
   The release workflow's optional native-computer check runs `scripts/verify-computer.ts`; ordinary release

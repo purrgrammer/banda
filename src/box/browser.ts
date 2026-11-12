@@ -751,7 +751,10 @@ export function openBrowser(options: BrowserOptions): Browser {
 
 	/** The browser, started for `chat` if it is not open; one start at a time. */
 	const opened = async (chat: number): Promise<Session> => {
-		if (session !== undefined) return session;
+		if (session !== undefined) {
+			await options.ensure();
+			if (session !== undefined) return session;
+		}
 		if (starting === undefined) {
 			const controller = new AbortController();
 			starting = { chat, controller, promise: start(chat, controller.signal) };
@@ -1350,6 +1353,8 @@ export function openBrowser(options: BrowserOptions): Browser {
 				cut.abort(new Taken());
 				cut = new AbortController();
 				try {
+					await options.ensure();
+					if (session !== s) throw new Refused("The browser closed while its computer was starting.");
 					await options.tell({ chat: s.chat, owner: true });
 					// what they press and type goes to this tab, in front
 					await s.cdp.send("Page.bringToFront", {}, s.page).catch(() => undefined);
@@ -1367,6 +1372,8 @@ export function openBrowser(options: BrowserOptions): Browser {
 					await s.cdp.send("Page.reload", { ignoreCache: true }, s.page);
 				}
 			} else {
+				await options.ensure();
+				if (session !== s) throw new Refused("The browser closed while its computer was starting.");
 				// the agent's next request is held again before the proxy is told
 				control = "agent";
 				await options.tell({ chat: s.chat, owner: false });
@@ -1380,6 +1387,8 @@ export function openBrowser(options: BrowserOptions): Browser {
 		input: async (input) => {
 			const s = session;
 			if (s === undefined || control !== "owner") throw new Refused("Take the browser first.");
+			if (input.type !== "mouse" || (input.action !== "move" && input.action !== "wheel")) await options.ensure();
+			if (session !== s || control !== "owner") throw new Refused("Take the browser first.");
 			touch();
 			if (input.type === "navigate") {
 				let url: URL;

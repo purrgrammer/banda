@@ -53,6 +53,36 @@ globalThis.fetch = (input, init) => {
 	);
 };
 const home = await realpath(await mkdtemp(join(tmpdir(), "banda-native-proof-")));
+const cache = join(
+	process.platform === "darwin" ? "/private/tmp" : "/tmp",
+	`banda-msb-${process.getuid?.() ?? 0}-${createHash("sha256").update(home).digest("hex").slice(0, 16)}`,
+);
+const runtimeEnv = {
+	PATH: "/usr/bin:/bin",
+	HOME: home,
+	MSB_HOME: cache,
+	MSB_PATH: assets.msb,
+	MSB_LIBKRUNFW_PATH: assets.firmware,
+};
+const runtime = (args: readonly string[]) =>
+	execFileSync(assets.msb, [...args], { encoding: "utf8", env: runtimeEnv, timeout: 30_000 });
+let proxyRestarts = 0;
+const stopProxy = () => {
+	const Listing = Type.Array(Type.Object({ name: Type.String() }));
+	const listed: unknown = JSON.parse(runtime(["list", "--format", "json"]));
+	assert.ok(Value.Check(Listing, listed));
+	const proxy = listed.find((vm) => vm.name.endsWith("-proxy"));
+	assert.ok(proxy !== undefined);
+	const Owned = Type.Object({
+		config: Type.Object({
+			labels: Type.Object({ "banda.home": Type.Literal(home), "banda.runtime": Type.Literal("microvm") }),
+		}),
+	});
+	const inspected: unknown = JSON.parse(runtime(["inspect", proxy.name, "--format", "json"]));
+	assert.ok(Value.Check(Owned, inspected));
+	runtime(["stop", proxy.name]);
+	proxyRestarts++;
+};
 const command = `set -eu
 test "$PWD" = /workspace
 test "$HOME" = /work
@@ -94,7 +124,7 @@ faux.setResponses(
 );
 await writeFile(
 	join(home, "config.json"),
-	JSON.stringify({ model: { provider: "faux", modelId: "faux-1" }, remote: { enabled: false } }),
+	JSON.stringify({ model: { provider: "faux", modelId: "faux-1" }, remote: { reach: "off" } }),
 );
 let daemon: Awaited<ReturnType<typeof startDaemon>> | undefined;
 const log: string[] = [];
@@ -130,6 +160,8 @@ try {
 				["Check the computer.", "native-computer-verified"],
 				["Browse the example page.", "Example Domain"],
 			]) {
+				// Existing command and browser connections must repair their proxy before the next operation.
+				if (width === 390) stopProxy();
 				const newestOwner =
 					"Math.max(0,...[...document.querySelectorAll('[data-message-bubble][data-mine]')].map(el=>Number(el.closest('[data-entry]')?.getAttribute('data-entry')??0)))";
 				const before = await page.run<number>(newestOwner);
@@ -156,15 +188,12 @@ try {
 		});
 	}
 	assert.equal(downloads, 1);
+	assert.equal(proxyRestarts, 2);
 } finally {
 	await releaseBrowser();
 	globalThis.fetch = nativeFetch;
 	await daemon?.close();
 	await writeFile(join(output, "daemon.log"), log.join("\n"));
-	const cache = join(
-		process.platform === "darwin" ? "/private/tmp" : "/tmp",
-		`banda-msb-${process.getuid?.() ?? 0}-${createHash("sha256").update(home).digest("hex").slice(0, 16)}`,
-	);
 	const listed: unknown = JSON.parse(
 		execFileSync(assets.msb, ["list", "--format", "json"], {
 			encoding: "utf8",
@@ -188,6 +217,7 @@ await writeFile(
 		{
 			target: assets.target,
 			widths: [1440, 390],
+			proxyRestarts,
 			browserDownloads: downloads,
 			localArchiveDelivery: true,
 			command,

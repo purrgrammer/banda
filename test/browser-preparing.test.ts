@@ -44,6 +44,76 @@ afterEach(() => {
 });
 
 describe("optional browser preparation", () => {
+	it("owner takeover excludes agent actions before waiting for computer recovery", async () => {
+		const recovery = preparation();
+		let repairing = false;
+		const browser = openBrowser({
+			setup: { command: async () => ["browser"], login: { username: "u", password: "p" } },
+			ensure: async () => {
+				if (repairing) await recovery.command();
+			},
+			tell: async () => {},
+			log: () => {},
+		});
+		cleanups.push(browser.close);
+		await browser.forget("example.com");
+		repairing = true;
+		const takeover = browser.hold(true);
+		try {
+			await expect(browser.act(0, { type: "navigate", url: "https://example.com/" })).rejects.toThrow(
+				"The owner is using the browser",
+			);
+		} finally {
+			recovery.ready([]);
+			await takeover;
+		}
+		expect(browser.view().control).toBe("owner");
+	});
+
+	it("owner input does not reach a session closed while computer recovery waited", async () => {
+		const recovery = preparation();
+		let repairing = false;
+		const browser = openBrowser({
+			setup: { command: async () => ["browser"], login: { username: "u", password: "p" } },
+			ensure: async () => {
+				if (repairing) await recovery.command();
+			},
+			tell: async () => {},
+			log: () => {},
+		});
+		cleanups.push(browser.close);
+		await browser.forget("example.com");
+		await browser.hold(true);
+		repairing = true;
+		const input = browser.input({ type: "navigate", url: "https://example.com/" }).catch((error: unknown) => error);
+		browser.close();
+		recovery.ready([]);
+		expect(await input).toMatchObject({ message: "Take the browser first." });
+	});
+
+	it("keeps owner pointer movement and scrolling responsive during a recovery", async () => {
+		const recovery = preparation();
+		let repairing = false;
+		const browser = openBrowser({
+			setup: { command: async () => ["browser"], login: { username: "u", password: "p" } },
+			ensure: async () => {
+				if (repairing) await recovery.command();
+			},
+			tell: async () => {},
+			log: () => {},
+		});
+		cleanups.push(browser.close);
+		await browser.forget("example.com");
+		await browser.hold(true);
+		repairing = true;
+		try {
+			await browser.input({ type: "mouse", action: "move", x: 10, y: 10 });
+			await browser.input({ type: "mouse", action: "wheel", x: 10, y: 10, deltaY: 100 });
+		} finally {
+			recovery.ready([]);
+		}
+	});
+
 	it("keeps a later opening intact when an earlier preparation finishes after close", async () => {
 		const first = preparation();
 		const next = preparation();
