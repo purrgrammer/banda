@@ -77,7 +77,8 @@ returned to and merged, at desktop and phone width.
   alone, an error line, unread; resume wakes once); tell-only changes run no model and are not unread; the issue kind
   followed until closed (labels and assignees as sets, told); a thousand changes in one look name twenty and count
   the rest; a derived "all …" condition may be `steady` over a path, so a push's first look never says all checks
-  green; the new rows and lines in the specimen
+  green, and the reading keeps the conditions it held back, so a watch that shares it looks again at the busy cadence
+  too; the new rows and lines in the specimen
 - [ ] Slice 3 through the app against a daemon: a burst, a limit and an issue against real GitHub (the pass followed
   a pull request alone) (#35)
 - [x] GitHub's repository-level kinds: a repository (a release, others' new pull requests and issues wake; a push to
@@ -140,9 +141,6 @@ returned to and merged, at desktop and phone width.
   reading is kept
 - [x] The fault sweep over the shared reading, the dropped reading at the end, Check now keeping the task and the
   stream's routing ran in CI
-- [ ] A watch that shares a reading whose derived condition was held back (`steady`) schedules its quiet cadence, so
-  it hears the flip up to a cadence after the watch that read; a held-back flag on the reading would give it the busy
-  one (#37)
 - [ ] `npm run home:fork` carries no connection sign-ins, so a fork wants a sign-in per connection before a pass (#36)
 - [x] Time-derived state refreshes though a timer's task is no news to the shell: the stream pushes again when the
   earliest permission's `until` passes, and the app reads its day words again at local midnight

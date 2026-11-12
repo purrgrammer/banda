@@ -23,7 +23,7 @@ import { Accepted, shaOf } from "../../src/core/agents.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
 import { accountKey, Connected } from "../../src/core/connections.ts";
 import { pause as pauseAll, resume as resumeAll } from "../../src/core/control.ts";
-import type { Json } from "../../src/core/follow.ts";
+import { BUSY_EVERY, type Json } from "../../src/core/follow.ts";
 import { type Gateway, OWNER } from "../../src/core/gateway.ts";
 import type { McpTool } from "../../src/core/mcp.ts";
 import { Readings } from "../../src/core/objects.ts";
@@ -737,6 +737,56 @@ function heldFailure(summary: WatchSummary): string[] {
 	return errors;
 }
 
+/** When the pushed head is out in `sharedPush`'s world: the step from which GitHub answers head b2. */
+const PUSHED_AT = 3;
+
+/**
+ * A push whose one check has finished green by the first look after it: head a1 with its check green, then from step
+ * `PUSHED_AT` head b2 with its own check already green. That look holds "all checks green" back (its steady path, the
+ * head, just moved), and the next one lets it flip.
+ */
+const sharedPush = (step: number): World => {
+	const pushed = step >= PUSHED_AT;
+	const at = world(0) as { [read: string]: Json } & { get: { [key: string]: Json } };
+	at.get.head = { ref: "objects", sha: pushed ? "b2" : "a1" };
+	at.get_check_runs = {
+		total_count: 1,
+		check_runs: [{ id: pushed ? 21 : 20, name: "vercel", status: "completed", conclusion: "success" }],
+	};
+	return at;
+};
+
+/**
+ * What must hold of two watches that hear a push whose checks finished before the first look after it: each tells the
+ * push, then wakes with "all checks green" within the busy cadence (and the kind's settling time) of the look that
+ * first saw the checks finished, whichever watch read it and whichever took that reading as shared.
+ */
+function sharedPushProblems(summary: WatchSummary): string[] {
+	const errors = watchInvariants(summary);
+	const say = (what: string, ok: boolean) => {
+		if (!ok) errors.push(what);
+	};
+	const told = summary.tells.filter((tell) => tell.changes.includes("new commits")).map((tell) => tell.at);
+	const finished = Math.min(...told);
+	say(`each watch told the push, got ${told.length}`, told.length === WATCHES.length);
+	for (const name of WATCHES) {
+		const wakes = summary.wakes.filter((wake) => wake.watch === name);
+		say(`${name}: one wake, got ${wakes.length}`, wakes.length === 1);
+		say(
+			`${name}: the wake says all checks green`,
+			[...(wakes[0]?.changes ?? [])].sort().join(", ") === "all checks green, checks finished",
+		);
+		const at = wakes[0]?.at ?? Number.POSITIVE_INFINITY;
+		say(
+			`${name}: woke ${(at - finished) / 60_000} minutes after the checks were seen finished, not within the busy cadence`,
+			at <= finished + BUSY_EVERY + 60_000,
+		);
+	}
+	for (const turn of summary.turns) say("a run ended", turn?.status === "completed");
+	say("nothing is parked", summary.parked.length === 0);
+	return errors;
+}
+
 /** What must hold of a scenario that held the watch while the world changed: one wake, from the pause, that ends it. */
 function fromThePause(summary: WatchSummary): string[] {
 	const errors = watchInvariants(summary);
@@ -841,6 +891,23 @@ export const SCENARIOS: {
 			},
 		},
 		problems: sharedProblems,
+	},
+	// the same two watches and no tasks, a minute a step, a push out at step 3 whose check is already green: each
+	// watch looks when its own cadence says (its record's `next`), Mara first, so she reads and Otto takes her reading
+	"shared-push": {
+		options: {
+			second: true,
+			tasks: false,
+			world: sharedPush,
+			clicks: Array.from({ length: 14 }, () => undefined),
+			at: (step) => NOW + step * 60_000,
+			act: async (_step, { harness, core, now }) => {
+				await runsEnded(harness);
+				const records = (await harness.snapshot(Watches, context))?.watches ?? {};
+				for (const name of WATCHES) if ((records[name]?.next ?? now) <= now) await core.lookWatch(harness, name);
+			},
+		},
+		problems: sharedPushProblems,
 	},
 	pause: {
 		options: {

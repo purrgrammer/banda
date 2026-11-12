@@ -173,6 +173,22 @@ describe("a watch on a pull request", () => {
 		expect(summary.followed).toBeUndefined();
 	}, 60_000);
 
+	it("a watch that takes a reading whose green was held back looks again at the busy cadence too: both hear the flip together", async () => {
+		// a push out at step 3 whose check is green already; each watch looks when its own record says, a minute a step.
+		// Mara's look at step 6 reads it and holds "all checks green" back (the head just moved); Otto's takes her reading
+		const scenario = SCENARIOS["shared-push"] as (typeof SCENARIOS)[string];
+		const summary = await watchScenario(await tempHome(), new Faults(), scenario.options);
+		const at = (name: string, kind: "wakes" | "tells") =>
+			summary[kind].filter((each) => each.watch === name).map((each) => (each.at - NOW) / MINUTE);
+		// both told the push at step 6; Mara read again at step 8 and saw it flip, held a minute to settle, and woke at 9;
+		// Otto looked at 8 too, on the reading Mara had kept, and woke with her
+		expect(at("banda-142", "tells")).toEqual([6]);
+		expect(at("banda-142-otto", "tells")).toEqual([6]);
+		expect(at("banda-142", "wakes")).toEqual([9]);
+		expect(at("banda-142-otto", "wakes")).toEqual([9]);
+		expect(scenario.problems(summary)).toEqual([]);
+	}, 60_000);
+
 	it("the first look after its connection's definition changed keeps the watch live, reads again and wakes on nothing", async () => {
 		// the pull request stands still; Mara reads it at step 3, then the connection's definition changes (the daemon
 		// started on a new build), and Otto's look takes no reading made under the version before: it reads for itself

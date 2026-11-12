@@ -16,6 +16,7 @@ import { keepReading, Readings } from "../src/core/objects.ts";
 import { Permissions } from "../src/core/permissions.ts";
 import { FileCredentialStore } from "../src/core/provider-credentials.ts";
 import { context, openStore } from "../src/core/store.ts";
+import { Followed } from "../src/core/watches.ts";
 import { tempHome } from "./helpers.ts";
 
 const open = (home: string) => openStore(home, { models: createModels(), registry: createRegistry() });
@@ -84,6 +85,15 @@ it("reopens current account authority and object readings without a migration", 
 		};
 		connected.reads.github = { tools: ["list_notifications"], version: 5 };
 		(await tx.doc(ToolSettings)).set.github__issue_write = "always";
+		(await tx.doc(Followed)).objects["github/alice/pull_request:org/repo#7"] = {
+			answers: { pr: { head: { sha: "b2" } }, derived: { checks_green: false } },
+			at: 455,
+			source: "accepted-definition-and-account-generation",
+			version: 2,
+			earlier: [{ version: 1, answers: { pr: { head: { sha: "a1" } }, derived: { checks_green: true } } }],
+			through: 455,
+			heldBack: ["checks_green"],
+		};
 		await keepReading(tx, "github/alice/issue:org/repo#12", {
 			connection: "github",
 			account: "alice",
@@ -245,6 +255,11 @@ it("reopens current account authority and object readings without a migration", 
 			reads: { github: { tools: ["list_notifications"], version: 5 } },
 		});
 		expect(await after.snapshot(ToolSettings, context)).toEqual({ set: { github__issue_write: "always" } });
+		expect((await after.snapshot(Followed, context))?.objects["github/alice/pull_request:org/repo#7"]).toMatchObject({
+			version: 2,
+			earlier: [{ version: 1 }],
+			heldBack: ["checks_green"],
+		});
 		expect(await after.snapshot(Connected, context)).toMatchObject({});
 		expect((await after.snapshot(Readings, context))?.readings["github/alice/issue:org/repo#12"]).toMatchObject({
 			account: "alice",

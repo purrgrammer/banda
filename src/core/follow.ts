@@ -304,10 +304,10 @@ export function withLastAnswers(
 	return looked;
 }
 
-/** Whether a derived condition holds over `answers` but is held back because its steady path just changed. */
-export function heldBack(follow: Pick<Follow, "derived">, answers: Item, before?: Item): boolean {
-	return Object.values(follow.derived ?? {}).some(
-		(each) => holds(whenOf(each), answers) && !steady(each, answers, before),
+/** The derived conditions that hold over `answers` but are held back because their steady path just changed. */
+export function heldBack(follow: Pick<Follow, "derived">, answers: Item, before?: Item): string[] {
+	return Object.entries(follow.derived ?? {}).flatMap(([name, each]) =>
+		holds(whenOf(each), answers) && !steady(each, answers, before) ? [name] : [],
 	);
 }
 
