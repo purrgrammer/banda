@@ -1,0 +1,121 @@
+{
+	"lead": {
+		"system": {
+			"total": 1981,
+			"sections": {
+				"speaking": 969,
+				"roster": 95,
+				"avatar_design": 0,
+				"memory": 37,
+				"now": 265,
+				"tool_discovery": 292,
+				"instructions": 313
+			}
+		},
+		"tools": {
+			"total": 22463,
+			"tools": {
+				"message_user": 1947,
+				"ask_user": 1550,
+				"react": 424,
+				"publish": 920,
+				"tool_search": 615,
+				"search": 1034,
+				"read_search_result": 979,
+				"read": 653,
+				"write": 399,
+				"edit": 1148,
+				"bash": 520,
+				"skill": 368,
+				"message_agent": 621,
+				"read_agent_chat": 513,
+				"propose_agent": 1722,
+				"propose_group": 434,
+				"propose_agent_change": 1662,
+				"schedule": 1814,
+				"watch": 1525,
+				"remember": 1505,
+				"recall": 606,
+				"forget": 259,
+				"web_fetch": 1221
+			}
+		}
+	},
+	"helper": {
+		"system": {
+			"total": 2011,
+			"sections": {
+				"speaking": 969,
+				"roster": 387,
+				"avatar_design": 0,
+				"memory": 37,
+				"now": 265,
+				"tool_discovery": 292,
+				"instructions": 51
+			}
+		},
+		"tools": {
+			"total": 22463,
+			"tools": {
+				"message_user": 1947,
+				"ask_user": 1550,
+				"react": 424,
+				"publish": 920,
+				"tool_search": 615,
+				"search": 1034,
+				"read_search_result": 979,
+				"read": 653,
+				"write": 399,
+				"edit": 1148,
+				"bash": 520,
+				"skill": 368,
+				"message_agent": 621,
+				"read_agent_chat": 513,
+				"propose_agent": 1722,
+				"propose_group": 434,
+				"propose_agent_change": 1662,
+				"schedule": 1814,
+				"watch": 1525,
+				"remember": 1505,
+				"recall": 606,
+				"forget": 259,
+				"web_fetch": 1221
+			}
+		}
+	},
+	"group": {
+		"system": {
+			"total": 1563,
+			"sections": {
+				"group": 914,
+				"memory": 37,
+				"now": 267,
+				"tool_discovery": 284,
+				"instructions": 53
+			}
+		},
+		"tools": {
+			"total": 17487,
+			"tools": {
+				"message_group": 1928,
+				"ask_user": 1550,
+				"react": 424,
+				"publish": 920,
+				"tool_search": 615,
+				"search": 1034,
+				"read_search_result": 979,
+				"read": 653,
+				"write": 399,
+				"edit": 1148,
+				"bash": 520,
+				"skill": 368,
+				"schedule": 1814,
+				"watch": 1525,
+				"remember": 1505,
+				"recall": 606,
+				"forget": 259,
+				"web_fetch": 1221
+			}
+		}
+	}
+}
