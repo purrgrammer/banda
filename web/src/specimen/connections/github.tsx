@@ -242,15 +242,13 @@ export function GithubSection() {
 										tool: "github__create_pull_request",
 										verb: "Open",
 										as: "@bandarra on GitHub",
-										args,
+										// answered, what ran: the owner's title
+										args: title === undefined ? args : { ...args, title },
 										editable: ["title", "body"],
 									}}
 									{...(title === undefined
 										? { wait: "specimen" }
-										: {
-												state: { kind: "done", words: "Approved as you edited it" },
-												edited: { ...args, title },
-											})}
+										: { state: { kind: "done", words: "Approved as you edited it" }, drafted: args })}
 								/>
 							);
 						})}

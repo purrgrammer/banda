@@ -7,8 +7,10 @@ vi.hoisted(() => {
 	Object.assign(globalThis, { location: { hash: "", pathname: "/", search: "" } });
 });
 
+import type { Item } from "../../../src/server/api.ts";
 import { DraftApproval } from "../app/DraftApproval.tsx";
 import type { Ask } from "../lib/api.ts";
+import { view } from "../lib/chat.ts";
 import { EditableText } from "./EditableText.tsx";
 import { RoutineProposal } from "./Routine.tsx";
 
@@ -44,16 +46,31 @@ describe("text the owner may edit before accepting it", () => {
 			label: "Change acme/banda #34",
 			editable: ["title", "body"],
 		};
+		// as the feed draws it: the daemon's answered Wait, with the draft that ran, through the chat's segments
+		const answered: Item = {
+			id: 1,
+			role: "wait",
+			ask,
+			outcome: "answered",
+			answer: "approve",
+			at: 1,
+			edited: { ...ask.args, title: "Owner's title" },
+		};
+		const segment = view([answered], [], { busy: false, running: [], thinking: false }).find(
+			(each) => each.kind === "approval",
+		);
+		if (segment?.kind !== "approval") throw new Error("no approval segment");
 		const html = renderToStaticMarkup(
 			createElement(DraftApproval, {
 				chat: 1,
 				agent: { name: "Octo" },
-				ask,
-				label: "Change acme/banda #34",
-				state: { kind: "done", words: "Approved as you edited it" },
-				edited: { ...ask.args, title: "Owner's title" },
+				ask: segment.ask,
+				label: segment.label,
+				drafted: segment.drafted,
+				state: { kind: "done", words: segment.ended?.said ?? "" },
 			}),
 		);
+		expect(html).toContain("Approved as you edited it");
 		expect(html).toContain("Owner&#x27;s title");
 		expect(html).not.toContain("Drafted title");
 		expect(html).toContain("Drafted description");

@@ -171,6 +171,14 @@ const editableList = (value: unknown, text: unknown): boolean =>
 		value.every((arg) => typeof arg === "string" && NAME.test(arg) && arg !== text) &&
 		new Set(value).size === value.length);
 
+/**
+ * The text a write lets the owner edit that would steer it instead (an argument naming the object it acts on, or one its
+ * other verbs turn on): editing those is changing an order for a machine, never words for a person.
+ */
+const steers = (text: unknown, editable: unknown, ...steering: readonly unknown[][]): string | undefined => {
+	const edited = [...(typeof text === "string" ? [text] : []), ...(Array.isArray(editable) ? editable : [])];
+	return edited.find((arg) => steering.some((args) => args.includes(arg))) as string | undefined;
+};
 const placeholders = (template: string) => [...template.matchAll(PLACEHOLDER)].map((m) => m[1] as string);
 const escapePattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
@@ -432,6 +440,14 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 						});
 				}
 				if (w.verbs !== undefined && !Array.isArray(w.verbs)) errors.push(`${at}.verbs is a list`);
+				const steering = steers(
+					w.text,
+					w.editable,
+					Object.values(idArgs),
+					verbs.flatMap((o) => Object.keys(o.when)),
+				);
+				if (steering !== undefined)
+					errors.push(`${at} lets the owner edit ${steering}, which says what it acts on or does`);
 				writes.push({
 					tool: w.tool,
 					id: idArgs as { [placeholder: string]: string },
@@ -476,6 +492,11 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 					placeholders(c.what).some((p) => !Object.hasOwn(into, p))
 				) {
 					errors.push(`${at}.in gives each placeholder its words name, of ${[...named].join(", ")}, from an argument`);
+					continue;
+				}
+				const steering = steers(c.text, c.editable, Object.values(into), Object.keys(when ?? {}));
+				if (steering !== undefined) {
+					errors.push(`${at} lets the owner edit ${steering}, which says what it acts on or does`);
 					continue;
 				}
 				creates.push({

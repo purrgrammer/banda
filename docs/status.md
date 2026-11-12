@@ -155,8 +155,9 @@ chat; a name, an avatar and a style the owner chooses; notifications only when s
 Editing proposed text before accepting it (#53) is in review on `feat/issue-53-edit-proposals`: a pull request's
 title and description (open, change, merge's commit title and message), an issue's title, an agent's proposed
 description and instructions, and a proposed routine's schedule and ask, each a read block with a quiet Edit. Sends
-held by the proxy and coding-agent asks stay as drafted. Tests and static checks pass; the walkthrough in the app at
-desktop and phone widths and owner review remain.
+held by the proxy and coding-agent asks stay as drafted. Walked through in the app against a daemon on a throwaway
+home, at desktop and phone widths, light and dark (`test/edit-proposals-daemon.browser.test.ts`); owner review
+remains.
 
 ## Existing implementation
 

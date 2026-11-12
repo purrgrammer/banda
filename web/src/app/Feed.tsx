@@ -101,6 +101,8 @@ function ProposalFeedCard({ segment }: { segment: Extract<Segment, { kind: "prop
 		return card;
 	}
 	const yes = state === "accepted";
+	// accepted as the owner edited it: the row says so, and reads their words, as an approval's does
+	const note = yes && edited !== undefined && Object.keys(edited).length > 0 ? "as you edited it" : undefined;
 	const row =
 		proposal.kind === "agent" ? (
 			<Done
@@ -108,9 +110,13 @@ function ProposalFeedCard({ segment }: { segment: Extract<Segment, { kind: "prop
 				action={yes ? "created" : "didn't create"}
 				reference={
 					yes
-						? { agent: { id: proposal.agentId, name: proposal.name, face: proposal.face }, title: proposal.description }
+						? {
+								agent: { id: proposal.agentId, name: proposal.name, face: proposal.face },
+								title: edited?.description ?? proposal.description,
+							}
 						: { where: proposal.name }
 				}
+				note={note}
 				card={card}
 			/>
 		) : proposal.kind === "group" ? (
@@ -131,6 +137,7 @@ function ProposalFeedCard({ segment }: { segment: Extract<Segment, { kind: "prop
 						face: (yes ? proposal.proposedAgent : proposal.beforeAgent).face,
 					},
 				}}
+				note={note}
 				card={card}
 			/>
 		);
@@ -213,6 +220,7 @@ function RoutineLine({
 	const set = routine?.accepted?.routine;
 	if (state === "done" && set !== undefined) {
 		const open = name === undefined || onRoutine === undefined ? undefined : () => onRoutine(name);
+		const edited = segment.sha !== undefined && routine?.edited?.includes(segment.sha) === true;
 		const card = (
 			<RoutineProposal
 				routine={{
@@ -223,11 +231,7 @@ function RoutineLine({
 					next: (routine?.nextRuns ?? []).slice(0, 3).map(clock),
 					ask: set.ask,
 				}}
-				settled={
-					segment.sha !== undefined && routine?.edited?.includes(segment.sha) === true
-						? `Set up · ${EDITED_WORDS}`
-						: "Set up"
-				}
+				settled={edited ? `Set up · ${EDITED_WORDS}` : "Set up"}
 			/>
 		);
 		return (
@@ -240,6 +244,7 @@ function RoutineLine({
 						kind="routine"
 						action="set up"
 						reference={{ routine: { title, when: set.when }, onOpen: open }}
+						note={edited ? "as you edited it" : undefined}
 						card={card}
 					/>
 				}
@@ -265,14 +270,18 @@ function RoutineLine({
 						? {}
 						: { schedule: shown.schedule, ...(shown.zone === undefined ? {} : { zone: shown.zone }) }),
 				}}
+				// a refusal (a time that has passed by the time it arrives, a version changed since) says why, and the card
+				// keeps the owner's edit to correct
 				onAllow={(edit) =>
-					void actOnRoutine(name, {
-						action: "accept",
-						sha: change.kind === "removed" ? null : (change.sha ?? null),
-						...edit,
-					}).then(showControl)
+					void attempt(change.kind === "removed" ? "stop it" : "set it up", () =>
+						actOnRoutine(name, {
+							action: "accept",
+							sha: change.kind === "removed" ? null : (change.sha ?? null),
+							...edit,
+						}).then(showControl),
+					)
 				}
-				onDecline={() => void actOnRoutine(name, { action: "decline" }).then(showControl)}
+				onDecline={() => void attempt("decline it", () => actOnRoutine(name, { action: "decline" }).then(showControl))}
 			/>
 		);
 	}
@@ -760,7 +769,7 @@ function partOf(
 					ask={segment.ask}
 					label={segment.label}
 					wait={open?.wait}
-					edited={segment.ended?.edited}
+					drafted={segment.drafted}
 					state={
 						open !== undefined
 							? { kind: "open" }

@@ -30,21 +30,33 @@ export type RoutineProposalView = {
 	readonly zone?: string | undefined;
 };
 
-const SCHEDULE_HINT = "every 4h, at 2026-11-02 09:00, or cron 0 8 * * 1-5";
+/** What a schedule line takes, its one-time example tomorrow: an example the daemon would refuse as passed helps no one. */
+function scheduleHint(now = new Date()): string {
+	const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+	const day = [tomorrow.getFullYear(), tomorrow.getMonth() + 1, tomorrow.getDate()]
+		.map((part) => String(part).padStart(2, "0"))
+		.join("-");
+	return `every 4h, at ${day} 09:00, or cron 0 8 * * 1-5`;
+}
 
-export function RoutineProposal({
-	routine,
-	onAllow,
-	onDecline,
-	settled,
-}: {
+type Props = {
 	routine: RoutineProposalView;
 	/** Answered: the result in words ("Set up · 9:12") in place of the buttons. */
 	settled?: string | undefined;
 	/** Allow it, with the owner's edit when they made one. */
 	onAllow?: (edit?: RoutineEdit) => void;
 	onDecline?: () => void;
-}) {
+};
+
+/**
+ * The owner's edit is of the words they were shown: when the agent writes the routine again while the card is open, the
+ * card starts afresh from the new words, never carrying an edit of the old ones onto a version they did not edit.
+ */
+export function RoutineProposal(props: Props) {
+	return <Proposed key={`${props.routine.schedule ?? ""}\n${props.routine.ask}`} {...props} />;
+}
+
+function Proposed({ routine, onAllow, onDecline, settled }: Props) {
 	const { kind } = routine;
 	const what = kind === "new" ? "set up a routine" : kind === "changed" ? "change a routine" : "stop a routine";
 	const [when, setWhen] = useState(routine.schedule ?? "");
@@ -52,7 +64,8 @@ export function RoutineProposal({
 	const editable = settled === undefined && onAllow !== undefined && kind !== "removed";
 	const parsed = when === routine.schedule ? undefined : parseSchedule(when, routine.zone);
 	const whenEdited = routine.schedule !== undefined && when !== routine.schedule;
-	const badWhen = whenEdited && parsed === undefined ? `Not a schedule: ${SCHEDULE_HINT}.` : undefined;
+	const hint = scheduleHint();
+	const badWhen = whenEdited && parsed === undefined ? `Not a schedule: ${hint}.` : undefined;
 	const badAsk = ask !== routine.ask && ask.trim() === "" ? "Say what it does each run." : undefined;
 	const edit: RoutineEdit = {
 		...(whenEdited ? { when } : {}),
@@ -74,7 +87,7 @@ export function RoutineProposal({
 						value={when}
 						original={routine.schedule}
 						reads={parsed === undefined ? routine.when : whenWords(parsed)}
-						hint={SCHEDULE_HINT}
+						hint={hint}
 						invalid={badWhen}
 						onChange={setWhen}
 					>

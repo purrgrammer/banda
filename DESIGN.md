@@ -564,9 +564,10 @@ edited bytes. Approved, the daemon runs the stored draft once and the tool retur
 returns that. What the owner may edit is what the agent wrote for a person or as its own instructions (a comment, a
 review, an issue's or a pull request's title and description, a merge's commit message, an agent's description and
 personality, what a routine asks and when), never an order for a machine (a held request, a coding agent's command
-or diff), which runs exactly as stored or not at all. Edited text reads as the owner's on the card ("Edited by you"),
-and the agent is told which text the owner changed. Outgoing messages on the owner's behalf (an email, a comment) are always drafts. Wait ids never reach
-the model.
+or diff), which runs exactly as stored or not at all, nor an argument that names what a write acts on or picks its
+verb. Edited text reads as the owner's on the card ("Edited by you"), and the agent is told which text the owner
+changed. Outgoing messages on the owner's behalf (an email, a comment) are always drafts. Wait ids never reach the
+model.
 
 **Permissions.** An approval can be given with a scope: this once, for this task, for an hour, always. A permission is
 stored; an effect within an open permission runs without asking and is listed in the activity log, and the owner revokes

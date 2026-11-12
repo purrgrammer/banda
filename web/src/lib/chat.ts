@@ -40,8 +40,6 @@ export type Ended = {
 	readonly inChat?: boolean;
 	/** What was picked or answered, or why there was no answer, as the card says it. */
 	readonly said: string;
-	/** An approval's draft as the owner edited it: what ran. */
-	readonly edited?: { readonly [arg: string]: unknown };
 };
 
 /** What the chat shows, part by part: the daemon's kinds here, and each area's own (`segments/`). */
@@ -84,7 +82,10 @@ type CoreSegment =
 			readonly key: string;
 			/** The tool call that asked, when the transcript names it. */
 			readonly call?: string;
+			/** Its draft: answered as the owner edited it, what ran. */
 			readonly ask: Approval;
+			/** What the agent drafted, when the owner edited it before approving: what the card says they changed. */
+			readonly drafted?: { readonly [arg: string]: unknown };
 			/** What it would run, in words, as the daemon labels it. */
 			readonly label: string;
 			/** Its arguments as a labelled list, never JSON. */
@@ -230,7 +231,7 @@ function ended(ask: Ask, item: Extract<Item, { role: "wait" }>): Ended {
 		if (!yes) return { ...base, said: "Declined" };
 		const edited = item.edited === undefined ? "Approved" : "Approved as you edited it";
 		const permitted = item.permitted === undefined ? "" : `, and allowed ${permissionWhen(item.permitted)}`;
-		return { ...base, said: `${edited}${permitted}`, ...(item.edited === undefined ? {} : { edited: item.edited }) };
+		return { ...base, said: `${edited}${permitted}` };
 	}
 	return { ...base, said: item.answer === undefined ? "Answered" : answerWords(item.answer) };
 }
@@ -749,6 +750,7 @@ function askSegment(
 		key,
 		...(call === undefined ? {} : { call }),
 		ask: one.item?.edited === undefined ? one.ask : { ...one.ask, args: one.item.edited },
+		...(one.item?.edited === undefined ? {} : { drafted: one.ask.args }),
 		label: one.label ?? one.ask.label ?? "this",
 		// what ran: the draft as the owner edited it
 		args: argList(one.item?.edited ?? one.ask.args),

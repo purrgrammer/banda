@@ -194,7 +194,7 @@ export async function accept(
 			throw new BadRequest(`${routinePath(name)} changed since you saw it: look again`, 409);
 		const parsed = parseRoutine(name, box.text);
 		if ("errors" in parsed) throw new BadRequest(parsed.errors.join("\n"));
-		const text = editedText(name, box.text, parsed.routine, change, now);
+		const { text, fields } = editedText(name, box.text, parsed.routine, change, now);
 		const runs = shaOf(text);
 		await harness.commit(async (tx) => {
 			const files = (await tx.doc(Accepted)).files;
@@ -209,14 +209,7 @@ export async function accept(
 				// the box holds the agent's version: it gets the owner's, as after any edit of theirs
 				record.edit = { sha: runs, base: sha };
 			}
-			if (runs !== sha) {
-				const fields = [
-					...(change.description === undefined ? [] : ["description"]),
-					...(change.when === undefined ? [] : ["schedule"]),
-					...(change.ask === undefined ? [] : ["ask"]),
-				];
-				await told?.(tx, routineAgent(record), fields);
-			}
+			if (runs !== sha) await told?.(tx, routineAgent(record), fields);
 			const how = runs === sha ? "" : ", edited";
 			await log(tx, { at: now, routine: name, what: known ? `You allowed its change${how}` : `You allowed it${how}` });
 		}, ctx);
@@ -227,10 +220,18 @@ export async function accept(
 
 /**
  * The box's routine file `text` with the owner's `change` in it, every other byte as the agent wrote it, checked as any
- * routine file is; `text` itself when they changed nothing.
+ * routine file is, and which of what the agent wrote it changes (an edit that gives the same words back changes nothing);
+ * `text` itself when they changed nothing.
  */
-function editedText(name: string, text: string, routine: Routine, change: RoutineChange, now: number): string {
-	if (change.when === undefined && change.description === undefined && change.ask === undefined) return text;
+function editedText(
+	name: string,
+	text: string,
+	routine: Routine,
+	change: RoutineChange,
+	now: number,
+): { readonly text: string; readonly fields: readonly string[] } {
+	if (change.when === undefined && change.description === undefined && change.ask === undefined)
+		return { text, fields: [] };
 	const description = change.description === undefined ? undefined : descriptionOf(change.description);
 	const ask = change.ask === undefined ? undefined : askOf(change.ask);
 	// the owner's times are on the wall the agent named: its zone stays as it was
@@ -245,7 +246,14 @@ function editedText(name: string, text: string, routine: Routine, change: Routin
 		throw new BadRequest(
 			parsed !== undefined && "errors" in parsed ? parsed.errors.join("; ") : "it has no frontmatter",
 		);
-	return next;
+	const after = parsed.routine;
+	const fields = [
+		...(after.description === routine.description ? [] : ["description"]),
+		...(JSON.stringify(after.when) === JSON.stringify(routine.when) ? [] : ["schedule"]),
+		...(after.ask === routine.ask ? [] : ["ask"]),
+	];
+	// the same routine in other bytes is no edit: what the agent wrote runs, as it wrote it
+	return fields.length === 0 ? { text, fields } : { text: next, fields };
 }
 
 /** Decline the box's change to routine `name`: the accepted file is written back, or a new one removed. */

@@ -746,8 +746,10 @@ describe("the owner edits a routine an agent proposed, before allowing it", () =
 			);
 			expect(await readFile(file, "utf8")).toBe(written);
 
+			// what it is for, given back as the agent wrote it, is no edit: the notice names only what changed
 			const allowed = await post<ControlView>("/routines/tea/accept", {
 				sha,
+				description: "Tea time",
 				when: "cron 0 9 * * *",
 				ask: "Remind the owner, kindly, to drink tea.",
 			});

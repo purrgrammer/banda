@@ -26,8 +26,11 @@ type Props = {
 	state?: ApprovalState | undefined;
 	/** The object the draft acts on, drawn already (the specimen's), instead of read from the daemon. */
 	drawn?: ReactNode;
-	/** Approved as the owner edited it: the draft that ran, which the answered card reads. */
-	edited?: { readonly [arg: string]: unknown } | undefined;
+	/**
+	 * Approved as the owner edited it, what the agent drafted: `ask` holds what ran, and each field the owner changed
+	 * says so against this.
+	 */
+	drafted?: { readonly [arg: string]: unknown } | undefined;
 };
 
 /** The text arguments that are one line: a title, a commit's title. */
@@ -51,7 +54,7 @@ export function DraftApproval(props: Props) {
 	return <Draft key={props.wait ?? "answered"} {...props} />;
 }
 
-function Draft({ chat, agent, ask, label, wait, state, drawn, edited }: Props) {
+function Draft({ chat, agent, ask, label, wait, state, drawn, drafted }: Props) {
 	const [edits, setEdits] = useState<Record<string, string>>({});
 	const [busy, setBusy] = useState(false);
 	const interrupted = ask.interrupted === true;
@@ -133,10 +136,10 @@ function Draft({ chat, agent, ask, label, wait, state, drawn, edited }: Props) {
 					{preview || fields.length === 0 ? null : (
 						<FieldGroup>
 							{fields.map((name) => {
-								const drafted = String(ask.args[name]);
-								// answered, the card reads what ran: the owner's text where they edited it
-								const ran = edited?.[name];
-								const value = readOnly ? (typeof ran === "string" ? ran : drafted) : (edits[name] ?? drafted);
+								// answered, `ask` is what ran: the owner's text where they edited it, said against the agent's
+								const given = String(ask.args[name]);
+								const original = typeof drafted?.[name] === "string" ? (drafted[name] as string) : given;
+								const value = readOnly ? given : (edits[name] ?? given);
 								// `*` on an ask_hosts draft is every destination: flagged in red, on the text as edited
 								const warning = name === "hosts" ? wildcardWarning(ask.tool, value) : undefined;
 								return (
@@ -144,8 +147,8 @@ function Draft({ chat, agent, ask, label, wait, state, drawn, edited }: Props) {
 										key={name}
 										label={fieldLabel(name, fields)}
 										value={value}
-										original={drafted}
-										line={!drafted.includes("\n") && TITLES.has(name)}
+										original={original}
+										line={!original.includes("\n") && TITLES.has(name)}
 										disabled={busy}
 										onChange={readOnly ? undefined : (next) => setEdits((prior) => ({ ...prior, [name]: next }))}
 									>

@@ -591,3 +591,31 @@ it("a write's editable text is a few argument names, never its free text again; 
 	});
 	expect(editableOf("dismiss_notification", shipped.objects)).toEqual({ free: [], bound: [] });
 });
+it("a write never lets the owner edit what it acts on or which verb it is: those steer it, they are not words", () => {
+	const withWrite = (write: object, creates: object[] = []) =>
+		parseObjects({ issue: { ...GITHUB_OBJECTS.issue, writes: [write], creates } }, () => true);
+	const base = {
+		tool: "issue_write",
+		id: { owner: "owner", repo: "repo", number: "issue_number" },
+		verb: "Change",
+		verbs: [{ when: { state: "closed" }, verb: "Close" }],
+	};
+	// the object's own arguments, and the one its other verb turns on, as editable or as its text
+	for (const steering of ["owner", "repo", "issue_number", "state"]) {
+		expect(withWrite({ ...base, editable: [steering] }), steering).toHaveProperty("errors");
+		expect(withWrite({ ...base, text: steering }), steering).toHaveProperty("errors");
+	}
+	expect(withWrite({ ...base, text: "body", editable: ["title"] })).toHaveProperty("objects");
+	// a create: where it lands and what picks it
+	const create = {
+		tool: "issue_write",
+		when: { method: "create" },
+		in: { owner: "owner", repo: "repo" },
+		verb: "Create",
+		what: "Create an issue on {owner}/{repo}",
+	};
+	const write = { ...base, text: "body" };
+	for (const steering of ["owner", "repo", "method"])
+		expect(withWrite(write, [{ ...create, editable: [steering] }]), steering).toHaveProperty("errors");
+	expect(withWrite(write, [{ ...create, text: "body", editable: ["title"] }])).toHaveProperty("objects");
+});
