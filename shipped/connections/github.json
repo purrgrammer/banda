@@ -1313,6 +1313,10 @@
 				"totals": {
 					"comments.comments": "comments.totalCount"
 				},
+				"authors": {
+					"comments.comments": "author.login",
+					"comments.comments[*].replies": "author.login"
+				},
 				"ignore": [
 					"discussion.body",
 					"comments.totalCount",
@@ -1348,14 +1352,28 @@
 					{
 						"on": "comments.comments[*]",
 						"kind": "added",
+						"where": "author.login = null",
 						"does": "wake",
 						"says": "new comment (author not known)"
+					},
+					{
+						"on": "comments.comments[*]",
+						"kind": "added",
+						"does": "wake",
+						"says": "{author.login} commented"
+					},
+					{
+						"on": "comments.comments[*].replies[*]",
+						"kind": "added",
+						"where": "author.login = null",
+						"does": "wake",
+						"says": "new reply (author not known)"
 					},
 					{
 						"on": "comments.comments[*].replies[*]",
 						"kind": "added",
 						"does": "wake",
-						"says": "new reply (author not known)"
+						"says": "{author.login} replied"
 					}
 				],
 				"ends": {

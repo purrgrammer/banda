@@ -530,11 +530,13 @@ export const GITHUB_OBJECTS = {
 				args: { owner: "{owner}", repo: "{repo}", discussionNumber: "{number}", perPage: 100, includeReplies: true },
 			},
 		},
-		// how a watch follows it: new comments and replies wake, answered or closed wakes and ends it, a new title tells.
-		// github-mcp-server's comment is an id, a body and isAnswer, with no author, and no listed read names one: the
-		// account's own comments wake too, and the words say whose is not known rather than pass them as another's
+		// how a watch follows it: new comments and replies wake, the account's own are nothing, answered or closed wakes
+		// and ends it, a new title tells. A comment's author is `author.login` where the server names it; GitHub's hosted
+		// server names none (its comment is an id, a body and isAnswer), and a deleted account's comment has none: such a
+		// comment wakes saying its author is not known, never taken for the account's or another's
 		follow: {
 			totals: { "comments.comments": "comments.totalCount" },
+			authors: { "comments.comments": "author.login", "comments.comments[*].replies": "author.login" },
 			ignore: [
 				"discussion.body",
 				"comments.totalCount",
@@ -548,8 +550,22 @@ export const GITHUB_OBJECTS = {
 				{ on: "discussion.closed", to: true, does: "wake", says: "closed" },
 				{ on: "discussion.closed", to: false, does: "wake", says: "reopened" },
 				{ on: "discussion.title", does: "tell", says: "retitled: {to}" },
-				{ on: "comments.comments[*]", kind: "added", does: "wake", says: "new comment (author not known)" },
-				{ on: "comments.comments[*].replies[*]", kind: "added", does: "wake", says: "new reply (author not known)" },
+				{
+					on: "comments.comments[*]",
+					kind: "added",
+					where: "author.login = null",
+					does: "wake",
+					says: "new comment (author not known)",
+				},
+				{ on: "comments.comments[*]", kind: "added", does: "wake", says: "{author.login} commented" },
+				{
+					on: "comments.comments[*].replies[*]",
+					kind: "added",
+					where: "author.login = null",
+					does: "wake",
+					says: "new reply (author not known)",
+				},
+				{ on: "comments.comments[*].replies[*]", kind: "added", does: "wake", says: "{author.login} replied" },
 			],
 			ends: { answered: "discussion.isAnswered = true", closed: "discussion.closed = true" },
 			every: "10m",

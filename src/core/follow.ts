@@ -216,6 +216,8 @@ function valuesAt(value: Json | undefined, p: Pattern, item = false): (Json | un
 /**
  * A condition: terms joined by ` or `, each `path = value` or `path != value` (a JSON value, else plain words), which
  * holds when any value at the path matches, or, written `all path …`, when every one does and there is one at least.
+ * `null` is no value: `path = null` holds where the path has none, left out or null (a comment whose author the service
+ * does not name).
  */
 /** One `path = value` of a condition; its values are alternatives, any of which is the value. */
 type Term = {
@@ -247,9 +249,11 @@ export function holds(text: string, reading: Json): boolean {
 	if ("error" in terms) return false;
 	return terms.some((term) => {
 		const values = valuesAt(reading, term.path);
-		// a value that is not there equals nothing: "= x" fails on it, "!= x" holds
+		// a value that is not there equals null alone: "= x" fails on it, "!= x" holds, "= null" holds
+		const none = term.values.some((each) => each === null);
 		const ok = (value: Json | undefined) =>
-			(value !== undefined && term.values.some((each) => canonical(value) === canonical(each))) === term.equal;
+			(value === undefined ? none : term.values.some((each) => canonical(value) === canonical(each))) === term.equal;
+		if (!term.all && values.length === 0) return term.equal && none;
 		return term.all ? values.length > 0 && values.every(ok) : values.some(ok);
 	});
 }
