@@ -40,7 +40,7 @@ import { ActivitySheet, type ActivityTarget } from "./Activity.tsx";
 import { kindWords } from "./ArtifactPage.tsx";
 import { whoOf } from "./band.ts";
 import { DraftApproval } from "./DraftApproval.tsx";
-import { HarnessActivitySheet } from "./HarnessSession.tsx";
+import { useHarnessMenu } from "./HarnessSession.tsx";
 import { chatActivity, harnessActivity } from "./harness-activity.ts";
 import { MessageObjects, MessageText } from "./Objects.tsx";
 import { useSkills } from "./Skills.tsx";
@@ -125,7 +125,6 @@ export function GroupChat({
 	const name = row?.name ?? group?.name ?? "Group";
 	const working = members.filter((member) => member.state === "working");
 	const executions = row?.executions ?? group?.executions ?? {};
-	const [delegatedOpen, setDelegatedOpen] = useState<readonly number[]>();
 	const delegated = harnessActivity(shell.harnesses?.sessions ?? [], Object.values(executions));
 	const status = chatActivity(
 		(row?.asking ?? group?.asking ?? []).length ? "waiting" : working.length ? "working" : "idle",
@@ -156,7 +155,7 @@ export function GroupChat({
 		const chat = executions[member.id];
 		return chat === undefined ? [] : [{ chat, name: member.name, heading: name }];
 	});
-	const openDelegated = () => setDelegatedOpen(delegated.sessions.map((session) => session.task));
+	const coding = useHarnessMenu(delegated.sessions, delegated.waiting, phone);
 	const activityTargets = (working.length ? working : members).flatMap((member) => {
 		const chat = executions[member.id];
 		return chat === undefined ? [] : [{ chat, name: member.name, heading: name }];
@@ -190,11 +189,7 @@ export function GroupChat({
 					faces={all}
 					state={status.state}
 					attention={status.attention}
-					delegated={
-						delegated.sessions.length > 0
-							? { count: delegated.sessions.length, waiting: delegated.waiting, onOpen: openDelegated }
-							: undefined
-					}
+					delegated={coding.menu}
 					phone={phone}
 					doing={status.doing}
 					onBack={onBack}
@@ -202,7 +197,7 @@ export function GroupChat({
 					onPanel={() => setPanel((open) => !open)}
 					onActivity={
 						status.delegatedPrimary
-							? openDelegated
+							? coding.open
 							: activityTargets.length
 								? () => setActivity(activityTargets)
 								: undefined
@@ -383,9 +378,7 @@ export function GroupChat({
 					/>
 				</Conversation>
 			</div>
-			{delegatedOpen === undefined ? null : (
-				<HarnessActivitySheet tasks={delegatedOpen} onClose={() => setDelegatedOpen(undefined)} />
-			)}
+			{coding.details}
 			{activity === undefined ? null : (
 				<ActivitySheet
 					targets={activity}

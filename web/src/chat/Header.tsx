@@ -6,8 +6,8 @@
  * to the band. Its parent is `relative feed-scope`, and the feed's scroller `feed-scroll` and clears it with
  * `HEADER_CLEARANCE`.
  */
-import { ChevronLeftIcon, PanelRightIcon, TerminalIcon } from "lucide-react";
-import { useId } from "react";
+import { ChevronLeftIcon, PanelRightIcon } from "lucide-react";
+import { type ReactNode, useId } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { Face, FaceStack, type FaceState } from "./Face.tsx";
@@ -33,7 +33,7 @@ export function Header({
 	doing?: string | undefined;
 	state?: FaceState | undefined;
 	attention?: boolean;
-	delegated?: { readonly count: number; readonly waiting: boolean; readonly onOpen: () => void } | undefined;
+	delegated?: ReactNode;
 	paused?: boolean;
 	phone?: boolean;
 	panelOpen?: boolean;
@@ -94,19 +94,7 @@ export function Header({
 				)}
 			</div>
 			<div className="pointer-events-auto absolute top-2.5 right-1.5 flex items-center gap-1">
-				{delegated === undefined ? null : (
-					<Button
-						variant="ghost"
-						size="sm"
-						className="shrink-0"
-						onClick={delegated.onOpen}
-						aria-label={`${delegated.waiting ? "Waiting on you: " : ""}${delegated.count} coding ${delegated.count === 1 ? "session" : "sessions"}`}
-					>
-						<TerminalIcon />
-						<span>{delegated.count}</span>
-						{phone ? null : <span>coding {delegated.count === 1 ? "session" : "sessions"}</span>}
-					</Button>
-				)}
+				{delegated}
 				{phone || onPanel === undefined ? null : (
 					<Button
 						variant="ghost"

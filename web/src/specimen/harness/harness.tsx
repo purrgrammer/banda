@@ -1,14 +1,14 @@
 /** Fixture-only: an agent hands coding work to Claude Code on the owner's computer, from connecting to its outcome. */
 import { SquareIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Terminal } from "@/components/ai-elements/terminal";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { HarnessAsks } from "../../app/HarnessSession.tsx";
-import { ApprovalCard } from "../../chat/Approval.tsx";
 import { Bubble, Run } from "../../chat/Feed.tsx";
 import { FolderBrowser } from "../../chat/FolderPicker.tsx";
 import {
 	HarnessCard,
+	HarnessMenu,
 	type HarnessSessionView,
 	type HarnessState,
 	type HarnessStep,
@@ -293,23 +293,16 @@ function Flow() {
 								session={session}
 								onStop={() => setStep("stopped")}
 								onOpen={() => setPanel(true)}
-								onSteer={steer}
+								permissions={
+									step === "waiting" ? (
+										<HarnessAsks
+											session={askSession([EXECUTE_ASK])}
+											onAnswer={(_id, allowed) => setStep(allowed ? "done" : "stopped")}
+										/>
+									) : undefined
+								}
 							/>
 						)}
-						{step === "waiting" || step === "done" ? (
-							<ApprovalCard
-								agent={HARNESS}
-								what={`Run a command in ${FOLDER}`}
-								verb="Run"
-								declineLabel="Don't run"
-								as="Mara's task"
-								object={<Terminal command={COMMAND} output="" />}
-								scope="Don't ask again for this session"
-								state={step === "done" ? { kind: "done", words: "Ran once" } : { kind: "open" }}
-								onApprove={() => setStep("done")}
-								onDecline={() => setStep("stopped")}
-							/>
-						) : null}
 					</Run>
 					{step === "done" ? (
 						<Run who={MARA} time="10:44">
@@ -352,6 +345,92 @@ const AT: Record<HarnessState, Step> = {
 	interrupted: "stopped",
 	failed: "stopped",
 };
+
+function HarnessPermissionSample({ initial }: { initial: NonNullable<SessionApiView["asks"]> }) {
+	const [asks, setAsks] = useState(initial);
+	return (
+		<HarnessCard
+			session={sessionAt(asks.length === 0 ? "done" : "waiting", [])}
+			permissions={
+				asks.length === 0 ? undefined : (
+					<HarnessAsks
+						session={askSession(asks)}
+						onAnswer={(id) => setAsks((prior) => prior.filter((one) => one.id !== id))}
+					/>
+				)
+			}
+		/>
+	);
+}
+
+function HarnessHeaderSample({
+	count,
+	waiting = false,
+	phone = false,
+}: {
+	count: 1 | 2;
+	waiting?: boolean;
+	phone?: boolean;
+}) {
+	const [open, setOpen] = useState(false);
+	const [selected, setSelected] = useState<HarnessSessionView>();
+	const first = sessionAt(waiting ? "waiting" : "working", []);
+	const cards =
+		count === 1
+			? [first]
+			: [first, { ...sessionAt("working", []), harness: "Codex", provider: "openai", folder: "~/banda" }];
+	return (
+		<HeaderStage>
+			<Header
+				name={MARA.name}
+				faces={[MARA]}
+				state={waiting ? "waiting" : "idle"}
+				doing={waiting ? "Waiting on you · Claude Code" : undefined}
+				attention={waiting}
+				phone={phone}
+				onActivity={() => setOpen(true)}
+				delegated={
+					<HarnessMenu
+						count={count}
+						waiting={waiting}
+						phone={phone}
+						open={open}
+						onOpenChange={setOpen}
+						onCloseAutoFocus={(event) => {
+							if (selected !== undefined) event.preventDefault();
+						}}
+					>
+						{cards.map((session) => (
+							<HarnessCard
+								key={session.harness}
+								session={session}
+								onOpen={() => {
+									setSelected(session);
+									setOpen(false);
+								}}
+							/>
+						))}
+					</HarnessMenu>
+				}
+			/>
+			<Sheet
+				open={selected !== undefined}
+				onOpenChange={(next) => {
+					if (!next) setSelected(undefined);
+				}}
+			>
+				<SheetContent>
+					<SheetHeader>
+						<SheetTitle>{selected?.harness}</SheetTitle>
+					</SheetHeader>
+					{selected === undefined ? null : (
+						<HarnessTranscript session={selected} className="min-h-0 overflow-auto p-4" />
+					)}
+				</SheetContent>
+			</Sheet>
+		</HeaderStage>
+	);
+}
 
 export function HarnessSection() {
 	return (
@@ -478,53 +557,20 @@ export function HarnessSection() {
 				note="Asks reviewed one at a time: the oldest whole, the rest folded until opened; no approve-all."
 			>
 				<div className="flex max-w-2xl flex-col gap-3">
-					<HarnessAsks session={askSession([EXECUTE_ASK])} agentName="Mara" />
-					<HarnessAsks session={askSession([EDIT_ASK])} agentName="Mara" />
-					<HarnessAsks session={askSession([EXECUTE_ASK, EDIT_ASK, FETCH_ASK])} agentName="Mara" />
-					<HarnessAsks session={askSession(MANY_ASKS)} agentName="Mara" />
+					<HarnessPermissionSample initial={[EXECUTE_ASK]} />
+					<HarnessPermissionSample initial={[EDIT_ASK]} />
+					<HarnessPermissionSample initial={[EXECUTE_ASK, EDIT_ASK, FETCH_ASK]} />
+					<HarnessPermissionSample initial={MANY_ASKS} />
 				</div>
 			</Section>
 			<Section
 				id="harness-header"
 				note="Coding sessions at work: their count at the right of the header, which opens them. The header says nothing of the work."
 			>
-				<HeaderStage>
-					<Header
-						name={MARA.name}
-						faces={[MARA]}
-						delegated={{ count: 1, waiting: false, onOpen: () => {} }}
-						onActivity={() => {}}
-					/>
-				</HeaderStage>
-				<HeaderStage>
-					<Header
-						name={MARA.name}
-						faces={[MARA]}
-						state="waiting"
-						doing="Waiting on you · Claude Code"
-						attention
-						delegated={{ count: 1, waiting: true, onOpen: () => {} }}
-						onActivity={() => {}}
-					/>
-				</HeaderStage>
-				<HeaderStage>
-					<Header
-						name={MARA.name}
-						faces={[MARA]}
-						delegated={{ count: 2, waiting: false, onOpen: () => {} }}
-						onActivity={() => {}}
-					/>
-				</HeaderStage>
-				<HeaderStage>
-					<Header
-						name={MARA.name}
-						faces={[MARA]}
-						attention
-						delegated={{ count: 2, waiting: true, onOpen: () => {} }}
-						phone
-						onActivity={() => {}}
-					/>
-				</HeaderStage>
+				<HarnessHeaderSample count={1} />
+				<HarnessHeaderSample count={1} waiting />
+				<HarnessHeaderSample count={2} />
+				<HarnessHeaderSample count={2} waiting phone />
 			</Section>
 			<Section
 				id="harness-panel"

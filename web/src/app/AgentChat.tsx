@@ -32,7 +32,7 @@ import { useTranscript } from "../lib/transcript.ts";
 import { ActivitySheet } from "./Activity.tsx";
 import { FeedView } from "./Feed.tsx";
 import { FACE_STARTER, firstStarters, firstWords } from "./first-words.ts";
-import { HarnessActivitySheet } from "./HarnessSession.tsx";
+import { useHarnessMenu } from "./HarnessSession.tsx";
 import { chatActivity, harnessActivity } from "./harness-activity.ts";
 import { type PendingMessage, settledByAnswer, shownMessages, stillPending } from "./outgoing.ts";
 import { useSkills } from "./Skills.tsx";
@@ -108,7 +108,6 @@ export function AgentChat({
 	const [activity, setActivity] = useState<{ anchor?: number }>();
 	const shell = useShell();
 	const agents = shell.agents;
-	const [delegatedOpen, setDelegatedOpen] = useState<readonly number[]>();
 	const delegated = harnessActivity(shell.harnesses?.sessions ?? [], row === undefined ? [] : [row.chat]);
 	const status = chatActivity(state, doing, delegated);
 	// a reply just finished well; what the agent is really doing always wins over it
@@ -122,7 +121,7 @@ export function AgentChat({
 	useEffect(() => {
 		return () => clearTimeout(happyEnds.current);
 	}, []);
-	const openDelegated = () => setDelegatedOpen(delegated.sessions.map((session) => session.task));
+	const coding = useHarnessMenu(delegated.sessions, delegated.waiting, phone);
 	// the lead gets every tool; another agent, what its accepted file names
 	const tools =
 		agent === "sancho"
@@ -146,20 +145,14 @@ export function AgentChat({
 				state={happy && status.state === "idle" ? "happy" : status.state}
 				doing={status.doing}
 				attention={status.attention}
-				delegated={
-					delegated.sessions.length > 0
-						? { count: delegated.sessions.length, waiting: delegated.waiting, onOpen: openDelegated }
-						: undefined
-				}
+				delegated={coding.menu}
 				phone={phone}
 				panelOpen={panelOpen}
 				onBack={onBack}
 				onPanel={onPanel}
-				onActivity={status.delegatedPrimary ? openDelegated : row === undefined ? undefined : () => setActivity({})}
+				onActivity={status.delegatedPrimary ? coding.open : row === undefined ? undefined : () => setActivity({})}
 			/>
-			{delegatedOpen === undefined ? null : (
-				<HarnessActivitySheet tasks={delegatedOpen} onClose={() => setDelegatedOpen(undefined)} />
-			)}
+			{coding.details}
 			{row === undefined ? (
 				<>
 					<div className="feed-scroll min-h-0 flex-1 overflow-y-auto">

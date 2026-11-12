@@ -8,6 +8,7 @@ import {
 	BrainIcon,
 	CheckIcon,
 	ChevronDownIcon,
+	ChevronRightIcon,
 	CircleAlertIcon,
 	FileTextIcon,
 	type LucideIcon,
@@ -19,7 +20,7 @@ import {
 	UserIcon,
 	XIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import { ChainOfThought, ChainOfThoughtContent, ChainOfThoughtStep } from "@/components/ai-elements/chain-of-thought";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
@@ -27,6 +28,7 @@ import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Terminal } from "@/components/ai-elements/terminal";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/cn";
 import { capEnds, commandEnds, pathEnds } from "@/lib/ends";
@@ -287,6 +289,8 @@ export function announceOf(state: HarnessState, harness: string): string {
 			return `${harness} finished`;
 		case "failed":
 			return `${harness} failed`;
+		case "interrupted":
+			return `${harness} was interrupted`;
 		default:
 			return `${harness} stopped`;
 	}
@@ -532,142 +536,164 @@ function HeadWords({ verb, object, code }: { verb: string; object: string; code:
 	);
 }
 
-/** The session in the chat: live while it works, its outcome once it ends. */
+function continuationWords(session: HarnessSessionView): string | undefined {
+	if (session.continues === undefined) return undefined;
+	if (session.continuation === "native") return "Resumed its original session.";
+	if (session.continuation === "summary") return "Started fresh with a summary of the earlier work.";
+	return "Opening the follow-up…";
+}
+
+function outcomeWords(session: HarnessSessionView): string | undefined {
+	switch (session.state) {
+		case "done":
+			return session.outcome ?? "Finished";
+		case "stopped":
+			return session.stoppedBy === "agent" ? `${session.agent ?? "Its agent"} stopped it` : "You stopped it";
+		case "interrupted":
+			return "Interrupted when banda restarted.";
+		case "failed":
+			return session.outcome === undefined ? "Session failed" : `Failed: ${session.outcome}`;
+	}
+}
+
+/** The same session summary in the feed and under the header's coding sessions button. */
 export function HarnessCard({
 	session,
 	onStop,
 	onOpen,
-	onSteer,
+	permissions,
 }: {
 	session: HarnessSessionView;
 	onStop?: () => void;
 	onOpen?: () => void;
-	onSteer?: (text: string) => void;
+	permissions?: ReactNode;
 }) {
-	const { harness, folder, state, steps, elapsed, outcome } = session;
-	// a note not yet taken is not what it is doing: the headline stays on its current step
-	const last = steps.filter((step) => step.kind !== "steered" || step.taken).at(-1);
-	const { verb, object, code } = headlineOf(
-		state === "waiting" ? [...steps].reverse().find((step) => step.kind === "waiting") : last,
-		folder,
-		session.root,
+	const { harness, folder, state, steps } = session;
+	const last = steps
+		.filter((step) => (state === "waiting" ? step.kind === "waiting" : step.kind !== "steered" || step.taken))
+		.at(-1);
+	const { verb, object, code } =
+		state === "waiting" && permissions !== undefined
+			? { verb: "Waiting on you", object: "", code: false }
+			: headlineOf(last, folder, session.root);
+	const outcome = outcomeWords(session);
+	const failed = state === "failed" || state === "interrupted";
+	const summary = (
+		<span className="flex min-w-0 items-baseline gap-1 truncate text-meta text-ink-2">
+			{outcome === undefined ? (
+				<>
+					<span className="shrink-0">{verb}</span>
+					{object === "" ? null : code ? (
+						<KeepEnd ends={commandEnds(object)} shimmer={state === "working"} className="font-code text-meta" />
+					) : state === "working" ? (
+						<Shimmer as="span" className="min-w-0 truncate text-meta">
+							{object}
+						</Shimmer>
+					) : (
+						<span className="min-w-0 truncate">{object}</span>
+					)}
+				</>
+			) : (
+				<span className={cn("truncate", failed && "text-danger")}>{outcome}</span>
+			)}
+		</span>
 	);
-	const notes = steps.filter((step): step is Extract<HarnessStep, { kind: "steered" }> => step.kind === "steered");
-	const headline =
-		state === "done" ? (
-			<>
-				<CheckIcon aria-hidden="true" className="size-4 shrink-0 self-center text-ink" />
-				<span className="min-w-0 text-ink">{outcome ?? "Finished"}</span>
-			</>
-		) : state === "stopped" || state === "interrupted" || state === "failed" ? (
-			<>
-				{state === "stopped" ? (
-					<SquareIcon aria-hidden="true" className="size-3.5 shrink-0 self-center fill-current text-ink-2" />
-				) : (
-					<CircleAlertIcon aria-hidden="true" className="size-4 shrink-0 self-center text-danger" />
-				)}
-				<span className="min-w-0 text-ink">
-					{state === "stopped"
-						? session.stoppedBy === "agent"
-							? `${session.agent ?? "Its agent"} stopped it`
-							: "You stopped it"
-						: state === "failed"
-							? `It ended with a problem: ${outcome ?? "it did not say why"}. Ask ${session.agent ?? "its agent"} to try again.`
-							: "Interrupted when banda restarted. Nothing was sent again."}
+	const contents = (
+		<>
+			<HarnessMark provider={session.provider} logo={session.logo} className="size-5 shrink-0" />
+			<span className="grid min-w-0 flex-1 gap-0.5">
+				<span className="flex min-w-0 items-baseline gap-2">
+					<span className="truncate text-ui font-medium text-ink">{harness}</span>
+					<span className="truncate text-meta text-ink-2" title={folder}>
+						{projectOf(folder)}
+					</span>
 				</span>
-			</>
-		) : (
-			<>
-				<span className="shrink-0 text-ink-2">{verb}</span>
-				{object === "" ? null : code ? (
-					// a path keeps its file name, a chain its last step: the line gives way in its middle
-					<KeepEnd
-						ends={commandEnds(object)}
-						shimmer={state === "working"}
-						className={cn("font-code text-ui", state === "working" ? "" : "text-ink")}
-					/>
-				) : state === "working" ? (
-					<Shimmer as="span" className="min-w-0 truncate text-ui">
-						{object}
-					</Shimmer>
-				) : (
-					<span className="min-w-0 truncate text-ui text-ink">{object}</span>
-				)}
-			</>
-		);
+				{summary}
+			</span>
+		</>
+	);
 	return (
-		<Tile className="flex flex-col gap-2.5 p-4">
+		<Tile data-harness-card="" className="flex min-w-0 flex-col p-1">
 			<span role="status" aria-live="polite" className="sr-only">
 				{announceOf(state, harness)}
 			</span>
-			<span className="flex items-center gap-2 text-ui">
-				<span
-					aria-hidden="true"
-					className={cn(
-						"size-1.5 shrink-0 rounded-full",
-						live(state) ? "bg-alive motion-safe:animate-pulse" : state === "done" ? "bg-ink" : "bg-ink-3",
-					)}
-				/>
-				<HarnessMark
-					provider={session.provider}
-					logo={session.logo}
-					className={session.provider === undefined && session.logo === undefined ? "size-4" : "size-5"}
-				/>
-				<span className="font-medium text-ink">{harness}</span>
-				<span className="min-w-0 truncate text-meta text-ink-2">{projectOf(folder)}</span>
-				{live(state) ? (
-					<Button variant="ghost" size="xs" className="ml-auto" onClick={onStop}>
-						<SquareIcon className="fill-current" />
-						Stop
+			<div className="flex min-w-0 items-center gap-1">
+				{onOpen === undefined ? (
+					<div className="flex min-h-13 min-w-0 flex-1 items-center gap-2.5 px-2">{contents}</div>
+				) : (
+					<button
+						type="button"
+						onClick={onOpen}
+						className="flex min-h-13 min-w-0 flex-1 items-center gap-2.5 rounded-field px-2 text-left hover:bg-paper-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
+					>
+						{contents}
+						<ChevronRightIcon aria-hidden="true" className="size-4 shrink-0 text-ink-2" />
+						<span className="sr-only">Steps</span>
+					</button>
+				)}
+				{live(state) && onStop !== undefined ? (
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-sm"
+						className="mr-1 size-11 shrink-0 text-ink-2"
+						aria-label={`Stop ${harness}`}
+						title={`Stop ${harness}`}
+						onClick={onStop}
+					>
+						<SquareIcon className="size-3.5 fill-current" />
 					</Button>
 				) : null}
-			</span>
-			{session.continues === undefined ? null : (
-				<p className="text-meta text-ink-2">
-					{session.continuation === "native"
-						? "Resumed its original session."
-						: session.continuation === "summary"
-							? "Started fresh with a summary of the earlier work."
-							: "Opening the follow-up…"}
-				</p>
-			)}
-			{onOpen === undefined ? (
-				<span className="flex min-h-6 min-w-0 items-baseline gap-2 text-body">{headline}</span>
-			) : (
-				// the whole line opens the sheet: on a touch screen it is the big target Steps repeats
-				<button
-					type="button"
-					onClick={onOpen}
-					className="-mx-1 flex min-h-6 min-w-0 cursor-pointer items-baseline gap-2 rounded-field px-1 text-left text-body outline-none hover:bg-paper-2 focus-visible:outline-[1.5px] focus-visible:outline-offset-2 focus-visible:outline-focus pointer-coarse:min-h-11 pointer-coarse:items-center max-sm:min-h-11 max-sm:items-center"
-				>
-					{headline}
-				</button>
-			)}
-			{notes.length === 0 ? null : (
-				<ul className="flex flex-col gap-1">
-					{notes.map((note, index) => (
-						// biome-ignore lint/suspicious/noArrayIndexKey: notes are append-only, a note is its place
-						<li key={`${index}:${note.text}`} className="flex min-w-0 items-baseline gap-1.5 text-meta text-ink-2">
-							{note.from === "agent" ? (
-								<BotIcon aria-hidden="true" className="size-3 shrink-0 self-center" />
-							) : (
-								<UserIcon aria-hidden="true" className="size-3 shrink-0 self-center" />
-							)}
-							<span className="min-w-0 truncate text-ink">{note.text}</span>
-							<span className="shrink-0">· {note.taken ? "taken" : "after this step"}</span>
-						</li>
-					))}
-				</ul>
-			)}
-			{live(state) ? <SteerField harness={harness} onSteer={onSteer} /> : null}
-			<span className="flex items-center gap-3 text-meta text-ink-2">
-				<Changes steps={steps} ended={!live(state)} />
-				<span className="tabular-nums">{stateWordsOf(state, elapsed)}</span>
-				<Button variant="ghost" size="xs" className="ml-auto" onClick={onOpen}>
-					Steps
-				</Button>
-			</span>
+			</div>
+			{permissions === undefined ? null : <div className="mx-1 border-t border-line-soft px-1">{permissions}</div>}
 		</Tile>
+	);
+}
+
+export function HarnessMenu({
+	count,
+	waiting,
+	phone,
+	children,
+	open,
+	onOpenChange,
+	triggerRef,
+	onCloseAutoFocus,
+}: {
+	count: number;
+	waiting: boolean;
+	phone: boolean;
+	children: ReactNode;
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	triggerRef?: Ref<HTMLButtonElement> | undefined;
+	onCloseAutoFocus?: ((event: Event) => void) | undefined;
+}) {
+	const label = `coding ${count === 1 ? "session" : "sessions"}`;
+	return (
+		<Popover open={open} onOpenChange={onOpenChange}>
+			<PopoverTrigger asChild>
+				<Button
+					ref={triggerRef}
+					variant="ghost"
+					size="sm"
+					className="shrink-0"
+					aria-label={`${waiting ? "Waiting on you: " : ""}${count} ${label}`}
+				>
+					<TerminalIcon />
+					<span>{count}</span>
+					{phone ? null : <span>{label}</span>}
+				</Button>
+			</PopoverTrigger>
+			<PopoverContent
+				align="end"
+				aria-label="Coding sessions"
+				onCloseAutoFocus={onCloseAutoFocus}
+				className="max-h-[var(--radix-popover-content-available-height)] w-[min(22rem,calc(100vw-1.5rem))] gap-1.5 overflow-y-auto overscroll-contain p-1.5"
+			>
+				{children}
+			</PopoverContent>
+		</Popover>
 	);
 }
 
@@ -893,6 +919,8 @@ export function HarnessTranscript({
 }) {
 	const working = session.state === "working";
 	const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(defaultOpenSteps));
+	const continuation = continuationWords(session);
+	const outcome = outcomeWords(session);
 	const header = (
 		<div className="flex min-w-0 flex-col gap-1">
 			<span className="flex items-center gap-2 text-ui">
@@ -916,6 +944,11 @@ export function HarnessTranscript({
 				)}
 				<span className="font-code">{session.folder}</span>
 			</span>
+			{continuation === undefined ? null : <p className="text-meta text-ink-2">{continuation}</p>}
+			{outcome === undefined ? null : <ClampedText text={outcome} />}
+			<div className="text-meta text-ink-2">
+				<Changes steps={session.steps} ended={!live(session.state)} />
+			</div>
 		</div>
 	);
 	const steps = (
