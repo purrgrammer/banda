@@ -115,9 +115,9 @@ function scriptedBrowser(cookies: { [host: string]: readonly string[] }) {
 			held = undefined;
 		},
 		key: () => undefined,
-		view: () => ({ running: true, chat: 1, control: "agent" }),
+		view: () => ({ running: true, preparing: false, chat: 1, control: "agent" }),
 		watch: () => () => {},
-		hold: async () => ({ running: true, chat: 1, control: "agent" }),
+		hold: async () => ({ running: true, preparing: false, chat: 1, control: "agent" }),
 		input: async () => {},
 		forget: async () => {},
 		close: () => {},

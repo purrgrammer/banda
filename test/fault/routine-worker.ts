@@ -184,5 +184,5 @@ console.log(
 		models: faults.hits("model"),
 	}),
 );
-box.close();
+await box.close();
 await harness.close(context);

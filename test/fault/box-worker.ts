@@ -151,5 +151,5 @@ console.log(
 		commits: faults.hits("commit:after"),
 	}),
 );
-opened.close();
+await opened.close();
 await harness.close(context);

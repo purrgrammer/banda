@@ -19,7 +19,7 @@ it.skipIf(!hasChrome())(
 		let onSwitch: ViewEvent[] = [];
 		const browser = openBrowser({
 			setup: {
-				command: [
+				command: async () => [
 					"/bin/sh",
 					"-c",
 					'exec 3<&0 4>&1 1>&2; exec "$1" --headless=new --remote-debugging-pipe --no-first-run --disable-background-networking --user-data-dir="$2" about:blank',

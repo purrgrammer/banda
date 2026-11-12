@@ -36,7 +36,7 @@ const owner: Origin = { gateway: "fake", peer: OWNER };
 const homes: string[] = [];
 const boxes: Box[] = [];
 afterAll(async () => {
-	for (const box of boxes) box.close();
+	for (const box of boxes) await box.close();
 	for (const home of homes) {
 		if (docker) await removeContainerBox(home);
 		rmSync(home, { recursive: true, force: true });

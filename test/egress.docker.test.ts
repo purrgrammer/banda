@@ -148,7 +148,7 @@ describe.skipIf(!docker)("the box's closed network", { timeout: 180_000 }, () =>
 
 	afterAll(async () => {
 		await harness?.close(context);
-		box?.close();
+		await box?.close();
 		try {
 			run(["rm", "--force", echo]);
 		} catch {

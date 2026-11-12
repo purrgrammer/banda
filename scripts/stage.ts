@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { chmod, cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { stageMicrovmBundle } from "./microvm-bundle.ts";
 
 /** The Node.js every release bundles: exact, an LTS of the major `engines` asks for. */
 export const NODE_VERSION = "26.13.0";
@@ -78,6 +79,7 @@ export const STAGED = [
 	"web/dist",
 	"box",
 	"proxy",
+	"computer",
 	"shipped",
 	"package.json",
 	"package-lock.json",
@@ -100,7 +102,10 @@ async function stageApp(root: string, out: string, target: Target): Promise<void
 		throw new Error("web/dist/ is missing: run `npm run build` first");
 	});
 	const app = join(out, "app");
-	for (const path of STAGED) await cp(join(root, path), join(app, path), { recursive: true });
+	for (const path of STAGED) {
+		if (path === "computer") await stageMicrovmBundle({ root, out, target });
+		else await cp(join(root, path), join(app, path), { recursive: true });
+	}
 	run("npm", ["ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], app);
 	const bin = join(app, "node_modules", "@earendil-works", "pi-env", "bin");
 	for (const file of await readdir(bin))

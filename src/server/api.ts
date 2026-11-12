@@ -351,7 +351,7 @@ export type ComputerView = {
 	/** Offline: why, in plain words where it is the owner's to fix (Docker missing, stopped, too old). */
 	readonly why?: string;
 	/** `host`: no box, its commands run on the daemon's own machine, unguarded (host mode, asked for by name). */
-	readonly box: "container" | "host";
+	readonly box: import("../box/box.ts").BoxKind;
 	readonly network: "guarded" | "none";
 };
 

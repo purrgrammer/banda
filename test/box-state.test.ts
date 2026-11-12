@@ -83,6 +83,7 @@ describe("the box's state", () => {
 		let fail: (error: Error) => void = () => {};
 		const box = openBox(
 			{
+				kind: "container",
 				workspace: "/workspace",
 				attachments: "/work/attachments",
 				command: ["true"],
@@ -109,6 +110,6 @@ describe("the box's state", () => {
 			why: "Docker isn't running: start Docker Desktop (or the Docker service), and the computer starts by itself.",
 		});
 		expect(seen.map((s) => s.state)).toEqual(["building", "offline"]);
-		box.close();
+		await box.close();
 	});
 });

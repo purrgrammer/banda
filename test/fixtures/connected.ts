@@ -138,7 +138,7 @@ export async function openConnected({
 				.sort(),
 		close: async () => {
 			capabilities.close();
-			box.close();
+			await box.close();
 			await harness.close(context);
 		},
 	};

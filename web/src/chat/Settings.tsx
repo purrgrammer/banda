@@ -40,6 +40,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import type { ComputerView } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { accountTitle, backendOf } from "../../../src/core/provider-accounts.ts";
 import { TIER_WORDS, TIERS, type Tier } from "../../../src/core/tiers.ts";
@@ -630,14 +631,7 @@ export type SettingsData = {
 	 * The band's computer: up, starting, built (the first run), or off and why; whether its commands run in a sandbox;
 	 * what it can reach.
 	 */
-	readonly computer?:
-		| {
-				readonly state: "up" | "starting" | "building" | "offline";
-				readonly why?: string | undefined;
-				readonly box: "container" | "host";
-				readonly network: "guarded" | "none";
-		  }
-		| undefined;
+	readonly computer?: ComputerView | undefined;
 	/** Sites an agent's browser is signed in to, as the owner: each its own credential, to sign out. */
 	readonly signedIn?:
 		| readonly { readonly agent: Who & { readonly id: string }; readonly site: string; readonly when: string }[]
@@ -1459,7 +1453,7 @@ function Computer({ computer }: { computer: NonNullable<SettingsData["computer"]
 						state === "up"
 							? "Running"
 							: state === "building"
-								? "Building the agent's computer…"
+								? "Preparing the agent's computer…"
 								: state === "starting"
 									? "Starting…"
 									: "Off"
@@ -1485,9 +1479,9 @@ function Computer({ computer }: { computer: NonNullable<SettingsData["computer"]
 				/>
 				<RowOf
 					lead={<span className="w-8 shrink-0" />}
-					title={box === "container" ? "In a sandbox of its own" : "On this computer, unguarded"}
+					title={box === "host" ? "On this computer, unguarded" : "In a sandbox of its own"}
 					detail={
-						box === "container"
+						box !== "host"
 							? "Its commands and files stay inside it, away from yours."
 							: "Its commands run on this machine itself, as banda was started."
 					}

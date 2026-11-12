@@ -63,7 +63,7 @@ describe.skipIf(!docker)("the container box", () => {
 		expect((await sh(box.env(), "true")).code).toBe(0);
 	}, 20 * 60_000);
 	afterAll(async () => {
-		box?.close();
+		await box?.close();
 		if (home !== undefined) {
 			await removeContainerBox(home);
 			rmSync(home, { recursive: true, force: true });
@@ -112,7 +112,7 @@ describe.skipIf(!docker)("the container box", () => {
 			expect((await sh(again, "pgrep -f '^sleep 307$' | wc -l")).out).toBe("0");
 			expect((await sh(again, "cat /workspace/note 2>/dev/null; echo ok")).out).toMatch(/ok$/);
 		} finally {
-			next.close();
+			await next.close();
 		}
 		// the old connection lost its box with the restart; it reconnects at its next use
 		const first = await sh(env, "echo back");

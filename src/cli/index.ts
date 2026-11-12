@@ -13,7 +13,7 @@ const { version } = JSON.parse(readFileSync(new URL("../../package.json", import
 export const usage = `banda ${version}
 
 usage:
-  banda serve [--port <n>] [--box host]
+  banda serve [--port <n>] [--box container|microvm|host]
                                      run the daemon and its web UI (default port 7787);
                                      --box host (or BANDA_BOX=host): no box, commands
                                      run on this computer without the network guard
@@ -54,7 +54,7 @@ async function main(argv: string[]): Promise<number> {
 		// only serve loads the daemon: the other commands are clients, quick to start
 		const { startDaemon } = await import("../daemon.ts");
 		const { boxKind } = await import("../box/box.ts");
-		// host mode only when asked for by name: an unknown value is refused, never read as the container or as host
+		// An unknown value is refused; a failed isolated runtime never falls back to the host.
 		const kind = boxKind(values.box ?? process.env.BANDA_BOX);
 		const daemon = await startDaemon({
 			home,

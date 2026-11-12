@@ -38,6 +38,26 @@ const control = async (home: string) => {
 	}
 };
 
+it("copies computer files without adopting runtime authority or pending proxy sends", async () => {
+	const from = dir("banda-microvm-source-");
+	const store = await openStore(from, { models: createModels(), registry: createRegistry() });
+	await store.close(context);
+	for (const path of ["workspace", "work", "tools", "browser", "proxy/kept", "runtime"]) {
+		mkdirSync(join(from, "computer", path), { recursive: true });
+		writeFileSync(join(from, "computer", path, "marker"), path);
+	}
+	const to = dir("banda-microvm-fork-");
+	const copied = await forkHome(from, to);
+	expect(copied).toEqual(expect.arrayContaining(["computer workspace", "computer work", "computer tools"]));
+	for (const path of ["workspace", "work", "tools"])
+		expect(readFileSync(join(to, "computer", path, "marker"), "utf8")).toBe(path);
+	for (const path of ["browser", "proxy", "runtime"]) expect(() => lstatSync(join(to, "computer", path))).toThrow();
+	const withBrowser = dir("banda-microvm-browser-fork-");
+	await forkHome(from, withBrowser, { browser: true });
+	expect(readFileSync(join(withBrowser, "computer/browser/marker"), "utf8")).toBe("browser");
+	expect(readFileSync(join(from, "computer/proxy/kept/marker"), "utf8")).toBe("proxy/kept");
+});
+
 it("forks a home's store and setup, pauses its routines, and leaves the source as it was", async () => {
 	const from = dir("banda-main-");
 	const harness = await openStore(from, { models: createModels(), registry: createRegistry() });

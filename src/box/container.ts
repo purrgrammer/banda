@@ -9,17 +9,16 @@
  * mounted. The daemon reaches pi-env in the box, and the proxy's control script, with `docker exec` alone.
  */
 import { execFile } from "node:child_process";
-import { createHash, createHmac, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { chmod, copyFile, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Context } from "@earendil-works/chord";
 import { packagedDaemon } from "@earendil-works/pi-env";
-import type { EgressControl, HeldRequest, Replayed, Taken } from "../core/egress.ts";
-import type { BoxEgress, BoxSetup, EgressConfig } from "./box.ts";
-import { configPusher } from "./egress-config.ts";
+import type { BoxSetup } from "./box.ts";
+import { BROWSER_UID, browserStart } from "./browser-start.ts";
+import { guardedProxy, type ProxyTransport, proxyReady, TRUST_ENV } from "./guarded-proxy.ts";
 
 const DOCKERFILE = fileURLToPath(new URL("../../box/Dockerfile", import.meta.url));
 const PROXY = fileURLToPath(new URL("../../proxy/", import.meta.url));
@@ -115,24 +114,6 @@ export const VOLUMES = { workspace: "/workspace", work: "/work", tools: "/tools"
 // sent: the writes sent under a host permission, kept until the daemon took them, whatever happens to the proxy
 const PROXY_VOLUMES = { ca: "/ca", trust: "/trust", kept: "/kept" } as const;
 const PROXY_PORT = 8080;
-/** What a command in the box reaches without the proxy: the box's own loopback, nothing else. */
-const LOOPBACK = "localhost,127.0.0.1,::1";
-/** Where the box finds the one authority it trusts; the variables toolchains read it from. */
-const TRUST = "/etc/ssl/certs/ca-certificates.crt";
-const TRUST_ENV = {
-	SSL_CERT_FILE: TRUST,
-	SSL_CERT_DIR: "/etc/ssl/certs",
-	CURL_CA_BUNDLE: TRUST,
-	REQUESTS_CA_BUNDLE: TRUST,
-	NODE_EXTRA_CA_CERTS: TRUST,
-	NODE_OPTIONS: "--use-openssl-ca",
-	GIT_SSL_CAINFO: TRUST,
-	PIP_CERT: TRUST,
-	CARGO_HTTP_CAINFO: TRUST,
-	DENO_CERT: TRUST,
-	AWS_CA_BUNDLE: TRUST,
-} as const;
-
 /** How many lines of a failed build's log its error keeps. */
 const BUILD_TAIL = 30;
 
@@ -165,8 +146,13 @@ async function build(
 }
 
 /** An image's tag: its repository and the hash of the files it is built from, by name. */
-async function imageTag(repository: string, files: { readonly [name: string]: string }): Promise<string> {
+async function imageTag(
+	repository: string,
+	files: { readonly [name: string]: string },
+	target?: "boot" | "browser",
+): Promise<string> {
 	const hash = createHash("sha256");
+	if (target !== undefined) hash.update(`target:${target}\n`);
 	for (const [name, path] of Object.entries(files).sort()) {
 		hash.update(name);
 		hash.update(await readFile(path));
@@ -175,10 +161,14 @@ async function imageTag(repository: string, files: { readonly [name: string]: st
 }
 
 /** The box's build files: the Dockerfile and the pi-env daemon it carries, for the Docker server's architecture. */
-async function boxFiles(): Promise<{ [name: string]: string }> {
-	const arch = await docker(["version", "--format", "{{.Server.Arch}}"], 10_000);
+async function boxFiles(target?: "arm64" | "x64"): Promise<{ [name: string]: string }> {
+	const arch = target ?? (await docker(["version", "--format", "{{.Server.Arch}}"], 10_000));
 	const daemon = packagedDaemon({ platform: "linux", arch: arch === "arm64" || arch === "aarch64" ? "arm64" : "x64" });
-	return { Dockerfile: DOCKERFILE, "pi-env": daemon };
+	return {
+		Dockerfile: DOCKERFILE,
+		"pi-env": daemon,
+		"proxy-bridge.sh": fileURLToPath(new URL("../../box/proxy-bridge.sh", import.meta.url)),
+	};
 }
 
 /** The proxy's build files: mitmproxy, pinned, with the policy addon and the control script. */
@@ -196,11 +186,23 @@ const proxyImage = async (building: () => void) => build("banda-proxy", await pr
  * The images a box is made of, each with the tag banda looks for and the files it is built from, so something else
  * (CI, with a layer cache) can build them first and banda finds them made.
  */
-export async function imageSpecs(): Promise<{ readonly tag: string; readonly files: { [name: string]: string } }[]> {
-	const box = await boxFiles();
+export async function imageSpecs({
+	arch,
+	boxTarget,
+}: {
+	readonly arch?: "arm64" | "x64";
+	readonly boxTarget?: "boot" | "browser";
+} = {}): Promise<
+	{ readonly tag: string; readonly files: { [name: string]: string }; readonly target?: "boot" | "browser" }[]
+> {
+	const box = await boxFiles(arch);
 	const proxy = await proxyFiles();
 	return [
-		{ tag: await imageTag("banda-box", box), files: box },
+		{
+			tag: await imageTag(boxTarget === "browser" ? "banda-browser" : "banda-box", box, boxTarget),
+			files: box,
+			...(boxTarget === undefined ? {} : { target: boxTarget }),
+		},
 		{ tag: await imageTag("banda-proxy", proxy), files: proxy },
 	];
 }
@@ -266,205 +268,56 @@ async function network(name: string, home: string, internal: boolean): Promise<v
 	]);
 }
 
-/** The key the daemon marks proxy logins with, made once, kept in `auth/` beside the owner's token. */
-function egressKey(home: string): string {
-	const path = join(home, "auth", "egress.key");
-	try {
-		const key = readFileSync(path, "utf8").trim();
-		if (/^[0-9a-f]{64}$/.test(key)) return key;
-	} catch {
-		// not made yet
-	}
-	mkdirSync(join(home, "auth"), { recursive: true, mode: 0o700 });
-	const key = randomBytes(32).toString("hex");
-	writeFileSync(path, `${key}\n`, { mode: 0o600 });
-	return key;
-}
-
-/** The password of chat `chat`'s proxy login (0: nobody's, the daemon's own listing, which only reads), as the proxy checks it. */
-export function proxyMark(key: string, chat: number): string {
-	return createHmac("sha256", Buffer.from(key, "hex")).update(`banda-egress:c${chat}`).digest("hex").slice(0, 32);
-}
-
-/** Agent `agent`'s browser's proxy login, which the proxy maps to the chat holding that browser. */
-export const browserLogin = (agent: string) => `b-${agent}`;
-
-/**
- * What agent `agent`'s browser tab of chat `chat` stamps its requests with (`TAB_HEADER`): the chat and its mark for that
- * agent and chat, which only the
- * daemon makes, so a page never names a chat; the proxy takes the request as that chat's, from that agent's browser alone.
- */
-export function tabStamp(key: string, agent: string, chat: number): string {
-	const mark = createHmac("sha256", Buffer.from(key, "hex"))
-		.update(`banda-egress:t${agent}:${chat}`)
-		.digest("hex")
-		.slice(0, 32);
-	return `${chat}.${mark}`;
-}
-
-/** The password of agent `agent`'s browser's proxy login, as the proxy checks it. */
-export function browserMark(key: string, agent: string): string {
-	return createHmac("sha256", Buffer.from(key, "hex"))
-		.update(`banda-egress:${browserLogin(agent)}`)
-		.digest("hex")
-		.slice(0, 32);
-}
-
-/**
- * The browsers' own uid in the box, and their volume, which only that uid reads: the agent's commands run as another, so
- * they never read a browser's sessions, its cache, its memory or the login it answers the proxy with. Each agent's
- * browser has a directory of its own there, its profile and its trust store in it.
- */
-const BROWSER_UID = 65533;
-const BROWSER_HOME = "/browser";
-const browserRoot = (agent: string) => `${BROWSER_HOME}/agents/${agent}`;
-/** Settings that keep what the owner types out of the profile: no saved passwords, no autofill, no restored session. */
-const PREFERENCES = JSON.stringify({
-	credentials_enable_service: false,
-	credentials_enable_autosignin: false,
-	profile: { password_manager_enabled: false },
-	autofill: { enabled: false, profile_enabled: false, credit_card_enabled: false },
-	session: { restore_on_startup: 5 },
-	// Chromium's own sign-in to Google sends requests of its own (accounts.google.com) that are nobody's
-	signin: { allowed: false },
-	browser: { enable_spellchecking: false },
-	search: { suggest_enabled: false },
-});
-
-/**
- * Agent `agent`'s Chromium's start in the box, as the browsers' uid: the browser of this agent the box left running (a
- * daemon that died) closed first, never another agent's, its settings set, the proxy's authority put in its trust
- * store, then Chromium, headless, with DevTools on the pipe its stdin and stdout become, through the proxy. Its sandbox
- * needs privileges the box drops, so it runs without one: the container and its uid are the boundary. Site isolation
- * is off, so a page and its frames are one tree the daemon reads and masks in one place. `agent` is an agent's id
- * (lowercase words and dashes), safe in the script as it is.
- */
-const browserStart = (agent: string) => {
-	const PROFILE = `${browserRoot(agent)}/profile`;
-	// only this agent's: a chromium whose command line names this profile
-	const mine = `tr '\\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -qF -- "--user-data-dir=${PROFILE} "`;
-	return [
-		"set -e",
-		"umask 077",
-		`export HOME=${browserRoot(agent)}/home`,
-		`for i in 1 2 3 4 5 6 7 8 9 10; do found=; for pid in $(pgrep -x chromium || true); do if ${mine}; then kill "$pid" 2>/dev/null || true; found=1; fi; done; [ -n "$found" ] || break; sleep 0.3; done`,
-		`mkdir -p ${PROFILE}/Default "$HOME/.pki/nssdb"`,
-		`rm -f ${PROFILE}/Singleton*`,
-		`prefs=${PROFILE}/Default/Preferences`,
-		`if [ -s "$prefs" ] && jq -e . "$prefs" >/dev/null 2>&1; then jq '. * ${PREFERENCES}' "$prefs" > "$prefs.new"; else echo '${PREFERENCES}' > "$prefs.new"; fi`,
-		'mv "$prefs.new" "$prefs"',
-		'[ -f "$HOME/.pki/nssdb/cert9.db" ] || certutil -d "sql:$HOME/.pki/nssdb" -N --empty-password',
-		'certutil -d "sql:$HOME/.pki/nssdb" -D -n banda >/dev/null 2>&1 || true',
-		`certutil -d "sql:$HOME/.pki/nssdb" -A -n banda -t C,, -i ${TRUST}`,
-		"exec 3<&0 4>&1 1>&2",
-		[
-			"exec chromium --headless=new --remote-debugging-pipe --no-sandbox --disable-dev-shm-usage",
-			`--user-data-dir=${PROFILE} --proxy-server=http://proxy:${PROXY_PORT} --no-first-run --no-default-browser-check`,
-			"--disable-background-networking --disable-component-update --disable-sync --disable-breakpad",
-			"--disable-features=IsolateOrigins,site-per-process,Translate,MediaRouter,OptimizationHints,AutofillServerCommunication,AccountConsistency",
-			"--disable-site-isolation-trials --password-store=basic --use-mock-keychain --window-size=1280,800",
-			// every tab runs as if in front: a chat's page in a tab behind another's is never slowed or left unpainted
-			"--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows",
-			"--hide-scrollbars --mute-audio about:blank",
-		].join(" "),
-	].join("\n");
-};
-
-/** The proxy's control script, run in the proxy container: what it printed, as JSON. */
-async function control<T>(proxy: string, args: readonly string[], input?: unknown, timeoutMs = 30_000): Promise<T> {
-	const out = await docker(
-		["exec", ...(input === undefined ? [] : ["--interactive"]), proxy, "python3", "/banda/ctl.py", ...args],
-		timeoutMs,
-		input === undefined ? undefined : JSON.stringify(input),
-	);
-	return JSON.parse(out.split("\n").at(-1) ?? "null") as T;
-}
-
 export function containerBox(home: string): BoxSetup {
 	const { box: name, proxy, inside, outside } = boxParts(home);
 	const uid = process.getuid?.() ?? 1000;
 	const gid = process.getgid?.() ?? 1000;
 	// whether this process brought the box up already
 	let started = false;
-	const key = egressKey(home);
-	let source: (() => Promise<Omit<EgressConfig, "key">>) | undefined;
-	const configure = configPusher({
+	const transport: ProxyTransport = {
+		exec: (args, input, timeoutMs) =>
+			docker(["exec", ...(input === undefined ? [] : ["--interactive"]), proxy, ...args], timeoutMs, input),
 		running: async () =>
 			(await docker(["container", "inspect", "--format", "{{.State.Running}}", proxy], 10_000).catch(
 				(error: unknown) => {
-					// a proxy that was never made runs nowhere; anything else is not known
 					if (String(error).includes("No such")) return "false";
 					throw error;
 				},
 			)) === "true",
-		read: async () => ({ key, ...(source === undefined ? {} : await source()) }),
-		send: async (config, generation) => {
-			const answered = await control<{ stale?: number }>(proxy, ["config"], { ...config, generation });
-			if (answered.stale !== undefined)
-				throw new DockerError(`the proxy holds a later config (generation ${answered.stale})`);
-		},
-		// killed, its tmpfs and the config in it go: brought up again, it holds everything until it is told
 		halt: async () => {
 			await docker(["kill", proxy], 20_000);
 		},
-	});
-	const egress: BoxEgress = {
-		env: (chat): Record<string, string> => {
-			const url = `http://c${chat}:${proxyMark(key, chat)}@proxy:${PROXY_PORT}`;
-			return {
-				http_proxy: url,
-				https_proxy: url,
-				HTTP_PROXY: url,
-				HTTPS_PROXY: url,
-				ALL_PROXY: url,
-				all_proxy: url,
-				// the box's own loopback is the box: a server a command starts there (a project's tests) is reached
-				// directly; anything else, the box's other addresses included, goes through the proxy
-				NO_PROXY: LOOPBACK,
-				no_proxy: LOOPBACK,
-				NODE_USE_ENV_PROXY: "1",
-			};
-		},
-		source: (from) => {
-			source = from;
-		},
-		configure,
-		pass: async (chat, hash) => {
-			await control(proxy, ["pass", String(chat), hash]);
-		},
-		take: (chat: number, _ctx: Context) => control<Taken>(proxy, ["take", String(chat)]),
-		sentChats: (_ctx: Context) => control<number[]>(proxy, ["sent"]),
-		ack: async (chat, readBytes, tickets, _ctx) => {
-			await control(proxy, ["ack", String(chat), String(readBytes), ...tickets]);
-		},
-		replay: (request: HeldRequest, _ctx: Context) =>
-			control<Replayed>(proxy, ["replay"], request, 120_000).catch((error: unknown) => {
-				const down = proxyDown(error);
-				if (down === undefined) throw error;
-				return { failed: down };
-			}),
-	} satisfies BoxEgress & EgressControl;
+	};
+	const guarded = guardedProxy({ home, endpoint: `proxy:${PROXY_PORT}`, transport });
 	return {
+		kind: "container",
 		workspace: VOLUMES.workspace,
 		attachments: `${VOLUMES.work}/attachments`,
 		command: ["docker", "exec", "--interactive", name, "/usr/local/bin/pi-env"],
-		egress,
+		egress: {
+			...guarded.egress,
+			replay: (request, ctx) =>
+				guarded.egress.replay(request, ctx).catch((error: unknown) => {
+					const down = proxyDown(error);
+					if (down === undefined) throw error;
+					return { failed: down };
+				}),
+		},
 		browser: (agent) => ({
-			command: [
+			command: async () => [
 				"docker",
 				"exec",
 				"--interactive",
 				"--user",
 				`${BROWSER_UID}:${BROWSER_UID}`,
 				"--env",
-				`HOME=${browserRoot(agent)}/home`,
+				`HOME=/browser/agents/${agent}/home`,
 				name,
 				"/bin/sh",
 				"-c",
-				browserStart(agent),
+				browserStart({ agent, proxy: `proxy:${PROXY_PORT}`, trust: TRUST_ENV.SSL_CERT_FILE }),
 			],
-			login: { username: browserLogin(agent), password: browserMark(key, agent) },
-			stamp: (chat) => tabStamp(key, agent, chat),
+			...guarded.browser(agent),
 		}),
 		ensure: async (building = () => {}) => {
 			await dockerReady();
@@ -504,13 +357,14 @@ export function containerBox(home: string): BoxSetup {
 			// up once it trusts its own authority and listens; then it gets the daemon's config, whatever it had
 			const deadline = Date.now() + 60_000;
 			for (;;) {
-				const ping = await control<{ up: boolean }>(proxy, ["ping"]).catch(() => ({ up: false }));
-				if (ping.up) break;
+				const ping = await proxyReady(transport).catch(() => false);
+				if (ping) break;
 				if (Date.now() > deadline) throw new DockerError("the egress proxy did not come up");
 				await new Promise((r) => setTimeout(r, 200));
 			}
 			// in line with every other push, read from the store at its turn: a revoke made while it came up is in it
-			if ((await configure()) !== "told") throw new DockerError("the egress proxy could not be told its config");
+			if ((await guarded.egress.configure()) !== "told")
+				throw new DockerError("the egress proxy could not be told its config");
 			// how the box runs, which decides its confinement: a box made otherwise is made again, never reused
 			const run = [
 				"--hostname",

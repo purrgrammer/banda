@@ -97,7 +97,7 @@ async function setup(name = "plan.md", hit?: (point: ArtifactPoint, path: string
 	};
 	const versions = async () => (await h.snapshot(Artifacts, context))?.artifacts[artifactId(path)]?.versions ?? [];
 	const close = async () => {
-		box.close();
+		await box.close();
 		await h.close(context);
 	};
 	return { h, blobs, library, path, chat, pub, done, told, versions, close, id: artifactId(path) };

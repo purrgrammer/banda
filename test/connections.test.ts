@@ -227,7 +227,7 @@ describe("a remote connection", () => {
 		// nowhere else: the store's files, every entry, the model's requests, the logs, the box's files
 		await s.harness.close(context);
 		opened.splice(opened.indexOf(s as never), 1);
-		s.box.close();
+		await s.box.close();
 		const everywhere = [
 			...files(s.home, (path) => !path.includes("/auth/")),
 			JSON.stringify(s.model.requests),

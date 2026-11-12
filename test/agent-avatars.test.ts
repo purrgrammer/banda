@@ -55,7 +55,7 @@ describe("accepted agent avatars", () => {
 			expect(await acceptedIconFace(harness)).toEqual(next);
 		} finally {
 			await harness.close(context);
-			box.close();
+			await box.close();
 		}
 	});
 	it("accepts owner edits immediately, but keeps box edits out of effect until their exact bytes are accepted", async () => {
@@ -103,7 +103,7 @@ describe("accepted agent avatars", () => {
 			expect((await effective())?.face.color).toBe("#abcdef");
 		} finally {
 			await harness.close(context);
-			box.close();
+			await box.close();
 		}
 	});
 });

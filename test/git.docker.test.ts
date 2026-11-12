@@ -238,7 +238,7 @@ describe.skipIf(!docker)("git through the box's proxy", { timeout: 180_000 }, ()
 	afterAll(async () => {
 		await stopPermissions?.();
 		await harness?.close(context);
-		box?.close();
+		await box?.close();
 		try {
 			run(["rm", "--force", forge]);
 		} catch {

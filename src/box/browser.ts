@@ -1,6 +1,6 @@
 /**
  * The browser (DESIGN.md "The box", The browser): Chromium, headless, in the box, started when first used and closed
- * once idle. The daemon drives it over DevTools on a pipe through `docker exec` (`cdp.ts`), never over a port.
+ * once idle. The daemon drives it over DevTools on a pipe through its launch command (`cdp.ts`), never over a port.
  *
  * - **One browser, one holder.** Its page belongs to one chat at a time, whose proxy login its requests carry
  *   (the browser's own login, which the proxy maps to the holder): what it reads is that chat's. Another
@@ -35,8 +35,8 @@ import {
  * requests carry (`TAB_HEADER`), which tells the proxy whose chat a request is, marked so only the daemon makes one.
  */
 export type BrowserSetup = {
-	/** The command that starts Chromium with DevTools on its stdin and stdout. */
-	readonly command: readonly string[];
+	/** Prepare the browser, then return the command that starts Chromium with DevTools on its stdin and stdout. */
+	command(): Promise<readonly string[]>;
 	readonly login: { readonly username: string; readonly password: string };
 	/** The value of `TAB_HEADER` for chat `chat`'s tab; none: requests go unstamped (a test's browser). */
 	readonly stamp?: (chat: number) => string;
@@ -75,6 +75,7 @@ export type PageWrite = {
 /** What the owner sees of the browser: whether it runs, whose it is, who holds it, and where it is. */
 export type BrowserView = {
 	readonly running: boolean;
+	readonly preparing: boolean;
 	readonly chat?: number;
 	readonly control: "agent" | "owner";
 	readonly url?: string;
@@ -206,8 +207,9 @@ export type BrowserOptions = {
 	/**
 	 * The process this browser is a tab of, shared with the other tabs of its agent's browser: its page is a new tab
 	 * there, closed when it is done. None: it starts a process of its own (`setup.command`) and uses its first page.
+	 * `signal` aborts when this tab closes during acquisition.
 	 */
-	readonly process?: () => Promise<BrowserProcess>;
+	readonly process?: (signal: AbortSignal) => Promise<BrowserProcess>;
 };
 
 const READS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -319,7 +321,9 @@ export function openBrowser(options: BrowserOptions): Browser {
 	const idleMs = options.idleMs ?? 5 * 60_000;
 	const settleMs = options.settleMs ?? 10_000;
 	let session: Session | undefined;
-	let starting: Promise<Session> | undefined;
+	let starting:
+		| { readonly chat: number; readonly controller: AbortController; readonly promise: Promise<Session> }
+		| undefined;
 	let control: "agent" | "owner" = "agent";
 	/** The owner is taking the browser: the agent's input is refused from the moment they ask, before the proxy knows. */
 	let claiming = false;
@@ -332,7 +336,12 @@ export function openBrowser(options: BrowserOptions): Browser {
 
 	const view = (): BrowserView => ({
 		running: session !== undefined,
-		...(session === undefined ? {} : { chat: session.chat, url: session.url, title: session.title }),
+		preparing: session === undefined && starting !== undefined,
+		...(session === undefined
+			? starting === undefined
+				? {}
+				: { chat: starting.chat }
+			: { chat: session.chat, url: session.url, title: session.title }),
 		control,
 	});
 	const emit = (event: ViewEvent) => {
@@ -356,15 +365,17 @@ export function openBrowser(options: BrowserOptions): Browser {
 	const stop = () => {
 		clearTimeout(idle);
 		const was = session;
+		const pending = starting;
 		session = undefined;
 		starting = undefined;
+		pending?.controller.abort(new Refused("The browser was closed."));
 		control = "agent";
 		if (was !== undefined) {
 			was.screencast = false;
 			was.frame = undefined;
 			was.close();
-			void options.tell(undefined).catch(() => undefined);
 		}
+		if (was !== undefined || pending !== undefined) void options.tell(undefined).catch(() => undefined);
 		changed();
 	};
 
@@ -641,13 +652,24 @@ export function openBrowser(options: BrowserOptions): Browser {
 			.catch(() => undefined);
 	};
 
-	const start = async (chat: number): Promise<Session> => {
+	const start = async (chat: number, signal: AbortSignal): Promise<Session> => {
 		await options.ensure();
+		signal.throwIfAborted();
 		await options.tell({ chat, owner: false });
+		signal.throwIfAborted();
 		fault("browser:start");
 		// a tab of the agent's shared process, or a process of its own
-		const shared = options.process === undefined ? undefined : await options.process();
-		const cdp = shared?.cdp ?? new Cdp(setup.command, log);
+		const shared = options.process === undefined ? undefined : await options.process(signal);
+		if (signal.aborted) {
+			shared?.release();
+			signal.throwIfAborted();
+		}
+		let cdp: Cdp;
+		if (shared === undefined) {
+			const command = await setup.command();
+			signal.throwIfAborted();
+			cdp = new Cdp(command, log);
+		} else cdp = shared.cdp;
 		let unhear = () => {};
 		let targetId: string | undefined;
 		const close = () => {
@@ -656,6 +678,7 @@ export function openBrowser(options: BrowserOptions): Browser {
 			if (targetId !== undefined) void cdp.send("Target.closeTarget", { targetId }).catch(() => undefined);
 			shared.release();
 		};
+		signal.addEventListener("abort", close, { once: true });
 		try {
 			if (shared !== undefined)
 				targetId = (await cdp.send<{ targetId: string }>("Target.createTarget", { url: "about:blank" })).targetId;
@@ -716,21 +739,41 @@ export function openBrowser(options: BrowserOptions): Browser {
 				sessionId,
 			);
 			if (listeners.size > 0) await startScreencast(s);
+			signal.throwIfAborted();
 			return s;
 		} catch (error) {
 			close();
 			throw error;
+		} finally {
+			signal.removeEventListener("abort", close);
 		}
 	};
 
 	/** The browser, started for `chat` if it is not open; one start at a time. */
 	const opened = async (chat: number): Promise<Session> => {
 		if (session !== undefined) return session;
-		if (starting === undefined)
-			starting = start(chat).finally(() => {
+		if (starting === undefined) {
+			const controller = new AbortController();
+			starting = { chat, controller, promise: start(chat, controller.signal) };
+			changed();
+		}
+		const pending = starting;
+		let s: Session;
+		try {
+			s = await pending.promise;
+		} catch (error) {
+			if (starting === pending) {
 				starting = undefined;
-			});
-		const s = await starting;
+				void options.tell(undefined).catch(() => undefined);
+				changed();
+			}
+			throw error;
+		}
+		if (pending.controller.signal.aborted) {
+			s.close();
+			pending.controller.signal.throwIfAborted();
+		}
+		if (starting === pending) starting = undefined;
 		if (session === undefined) {
 			session = s;
 			generation++;

@@ -66,8 +66,9 @@ describe("host mode", () => {
 		expect(boxKind(undefined)).toBe("container");
 		expect(boxKind("")).toBe("container");
 		expect(boxKind("container")).toBe("container");
+		expect(boxKind("microvm")).toBe("microvm");
 		expect(boxKind("host")).toBe("host");
-		expect(() => boxKind("hots")).toThrow("--box is container or host, not hots");
+		expect(() => boxKind("hots")).toThrow("--box is container, microvm or host, not hots");
 	});
 
 	it("is refused on Windows, which has no /usr/bin/env to run it under", () => {

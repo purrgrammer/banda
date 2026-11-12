@@ -39,7 +39,7 @@ async function setUp() {
 	const allowed = async () => (await harness.snapshot(Accepted, context))?.files[watchPath("banda-142")]?.sha;
 	const close = async () => {
 		await harness.close(context);
-		box.close();
+		await box.close();
 	};
 	return { harness, workspace, allowed, close };
 }

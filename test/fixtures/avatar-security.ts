@@ -95,6 +95,6 @@ try {
 	}
 } finally {
 	await harness.close(context);
-	box.close();
+	await box.close();
 }
 console.log("avatar security boundaries passed");

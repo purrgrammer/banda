@@ -90,7 +90,17 @@ export async function forkHome(from: string, to: string, options: ForkOptions = 
 	}
 	done.push("routines paused");
 
-	// the box's files, into volumes of the fork's own box
+	const computer = join(from, "computer");
+	if (options.volumes !== false && (await exists(join(computer, "workspace")))) {
+		for (const directory of ["workspace", "work", "tools", ...(options.browser ? ["browser"] : [])]) {
+			if (!(await exists(join(computer, directory)))) continue;
+			await mkdir(join(to, "computer"), { recursive: true, mode: 0o700 });
+			await cp(join(computer, directory), join(to, "computer", directory), { recursive: true });
+			done.push(`computer ${directory}`);
+		}
+		return done;
+	}
+	// Docker's files, into volumes of the fork's own box.
 	const box = containerName(from);
 	const volumes = options.volumes ?? ((await dockerAvailable()) && hasContainer(box));
 	if (volumes) {
@@ -162,7 +172,9 @@ async function main() {
 		log: (line) => console.error(line),
 	});
 	console.log(`forked ${from} into ${to}: ${done.join(", ")}`);
-	console.log(`run it: BANDA_HOME=${to} node dist/cli/index.js serve --port 0`);
+	console.log(
+		`run it: BANDA_HOME=${to} node dist/cli/index.js serve --port 0${done.includes("computer workspace") ? " --box microvm" : ""}`,
+	);
 	console.log("routines are paused there; resume them in the app if you want them to run");
 }
 

@@ -50,7 +50,7 @@ class ScriptedCdp {
 async function setup(allowed: readonly string[] = []) {
 	const cdp = new ScriptedCdp();
 	const browser: Browser = openBrowser({
-		setup: { command: [], login: { username: "u", password: "p" } },
+		setup: { command: async () => [], login: { username: "u", password: "p" } },
 		ensure: async () => {},
 		tell: async () => {},
 		log: () => {},
@@ -93,7 +93,7 @@ describe("a site the owner signed in to, at the browser", () => {
 	it("knows the cookies for an address about to open, in a chat whose tab never opened", async () => {
 		const cdp = new ScriptedCdp();
 		const browser = openBrowser({
-			setup: { command: [], login: { username: "u", password: "p" } },
+			setup: { command: async () => [], login: { username: "u", password: "p" } },
 			ensure: async () => {},
 			tell: async () => {},
 			log: () => {},

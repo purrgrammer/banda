@@ -28,7 +28,7 @@ export function hostBox(home: string): BoxSetup {
 	return {
 		workspace,
 		attachments,
-		host: true,
+		kind: "host",
 		ensure: async () => {
 			await mkdir(workspace, { recursive: true, mode: 0o700 });
 			await mkdir(attachments, { recursive: true, mode: 0o700 });

@@ -55,7 +55,7 @@ async function setUp() {
 	const boxed = () => readFile(join(box.workspace, watchPath("banda-142")), "utf8");
 	const close = async () => {
 		await harness.close(context);
-		box.close();
+		await box.close();
 	};
 	return { box, harness, workspace, accepted, boxed, close };
 }

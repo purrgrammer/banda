@@ -4,7 +4,9 @@
  * folders that still exists (~/.banda), is never touched. Do not run it while tests run: a test's box has no daemon.
  */
 import { dockerAvailable, sweepBoxes } from "../src/box/container.ts";
+import { sweepMicrovmBoxes } from "../src/box/microvm.ts";
 
+await sweepMicrovmBoxes();
 if (!(await dockerAvailable())) {
 	console.log("Docker is not running: nothing to sweep.");
 	process.exit(0);

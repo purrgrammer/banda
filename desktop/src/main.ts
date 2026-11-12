@@ -4,21 +4,29 @@
  * the web UI the daemon serves. Closing the window leaves the daemon running, so routines still wake; Quit stops it. If
  * the shell crashes, the daemon lives on and the next launch attaches to it.
  */
-import { spawn } from "node:child_process";
-import { closeSync, openSync } from "node:fs";
+import { type ChildProcess, spawn } from "node:child_process";
+import { closeSync, mkdirSync, mkdtempSync, openSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { delimiter, join, resolve } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell, Tray } from "electron";
 import { shellPath } from "./environment.js";
 import { failurePage, type Trouble, trouble } from "./trouble.js";
 
 const windows = process.platform === "win32";
-const home = process.env.BANDA_HOME ?? join(homedir(), ".banda");
+const home = resolve(process.env.BANDA_HOME ?? join(homedir(), ".banda"));
 const port = Number(process.env.BANDA_PORT ?? 7787);
 const log = join(home, "daemon.log");
 
 type Published = { readonly pid: number; readonly port: number; readonly token: string };
+let attachedDaemon: Published | undefined;
+let startingDaemon: ChildProcess | undefined;
+const profile =
+	!app.isPackaged && process.env.BANDA_HOME === undefined
+		? mkdtempSync(join(tmpdir(), "banda-desktop-refused-"))
+		: join(home, "desktop");
+mkdirSync(profile, { recursive: true, mode: 0o700 });
+app.setPath("userData", profile);
 
 /** The bundled release, or in development the checkout's build run by the Node.js on PATH. */
 function release() {
@@ -130,11 +138,19 @@ async function ensureDaemon(): Promise<Published> {
 	// the daemon writes to a file, not to a pipe of ours: it must outlive this process without writing into a closed pipe
 	const output = openSync(log, "w", 0o600);
 	const child = spawn(node, [cli, "serve", "--port", String(port)], {
-		env: { ...process.env, BANDA_HOME: home, PATH: dockerPath(path) },
+		env: {
+			...process.env,
+			BANDA_HOME: home,
+			BANDA_BOX:
+				process.env.BANDA_BOX ??
+				(app.isPackaged && process.platform === "darwin" && process.arch === "arm64" ? "microvm" : "container"),
+			PATH: dockerPath(path),
+		},
 		stdio: ["ignore", output, output],
 		detached: true,
 		windowsHide: true,
 	});
+	startingDaemon = child;
 	closeSync(output);
 	let ended = false;
 	let failedToStart: Error | undefined;
@@ -147,7 +163,10 @@ async function ensureDaemon(): Promise<Published> {
 	});
 	child.unref();
 	const running = child.pid === undefined ? undefined : await published(120_000, child.pid, () => ended);
-	if (running !== undefined) return running;
+	if (running !== undefined) {
+		startingDaemon = undefined;
+		return running;
+	}
 	if (!ended) child.kill();
 	const said = failedToStart?.message ?? (await readFile(log, "utf8").catch(() => ""));
 	throw new DaemonFailed(trouble(said, { home, port, log }));
@@ -155,15 +174,19 @@ async function ensureDaemon(): Promise<Published> {
 
 /** Stop the daemon the window shows, and wait for it to go; the store survives a kill by design, so this is a courtesy. */
 async function stopDaemon(): Promise<void> {
-	const file = await readPublished();
-	if (file === undefined || !alive(file.pid)) return;
+	const selected = attachedDaemon;
+	if (selected === undefined) {
+		startingDaemon?.kill();
+		return;
+	}
+	if (!alive(selected.pid) || !(await answers(selected))) return;
 	try {
-		process.kill(file.pid, "SIGTERM");
+		process.kill(selected.pid, "SIGTERM");
 	} catch {
 		return;
 	}
 	const deadline = Date.now() + 15_000;
-	while (Date.now() < deadline && alive(file.pid)) await pause(200);
+	while (Date.now() < deadline && alive(selected.pid)) await pause(200);
 }
 
 let window: BrowserWindow | undefined;
@@ -350,8 +373,11 @@ else {
 		}
 		try {
 			const daemon = await ensureDaemon();
+			attachedDaemon = daemon;
+			if (quitting) return void stopDaemon();
 			window = openWindow(`http://127.0.0.1:${daemon.port}/#token=${daemon.token}`);
 		} catch (error) {
+			if (quitting) return;
 			const shown =
 				error instanceof DaemonFailed ? error.trouble : trouble((error as Error).message, { home, port, log });
 			window = openWindow(undefined, failurePage(shown));

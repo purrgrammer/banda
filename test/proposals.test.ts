@@ -182,7 +182,7 @@ describe("agent proposals", () => {
 			expect(itemOf(decided[0]!)).toMatchObject({ role: "instruction", text: decidedText(proposal, "accepted") });
 		} finally {
 			await harness.close(context);
-			box.close();
+			await box.close();
 		}
 	});
 
@@ -251,7 +251,7 @@ describe("agent proposals", () => {
 			expect(await readFile(join(box.workspace, "agents", "reader.md"), "utf8")).toBe(before);
 		} finally {
 			await harness.close(context);
-			box.close();
+			await box.close();
 		}
 	});
 

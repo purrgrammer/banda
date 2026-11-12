@@ -140,5 +140,5 @@ console.log(
 		asides: faults.hits("artifact:aside"),
 	}),
 );
-box.close();
+await box.close();
 await open.close(context);

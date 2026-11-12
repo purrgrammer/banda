@@ -102,7 +102,7 @@ export function withBrowsed(segments: Segment[], items: ViewInput["items"], usin
 
 /** Whether the browser is in use for this chat: it runs for it, and its run goes on or the owner holds it. */
 export function inUse(view: BrowserView | undefined, busy: boolean): boolean {
-	return view?.running === true && (busy || view.control === "owner");
+	return view !== undefined && (view.running || view.preparing) && (busy || view.control === "owner");
 }
 
 export const browser: Segmenter = {

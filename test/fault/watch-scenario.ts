@@ -507,7 +507,7 @@ export async function watchScenario(
 			models: faults.hits("model"),
 		};
 	} finally {
-		box.close();
+		await box.close();
 		await harness.close(context).catch(() => {});
 	}
 }

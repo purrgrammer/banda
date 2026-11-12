@@ -47,8 +47,8 @@ import { allowTools, blobStore, FAUX_MODEL, FakeGateway, tempHome } from "./help
 import { pbtRuns, pbtTimeout } from "./pbt.ts";
 
 const boxes: Box[] = [];
-afterAll(() => {
-	for (const box of boxes) box.close();
+afterAll(async () => {
+	for (const box of boxes) await box.close();
 });
 
 const textOf = (message: Message | undefined): string =>

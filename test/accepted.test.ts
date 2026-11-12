@@ -26,8 +26,8 @@ import { blobStore, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
 import { pbtRuns, pbtTimeout } from "./pbt.ts";
 
 const boxes: Box[] = [];
-afterAll(() => {
-	for (const box of boxes) box.close();
+afterAll(async () => {
+	for (const box of boxes) await box.close();
 });
 
 /** A tool outside the base: only an accepted file can give it, so it is what a box-written file tries to grant itself. */

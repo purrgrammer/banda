@@ -7,7 +7,14 @@
  *
  * A process starts with its agent's first tab and ends once its last tab closed (a tab closes after a while unused).
  */
-import { type Browser, type BrowserProcess, type BrowserSetup, type BrowserView, openBrowser } from "./browser.ts";
+import {
+	type Browser,
+	type BrowserProcess,
+	type BrowserSetup,
+	type BrowserView,
+	openBrowser,
+	Refused,
+} from "./browser.ts";
 import { Cdp } from "./cdp.ts";
 
 /** Each agent's tabs, by chat: whether the owner holds it. What the proxy is told. */
@@ -61,7 +68,8 @@ export function openBrowsers(options: BrowsersOptions): Browsers {
 	// by agent and chat: chat 0 (a sign-out with no tab open) is every agent's own
 	const tabs = new Map<string, { readonly agent: string; readonly chat: number; readonly browser: Browser }>();
 	const holders = new Map<string, { readonly agent: string; readonly chat: number; readonly owner: boolean }>();
-	const processes = new Map<string, { cdp: Promise<Cdp>; users: number }>();
+	const processes = new Map<string, { cdp: Promise<Cdp>; users: number; started?: Cdp }>();
+	let closed = false;
 
 	const told = (): TabHolders => {
 		const all: { [agent: string]: { tabs: { [chat: string]: { owner: boolean } } } } = {};
@@ -74,19 +82,30 @@ export function openBrowsers(options: BrowsersOptions): Browsers {
 	};
 
 	/** Agent `agent`'s process, started for its first tab; let go by each tab, ended with its last. */
-	const processOf = async (agent: string): Promise<BrowserProcess> => {
+	const processOf = async (agent: string, signal: AbortSignal): Promise<BrowserProcess> => {
+		signal.throwIfAborted();
+		if (closed) throw new Refused("The browsers are closed.");
 		let found = processes.get(agent);
 		if (found === undefined) {
-			const cdp = (async () => {
+			const cdp = Promise.resolve().then(async () => {
 				await options.ensure();
-				const started = new Cdp(options.setup(agent).command, (line) => options.log(`${agent}: ${line}`));
+				const command = await options.setup(agent).command();
+				const entry = processes.get(agent);
+				if (closed || entry?.cdp !== cdp || entry.users === 0) throw new Refused("The browser was closed.");
+				const started = new Cdp(command, (line) => options.log(`${agent}: ${line}`));
+				entry.started = started;
 				void started.ended.then(() => {
 					if (processes.get(agent)?.cdp === cdp) processes.delete(agent);
 				});
-				await started.send("Target.setDiscoverTargets", { discover: true });
-				await started.send("Browser.setDownloadBehavior", { behavior: "deny" }).catch(() => undefined);
-				return started;
-			})();
+				try {
+					await started.send("Target.setDiscoverTargets", { discover: true });
+					await started.send("Browser.setDownloadBehavior", { behavior: "deny" }).catch(() => undefined);
+					return started;
+				} catch (error) {
+					started.close();
+					throw error;
+				}
+			});
 			found = { cdp, users: 0 };
 			processes.set(agent, found);
 			cdp.catch(() => {
@@ -96,26 +115,30 @@ export function openBrowsers(options: BrowsersOptions): Browsers {
 		const entry = found;
 		entry.users++;
 		let released = false;
-		try {
-			return {
-				cdp: await entry.cdp,
-				release: () => {
-					if (released) return;
-					released = true;
-					entry.users--;
-					if (entry.users > 0 || processes.get(agent) !== entry) return;
-					processes.delete(agent);
-					void entry.cdp.then((cdp) => cdp.close()).catch(() => undefined);
-				},
-			};
-		} catch (error) {
+		const release = () => {
+			if (released) return;
+			released = true;
 			entry.users--;
+			if (entry.users > 0 || processes.get(agent) !== entry) return;
+			processes.delete(agent);
+			entry.started?.close();
+		};
+		signal.addEventListener("abort", release, { once: true });
+		try {
+			const cdp = await entry.cdp;
+			signal.throwIfAborted();
+			return { cdp, release };
+		} catch (error) {
+			release();
 			throw error;
+		} finally {
+			signal.removeEventListener("abort", release);
 		}
 	};
 
 	/** The tab of `chat` in `agent`'s browser. */
 	const tabOf = (agent: string, chat: number): Browser => {
+		if (closed) throw new Refused("The browsers are closed.");
 		if (!AGENT.test(agent)) throw new Error(`"${agent}" is not an agent's id`);
 		const key = `${agent}:${chat}`;
 		const found = tabs.get(key);
@@ -123,7 +146,7 @@ export function openBrowsers(options: BrowsersOptions): Browsers {
 		const browser = openBrowser({
 			setup: options.setup(agent),
 			ensure: options.ensure,
-			process: () => processOf(agent),
+			process: (signal) => processOf(agent, signal),
 			tell: async (holder) => {
 				if (holder === undefined) holders.delete(key);
 				else {
@@ -163,10 +186,11 @@ export function openBrowsers(options: BrowsersOptions): Browsers {
 			await (running?.browser ?? tabOf(agent, 0)).forget(site);
 		},
 		close: () => {
+			closed = true;
 			for (const { browser } of tabs.values()) browser.close();
 			tabs.clear();
 			holders.clear();
-			for (const { cdp } of processes.values()) void cdp.then((each) => each.close()).catch(() => undefined);
+			for (const { started } of processes.values()) started?.close();
 			processes.clear();
 		},
 	};

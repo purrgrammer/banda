@@ -216,17 +216,17 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 				);
 			}
 			if (stopListing !== undefined) await step("listings", async () => stopListing?.());
-			// the writes the proxy sent under a host permission are logged before the store goes
+			const browsing = browsers;
+			if (browsing !== undefined) await step("browser", () => browsing.close());
+			// The proxy's last outcomes are taken while both its control and the store remain available.
 			const sweepingLast = sweepSentNow;
 			if (sweepingLast !== undefined) await step("sent", sweepingLast);
+			const opened = box;
+			if (opened !== undefined) await step("box", () => opened.close());
 			const store = harness;
 			if (store !== undefined) await step("store", () => store.close(context));
 			const index = search;
 			if (index !== undefined) await step("search", () => index.close());
-			const browsing = browsers;
-			if (browsing !== undefined) await step("browser", () => browsing.close());
-			const opened = box;
-			if (opened !== undefined) await step("box", () => opened.close());
 			await step("daemon.json", () => rm(daemonFile(home), { force: true }));
 			lock.close();
 			stopped({ failed });
@@ -255,7 +255,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		const blobs = new BlobStore(join(home, "blobs"));
 		const agentBox = openBox(options.box ?? (await chooseBox(home, log, options.boxKind)), log);
 		box = agentBox;
-		if (agentBox.host) {
+		if (agentBox.kind === "host") {
 			log(`box: ${HOST_WARNING}`);
 			// they are set at the proxy, and host mode has none: a connection that needs one fails as it would without it
 			const unset = await egressCredentials(home, log);
@@ -658,7 +658,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			return {
 				state: now.state,
 				...(now.state === "offline" ? { why: now.why } : {}),
-				box: agentBox.host ? "host" : "container",
+				box: agentBox.kind,
 				network: agentBox.egress === undefined ? "none" : "guarded",
 			};
 		};

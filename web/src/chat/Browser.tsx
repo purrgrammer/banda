@@ -7,10 +7,21 @@
 import { MonitorIcon, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { Line } from "./Line.tsx";
 
 export type BrowserHold = "agent" | "owner" | "stuck";
+
+export function BrowserPreparing() {
+	return (
+		<div aria-busy="true" className="flex size-full min-h-32 items-center justify-center gap-2 text-meta text-ink-2">
+			<Spinner aria-hidden="true" className="motion-reduce:[animation-duration:6s]" />
+			<span>Preparing browser…</span>
+			<progress aria-label="Preparing browser" className="sr-only" />
+		</div>
+	);
+}
 
 export function BrowserWindow({
 	agent,
@@ -21,6 +32,7 @@ export function BrowserWindow({
 	landscape = false,
 	screen,
 	why,
+	preparing = false,
 	onTakeOver,
 	onGiveBack,
 	onStop,
@@ -38,6 +50,8 @@ export function BrowserWindow({
 	screen?: ReactNode;
 	/** Why the last control failed, in words. */
 	why?: string | undefined;
+	/** The optional browser is being prepared; there is no page to control yet. */
+	preparing?: boolean;
 	onTakeOver?: () => void;
 	onGiveBack?: () => void;
 	onStop?: () => void;
@@ -61,7 +75,7 @@ export function BrowserWindow({
 					<span className="truncate text-ui font-medium text-ink">{title}</span>
 					{landscape ? null : <span className="truncate text-meta text-ink-2">{host}</span>}
 				</span>
-				{owner ? (
+				{preparing ? null : owner ? (
 					<span className="flex items-center gap-1.5 text-meta font-medium text-ink">You're in control</span>
 				) : (
 					<span className="flex items-center gap-1.5 text-meta font-medium text-ink">
@@ -74,7 +88,7 @@ export function BrowserWindow({
 						Give back
 					</Button>
 				) : (
-					<Button variant="outline" size="sm" className="ml-1" onClick={onTakeOver}>
+					<Button variant="outline" size="sm" className="ml-1" disabled={preparing} onClick={onTakeOver}>
 						Take over
 					</Button>
 				)}
@@ -90,12 +104,18 @@ export function BrowserWindow({
 				)}
 			</div>
 			<div className={cn("relative min-h-0 bg-paper-2", landscape ? "flex-1" : "")}>
-				{screen ?? (
-					<img
-						src={shot}
-						alt={`${title}, as ${agent} sees it`}
-						className={cn("block w-full object-cover object-top", landscape ? "h-full" : "aspect-[16/10]")}
-					/>
+				{preparing ? (
+					<div className="aspect-[16/10]">
+						<BrowserPreparing />
+					</div>
+				) : (
+					(screen ?? (
+						<img
+							src={shot}
+							alt={`${title}, as ${agent} sees it`}
+							className={cn("block w-full object-cover object-top", landscape ? "h-full" : "aspect-[16/10]")}
+						/>
+					))
 				)}
 			</div>
 			{hold === "owner" && !landscape ? (

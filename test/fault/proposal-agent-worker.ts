@@ -156,7 +156,7 @@ try {
 } catch (error) {
 	if (!injected(error)) throw error;
 	await current.harness.close(context).catch(() => {});
-	current.box.close();
+	await current.box.close();
 	armed = false;
 	current = await setup();
 	armed = true;
@@ -185,4 +185,4 @@ console.log(
 	}),
 );
 await current.harness.close(context);
-current.box.close();
+await current.box.close();

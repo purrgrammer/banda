@@ -118,6 +118,32 @@ export function States() {
 						</SettingsPage>
 					</div>
 				</Group>
+				<Group label="Settings while the bundled computer is prepared" className="items-start">
+					<div className="h-[520px] w-[30rem] max-w-full overflow-hidden rounded-tile border border-line-soft">
+						<SettingsPage title="Settings">
+							<AppSettings
+								data={{ ...SETTINGS, computer: { state: "building", box: "microvm", network: "guarded" } }}
+							/>
+						</SettingsPage>
+					</div>
+				</Group>
+				<Group label="Settings when the bundled computer cannot start" className="items-start">
+					<div className="h-[520px] w-[30rem] max-w-full overflow-hidden rounded-tile border border-line-soft">
+						<SettingsPage title="Settings">
+							<AppSettings
+								data={{
+									...SETTINGS,
+									computer: {
+										state: "offline",
+										box: "microvm",
+										network: "guarded",
+										why: "The computer's bundled files are incomplete. Reinstall this build of banda.",
+									},
+								}}
+							/>
+						</SettingsPage>
+					</div>
+				</Group>
 			</Section>
 		</>
 	);

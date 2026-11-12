@@ -16,7 +16,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  computer-images:
+    name: build computer images (linux-arm64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: node scripts/microvm-bundle.ts --images --out release/computer-images
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: computer-images-arm64
+          path: release/computer-images
+          if-no-files-found: error
+          compression-level: 0
+
   build:
+    needs: computer-images
     strategy:
       fail-fast: false
       matrix:
@@ -51,7 +73,19 @@ jobs:
       - name: Format, lint, types and the ordinary suites
         if: matrix.target == 'linux-x64'
         run: npm run check && npm run typecheck && npm run test:fast
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: matrix.target == 'mac-arm64'
+        with:
+          name: computer-images-arm64
+          path: ${{ runner.temp }}/computer-images
       - run: npm run cli:pack
+        env:
+          BANDA_COMPUTER_IMAGES: ${{ matrix.target == 'mac-arm64' && format('{0}/computer-images', runner.temp) || '' }}
+      - name: Bundled computer distribution qualification
+        if: matrix.target == 'mac-arm64' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          echo "::error::Bundled computer redistribution review is pending: corresponding source, dependency notices and guest-image requirements must be qualified before a tagged release."
+          exit 1
       - run: node scripts/smoke-release.ts
       - run: npm --prefix desktop ci
       - run: npm --prefix desktop run dist
@@ -64,6 +98,7 @@ jobs:
           if-no-files-found: error
           path: |
             release/banda-cli-*
+            release/banda-browser-*.tar
             release/desktop/banda-*.dmg
             release/desktop/banda-*.zip
             release/desktop/banda-*.exe

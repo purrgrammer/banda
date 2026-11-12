@@ -23,8 +23,8 @@ import { hostBox } from "./fixtures/host-box.ts";
 import { blobStore, echoModels, FAUX_MODEL, FakeGateway, tempHome, until } from "./helpers.ts";
 
 const boxes: Box[] = [];
-afterAll(() => {
-	for (const box of boxes) box.close();
+afterAll(async () => {
+	for (const box of boxes) await box.close();
 });
 
 /** A gateway that holds its first send until released (or a stop aborts it), so a run is at work. */

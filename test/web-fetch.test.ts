@@ -540,7 +540,7 @@ describe.skipIf(!curl)("the request, with the real curl", () => {
 	});
 
 	afterAll(async () => {
-		box?.close();
+		await box?.close();
 		await new Promise((resolve) => server?.close(resolve));
 		rmSync(home, { recursive: true, force: true });
 	});

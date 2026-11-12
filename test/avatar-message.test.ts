@@ -190,7 +190,7 @@ describe("generated face message parts", () => {
 			);
 		} finally {
 			await harness.close(context);
-			box.close();
+			await box.close();
 		}
 	});
 });

@@ -12,6 +12,7 @@ import type { BrowserSetup } from "./browser.ts";
 import { containerBox, dockerReady, sweepBoxes } from "./container.ts";
 import type { Pushed } from "./egress-config.ts";
 import { hostBox } from "./host.ts";
+import { microvmBox } from "./microvm.ts";
 
 /** What the daemon tells the egress proxy: whose logins it trusts, credentials, and what goes straight through. */
 export type EgressConfig = {
@@ -60,6 +61,7 @@ export type BoxEgress = EgressControl & {
 
 /** How a box is made. */
 export type BoxSetup = {
+	readonly kind: BoxKind;
 	/** The workspace, in the box's own paths. */
 	readonly workspace: string;
 	/** Where attachments that came in are written, outside the workspace. */
@@ -75,8 +77,8 @@ export type BoxSetup = {
 	readonly egress?: BoxEgress;
 	/** How it starts agent `agent`'s browser (each its own profile and proxy login), when it has browsers. */
 	readonly browser?: (agent: string) => BrowserSetup;
-	/** Host mode: no box, its commands run on the daemon's own machine (`hostBox`). */
-	readonly host?: true;
+	/** Release owned runtime resources after pi-env stops; retain persistent files. */
+	close?(): Promise<void>;
 };
 
 /**
@@ -89,8 +91,7 @@ export type BoxState =
 
 export type Box = {
 	readonly workspace: string;
-	/** Host mode: no box, its commands run on the daemon's own machine. */
-	readonly host: boolean;
+	readonly kind: BoxKind;
 	readonly attachments: string;
 	readonly egress?: BoxEgress;
 	/** How it starts agent `agent`'s browser (each its own profile and proxy login), when it has browsers. */
@@ -105,8 +106,8 @@ export type Box = {
 	state(): BoxState;
 	/** Told whenever its state changes. */
 	watch(listener: () => void): () => void;
-	/** Stop pi-env, which kills every command it started; the box itself stays. */
-	close(): void;
+	/** Stop pi-env and release owned runtime resources; persistent files remain. */
+	close(): Promise<void>;
 };
 
 export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
@@ -116,6 +117,7 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 	// while offline, it tries again now and then, so the app says when it is back without waiting for a tool call
 	let retry: NodeJS.Timeout | undefined;
 	let closed = false;
+	let closing: Promise<void> | undefined;
 	const set = (next: BoxState) => {
 		clearTimeout(retry);
 		if (next.state === "offline" && !closed) {
@@ -127,30 +129,54 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 		for (const listener of listeners) listener();
 	};
 	// one bring-up at a time, and a fresh one at every start of pi-env: a lost connection may mean the box went away
-	const ensure = () =>
-		(running ??= setup
+	const ensure = (): Promise<void> => {
+		if (closed) return Promise.reject(new Error("The computer is closed"));
+		if (running !== undefined) return running;
+		running = setup
 			.ensure(() => set({ state: "building" }))
 			.then(
-				() => set({ state: "up" }),
+				() => {
+					if (closed) throw new Error("The computer is closed");
+					set({ state: "up" });
+				},
 				(error: unknown) => {
 					set({ state: "offline", why: error instanceof Error ? error.message : String(error) });
 					throw error;
 				},
 			)
-			.finally(() => (running = undefined)));
+			.finally(() => (running = undefined));
+		return running;
+	};
 	const connection = new Connection({
 		command: async () => {
 			await ensure();
+			if (closed) throw new Error("The computer is closed");
 			return setup.command;
 		},
 		onLog: (text) => log(`box: ${text.trimEnd()}`),
 	});
+	const browserOf = setup.browser;
 	return {
 		workspace: setup.workspace,
 		attachments: setup.attachments,
-		host: setup.host === true,
+		kind: setup.kind,
 		...(setup.egress === undefined ? {} : { egress: setup.egress }),
-		...(setup.browser === undefined ? {} : { browser: setup.browser }),
+		...(browserOf === undefined
+			? {}
+			: {
+					browser: (agent: string) => {
+						const browser = browserOf(agent);
+						return {
+							...browser,
+							command: async () => {
+								await ensure();
+								const command = await browser.command();
+								if (closed) throw new Error("The computer is closed");
+								return command;
+							},
+						};
+					},
+				}),
 		ensure,
 		env: (cwd, env) =>
 			new RemoteExecutionEnv({
@@ -171,9 +197,15 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 			return () => listeners.delete(listener);
 		},
 		close: () => {
+			if (closing !== undefined) return closing;
 			closed = true;
 			clearTimeout(retry);
 			connection.close();
+			closing = (async () => {
+				await running?.catch(() => undefined);
+				await setup.close?.();
+			})();
+			return closing;
 		},
 	};
 }
@@ -182,16 +214,17 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 const RETRY_OFFLINE_MS = 15_000;
 
 /** Which box: the container (the default), or host mode, which the owner asks for by name and nothing falls back to. */
-export type BoxKind = "container" | "host";
+export type BoxKind = "container" | "microvm" | "host";
 
 /** The box kind `value` names (`--box`, `BANDA_BOX`); unset is the container. */
 export function boxKind(value: string | undefined, platform: NodeJS.Platform = process.platform): BoxKind {
 	if (value === undefined || value === "" || value === "container") return "container";
+	if (value === "microvm") return "microvm";
 	// host mode runs pi-env under `/usr/bin/env -i` (host.ts), which Windows does not have
 	if (value === "host" && platform === "win32")
 		throw new Error("--box host needs macOS or Linux; on Windows, commands run only in the box");
 	if (value === "host") return "host";
-	throw new Error(`--box is container or host, not ${value}`);
+	throw new Error(`--box is container, microvm or host, not ${value}`);
 }
 
 /** What host mode drops, in one line: said at start. */
@@ -208,6 +241,7 @@ export async function chooseBox(
 	kind: BoxKind = "container",
 ): Promise<BoxSetup> {
 	if (kind === "host") return hostBox(home);
+	if (kind === "microvm") return microvmBox(home);
 	const trouble = await dockerReady().then(
 		() => undefined,
 		(error: unknown) => (error instanceof Error ? error.message : String(error)),

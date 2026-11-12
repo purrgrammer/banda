@@ -17,8 +17,8 @@ import { tempHome } from "./helpers.ts";
 import { pbtRuns } from "./pbt.ts";
 
 const boxes: Box[] = [];
-afterAll(() => {
-	for (const box of boxes) box.close();
+afterAll(async () => {
+	for (const box of boxes) await box.close();
 });
 
 async function workspace(): Promise<Workspace> {

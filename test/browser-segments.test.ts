@@ -11,6 +11,7 @@ const IDLE: Live = { busy: false, running: [], thinking: false };
 const BUSY: Live = { busy: true, running: [{ call: "c9", doing: "using its browser" }], thinking: false };
 const RUNNING: BrowserView = {
 	running: true,
+	preparing: false,
 	chat: 1,
 	control: "agent",
 	url: "https://example.com/",
@@ -30,6 +31,11 @@ const items: Item[] = [
 const kinds = (segments: Segment[]) => segments.map((s) => s.kind);
 
 describe("the inline browser", () => {
+	it("shows preparation during a browser call before a page exists", () => {
+		const preparing: BrowserView = { running: false, preparing: true, control: "agent" };
+		expect(kinds(view(items, [], BUSY, { browser: preparing }))).toContain("browser");
+		expect(kinds(view(items, [], IDLE, { browser: preparing }))).not.toContain("browser");
+	});
 	it("does not add a second live preview when a message already shows the browser", () => {
 		const explicit: Item = {
 			id: 4,
@@ -117,7 +123,9 @@ describe("the inline browser", () => {
 	});
 
 	it("shows nothing when the browser is closed, or another chat holds it", () => {
-		expect(kinds(view(items, [], IDLE, { browser: { running: false, control: "agent" } }))).not.toContain("browser");
+		expect(
+			kinds(view(items, [], IDLE, { browser: { running: false, preparing: false, control: "agent" } })),
+		).not.toContain("browser");
 		expect(kinds(view(items, [], IDLE, {}))).not.toContain("browser");
 	});
 });

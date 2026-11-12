@@ -11,7 +11,7 @@ export function useViewContext(chat: number): ViewContext {
 	const removed = control?.removed;
 	// this chat's own tab, while it runs
 	const view = browserOf(shell, chat);
-	const browser = view?.running === true && view.chat === chat ? view : undefined;
+	const browser = view !== undefined && (view.running || view.preparing) && view.chat === chat ? view : undefined;
 	return useMemo(
 		(): ViewContext => ({
 			agents,

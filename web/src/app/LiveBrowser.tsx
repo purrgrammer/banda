@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { BrowserWindow } from "../chat/Browser.tsx";
+import { BrowserPreparing, BrowserWindow } from "../chat/Browser.tsx";
 import { ViewCard } from "../chat/Cards.tsx";
 import type { Who } from "../chat/types.ts";
 import { BrowserScreen, type Frame } from "../components/BrowserScreen.tsx";
@@ -61,8 +61,11 @@ export function LiveView({ chat, who }: { chat: number; who: Who }) {
 			host={hostOf(view?.url)}
 			title={view?.title ?? "Its browser"}
 			live={view?.running === true}
+			preparing={view?.preparing === true}
 			screen={
-				frame === undefined ? undefined : (
+				view?.preparing === true ? (
+					<BrowserPreparing />
+				) : frame === undefined ? undefined : (
 					<img
 						src={`data:image/jpeg;base64,${frame.data}`}
 						alt={`${view?.title ?? "The page"}, as ${who.name} sees it`}
@@ -146,6 +149,7 @@ export function BrowserDialog({ who }: { who: (chat: number) => Who }) {
 					host={hostOf(view?.url)}
 					title={view?.title ?? "Its browser"}
 					hold={stuck ? "stuck" : owner ? "owner" : "agent"}
+					preparing={view?.preparing === true}
 					why={why}
 					screen={
 						<BrowserScreen

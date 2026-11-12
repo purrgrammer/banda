@@ -4,7 +4,7 @@ import type { BrowserView } from "../src/server/api.ts";
 import { BrowserSession } from "../web/src/lib/browser-session.ts";
 import { pbtRuns } from "./pbt.ts";
 
-const watching: BrowserView = { running: true, control: "agent", chat: 3 };
+const watching: BrowserView = { running: true, preparing: false, control: "agent", chat: 3 };
 const held: BrowserView = { ...watching, control: "owner" };
 const deferred = () => {
 	let resolve!: (view: BrowserView) => void;

@@ -244,4 +244,4 @@ console.log(
 	}),
 );
 await harness.close(context);
-box.close();
+await box.close();

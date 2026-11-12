@@ -20,7 +20,7 @@ export function fakeBrowser(home: string, fault: (point: string) => void = () =>
 	let generation = 0;
 	let held: PageWrite | undefined;
 	let control: BrowserView["control"] = "agent";
-	const view = (): BrowserView => ({ running: open, ...(open ? { chat: 1 } : {}), control });
+	const view = (): BrowserView => ({ running: open, preparing: false, ...(open ? { chat: 1 } : {}), control });
 	const take = () => {
 		if (control === "owner") throw new Taken();
 		if (!open) {

@@ -77,6 +77,7 @@ export function ViewCard({
 	shot,
 	screen,
 	live = true,
+	preparing = false,
 	onOpen,
 	onTakeOver,
 }: {
@@ -85,6 +86,7 @@ export function ViewCard({
 	shot?: string | undefined;
 	screen?: ReactNode;
 	live?: boolean;
+	preparing?: boolean;
 	onOpen?: () => void;
 	onTakeOver?: () => void;
 }) {
@@ -113,7 +115,7 @@ export function ViewCard({
 			</button>
 			<span className="flex items-center gap-2 px-3 py-2">
 				<span className="min-w-0 truncate text-meta text-ink-2">{title}</span>
-				<Button variant="ghost" size="xs" className="ml-auto" onClick={onTakeOver}>
+				<Button variant="ghost" size="xs" className="ml-auto" disabled={preparing} onClick={onTakeOver}>
 					Take over
 				</Button>
 				<Button variant="outline" size="xs" onClick={onOpen}>

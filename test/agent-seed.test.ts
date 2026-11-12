@@ -21,7 +21,7 @@ async function fresh() {
 	const workspace: Workspace = { env: () => box.env(), root: box.workspace, tools: () => [], known: () => true };
 	const close = async () => {
 		await harness.close(context);
-		box.close();
+		await box.close();
 	};
 	return { box, harness, workspace, close };
 }

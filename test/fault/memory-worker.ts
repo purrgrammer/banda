@@ -181,5 +181,5 @@ console.log(
 );
 fresh.close();
 search.close();
-box.close();
+await box.close();
 await harness.close(context);

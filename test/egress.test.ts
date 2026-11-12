@@ -17,7 +17,8 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { openBox } from "../src/box/box.ts";
 import { writeHash } from "../src/box/browser.ts";
-import { browserLogin, browserMark, proxyDown, proxyMark, tabStamp } from "../src/box/container.ts";
+import { containerBox, proxyDown } from "../src/box/container.ts";
+import { browserLogin, browserMark, proxyMark, tabStamp } from "../src/box/guarded-proxy.ts";
 import { boxEnv, boxTools } from "../src/box/tools.ts";
 import { ActivityLog } from "../src/core/activity.ts";
 import { Accepted, AgentChats, agentPath, LEAD } from "../src/core/agents.ts";
@@ -157,7 +158,7 @@ function setup() {
 		harness.resume();
 		const close = async () => {
 			await harness.close(context);
-			box.close();
+			await box.close();
 		};
 		return { harness, close };
 	};
@@ -1121,6 +1122,18 @@ describe("a held write's release", () => {
 		])
 			expect(proxyDown(new Error(said)), said).toBeDefined();
 		expect(proxyDown(new Error("docker exec: it did not answer in time"))).toBeUndefined();
+	});
+
+	it("a replay that cannot start Docker reports a known failure rather than an uncertain send", async () => {
+		const path = process.env.PATH;
+		process.env.PATH = await tempHome();
+		try {
+			const proxy = containerBox(await tempHome()).egress;
+			if (proxy === undefined) throw new Error("No proxy");
+			expect(await proxy.replay(held(7), context)).toEqual({ failed: "the computer's proxy is not running" });
+		} finally {
+			process.env.PATH = path;
+		}
 	});
 
 	it("property: whatever is held, taken once or twice, each own write is asked once and sent only if approved, once", async () => {

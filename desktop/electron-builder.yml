@@ -26,6 +26,10 @@ mac:
   # Team ID, so library validation (hardened runtime) would refuse Electron's own frameworks.
   identity: "-"
   hardenedRuntime: false
+  # Preserve the verified vendor signatures and the VM helper's hypervisor entitlements. Resigning these would also
+  # invalidate computer/manifest.json's hashes. The enclosing app still seals them as resources.
+  signIgnore:
+    - '/computer/(msb|libkrunfw\.5\.dylib)$'
 win:
   target: [nsis]
 nsis:

@@ -674,6 +674,11 @@ export function PanelSections() {
 				id="browser"
 				note="For reading and take-over. Nothing is drawn over the page; closing hands it back first."
 			>
+				<Group label="Preparing the optional browser" className="items-start">
+					<div className="w-[30rem] max-w-full">
+						<BrowserWindow agent="Mara" host="" title="Its browser" preparing />
+					</div>
+				</Group>
 				<Group label="Mara uses it · you took over · hand-back not confirmed" className="items-start">
 					<div className="w-[30rem] max-w-full">
 						<BrowserWindow agent="Mara" host="flights.example" title="Lisbon, Fri 14 Nov" shot={PAGE} />
