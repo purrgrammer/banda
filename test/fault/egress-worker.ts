@@ -1,10 +1,10 @@
 /**
  * The process the egress fault suite kills. The owner says "send" twice in one chat. Each run calls `bash`,
- * after which the daemon takes what the proxy held: the first time, one POST (and the chat's first read). The
- * model asks with `propose_send`, and the owner approves it, allowing its route always. The second run holds the same
- * route again: it runs within that permission, unasked, though the chat read from outside; had a kill kept the
- * permission from being given, it asks, and the owner approves. A run interrupted by a kill asks to run again, and the
- * owner says yes. Every step is safe to repeat, as the worker
+ * after which the daemon takes what the proxy held: the first time, one POST (and the chat's first read), opening its
+ * release and asking the owner in the commit that stores it. The owner approves, allowing its route always, and the
+ * agent is woken with how it ended. The second run holds the same route twice: both run within that permission, one
+ * after the other and told in one wake-up, unasked, though the chat read from outside; had a kill kept the permission from being given, they ask, and the owner
+ * approves. A send interrupted by a kill asks to run again, and the owner says yes. Every step is safe to repeat, as the worker
  * does it again from the start in each process; it prints a summary as its last line.
  *
  * The proxy is a fake that keeps its state in files under the home, so a kill loses nothing it held: what it holds
@@ -18,7 +18,7 @@
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
-import { type ConversationId, createRegistry, defineExtension, type TaskId } from "@earendil-works/pi-durable";
+import { type ConversationId, createRegistry, type TaskId } from "@earendil-works/pi-durable";
 import { openBox } from "../../src/box/box.ts";
 import { boxEnv, boxTools } from "../../src/box/tools.ts";
 import { ActivityLog } from "../../src/core/activity.ts";
@@ -26,7 +26,6 @@ import { BlobStore } from "../../src/core/blobs.ts";
 import {
 	type EgressControl,
 	type HeldRequest,
-	proposeSendTool,
 	type Replayed,
 	Sent,
 	type SentRequest,
@@ -35,6 +34,7 @@ import {
 } from "../../src/core/egress.ts";
 import { type Gateway, OWNER } from "../../src/core/gateway.ts";
 import { Permissions } from "../../src/core/permissions.ts";
+import { RELEASE, RELEASED } from "../../src/core/release.ts";
 import { openWaits, status } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore, type TurnResult } from "../../src/core/turn.ts";
@@ -50,11 +50,11 @@ const fault = (point: string) => faults.hit(point as FaultPoint);
 
 type ProxyState = { held: { [round: string]: HeldRequest[] }; taken: string[]; reads: string[] };
 
-/** A request of round `round` (1 or 2): the same route, another id. */
+/** Request `n` (1, then 2 and 3 in the second command): the same route, another id, held in that order. */
 const request = (round: number): HeldRequest => ({
 	ticket: `t00000000${round}0`,
 	chat: 0,
-	at: Date.now(),
+	at: Date.now() + round,
 	method: "POST",
 	scheme: "https",
 	host: "api.example.com",
@@ -87,7 +87,7 @@ if (!existsSync(statePath))
 	writeFileSync(
 		statePath,
 		JSON.stringify({
-			held: { 1: [request(1)], 2: [request(2)] },
+			held: { 1: [request(1)], 2: [request(2), request(3)] },
 			taken: [],
 			reads: ["example.com"],
 		} satisfies ProxyState),
@@ -141,13 +141,9 @@ const respond = (ctx: { messages: readonly { role: string; content: unknown }[] 
 	const last = ctx.messages.at(-1);
 	const text = typeof last?.content === "string" ? last.content : JSON.stringify(last?.content ?? "");
 	n += 1;
-	if (last?.role === "user")
+	// the agent woken with how a held request ended has nothing more to run
+	if (last?.role === "user" && !text.includes("<held-request-result>"))
 		return fauxAssistantMessage([fauxToolCall("bash", { command: "true" }, { id: `b${n}` })], {
-			stopReason: "toolUse",
-		});
-	const ticket = /\(ticket (t[0-9a-f]{10})\)/.exec(text)?.[1];
-	if (last?.role === "toolResult" && ticket !== undefined)
-		return fauxAssistantMessage([fauxToolCall("propose_send", { ticket }, { id: `r${n}` })], {
 			stopReason: "toolUse",
 		});
 	return fauxAssistantMessage("Done.");
@@ -156,8 +152,7 @@ faux.setResponses(Array.from({ length: 200 }, () => respond as never));
 const box = openBox(hostBox(home), () => {});
 const registry = createRegistry();
 registry.install(core.extension);
-registry.install(boxTools({ egress: proxy, fault }));
-registry.install(defineExtension({ name: "effects", tools: [core.effect(proposeSendTool(proxy, fault))] }));
+registry.install(boxTools({ egress: core.held(proxy, fault), fault }));
 const harness = await openStore(home, {
 	models,
 	registry,
@@ -168,12 +163,31 @@ await revive(harness);
 harness.resume();
 
 const web = { gateway: "web", peer: OWNER };
-/** Say "send", and answer its asks as the owner would until its Turn ends. */
+/** How many releases and Turns are still live. */
+async function settledReleases(): Promise<number> {
+	const graph = await harness.taskGraph(context);
+	try {
+		return Object.values(graph.value.tasks).filter((node) => node.kind === RELEASE || node.kind === "banda.turn")
+			.length;
+	} finally {
+		graph.dispose();
+	}
+}
+
+/** Say "send", and answer its asks as the owner would until its Turn, and all it held, ended. */
 async function say(id: string) {
 	const received = await core.receive(harness, { id, origin: { gateway: "fake", peer: OWNER }, text: "send" });
 	if (!("turn" in received)) throw new Error(`the message started no Turn: ${JSON.stringify(received)}`);
 	const ended = harness.waitForTask(received.turn as TaskId<TurnResult>, context).then(() => true);
-	while (!(await Promise.race([ended, new Promise<false>((r) => setTimeout(r, 10, false))]))) {
+	let over = false;
+	while (!over) {
+		// the timer always runs: once the Turn ended the race alone would never yield to a release's timer
+		const [turnDone] = await Promise.all([
+			Promise.race([ended, new Promise<false>((r) => setTimeout(r, 10, false))]),
+			new Promise((r) => setTimeout(r, 10)),
+		]);
+		// it is over when its Turn ended and nothing it held is still on its way to the agent
+		over = turnDone && (await settledReleases()) === 0;
 		for (const wait of await openWaits(harness)) {
 			if (wait.ask.type !== "approval") continue;
 			faults.hit("answer");
@@ -217,6 +231,9 @@ console.log(
 		sends,
 		results: page.items.filter((e) => e.kind === "pi.tool-result").length,
 		tickets: Object.keys((await harness.snapshot(Tickets, context))?.tickets ?? {}).sort(),
+		released: page.items.filter((e) => e.kind === RELEASED).flatMap((e) => (e.data as { tickets: string[] }).tickets),
+		wakeUps: page.items.filter((e) => e.kind === RELEASED).length,
+		live: await settledReleases(),
 		sent: Object.keys((await harness.snapshot(Sent, context))?.sent ?? {}),
 		chat,
 		permissions: Object.keys((await harness.snapshot(Permissions, context))?.permissions ?? {}).length,

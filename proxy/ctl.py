@@ -121,7 +121,8 @@ class PinnedHTTPConnection(http.client.HTTPConnection):
         self.sock = socket.create_connection((self._address, self.port), self.timeout)
 
 
-def replay(request):
+def replay(request, progress):
+    """Send it; `progress["reached"]` is set from the moment any of it may have left, for a failure to say so."""
     cfg = state.config()
     host, port = policy.name(request["host"]), int(request["port"])
     address, why = policy.pin(
@@ -137,6 +138,8 @@ def replay(request):
     credentials = policy.credential_for(host, cfg.get("credentials", []), request["scheme"])
     swapped = {header.lower() for header, _ in credentials}
     body = base64.b64decode(request["body"])
+    # connected first: a server that cannot be reached has been sent nothing
+    connection.connect()
     connection.putrequest(request["method"], request["path"], skip_host=True, skip_accept_encoding=True)
     # the server is named by the host it was held for, never by a Host header the box wrote
     default = 443 if request["scheme"] == "https" else 80
@@ -155,6 +158,7 @@ def replay(request):
         connection.putheader(header, value)
     if not framed and (body or request["method"].upper() not in ("GET", "HEAD", "OPTIONS")):
         connection.putheader("Content-Length", str(len(body)))
+    progress["reached"] = True
     connection.endheaders(body)
     response = connection.getresponse()
     data = response.read(RESPONSE_LIMIT + 1)
@@ -184,10 +188,11 @@ def main(argv):
         state.allow(int(argv[2]), argv[3])
         print("{}")
     elif command == "replay":
+        progress = {}
         try:
-            print(json.dumps(replay(json.load(sys.stdin))))
+            print(json.dumps(replay(json.load(sys.stdin), progress)))
         except (OSError, http.client.HTTPException, ssl.SSLError) as error:
-            print(json.dumps({"failed": f"{type(error).__name__}: {error}"}))
+            print(json.dumps({"failed": f"{type(error).__name__}: {error}", **progress}))
     elif command == "ping":
         try:
             socket.create_connection(("127.0.0.1", 8080), 2).close()

@@ -23,6 +23,8 @@ import {
 	errandOf,
 	type Floor,
 	give,
+	HOST_ARG,
+	HOST_TOOL,
 	isOpen,
 	matches,
 	type OfferedScope,
@@ -360,7 +362,11 @@ export async function fill(
 	if (slot.answer !== undefined || slot.dismissed === true) return { refused: "this ask was already answered" };
 	// reads first: a transaction reads tables only until its first write
 	const giving = permission !== undefined && ask.type === "approval" ? shapeFor(permission, ask) : undefined;
-	const errand = giving === undefined ? { chat, input: 0 } : await errandOf(tx, chat);
+	// the task the card offered, which the chat may have moved on from while it stayed open
+	const errand =
+		giving === undefined
+			? { chat, input: 0 }
+			: ((ask.type === "approval" ? ask.errand : undefined) ?? (await errandOf(tx, chat)));
 	const agent = giving === undefined ? undefined : await agentOfChat(tx, chat);
 	const covered =
 		giving === undefined || permission === undefined || ask.type !== "approval"
@@ -380,13 +386,7 @@ export async function fill(
 		};
 		slot.permission = permitted;
 		// never ask twice: the open asks the new permission covers are answered by it, in this commit
-		for (const other of covered) {
-			const answers = await tx.doc(Answers, other as TaskId);
-			answers.answer = "approve";
-			answers.by = sender;
-			answers.at = now;
-			answers.permission = { ...permitted };
-		}
+		await answerCovered(tx, covered, sender, now, permitted);
 	}
 	return { answered: id, chat };
 }
@@ -447,13 +447,49 @@ async function coveredAsks(
 		if (!matches(permission, ask.tool, ask.args)) continue;
 		// a host covers only the chats of the agent it was allowed for
 		if (host && (permission.agent === undefined || (await agentOfChat(tx, wait.chat)) !== permission.agent)) continue;
-		const errand = permission.scope === "task" ? await errandOf(tx, wait.chat) : undefined;
+		const errand = permission.scope === "task" ? (ask.errand ?? (await errandOf(tx, wait.chat))) : undefined;
 		if (!isOpen(permission, now, errand)) continue;
 		if ((await tx.doc(Answers, wait.id as TaskId)).answer !== undefined) continue;
 		covered.push(wait.id);
 	}
 	return covered;
 }
+
+/** In the commit that gives a permission: the open asks it covers are answered by it. */
+async function answerCovered(
+	tx: Tx,
+	covered: readonly number[],
+	by: Sender,
+	at: number,
+	permission: { readonly id: string; readonly scope: PermissionScope["scope"]; readonly until?: number },
+): Promise<void> {
+	for (const other of covered) {
+		const answers = await tx.doc(Answers, other as TaskId);
+		answers.answer = "approve";
+		answers.by = by;
+		answers.at = at;
+		answers.permission = { ...permission };
+	}
+}
+
+/** The open asks of `agent`'s chats that allowing it `host` covers, the same as a host chosen on a card. Reads only. */
+export const asksHostCovers = (tx: Tx, agent: string, host: string, now: number): Promise<number[]> =>
+	coveredAsks(
+		tx,
+		0,
+		{
+			tool: HOST_TOOL,
+			shape: { match: { [HOST_ARG]: host }, what: "" },
+			scope: { scope: "host" },
+			errand: { chat: 0, input: 0 },
+			agent,
+		},
+		now,
+	);
+
+/** In the commit that allowed a host: the open asks it covers (`asksHostCovers`) are answered by the owner's allowing it. */
+export const answerAsksOfHost = (tx: Tx, covered: readonly number[], by: Sender, at: number, id: string) =>
+	answerCovered(tx, covered, by, at, { id, scope: "host" });
 
 /** The draft with the owner's edits, or why they cannot be made: only the text the tool says may be edited. */
 function editsOf(

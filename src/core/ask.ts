@@ -41,7 +41,12 @@ import {
 import { type Answer, type Ask, TasksOf, type WaitResult } from "./wait.ts";
 
 /** Open (or find) the Wait named `name` of the calling tool task, for the owner, and resolve with its id. */
-export type Asking = (api: ToolExecutionApi, name: string, ask: Ask, deadline: number, ctx: Context) => Promise<number>;
+export type Asking = (api: EffectApi, name: string, ask: Ask, deadline: number, ctx: Context) => Promise<number>;
+
+/** What an effect needs of the task it runs in: a tool call's, or a release's, which is no tool call. */
+export type EffectApi = Pick<ToolExecutionApi, "taskId" | "conversationId" | "now" | "commit" | "waitForTask"> & {
+	readonly callId?: string;
+};
 
 const HOUR = 60 * 60_000;
 /** What an option's label may hold: a button's one line on a phone, and a gateway's button. */
@@ -87,7 +92,7 @@ export async function askOwner(
 }
 
 /** Wait for Wait `id`; undefined when it was cancelled. */
-async function settle(api: ToolExecutionApi, id: number, ctx: Context): Promise<WaitResult | undefined> {
+async function settle(api: EffectApi, id: number, ctx: Context): Promise<WaitResult | undefined> {
 	const outcome = (await api.waitForTask(id as TaskId<WaitResult>, ctx)).state.outcome;
 	return outcome.status === "completed" ? outcome.result : undefined;
 }
@@ -564,8 +569,11 @@ export function proposeAvatarTool({ asking, sending, blobs, limit }: Speaking): 
  * `host`, for a held request alone, the argument naming its host: a second shape, offered as a permission for anything
  * sent there, for the chats of the agent that asked.
  */
-export type EffectTool<P extends TSchema> = {
+/** `A` is what its `run` and `expand` are given of the task running them: a tool call's whole view, unless it needs less. */
+export type EffectTool<P extends TSchema, A extends EffectApi = ToolExecutionApi> = {
 	readonly name: string;
+	/** What its words call it, when that is not its name: an effect no model calls has no name a model knows. */
+	readonly spoken?: string;
 	readonly description: string;
 	readonly parameters: P;
 	readonly effect: "idempotent" | "unsafe";
@@ -589,18 +597,14 @@ export type EffectTool<P extends TSchema> = {
 	 * The whole effect from the call's arguments, when they only name it (a held request by its ticket): what the
 	 * draft shows and what runs; or why there is none. It reads only what never changes once written.
 	 */
-	readonly expand?: (args: Static<P>, api: ToolExecutionApi, ctx: Context) => Promise<JsonObject | string>;
+	readonly expand?: (args: Static<P>, api: A, ctx: Context) => Promise<JsonObject | string>;
 	/**
 	 * Why the tool may not run now (the owner switched it off, or took back what it reaches: the account the draft acts
 	 * as, for the agent of `chat`), checked in every commit that lets an attempt start, so one taken back while it waited
 	 * for the owner never runs; undefined when it may.
 	 */
 	readonly allowed?: (tx: Tx, draft: JsonObject, chat: number) => Promise<string | undefined>;
-	run(
-		args: Static<P>,
-		effect: { readonly key: string; readonly api: ToolExecutionApi },
-		ctx: Context,
-	): Promise<ToolExecutionResult>;
+	run(args: Static<P>, effect: { readonly key: string; readonly api: A }, ctx: Context): Promise<ToolExecutionResult>;
 };
 
 /** The entry an effect that ran within a permission leaves in its chat: what ran, and the permission that let it. */
@@ -648,7 +652,7 @@ function withValues(words: string, match: JsonObject): string {
 }
 
 /** The draft for a call of `tool` with `args`: what the approval shows, and what a permission from it would bind. */
-export function draftOf<P extends TSchema>(tool: EffectTool<P>, args: JsonObject): Draft {
+export function draftOf<P extends TSchema, A extends EffectApi>(tool: EffectTool<P, A>, args: JsonObject): Draft {
 	const typed = args as Static<P>;
 	const floor = typeof tool.floor === "function" ? tool.floor(typed) : tool.floor;
 	const label = tool.describe?.(typed) ?? toolWords(tool.name);
@@ -692,6 +696,28 @@ export function draftOf<P extends TSchema>(tool: EffectTool<P>, args: JsonObject
  * gets to retry the same approval: a new call is a new ask.
  */
 export function effect<P extends TSchema>(asking: Asking, tool: EffectTool<P>): ToolRegistration {
+	const running = effectRun(asking, tool);
+	return defineTool({
+		name: tool.name,
+		description: tool.description,
+		parameters: tool.parameters,
+		replay: "safe",
+		// effects leave the box in the order the model wrote them, each checked against the permissions as it starts
+		executionMode: "sequential",
+		execute: async (called, api, ctx) => running(called, await api.memo("key", crypto.randomUUID(), ctx), api, ctx),
+	} as ToolRegistration<P>) as ToolRegistration;
+}
+
+/**
+ * The effect itself, for whatever task runs it, under idempotency key `key`. `inTurn`, when given, resolves when this
+ * run may start: awaited before any attempt is recorded, so a kill while it waits leaves nothing that looks interrupted.
+ */
+export function effectRun<P extends TSchema, A extends EffectApi>(
+	asking: Asking,
+	tool: EffectTool<P, A>,
+	inTurn: (api: A, ctx: Context) => Promise<void> = async () => {},
+): (called: Static<P>, key: string, api: A, ctx: Context) => Promise<ToolExecutionResult> {
+	const spoken = tool.spoken ?? tool.name;
 	const overlap = (tool.editable ?? []).filter(
 		(arg) => tool.permission?.args?.includes(arg) || tool.permission?.host?.arg === arg,
 	);
@@ -699,7 +725,7 @@ export function effect<P extends TSchema>(asking: Asking, tool: EffectTool<P>): 
 		throw new Error(`${tool.name}: a permission cannot bind what the owner may edit (${overlap.join(", ")})`);
 	/** The owner's answer to the ask named `name`: the draft as approved, or why it may not run. */
 	const approved = async (
-		api: ToolExecutionApi,
+		api: EffectApi,
 		name: string,
 		ask: Ask,
 		ctx: Context,
@@ -713,7 +739,7 @@ export function effect<P extends TSchema>(asking: Asking, tool: EffectTool<P>): 
 		return { wait: id, ...(result.draft === undefined ? {} : { draft: result.draft }) };
 	};
 	/** Record attempt `attempt` started, with what let it, and the draft it runs; or why it may not start. */
-	const start = (api: ToolExecutionApi, attempt: number, by: { wait: number }, draft: JsonObject, ctx: Context) =>
+	const start = (api: EffectApi, attempt: number, by: { wait: number }, draft: JsonObject, ctx: Context) =>
 		api.commit(async (tx): Promise<string | undefined> => {
 			const refused = await tool.allowed?.(tx, draft, Number(api.conversationId));
 			if (refused !== undefined) return refused;
@@ -726,7 +752,7 @@ export function effect<P extends TSchema>(asking: Asking, tool: EffectTool<P>): 
 	 * Start attempt `attempt` within an open permission, in one commit with the check, so a permission revoked before it covers
 	 * nothing; undefined when none covers it, or when the owner was already asked, whose answer then decides.
 	 */
-	const withinPermission = (api: ToolExecutionApi, attempt: number, draft: Draft, ctx: Context) =>
+	const withinPermission = (api: EffectApi, attempt: number, draft: Draft, ctx: Context) =>
 		api.commit(async (tx): Promise<string | { readonly refused: string } | undefined> => {
 			const refused = await tool.allowed?.(tx, draft.args, Number(api.conversationId));
 			if (refused !== undefined) return { refused };
@@ -754,57 +780,50 @@ export function effect<P extends TSchema>(asking: Asking, tool: EffectTool<P>): 
 			await log(tx, { at: now, what: `Ran without asking: ${draft.label ?? permission.what}`, chat, outside: "sent" });
 			return found.id;
 		}, ctx);
-	return defineTool({
-		name: tool.name,
-		description: tool.description,
-		parameters: tool.parameters,
-		replay: "safe",
-		// effects leave the box in the order the model wrote them, each checked against the permissions as it starts
-		executionMode: "sequential",
-		execute: async (called, api, ctx) => {
-			const key = await api.memo("key", crypto.randomUUID(), ctx);
-			const run = (draft: JsonObject) => tool.run(draft as Static<P>, { key, api }, ctx);
-			const args =
-				tool.expand === undefined ? (called as JsonObject) : await tool.expand(called as Static<P>, api, ctx);
-			if (typeof args === "string") return text(`${tool.name} did not run: ${args}.`, true);
-			const draft = draftOf(tool, args);
-			const before = await api.commit(
-				async (tx) => JSON.parse(JSON.stringify(await tx.doc(EffectRun, api.taskId))) as Run,
-				ctx,
-			);
-			const last = Math.max(0, ...Object.keys(before.started).map(Number));
-			const notAllowed = (why: string) => text(`${tool.name} did not run: ${why}.`, true);
-			if (last === 0) {
-				const permitted = await withinPermission(api, 1, draft, ctx);
-				if (typeof permitted === "object") return notAllowed(permitted.refused);
-				if (permitted !== undefined) return run(draft.args);
-				// the ask names its task and offers the scopes the daemon allows
-				const asked = await api.commit((tx) => offering(tx, Number(api.conversationId), draft), ctx);
-				const answer = await approved(api, "approval", asked, ctx);
-				if (typeof answer === "string") return text(`${tool.name} did not run: ${answer}.`, true);
-				const final = answer.draft ?? draft.args;
-				const refused = await start(api, 1, { wait: answer.wait }, final, ctx);
-				if (refused !== undefined) return notAllowed(refused);
-				return run(final);
-			}
-			// a restart interrupted attempt `last`: what runs is the draft stored when it started, never the call's words
-			const stored = before.draft ?? draft.args;
-			const shown = { ...draftOf(tool, stored), interrupted: true } as Draft;
-			if (tool.effect === "idempotent") {
-				// the same key makes a second run a no-op: again unasked, if what let it run still does
-				const by = before.started[last];
-				if (by?.permission === undefined) return run(stored);
-				const permitted = await withinPermission(api, last, shown, ctx);
-				if (typeof permitted === "object") return notAllowed(permitted.refused);
-				if (permitted !== undefined) return run(stored);
-			}
-			const { permission: _permission, host: _host, ...again } = shown;
-			const answer = await approved(api, `interrupted:${last}`, again, ctx);
-			if (typeof answer === "string")
-				return text(`${tool.name} was interrupted and may have partly run; not run again: ${answer}.`, true);
-			const refused = await start(api, last + 1, { wait: answer.wait }, stored, ctx);
+	return async (called, key, api, ctx) => {
+		const run = (draft: JsonObject) => tool.run(draft as Static<P>, { key, api }, ctx);
+		const args = tool.expand === undefined ? (called as JsonObject) : await tool.expand(called as Static<P>, api, ctx);
+		if (typeof args === "string") return text(`${spoken} did not run: ${args}.`, true);
+		const draft = draftOf(tool, args);
+		const before = await api.commit(
+			async (tx) => JSON.parse(JSON.stringify(await tx.doc(EffectRun, api.taskId))) as Run,
+			ctx,
+		);
+		const last = Math.max(0, ...Object.keys(before.started).map(Number));
+		const notAllowed = (why: string) => text(`${spoken} did not run: ${why}.`, true);
+		if (last === 0) {
+			await inTurn(api, ctx);
+			const permitted = await withinPermission(api, 1, draft, ctx);
+			if (typeof permitted === "object") return notAllowed(permitted.refused);
+			if (permitted !== undefined) return run(draft.args);
+			// the ask names its task and offers the scopes the daemon allows
+			const asked = await api.commit((tx) => offering(tx, Number(api.conversationId), draft), ctx);
+			const answer = await approved(api, "approval", asked, ctx);
+			if (typeof answer === "string") return text(`${spoken} did not run: ${answer}.`, true);
+			await inTurn(api, ctx);
+			const final = answer.draft ?? draft.args;
+			const refused = await start(api, 1, { wait: answer.wait }, final, ctx);
 			if (refused !== undefined) return notAllowed(refused);
-			return run(stored);
-		},
-	} as ToolRegistration<P>) as ToolRegistration;
+			return run(final);
+		}
+		// a restart interrupted attempt `last`: what runs is the draft stored when it started, never the call's words
+		const stored = before.draft ?? draft.args;
+		const shown = { ...draftOf(tool, stored), interrupted: true } as Draft;
+		if (tool.effect === "idempotent") {
+			// the same key makes a second run a no-op: again unasked, if what let it run still does
+			const by = before.started[last];
+			if (by?.permission === undefined) return run(stored);
+			const permitted = await withinPermission(api, last, shown, ctx);
+			if (typeof permitted === "object") return notAllowed(permitted.refused);
+			if (permitted !== undefined) return run(stored);
+		}
+		const { permission: _permission, host: _host, ...again } = shown;
+		const answer = await approved(api, `interrupted:${last}`, again, ctx);
+		if (typeof answer === "string")
+			return text(`${spoken} was interrupted and may have partly run; not run again: ${answer}.`, true);
+		await inTurn(api, ctx);
+		const refused = await start(api, last + 1, { wait: answer.wait }, stored, ctx);
+		if (refused !== undefined) return notAllowed(refused);
+		return run(stored);
+	};
 }

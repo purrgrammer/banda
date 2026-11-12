@@ -45,6 +45,12 @@ export type FaultPoint =
 	/** A held request sent: before the proxy sends it, and once it answered, before the store records it. */
 	| "replay"
 	| "replay:sent"
+	/** A held request's release: before its effect, once it ended and before that is stored; then before the agent is woken with it. */
+	| "release:run"
+	| "release:ran"
+	| "release:told"
+	/** A chat with no home told outside the commit that ends its release: once submitted, before that end. */
+	| "release:submitted"
 	/** A connection allowed: before the store holds it, and after. */
 	| "accept:before"
 	| "accept:after"

@@ -25,7 +25,7 @@ import {
 	type ImageProcessor,
 } from "@earendil-works/pi-durable/tools";
 import { Accepted } from "../core/agents.ts";
-import { type EgressControl, intake } from "../core/egress.ts";
+import { type HoldingEgress, intake } from "../core/egress.ts";
 
 import { context } from "../core/store.ts";
 import type { CoreOptions } from "../core/turn.ts";
@@ -47,7 +47,7 @@ export function boxTools({
 }: {
 	images?: ImageProcessor;
 	workspace?: string;
-	egress?: EgressControl;
+	egress?: HoldingEgress;
 	/**
 	 * Before a command of `chat` runs: the proxy knows what the store says this chat may send straight through (a chat
 	 * just started is in the proxy's config before its first command).
@@ -104,7 +104,7 @@ function bash(): ToolRegistration {
  */
 function taking(
 	tool: ToolRegistration,
-	egress: EgressControl,
+	egress: HoldingEgress,
 	fault?: (point: string) => void,
 	ready?: (chat: number) => Promise<void>,
 ): ToolRegistration {

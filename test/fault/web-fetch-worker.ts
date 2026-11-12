@@ -88,7 +88,7 @@ registry.install(
 		name: "web",
 		tools: [
 			webFetchTool({
-				egress: proxy,
+				egress: Object.assign(proxy, { release: async () => [] }),
 				fault,
 				fetchOne: async (url) => {
 					appendFileSync(join(home, "gets.jsonl"), `${JSON.stringify({ method: "GET", url })}\n`);

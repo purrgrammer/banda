@@ -38,7 +38,7 @@ import {
 	webFetchTool,
 } from "../src/box/web-fetch.ts";
 import { ActivityLog } from "../src/core/activity.ts";
-import type { EgressControl, Taken } from "../src/core/egress.ts";
+import type { HoldingEgress, Taken } from "../src/core/egress.ts";
 import { OWNER, type Received } from "../src/core/gateway.ts";
 import { htmlToText } from "../src/core/html-text.ts";
 import { openWaits } from "../src/core/status.ts";
@@ -242,7 +242,7 @@ const page = (
 });
 
 /** The tool over a faked request: the pages it answers, by address, and every address it was asked. */
-function fake(pages: { [url: string]: Fetched }, options: { egress?: EgressControl } = {}) {
+function fake(pages: { [url: string]: Fetched }, options: { egress?: HoldingEgress } = {}) {
 	const asked: string[] = [];
 	const tool = webFetchTool({
 		...options,
@@ -441,7 +441,8 @@ describe("web_fetch", () => {
 
 	it("takes what the proxy saw into the store after the reads, as after a command", async () => {
 		const taken: number[] = [];
-		const egress: EgressControl = {
+		const egress: HoldingEgress = {
+			release: async () => [],
 			take: async (chat): Promise<Taken> => {
 				taken.push(chat);
 				return { held: [], reads: [], readBytes: 0 };

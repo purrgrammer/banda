@@ -50,7 +50,7 @@ changes.
 - [ ] Verify meta-tools end to end in a throwaway home: direct agent messages, bounded chat reads, proposals for agents/groups/existing agents, and owner acceptance/rejection at desktop and phone widths
 - [x] Add thrown-fault and SIGKILL sweeps for message delivery, proposal creation and group acceptance; retries create one message and one group, and existing-agent proposals refuse stale bases
 - [x] Verify context-sensitive `@` autocomplete in phone and desktop browser widths: direct chat sends references only; group mentions keep their existing targeting behavior
-- [ ] Delete the lead, hand-offs, helpers and every `propose_*` tool but `propose_send`; make the first agent ordinary
+- [ ] Delete the lead, hand-offs, helpers and every `propose_*` tool; make the first agent ordinary
 - [ ] The new agent sheet writes an accepted file; the owner's edits accepted in the commit that stores them
 - [x] Archive and restore across runs, routines, permissions and mentions (the last active agent stays)
 - [ ] Reconcile accepted-definition removal across runs, routines and permissions

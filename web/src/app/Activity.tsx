@@ -298,7 +298,6 @@ const LABELS: Record<string, string> = {
 	recall: "Looking up memories",
 	forget: "Removing a memory",
 	propose_key: "Requesting a credential",
-	propose_send: "Requesting permission to send",
 };
 function titleOf(call: ToolCall) {
 	return Object.hasOwn(LABELS, call.name) ? (LABELS[call.name] ?? call.name) : call.name;
