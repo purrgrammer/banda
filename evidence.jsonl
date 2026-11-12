@@ -1,0 +1,40 @@
+{"t":0,"what":"definition","pull_request_every":"2m","checks_unless":{"same":["pr.head.sha","pr.updated_at"],"while":"derived.checks_done = true","every":"10m"},"reviews_unless":{"same":["pr.updated_at"],"every":"2h"}}
+{"t":0,"what":"daemon","home":"<throwaway home>","port":54602,"github":"http://127.0.0.1:54598/mcp"}
+{"t":0,"what":"connected"}
+{"t":3,"what":"followed through the app"}
+{"t":6,"what":"look","label":"baseline","looked":2,"next":120,"reads":["get","get_check_runs","get_reviews","get_comments"],"failed":null}
+{"t":6,"what":"PASS","check":"baseline makes every read","reads":4}
+{"t":7,"what":"screenshot","file":"./1440-1-baseline-detail.png","errors":[]}
+{"t":126,"what":"look","label":"confirm","looked":122,"next":120,"reads":["get","get_check_runs","get_reviews","get_comments"],"failed":null}
+{"t":126,"what":"PASS","check":"confirm look makes every read","reads":4}
+{"t":246,"what":"look","label":"quiet","looked":243,"next":120,"reads":["get"],"failed":null}
+{"t":246,"what":"PASS","check":"quiet look is one request (pr only)","reads":["get"]}
+{"t":247,"what":"screenshot","file":"./1440-2-quiet-carried.png","errors":[]}
+{"t":247,"what":"world: label 'deploy' starts a check on the same head; updated_at moves"}
+{"t":366,"what":"look","label":"label","looked":363,"next":120,"reads":["get","get_check_runs","get_reviews","get_comments"],"failed":null}
+{"t":366,"what":"PASS","check":"the label's look reads the checks (updated_at moved)","reads":["get","get_check_runs","get_reviews","get_comments"]}
+{"t":366,"what":"next look after the label","next":120}
+{"t":366,"what":"world: deploy completes (failure); updated_at and head unchanged"}
+{"t":486,"what":"look","label":"completion","looked":483,"next":60,"reads":["get","get_check_runs","get_reviews","get_comments"],"failed":null}
+{"t":486,"what":"PASS","check":"the completion is read though updated_at did not move (a check was running)","reads":["get","get_check_runs","get_reviews","get_comments"]}
+{"t":546,"what":"look","label":"wake","looked":543,"next":120,"reads":["get","get_check_runs"],"saw":["deploy failed","checks finished"],"failed":null}
+{"t":546,"what":"PASS","check":"the look after the completion reads the checks once more (done had only just come true)","reads":["get","get_check_runs"]}
+{"t":546,"what":"PASS","check":"the deploy failure woke the agent","saw":["deploy failed","checks finished"]}
+{"t":547,"what":"screenshot","file":"./1440-3-deploy-failed-woken.png","errors":[]}
+{"t":667,"what":"look","label":"quiet-after-wake","looked":663,"next":120,"reads":["get","get_check_runs"],"saw":["deploy failed","checks finished"],"failed":null}
+{"t":787,"what":"look","label":"quiet-after-wake-2","looked":783,"next":120,"reads":["get"],"saw":["deploy failed","checks finished"],"failed":null}
+{"t":787,"what":"PASS","check":"within two quiet looks after the wake, one is a single request (pr only)","reads":[["get","get_check_runs"],["get"]]}
+{"t":787,"what":"world: carol approves (updated_at moves); get_reviews fails for the next look"}
+{"t":906,"what":"look","label":"reviews-fail","looked":903,"next":120,"reads":["get","get_check_runs","get_reviews(failed)","get_comments"],"saw":["deploy failed","checks finished"],"failed":null}
+{"t":906,"what":"PASS","check":"the reviews read was asked and failed","reads":["get","get_check_runs","get_reviews(failed)","get_comments"]}
+{"t":906,"what":"PASS","check":"a failed optional read is no change: carol not yet seen"}
+{"t":906,"what":"world: GitHub answers get_reviews again"}
+{"t":1026,"what":"look","label":"recover","looked":1023,"next":60,"reads":["get","get_check_runs","get_reviews","get_comments"],"saw":["deploy failed","checks finished"],"failed":null}
+{"t":1026,"what":"PASS","check":"the next look reads the reviews again (a failed read is never 'made'), though updated_at is as kept","reads":["get","get_check_runs","get_reviews","get_comments"]}
+{"t":1086,"what":"look","label":"wake-carol","looked":1083,"next":120,"reads":["get"],"saw":["carol approved"],"failed":null}
+{"t":1086,"what":"PASS","check":"carol's approval woke the agent after the recovery","saw":["carol approved"]}
+{"t":1087,"what":"screenshot","file":"./1440-4-recovered-carol.png","errors":[]}
+{"t":1087,"what":"page errors","errors":[]}
+{"t":1091,"what":"screenshot","file":"./390-*.png","errors":[]}
+{"t":1091,"what":"all reads","count":31,"byMethod":{"get":11,"get_check_runs":8,"get_reviews":6,"get_comments":6}}
+{"t":1091,"what":"RESULT PASS"}
