@@ -198,39 +198,36 @@ export type Routes = {
 
 /** What the owner does to a connection or a tool the companion made, from the app. */
 export type CapabilityAction =
-	| {
-			readonly action: "accept";
-			readonly folder: "connections" | "tools";
-			readonly name: string;
-			readonly sha: string | null;
-	  }
-	| { readonly action: "decline" | "remove"; readonly folder: "connections" | "tools"; readonly name: string }
+	| { readonly action: "remove"; readonly name: string }
 	| { readonly action: "disconnect"; readonly name: string }
 	| { readonly action: "key"; readonly name: string; readonly key: unknown; readonly agent?: string }
 	| {
 			readonly action: "account";
 			readonly name: string;
 			readonly account: string;
-			readonly sha?: string;
+			readonly version?: string;
 			readonly agent: string;
 			readonly on: boolean;
 	  }
 	| { readonly action: "signout"; readonly name: string; readonly account: string }
 	| { readonly action: "label"; readonly name: string; readonly account: string; readonly label: string }
 	| { readonly action: "add"; readonly name: string }
-	/** Update a shipped connection to the version this banda ships; `sha` is the version in effect the owner saw. */
-	| { readonly action: "update"; readonly name: string; readonly sha: string }
 	| { readonly action: "address"; readonly url: unknown }
-	| { readonly action: "trust" | "reads"; readonly name: string; readonly tools: unknown; readonly sha?: string }
+	| {
+			readonly action: "tools";
+			readonly name: string;
+			readonly settings: unknown;
+			readonly version: string;
+			readonly group?: boolean;
+	  }
 	| {
 			readonly action: "public";
 			readonly name: string;
 			readonly agent: string;
 			readonly on: boolean;
-			readonly sha?: string;
+			readonly version?: string;
 	  }
-	| { readonly action: "refresh"; readonly name: string }
-	| { readonly action: "switch"; readonly tool: string; readonly on: boolean };
+	| { readonly action: "refresh"; readonly name: string };
 
 /** What the owner does to memory from the app. */
 export type FactAction =
@@ -244,6 +241,9 @@ export type RoutineAction =
 	| { readonly action: "decline" | "pause" | "resume" | "remove" };
 
 /** The built web UI (`npm run build:web`); the same path from `src/server` and `dist/server`. */
+/** A connection's version as the app sends it back: a definition's hash or a record's counter, with its overlay's. */
+const VERSION = /^[0-9a-f]{64}(\.r\d+)?$|^s\d+(\.r\d+)?$/;
+
 export const WEB = fileURLToPath(new URL("../../web/dist/", import.meta.url));
 
 const TYPES: Record<string, string> = {
@@ -742,13 +742,12 @@ export function handler(
 		if (route === "POST /capabilities/connections")
 			return reply(res, 200, await routes.capability({ action: "address", url: (await json(req)).url }));
 		const capability =
-			/^\/capabilities\/(connections|tools)\/([a-z0-9-]{1,64})\/(accept|decline|remove|signin|key|add|update|trust|disconnect|public|refresh|reads)$/.exec(
+			/^\/capabilities\/connections\/([a-z0-9-]{1,64})\/(remove|signin|key|add|disconnect|public|refresh|tools)$/.exec(
 				path,
 			);
 		if (capability !== null && req.method === "POST") {
-			const [, folder = "", name = "", action = ""] = capability;
-			const kind = folder as "connections" | "tools";
-			if (action === "signin" && kind === "connections") {
+			const [, name = "", action = ""] = capability;
+			if (action === "signin") {
 				const { agent, scopes, account } = await json(req);
 				if (agent !== undefined && (typeof agent !== "string" || !/^[a-z0-9-]{1,64}$/.test(agent)))
 					throw new BadRequest("agent names an agent");
@@ -765,15 +764,8 @@ export function handler(
 					}),
 				);
 			}
-			if (action === "accept") {
-				const { sha } = await json(req);
-				if (sha !== null && (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)))
-					throw new BadRequest("sha must be the hash shown, or null for a removal");
-				return reply(res, 200, await routes.capability({ action, folder: kind, name, sha }));
-			}
-			if (action === "decline" || action === "remove")
-				return reply(res, 200, await routes.capability({ action, folder: kind, name }));
-			if (action === "key" && kind === "connections") {
+			if (action === "remove") return reply(res, 200, await routes.capability({ action, name }));
+			if (action === "key") {
 				const { key, agent } = await json(req);
 				if (agent !== undefined && (typeof agent !== "string" || !/^[a-z0-9-]{1,64}$/.test(agent)))
 					throw new BadRequest("agent names an agent");
@@ -783,38 +775,37 @@ export function handler(
 					await routes.capability({ action, name, key, ...(agent === undefined ? {} : { agent: agent as string }) }),
 				);
 			}
-			if (action === "add" && kind === "connections") return reply(res, 200, await routes.capability({ action, name }));
-			if (action === "update" && kind === "connections") {
-				const { sha } = await json(req);
-				if (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)) throw new BadRequest("sha is the hash shown");
-				return reply(res, 200, await routes.capability({ action, name, sha }));
-			}
-			if ((action === "trust" || action === "reads") && kind === "connections") {
-				const { tools, sha } = await json(req);
-				if ((action === "reads" || sha !== undefined) && (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)))
-					throw new BadRequest("sha is the reviewed connection hash");
+			if (action === "add") return reply(res, 200, await routes.capability({ action, name }));
+			if (action === "tools") {
+				const { settings, version, group } = await json(req);
+				if (typeof version !== "string" || !VERSION.test(version))
+					throw new BadRequest("version is the version of the connection you saw");
 				return reply(
 					res,
 					200,
-					await routes.capability({ action, name, tools, ...(sha === undefined ? {} : { sha: sha as string }) }),
+					await routes.capability({ action, name, settings, version: version as string, group: group === true }),
 				);
 			}
-			if (action === "public" && kind === "connections") {
-				const { agent, on, sha } = await json(req);
-				if (sha !== undefined && (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)))
-					throw new BadRequest("sha is the reviewed connection hash");
+			if (action === "public") {
+				const { agent, on, version } = await json(req);
+				if (version !== undefined && (typeof version !== "string" || !VERSION.test(version)))
+					throw new BadRequest("version is the version of the connection you saw");
 				if (typeof on !== "boolean" || typeof agent !== "string" || !/^[a-z0-9-]{1,64}$/.test(agent))
 					throw new BadRequest("Choose an agent and whether it has access");
 				return reply(
 					res,
 					200,
-					await routes.capability({ action, name, agent, on, ...(sha === undefined ? {} : { sha: sha as string }) }),
+					await routes.capability({
+						action,
+						name,
+						agent,
+						on,
+						...(version === undefined ? {} : { version: version as string }),
+					}),
 				);
 			}
-			if (action === "refresh" && kind === "connections")
-				return reply(res, 200, await routes.capability({ action, name }));
-			if (action === "disconnect" && kind === "connections")
-				return reply(res, 200, await routes.capability({ action, name }));
+			if (action === "refresh") return reply(res, 200, await routes.capability({ action, name }));
+			if (action === "disconnect") return reply(res, 200, await routes.capability({ action, name }));
 			return reply(res, 404, { error: "not found" });
 		}
 		// an account of a connection: switched on or off for an agent, or signed out
@@ -837,9 +828,9 @@ export function handler(
 				if (typeof label !== "string") throw new BadRequest("label is the account's name");
 				return reply(res, 200, await routes.capability({ action: "label", name, account: key, label }));
 			}
-			const { agent, on, sha } = await json(req);
-			if (sha !== undefined && (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)))
-				throw new BadRequest("sha is the reviewed connection hash");
+			const { agent, on, version } = await json(req);
+			if (version !== undefined && (typeof version !== "string" || !VERSION.test(version)))
+				throw new BadRequest("version is the version of the connection you saw");
 			if (typeof on !== "boolean") throw new BadRequest("on is true or false");
 			if (typeof agent !== "string" || !/^[a-z0-9-]{1,64}$/.test(agent)) throw new BadRequest("agent names an agent");
 			return reply(
@@ -851,15 +842,9 @@ export function handler(
 					account: key,
 					agent,
 					on,
-					...(sha === undefined ? {} : { sha: sha as string }),
+					...(version === undefined ? {} : { version: version as string }),
 				}),
 			);
-		}
-		const switching = /^\/capabilities\/tools\/([A-Za-z0-9_-]{1,64})\/switch$/.exec(path);
-		if (switching !== null && req.method === "POST") {
-			const { on } = await json(req);
-			if (typeof on !== "boolean") throw new BadRequest("on is true or false");
-			return reply(res, 200, await routes.capability({ action: "switch", tool: switching[1] ?? "", on }));
 		}
 		if (route === "GET /events") {
 			// one stream a page: the shell, and the live events of the chat it shows (`?chat=`), each tagged with it, so

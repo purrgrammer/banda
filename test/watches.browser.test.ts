@@ -1,6 +1,6 @@
 /**
  * A watch through the app, as a person uses it, against a throwaway daemon and a fake GitHub: the connection banda
- * ships is updated to the version that can follow, a pull request is followed from the agent's panel, its end is
+ * ships, a pull request is followed from the agent's panel, its end is
  * edited, a change wakes the agent's chat, and the watch is paused, resumed and stopped. No live provider or network.
  */
 import { mkdir, writeFile } from "node:fs/promises";
@@ -11,7 +11,7 @@ import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { CapabilitiesView } from "../src/server/api.ts";
 import { world } from "./fault/watch-scenario.ts";
-import { githubObjectFile, startGithubObjects } from "./fixtures/github-objects.ts";
+import { githubObjectDefinition, startGithubObjects } from "./fixtures/github-objects.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { skipShippedSkills, tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
@@ -50,19 +50,6 @@ async function paste(page: Page, label: string, value: string) {
 	);
 }
 
-/** The objects of a GitHub connection file as they were before a watch could follow one: no `follow` anywhere. */
-function withoutFollow(file: string): string {
-	const strip = (value: unknown): unknown =>
-		Array.isArray(value)
-			? value.map(strip)
-			: typeof value === "object" && value !== null
-				? Object.fromEntries(Object.entries(value).flatMap(([k, v]) => (k === "follow" ? [] : [[k, strip(v)]])))
-				: value;
-	return file.replace(/```json\n([\s\S]*?)\n```/, (_, json: string) => {
-		return `\`\`\`json\n${JSON.stringify(strip(JSON.parse(json)), null, 2)}\n\`\`\``;
-	});
-}
-
 for (const width of [390, 1440])
 	it.skipIf(!hasChrome())(
 		`the owner follows a pull request and it wakes the agent, through the app at ${width}`,
@@ -82,10 +69,7 @@ for (const width of [390, 1440])
 			};
 			const shipped = join(home, "shipped");
 			await mkdir(shipped, { recursive: true });
-			const newer = githubObjectFile(github.url);
-			const older = withoutFollow(newer);
-			expect(older).not.toContain('"follow"');
-			await writeFile(join(shipped, "github.md"), older);
+			await writeFile(join(shipped, "github.json"), githubObjectDefinition(github.url));
 			await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
 			const models = createModels();
 			const faux = fauxProvider();
@@ -126,7 +110,7 @@ for (const width of [390, 1440])
 					base: null,
 					text: "---\nname: Mara\ndescription: Follows things\nconnections: [github]\n---\nFollow things for the owner.\n",
 				});
-				// the GitHub banda shipped before, added and signed in to as bandarra, switched on for Mara
+				// GitHub, added and signed in to as bandarra, switched on for Mara
 				await api("/capabilities/connections/github/add", "POST", {});
 				const started = await api<{ url: string }>("/capabilities/connections/github/signin", "POST", {
 					agent: "mara",
@@ -135,8 +119,7 @@ for (const width of [390, 1440])
 				await fetch(consent.headers.get("location") as string, { redirect: "manual" });
 				while ((await connection())?.state !== "connected") await new Promise((resolve) => setTimeout(resolve, 50));
 				expect((await connection())?.accounts).toEqual([expect.objectContaining({ id: "bandarra", agents: ["mara"] })]);
-				// this banda ships a newer GitHub: one that can follow a pull request
-				await writeFile(join(shipped, "github.md"), newer);
+
 				await withPage(`${server.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
 					const shot = async (name: string) => {
 						expect(
@@ -152,12 +135,9 @@ for (const width of [390, 1440])
 					};
 					await page.until(shows("Mara"));
 					await page.run(`location.hash='#/connections'`);
-					await page.until(shows("banda has a newer GitHub"));
-					await shot("1-update-offered");
-					await click(page, button("Update"));
-					await page.until(`!${shows("banda has a newer GitHub")}`);
+					await page.until(shows("Pull requests, issues, checks"));
 					expect((await connection())?.state).toBe("connected");
-					await shot("2-updated");
+					await shot("1-connections");
 
 					await page.run(`location.hash='#/a/mara'`);
 					await click(page, named("Mara: open its panel"));

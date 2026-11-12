@@ -25,7 +25,7 @@ import { mimeOf } from "./gateway.ts";
 import { AVATAR_GEOMETRY } from "./parts/avatar.ts";
 import { artifact, avatar, connect, MESSAGE_PARTS, reaction } from "./parts/index.ts";
 import type { MessagePart } from "./parts/part.ts";
-import { covering, type Floor, offering, type PermissionScope, type ScopeKind } from "./permissions.ts";
+import { covering, type Floor, floorNow, offering, type PermissionScope, type ScopeKind } from "./permissions.ts";
 import {
 	ASK_USER,
 	CONNECT,
@@ -582,7 +582,7 @@ export type EffectTool<P extends TSchema, A extends EffectApi = ToolExecutionApi
 	/** The arguments that are the effect in full (a request's headers, its raw body): shown behind a disclosure. */
 	readonly details?: readonly string[];
 	/** What the approval card draws beside its words: the object it acts on, the account it acts as, its verb. */
-	readonly drawn?: (args: Static<P>) => Pick<Draft, "on" | "as" | "verb">;
+	readonly drawn?: (args: Static<P>) => Pick<Draft, "on" | "as" | "verb" | "hidden">;
 	readonly floor?: Floor | ((args: Static<P>) => Floor | undefined);
 	readonly permission?: {
 		/** Structural identity arguments: always bound, never editable, regardless of presentation metadata. */
@@ -797,7 +797,10 @@ export function effectRun<P extends TSchema, A extends EffectApi>(
 			if (typeof permitted === "object") return notAllowed(permitted.refused);
 			if (permitted !== undefined) return run(draft.args);
 			// the ask names its task and offers the scopes the daemon allows
-			const asked = await api.commit((tx) => offering(tx, Number(api.conversationId), draft), ctx);
+			const asked = await api.commit(async (tx) => {
+				const floor = await floorNow(tx, draft);
+				return offering(tx, Number(api.conversationId), floor === undefined ? draft : { ...draft, floor });
+			}, ctx);
 			const answer = await approved(api, "approval", asked, ctx);
 			if (typeof answer === "string") return text(`${spoken} did not run: ${answer}.`, true);
 			await inTurn(api, ctx);

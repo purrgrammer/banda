@@ -340,6 +340,13 @@ export const SECTIONS: readonly Entry[] = [
 	},
 	{ id: "connect", title: "Connecting", group: "connections", status: "app", sources: [CONNECT] },
 	{
+		id: "connection-details",
+		title: "A connection's details",
+		group: "connections",
+		status: "app",
+		sources: ["web/src/chat/ConnectionDetails.tsx", "web/src/app/ConnectionPage.tsx"],
+	},
+	{
 		id: "github",
 		title: "GitHub",
 		group: "connections",
@@ -361,7 +368,7 @@ export const SECTIONS: readonly Entry[] = [
 		title: "Add an MCP connection",
 		group: "connections",
 		status: "app",
-		sources: ["web/src/app/McpSetup.tsx", "web/src/chat/McpConnection.tsx"],
+		sources: ["web/src/app/McpSetup.tsx", "web/src/chat/McpConnection.tsx", "web/src/chat/ConnectionDetails.tsx"],
 	},
 	// Harness
 	{

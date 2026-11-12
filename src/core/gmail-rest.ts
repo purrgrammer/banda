@@ -32,7 +32,7 @@ export const GMAIL_TOOLS: McpTool[] = [
 	tool("get_labels", "List Gmail labels and their names and identifiers.", {}),
 	tool(
 		"search_messages",
-		"Search Gmail using Gmail search syntax. Defaults to the inbox. Returns matching message ids and a nextPageToken when more results exist. Use that token as page_token to continue. Name each message in your answer as a link, [its name](gmail/<id>); to show cards, give them in the message's objects.",
+		"Search Gmail using Gmail search syntax. Defaults to the inbox. Returns matching message ids and a nextPageToken when more results exist. Use that token as page_token to continue. Name each message in your answer as a link, [its name](gmail/<id>); to show cards, give them in the message's objects. New mail matching a search is gmail/search/<query> (gmail/search/from:boss is:unread), which can be followed, as an email can.",
 		{
 			query: { type: "string", description: "Gmail search query; defaults to in:inbox", maxLength: 500 },
 			max_results: { type: "integer", minimum: 1, maximum: 25 },
@@ -49,7 +49,7 @@ export const GMAIL_TOOLS: McpTool[] = [
 	),
 	tool(
 		"get_thread",
-		"Read a Gmail conversation and its messages. Name a message in your answer as a link, [its name](gmail/<id>); to show cards, give them in the message's objects.",
+		"Read a Gmail conversation and its messages. Name a message in your answer as a link, [its name](gmail/<id>); to show cards, give them in the message's objects. The conversation itself is gmail/thread/<threadId>, which can be followed, as an email can.",
 		{
 			thread_id: { type: "string", minLength: 1, maxLength: 200 },
 		},

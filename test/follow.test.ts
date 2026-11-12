@@ -1,13 +1,14 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
-import { parseConnection } from "../src/core/connections.ts";
+import { readDefinition } from "../src/core/definitions.ts";
 import {
 	BUSY_EVERY,
 	canonical,
 	endedBy,
 	type Follow,
+	followWords,
 	heldBack,
 	holds,
 	type Json,
@@ -21,6 +22,7 @@ import {
 	sort,
 } from "../src/core/follow.ts";
 import { parseObjects } from "../src/core/objects.ts";
+import { shippedText } from "./fixtures/shipped.ts";
 import { pbtRuns } from "./pbt.ts";
 
 /** How GitHub's pull request is followed, as the shipped file declares it. */
@@ -55,6 +57,52 @@ function withoutEmptyLists(value: Json): Json {
 		),
 	);
 }
+
+describe("what following a kind does, in words", () => {
+	it("says each rule's words once, a lookup by its values, and what no rule matches only when it does something", () => {
+		const follow: Pick<Follow, "rules" | "otherwise"> = {
+			rules: [
+				{ on: "state", does: "wake", says: "{from} replied" },
+				{ on: "state2", does: "wake", says: "{to}", words: { review: "review requested", assign: "assigned" } },
+				{ on: "x", does: "tell", says: "renamed: {to}" },
+				{ on: "y", does: "tell", says: "renamed: {to}" },
+				{ on: "z", does: "nothing", says: "quiet" },
+			],
+		};
+		expect(followWords(follow)).toEqual({
+			wakes: ["replied", "review requested", "assigned"],
+			tells: ["renamed"],
+		});
+		expect(followWords({ ...follow, otherwise: "tell" }).tells).toContain("anything else that changes");
+	});
+
+	it("leaves no template holes in what it shows: no ellipsis, no brackets, no dangling punctuation or word", () => {
+		const dir = new URL("../shipped/connections/", import.meta.url);
+		for (const file of readdirSync(dir).filter((name) => name.endsWith(".json"))) {
+			const read = readDefinition(file.replace(".json", ""), readFileSync(new URL(file, dir), "utf8"));
+			if ("errors" in read) throw new Error(read.errors.join("; "));
+			for (const [kind, shape] of Object.entries(read.connection.objects ?? {})) {
+				if (shape.follow === undefined) continue;
+				const { wakes, tells } = followWords(shape.follow);
+				for (const phrase of [...wakes, ...tells]) {
+					expect(phrase, `${file} ${kind}: ${phrase}`).not.toMatch(/[…{}]/);
+					expect(phrase, `${file} ${kind}: ${phrase}`).not.toMatch(/^['’:#]|[:#]$/);
+					expect(phrase, `${file} ${kind}: ${phrase}`).not.toMatch(/^(now|no longer|in)$/);
+				}
+			}
+		}
+		// each kind of a template: a possessive, a hole between words, a preposition before a hole, nothing to say
+		const says = (text: string) => followWords({ rules: [{ on: "x", does: "wake", says: text }] }).wakes;
+		expect(says("{user.login}'s review was dismissed")).toEqual(["review was dismissed"]);
+		expect(says("{user.login} opened #{number}: {title}")).toEqual(["opened"]);
+		expect(says("a message from {from} was deleted")).toEqual(["a message was deleted"]);
+		expect(says("{count} reacted :{name}:")).toEqual(["reacted"]);
+		expect(says("moved to {to}")).toEqual(["moved"]);
+		expect(says("{name}: {to}")).toEqual([]);
+		expect(says("{user.login} {state}")).toEqual([]);
+		expect(says("now at {to}")).toEqual([]);
+	});
+});
 
 describe("following an object", () => {
 	it("the shipped pull request kind follows: comments are read only when followed, and it ends when merged or closed", () => {
@@ -402,10 +450,7 @@ describe("following an object", () => {
 
 	/** Gmail's kinds, as the shipped file declares them. */
 	const gmail = (() => {
-		const parsed = parseConnection(
-			"gmail",
-			readFileSync(new URL("../shipped/connections/gmail.md", import.meta.url), "utf8"),
-		);
+		const parsed = readDefinition("gmail", shippedText("gmail"));
 		if (!("connection" in parsed)) throw new Error(JSON.stringify(parsed));
 		const objects = parsed.connection.objects ?? {};
 		const follow = (kind: string) => {

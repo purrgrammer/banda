@@ -29,9 +29,10 @@ code holds the details. If a sentence here only restates code, delete it.
 1. **The agent is the object; the chat is its surface.** Every agent has one chat, its identity, personality, memory,
    connections, routines and watches, and the owner talks to it directly. The owner never manages threads: a routine's
    run, an ask and a result all land in the agent's one conversation.
-2. **What the agent is made of is files.** Agents, connections, routines, watches and memory are plain text files in the
-   workspace, inspectable and editable by the owner or an agent. The store holds what runs and what is in effect, never
-   a second copy of a definition.
+2. **What the agent is made of is files.** Agents, routines, watches and memory are plain text files in the workspace,
+   inspectable and editable by the owner or an agent. The store holds what runs and what is in effect, never a second
+   copy of a definition. A connection is the exception: a definition banda ships and a choice the store holds, so nothing
+   the box writes can reach one.
 3. **An agent speaks only through its speaking tools.** The only way to reach the owner is a speaking tool, one per
    act: `message_user` for words, `ask_user`, `react`, `publish`, …; in a group, `message_group` posts the words to its
    room in `message_user`'s place. Proactive
@@ -91,7 +92,7 @@ The words the rules lean on:
 | **Permission** | a stored approval with a scope; an effect within an open permission runs without asking |
 | **Routine** | `routines/<name>.md` in the workspace: when it runs (a timer) and what it asks; its task submits those inputs to its agent's chat |
 | **Watch** | `watches/<name>.md` in the workspace: the object it follows, the account it looks with, what ends it and what matters; its task keeps the reading and submits each change to its agent's chat |
-| **Connection** | `connections/<name>.md`, shipped with the app: a service's tools, which only read, and its objects; its accounts' credentials stay with the daemon |
+| **Connection** | A definition banda ships (`shipped/connections/<name>.json`, one schema), on in a home by a switch: a service's tools, which only read, and its objects; its accounts' credentials stay with the daemon. A server the owner adds by its address is a record in the store |
 | **Harness** | `shipped/harnesses/<name>.md`, or a command line the owner gave: an ACP agent on the owner's computer (or banda's own adapter around one that speaks something else), connected in the owner's code folder, for the agents the owner turns it on for |
 | **Object** | the daemon's rendering of one thing in a connection, read with an account's credentials for the owner's eyes |
 | **Gateway** | where the owner reaches the band: the app and the CLI |
@@ -217,7 +218,7 @@ one that gives them one more thing to manage stays out.
   defaulted, a name and a personality that three tappable starters fill (Researcher, Writer, Keeper of the calendar):
   naming a friend, not filling a form. No description, no interview.
 - **Connections** is a page from the band's menu and from Settings: every service the band can work with, a tile each
-  (its accounts, or Connect; one not shipped yet says so), so the owner connects before any agent needs it. A chat
+  (its accounts, or Connect), so the owner connects before any agent needs it. A chat
   that needs a connection carries the connect card instead of pointing elsewhere.
 - **Settings** is one page: the model providers (connect another, add another account of one by name, switch the
   band to one account, sign out of each; the models the tiers use); connections (every account across
@@ -373,20 +374,25 @@ execution chats remain; Settings lists it, to restore, and a restored group goes
 comes back.
 
 ## Connections
-A connection is how the band works with the owner's services without holding them. It ships as a file
-(`shipped/connections/<name>.md`): the service in plain words, its logo, where it is, how the daemon signs in (OAuth
-with PKCE, or by code where the server registers no clients, as GitHub), the scopes it asks for, which tools only
-read and its objects. The owner adds one with a tap: its bytes are written into the workspace and
-allowed at once, since the app wrote them and the owner chose them; from then on it is an ordinary "before" file. It
-is first class in the UI (a logo and a name on every card, event and draft of its) and secondary in the hierarchy: it
+A connection is how the band works with the owner's services without holding them. What banda ships is a definition
+in its release (`shipped/connections/<name>.json`, checked against one schema): the service in plain words, a line
+about it, where it is, how the daemon signs in (OAuth with PKCE, or by code where the server registers no clients, as
+GitHub), the scopes it asks for and the access the owner chooses among, which tools only read and its objects. The
+daemon reads them when it starts, and one that does not pass is left out and said in the log. The owner adds one with
+a switch, a fact in the store: nothing is written to the workspace, and the definition in effect is the one this
+banda ships, so nothing is ever updated: a new release takes effect at its first start, asking nothing, since the
+owner updated banda themselves. Its version is the hash of what was read, and what binds to a connection binds to
+that. A server the owner adds by its address is a record in the store, every tool asking first until they say it
+reads; its version is a counter that moves with each change, and the reads they allow lie over its definition or
+over one banda ships, kept by name across versions, never on a floor or a write the definition names. It is first class in the UI (a logo and a name on every card, event and draft of its) and secondary in the hierarchy: it
 lives inside agents' settings and the app's Settings, never as a screen of its own.
 - **Accounts.** An account is one sign-in: `auth/connections/<connection>/<account>/` holds its credentials, bound to
   the URL they were given for, so a changed URL never carries them along. Its id is what the service calls the owner,
-  read once after sign-in and shown ("@bandarra"). Each account has its own access: the file's scopes are what a new
-  account asks for, and the owner may pick others for one account from what the file allows (its scopes and every
-  scope its tools need), so a personal mailbox can read while a work one sends; what an account was given is what its
-  credentials record, and a tool it was not given access for is refused in words before any request. Narrowing what
-  the file allows makes the accounts beyond it sign in again. The owner signs in another at any time; signing out forgets the
+  read once after sign-in and shown ("@bandarra"). Each account has its own access: the definition's scopes are what a
+  new account asks for, and the owner may pick others for one account from what the definition allows (its scopes and
+  every scope its tools need), so a personal mailbox can read while a work one sends; what an account was given is what
+  its credentials record, and a tool it was not given access for is refused in words before any request. Narrowing what
+  the definition allows makes the accounts beyond it sign in again. The owner signs in another at any time; signing out forgets the
   credentials and switches the account off for every agent. Credentials never reach the
   box, a prompt, an entry, the store or a log; what a server echoes of one is hidden.
 - **One flow everywhere: enable, sign in, done.** From an agent's panel (Permissions), from Settings, or from a card the agent
@@ -400,8 +406,10 @@ lives inside agents' settings and the app's Settings, never as a screen of its o
   tap and no sign-in: "Let Mara use GitHub as @bandarra?". From then on reads run freely; a write is a draft. The
   agent is never asked for permission to use a connection it has: the draft is the only ask.
 - **What is offered is what was listed.** On connecting, the daemon lists the server's tools and keeps them in the
-  store for that accepted file; the model is offered exactly those, under stable names (`<connection>__<tool>`). A
-  tool the server adds later waits switched off.
+  store for that version of the connection; the model is offered exactly those, under stable names
+  (`<connection>__<tool>`). A tool the server adds later waits switched off. For a connection banda ships a tool its
+  definition names comes with the release, switched on, and one it does not name waits switched off at every listing,
+  whatever the version; the owner's switches stay by name across versions.
 - **A read runs, a write is a draft.** A read runs when called, and its answer comes back framed as foreign data. A
   tool that runs many routes may read for some exact arguments only, `tool(arg=value)` in the file; any other call of
   it is a write. Every other tool is a write: a draft the owner approves, run once as approved; one the file puts on
@@ -411,9 +419,17 @@ lives inside agents' settings and the app's Settings, never as a screen of its o
   Objects, events, drafts and permissions carry their account; a permission binds one account and never covers
   another. A draft may edit its text, never its acting account. Nothing is on by default: an agent gets an account
   when the owner switches it on. Replacing a sign-in does not lend its authority to work still using the old one.
-- **Switches.** The owner switches any tool off, signs an account out or removes a connection from Settings. Whether a
-  tool is in effect is checked in the commit that starts each call, so one taken back is refused even mid-run, a write
-  waiting for approval included.
+- **Switches and settings.** The owner switches any tool off, signs an account out or removes a connection from
+  Settings. Whether a tool is in effect is checked in the commit that starts each call, so one taken back is refused
+  even mid-run, a write waiting for approval included. Each tool has a kind, said by its definition, by the owner, by
+  the server's own annotations, or by nobody, and then it is unknown and asks; banda never guesses one. The owner
+  sets each tool in a connection's details: Allow or Ask on a read, Ask or Always ask on a write, Always ask on the
+  floor, Off on any. Ask and Always ask apply to an agent's calls. Off also stops what the tool reads for: a card
+  that needs it says it is unavailable and why, and a watch stays alive, makes no call and tells nothing until the
+  tool is back on, when its next look starts it over, so the resume is not a change. A connection only narrows: a setting never lets a known write run unasked, and the store holds
+  only what narrows. A setting that puts a tool on the floor applies in the same commit, so a permission given before
+  does not cover it. A stale view changes nothing: each change names the version the owner saw. A connection's tools,
+  accounts, agents and what it draws are checked and changed in its details, the same component as the review on adding it.
 
 **Objects.** An object is a thing in a connection the owner recognises. In the owner's words, a recognised link is a
 compact inline reference: the service's icon, the object's type icon and its linked title, aligned with the owner's
@@ -851,11 +867,11 @@ valid stamp.
   site that checks for bots does not serve the agent's browser, whoever clicks, so the agent goes elsewhere or says so.
 
 ## The workspace
-The workspace is the band's folder, in the box: `agents/`, `connections/`, `routines/`, `watches/`, `skills/`,
-`memory/`, and the files the agents work on. The daemon reads it over the box's connection, so no folder the box writes
+The workspace is the band's folder, in the box: `agents/`, `routines/`, `watches/`, `skills/`, `memory/`, and the files
+the agents work on. The daemon reads it over the box's connection, so no folder the box writes
 sits on the owner's machine. The agent writes it and the owner edits it, so the daemon decides when a change takes
 effect:
-- **Before**: `agents/`, `connections/`, `routines/`, `watches/` and skill instructions take effect once the owner
+- **Before**: `agents/`, `routines/`, `watches/` and skill instructions take effect once the owner
   accepts the change. Accepting binds the hash of the bytes shown; the daemon keeps the accepted version in the store,
   and prompts and loading read only from there. Until then the accepted version stays in effect, and the tool that made
   the change tells the model so. The owner's own write through the app is accepted in the commit that stores it. The app

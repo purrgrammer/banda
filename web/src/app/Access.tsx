@@ -12,6 +12,7 @@ import { showCapabilities, showControl, useShell } from "../lib/shell.ts";
 import { ConnectFlow } from "./ConnectFlow.tsx";
 import { AddHarnessButton, HarnessAccessTile } from "./HarnessConnections.tsx";
 import { McpSetup } from "./McpSetup.tsx";
+import { hrefOf } from "./where.ts";
 
 /**
  * The rows of an agent's connections: every connection signed in to that banda has, then those banda ships and the
@@ -95,6 +96,9 @@ export function AccessTab({
 				agent={agent.name}
 				rows={used}
 				empty={`${agent.name} reaches nothing yet.`}
+				onDetails={(row) => {
+					if (row.id !== undefined) location.hash = hrefOf({ name: "connections", connection: row.id });
+				}}
 				onSwitch={(row, account, on) => {
 					if (row.id === undefined) return;
 					setError(undefined);

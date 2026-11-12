@@ -5,8 +5,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { context } from "../src/core/store.ts";
-import { connectionFile, signInAsOwner } from "./fixtures/connected.ts";
-import { changeOf, closeAll, fakes, open } from "./fixtures/connections-world.ts";
+import { connectionDefinition, define, signInAsOwner } from "./fixtures/connected.ts";
+import { closeAll, fakes, open } from "./fixtures/connections-world.ts";
 import { type FakeMcp, startFakeMcp } from "./fixtures/mcp-server.ts";
 
 /** Held at the next read of the box, so a test can finish a sign-in inside a view that has already read the store. */
@@ -28,7 +28,15 @@ afterEach(closeAll);
 
 describe("each account's own access", () => {
 	const fileWith = (fake: FakeMcp, scopes: string[], needs: Record<string, string[]> = { whoami: ["repo"] }) =>
-		`${connectionFile({ url: fake.url, auth: "oauth", client: "banda-app", scopes, account: "get_me.login", reads: ["whoami", "list_events"] })}\n\`\`\`json\n${JSON.stringify({ needs })}\n\`\`\`\n`;
+		connectionDefinition({
+			url: fake.url,
+			auth: "oauth",
+			client: "banda-app",
+			scopes,
+			account: "get_me.login",
+			reads: ["whoami", "list_events"],
+			needs,
+		});
 	const shown = async (s: Awaited<ReturnType<typeof open>>) =>
 		(await s.capabilities.view()).connections.find((c) => c.name === "cal");
 	const as = async (
@@ -45,8 +53,7 @@ describe("each account's own access", () => {
 		fake.needs = { whoami: "repo" };
 		fakes.push(fake);
 		const s = await open(fake);
-		s.writeBox("connections/cal.md", fileWith(fake, ["read:user"]));
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await define(s, "cal", fileWith(fake, ["read:user"]));
 		await as(s, fake, "alice", { scopes: ["read:user"] });
 		await as(s, fake, "bob", { scopes: ["read:user", "repo"] });
 		return { fake, s };
@@ -137,51 +144,29 @@ describe("each account's own access", () => {
 		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true, scopes: [] });
 		fakes.push(fake);
 		const s = await open(fake);
-		s.writeBox(
-			"connections/cal.md",
-			connectionFile({ url: fake.url, auth: "oauth", client: "banda-app", account: "get_me.login", reads: ["whoami"] }),
+		await define(
+			s,
+			"cal",
+			connectionDefinition({
+				url: fake.url,
+				auth: "oauth",
+				client: "banda-app",
+				account: "get_me.login",
+				reads: ["whoami"],
+			}),
 		);
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
 		await as(s, fake, "alice");
 		expect((await shown(s))?.accounts?.[0]?.stale).toBeUndefined();
-		s.writeBox("connections/cal.md", fileWith(fake, ["read:user"], {}));
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await define(s, "cal", fileWith(fake, ["read:user"], {}));
 		expect((await shown(s))?.accounts?.[0]?.stale).toBe(true);
-	});
-
-	it("a view begun during a sign-in by code never says to sign in, though the sign-in ends before the view does", async () => {
-		const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true, scopes: [] });
-		fakes.push(fake);
-		const s = await open(fake);
-		s.writeBox(
-			"connections/cal.md",
-			connectionFile({ url: fake.url, auth: "oauth", client: "banda-app", account: "get_me.login", reads: ["whoami"] }),
-		);
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
-		fake.user = "alice";
-		const started = await s.capabilities.signIn("cal", context, undefined, {});
-		if (!("code" in started)) throw new Error("expected a sign-in by code");
-		let release = () => {};
-		boxRead.hold = new Promise<void>((resolve) => {
-			release = resolve;
-		});
-		// this view reads the store, with no account yet, and stays at the box while the sign-in finishes
-		const reading = shown(s);
-		while (boxRead.hold !== undefined) await new Promise((resolve) => setTimeout(resolve, 5));
-		await fake.typeCode(started.code, true);
-		while ((await shown(s))?.state !== "connected") await new Promise((resolve) => setTimeout(resolve, 25));
-		release();
-		expect((await reading)?.state).toBe("signing-in");
 	});
 
 	it("narrowing what an account may ask for makes the accounts beyond it stale; changing the default does not", async () => {
 		const { s } = await twoAccounts();
-		s.writeBox("connections/cal.md", fileWith(s.fake as FakeMcp, ["read:user", "repo"]));
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await define(s, "cal", fileWith(s.fake as FakeMcp, ["read:user", "repo"]));
 		expect((await shown(s))?.accounts?.some((account) => account.stale === true)).toBe(false);
 		// no tool needs repo any more, and the default does not ask for it: bob asked for more than may be asked
-		s.writeBox("connections/cal.md", fileWith(s.fake as FakeMcp, ["read:user"], {}));
-		await s.capabilities.acceptConnection("cal", ((await changeOf(s, "cal")) as { sha: string }).sha);
+		await define(s, "cal", fileWith(s.fake as FakeMcp, ["read:user"], {}));
 		const view = await shown(s);
 		expect(view?.accounts?.find((account) => account.account === "alice")?.stale).toBeUndefined();
 		expect(view?.accounts?.find((account) => account.account === "bob")?.stale).toBe(true);

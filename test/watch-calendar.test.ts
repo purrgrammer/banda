@@ -10,7 +10,7 @@ import { tempHome } from "./helpers.ts";
 /** Google Calendar as banda ships it, signed in as ana@example.com. */
 const CALENDAR = {
 	name: "calendar",
-	file: readFileSync(new URL("../shipped/connections/calendar.md", import.meta.url), "utf8"),
+	file: readFileSync(new URL("../shipped/connections/calendar.json", import.meta.url), "utf8"),
 	tools: REST_APIS.calendar.tools,
 	account: "ana@example.com",
 };

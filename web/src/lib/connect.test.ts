@@ -13,6 +13,8 @@ const account = (key: string, agents: string[] = [], stale = false): AccountView
 });
 const view = (extra: Partial<ConnectionView> = {}): ConnectionView => ({
 	name: "github",
+	groups: [],
+	draws: [],
 	state: "sign-in",
 	tools: [],
 	accounts: [],

@@ -22,6 +22,7 @@ import {
 	type Errand,
 	errandOf,
 	type Floor,
+	floorNow,
 	give,
 	HOST_ARG,
 	HOST_TOOL,
@@ -88,6 +89,8 @@ export type Ask =
 			readonly on?: { readonly refs: readonly string[]; readonly account?: string };
 			/** The account it acts as, in words: "@bandarra on GitHub". */
 			readonly as?: string;
+			/** Arguments the card says another way (the account, the object it draws): not listed as well. */
+			readonly hidden?: readonly string[];
 			/** The effect's own verb, the card's button: "Comment". */
 			readonly verb?: string;
 			/** On the floor: it asks every time, and no permission is given for it or covers it. */
@@ -354,7 +357,7 @@ export async function fill(
 			draft = edited.draft;
 		}
 		if (permission !== undefined) {
-			const why = refusal(permission, shapeFor(permission, ask), ask.floor, now, offeredScopes(ask));
+			const why = refusal(permission, shapeFor(permission, ask), await floorNow(tx, ask), now, offeredScopes(ask));
 			if (why !== undefined) return { refused: why };
 		}
 	}
@@ -443,7 +446,7 @@ async function coveredAsks(
 		const { ask } = wait.input;
 		if (wait.id === id || ask.type !== "approval" || now >= wait.input.deadline) continue;
 		const host = permission.scope === "host";
-		if (ask.floor !== undefined || ask.permission === undefined || ask.interrupted === true) continue;
+		if ((await floorNow(tx, ask)) !== undefined || ask.permission === undefined || ask.interrupted === true) continue;
 		if (!matches(permission, ask.tool, ask.args)) continue;
 		// a host covers only the chats of the agent it was allowed for
 		if (host && (permission.agent === undefined || (await agentOfChat(tx, wait.chat)) !== permission.agent)) continue;

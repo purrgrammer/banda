@@ -259,6 +259,40 @@ export function frontmatter(raw: string, fields: readonly string[]): Frontmatter
 }
 
 /**
+ * `text`'s frontmatter with `key` set to the list `values`: its line replaced (whatever form it was in), or added after
+ * the first of `after` there is, else at the end. Undefined when there is no frontmatter.
+ */
+export function withList(
+	text: string,
+	key: string,
+	values: readonly string[],
+	after: readonly string[],
+): string | undefined {
+	const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+	if (match === null) return undefined;
+	const lines = (match[1] ?? "").split("\n");
+	const out: string[] = [];
+	let skipping = false;
+	const own = new RegExp(`^${key}\\s*:`);
+	for (const line of lines) {
+		if (own.test(line)) {
+			skipping = true;
+			continue;
+		}
+		if (skipping && /^\s*-\s/.test(line)) continue;
+		skipping = false;
+		out.push(line);
+	}
+	let at = -1;
+	for (const field of after) {
+		at = out.findIndex((line) => new RegExp(`^${field}\\s*:`).test(line));
+		if (at !== -1) break;
+	}
+	out.splice(at === -1 ? out.length : at + 1, 0, `${key}: [${values.join(", ")}]`);
+	return `---\n${out.join("\n")}\n---${text.slice(match[0].length)}`;
+}
+
+/**
  * Parse an agent file: a `---` frontmatter of `key: value` lines (a list as `[a, b]`, or as `- item` lines under its
  * key), then the instructions. Every problem is reported, each saying what to write instead. `tools` are those there
  * are, and `known` says whether a model exists; unchecked when not given.

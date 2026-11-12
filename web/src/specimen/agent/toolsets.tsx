@@ -23,7 +23,7 @@ import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLab
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import github from "../../../../shipped/connections/github.md?raw";
+import github from "../../../../shipped/connections/github.json";
 import { TOOLSETS } from "../../../../src/core/toolsets.ts";
 import { AgentPanel, Panel } from "../../chat/Panel.tsx";
 import { Block, Connections, Permissions } from "../../chat/Settings.tsx";
@@ -90,9 +90,7 @@ const TOOL_LABELS: Record<string, string> = {
 	propose_key: "Ask to save a key",
 };
 // The shipped inventory, not an invented service or a duplicate list to maintain.
-const needs = (JSON.parse(/```json\n([\s\S]*?)\n```/.exec(github)?.[1] ?? "{}") as { needs: Record<string, unknown> })
-	.needs;
-const GITHUB_TOOLS = Object.keys(needs).map((name) => `github__${name}`);
+const GITHUB_TOOLS = Object.keys(github.needs).map((name) => `github__${name}`);
 const INVENTORY = Object.entries({
 	...TOOLSETS,
 	search: ["search", "read_search_result"],

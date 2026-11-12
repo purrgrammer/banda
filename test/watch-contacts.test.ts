@@ -9,7 +9,7 @@ import { tempHome } from "./helpers.ts";
 /** Google Contacts as banda ships it, signed in as me@example.com. */
 const CONTACTS = {
 	name: "contacts",
-	file: readFileSync(new URL("../shipped/connections/contacts.md", import.meta.url), "utf8"),
+	file: readFileSync(new URL("../shipped/connections/contacts.json", import.meta.url), "utf8"),
 	tools: REST_APIS.contacts.tools,
 	account: "me@example.com",
 };

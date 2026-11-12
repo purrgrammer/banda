@@ -25,11 +25,11 @@ import { ownerAnswer } from "./owner.ts";
 const [home, scheduleJson] = process.argv.slice(2) as [string, string];
 const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
 const shipped = join(home, "shipped");
-if (!existsSync(join(shipped, "calendar.md"))) {
+if (!existsSync(join(shipped, "calendar.json"))) {
 	mkdirSync(shipped, { recursive: true });
 	writeFileSync(
-		join(shipped, "calendar.md"),
-		readFileSync(new URL("../../shipped/connections/calendar.md", import.meta.url), "utf8"),
+		join(shipped, "calendar.json"),
+		readFileSync(new URL("../../shipped/connections/calendar.json", import.meta.url), "utf8"),
 	);
 }
 const google = fakeCalendar({ file: join(home, "google-calendar.json") });
@@ -69,17 +69,7 @@ const s = await openConnected({
 });
 
 const shown = async () => (await s.capabilities.view()).connections.find((c) => c.name === "calendar");
-// what the file says now, allowed, whatever a kill left between writing it and allowing it
-const allow = async () => {
-	const change = (await shown())?.change;
-	if (change !== undefined && "sha" in change && change.sha !== undefined)
-		await s.capabilities.acceptConnection("calendar", change.sha);
-};
-if ((await shown())?.accepted === undefined) {
-	await allow();
-	if ((await shown())?.accepted === undefined) await s.capabilities.addShipped("calendar");
-}
-await allow();
+if ((await shown())?.accepted === undefined) await s.capabilities.addShipped("calendar");
 if ((await shown())?.state === "sign-in") {
 	const started = await s.capabilities.signIn("calendar", context, LEAD, {
 		scopes: ["https://www.googleapis.com/auth/calendar.readonly", "https://www.googleapis.com/auth/calendar.events"],

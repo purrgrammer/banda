@@ -603,6 +603,40 @@ export function readArgs(read: ObjectRead, ref: ObjectRef, schema: JsonObject | 
 }
 
 /** The object a write's draft acts on, from its arguments: each kind it may be, and its words; none when it names none. */
+/**
+ * The object a call of the read `tool` is about, when a kind reads it with those arguments, and the arguments that name
+ * it: an approval for a read the owner set to Ask draws the thing, not its ids.
+ */
+export function readOn(
+	connection: string,
+	tool: string,
+	args: JsonObject,
+	kinds: ObjectKinds,
+): { readonly ref: ObjectRef; readonly args: readonly string[] } | undefined {
+	for (const [kind, shape] of Object.entries(kinds))
+		for (const read of Object.values(shape.reads)) {
+			if (read.tool !== tool) continue;
+			const values: { [placeholder: string]: string } = {};
+			const used: string[] = [];
+			for (const [arg, template] of Object.entries(read.args ?? {})) {
+				const placeholder = typeof template === "string" ? /^\{(\w+)\}$/.exec(template)?.[1] : undefined;
+				if (placeholder === undefined) continue;
+				const value = args[arg];
+				if ((typeof value === "string" || typeof value === "number") && new RegExp(`^${VALUE}$`).test(String(value))) {
+					values[placeholder] = String(value);
+					used.push(arg);
+				}
+			}
+			const placeholders = Object.values(read.args ?? {}).filter(
+				(each) => typeof each === "string" && /^\{\w+\}$/.test(each),
+			);
+			if (used.length === 0 || used.length !== placeholders.length) continue;
+			const normalized = normalizeValues(values, shape.normalize);
+			if (normalized !== undefined) return { ref: { connection, kind, values: normalized }, args: used };
+		}
+	return undefined;
+}
+
 export function draftedOn(
 	connection: string,
 	tool: string,

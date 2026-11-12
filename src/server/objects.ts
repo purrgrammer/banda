@@ -5,6 +5,7 @@ import type { BlobStore } from "../core/blobs.ts";
 import { type Attachment, hold, safeName } from "../core/blobs.ts";
 import {
 	acceptedConnection,
+	acceptedNames,
 	accountLabel,
 	accountsOn,
 	Connected,
@@ -14,7 +15,7 @@ import {
 } from "../core/connections.ts";
 import { mimeOf } from "../core/gateway.ts";
 import { Groups } from "../core/groups.ts";
-import { objectAccess } from "../core/object-access.ts";
+import { type OffRead, objectAccess, objectStanding, offWords } from "../core/object-access.ts";
 import {
 	cardOf,
 	keepReading,
@@ -77,8 +78,10 @@ export type ObjectShown =
 			readonly name: string;
 			readonly at: number;
 			readonly why: string;
+			/** The owner's switch holds a read it needs off: nothing to try again, `why` says what to change. */
+			readonly off?: true;
 	  };
-type Known = Connection & { readonly accepted: boolean; readonly missing?: boolean };
+type Known = Connection & { readonly accepted: boolean };
 type Attempt = {
 	chat: number;
 	ref: ObjectRef;
@@ -106,18 +109,14 @@ export function openObjects({
 	async function known(ctx: Context): Promise<Known[]> {
 		const accepted = await harness.commit(async (tx) => {
 			const out: Known[] = [];
-			for (const path of Object.keys((await tx.doc(Accepted)).files).sort()) {
-				const name = /^connections\/(.+)\.md$/.exec(path)?.[1];
-				const connection = name === undefined ? undefined : await acceptedConnection(tx, name);
+			for (const name of await acceptedNames(tx)) {
+				const connection = await acceptedConnection(tx, name);
 				if (connection !== undefined) out.push({ ...connection, accepted: true });
 			}
 			return out;
 		}, ctx);
-		for (const shipped of await capabilities.shipped()) {
-			const old = accepted.findIndex((c) => c.name === shipped.name);
-			if (old < 0) accepted.push({ ...shipped, accepted: false });
-			else if (accepted[old]?.objects === undefined) accepted[old] = { ...shipped, accepted: true, missing: true };
-		}
+		for (const shipped of await capabilities.shipped())
+			if (!accepted.some((c) => c.name === shipped.name)) accepted.push({ ...shipped, accepted: false });
 		return accepted;
 	}
 	async function reading(
@@ -214,9 +213,15 @@ export function openObjects({
 	): Promise<ObjectShown> {
 		const kinds = connection.objects ?? {};
 		let last: { ref: ObjectRef; found: Reading; stamp: string } | undefined;
+		let held: { ref: ObjectRef; off: OffRead } | undefined;
 		for (const ref of refs.slice(0, 4)) {
-			const access = await harness.commit((tx) => objectAccess(tx, chat, ref, account), ctx);
+			const access = await harness.commit((tx) => objectStanding(tx, chat, ref, account), ctx);
 			if (access === undefined) return { shown: "link" };
+			if (access.off !== undefined) {
+				// the first candidate speaks for the link: another read as another kind would not be what it names
+				held = { ref, off: access.off };
+				break;
+			}
 			// A request may reach this candidate through a URL, shorthand fallback or notification subject.
 			// Share successes AND failures, but never across an authority generation or another request's Retry.
 			const key = JSON.stringify([chat, account, refKey(ref, access.connection.objects ?? {}), access.stamp]);
@@ -230,14 +235,27 @@ export function openObjects({
 			last = { ref, found, stamp: access.stamp };
 			if (found.card !== undefined) break;
 		}
-		if (last === undefined) return { shown: "link" };
-		const { ref, found, stamp } = last;
 		const label =
 			account === ""
 				? undefined
 				: accountLabel(
 						(await harness.snapshot(Connected, ctx))?.accounts[connection.name]?.[account] ?? { id: account },
 					);
+		// the owner's switch, not a failed read: the same card as one that could not be read, with nothing to try again
+		if (held !== undefined)
+			return {
+				shown: "failed",
+				key: refKey(held.ref, kinds),
+				connection: connection.name,
+				service: connection.service,
+				...(label === undefined ? {} : { account: label }),
+				name: nameOf(held.ref, kinds),
+				at: now(),
+				why: offWords(held.off),
+				off: true,
+			};
+		if (last === undefined) return { shown: "link" };
+		const { ref, found, stamp } = last;
 		const base = {
 			key: refKey(ref, kinds),
 			connection: connection.name,
@@ -321,18 +339,6 @@ export function openObjects({
 			}
 			seen.add(identity);
 			count++;
-			if (connection.missing) {
-				out.push({
-					shown: "failed",
-					key: refKey(first, connection.objects ?? {}),
-					connection: connection.name,
-					service: connection.service,
-					name: nameOf(first, connection.objects ?? {}),
-					at: now(),
-					why: "This connection has no object definitions. Accept the current connection file to show cards.",
-				});
-				continue;
-			}
 			const selected = await harness.commit(async (tx) => {
 				const group = (await tx.doc(Groups)).groups[chat];
 				const direct = await agentOfChat(tx, chat);

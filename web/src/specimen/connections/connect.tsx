@@ -5,8 +5,8 @@ import { Band } from "../../chat/Band.tsx";
 import { Catalogue } from "../../chat/Catalogue.tsx";
 import { ConnectCard, ConnectDialog, type ConnectStep } from "../../chat/Connect.tsx";
 import { SettingsPage } from "../../chat/Settings.tsx";
-import { scopeChoicesOf } from "../../lib/connect.ts";
-import { MARA, OCTO, ROWS, SANCHO, SERVICES } from "../fixtures.ts";
+import { scopesOfChoice } from "../../lib/connect.ts";
+import { choicesOf, MARA, OCTO, ROWS, SANCHO, SERVICES } from "../fixtures.ts";
 import { Labelled, Section, StageContext } from "../stage.tsx";
 
 export function ConnectSections() {
@@ -54,6 +54,7 @@ const CONNECT_STEPS: readonly {
 	readonly connection: string;
 	readonly id: string;
 	readonly step: ConnectStep;
+	readonly account?: string;
 }[] = [
 	{ label: "Access to grant", connection: "Google Calendar", id: "calendar", step: { kind: "permissions" } },
 	{ label: "GitHub's access", agent: "Octo", connection: "GitHub", id: "github", step: { kind: "permissions" } },
@@ -115,6 +116,13 @@ const CONNECT_STEPS: readonly {
 		id: "github",
 		step: { kind: "share", login: "@bandarra" },
 	},
+	{
+		label: "Changing one account's access",
+		connection: "Google Calendar",
+		id: "calendar",
+		account: "@bandarra",
+		step: { kind: "permissions" },
+	},
 ];
 
 /** Each step of the connect dialog, opened by its button; the dialog takes the frame's colour scheme. */
@@ -135,8 +143,8 @@ function ConnectSteps() {
 				}
 			: listed;
 	const show = (index: number) => {
-		const required = scopeChoicesOf(CONNECT_STEPS[index]?.id)?.required;
-		setScopes(required === undefined ? [] : [required.scope]);
+		const required = choicesOf(CONNECT_STEPS[index]?.id)?.required;
+		setScopes(required === undefined ? [] : scopesOfChoice(required));
 		setOn({});
 		setOpen(index);
 	};
@@ -163,8 +171,10 @@ function ConnectSteps() {
 					agent={shown.agent}
 					connection={shown.connection}
 					id={shown.id}
+					account={shown.account}
 					step={shown.step}
 					scopes={scopes}
+					choices={choicesOf(shown.id)}
 					onScopes={setScopes}
 					scopesChanged={scopes.length > 1}
 					onSignIn={() => setOpen(undefined)}

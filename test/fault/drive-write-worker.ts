@@ -32,11 +32,11 @@ const [home, mode, scheduleJson] = process.argv.slice(2) as [
 ];
 const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
 const shipped = join(home, "shipped");
-if (!existsSync(join(shipped, "drive.md"))) {
+if (!existsSync(join(shipped, "drive.json"))) {
 	mkdirSync(shipped, { recursive: true });
 	writeFileSync(
-		join(shipped, "drive.md"),
-		readFileSync(new URL("../../shipped/connections/drive.md", import.meta.url), "utf8"),
+		join(shipped, "drive.json"),
+		readFileSync(new URL("../../shipped/connections/drive.json", import.meta.url), "utf8"),
 	);
 }
 /** The Sheet the owner has, before anything: two tabs, a budget in the first. */
@@ -95,17 +95,7 @@ const s = await openConnected({
 });
 
 const shown = async () => (await s.capabilities.view()).connections.find((c) => c.name === "drive");
-// what the file says now, allowed, whatever a kill left between writing it and allowing it
-const allow = async () => {
-	const change = (await shown())?.change;
-	if (change !== undefined && "sha" in change && change.sha !== undefined)
-		await s.capabilities.acceptConnection("drive", change.sha);
-};
-if ((await shown())?.accepted === undefined) {
-	await allow();
-	if ((await shown())?.accepted === undefined) await s.capabilities.addShipped("drive");
-}
-await allow();
+if ((await shown())?.accepted === undefined) await s.capabilities.addShipped("drive");
 if ((await shown())?.state === "sign-in") {
 	const started = await s.capabilities.signIn("drive", context, LEAD, {
 		scopes: [

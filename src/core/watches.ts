@@ -33,6 +33,7 @@ import { log } from "./activity.ts";
 import { Accepted, AGENT_NAME, agentWords, ChatAgent, frontmatter, isArchived, LEAD, shaOf } from "./agents.ts";
 import {
 	acceptedConnection,
+	acceptedNames,
 	accountLabel,
 	accountNamed,
 	accountsOn,
@@ -55,7 +56,7 @@ import {
 	withLastAnswers,
 } from "./follow.ts";
 import { fileNameFor } from "./names.ts";
-import { objectAccess } from "./object-access.ts";
+import { type OffRead, objectAccess, objectStanding, offWords } from "./object-access.ts";
 import {
 	cardOf,
 	keepReading,
@@ -218,13 +219,18 @@ export type WatchRecord = {
 	/**
 	 * The newest look that could not be made: when, why in the daemon's words, and since when it could not, the first
 	 * failure of this run of them; `told` once its chat drew the error line for this run; `run` when it was the wake's
-	 * run that failed, not a look. A good look clears it.
+	 * run that failed, not a look; `off` when the owner's switch holds a read off, which no line in its chat tells of,
+	 * since the owner did it. A good look clears it.
 	 */
-	failed?: { at: number; why: string; since: number; told?: number; run?: true };
+	failed?: { at: number; why: string; since: number; told?: number; run?: true; off?: true };
 	/** The Turn of its newest wake. */
 	turn?: number;
 	/** When it woke, within the last day. */
 	wakes?: number[];
+	/** The owner's switch held it off: its first look back also says whether the object ended meanwhile. */
+	back?: true;
+	/** The optional reads off at its newest look, by name: when they move, its next look is a baseline. */
+	skipped?: string[];
 	/** When it last woke, kept past the day. */
 	last?: number;
 	/** The keys of the owner's newest "Check now" clicks, so a click sent twice looks once. */
@@ -322,12 +328,11 @@ export async function acceptedWatches(tx: Tx): Promise<string[]> {
 	);
 }
 
-/** Every accepted connection, with its hash. */
-export async function acceptedConnections(tx: Tx): Promise<(Connection & { readonly sha: string })[]> {
-	const out: (Connection & { readonly sha: string })[] = [];
-	for (const path of Object.keys((await tx.doc(Accepted)).files).sort()) {
-		const name = /^connections\/(.+)\.md$/.exec(path)?.[1];
-		const connection = name === undefined ? undefined : await acceptedConnection(tx, name);
+/** Every connection in effect, with its version. */
+export async function acceptedConnections(tx: Tx): Promise<(Connection & { readonly version: string })[]> {
+	const out: (Connection & { readonly version: string })[] = [];
+	for (const name of await acceptedNames(tx)) {
+		const connection = await acceptedConnection(tx, name);
 		if (connection !== undefined) out.push(connection);
 	}
 	return out;
@@ -488,7 +493,7 @@ export async function followed(
 	tx: Tx,
 	object: string,
 ): Promise<
-	{ ref: ObjectRef; kind: ObjectKind & { follow: Follow }; connection: Connection & { sha: string } } | undefined
+	{ ref: ObjectRef; kind: ObjectKind & { follow: Follow }; connection: Connection & { version: string } } | undefined
 > {
 	const connections = await acceptedConnections(tx);
 	for (const ref of recognise(object, connections)) {
@@ -501,8 +506,8 @@ export async function followed(
 }
 
 /**
- * Why `object` cannot be followed, in words: no connection recognises the link, or one does but its file in effect
- * declares no `follow` for that kind, which a newer file banda ships may have (Update on its Connections tile).
+ * Why `object` cannot be followed, in words: no connection recognises the link, or one does but its definition
+ * declares no `follow` for that kind.
  */
 export async function cannotFollow(tx: Tx, object: string): Promise<string> {
 	const connections = await acceptedConnections(tx);
@@ -510,7 +515,7 @@ export async function cannotFollow(tx: Tx, object: string): Promise<string> {
 	const connection = connections.find((each) => each.name === ref?.connection);
 	if (ref === undefined || connection === undefined) return "no connection you have recognises that link";
 	const kind = ref.kind.replaceAll("_", " ");
-	return `${connection.service} here cannot follow a ${kind} yet: update ${connection.service} on the Connections page`;
+	return `${connection.service} cannot follow a ${kind}`;
 }
 
 /**
@@ -550,7 +555,7 @@ type Resolved = {
 	readonly chat: number;
 	readonly ref: ObjectRef;
 	readonly kind: ObjectKind & { follow: Follow };
-	readonly connection: Connection & { sha: string };
+	readonly connection: Connection & { version: string };
 	readonly account: string;
 	/** What the service calls the account: its own changes are nothing. */
 	readonly me?: string;
@@ -686,7 +691,7 @@ export function decide(look: {
 	/** The watch's cursor: the version it last saw, none before its baseline. */
 	readonly seen: number | undefined;
 	/** What the record held from the looks before, when its burst began, and when it woke today. */
-	readonly record: Pick<WatchRecord, "held" | "burst" | "wakes">;
+	readonly record: Pick<WatchRecord, "held" | "burst" | "wakes" | "back">;
 	/** The reading kept before this look, if any, and what this look read. */
 	readonly kept: FollowedReading | undefined;
 	readonly after: Item;
@@ -707,13 +712,16 @@ export function decide(look: {
 	readonly every: number;
 }): Decision {
 	const { seen, record, kept, after, same, version, follow, now, click } = look;
+	// the first look back from the owner's Off: the object may have ended while it could not look. Its reading is no
+	// change to report, but an end is an end
+	const endedBack = seen === undefined && record.back === true ? endedBy(follow, look.until, after) : undefined;
 	// the watch's first look is its baseline: only what changes after it is a change, whoever else follows
-	if (seen === undefined) return { does: "baseline" };
-	if (kept === undefined || (same && seen === version)) return { does: "nothing" };
-	const sorted = sort(follow, look.me, readingAt(kept, seen), after);
+	if (seen === undefined && endedBack === undefined) return { does: "baseline" };
+	if (seen !== undefined && (kept === undefined || (same && seen === version))) return { does: "nothing" };
+	const sorted = seen === undefined || kept === undefined ? [] : sort(follow, look.me, readingAt(kept, seen), after);
 	const wake = sorted.filter((each) => each.does === "wake");
 	const tell = sorted.filter((each) => each.does === "tell");
-	const ended = endedBy(follow, look.until, after);
+	const ended = endedBack ?? endedBy(follow, look.until, after);
 	// what the looks that held saw, with what this one sees: a change once seen to wake still wakes, though the
 	// newest reading no longer shows it (a failed check a new push made run again), and each is said once
 	const union = (before: readonly string[] | undefined, latest: readonly string[]) => [
@@ -763,8 +771,35 @@ export function decide(look: {
 		ids: held.ids,
 		...(ended === undefined ? {} : { ended }),
 		...(record.burst === undefined ? {} : { burst: record.burst }),
-		gap: fellOff(kept, seen),
+		gap: seen !== undefined && kept !== undefined && fellOff(kept, seen),
 	};
+}
+
+/**
+ * `record` starts over: its next look is a baseline, as its first was, so only what changes after it is a change. Used
+ * when a look could not be made, or would read a different shape, because of the owner's switch: a diff across that is
+ * not news about the object.
+ */
+function afresh(record: WatchRecord) {
+	delete record.seen;
+	delete record.burst;
+	delete record.held;
+	delete record.resumed;
+	delete record.behind;
+}
+
+/**
+ * In the commit that starts a look, or a look that lost its authority mid-way: `record` makes no call because the owner's
+ * switch holds a read off. It stays alive and its row says why, with no line in its chat; once the tool is back on, its
+ * next look is a baseline, so the resume is not a change.
+ */
+function stop(record: WatchRecord, off: OffRead, now: number) {
+	afresh(record);
+	const since = record.failed?.off === true ? record.failed.since : now;
+	record.failed = { at: now, why: offWords(off), since, off: true };
+	record.back = true;
+	record.looked = now;
+	record.next = now + lookEvery({}, {});
 }
 
 /** The agent `chat` runs. */
@@ -772,7 +807,10 @@ const agentOf = async (tx: Tx, chat: number) => (await tx.doc(ChatAgent, chat as
 
 export function defineWatches(options: WatchesOptions) {
 	/** In `tx`: everything a look needs, or why it cannot be made (noted on the record, so the row says so). */
-	async function resolve(tx: Tx, name: string): Promise<Resolved | { readonly why: string }> {
+	async function resolve(
+		tx: Tx,
+		name: string,
+	): Promise<Resolved | { readonly why: string } | { readonly off: OffRead }> {
 		const watch = await acceptedWatch(tx, name);
 		const record = (await tx.doc(Watches)).watches[name];
 		if (watch === undefined || record === undefined) return { why: "gone" };
@@ -792,9 +830,17 @@ export function defineWatches(options: WatchesOptions) {
 			};
 		const picked = await accountFor(tx, agent, connection, watch.account);
 		if ("refused" in picked) return { why: picked.refused };
-		const access = await objectAccess(tx, chat, ref, picked.account);
+		const access = await objectStanding(tx, chat, ref, picked.account);
 		if (access === undefined)
 			return { why: `${connection.service} is not connected for ${await agentWords(tx, agent)}` };
+		if (access.off !== undefined) return { off: access.off };
+		if (access.stopped !== undefined) return { off: access.stopped };
+		// which optional reads are off shapes the reading: when that moved, a diff would be of the shape, not the object
+		if (canonical(record.skipped ?? []) !== canonical(access.skipped)) {
+			afresh(record);
+			if (access.skipped.length > 0) record.skipped = [...access.skipped];
+			else delete record.skipped;
+		}
 		const key = readingKey(picked.account, refKey(ref, connection.objects ?? {}));
 		const seen = record.seen;
 		return {
@@ -885,6 +931,11 @@ export function defineWatches(options: WatchesOptions) {
 				return;
 			}
 			const found = await resolve(tx, name);
+			if ("off" in found) {
+				why = offWords(found.off);
+				if (record !== undefined) stop(record, found.off, now);
+				return;
+			}
 			if ("why" in found) {
 				why = found.why;
 				if (record !== undefined && found.why !== "gone") {
@@ -975,8 +1026,13 @@ export function defineWatches(options: WatchesOptions) {
 				return;
 			}
 			if ((await objectAccess(tx, chat, ref, account))?.stamp !== stamp) {
-				outcome = { outcome: "failed", why: `${connection.service} is no longer connected as that account` };
-				await unable(tx, name, record, outcome.why, now, chat);
+				const off = await switchedOff(tx);
+				outcome = {
+					outcome: "failed",
+					why: off === undefined ? `${connection.service} is no longer connected as that account` : offWords(off),
+				};
+				if (off === undefined) await unable(tx, name, record, outcome.why, now, chat);
+				else stop(record, off, now);
 				return;
 			}
 			// a done watch never wakes again; a pause that came while the task read holds what it saw for the resume,
@@ -1074,6 +1130,7 @@ export function defineWatches(options: WatchesOptions) {
 				case "nothing":
 					record.seen = version;
 					delete record.resumed;
+					delete record.back;
 					await taken();
 					outcome = decision.does === "baseline" ? { outcome: "baseline" } : { outcome: "looked", changes: [] };
 					return;
@@ -1105,11 +1162,10 @@ export function defineWatches(options: WatchesOptions) {
 				default:
 					break;
 			}
-			// past the baseline, the watch has a cursor to say what changed from
-			if (seen === undefined) return;
 			const { changes, ended, burst, gap } = decision;
 			record.seen = version;
 			delete record.resumed;
+			delete record.back;
 			delete record.burst;
 			delete record.held;
 			const held = (await tx.doc(Connected)).accounts[connection.name]?.[account];
@@ -1126,7 +1182,7 @@ export function defineWatches(options: WatchesOptions) {
 				},
 				changes: [...changes],
 				at: now,
-				seen,
+				seen: seen ?? version,
 				version,
 				...(ended === undefined ? {} : { ended }),
 				...(resumed ? { resumed: true as const } : {}),
@@ -1137,7 +1193,7 @@ export function defineWatches(options: WatchesOptions) {
 			else if (changes.length > 0) delete record.behind;
 			if (decision.does === "wake") {
 				record.turn = await options.followUp(tx, chat, {
-					key: wakeKey(name, record.since, seen, decision.ids, ended),
+					key: wakeKey(name, record.since, seen ?? version, decision.ids, ended),
 					text: wakeText(watch, data.object.name, connection.service, changes, {
 						...(ended === undefined ? {} : { ended }),
 						resumed,
@@ -1166,10 +1222,21 @@ export function defineWatches(options: WatchesOptions) {
 		});
 		return outcome;
 
+		/** The read the owner's switch holds off now, when one is: what a look that lost its authority mid-way says. */
+		async function switchedOff(tx: Tx): Promise<OffRead | undefined> {
+			const standing = await objectStanding(tx, chat, ref, account);
+			return standing === undefined ? undefined : (standing.off ?? standing.stopped);
+		}
+
 		async function failing(reason: string): Promise<Looked> {
 			await commit(async (tx) => {
 				const record = (await tx.doc(Watches)).watches[name];
 				if (record !== undefined && record.done === undefined) {
+					const off = await switchedOff(tx);
+					if (off !== undefined) {
+						stop(record, off, now);
+						return;
+					}
 					await unable(tx, name, record, reason, now, chat);
 					record.looked = now;
 					record.next = now + lookEvery(kind.follow, {});

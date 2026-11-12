@@ -26,11 +26,11 @@ import { ownerAnswer } from "./owner.ts";
 const [home, mode, scheduleJson] = process.argv.slice(2) as [string, "update" | "delete" | "create", string];
 const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
 const shipped = join(home, "shipped");
-if (!existsSync(join(shipped, "contacts.md"))) {
+if (!existsSync(join(shipped, "contacts.json"))) {
 	mkdirSync(shipped, { recursive: true });
 	writeFileSync(
-		join(shipped, "contacts.md"),
-		readFileSync(new URL("../../shipped/connections/contacts.md", import.meta.url), "utf8"),
+		join(shipped, "contacts.json"),
+		readFileSync(new URL("../../shipped/connections/contacts.json", import.meta.url), "utf8"),
 	);
 }
 const google = fakeContacts({
@@ -65,17 +65,7 @@ const s = await openConnected({
 });
 
 const shown = async () => (await s.capabilities.view()).connections.find((c) => c.name === "contacts");
-// what the file says now, allowed, whatever a kill left between writing it and allowing it
-const allow = async () => {
-	const change = (await shown())?.change;
-	if (change !== undefined && "sha" in change && change.sha !== undefined)
-		await s.capabilities.acceptConnection("contacts", change.sha);
-};
-if ((await shown())?.accepted === undefined) {
-	await allow();
-	if ((await shown())?.accepted === undefined) await s.capabilities.addShipped("contacts");
-}
-await allow();
+if ((await shown())?.accepted === undefined) await s.capabilities.addShipped("contacts");
 if ((await shown())?.state === "sign-in") {
 	const started = await s.capabilities.signIn("contacts", context, LEAD, {
 		scopes: [

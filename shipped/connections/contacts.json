@@ -1,0 +1,161 @@
+{
+	"service": "Google Contacts",
+	"about": "Find people and their addresses",
+	"url": "https://people.googleapis.com/v1",
+	"api": "contacts",
+	"auth": "oauth",
+	"client": "google",
+	"scopes": [
+		"https://www.googleapis.com/auth/contacts.readonly",
+		"https://www.googleapis.com/auth/contacts.other.readonly",
+		"https://www.googleapis.com/auth/userinfo.email"
+	],
+	"access": {
+		"required": "Read your contacts",
+		"choices": [
+			{
+				"label": "People you've emailed",
+				"scopes": [
+					"https://www.googleapis.com/auth/contacts.other.readonly"
+				]
+			},
+			{
+				"label": "Add, change and delete contacts",
+				"scopes": [
+					"https://www.googleapis.com/auth/contacts"
+				]
+			}
+		],
+		"note": "Changing access signs in again. Adding, changing and deleting contacts still ask you to approve each one."
+	},
+	"account": "get_profile.email",
+	"reads": [
+		"get_profile",
+		"search_contacts",
+		"search_other_contacts",
+		"get_contact"
+	],
+	"needs": {
+		"create_contact": [
+			"https://www.googleapis.com/auth/contacts"
+		],
+		"update_contact": [
+			"https://www.googleapis.com/auth/contacts"
+		],
+		"delete_contact": [
+			"https://www.googleapis.com/auth/contacts"
+		]
+	},
+	"objects": {
+		"contact": {
+			"card": "contact",
+			"name": "{id}",
+			"ids": [
+				"contacts/{id}"
+			],
+			"reads": {
+				"contact": {
+					"tool": "get_contact",
+					"args": {
+						"contact_id": "{id}"
+					}
+				}
+			},
+			"follow": {
+				"rules": [
+					{
+						"on": "contact.emails[*]",
+						"kind": "added",
+						"does": "tell",
+						"says": "new email {to}"
+					},
+					{
+						"on": "contact.emails[*]",
+						"kind": "removed",
+						"does": "tell",
+						"says": "email {from} removed"
+					},
+					{
+						"on": "contact.phones[*]",
+						"kind": "added",
+						"does": "tell",
+						"says": "new phone {to}"
+					},
+					{
+						"on": "contact.phones[*]",
+						"kind": "removed",
+						"does": "tell",
+						"says": "phone {from} removed"
+					},
+					{
+						"on": "contact.addresses[*]",
+						"kind": "added",
+						"does": "tell",
+						"says": "new address: {to}"
+					},
+					{
+						"on": "contact.addresses[*]",
+						"kind": "removed",
+						"does": "tell",
+						"says": "address removed: {from}"
+					},
+					{
+						"on": "contact.organization",
+						"to": "",
+						"does": "tell",
+						"says": "no longer at {from}"
+					},
+					{
+						"on": "contact.organization",
+						"does": "tell",
+						"says": "now at {to}"
+					},
+					{
+						"on": "contact.title",
+						"to": "",
+						"does": "nothing",
+						"says": "no title"
+					},
+					{
+						"on": "contact.title",
+						"does": "tell",
+						"says": "title: {to}"
+					},
+					{
+						"on": "contact.name",
+						"does": "tell",
+						"says": "renamed: {to}"
+					}
+				],
+				"ends": {},
+				"every": "6h"
+			},
+			"fields": {
+				"name": "contact.name",
+				"emails": "contact.emails",
+				"phones": "contact.phones",
+				"organization": "contact.organization",
+				"title": "contact.title",
+				"other": "contact.other",
+				"photo": "contact.photo",
+				"url": "contact.url"
+			},
+			"writes": [
+				{
+					"tool": "update_contact",
+					"id": {
+						"id": "contact_id"
+					},
+					"verb": "Change"
+				},
+				{
+					"tool": "delete_contact",
+					"id": {
+						"id": "contact_id"
+					},
+					"verb": "Delete"
+				}
+			]
+		}
+	}
+}

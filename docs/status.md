@@ -81,8 +81,8 @@ task that looks, diffs and wakes its agent's chat as a feed item ("<ref>: all ch
 tool's card, Follow on an object's card, the Watching list (Add a link, Check now, Pause, Stop) and the detail's
 editor. Slices 1 to 3 (health, gaps, resume, authority, bursts, cadence, wakes a day) and every connection banda
 ships: GitHub's pull requests, issues, jobs, notifications, repositories, discussions and workflow runs; Gmail's
-emails, conversations and searches; Calendar's events; Drive's files and folders; contacts. A shipped connection
-offers Update when this banda ships a newer file ([Connections](connections.md)). Followed for real in a forked home:
+emails, conversations and searches; Calendar's events; Drive's files and folders; contacts. A shipped connection's
+definition is the one this banda ships, and it takes effect at its first start ([Connections](connections.md)). Followed for real in a forked home:
 purrgrammer/banda#24's pushes and green checks, each seen on time. The fault sweeps over the new scenarios, the Google
 kinds against real accounts, the phone pass of slices 2 and 3 and owner review remain open.
 
@@ -156,7 +156,7 @@ chat; a name, an avatar and a style the owner chooses; notifications only when s
 | Watches, `follow` in an object kind, `watches.ts` | Present on the `watches` branch | Slices 1 to 3: a pull request or an issue followed until it ends; health, gaps, resume and authority; bursts, cadence and wakes a day; owner review pending ([Watches](watches.md)) |
 | Skills, `skill` | Wired in a separate worktree, owner review pending | Accepted shared prompt files, owner and agent loads; supporting files remain data |
 | Memory's accepted core, learned cards, `propose_preference`, `used` | Removed | Deleted; facts in effect at once |
-| Connections, OAuth, GitHub by code, shipped file | Present, per-account credentials and object readings | Accounts; one connect flow; objects |
+| Connections, OAuth, GitHub by code, shipped definitions | Present, per-account credentials and object readings | Accounts; one connect flow; objects; a definition banda ships and a choice the store holds, never a workspace file |
 | Drafts, permissions, activity, floor | Present | Kept; bound to an account |
 | Taint | Removed | Deleted; browsing asks only as the owner (DESIGN.md "The browser", "Trust") |
 | Extensions, agent-built tools and connections, `propose_connection` | Removed | Deleted (DESIGN.md "Open") |

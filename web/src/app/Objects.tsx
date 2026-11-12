@@ -36,6 +36,7 @@ import { sizeOf } from "../lib/size.ts";
 import { ConnectFlowCard } from "./ConnectFlow.tsx";
 import { FilePart } from "./FilePart.tsx";
 import { watchActions } from "./watches.tsx";
+import { hrefOf } from "./where.ts";
 
 /** Read an object's card from the daemon, once for every line that names it. */
 const readObject = sharedReads((chat, reference, agent) =>
@@ -368,7 +369,7 @@ function ReadObjects({
 							busy={busy !== undefined}
 							onRefresh={() => void refresh([index])}
 						/>
-						{one.shown === "card" ? null : (
+						{one.shown === "card" || (one.shown === "failed" && one.off === true) ? null : (
 							<Button
 								variant="ghost"
 								size="sm"
@@ -415,8 +416,24 @@ export function ObjectReading({
 	if (shown.shown === "failed")
 		return (
 			<ObjectUnavailable
-				what={`Couldn't read ${shown.name}`}
-				why={`${shown.service}${shown.account ? ` as ${shown.account}` : ""}: ${shown.why}`}
+				what={
+					shown.off === true
+						? `${shown.name.charAt(0).toUpperCase()}${shown.name.slice(1)} can't be shown`
+						: `Couldn't read ${shown.name}`
+				}
+				why={
+					shown.off === true
+						? shown.why
+						: `${shown.service}${shown.account ? ` as ${shown.account}` : ""}: ${shown.why}`
+				}
+				{...(shown.off === true
+					? {
+							fix: "Details",
+							onFix: () => {
+								location.hash = hrefOf({ name: "connections", connection: shown.connection });
+							},
+						}
+					: {})}
 			/>
 		);
 	return (

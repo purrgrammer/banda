@@ -19,8 +19,35 @@ export async function githubObjectTools(): Promise<FakeTool[]> {
 		readOnlyHint: t.annotations.readOnlyHint === true,
 	}));
 }
-export function githubObjectFile(url: string, auth: "none" | "key" | "oauth" = "oauth") {
-	return `---\nservice: GitHub\nurl: ${url}\nauth: ${auth}\n${auth === "none" ? "" : "account: get_me.login\n"}${auth === "oauth" ? "scopes: [repo]\n" : ""}reads: [pull_request_read, issue_read, actions_get, actions_list, get_notification_details, list_pull_requests, list_issues, list_releases, list_commits, get_discussion, get_discussion_comments]\n---\nGitHub objects.\n\n\`\`\`json\n${JSON.stringify({ objects: GITHUB_OBJECTS }, null, 2)}\n\`\`\`\n`;
+/** GitHub as a definition banda could ship, at `url`, with the objects the app draws: its bytes. */
+export function githubObjectDefinition(url: string, auth: "none" | "key" | "oauth" = "oauth") {
+	return `${JSON.stringify(
+		{
+			service: "GitHub",
+			about: "Pull requests, issues, checks",
+			url,
+			auth,
+			...(auth === "oauth" ? { scopes: ["repo"] } : {}),
+			...(auth === "none" ? {} : { account: "get_me.login" }),
+			reads: [
+				"get_me",
+				"pull_request_read",
+				"issue_read",
+				"actions_get",
+				"actions_list",
+				"get_notification_details",
+				"list_pull_requests",
+				"list_issues",
+				"list_releases",
+				"list_commits",
+				"get_discussion",
+				"get_discussion_comments",
+			],
+			objects: GITHUB_OBJECTS,
+		},
+		null,
+		"\t",
+	)}\n`;
 }
 export async function startGithubObjects({ auth = "oauth" }: { auth?: "none" | "key" | "oauth" } = {}) {
 	const fake = await startFakeMcp({ auth, scopes: ["repo"] });

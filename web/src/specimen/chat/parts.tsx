@@ -711,13 +711,13 @@ export function Parts() {
 					<Line icon={CircleAlertIcon} tone="danger">
 						Not done: that site is not on the list your computer may reach
 					</Line>
-					<Line icon={FilePenIcon}>Allowed: Octo's tool pr-summary</Line>
+					<Line icon={FilePenIcon}>Allowed: the routine Morning briefing</Line>
 					<Line icon={FileXIcon}>Not allowed: a change to Mara's file</Line>
 					<ApprovalCard
 						agent="Octo"
-						what="use a tool it made: Pr summary"
+						what="set up a routine: Morning briefing"
 						verb="Allow"
-						object={<Facts rows={[["What it does", "Summarises a pull request's diff in five lines"]]} />}
+						object={<Facts rows={[["What it does", "Summarises the day's mail at nine"]]} />}
 					/>
 				</div>
 			</Section>

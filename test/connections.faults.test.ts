@@ -4,7 +4,9 @@
  * listing, each call to the server, before and after it answered). Whatever was killed and when, the connection ends
  * allowed and connected, the Turn ends with nothing parked or open, the write reaches the server at most once and only
  * as approved, and no credential is in the store. The same again signing in by code, as a file's named client, with a
- * kill once the code was given, once the owner's tokens came, and once they were kept.
+ * kill once the code was given, once the owner's tokens came, and once they were kept. And a draft waiting across a
+ * new build that says its tool only reads: one kill at every commit and at the listing carried and the call found to
+ * stay a write, and the owner's answer still decides it, once.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -20,14 +22,16 @@ type Summary = {
 	accepted: boolean;
 	connected: boolean;
 	answers: string[];
+	due?: boolean;
 	open: number;
 	commits: number;
+	points?: Record<string, number>;
 };
 
 /** One scenario, against a fake server of its own, which outlives the processes killed. */
 const run = async (
 	schedules: readonly (readonly Fault[])[],
-	mode: "callback" | "code" | "shipped" | "rule" | "address" | "mcp" = "callback",
+	mode: "callback" | "code" | "shipped" | "remove" | "rule" | "address" | "mcp" | "carry" | "carry-deny" = "callback",
 ) => {
 	const home = await tempHome();
 	const fake = await startFakeMcp(
@@ -55,7 +59,7 @@ function storeText(home: string): string {
 		.join("\n");
 }
 
-function check(summary: Awaited<ReturnType<typeof run>>) {
+function check(summary: Awaited<ReturnType<typeof run>>, { denied = false } = {}) {
 	expect(summary.outcome.status).toBe("completed");
 	expect(summary.parked).toEqual([]);
 	expect(summary.open).toBe(0);
@@ -64,7 +68,8 @@ function check(summary: Awaited<ReturnType<typeof run>>) {
 	// once, as approved; never again after an interruption, which the owner declined
 	expect(summary.creates).toBeLessThanOrEqual(1);
 	expect(summary.answers.filter((a) => a === "approve").length).toBeGreaterThanOrEqual(summary.creates);
-	if (!summary.answers.includes("no-again")) expect(summary.creates).toBe(1);
+	if (denied) expect(summary.creates).toBe(0);
+	else if (!summary.answers.includes("no-again")) expect(summary.creates).toBe(1);
 	const text = storeText(summary.home);
 	for (const token of summary.tokens) expect(text.includes(token)).toBe(false);
 }
@@ -77,8 +82,6 @@ describe("connections under faults", () => {
 			expect(clean.creates).toBe(1);
 			expect(clean.answers).toEqual(["approve"]);
 			const points: [FaultPoint, number][] = [
-				["accept:before", 1],
-				["accept:after", 1],
 				["oauth:taken", 1],
 				["oauth:exchanged", 1],
 				["oauth:kept", 1],
@@ -136,11 +139,53 @@ describe("connections under faults", () => {
 		);
 	}, 300_000);
 
-	it("sweep, adding what banda ships: one kill once its file was written, and once it was allowed", async () => {
+	for (const [mode, denied] of [
+		["carry", false],
+		["carry-deny", true],
+	] as const)
+		it(`sweep, a draft waiting across a new build (${denied ? "denied" : "approved"}): one kill at every commit, at the listing carried and at the call that stays a write`, async () => {
+			const clean = await run([], mode);
+			check(clean, { denied });
+			expect(clean.creates).toBe(denied ? 0 : 1);
+			expect(clean.answers).toEqual([denied ? "deny" : "approve"]);
+			expect(clean.due).toBe(false);
+			// the guard ran: the call went through the read path of the new build, and on as the write it was
+			expect(clean.points?.["connection:stays-write"]).toBeGreaterThan(0);
+			const points = [
+				"connection:carry",
+				"connection:carried",
+				"connection:stays-write",
+				"connection:call",
+				"connection:answered",
+				"answer",
+			] as const satisfies readonly FaultPoint[];
+			const faults: Fault[] = [];
+			for (const point of points)
+				for (let hit = 1; hit <= (clean.points?.[point] ?? 0); hit++) faults.push({ point, hit, kind: "kill" });
+			for (let hit = 1; hit <= clean.commits; hit++)
+				faults.push({ point: "commit:before", hit, kind: "kill" }, { point: "commit:after", hit, kind: "kill" });
+			await pool(
+				2,
+				faults.map((fault) => async () => {
+					const killed = await run([[fault]], mode);
+					try {
+						expect(killed.kills).toBe(1);
+						// nothing ran unapproved, and the owner decided this draft once, however the build changed around it
+						check(killed, { denied });
+						expect(killed.answers.filter((a) => a === (denied ? "deny" : "approve")).length).toBeLessThanOrEqual(1);
+						expect(killed.due).toBe(false);
+					} catch (error) {
+						throw new Error(`killed at ${fault.point} #${fault.hit}: ${(error as Error).message}`);
+					}
+				}),
+			);
+		}, 600_000);
+
+	it("sweep, adding what banda ships: one kill before it is on, and once it is", async () => {
 		const clean = await run([], "shipped");
 		check(clean);
 		expect(clean.creates).toBe(1);
-		const points: FaultPoint[] = ["shipped:written", "accept:before", "accept:after"];
+		const points: FaultPoint[] = ["shipped:before", "shipped:added"];
 		await pool(
 			2,
 			points.map((point) => async () => {
@@ -152,6 +197,52 @@ describe("connections under faults", () => {
 				} catch (error) {
 					throw new Error(`killed at ${point}: ${(error as Error).message}`);
 				}
+			}),
+		);
+	}, 300_000);
+
+	it("sweep, removing what banda ships: one kill before it is gone, and once it is, before its credentials go", async () => {
+		const removal = async (schedules: readonly (readonly Fault[])[]) => {
+			const home = await tempHome();
+			const fake = await startFakeMcp({ auth: "oauth", registeredClient: "banda-app", device: true });
+			try {
+				return await runWorker("test/fault/connection-worker.ts", [home, fake.url, "remove"], schedules);
+			} finally {
+				await fake.close();
+			}
+		};
+		const gone = { added: false, accounts: [], listed: false, credentials: 0 };
+		expect((await removal([])).last).toMatchObject(gone);
+		const points: FaultPoint[] = ["shipped:remove", "shipped:removed"];
+		await pool(
+			2,
+			points.map((point) => async () => {
+				const killed = await removal([[{ point, hit: 1, kind: "kill" }]]);
+				expect(killed.kills, point).toBe(1);
+				expect(killed.last, point).toMatchObject(gone);
+			}),
+		);
+	}, 300_000);
+
+	it("sweep, removing a server the owner added: one kill at each step, and it ends gone", async () => {
+		const removal = async (schedules: readonly (readonly Fault[])[]) => {
+			const home = await tempHome();
+			const fake = await startFakeMcp();
+			try {
+				return await runWorker("test/fault/connection-worker.ts", [home, fake.url, "remove-server"], schedules);
+			} finally {
+				await fake.close();
+			}
+		};
+		const gone = { record: false, listed: false, reads: false };
+		expect((await removal([])).last).toMatchObject(gone);
+		const points: FaultPoint[] = ["server:before", "server:added", "server:remove", "server:removed"];
+		await pool(
+			2,
+			points.map((point) => async () => {
+				const killed = await removal([[{ point, hit: 1, kind: "kill" }]]);
+				expect(killed.kills, point).toBe(1);
+				expect(killed.last, point).toMatchObject(gone);
 			}),
 		);
 	}, 300_000);
@@ -184,7 +275,7 @@ describe("connections under faults", () => {
 		const clean = await run([], "mcp");
 		check(clean);
 		expect(clean.creates).toBe(1);
-		const points: FaultPoint[] = ["address:written", "accept:after", "oauth:kept", "trust:written", "connect:listed"];
+		const points: FaultPoint[] = ["server:added", "settings:after", "oauth:kept", "connect:listed"];
 		await pool(
 			2,
 			points.map((point) => async () => {
@@ -203,7 +294,7 @@ describe("connections under faults", () => {
 		const clean = await run([], "address");
 		check(clean);
 		expect(clean.creates).toBe(1);
-		const points: FaultPoint[] = ["address:written", "accept:after", "oauth:kept", "trust:written", "connect:listed"];
+		const points: FaultPoint[] = ["server:added", "settings:after", "oauth:kept", "connect:listed"];
 		await pool(
 			2,
 			points.map((point) => async () => {

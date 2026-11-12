@@ -12,15 +12,17 @@ import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { ACCOUNT_LABEL_MAX } from "../../../src/core/choices.ts";
 import type { McpConfig } from "../../../src/core/mcp-config.ts";
+import type { Setting } from "../../../src/core/tool-kinds.ts";
 import type { CapabilitiesView, ConnectionView } from "../../../src/server/api.ts";
 import { Confirm } from "../chat/Confirm.tsx";
-import { McpAgents, McpDetails, McpReadChoices, McpServerForm } from "../chat/McpConnection.tsx";
+import { ConnectionDetailsView } from "../chat/ConnectionDetails.tsx";
+import { McpServerForm } from "../chat/McpConnection.tsx";
 import {
 	actOnCapability,
 	addMcp,
 	labelAccount,
 	refreshConnection,
-	setConnectionReads,
+	setConnectionTools,
 	signIn,
 	signOutAccount,
 	switchAccount,
@@ -44,7 +46,8 @@ export type McpSetupState = {
 	/** The name typed for an account whose server did not say whom it is for. */
 	readonly label: string;
 	readonly selected: readonly string[];
-	readonly reads: readonly string[];
+	/** The settings chosen in the review, by tool: what Save sends. */
+	readonly chosen: { readonly [tool: string]: Setting };
 	/** The sign-in page this visit opened, while waiting. */
 	readonly link?: string | undefined;
 	/** The phase Back returns to, when there is one to return to. */
@@ -64,7 +67,9 @@ export type McpSetupActions = {
 	readonly retry: () => void;
 	readonly setAccount: (account: string) => void;
 	readonly setLabel: (label: string) => void;
-	readonly setReads: (reads: string[]) => void;
+	readonly setChosen: (chosen: { readonly [tool: string]: Setting }) => void;
+	/** Set tools at once, once it is connected and past the review. */
+	readonly setTools: (settings: { readonly [tool: string]: Setting }, group?: boolean) => void;
 	readonly switchAgent: (agent: string, on: boolean) => void;
 	readonly save: () => void;
 	readonly review: () => void;
@@ -73,7 +78,7 @@ export type McpSetupActions = {
 };
 
 /**
- * The sign-in made before can't be used now: its account no longer fits the connection's file, or the last sign-in
+ * The sign-in made before can't be used now: its account no longer fits the connection's definition, or the last sign-in
  * did not finish (the daemon says so as its problem). Said plainly before asking to sign in again.
  */
 export const signInExpired = (view: ConnectionView): boolean =>
@@ -118,15 +123,15 @@ export function McpSetup({
 	const [account, setAccount] = useState("");
 	const [label, setLabel] = useState("");
 	const [selected, setSelected] = useState<string[]>([]);
-	const [reads, setReads] = useState<string[]>([]);
+	const [chosen, setChosen] = useState<{ readonly [tool: string]: Setting }>({});
 	const [link, setLink] = useState<string>();
 	const [before, setBefore] = useState<number>();
 	const view = shell.capabilities?.connections.find((each) => each.name === name);
 	const summary = view?.accepted?.connection;
 	const anonymous = summary?.auth === "none";
 	const accounts = freshAccounts(view);
-	const chosen = accounts.find((each) => each.account === account);
-	const active = anonymous ? (view?.agents ?? []) : (chosen?.agents ?? []);
+	const held = accounts.find((each) => each.account === account);
+	const active = anonymous ? (view?.agents ?? []) : (held?.agents ?? []);
 	const agents = shell.companion === undefined ? [] : chatAgents(shell.agents, shell.companion);
 	useEffect(() => {
 		alive.current = true;
@@ -173,11 +178,11 @@ export function McpSetup({
 	}, [view, phase, before, account]);
 	const initialized = useRef("");
 	useEffect(() => {
-		const key = `${name}/${account}/${view?.accepted?.sha}`;
+		const key = `${name}/${account}/${view?.accepted?.version}`;
 		if (initialized.current === key) return;
 		initialized.current = key;
 		setSelected([...new Set([...active, ...(agent === undefined ? [] : [agent.id])])]);
-		setReads(view?.tools.filter((tool) => tool.kind === "read").map((tool) => tool.title) ?? []);
+		setChosen({});
 		setLabel("");
 	}, [name, account, view, active, agent]);
 	const update = (next: CapabilitiesView) => {
@@ -225,22 +230,19 @@ export function McpSetup({
 		void run(async () => {
 			if (!view?.accepted || !name) return;
 			if (view.state !== "connected") throw new Error("Finish connecting before giving access.");
-			if (!anonymous && !chosen) throw new Error("Choose a signed-in account first.");
+			if (!anonymous && !held) throw new Error("Choose a signed-in account first.");
 			let current: ConnectionView = view;
 			// left empty, the account keeps the name it has
-			if (chosen?.numbered && label.trim() && label.trim() !== chosen.label) {
+			if (held?.numbered && label.trim() && label.trim() !== held.label) {
 				const next = update(await labelAccount(name, account, label));
 				if (!next) throw new Error("This connection was removed. Return to Connections.");
 				current = next;
 			}
-			const old = view.tools
-				.filter((tool) => tool.kind === "read")
-				.map((tool) => tool.title)
-				.sort();
-			if (JSON.stringify(old) !== JSON.stringify([...reads].sort())) {
-				const next = update(await setConnectionReads(name, reads, view.accepted.sha));
+			if (Object.keys(chosen).length > 0) {
+				const next = update(await setConnectionTools(name, chosen, view.accepted.version));
 				if (!next) throw new Error("This connection was removed. Return to Connections.");
 				current = next;
+				setChosen({});
 			}
 			const allowed = anonymous
 				? (current.agents ?? [])
@@ -249,8 +251,8 @@ export function McpSetup({
 				if (selected.includes(agent.id) !== allowed.includes(agent.id))
 					update(
 						await (anonymous
-							? switchPublicConnection(name, agent.id, selected.includes(agent.id), current.accepted?.sha)
-							: switchAccount(name, account, agent.id, selected.includes(agent.id), current.accepted?.sha)),
+							? switchPublicConnection(name, agent.id, selected.includes(agent.id), current.accepted?.version)
+							: switchAccount(name, account, agent.id, selected.includes(agent.id), current.accepted?.version)),
 					);
 			go("done");
 		});
@@ -298,15 +300,20 @@ export function McpSetup({
 		},
 		setAccount,
 		setLabel,
-		setReads,
+		setChosen,
+		setTools: (settings, group) =>
+			void run(async () => {
+				if (!view?.accepted || !name) return;
+				update(await setConnectionTools(name, settings, view.accepted.version, group));
+			}),
 		switchAgent: (agent, on) =>
 			phase === "done"
 				? void run(async () => {
 						if (!view) return;
 						update(
 							await (anonymous
-								? switchPublicConnection(view.name, agent, on, view.accepted?.sha)
-								: switchAccount(view.name, account, agent, on, view.accepted?.sha)),
+								? switchPublicConnection(view.name, agent, on, view.accepted?.version)
+								: switchAccount(view.name, account, agent, on, view.accepted?.version)),
 						);
 					})
 				: setSelected((old) => (on ? [...new Set([...old, agent])] : old.filter((each) => each !== agent))),
@@ -314,18 +321,21 @@ export function McpSetup({
 		review: () => {
 			if (!view) return;
 			setSelected([...active]);
-			setReads(view.tools.filter((tool) => tool.kind === "read").map((tool) => tool.title));
+			setChosen({});
 			go("review");
 		},
 		signInAnother: () => go("auth"),
 		signOut: () => {
 			if (!view) return;
 			void run(async () => {
-				update(
-					await (anonymous
-						? actOnCapability({ action: "disconnect", name: view.name })
-						: signOutAccount(view.name, account)),
-				);
+				// a server with no sign-in has only Remove, the same one its details offer: the page goes with it
+				if (anonymous) {
+					const next = await actOnCapability({ action: "remove", name: view.name });
+					onClose();
+					update(next);
+					return;
+				}
+				update(await signOutAccount(view.name, account));
 				setAccount("");
 				setSelected([]);
 				setTrail([]);
@@ -335,7 +345,7 @@ export function McpSetup({
 	};
 	return (
 		<McpSetupView
-			state={{ phase, view, agents, busy, error, credential, account, label, selected, reads, link, back }}
+			state={{ phase, view, agents, busy, error, credential, account, label, selected, chosen, link, back }}
 			actions={actions}
 		/>
 	);
@@ -343,15 +353,15 @@ export function McpSetup({
 
 /** The setup as the owner sees it, from its state alone: no daemon, no network, nothing kept. */
 export function McpSetupView({ state, actions }: { state: McpSetupState; actions: McpSetupActions }) {
-	const { phase, view, agents, busy, error, credential, account, label, selected, reads, link, back } = state;
+	const { phase, view, agents, busy, error, credential, account, label, selected, chosen, link, back } = state;
 	const id = useId();
 	const heading = useRef<HTMLHeadingElement>(null);
 	const summary = view?.accepted?.connection;
 	const service = summary?.service ?? "MCP server";
 	const anonymous = summary?.auth === "none";
 	const accounts = freshAccounts(view);
-	const chosen = accounts.find((each) => each.account === account);
-	const active = anonymous ? (view?.agents ?? []) : (chosen?.agents ?? []);
+	const held = accounts.find((each) => each.account === account);
+	const active = anonymous ? (view?.agents ?? []) : (held?.agents ?? []);
 	const expired = view !== undefined && phase === "auth" && signInExpired(view);
 	const previous = useRef(phase);
 	useEffect(() => {
@@ -497,7 +507,7 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 						</>
 					) : null}
 					{anonymous ? (
-						<p className="text-ui text-ink-2">No sign-in needed. No account or credential was created.</p>
+						<p className="text-ui text-ink-2">No sign-in needed.</p>
 					) : (
 						<Field>
 							<FieldLabel htmlFor={`${id}-account`}>Account</FieldLabel>
@@ -517,32 +527,43 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 							</Select>
 						</Field>
 					)}
-					{phase === "review" && chosen?.numbered ? (
+					{phase === "review" && held?.numbered ? (
 						<Field>
 							<FieldLabel htmlFor={`${id}-label`}>Name this account</FieldLabel>
 							<Input
 								id={`${id}-label`}
 								value={label}
-								placeholder={chosen.label}
+								placeholder={held.label}
 								maxLength={ACCOUNT_LABEL_MAX}
 								onChange={(event) => actions.setLabel(event.target.value)}
 								disabled={busy}
 							/>
 							<p className="text-meta text-ink-2">
-								The server doesn’t say which account this is. Leave this empty to keep {chosen.label}.
+								The server doesn’t say which account this is. Leave this empty to keep {held.label}.
 							</p>
 						</Field>
 					) : null}
-					<McpDetails view={view} />
-					{phase === "review" ? (
-						<McpReadChoices view={view} reads={reads} onChange={actions.setReads} disabled={busy} />
-					) : null}
 					<Separator />
-					<McpAgents
+					<ConnectionDetailsView
+						view={view}
+						service={service}
+						mode={phase === "review" ? "review" : "details"}
+						chosen={chosen}
+						onChoose={actions.setChosen}
+						onSetTools={actions.setTools}
 						agents={agents}
-						selected={phase === "done" ? active : selected}
-						disabled={busy || view.state !== "connected" || (!anonymous && !chosen)}
-						onSwitch={actions.switchAgent}
+						busy={busy || view.state !== "connected"}
+						agentsFor={
+							anonymous || (accounts.length > 0 && account !== "")
+								? [
+										{
+											key: anonymous ? "public" : account,
+											selected: phase === "done" ? active : selected,
+											onSwitch: actions.switchAgent,
+										},
+									]
+								: []
+						}
 					/>
 					{phase === "review" ? (
 						<>
@@ -553,7 +574,7 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 							</p>
 							<Button
 								className="self-start"
-								disabled={busy || view.state !== "connected" || (!anonymous && !chosen)}
+								disabled={busy || view.state !== "connected" || (!anonymous && account === "")}
 								onClick={actions.save}
 							>
 								{busy ? "Saving…" : "Save access"}
@@ -571,14 +592,18 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 							</Button>
 						) : null}
 						<Confirm
-							title={anonymous ? `Disconnect ${service}?` : `Sign out of ${service}?`}
-							body="Agents lose access to this sign-in. You can reconnect later."
-							action={anonymous ? "Disconnect" : "Sign out"}
-							keep="Stay connected"
+							title={anonymous ? `Remove ${service}?` : `Sign out of ${service}?`}
+							body={
+								anonymous
+									? "Agents lose access to it. You can add it again later."
+									: "Agents lose access to this sign-in. You can reconnect later."
+							}
+							action={anonymous ? "Remove" : "Sign out"}
+							keep={anonymous ? "Keep it" : "Stay connected"}
 							onConfirm={actions.signOut}
 						>
-							<Button variant="outline" size="sm" disabled={busy || (!anonymous && !chosen)}>
-								{anonymous ? "Disconnect" : "Sign out"}
+							<Button variant="outline" size="sm" disabled={busy || (!anonymous && account === "")}>
+								{anonymous ? "Remove" : "Sign out"}
 							</Button>
 						</Confirm>
 					</div>

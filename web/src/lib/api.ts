@@ -5,6 +5,7 @@
  * says where the link is. In the phone's native shell no token is kept: the shell's paired device identity is what
  * lets a request in.
  */
+import type { Setting } from "../../../src/core/tool-kinds.ts";
 import type {
 	AgentView,
 	Answer,
@@ -343,20 +344,23 @@ export const addMcp = (config: import("../../../src/core/mcp-config.ts").McpConf
 		method: "POST",
 		body: JSON.stringify(config),
 	});
-/** Update a connection banda ships to the version it ships now; `sha` is the version in effect the owner saw. */
-export const updateConnection = (name: string, sha: string) =>
-	api<CapabilitiesView>(`/capabilities/connections/${name}/update`, { method: "POST", body: JSON.stringify({ sha }) });
 export const refreshConnection = (name: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/refresh`, { method: "POST", body: "{}" });
-export const setConnectionReads = (name: string, tools: readonly string[], sha: string) =>
-	api<CapabilitiesView>(`/capabilities/connections/${name}/reads`, {
+/** Set connection `name`'s tools, each as given, for the `version` the owner saw: a stale view changes nothing. */
+export const setConnectionTools = (
+	name: string,
+	settings: { readonly [tool: string]: Setting },
+	version: string,
+	group = false,
+) =>
+	api<CapabilitiesView>(`/capabilities/connections/${name}/tools`, {
 		method: "POST",
-		body: JSON.stringify({ tools, sha }),
+		body: JSON.stringify({ settings, version, ...(group ? { group: true } : {}) }),
 	});
-export const switchPublicConnection = (name: string, agent: string, on: boolean, sha?: string) =>
+export const switchPublicConnection = (name: string, agent: string, on: boolean, version?: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/public`, {
 		method: "POST",
-		body: JSON.stringify({ agent, on, sha }),
+		body: JSON.stringify({ agent, on, version }),
 	});
 /** Shared catalogue, including box changes awaiting the owner's acceptance. */
 export const skills = () => api<SkillView[]>("/skills");
@@ -379,42 +383,22 @@ export const chooseBring = (skills: readonly BringPick[], agents: readonly Bring
 export const chooseShippedSkills = (add: readonly string[]) =>
 	api<ShippedSkillsView>("/skills/shipped", { method: "POST", body: JSON.stringify({ add }) });
 
-/** What the owner does to a connection or a tool the companion made. */
+/** What the owner does to a connection or one of its tools. */
 export type CapabilityAct =
-	| {
-			readonly action: "accept";
-			readonly folder: "connections" | "tools";
-			readonly name: string;
-			readonly sha: string | null;
-	  }
-	| { readonly action: "decline" | "remove"; readonly folder: "connections" | "tools"; readonly name: string }
+	| { readonly action: "remove"; readonly name: string }
 	| { readonly action: "disconnect"; readonly name: string }
 	| { readonly action: "key"; readonly name: string; readonly key: string }
 	| { readonly action: "add"; readonly name: string }
-	| { readonly action: "address"; readonly url: string }
-	| { readonly action: "trust"; readonly name: string; readonly tools: readonly string[] }
-	| { readonly action: "switch"; readonly tool: string; readonly on: boolean };
+	| { readonly action: "address"; readonly url: string };
 
-/** Act on a connection or a tool as the owner; what the companion can use as it is after, or rejects with why. */
+/** Act on a connection as the owner; what the companion can use as it is after, or rejects with why. */
 export const actOnCapability = (act: CapabilityAct) =>
-	act.action === "switch"
-		? api<CapabilitiesView>(`/capabilities/tools/${act.tool}/switch`, {
+	act.action === "address"
+		? api<CapabilitiesView>("/capabilities/connections", { method: "POST", body: JSON.stringify({ url: act.url }) })
+		: api<CapabilitiesView>(`/capabilities/connections/${act.name}/${act.action}`, {
 				method: "POST",
-				body: JSON.stringify({ on: act.on }),
-			})
-		: act.action === "address"
-			? api<CapabilitiesView>("/capabilities/connections", { method: "POST", body: JSON.stringify({ url: act.url }) })
-			: act.action === "disconnect" || act.action === "key" || act.action === "add" || act.action === "trust"
-				? api<CapabilitiesView>(`/capabilities/connections/${act.name}/${act.action}`, {
-						method: "POST",
-						body: JSON.stringify(
-							act.action === "key" ? { key: act.key } : act.action === "trust" ? { tools: act.tools } : {},
-						),
-					})
-				: api<CapabilitiesView>(`/capabilities/${act.folder}/${act.name}/${act.action}`, {
-						method: "POST",
-						body: JSON.stringify(act.action === "accept" ? { sha: act.sha } : {}),
-					});
+				body: JSON.stringify(act.action === "key" ? { key: act.key } : {}),
+			});
 
 /**
  * Start signing in to a connection: the page to send the browser to, which comes back to banda; or the code the owner
@@ -479,10 +463,10 @@ export async function typedUrl(url: string, mimeType: string): Promise<string> {
 	return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
 }
 /** Switch account `account` of connection `name` on or off for agent `agent`, in effect at once. */
-export const switchAccount = (name: string, account: string, agent: string, on: boolean, sha?: string) =>
+export const switchAccount = (name: string, account: string, agent: string, on: boolean, version?: string) =>
 	api<CapabilitiesView>(`/capabilities/connections/${name}/accounts/${encodeURIComponent(account)}/switch`, {
 		method: "POST",
-		body: JSON.stringify({ agent, on, sha }),
+		body: JSON.stringify({ agent, on, version }),
 	});
 
 /** Name numbered account `account` of connection `name`, whose server did not say whom it is for. */

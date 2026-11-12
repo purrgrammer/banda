@@ -128,9 +128,8 @@ for (const width of [390, 1440])
 					expect(await page.run(`document.body.textContent.includes('Ernesto test introduction.')`)).toBe(true);
 					await click(
 						page,
-						`[...document.querySelectorAll('summary')].find(el => el.textContent === 'Read without asking')`,
+						`[...document.querySelector('[data-tool="fs_read"]').querySelectorAll('button')].find(el => el.textContent === 'Allow')`,
 					);
-					await click(page, labelled("fs_read"));
 					await click(page, labelled("Sancho"));
 					await click(page, button("Save access"));
 					await phase(page, "done");

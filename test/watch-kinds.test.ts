@@ -10,7 +10,7 @@ import { tempHome } from "./helpers.ts";
 /** Gmail as banda ships it, signed in as ana@example.com: the shape each connection's watch scenario copies. */
 const GMAIL = {
 	name: "gmail",
-	file: readFileSync(new URL("../shipped/connections/gmail.md", import.meta.url), "utf8"),
+	file: readFileSync(new URL("../shipped/connections/gmail.json", import.meta.url), "utf8"),
 	tools: REST_APIS.gmail.tools,
 	account: "ana@example.com",
 };

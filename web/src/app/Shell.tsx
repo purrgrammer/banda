@@ -19,7 +19,7 @@ import { MemorySettings, type NewFactSpec } from "../chat/MemorySettings.tsx";
 import { AgentPanel, firstTab, Panel, Routines, Watching } from "../chat/Panel.tsx";
 import { AppSettings, Archive, Personality, SettingsPage } from "../chat/Settings.tsx";
 import { SkillCatalogue } from "../chat/Skill.tsx";
-import { actOnFact, setPaused, signOutAccount, signOutSite, updateConnection } from "../lib/api.ts";
+import { actOnFact, setPaused, signOutSite } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { agentMainOf } from "../lib/chats.ts";
 import { useMidnight } from "../lib/midnight.ts";
@@ -33,6 +33,7 @@ import { BringOnboarding, BringSettings, useBring } from "./Bring.tsx";
 import { bandRows, titleOf, whoOf } from "./band.ts";
 import { ChatThinking } from "./ChatThinking.tsx";
 import { ConnectFlow, freshAccounts } from "./ConnectFlow.tsx";
+import { ConnectionPage } from "./ConnectionPage.tsx";
 import { saveEdit, setAgentState } from "./edits.ts";
 import { GroupChat } from "./GroupChat.tsx";
 import { AddHarnessButton, HarnessConnectionTile } from "./HarnessConnections.tsx";
@@ -82,17 +83,6 @@ function usePhone(): boolean {
 	}, []);
 	return phone;
 }
-
-const SERVICES = [
-	{ id: "github", name: "GitHub", does: "Pull requests, issues, checks" },
-	{ id: "gmail", name: "Gmail", does: "Read and send email" },
-	{ id: "calendar", name: "Google Calendar", does: "Read and change your events" },
-	{ id: "contacts", name: "Google Contacts", does: "Find people and their addresses" },
-	{ id: "drive", name: "Google Drive", does: "Find and read your files" },
-	{ id: "linear", name: "Linear", does: "Issues and cycles" },
-	{ id: "slack", name: "Slack", does: "Channels and messages" },
-	{ id: "notion", name: "Notion", does: "Pages and databases" },
-];
 
 export function Shell() {
 	const tiers = useTiers();
@@ -623,16 +613,17 @@ function Main() {
 								balanced: tiers?.models.balanced.name ?? "",
 								deep: tiers?.models.deep.name ?? "",
 							},
-							accounts: (shell.capabilities?.connections ?? []).flatMap((view) =>
-								(view.accounts ?? []).map((account) => ({
-									id: `${view.name}/${account.account}`,
-									name: view.name,
-									connection: view.accepted?.connection?.service ?? view.name,
-									login: account.label,
-									agents: account.agents.map((agent) => whoOf(agents, agent).name),
-									...(account.stale === true ? { stale: true } : {}),
+							connections: (shell.capabilities?.connections ?? [])
+								.filter((view) => view.accounts !== undefined || view.agents !== undefined)
+								.map((view) => ({
+									id: view.name,
+									service: view.accepted?.connection?.service ?? view.name,
+									logins: (view.accounts ?? []).map((account) => account.label),
+									agents: [
+										...new Set([...(view.accounts ?? []).flatMap((account) => account.agents), ...(view.agents ?? [])]),
+									].map((agent) => whoOf(agents, agent).name),
+									...(view.accounts?.some((account) => account.stale === true) ? { stale: true } : {}),
 								})),
-							),
 							archivedGroups: (shell.groups ?? []).flatMap((group) =>
 								group.archived === undefined
 									? []
@@ -674,12 +665,7 @@ function Main() {
 						onPause={(paused) => void setPaused(paused)}
 						onConnect={() => go({ name: "connections" })}
 						onSignOut={(agent, site) => void signOutSite(agent, site).then(showCapabilities)}
-						onAccountSignOut={(account) => {
-							const [name = "", key = ""] = account.id.split("/");
-							void signOutAccount(name, key)
-								.then(showCapabilities)
-								.catch(() => {});
-						}}
+						onDetails={(connection) => go({ name: "connections", connection })}
 						onRestore={(who) => (who.id === undefined ? undefined : restore(who.id))}
 						onRestoreGroup={(room) => archiveGroup(room, false)}
 						onGroupLimits={(limits) => setGroupLimits(limits)}
@@ -687,14 +673,21 @@ function Main() {
 				</SettingsPage>
 			);
 		if (where.name === "connections") {
-			if (where.add || where.connection)
+			// adding keeps the setup, its route and its phases, through to the review; a connection there is one that is added
+			if (where.add)
 				return (
 					<SettingsPage title="Connections" phone={phone} onBack={() => go({ name: "connections" })}>
 						<McpSetup
-							{...(where.connection ? { connection: where.connection } : {})}
-							onCreated={(connection) => go({ name: "connections", connection })}
+							{...(where.connection === undefined ? {} : { connection: where.connection })}
+							onCreated={(connection) => go({ name: "connections", connection, add: true })}
 							onClose={() => go({ name: "connections" })}
 						/>
+					</SettingsPage>
+				);
+			if (where.connection)
+				return (
+					<SettingsPage title="Connections" phone={phone} onBack={() => go({ name: "connections" })}>
+						<ConnectionPage connection={where.connection} onClose={() => go({ name: "connections" })} />
 					</SettingsPage>
 				);
 			const capabilities = shell.capabilities;
@@ -715,15 +708,12 @@ function Main() {
 					name: view?.accepted?.connection?.service ?? shipped?.connection.service ?? name,
 					url: view?.accepted?.connection?.url ?? shipped?.connection.url,
 					// what banda says the service is for, else where an added server is
-					does: SERVICES.find((service) => service.id === name)?.does ?? view?.accepted?.connection?.where ?? "",
+					does: shipped?.about ?? view?.accepted?.connection?.where ?? "",
+					choices: shipped?.access !== undefined,
 					accounts: freshAccounts(view).map((account) => account.label),
 					managed: view?.agents !== undefined,
 					stale: (view?.accounts ?? []).filter((account) => account.stale === true).map((account) => account.label),
 					problem: view?.state === "problem" ? (view.problem ?? "Not reached") : undefined,
-					onUpdate:
-						shipped?.update === undefined
-							? undefined
-							: () => updateConnection(name, shipped.update as string).then(showCapabilities),
 				};
 			});
 			return (
@@ -739,10 +729,7 @@ function Main() {
 							.filter(({ name }) => shell.harnesses?.accounts[name] !== undefined)
 							.map(({ name }) => ({ key: `harness:${name}`, card: <HarnessConnectionTile name={name} /> }))}
 						onManage={(connection) => go({ name: "connections", connection })}
-						services={[
-							...services,
-							...SERVICES.filter((service) => !services.some((existing) => existing.id === service.id)),
-						]}
+						services={services}
 						connect={(service, close) => <ConnectFlow connection={service.id} onClose={close} />}
 					/>
 				</SettingsPage>

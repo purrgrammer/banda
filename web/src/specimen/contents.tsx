@@ -17,6 +17,7 @@ import { Parts } from "./chat/parts.tsx";
 import { CalendarSection } from "./connections/calendar.tsx";
 import { ConnectSections } from "./connections/connect.tsx";
 import { ContactsSection } from "./connections/contacts.tsx";
+import { ConnectionDetailsSection } from "./connections/details.tsx";
 import { DriveSection } from "./connections/drive.tsx";
 import { GithubSection } from "./connections/github.tsx";
 import { GmailSection } from "./connections/gmail.tsx";
@@ -61,6 +62,7 @@ export const CONTENTS: Readonly<Record<GroupId, readonly (readonly [string, Comp
 	],
 	connections: [
 		["connect", ConnectSections],
+		["connection-details", ConnectionDetailsSection],
 		["github", GithubSection],
 		["gmail", GmailSection],
 		["calendar", CalendarSection],

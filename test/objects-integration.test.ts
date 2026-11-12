@@ -6,6 +6,7 @@ import { afterEach, expect, it } from "vitest";
 import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
 import { Accepted, AgentChats, shaOf } from "../src/core/agents.ts";
 import { Connected, credentialsOf, keepCredentials } from "../src/core/connections.ts";
+import { type Shipped, setDefinitions, shippedDefinition } from "../src/core/definitions.ts";
 import { OWNER } from "../src/core/gateway.ts";
 import { Readings, readingKey } from "../src/core/objects.ts";
 import { Permissions } from "../src/core/permissions.ts";
@@ -14,8 +15,8 @@ import { context } from "../src/core/store.ts";
 import { answer } from "../src/core/wait.ts";
 import { Watches, watchPath } from "../src/core/watches.ts";
 import { openObjects } from "../src/server/objects.ts";
-import { openConnected, signInAsOwner } from "./fixtures/connected.ts";
-import { githubObjectFile, startGithubObjects } from "./fixtures/github-objects.ts";
+import { openConnected, signInAsOwner, switchTool } from "./fixtures/connected.ts";
+import { githubObjectDefinition, startGithubObjects } from "./fixtures/github-objects.ts";
 import { tempHome, until } from "./helpers.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
@@ -40,7 +41,18 @@ async function setup(
 					},
 		);
 	cleanup.push(() => fake.close());
-	const s = await openConnected({ home: await tempHome(), respond });
+	const home = await tempHome();
+	const shipped = join(home, "shipped");
+	await mkdir(shipped, { recursive: true });
+	const definition = JSON.parse(githubObjectDefinition(fake.url)) as { objects: typeof GITHUB_OBJECTS };
+	if (attack !== undefined) {
+		const objects = JSON.parse(JSON.stringify(GITHUB_OBJECTS)) as { issue: { writes: { text?: string }[] } };
+		objects.issue.writes[0]!.text = attack.accountArg;
+		if (attack.serverAccount) objects.issue.writes.push({ ...objects.issue.writes[0], text: "account" });
+		definition.objects = objects as unknown as typeof GITHUB_OBJECTS;
+	}
+	await writeFile(join(shipped, "github.json"), JSON.stringify(definition));
+	const s = await openConnected({ home, respond, shipped });
 	cleanup.push(() => s.close());
 	const agent = "---\nname: Reader\ndescription: Reads objects\nconnections: [github]\n---\nRead.";
 	const chat = await s.harness.commit(async (tx) => {
@@ -49,18 +61,7 @@ async function setup(
 		(await tx.doc(AgentChats)).chats[chat] = "reader";
 		return chat;
 	}, context);
-	await mkdir(join(s.box.workspace, "connections"), { recursive: true });
-	let file = githubObjectFile(fake.url);
-	if (attack !== undefined) {
-		const objects = JSON.parse(JSON.stringify(GITHUB_OBJECTS)) as { issue: { writes: { text?: string }[] } };
-		objects.issue.writes[0]!.text = attack.accountArg;
-		if (attack.serverAccount) objects.issue.writes.push({ ...objects.issue.writes[0], text: "account" });
-		file = file.replace(/```json\n[\s\S]*?\n```/, `\`\`\`json\n${JSON.stringify({ objects })}\n\`\`\``);
-	}
-	await writeFile(join(s.box.workspace, "connections/github.md"), file);
-	const change = (await s.capabilities.view()).connections.find((c) => c.name === "github")?.change;
-	if (change === undefined || !("sha" in change) || change.sha === undefined) throw new Error("no change");
-	await s.capabilities.acceptConnection("github", change.sha);
+	await s.capabilities.addShipped("github");
 	fake.user = "alice";
 	const signed = await signInAsOwner(s.capabilities, "github", { agent: "reader" });
 	expect(signed, JSON.stringify(signed)).toMatchObject({ ok: true });
@@ -213,7 +214,7 @@ it.each(["version", "signout", "disconnect", "remove"] as const)(
 			if (mode === "version") await keepCredentials(s.home, "github", "alice", original);
 			else if (mode === "signout") await s.capabilities.signOut("github", "alice");
 			else if (mode === "disconnect") await s.capabilities.disconnect("github");
-			else await s.capabilities.remove("connections", "github");
+			else await s.capabilities.remove("github");
 			const replacement = await credentialsOf(s.home, "github", "alice");
 			release();
 			await shown;
@@ -424,7 +425,7 @@ it("reads all GitHub shapes using upstream schemas, scopes accounts, and never c
 	const count = s.fake.calls.length;
 	expect((await s.service.show(s.chat, [{ refs: ["acme/banda#34"], account: "bob" }]))[0]?.shown).not.toBe("card");
 	expect(s.fake.calls).toHaveLength(count);
-	await s.capabilities.toggle("github__pull_request_read", false);
+	await switchTool(s, "github__pull_request_read", false);
 	expect((await s.service.show(s.chat, [{ ref: "acme/banda#34" }]))[0]?.shown).not.toBe("card");
 	expect(s.fake.calls).toHaveLength(count);
 });
@@ -451,11 +452,7 @@ it.each(["signout", "switch", "regrant", "definition"] as const)(
 		else if (mode === "switch" || mode === "regrant") {
 			await s.capabilities.switchAccount("reader", "github", "alice", false);
 			if (mode === "regrant") await s.capabilities.switchAccount("reader", "github", "alice", true);
-		} else
-			await s.harness.commit(async (tx) => {
-				const accepted = (await tx.doc(Accepted)).files["connections/github.md"];
-				if (accepted !== undefined) accepted.sha = "changed";
-			}, context);
+		} else setDefinitions(new Map([["github", { ...(shippedDefinition("github") as Shipped), version: "changed" }]]));
 		finish();
 		expect((await shown)[0]?.shown).not.toBe("card");
 		expect(Object.keys((await s.harness.snapshot(Readings, context))?.readings ?? {})).toHaveLength(0);
@@ -510,4 +507,54 @@ it("a card's follow line names the watches on it whose files stand: one stopped,
 	}, context);
 	const shown = await s.service.show(s.chat, [{ ref: "https://github.com/acme/banda/issues/35" }]);
 	expect(shown[0]).toMatchObject({ shown: "card", follow: { by: [{ watch: "banda-35", agent: "reader" }] } });
+});
+
+it("a tool a kind reads says so; Ask leaves a read under way alone, Off does not", async () => {
+	const s = await setup();
+	const github = async () =>
+		(await s.capabilities.view()).connections.find((each) => each.name === "github") as NonNullable<
+			Awaited<ReturnType<typeof s.capabilities.view>>["connections"][number]
+		>;
+	const before = await github();
+	const version = before.accepted?.version as string;
+	const tool = (title: string) => before.tools.find((each) => each.title === title);
+	expect(tool("issue_read")?.cards).toBe(true);
+	expect(tool("add_issue_comment")?.cards).toBeUndefined();
+	const epoch = async () => (await s.harness.snapshot(Connected, context))?.epoch as number;
+	const start = await epoch();
+	await s.capabilities.setTools("github", { issue_read: "ask" }, version);
+	expect(await epoch()).toBe(start);
+	await s.capabilities.setTools("github", { issue_read: "off" }, version);
+	expect(await epoch()).toBe(start + 1);
+});
+
+it("removing a connection drops a draft waiting on it, and the turn that asked goes on", async () => {
+	let planned = true;
+	const s = await setup(() => {
+		if (!planned) return fauxAssistantMessage("done");
+		planned = false;
+		return fauxAssistantMessage(
+			[
+				fauxToolCall("github__add_issue_comment", {
+					owner: "acme",
+					repo: "banda",
+					issue_number: 34,
+					body: "x",
+					account: "alice",
+				}),
+			],
+			{ stopReason: "toolUse" },
+		);
+	});
+	const received = await s.core.receive(s.harness, {
+		id: crypto.randomUUID(),
+		origin: { gateway: "fake", peer: OWNER, thread: "reader" },
+		agent: "reader",
+		text: "comment",
+	});
+	if (!("turn" in received)) throw new Error("no turn");
+	await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+	await s.capabilities.remove("github");
+	expect((await openWaits(s.harness)).filter((w) => w.ask.type === "approval")).toEqual([]);
+	await s.harness.waitForTask(received.turn as TaskId, context);
 });

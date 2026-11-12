@@ -7,8 +7,9 @@ docs/status.md (current work and acceptance) and the relevant section's open wor
 1. **One store.** pi-durable holds all truth; bytes too big for it live beside it as blobs, by hash, and the store holds
    every fact about them. Anything else is derived and rebuildable; a mechanism that only syncs
    two stores means one of them should not exist.
-2. **Definitions are files.** Agents, connections, routines, watches and memory are plain text files in the workspace, inspectable and
-   editable by the owner or an agent; the store holds what runs and what was accepted, never a copy to sync.
+2. **Definitions are files.** Agents, routines, watches and memory are plain text files in the workspace, inspectable and
+   editable by the owner or an agent; the store holds what runs and what was accepted, never a copy to sync. A connection
+   is the exception: a definition banda ships and a choice the store holds, never a file in the workspace.
    Data is typed: a file that holds data, not prose, is `.json` with a TypeBox schema it is checked against on every
    read; `.md` only where free-form text is the point (instructions, personality, memory).
 3. **Use the substrate first.** Before building, check whether pi-durable, pi-env, git or Docker already does it

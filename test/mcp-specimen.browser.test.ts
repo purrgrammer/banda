@@ -114,10 +114,12 @@ for (const width of [390, 1440])
 					await click(page, tab("Review"));
 					await phase(page, "review");
 					expect(await page.run(`document.querySelectorAll('[role="switch"][aria-checked="true"]').length`)).toBe(0);
-					await click(page, summary("Read without asking"));
-					expect(await page.run(`${labelled("fs_read")}.getAttribute('aria-checked')`)).toBe("false");
+					expect(
+						await page.run(
+							`[...document.querySelector('[data-tool="fs_read"]').querySelectorAll('button')].find(el => el.textContent === 'Allow').getAttribute('aria-checked')`,
+						),
+					).toBe("false");
 					await click(page, summary("Introduction from the server"));
-					await click(page, summary("Tools · 3"));
 					await shot(page, `${width}-${theme}-review`);
 					await click(page, labelled("Sancho"));
 					await click(page, button("Save access"));
@@ -162,7 +164,7 @@ it.skipIf(!hasChrome())(
 			await fill(page, "Server address", "https://ernesto.example/mcp");
 			await click(page, button("Check server"));
 			await phase(page, "review");
-			expect(await page.run(`document.body.textContent.includes('No account or credential was created.')`)).toBe(true);
+			expect(await page.run(`document.body.textContent.includes('No sign-in needed.')`)).toBe(true);
 			expect(await page.run(`Boolean(${button("Back to sign-in")})`)).toBe(false);
 			await click(page, button("Save access"));
 			await phase(page, "done");

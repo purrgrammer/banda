@@ -640,7 +640,18 @@ function WatchRow({
 					)}
 				</span>
 				{subline === undefined || subline === "" ? null : (
-					<span className={cn("truncate text-meta", failing ? "text-danger" : "text-ink-2")}>{subline}</span>
+					<span
+						className={cn(
+							"text-meta",
+							watch.stopped === true
+								? "break-words text-ink-2"
+								: failing
+									? "truncate text-danger"
+									: "truncate text-ink-2",
+						)}
+					>
+						{subline}
+					</span>
 				)}
 			</button>
 			<DropdownMenu>
@@ -654,7 +665,11 @@ function WatchRow({
 						<>
 							<DropdownMenuLabel className="flex flex-col gap-0.5 font-normal text-meta text-ink-2">
 								{watch.saw === undefined ? null : (
-									<span className={cn("line-clamp-3", watch.failing === true && "text-danger")}>{watch.saw}</span>
+									<span
+										className={cn("line-clamp-3", watch.failing === true && watch.stopped !== true && "text-danger")}
+									>
+										{watch.saw}
+									</span>
 								)}
 								{watch.next === undefined || quiet ? null : <span>Next look {watch.next}</span>}
 							</DropdownMenuLabel>

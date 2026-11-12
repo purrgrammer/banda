@@ -1,49 +1,81 @@
 /**
- * The process the connection fault suite kills: the agent proposes a calendar it signs in to with OAuth; the owner
- * allows it and signs in; then one owner message whose run reads the calendar and creates an event, which the owner
+ * The process the connection fault suite kills: a calendar banda ships that signs in with OAuth; the owner adds it and
+ * signs in; then one owner message whose run reads the calendar and creates an event, which the owner
  * approves. A run interrupted while it created the event asks to run it again, and the owner says no, so a write that
  * may have reached the server is never sent twice. Every step is safe to repeat, as each process does them again from
  * the start; the fake server, in the test's own process, keeps counting across kills. Prints a summary as its last line.
  *
- * With "code", the file names its client and the owner signs in by code, typed on the fake server's page; a sign-in by
+ * With "code", the definition names its client and the owner signs in by code, typed on the fake server's page; a sign-in by
  * code dies with the process that waited for it, so a restart starts it again.
  *
- * argv: home, the fake server's URL, "callback" or "code", fault schedule JSON (Fault[])
+ * With "carry", the run reaches its draft for the event, and the store is opened again on a build whose definition says
+ * create_event only reads: the listing is carried, the draft stays the draft it was, and the owner still decides it.
+ * With "carry-deny" the owner says no, so a call that went on as a read, unasked, is seen at once: it reached the server.
+ *
+ * With "shipped", the calendar is a definition banda ships, the owner adds it as a switch. With "remove", the owner adds
+ * it, signs in, and removes it: the process ends with no fact, no account and no credential of it, whatever was killed.
+ *
+ * argv: home, the fake server's URL, "callback" or "code" or another mode, fault schedule JSON (Fault[])
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { TaskId } from "@earendil-works/pi-durable";
-import { Accepted } from "../../src/core/agents.ts";
 import { Connected } from "../../src/core/connections.ts";
 import { OWNER } from "../../src/core/gateway.ts";
 import { openWaits, status } from "../../src/core/status.ts";
 import { context } from "../../src/core/store.ts";
 import type { TurnResult } from "../../src/core/turn.ts";
-import { connectionFile, openConnected, signInAsOwner, typingAt } from "../fixtures/connected.ts";
+import { connectionDefinition, openConnected, signInAsOwner, typingAt } from "../fixtures/connected.ts";
 import { answerNudge } from "../fixtures/models.ts";
 import { type Fault, type FaultPoint, Faults } from "./faults.ts";
-import { ownerAnswer } from "./owner.ts";
+import { answersGiven, noteAnswer, ownerAnswer } from "./owner.ts";
 
 const [home, url, mode, scheduleJson] = process.argv.slice(2) as [
 	string,
 	string,
-	"callback" | "code" | "shipped" | "rule" | "address" | "mcp",
+	"callback" | "code" | "shipped" | "remove" | "remove-server" | "rule" | "address" | "mcp" | "carry" | "carry-deny",
 	string,
 ];
-const byCode = mode === "code" || mode === "shipped";
-const calendar = connectionFile({
+const carrying = mode === "carry" || mode === "carry-deny";
+const byCode = mode === "code" || mode === "shipped" || mode === "remove" || carrying;
+const calendar = connectionDefinition({
 	url,
 	auth: "oauth",
 	// "rule": the read is list_events only for day=mon, the call the model makes; any other day would ask
 	reads: [mode === "rule" ? "list_events(day=mon)" : "list_events"],
+	// the write the run makes, named: a tool the server lists and the definition does not name waits off
+	needs: { create_event: ["calendar"] },
 	...(byCode ? { client: "banda-app", scopes: ["calendar"] } : {}),
 });
-// what banda ships, for "shipped": the same file, in a folder of its own
+// "carry": what the next build ships, which says the tool of the waiting draft only reads
+const nextBuild = connectionDefinition({
+	url,
+	auth: "oauth",
+	reads: ["list_events", "create_event"],
+	client: "banda-app",
+	scopes: ["calendar"],
+});
+// what banda ships, in a folder of its own: every mode but the servers the owner adds
 const shipped = join(home, "shipped");
-if (mode === "shipped" && !existsSync(shipped)) {
+const shipping = mode !== "address" && mode !== "mcp" && mode !== "remove-server";
+if (shipping && !existsSync(shipped)) {
 	mkdirSync(shipped, { recursive: true });
-	writeFileSync(join(shipped, "cal.md"), calendar);
+	writeFileSync(
+		join(shipped, "cal.json"),
+		mode === "shipped" || mode === "remove"
+			? JSON.stringify({
+					service: "Calendar",
+					about: "Your days",
+					url,
+					auth: "oauth",
+					client: "banda-app",
+					scopes: ["calendar"],
+					reads: ["list_events"],
+					needs: { create_event: ["calendar"] },
+				})
+			: calendar,
+	);
 }
 const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
 
@@ -65,32 +97,77 @@ const respond = (ctx: { messages: readonly { role: string; content: unknown }[] 
 	return fauxAssistantMessage("Done.");
 };
 
-const s = await openConnected({
-	home,
-	respond: respond as never,
-	wrapStorage: (storage) => faults.storage(storage),
-	fault: (point) => faults.hit(point as FaultPoint),
-	...(mode === "shipped" ? { shipped } : {}),
-});
+const open = () =>
+	openConnected({
+		home,
+		respond: respond as never,
+		wrapStorage: (storage) => faults.storage(storage),
+		fault: (point) => faults.hit(point as FaultPoint),
+		...(shipping ? { shipped } : {}),
+	});
+let s = await open();
 
-// the agent proposes it, or the owner adds the one banda ships (a kill after the file was written leaves it to allow)
-const file = join(s.box.workspace, "connections", "cal.md");
+const hasRecord = async () => (await s.harness.snapshot(Connected, context))?.servers.cal !== undefined;
+
+// "remove-server": a server the owner added, then removed; a kill anywhere ends with it gone
+if (mode === "remove-server") {
+	const removing = join(home, "removing");
+	if (!existsSync(removing)) {
+		await s.capabilities.addMcp({ url, service: "Cal" });
+		writeFileSync(removing, "");
+	}
+	if (await hasRecord()) await s.capabilities.remove("cal");
+	const connected = await s.harness.snapshot(Connected, context);
+	console.log(
+		JSON.stringify({
+			record: await hasRecord(),
+			listed: connected?.connections.cal !== undefined,
+			reads: connected?.reads.cal !== undefined,
+		}),
+	);
+	await s.close();
+	process.exit(0);
+}
+
+// "remove": added and signed in to once, then removed; a kill after it was removed leaves it for the next start to
+// finish, and adding it again is what must not happen
+if (mode === "remove") {
+	const removing = join(home, "removing");
+	if (!existsSync(removing)) {
+		if ((await s.harness.snapshot(Connected, context))?.added.cal === undefined) await s.capabilities.addShipped("cal");
+		const before = (await s.capabilities.view()).connections.find((c) => c.name === "cal");
+		if (before?.state === "sign-in") {
+			const signed = await signInAsOwner(s.capabilities, "cal", { fake: typingAt(new URL(url).origin) });
+			if (!signed.ok) throw new Error(signed.words);
+		}
+		writeFileSync(removing, "");
+	}
+	if ((await s.harness.snapshot(Connected, context))?.added.cal !== undefined) await s.capabilities.remove("cal");
+	const connected = await s.harness.snapshot(Connected, context);
+	console.log(
+		JSON.stringify({
+			added: connected?.added.cal !== undefined,
+			accounts: Object.keys(connected?.accounts.cal ?? {}),
+			listed: connected?.connections.cal !== undefined,
+			credentials: existsSync(join(home, "auth", "connections", "cal"))
+				? readdirSync(join(home, "auth", "connections", "cal")).length
+				: 0,
+			commits: faults.hits("commit:after"),
+		}),
+	);
+	await s.close();
+	process.exit(0);
+}
+
+// the agent proposes it, or the owner adds the one banda ships
 // "mcp": the owner sets it up from Connections, and after a kill sets it up again: the same connection, never a second
 if (mode === "mcp") {
 	const named = await s.capabilities.addMcp({ url, service: "Cal" });
 	if (named !== "cal") throw new Error(`setting it up again made ${named}, not cal`);
-} else if (!existsSync(file)) {
-	if (mode === "shipped") await s.capabilities.addShipped("cal");
-	else if (mode === "address") await s.capabilities.addByAddress(url, context, "cal");
-	else {
-		mkdirSync(join(s.box.workspace, "connections"), { recursive: true });
-		writeFileSync(file, calendar);
-	}
-}
-// the owner allows it, as shown
-const shown = (await s.capabilities.view()).connections.find((c) => c.name === "cal");
-if (shown?.change !== undefined && "sha" in shown.change && shown.change.sha !== undefined)
-	await s.capabilities.acceptConnection("cal", shown.change.sha);
+} else if (mode === "address") {
+	if (!(await hasRecord())) await s.capabilities.addByAddress(url, context, "cal");
+} else if ((await s.harness.snapshot(Connected, context))?.added.cal === undefined)
+	await s.capabilities.addShipped("cal");
 // and signs in, unless the credentials are in already (the start listed its tools then)
 const state = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.state;
 if (state === "sign-in") {
@@ -99,8 +176,16 @@ if (state === "sign-in") {
 }
 // "address": its reads are none at first; the owner lets what the server says only reads run without asking
 if (mode === "address" || mode === "mcp") {
-	const hinted = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.hinted ?? [];
-	if (hinted.includes("list_events")) await s.capabilities.trustReads("cal", ["list_events"]);
+	const hinted = ((await s.capabilities.view()).connections.find((c) => c.name === "cal")?.tools ?? [])
+		.filter((t) => t.classed?.kind === "read" && t.classed.from === "server")
+		.map((t) => t.title);
+	const seen = (await s.capabilities.view()).connections.find((c) => c.name === "cal")?.accepted?.version;
+	if (hinted.includes("list_events") && seen !== undefined)
+		await s.capabilities.setTools("cal", { list_events: "allow" }, seen);
+	// and sets one of them to ask: the same after a kill, whichever side of the commit it died on
+	const current = (await s.capabilities.view()).connections.find((c) => c.name === "cal");
+	if (current?.accepted?.version !== undefined)
+		await s.capabilities.setTools("cal", { whoami: "ask" }, current.accepted.version);
 }
 
 const received = await s.core.receive(s.harness, {
@@ -109,6 +194,15 @@ const received = await s.core.receive(s.harness, {
 	text: "tea on monday",
 });
 if (!("turn" in received)) throw new Error(`the message started no Turn: ${JSON.stringify(received)}`);
+const onNextBuild = join(home, "on-next-build");
+if (carrying && !existsSync(onNextBuild)) {
+	while (!(await openWaits(s.harness)).some((wait) => wait.ask.type === "approval"))
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	writeFileSync(join(shipped, "cal.json"), nextBuild);
+	writeFileSync(onNextBuild, "");
+	await s.close();
+	s = await open();
+}
 const ended = s.harness.waitForTask(received.turn as TaskId<TurnResult>, context).then(() => true);
 const web = { gateway: "web", peer: OWNER };
 while (!(await Promise.race([ended, new Promise<false>((r) => setTimeout(r, 10, false))]))) {
@@ -116,16 +210,18 @@ while (!(await Promise.race([ended, new Promise<false>((r) => setTimeout(r, 10, 
 		if (wait.ask.type !== "approval") continue;
 		faults.hit("answer");
 		const again = wait.ask.interrupted === true;
-		appendFileSync(join(home, "answers.txt"), `${again ? "no-again" : "approve"}\n`);
-		await ownerAnswer(s.harness, wait.key, again ? "deny" : "approve", web, "bearer");
+		const no = again || mode === "carry-deny";
+		noteAnswer(home, again ? "no-again" : no ? "deny" : "approve", wait.key);
+		await ownerAnswer(s.harness, wait.key, no ? "deny" : "approve", web, "bearer");
 	}
 }
 
 const outcome = (await s.harness.getTask(received.turn as TaskId<TurnResult>, context))?.state.outcome;
 const { parked } = await status(s.harness);
-const accepted = (await s.harness.snapshot(Accepted, context))?.files["connections/cal.md"] !== undefined;
+const accepted = (await s.harness.snapshot(Connected, context))?.added.cal !== undefined || (await hasRecord());
 const connected = (await s.harness.snapshot(Connected, context))?.connections.cal !== undefined;
-const answers = readFileSync(join(home, "answers.txt"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean);
+const answers = answersGiven(home);
+const due = (await s.harness.snapshot(Connected, context))?.connections.cal?.due === true;
 console.log(
 	JSON.stringify({
 		outcome,
@@ -133,8 +229,22 @@ console.log(
 		accepted,
 		connected,
 		answers,
+		due,
 		open: (await openWaits(s.harness)).length,
 		commits: faults.hits("commit:after"),
+		points: Object.fromEntries(
+			(
+				[
+					"connection:carry",
+					"connection:carried",
+					"connection:stays-write",
+					"connection:call",
+					"connection:answered",
+					"answer",
+					"model",
+				] as const
+			).map((point) => [point, faults.hits(point)]),
+		),
 	}),
 );
 await s.close();

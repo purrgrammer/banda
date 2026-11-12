@@ -276,7 +276,9 @@ export function draftParts(ask: Extract<Ask, { type: "approval" }>): {
 	return {
 		fields,
 		rest: Object.fromEntries(
-			Object.entries(ask.args).filter(([name]) => !fields.includes(name) && !full.includes(name)),
+			Object.entries(ask.args).filter(
+				([name]) => !fields.includes(name) && !full.includes(name) && !(ask.hidden ?? []).includes(name),
+			),
 		),
 		details: argList(Object.fromEntries(full.map((name) => [name, ask.args[name]]))),
 	};

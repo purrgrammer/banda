@@ -61,8 +61,12 @@ export function hrefOf(where: Where): string {
 			return `#/a/${where.id}${at}`;
 		case "group":
 			return `#/g/${where.room}${at}`;
-		case "connections":
-			return `#/connections${where.connection ? `?connection=${where.connection}` : where.add ? "?add=true" : ""}`;
+		case "connections": {
+			const query = [where.connection ? `connection=${where.connection}` : "", where.add ? "add=true" : ""]
+				.filter((part) => part !== "")
+				.join("&");
+			return `#/connections${query === "" ? "" : `?${query}`}`;
+		}
 		case "artifact":
 			return `#/artifact/${where.id}${where.v === undefined ? "" : `?v=${where.v}`}`;
 		case "skill":

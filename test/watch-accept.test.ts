@@ -11,8 +11,9 @@ import { defineCore } from "../src/core/turn.ts";
 import { type Looked, watchPath } from "../src/core/watches.ts";
 import type { Workspace } from "../src/server/agents.ts";
 import { accept } from "../src/server/watches.ts";
-import { githubObjectFile } from "./fixtures/github-objects.ts";
+import { githubObjectDefinition } from "./fixtures/github-objects.ts";
 import { hostBox } from "./fixtures/host-box.ts";
+import { added, definition, shipping } from "./fixtures/shipped.ts";
 import { blobStore, echoModels, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
 
 const NOW = new Date(2026, 10, 2, 9, 0).getTime();
@@ -28,9 +29,9 @@ async function setUp() {
 	registry.install(core.extension);
 	const harness = await openStore(home, { models: echoModels().models, registry });
 	const workspace: Workspace = { env: () => box.env(), root: box.workspace, tools: () => [], known: () => true };
-	const connection = githubObjectFile("https://example.com/mcp");
+	shipping(definition("github", githubObjectDefinition("https://example.com/mcp")));
 	await harness.commit(async (tx) => {
-		(await tx.doc(Accepted)).files["connections/github.md"] = { sha: shaOf(connection), text: connection, at: NOW };
+		await added(tx, "github", NOW);
 		(await tx.doc(Control)).paused = NOW;
 	}, context);
 	await mkdir(join(box.workspace, "watches"), { recursive: true });

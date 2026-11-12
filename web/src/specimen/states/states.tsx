@@ -77,17 +77,26 @@ export function States() {
 							fix="Sign in again"
 						/>
 					</div>
+					<div className="w-[24rem] max-w-full">
+						<ObjectUnavailable
+							what="purrgrammer/banda #34 can't be shown"
+							fix="Details"
+							why={
+								'You turned off "pull request read" for GitHub. Turn it back on in GitHub\'s details, under Connections.'
+							}
+						/>
+					</div>
 				</Group>
 				<Group label="A file while its preview is drawn" className="items-start">
 					<FileLoading name="Booking terms.pdf" size="1.2 MB" />
 				</Group>
-				<Group label="Settings with no accounts, nothing archived" className="items-start">
+				<Group label="Settings with no connections, nothing archived" className="items-start">
 					<div className="h-[520px] w-[30rem] max-w-full overflow-hidden rounded-tile border border-line-soft">
 						<SettingsPage title="Settings">
 							<AppSettings
 								data={{
 									...SETTINGS,
-									accounts: [],
+									connections: [],
 									computer: {
 										state: "offline",
 										why: "Docker isn't running: start Docker Desktop (or the Docker service), and the computer starts by itself.",

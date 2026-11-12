@@ -11,6 +11,8 @@ import { openBox } from "../../src/box/box.ts";
 import { boxEnv, boxTools } from "../../src/box/tools.ts";
 import { LEAD } from "../../src/core/agents.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
+import { Connected as ConnectedDoc } from "../../src/core/connections.ts";
+import { readDefinition, type Shipped, shippedDefinitions } from "../../src/core/definitions.ts";
 import type { Gateway } from "../../src/core/gateway.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore } from "../../src/core/turn.ts";
@@ -41,6 +43,7 @@ export async function openConnected({
 	install,
 	shipped,
 	fetch: fetcher,
+	retryDelays,
 	registry = createRegistry(),
 }: {
 	home: string;
@@ -56,6 +59,8 @@ export async function openConnected({
 	shipped?: string;
 	/** How the daemon reaches services, when a test fakes one that is not on this machine (Google's). */
 	fetch?: typeof fetch;
+	/** How long before a failed listing is tried again, when a test does not want to wait. */
+	retryDelays?: readonly number[];
 }) {
 	const box = openBox(hostBox(home), () => {});
 	const faux = fauxProvider();
@@ -97,18 +102,17 @@ export async function openConnected({
 		workspace,
 		registry,
 		effect: core.effect,
-		listEnv: () => box.env(),
 		redirect: () => "http://127.0.0.1:9/oauth/callback",
 		log: (line) => logs.push(line),
 		...(fault === undefined ? {} : { fault }),
 		...(shipped === undefined ? {} : { shipped }),
 		...(fetcher === undefined ? {} : { fetch: fetcher }),
-		// the fake servers are on this machine: the tests probe them as they are
-		probe: fetch,
+		...(retryDelays === undefined ? {} : { retryDelays }),
 		agentChanged: core.agentChanged,
 	});
 	// as the daemon does on start: what was in effect is installed before anything resumes
 	await revive(harness);
+	await capabilities.carryListings();
 	await capabilities.install();
 	harness.resume();
 	await capabilities.reconcile();
@@ -130,6 +134,7 @@ export async function openConnected({
 				.map(({ tool }) => tool.name)
 				.sort(),
 		close: async () => {
+			capabilities.close();
 			box.close();
 			await harness.close(context);
 		},
@@ -184,22 +189,25 @@ export async function signInAsOwner(
 	});
 }
 
-/** A connection file. */
-export function connectionFile({
+/** The definition of a connection, as banda ships one: the bytes a test takes into effect with `define`. */
+export function connectionDefinition({
 	url,
-	command,
 	service = "Calendar",
+	about = "To see your day and put things in it.",
 	auth = "none",
 	client,
 	scopes,
 	account,
 	reads = [],
 	money = [],
-	why = "To see your day and put things in it.",
+	needs,
+	objects,
+	groups,
+	ask,
 }: {
-	url?: string;
-	command?: string;
+	url: string;
 	service?: string;
+	about?: string;
 	auth?: "none" | "key" | "oauth";
 	client?: string;
 	scopes?: readonly string[];
@@ -207,23 +215,65 @@ export function connectionFile({
 	account?: string;
 	reads?: readonly string[];
 	money?: readonly string[];
-	why?: string;
+	needs?: { readonly [tool: string]: readonly string[] };
+	objects?: unknown;
+	groups?: { readonly [group: string]: readonly string[] };
+	ask?: "always";
 }): string {
-	return [
-		"---",
-		`service: ${service}`,
-		...(url === undefined ? [] : [`url: ${url}`]),
-		...(command === undefined ? [] : [`command: ${command}`]),
-		...(auth === "none" ? [] : [`auth: ${auth}`]),
-		...(client === undefined ? [] : [`client: ${client}`]),
-		...(scopes === undefined ? [] : [`scopes: [${scopes.join(", ")}]`]),
-		...(account === undefined ? [] : [`account: ${account}`]),
-		`reads: [${reads.join(", ")}]`,
-		...(money.length === 0 ? [] : [`money: [${money.join(", ")}]`]),
-		"---",
-		why,
-		"",
-	].join("\n");
+	return JSON.stringify({
+		service,
+		about,
+		url,
+		auth,
+		...(client === undefined ? {} : { client }),
+		...(scopes === undefined ? {} : { scopes }),
+		...(account === undefined ? {} : { account }),
+		reads,
+		...(money.length === 0 ? {} : { floors: { money } }),
+		...(needs === undefined ? {} : { needs }),
+		...(objects === undefined ? {} : { objects }),
+		...(groups === undefined ? {} : { groups }),
+		...(ask === undefined ? {} : { ask }),
+	});
+}
+
+/**
+ * Take the definition `text` of connection `name` into effect, as a daemon starting on a build that ships it would: on
+ * in this home for the first time (`addShipped`), or a changed version picked up (`install`, then what a start does).
+ * Returns its version.
+ */
+export async function define(
+	s: Pick<Connected, "capabilities" | "harness">,
+	name: string,
+	text: string,
+): Promise<string> {
+	const read = readDefinition(name, text);
+	if ("errors" in read) throw new Error(`${name}: ${read.errors.join("; ")}`);
+	const known = await s.harness.commit(async (tx) => (await tx.doc(ConnectedDoc)).added[name] !== undefined, context);
+	(shippedDefinitions() as Map<string, Shipped>).set(name, read.connection);
+	if (known) {
+		await s.capabilities.install();
+		await s.capabilities.reconcile();
+	} else await s.capabilities.addShipped(name);
+	// a tool the server lists that the definition does not name waits off: on, as a test of what it does expects
+	await turnOnWaiting(s, name);
+	return read.connection.version;
+}
+
+/** The owner switching tool `tool` (the model's name for it) on or off, in its connection's details. */
+export async function switchTool(s: Pick<Connected, "capabilities">, tool: string, on: boolean): Promise<void> {
+	const name = tool.slice(0, tool.indexOf("__"));
+	const shown = (await s.capabilities.view()).connections.find((connection) => connection.name === name);
+	const found = shown?.tools.find((each) => each.name === tool);
+	if (shown === undefined || found === undefined) throw new Error(`there is no tool named ${tool}`);
+	const setting = !on ? "off" : found.classed?.kind === "read" && found.classed.from !== "server" ? "allow" : "ask";
+	await s.capabilities.setTools(name, { [found.title]: setting }, shown.accepted?.version);
+}
+
+/** Every tool of connection `name` waiting for the owner, switched on. */
+export async function turnOnWaiting(s: Pick<Connected, "capabilities">, name: string): Promise<void> {
+	const shown = (await s.capabilities.view()).connections.find((connection) => connection.name === name);
+	for (const tool of shown?.tools ?? []) if (tool.waiting === true) await switchTool(s, tool.name, true);
 }
 
 /** The owner's side of a sign-in by code at a fake server in another process: they type it on its page. */

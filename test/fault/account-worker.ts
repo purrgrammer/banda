@@ -21,34 +21,38 @@ const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
 const origin = new URL(url).origin;
 const as = (user: string) => fetch(`${origin}/user`, { method: "POST", body: user });
 
+// the calendar banda ships, in a folder of its own
+const shipped = join(home, "shipped");
+if (!existsSync(shipped)) {
+	mkdirSync(shipped, { recursive: true });
+	writeFileSync(
+		join(shipped, "cal.json"),
+		JSON.stringify({
+			service: "Calendar",
+			about: "Your day",
+			url,
+			auth: "oauth",
+			account: "get_me.login",
+			reads: ["list_events"],
+		}),
+	);
+	// a server that does not say whom a sign-in is for
+	writeFileSync(
+		join(shipped, "notes.json"),
+		JSON.stringify({ service: "Notes", about: "Your notes", url, auth: "oauth", reads: ["list_events"] }),
+	);
+}
 const s = await openConnected({
 	home,
+	shipped,
 	respond: () => fauxAssistantMessage("Done."),
 	wrapStorage: (storage) => faults.storage(storage),
 	fault: (point) => faults.hit(point as FaultPoint),
 });
-const calendar = [
-	"---",
-	"service: Calendar",
-	`url: ${url}`,
-	"auth: oauth",
-	"account: get_me.login",
-	"reads: [list_events]",
-	"---",
-	"Your day.",
-	"",
-].join("\n");
 const mara = "---\nname: Mara\nstate: active\ndescription: Keeps the calendar.\n---\nYou keep the calendar.\n";
 
-// the agent proposes the calendar; the owner allows it, as shown
-const file = join(s.box.workspace, "connections", "cal.md");
-if (!existsSync(file)) {
-	mkdirSync(join(s.box.workspace, "connections"), { recursive: true });
-	writeFileSync(file, calendar);
-}
-const shown = (await s.capabilities.view()).connections.find((c) => c.name === "cal");
-if (shown?.change !== undefined && "sha" in shown.change && shown.change.sha !== undefined)
-	await s.capabilities.acceptConnection("cal", shown.change.sha);
+// the owner adds the calendar
+if ((await s.harness.snapshot(Connected, context))?.added.cal === undefined) await s.capabilities.addShipped("cal");
 // Mara, as the owner made her
 if ((await s.harness.snapshot(Accepted, context))?.files["agents/mara.md"] === undefined) {
 	mkdirSync(join(s.box.workspace, "agents"), { recursive: true });
@@ -81,12 +85,7 @@ if ((await accounts()).ana !== undefined) await s.capabilities.signOut("cal", "a
 writeFileSync(done, "");
 
 // a server that does not say whom a sign-in is for: signed in once, then given the owner's name
-const notes = join(s.box.workspace, "connections", "notes.md");
-if (!existsSync(notes))
-	writeFileSync(notes, calendar.replace("service: Calendar", "service: Notes").replace("account: get_me.login\n", ""));
-const notesShown = (await s.capabilities.view()).connections.find((c) => c.name === "notes");
-if (notesShown?.change !== undefined && "sha" in notesShown.change && notesShown.change.sha !== undefined)
-	await s.capabilities.acceptConnection("notes", notesShown.change.sha);
+if ((await s.harness.snapshot(Connected, context))?.added.notes === undefined) await s.capabilities.addShipped("notes");
 const noteAccounts = async () => (await s.harness.snapshot(Connected, context))?.accounts?.notes ?? {};
 if ((await noteAccounts())["account-1"] === undefined) {
 	const signed = await signInAsOwner(s.capabilities, "notes", { agent: null });

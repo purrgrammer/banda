@@ -1,14 +1,14 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { afterEach, expect, it } from "vitest";
 import { Accepted, AgentChats, shaOf } from "../src/core/agents.ts";
 import { BlobStore, Blobs } from "../src/core/blobs.ts";
-import { Connected, parseConnection } from "../src/core/connections.ts";
+import { Connected } from "../src/core/connections.ts";
 import { cardOf, Readings } from "../src/core/objects.ts";
 import { context } from "../src/core/store.ts";
 import { openObjects } from "../src/server/objects.ts";
 import { openConnected } from "./fixtures/connected.ts";
+import { added, definition as shipped, shippedText, shipping } from "./fixtures/shipped.ts";
 import { tempHome } from "./helpers.ts";
 
 const opened: Awaited<ReturnType<typeof openConnected>>[] = [];
@@ -21,9 +21,9 @@ it("fetches only an attachment named by the same authorized Gmail message and ho
 	const connected = await openConnected({ home, respond: () => fauxAssistantMessage("done") });
 	opened.push(connected);
 	const blobs = new BlobStore(join(home, "blobs"));
-	const definition = await readFile(new URL("../shipped/connections/gmail.md", import.meta.url), "utf8");
-	const parsed = parseConnection("gmail", definition);
-	if (!("connection" in parsed)) throw new Error(JSON.stringify(parsed));
+	const definition = shippedText("gmail");
+	const parsed = { connection: shipped("gmail", definition) };
+	shipping(parsed.connection);
 	const emailKind = parsed.connection.objects?.email;
 	if (emailKind === undefined) throw new Error("no email object");
 	let chat = 0;
@@ -47,14 +47,14 @@ it("fetches only an attachment named by the same authorized Gmail message and ho
 	).not.toThrow();
 	const agent = "---\nname: Reader\ndescription: Reads Gmail\nstate: active\nconnections: [gmail]\n---\nReader";
 	await connected.harness.commit(async (tx) => {
-		(await tx.doc(Accepted)).files["connections/gmail.md"] = { text: definition, sha: shaOf(definition), at: 1 };
+		await added(tx, "gmail");
 		(await tx.doc(Accepted)).files["agents/reader.md"] = { text: agent, sha: shaOf(agent), at: 1 };
 		const conversation = await tx.createConversation({ ownership: { kind: "ownerless" } });
 		chat = Number(conversation.id);
 		(await tx.doc(AgentChats)).chats[chat] = "reader";
 		const store = await tx.doc(Connected);
 		store.connections.gmail = {
-			sha: shaOf(definition),
+			version: shaOf(definition),
 			at: 1,
 			tools: {
 				get_profile: { description: "profile", schema: { type: "object" } },

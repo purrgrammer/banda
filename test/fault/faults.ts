@@ -52,21 +52,26 @@ export type FaultPoint =
 	/** A chat with no home told outside the commit that ends its release: once submitted, before that end. */
 	| "release:submitted"
 	/** A connection allowed: before the store holds it, and after. */
-	| "accept:before"
-	| "accept:after"
+	/** The owner's setting of a connection's tool, committed, before the tools are offered again. */
+	| "settings:after"
 	/** Signing in: the sign-in taken at the callback, the code traded for tokens, the tokens kept. */
 	| "oauth:taken"
 	| "oauth:exchanged"
 	| "oauth:kept"
 	| "oauth:device"
-	| "shipped:written"
+	/** A connection banda ships: before the store has it on, once it does; before it is removed, once it was. */
+	| "shipped:before"
+	| "shipped:added"
+	| "shipped:remove"
+	| "shipped:removed"
 	/** Bringing from the other harnesses: the skills written, then accepted, then each agent saved. */
 	| "bring:written"
 	| "bring:accepted"
 	| "bring:agent"
-	| "address:written"
-	| "trust:written"
-	| "nosignin:written"
+	| "server:before"
+	| "server:added"
+	| "server:remove"
+	| "server:removed"
 	/** A connection's tools listed, before the store holds them. */
 	| "connect:listed"
 	/** An account: whom a sign-in is for read; added to the store; its agent's file rewritten; switched; signed out. */
@@ -84,6 +89,11 @@ export type FaultPoint =
 	/** A call to a remote server: before it goes, and once it answered, before the store records it. */
 	| "connection:call"
 	| "connection:answered"
+	/** The listings carried to the build's versions at start: before the commit, and once it is kept. */
+	| "connection:carry"
+	| "connection:carried"
+	/** A read's call that already asked the owner, found so: before it goes on as the write it was. */
+	| "connection:stays-write"
 	/** An object read for its card: before the read goes, and once its reading is in the store. */
 	| "object:read"
 	| "object:answered"

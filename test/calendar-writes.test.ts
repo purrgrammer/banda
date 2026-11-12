@@ -9,7 +9,7 @@ import type { JsonObject, TaskId } from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
 import { LEAD } from "../src/core/agents.ts";
 import { createdEventId, eventRef } from "../src/core/calendar-rest.ts";
-import { parseConnection } from "../src/core/connections.ts";
+import { readDefinition } from "../src/core/definitions.ts";
 import { OWNER } from "../src/core/gateway.ts";
 import { REST_APIS, type RestApi } from "../src/core/rest.ts";
 import { openWaits } from "../src/core/status.ts";
@@ -19,6 +19,7 @@ import { answer } from "../src/core/wait.ts";
 import { openConnected } from "./fixtures/connected.ts";
 import { fakeCalendar } from "./fixtures/google-calendar.ts";
 import { answerNudge } from "./fixtures/models.ts";
+import { shippedText } from "./fixtures/shipped.ts";
 import { tempHome } from "./helpers.ts";
 
 const READ = "https://www.googleapis.com/auth/calendar.readonly";
@@ -36,8 +37,8 @@ async function connectedWith(call: { tool: string; args: JsonObject }) {
 	const shipped = join(home, "shipped");
 	mkdirSync(shipped, { recursive: true });
 	writeFileSync(
-		join(shipped, "calendar.md"),
-		readFileSync(new URL("../shipped/connections/calendar.md", import.meta.url), "utf8"),
+		join(shipped, "calendar.json"),
+		readFileSync(new URL("../shipped/connections/calendar.json", import.meta.url), "utf8"),
 	);
 	const google = fakeCalendar();
 	const s = await openConnected({
@@ -175,10 +176,7 @@ describe("Calendar changes as drafts", () => {
 describe("what a built-in change never gets ahead", () => {
 	it("a change whose content the owner edits, so no permission can bind it, is on a floor in its shipped file", () => {
 		const shippedFile = (name: string) => {
-			const parsed = parseConnection(
-				name,
-				readFileSync(new URL(`../shipped/connections/${name}.md`, import.meta.url), "utf8"),
-			);
+			const parsed = readDefinition(name, shippedText(name));
 			if ("errors" in parsed) throw new Error(parsed.errors.join("; "));
 			return parsed.connection;
 		};

@@ -176,6 +176,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 	const ended = new Promise<{ failed: boolean }>((resolve) => (stopped = resolve));
 	const gateways = new Map<string, Gateway>();
 	let areas: readonly Area[] = [];
+	let stopListing: (() => void) | undefined;
 	const close = () =>
 		(stop ??= (async () => {
 			const step = async (what: string, run: () => unknown) => {
@@ -212,6 +213,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						}),
 				);
 			}
+			if (stopListing !== undefined) await step("listings", async () => stopListing?.());
 			// the writes the proxy sent under a host permission are logged before the store goes
 			const sweepingLast = sweepSentNow;
 			if (sweepingLast !== undefined) await step("sent", sweepingLast);
@@ -521,7 +523,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			known: (model) => models.getModel(model.provider, model.modelId) !== undefined,
 		};
 		let capabilitiesChanged = () => {};
-		// connections and the tools the agent built: what is in effect is installed before anything resumes
+		// connections: what is in effect is installed before anything resumes
 		const capabilities = openCapabilities({
 			home,
 			blobs,
@@ -529,16 +531,15 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			workspace,
 			registry,
 			effect: core.effect,
-			// a server the agent built is listed in its box, reading as nobody's chat (0)
-			listEnv: () => agentBox.env(undefined, agentBox.egress?.env(0)),
-			...(holding === undefined ? {} : { egress: holding }),
 			redirect: () => `http://127.0.0.1:${port}/oauth/callback`,
 			log,
 			changed: () => capabilitiesChanged(),
 			agentChanged: core.agentChanged,
 			...(options.shipped === undefined ? {} : { shipped: options.shipped }),
 		});
+		await capabilities.carryListings();
 		await capabilities.install();
+		stopListing = capabilities.close;
 		reader = capabilities;
 		const objects = openObjects({ harness: open, capabilities, blobs });
 		// the lead proposes a new agent by writing its before-file into the box; the owner reviews and accepts it in Agents
@@ -878,27 +879,20 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						capabilities: await capabilitiesView(),
 					}),
 					capability: async (act) => {
-						if (act.action === "accept")
-							await (act.folder === "connections"
-								? capabilities.acceptConnection(act.name, act.sha)
-								: capabilities.acceptTool(act.name, act.sha));
-						else if (act.action === "decline") await capabilities.decline(act.folder, act.name);
-						else if (act.action === "remove") await capabilities.remove(act.folder, act.name);
+						if (act.action === "remove") await capabilities.remove(act.name);
 						else if (act.action === "disconnect") await capabilities.disconnect(act.name);
 						else if (act.action === "key") await capabilities.setKey(act.name, act.key, context, act.agent);
 						else if (act.action === "account")
-							await capabilities.switchAccount(act.agent, act.name, act.account, act.on, context, act.sha);
+							await capabilities.switchAccount(act.agent, act.name, act.account, act.on, context, act.version);
 						else if (act.action === "signout") await capabilities.signOut(act.name, act.account);
 						else if (act.action === "label") await capabilities.labelAccount(act.name, act.account, act.label);
 						else if (act.action === "add") await capabilities.addShipped(act.name);
-						else if (act.action === "update") await capabilities.updateShipped(act.name, act.sha);
 						else if (act.action === "address") await capabilities.addByAddress(act.url);
-						else if (act.action === "trust" || act.action === "reads")
-							await capabilities.trustReads(act.name, act.tools, context, act.sha, act.action === "reads");
+						else if (act.action === "tools")
+							await capabilities.setTools(act.name, act.settings, act.version, context, act.group === true);
 						else if (act.action === "public")
-							await capabilities.switchAccount(act.agent, act.name, undefined, act.on, context, act.sha);
+							await capabilities.switchAccount(act.agent, act.name, undefined, act.on, context, act.version);
 						else if (act.action === "refresh") await capabilities.refresh(act.name);
-						else if (act.action === "switch") await capabilities.toggle(act.tool, act.on);
 						changed();
 						return capabilitiesView();
 					},

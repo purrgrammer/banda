@@ -149,46 +149,24 @@ describe("changes to before files", () => {
 		only(view(items, [], IDLE, context), "change").map((segment) => [segment.state, changeWords(segment)]);
 
 	it("a write the daemon did not mark as a before file draws nothing, whatever its arguments say", () => {
-		expect(lines(write("tools/x.md", { notes: [] }), {})).toEqual([]);
-		expect(lines([called(1, "w1", "write", { path: "tools/x.md" })], {})).toEqual([]);
+		expect(lines(write("agents/x.md", { notes: [] }), {})).toEqual([]);
+		expect(lines([called(1, "w1", "write", { path: "agents/x.md" })], {})).toEqual([]);
 	});
 	it("a command the daemon told of changing before files draws a line for each, even when it failed", () => {
-		const notes = [...noted("tools/weather.md").notes, ...noted("connections/notion.md").notes];
+		const notes = [...noted("agents/weather.md").notes, ...noted("routines/notion.md").notes];
 		const bash = (error: boolean) => [
 			called(1, "b1", "bash", { command: "whatever the model ran" }),
 			answered(2, "b1", "bash", { notes, error }),
 		];
-		const context = { capabilities: { tools: [], connections: [] } };
+		const context = { agents: [], routines: [] };
 		const expected = [
-			["declined", "Not allowed: a tool it made: weather"],
-			["declined", "Not allowed: a connection to notion"],
+			["declined", "Not allowed: the agent weather"],
+			["declined", "Not allowed: the routine notion"],
 		];
 		expect(lines(bash(false), context)).toEqual(expected);
 		expect(lines(bash(true), context)).toEqual(expected);
 		// a write that failed wrote nothing, whatever it noted
-		expect(lines(write("tools/x.md", { ...noted("tools/x.md"), error: true } as never), context)).toEqual([]);
-	});
-	it("a connection waits for the owner, then reads allowed by its service's name", () => {
-		const base = { name: "notion", state: "waiting" as const, tools: [] };
-		const connection = {
-			service: "Notion",
-			where: "mcp.notion.com",
-			boxed: false,
-			auth: "oauth" as const,
-			reads: [],
-			floors: {},
-			why: "notes",
-		};
-		expect(
-			lines(write("connections/notion.md"), {
-				capabilities: { tools: [], connections: [{ ...base, change: { kind: "added", sha: "a", connection } }] },
-			}),
-		).toEqual([["pending", "Allow this change? A connection to Notion"]]);
-		expect(
-			lines(write("connections/notion.md"), {
-				capabilities: { tools: [], connections: [{ ...base, state: "connected", accepted: { sha: "a", connection } }] },
-			}),
-		).toEqual([["done", "Allowed: a connection to Notion"]]);
+		expect(lines(write("agents/x.md", { ...noted("agents/x.md"), error: true } as never), context)).toEqual([]);
 	});
 });
 

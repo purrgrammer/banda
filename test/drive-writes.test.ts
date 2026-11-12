@@ -70,8 +70,8 @@ async function connectedWith(
 	const shipped = join(home, "shipped");
 	mkdirSync(shipped, { recursive: true });
 	writeFileSync(
-		join(shipped, "drive.md"),
-		readFileSync(new URL("../shipped/connections/drive.md", import.meta.url), "utf8"),
+		join(shipped, "drive.json"),
+		readFileSync(new URL("../shipped/connections/drive.json", import.meta.url), "utf8"),
 	);
 	const google = fakeDrive(seed === undefined ? {} : { seed });
 	const s = await openConnected({
