@@ -159,6 +159,11 @@ held by the proxy and coding-agent asks stay as drafted. Walked through in the a
 home, at desktop and phone widths, light and dark (`test/edit-proposals-daemon.browser.test.ts`); owner review
 remains.
 
+An artifact shown once per run (#85) is in review on `fix/issue-85-artifact-once`: a message that names what its
+own run just published, at that version, draws no second card, in a chat and in a group's room; a later run's re-share
+still draws one. Tried against a daemon on a throwaway home, its model scripted, at desktop and phone widths, light
+and dark; owner review remains.
+
 ## Existing implementation
 
 | Area | Implementation baseline | What the slices do with it |

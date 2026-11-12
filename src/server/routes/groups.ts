@@ -15,7 +15,7 @@ import { type ArtifactKind, Artifacts, publishedBy } from "../../core/artifacts.
 import { type Attachment, safeName } from "../../core/blobs.ts";
 import { GroupReads, readGroup } from "../../core/chat-reads.ts";
 import { mimeOf } from "../../core/gateway.ts";
-import { type GroupLine, type GroupMessage, Groups } from "../../core/groups.ts";
+import { type GroupLine, type GroupMessage, Groups, runsOf } from "../../core/groups.ts";
 import { status } from "../../core/status.ts";
 import { context } from "../../core/store.ts";
 import type { defineCore } from "../../core/turn.ts";
@@ -133,16 +133,37 @@ export async function groupView(groups: GroupsApi, harness: Harness, room: numbe
 	if (row === undefined) throw new BadRequest("no such group", 404);
 	const log = await groups.log(harness, room);
 	// a member's message shows what its call published to the Library, found by its chat and that call, then what it
-	// showed again by id; one the Library no longer holds is left out
+	// showed again by id, less what a publish of its own run already drew at that very version (DESIGN.md "Messages");
+	// one the Library no longer holds is left out
 	const published = await harness.commit(async (tx) => {
 		const found = new Map<number, { id: string; n: number; title: string; kind: ArtifactKind }[]>();
 		const { artifacts } = await tx.doc(Artifacts);
+		/** Each member's newest publish call to draw a version, by `<id>:<n>`. */
+		const drawn = new Map<string, Map<string, string>>();
+		/** Each execution's calls by their run, read once a message needs them. */
+		const runs = new Map<number, Map<string, number>>();
+		const sameRun = async (chat: number, a: string, b: string) => {
+			const known = runs.get(chat) ?? (await runsOf(tx, chat));
+			runs.set(chat, known);
+			return known.get(a) !== undefined && known.get(a) === known.get(b);
+		};
 		for (const line of log) {
 			if (!("message" in line) || !("agent" in line.message.author)) continue;
-			const chat = row.executions[line.message.author.agent];
+			const agent = line.message.author.agent;
+			const chat = row.executions[agent];
 			const call = line.message.call;
 			const made = chat === undefined || call === undefined ? undefined : await publishedBy(tx, chat, call);
-			const cards = [...(made === undefined ? [] : [made]), ...(line.message.artifacts ?? [])].flatMap(({ id, n }) => {
+			const mine = drawn.get(agent) ?? new Map<string, string>();
+			drawn.set(agent, mine);
+			if (made !== undefined && call !== undefined) mine.set(`${made.id}:${made.n}`, call);
+			const shown: { id: string; n: number }[] = [];
+			for (const again of line.message.artifacts ?? []) {
+				const by = mine.get(`${again.id}:${again.n}`);
+				const drawnByItsRun =
+					chat !== undefined && call !== undefined && by !== undefined && (await sameRun(chat, by, call));
+				if (!drawnByItsRun) shown.push(again);
+			}
+			const cards = [...(made === undefined ? [] : [made]), ...shown].flatMap(({ id, n }) => {
 				const artifact = artifacts[id];
 				return artifact === undefined ? [] : [{ id, n, title: artifact.title, kind: artifact.kind }];
 			});

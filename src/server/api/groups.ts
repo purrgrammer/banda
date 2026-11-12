@@ -21,7 +21,8 @@ export type GroupMessageView = {
 	readonly at: number;
 	/**
 	 * A member's message's artifacts, each its card, opened beside the room: what its call published, then those it
-	 * showed again, each at its version then; one removed from the Library since is left out.
+	 * showed again, each at its version then, less one a publish of its own run already drew at that version; one removed
+	 * from the Library since is left out.
 	 */
 	readonly artifacts?: readonly {
 		readonly id: string;

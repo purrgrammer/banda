@@ -427,6 +427,26 @@ function rowOf(
 }
 
 /**
+ * Member execution `chat`'s tool calls, each by the run it was made in: how many inputs (each turn's, or any other that
+ * starts work; never a nudge, which goes on with the run) came before it. Reads only.
+ */
+export async function runsOf(tx: Tx, chat: number): Promise<Map<string, number>> {
+	const runs = new Map<string, number>();
+	let run = 0;
+	let cursor: Parameters<Tx["scanEntries"]>[2];
+	do {
+		const page = await tx.scanEntries({ conversationId: chat as ConversationId, order: "ascending" }, 100, cursor);
+		for (const item of page.items) {
+			const row = rowOf(item, false);
+			if (row?.role === "user" || row?.role === "other") run++;
+			if (row?.role === "assistant") for (const call of row.calls) runs.set(call.id, run);
+		}
+		cursor = page.next;
+	} while (cursor !== undefined);
+	return runs;
+}
+
+/**
  * Whether member execution `chat`'s run that ended at entry `answer` left the owner unanswered in its room: they asked it
  * (`asked`), and no `message_group` of its went through since. Reads only.
  */

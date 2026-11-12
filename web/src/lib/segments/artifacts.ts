@@ -2,7 +2,8 @@
  * Artifacts in a chat: a `message_user` call that published one as its card after the message, naming the version that
  * call made; and the owner's own version, told to the chat as their words, as a card on their side in place of the
  * words. Which version is which comes from the Library (`ViewContext.artifacts`) and the entry's own {id, n}, never
- * from anyone's words; a card whose artifact left the Library says so.
+ * from anyone's words; a card whose artifact left the Library says so. A message showing a version its own run's
+ * publish already drew draws no second card (`once`).
  */
 import type { ArtifactKind, ArtifactView } from "../../../../src/server/api.ts";
 import type { Segment } from "../chat.ts";
@@ -65,6 +66,32 @@ export function artifactLine(segment: ArtifactSegment): { state: FeedState; text
 	};
 }
 
+/** What starts a run: an input to the chat (the owner's words or version, another agent's message, a wake, a change). */
+const INPUTS: ReadonlySet<Segment["kind"]> = new Set<Segment["kind"]>([
+	"owner",
+	"owner-message",
+	"agentMessage",
+	"wake",
+	"watch",
+]);
+
+/**
+ * Each artifact once per run (DESIGN.md "Messages"): a card a message shows again is left out when a publish of the
+ * same run, since the chat's last input, already drew that very version (its id and n, both from the store). Another
+ * version, or the same one in a later run, is shown on purpose: it stays.
+ */
+function once(segments: readonly Segment[]): Segment[] {
+	const drawn = new Set<string>();
+	return segments.filter((segment) => {
+		if (INPUTS.has(segment.kind) || (segment.kind === "artifact" && segment.by === "owner")) drawn.clear();
+		if (segment.kind !== "artifact" || segment.id === undefined || segment.n === undefined) return true;
+		const version = `${segment.id}:${segment.n}`;
+		if (segment.shown === true) return !drawn.has(version);
+		if (segment.call !== undefined) drawn.add(version);
+		return true;
+	});
+}
+
 export const artifacts: Segmenter = {
 	message: (call, key, { result }) => {
 		// artifacts a message showed again: each at the version its receipt names, once it was sent
@@ -111,7 +138,7 @@ export const artifacts: Segmenter = {
 		const told = new Map<string, { readonly id: string; readonly n: number }>();
 		for (const item of items)
 			if (item.role === "user" && item.artifact !== undefined) told.set(`${item.id}`, item.artifact);
-		return segments.map((segment): Segment => {
+		const cards = segments.map((segment): Segment => {
 			// shown again by id: its title and kind from the Library, the version as it was sent
 			if (segment.kind === "artifact" && segment.shown === true && segment.id !== undefined) {
 				const artifact = library.get(segment.id);
@@ -154,6 +181,7 @@ export const artifacts: Segmenter = {
 			}
 			return segment;
 		});
+		return once(cards);
 	},
 	shown: (segment) =>
 		segment.kind !== "artifact"

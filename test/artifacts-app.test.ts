@@ -116,6 +116,84 @@ describe("artifacts in the app", () => {
 		);
 	});
 
+	it("a message showing what its own run just published, at that very version, draws no second card", () => {
+		const plans: ArtifactView[] = [
+			{
+				...library[0]!,
+				versions: [
+					{ n: 1, sha: "1".repeat(64), size: 1, at: 1, by: "companion", chat: 3, call: "p1" },
+					{ n: 2, sha: "2".repeat(64), size: 1, at: 2, by: "companion", chat: 3, call: "p2" },
+				],
+				published: { "3:p1": 1, "3:p2": 2 },
+			},
+			{ ...library[0]!, id: "b2", title: "Budget", path: "/workspace/budget.md", versions: [], published: {} },
+		];
+		const publish = (id: number, call: string): Item[] => [
+			{ id, role: "assistant", text: "", at: id, calls: [{ id: call, name: "publish", args: { path: "plan.md" } }] },
+			{ id: id + 1, role: "tool", call, name: "publish", text: "Published.", error: false, at: id },
+		];
+		const show = (id: number, call: string, shown: { id: string; n: number }[]): Item[] => [
+			{
+				id,
+				role: "assistant",
+				text: "",
+				at: id,
+				calls: [{ id: call, name: "message_user", args: { text: "Here.", artifacts: shown.map((one) => one.id) } }],
+			},
+			{
+				id: id + 1,
+				role: "tool",
+				call,
+				name: "message_user",
+				text: "Sent.",
+				error: false,
+				at: id,
+				receipt: { kind: "artifacts", artifacts: shown },
+			},
+		];
+		const cards = (items: Item[]) =>
+			view(items, [], live, { artifacts: { chat: 3, library: plans } }).flatMap((segment) =>
+				segment.kind === "artifact" ? [`${segment.id}:${segment.n}${segment.shown === true ? " again" : ""}`] : [],
+			);
+		const asked = (id: number): Item => ({ id, role: "user", text: "and?", at: id });
+		// published then shown in one run: the publish's card alone; another artifact it shows beside it stays
+		expect(cards([asked(1), ...publish(2, "p1"), ...show(4, "s1", [{ id: "a1", n: 1 }])])).toEqual(["a1:1"]);
+		expect(
+			cards([
+				asked(1),
+				...publish(2, "p1"),
+				...show(4, "s1", [
+					{ id: "a1", n: 1 },
+					{ id: "b2", n: 1 },
+				]),
+			]),
+		).toEqual(["a1:1", "b2:1 again"]);
+		// a newer version published since in the run: the newest card is the one it shows
+		expect(cards([asked(1), ...publish(2, "p1"), ...publish(4, "p2"), ...show(6, "s1", [{ id: "a1", n: 2 }])])).toEqual(
+			["a1:1", "a1:2"],
+		);
+		// the same version shown after the owner wrote again, or by a routine's later run: shown on purpose
+		expect(cards([asked(1), ...publish(2, "p1"), asked(4), ...show(5, "s1", [{ id: "a1", n: 1 }])])).toEqual([
+			"a1:1",
+			"a1:1 again",
+		]);
+		const wake: Item = { id: 4, role: "wake", routine: "daily", text: "Daily", at: 4 };
+		expect(cards([asked(1), ...publish(2, "p1"), wake, ...show(5, "s1", [{ id: "a1", n: 1 }])])).toEqual([
+			"a1:1",
+			"a1:1 again",
+		]);
+		// an older version than the run published: not the card it drew
+		expect(cards([asked(1), ...publish(2, "p2"), ...show(4, "s1", [{ id: "a1", n: 1 }])])).toEqual([
+			"a1:2",
+			"a1:1 again",
+		]);
+		// shown before the publish that drew it: both, in their order
+		expect(cards([asked(1), ...show(2, "s1", [{ id: "a1", n: 1 }]), ...publish(4, "p1")])).toEqual([
+			"a1:1 again",
+			"a1:1",
+		]);
+	});
+
 	it("the owner's card is matched to its version by the entry's {id, n}, never by its words", () => {
 		const second: ArtifactView = {
 			...library[0]!,
