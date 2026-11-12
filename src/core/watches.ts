@@ -55,9 +55,9 @@ import {
 	reading as readingOf,
 	settleOf,
 	sort,
-	withLastAnswers,
 	type Walk,
 	walkOn,
+	withLastAnswers,
 } from "./follow.ts";
 import { fileNameFor } from "./names.ts";
 import { type OffRead, objectAccess, objectStanding, offWords } from "./object-access.ts";

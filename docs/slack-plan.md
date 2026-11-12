@@ -67,7 +67,7 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or C
 **Files.**
 
 - [ ] Create `scripts/spike-slack.ts`, the recorded run of the spike stage (AGENTS.md principle 6), kept.
-- [x] Create `shipped/connections/slack.md` as `docs/slack.md` sketches it, fixed by the spikes.
+- [x] Create `shipped/connections/slack.json` as `docs/slack.md` sketches it, fixed by the spikes.
 - [x] Create `src/core/slack-rest.ts`. `SLACK_TOOLS`, `slackCall`, `slackWriteCall`, mrkdwn to plain text, names resolved through a per-account cache, authors as handles with `[bot]` and outside marked, `mentions_me`, `active`, and `slackBudget`.
 - [ ] Edit `src/core/rest.ts`. Register `slack` in `REST_APIS` with `required`, `scopes`, the account read (`whoami`, `handle`), `read`, `write`, `drafts` and `limits`.
 - [x] Edit `src/core/oauth.ts` and `src/server/capabilities.ts`. A `CLIENTS` table over client names (`google`, `slack`) replaces the Google branches. Each row holds the public id and its environment override, the authorize parameters, the token body's shape and how the redirect is sent.
@@ -92,7 +92,7 @@ lane says so, driven by the browser test harness (`test/*.browser.test.ts`) or C
   - [x] The Slack kinds in `src/core/objects.ts` and the two cards reading them, with `follow` left out of the file until stage 2.
 - [x] Stage 2, follow a thread and a channel. `pages` in `src/core/follow.ts`, `window(reading, pages)` keeping the newest `keep` by the ordering field, `merge(held, pages)` joining pages into the window.
   - [x] `lookPaged` in `src/core/watches.ts`. Fetch the newest page, compare its oldest item to the window's newest, hold or merge, record "behind" with the gap's age, repeat on the next due look within the budget.
-  - [x] The thread and channel `follow` entries in `shipped/connections/slack.md`, as `docs/slack.md` has them. A mention wakes, a message tells, the owner's own are nothing.
+  - [x] The thread and channel `follow` entries in `shipped/connections/slack.json`, as `docs/slack.md` has them. A mention wakes, a message tells, the owner's own are nothing.
   - [x] DESIGN.md "Watches" gains the paged list and the budget.
 - [x] Stage 3, search, people, reactions and files. `search_messages` followed as a `newest` page by `ts` sorted by timestamp, the person kind told, `add_reaction` as an idempotent draft with "Don't ask again for this task" offered, `get_file` reading a Slack file's bytes through the daemon as a blob and never into the box, and `authors` scoped to additions so a reaction on the owner's own message counts. Evidence. test/watch-slack.test.ts (search, person, reaction scenarios), test/slack-writes.test.ts (the reaction draft, a task permission covering the second), test/slack-rest.test.ts, test/attachments.test.ts (a file fetched only when a card shows it); `get_file` itself says what a file is and the bytes come through the owner's open from a card.
 

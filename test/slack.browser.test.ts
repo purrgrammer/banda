@@ -6,9 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
-import { createServer } from "vite";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { agentMainThread } from "../src/core/gateway.ts";
 import { startDaemon } from "../src/daemon.ts";
@@ -16,7 +14,7 @@ import { readDaemonFile } from "../src/home.ts";
 import type { CapabilitiesView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { fakeSlack, ROOT_TS } from "./fixtures/slack.ts";
-import { freePort, skipShippedSkills, tempHome, viteCacheDir } from "./helpers.ts";
+import { skipShippedSkills, tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const SHOTS = process.env.BANDA_SLACK_SHOTS;
@@ -63,8 +61,8 @@ for (const width of [390, 1440])
 			const shipped = join(home, "shipped");
 			await mkdir(shipped, { recursive: true });
 			await writeFile(
-				join(shipped, "slack.md"),
-				await readFile(new URL("../shipped/connections/slack.md", import.meta.url), "utf8"),
+				join(shipped, "slack.json"),
+				await readFile(new URL("../shipped/connections/slack.json", import.meta.url), "utf8"),
 			);
 			await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
 			const models = createModels();
@@ -120,14 +118,8 @@ for (const width of [390, 1440])
 			});
 			const base = `http://127.0.0.1:${daemon.port}`;
 			const token = (await readDaemonFile(home))!.token!;
-			const server = await createServer({
-				configFile: fileURLToPath(new URL("../web/vite.config.ts", import.meta.url)),
-				cacheDir: await viteCacheDir(),
+			const server = await webServer({
 				server: {
-					host: "127.0.0.1",
-					port: await freePort(),
-					strictPort: true,
-					open: false,
 					proxy: {
 						"/api": { target: base, changeOrigin: true, headers: { origin: base } },
 						"^/(?:icon(?:-maskable)?\\.svg|icon-(?:192|512|maskable-512)\\.png|apple-touch-icon\\.png|manifest\\.webmanifest)$":
@@ -154,10 +146,7 @@ for (const width of [390, 1440])
 					base: null,
 					text: "---\nname: Mara\ndescription: Works in Slack\nconnections: [slack]\n---\nHelp the owner in Slack.\n",
 				});
-				await server.listen();
-				const address = server.httpServer!.address();
-				if (!address || typeof address === "string") throw new Error("No app port");
-				await withPage(`http://127.0.0.1:${address.port}/#token=${token}`, { width, height: 900 }, async (page) => {
+				await withPage(`${server.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
 					const shot = async (name: string) => {
 						expect(
 							await page.run("document.documentElement.scrollWidth <= innerWidth"),

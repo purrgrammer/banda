@@ -24,7 +24,7 @@ export const ROOT = "1700000000.000100";
 /** Slack as banda ships it, signed in as @ana at Acme. */
 export const SLACK: ScenarioConnection = {
 	name: "slack",
-	file: readFileSync(new URL("../../shipped/connections/slack.md", import.meta.url), "utf8"),
+	file: readFileSync(new URL("../../shipped/connections/slack.json", import.meta.url), "utf8"),
 	tools: REST_APIS.slack.tools,
 	account: ME,
 };

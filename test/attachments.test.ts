@@ -122,9 +122,9 @@ it("fetches a file only when a Slack thread's card shows it, at most 10 MB, and 
 	const connected = await openConnected({ home, respond: () => fauxAssistantMessage("done") });
 	opened.push(connected);
 	const blobs = new BlobStore(join(home, "blobs"));
-	const definition = await readFile(new URL("../shipped/connections/slack.md", import.meta.url), "utf8");
-	const parsed = parseConnection("slack", definition);
-	if (!("connection" in parsed)) throw new Error(JSON.stringify(parsed));
+	const definition = shippedText("slack");
+	const parsed = { connection: shipped("slack", definition) };
+	shipping(parsed.connection);
 	let chat = 0;
 	const agent = "---\nname: Reader\ndescription: Reads Slack\nstate: active\nconnections: [slack]\n---\nReader";
 	const schema = (properties: string[]) => ({
@@ -132,14 +132,14 @@ it("fetches a file only when a Slack thread's card shows it, at most 10 MB, and 
 		properties: Object.fromEntries(properties.map((each) => [each, { type: "string" }])),
 	});
 	await connected.harness.commit(async (tx) => {
-		(await tx.doc(Accepted)).files["connections/slack.md"] = { text: definition, sha: shaOf(definition), at: 1 };
+		await added(tx, "slack");
 		(await tx.doc(Accepted)).files["agents/reader.md"] = { text: agent, sha: shaOf(agent), at: 1 };
 		const conversation = await tx.createConversation({ ownership: { kind: "ownerless" } });
 		chat = Number(conversation.id);
 		(await tx.doc(AgentChats)).chats[chat] = "reader";
 		const store = await tx.doc(Connected);
 		store.connections.slack = {
-			sha: shaOf(definition),
+			version: shaOf(definition),
 			at: 1,
 			tools: Object.fromEntries(
 				parsed.connection.reads.map((tool) => [tool, { description: tool, schema: schema(["channel", "ts"]) }]),

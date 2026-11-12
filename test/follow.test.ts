@@ -28,7 +28,7 @@ import {
 	walkOn,
 } from "../src/core/follow.ts";
 import { parseObjects } from "../src/core/objects.ts";
-import { shippedText } from "./fixtures/shipped.ts";
+import { definition, shippedText } from "./fixtures/shipped.ts";
 import { pbtRuns } from "./pbt.ts";
 
 /** How GitHub's pull request is followed, as the shipped file declares it. */
@@ -731,14 +731,9 @@ describe("a paged list: a window of the newest, walked to by pages", () => {
 		expect(kept.map((item) => item.ts)).toEqual([ts(9), ts(8), ts(7), ts(6)]);
 	});
 
-	/** Slack's thread and channel kinds, as the shipped file declares them. */
+	/** Slack's thread and channel kinds, as its shipped definition declares them. */
 	const slack = (() => {
-		const parsed = parseConnection(
-			"slack",
-			readFileSync(new URL("../shipped/connections/slack.md", import.meta.url), "utf8"),
-		);
-		if (!("connection" in parsed)) throw new Error(JSON.stringify(parsed));
-		const objects = parsed.connection.objects ?? {};
+		const objects = definition("slack").objects ?? {};
 		return {
 			thread: objects.thread?.follow as Follow,
 			channel: objects.channel?.follow as Follow,

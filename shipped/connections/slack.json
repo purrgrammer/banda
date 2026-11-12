@@ -1,6 +1,6 @@
 {
 	"service": "Slack",
-	"about": "Read channels and threads, and post as you",
+	"about": "Channels and messages",
 	"url": "https://slack.com/api",
 	"api": "slack",
 	"auth": "oauth",

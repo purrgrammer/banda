@@ -30,11 +30,11 @@ const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
 // a developer's own app: the fixture's daemon calls back on a port the shipped app did not register
 process.env.BANDA_SLACK_CLIENT_ID = "dev.slack";
 const shipped = join(home, "shipped");
-if (!existsSync(join(shipped, "slack.md"))) {
+if (!existsSync(join(shipped, "slack.json"))) {
 	mkdirSync(shipped, { recursive: true });
 	writeFileSync(
-		join(shipped, "slack.md"),
-		readFileSync(new URL("../../shipped/connections/slack.md", import.meta.url), "utf8"),
+		join(shipped, "slack.json"),
+		readFileSync(new URL("../../shipped/connections/slack.json", import.meta.url), "utf8"),
 	);
 }
 const slack = fakeSlack({ file: join(home, "slack-posts.json"), stable: true });
@@ -71,17 +71,7 @@ const s = await openConnected({
 });
 
 const shown = async () => (await s.capabilities.view()).connections.find((c) => c.name === "slack");
-// what the file says now, allowed, whatever a kill left between writing it and allowing it
-const allow = async () => {
-	const change = (await shown())?.change;
-	if (change !== undefined && "sha" in change && change.sha !== undefined)
-		await s.capabilities.acceptConnection("slack", change.sha);
-};
-if ((await shown())?.accepted === undefined) {
-	await allow();
-	if ((await shown())?.accepted === undefined) await s.capabilities.addShipped("slack");
-}
-await allow();
+if ((await shown())?.accepted === undefined) await s.capabilities.addShipped("slack");
 if ((await shown())?.state === "sign-in") {
 	const started = await s.capabilities.signIn("slack", context, LEAD, {
 		scopes: [react ? "reactions:write" : "chat:write"],
