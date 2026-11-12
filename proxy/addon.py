@@ -313,11 +313,14 @@ class Egress:
             # a protocol switch has no body: what follows is the stream's, scrubbed frame by frame
             return
         bodiless = flow.request.method.upper() == "HEAD" or flow.response.status_code in (204, 304)
-        if encoding.strip().lower() not in ("", "identity") and not bodiless:
-            # it goes on as sent, of a length nobody knows until its end
-            del flow.response.headers["content-encoding"]
+        if not bodiless:
+            # Decoding and credential scrubbing can both change a streamed body's length.
+            if encoding.strip().lower() not in ("", "identity"):
+                del flow.response.headers["content-encoding"]
             flow.response.headers.pop("content-length", None)
-            if not (flow.request.is_http2 or flow.request.is_http3):
+            if flow.request.is_http2 or flow.request.is_http3:
+                flow.response.headers.pop("transfer-encoding", None)
+            else:
                 flow.response.headers["transfer-encoding"] = "chunked"
         scrub = policy.scrubber(credentials)
 

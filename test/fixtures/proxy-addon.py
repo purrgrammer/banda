@@ -50,6 +50,7 @@ class Headers:
 class Response:
     def __init__(self, status, body, headers):
         self.status_code, self.body, self.headers = status, body, headers
+        self.stream = None
 
     @staticmethod
     def make(status, body, headers):
@@ -81,7 +82,8 @@ class Request:
         self.host_header = case["host"]
         self.headers = Headers(case.get("headers", []))
         self.raw_content = case.get("body", "").encode()
-        self.is_http2 = self.is_http3 = False
+        self.is_http2 = case.get("http", 1) == 2
+        self.is_http3 = case.get("http", 1) == 3
 
     @property
     def url(self):
@@ -113,8 +115,27 @@ for n, case in enumerate(json.load(sys.stdin)):
             flow.error = types.SimpleNamespace(msg=case["fails"])
             egress.error(flow)
         else:
-            flow.response = Response(case.get("answer", 200), b"", Headers([]))
+            response = case.get("response", {})
+            flow.response = Response(case.get("answer", 200), b"", Headers(response.get("headers", [])))
+            killed = []
+            flow.kill = lambda: killed.append(True)
             egress.responseheaders(flow)
+            if "response" in case:
+                body = base64.b64decode(response.get("body", ""))
+                if flow.response.stream is not None and not killed:
+                    split = response.get("split", len(body) // 2)
+                    chunks = [chunk for chunk in [body[:split], body[split:]] if chunk]
+                    body = b"".join(
+                        piece
+                        for chunk in [*chunks, b""]
+                        for piece in flow.response.stream(chunk)
+                    )
+                out[-1]["response"] = {
+                    "headers": flow.response.headers.items(),
+                    "body": base64.b64encode(body).decode(),
+                    "streamed": flow.response.stream is not None,
+                    "killed": bool(killed),
+                }
         # a WebSocket the case opens: whether it streams, and what each frame its server sends arrives as
         if "frames" in case:
             killed = []

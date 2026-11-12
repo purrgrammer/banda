@@ -1611,7 +1611,13 @@ function admit(config: object, cases: readonly object[]) {
 		return JSON.parse(out) as {
 			cases: (
 				| { status: number; body: string }
-				| { on: true; headers: [string, string][]; streams?: boolean; frames?: string[] }
+				| {
+						on: true;
+						headers: [string, string][];
+						streams?: boolean;
+						frames?: string[];
+						response?: { headers: [string, string][]; body: string; streamed: boolean; killed: boolean };
+				  }
 			)[];
 			held: { [chat: string]: HeldRequest[] };
 			sent: { [chat: string]: SentRequest[] };
@@ -1622,6 +1628,67 @@ function admit(config: object, cases: readonly object[]) {
 }
 
 describe.skipIf(!python)("a host the owner allowed, at the proxy", () => {
+	it("frames scrubbed identity and decoded bodies with their unknown streamed length", () => {
+		const credential = `Bearer ${"a".repeat(53)}`;
+		const original = Buffer.from(`before: ${credential} after`);
+		const expected = Buffer.from("before: [removed by banda] after");
+		const cases = [1, 2, 3].flatMap((http) =>
+			["", "identity", "gzip"].map((encoding) => {
+				const body = encoding === "gzip" ? gzipSync(original) : original;
+				return {
+					login: "c7",
+					method: "GET",
+					host: "forge.example",
+					http,
+					response: {
+						headers: [
+							["Content-Length", String(body.length)],
+							...(encoding === "" ? [] : [["Content-Encoding", encoding]]),
+						],
+						body: body.toString("base64"),
+						split: 20,
+					},
+				};
+			}),
+		);
+		const result = admit(
+			{ key: "55".repeat(32), credentials: [{ host: "forge.example", header: "Authorization", value: credential }] },
+			cases,
+		);
+		for (const [index, response] of result.cases.entries()) {
+			if (!("on" in response) || response.response === undefined)
+				throw new Error("The read did not reach its response");
+			const arrived = response.response;
+			expect(arrived.killed).toBe(false);
+			expect(Buffer.from(arrived.body, "base64")).toEqual(expected);
+			expect(arrived.headers.some(([name]) => name.toLowerCase() === "content-length")).toBe(false);
+			const transfer = arrived.headers.find(([name]) => name.toLowerCase() === "transfer-encoding")?.[1];
+			expect(transfer).toBe(index < 3 ? "chunked" : undefined);
+			expect(
+				arrived.headers.some(([name, value]) => name.toLowerCase() === "content-encoding" && value === "gzip"),
+			).toBe(false);
+		}
+	});
+
+	it("preserves representation headers for bodiless responses and leaves protocol switches unstreamed", () => {
+		const headers = [
+			["Content-Length", "512"],
+			["Content-Encoding", "gzip"],
+		];
+		const cases = [
+			{ method: "HEAD", answer: 200 },
+			{ method: "GET", answer: 204 },
+			{ method: "GET", answer: 304 },
+			{ method: "GET", answer: 101 },
+		].map((one) => ({ ...one, login: "c7", host: "forge.example", response: { headers } }));
+		const result = admit({ key: "55".repeat(32), credentials: [] }, cases);
+		for (const [index, response] of result.cases.entries()) {
+			if (!("on" in response) || response.response === undefined)
+				throw new Error("The read did not reach its response");
+			expect(response.response).toEqual({ headers, body: "", killed: false, streamed: index !== 3 });
+		}
+	});
+
 	it("spells a permitted host as the daemon does, knows the floor's headers, and hashes as the daemon does", () => {
 		const requests: [string, string, number][] = [
 			["https", "github.com", 443],
