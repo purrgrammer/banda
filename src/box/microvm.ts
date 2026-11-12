@@ -256,7 +256,6 @@ export function microvmBox(input: string): BoxSetup {
 	let loading: Promise<Runtime> | undefined;
 	let computer: Runtime | undefined;
 	const bridges = new Map<"box" | "browser", ReturnType<typeof forwarding>>();
-	let bringing: Promise<void> | undefined;
 	let browserBringing: Promise<void> | undefined;
 	let closing: Promise<void> | undefined;
 	let closed = false;
@@ -413,7 +412,7 @@ export function microvmBox(input: string): BoxSetup {
 		});
 		return takingOver;
 	};
-	const ensure = async (building: () => void) => {
+	const ensure = async (building = () => {}) => {
 		assertOpen();
 		const current = await loaded();
 		assertOpen();
@@ -475,15 +474,10 @@ export function microvmBox(input: string): BoxSetup {
 		]);
 		await relay("box");
 	};
-	const ensureBase = (building = () => {}) =>
-		(bringing ??= ensure(building).finally(() => {
-			bringing = undefined;
-		}));
 	const ensureBrowser = () => {
 		assertOpen();
 		if (browserBringing !== undefined) return browserBringing;
 		browserBringing = (async () => {
-			await ensureBase();
 			const current = await loaded();
 			assertOpen();
 			const asset = await downloadMicrovmBrowser({
@@ -535,12 +529,11 @@ export function microvmBox(input: string): BoxSetup {
 				return [process.execPath, launcher, "browser", homeArg, names.browser, agent];
 			},
 		}),
-		ensure: ensureBase,
+		ensure,
 		close: () =>
 			(closing ??= (async () => {
 				closed = true;
 				startup.abort();
-				await bringing?.catch(() => undefined);
 				await browserBringing?.catch(() => undefined);
 				await loading?.catch(() => undefined);
 				await takingOver?.catch(() => undefined);

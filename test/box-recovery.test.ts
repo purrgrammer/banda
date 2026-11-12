@@ -118,3 +118,61 @@ it("repairs native dependencies before using an existing command connection and 
 		await box.close();
 	}
 });
+
+it("starts no waiting command when the computer closes during recovery", async () => {
+	const home = await tempHome();
+	const setup = hostBox(home);
+	let repairing = false;
+	let acquired = () => {};
+	const acquiring = new Promise<void>((resolve) => {
+		acquired = resolve;
+	});
+	let release = () => {};
+	const recovery = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	const box = openBox(
+		{
+			...setup,
+			kind: "microvm",
+			ensure: async () => {
+				if (repairing) {
+					acquired();
+					await recovery;
+				}
+				await setup.ensure();
+			},
+		},
+		() => {},
+	);
+	try {
+		const env = box.env();
+		expect(await env.exec("printf kept > effects", undefined, context)).toMatchObject({
+			ok: true,
+			value: { exitCode: 0 },
+		});
+		repairing = true;
+		const waiting = Promise.allSettled([
+			env.exec("printf first >> effects", undefined, context),
+			env.exec("printf second >> effects", undefined, context),
+		]);
+		try {
+			await acquiring;
+			expect(await readFile(join(home, "workspace/effects"), "utf8")).toBe("kept");
+			const closing = box.close();
+			release();
+			await closing;
+			expect(await waiting).toEqual([
+				{ status: "rejected", reason: expect.objectContaining({ message: "The computer is closed" }) },
+				{ status: "rejected", reason: expect.objectContaining({ message: "The computer is closed" }) },
+			]);
+			expect(await readFile(join(home, "workspace/effects"), "utf8")).toBe("kept");
+		} finally {
+			release();
+			await waiting;
+		}
+	} finally {
+		release();
+		await box.close();
+	}
+});

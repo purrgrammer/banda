@@ -67,10 +67,7 @@ export type BoxSetup = {
 	readonly workspace: string;
 	/** Where attachments that came in are written, outside the workspace. */
 	readonly attachments: string;
-	/**
-	 * Bring the box up (build, create, start) if it is not; called before every start of pi-env in it. `building` is told
-	 * when an image is built, which takes minutes.
-	 */
+	/** Bring up the base runtime, reporting image preparation through `building`. */
 	ensure(building?: () => void): Promise<void>;
 	/** The command that starts pi-env in the box, before its own `serve` arguments. */
 	readonly command: readonly string[];

@@ -88,7 +88,6 @@ export function openBrowsers(options: BrowsersOptions): Browsers {
 		let found = processes.get(agent);
 		if (found === undefined) {
 			const cdp = Promise.resolve().then(async () => {
-				await options.ensure();
 				const command = await options.setup(agent).command();
 				const entry = processes.get(agent);
 				if (closed || entry?.cdp !== cdp || entry.users === 0) throw new Refused("The browser was closed.");
