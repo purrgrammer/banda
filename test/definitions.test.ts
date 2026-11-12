@@ -312,3 +312,47 @@ describe("a definition", () => {
 		}
 	});
 });
+
+describe("a read with pages, in a definition", () => {
+	const slack = definition("slack");
+	const withChannel = (change: (channel: Record<string, unknown>) => void) => {
+		const value = structuredClone(slack) as unknown as { objects: Record<string, Record<string, unknown>> };
+		change(value.objects.channel as Record<string, unknown>);
+		return errorsOf("slack", value);
+	};
+	const history = (channel: Record<string, unknown>) =>
+		(channel.reads as Record<string, Record<string, unknown>>).history as Record<string, unknown>;
+
+	it("is Slack's as shipped, and refused when its list is not in its own answer, it asks for its page, or two have pages", () => {
+		expect(withChannel(() => {})).toEqual([]);
+		expect(
+			withChannel((channel) => {
+				history(channel).pages = { list: "channel.messages", by: "ts", keep: 100 };
+			}).join(),
+		).toContain("pages is");
+		expect(
+			withChannel((channel) => {
+				history(channel).args = { channel: "{channel}", cursor: "c1" };
+			}).join(),
+		).toContain("leaves oldest and cursor to the daemon");
+		expect(
+			withChannel((channel) => {
+				const reads = channel.reads as Record<string, Record<string, unknown>>;
+				(reads.channel as Record<string, unknown>).pages = { list: "channel.messages", by: "ts", keep: 10 };
+			}).join(),
+		).toContain("at most one read has pages");
+		expect(
+			withChannel((channel) => {
+				history(channel).pages = { list: "history.messages", by: "ts", keep: 100_000 };
+			}),
+		).toHaveLength(1);
+	});
+
+	it("is refused on a kind no watch follows: its window is a watch's", () => {
+		expect(
+			withChannel((channel) => {
+				delete channel.follow;
+			}).join(),
+		).toContain('its kind needs a "follow"');
+	});
+});

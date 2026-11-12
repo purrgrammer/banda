@@ -92,7 +92,7 @@ files, `{id, name, size, mimetype}`. A followed thread keys a message's reaction
 "2 reacted :tada:", on the owner's own message too; one taken back, or more people giving the same one, is nothing. A
 channel's watch ignores reactions. A search match is keyed by its permalink, since one `ts` names messages in two
 channels; it is new only when its `ts` is past every match the reading had, so a match Slack indexes late with an
-older time is not new (the file says so). A person's face changing is nothing.
+older time is not new (its `newest`). A person's face changing is nothing.
 
 A message and a thread are one kind. A link to a reply carries `thread_ts`, and the kind's `normalize` takes the
 thread's root from it, so a link to a reply and a link to its root name the same object and share one reading; the

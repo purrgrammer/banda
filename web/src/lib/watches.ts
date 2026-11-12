@@ -129,7 +129,10 @@ export function watchRows(
 					ended: watch.done?.authority === true,
 					failing: watch.done === undefined && watch.failed !== undefined,
 					stopped: watch.done === undefined && watch.failed?.off === true,
-					behind: watch.done === undefined && (watch.behind !== undefined || watch.pages !== undefined),
+					behind:
+						watch.done === undefined &&
+						watch.failed?.off !== true &&
+						(watch.behind !== undefined || watch.pages !== undefined),
 					...(change === undefined
 						? {}
 						: {

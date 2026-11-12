@@ -824,6 +824,8 @@ function afresh(record: WatchRecord) {
 	delete record.held;
 	delete record.resumed;
 	delete record.behind;
+	// a baseline reads afresh: a walk of pages from before it does not go on
+	delete record.pages;
 }
 
 /**
@@ -1019,7 +1021,8 @@ export function defineWatches(options: WatchesOptions) {
 			const paged = Object.entries(found.reads).find(([, read]) => read.pages !== undefined);
 			if (paged !== undefined) {
 				const [as, read] = paged;
-				const list = listIn(kept?.answers[as], (read.pages as Pages).list);
+				// a window read under another definition is not this one's: its items are keyed and ordered by other rules
+				const list = kept?.source === found.source ? listIn(kept.answers[as], (read.pages as Pages).list) : undefined;
 				const walk = record?.pages?.[as];
 				// copies of the doc's values: the reads happen outside this commit
 				paging = {
@@ -1184,7 +1187,8 @@ export function defineWatches(options: WatchesOptions) {
 			record.next = now + every;
 			// what a walk of pages fetched is in this reading now; one merged as far as it read leaves the watch behind
 			if (paging !== undefined && shared === undefined) delete record.pages;
-			if (gapped) record.behind = now;
+			// a baseline has nothing it may have missed: only a look after one is behind
+			if (gapped && seen !== undefined) record.behind = now;
 			// one reading per object, kept with the few before it; a reading the same as the newest is no new version, and
 			// one shared is the newest, as read when it was
 			const same = shared !== undefined || (kept !== undefined && canonical(kept.answers) === canonical(after));

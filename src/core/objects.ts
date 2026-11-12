@@ -480,6 +480,8 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 		}
 		if (follow === undefined && Object.values(reads).some((read) => read.follow === true))
 			errors.push(`${where}: a read made only when followed needs a "follow"`);
+		if (follow === undefined && Object.values(reads).some((read) => read.pages !== undefined))
+			errors.push(`${where}: a read with pages is a window a watch keeps, so its kind needs a "follow"`);
 		const windows = Object.values(reads).flatMap((read) => (read.pages === undefined ? [] : [read.pages]));
 		if (windows.length > 1) errors.push(`${where}: at most one read has pages`);
 		if (follow !== undefined && windows.length > 0)
