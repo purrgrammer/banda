@@ -87,6 +87,7 @@ import { defineGroups, Groups, groupSection } from "./groups.ts";
 import { FLOOR_WORDS } from "./permissions.ts";
 import { decidedText, makeProposal, PROPOSAL_DECIDED, type Proposal, proposalTools } from "./proposals.ts";
 import { defineReleases, RELEASED, stoppable } from "./release.ts";
+import { rosterSection } from "./roster.ts";
 import { defineRoutines, failureKey, Routines, troubleIn, WAKE, type WakeData } from "./routines.ts";
 import { skillTokens } from "./skill-tokens.ts";
 import { acceptedSkills, ownerSkillEntry, type Skill } from "./skills.ts";
@@ -1685,7 +1686,7 @@ export function defineCore(options: CoreOptions) {
 			watches.Watch,
 			groups.GroupTurn,
 		],
-		sections: [speaking, groupSection],
+		sections: [speaking, groupSection, rosterSection],
 		tools: [
 			messageTool(speakingWith),
 			askUserTool(speakingWith),
