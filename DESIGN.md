@@ -312,7 +312,9 @@ its chat at the next model boundary and deliberately starts its prompt cache col
 
 The workspace starts with one agent, which is ordinary: renameable and archivable like any other, except
 that the last active agent cannot be archived, since the app opens in a chat. The owner makes another from the sheet:
-a face, a name, a personality, connections; nothing runs before the file is written. The default face is the chat
+a face, a name, a personality, connections; nothing runs before the file is written. The owner never writes a
+description: it is the personality's first sentence (the name while there is none), and the owner's edit of either
+carries it along, unless it was written otherwise (an accepted proposal's). The default face is the chat
 bubble. The owner can choose a shape and colour or accept a generated candidate; generated geometry is data, validated
 and previewed before acceptance, never code or markup from the box. The sheet designs one in place, from the owner's
 description or the name alone, by an inference on the Balanced tier; it is the owner's pick, written with the file.

@@ -12,12 +12,14 @@ import { type Box, openBox } from "../src/box/box.ts";
 import { BOX_TOOLS, boxEnv, boxTools } from "../src/box/tools.ts";
 import { Accepted, AgentChats, agentPath, LEAD, LEAD_TEXT } from "../src/core/agents.ts";
 import { stopArchived } from "../src/core/archive.ts";
+import { defaultAvatarFace } from "../src/core/avatar-face.ts";
 import { DEFAULT_NAME } from "../src/core/choices.ts";
 import { Groups } from "../src/core/groups.ts";
 import { ROSTER_DESCRIPTION, rosterSection, rosterText } from "../src/core/roster.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
 import { save, type Workspace } from "../src/server/agents.ts";
+import { agentFile, edited } from "../web/src/app/edit-file.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { blobStore, echoModels, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
 
@@ -147,5 +149,20 @@ describe("the roster", () => {
 		// restored, it is back
 		await write("mara", MARA);
 		expect(await roster(harness, LEAD_CHAT)).toContain("- mara: Mara. Plans trips");
+	});
+
+	it("follows the owner's edits in the app: a rewritten personality is what the others read", async () => {
+		const { harness, write } = await open();
+		// as the app's new-agent sheet writes it; this test box has fewer tools than the daemon's
+		const made = agentFile(
+			{ face: defaultAvatarFace(), name: "Mara" },
+			"Plans trips: trains and flights. Thorough.",
+		).replace(/^tools: .*\n/m, "");
+		await write("mara", made);
+		expect(await roster(harness, LEAD_CHAT)).toContain("- mara: Mara. Plans trips: trains and flights");
+		await write("mara", edited(made, { name: "Mara Lu", personality: "Keeps the owner's taxes in order. Thorough." }));
+		const after = await roster(harness, LEAD_CHAT);
+		expect(after).toContain("- mara: Mara Lu. Keeps the owner's taxes in order");
+		expect(after).not.toContain("Plans trips");
 	});
 });
