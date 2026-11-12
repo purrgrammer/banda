@@ -298,12 +298,27 @@ export async function seed(harness: Harness, workspace: Workspace, ctx: Context 
 	const { files: boxed } = await boxFiles(workspace, ctx);
 	for (const [path, file] of Object.entries(doc?.files ?? {})) {
 		const name = /^agents\/(.+)\.md$/.exec(path)?.[1];
-		if (name !== undefined && !boxed.has(name))
-			await write(env, workspace, `${workspace.root}/${path}`, file.text, ctx);
+		if (name !== undefined && !boxed.has(name)) await seedFile(env, workspace, path, file.text, ctx);
 	}
 	await harness.commit(async (tx) => {
 		(await tx.doc(Accepted)).seeded = true;
 	}, ctx);
+}
+
+async function seedFile(env: ExecutionEnv, workspace: Workspace, path: string, text: string, ctx: Context) {
+	const temporary = `${workspace.root}/.banda-seed-${shaOf(`${path}\0${text}`)}.tmp`;
+	try {
+		await write(env, workspace, temporary, text, ctx);
+		const flushed = await env.flushFile(temporary, ctx);
+		if (!flushed.ok) throw flushed.error;
+		const target = `${workspace.root}/${path}`;
+		const made = await env.createDir(posix.dirname(target), { recursive: true }, ctx);
+		if (!made.ok) throw made.error;
+		const published = await env.renameFile(temporary, target, ctx);
+		if (!published.ok) throw published.error;
+	} finally {
+		await env.remove(temporary, { force: true }, ctx);
+	}
 }
 
 /** Write a workspace file, its folder made first. */

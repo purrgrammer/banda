@@ -138,6 +138,11 @@ export type FaultPoint =
 	/** Owner agent-file publication, before and after its filesystem write. */
 	| "agent:write:before"
 	| "agent:write:after"
+	| "agent:write:partial"
+	| "agent:rename:before"
+	| "agent:rename:after"
+	| "agent:flush:before"
+	| "agent:flush:after"
 	/**
 	 * A box script cut short: it runs only its first `hit` lines and then the process is killed, as a daemon killed
 	 * while the script ran leaves it. Fired by the worker that runs the script, never by `hit()`.

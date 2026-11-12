@@ -129,7 +129,7 @@ describe("seeding a new box with the accepted agents", () => {
 		}
 	});
 
-	it("resumes a partial restoration after an already seeded agents folder is lost", async () => {
+	it.each(["before", "partial"] as const)("resumes restoration after a %s write failure", async (point) => {
 		const { harness, workspace, close } = await fresh();
 		try {
 			await save(
@@ -145,12 +145,13 @@ describe("seeding a new box with the accepted agents", () => {
 			const env = workspace.env();
 			const write = env.writeFile.bind(env);
 			let failed = false;
-			vi.spyOn(env, "writeFile").mockImplementation(async (path, ...args) => {
-				if (path.endsWith("/mira.md") && !failed) {
+			vi.spyOn(env, "writeFile").mockImplementation(async (path, content, ctx) => {
+				if (typeof content === "string" && content.includes("Be practical.") && !failed) {
 					failed = true;
+					if (point === "partial") await write(path, content.slice(0, 4), ctx);
 					throw new Error("restoration interrupted");
 				}
-				return write(path, ...args);
+				return write(path, content, ctx);
 			});
 			const interrupted: Workspace = { ...workspace, env: () => env };
 			await expect(seed(harness, interrupted)).rejects.toThrow("restoration interrupted");
