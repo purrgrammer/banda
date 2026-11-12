@@ -131,9 +131,11 @@ describe("a chat's prompt", () => {
 			const after = (await api<ChatPrompt>(`/chats/${chat}/prompt?at=${loaded.id}`)).body;
 			expect(before.tools.map((tool) => tool.name)).not.toContain("propose_avatar");
 			expect(after.tools.map((tool) => tool.name)).toContain("propose_avatar");
-			// the face guide arrives with the tool, and costs a chat nothing before it
+			// the face guide arrives with the tool, in the search's result, and is never a section added mid-chat
 			expect(before.system).not.toContain("Avatar geometry designer");
-			expect(after.system).toContain("Avatar geometry designer");
+			expect(after.system).not.toContain("Avatar geometry designer");
+			const found = entries.find((item) => item.role === "tool" && item.name === "tool_search");
+			expect(found?.role === "tool" ? found.text : "").toContain("Avatar geometry designer");
 			// its group leaves once none of its tools is left to load; connect is still to load
 			expect(before.system).toMatch(/On demand: .*\bavatar\b/);
 			expect(after.system).not.toMatch(/On demand: .*\bavatar\b/);

@@ -513,7 +513,7 @@ describe("memory files", () => {
 		const thread = crypto.randomUUID();
 		await s.say("hello", thread);
 		const first = s.requests.at(-1)!;
-		expect(first.messages.join()).not.toContain("<memory>");
+		expect(first.messages.join()).toContain("<memory>\\nNothing saved yet.\\n</memory>");
 		await s.call("remember", { fact: "Never books flights before 9am", scope: "global" });
 		const id = factId(GLOBAL_MEMORY, "Never books flights before 9am");
 		expect(s.lastResult()).toBe(`Remembered [${id}].`);

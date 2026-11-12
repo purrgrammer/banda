@@ -1,4 +1,5 @@
-import { defineExtension } from "@earendil-works/pi-durable";
+import { defineExtension, type PromptSection, type ToolRegistration, wrapTool } from "@earendil-works/pi-durable";
+import { TOOL_SEARCH_TOOL_NAME } from "@earendil-works/pi-durable/tool-search";
 import { PROPOSE_AVATAR } from "./toolsets.ts";
 
 /**
@@ -94,14 +95,40 @@ export const AVATAR_INSTRUCTIONS = CHAT_DELIVERY + DESIGN;
 /** For a face designed in the "+" sheet, outside any chat. */
 export const SHEET_AVATAR_INSTRUCTIONS = SHEET_DELIVERY + DESIGN;
 
-/** The guide reaches a chat with `propose_avatar` itself, as a section: tool search indexes descriptions, not sections. */
+/**
+ * The guide reaches a chat with `propose_avatar` itself, in the result of the `tool_search` that loaded it: a trusted
+ * tool result, as the old read tool's was. Not a section from the moment it loads: pi-durable can only append a new
+ * section at the end, and one that appears anywhere else re-adds every section; nor the tool's description, which
+ * `tool_search` indexes in full, so its words would load the tool for unrelated queries.
+ */
+export function withAvatarGuide(tool: ToolRegistration): ToolRegistration {
+	return {
+		...tool,
+		execute: async (args, api, context) => {
+			const result = await tool.execute(args, api, context);
+			const loaded = (result.details as { readonly loaded?: unknown } | undefined)?.loaded;
+			if (!Array.isArray(loaded) || !loaded.includes(PROPOSE_AVATAR)) return result;
+			return { ...result, output: [...(result.output ?? []), { type: "text", text: `\n\n${AVATAR_INSTRUCTIONS}` }] };
+		},
+	};
+}
+
+/**
+ * The guide as a section only when the prompt is written whole, which costs no re-add: after a compaction, whose summary
+ * may have replaced the search result that brought it while `propose_avatar` stays loaded. A prompt written whole lacks
+ * `instructions` among the sections shown, which is otherwise always there; once in, it stays while the tool does.
+ */
+export const avatarSection: PromptSection = {
+	key: "avatar_design",
+	render: ({ agent, shown }) =>
+		agent.tools.some((tool) => tool.name === PROPOSE_AVATAR) &&
+		(shown.avatar_design !== undefined || shown.instructions === undefined)
+			? AVATAR_INSTRUCTIONS
+			: undefined,
+};
+
 export const avatarInstructionsExtension = defineExtension({
 	name: "banda.avatar-instructions",
-	sections: [
-		{
-			key: "avatar_design",
-			render: ({ agent }) =>
-				agent.tools.some((tool) => tool.name === PROPOSE_AVATAR) ? AVATAR_INSTRUCTIONS : undefined,
-		},
-	],
+	sections: [avatarSection],
+	wraps: [wrapTool({ name: TOOL_SEARCH_TOOL_NAME } as ToolRegistration, withAvatarGuide)],
 });
