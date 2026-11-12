@@ -243,7 +243,11 @@ it.skipIf(!hasChrome())(
 				await page.until(face("Sancho"));
 				const drawing = `${face("Sancho")}.parentElement.querySelector('[role="img"]').innerHTML`;
 				await page.until(`${face("Sancho")}.parentElement.querySelector('[role="img"] canvas, [role="img"] svg')`);
-				expect(await frames(page, drawing), "without the preference the face moves").toBeGreaterThan(1);
+				// without the preference the face moves: waited on, since the live scene mounts only once the face is seen on
+				// screen; three drawings are the still one, the live scene, and a pose it moved to
+				await page.until(
+					`(()=>{window.drawings??=new Set();window.drawings.add(${drawing});return window.drawings.size>=3})()`,
+				);
 				await page.input("Emulation.setEmulatedMedia", {
 					features: [{ name: "prefers-reduced-motion", value: "reduce" }],
 				});
