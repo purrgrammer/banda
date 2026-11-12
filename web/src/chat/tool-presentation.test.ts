@@ -41,6 +41,21 @@ describe("tool identity and literal previews", () => {
 		expect(args.text).toBe(original);
 		expect(shortPreview(" one\n two \t three ")).toBe("one two three");
 	});
+	it("cuts a command before its last step, a path before its file name, and keeps a trailing submit", () => {
+		const chain = `npm ci && npm run build && npm test -- ${"--flag ".repeat(30)}&& git push origin main`;
+		const command = toolPreview("bash", { command: chain }) ?? "";
+		expect(command.length).toBeLessThanOrEqual(88);
+		expect(command.endsWith("&& git push origin main")).toBe(true);
+		expect(command).toContain("…");
+		const path = toolPreview("edit", { path: `/workspace/${"nested/".repeat(20)}Settled.tsx` }) ?? "";
+		expect(path.length).toBeLessThanOrEqual(88);
+		expect(path.endsWith("/Settled.tsx") || path.endsWith("…Settled.tsx")).toBe(true);
+		const typed = toolPreview("browser_type", { ref: "e4", text: "word ".repeat(60), submit: true }) ?? "";
+		expect(typed.endsWith(" · submit")).toBe(true);
+		expect(typed.length).toBeLessThanOrEqual(88);
+		// short enough to show whole: unchanged
+		expect(toolPreview("bash", { command: "npm test && git push" })).toBe("npm test && git push");
+	});
 	it("does not put credentials or unknown arguments in a collapsed preview", () => {
 		expect(toolPreview("propose_key", { key: "private", connection: "GitHub", host: "api.github.com" })).toBe(
 			"GitHub · api.github.com",

@@ -31,6 +31,7 @@ import {
 	UserRoundIcon,
 	WrenchIcon,
 } from "lucide-react";
+import { capEnds, commandEnds, type Ends, pathEnds, suffixEnds } from "@/lib/ends";
 
 const ICONS: Record<string, LucideIcon> = {
 	message_user: MessageCircleIcon,
@@ -73,15 +74,25 @@ export function ToolIcon({ name }: { name: string }) {
 	return <Icon aria-hidden="true" data-tool-icon={name} className="size-4" />;
 }
 
-export function shortPreview(text: string): string {
+/**
+ * Text on one line, at most `max` long. Cut at its end, unless `ends` says what must stay (a command's last step, a
+ * path's file name, a trailing " · submit"): then the cut is before it.
+ */
+export function shortPreview(text: string, ends?: (text: string) => Ends, max = 180): string {
 	const one = text.replace(/\s+/g, " ").trim();
-	return one.length > 180 ? `${one.slice(0, 179)}…` : one;
+	const { head, end } = capEnds(ends === undefined ? { head: one, end: "" } : ends(one), max);
+	return head + end;
 }
+
+/** How long a preview whose end matters may be: two lines on a phone, so the clamp under it never takes the end. */
+const KEPT = 88;
 
 export function toolPreview(name: string, args: Readonly<Record<string, unknown>>): string | undefined {
 	const text = (...keys: string[]) =>
 		keys.flatMap((key) => (typeof args[key] === "string" && args[key] !== "" ? [String(args[key])] : [])).join(" · ");
 	let value: string;
+	// what must stay when the preview is cut: none, by default
+	let ends: ((text: string) => Ends) | undefined;
 	switch (name) {
 		case "message_user":
 		case "message_group":
@@ -107,23 +118,28 @@ export function toolPreview(name: string, args: Readonly<Record<string, unknown>
 			break;
 		case "bash":
 			value = text("command");
+			ends = commandEnds;
 			break;
 		case "read":
 			value = text("path") + (typeof args.offset === "number" ? ` · from line ${args.offset}` : "");
+			ends = pathEnds;
 			break;
 		case "write":
 		case "edit":
 			value = text("path");
+			ends = pathEnds;
 			break;
 		case "web_fetch":
 		case "browser_navigate":
 			value = text("url");
+			ends = pathEnds;
 			break;
 		case "browser_click":
 			value = text("ref");
 			break;
 		case "browser_type":
 			value = text("ref", "text") + (args.submit ? " · submit" : "");
+			ends = suffixEnds;
 			break;
 		case "browser_select":
 			value = text("ref") + (Array.isArray(args.values) ? ` · ${args.values.join(", ")}` : "");
@@ -163,5 +179,5 @@ export function toolPreview(name: string, args: Readonly<Record<string, unknown>
 		default:
 			value = text("path", "url", "query");
 	}
-	return value ? shortPreview(value) : undefined;
+	return value ? (ends === undefined ? shortPreview(value) : shortPreview(value, ends, KEPT)) : undefined;
 }

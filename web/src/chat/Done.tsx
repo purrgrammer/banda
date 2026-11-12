@@ -188,10 +188,12 @@ export function Done({
 							<span className="shrink-0 font-medium text-ink">{who.name}</span>
 						</>
 					)}
-					<span className="min-w-0 truncate text-ink-2" title={said}>
+					{/* it wraps to a second line before it cuts (on a phone its end is often what happened) and never shrinks, so
+					no word splits: it wraps only once it fills the row, and what it was about takes the rest */}
+					<span className="line-clamp-2 max-w-full shrink-0 whitespace-normal break-words text-ink-2" title={said}>
 						{said}
 					</span>
-					{ref}
+					{ref === null ? null : <span className="flex min-w-0">{ref}</span>}
 					{note === undefined ? null : (
 						<span className="hidden min-w-0 shrink-[99] truncate text-ink-2 @sm:inline">{note}</span>
 					)}

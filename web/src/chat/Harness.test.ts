@@ -178,6 +178,22 @@ describe("headlineOf", () => {
 	});
 });
 
+describe("a long headline keeps what it ends on", () => {
+	it("keeps an edited file's name whole, its folders giving way", () => {
+		const { object } = headlineOf({ kind: "edit", path: `src/${"deeply/nested/".repeat(8)}auth-session-store.ts` });
+		expect(object.length).toBeLessThanOrEqual(64);
+		expect(object.endsWith("…auth-session-store.ts")).toBe(true);
+	});
+	it("keeps a chain's last step whole, the steps before it giving way", () => {
+		const command = `npm ci && npm run build && npm run lint -- ${"--max-warnings 0 ".repeat(5)}&& git push --force origin main`;
+		const { verb, object } = headlineOf({ kind: "run", command, running: false });
+		expect(verb).toBe("Ran");
+		expect(object.length).toBeLessThanOrEqual(72);
+		expect(object.startsWith("npm ci && npm run build")).toBe(true);
+		expect(object.endsWith("&& git push --force origin main")).toBe(true);
+	});
+});
+
 describe("middleEllipsis", () => {
 	it("truncates in the middle, never the end", () => {
 		const long = `npm run build ${"x".repeat(100)} --reporter dot`;

@@ -3,7 +3,7 @@
  * the owner may edit; one primary button that is the effect's own verb, a quiet Don't, and at most one scope. And the
  * change card: an agent's change to itself, shown in full.
  */
-import { CheckIcon, ChevronRightIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronRightIcon, CircleSlashIcon, ClockIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,7 +14,12 @@ import { Tile } from "./Cards.tsx";
 export type ApprovalState =
 	| { readonly kind: "open"; readonly editing?: boolean }
 	| { readonly kind: "done"; readonly words: string }
-	| { readonly kind: "declined" };
+	| { readonly kind: "declined" }
+	/** No answer came in time, or its run stopped first: nobody said no, so it never says they did. */
+	| { readonly kind: "expired" | "cancelled"; readonly words: string };
+
+/** How a settled card says what happened: as tall as the buttons it replaces, wrapping rather than leaving the card. */
+const SETTLED = "flex min-h-9 items-center gap-1.5 text-ui text-ink-2";
 
 export function ApprovalCard({
 	agent,
@@ -70,8 +75,8 @@ export function ApprovalCard({
 		<Tile className="flex flex-col gap-3 p-4">
 			<span className="flex flex-col gap-0.5">
 				<span className="text-meta text-ink-2">{agent} asks to</span>
-				<span className="text-body font-semibold text-ink">{what}</span>
-				{as === undefined ? null : <span className="text-meta text-ink-2">as {as}</span>}
+				<span className="text-body font-semibold text-ink [overflow-wrap:anywhere]">{what}</span>
+				{as === undefined ? null : <span className="text-meta text-ink-2 [overflow-wrap:anywhere]">as {as}</span>}
 			</span>
 			{object}
 			{text === undefined ? null : state.kind === "open" && editing ? (
@@ -83,7 +88,7 @@ export function ApprovalCard({
 					className="min-h-24 text-body"
 				/>
 			) : (
-				<blockquote className="rounded-field bg-paper-2 px-3.5 py-2.5 text-body whitespace-pre-line text-ink">
+				<blockquote className="rounded-field bg-paper-2 px-3.5 py-2.5 text-body whitespace-pre-line text-ink [overflow-wrap:anywhere]">
 					{text}
 				</blockquote>
 			)}
@@ -119,14 +124,23 @@ export function ApprovalCard({
 				</>
 			) : state.kind === "done" ? (
 				// as tall as the buttons it replaces: the card keeps its height when it settles, until it folds
-				<span className="flex min-h-9 items-center gap-1.5 text-ui text-ink-2">
-					<CheckIcon className="size-4 text-alive" />
-					{state.words}
+				<span className={SETTLED}>
+					<CheckIcon className="size-4 shrink-0 text-alive" />
+					<span className="min-w-0 [overflow-wrap:anywhere]">{state.words}</span>
+				</span>
+			) : state.kind === "declined" ? (
+				<span className={SETTLED}>
+					<XIcon className="size-4 shrink-0" />
+					<span className="min-w-0 [overflow-wrap:anywhere]">You said no: didn't {verb.toLowerCase()}</span>
 				</span>
 			) : (
-				<span className="flex min-h-9 items-center gap-1.5 text-ui text-ink-2">
-					<XIcon className="size-4" />
-					You said no: didn't {verb.toLowerCase()}
+				<span className={SETTLED}>
+					{state.kind === "expired" ? (
+						<ClockIcon className="size-4 shrink-0" />
+					) : (
+						<CircleSlashIcon className="size-4 shrink-0" />
+					)}
+					<span className="min-w-0 [overflow-wrap:anywhere]">{state.words}</span>
 				</span>
 			)}
 		</Tile>
@@ -223,7 +237,11 @@ export function WaitingPill({ ask, onClick }: { ask: string; onClick?: () => voi
 			className="inline-flex h-8 max-w-full items-center gap-2 rounded-full bg-ink px-3.5 text-meta font-medium text-paper shadow-composer"
 		>
 			<span className="size-1.5 shrink-0 rounded-full bg-paper" />
-			<span className="truncate">Waiting on you: {ask}</span>
+			{/* what it waits on gives way, never that it waits */}
+			<span className="flex min-w-0 gap-1">
+				<span className="shrink-0">Waiting on you:</span>
+				<span className="min-w-0 truncate">{ask}</span>
+			</span>
 		</button>
 	);
 }

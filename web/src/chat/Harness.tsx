@@ -29,10 +29,12 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/cn";
+import { capEnds, commandEnds, pathEnds } from "@/lib/ends";
 import { askSummary } from "../app/harness-activity.ts";
 import { projectOf } from "../lib/project.ts";
 import { Tile } from "./Cards.tsx";
 import { Confirm } from "./Confirm.tsx";
+import { KeepEnd } from "./KeepEnd.tsx";
 
 export { projectOf };
 
@@ -149,6 +151,12 @@ export function middleEllipsis(text: string, max = 64): string {
 	return `${text.slice(0, head)}…${text.slice(text.length - (keep - head))}`;
 }
 
+/** A path at most `max` long, its file name whole: the folders give way. */
+const pathCut = (path: string, max = 64) => {
+	const { head, end } = capEnds(pathEnds(path), max);
+	return head + end;
+};
+
 const unquote = (token: string) => token.replace(/^["']|["']$/g, "");
 
 const TESTS = /\b(vitest|jest|pytest|cargo test|go test)\b|\bnpm (run )?test/;
@@ -184,7 +192,9 @@ export function runHeadline(
 	root?: string,
 ): { verb: string; object: string; code: boolean } {
 	const clean = cleanCommand(command, folder, root);
-	const whole = { verb: ran ? "Ran" : "Running", object: middleEllipsis(clean, 72), code: true };
+	// cut before its last step, never in it: what a chain ends on (a push, a submit) is what it does
+	const steps = capEnds(commandEnds(clean), 72);
+	const whole = { verb: ran ? "Ran" : "Running", object: steps.head + steps.end, code: true };
 	// a chained, piped, redirected or substituting command never hides behind one quiet verb: the owner sees it whole
 	if (compoundCommand(clean)) return whole;
 	const tokens = clean.match(/"[^"]*"|'[^']*'|\S+/g) ?? [];
@@ -199,7 +209,7 @@ export function runHeadline(
 	if (head === "cat" || head === "head" || head === "tail") {
 		// `head -n 20 file`: the count is not the file; the last non-numeric word is
 		const file = positional.filter((token) => !/^\d+$/.test(token)).at(-1);
-		if (file !== undefined) return { verb: ran ? "Read" : "Reading", object: middleEllipsis(file), code: true };
+		if (file !== undefined) return { verb: ran ? "Read" : "Reading", object: pathCut(file), code: true };
 	}
 	if (head === "ls")
 		return {
@@ -223,9 +233,9 @@ export function headlineOf(
 ): { verb: string; object: string; code: boolean } {
 	switch (step?.kind) {
 		case "read":
-			return { verb: "Reading", object: middleEllipsis(relativeTo(step.path, folder, root)), code: true };
+			return { verb: "Reading", object: pathCut(relativeTo(step.path, folder, root)), code: true };
 		case "edit":
-			return { verb: "Editing", object: middleEllipsis(relativeTo(step.path, folder, root)), code: true };
+			return { verb: "Editing", object: pathCut(relativeTo(step.path, folder, root)), code: true };
 		case "run":
 			return runHeadline(step.command, folder, step.running === false, root);
 		// a headline never shows a command in part: what is asked is said by its kind, whole only on the ask's card
@@ -513,8 +523,10 @@ function HeadWords({ verb, object, code }: { verb: string; object: string; code:
 	return (
 		<>
 			<span className="shrink-0 text-ink-2">{verb}</span>
-			{object === "" ? null : (
-				<span className={cn("min-w-0 truncate text-ink", code ? "font-code text-meta" : "text-ui")}>{object}</span>
+			{object === "" ? null : code ? (
+				<KeepEnd ends={commandEnds(object)} className="font-code text-meta text-ink" />
+			) : (
+				<span className="min-w-0 truncate text-ui text-ink">{object}</span>
 			)}
 		</>
 	);
@@ -567,12 +579,19 @@ export function HarnessCard({
 		) : (
 			<>
 				<span className="shrink-0 text-ink-2">{verb}</span>
-				{object === "" ? null : state === "working" ? (
-					<Shimmer as="span" className={cn("min-w-0 truncate", code ? "font-code" : "", "text-ui")}>
+				{object === "" ? null : code ? (
+					// a path keeps its file name, a chain its last step: the line gives way in its middle
+					<KeepEnd
+						ends={commandEnds(object)}
+						shimmer={state === "working"}
+						className={cn("font-code text-ui", state === "working" ? "" : "text-ink")}
+					/>
+				) : state === "working" ? (
+					<Shimmer as="span" className="min-w-0 truncate text-ui">
 						{object}
 					</Shimmer>
 				) : (
-					<span className={cn("min-w-0 truncate text-ink", code ? "font-code" : "", "text-ui")}>{object}</span>
+					<span className="min-w-0 truncate text-ui text-ink">{object}</span>
 				)}
 			</>
 		);

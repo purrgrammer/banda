@@ -2,10 +2,21 @@
  * Cards in the chat: what an agent made (an artifact), what it is looking at (the browser, live), what it asks (a
  * question), and a page it hands to the owner (a sign-in). Each sits in the agent's column, outside the bubbles.
  */
-import { BookOpenIcon, CheckIcon, ExternalLinkIcon, FileTextIcon, GlobeIcon, MonitorIcon } from "lucide-react";
+import {
+	BookOpenIcon,
+	CheckIcon,
+	CircleSlashIcon,
+	ClockIcon,
+	ExternalLinkIcon,
+	FileTextIcon,
+	GlobeIcon,
+	MonitorIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import { pathEnds } from "@/lib/ends";
+import { KeepEnd } from "./KeepEnd.tsx";
 
 /** The frame every card shares: a hairline, the tile radius, the measure. */
 export function Tile({
@@ -21,6 +32,7 @@ export function Tile({
 		// the measure, not the column's share: a chat column shrinks each entry to its content, so a card whose content got
 		// smaller (an approval once answered) would shrink with it
 		<div
+			data-tile=""
 			{...data}
 			className={cn("w-[var(--measure)] max-w-full rounded-tile border border-line-soft bg-paper", className)}
 		>
@@ -115,9 +127,13 @@ export function ViewCard({
 export type QuestionState =
 	| { readonly kind: "open" }
 	| { readonly kind: "answered"; readonly answer: string }
-	| { readonly kind: "dismissed" };
+	/** The owner answered in a message of their own, not on the card. */
+	| { readonly kind: "answered"; readonly inChat: true }
+	| { readonly kind: "dismissed" }
+	/** No answer came in time, or its run stopped first; `words` says which, as the store recorded it. */
+	| { readonly kind: "expired" | "cancelled"; readonly words: string };
 
-/** A question: its choices as buttons, or an answer typed in the composer; it may be dismissed. */
+/** A question: its choices as buttons, or an answer typed in the composer; it may be dismissed, or go unanswered. */
 export function QuestionCard({
 	question,
 	choices,
@@ -133,7 +149,7 @@ export function QuestionCard({
 }) {
 	return (
 		<Tile className="flex flex-col gap-3 p-4">
-			<p className="text-body font-medium text-ink">{question}</p>
+			<p className="text-body font-medium text-ink [overflow-wrap:anywhere]">{question}</p>
 			{state.kind === "open" ? (
 				<>
 					<div className="flex flex-wrap gap-2">
@@ -158,12 +174,28 @@ export function QuestionCard({
 					</p>
 				</>
 			) : state.kind === "answered" ? (
-				<p className="flex items-center gap-1.5 text-ui text-ink-2">
-					<CheckIcon className="size-4 text-ink" />
-					You answered <span className="font-medium text-ink">{state.answer}</span>
+				// the answer wraps under its words on a narrow card, and a long link or token breaks rather than leaving it
+				<p className="flex items-start gap-1.5 text-ui text-ink-2">
+					<CheckIcon className="mt-0.5 size-4 shrink-0 text-ink" />
+					{"inChat" in state ? (
+						<span className="min-w-0">You answered in the chat</span>
+					) : (
+						<span className="min-w-0 [overflow-wrap:anywhere]">
+							You answered <span className="font-medium whitespace-pre-line text-ink">{state.answer}</span>
+						</span>
+					)}
 				</p>
-			) : (
+			) : state.kind === "dismissed" ? (
 				<p className="text-ui text-ink-2">You let this one go.</p>
+			) : (
+				<p className="flex items-start gap-1.5 text-ui text-ink-2">
+					{state.kind === "expired" ? (
+						<ClockIcon className="mt-0.5 size-4 shrink-0" />
+					) : (
+						<CircleSlashIcon className="mt-0.5 size-4 shrink-0" />
+					)}
+					<span className="min-w-0 [overflow-wrap:anywhere]">{state.words}</span>
+				</p>
 			)}
 		</Tile>
 	);
@@ -197,6 +229,7 @@ export function Browsed({ pages, verb = "Browsed" }: { pages: readonly string[];
 		const url = new URL(first);
 		shown = `${url.host}${url.pathname === "/" ? "" : url.pathname}`;
 	} catch {}
+	// short of room the path gives way in its middle: the host and the page itself stay
 	return (
 		<span className="flex max-w-full items-center gap-2 rounded-full border border-line-soft px-3 py-1.5 text-meta text-ink-2">
 			<Icon aria-hidden="true" className="size-3.5 shrink-0" />
@@ -205,9 +238,9 @@ export function Browsed({ pages, verb = "Browsed" }: { pages: readonly string[];
 				href={first}
 				target="_blank"
 				rel="noreferrer noopener"
-				className="min-w-0 truncate text-ink underline decoration-line underline-offset-[3px] hover:decoration-ink"
+				className="flex min-w-0 text-ink underline decoration-line underline-offset-[3px] hover:decoration-ink"
 			>
-				{shown}
+				<KeepEnd ends={pathEnds(shown)} whole={first} />
 			</a>
 			{rest.length === 0 ? null : <span className="shrink-0">+{rest.length} more</span>}
 		</span>

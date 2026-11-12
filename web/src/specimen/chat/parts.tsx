@@ -335,6 +335,10 @@ export function Parts() {
 						<Browsed verb="Read" pages={["https://docs.python.org/3/library/asyncio.html"]} />
 						<Browsed
 							verb="Read"
+							pages={["https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/text-overflow"]}
+						/>
+						<Browsed
+							verb="Read"
 							pages={[
 								"https://www.visitportugal.com/en/content/lisbon-card",
 								"https://en.wikipedia.org/wiki/Lisbon_Metro",
@@ -350,6 +354,31 @@ export function Parts() {
 						choices={[]}
 						state={{ kind: "answered", answer: "TP 1351 at 9:15" }}
 					/>
+					<Group label="Settled, each as it ended: answered in the chat, a long answer, no answer in time, stopped">
+						<QuestionCard
+							question="Where should the notes go?"
+							choices={[]}
+							state={{ kind: "answered", inChat: true }}
+						/>
+						<QuestionCard
+							question="Which page has the fare rules?"
+							choices={[]}
+							state={{
+								kind: "answered",
+								answer: "https://www.flytap.com/en-pt/fare-rules/economy-discount-classic-plus-lisbon-porto-2026",
+							}}
+						/>
+						<QuestionCard
+							question="Should I hold the 9:15?"
+							choices={[]}
+							state={{ kind: "expired", words: "No answer in time" }}
+						/>
+						<QuestionCard
+							question="Which seat?"
+							choices={[]}
+							state={{ kind: "cancelled", words: "Stopped before an answer" }}
+						/>
+					</Group>
 					<SignInCard agent="Mara" site="flights.example" />
 					<PullRequestCard pr={PR} />
 					<PullRequestCard
@@ -405,6 +434,21 @@ export function Parts() {
 						as="@bandarra on GitHub"
 						state={{ kind: "done", words: "Merged · 10:52" }}
 					/>
+					<Group label="Neither yes nor no: no answer in time, stopped before it ran" className="flex-col items-start">
+						<ApprovalCard
+							agent="Octo"
+							what="Run npm run build && npm test && git push origin fix/quiet-hours"
+							verb="Run"
+							state={{ kind: "expired", words: "No answer in time; it did not run" }}
+						/>
+						<ApprovalCard
+							agent="Octo"
+							what="Comment on purrgrammer/banda #34"
+							verb="Comment"
+							as="@bandarra on GitHub"
+							state={{ kind: "cancelled", words: "Stopped before your answer was used" }}
+						/>
+					</Group>
 					<ApprovalCard
 						agent="Mara"
 						what="Book TP 1351 for €214"

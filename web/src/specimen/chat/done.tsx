@@ -256,6 +256,21 @@ export function DoneSection() {
 				<Group label="Opened: the card it was, settled" className="flex-col flex-nowrap items-stretch">
 					<Done kind="merge" action="merged" reference={PR_MERGED} time="10:55" open card={MERGE_CARD} />
 				</Group>
+				<Group
+					label="Each way an ask ended · a long one wraps to a second line before it cuts"
+					className="flex-col flex-nowrap items-stretch"
+				>
+					<div className="flex flex-col">
+						<Done kind="answer" action="answered in the chat" reference={{ where: "Where should the notes go?" }} />
+						<Done kind="declined" action="no answer in time" reference={{ where: "Should I hold the 9:15?" }} />
+						<Done kind="declined" action="stopped before an answer" reference={{ where: "Which seat?" }} />
+						<Done
+							kind="declined"
+							action="not done, no answer in time: run npm run build && npm test && git push origin fix/quiet-hours"
+						/>
+						<Done kind="declined" action="stopped before it ran: comment on purrgrammer/banda #34" />
+					</div>
+				</Group>
 				<Group label="Every kind · declined stays, struck" className="flex-col flex-nowrap items-stretch">
 					<div className="flex flex-col">
 						<Done kind="pull-request" action="opened" reference={PR_35} />
