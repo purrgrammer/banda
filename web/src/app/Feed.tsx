@@ -600,12 +600,7 @@ export function FeedView({
 	for (const pending of outgoing) {
 		nodes.push(
 			<Run key={`outgoing:${pending.id}`}>
-				<div
-					className={cn(
-						"flex flex-col items-end gap-1 transition-opacity duration-200",
-						pending.state === "sending" && "opacity-60",
-					)}
-				>
+				<div className="flex flex-col items-end gap-1">
 					{pending.text.trim() === "" ? null : (
 						<Bubble mine>
 							<OwnerWords text={pending.text} />
@@ -655,13 +650,7 @@ function partOf(
 	switch (segment.kind) {
 		case "owner":
 			return (
-				// queued, it shows dimmed, as a message on its way does, until the agent takes it
-				<div
-					className={cn(
-						"contents",
-						segment.queued === true && "flex flex-col items-end gap-1 opacity-60 transition-opacity duration-200",
-					)}
-				>
+				<>
 					{segment.text.trim() === "" ? null : (
 						<Bubble mine copy={segment.text}>
 							{segment.queued ? (
@@ -674,9 +663,7 @@ function partOf(
 					{segment.files.map((file) => (
 						<FilePart key={`${file.name}-${"sha" in file ? file.sha : ""}`} chat={chat} file={file} />
 					))}
-					{/* the dimming says it to the eye; the words only to a screen reader */}
-					{segment.queued === true ? <span className="sr-only">Waiting its turn</span> : null}
-				</div>
+				</>
 			);
 		case "owner-message":
 			return (

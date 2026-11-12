@@ -23,7 +23,7 @@ import { Line } from "../chat/Line.tsx";
 import { ChatLoading } from "../chat/Loading.tsx";
 import type { Who } from "../chat/Row.tsx";
 import { Mentionable } from "../components/MentionChip.tsx";
-import { type ChatRow, type Item, type Posted, postMessage, readChat, stopChat, upload } from "../lib/api.ts";
+import { type ChatRow, type Item, type Posted, postMessage, readChat, upload } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { answeredWell, view } from "../lib/chat.ts";
 import type { ChatAgent } from "../lib/navigation.ts";
@@ -265,7 +265,7 @@ function Timeline({
 					busy: transcript.busy,
 					running: transcript.running,
 					thinking: transcript.thinking,
-					// the owner's messages waiting for the run (a steer, or a follow-up), dimmed until the agent takes them
+					// the owner's messages waiting for the run (a steer, or a follow-up), shown as any message until the agent takes them
 					queued: transcript.queued,
 				},
 				context,
@@ -403,7 +403,6 @@ function Timeline({
 				agent={agent}
 				who={who}
 				mentionables={mentionables}
-				working={transcript.busy && ask === undefined}
 				{...(ask === undefined
 					? {}
 					: { ask: ask.kind === "question" ? ask.ask.question : ask.kind === "approval" ? ask.label : "" })}
@@ -413,7 +412,6 @@ function Timeline({
 					setOutgoing((items) => [...items, pending]);
 					deliver(pending);
 				}}
-				onStop={() => void stopChat(chat)}
 			/>
 			{activity === undefined ? null : (
 				<ActivitySheet
@@ -510,18 +508,14 @@ function Foot({
 	agent,
 	who,
 	mentionables,
-	working = false,
 	ask,
 	onSend,
-	onStop,
 }: {
 	agent: string;
 	who: Who;
 	mentionables: readonly Who[];
-	working?: boolean;
 	ask?: string;
 	onSend: (text: string, files: readonly File[]) => Promise<void>;
-	onStop?: () => void;
 }) {
 	const { list } = useSkills();
 	return (
@@ -536,9 +530,7 @@ function Foot({
 				keep={`a:${agent}`}
 				focus
 				className="w-full"
-				state={working ? "working" : "ready"}
 				onSend={onSend}
-				{...(onStop === undefined ? {} : { onStop })}
 			/>
 		</div>
 	);

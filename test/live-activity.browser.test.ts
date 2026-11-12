@@ -85,7 +85,7 @@ beforeAll(async () => {
 		},
 	});
 	faux.setResponses(
-		Array.from({ length: 1000 }, () => async (request) => {
+		Array.from({ length: 1000 }, () => async (request, options) => {
 			const last = [...request.messages].reverse().find((message) => message.role !== "system");
 			const input = [...request.messages].reverse().find((message) => message.role === "user");
 			const marker = [...text(input?.content).matchAll(/(?:BROWSER|GROUP)_[A-Z0-9_]+/g)].at(-1)?.[0] ?? "request";
@@ -95,7 +95,11 @@ beforeAll(async () => {
 			if (last?.role === "user") {
 				if (marker.endsWith("LIVE") && gate) {
 					entered = true;
-					await gate;
+					// a held request ends when it is aborted, as a provider's does
+					await Promise.race([
+						gate,
+						new Promise((resolve) => options?.signal?.addEventListener("abort", resolve, { once: true })),
+					]);
 				}
 				if (group)
 					return fauxAssistantMessage(
@@ -407,39 +411,55 @@ it.skipIf(!hasChrome())(
 );
 
 it.skipIf(!hasChrome())(
-	"a message sent while the agent works shows dimmed as waiting its turn, then as sent once the agent takes it",
+	"a message sent while the agent works shows at once as any message, and a second Enter on the emptied composer sends nothing",
 	async () => {
 		gate = new Promise((resolve) => {
 			release = resolve;
 		});
 		entered = false;
+		const field = `document.querySelector('textarea[name="message"]')`;
 		const write = (value: string) =>
-			`(()=>{const el=document.querySelector('textarea[name="message"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));})()`;
+			`(()=>{const el=${field};Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));})()`;
 		const button = (label: string) => `document.querySelector('form button[aria-label="${label}"]')`;
-		const waiting = `[...document.querySelectorAll('.opacity-60')].some(el => el.textContent.includes('BROWSER_STEER_NOTE') && el.textContent.includes('Waiting its turn'))`;
+		const stop = `[...document.querySelectorAll('button')].some(el => el.textContent === 'Stop' || el.getAttribute('aria-label') === 'Stop')`;
+		const bubble = `[...document.querySelectorAll('[data-slot], div')].find(el => el.textContent === 'BROWSER_STEER_NOTE')`;
+		const labelled = `[...document.querySelectorAll('span')].some(el => el.textContent === 'Queued' || el.textContent === 'Waiting its turn')`;
+		const dimmed = `(() => { for (let el = ${bubble}; el; el = el.parentElement) if (getComputedStyle(el).opacity !== '1') return true; return false; })()`;
+		const enter = async (page: Page) => {
+			await page.run(`${field}.focus()`);
+			const key = { key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" };
+			await page.input("Input.dispatchKeyEvent", { type: "keyDown", ...key });
+			await page.input("Input.dispatchKeyEvent", { type: "keyUp", ...key });
+		};
 		try {
 			await withPage(`${base}/#token=${token}`, { width: 1440, height: 900 }, async (page) => {
 				await open(page, "#/a/sancho");
-				await page.until(`document.querySelector('textarea[name="message"]')`);
+				await page.until(field);
 				await page.run(write("BROWSER_STEER_LIVE"));
-				await page.run(`document.querySelector('textarea[name="message"]').closest('form').requestSubmit()`);
+				await page.run(`${field}.closest('form').requestSubmit()`);
 				await until(() => Promise.resolve(entered));
-				// working with nothing written: Stop; with words: Send
-				await page.until(`${button("Stop")} && !${button("Send")}`);
+				// working, nothing written: Send is there but off, and there is no Stop anywhere
+				await page.until(`${button("Send")}?.disabled === true`);
+				expect(await page.run(stop)).toBe(false);
 				await page.run(write("BROWSER_STEER_NOTE"));
-				await page.until(`${button("Send")} && !${button("Stop")}`);
-				await page.run(`${button("Send")}.click()`);
-				// queued behind the run: dimmed, waiting its turn, and the composer empty again
-				await page.until(waiting);
-				await page.until(`document.querySelector('textarea[name="message"]').value === '' && ${button("Stop")}`);
+				await page.until(`${button("Send")}?.disabled === false`);
+				await enter(page);
+				// behind the run: shown at once as any message, not dimmed and with no label, and the composer empty again
+				await page.until(`${bubble} && ${field}.value === ''`);
+				expect(await page.run(dimmed)).toBe(false);
+				expect(await page.run(labelled)).toBe(false);
+				// a second Enter, as a double tap lands once the composer has emptied: nothing more goes
+				await enter(page);
+				await new Promise((resolve) => setTimeout(resolve, 500));
 				release();
 				gate = undefined;
 				await idle();
-				// taken by the agent: shown as sent, no longer waiting
-				await page.until(
-					`!document.body.textContent.includes('Waiting its turn') && [...document.querySelectorAll('[data-slot]'), ...document.querySelectorAll('div')].some(el => el.textContent === 'BROWSER_STEER_NOTE')`,
-				);
-				expect(await page.run(waiting)).toBe(false);
+				// taken by the agent: still shown once, and no empty message went with it
+				await page.until(bubble);
+				expect(await page.run(labelled)).toBe(false);
+				const owner = (await allItems(chat)).filter((item) => item.role === "user");
+				expect(owner.filter((item) => item.text === "BROWSER_STEER_NOTE")).toHaveLength(1);
+				expect(owner.filter((item) => (item.text ?? "").trim() === "" && (item.files ?? []).length === 0)).toEqual([]);
 				expect(page.errors()).toEqual([]);
 			});
 		} finally {
@@ -451,7 +471,7 @@ it.skipIf(!hasChrome())(
 );
 
 it.skipIf(!hasChrome())(
-	"in a group while a member works: Send shows once written, the message joins the room at once, and the draft keeps its file",
+	"in a group while a member works: no Stop, the message joins the room at once, and the draft keeps its file",
 	async () => {
 		gate = new Promise((resolve) => {
 			release = resolve;
@@ -468,10 +488,14 @@ it.skipIf(!hasChrome())(
 				await page.until(field);
 				await api(`/groups/${room}/messages`, { key: randomUUID(), text: "GROUP_STEER_LIVE", mentions: ["sancho"] });
 				await until(() => Promise.resolve(entered));
-				// a member at work, nothing written: Stop; words: Send
-				await page.until(`${button("Stop")} && !${button("Send")}`);
+				// a member at work: the composer offers Send, off until something is written, and there is no Stop
+				await page.until(`${button("Send")}?.disabled === true`);
+				expect(
+					await page.run(
+						`[...document.querySelectorAll('button')].some(el => el.textContent === 'Stop' || el.getAttribute('aria-label') === 'Stop')`,
+					),
+				).toBe(false);
 				await page.run(write("GROUP_STEER_NOTE"));
-				await page.until(`${button("Send")} && !${button("Stop")}`);
 				// the draft, words and a file, survives a reload
 				await page.run(`(() => {
 					const input = document.querySelector('input[type="file"]');
@@ -488,12 +512,12 @@ it.skipIf(!hasChrome())(
 				await page.until(`!window.beforeReload && document.readyState === 'complete'`);
 				await page.until(`${field}?.value === 'GROUP_STEER_NOTE'`);
 				await page.until(`${attached}.includes('group-notes.txt')`);
-				// sent while the member works: in the room at once, the composer empty, Stop back
+				// sent while the member works: in the room at once, the composer empty
 				await page.run(`${button("Send")}.click()`);
 				await page.until(
 					`[...document.querySelectorAll('[data-entry]')].some(el => el.textContent.includes('GROUP_STEER_NOTE'))`,
 				);
-				await page.until(`${field}.value === '' && ${attached}.length === 0 && ${button("Stop")}`);
+				await page.until(`${field}.value === '' && ${attached}.length === 0`);
 				release();
 				gate = undefined;
 				expect(await page.run(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);

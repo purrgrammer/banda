@@ -326,7 +326,6 @@ export function GroupChat({
 						group
 						mentionables={members}
 						className="w-full"
-						state={working.length > 0 ? "working" : "ready"}
 						onSend={async (words, files) => {
 							const uploaded = await Promise.all(files.map((file) => upload(file)));
 							const mentioned = mentionsIn(
@@ -341,7 +340,6 @@ export function GroupChat({
 								uploaded.map(({ sha, name: fileName }) => ({ sha, name: fileName })),
 							);
 						}}
-						onStop={() => void api(`/groups/${room}/stop`, { method: "POST", body: "{}" })}
 					/>
 				</Conversation>
 			</div>

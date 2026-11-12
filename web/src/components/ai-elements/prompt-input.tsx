@@ -444,6 +444,8 @@ export const PromptInput = ({
 	// Refs
 	const inputRef = useRef<HTMLInputElement | null>(null);
 	const formRef = useRef<HTMLFormElement | null>(null);
+	// banda: a message on its way, until its submit settles
+	const sending = useRef(false);
 
 	// ----- Local attachments (only used when no provider)
 	const [items, setItems] = useState<(FileUIPart & { id: string })[]>([]);
@@ -746,6 +748,12 @@ export const PromptInput = ({
 						return (formData.get("message") as string) || "";
 					})();
 
+			// banda: the form itself refuses what is not a message, so no path to it (Send, Enter, a second tap that lands
+			// once the first has emptied the composer) can send one: nothing but blanks and no file is nothing to send, and
+			// a submit while another is on its way is the same message again (its words are still there until it settles)
+			if ((text.trim() === "" && files.length === 0) || sending.current) return;
+			sending.current = true;
+
 			// Reset form immediately after capturing text to avoid race condition
 			// where user input during async blob conversion would be lost
 			if (!usingProvider) {
@@ -796,6 +804,8 @@ export const PromptInput = ({
 				}
 			} catch {
 				// Don't clear on error - user may want to retry
+			} finally {
+				sending.current = false;
 			}
 		},
 		[usingProvider, controller, files, onSubmit, remove, clearReferencedSources],

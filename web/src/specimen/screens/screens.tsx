@@ -82,7 +82,7 @@ export function ChatScreen({
 			</div>
 			<div className="mx-auto flex w-full max-w-[44rem] flex-col items-center gap-2 px-3 pb-3">
 				{pill === undefined ? null : <WaitingPill ask={pill} />}
-				<Composer to={name} group={group} className="w-full" state={state === "working" ? "working" : "ready"} />
+				<Composer to={name} group={group} className="w-full" />
 			</div>
 			{keyboard ? <Keyboard /> : null}
 		</div>

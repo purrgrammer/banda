@@ -706,13 +706,12 @@ export function Parts() {
 			</Section>
 			<Section
 				id="composer"
-				note="Words, files and a voice message. While the agent works, Stop when empty and Send once something is written; the last one keeps its draft across a reload."
+				note="Words, files and a voice message, the same while the agent works: what is sent shows at once. Send is off until there is something to send. The last one keeps its draft across a reload."
 			>
 				<div className="flex max-w-2xl flex-col gap-5">
 					<Composer to="Mara" />
 					<Composer to="Mara" files={ATTACHED} draft="Here are the photos and the terms. Which hotel is closer?" />
-					<Composer to="Octo" state="working" />
-					<Composer to="Octo" state="working" draft="Also check the 10:40, it might be cheaper." />
+					<Composer to="Octo" draft="Also check the 10:40, it might be cheaper." />
 					<Composer to="Mara" state="recording" />
 					<Composer to="Trip" group />
 					<div className="flex justify-center">
@@ -733,30 +732,26 @@ export function Parts() {
 	);
 }
 
-/** A composer while Octo works, live: what is sent steers (listed under it), Stop stops, and its draft is kept. */
+/** A composer while Octo works, live: what is sent goes in the queue (listed under it), and its draft is kept. */
 function SteerComposer() {
 	const scheme = useContext(FrameContext);
 	const [sent, setSent] = useState<readonly string[]>([]);
-	const [stopped, setStopped] = useState(false);
 	return (
 		<div id="composer-steer" className="flex flex-col gap-2">
 			<Composer
 				to="Octo"
-				state={stopped ? "ready" : "working"}
 				keep={`specimen:steer:${scheme}`}
 				onSend={async (text, files) => {
 					// on its way a moment, as over a network: words written meanwhile stay in the composer
 					await new Promise((resolve) => setTimeout(resolve, 600));
 					setSent((was) => [...was, [text, ...files.map((file) => file.name)].filter(Boolean).join(" + ")]);
 				}}
-				onStop={() => setStopped(true)}
 			/>
 			<ul data-sent className="px-3 text-meta text-ink-2">
 				{sent.map((each, index) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: a fixture's log, appended only
-					<li key={index}>Steered: {each}</li>
+					<li key={index}>Sent: {each}</li>
 				))}
-				{stopped ? <li>Stopped</li> : null}
 			</ul>
 		</div>
 	);

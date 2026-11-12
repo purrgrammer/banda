@@ -31,7 +31,7 @@ Each step is reviewed in the browser before the next. Estimates are for an agent
    object, reaction, sign-in); the approval card (the verb, Don't, one scope row; on an object; editable); the change
    card (the text in full, What it was); every event line (a routine's run, a failure, a change to accept, a sign-in to
    finish); the "waiting on you" pill; Try again on a failed send; the transcript view. The composer: `prompt-input`
-   with attachment previews, Stop, the menu, mentions in a group ("To everyone · @ to pick one"; a mention as the emoji
+   with attachment previews, the menu, mentions in a group ("To everyone · @ to pick one"; a mention as the emoji
    and name, a link). First run: the first agent's screen with the providers to pick from; the first words and starters.
    A group chat with members' messages and a member's ask.
 3. **The panel, settings and connections** (2 to 3 days). The agent's panel: its face and name over
@@ -112,6 +112,7 @@ About five weeks of agent work in all; slices 8 and 9 can run beside 6 and 7 onc
 - [ ] The panel's tab when switching agents: the one that fits what happens in that chat
 - [ ] A page handed over that the owner cannot get through in the agent's browser (a bot check that keeps checking) offers "Open in your browser": the same address in the owner's own browser
 - [ ] Long chats: "Earlier messages" and opening at a search hit, tried on a chat of hundreds of entries
+- [ ] Stop has no control in the app: a chat's or a group's run stops only through the daemon (`POST /chats/<chat>/stop`, `POST /groups/<room>/stop`), the browser's Stop or archiving; the owner decides whether and where it returns
 
 ## Search tools
 
