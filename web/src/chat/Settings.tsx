@@ -3,15 +3,7 @@
  * owner's words, its connections, permissions, memory, thinking tier and archive. A new agent is a short sheet with the
  * face defaulted: naming a friend, not filling a form. And Settings, one page. Every change is in effect at once.
  */
-import {
-	ArchiveIcon,
-	ArchiveRestoreIcon,
-	ChevronLeftIcon,
-	EllipsisIcon,
-	PencilIcon,
-	PlusIcon,
-	XIcon,
-} from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, ChevronLeftIcon, PencilIcon, PlusIcon, XIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
 	AlertDialog,
@@ -25,12 +17,6 @@ import {
 	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -43,6 +29,7 @@ import { accountTitle, backendOf } from "../../../src/core/provider-accounts.ts"
 import { TIER_WORDS, TIERS, type Tier } from "../../../src/core/tiers.ts";
 import { AvatarChoices } from "../avatar/Choices.tsx";
 import type { ModelView, TiersView } from "../lib/api.ts";
+import { RowMenu } from "./Accounts.tsx";
 import { Confirm } from "./Confirm.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
 import { Face, FaceStack } from "./Face.tsx";
@@ -1077,7 +1064,8 @@ export type ProviderRow = {
 
 /**
  * Settings' providers: each the band may think with. The one in use says so; a connected one is Use; one not connected
- * is Connect (a sign-in in its own tab, or a key here); any connected one signs out, asked first. On a device (`here`
+ * is Connect (a sign-in in its own tab, or a key here); a connected one's menu renames it and signs it out, asked first,
+ * and Add account under a provider's accounts adds another. On a device (`here`
  * false) only the connected ones show, to use or sign out of: a sign-in comes back to the computer banda runs on, so
  * providers are connected there.
  */
@@ -1123,7 +1111,7 @@ export function ModelProviders({
 	onAdd?: ((provider: string, label: string, key?: string) => void) | undefined;
 	/** A new name for an account, in the owner's words. */
 	onRename?: ((id: string, label: string) => void) | undefined;
-	/** The provider whose "Add another account" form shows at first. */
+	/** The provider whose "Add account" form shows at first. */
 	adding?: string | undefined;
 	/** The account whose rename form shows at first. */
 	renaming?: string | undefined;
@@ -1210,65 +1198,22 @@ export function ModelProviders({
 										) : null}
 										{provider.connected && !ambient ? (
 											<>
-												{renamable ? (
-													<DropdownMenu>
-														<DropdownMenuTrigger asChild>
-															<Button
-																variant="ghost"
-																size="icon-xs"
-																className="sm:hidden"
-																aria-label={`More for ${name}`}
-															>
-																<EllipsisIcon />
-															</Button>
-														</DropdownMenuTrigger>
-														<DropdownMenuContent align="end">
-															<DropdownMenuItem onSelect={() => setRenaming(provider.id)}>Rename</DropdownMenuItem>
-															<DropdownMenuItem variant="destructive" onSelect={() => setLeaving(provider.id)}>
-																Sign out
-															</DropdownMenuItem>
-														</DropdownMenuContent>
-													</DropdownMenu>
-												) : null}
-												{renamable ? (
-													<Button
-														variant="ghost"
-														size="xs"
-														className="hidden sm:inline-flex"
-														aria-label={`Rename ${name}`}
-														aria-expanded={renaming === provider.id}
-														onClick={() => setRenaming((was) => (was === provider.id ? undefined : provider.id))}
-													>
-														Rename
-													</Button>
-												) : null}
+												<RowMenu
+													label={name}
+													items={[
+														...(renamable ? [{ words: "Rename", onSelect: () => setRenaming(provider.id) }] : []),
+														{ words: "Sign out", onSelect: () => setLeaving(provider.id) },
+													]}
+												/>
 												<Confirm
 													title={`Sign out of ${name}?`}
 													body={leave}
 													action="Sign out"
-													keep="Stay signed in"
+													keep="Stay connected"
 													onConfirm={onSignOut === undefined ? undefined : () => onSignOut(provider.id)}
-												>
-													<Button
-														variant="ghost"
-														size="xs"
-														className={renamable ? "hidden sm:inline-flex" : undefined}
-														aria-label={`Sign out of ${name}`}
-													>
-														Sign out
-													</Button>
-												</Confirm>
-												{renamable ? (
-													<Confirm
-														title={`Sign out of ${name}?`}
-														body={leave}
-														action="Sign out"
-														keep="Stay signed in"
-														onConfirm={onSignOut === undefined ? undefined : () => onSignOut(provider.id)}
-														open={leaving === provider.id}
-														onOpenChange={(open) => setLeaving(open ? provider.id : undefined)}
-													/>
-												) : null}
+													open={leaving === provider.id}
+													onOpenChange={(open) => setLeaving(open ? provider.id : undefined)}
+												/>
 											</>
 										) : !here ? null : (
 											<>
@@ -1340,21 +1285,17 @@ export function ModelProviders({
 										onClose={() => setAdding(undefined)}
 									/>
 								) : (
-									<RowOf
-										className="border-t border-line-soft pl-[2.875rem]"
-										title={<span className="text-ink-2">Another {provider.name} account</span>}
-										end={
-											<Button
-												variant="ghost"
-												size="xs"
-												aria-label={`Add another ${provider.name} account`}
-												onClick={() => setAdding(backend(provider))}
-											>
-												<PlusIcon />
-												{provider.by === "sign-in" ? "Sign in another" : "Add another"}
-											</Button>
-										}
-									/>
+									<div className="border-t border-line-soft py-1.5 pr-3 pl-[2.375rem]">
+										<Button
+											variant="ghost"
+											size="xs"
+											aria-label={`Add account to ${provider.name}`}
+											onClick={() => setAdding(backend(provider))}
+										>
+											<PlusIcon />
+											Add account
+										</Button>
+									</div>
 								)
 							) : null}
 						</div>

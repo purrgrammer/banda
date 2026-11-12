@@ -41,7 +41,7 @@ describe("Settings' providers", () => {
 		expect(page).not.toContain('aria-label="Connect');
 		expect(page).toContain('aria-label="Use OpenAI"');
 		expect(page).toContain('aria-label="Use xAI"');
-		expect(page).toContain('aria-label="Sign out of OpenAI"');
+		expect(page).toContain('aria-label="More for OpenAI"');
 		expect(page).toContain("on the computer banda runs on");
 	});
 
@@ -55,11 +55,11 @@ describe("Settings' providers", () => {
 			createElement(ModelProviders, { current: "anthropic@work", providers: accounts, onAdd: () => {} }),
 		);
 		expect(page).toContain('aria-label="Use Anthropic · Personal"');
-		expect(page).toContain('aria-label="Sign out of Anthropic · Work"');
+		expect(page).toContain('aria-label="More for Anthropic · Work"');
 		// one account of a provider is named by the provider alone
 		expect(page).toContain('aria-label="Use OpenAI"');
-		expect(page).toContain('aria-label="Add another Anthropic account"');
-		expect(page).toContain('aria-label="Add another OpenAI account"');
+		expect(page).toContain('aria-label="Add account to Anthropic"');
+		expect(page).toContain('aria-label="Add account to OpenAI"');
 		expect(page).toContain('src="/providers/anthropic.svg"');
 		expect(page).not.toContain("anthropic@work.svg");
 		const adding = renderToStaticMarkup(
@@ -75,7 +75,7 @@ describe("Settings' providers", () => {
 		const device = renderToStaticMarkup(
 			createElement(ModelProviders, { current: "anthropic", providers: accounts, onAdd: () => {}, here: false }),
 		);
-		expect(device).not.toContain("Add another");
+		expect(device).not.toContain("Add account");
 	});
 
 	it("renames an account only where a provider has more than one, starting from its name", () => {
@@ -87,12 +87,11 @@ describe("Settings' providers", () => {
 		const page = renderToStaticMarkup(
 			createElement(ModelProviders, { current: "anthropic", providers: accounts, onRename: () => {} }),
 		);
-		expect(page).toContain('aria-label="Rename Anthropic"');
-		expect(page).toContain('aria-label="Rename Anthropic · Work"');
-		expect(page).not.toContain('aria-label="Rename OpenAI"');
-		// a phone gathers Rename and Sign out under one menu, where a label makes the row long
+		// Rename and Sign out act on one account: they are in its row's menu, at every width
+		expect(page).toContain('aria-label="More for Anthropic"');
 		expect(page).toContain('aria-label="More for Anthropic · Work"');
-		expect(page).not.toContain('aria-label="More for OpenAI"');
+		expect(page).toContain('aria-label="More for OpenAI"');
+		expect(page).not.toContain(">Rename<");
 		const renaming = renderToStaticMarkup(
 			createElement(ModelProviders, {
 				current: "anthropic",

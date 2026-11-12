@@ -364,7 +364,7 @@ export const SECTIONS: readonly Entry[] = [
 		title: "A connection's details",
 		group: "connections",
 		status: "app",
-		sources: ["web/src/chat/ConnectionDetails.tsx", "web/src/app/ConnectionPage.tsx"],
+		sources: ["web/src/chat/ConnectionDetails.tsx", "web/src/chat/Accounts.tsx", "web/src/app/ConnectionPage.tsx"],
 	},
 	{
 		id: "github",

@@ -152,7 +152,7 @@ for (const width of [390, 1440])
 	);
 
 it.skipIf(!hasChrome())(
-	"changing access signs in the account it was chosen for, with two accounts",
+	"each account's menu changes its access or signs it out, asked first, with two accounts",
 	async () => {
 		const home = await tempHome();
 		const fake = await startFakeMcp({ auth: "oauth", scopes: ["calendar", "repo"] });
@@ -226,15 +226,92 @@ it.skipIf(!hasChrome())(
 					};
 					location.hash = '#/connections?connection=cal'`);
 				await page.until(`document.querySelector('[data-account="bob"]')`);
-				const change = (who: string) =>
-					`[...document.querySelector('[data-account="${who}"]').querySelectorAll('button')].find(el => el.textContent.trim() === 'Change access')`;
-				await page.run(`${change("ana")}.click()`);
+				// what acts on an account is in its row's menu, opened as a pointer opens it
+				const menu = (who: string) =>
+					`document.querySelector('[data-account="${who}"] [aria-label="More for @${who}"]')`;
+				const item = (words: string) =>
+					`[...document.querySelectorAll('[role="menu"][data-state="open"] [role="menuitem"]')].find(el => el.textContent.trim() === ${JSON.stringify(words)})`;
+				// a person's click: at the control's middle, once nothing (a dialog closing) lies over it
+				const press = async (expression: string) => {
+					const at = `(() => {const el=${expression}; if (!el) return undefined; el.scrollIntoView({block:'center'}); const r=el.getBoundingClientRect(); const x=r.x+r.width/2, y=r.y+r.height/2; return el.contains(document.elementFromPoint(x,y)) ? {x,y} : undefined;})()`;
+					await page.until(at);
+					const point = await page.run<{ x: number; y: number }>(at);
+					await page.input("Input.dispatchMouseEvent", {
+						type: "mousePressed",
+						button: "left",
+						clickCount: 1,
+						...point,
+					});
+					await page.input("Input.dispatchMouseEvent", {
+						type: "mouseReleased",
+						button: "left",
+						clickCount: 1,
+						...point,
+					});
+				};
+				const open = async (who: string, words: string) => {
+					await page.input("Page.bringToFront", {});
+					await press(menu(who));
+					await press(item(words));
+				};
+				await open("ana", "Change access");
 				await page.until(`document.querySelector('[role="dialog"]')?.textContent.includes('as @ana')`);
 				await page.run(
 					`[...document.querySelector('[role="dialog"]').querySelectorAll('button')].find(el => /sign in/i.test(el.textContent)).click()`,
 				);
 				await page.until(`window.__signins.length > 0`);
 				expect(await page.run(`window.__signins[0]`)).toMatchObject({ account: "ana", scopes: ["calendar"] });
+				await page.run(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+				await page.until(`!document.querySelector('[role="dialog"]')`);
+				// what adds an account is one control below the list
+				const add = `[...document.querySelectorAll('button')].filter(el => el.textContent.trim() === 'Add account')`;
+				expect(await page.run(`${add}.length`)).toBe(1);
+				// signing out of an account says who loses it, and nothing is sent until the owner says Sign out
+				const sancho = await fetch(`${base}/api/capabilities/connections/cal/accounts/bob/switch`, {
+					method: "POST",
+					headers,
+					body: JSON.stringify({ agent: "sancho", on: true }),
+				});
+				expect(sancho.ok).toBe(true);
+				await page.until(`document.querySelector('[data-account="bob"]')?.textContent.includes('Sancho')`);
+				await page.run(`window.__signouts = 0;
+					const before = window.fetch;
+					window.fetch = (input, init) => {
+						if (String(input).includes('/signout')) window.__signouts++;
+						return before(input, init);
+					};`);
+				const dialog = `document.querySelector('[role="alertdialog"]')`;
+				const accounts = async () =>
+					((await (await fetch(`${base}/api/capabilities`, { headers })).json()) as CapabilitiesView).connections
+						.find((each) => each.name === "cal")
+						?.accounts?.map((each) => each.account);
+				await open("bob", "Sign out");
+				await page.until(dialog);
+				expect(await page.run(`${dialog}.querySelector('h2').textContent`)).toBe("Sign out of @bob?");
+				expect(await page.run(`${dialog}.querySelector('p').textContent`)).toBe(
+					"Sancho loses access to @bob. Its sign-in is forgotten, and the permissions, watches and waiting drafts that use it end. You can sign in again.",
+				);
+				const buttons = `[...${dialog}.querySelectorAll('button')].map(el => el.textContent.trim())`;
+				expect(await page.run(buttons)).toEqual(["Stay connected", "Sign out"]);
+				expect(await page.run(`window.__signouts`)).toBe(0);
+				expect(await accounts()).toEqual(["ana", "bob"]);
+				// Stay connected changes nothing
+				await page.run(
+					`[...${dialog}.querySelectorAll('button')].find(el => el.textContent.trim() === 'Stay connected').click()`,
+				);
+				await page.until(`!${dialog}`);
+				expect(await page.run(`window.__signouts`)).toBe(0);
+				expect(await accounts()).toEqual(["ana", "bob"]);
+				expect(await page.run(`Boolean(document.querySelector('[data-account="bob"]'))`)).toBe(true);
+				// Sign out, confirmed, signs that account out and no other
+				await open("bob", "Sign out");
+				await page.until(dialog);
+				await page.run(
+					`[...${dialog}.querySelectorAll('button')].find(el => el.textContent.trim() === 'Sign out').click()`,
+				);
+				await page.until(`!document.querySelector('[data-account="bob"]')`);
+				expect(await page.run(`window.__signouts`)).toBe(1);
+				expect(await accounts()).toEqual(["ana"]);
 				expect(page.errors()).toEqual([]);
 			});
 		} finally {

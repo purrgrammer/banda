@@ -2,7 +2,7 @@
  * Owner-driven MCP setup. Also embeddable in a future owner-reviewed proposal card. `McpSetup` holds the state and
  * talks to the daemon; `McpSetupView` draws it from that state alone, so the specimen shows every phase over a fixture.
  */
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, PlusIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -73,8 +73,10 @@ export type McpSetupActions = {
 	readonly switchAgent: (agent: string, on: boolean) => void;
 	readonly save: () => void;
 	readonly review: () => void;
-	readonly signInAnother: () => void;
-	readonly signOut: () => void;
+	/** Sign in another account of the server. */
+	readonly addAccount: () => void;
+	/** Sign account `account` out, once the owner confirmed; a server with no sign-in is removed instead. */
+	readonly signOut: (account?: string) => void;
 };
 
 /**
@@ -103,16 +105,19 @@ export function McpSetup({
 	connection,
 	onCreated,
 	agent,
+	adding = false,
 	onClose,
 }: {
 	connection?: string;
 	agent?: { readonly id: string; readonly name: string };
 	onCreated?: (name: string) => void;
+	/** Opened to add another account of `connection`: it starts at the sign-in. */
+	adding?: boolean;
 	onClose: () => void;
 }) {
 	const shell = useShell();
 	const [name, setName] = useState(connection);
-	const [phase, setPhase] = useState<McpPhase>(connection ? "review" : "setup");
+	const [phase, setPhase] = useState<McpPhase>(connection ? (adding ? "auth" : "review") : "setup");
 	// the phases this visit went through, so Back goes to the one before when it still applies
 	const [trail, setTrail] = useState<readonly McpPhase[]>([]);
 	const [busy, setBusy] = useState(false);
@@ -324,8 +329,8 @@ export function McpSetup({
 			setChosen({});
 			go("review");
 		},
-		signInAnother: () => go("auth"),
-		signOut: () => {
+		addAccount: () => go("auth"),
+		signOut: (leaving) => {
 			if (!view) return;
 			void run(async () => {
 				// a server with no sign-in has only Remove, the same one its details offer: the page goes with it
@@ -335,7 +340,14 @@ export function McpSetup({
 					update(next);
 					return;
 				}
-				update(await signOutAccount(view.name, account));
+				if (leaving === undefined) return;
+				const next = update(await signOutAccount(view.name, leaving));
+				// another account still signed in keeps the setup where it is, on that one
+				const left = freshAccounts(next);
+				if (left.length > 0) {
+					if (leaving === account) setAccount(left[0]?.account ?? "");
+					return;
+				}
 				setAccount("");
 				setSelected([]);
 				setTrail([]);
@@ -527,6 +539,13 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 							</Select>
 						</Field>
 					)}
+					{/* in the review, what adds is under the account chosen; once connected, under the account list */}
+					{phase === "review" && !anonymous ? (
+						<Button variant="ghost" size="sm" className="-ml-2 self-start" disabled={busy} onClick={actions.addAccount}>
+							<PlusIcon data-icon="inline-start" />
+							Add account
+						</Button>
+					) : null}
 					{phase === "review" && held?.numbered ? (
 						<Field>
 							<FieldLabel htmlFor={`${id}-label`}>Name this account</FieldLabel>
@@ -553,6 +572,8 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 						onSetTools={actions.setTools}
 						agents={agents}
 						busy={busy || view.state !== "connected"}
+						onAdd={anonymous ? undefined : actions.addAccount}
+						onSignOut={(each) => actions.signOut(each.account)}
 						agentsFor={
 							anonymous || (accounts.length > 0 && account !== "")
 								? [
@@ -585,28 +606,19 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 							Review tool permissions
 						</Button>
 					)}
-					<div className="flex flex-wrap gap-2">
-						{!anonymous ? (
-							<Button variant="ghost" size="sm" disabled={busy} onClick={actions.signInAnother}>
-								Sign in another account
-							</Button>
-						) : null}
+					{anonymous ? (
 						<Confirm
-							title={anonymous ? `Remove ${service}?` : `Sign out of ${service}?`}
-							body={
-								anonymous
-									? "Agents lose access to it. You can add it again later."
-									: "Agents lose access to this sign-in. You can reconnect later."
-							}
-							action={anonymous ? "Remove" : "Sign out"}
-							keep={anonymous ? "Keep it" : "Stay connected"}
-							onConfirm={actions.signOut}
+							title={`Remove ${service}?`}
+							body="Agents lose access to it. You can add it again later."
+							action="Remove"
+							keep="Keep it"
+							onConfirm={() => actions.signOut()}
 						>
-							<Button variant="outline" size="sm" disabled={busy || (!anonymous && account === "")}>
-								{anonymous ? "Remove" : "Sign out"}
+							<Button variant="outline" size="sm" className="self-start" disabled={busy}>
+								Remove
 							</Button>
 						</Confirm>
-					</div>
+					) : null}
 				</>
 			) : null}
 		</div>

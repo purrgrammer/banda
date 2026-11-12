@@ -428,7 +428,7 @@ One flow as every connection's: Connect Slack from an agent's Permissions, Setti
 opens Slack's authorize URL with `user_scope` set to the required scopes plus the owner's choices, a PKCE challenge and
 `redirect_uri` on the daemon's loopback callback (`/oauth/callback`, as Google's); Slack asks which team and shows
 the owner what the app will see; the callback trades the code (no secret) for the user token; `whoami` reads the
-handle; the account is on for that agent. Signing in to a second team is "Sign in another"; an account already known
+handle; the account is on for that agent. Signing in to a second team is "Add account"; an account already known
 says so. Scopes added later (a choice) re-consent in place, keeping the agent switches, as GitHub and Gmail do today.
 
 What the Slack app needs, for whoever configures it:

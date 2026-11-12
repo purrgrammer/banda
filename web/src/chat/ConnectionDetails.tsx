@@ -24,6 +24,7 @@ import {
 } from "../../../src/core/tool-kinds.ts";
 import type { AccountView, ConnectionToolView, ConnectionView, KindView } from "../../../src/server/api.ts";
 import type { ScopeChoices } from "../lib/connect.ts";
+import { AccountList } from "./Accounts.tsx";
 import { Confirm } from "./Confirm.tsx";
 import { McpAgents } from "./McpConnection.tsx";
 import type { Who } from "./Row.tsx";
@@ -285,17 +286,6 @@ function Part({ title, note, children }: { title: string; note?: ReactNode; chil
 	);
 }
 
-/** The access an account was given, in the definition's words where they name it; else the scopes as they are. */
-export function accessWords(account: Pick<AccountView, "scopes" | "stale">, access: ScopeChoices | undefined): string {
-	if (account.stale === true) return "Its sign-in no longer fits this connection";
-	const scopes = account.scopes ?? [];
-	const labels =
-		access?.choices
-			.filter((choice) => choice.scopes.every((scope) => scopes.includes(scope)))
-			.map((choice) => choice.label) ?? [];
-	return labels.length > 0 ? labels.join(" · ") : "Signed in";
-}
-
 /** One kind it draws, and what following one does, in words. */
 export function KindLine({ kind }: { kind: KindView }) {
 	const follow = kind.follow;
@@ -345,6 +335,7 @@ export function ConnectionDetailsView({
 	access,
 	onChangeAccess,
 	onSignOut,
+	onAdd,
 	onRemove,
 	busy = false,
 	error = "",
@@ -360,7 +351,10 @@ export function ConnectionDetailsView({
 	agentsFor: readonly AgentsFor[];
 	access?: ScopeChoices | undefined;
 	onChangeAccess?: ((account: AccountView) => void) | undefined;
+	/** Sign an account out: called once the owner confirmed it. */
 	onSignOut?: ((account: AccountView) => void) | undefined;
+	/** Sign in another account (or the first: Connect), below the list. */
+	onAdd?: (() => void) | undefined;
 	/** Remove the connection whole; absent in the review on adding, where there is nothing yet to remove. */
 	onRemove?: (() => void) | undefined;
 	busy?: boolean | undefined;
@@ -413,40 +407,22 @@ export function ConnectionDetailsView({
 					expanded={review}
 				/>
 			</Part>
-			{view.accounts === undefined || view.accounts.length === 0 || review ? null : (
-				<Part title="Accounts" note="Each account you signed in to, with the access it was given.">
-					<ul className="flex flex-col divide-y divide-line-soft rounded-field border border-line-soft">
-						{view.accounts.map((account) => (
-							<li
-								key={account.account}
-								className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5"
-								data-account={account.account}
-							>
-								<span className="flex min-w-0 flex-col">
-									<span className="flex items-center gap-1.5 text-ui text-ink">
-										{account.label}
-										{account.stale ? <Badge variant="secondary">Sign in again</Badge> : null}
-									</span>
-									<span className="text-meta text-ink-2">{accessWords(account, access)}</span>
-									{account.missing ? (
-										<span className="text-meta text-ink-2">Needs more access for some tools</span>
-									) : null}
-								</span>
-								<span className="flex items-center gap-1.5">
-									{onChangeAccess === undefined ? null : (
-										<Button variant="outline" size="xs" disabled={busy} onClick={() => onChangeAccess(account)}>
-											{account.stale ? "Sign in again" : "Change access"}
-										</Button>
-									)}
-									{onSignOut === undefined ? null : (
-										<Button variant="ghost" size="xs" disabled={busy} onClick={() => onSignOut(account)}>
-											Sign out
-										</Button>
-									)}
-								</span>
-							</li>
-						))}
-					</ul>
+			{review ||
+			view.accepted?.connection?.auth === "none" ||
+			((view.accounts?.length ?? 0) === 0 && onAdd === undefined) ? null : (
+				<Part
+					title="Accounts"
+					note="Each account you signed in to, the agents that use it and the access it was given."
+				>
+					<AccountList
+						accounts={view.accounts ?? []}
+						agents={agents}
+						access={access}
+						busy={busy}
+						onAdd={onAdd}
+						onChangeAccess={onChangeAccess}
+						onSignOut={onSignOut}
+					/>
 				</Part>
 			)}
 			{agentsFor.length === 0 ? null : (

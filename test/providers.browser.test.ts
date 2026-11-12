@@ -115,7 +115,15 @@ for (const width of [390, 1440])
 					await page.until(`document.body.textContent.includes(${JSON.stringify(ANTHROPIC.models.quick)})`);
 					expect((await tiers()).provider.id).toBe("anthropic");
 
-					await click(page, labelled("Sign out of OpenAI"));
+					// Sign out is in the account's row menu, and asked first
+					await page.until(labelled("More for OpenAI"));
+					await page.run(
+						`${labelled("More for OpenAI")}.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerType:'mouse'}))`,
+					);
+					await click(
+						page,
+						`[...document.querySelectorAll('[role="menu"][data-state="open"] [role="menuitem"]')].find(el => el.textContent.trim() === 'Sign out')`,
+					);
 					await page.until(`document.querySelector('[role="alertdialog"]')`);
 					await click(page, button("Sign out"));
 					await page.until(labelled("Connect OpenAI"));

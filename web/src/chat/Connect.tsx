@@ -154,7 +154,7 @@ export function ConnectDialog({
 	scopesReadonly?: boolean | undefined;
 	/** The account signing in again to change its access, as the owner reads it. */
 	account?: string | undefined;
-	/** Start signing in: Sign in, Save and sign in, Try again, Sign in another. */
+	/** Start signing in: Sign in, Save and sign in, Try again, Add account. */
 	onSignIn?: (() => void) | undefined;
 	/** Back to the access to grant; none for a connection without choices. */
 	onPermissions?: (() => void) | undefined;
@@ -200,9 +200,9 @@ export function ConnectDialog({
 						: { title: title(agent, connection, step), detail: detail(agent, connection, step) };
 	// a sign-in again starts where the first did: on the access to grant, when the connection has choices
 	const again = onPermissions ?? onSignIn;
-	const signInAnother = (
+	const addAccount = (
 		<Button variant="ghost" disabled={busy} onClick={again}>
-			Sign in another
+			Add account
 		</Button>
 	);
 	return (
@@ -352,7 +352,7 @@ export function ConnectDialog({
 						</>
 					) : step.kind === "known" ? (
 						<>
-							{signInAnother}
+							{addAccount}
 							{step.logins.map((login) => (
 								<Button key={login} variant="outline" disabled={busy} onClick={() => onUse?.(login)}>
 									Use {login}
@@ -364,14 +364,14 @@ export function ConnectDialog({
 							<Button variant="ghost" onClick={close}>
 								Don't
 							</Button>
-							{signInAnother}
+							{addAccount}
 							<Button disabled={busy} onClick={() => onUse?.(step.login)}>
 								Allow
 							</Button>
 						</>
 					) : (
 						<>
-							{signInAnother}
+							{addAccount}
 							<Button onClick={close}>Done</Button>
 						</>
 					)}

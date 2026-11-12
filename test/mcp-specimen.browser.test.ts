@@ -55,6 +55,23 @@ async function fill(page: Page, label: string, value: string) {
 		`(() => {const el=${labelled(label)}; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true}));})()`,
 	);
 }
+/** A person's click at the middle of `expression`, once nothing (a dialog closing) lies over it. */
+async function press(page: Page, expression: string) {
+	const at = `(() => {const el=${expression}; if (!el) return undefined; el.scrollIntoView({block:'center'}); const r=el.getBoundingClientRect(); const x=r.x+r.width/2, y=r.y+r.height/2; return el.contains(document.elementFromPoint(x,y)) ? {x,y} : undefined;})()`;
+	await page.until(at);
+	const point = await page.run<{ x: number; y: number }>(at);
+	await page.input("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", clickCount: 1, ...point });
+	await page.input("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", clickCount: 1, ...point });
+}
+/** Choose `words` in the row menu "More for `label`", as a person opens it. */
+async function menu(page: Page, label: string, words: string) {
+	await page.input("Page.bringToFront", {});
+	await press(page, `document.querySelector('[aria-label=${JSON.stringify(`More for ${label}`)}]')`);
+	await press(
+		page,
+		`[...document.querySelectorAll('[role="menu"][data-state="open"] [role="menuitem"]')].find(el => el.textContent.trim() === ${JSON.stringify(words)})`,
+	);
+}
 async function phase(page: Page, value: string) {
 	await page.until(`document.querySelector('[data-mcp-phase="${value}"]')`);
 	expect(await page.run(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
@@ -127,15 +144,19 @@ for (const width of [390, 1440])
 					expect(await page.run(`${labelled("Sancho")}.getAttribute('aria-checked')`)).toBe("true");
 					expect(await page.run(`${labelled("Mara")}.getAttribute('aria-checked')`)).toBe("false");
 					await shot(page, `${width}-${theme}-done`);
-					await click(page, button("Sign out"));
+					// Sign out is in the account's row menu, and asked first, saying who loses access
+					await menu(page, "ernesto.example", "Sign out");
 					await page.until(`document.querySelector('[role="alertdialog"]')`);
+					expect(await page.run(`document.querySelector('[role="alertdialog"] p').textContent`)).toMatch(
+						/^Sancho loses access to ernesto\.example\./,
+					);
 					expect(await page.run(`getComputedStyle(document.querySelector('[role="alertdialog"]')).colorScheme`)).toBe(
 						theme.toLowerCase(),
 					);
 					await click(page, button("Stay connected"));
 					await page.until(`!document.querySelector('[role="alertdialog"]')`);
 					await phase(page, "done");
-					await click(page, button("Sign out"));
+					await menu(page, "ernesto.example", "Sign out");
 					await click(
 						page,
 						`[...document.querySelectorAll('[role="alertdialog"] button')].find(el => el.textContent === 'Sign out')`,
@@ -180,11 +201,11 @@ it.skipIf(!hasChrome())(
 			await click(page, button("Back to sign-in"));
 			await phase(page, "auth");
 			expect(await page.run(`${labelled("Bearer credential")}.value`)).toBe("");
-			// from a connected server, signing in another account can come back to the review it left
+			// from a connected server, adding an account can come back to the review it left
 			await scenario(page, "Ernesto · OAuth");
 			await click(page, tab("Review"));
 			await phase(page, "review");
-			await click(page, button("Sign in another account"));
+			await click(page, button("Add account"));
 			await phase(page, "auth");
 			expect(await page.run(`Boolean(${button("Use a connected account")})`)).toBe(false);
 			await click(page, button("Back to review"));

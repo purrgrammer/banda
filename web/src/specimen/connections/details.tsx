@@ -7,6 +7,7 @@ import { useState } from "react";
 import { type Classed, optionsOf, type Setting } from "../../../../src/core/tool-kinds.ts";
 import type { ConnectionToolView, ConnectionView } from "../../../../src/server/api.ts";
 import { ConnectionGone } from "../../app/ConnectionPage.tsx";
+import { AccountList } from "../../chat/Accounts.tsx";
 import { type AgentsFor, ConnectionDetailsView } from "../../chat/ConnectionDetails.tsx";
 import type { ChatAgent } from "../../lib/navigation.ts";
 import { MARA, SANCHO } from "../fixtures.ts";
@@ -70,7 +71,7 @@ const ACCOUNT = {
 	id: "bandarra",
 	label: "@bandarra",
 	at: Date.UTC(2026, 10, 13, 9, 30),
-	agents: ["sancho"],
+	agents: ["mara", "sancho"],
 	scopes: ["repo", "read:user"],
 };
 
@@ -114,6 +115,7 @@ const ACCESS = {
 /** The details changed in place, as a tap would change them. */
 function Live({ view, mode }: { view: ConnectionView; mode: "details" | "review" }) {
 	const [tools, setTools] = useState(view.tools);
+	const [accounts, setAccounts] = useState(view.accounts ?? []);
 	const [chosen, setChosen] = useState<{ readonly [tool: string]: Setting }>({});
 	const [selected, setSelected] = useState<readonly string[]>(["sancho"]);
 	const onSwitch = (agent: string, on: boolean) =>
@@ -121,7 +123,7 @@ function Live({ view, mode }: { view: ConnectionView; mode: "details" | "review"
 	const agentsFor: AgentsFor[] = [{ key: "bandarra", selected, onSwitch }];
 	return (
 		<ConnectionDetailsView
-			view={{ ...view, tools }}
+			view={{ ...view, tools, accounts }}
 			service="GitHub"
 			about="Read and change code, issues and pull requests"
 			mode={mode}
@@ -138,7 +140,8 @@ function Live({ view, mode }: { view: ConnectionView; mode: "details" | "review"
 			agentsFor={agentsFor}
 			access={ACCESS}
 			onChangeAccess={() => {}}
-			onSignOut={() => {}}
+			onSignOut={(account) => setAccounts((old) => old.filter((each) => each.account !== account.account))}
+			onAdd={() => {}}
 			onRemove={() => {}}
 		/>
 	);
@@ -159,6 +162,11 @@ export function ConnectionDetailsSection() {
 				<Labelled label="Review, on adding: nothing changes until Save">
 					<div className="max-w-2xl">
 						<Live view={{ ...VIEW, name: "reviewing", accounts: [], draws: [] }} mode="review" />
+					</div>
+				</Labelled>
+				<Labelled label="No account signed in: one Connect">
+					<div className="max-w-2xl">
+						<AccountList accounts={[]} agents={AGENTS} onAdd={() => {}} />
 					</div>
 				</Labelled>
 				<Labelled label="A connection that is gone, or never was">

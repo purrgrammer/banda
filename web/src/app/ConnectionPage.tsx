@@ -6,7 +6,6 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { AccountView } from "../../../src/server/api.ts";
-import { Confirm } from "../chat/Confirm.tsx";
 import { type AgentsFor, ConnectionDetailsView } from "../chat/ConnectionDetails.tsx";
 import {
 	actOnCapability,
@@ -41,16 +40,23 @@ export function ConnectionPage({ connection, onClose }: { connection: string; on
 	const shipped = shell.capabilities?.shipped?.find((each) => each.name === connection);
 	const [busy, setBusy] = useState(false);
 	const [changing, setChanging] = useState<AccountView>();
-	const [leaving, setLeaving] = useState<AccountView>();
-	const [setup, setSetup] = useState(false);
+	const [adding, setAdding] = useState(false);
+	// the setup, for a server that takes a key: to change it, or to add another account with one
+	const [setup, setSetup] = useState<"change" | "add">();
 	const version = useRef(view?.accepted?.version);
 	version.current = view?.accepted?.version ?? version.current;
 	const summary = view?.accepted?.connection;
 	if (shell.capabilities === undefined) return <p className="text-ui text-ink-2">Loading connection…</p>;
 	if (view === undefined || summary === undefined) return <ConnectionGone onConnections={onClose} />;
 	// a server the owner added and has not connected yet is still being set up
-	if (setup || (shipped === undefined && view.state !== "connected"))
-		return <McpSetup connection={connection} onClose={setup ? () => setSetup(false) : onClose} />;
+	if (setup !== undefined || (shipped === undefined && view.state !== "connected"))
+		return (
+			<McpSetup
+				connection={connection}
+				adding={setup === "add"}
+				onClose={setup !== undefined ? () => setSetup(undefined) : onClose}
+			/>
+		);
 	const service = summary.service;
 	const anonymous = summary.auth === "none";
 	const agents = shell.companion === undefined ? [] : chatAgents(shell.agents, shell.companion);
@@ -109,10 +115,21 @@ export function ConnectionPage({ connection, onClose }: { connection: string; on
 				}}
 				onChangeAccess={(account) => {
 					// a key has no sign-in page to come back from: the setup takes a new one
-					if (summary.auth === "key") setSetup(true);
+					if (summary.auth === "key") setSetup("change");
 					else setChanging(account);
 				}}
-				onSignOut={setLeaving}
+				onSignOut={(account) =>
+					void run(async () => showCapabilities(await signOutAccount(connection, account.account)))
+				}
+				onAdd={
+					anonymous
+						? undefined
+						: () => {
+								// a key has no sign-in page: the setup takes another one
+								if (summary.auth === "key") setSetup("add");
+								else setAdding(true);
+							}
+				}
 				onRemove={() =>
 					void run(async () => {
 						const next = await actOnCapability({ action: "remove", name: connection });
@@ -127,29 +144,7 @@ export function ConnectionPage({ connection, onClose }: { connection: string; on
 			{changing !== undefined ? (
 				<ConnectFlow connection={connection} account={changing} onClose={() => setChanging(undefined)} />
 			) : null}
-			{leaving !== undefined ? (
-				<Confirm
-					open
-					onOpenChange={(open) => {
-						if (!open) setLeaving(undefined);
-					}}
-					title={`Sign out of ${service} as ${leaving.label}?`}
-					body={
-						leaving.agents.length === 0
-							? "Its sign-in is forgotten. You can sign in again any time."
-							: `${leaving.agents.map((id) => agents.find((each) => each.id === id)?.name ?? id).join(", ")} will lose it. What they were allowed to do as ${leaving.label} is taken back.`
-					}
-					action="Sign out"
-					keep="Stay signed in"
-					onConfirm={() =>
-						void run(async () => {
-							const account = leaving.account;
-							setLeaving(undefined);
-							showCapabilities(await signOutAccount(connection, account));
-						})
-					}
-				/>
-			) : null}
+			{adding ? <ConnectFlow connection={connection} onClose={() => setAdding(false)} /> : null}
 		</div>
 	);
 }

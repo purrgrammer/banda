@@ -215,7 +215,7 @@ function McpExample({
 			setSelected(granted);
 			go("review");
 		},
-		signInAnother: () => go("auth"),
+		addAccount: () => go("auth"),
 		signOut: () => {
 			setGranted([]);
 			setSelected([]);

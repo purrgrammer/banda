@@ -107,10 +107,10 @@ export function SettingsSections() {
 				note="Every provider account the band may think with, in each state; adding, renaming and signing out."
 			>
 				<SettingsPage title="Settings" phone={phone}>
-					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} open="mistral" />
+					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} open="mistral" onAdd={() => {}} />
 				</SettingsPage>
 				<SettingsPage title="Settings, adding an account" phone={phone}>
-					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} adding="anthropic" />
+					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} adding="anthropic" onAdd={() => {}} />
 				</SettingsPage>
 				<SettingsPage title="Settings, renaming an account" phone={phone}>
 					<ModelProviders
@@ -125,6 +125,7 @@ export function SettingsSections() {
 						current="anthropic"
 						providers={[{ id: "mistral", name: "Mistral", by: "key", connected: true }]}
 						adding="mistral"
+						onAdd={() => {}}
 					/>
 				</SettingsPage>
 				<SettingsPage title="Settings, on a device" phone={phone}>

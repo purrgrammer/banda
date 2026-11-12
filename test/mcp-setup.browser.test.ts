@@ -151,7 +151,7 @@ for (const width of [390, 1440])
 					connected = (await view()).connections.find((each) => each.name === connection.name)!;
 					expect(connected.accounts?.[0]?.agents).toEqual([]);
 					// another sign-in: the name asked for next is the new account's, never the one that was selected
-					await click(page, button("Sign in another account"));
+					await click(page, button("Add account"));
 					await phase(page, "auth");
 					await click(page, button("Continue to sign in"));
 					await phase(page, "review");
@@ -164,15 +164,28 @@ for (const width of [390, 1440])
 						["account-1", "Work"],
 						["account-2", "Home"],
 					]);
-					await fetch(`${base}/api/capabilities/connections/${connection.name}/accounts/account-1/signout`, {
-						method: "POST",
-						headers: { authorization: `Bearer ${token}` },
-					});
-					await click(page, button("Sign out"));
-					await click(
-						page,
-						`[...document.querySelectorAll('[role="alertdialog"] button')].find(el => el.textContent.trim() === 'Sign out')`,
-					);
+					// each account's row menu signs that one out, asked first; another left keeps the connected step
+					const signOut = async (key: string, label: string) => {
+						const trigger = `document.querySelector('[data-account="${key}"] [aria-label="More for ${label}"]')`;
+						// as a person clicks: once nothing (a dialog closing) lies over it
+						await page.until(
+							`(() => {const el=${trigger}; if (!el) return false; el.scrollIntoView({block:'center'}); const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2, r.y+r.height/2));})()`,
+						);
+						await click(page, trigger);
+						const item = `[...document.querySelectorAll('[role="menu"][data-state="open"] [role="menuitem"]')].find(el => el.textContent.trim() === 'Sign out')`;
+						await page.until(item);
+						await click(page, item);
+						await page.until(`document.querySelector('[role="alertdialog"]')`);
+						await click(
+							page,
+							`[...document.querySelectorAll('[role="alertdialog"] button')].find(el => el.textContent.trim() === 'Sign out')`,
+						);
+					};
+					await signOut("account-1", "Work");
+					await page.until(`!document.querySelector('[data-account="account-1"]')`);
+					await phase(page, "done");
+					expect((await view()).connections.find((each) => each.name === connection.name)?.accounts?.length).toBe(1);
+					await signOut("account-2", "Home");
 					try {
 						await phase(page, "auth");
 					} catch (error) {
