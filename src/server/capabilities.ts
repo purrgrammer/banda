@@ -212,6 +212,15 @@ const unpaged = (args: JsonObject): JsonObject => {
 	return plain(oldest) && plain(cursor) ? rest : args;
 };
 
+/**
+ * A tail read's arguments without the page a watch asks for (`page`), which the daemon fills; a page that is not a
+ * whole number from 1 leaves an argument that matches no read.
+ */
+const untailed = (args: JsonObject): JsonObject => {
+	const { page, ...rest } = args;
+	return typeof page === "number" && Number.isInteger(page) && page >= 1 && page <= 100_000 ? rest : args;
+};
+
 /** What a server says names the owner, as one plain line: no control or invisible characters, a hundred at most. */
 const plainId = (value: unknown) =>
 	(typeof value === "string" || typeof value === "number" ? String(value) : "")
@@ -2695,7 +2704,7 @@ export function openCapabilities(options: CapabilityOptions) {
 					(read) =>
 						read.tool === tool &&
 						canonical(readArgs(read, authority.ref, doc.connections[name]?.tools[tool]?.schema)) ===
-							canonical(read.pages === undefined ? args : unpaged(args)),
+							canonical(read.pages !== undefined ? unpaged(args) : read.tail !== undefined ? untailed(args) : args),
 				)
 			)
 				return undefined;

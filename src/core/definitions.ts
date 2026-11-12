@@ -57,6 +57,15 @@ const Read = Type.Object(
 				{ ...closed, description: "A list newest first, kept to `keep` items, its pages walked to them" },
 			),
 		),
+		tail: Type.Optional(
+			Type.Object(
+				{
+					by: Type.String({ pattern: "^[A-Za-z0-9_]{1,64}$" }),
+					total: Type.Optional(Type.String({ maxLength: 200 })),
+				},
+				{ ...closed, description: "A list oldest first by numbered pages, its last pages read" },
+			),
+		),
 	},
 	closed,
 );

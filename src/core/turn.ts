@@ -87,6 +87,7 @@ import { defineGroups, Groups, groupSection } from "./groups.ts";
 import { FLOOR_WORDS } from "./permissions.ts";
 import { decidedText, makeProposal, PROPOSAL_DECIDED, type Proposal, proposalTools } from "./proposals.ts";
 import { defineReleases, RELEASED, stoppable } from "./release.ts";
+import { rosterSection } from "./roster.ts";
 import { defineRoutines, failureKey, Routines, routinePath, troubleIn, WAKE, type WakeData } from "./routines.ts";
 import { skillTokens } from "./skill-tokens.ts";
 import { acceptedSkills, ownerSkillEntry, type Skill } from "./skills.ts";
@@ -1185,6 +1186,16 @@ export function defineCore(options: CoreOptions) {
 					const { chat, internal } = task.input;
 					const wake = internal?.kind === WAKE ? (internal.data as WakeData) : undefined;
 					const routine = wake === undefined ? undefined : (await tx.doc(Routines)).routines[wake.routine];
+					// the run's history says how it ended, and where its wake and answer are in the chat
+					const run = [...(routine?.runs ?? [])].reverse().find((each) => each.turn === Number(task.id));
+					if (run !== undefined) {
+						run.ended = runtime.now();
+						run.result = "failed" in result ? "failed" : result.ended === "answered" ? "answered" : "stopped";
+						// the daemon's words, kept short: a provider's raw error can be pages long
+						if ("failed" in result) run.why = result.failed.slice(0, 1000);
+						if (settled?.entry !== undefined) run.entry = Number(settled.entry);
+						if (answer !== undefined) run.answer = answer;
+					}
 					// a routine's run that answered ends its failing streak; one the owner stopped neither ends nor adds to it
 					if (routine?.failing !== undefined && "ended" in result && result.ended === "answered")
 						delete routine.failing;
@@ -1703,7 +1714,7 @@ export function defineCore(options: CoreOptions) {
 			watches.Watch,
 			groups.GroupTurn,
 		],
-		sections: [speaking, groupSection],
+		sections: [speaking, groupSection, rosterSection],
 		tools: [
 			messageTool(speakingWith),
 			askUserTool(speakingWith),
