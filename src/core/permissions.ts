@@ -85,13 +85,12 @@ export type Permission = {
 	readonly match: JsonObject;
 	/** The effects it covers, in the daemon's words: "send an email to ana@example.com". */
 	readonly what: string;
-	/** "host": always, but only the chats of its agent. */
 	readonly scope: PermissionScope["scope"];
 	readonly until?: number;
 	readonly task?: Errand;
 	/** The task it was given in, whatever its scope: what it serves. */
 	readonly from?: Errand;
-	/** The agent of the chat it was given in; a host permission covers only that agent's chats. */
+	/** The agent whose chats it covers. Without a recorded agent it covers nothing. */
 	readonly agent?: string;
 	/** When it was given, and by which approval (its Wait). */
 	readonly at: number;
@@ -123,7 +122,7 @@ export const Permissions = defineDoc<PermissionsValue>({
 
 /**
  * The agent `chat` runs, as the store records it for every chat it starts (`AgentChats`); undefined for a chat it
- * records none for, which no host permission covers. The daemon tells the proxy the same mapping. Reads only.
+ * records none for, which no permission covers. The daemon tells the proxy the same mapping. Reads only.
  */
 export async function agentOfChat(tx: Tx, chat: number): Promise<string | undefined> {
 	return (await tx.doc(AgentChats)).chats[chat];
@@ -176,11 +175,24 @@ export function isOpen(permission: Permission, now: number, errand?: Errand): bo
 }
 
 /**
- * Whether `permission` covers a call of `tool` with `args`: the same tool, and every bound argument exactly as permitted;
+ * Whether `permission` covers a call: the same known agent and tool, and every bound argument exactly as permitted;
  * a host permission's host may be a pattern (`*.example.com`, `*`), which covers what the proxy lets through.
  */
-export function matches(permission: Permission, tool: string, args: { readonly [key: string]: unknown }): boolean {
+export function matches(
+	permission: Permission,
+	{
+		tool,
+		args,
+		agent,
+	}: {
+		readonly tool: string;
+		readonly args: { readonly [key: string]: unknown };
+		readonly agent: string | undefined;
+	},
+): boolean {
 	return (
+		agent !== undefined &&
+		permission.agent === agent &&
 		permission.tool === tool &&
 		Object.entries(permission.match).every(
 			([key, value]) =>
@@ -251,7 +263,7 @@ export async function floorNow(
 
 /**
  * The open permission covering a call of `tool` with `args` from `chat`, if any: never one for a draft on the floor,
- * and a host permission only from the chats of the agent it was allowed for. Reads only.
+ * and only from the chats of the agent it was allowed for. Reads only.
  */
 export async function covering(
 	tx: Tx,
@@ -260,13 +272,10 @@ export async function covering(
 	now: number,
 ): Promise<{ readonly id: string; readonly permission: Permission } | undefined> {
 	if ((await floorNow(tx, draft)) !== undefined) return undefined;
-	// a host is allowed for one agent: it covers only that agent's chats, as the proxy is told
 	const agent = await agentOfChat(tx, chat);
 	const { permissions } = await tx.doc(Permissions);
-	const candidates = Object.entries(permissions).filter(
-		([, permission]) =>
-			(permission.scope !== "host" || (agent !== undefined && permission.agent === agent)) &&
-			matches(permission, draft.tool, draft.args),
+	const candidates = Object.entries(permissions).filter(([, permission]) =>
+		matches(permission, { tool: draft.tool, args: draft.args, agent }),
 	);
 	if (candidates.length === 0) return undefined;
 	const errand = candidates.some(([, permission]) => permission.scope === "task")

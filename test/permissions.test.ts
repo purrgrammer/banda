@@ -33,7 +33,7 @@ import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
 import { type Approving, type Ask, answer, WAIT, type WaitEnded } from "../src/core/wait.ts";
 import { groupApprovals, scopeOf, servesGroups, sharedScopes } from "../web/src/lib/permissions.ts";
-import { blobStore, FAUX_MODEL, FakeGateway, tempHome, until } from "./helpers.ts";
+import { allowTools, blobStore, FAUX_MODEL, FakeGateway, tempHome, until } from "./helpers.ts";
 import { pbtRuns } from "./pbt.ts";
 
 const owner = { gateway: "fake", peer: OWNER };
@@ -133,11 +133,11 @@ function setup() {
 	};
 	let n = 0;
 	/** Send an owner message whose run makes `calls`. */
-	const say = async (harness: Harness, calls: readonly Call[], thread?: string) => {
+	const say = async (harness: Harness, calls: readonly Call[], thread?: string, agent?: string) => {
 		const text = `m${++n}`;
 		planned.set(text, calls);
 		const origin = thread === undefined ? owner : { ...owner, thread };
-		const received: Received = await core.receive(harness, { id: text, origin, text });
+		const received: Received = await core.receive(harness, { id: text, origin, text, agent });
 		if (!("turn" in received)) throw new Error(`no Turn: ${JSON.stringify(received)}`);
 		return received;
 	};
@@ -178,18 +178,92 @@ async function entries(harness: Harness, chat: number) {
 }
 
 describe("permissions", () => {
+	it.each(["until", "always"] as const)(
+		"a %s permission runs across the approved agent's chats and never another agent's chat",
+		async (scope) => {
+			const s = setup();
+			const harness = await s.open(await tempHome());
+			try {
+				await allowTools(harness, "mara", ["send"]);
+				await allowTools(harness, "atlas", ["send"]);
+				const calls = [{ tool: "send", to: "ana", body: "hello" }] as const;
+				const first = await s.say(harness, calls, "first", "mara");
+				const { wait } = await nextAsk(harness, first.turn);
+				const permission = scope === "until" ? { scope, until: s.now() + HOUR } : { scope };
+				expect(await approve(harness, wait!.key, { permission })).toMatchObject({ answered: expect.any(Number) });
+				await until(() => done(harness, first.turn));
+				const same = await s.say(harness, calls, "second", "mara");
+				expect(same.chat).not.toBe(first.chat);
+				expect((await nextAsk(harness, same.turn)).wait).toBeUndefined();
+				expect(s.runs).toEqual([...calls, ...calls]);
+				const other = await s.say(harness, calls, "third", "atlas");
+				const asked = (await nextAsk(harness, other.turn)).wait;
+				expect.soft(s.runs).toEqual([...calls, ...calls]);
+				expect(asked?.ask).toMatchObject({ tool: "send", args: { to: "ana", body: "hello" } });
+				await answer(harness, asked!.key, "deny", web, "bearer");
+				await until(() => done(harness, other.turn));
+				expect(s.runs).toEqual([...calls, ...calls]);
+			} finally {
+				await harness.close(context);
+			}
+		},
+	);
+
+	it.each(["until", "always"] as const)(
+		"giving a %s permission answers the same agent's pending draft and leaves another agent's draft waiting",
+		async (scope) => {
+			const s = setup();
+			const harness = await s.open(await tempHome());
+			try {
+				await allowTools(harness, "mara", ["send"]);
+				await allowTools(harness, "atlas", ["send"]);
+				const calls = [{ tool: "send", to: "ana", body: "hello" }] as const;
+				const first = await s.say(harness, calls, "first", "mara");
+				const same = await s.say(harness, calls, "second", "mara");
+				const other = await s.say(harness, calls, "third", "atlas");
+				const waits = await until(async () => {
+					const open = await openWaits(harness);
+					return open.length === 3 ? open : undefined;
+				});
+				const firstAsk = waits.find((wait) => wait.chat === first.chat)!;
+				const otherAsk = waits.find((wait) => wait.chat === other.chat)!;
+				const permission = scope === "until" ? { scope, until: s.now() + HOUR } : { scope };
+				expect(await approve(harness, firstAsk.key, { permission })).toMatchObject({ answered: expect.any(Number) });
+				await until(() => done(harness, first.turn));
+				await until(() => done(harness, same.turn));
+				const declined = await answer(harness, otherAsk.key, "deny", web, "bearer");
+				await until(() => done(harness, other.turn));
+				expect.soft(s.runs).toEqual([...calls, ...calls]);
+				expect(declined).toMatchObject({ answered: expect.any(Number) });
+			} finally {
+				await harness.close(context);
+			}
+		},
+	);
+
 	it("a permission covers its own tool and bound arguments, and nothing else", () => {
 		const given = {
 			tool: "propose_send",
 			match: { _host: "github.com" },
 			what: "",
 			scope: "host",
+			agent: "mara",
 			at: 1,
 			wait: 1,
 		} as const;
-		expect(matches(given, "propose_send", { _host: "github.com" })).toBe(true);
-		expect(matches(given, "propose_send", { _host: "gitlab.com" })).toBe(false);
-		expect(matches(given, "propose_key", { _host: "github.com" })).toBe(false);
+		expect(matches(given, { tool: "propose_send", args: { _host: "github.com" }, agent: "mara" })).toBe(true);
+		expect(matches(given, { tool: "propose_send", args: { _host: "gitlab.com" }, agent: "mara" })).toBe(false);
+		expect(matches(given, { tool: "propose_key", args: { _host: "github.com" }, agent: "mara" })).toBe(false);
+	});
+	it.each(["task", "until", "always", "host"] as const)("a %s permission requires a known equal agent", (scope) => {
+		const ownerless = { tool: "send", match: { to: "ana" }, what: "", scope, at: 1, wait: 1 };
+		const given = { ...ownerless, agent: "mara" };
+		const call = { tool: "send", args: { to: "ana" }, agent: "mara" };
+		expect(matches(given, call)).toBe(true);
+		expect(matches(given, { ...call, agent: "atlas" })).toBe(false);
+		expect(matches(given, { ...call, agent: undefined })).toBe(false);
+		expect(matches(ownerless, call)).toBe(false);
+		expect(matches(ownerless, { ...call, agent: undefined })).toBe(false);
 	});
 	it("a permission for always: the same recipient runs without asking, in the activity log; another asks", async () => {
 		const s = setup();
@@ -299,7 +373,15 @@ describe("permissions", () => {
 		// a permission for it, however it got into the store, covers nothing
 		await harness.commit(async (tx) => {
 			const doc = await tx.doc(Permissions);
-			doc.permissions["99"] = { tool: "pay", match: {}, what: "pay anyone", scope: "always", at: 0, wait: 0 };
+			doc.permissions["99"] = {
+				tool: "pay",
+				match: {},
+				what: "pay anyone",
+				scope: "always",
+				agent: LEAD,
+				at: 0,
+				wait: 0,
+			};
 		}, context);
 		const again = await s.say(harness, [{ tool: "pay", to: "ana" }]);
 		expect((await nextAsk(harness, again.turn)).wait?.ask).toMatchObject({ floor: "money" });
@@ -411,14 +493,14 @@ describe("the scopes an ask offers", () => {
 		);
 	});
 
-	it("covers a call by its route's permission, and by a host permission only in its agent's chats", async () => {
+	it("covers a call by its route or host permission only in its agent's chats", async () => {
 		const harness = await openStore(await tempHome(), { models: createModels(), registry: createRegistry() });
 		try {
 			const at = 1_000;
 			const draft = { tool: "propose_send", args: { _route: "POST github.com/x", _host: "github.com" } };
 			await harness.commit(async (tx) => {
 				const doc = await tx.doc(Permissions);
-				const base = { tool: "propose_send", at, wait: 1 };
+				const base = { tool: "propose_send", agent: LEAD, at, wait: 1 };
 				doc.permissions["1"] = { ...base, match: { _route: "POST github.com/x" }, what: "route", scope: "always" };
 				doc.permissions["2"] = { ...base, match: { _host: "github.com" }, what: "host", scope: "host", agent: LEAD };
 				doc.next = 3;
@@ -428,7 +510,8 @@ describe("the scopes an ask offers", () => {
 			}, context);
 			const found = () => harness.commit((tx) => covering(tx, draft, 7, at), context);
 			expect((await found())?.id).toBe("1");
-			// the route's covers every chat; the lead's host none of another agent's chats, nor one of no agent
+			for (const chat of [8, 9])
+				expect(await harness.commit((tx) => covering(tx, draft, chat, at), context), `chat ${chat}`).toBeUndefined();
 			const hostOnly = { ...draft, args: { ...draft.args, _route: "POST github.com/y" } };
 			expect((await harness.commit((tx) => covering(tx, hostOnly, 7, at), context))?.id).toBe("2");
 			for (const chat of [8, 9])

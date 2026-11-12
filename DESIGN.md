@@ -576,7 +576,8 @@ model.
 
 **Permissions.** An approval can be given with a scope: this once, for this task, for an hour, always. A permission is
 stored; an effect within an open permission runs without asking and is listed in the activity log, and the owner revokes
-a permission from the agent's panel. A permission belongs to one agent, one account and one chat. Below every
+a permission from the agent's panel. A permission belongs to one known agent and one account, and covers that agent's
+chats. "For this task" also binds the chat and its input. Without a known agent, no permission covers a call. Below every
 permission sits a floor no permission covers: money, credentials and account changes, and anything that sends private
 data to a recipient the owner has not approved, ask every time. A tool declares its floor class and the daemon enforces
 it: a draft on the floor offers no permission, a permission asked for it is refused, and no permission covers it. A
