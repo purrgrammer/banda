@@ -271,8 +271,10 @@ a minute with a hundred per page. Two things follow for the daemon, both new, bo
   or a card's unfurl alike, goes through one queue for that (account, method): one call in flight at a time, and a
   refusal with `Retry-After` holds the queue until it passes, said in words where the call came from ("Slack is
   busy, back at 10:43" on a card, "can't reach Slack, back at 10:43" in a watch's row), never a retry loop. The
-  owner's own team was not clamped (stage 0), so no rate is declared for it; a team that is clamped is met by its
-  `Retry-After`, and a kind's `every` keeps looks apart. Whether Slack counts a limit per team or per user token is
+  owner's own team was not clamped (stage 0), so no rate is declared for it. A refusal teaches the queue the method's
+  limit instead (as many calls a minute as Slack answered before it: one on a clamped team's history), and for an hour
+  a call past it is answered "busy" without being sent; test/slack-limits.test.ts runs six watches and an agent for an
+  hour against Slack's own tiers and meets one refusal for each clamped method. Whether Slack counts a limit per team or per user token is
   still open (no second team was available). A watch whose look the held queue
   refused looks again when the queue opens (sooner than its cadence, never later), so watches sharing an account
   take turns a minute apart rather than meeting the refusal together every five minutes.
@@ -389,8 +391,8 @@ AGENTS.md principle 6). Observed, not inferred:
 - [ ] Stage 3: search and person followed, `add_reaction`, files through the daemon are built and tested; the
   reaction's kill sweep run in CI, `files:read` added to the shipped app, and the owner's walkthrough (a search watch
   over a day, a reaction approved for a task, a file opened at both widths) remain
-- [ ] A rate a connection file declares (`limits: { channel_history: "1/m" }`), so the queue spaces calls before
-  Slack refuses: not built; a clamped team is met by its `Retry-After` alone
+- [x] The queue spaces calls before Slack refuses: learned from Slack's first refusal (test/slack-limits.test.ts),
+  rather than a rate the definition declares
 - [ ] The names an account looked up (a person's handle, a channel's name) are kept for the daemon's life: a rename
   shows its old name in cards and a post's mentions until a restart; they want an age
 - [ ] A file whose own type is `text/html` is taken as Slack answered it, so without `files:read` Slack's sign-in page

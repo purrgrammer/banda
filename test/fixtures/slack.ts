@@ -27,6 +27,15 @@ export type FakeSlack = {
 	readonly unindexed: Set<string>;
 	/** The methods answered at most once a minute of `now` (`conversations.history`), else 429 to the minute's end. */
 	readonly perMinute: Set<string>;
+	/**
+	 * Slack's own limits, by method: at most that many calls in any sixty seconds of `now`, else 429 with `Retry-After`
+	 * until the oldest of them is a minute old (`SLACK_LIMITS`, `SLACK_CLAMPED`). Every call past one counts as asked.
+	 */
+	readonly limits: { [method: string]: number };
+	/** Each method's 429s, counted. */
+	readonly refused: { [method: string]: number };
+	/** Each method's answered calls, by when, for checking a minute's count. */
+	readonly answered: { [method: string]: number[] };
 	now: () => number;
 	/** The access token the API takes now; a refresh replaces it. */
 	access: string;
@@ -46,6 +55,30 @@ export type FakeSlack = {
 	readonly replies: { [thread: string]: FakeSlackMessage[] };
 	readonly users: { [id: string]: { [key: string]: unknown } };
 	readonly channels: { [id: string]: { [key: string]: unknown } };
+};
+
+/**
+ * Slack's published per-method limits for what banda calls, each tier's floor in calls a minute: tier 2 is 20, tier 3
+ * 50, tier 4 100; `chat.postMessage` is one a second a channel, taken as 60; `auth.test` is special, taken as tier 4.
+ */
+export const SLACK_LIMITS: { readonly [method: string]: number } = {
+	"auth.test": 100,
+	"users.info": 100,
+	"files.info": 100,
+	"conversations.info": 50,
+	"users.conversations": 50,
+	"conversations.history": 50,
+	"conversations.replies": 50,
+	"reactions.add": 50,
+	"search.messages": 20,
+	"chat.postMessage": 60,
+};
+
+/** As Slack limits an app distributed outside its Marketplace: history and replies once a minute, 15 a page. */
+export const SLACK_CLAMPED: { readonly [method: string]: number } = {
+	...SLACK_LIMITS,
+	"conversations.history": 1,
+	"conversations.replies": 1,
 };
 
 export const SLACK_TEAM = { id: "T0ACME", name: "Acme", domain: "acme" };
@@ -277,6 +310,9 @@ export function fakeSlack({
 		bytes,
 		unindexed: new Set(),
 		perMinute: new Set(),
+		limits: {},
+		refused: {},
+		answered: {},
 		now: Date.now,
 		access: "xoxp-1",
 		refreshToken: "xoxe-1",
@@ -351,6 +387,16 @@ export function fakeSlack({
 			if (fake.busy !== undefined)
 				return json({ ok: false, error: "ratelimited" }, 429, { "retry-after": String(fake.busy) });
 			if (token !== fake.access) return json({ ok: false, error: "invalid_auth" });
+			const limit = fake.limits[method];
+			if (limit !== undefined) {
+				const window = (fake.answered[method] ?? []).filter((at) => fake.now() - at < 60_000);
+				if (window.length >= limit) {
+					fake.refused[method] = (fake.refused[method] ?? 0) + 1;
+					const seconds = Math.max(1, Math.ceil(((window[0] as number) + 60_000 - fake.now()) / 1000));
+					return json({ ok: false, error: "ratelimited" }, 429, { "retry-after": String(seconds) });
+				}
+				fake.answered[method] = [...window, fake.now()];
+			}
 			if (fake.perMinute.has(method)) {
 				const minute = Math.floor(fake.now() / 60_000);
 				if (answered.get(method) === minute) {

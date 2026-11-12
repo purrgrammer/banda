@@ -646,7 +646,10 @@ or not the model remembers it.
   as that account, kept across a crash, and the watch is behind until the merge. A walk that cannot reach the window
   within an hour, or within the window's bytes, merges what it read, and its wake says what may be missing. What leaves the window from its old end was pushed off, never
   removed. Every call a connection makes for one account and one method, whoever makes it (a watch, an agent, a
-  card), waits its turn in one queue, and a refusal that says when to come back holds that queue until then.
+  card), waits its turn in one queue, and a refusal that says when to come back holds that queue until then. The
+  refusal also teaches the queue the method's limit, as many calls a minute as the service answered before it, so for
+  the hour after, a call past it is answered "busy" without being sent: a service meets one refusal an hour from banda,
+  not one each time two callers meet.
 - **"Ask again later" is honoured.** Any service that refuses for now with `Retry-After` (Slack, Google, a remote MCP
   server) is asked again no sooner than it said, by any watch, card or agent. A watch it refused looks again exactly
   then, sooner or later than its cadence, so watches sharing a queue take turns and none asks early.

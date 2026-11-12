@@ -204,13 +204,45 @@ export type SlackBudget = {
 	readonly run: <T>(key: string, call: () => Promise<T>) => Promise<T>;
 };
 
+/** How long what a refusal taught holds: a team no longer clamped is asked as fast again an hour on. */
+const LEARNED_HELD_MS = 60 * 60_000;
+/** Slack's limits are per minute (its tiers, and its clamp of one history request a minute). */
+const WINDOW_MS = 60_000;
+/** A wait this short is waited out in the queue rather than answered "busy". */
+const WAITED_MS = 2_000;
+
 /**
  * One queue per (account, method): one call in flight at a time, and a `Retry-After` refusal holds the queue until it
  * passes, every caller meanwhile answered in words at once, never retried in a loop. A queue already `depth` deep
  * answers "try again" rather than growing.
+ *
+ * A refusal also teaches the queue its method's limit, learned rather than assumed: as many calls a minute as Slack had
+ * answered in the minute before it refused (one for its clamp on history, a hundred for a tier 4 method). For an hour
+ * after, a call past that limit is answered "busy" at once and never sent, so a method meets Slack's refusal once an
+ * hour, not every minute something else asks; a wait of a moment or two is waited out.
  */
 export function slackBudget(now: () => number = Date.now, depth = 8): SlackBudget {
 	const queues = new Map<string, { tail: Promise<unknown>; waiting: number; until: number }>();
+	/** Each (account, method)'s learned limit (calls a minute) and when Slack last refused it. */
+	const learned = new Map<string, { limit: number; refused: number }>();
+	/** When each (account, method)'s calls of the last minute went out, oldest first. */
+	const sent = new Map<string, number[]>();
+	const recent = (key: string) => {
+		const times = (sent.get(key) ?? []).filter((at) => now() - at < WINDOW_MS);
+		if (times.length === 0) sent.delete(key);
+		else sent.set(key, times);
+		return times;
+	};
+	/** When `key` may next be asked: after a hold, and within what Slack taught it. */
+	const nextOf = (key: string, held: { until: number }) => {
+		const lesson = learned.get(key);
+		if (lesson !== undefined && now() - lesson.refused > LEARNED_HELD_MS) learned.delete(key);
+		const limit = learned.get(key)?.limit;
+		const times = recent(key);
+		const spaced =
+			limit === undefined || times.length < limit ? 0 : (times[times.length - limit] as number) + WINDOW_MS;
+		return Math.max(held.until, spaced);
+	};
 	return {
 		run: <T>(key: string, call: () => Promise<T>): Promise<T> => {
 			let queue = queues.get(key);
@@ -219,16 +251,29 @@ export function slackBudget(now: () => number = Date.now, depth = 8): SlackBudge
 				queues.set(key, queue);
 			}
 			const held = queue;
-			if (held.until > now()) return Promise.reject(new SlackBusy(held.until));
+			const next = nextOf(key, held);
+			if (next - now() > WAITED_MS) return Promise.reject(new SlackBusy(next));
 			if (held.waiting >= depth) return Promise.reject(new Error("Slack is busy, try again in a moment"));
 			held.waiting++;
 			const ran = held.tail.then(async () => {
-				if (held.until > now()) throw new SlackBusy(held.until);
+				const at = nextOf(key, held);
+				if (at - now() > WAITED_MS) throw new SlackBusy(at);
+				if (at > now()) await new Promise((resolve) => setTimeout(resolve, at - now()));
+				const answered = recent(key).length;
+				const started = now();
+				sent.set(key, [...recent(key), started].slice(-1000));
+				if (sent.size > 4096) sent.delete(sent.keys().next().value as string);
 				try {
 					return await call();
 				} catch (error) {
 					if (!(error instanceof RateLimited)) throw error;
 					held.until = now() + error.seconds * 1000;
+					// refused: this call does not count, and what Slack answered in the minute before it is its limit
+					const times = recent(key);
+					const own = times.lastIndexOf(started);
+					if (own >= 0) sent.set(key, [...times.slice(0, own), ...times.slice(own + 1)]);
+					const limit = Math.max(1, Math.min(answered, learned.get(key)?.limit ?? Number.POSITIVE_INFINITY));
+					learned.set(key, { limit, refused: now() });
 					throw new SlackBusy(held.until);
 				}
 			});
@@ -346,6 +391,9 @@ const identities = new Map<string, Promise<Identity>>();
 type Named = { readonly name: string; readonly handle?: string; readonly team?: string; readonly avatar?: string };
 const names = new Map<string, Map<string, Named>>();
 const MAX_NAMES = 4000;
+/** Who Slack could not name for an account, and when: not asked again for an hour (a deleted user, another org's). */
+const misses = new Map<string, number>();
+const MISS_HELD_MS = 60 * 60_000;
 
 /** A Map kept to `max` entries, the oldest dropped first. */
 function remember<K, V>(map: Map<K, V>, key: K, value: V, max: number): V {
@@ -380,24 +428,34 @@ type Call = (
 const THREAD_ROOTS = new Map<string, string>();
 
 /**
- * The message that started the thread `ts` is in. Asked about a reply, `conversations.replies` answers that reply alone,
- * so a link to a reply has to be read through its thread's first message.
+ * A thread's page of `conversations.replies` by any message in it. Asked about a reply, Slack answers that reply alone,
+ * naming its thread's first message: the page is then asked again by that one, and which message started the thread is
+ * remembered, since it never changes. Named by its first message, as a followed thread is, a page is one request.
  */
-async function threadRoot(s: Session, channel: string, ts: string): Promise<string> {
+async function repliesOf(
+	s: Session,
+	channel: string,
+	ts: string,
+	page: Record<string, string | number | undefined>,
+): Promise<{ readonly root: string; readonly body: Json }> {
 	const key = `${channel}/${ts}`;
-	const known = THREAD_ROOTS.get(key);
-	if (known !== undefined) return known;
-	const [head] = list((await s.call("conversations.replies", { channel, ts, limit: 1 })).messages);
-	const root = (typeof head?.thread_ts === "string" ? slackTs(head.thread_ts) : undefined) ?? ts;
+	const known = THREAD_ROOTS.get(key) ?? ts;
+	const body = await s.call("conversations.replies", { channel, ts: known, ...page });
+	const [head] = list(body.messages);
+	const named = typeof head?.thread_ts === "string" ? slackTs(head.thread_ts) : undefined;
+	const root = named ?? known;
 	if (THREAD_ROOTS.size >= 5000) THREAD_ROOTS.clear();
 	THREAD_ROOTS.set(key, root);
-	return root;
+	if (root === known) return { root, body };
+	return { root, body: await s.call("conversations.replies", { channel, ts: root, ...page }) };
 }
 
 type Session = {
 	readonly call: Call;
 	readonly me: () => Promise<Identity>;
 	readonly lookup: (users: readonly string[], channels: readonly string[]) => Promise<void>;
+	/** Keep a person's name as Slack sent it with a message (`user_profile`), when it is one. */
+	readonly learn: (user: string, profile: unknown) => Promise<void>;
 	readonly named: SlackNames;
 	readonly teamOf: (user: string) => string | undefined;
 	readonly avatarOf: (user: string) => string | undefined;
@@ -447,9 +505,17 @@ function session(token: string, signal: AbortSignal | undefined, fetcher: typeof
 	};
 	const lookup = async (users: readonly string[], channels: readonly string[]) => {
 		const known = await book();
+		const account = await accountKey();
+		const missed = (id: string) => {
+			const at = misses.get(`${account}/${id}`);
+			if (at !== undefined && Date.now() - at > MISS_HELD_MS) misses.delete(`${account}/${id}`);
+			return misses.has(`${account}/${id}`);
+		};
 		const missing = [
-			...users.filter((id) => USER.test(id) && !known.has(id)).map((id) => ["user", id] as const),
-			...channels.filter((id) => CHANNEL.test(id) && !known.has(id)).map((id) => ["channel", id] as const),
+			...users.filter((id) => USER.test(id) && !known.has(id) && !missed(id)).map((id) => ["user", id] as const),
+			...channels
+				.filter((id) => CHANNEL.test(id) && !known.has(id) && !missed(id))
+				.map((id) => ["channel", id] as const),
 		].slice(0, MAX_LOOKUPS);
 		for (const [kind, id] of missing) {
 			try {
@@ -468,8 +534,22 @@ function session(token: string, signal: AbortSignal | undefined, fetcher: typeof
 			} catch (error) {
 				// a name that cannot be read stays its id; credentials refused, or Slack busy, stop the read
 				if (error instanceof Unauthorized || error instanceof SlackBusy) throw error;
+				// Slack has no such person or channel for this account: not asked again for an hour
+				const said = error instanceof Error ? error.message : "";
+				if (said === REFUSALS.user_not_found || said === REFUSALS.channel_not_found)
+					remember(misses, `${account}/${id}`, Date.now(), MAX_NAMES);
 			}
 		}
+	};
+	const learn = async (id: string, given: unknown) => {
+		if (!USER.test(id) || typeof given !== "object" || given === null || Array.isArray(given)) return;
+		const profile = object(given);
+		const handle = line(profile.name, 100);
+		const name = line(profile.display_name, 100) || line(profile.real_name, 100) || handle;
+		if (handle === "" || name === "") return;
+		const team = idOf(profile.team, TEAM);
+		const avatar = slackAvatar(profile.image_72) ?? slackAvatar(profile.image_48);
+		remember(await book(), id, { name, handle, team, ...(avatar === undefined ? {} : { avatar }) }, MAX_NAMES);
 	};
 	const named: SlackNames = (kind, id) => {
 		const found = held?.get(id)?.name;
@@ -480,6 +560,7 @@ function session(token: string, signal: AbortSignal | undefined, fetcher: typeof
 		call,
 		me,
 		lookup,
+		learn,
 		named,
 		handleOf: (user) => held?.get(user)?.handle,
 		teamOf: (user) => held?.get(user)?.team,
@@ -630,6 +711,8 @@ async function namesOf(raws: readonly Json[], s: Session): Promise<void> {
 	const users = new Set<string>();
 	const channels = new Set<string>();
 	for (const raw of raws) {
+		// Slack sends a message's author's profile with it: that name needs no lookup
+		if (typeof raw.user === "string") await s.learn(raw.user, raw.user_profile);
 		if (typeof raw.user === "string") users.add(raw.user);
 		const mentioned = slackMentions(typeof raw.text === "string" ? raw.text : "");
 		for (const id of mentioned.users) users.add(id);
@@ -782,11 +865,8 @@ export async function slackCall(
 			}
 			case "get_thread": {
 				const id = channelArg(args.channel);
-				const root = await threadRoot(s, id, tsArg(args.ts));
 				const me = await s.me();
-				const body = await s.call("conversations.replies", {
-					channel: id,
-					ts: root,
+				const { root, body } = await repliesOf(s, id, tsArg(args.ts), {
 					limit: intArg(args.limit, 100, 100, "limit"),
 					cursor: cursorArg(args.cursor),
 					oldest: args.oldest === undefined ? undefined : tsArg(args.oldest, "oldest message"),

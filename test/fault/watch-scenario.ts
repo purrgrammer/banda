@@ -190,6 +190,8 @@ export type WatchSummary = {
 	/** Mara's watch's live task: its status, and until when it sleeps when it does. */
 	task?: { status: string; until?: number };
 	followed?: { version: number; at: number };
+	/** The newest reading's version of every followed object, by its key. */
+	versions: { [key: string]: number };
 	card?: { state?: string; at: number };
 	wakes: WatchWakeData[];
 	tells: WatchWakeData[];
@@ -463,7 +465,9 @@ export async function watchScenario(
 		const task = record.task === undefined ? undefined : await harness.getTask(record.task as TaskId, context);
 		const second = records["banda-142-otto"];
 		const key = record.key;
-		const followed = key === undefined ? undefined : (await harness.snapshot(Followed, context))?.objects[key];
+		const objects = (await harness.snapshot(Followed, context))?.objects ?? {};
+		const followed = key === undefined ? undefined : objects[key];
+		const versions = Object.fromEntries(Object.entries(objects).map(([each, object]) => [each, object.version]));
 		const reading = key === undefined ? undefined : (await harness.snapshot(Readings, context))?.readings[key];
 		const card = reading?.card as { state?: string } | undefined;
 		return {
@@ -479,6 +483,7 @@ export async function watchScenario(
 						},
 					}),
 			...(followed === undefined ? {} : { followed: { version: followed.version, at: followed.at } }),
+			versions,
 			...(card === undefined || reading === undefined
 				? {}
 				: { card: { ...(card.state === undefined ? {} : { state: card.state }), at: reading.at } }),
@@ -521,8 +526,10 @@ export function watchInvariants(summary: WatchSummary): string[] {
 			record.paused !== undefined ||
 			record.failed !== undefined ||
 			record.burst !== undefined;
-		if (summary.live.includes(name) && !quiet && summary.followed !== undefined)
-			say(`${name}: its cursor is on the newest reading`, record.seen === summary.followed.version);
+		// each watch against its own object's newest reading
+		const newest = record.key === undefined ? undefined : summary.versions[record.key];
+		if (summary.live.includes(name) && !quiet && newest !== undefined)
+			say(`${name}: its cursor is on the newest reading`, record.seen === newest);
 		// a hold begins with a change that wakes: once seen, it ends in a wake, whatever the newest reading shows then
 		say(
 			`${name}: a held wake ended in a wake, not a tell`,

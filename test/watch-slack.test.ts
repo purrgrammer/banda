@@ -335,8 +335,8 @@ describe("three channel watches on one account, Slack answering history once a m
 		});
 		expect(watchInvariants(summary)).toEqual([]);
 		const history = slack.calls.filter((call) => call.method === "conversations.history");
-		// one good read a minute, and at most one refusal beside it: the held queue answered the rest itself
-		expect(history).toHaveLength(5);
+		// one good read a minute, and one refusal in all: from it the budget learned the limit, and answered the rest itself
+		expect(history).toHaveLength(4);
 		// a minute on, two have looked; the third's row says since when Slack has been busy, and when it looks again
 		const second = records[0] ?? {};
 		const failing = names.filter((name) => second[name]?.failed !== undefined);
