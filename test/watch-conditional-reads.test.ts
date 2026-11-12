@@ -357,6 +357,42 @@ describe("a watch's looks with conditional reads", () => {
 		expect(watchInvariants(summary)).toEqual([]);
 	}, 60_000);
 
+	it("a guarded read refused at two looks running is never taken as made: the approval wakes once GitHub answers", async () => {
+		// quiet, confirmed at +5m; at +10m carol approves (`updated_at` moves) and GitHub refuses the reviews read at +10m
+		// and again at +15m, when `updated_at` is as kept and the reading before had it. A read refused is not made, so
+		// it is not sure and its old answer (from before the approval) is never carried: +20m reads it and carol wakes.
+		// (A look that took a read as made before making it, or whatever came of it, would carry the stale answer here.)
+		const home = await tempHome();
+		const approved = (step: number): World => {
+			const at = quietWorld(1) as { get: { [key: string]: Json }; get_reviews: Json[] };
+			if (step >= 3) {
+				at.get.updated_at = "2026-11-02T09:10:00Z";
+				at.get_reviews = [{ id: 2, user: { login: "carol" }, state: "APPROVED" }];
+			}
+			return at as unknown as World;
+		};
+		const perLook: string[][] = [];
+		const summary = await watchScenario(home, new Faults(), {
+			tasks: false,
+			world: approved,
+			answer: (tool, args, step) =>
+				(step === 3 || step === 4) && args.method === "get_reviews"
+					? failure("GitHub is having a moment")
+					: byMethod(approved)(tool, args, step),
+			clicks: [undefined, undefined, undefined, undefined, undefined, undefined],
+			at: (step) => NOW + (step - 1) * 5 * MINUTE,
+			act: async (_step, { harness, core }) => {
+				await runsEnded(harness);
+				const before = readsIn(home).length;
+				await core.lookWatch(harness, "banda-142");
+				perLook.push(readsIn(home).slice(before));
+			},
+		});
+		expect(perLook.slice(2, 5).map((each) => each.includes("get_reviews"))).toEqual([true, true, true]);
+		expect(summary.wakes.map((wake) => [wake.at, wake.changes])).toEqual([[NOW + 25 * MINUTE, ["carol approved"]]]);
+		expect(watchInvariants(summary)).toEqual([]);
+	}, 60_000);
+
 	it("the first look after a resume reads everything", async () => {
 		const home = await tempHome();
 		const counts: number[] = [];
