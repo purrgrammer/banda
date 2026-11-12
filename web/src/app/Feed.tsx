@@ -391,7 +391,7 @@ const sideOf = (segment: Segment): "owner" | "agent" | "line" => {
 	return "line";
 };
 
-/** What begins an agent's turn in its chat: the working line stands after one until the agent shows something. */
+/** What begins an agent's turn in its chat: the working line can show until the agent shows something. */
 const TURN_STARTS: ReadonlySet<Segment["kind"]> = new Set(["owner", "owner-message", "wake", "agentMessage"]);
 
 /** The transcript entry a segment stands for, from its key ("41", "41:ask", "answer:41"). */
@@ -460,6 +460,7 @@ export function FeedView({
 	// whether the agent showed anything since its turn began: the working line
 	// stands only until it does, however long the turn goes on
 	let shown = false;
+	let showWorking = false;
 	const flush = () => {
 		if (run === undefined) return;
 		nodes.push(
@@ -480,6 +481,10 @@ export function FeedView({
 	const lastRead = unreadAfter === undefined ? -1 : segments.findIndex((segment) => segment.key === unreadAfter);
 	const firstUnread = lastRead < 0 ? -1 : segments.findIndex((segment, index) => index > lastRead && counts(segment));
 	segments.forEach((segment, index) => {
+		if (segment.kind === "working") {
+			showWorking = !shown;
+			return;
+		}
 		const at = atOf(segment);
 		if (at !== undefined && day(at) !== lastDay) {
 			flush();
@@ -522,12 +527,6 @@ export function FeedView({
 		// what begins a turn: the owner's words, a routine's wake, another agent's message
 		if (TURN_STARTS.has(segment.kind)) shown = false;
 		else if (part !== null) shown = true;
-		if (segment.kind === "working") {
-			if (shown) return;
-			flush();
-			nodes.push(<WorkingLine key="working" who={[who]} onOpen={onWorkingLine} />);
-			return;
-		}
 		if (again && segment.kind === "companion") {
 			flush();
 			if (part !== null) {
@@ -642,6 +641,7 @@ export function FeedView({
 			</Run>,
 		);
 	}
+	if (showWorking) nodes.push(<WorkingLine key="working" who={[who]} onOpen={onWorkingLine} />);
 	return <>{nodes}</>;
 }
 

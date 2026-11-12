@@ -181,21 +181,12 @@ for (const width of [1440, 390])
 					await page.until(`${dialog}?.querySelector('[data-activity-timeline]')`);
 					await close(page);
 					await page.until(`document.activeElement === ${lineButton}`);
-					// where things stand is measured from the owner's words above them, since the feed may scroll as it grows; and
-					// for what comes, the whole of it in the feed's list, where the line stood
-					await page.run(`(window.list=${line}.parentElement,true)`);
-					const asked = `[...document.querySelectorAll('[data-message-bubble]')].find(b=>b.innerText.includes('${marker}')).getBoundingClientRect()`;
-					const top = await page.run<number>(`${line}.getBoundingClientRect().top - ${asked}.bottom`);
-					// it says something and goes on working: the line goes at once, and what it said takes its place
+					// The first reply removes Working even while the agent continues. Other feed items can stay in place.
 					before.get("sancho")?.open();
 					await until(() => Promise.resolve(after.get("sancho")?.held === 1));
 					await page.until(`document.body.innerText.includes('Reply from sancho: ${marker}')`);
 					expect(await page.run(`!${line}`)).toBe(true);
 					expect((await api<ChatRow[]>("/chats")).find((row) => row.chat === chat)?.state).not.toBe("idle");
-					const replyTop = await page.run<number>(
-						`(()=>{let n=[...document.querySelectorAll('[data-message-bubble]')].find(b=>b.innerText.includes('Reply from sancho: ${marker}'));while(n.parentElement!==window.list)n=n.parentElement;return n.getBoundingClientRect().top})() - ${asked}.bottom`,
-					);
-					expect(Math.abs(replyTop - top)).toBeLessThan(4);
 					expect(await page.run(headerQuiet)).toBe(true);
 					after.get("sancho")?.open();
 					await idle();
@@ -310,3 +301,39 @@ it.skipIf(!hasChrome())(
 	},
 	60_000,
 );
+
+for (const width of [1440, 390])
+	it.skipIf(!hasChrome())(
+		`a message sent while the agent works appears above Working… at ${width}px`,
+		async () => {
+			holdAll();
+			try {
+				await withLinePage(width, async (page) => {
+					await open(page, "#/a/sancho");
+					await post(`LINE_${width}_ORDER_LIVE`);
+					await page.until(lineButton);
+					const followUp = `LINE_${width}_FOLLOW_UP`;
+					await page.run(`(() => {
+						const field = document.querySelector('textarea[name="message"]');
+						Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(field, '${followUp}');
+						field.dispatchEvent(new Event('input', { bubbles: true }));
+					})()`);
+					const send = `document.querySelector('form button[aria-label="Send"]')`;
+					await page.until(`${send} && !${send}.disabled`);
+					await page.run(`${send}.click()`);
+					const queued = `[...document.querySelectorAll('[data-message-bubble]')].find(b=>b.innerText === '${followUp}')`;
+					await page.until(`${queued} && ${line}`);
+					expect(
+						await page.run(
+							`${queued}.getBoundingClientRect().bottom <= ${line}.getBoundingClientRect().top && ${line}.parentElement.lastElementChild === ${line}`,
+						),
+					).toBe(true);
+					expect(page.errors()).toEqual([]);
+				});
+			} finally {
+				letAllGo();
+				await idle();
+			}
+		},
+		60_000,
+	);

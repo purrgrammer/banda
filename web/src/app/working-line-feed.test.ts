@@ -14,8 +14,10 @@ const who = { name: "Mara", face: defaultAvatarFace() };
 const asked: Segment = { kind: "owner", key: "40", text: "Find me a train", files: [] };
 const reply: Segment = { kind: "companion", key: "41", text: "The 09:00 is direct", files: [], undelivered: false };
 const working: Segment = { kind: "working", key: "working", text: "working…" };
-const render = (segments: readonly Segment[]) =>
-	renderToStaticMarkup(createElement(FeedView, { chat: 1, who, compact: true, segments, onWorkingLine: () => {} }));
+const render = (segments: readonly Segment[], outgoing: Parameters<typeof FeedView>[0]["outgoing"] = []) =>
+	renderToStaticMarkup(
+		createElement(FeedView, { chat: 1, who, compact: true, segments, outgoing, onWorkingLine: () => {} }),
+	);
 const line = (html: string) => html.includes("data-working-line");
 
 it("while the agent works and has shown nothing, its face and Working… stand at the foot, named for who works", () => {
@@ -46,11 +48,13 @@ it("comes back when a new turn begins: the owner's words, or a routine's wake", 
 	expect(line(render([wake, reply, working]))).toBe(false);
 });
 
-// what the owner sent while it works waits below the line: the reply to the words the agent took comes before them
-it("stands above the owner's words still waiting for the agent", () => {
+it("stays below the owner's message both while sending and once queued", () => {
 	const waiting: Segment = { kind: "owner", key: "queued:q1", text: "Before noon", files: [], queued: true };
-	const html = render([asked, working, waiting]);
-	expect(html.indexOf("data-working-line")).toBeLessThan(html.indexOf("Before noon"));
+	const sending = { id: "q1", text: waiting.text, files: [], state: "sending" } as const;
+	for (const html of [render([asked, working], [sending]), render([asked, working, waiting])]) {
+		expect(html).toContain(waiting.text);
+		expect(html.indexOf("data-working-line")).toBeGreaterThan(html.indexOf(waiting.text));
+	}
 });
 
 it("says nothing of the work when nobody is working", () => {
