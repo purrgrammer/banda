@@ -144,7 +144,7 @@ export function AgentChat({
 				doing={status.doing}
 				attention={status.attention}
 				delegated={
-					status.secondary
+					delegated.sessions.length > 0
 						? { count: delegated.sessions.length, waiting: delegated.waiting, onOpen: openDelegated }
 						: undefined
 				}
@@ -221,6 +221,7 @@ function Timeline({
 	chat: number;
 	activity: { anchor?: number } | undefined;
 	onActivity: (entry: number) => void;
+	/** The working line was tapped: the current work's activity. */
 	onWorkActivity: () => void;
 	onCloseActivity: () => void;
 	mentionables: readonly ChatAgent[];
@@ -236,7 +237,7 @@ function Timeline({
 }) {
 	const transcript = useTranscript(chat);
 	const context = useViewContext(chat);
-	// the working face that opened the sheet, for focus to go back to
+	// the working line that opened the sheet, for focus to go back to
 	const openedFrom = useRef<HTMLElement | undefined>(undefined);
 	const [outgoing, setOutgoing] = useState<PendingMessage[]>([]);
 	const deliver = (pending: PendingMessage) => {
@@ -388,8 +389,8 @@ function Timeline({
 						}}
 						onRoutine={onRoutine}
 						onActivity={onActivity}
-						onWorkingFace={(face) => {
-							openedFrom.current = face;
+						onWorkingLine={(line) => {
+							openedFrom.current = line;
 							onWorkActivity();
 						}}
 					/>

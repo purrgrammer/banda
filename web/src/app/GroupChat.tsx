@@ -23,11 +23,12 @@ import { archiveGroup, groupOf, postToGroup } from "../areas/groups.ts";
 import { ArtifactCard, QuestionCard } from "../chat/Cards.tsx";
 import { Composer } from "../chat/Composer.tsx";
 import { Bubble, MessageActions, Run } from "../chat/Feed.tsx";
-import { HEADER_CLEARANCE, Header, workingWords } from "../chat/Header.tsx";
+import { HEADER_CLEARANCE, Header } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { ChatLoading, GroupEmpty } from "../chat/Loading.tsx";
 import { GroupPanel, Panel } from "../chat/Panel.tsx";
 import { SkillFeedItem } from "../chat/Skill.tsx";
+import { WorkingLine } from "../chat/WorkingLine.tsx";
 import { MENTION_LINK, Mentionable } from "../components/MentionChip.tsx";
 import { answerWait, api, dismissQuestion, type GroupNoticeView, type GroupView, upload } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
@@ -39,11 +40,11 @@ import { ActivitySheet, type ActivityTarget } from "./Activity.tsx";
 import { kindWords } from "./ArtifactPage.tsx";
 import { whoOf } from "./band.ts";
 import { DraftApproval } from "./DraftApproval.tsx";
-import { groupFaces, noFaceKeys } from "./group-faces.ts";
 import { HarnessActivitySheet } from "./HarnessSession.tsx";
 import { chatActivity, harnessActivity } from "./harness-activity.ts";
 import { MessageObjects, MessageText } from "./Objects.tsx";
 import { useSkills } from "./Skills.tsx";
+import { noneWorking, workingMembers } from "./working-members.ts";
 
 /** A message's markdown with each agent it mentions as a link, which `Markdown` draws as its chip. */
 function linkedMentions(text: string, ids: readonly string[], known: readonly ChatAgent[]): string {
@@ -85,9 +86,9 @@ export function GroupChat({
 	// closed by default, like an agent's: the screen is the conversation; the face or the name opens it
 	const [panel, setPanel] = useState(false);
 	const [activity, setActivity] = useState<readonly ActivityTarget[]>();
-	// the working face that opened the sheet, for focus to go back to
+	// the working line that opened the sheet, for focus to go back to
 	const openedFrom = useRef<HTMLElement | undefined>(undefined);
-	const faceKeys = useRef(noFaceKeys());
+	const since = useRef(noneWorking());
 	const latest = row?.latest;
 	const asking = row?.asking.join(",");
 	// biome-ignore lint/correctness/useExhaustiveDependencies: read again whenever the row says the log or its asks changed
@@ -124,20 +125,37 @@ export function GroupChat({
 	const name = row?.name ?? group?.name ?? "Group";
 	const working = members.filter((member) => member.state === "working");
 	const executions = row?.executions ?? group?.executions ?? {};
-	const faces = groupFaces(
-		faceKeys.current,
-		// a reaction alone draws nothing in the feed: it is no reply for a face to become
-		group && { latest: group.latest, messages: group.messages.filter((message) => !reactionOnly(message)) },
-		working.flatMap((member) => (member.id === undefined ? [] : [member.id])),
-		latest,
-	);
 	const [delegatedOpen, setDelegatedOpen] = useState<readonly number[]>();
 	const delegated = harnessActivity(shell.harnesses?.sessions ?? [], Object.values(executions));
 	const status = chatActivity(
 		(row?.asking ?? group?.asking ?? []).length ? "waiting" : working.length ? "working" : "idle",
-		workingWords(working.map((member) => member.name)),
+		undefined,
 		delegated,
 	);
+	// the working line: who works and has shown nothing yet. A reaction alone draws nothing, so it is not something shown
+	const onLine = workingMembers(
+		since.current,
+		group && {
+			latest: group.latest,
+			shown: [
+				...group.messages.flatMap((message) =>
+					"agent" in message.author && !reactionOnly(message)
+						? [{ entry: message.entry, agent: message.author.agent }]
+						: [],
+				),
+				...group.notices.flatMap((notice) =>
+					notice.agent === undefined ? [] : [{ entry: notice.entry, agent: notice.agent }],
+				),
+			],
+			asking: group.asks.map((ask) => ask.agent),
+		},
+		working.flatMap((member) => (member.id === undefined ? [] : [member.id])),
+		latest,
+	).map((id) => ({ ...whoOf(known, id), id }));
+	const lineTargets = onLine.flatMap((member) => {
+		const chat = executions[member.id];
+		return chat === undefined ? [] : [{ chat, name: member.name, heading: name }];
+	});
 	const openDelegated = () => setDelegatedOpen(delegated.sessions.map((session) => session.task));
 	const activityTargets = (working.length ? working : members).flatMap((member) => {
 		const chat = executions[member.id];
@@ -173,7 +191,7 @@ export function GroupChat({
 					state={status.state}
 					attention={status.attention}
 					delegated={
-						status.secondary
+						delegated.sessions.length > 0
 							? { count: delegated.sessions.length, waiting: delegated.waiting, onOpen: openDelegated }
 							: undefined
 					}
@@ -207,147 +225,136 @@ export function GroupChat({
 							<ChatLoading />
 						) : null}
 						{group !== undefined && group.messages.length === 0 ? <GroupEmpty name={name} faces={all} /> : null}
-						{[
-							...logOf(group).map((line) => {
-								// a member's reaction shows on the owner's message it went on; alone, it is no line of its own
-								if ("message" in line && reactionOnly(line.message)) return null;
-								if ("notice" in line) {
-									const { notice } = line;
-									const who = notice.agent === undefined ? undefined : whoOf(known, notice.agent).name;
+						{logOf(group).map((line) => {
+							// a member's reaction shows on the owner's message it went on; alone, it is no line of its own
+							if ("message" in line && reactionOnly(line.message)) return null;
+							if ("notice" in line) {
+								const { notice } = line;
+								const who = notice.agent === undefined ? undefined : whoOf(known, notice.agent).name;
+								return (
+									<div key={`n${notice.entry}`} data-entry={notice.entry}>
+										{noticeLine(notice, who)}
+									</div>
+								);
+							}
+							const { message } = line;
+							const node = (() => {
+								if ("owner" in message.author)
 									return (
-										<div key={`n${notice.entry}`} data-entry={notice.entry}>
-											{noticeLine(notice, who)}
-										</div>
-									);
-								}
-								const { message } = line;
-								const node = (() => {
-									if ("owner" in message.author)
-										return (
-											<Run
-												key={message.entry}
-												time={new Date(message.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-											>
-												{message.text.trim() === "" ? null : (
-													<Bubble mine copy={message.text} reaction={reactionsOn(group, message.entry)}>
-														<Mentionable.Provider value={known}>
-															<MessageText chat={room} text={linkedMentions(message.text, message.mentions, known)} />
-														</Mentionable.Provider>
-													</Bubble>
-												)}
-												{message.loaded?.map((name) => (
-													<SkillFeedItem key={name} name={name} href={`#/skills/${name}`} />
-												))}
-											</Run>
-										);
-									const member = whoOf(known, message.author.agent);
-									const chat = executions[message.author.agent];
-									const anchor = message.activity;
-									const inspect =
-										anchor === undefined || chat === undefined
-											? undefined
-											: () => setActivity([{ chat, name: member.name, anchor, heading: message.text || name }]);
-									// what the member's message published to the Library, opened at that version
-									const artifacts = message.artifacts ?? [];
-									const objects = (
-										<MessageObjects
-											chat={room}
-											objects={message.objects}
-											agent={{ id: message.author.agent, name: member.name }}
-										/>
-									);
-									return (
-										// no key of its own: the message's row carries the working face's, so the face goes on
 										<Run
-											who={member}
+											key={message.entry}
 											time={new Date(message.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
 										>
 											{message.text.trim() === "" ? null : (
-												<Bubble copy={message.text} onActivity={inspect}>
+												<Bubble mine copy={message.text} reaction={reactionsOn(group, message.entry)}>
 													<Mentionable.Provider value={known}>
-														<MessageText
-															chat={room}
-															text={linkedMentions(message.text, message.mentions, known)}
-															agent={{ id: message.author.agent, name: member.name }}
-															shown={message.objects}
-														/>
+														<MessageText chat={room} text={linkedMentions(message.text, message.mentions, known)} />
 													</Mentionable.Provider>
 												</Bubble>
 											)}
-											{message.text.trim() === "" && inspect ? (
-												<MessageActions onActivity={inspect}>
-													<div className="min-w-0">{objects}</div>
-												</MessageActions>
-											) : (
-												objects
-											)}
-											{artifacts.map((artifact) => (
-												<ArtifactCard
-													key={`${artifact.id}:${artifact.n}`}
-													title={artifact.title}
-													kind={kindWords(artifact.kind)}
-													version={`Version ${artifact.n}`}
-													onOpen={() => {
-														location.hash = `#/artifact/${artifact.id}?v=${artifact.n}`;
-													}}
-												/>
+											{message.loaded?.map((name) => (
+												<SkillFeedItem key={name} name={name} href={`#/skills/${name}`} />
 											))}
 										</Run>
 									);
-								})();
+								const member = whoOf(known, message.author.agent);
+								const chat = executions[message.author.agent];
+								const anchor = message.activity;
+								const inspect =
+									anchor === undefined || chat === undefined
+										? undefined
+										: () => setActivity([{ chat, name: member.name, anchor, heading: message.text || name }]);
+								// what the member's message published to the Library, opened at that version
+								const artifacts = message.artifacts ?? [];
+								const objects = (
+									<MessageObjects
+										chat={room}
+										objects={message.objects}
+										agent={{ id: message.author.agent, name: member.name }}
+									/>
+								);
 								return (
-									<div
-										key={faceKeys.current.taken.get(message.entry) ?? message.entry}
-										data-entry={message.entry}
-										className="scroll-my-24 rounded-tile transition-[background-color] duration-700 data-[found]:bg-paper-3"
+									<Run
+										key={message.entry}
+										who={member}
+										time={new Date(message.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
 									>
-										{node}
-									</div>
+										{message.text.trim() === "" ? null : (
+											<Bubble copy={message.text} onActivity={inspect}>
+												<Mentionable.Provider value={known}>
+													<MessageText
+														chat={room}
+														text={linkedMentions(message.text, message.mentions, known)}
+														agent={{ id: message.author.agent, name: member.name }}
+														shown={message.objects}
+													/>
+												</Mentionable.Provider>
+											</Bubble>
+										)}
+										{message.text.trim() === "" && inspect ? (
+											<MessageActions onActivity={inspect}>
+												<div className="min-w-0">{objects}</div>
+											</MessageActions>
+										) : (
+											objects
+										)}
+										{artifacts.map((artifact) => (
+											<ArtifactCard
+												key={`${artifact.id}:${artifact.n}`}
+												title={artifact.title}
+												kind={kindWords(artifact.kind)}
+												version={`Version ${artifact.n}`}
+												onOpen={() => {
+													location.hash = `#/artifact/${artifact.id}?v=${artifact.n}`;
+												}}
+											/>
+										))}
+									</Run>
 								);
-							}),
-							...(group?.asks ?? []).map(({ agent, wait }) => (
-								<Run key={wait.key} who={whoOf(known, agent)}>
-									{wait.ask.type === "question" ? (
-										<QuestionCard
-											question={wait.ask.question}
-											choices={wait.ask.options ?? []}
-											onChoose={(choice) =>
-												void attempt("send your answer", () => answerWait(wait.key, choice, "question"))
-											}
-											onDismiss={() => void attempt("dismiss the question", () => dismissQuestion(wait.key))}
-										/>
-									) : (
-										<DraftApproval
-											chat={room}
-											agent={{ id: agent, name: whoOf(known, agent).name }}
-											ask={wait.ask}
-											label={wait.label ?? wait.ask.label ?? wait.ask.tool}
-											wait={wait.key}
-										/>
-									)}
-								</Run>
-							)),
-							...faces.map(({ member: id, key }) => {
-								const member = whoOf(known, id);
-								const chat = executions[id];
-								return (
-									<div key={key}>
-										<Run
-											who={member}
-											work={{
-												onOpen:
-													chat === undefined
-														? undefined
-														: (face) => {
-																openedFrom.current = face;
-																setActivity([{ chat, name: member.name, heading: name }]);
-															},
-											}}
-										/>
-									</div>
-								);
-							}),
-						]}
+							})();
+							return (
+								<div
+									key={message.entry}
+									data-entry={message.entry}
+									className="scroll-my-24 rounded-tile transition-[background-color] duration-700 data-[found]:bg-paper-3"
+								>
+									{node}
+								</div>
+							);
+						})}
+						{(group?.asks ?? []).map(({ agent, wait }) => (
+							<Run key={wait.key} who={whoOf(known, agent)}>
+								{wait.ask.type === "question" ? (
+									<QuestionCard
+										question={wait.ask.question}
+										choices={wait.ask.options ?? []}
+										onChoose={(choice) =>
+											void attempt("send your answer", () => answerWait(wait.key, choice, "question"))
+										}
+										onDismiss={() => void attempt("dismiss the question", () => dismissQuestion(wait.key))}
+									/>
+								) : (
+									<DraftApproval
+										chat={room}
+										agent={{ id: agent, name: whoOf(known, agent).name }}
+										ask={wait.ask}
+										label={wait.label ?? wait.ask.label ?? wait.ask.tool}
+										wait={wait.key}
+									/>
+								)}
+							</Run>
+						))}
+						<WorkingLine
+							who={onLine}
+							onOpen={
+								lineTargets.length === 0
+									? undefined
+									: (line) => {
+											openedFrom.current = line;
+											setActivity(lineTargets);
+										}
+							}
+						/>
 					</ConversationContent>
 					<OpenAt at={at} ready={group !== undefined} />
 					<div className="relative">

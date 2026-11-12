@@ -26,8 +26,9 @@ async function press(page: Page, selector: string) {
 		el.click();
 	})()`);
 }
-/** The chat header's status line: the app's own activity control. */
-const status = `document.querySelector('[aria-label^="Activity: "]')`;
+/** A message's activity control, as the app has it: the first message's, or the newest's. */
+const first = `document.querySelector('[aria-label="View activity"]')`;
+const newest = `[...document.querySelectorAll('[aria-label="View activity"]')].at(-1)`;
 /** The nth step of the timeline that reads `title`, or the one whose state reads `state`. */
 const step = (title: string, n = 0) =>
 	`[...document.querySelectorAll('[role="dialog"] [aria-label="Inspect ${title}"]')][${n}]`;
@@ -45,10 +46,10 @@ const dialogText = `document.querySelector('[role="dialog"]')?.textContent`;
 for (const width of [320, 390, 1440]) {
 	it.skipIf(!hasChrome())(`activity has three local depths, completion and failure at ${width}px`, async () => {
 		await withPage(url, { width, height: 900 }, async (page) => {
-			await page.until(status);
+			await page.until(first);
 			expect(await page.run(`document.body.textContent.includes('browser_navigate')`)).toBe(false);
 			await press(page, tab("Dark"));
-			await press(page, status);
+			await press(page, first);
 			await page.until(`${dialogText}?.includes('Working')`);
 			expect(await page.run(`getComputedStyle(document.querySelector('[role="dialog"]')).colorScheme`)).toBe("dark");
 			expect(await page.run(`${dialogText}.includes('browser_navigate')`)).toBe(false);
@@ -75,10 +76,11 @@ for (const width of [320, 390, 1440]) {
 			await page.until(`${dialogText}?.includes('Working')`);
 			await press(page, button("Close"));
 			await page.until(`!document.querySelector('[role="dialog"]')`);
-			await page.until(`document.activeElement?.getAttribute('aria-label')?.startsWith('Activity: ')`);
+			await page.until(`document.activeElement?.getAttribute('aria-label') === 'View activity'`);
 
 			await press(page, tab("Failure"));
-			await press(page, status);
+			await page.until(`document.querySelectorAll('[aria-label="View activity"]').length === 2`);
+			await press(page, newest);
 			await page.until(`${dialogText}?.includes('Failed')`);
 			await press(page, stepWith("Failed"));
 			await page.until(row("browser_navigate result", 2));
@@ -129,8 +131,8 @@ for (const width of [320, 390, 1440]) {
 
 it.skipIf(!hasChrome())("streaming preserves inspection and keeps the sheet open when work completes", async () => {
 	await withPage(url, { width: 390, height: 740 }, async (page) => {
-		await page.until(status);
-		await press(page, status);
+		await page.until(first);
+		await press(page, first);
 		await page.until(step("Thinking"));
 		await press(page, step("Thinking"));
 		await page.until(`document.querySelector('[data-thinking]')`);

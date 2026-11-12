@@ -14,7 +14,7 @@ import {
 	FileXIcon,
 	RotateCwIcon,
 } from "lucide-react";
-import { type ReactNode, useContext, useRef } from "react";
+import { type ReactNode, useContext } from "react";
 import { cn } from "@/lib/cn";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import { actOnRoutine } from "../areas/routines.ts";
@@ -31,6 +31,7 @@ import { RoutineProposal } from "../chat/Routine.tsx";
 import type { Who } from "../chat/Row.tsx";
 import { SkillFeedItem } from "../chat/Skill.tsx";
 import { WatchLine, WatchProposal } from "../chat/Watch.tsx";
+import { WorkingLine } from "../chat/WorkingLine.tsx";
 import { Markdown } from "../components/Markdown.tsx";
 import { Mentionable } from "../components/MentionChip.tsx";
 import { actOnCapability, actOnProposal, answerAgent, answerWait, dismissQuestion } from "../lib/api.ts";
@@ -398,6 +399,9 @@ const sideOf = (segment: Segment): "owner" | "agent" | "line" => {
 	return "line";
 };
 
+/** What begins an agent's turn in its chat: the working line stands after one until the agent shows something. */
+const TURN_STARTS: ReadonlySet<Segment["kind"]> = new Set(["owner", "owner-message", "wake", "agentMessage"]);
+
 /** The transcript entry a segment stands for, from its key ("41", "41:ask", "answer:41"). */
 const entryOf = (key: string): number | undefined => {
 	const found = /\d+/.exec(key)?.[0];
@@ -417,7 +421,7 @@ export function FeedView({
 	onTryAgain,
 	onRoutine,
 	onActivity,
-	onWorkingFace,
+	onWorkingLine,
 	outgoing = [],
 	onRetry,
 }: {
@@ -437,15 +441,13 @@ export function FeedView({
 	/** A routine's event or trouble line was tapped: open the agent's routines. */
 	onRoutine?: ((name: string) => void) | undefined;
 	onActivity?: ((entry: number) => void) | undefined;
-	/** The working face was tapped: open the current work's activity, and hand focus back to this slot after. */
-	onWorkingFace?: ((face: HTMLElement) => void) | undefined;
+	/** The working line was tapped: open the work's activity, and hand focus back to the line after. */
+	onWorkingLine?: ((line: HTMLElement) => void) | undefined;
 	outgoing?: readonly { id: string; text: string; files: readonly File[]; state: "sending" | "failed" }[];
 	onRetry?: (pending: { id: string; text: string; files: readonly File[]; state: "sending" | "failed" }) => void;
 }) {
 	const nodes: ReactNode[] = [];
 	const shell = useShell();
-	// the runs of this chat the working face stood on: each keeps it when the work ends
-	const facedRuns = useRef(new Set<string>());
 	const messageAuthor = (id: string) => {
 		const accepted = shell.agents.find((view) => view.accepted?.agent?.id === id)?.accepted?.agent;
 		if (accepted !== undefined)
@@ -461,28 +463,15 @@ export function FeedView({
 		};
 	};
 	const failed = tryAgainAfter(segments);
-	let run:
-		| { side: "owner" | "agent"; items: ReactNode[]; at?: number | undefined; key: string; work?: boolean }
-		| undefined;
+	let run: { side: "owner" | "agent"; items: ReactNode[]; at?: number | undefined; key: string } | undefined;
 	let lastDay: string | undefined;
-	// what the last drawn segment was: an agent's run is named by what it follows, so the working face and the reply that
-	// comes to stand beside it are one run to React, and the face is never mounted again
-	let previous = "start";
+	// whether the agent showed anything since its turn began: the working line
+	// stands only until it does, however long the turn goes on
+	let shown = false;
 	const flush = () => {
 		if (run === undefined) return;
 		nodes.push(
-			<Run
-				key={run.key}
-				{...(run.side === "agent"
-					? {
-							who,
-							compact,
-							faced: facedRuns.current.has(`${chat}:${run.key}`),
-							work: run.work ? { onOpen: onWorkingFace } : undefined,
-						}
-					: {})}
-				time={time(run.at)}
-			>
+			<Run key={run.key} {...(run.side === "agent" ? { who, compact } : {})} time={time(run.at)}>
 				{run.items}
 			</Run>,
 		);
@@ -538,13 +527,21 @@ export function FeedView({
 			) : (
 				partOf(chat, who, segment, onOpenArtifact, agent, onRoutine, inspect, messageAuthor)
 			);
+		// what begins a turn: the owner's words, a routine's wake, another agent's message
+		if (TURN_STARTS.has(segment.kind)) shown = false;
+		else if (part !== null) shown = true;
+		if (segment.kind === "working") {
+			if (shown) return;
+			flush();
+			nodes.push(<WorkingLine key="working" who={[who]} onOpen={onWorkingLine} />);
+			return;
+		}
 		if (again && segment.kind === "companion") {
 			flush();
 			if (part !== null) {
 				run = { side: "agent", items: [part], key: segment.key, at };
 				flush();
 			}
-			previous = segment.key;
 			nodes.push(
 				<div key={`${segment.key}:again`}>
 					<Line icon={CircleAlertIcon} tone="danger" action={{ label: "Try again", onClick: onTryAgain }}>
@@ -554,22 +551,7 @@ export function FeedView({
 			);
 			return;
 		}
-		// the agent is at work: the face alone says so. It stays on the run it already stood on; any other run is older
-		// work (the news of a run can come before the owner's words that began it), and the face goes alone to the foot
-		if (segment.kind === "working") {
-			if (run?.side !== "agent" || !facedRuns.current.has(`${chat}:${run.key}`)) {
-				flush();
-				run = { side: "agent", items: [], key: `after:${previous}` };
-			}
-			run.work = true;
-			facedRuns.current.add(`${chat}:${run.key}`);
-			return;
-		}
 		if (part === null) return;
-		const follows = previous;
-		previous = segment.key;
-		// what comes after a face alone at the foot is the reply it stood for: its own run, beside that face
-		if (run?.side === "agent" && side === "agent" && facedRuns.current.has(`${chat}:after:${follows}`)) flush();
 		if (side === "line") {
 			flush();
 			nodes.push(
@@ -586,7 +568,7 @@ export function FeedView({
 		}
 		if (run === undefined || run.side !== side) {
 			flush();
-			run = { side, items: [], key: side === "agent" ? `after:${follows}` : segment.key };
+			run = { side, items: [], key: segment.key };
 		}
 		run.items.push(
 			<div

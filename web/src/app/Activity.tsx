@@ -72,7 +72,7 @@ export function ActivitySheet({
 	targets: readonly ActivityTarget[];
 	source?: Source;
 	onClose: () => void;
-	/** Opened from the working face: focus goes back to it, or to its slot if the work ended meanwhile. */
+	/** Opened from the working line: focus goes back to it while it is on the page. */
 	returnTo?: HTMLElement | undefined;
 	/** The specimen's frame passes its colour scheme to the sheet, which opens outside the frame. */
 	style?: CSSProperties;

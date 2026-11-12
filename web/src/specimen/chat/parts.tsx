@@ -28,7 +28,7 @@ import {
 	SheetFile,
 	VideoFile,
 } from "../../chat/Files.tsx";
-import { Header, workingWords } from "../../chat/Header.tsx";
+import { Header } from "../../chat/Header.tsx";
 import { Line } from "../../chat/Line.tsx";
 import {
 	type CheckRun,
@@ -41,6 +41,7 @@ import {
 import { RoutineProposal } from "../../chat/Routine.tsx";
 import { VoiceMessage } from "../../chat/Voice.tsx";
 import { Named, WatchLine, WatchProposal } from "../../chat/Watch.tsx";
+import { WorkingLine } from "../../chat/WorkingLine.tsx";
 import { Markdown } from "../../components/Markdown.tsx";
 import { SourceLabels } from "../../components/SourceLink.tsx";
 import { watchWords } from "../../lib/chat.ts";
@@ -55,6 +56,7 @@ import {
 	ISSUE,
 	MARA,
 	OCTO,
+	OTTO,
 	PAGE,
 	PHOTO,
 	POSTER,
@@ -518,43 +520,44 @@ export function Parts() {
 					/>
 				</div>
 			</Section>
-			<Section id="working" note="Under the floating face while an agent works: what it does now.">
+			<Section
+				id="working"
+				note="At the foot of the feed while agents work and have shown nothing yet: their faces and Working…, gone at the first thing they show. A tap opens the activity. The header says nothing of the work."
+			>
 				<Group label="A chat with one agent">
-					<HeaderStage>
-						<Header name="Octo" faces={[OCTO]} state="working" doing="Reading the checks on #34…" />
-					</HeaderStage>
+					<div className="flex max-w-xl flex-col gap-3">
+						<Run time="10:41">
+							<Bubble mine>Which train should I take to Madrid on Saturday?</Bubble>
+						</Run>
+						<WorkingLine who={[OCTO]} onOpen={() => {}} />
+					</div>
 				</Group>
-				<Group label="Working, nothing more said">
+				<Group label="A group: one member at work">
+					<WorkingLine who={[MARA]} onOpen={() => {}} />
+				</Group>
+				<Group label="Two members">
+					<WorkingLine who={[MARA, SANCHO]} onOpen={() => {}} />
+				</Group>
+				<Group label="Three members">
+					<WorkingLine who={[MARA, SANCHO, OCTO]} onOpen={() => {}} />
+				</Group>
+				<Group label="Five members: three faces and a count">
+					<WorkingLine who={[MARA, SANCHO, OCTO, ATLAS, OTTO]} onOpen={() => {}} />
+				</Group>
+				<Group label="At phone width">
+					<div className="flex w-full max-w-[390px] flex-col gap-3 rounded-card border border-line-soft bg-paper p-4">
+						<Run time="10:05">
+							<Bubble mine>
+								<Mention who={MARA} /> book the 9:15. <Mention who={SANCHO} /> add it to my calendar.
+							</Bubble>
+						</Run>
+						<WorkingLine who={[MARA, SANCHO]} onOpen={() => {}} />
+					</div>
+				</Group>
+				<Group label="The header while it works: the face at rest, no words">
 					<HeaderStage>
 						<Header name="Octo" faces={[OCTO]} state="working" />
 					</HeaderStage>
-				</Group>
-				<Group label="A group: who is at work">
-					<HeaderStage>
-						<Header
-							name="Trip"
-							faces={[
-								{ ...MARA, state: "working" },
-								{ ...SANCHO, state: "working" },
-							]}
-							state="working"
-							doing={workingWords(["Mara", "Sancho"])}
-						/>
-					</HeaderStage>
-				</Group>
-				<Group label="In the feed: the face alone, which opens the activity">
-					<Run who={OCTO} compact faced work={{ onOpen: () => {} }} />
-				</Group>
-				<Group label="The reply comes beside the same face">
-					<Run who={OCTO} compact faced time="10:42">
-						<Bubble>The 09:00 is the one I'd take: direct, €46, in Madrid by 11:45.</Bubble>
-					</Run>
-				</Group>
-				<Group label="A group: one face for each member at work">
-					<div className="flex flex-col gap-3">
-						<Run who={MARA} work={{ onOpen: () => {} }} />
-						<Run who={SANCHO} work={{ onOpen: () => {} }} />
-					</div>
 				</Group>
 			</Section>
 			<Section id="lines" note="What no one said: a routine ran, a sign-in to finish, a failure, a run you stopped.">
