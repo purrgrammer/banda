@@ -14,7 +14,7 @@
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
 import { type Follow, MAX_KEEP, type Pages, parseFollow } from "./follow.ts";
 import { slackAvatar, slackTs } from "./slack-text.ts";
-import type { Tail } from "./tail.ts";
+import { MAX_TAIL_PAGE, type Tail } from "./tail.ts";
 
 type JsonValue = JsonObject[string];
 
@@ -320,8 +320,12 @@ export function parseObjects(value: unknown, isRead: IsRead): { objects: ObjectK
 				if (tail !== undefined && "page" in ((args as object | null) ?? {}))
 					errors.push(`${where}.reads.${as}: a read with tail leaves page to the daemon`);
 				const perPage = (args as { perPage?: unknown } | null)?.perPage;
-				if (tail !== undefined && !(typeof perPage === "number" && Number.isInteger(perPage) && perPage >= 1))
-					errors.push(`${where}.reads.${as}: a read with tail gives perPage, a whole number of items`);
+				// a page larger than the service hands would look short, and end every walk at its first page
+				if (
+					tail !== undefined &&
+					!(typeof perPage === "number" && Number.isInteger(perPage) && perPage >= 1 && perPage <= MAX_TAIL_PAGE)
+				)
+					errors.push(`${where}.reads.${as}: a read with tail gives perPage, 1 to ${MAX_TAIL_PAGE} items`);
 				if (
 					!NAME.test(as) ||
 					reserved(as) ||

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
 import { type Item, sort } from "../src/core/follow.ts";
 import { parseObjects } from "../src/core/objects.ts";
-import { newestWithin, readTail, TAIL_PAGES, tailStart } from "../src/core/tail.ts";
+import { missed, newestWithin, readTail, TAIL_PAGES, tailStart } from "../src/core/tail.ts";
 import { Faults } from "./fault/faults.ts";
 import { type Answer, failure, watchInvariants, watchScenario } from "./fault/watch-scenario.ts";
 import { tempHome } from "./helpers.ts";
@@ -69,17 +69,32 @@ describe("a tail read", () => {
 		expect("items" in read && read.items.length).toBe(items.length - 100);
 	});
 
-	it("steps back a page when the list got shorter than its count said", async () => {
+	it("steps back when the list got shorter than its count said, by little or by much", async () => {
 		const { asked, page } = pager(list(150), 100);
 		const read = await readTail(page, 100, 350, true);
-		expect(asked).toEqual([3, 2]);
-		expect("items" in read && ids(read.items)).toEqual(ids(list(50, 101)));
+		expect(asked).toEqual([3, 1, 2]);
+		expect("items" in read && ids(read.items)).toEqual(ids(list(150)));
 		expect(read).toMatchObject({ length: 150 });
-		// a hundred and fifty deleted at once: three pages back is past what a look reads, so the next look starts lower
+		// a count far past the list (wrong, not stale): halving reaches its start within a look's pages
 		const far = pager(list(50), 100);
-		const behind = await readTail(far.page, 100, 450, true);
-		expect(far.asked).toEqual([4, 3, 2]);
-		expect(behind).toMatchObject({ behind: true });
+		const wrong = await readTail(far.page, 100, 450, true);
+		expect(far.asked).toEqual([4, 2, 1]);
+		expect(wrong).toMatchObject({ length: 50 });
+	});
+
+	it("a watch may miss items only when the newest reading is not whole and does not reach back to what it saw", () => {
+		const of = (from: number, to: number) => list(to - from + 1, from);
+		// the newest reading overlaps what the watch saw: nothing between was unread
+		expect(missed(of(101, 250), of(151, 300), "id", 300)).toBe(false);
+		// more came between two looks than its pages hold
+		expect(missed(of(101, 250), of(301, 500), "id", 500)).toBe(true);
+		// a whole list misses nothing, whatever it no longer holds
+		expect(missed(of(101, 250), of(1, 40), "id", 40)).toBe(false);
+		// none before, and the newest reading starts past the list's first items
+		expect(missed([], of(101, 300), "id", 300)).toBe(true);
+		// a list the reading before did not hold, or a length never learned, is no change of its items
+		expect(missed(undefined, of(101, 300), "id", 300)).toBe(false);
+		expect(missed(of(1, 10), of(101, 300), "id", undefined)).toBe(false);
 	});
 
 	it("never reads more than its pages a look: a list longer says where the next look starts", async () => {
@@ -149,6 +164,7 @@ describe("GitHub's reviews and comments as tails", () => {
 		expect(errors({ args: { perPage: 100 }, tail: { by: "id", total: "x.count" } })).not.toMatch(/tail/);
 		expect(errors({ args: { perPage: 100, page: 1 }, tail: { by: "id" } })).toMatch(/leaves page/);
 		expect(errors({ args: {}, tail: { by: "id" } })).toMatch(/perPage/);
+		expect(errors({ args: { perPage: 200 }, tail: { by: "id" } })).toMatch(/perPage, 1 to 100/);
 		expect(errors({ args: { perPage: 100 }, tail: { by: "id", total: "y.count" } })).toMatch(/no other read/);
 		expect(errors({ args: { perPage: 100 }, tail: { by: "id", total: "list.count" } })).toMatch(/tail is/);
 		expect(errors({ args: { perPage: 100 }, tail: { by: "id", more: 1 } })).toMatch(/tail is/);

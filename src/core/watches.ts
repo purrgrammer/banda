@@ -983,9 +983,8 @@ export function defineWatches(options: WatchesOptions) {
 		let shared: { readonly version: number } | undefined;
 		/** The paged read's window as kept, the walk this watch holds on it, and how many items a full page held. */
 		let paging: { window: Item[] | undefined; walk: Walk | undefined; size: number | undefined } | undefined;
-		/** How long each tail read's list was when it was last read, and the list the newest reading holds. */
+		/** How long each tail read's list was when it was last read. */
 		let lengthsBefore: { readonly [read: string]: number } = {};
-		let tailsBefore: { readonly [read: string]: Json } = {};
 		await commit(async (tx) => {
 			const record = (await tx.doc(Watches)).watches[name];
 			// a done watch never looks again, whatever its authority says now
@@ -1027,19 +1026,6 @@ export function defineWatches(options: WatchesOptions) {
 			// while paused is diffed, not an older reading), and the owner's Check now, as they asked.
 			const kept = (await tx.doc(Followed)).objects[found.key];
 			lengthsBefore = { ...kept?.lengths };
-			// copies of the doc's values, for the reads outside this commit; a reading under another definition is not one
-			tailsBefore =
-				kept?.source === found.source
-					? (JSON.parse(
-							JSON.stringify(
-								Object.fromEntries(
-									Object.entries(found.reads).flatMap(([as, read]) =>
-										read.tail === undefined || kept.answers[as] === undefined ? [] : [[as, kept.answers[as]]],
-									),
-								),
-							),
-						) as { [read: string]: Json })
-					: {};
 			const settled = record?.burst === undefined ? undefined : record.burst + settleOf(found.kind.follow);
 			if (
 				click === undefined &&
@@ -1132,8 +1118,6 @@ export function defineWatches(options: WatchesOptions) {
 					gapped = true;
 					continue;
 				}
-				// more came between two looks than its pages hold: what came between was not read, and may be missing
-				if (missed(tailsBefore[as], tailed, read.tail.by)) gapped = true;
 				const list = newestWithin(tailed.items, MAX_TAIL_BYTES);
 				bytes += JSON.stringify(list).length;
 				if (bytes > MAX_READING_BYTES) {
@@ -1304,6 +1288,14 @@ export function defineWatches(options: WatchesOptions) {
 			const counted = { ...kept?.lengths, ...lengths };
 			if (stored !== undefined && Object.keys(counted).length > 0 && canonical(counted) !== canonical(stored.lengths))
 				stored.lengths = counted;
+			// a tail's newest reading that does not reach back to what this watch last saw of it: what came between was
+			// never read, by this look or by the other watch's whose reading it shares, and may be missing
+			const seenReading = seen === undefined || kept === undefined ? undefined : readingAt(kept, seen);
+			const missing =
+				seenReading !== undefined &&
+				Object.entries(reads).some(
+					([as, read]) => read.tail !== undefined && missed(seenReading[as], after[as], read.tail.by, counted[as]),
+				);
 			// the owner's click is taken in the commit that keeps what it looked at: a kill before leaves it to look again
 			const taken = async () => {
 				if (click === undefined) return;
@@ -1327,7 +1319,7 @@ export function defineWatches(options: WatchesOptions) {
 				click: click !== undefined,
 				running: last !== undefined && last.state.status !== "terminal",
 				every,
-				gapped,
+				gapped: gapped || missing,
 			});
 			const copy = (held: Held) => ({ wake: [...held.wake], tell: [...held.tell], ids: [...held.ids] });
 			switch (decision.does) {

@@ -11,6 +11,8 @@ export type Tail = { readonly by: string; readonly total?: string };
 
 /** The most pages one look reads of a tail. */
 export const TAIL_PAGES = 3;
+/** The most items a tail's page may ask for: what services that number their pages hand at most (GitHub's 100). */
+export const MAX_TAIL_PAGE = 100;
 
 /**
  * The page a tail's reading starts at, for a list `length` long in pages of `size`: the one before its last, so the
@@ -21,8 +23,8 @@ export const tailStart = (length: number | undefined, size: number): number =>
 
 /** What a read of a tail found. */
 export type TailRead =
-	/** It reached the end: the newest items, oldest first, how long the whole list is, and the page they start at. */
-	| { readonly items: Item[]; readonly length: number; readonly from: number }
+	/** It reached the end: the newest items, oldest first, and how long the whole list is. */
+	| { readonly items: Item[]; readonly length: number }
 	/** It read `TAIL_PAGES` full pages without reaching the end: the list is at least `length` long. */
 	| { readonly behind: true; readonly length: number }
 	/** A page could not be read: what the service said. */
@@ -42,7 +44,6 @@ export async function readTail(
 ): Promise<TailRead> {
 	let last = exact && length !== undefined && length > 0 ? Math.ceil(length / size) : undefined;
 	let n = tailStart(length, size);
-	let from = n;
 	const items: Item[] = [];
 	/** How long the list is up to the last page read that held any. */
 	let end = 0;
@@ -50,16 +51,15 @@ export async function readTail(
 		const got = await page(n);
 		if (!Array.isArray(got)) return got;
 		if (got.length === 0 && items.length === 0 && n > 1) {
-			// nothing from here on: the page before is the last there can be
-			n--;
+			// nothing from here on: the list is shorter than its count said, by little (deleted since) or by much (a count
+			// that is wrong); halving the page reaches its start within the pages a look reads either way
+			n = Math.floor(n / 2);
 			last = n;
-			from = n;
 			continue;
 		}
 		items.push(...got);
 		if (got.length > 0) end = (n - 1) * size + got.length;
-		if (got.length === 0 || (got.length < size && (last === undefined || n >= last)))
-			return { items, length: end, from };
+		if (got.length === 0 || (got.length < size && (last === undefined || n >= last))) return { items, length: end };
 		n++;
 	}
 	// the last page read (n - 1) was full: the list may go on past it, so the next look starts at that page
@@ -67,22 +67,19 @@ export async function readTail(
 }
 
 /**
- * Whether a tail read from page `from` may have missed items: it does not reach back to the newest item the reading
- * before held (more came between two looks than the pages it read), or that reading held none though the list now
- * starts past its first page. A list the reading before did not hold (the first look, or one not read then) misses none.
+ * Whether a watch diffing a tail's list from `before` (the reading it last saw) to `after` (the newest, `length` long
+ * as read) may miss items: `after` is not the whole list and does not reach back to the newest item `before` held, so
+ * what came between was in neither (more came between two looks than a look's pages, or than a tail's bytes, hold).
+ * A list `before` did not hold (its first look, or one not read then) misses none: it is no change of its items.
  */
-export function missed(
-	before: Json | undefined,
-	read: { readonly items: readonly Item[]; readonly from: number },
-	by: string,
-) {
-	if (read.from <= 1 || !Array.isArray(before)) return false;
-	const newest = newestOf(
-		before.filter((item): item is Item => item !== null && typeof item === "object" && !Array.isArray(item)),
-		by,
-	);
-	const oldest = read.items[0]?.[by];
-	return newest === undefined || oldest === undefined || later(oldest, newest);
+export function missed(before: Json | undefined, after: Json | undefined, by: string, length: number | undefined) {
+	if (!Array.isArray(before) || !Array.isArray(after) || length === undefined || after.length >= length) return false;
+	const items = (list: Json[]) =>
+		list.filter((item): item is Item => item !== null && typeof item === "object" && !Array.isArray(item));
+	const newest = newestOf(items(before), by);
+	const oldest = items(after)[0]?.[by];
+	if (oldest === undefined) return false;
+	return newest === undefined || later(oldest, newest);
 }
 
 /** The newest of `items` (oldest first) whose JSON fits in `maxBytes`: the oldest leave first, never the newest. */
