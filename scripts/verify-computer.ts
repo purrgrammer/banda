@@ -7,9 +7,11 @@ import { access, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { Readable } from "node:stream";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { type Static, Type } from "@earendil-works/pi-ai";
 import { Value } from "typebox/value";
+import { nativeComputerReply } from "../test/fixtures/native-computer-model.ts";
 import { BROWSERS, hold } from "../test/slots.ts";
 import { hasChrome, withPage } from "../test/smoke/chrome.ts";
 
@@ -44,13 +46,7 @@ const { startDaemon }: typeof import("../src/daemon.ts") = await import(
 const { installedMicrovmAssets }: typeof import("../src/box/microvm-assets.ts") = await import(
 	pathToFileURL(join(app, "dist/box/microvm-assets.js")).href
 );
-const {
-	createModels,
-	fauxProvider,
-	fauxAssistantMessage,
-	fauxToolCall,
-	getCurrentTools,
-}: typeof import("@earendil-works/pi-ai") = await import(
+const { createModels, fauxProvider }: typeof import("@earendil-works/pi-ai") = await import(
 	pathToFileURL(join(app, "node_modules/@earendil-works/pi-ai/dist/index.js")).href
 );
 const assets = await installedMicrovmAssets();
@@ -118,28 +114,7 @@ printf native-computer-verified`;
 const models = createModels();
 const faux = fauxProvider({ tokensPerSecond: 10_000 });
 models.setProvider(faux.provider);
-faux.setResponses(
-	Array.from({ length: 80 }, () => (request) => {
-		const previous = request.messages.at(-1);
-		if (previous?.role === "toolResult" && previous.toolName === "message_user") return fauxAssistantMessage("Done.");
-		if (previous?.role === "toolResult" && previous.toolName !== "tool_search") {
-			const declined =
-				previous.toolName === "propose_send" && JSON.stringify(previous.content).includes("the owner denied it");
-			assert.ok(!previous.isError || declined, JSON.stringify(previous.content));
-			return fauxAssistantMessage([fauxToolCall("message_user", { text: JSON.stringify(previous.content) })], {
-				stopReason: "toolUse",
-			});
-		}
-		const browse = JSON.stringify(
-			request.messages.filter((message) => message.role === "user").at(-1)?.content,
-		).includes("Browse");
-		const tool = browse ? "browser_navigate" : "bash";
-		const next = getCurrentTools(request.messages).some((offered) => offered.name === tool)
-			? fauxToolCall(tool, browse ? { url: "https://example.com/" } : { command })
-			: fauxToolCall("tool_search", { query: tool, limit: 1 });
-		return fauxAssistantMessage([next], { stopReason: "toolUse" });
-	}),
-);
+faux.setResponses(Array.from({ length: 80 }, () => (request) => nativeComputerReply(request.messages, command)));
 await writeFile(
 	join(home, "config.json"),
 	JSON.stringify({ model: { provider: "faux", modelId: "faux-1" }, remote: { reach: "off" } }),
@@ -243,6 +218,7 @@ try {
 		assert.ok(response.ok, `${path}: ${response.status}: ${response.ok ? "" : await response.text()}`);
 	};
 	const Pending = Type.Object({
+		chats: Type.Array(Type.Object({ state: Type.String() })),
 		waits: Type.Array(
 			Type.Object({
 				key: Type.String(),
@@ -259,12 +235,12 @@ try {
 			}),
 		),
 	});
-	const pending = async () => {
-		const response = await fetch(`${origin}/api/status`, { headers });
+	const status = async () => {
+		const response = await fetch(`${origin}/api/status`, { headers, signal: AbortSignal.timeout(10_000) });
 		assert.ok(response.ok);
 		const value: unknown = await response.json();
 		assert.ok(Value.Check(Pending, value), "Only the deliberately held native test POST may await approval.");
-		return value.waits;
+		return value;
 	};
 	await api("/skills/shipped", { add: [] });
 	await api("/companion", { name: "Sancho", personality: "Brief." }, "PUT");
@@ -313,7 +289,7 @@ try {
 						30_000,
 					);
 					await page.until("document.querySelector('[data-open-ask]')", 30_000);
-					const waits = await pending();
+					const { waits } = await status();
 					assert.equal(waits.length, 1, "The held test POST must produce one approval.");
 					const [wait] = waits;
 					assert.ok(wait !== undefined);
@@ -338,7 +314,13 @@ try {
 						...point,
 					});
 					await page.until("!document.querySelector('[data-open-ask]')");
-					assert.equal((await pending()).length, 0);
+					const settled = AbortSignal.timeout(30_000);
+					for (;;) {
+						settled.throwIfAborted();
+						const now = await status();
+						if (now.waits.length === 0 && now.chats.every((chat) => chat.state === "idle")) break;
+						await delay(20, undefined, { signal: settled });
+					}
 					declinedPosts++;
 				}
 			}

@@ -1086,6 +1086,50 @@ describe("a held write's release", () => {
 		}
 	});
 
+	it("a denied ticket retained after a lost ACK stays denied across restart and a new identical request", async () => {
+		const s = setup();
+		const home = await tempHome();
+		let opened = await s.open(home);
+		try {
+			const first = await s.say(opened.harness);
+			await until(() => done(opened.harness, first.turn));
+			const original = held(first.chat);
+			s.proxy.pending.set(first.chat, [original]);
+			await expect(
+				sweepReceipts(s.holding, opened.harness, Date.now, "recover", context, (point) => {
+					if (point === "recovery:stored") throw new Error("lost ACK");
+				}),
+			).rejects.toThrow("lost ACK");
+			const [wait] = await openWaits(opened.harness);
+			expect(wait).toBeDefined();
+			await answer(opened.harness, wait!.key, "deny", web, "bearer");
+			await until(() => done(opened.harness, first.turn));
+			const told = await released(opened.harness, first.chat);
+			expect(told).toHaveLength(1);
+			expect(told[0]).toContain("the owner denied it");
+			expect(s.proxy.pending.get(first.chat)).toEqual([original]);
+			await opened.close();
+			opened = await s.open(home);
+			await sweepReceipts(s.holding, opened.harness, Date.now, "recover");
+			expect(await openWaits(opened.harness)).toEqual([]);
+			expect(await released(opened.harness, first.chat)).toEqual(told);
+			expect(s.proxy.pending.get(first.chat)).toEqual([]);
+			expect(s.proxy.acked).toEqual([original.ticket]);
+			const next = { ...original, ticket: held(first.chat).ticket };
+			s.proxy.pending.set(first.chat, [next]);
+			const newer = await s.say(opened.harness);
+			const asked = await nextAsk(opened.harness, newer.turn);
+			expect(await openWaits(opened.harness)).toHaveLength(1);
+			expect(asked.wait?.ask).toMatchObject({ args: { _ticket: next.ticket } });
+			await answer(opened.harness, asked.wait!.key, "deny", web, "bearer");
+			await until(() => done(opened.harness, newer.turn));
+			expect(s.proxy.sent).toEqual([]);
+			expect(await released(opened.harness, first.chat)).toHaveLength(2);
+		} finally {
+			await opened.close();
+		}
+	});
+
 	it("what the server answered cannot close the fence it is told in", async () => {
 		const s = setup();
 		const { harness, close } = await s.open(await tempHome());
