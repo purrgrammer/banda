@@ -129,6 +129,33 @@ describe("a watch on a repository", () => {
 		expect(summary.record.done).toBeUndefined();
 	}, 60_000);
 
+	it("a renamed default branch is no news; a push after it tells as on the default branch, never by a name", async () => {
+		// a scripted mock: the repository's branches and which is the default, renamed from main to trunk at step 1 and
+		// pushed to at step 2; list_commits without `sha` answers the default branch's head, as GitHub's does
+		const asked: unknown[] = [];
+		const summary = await watchScenario(await tempHome(), new Faults(), {
+			connection: await github(),
+			object: REPOSITORY,
+			answer: (tool, args, step) => {
+				if (tool === "list_commits") asked.push(args.sha);
+				const head = step >= 2 ? commit("e5f6a7b8", "ana", "After the rename") : commit("a1b2c3d4", "ana", "Start");
+				const branches: { [name: string]: Item[] } = { [step >= 1 ? "trunk" : "main"]: [head] };
+				const defaultBranch = step >= 1 ? "trunk" : "main";
+				return repository(() => ({
+					pulls: [pull(11, "ana", "Older")],
+					issues: [],
+					releases: [],
+					commits: branches[typeof args.sha === "string" ? args.sha : defaultBranch] ?? [],
+				}))(tool, args, step);
+			},
+			clicks: ["k1", "k2"],
+		});
+		expect(watchInvariants(summary)).toEqual([]);
+		expect(asked.every((sha) => sha === undefined)).toBe(true);
+		expect(summary.wakes).toEqual([]);
+		expect(summary.tells.map((tell) => tell.changes)).toEqual([["new commits on the default branch"]]);
+	}, 60_000);
+
 	it("one that slid onto a page as another left is nothing: a deleted release, a transferred issue", async () => {
 		const summary = await watchScenario(await tempHome(), new Faults(), {
 			connection: await github(),

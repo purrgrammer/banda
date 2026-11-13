@@ -252,6 +252,23 @@ describe("following an object", () => {
 		expect((shipped.derived as { checks_green: boolean }).checks_green).toBe(true);
 	});
 
+	it("null is no value: `= null` holds where a field is left out or null, and nothing else changes", () => {
+		expect(holds("author.login = null", { id: "DC_1" })).toBe(true);
+		expect(holds("author.login = null", { id: "DC_1", author: null })).toBe(true);
+		expect(holds("author.login = null", { id: "DC_1", author: { login: null } })).toBe(true);
+		expect(holds("author.login = null", { id: "DC_1", author: { login: "ana" } })).toBe(false);
+		expect(holds("author.login != null", { id: "DC_1", author: { login: "ana" } })).toBe(true);
+		expect(holds("author.login != null", { id: "DC_1" })).toBe(false);
+		// within a list, an item that lacks the field is null to `= null`, and still unequal to any value
+		const list: Json = { comments: [{ author: { login: "ana" } }, {}] };
+		expect(holds("comments[*].author.login = null", list)).toBe(true);
+		expect(holds("all comments[*].author.login = null", list)).toBe(false);
+		expect(holds("comments[*].author.login != ana", list)).toBe(true);
+		// a path with nothing at it, as before: no value equals a word, and `!=` does not hold over nothing
+		expect(holds("checks.check_runs[*].status != completed", {})).toBe(false);
+		expect(holds("author.login = ana", {})).toBe(false);
+	});
+
 	it("a short page never says an item is gone", () => {
 		const before = open() as { [key: string]: Json };
 		const after = open() as { [key: string]: Json };

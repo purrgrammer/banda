@@ -686,8 +686,9 @@ or not the model remembers it.
 - **Wake, tell or nothing.** The kind's rules sort each change: a wake starts the agent's run with the change as its
   input, framed as data, the watch's words beside it; a change that only tells draws its line and card in the chat
   and runs no model; the rest (noise, what the account itself did, a bot's) leaves no trace, so an agent never wakes
-  on its own work where the service says whose it is. Where no read names who wrote an item (a GitHub discussion's
-  comments), whose it is is never guessed: the rules alone sort it, and its words say the author is not known. At a
+  on its own work where the service says whose it is. Where an item's answer names no author (a deleted account's
+  comment; every discussion comment GitHub's hosted server lists), whose it is is never guessed: the rules alone sort
+  it, and its words say the author is not known. At a
   wake the agent decides whether anything is worth a message, as at a routine's: its message counts as unread, a line
   alone does not.
 - **A burst is one wake.** Changes that arrive while the watch's last run still goes, or before the kind's settling

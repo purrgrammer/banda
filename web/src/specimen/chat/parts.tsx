@@ -759,6 +759,7 @@ export function Parts() {
 							"08:40",
 						)}
 						{saw(FOLLOWED.repository, ["new commits on the default branch"], "09:05")}
+						{saw(FOLLOWED.discussion, ["ana commented"], "13:40")}
 						{saw(FOLLOWED.discussion, ["new reply (author not known)"], "14:12")}
 						{saw(FOLLOWED.discussion, ["answered"], "15:30", { ended: "answered" })}
 					</Group>
