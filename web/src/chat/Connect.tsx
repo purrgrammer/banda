@@ -1,6 +1,6 @@
 /**
  * Connecting, the one flow for every connection: in the chat where it was needed, in an agent's Access tab, in Settings
- * and on the Connections page. Where an agent asks, a compact card says why and offers Connect; the tile or row of a
+ * and on the Connections page. Where an agent asks, a bubble says why and offers Connect; the tile or row of a
  * page offers it as its own button. Either opens the connect dialog, where every step of signing in happens: the
  * access to grant, the service's page (and a code to enter on it), what failed, and an account banda already has.
  * Without an agent (from Settings or the Connections page) it signs an account in for none.
@@ -22,9 +22,9 @@ import { Switch } from "@/components/ui/switch";
 import type { AvatarFace } from "../../../src/core/avatar-face.ts";
 import { ACCOUNT_LABEL_MAX } from "../../../src/core/choices.ts";
 import { type ScopeChoices, scopesOfChoice } from "../lib/connect.ts";
-import { Tile } from "./Cards.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
 import { Face } from "./Face.tsx";
+import { Bubble } from "./Feed.tsx";
 
 export type ConnectState =
 	| { readonly kind: "connect"; readonly why: string }
@@ -85,8 +85,8 @@ export function ConnectCard({
 }) {
 	const connected = state.kind !== "connect";
 	return (
-		<Tile className={`flex flex-col ${connected ? "gap-0 p-3" : "gap-3 p-4"}`}>
-			<span className="flex items-center gap-3">
+		<Bubble mine={false} className="flex flex-col gap-2">
+			<span className="flex items-center gap-2">
 				<ConnectionMark id={id} url={connectionUrl} />
 				<span className="flex min-w-0 flex-col">
 					<span className="flex items-center gap-1.5 text-ui font-semibold text-ink">
@@ -98,18 +98,18 @@ export function ConnectCard({
 			</span>
 			{connected ? null : (
 				<span className="flex flex-wrap gap-2">
-					<Button disabled={busy} onClick={onConnect}>
+					<Button size="sm" disabled={busy} onClick={onConnect}>
 						{busy ? <Spinner className="size-3.5" /> : null}
 						Connect {connection}
 					</Button>
 					{onDismiss === undefined ? null : (
-						<Button variant="ghost" onClick={onDismiss}>
+						<Button size="sm" variant="ghost" onClick={onDismiss}>
 							Not now
 						</Button>
 					)}
 				</span>
 			)}
-		</Tile>
+		</Bubble>
 	);
 }
 

@@ -1,4 +1,5 @@
 /** Connections: the catalogue page, and connecting, one dialog everywhere. */
+import { PlugIcon } from "lucide-react";
 import { useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Band } from "../../chat/Band.tsx";
@@ -16,7 +17,7 @@ export function ConnectSections() {
 		<>
 			<Section id="connections" note="Everything the band can work with, from the band's foot or Settings." bleed>
 				{phone ? null : <Band rows={ROWS} />}
-				<SettingsPage title="Connections" phone={phone}>
+				<SettingsPage title="Connections" icon={PlugIcon} phone={phone}>
 					<Catalogue services={SERVICES} />
 				</SettingsPage>
 			</Section>

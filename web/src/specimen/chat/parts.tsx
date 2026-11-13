@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useContext, useState } from "react";
 import { ApprovalCard, ChangeCard, Details, Facts, WaitingPill } from "../../chat/Approval.tsx";
-import { ArtifactCard, Browsed, QuestionCard, SignInCard, ViewCard } from "../../chat/Cards.tsx";
+import { ArtifactCard, Browsed, QuestionCard, type QuestionState, SignInCard, ViewCard } from "../../chat/Cards.tsx";
 import { Composer } from "../../chat/Composer.tsx";
 import { Bubble, DaySeparator, JumpToLatest, Mention, Run, UnreadDivider } from "../../chat/Feed.tsx";
 import { FileChanges } from "../../chat/FileChanges.tsx";
@@ -181,6 +181,31 @@ function saw(
 
 /** An agent's name too long for a phone's bubble. */
 const LONG_NAME = "Ana María de la Vega Ortega Fernández Hidalgo";
+
+function NativePrompts() {
+	const [question, setQuestion] = useState<QuestionState>({ kind: "open" });
+	const [approval, setApproval] = useState<"open" | "done" | "declined">("open");
+	return (
+		<Group label="Native prompts" className="flex-col items-start">
+			<QuestionCard
+				question="Which train works for you?"
+				choices={["09:15", "11:30"]}
+				state={question}
+				onChoose={(answer) => setQuestion({ kind: "answered", answer })}
+				onDismiss={() => setQuestion({ kind: "dismissed" })}
+			/>
+			<ApprovalCard
+				bubble
+				agent="Mara"
+				what="Allow requests to calendar.example.com"
+				verb="Allow"
+				state={approval === "done" ? { kind: "done", words: "Allowed" } : { kind: approval }}
+				onApprove={() => setApproval("done")}
+				onDecline={() => setApproval("declined")}
+			/>
+		</Group>
+	);
+}
 
 export function Parts() {
 	return (
@@ -405,11 +430,9 @@ export function Parts() {
 					/>
 				</div>
 			</Section>
-			<Section
-				id="approvals"
-				note="The approval card, the same for every agent: what will happen, as whom, the verb as the button, at most one scope."
-			>
+			<Section id="approvals" note="Native prompts appear in bubbles. Drafts with previews use cards.">
 				<div className="flex max-w-2xl flex-col gap-3">
+					<NativePrompts />
 					<Group label="Allow → Approved · same card height" className="flex-col items-start">
 						{(["open", "done"] as const).map((kind) => (
 							<ApprovalCard
@@ -621,9 +644,9 @@ export function Parts() {
 						<WorkingLine who={[MARA, SANCHO]} onOpen={() => {}} />
 					</div>
 				</Group>
-				<Group label="The header while it works: the face at rest, no words">
+				<Group label="The chat title while work appears in the feed">
 					<HeaderStage>
-						<Header name="Octo" faces={[OCTO]} state="working" />
+						<Header name="Octo" face={OCTO.face} />
 					</HeaderStage>
 				</Group>
 			</Section>

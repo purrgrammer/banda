@@ -78,12 +78,21 @@ function Draft({ chat, agent, ask, label, wait, state, drawn, drafted }: Props) 
 				: label;
 	const driveDraft = DRIVE_DRAFT.test(ask.tool) && !interrupted;
 	const preview = emailDraft || eventDraft || contactDraft || slackDraft;
+	const bubble =
+		!interrupted &&
+		!ask.tool.includes("__") &&
+		ask.on === undefined &&
+		drawn === undefined &&
+		changes.files.length === 0 &&
+		details.length === 0 &&
+		(fields.length === 0 || ask.tool === "ask_hosts");
 	// the daemon's verb, where the effect has one of its own; never a word of the label, which may be a tool's name
 	const verb = interrupted ? "Retry" : (ask.verb ?? "Allow");
 	const scope = !interrupted && ask.floor === undefined ? scopesOf(ask)[0] : undefined;
 	const asAgent = agent.id === undefined ? undefined : { id: agent.id, name: agent.name };
 	return (
 		<ApprovalCard
+			bubble={bubble}
 			agent={agent.name}
 			what={what}
 			verb={verb}

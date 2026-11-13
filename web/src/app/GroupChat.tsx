@@ -1,5 +1,5 @@
 /**
- * A group's chat: its members' faces in the header, the log as runs of bubbles under each member's face and name,
+ * A group's chat: its name in the header, the log as runs of bubbles under each member's face and name,
  * mentions as the member's face and name, members' asks answered in place, and the composer, whose message goes to
  * everyone unless it @mentions someone. The log is read again whenever the group's row says it grew.
  */
@@ -23,7 +23,7 @@ import { archiveGroup, groupOf, postToGroup } from "../areas/groups.ts";
 import { ArtifactCard, QuestionCard } from "../chat/Cards.tsx";
 import { Composer } from "../chat/Composer.tsx";
 import { Bubble, MessageActions, Run } from "../chat/Feed.tsx";
-import { HEADER_CLEARANCE, Header } from "../chat/Header.tsx";
+import { Header } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { ChatLoading, GroupEmpty } from "../chat/Loading.tsx";
 import { GroupPanel, Panel } from "../chat/Panel.tsx";
@@ -155,7 +155,7 @@ export function GroupChat({
 		const chat = executions[member.id];
 		return chat === undefined ? [] : [{ chat, name: member.name, heading: name }];
 	});
-	const coding = useHarnessMenu(delegated.sessions, delegated.waiting, phone);
+	const coding = useHarnessMenu(delegated.sessions, delegated.waiting);
 	const activityTargets = (working.length ? working : members).flatMap((member) => {
 		const chat = executions[member.id];
 		return chat === undefined ? [] : [{ chat, name: member.name, heading: name }];
@@ -183,12 +183,11 @@ export function GroupChat({
 	if (phone && panel) return panelView;
 	return (
 		<>
-			<div className="feed-scope relative flex min-w-0 flex-1 flex-col bg-paper">
+			<div className="flex min-w-0 flex-1 flex-col bg-paper">
 				<Header
 					name={name}
-					faces={all}
+					faces={all.map(({ id, name, face }) => ({ id, name, face }))}
 					state={status.state}
-					attention={status.attention}
 					delegated={coding.menu}
 					phone={phone}
 					doing={status.doing}
@@ -205,8 +204,8 @@ export function GroupChat({
 				/>
 				<Conversation className="flex flex-col">
 					<ConversationContent
-						scrollClassName="feed-scroll min-h-0 flex-1 overflow-y-auto"
-						className={`mx-auto w-full max-w-[44rem] px-4 pb-5 ${HEADER_CLEARANCE}`}
+						scrollClassName="min-h-0 flex-1 overflow-y-auto"
+						className="mx-auto w-full max-w-[44rem] px-4 pt-4 pb-5"
 					>
 						{group === undefined && unread ? (
 							<Line
@@ -219,7 +218,7 @@ export function GroupChat({
 						) : group === undefined ? (
 							<ChatLoading />
 						) : null}
-						{group !== undefined && group.messages.length === 0 ? <GroupEmpty name={name} faces={all} /> : null}
+						{group !== undefined && group.messages.length === 0 ? <GroupEmpty hasMembers={all.length > 0} /> : null}
 						{logOf(group).map((line) => {
 							// a member's reaction shows on the owner's message it went on; alone, it is no line of its own
 							if ("message" in line && reactionOnly(line.message)) return null;

@@ -1,6 +1,6 @@
 /**
  * A chat's segments (`lib/chat.ts`) drawn with the chat's components: the owner's words and the agent's messages as
- * runs of bubbles, files rich, questions and approvals as cards the owner answers in place, events as lines. A kind
+ * runs of bubbles, rich files, prompts the owner answers in place, and events as lines. A kind
  * the new feed does not draw yet falls back to its area's view, until slice 5b ports it.
  */
 import {

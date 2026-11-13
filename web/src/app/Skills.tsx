@@ -1,4 +1,5 @@
 /** Shared skills, from the accepted workspace files. Draft box changes never appear as usable instructions. */
+import { BookOpenIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,7 +85,9 @@ export function SkillsPage({
 		});
 	return (
 		<SettingsPage
-			title={name === undefined || accepted !== undefined ? "Skills" : `/${name}`}
+			title={name === undefined ? "Skills" : `/${name}`}
+			parent={name === undefined ? undefined : { title: "Skills", href: "#/skills" }}
+			icon={BookOpenIcon}
 			phone={phone}
 			onBack={onBack}
 			wide={name !== undefined}
@@ -144,7 +147,7 @@ export function SkillsPage({
 					No accepted skill named /{name}. A proposed file needs review before it can load.
 				</p>
 			) : (
-				<SkillDetail skill={accepted} />
+				<SkillDetail skill={accepted} showTitle={false} />
 			)}
 			{name !== undefined && selected?.change !== undefined ? (
 				<ChangeReview

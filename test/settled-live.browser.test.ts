@@ -19,6 +19,7 @@ import { demoEffects } from "./fixtures/effects.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { skipShippedSkills, tempHome, until, type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
+import { chooseMessageAction } from "./smoke/message-actions.ts";
 
 const LONG_URL =
 	"https://docs.example.test/releases/2026/november/very-long-path-segment-without-breaks/aVeryLongTokenWithoutAnySpaces_0123456789abcdefghijklmnopqrstuvwxyz?ref=pull-request-review";
@@ -91,7 +92,7 @@ const audit = `(() => {
 	const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
 	for (let node = walk.nextNode(); node !== null; node = walk.nextNode()) {
 		if (node.textContent.trim() === '') continue;
-		const frame = node.parentElement.closest('[data-done], [data-tile]');
+		const frame = node.parentElement.closest('[data-done], [data-tile], [data-message-bubble]');
 		if (frame === null) continue;
 		let clipped = false;
 		for (let el = node.parentElement; el !== frame && el !== null; el = el.parentElement)
@@ -177,6 +178,7 @@ beforeAll(async () => {
 	await onChat(320, "light", async (page) => {
 		// open, at the narrowest phone: the long choices wrap in their buttons
 		await page.until(`!!${button(TOKEN)}`);
+		expect(await page.run(`Boolean(${button(TOKEN)}.closest('[data-message-bubble]'))`)).toBe(true);
 		expect(await settledAudit(page)).toEqual({ spills: [], sideways: [] });
 		await page.run(`${button(LONG_URL)}.click()`);
 		await until(async () => (await state()) === "idle");
@@ -224,7 +226,7 @@ for (const theme of ["light", "dark"] as const)
 				await onChat(width, theme, async (page) => {
 					await page.until(`document.querySelectorAll('[data-done]').length >= 5`).catch(async (error: Error) => {
 						throw new Error(
-							`${error.message}\nrows: ${JSON.stringify(await page.run(settled))}\nfeed: ${await page.run("document.querySelector('.feed-scroll')?.innerText.slice(-1500)")}`,
+							`${error.message}\nrows: ${JSON.stringify(await page.run(settled))}\nfeed: ${await page.run("document.querySelector('[role=log]')?.innerText.slice(-1500)")}`,
 						);
 					});
 					const rows = await page.run<{ kind: string; mark: string; text: string }[]>(settled);
@@ -248,8 +250,10 @@ for (const theme of ["light", "dark"] as const)
 					await page.run(
 						`[...document.querySelectorAll('[data-done] button[aria-label="Show details"]')].forEach((b) => b.click())`,
 					);
-					await page.until(`document.querySelectorAll('[data-done] [data-tile]').length >= 5`);
-					const cards = await page.run<string>(`document.querySelector('.feed-scroll').innerText`);
+					await page.until(
+						`document.querySelectorAll('[data-done] :is([data-tile], [data-message-bubble])').length >= 5`,
+					);
+					const cards = await page.run<string>(`document.querySelector('[role=log]').innerText`);
 					for (const words of ["You answered in the chat", "Stopped before an answer", "You said no", LONG_URL])
 						expect(cards.replace(/\s+/g, ""), words).toContain(words.replace(/\s+/g, ""));
 					expect(await page.run(`document.documentElement.classList.contains('dark')`)).toBe(theme === "dark");
@@ -271,8 +275,12 @@ for (const width of [320, 1440])
 		async () => {
 			await onChat(width, "light", async (page) => {
 				// the run's activity: open the last message's
-				await page.until(`document.querySelectorAll('button[aria-label="View activity"]').length > 0`);
-				await page.run(`[...document.querySelectorAll('button[aria-label="View activity"]')].at(-1).click()`);
+				await page.until(`document.querySelectorAll('button[data-message-transcript]').length > 0`);
+				await chooseMessageAction(
+					page,
+					`[...document.querySelectorAll('button[data-message-transcript]')].at(-1)`,
+					"Activity & transcript",
+				);
 				const preview = `[...document.querySelectorAll('[data-tool-preview]')].find((p) => p.textContent.includes('pushed-to-origin-main'))`;
 				await page.until(`!!${preview}`);
 				const kept = await page.run<{ end: string; whole: boolean; describes: boolean }>(`(() => {

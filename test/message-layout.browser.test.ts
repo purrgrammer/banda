@@ -3,6 +3,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import { defaultAvatarFace } from "../src/core/avatar-face.ts";
 import { type WebServer, webServer } from "./helpers.ts";
 import { COMMAND_MS, hasChrome, openChrome } from "./smoke/chrome.ts";
+import { chooseMessageAction } from "./smoke/message-actions.ts";
 
 const fixture = fileURLToPath(new URL("../web/message-layout-fixture.tsx", import.meta.url));
 const at = Date.UTC(2026, 10, 4, 10, 42);
@@ -184,7 +185,7 @@ async function withLayoutPage(width: number, use: (page: LayoutPage) => Promise<
 		};
 		await input("Page.navigate", { url: `${base}/message-layout#token=layout-test` });
 		await page.until(
-			`document.querySelector('[data-heading="3"] h3') && document.querySelector('#group [data-entry="2"] button[aria-label="Copy the message"]')`,
+			`document.querySelector('[data-heading="3"] h3') && document.querySelector('#group [data-entry="2"] button[aria-label="Message actions"]')`,
 		);
 		await run("document.fonts.ready.then(()=>true)");
 		await use(page);
@@ -261,7 +262,12 @@ for (const width of [320, 390, 1440]) {
 				expect(said).not.toContain("](#/a/");
 				// Copy gives what the owner wrote, not the link drawn for the eye
 				await page.run(
-					`Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>{window.copied=t}}});${taken}.parentElement.querySelector('button[aria-label="Copy the message"]').click()`,
+					`Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>{window.copied=t}}})`,
+				);
+				await chooseMessageAction(
+					page,
+					`${taken}.parentElement.querySelector('button[aria-label="Message actions"]')`,
+					"Copy",
 				);
 				await page.until("window.copied");
 				expect(await page.run<string>("window.copied")).toBe(directText);
@@ -404,7 +410,7 @@ for (const width of [320, 390, 1440]) {
 			await withLayoutPage(width, async (page) => {
 				for (const selector of ["#direct-0", "#direct-1", '#group [data-entry="1"]', '#group [data-entry="2"]']) {
 					await page.run(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'center'})`);
-					const measure = `(()=>{const root=document.querySelector(${JSON.stringify(selector)});const copy=root.querySelector('button[aria-label="Copy the message"]');const stamp=Array.from(root.querySelectorAll('span')).find(e=>e.textContent===new Date(${at}).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));const a=copy.getBoundingClientRect(),b=stamp.getBoundingClientRect(),r=root.getBoundingClientRect();return {overlap:a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top,copyY:a.top-r.top,timeY:b.top-r.top,height:r.height,copyX:a.left,copyTop:a.top,opacity:getComputedStyle(copy).opacity};})()`;
+					const measure = `(()=>{const root=document.querySelector(${JSON.stringify(selector)});const copy=root.querySelector('button[aria-label="Message actions"]');const stamp=Array.from(root.querySelectorAll('span')).find(e=>e.textContent===new Date(${at}).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));const a=copy.getBoundingClientRect(),b=stamp.getBoundingClientRect(),r=root.getBoundingClientRect();return {overlap:a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top,copyY:a.top-r.top,timeY:b.top-r.top,height:r.height,copyX:a.left,copyTop:a.top,opacity:getComputedStyle(copy).opacity};})()`;
 					const before = await page.run<{
 						overlap: boolean;
 						copyY: number;
@@ -428,12 +434,12 @@ for (const width of [320, 390, 1440]) {
 						y: before.copyTop + 10,
 					});
 					await page.until(
-						`getComputedStyle(document.querySelector(${JSON.stringify(selector)}+' button[aria-label="Copy the message"]')).opacity==='1'`,
+						`getComputedStyle(document.querySelector(${JSON.stringify(selector)}+' button[aria-label="Message actions"]')).opacity==='1'`,
 					);
 					await stable();
 					await page.input("Input.dispatchMouseEvent", { type: "mouseMoved", x: 0, y: 0 });
 					await page.run(
-						`document.querySelector(${JSON.stringify(selector)}+' button[aria-label="Copy the message"]').focus({preventScroll:true})`,
+						`document.querySelector(${JSON.stringify(selector)}+' button[aria-label="Message actions"]').focus({preventScroll:true})`,
 					);
 					await page.input("Input.dispatchKeyEvent", {
 						type: "keyDown",
@@ -443,18 +449,12 @@ for (const width of [320, 390, 1440]) {
 					});
 					await page.input("Input.dispatchKeyEvent", { type: "keyUp", key: "Shift", code: "ShiftLeft" });
 					await page.until(
-						`getComputedStyle(document.querySelector(${JSON.stringify(selector)}+' button[aria-label="Copy the message"]')).opacity==='1'`,
+						`getComputedStyle(document.querySelector(${JSON.stringify(selector)}+' button[aria-label="Message actions"]')).opacity==='1'`,
 					);
 					await stable();
-					await page.run(
-						`document.activeElement.blur();document.querySelector(${JSON.stringify(selector)}+' [class~="group/bubble"]').dispatchEvent(new PointerEvent('pointerdown',{pointerType:'touch',bubbles:true}))`,
-					);
-					await page.until(
-						`document.querySelector(${JSON.stringify(selector)}+' button[aria-label="Copy the message"]').classList.contains('opacity-100')`,
-					);
-					await page.run(
-						`document.querySelector(${JSON.stringify(selector)}+' [class~="group/bubble"]').dispatchEvent(new PointerEvent('pointerup',{pointerType:'touch',bubbles:true}))`,
-					);
+					await page.input("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter" });
+					await page.input("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter" });
+					await page.until(`document.querySelector('[role="menuitem"]')?.textContent.trim() === 'Copy'`);
 					const after = await page.run<typeof before>(measure);
 					expect(after).toMatchObject({
 						overlap: false,
@@ -463,6 +463,9 @@ for (const width of [320, 390, 1440]) {
 						height: before.height,
 					});
 					expect(await page.run(`document.documentElement.scrollWidth<=innerWidth`)).toBe(true);
+					await page.input("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape" });
+					await page.input("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape" });
+					await page.until(`!document.querySelector('[role="menu"]')`);
 				}
 			});
 		},

@@ -126,9 +126,10 @@ for (const width of [390, 1440])
 						`[...document.querySelectorAll('summary')].find(el => el.textContent === 'Introduction from the server')`,
 					);
 					expect(await page.run(`document.body.textContent.includes('Ernesto test introduction.')`)).toBe(true);
-					await click(
-						page,
-						`[...document.querySelector('[data-tool="fs_read"]').querySelectorAll('button')].find(el => el.textContent === 'Allow')`,
+					await click(page, `document.querySelector('[data-tool="fs_read"] [role="combobox"]')`);
+					await click(page, `[...document.querySelectorAll('[role="option"]')].find(el => el.textContent === 'Allow')`);
+					await page.until(
+						`document.querySelector('[data-tool="fs_read"] [role="combobox"]').textContent === 'Allow' && !document.querySelector('[role="listbox"]')`,
 					);
 					await click(page, labelled("Sancho"));
 					await click(page, button("Save access"));

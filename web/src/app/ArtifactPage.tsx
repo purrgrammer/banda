@@ -4,7 +4,7 @@
  * its own, which the agent reads as their words); an image shows; a page renders in a sandbox of its own origin, never
  * the daemon's; anything else downloads. Any older version opens read only, with Restore.
  */
-import { ChevronLeftIcon, DownloadIcon, HistoryIcon, Maximize2Icon, Minimize2Icon } from "lucide-react";
+import { ChevronLeftIcon, DownloadIcon, FileTextIcon, HistoryIcon, Maximize2Icon, Minimize2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { WebPreview, WebPreviewBody, WebPreviewNavigation, WebPreviewUrl } from "@/components/ai-elements/web-preview";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { CodeLines, useHighlighted } from "../chat/Files.tsx";
+import { PaneHeader, type PaneParent } from "../chat/Header.tsx";
 import { ChatLoading } from "../chat/Loading.tsx";
 import { FileBody } from "../chat/Viewer.tsx";
 import { Markdown } from "../components/Markdown.tsx";
@@ -39,15 +40,19 @@ export const kindWords = (kind: string) => KIND[kind] ?? "File";
 
 export function ArtifactPage({
 	id,
+	phone,
 	v,
 	nameOf,
+	sourceOf,
 	onBack,
 	onVersion,
 }: {
 	id: string;
+	phone: boolean;
 	v?: number | undefined;
 	/** The name of the agent of a chat. */
 	nameOf: (chat: number) => string;
+	sourceOf: (chat: number) => PaneParent | undefined;
 	/** Back to the chat that made it, when known. */
 	onBack: (chat?: number) => void;
 	onVersion: (n: number | undefined) => void;
@@ -103,7 +108,7 @@ export function ArtifactPage({
 
 	if (missing)
 		return (
-			<Frame title="Not found" onBack={() => onBack()}>
+			<Frame title="Not found" phone={phone} onBack={() => onBack()}>
 				<p className="p-6 text-ui text-ink-2">This artifact was removed, or never was.</p>
 			</Frame>
 		);
@@ -119,7 +124,7 @@ export function ArtifactPage({
 	);
 	if (artifact === undefined || version === undefined)
 		return (
-			<Frame title="" onBack={() => onBack()}>
+			<Frame title="Artifact" phone={phone} onBack={() => onBack()}>
 				{unread ? (
 					retry
 				) : (
@@ -166,6 +171,8 @@ export function ArtifactPage({
 	return (
 		<Frame
 			title={artifact.title}
+			parent={sourceOf(artifact.chat)}
+			phone={phone}
 			onBack={() => onBack(artifact.chat)}
 			detail={`${kindWords(artifact.kind)} · version ${version.n}${old ? ` of ${newest}` : ""} · by ${by(version)}${
 				note === undefined ? "" : ` · ${note}`
@@ -408,12 +415,16 @@ function Editor({ text, onSave, onCancel }: { text: string; onSave: (text: strin
 
 function Frame({
 	title,
+	parent,
+	phone,
 	detail,
 	actions,
 	onBack,
 	children,
 }: {
 	title: string;
+	parent?: PaneParent | undefined;
+	phone: boolean;
 	detail?: string;
 	actions?: React.ReactNode;
 	onBack: () => void;
@@ -421,16 +432,19 @@ function Frame({
 }) {
 	return (
 		<div className="flex min-w-0 flex-1 flex-col bg-paper">
-			<header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-line-soft px-2.5">
-				<Button variant="ghost" size="icon-sm" aria-label="Back to the chat" className="text-ink-2" onClick={onBack}>
-					<ChevronLeftIcon className="size-5" />
-				</Button>
-				<span className="flex min-w-0 flex-1 flex-col">
-					<span className="truncate text-heading font-semibold text-ink">{title}</span>
-					{detail === undefined ? null : <span className="truncate text-meta text-ink-2">{detail}</span>}
-				</span>
-				{actions}
-			</header>
+			<PaneHeader
+				title={title}
+				parent={parent}
+				icon={<FileTextIcon />}
+				phone={phone}
+				detail={detail === undefined ? null : <p className="truncate text-meta text-ink-2">{detail}</p>}
+				trailing={actions}
+				navigation={
+					<Button variant="ghost" size="icon-sm" aria-label="Back to the chat" className="text-ink-2" onClick={onBack}>
+						<ChevronLeftIcon className="size-5" />
+					</Button>
+				}
+			/>
 			{children}
 		</div>
 	);

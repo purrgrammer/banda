@@ -10,7 +10,7 @@ import { type ReactNode, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/cn";
 import { FLOOR_WORDS } from "../../../src/core/floor.ts";
 import {
@@ -56,42 +56,45 @@ export function fromWords(from: From): string {
 	return "Not known";
 }
 
-/** One control: a segmented choice of the settings given. */
-function Choice({
+function PermissionSelect({
 	label,
 	options,
 	value,
 	onChange,
 	disabled,
+	waiting,
 }: {
 	label: string;
 	options: readonly Setting[];
 	value: Setting | undefined;
 	onChange: (setting: Setting) => void;
 	disabled?: boolean | undefined;
+	waiting?: boolean | undefined;
 }) {
+	// A newly listed tool is provisionally Off. Picking Off still needs to record the owner's choice.
+	const pendingOff = waiting === true && value === "off";
 	return (
-		<ToggleGroup
-			type="single"
-			variant="outline"
-			size="sm"
-			spacing={0}
-			aria-label={label}
-			value={value ?? ""}
+		<Select
+			value={pendingOff ? "" : (value ?? "")}
 			disabled={disabled}
 			onValueChange={(next) => {
-				// a segment clicked again deselects: the choice stands, so Off on a waiting tool can settle it as the owner's
-				if (next === "" && value !== undefined) onChange(value);
-				else if ((SETTINGS as readonly string[]).includes(next)) onChange(next as Setting);
+				const setting = options.find((option) => option === next);
+				if (setting !== undefined) onChange(setting);
 			}}
-			className="max-w-full shrink-0"
 		>
-			{options.map((setting) => (
-				<ToggleGroupItem key={setting} value={setting} className="px-2 max-sm:min-h-10">
-					{SETTING_WORDS[setting]}
-				</ToggleGroupItem>
-			))}
-		</ToggleGroup>
+			<SelectTrigger size="sm" aria-label={label} className="w-28 shrink-0 max-sm:min-h-12">
+				<SelectValue placeholder={pendingOff ? SETTING_WORDS.off : "Mixed"} />
+			</SelectTrigger>
+			<SelectContent position="popper" align="end">
+				<SelectGroup>
+					{options.map((setting) => (
+						<SelectItem key={setting} value={setting} className="max-sm:min-h-12">
+							{SETTING_WORDS[setting]}
+						</SelectItem>
+					))}
+				</SelectGroup>
+			</SelectContent>
+		</Select>
 	);
 }
 
@@ -178,7 +181,7 @@ function ToolRow({ tool, children }: { tool: ConnectionToolView; children?: Reac
 			data-tool={tool.title}
 			className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 py-2.5 pr-3.5 pl-9"
 		>
-			<details className="group/tool min-w-0 flex-1 basis-48">
+			<details className="group/tool min-w-0 flex-1 basis-32">
 				<summary className="flex cursor-pointer list-none flex-col gap-0.5 rounded-field focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink max-sm:min-h-10 [&::-webkit-details-marker]:hidden">
 					<span className="flex flex-wrap items-center gap-1.5 break-words text-ui text-ink">
 						{tool.words}
@@ -243,25 +246,24 @@ function ToolGroup({
 						) : null}
 					</Button>
 				</CollapsibleTrigger>
-				<div className="flex items-center gap-2">
-					{common === undefined ? <span className="text-meta text-ink-2">Mixed</span> : null}
-					<Choice
-						label={`Every tool in ${group}`}
-						options={groupOptions(tools)}
-						value={common}
-						disabled={disabled}
-						onChange={(setting) => onTools(groupSet(tools, setting), true)}
-					/>
-				</div>
+				<PermissionSelect
+					label={`Every tool in ${group}`}
+					options={groupOptions(tools)}
+					value={common}
+					disabled={disabled}
+					waiting={waiting > 0}
+					onChange={(setting) => onTools(groupSet(tools, setting), true)}
+				/>
 			</div>
 			<CollapsibleContent id={id} className="flex flex-col divide-y divide-line-soft border-t border-line-soft">
 				{tools.map((tool) => (
 					<ToolRow key={tool.name} tool={tool}>
-						<Choice
+						<PermissionSelect
 							label={tool.words}
 							options={tool.options}
 							value={settingOf(tool)}
 							disabled={disabled}
+							waiting={tool.waiting}
 							onChange={(setting) => onTools({ [tool.title]: setting })}
 						/>
 						{tool.cards === true && settingOf(tool) === "off" ? (
@@ -394,11 +396,10 @@ export function ConnectionDetailsView({
 				note={
 					hasTools ? (
 						<>
-							Allow lets a tool that reads run without asking, for every agent with {service}. Ask shows you each change
-							first; Always ask never lets an agent skip that. Nothing here makes a tool that changes something run
-							unasked.
+							Allow runs reads without approval. Ask requires approval unless you’ve already granted permission for the
+							change. Always ask requires approval every time. Off disables the tool.
 							{view.tools.some((tool) => tool.classed?.kind === "unknown")
-								? " Allow on a tool marked Not known is you saying it only reads; only that tool's own control can say so."
+								? " Choosing Allow on a tool marked Not known says it only reads."
 								: null}
 						</>
 					) : undefined

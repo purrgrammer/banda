@@ -8,6 +8,7 @@ import { readDaemonFile } from "../src/home.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
+import { chooseMessageAction } from "./smoke/message-actions.ts";
 
 const button = (label: string) =>
 	`[...document.querySelectorAll('button')].find(el => el.getClientRects().length && el.textContent.trim() === ${JSON.stringify(label)})`;
@@ -96,10 +97,12 @@ for (const width of [390, 1440])
 				await click(page, `document.querySelector('button[aria-label="Send"]')`);
 				await page.until(`document.body.textContent.includes('Loaded /research')`);
 				expect(await page.run(`document.body.textContent.includes('Cite your sources.')`)).toBe(false);
-				await click(
-					page,
-					`document.querySelector('[aria-label="View activity"]') || document.querySelector('[aria-label="View current activity"]')`,
-				);
+				const transcriptAction = `document.querySelector('[data-message-transcript]')`;
+				const current = `document.querySelector('[aria-label="View current activity"]')`;
+				await page.until(`${transcriptAction} || ${current}`);
+				if (await page.run(`Boolean(${transcriptAction})`))
+					await chooseMessageAction(page, transcriptAction, "Activity & transcript");
+				else await click(page, current);
 				await page.until(`document.querySelector('[role="dialog"]')`);
 				const activity = String(await page.run(`document.querySelector('[role="dialog"]')?.innerText`));
 				expect(activity).toContain("Activity");

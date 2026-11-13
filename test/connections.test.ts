@@ -9,6 +9,7 @@ import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 import { AgentDoc, type ConversationId, type ToolExecutionApi } from "@earendil-works/pi-durable";
 import fc from "fast-check";
 import { afterEach, describe, expect, it } from "vitest";
+import { ActivityLog } from "../src/core/activity.ts";
 import { Accepted, parseAgent, shaOf } from "../src/core/agents.ts";
 import {
 	accountNamed,
@@ -475,6 +476,54 @@ describe("adding a server", () => {
 			{ tool: "list_events", args: { day: "mon" } },
 			{ tool: "list_events", args: { day: "tue" } },
 		]);
+	});
+
+	it("an account its server does not name reads by its name in every word the owner and a model read, never its number", async () => {
+		const numberWords = /account[ -]\d/i;
+		const fake = await startFakeMcp({ auth: "oauth" });
+		const keyed = await startFakeMcp({ auth: "key" });
+		fakes.push(fake, keyed);
+		const s = await open();
+		const name = await s.capabilities.addMcp({ url: fake.url });
+		const host = new URL(fake.url).hostname;
+		const said = [
+			(await signInAsOwner(s.capabilities, name, { agent: null })).words,
+			(await signInAsOwner(s.capabilities, name, { agent: null })).words,
+		];
+		// a key its server does not name goes by the host too
+		const byKey = await s.capabilities.addMcp({ url: keyed.url });
+		await s.capabilities.setKey(byKey, "fake-key-0123456789");
+		expect((await s.capabilities.view()).connections.find((each) => each.name === byKey)?.accounts).toEqual([
+			expect.objectContaining({ account: "account-1", label: new URL(keyed.url).hostname, numbered: true }),
+		]);
+		// what the owner writes is what it goes by
+		await s.capabilities.labelAccount(name, "account-1", "Work");
+		await allowReads(s, name, ["list_events"]);
+		await s.capabilities.switchAccount("sancho", name, "account-1", true);
+		await s.capabilities.switchAccount("sancho", name, "account-2", true);
+		s.model.plan(
+			[{ tool: `${name}__list_events`, args: { day: "mon" } }],
+			[{ tool: `${name}__list_events`, args: { day: "mon", account: "nobody" } }],
+			[{ tool: `${name}__create_event`, args: { title: "Tea", day: "mon", account: "work" } }],
+		);
+		const ran = await s.say("monday?");
+		const wait = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+		const drafted = wait.ask.type === "approval" ? (wait.ask.label ?? "") : "";
+		expect(drafted).toMatch(/ as Work$/);
+		await answer(s.harness, wait.key, "approve", web, "bearer");
+		await s.done(ran.turn);
+		const [unsaid, nobody, wrote] = await s.results(ran.chat);
+		expect(unsaid?.text).toContain(`"account": Work or ${host} 2`);
+		expect(nobody?.text).toContain(`nobody is not an account you may use: Work, ${host} 2`);
+		expect(wrote?.text).toContain("create_event ok");
+		await s.capabilities.signOut(name, "account-2");
+		const events = (await s.harness.snapshot(ActivityLog, context))?.events.map((event) => event.what) ?? [];
+		expect(events).toEqual(
+			expect.arrayContaining([expect.stringContaining(`as ${host} 2`), expect.stringContaining("as Work")]),
+		);
+		const shown = (await s.capabilities.view()).connections.flatMap((each) => each.accounts ?? []);
+		for (const words of [...said, drafted, unsaid?.text, nobody?.text, ...events, ...shown.map((each) => each.label)])
+			expect(words).not.toMatch(numberWords);
 	});
 
 	it("an account switched off stays off, even when another account's name spells its key", async () => {
