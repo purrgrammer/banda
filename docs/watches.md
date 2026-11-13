@@ -86,12 +86,12 @@ returned to and merged, at desktop and phone width.
 - [ ] Those kinds through the app against a daemon and real GitHub, at desktop and phone width (#35)
 - [x] A discussion's comments carry no author (github-mcp-server's comment is an id, a body and `isAnswer`; no listed
   read names who wrote one): a new comment or reply wakes as "new comment (author not known)", never as another's (#38)
-- [ ] The account's own discussion comments still wake, said as by an author not known, until a read names who wrote
-  a comment (github-mcp-server's `get_discussion_comments` answering it; then `authors` on comments and replies) (#38)
+- [ ] The account's own discussion comments still wake, as by an author not known, until a read names who wrote a
+  comment (github-mcp-server's `get_discussion_comments` answering it; then `authors` on comments and replies) (#38)
 - [ ] A repository's push says "the default branch", not its name: none of its four reads answers it, and the listed
-  read that does (`search_repositories` for `repo:{owner}/{repo}`, its `default_branch`) would be a fifth, past the four
-  a kind may declare; a fifth read carried a day by `unless`, or the name kept from the first look, is the owner's call
-  (#38)
+  reads that do (`get_repository_tree` with no `tree_sha`, its `tree_sha`; `search_repositories` for
+  `repo:{owner}/{repo}`, its `default_branch`, on the search quota) would be a fifth, past the four a kind may declare;
+  a fifth read carried a day by `unless`, or the name kept from the first look, is the owner's call (#38)
 - [x] Every connection banda ships can be followed: GitHub's pull request, issue, check run, notification,
   repository, discussion and workflow run; Gmail's email (until read or trashed), conversation (others' replies wake)
   and search (new matches wake; never ends); Calendar's event (moved, cancelled, a guest's reply); Drive's file
