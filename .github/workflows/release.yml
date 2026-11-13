@@ -60,7 +60,7 @@ jobs:
           - { runner: ubuntu-24.04-arm, target: linux-arm64, computer: arm64 }
     name: build (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     defaults:
       run:
         shell: bash
@@ -75,6 +75,12 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             desktop/package-lock.json
+      - name: Cache verified native compiler inputs and Cargo intermediates
+        if: matrix.computer != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: release/cache/computer/runtime
+          key: native-runtime-${{ matrix.target }}-${{ hashFiles('scripts/microvm-runtime.*', 'src/box/microvm-assets.ts') }}
       - name: The tag names the version being built
         if: startsWith(github.ref, 'refs/tags/v')
         run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"

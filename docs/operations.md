@@ -23,6 +23,18 @@ Entry points: ../src/cli/index.ts, ../src/daemon.ts, ../src/box/container.ts, ..
 
 Follow [Delivery](delivery.md) and the relevant gates in [Verification](verification.md).
 
+## Native packaging
+
+Native packaging compiles the pinned Microsandbox source with banda's existing-only execution patch. The packaging
+helper verifies source, compiler and guest-agent inputs, uses a private Rust 1.99.1 toolchain and Cargo cache under
+`release/cache/computer/runtime`, and records the build inputs and actual executable hash in the installed manifest.
+The original vendor archive remains a verified firmware input. A source build failure has no fallback to ordinary exec.
+
+Mac packaging needs the platform's C toolchain and targets macOS 14. Linux packaging runs the source build inside the
+upstream digest-pinned manylinux 2.28 Docker image and checks that baseline before installation. Those are packaging
+requirements. The installed native Mac and Linux applications use their bundled executables and need neither Rust
+nor Docker. Windows keeps its existing backend until native qualification.
+
 ## Open work
 
 - [ ] Qualify native recovery through host sleep/wake and prolonged outages, and reduce the preflight cost without

@@ -67,8 +67,8 @@ export type BoxSetup = {
 	readonly workspace: string;
 	/** Where attachments that came in are written, outside the workspace. */
 	readonly attachments: string;
-	/** Bring up the base runtime, reporting image preparation through `building`. */
-	ensure(building?: () => void): Promise<void>;
+	/** Bring up the base runtime, reporting image preparation and accepting the box's shutdown signal. */
+	ensure(building?: () => void, shutdown?: AbortSignal): Promise<void>;
 	/** The command that starts pi-env in the box, before its own `serve` arguments. */
 	readonly command: readonly string[];
 	/** Its egress proxy, when its network is closed but for one; a box without one is a test's. */
@@ -115,6 +115,7 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 	let retry: NodeJS.Timeout | undefined;
 	let closed = false;
 	let closing: Promise<void> | undefined;
+	const shutdown = new AbortController();
 	const set = (next: BoxState) => {
 		clearTimeout(retry);
 		if (next.state === "offline" && !closed) {
@@ -130,7 +131,7 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 		if (closed) return Promise.reject(new Error("The computer is closed"));
 		if (running !== undefined) return running;
 		running = setup
-			.ensure(() => set({ state: "building" }))
+			.ensure(() => set({ state: "building" }), shutdown.signal)
 			.then(
 				() => {
 					if (closed) throw new Error("The computer is closed");
@@ -224,6 +225,7 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 			closed = true;
 			unwatchBrowser?.();
 			clearTimeout(retry);
+			shutdown.abort();
 			connection.close();
 			closing = (async () => {
 				await running?.catch(() => undefined);

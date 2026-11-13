@@ -74,6 +74,20 @@ function owned(vm: Inspection, home: string, generation?: string): void {
 		throw new Error("Refusing a computer that belongs to another home or daemon.");
 }
 
+type LifecycleCommand = readonly [
+	"image" | "load" | "inspect" | "list" | "create" | "start" | "stop" | "remove",
+	...string[],
+];
+type GuestCommand = {
+	readonly name: string;
+	readonly user: string;
+	readonly argv: readonly [string, ...string[]];
+};
+
+function execution(command: GuestCommand, mode: "stream" | "detach"): string[] {
+	return ["exec", "--require-running", `--${mode}`, "--user", command.user, command.name, "--", ...command.argv];
+}
+
 function runtime(assets: MicrovmAssets, home: string) {
 	const cache = cachePath(home);
 	const env = {
@@ -84,7 +98,12 @@ function runtime(assets: MicrovmAssets, home: string) {
 		MSB_PATH: assets.msb,
 		MSB_LIBKRUNFW_PATH: assets.firmware,
 	};
-	const run = (args: readonly string[], input?: string, timeoutMs = 60_000, signal?: AbortSignal): Promise<string> =>
+	const execute = (
+		args: readonly string[],
+		input?: string,
+		timeoutMs = 60_000,
+		signal?: AbortSignal,
+	): Promise<string> =>
 		new Promise((yes, no) => {
 			const child = execFile(
 				assets.msb,
@@ -99,12 +118,18 @@ function runtime(assets: MicrovmAssets, home: string) {
 			child.stdin?.on("error", () => {});
 			child.stdin?.end(input);
 		});
-	const stream = (args: readonly string[]) =>
-		spawn(assets.msb, [...args], { cwd: assets.root, env, stdio: ["pipe", "pipe", "pipe"] });
-	const inspect = async (name: string): Promise<Inspection | undefined> => {
+	const run = (args: LifecycleCommand, input?: string, timeoutMs?: number, signal?: AbortSignal) =>
+		execute(args, input, timeoutMs, signal);
+	const exec = (command: GuestCommand, input?: string, timeoutMs?: number, signal?: AbortSignal) =>
+		execute(execution(command, "stream"), input, timeoutMs, signal);
+	const detach = (command: GuestCommand, signal?: AbortSignal) =>
+		execute(execution(command, "detach"), undefined, undefined, signal);
+	const stream = (command: GuestCommand) =>
+		spawn(assets.msb, execution(command, "stream"), { cwd: assets.root, env, stdio: ["pipe", "pipe", "pipe"] });
+	const inspect = async (name: string, signal?: AbortSignal): Promise<Inspection | undefined> => {
 		if (!VM_NAME.test(name)) throw new Error("Invalid computer identifier.");
 		try {
-			return parse(Inspection, await run(["inspect", name, "--format", "json"]));
+			return parse(Inspection, await run(["inspect", name, "--format", "json"], undefined, undefined, signal));
 		} catch (error) {
 			if (error instanceof Error && error.message.includes(`sandbox not found: ${name}`)) return undefined;
 			throw error;
@@ -116,7 +141,7 @@ function runtime(assets: MicrovmAssets, home: string) {
 		owned(vm, home);
 		await run(["remove", "--force", name], undefined, 30_000);
 	};
-	return { assets, home, cache, run, stream, inspect, remove };
+	return { assets, home, cache, run, exec, detach, stream, inspect, remove };
 }
 type Runtime = ReturnType<typeof runtime>;
 
@@ -174,7 +199,13 @@ async function exportsFor(home: string): Promise<string> {
 	return storage;
 }
 
-function forwarding(computer: Runtime, proxy: string, generation: string, role: "box" | "browser") {
+function forwarding(
+	computer: Runtime,
+	proxy: string,
+	generation: string,
+	role: "box" | "browser",
+	signal: AbortSignal,
+) {
 	const path = join(computer.cache, `p-${generation}-${role}.sock`);
 	const sockets = new Set<Socket>();
 	const children = new Set<ChildProcessWithoutNullStreams>();
@@ -195,24 +226,21 @@ function forwarding(computer: Runtime, proxy: string, generation: string, role: 
 		await rm(path, { force: true });
 	};
 	const ensure = async () => {
+		signal.throwIfAborted();
 		if (server?.listening) return;
 		await close();
+		signal.throwIfAborted();
 		server = createServer((socket) => {
-			if (sockets.size >= 128) {
+			if (signal.aborted || sockets.size >= 128) {
 				socket.destroy();
 				return;
 			}
 			sockets.add(socket);
-			const child = computer.stream([
-				"exec",
-				"--stream",
-				"--user",
-				"1000:1000",
-				proxy,
-				"--",
-				"/usr/local/bin/python3",
-				"/banda/connect.py",
-			]);
+			const child = computer.stream({
+				name: proxy,
+				user: "1000:1000",
+				argv: ["/usr/local/bin/python3", "/banda/connect.py"],
+			});
 			children.add(child);
 			child.stderr.resume();
 			child.stdin.on("error", () => socket.destroy());
@@ -280,7 +308,21 @@ export function microvmBox(input: string): BoxSetup {
 	let takingOver: Promise<void> | undefined;
 	const startup = new AbortController();
 	const assertOpen = () => {
-		if (closed) throw new Error("This computer is closed.");
+		if (closed || startup.signal.aborted) throw new Error("This computer is closed.");
+	};
+	const baseWork = new Set<Promise<void>>();
+	let proxyWork: Promise<void> = Promise.resolve();
+	const transition = <T>(operation: () => Promise<T>): Promise<T> => {
+		assertOpen();
+		const next = proxyWork.then(() => {
+			assertOpen();
+			return operation();
+		});
+		proxyWork = next.then(
+			() => undefined,
+			() => undefined,
+		);
+		return next;
 	};
 	const loaded = () =>
 		(loading ??= canonicalHome(homeArg)
@@ -293,7 +335,14 @@ export function microvmBox(input: string): BoxSetup {
 	const transport: ProxyTransport = {
 		exec: async (args, input, timeout) => {
 			const current = await loaded();
-			return current.run(["exec", "--stream", "--user", "1000:1000", names.proxy, "--", ...args], input, timeout);
+			const [program, ...rest] = args;
+			if (program === undefined) throw new Error("The computer expects a proxy command.");
+			return current.exec(
+				{ name: names.proxy, user: "1000:1000", argv: [program, ...rest] },
+				input,
+				timeout,
+				startup.signal,
+			);
 		},
 		running: async () => {
 			if (closed) return false;
@@ -320,8 +369,10 @@ export function microvmBox(input: string): BoxSetup {
 	) => {
 		assertOpen();
 		const current = await loaded();
+		assertOpen();
 		const vmName = names[role];
-		const existing = await current.inspect(vmName);
+		const existing = await current.inspect(vmName, startup.signal);
+		assertOpen();
 		if (existing === undefined) {
 			await current.run(
 				[
@@ -341,13 +392,14 @@ export function microvmBox(input: string): BoxSetup {
 				],
 				undefined,
 				120_000,
+				startup.signal,
 			);
 		} else {
 			owned(existing, current.home, generation);
 			if (existing.config.manifest_digest !== manifest) throw new Error("The computer has a different image.");
-			if (existing.status !== "Running") await current.run(["start", vmName], undefined, 120_000);
+			if (existing.status !== "Running") await current.run(["start", vmName], undefined, 120_000, startup.signal);
 		}
-		const running = await current.inspect(vmName);
+		const running = await current.inspect(vmName, startup.signal);
 		if (running === undefined) throw new Error("The computer disappeared while starting.");
 		owned(running, current.home, generation);
 		if (running.config.network.ports.length !== 0) throw new Error("The computer must not publish host network ports.");
@@ -356,9 +408,10 @@ export function microvmBox(input: string): BoxSetup {
 	const forward = async (role: "box" | "browser") => {
 		assertOpen();
 		const current = await loaded();
+		assertOpen();
 		let bridge = bridges.get(role);
 		if (bridge === undefined) {
-			bridge = forwarding(current, names.proxy, generation, role);
+			bridge = forwarding(current, names.proxy, generation, role, startup.signal);
 			bridges.set(role, bridge);
 		}
 		await bridge.ensure();
@@ -368,27 +421,24 @@ export function microvmBox(input: string): BoxSetup {
 	const relay = async (role: "box" | "browser") => {
 		assertOpen();
 		const current = await loaded();
-		const check = [
-			"exec",
-			"--stream",
-			"--user",
-			"1000:1000",
-			names[role],
-			"--",
-			"/bin/sh",
-			"/banda/proxy-bridge.sh",
-			"--check",
-		];
+		const check: GuestCommand = {
+			name: names[role],
+			user: "1000:1000",
+			argv: ["/bin/sh", "/banda/proxy-bridge.sh", "--check"],
+		};
 		try {
-			await current.run(check, undefined, 5_000);
+			await current.exec(check, undefined, 5_000, startup.signal);
 		} catch {
 			assertOpen();
-			await current.run(["exec", "--detach", "--user", "0:0", names[role], "--", "/bin/sh", "/banda/proxy-bridge.sh"]);
+			await current.detach(
+				{ name: names[role], user: "0:0", argv: ["/bin/sh", "/banda/proxy-bridge.sh"] },
+				startup.signal,
+			);
 			const until = Date.now() + 10_000;
 			for (;;) {
 				assertOpen();
 				try {
-					await current.run(check, undefined, 5_000);
+					await current.exec(check, undefined, 5_000, startup.signal);
 					break;
 				} catch (error) {
 					if (Date.now() >= until) throw error;
@@ -429,7 +479,7 @@ export function microvmBox(input: string): BoxSetup {
 		});
 		return takingOver;
 	};
-	const ensure = async (building = () => {}) => {
+	const prepare = async (building: () => void) => {
 		assertOpen();
 		const current = await loaded();
 		assertOpen();
@@ -440,41 +490,37 @@ export function microvmBox(input: string): BoxSetup {
 			box: await image(current, current.assets.box, building, startup.signal),
 			proxy: await image(current, current.assets.proxy, building, startup.signal),
 		};
-		await bringUp("proxy", current.assets.proxy, manifests.proxy, [
-			"--memory",
-			"512M",
-			"--cpus",
-			"1",
-			"--user",
-			"1000:1000",
-			"--net-rule",
-			"allow@public,allow@dns",
-			"--net-default-ingress",
-			"deny",
-			...["ca", "trust", "kept"].flatMap((directory) => [
-				"--mount-dir",
-				`${join(storage, "proxy", directory)}:/${directory}:uid=1000,gid=1000`,
-			]),
-		]);
-		if (!(await proxyReady(transport)))
-			await current.run([
-				"exec",
-				"--detach",
+		await transition(async () => {
+			await bringUp("proxy", current.assets.proxy, manifests.proxy, [
+				"--memory",
+				"512M",
+				"--cpus",
+				"1",
 				"--user",
 				"1000:1000",
-				names.proxy,
-				"--",
-				"/usr/local/bin/python3",
-				"/banda/start.py",
+				"--net-rule",
+				"allow@public,allow@dns",
+				"--net-default-ingress",
+				"deny",
+				...["ca", "trust", "kept"].flatMap((directory) => [
+					"--mount-dir",
+					`${join(storage, "proxy", directory)}:/${directory}:uid=1000,gid=1000`,
+				]),
 			]);
-		const deadline = Date.now() + 30_000;
-		while (!(await proxyReady(transport))) {
-			assertOpen();
-			if (Date.now() >= deadline) throw new Error("The computer's network guard did not start.");
-			await new Promise((done) => setTimeout(done, 150));
-		}
-		if ((await guarded.egress.configure()) !== "told")
-			throw new Error("The computer's network guard could not be configured.");
+			if (!(await proxyReady(transport)))
+				await current.detach(
+					{ name: names.proxy, user: "1000:1000", argv: ["/usr/local/bin/python3", "/banda/start.py"] },
+					startup.signal,
+				);
+			const deadline = Date.now() + 30_000;
+			while (!(await proxyReady(transport))) {
+				assertOpen();
+				if (Date.now() >= deadline) throw new Error("The computer's network guard did not start.");
+				await new Promise((done) => setTimeout(done, 150));
+			}
+			if ((await guarded.egress.configure()) !== "told")
+				throw new Error("The computer's network guard could not be configured.");
+		});
 		const socket = await forward("box");
 		await bringUp("box", current.assets.box, manifests.box, [
 			"--memory",
@@ -490,6 +536,19 @@ export function microvmBox(input: string): BoxSetup {
 			`${join(storage, "proxy", "trust")}:/etc/ssl/certs:ro,uid=1000,gid=1000`,
 		]);
 		await relay("box");
+	};
+	const ensure = (building = () => {}, shutdown?: AbortSignal): Promise<void> => {
+		const abort = () => startup.abort();
+		if (shutdown?.aborted) abort();
+		else shutdown?.addEventListener("abort", abort, { once: true });
+		const work = prepare(building);
+		baseWork.add(work);
+		const settled = () => {
+			baseWork.delete(work);
+			shutdown?.removeEventListener("abort", abort);
+		};
+		work.then(settled, settled);
+		return work;
 	};
 	const ensureBrowser = () => {
 		assertOpen();
@@ -545,10 +604,27 @@ export function microvmBox(input: string): BoxSetup {
 		command: [process.execPath, launcher, "env", homeArg, names.box],
 		egress: {
 			...guarded.egress,
-			configure: async () => {
-				await retirePriorGenerations();
-				return guarded.egress.configure();
-			},
+			source: (from) =>
+				guarded.egress.source(
+					() =>
+						new Promise((resolve, reject) => {
+							assertOpen();
+							const abort = () => reject(new Error("This computer is closed."));
+							startup.signal.addEventListener("abort", abort, { once: true });
+							Promise.resolve()
+								.then(() => {
+									assertOpen();
+									return from();
+								})
+								.then(resolve, reject)
+								.finally(() => startup.signal.removeEventListener("abort", abort));
+						}),
+				),
+			configure: async () =>
+				transition(async () => {
+					await retirePriorGenerations();
+					return guarded.egress.configure();
+				}),
 		},
 		browser: {
 			prepare: ensureBrowser,
@@ -573,9 +649,11 @@ export function microvmBox(input: string): BoxSetup {
 				closed = true;
 				browserSet({ state: "idle" });
 				startup.abort();
+				await Promise.allSettled(baseWork);
 				await browserBringing?.catch(() => undefined);
 				await loading?.catch(() => undefined);
 				await takingOver?.catch(() => undefined);
+				await proxyWork;
 				if (computer === undefined) return;
 				let failure: unknown;
 				for (const operation of [
@@ -608,28 +686,22 @@ export async function launchMicrovm(argv: readonly string[]): Promise<void> {
 	if (generation === undefined) throw new Error("Invalid computer generation.");
 	owned(vm, home, generation);
 	if (vm.config.network.ports.length !== 0) throw new Error("The computer must not publish host network ports.");
-	let command: string[];
+	let command: GuestCommand;
 	if (mode === "env") {
 		if (name.endsWith("-browser")) throw new Error("The browser VM cannot run agent commands.");
 		if (args.length !== 3 || args[0] !== "serve" || args[1] !== "--token" || !/^[a-f0-9]{32}$/.test(args[2] ?? ""))
 			throw new Error("The computer expects pi-env serve with its connection token.");
-		command = ["exec", "--stream", "--user", "1000:1000", name, "--", "/usr/local/bin/pi-env", ...args];
+		command = { name, user: "1000:1000", argv: ["/usr/local/bin/pi-env", ...args] };
 	} else if (mode === "browser") {
 		if (!name.endsWith("-browser")) throw new Error("The command VM cannot run the browser.");
 		const [agent] = args;
 		if (args.length !== 1 || agent === undefined || !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(agent))
 			throw new Error("Invalid computer browser identifier.");
-		command = [
-			"exec",
-			"--stream",
-			"--user",
-			`${BROWSER_UID}:${BROWSER_UID}`,
+		command = {
 			name,
-			"--",
-			"/bin/sh",
-			"-c",
-			browserStart({ agent, proxy: endpoint, trust: TRUST }),
-		];
+			user: `${BROWSER_UID}:${BROWSER_UID}`,
+			argv: ["/bin/sh", "-c", browserStart({ agent, proxy: endpoint, trust: TRUST })],
+		};
 	} else throw new Error("Unknown computer command.");
 	const child = computer.stream(command);
 	child.stdout.pipe(process.stdout);

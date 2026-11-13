@@ -17,7 +17,10 @@ import {
 	MICROSANDBOX_ARCHIVE_SHA256,
 	MICROSANDBOX_VERSION,
 	MICROVM_PLATFORMS,
+	MICROVM_SOURCE,
 	type MicrovmManifest,
+	type MicrovmRuntimeBuild,
+	type MicrovmTarget,
 	readMicrovmAssets,
 } from "../src/box/microvm-assets.ts";
 
@@ -40,6 +43,29 @@ const image = (role: "box" | "proxy"): MicrovmManifest["box"] => ({
 	ref: `banda-${role}:${"a".repeat(12)}`,
 	digest: `sha256:${"b".repeat(64)}`,
 });
+function runtimeBuild(target: MicrovmTarget = "darwin-arm64"): MicrovmRuntimeBuild {
+	const platform = MICROVM_PLATFORMS[target];
+	return {
+		execution: "require-running",
+		source: { commit: MICROVM_SOURCE.commit, sha256: MICROVM_SOURCE.archiveSha256 },
+		patchSha256: sum("patch"),
+		lockSha256: MICROVM_SOURCE.lockSha256,
+		recipeSha256: sum("recipe"),
+		compiler: {
+			version: MICROVM_SOURCE.rust,
+			target: platform.rustTarget,
+			rustc: sum("rustc"),
+			cargo: sum("cargo"),
+			std: sum("std"),
+		},
+		agentdSha256: platform.agentd.sha256,
+		features: MICROVM_SOURCE.features,
+		environment:
+			"manylinux" in platform
+				? { platform: "linux", image: platform.manylinux, glibc: "2.28" }
+				: { platform: "darwin", minimumVersion: "14.0" },
+	};
+}
 async function fixture() {
 	const root = await mkdtemp(join(tmpdir(), "banda-computer-assets-"));
 	homes.push(root);
@@ -51,6 +77,7 @@ async function fixture() {
 	const manifest: MicrovmManifest = {
 		target: "darwin-arm64",
 		version: MICROSANDBOX_VERSION,
+		runtimeBuild: runtimeBuild(),
 		vendorArchiveSha256: MICROSANDBOX_ARCHIVE_SHA256,
 		msb: await file("msb"),
 		firmware: await file("libkrunfw.5.dylib"),
@@ -82,6 +109,27 @@ describe("installed computer assets", () => {
 		await rename(root, exported);
 		vi.stubEnv("BANDA_COMPUTER_BUNDLE", exported);
 		await expect(installedMicrovmAssets()).rejects.toThrow(/BANDA_COMPUTER_BUNDLE is not supported/);
+	});
+	it("rejects an old runtime without borrowed-execution build provenance", async () => {
+		const { root, manifest } = await fixture();
+		const { runtimeBuild: omitted, ...old } = manifest;
+		expect(omitted.execution).toBe("require-running");
+		await writeFile(join(root, "manifest.json"), JSON.stringify(old));
+		await expect(readMicrovmAssets(root)).rejects.toThrow(/manifest/);
+	});
+	it("rejects mismatched compiler, agent and baseline provenance before execution", async () => {
+		const { root, manifest } = await fixture();
+		for (const runtimeBuild of [
+			{ ...manifest.runtimeBuild, compiler: { ...manifest.runtimeBuild.compiler, version: "latest" } },
+			{ ...manifest.runtimeBuild, agentdSha256: sum("wrong agent") },
+			{
+				...manifest.runtimeBuild,
+				environment: { platform: "linux", image: MICROVM_PLATFORMS["linux-x64"].manylinux, glibc: "2.28" },
+			},
+		]) {
+			await writeFile(join(root, "manifest.json"), JSON.stringify({ ...manifest, runtimeBuild }));
+			await expect(readMicrovmAssets(root)).rejects.toThrow(/manifest|native inputs|baseline/);
+		}
 	});
 	it("loads a relocated self-contained bundle without its original directory", async () => {
 		const { root } = await fixture();
@@ -202,6 +250,7 @@ describe("installed computer assets", () => {
 					...common,
 					target,
 					vendorArchiveSha256: vendor.sha256,
+					runtimeBuild: runtimeBuild(target),
 					firmware: { path: vendor.firmware, sha256: sum(vendor.firmware) },
 				}),
 			);

@@ -1,0 +1,32 @@
+--- a/crates/cli/lib/commands/exec.rs
++++ b/crates/cli/lib/commands/exec.rs
+@@ -27,6 +27,10 @@
+ /// Run a command in a running sandbox.
+ #[derive(Debug, Args)]
+ pub struct ExecArgs {
++    /// Connect to an existing running sandbox without starting or stopping it.
++    #[arg(long)]
++    pub require_running: bool,
++
+     /// Sandbox to run the command in.
+     pub name: String,
+ 
+@@ -159,7 +163,17 @@
+         return Ok(());
+     }
+ 
+-    let sandbox = super::resolve_and_start(&args.name, args.quiet).await?;
++    let sandbox = if args.require_running {
++        let handle = Sandbox::get(&args.name).await?;
++        anyhow::ensure!(
++            handle.status_snapshot() == microsandbox::sandbox::SandboxStatus::Running,
++            "execution requires a running sandbox; start it with `msb start {}`",
++            args.name
++        );
++        handle.connect().await?
++    } else {
++        super::resolve_and_start(&args.name, args.quiet).await?
++    };
+ 
+     let result = run_started(
+         &sandbox,

@@ -1,10 +1,12 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { createConnection, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { openBox } from "../src/box/box.ts";
 import type { BrowserPreparation } from "../src/box/browser-preparation.ts";
 import { microvmBox } from "../src/box/microvm.ts";
 import * as assets from "../src/box/microvm-assets.ts";
@@ -42,7 +44,8 @@ async function fixture(success = false) {
 		await writeFile(
 			msb,
 			`#!${process.execPath}
-import { appendFileSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { createConnection } from "node:net";
 import { join } from "node:path";
 const args = process.argv.slice(2);
 const path = (name) => join(process.env.MSB_HOME, name + ".json");
@@ -53,6 +56,16 @@ if (args[0] === "image") {
   process.stdout.write("[]");
 } else if (args[0] === "create") {
   const name = args[args.indexOf("--name") + 1];
+  const gate = join(process.env.MSB_HOME, "create-gate.sock");
+  if (!name.endsWith("-proxy") && !name.endsWith("-browser") && existsSync(gate)) {
+    const socket = createConnection(gate);
+    await new Promise((resolve, reject) => {
+      socket.once("error", reject);
+      socket.once("connect", () => socket.write("creating"));
+      socket.once("end", resolve);
+    });
+    socket.destroy();
+  }
   const labels = {};
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--label") { const [key, value] = args[++i].split("="); labels[key] = value; }
@@ -69,8 +82,27 @@ if (args[0] === "image") {
   catch { process.stderr.write("sandbox not found: " + args[1]); process.exitCode = 1; }
 } else if (args[0] === "remove") {
   rmSync(path(args.at(-1)), { force: true });
-} else if (args[0] === "exec" && args.includes("/banda/ctl.py")) {
-  process.stdout.write(args.at(-1) === "ping" ? JSON.stringify({ up: true }) : "{}");
+} else if (args[0] === "exec") {
+  const name = args[args.indexOf("--") - 1];
+  const vm = JSON.parse(readFileSync(path(name), "utf8"));
+  const temporary = vm.status !== "Running";
+  if (temporary && (args.includes("--require-running") || args.includes("--detach"))) {
+    process.stderr.write("sandbox is not running");
+    process.exit(1);
+  }
+  if (temporary) {
+    vm.status = "Running";
+    writeFileSync(path(name), JSON.stringify(vm));
+    appendFileSync(join(process.env.MSB_HOME, "implicit-starts"), name + "\\n");
+    process.once("exit", () => {
+      vm.status = "Stopped";
+      writeFileSync(path(name), JSON.stringify(vm));
+    });
+  }
+  if (args.includes("/banda/ctl.py")) {
+    process.stdout.write(args.at(-1) === "ping" ? JSON.stringify({ up: true }) : "{}");
+  }
+  if (args.includes("/banda/connect.py")) process.stdin.pipe(process.stdout);
 }
 `,
 			{ mode: 0o700 },
@@ -97,8 +129,9 @@ if (args[0] === "image") {
 	);
 	caches.push(cache);
 	const setup = microvmBox(home);
-	if (setup.browser === undefined) throw new Error("Missing browser capability");
+	if (setup.browser === undefined || setup.egress === undefined) throw new Error("Missing native capability");
 	const browser = setup.browser;
+	const egress = setup.egress;
 	const states: BrowserPreparation[] = [];
 	browser.watch(() => states.push(browser.state()));
 	const proxy = async () => {
@@ -107,19 +140,244 @@ if (args[0] === "image") {
 		return file.slice(0, -5);
 	};
 	return {
+		setup,
 		browser,
 		states,
+		egress,
 		ensure: setup.ensure,
 		stopProxy: async () => promisify(execFile)(msb, ["stop", await proxy()], { env: { MSB_HOME: cache } }),
 		proxyState: async () => readFile(join(cache, `${await proxy()}.json`), "utf8"),
 		browserLaunches: () => readFile(join(cache, "browser-launches"), "utf8"),
-		close: () => setup.close?.().catch(() => undefined),
+		implicitStarts: () => readFile(join(cache, "implicit-starts"), "utf8").catch(() => ""),
+		vmNames: async () => (await readdir(cache)).filter((entry) => /^banda-microvm-.*\.json$/.test(entry)),
+		pauseBoxCreate: async () => {
+			await mkdir(cache, { recursive: true, mode: 0o700 });
+			const sockets = new Set<Socket>();
+			let created = () => {};
+			const creating = new Promise<void>((resolve) => {
+				created = resolve;
+			});
+			const server = createServer((socket) => {
+				sockets.add(socket);
+				socket.once("data", created);
+				socket.once("close", () => sockets.delete(socket));
+			});
+			await new Promise<void>((resolve, reject) => {
+				server.once("error", reject);
+				server.listen(join(cache, "create-gate.sock"), resolve);
+			});
+			return {
+				creating,
+				release: () => {
+					for (const socket of sockets) socket.end();
+				},
+				close: async () => {
+					for (const socket of sockets) socket.destroy();
+					await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+				},
+			};
+		},
+		forwardPath: async () => {
+			const path = (await readdir(cache)).find((entry) => entry.endsWith("-box.sock"));
+			if (path === undefined) throw new Error("Missing fixture forwarding socket");
+			return join(cache, path);
+		},
+		close: async () => setup.close?.().catch(() => undefined),
 	};
 }
 
 describe.skipIf(process.platform !== "darwin" && process.platform !== "linux")(
 	"native shared browser preparation without a VM",
 	() => {
+		it("public close cancels readiness waiting for policy without releasing its source", async () => {
+			const { setup, egress, vmNames, close } = await fixture(true);
+			const box = openBox(setup, () => {});
+			let started = () => {};
+			const reading = new Promise<void>((resolve) => {
+				started = resolve;
+			});
+			let release = () => {};
+			const pending = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			let reads = 0;
+			egress.source(async () => {
+				reads++;
+				started();
+				await pending;
+				return { credentials: [] };
+			});
+			const starting = Promise.allSettled([box.ensure()]);
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			let closing: Promise<void> | undefined;
+			try {
+				await reading;
+				const queued = Promise.allSettled([egress.configure()]);
+				closing = box.close();
+				expect(
+					await Promise.race([
+						closing.then(() => "closed"),
+						new Promise<string>((resolve) => {
+							timer = setTimeout(() => resolve("blocked"), 3_000);
+						}),
+					]),
+				).toBe("closed");
+				expect((await starting)[0]?.status).toBe("rejected");
+				expect(await queued).toEqual([
+					{ status: "rejected", reason: expect.objectContaining({ message: "This computer is closed." }) },
+				]);
+				expect(reads).toBe(1);
+				expect(await vmNames()).toEqual([]);
+				release();
+				await expect(box.ensure()).rejects.toThrow("The computer is closed");
+				await expect(egress.configure()).rejects.toThrow("This computer is closed");
+				expect(await vmNames()).toEqual([]);
+			} finally {
+				clearTimeout(timer);
+				release();
+				await starting;
+				await closing;
+				await box.close();
+				await close();
+			}
+		});
+		it("close cancels and drains base VM creation after proxy readiness", async () => {
+			const { ensure, pauseBoxCreate, vmNames, close } = await fixture(true);
+			const barrier = await pauseBoxCreate();
+			let settled = false;
+			const starting = ensure().then(
+				() => {
+					settled = true;
+					return "started";
+				},
+				() => {
+					settled = true;
+					return "cancelled";
+				},
+			);
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			try {
+				await barrier.creating;
+				expect(
+					await Promise.race([
+						close().then(() => "closed"),
+						new Promise<string>((resolve) => {
+							timer = setTimeout(() => resolve("blocked"), 3_000);
+						}),
+					]),
+				).toBe("closed");
+				expect(settled).toBe(true);
+				expect(await starting).toBe("cancelled");
+				expect(await vmNames()).toEqual([]);
+				barrier.release();
+				expect(await vmNames()).toEqual([]);
+			} finally {
+				clearTimeout(timer);
+				barrier.release();
+				await starting;
+				await close();
+				await barrier.close();
+			}
+		});
+		it("fails closed without starting a proxy lost between configuration admission and execution", async () => {
+			const { egress, ensure, stopProxy, proxyState, implicitStarts, close } = await fixture(true);
+			try {
+				await ensure();
+				let interrupt = true;
+				egress.source(async () => {
+					if (interrupt) {
+						interrupt = false;
+						await stopProxy();
+					}
+					return { credentials: [] };
+				});
+				expect(await egress.configure()).toBe("stopped");
+				expect(await proxyState()).toContain('"status":"Stopped"');
+				expect(await implicitStarts()).toBe("");
+				await ensure();
+				expect(await proxyState()).toContain('"status":"Running"');
+				expect(await implicitStarts()).toBe("");
+			} finally {
+				await close();
+			}
+		});
+		it("a forwarding connection to a lost proxy cannot start it or pass bytes", async () => {
+			const { ensure, stopProxy, proxyState, implicitStarts, forwardPath, close } = await fixture(true);
+			try {
+				await ensure();
+				await stopProxy();
+				const received: string[] = [];
+				const socket = createConnection(await forwardPath());
+				await new Promise<void>((resolve, reject) => {
+					socket.once("close", () => resolve());
+					socket.once("error", reject);
+					socket.once("data", (data) => {
+						received.push(data.toString());
+						socket.destroy();
+					});
+					socket.write("must not cross");
+				});
+				expect(received).toEqual([]);
+				expect(await implicitStarts()).toBe("");
+				expect(await proxyState()).toContain('"status":"Stopped"');
+			} finally {
+				await close();
+			}
+		});
+		it("an active forwarding stream does not block a current policy push", async () => {
+			const { ensure, egress, forwardPath, proxyState, close } = await fixture(true);
+			try {
+				await ensure();
+				const socket = createConnection(await forwardPath());
+				try {
+					const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+					const echoed = new Promise<string>((resolve, reject) => {
+						socket.once("data", (data) => resolve(data.toString()));
+						socket.once("error", reject);
+					});
+					socket.write("connected");
+					expect(await echoed).toBe("connected");
+					expect(await egress.configure()).toBe("told");
+					expect(await proxyState()).toContain('"status":"Running"');
+					await close();
+					await closed;
+				} finally {
+					socket.destroy();
+				}
+			} finally {
+				await close();
+			}
+		});
+		it("close cancels an unfinished policy read and drains its fail-closed stop", async () => {
+			const { ensure, egress, close } = await fixture(true);
+			let started = () => {};
+			const reading = new Promise<void>((resolve) => {
+				started = resolve;
+			});
+			let release = () => {};
+			const pending = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			try {
+				await ensure();
+				egress.source(async () => {
+					started();
+					await pending;
+					return { credentials: [] };
+				});
+				const configured = egress.configure();
+				await reading;
+				const queued = expect(egress.configure()).rejects.toThrow("This computer is closed");
+				await close();
+				expect(await configured).toBe("stopped");
+				await queued;
+				await expect(ensure()).rejects.toThrow("This computer is closed");
+				await expect(egress.configure()).rejects.toThrow("This computer is closed");
+			} finally {
+				release();
+				await close();
+			}
+		});
 		it("keeps a prepared browser available when the base runtime repairs its proxy", async () => {
 			const { browser, states, ensure, stopProxy, proxyState, browserLaunches, close } = await fixture(true);
 			const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response(bytes));

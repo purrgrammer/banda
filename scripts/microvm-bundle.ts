@@ -18,6 +18,7 @@ import {
 	readMicrovmAssets,
 	verifyBundleFile,
 } from "../src/box/microvm-assets.ts";
+import { buildMicrovmRuntime } from "./microvm-runtime.ts";
 import type { Target } from "./stage.ts";
 
 export { microvmTarget };
@@ -192,6 +193,7 @@ export async function stageMicrovmBundle(options: { root: string; out: string; t
 		for (const file of ["msb", vendor.firmware])
 			execFileSync("/usr/bin/codesign", ["--verify", "--strict", join(bundle, file)]);
 	}
+	const runtimeBuild = await buildMicrovmRuntime({ bundle, target });
 	await mkdir(join(bundle, "notices"), { recursive: true });
 	for (const notice of NOTICES) {
 		const cached = join(cache, notice.name);
@@ -200,7 +202,7 @@ export async function stageMicrovmBundle(options: { root: string; out: string; t
 	}
 	await writeFile(
 		join(bundle, "notices", "INVENTORY.md"),
-		`# Bundled computer: distribution review pending\n\nMicrosandbox ${MICROSANDBOX_VERSION}: https://github.com/superradcompany/microsandbox/tree/60fc5071b34e6cc2671c84c8dc07709795d45d27\nVendor archive SHA-256: ${vendor.sha256}\nIts libkrunfw submodule: https://github.com/containers/libkrunfw/tree/223f11693774646eaa8ba892e3a6ebd07653154b\n\nThe included license texts and source inventory do not qualify redistribution. Corresponding source, third-party dependency notices and guest-image distribution requirements remain to be reviewed before release. Local candidate testing only.\n\nBox source identity: ${images.box.ref}; proxy source identity: ${images.proxy.ref}. Their Dockerfiles and inputs are shipped beside this bundle. Guest package license files remain in each image.\n`,
+		`# Bundled computer: distribution review pending\n\nMicrosandbox ${MICROSANDBOX_VERSION}: https://github.com/superradcompany/microsandbox/tree/60fc5071b34e6cc2671c84c8dc07709795d45d27\nThe CLI is built from that pinned source with banda's require-running execution patch. Patch SHA-256: ${runtimeBuild.patchSha256}. The manifest records the selected source and compiler inputs, build recipe and actual executable hash.\nOriginal vendor input archive SHA-256: ${vendor.sha256}\nIts libkrunfw submodule: https://github.com/containers/libkrunfw/tree/223f11693774646eaa8ba892e3a6ebd07653154b\n\nThe included license texts and source inventory do not qualify redistribution. Corresponding source, third-party dependency notices and guest-image distribution requirements remain to be reviewed before release. Local candidate testing only.\n\nBox source identity: ${images.box.ref}; proxy source identity: ${images.proxy.ref}. Their Dockerfiles and inputs are shipped beside this bundle. Guest package license files remain in each image.\n`,
 	);
 	for (const role of ["box", "proxy"] as const)
 		await copyFile(join(imageDirectory, images[role].archive), join(bundle, images[role].archive));
@@ -208,6 +210,7 @@ export async function stageMicrovmBundle(options: { root: string; out: string; t
 	const notice = async <T extends string>(path: T) => ({ path, sha256: await fileSha256(join(bundle, path)) });
 	const common = {
 		version: MICROSANDBOX_VERSION,
+		runtimeBuild,
 		msb: await notice("msb"),
 		box: images.box,
 		proxy: images.proxy,
