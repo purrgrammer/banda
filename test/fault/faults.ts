@@ -42,6 +42,10 @@ export type FaultPoint =
 	| "intake:stored"
 	/** Writes the proxy sent straight through under a host permission, taken: before the store logs them. */
 	| "intake:sent"
+	/** Autonomous recovery: after take, after durable ownership, and after acknowledgement. */
+	| "recovery:taken"
+	| "recovery:stored"
+	| "recovery:acked"
 	/** A held request sent: before the proxy sends it, and once it answered, before the store records it. */
 	| "replay"
 	| "replay:sent"

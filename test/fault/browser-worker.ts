@@ -74,7 +74,7 @@ const s = await openConnected({
 				tools: browserTools({
 					browser: async () => browser,
 					egress: {
-						release: async () => [],
+						retain: async () => ({ ids: [], notSent: {} }),
 						take: async () => ({ held: [], reads: [], readBytes: 0 }),
 						ack: async () => {},
 						replay: async () => ({ refused: "not here" }),

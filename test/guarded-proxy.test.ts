@@ -100,7 +100,7 @@ describe("the shared guarded proxy", () => {
 			readBytes: 12,
 		});
 		answer([7, 9]);
-		expect(await proxy.egress.sentChats(context)).toEqual([7, 9]);
+		expect(await proxy.egress.receiptChats(context)).toEqual([7, 9]);
 		answer({});
 		await proxy.egress.ack(7, 12, [request.ticket], context);
 		answer({
@@ -115,7 +115,7 @@ describe("the shared guarded proxy", () => {
 			["python3", "/banda/ctl.py", "ping"],
 			["python3", "/banda/ctl.py", "pass", "7", "abc123"],
 			["python3", "/banda/ctl.py", "take", "7"],
-			["python3", "/banda/ctl.py", "sent"],
+			["python3", "/banda/ctl.py", "receipts"],
 			["python3", "/banda/ctl.py", "ack", "7", "12", request.ticket],
 			["python3", "/banda/ctl.py", "replay"],
 		]);
@@ -130,7 +130,7 @@ describe("the shared guarded proxy", () => {
 		answer({ held: [{ ...request, headers: ["not a pair"] }], reads: [], readBytes: 0 });
 		await expect(proxy.egress.take(7, context)).rejects.toThrow("Invalid proxy take response");
 		answer(["7"]);
-		await expect(proxy.egress.sentChats(context)).rejects.toThrow("Invalid proxy sent response");
+		await expect(proxy.egress.receiptChats(context)).rejects.toThrow("Invalid proxy receipts response");
 		answer({ status: "201", body: "" });
 		await expect(proxy.egress.replay(request, context)).rejects.toThrow("Invalid proxy replay response");
 		answer({ up: "yes" });

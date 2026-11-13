@@ -54,8 +54,8 @@ export type BoxEgress = EgressControl & {
 	 * was stopped because it could not be told; thrown only when it could be neither.
 	 */
 	configure(): Promise<Pushed>;
-	/** The chats with writes sent under a host permission the daemon has not taken yet (`sweepSent`). */
-	sentChats(ctx: Context): Promise<readonly number[]>;
+	/** The chats with held or sent receipts the daemon has not taken yet (`sweepReceipts`). */
+	receiptChats(ctx: Context): Promise<readonly number[]>;
 	/** Let one browser write of `chat` with this hash through the proxy, once. */
 	pass(chat: number, hash: string): Promise<void>;
 };
@@ -234,9 +234,9 @@ function recoveringEgress(egress: BoxEgress, ensure: () => Promise<void>): BoxEg
 			await ensure();
 			return egress.take(chat, ctx);
 		},
-		sentChats: async (ctx) => {
+		receiptChats: async (ctx) => {
 			await ensure();
-			return egress.sentChats(ctx);
+			return egress.receiptChats(ctx);
 		},
 		ack: async (chat, bytes, tickets, ctx) => {
 			await ensure();

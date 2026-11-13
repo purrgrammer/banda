@@ -846,10 +846,12 @@ long as it runs.
   needs scripts, a click or the owner's session is the browser's.
 - **A write needs the owner.** A write (any method but GET, HEAD and OPTIONS, a WebSocket upgrade) is held as a ticket
   and answered 403. A git fetch is a read, but only to a forge the daemon names: git's own request to upload-pack,
-  which only sends objects back. After each command the daemon takes the chat's tickets into the store and lists
-  them; the commit that stores a ticket also opens its draft, so the owner is asked whatever the model does next and
-  a ticket is never stored unasked, but for a WebSocket (a stream, which only an allowed host lets through) and past a
-  limit of open asks per chat, both of which the agent is told of. Approved, the proxy sends exactly the stored request,
+  which only sends objects back. The proxy keeps tickets until the daemon stores their bytes and, in the same commit,
+  opens their approval or records an explicit not-sent resolution. Command results list their tickets, and recovery
+  takes retained tickets without another command. A recovered request has no recorded original task, so it needs a
+  once-only owner approval, without reusing or offering a permission. A WebSocket (a stream, which only an allowed
+  host lets through), a request past the limit of open asks, or one whose chat or agent is no longer active is resolved
+  as not sent in activity. Approved, the proxy sends exactly the stored request,
   once, and the agent is woken with how it ended, the response fenced as foreign data; how a send ended is stored in
   the commit that logs it, so a restart after it asks nothing again. The task doing this belongs to the chat, as the
   command that held the request has already ended. A chat's held requests that can go leave in the order they were

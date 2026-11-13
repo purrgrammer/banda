@@ -442,7 +442,7 @@ describe("web_fetch", () => {
 	it("takes what the proxy saw into the store after the reads, as after a command", async () => {
 		const taken: number[] = [];
 		const egress: HoldingEgress = {
-			release: async () => [],
+			retain: async () => ({ ids: [], notSent: {} }),
 			take: async (chat): Promise<Taken> => {
 				taken.push(chat);
 				return { held: [], reads: [], readBytes: 0 };

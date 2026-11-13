@@ -667,7 +667,7 @@ export const BY_PERMISSION: Sender = { gateway: "permission", peer: OWNER };
  * says so). Reads before it writes.
  */
 async function coveredAtStart(tx: Tx, ask: Ask, chat: number, id: TaskId, now: number): Promise<void> {
-	if (ask.type !== "approval" || ask.interrupted === true) return;
+	if (ask.type !== "approval" || ask.permission === undefined || ask.interrupted === true) return;
 	const slot = await tx.doc(Answers, id);
 	if (slot.answer !== undefined) return;
 	const found = await covering(tx, ask, chat, now);

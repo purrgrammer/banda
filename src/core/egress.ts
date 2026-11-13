@@ -2,10 +2,9 @@
  * Egress (DESIGN.md "The box", Network): what leaves the box goes through the egress proxy, and only the daemon decides
  * what the proxy sends on the owner's behalf.
  *
- * A write the proxy held is a ticket. After each command a chat runs, the daemon takes its tickets into the
- * store (the request whole, by its ticket), and in that same commit opens each one's release (`release.ts`): the draft
- * the owner approves (slice 4's machinery: an approval, a permission over its route, the floor), so a ticket the store
- * holds is never one nobody was asked about. Then the proxy forgets them; the command's result lists them. Approved,
+ * A write the proxy held is a ticket. Tool intake and recovery retain the whole request by ticket, with its release
+ * or explicit not-sent resolution in the same commit. Recovery requires once-only approval; normal intake may use an
+ * existing permission. Only after that commit may the proxy forget it; a command's result lists its tickets. Approved,
  * the proxy sends exactly the stored request, once, and the agent is told. A permission covers a route: the method,
  * the host and the path with its ids as `*`; or, as the owner may choose, its host: anything sent there, always, from
  * the chats of the agent that asked. The response is foreign content, framed as data.
@@ -100,20 +99,28 @@ export type EgressControl = {
 	replay(request: HeldRequest, ctx: Context): Promise<Replayed>;
 };
 
-/**
- * In the commit that stores them: open the release of each of `chat`'s new tickets. The tickets it did not open, as
- * too many of the chat's already wait on the owner. Reads before it writes.
- */
-export type Release = (tx: Tx, chat: number, held: readonly HeldRequest[], now: number) => Promise<readonly string[]>;
+export type IntakeSource = "tool" | "recovery";
+export type NotSent = "websocket" | "limit" | "missing" | "inactive";
+export type KeptTicket = HeldRequest & { readonly kept: number; readonly notSent?: NotSent };
+export type Retained = { readonly ids: readonly string[]; readonly notSent: Readonly<Record<string, NotSent>> };
 
-/** The proxy's control, with what opens the release of a ticket taken from it. */
-export type HoldingEgress = EgressControl & { readonly release: Release };
+/** Retain each own-chat ticket with its release/approval or explicit not-sent resolution, in the same commit. */
+export type Retain = (
+	tx: Tx,
+	chat: number,
+	held: readonly HeldRequest[],
+	now: number,
+	source: IntakeSource,
+) => Promise<Retained>;
+
+/** The proxy's control, with transactional retention of held tickets and their disposition. */
+export type HoldingEgress = EgressControl & { readonly retain: Retain };
 
 /**
  * The requests taken from the proxy, by ticket. A ticket names exactly one request, never changed once stored.
- * `unasked`: nobody was asked about it, as too many of its chat's already waited, which a retake must say again.
+ * `notSent`: its terminal resolution, reused after a lost acknowledgement. `kept` is the daemon's retention clock.
  */
-export const Tickets = defineDoc<{ tickets: { [ticket: string]: HeldRequest & { unasked?: true } } }>({
+export const Tickets = defineDoc<{ tickets: { [ticket: string]: KeptTicket } }>({
 	kind: "banda.tickets",
 	version: 1,
 	scope: "session",
@@ -207,7 +214,7 @@ export function proxyKnows(harness: Harness, tell: () => Promise<unknown>, ctx: 
 }
 
 /** Whether a request asks to become a WebSocket, as the proxy reads it (policy.py `is_websocket`). */
-const webSocket = (headers: readonly (readonly [string, string])[]) =>
+export const webSocket = (headers: readonly (readonly [string, string])[]) =>
 	headers.some(([key, value]) => key.toLowerCase() === "upgrade" && value.toLowerCase().includes("websocket"));
 
 /**
@@ -260,7 +267,14 @@ export function routeOf(request: Pick<HeldRequest, "method" | "scheme" | "host" 
 	const path = request.path.split(/[?#]/)[0] ?? "/";
 	const pattern = path
 		.split("/")
-		.map((segment) => (segment !== "" && isId(decodeURIComponent(segment)) ? "*" : segment))
+		.map((segment) => {
+			try {
+				return segment !== "" && isId(decodeURIComponent(segment)) ? "*" : segment;
+			} catch (error) {
+				if (error instanceof URIError) return segment;
+				throw error;
+			}
+		})
 		.join("/");
 	return `${request.method.toUpperCase()} ${hostOf(request)}${pattern === "" ? "/" : pattern}`;
 }
@@ -376,24 +390,33 @@ async function keepSent(
 }
 
 /**
- * Take every chat's writes sent under a host permission into the store, whether or not the chat ran a command since:
- * a process the box left running sends too. Run at the box's bring-up, now and then, and before the daemon stops.
- * Only the sent records are taken and forgotten: held requests and reads stay for the chat's own next command.
+ * Recover held requests and settled sends without a command. Shutdown's settled mode opens no new work. Neither
+ * mode consumes read observations; their relative-prefix acknowledgement belongs to tool intake alone.
  */
-export async function sweepSent(
-	egress: EgressControl & { sentChats(ctx: Context): Promise<readonly number[]> },
+export async function sweepReceipts(
+	egress: HoldingEgress & { receiptChats(ctx: Context): Promise<readonly number[]> },
 	harness: Harness,
 	now: () => number,
+	mode: "recover" | "settled",
 	ctx: Context = context,
+	fault: (point: string) => void = () => {},
 ): Promise<number> {
 	let logged = 0;
-	for (const chat of await egress.sentChats(ctx)) {
+	for (const chat of await egress.receiptChats(ctx)) {
 		const taken = await egress.take(chat, ctx);
 		const at = now();
+		const own = mode === "recover" ? taken.held.filter((held) => held.chat === chat) : [];
 		const sent = settled(taken.sent ?? [], chat, at);
-		if (sent.length === 0) continue;
-		const kept = await harness.commit((tx) => keepSent(tx, chat, sent, at), ctx);
+		if (own.length === 0 && sent.length === 0) continue;
+		if (mode === "recover") fault("recovery:taken");
+		const kept = await harness.commit(async (tx) => {
+			const held = mode === "recover" ? await egress.retain(tx, chat, own, at, "recovery") : { ids: [] };
+			const keptSent = await keepSent(tx, chat, sent, at);
+			return { done: [...held.ids, ...keptSent.done], logged: keptSent.logged };
+		}, ctx);
+		if (mode === "recover") fault("recovery:stored");
 		if (kept.done.length > 0) await egress.ack(chat, 0, kept.done, ctx);
+		if (mode === "recover") fault("recovery:acked");
 		logged += kept.logged;
 	}
 	return logged;
@@ -420,54 +443,43 @@ export async function intake(
 	if (taken.held.length === 0 && sent.length === 0 && taken.reads.length === 0) return "";
 	fault("intake");
 	if (sent.length > 0) fault("intake:sent");
-	let over: readonly string[] = [];
-	await api.commit(async (tx) => {
-		const doc = await tx.doc(Tickets);
-		for (const [id, held] of Object.entries(doc.tickets)) if (held.at < now - TICKET_KEPT_MS) delete doc.tickets[id];
-		const fresh = own.filter((held) => doc.tickets[held.ticket] === undefined);
-		for (const held of fresh) doc.tickets[held.ticket] = JSON.parse(JSON.stringify(held));
-		const unasked = await egress.release(
-			tx,
-			chat,
-			fresh.filter((held) => !webSocket(held.headers)),
-			now,
-		);
-		for (const ticket of unasked) (doc.tickets[ticket] as { unasked?: true }).unasked = true;
-		// kept with the ticket: a kill before the ack takes it again, and what it is told must not change
-		over = own.filter((held) => doc.tickets[held.ticket]?.unasked === true).map((held) => held.ticket);
+	const kept = await api.commit(async (tx) => {
+		const held = await egress.retain(tx, chat, own, now, "tool");
 		await keepSent(tx, chat, sent, now);
 		if (taken.reads.length > 0)
 			await log(tx, { at: now, what: `Read from ${taken.reads.join(", ")}`, chat, outside: "read" });
+		return held;
 	}, ctx);
 	fault("intake:stored");
 	await egress.ack(
 		chat,
 		taken.readBytes,
 		// a send logged as unknown stays at the proxy for its outcome
-		[...taken.held.map((held) => held.ticket), ...forgettable(sent, now)],
+		[...kept.ids, ...forgettable(sent, now)],
 		ctx,
 	);
 	const lines: string[] = sent.map((one) => `${sentWords(one, "model")}.`);
 	for (const held of own) {
 		lines.push(
 			`Held, not sent: ${held.method} ${addressOf(held)} (ticket ${held.ticket}). ` +
-				(webSocket(held.headers)
-					? ownCredential(held.headers, held.path)
-						? "A WebSocket is a stream, never sent as one request, and one carrying a credential of its own is never " +
-							"let through: it will not be sent. Open it without that credential."
-						: `A WebSocket is a stream, never sent as one request: ask the owner to allow ${permittedHost(held)} with ` +
-							"ask_hosts (with every other host the task needs), then run the command again."
-					: over.includes(held.ticket)
-						? "It writes, and too many of your requests already wait on the owner, so they were not asked about " +
-							"this one and it will not be sent. Wait for those, or ask the owner to allow the host with ask_hosts, " +
-							"then run the command again."
-						: "It writes, so the owner decides: they have been asked, or allowed it already. You will be told how " +
-							"it ended, with the response if it was sent. There is nothing to call: go on or end your turn, and do " +
-							"not send it again yourself." +
-							(ownCredential(held.headers, held.path)
-								? ""
-								: ` Before your next writes there, you can ask the owner to allow ${permittedHost(held)} with ask_hosts: ` +
-									"this one is then sent too, once.")),
+				(kept.notSent[held.ticket] === "missing" || kept.notSent[held.ticket] === "inactive"
+					? "This chat no longer has an active agent or group. The request will not be sent."
+					: kept.notSent[held.ticket] === "websocket"
+						? ownCredential(held.headers, held.path)
+							? "A WebSocket is a stream, never sent as one request, and one carrying a credential of its own is never " +
+								"let through: it will not be sent. Open it without that credential."
+							: `A WebSocket is a stream, never sent as one request: ask the owner to allow ${permittedHost(held)} with ` +
+								"ask_hosts (with every other host the task needs), then run the command again."
+						: kept.notSent[held.ticket] === "limit"
+							? "It writes, and too many of your requests already wait on the owner, so they were not asked about " +
+								"this one and it will not be sent. Wait for those, or ask the owner to allow the host with ask_hosts, " +
+								"then run the command again."
+							: "It writes, so the owner decides: they have been asked, or allowed it already. You will be told how " +
+								"it ended, with the response if it was sent. There is nothing to call: go on or end your turn, and do " +
+								"not send it again yourself." +
+								(ownCredential(held.headers, held.path)
+									? ""
+									: ` Before your next writes there, you can ask the owner to allow ${permittedHost(held)} with ask_hosts.`)),
 		);
 	}
 	return lines.length === 0 ? "" : `\n\n[banda] ${lines.join("\n[banda] ")}`;
@@ -521,7 +533,9 @@ export function proposeSendTool(
 	const stored = (api: EffectApi, ticket: string, ctx: Context) =>
 		api.commit(async (tx: Tx) => {
 			const held = (await tx.doc(Tickets)).tickets[ticket];
-			return held === undefined ? undefined : (JSON.parse(JSON.stringify(held)) as HeldRequest);
+			if (held === undefined || held.notSent !== undefined) return undefined;
+			const { kept: _kept, notSent: _notSent, ...request } = held;
+			return { ...request, headers: request.headers.map(([key, value]) => [key, value] satisfies [string, string]) };
 		}, ctx);
 	return {
 		name: "propose_send",

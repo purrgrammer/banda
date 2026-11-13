@@ -169,7 +169,7 @@ async function setup(
 					tools: browserTools({
 						browser: async () => page.browser,
 						egress: {
-							release: async () => [],
+							retain: async () => ({ ids: [], notSent: {} }),
 							take: async (chat): Promise<Taken> => {
 								const read = reads.get(chat) ?? [];
 								reads.delete(chat);

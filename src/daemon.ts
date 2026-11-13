@@ -45,7 +45,7 @@ import { compactionExtension, compactionSettings } from "./core/compaction.ts";
 import { Companion } from "./core/companion.ts";
 import { Connected } from "./core/connections.ts";
 import { pause, pauseRoutine, resume } from "./core/control.ts";
-import { GIT_HOSTS, proxyKnows, sweepSent } from "./core/egress.ts";
+import { GIT_HOSTS, proxyKnows, sweepReceipts } from "./core/egress.ts";
 import { dropEmptyReplies } from "./core/empty-replies.ts";
 import { type Gateway, INLINE_IMAGES, mimeOf, OWNER, routeKey } from "./core/gateway.ts";
 import { guardImages } from "./core/images.ts";
@@ -155,8 +155,9 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 	let remoteState: RemoteState = "off";
 	let stopping = false;
 	let sweeping: NodeJS.Timeout | undefined;
-	let sweepingSent: NodeJS.Timeout | undefined;
-	let sweepSentNow: (() => Promise<void>) | undefined;
+	let sweepingReceipts: NodeJS.Timeout | undefined;
+	let stopRecovering: (() => Promise<void>) | undefined;
+	let settleReceipts: (() => Promise<void>) | undefined;
 	// the daemon's own port, which every config the proxy is told carries: a push waits for it, so no config ever
 	// leaves the daemon's port reachable from the box; it fails if the daemon stops before it listens
 	let listening!: (port: number) => void;
@@ -189,9 +190,10 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			};
 			clearInterval(sweeping);
 			notListening(new Error("the daemon stopped before it listened"));
-			clearInterval(sweepingSent);
+			clearInterval(sweepingReceipts);
 			if (unwatchPermissions !== undefined) await step("permissions watch", unwatchPermissions);
 			unwatchBox?.();
+			if (stopRecovering !== undefined) await step("receipt recovery", stopRecovering);
 			// sends the gateways have taken are recorded before the gateways and the store go, so none goes twice
 			const sends = drain;
 			if (sends !== undefined) await step("sends", () => sends(SEND_DRAIN_MS));
@@ -217,7 +219,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			const browsing = browsers;
 			if (browsing !== undefined) await step("browser", () => browsing.close());
 			// The proxy's last outcomes are taken while both its control and the store remain available.
-			const sweepingLast = sweepSentNow;
+			const sweepingLast = settleReceipts;
 			if (sweepingLast !== undefined) await step("sent", sweepingLast);
 			const opened = box;
 			if (opened !== undefined) await step("box", () => opened.close());
@@ -494,24 +496,32 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		// a chat the proxy was not told of yet is told before its command runs, so its first push goes through
 		egressReady = (chat) => knows.ready(chat);
 		unwatchPermissions = await onPermissions(open, tellProxyQuietly);
-		// every chat's writes the proxy sent under a host permission are logged, whether or not the chat runs a command
-		// again (a process the box left running pushes too): at bring-up, every minute, and before the daemon stops
+		// Receipt recovery runs independently of tools. Closing waits for it before draining owner messages, then only
+		// settles sent outcomes; late held requests stay at the proxy for the next bring-up.
 		let sweepingNow: Promise<void> | undefined;
-		const sweepSentOnce = () =>
-			(sweepingNow ??= (async () => {
-				const egress = agentBox.egress;
-				if (egress === undefined || agentBox.state().state !== "up") return;
-				await sweepSent(egress, open, Date.now).catch((error: unknown) =>
-					log(`egress: the sent writes were not taken: ${error instanceof Error ? error.message : String(error)}`),
-				);
-			})().finally(() => {
+		let recovering = true;
+		const collectReceipts = async (mode: "recover" | "settled") => {
+			if (holding === undefined || agentBox.state().state !== "up") return;
+			await sweepReceipts(holding, open, Date.now, mode).catch((error: unknown) =>
+				log(`egress: the receipts were not taken: ${error instanceof Error ? error.message : String(error)}`),
+			);
+		};
+		const recoverReceipts = () => {
+			if (!recovering) return Promise.resolve();
+			sweepingNow ??= collectReceipts("recover").finally(() => {
 				sweepingNow = undefined;
-			}));
-		sweepSentNow = sweepSentOnce;
-		sweepingSent = setInterval(() => void sweepSentOnce(), SENT_SWEEP_MS);
-		sweepingSent.unref();
+			});
+			return sweepingNow;
+		};
+		stopRecovering = async () => {
+			recovering = false;
+			await sweepingNow;
+		};
+		settleReceipts = () => collectReceipts("settled");
+		sweepingReceipts = setInterval(() => void recoverReceipts(), SENT_SWEEP_MS);
+		sweepingReceipts.unref();
 		const sweepAtBringUp = agentBox.watch(() => {
-			if (agentBox.state().state === "up") void sweepSentOnce();
+			if (agentBox.state().state === "up") void recoverReceipts();
 		});
 		const workspace: Workspace = {
 			env: () => agentBox.env(),

@@ -1681,6 +1681,27 @@ export function defineCore(options: CoreOptions) {
 	const releases = defineReleases({
 		asking,
 		askTarget,
+		receiptHome: async (tx, chat) => {
+			if ((await tx.conversation(chat as ConversationId)) === undefined) return { kind: "missing" };
+			const agent = (await tx.doc(AgentChats)).chats[chat];
+			if (agent === undefined) return { kind: "missing" };
+			if ((await acceptedAgent(tx, agent)) === undefined)
+				return { kind: (await isArchived(tx, agent)) ? "inactive" : "missing" };
+			const groups = await tx.doc(Groups);
+			const member = groups.byExecution[chat];
+			if (member !== undefined) {
+				const group = groups.groups[member.room];
+				if (
+					group === undefined ||
+					group.archived !== undefined ||
+					member.agent !== agent ||
+					!group.members.includes(agent) ||
+					group.executions[agent]?.chat !== chat
+				)
+					return { kind: "inactive" };
+			} else if ((await tx.doc(Routes)).chats[chat] === undefined) return { kind: "missing" };
+			return { kind: "active", target: await askTarget(tx, chat) };
+		},
 		placeAsk,
 		hasHome: async (tx, chat) => {
 			if ((await tx.doc(Routes)).chats[chat] === undefined) return false;

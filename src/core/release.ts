@@ -1,8 +1,8 @@
 /**
  * A held request's release (DESIGN.md "The box", Network): the task that takes a ticket from the owner's answer to the
- * agent going on. It is opened in the commit that stores the ticket, with its approval (unless a permission already
- * covers the request), so no ticket is stored that nobody was asked about, and no answer is ever about a ticket the
- * store does not hold. It belongs to the chat and not to the command that held the request: a command's task ends with
+ * agent going on. A ticket is retained with its release/approval or an explicit not-sent resolution. Tool intake may
+ * use an existing permission; recovery always opens a once-only approval. No answer is about bytes the store does
+ * not hold. A release belongs to the chat and not to the command that held the request: a command's task ends with
  * its result, and one a restart interrupted never runs again.
  *
  * It runs the ticket's effect as a tool call would (`effectRun`: within a permission or as approved, once, and a send a
@@ -26,18 +26,25 @@ import {
 	type TaskRuntime,
 	type Tx,
 } from "@earendil-works/pi-durable";
+import { log } from "./activity.ts";
 import { type Asking, DEFAULT_DEADLINE, draftOf, type EffectApi, EffectRun, effectRun } from "./ask.ts";
 import {
+	addressOf,
 	draftArgs,
 	type EgressControl,
 	type HeldRequest,
 	type HoldingEgress,
+	type NotSent,
 	proposeSendTool,
-	type Release,
+	type Retain,
 	SendOutcome,
+	TICKET_KEPT_MS,
+	Tickets,
+	webSocket,
 	wordsOf,
 } from "./egress.ts";
 import { covering, offering } from "./permissions.ts";
+import { addressWords } from "./request-words.ts";
 import { Answers, type Ask, liveWaits, TasksOf } from "./wait.ts";
 
 export const RELEASE = "banda.release";
@@ -86,6 +93,10 @@ export type ReleaseCore<Target> = {
 	readonly asking: Asking;
 	/** Where a new ask of `chat` goes. Reads only. */
 	askTarget(tx: Tx, chat: number): Promise<Target>;
+	receiptHome(
+		tx: Tx,
+		chat: number,
+	): Promise<{ readonly kind: "active"; readonly target: Target } | { readonly kind: "missing" | "inactive" }>;
 	placeAsk(
 		tx: Tx,
 		of: { tasks: { [name: string]: number } },
@@ -376,48 +387,121 @@ export function defineReleases<Target>(core: ReleaseCore<Target>) {
 			}, ctx),
 	});
 
-	/** In the commit that stores them: a release for each ticket, with its approval unless a permission covers it. */
-	const release: Release = async (tx, chat, held, now) => {
-		if (held.length === 0) return [];
+	/** Retain held bytes and their single disposition before the proxy may forget them. */
+	const retain: Retain = async (tx, chat, held, now, source) => {
+		const own = [...new Map(held.filter((one) => one.chat === chat).map((one) => [one.ticket, one])).values()];
+		if (own.length === 0) return { ids: [], notSent: {} };
 		if (tool === undefined) throw new Error("this home has no egress proxy to send through");
 		// reads first: a transaction reads tables only until its first write
-		const prepared: { held: HeldRequest; label: string; ask?: Ask }[] = [];
-		const over: string[] = [];
+		const doc = await tx.doc(Tickets);
+		const stale = Object.entries(doc.tickets).filter(([, one]) => one.chat === chat && one.kept < now - TICKET_KEPT_MS);
+		if (stale.length > 0) {
+			const live = new Set<string>();
+			for (const status of ["pending", "running", "waiting", "sleeping", "completing"] as const) {
+				let cursor: Parameters<Tx["scanTasks"]>[2];
+				do {
+					const page = await tx.scanTasks(
+						{ kind: RELEASE, status, conversationId: chat as ConversationId },
+						100,
+						cursor,
+					);
+					for (const task of page.items) {
+						const input = task.input;
+						if (
+							input !== null &&
+							typeof input === "object" &&
+							!Array.isArray(input) &&
+							typeof input.ticket === "string"
+						)
+							live.add(input.ticket);
+					}
+					cursor = page.next;
+				} while (cursor !== undefined);
+			}
+			for (const [id] of stale) if (!live.has(id)) delete doc.tickets[id];
+		}
+		const fresh = own.filter((one) => doc.tickets[one.ticket] === undefined);
+		const home =
+			source === "recovery"
+				? await core.receiptHome(tx, chat)
+				: { kind: "active" as const, target: await core.askTarget(tx, chat) };
+		const prepared: (
+			| { kind: "release"; held: HeldRequest; label: string; target: Target; ask?: Ask }
+			| { kind: "notSent"; held: HeldRequest; reason: NotSent }
+		)[] = [];
 		let open = (await liveWaits(tx, chat)).filter(
 			(wait) => wait.input.ask.type === "approval" && wait.input.ask.tool === tool?.name,
 		).length;
 		// oldest first, as a release's id is its place in the chat's order; the proxy lists them by ticket
-		for (const one of [...held].sort((a, b) => a.at - b.at)) {
+		for (const one of [...fresh].sort((a, b) => a.at - b.at)) {
+			if (home.kind !== "active") {
+				prepared.push({ kind: "notSent", held: one, reason: home.kind });
+				continue;
+			}
+			if (webSocket(one.headers)) {
+				prepared.push({ kind: "notSent", held: one, reason: "websocket" });
+				continue;
+			}
 			const draft = draftOf(tool, draftArgs(one));
-			const covered = (await covering(tx, draft, chat, now)) !== undefined;
+			const covered = source === "tool" && (await covering(tx, draft, chat, now)) !== undefined;
 			// a script that writes in a loop must not bury the owner in cards: the rest stay stored, and the agent is told
 			if (!covered && open >= MAX_OPEN_ASKS) {
-				over.push(one.ticket);
+				prepared.push({ kind: "notSent", held: one, reason: "limit" });
 				continue;
 			}
 			if (!covered) open += 1;
+			const { permission: _permission, host: _host, ...once } = draft;
 			prepared.push({
+				kind: "release",
 				held: one,
+				target: home.target,
 				label: draft.label ?? `${one.method} ${one.host}`,
-				...(covered ? {} : { ask: await offering(tx, chat, draft) }),
+				...(covered ? {} : { ask: source === "recovery" ? { ...once, scopes: [] } : await offering(tx, chat, draft) }),
 			});
 		}
-		const target = await core.askTarget(tx, chat);
 		// what a release waiting its turn watches exists before any release does
-		(await tx.doc(Asked)).chats[chat] ??= 0;
-		for (const { held: one, label, ask } of prepared) {
+		if (prepared.some((one) => one.kind === "release")) (await tx.doc(Asked)).chats[chat] ??= 0;
+		for (const one of prepared) {
+			const request = one.held;
+			doc.tickets[request.ticket] = {
+				...structuredClone(request),
+				kept: now,
+				...(one.kind === "notSent" ? { notSent: one.reason } : {}),
+			};
+			if (one.kind === "notSent") {
+				const why = {
+					websocket: "a WebSocket is a stream and cannot be replayed as one request",
+					limit: "too many requests already wait on the owner",
+					missing: "its chat or agent no longer exists",
+					inactive: "its agent or group is no longer active",
+				}[one.reason];
+				await log(tx, {
+					at: now,
+					chat,
+					what: `Did not send ${request.method} ${addressWords(addressOf(request))} (ticket ${request.ticket}): ${why}`,
+				});
+				continue;
+			}
 			const owner = await tx.createTask(
 				Release,
-				{ ticket: one.ticket, label },
+				{ ticket: request.ticket, label: one.label },
 				{ ownership: { kind: "conversation" }, background: true, conversationId: chat as ConversationId },
 			);
-			if (ask === undefined) continue;
-			await core.placeAsk(tx, await tx.doc(TasksOf, owner), target, owner as TaskId, chat, "approval", {
-				ask,
+			if (one.ask === undefined) continue;
+			await core.placeAsk(tx, await tx.doc(TasksOf, owner), one.target, owner as TaskId, chat, "approval", {
+				ask: one.ask,
 				deadline: now + DEFAULT_DEADLINE,
 			});
 		}
-		return over;
+		const ids: string[] = [];
+		const notSent: Record<string, NotSent> = {};
+		for (const one of own) {
+			const kept = doc.tickets[one.ticket];
+			if (kept?.chat !== chat) continue;
+			ids.push(one.ticket);
+			if (kept.notSent !== undefined) notSent[one.ticket] = kept.notSent;
+		}
+		return { ids, notSent };
 	};
 
 	return {
@@ -433,7 +517,7 @@ export function defineReleases<Target>(core: ReleaseCore<Target>) {
 			};
 			running = effectRun(releaseAsking, tool, (api: ReleaseApi, ctx) => api.inTurn(ctx));
 			fault = onFault;
-			return Object.create(egress, { release: { value: release } }) as E & HoldingEgress;
+			return Object.create(egress, { retain: { value: retain } }) as E & HoldingEgress;
 		},
 	};
 }

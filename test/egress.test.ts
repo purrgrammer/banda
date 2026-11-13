@@ -31,6 +31,7 @@ import {
 	type EgressControl,
 	type HeldRequest,
 	hostOf,
+	intake,
 	ownCredential,
 	permittedHost,
 	permittedHosts,
@@ -44,18 +45,20 @@ import {
 	SENT_PENDING_MS,
 	Sent,
 	type SentRequest,
-	sweepSent,
+	sweepReceipts,
 	type Taken,
+	TICKET_KEPT_MS,
 	Tickets,
 } from "../src/core/egress.ts";
 import { OWNER, type Received } from "../src/core/gateway.ts";
+import { Groups } from "../src/core/groups.ts";
 import { hostCovers } from "../src/core/hosts.ts";
-import { covering, Permissions, revoke } from "../src/core/permissions.ts";
+import { covering, errandOf, Permissions, revoke } from "../src/core/permissions.ts";
 import { MAX_OPEN_ASKS, RELEASE, RELEASED, releasedText } from "../src/core/release.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore, stop } from "../src/core/turn.ts";
-import { type Approving, answer } from "../src/core/wait.ts";
+import { type Approving, answer, liveWaits } from "../src/core/wait.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { answerNudge } from "./fixtures/models.ts";
 import { blobStore, FAUX_MODEL, FakeGateway, tempHome, until } from "./helpers.ts";
@@ -92,6 +95,9 @@ class FakeProxy implements EgressControl {
 	/** What each chat's next command will have sent straight through, under a host permission. */
 	readonly sentOut = new Map<number, SentRequest[]>();
 	readonly acked: string[] = [];
+	async receiptChats(): Promise<readonly number[]> {
+		return [...new Set([...this.pending.keys(), ...this.sentOut.keys()])];
+	}
 	async take(chat: number): Promise<Taken> {
 		const reads = this.reads.get(chat) ?? [];
 		return {
@@ -153,6 +159,7 @@ function setup() {
 		const box = openBox(hostBox(home), () => {});
 		const registry = createRegistry();
 		registry.install(core.extension);
+		registry.install(core.groupExtension);
 		registry.install(boxTools({ egress }));
 		const harness = await openStore(home, { models, registry, env: boxEnv(box) });
 		harness.resume();
@@ -171,7 +178,7 @@ function setup() {
 		if (!("turn" in received)) throw new Error(JSON.stringify(received));
 		return received;
 	};
-	return { proxy, open, say, holding, withFault: (fault: (point: string) => void) => core.held(proxy, fault) };
+	return { core, proxy, open, say, holding, withFault: (fault: (point: string) => void) => core.held(proxy, fault) };
 }
 
 /** Turn `turn` ended, and so did what it held: no release left, and no Turn waking the agent with one. */
@@ -207,6 +214,12 @@ const nextAsk = (harness: Harness, turn: number) =>
 
 const approve = (harness: Harness, key: string, approving: Approving = {}) =>
 	answer(harness, key, "approve", web, "bearer", { approving });
+
+const intakeApi = (harness: Harness, chat: number, now = Date.now): Parameters<typeof intake>[1] => ({
+	conversationId: chat as ConversationId,
+	commit: (change, ctx) => harness.commit(change, ctx),
+	now,
+});
 
 async function results(harness: Harness, chat: number): Promise<string[]> {
 	const page = await (await harness.conversation(chat as ConversationId, context))!.entries(
@@ -248,7 +261,10 @@ describe("a held write", () => {
 				permission: { match: { _route: "POST api.example.com/v1/issues/*/comments" } },
 			});
 			expect(s.proxy.acked).toEqual([request.ticket]);
-			expect((await harness.snapshot(Tickets, context))?.tickets[request.ticket]).toEqual(request);
+			expect((await harness.snapshot(Tickets, context))?.tickets[request.ticket]).toEqual({
+				...request,
+				kept: expect.any(Number),
+			});
 			expect(s.proxy.sent).toEqual([]);
 			await approve(harness, wait!.key, { permission: { scope: "always" } });
 			await until(() => done(harness, first.turn));
@@ -606,7 +622,409 @@ describe("a host the owner allowed", () => {
 		}
 	});
 
-	it("a sweep logs every chat's sent writes, though no command ran, and leaves held requests and reads alone", async () => {
+	it("a sweep recovers a held request after the command ended, without another command", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const first = await s.say(harness);
+			await until(() => done(harness, first.turn));
+			const request = held(first.chat);
+			s.proxy.pending.set(first.chat, [request]);
+			s.proxy.reads.set(first.chat, ["example.com"]);
+			const egress = Object.assign(s.holding, {
+				receiptChats: async () => [first.chat],
+				ack: async (chat: number, readBytes: number, tickets: readonly string[]) => {
+					expect((await harness.snapshot(Tickets, context))?.tickets[request.ticket]).toMatchObject(request);
+					expect(
+						(await openWaits(harness)).filter(
+							(wait) => wait.ask.type === "approval" && wait.ask.args._ticket === request.ticket,
+						),
+					).toHaveLength(1);
+					expect(readBytes).toBe(0);
+					await s.proxy.ack(chat, readBytes, tickets);
+				},
+			});
+			const now = Date.now();
+			await sweepReceipts(egress, harness, () => now, "recover");
+			expect
+				.soft((await harness.snapshot(Tickets, context))?.tickets[request.ticket])
+				.toEqual({ ...request, kept: now });
+			const waits = (await openWaits(harness)).filter(
+				(wait) => wait.ask.type === "approval" && wait.ask.args._ticket === request.ticket,
+			);
+			expect.soft(waits).toHaveLength(1);
+			expect(s.proxy.sent).toEqual([]);
+			expect.soft(s.proxy.acked).toEqual([request.ticket]);
+			expect.soft(s.proxy.pending.get(first.chat)).toEqual([]);
+			expect(s.proxy.reads.get(first.chat)).toEqual(["example.com"]);
+			await sweepReceipts(egress, harness, Date.now, "recover");
+			expect((await openWaits(harness)).map((wait) => wait.key)).toEqual(waits.map((wait) => wait.key));
+		} finally {
+			await close();
+		}
+	});
+
+	it("retaking an old held request after a lost ACK keeps its original approval", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const first = await s.say(harness);
+			await until(() => done(harness, first.turn));
+			const request = held(first.chat, { at: Date.now() - TICKET_KEPT_MS - 1 });
+			s.proxy.pending.set(first.chat, [request]);
+			let acks = 0;
+			const egress = Object.assign(s.holding, {
+				ack: async (chat: number, readBytes: number, tickets: readonly string[]) => {
+					if (++acks === 1) throw new Error("lost ACK");
+					await s.proxy.ack(chat, readBytes, tickets);
+				},
+			});
+			const api: Parameters<typeof intake>[1] = {
+				conversationId: first.chat as ConversationId,
+				commit: (change, ctx) => harness.commit(change, ctx),
+				now: Date.now,
+			};
+			await expect(intake(egress, api, context)).rejects.toThrow("lost ACK");
+			const before = (await openWaits(harness)).map((wait) => wait.key);
+			expect(before).toHaveLength(1);
+			await intake(egress, api, context);
+			expect((await openWaits(harness)).map((wait) => wait.key)).toEqual(before);
+			expect(s.proxy.sent).toEqual([]);
+			expect(s.proxy.acked).toEqual([request.ticket]);
+		} finally {
+			await close();
+		}
+	});
+
+	it.each(["always", "task"] as const)(
+		"a recovered request requires once-only approval despite a matching %s permission for newer work",
+		async (scope) => {
+			const s = setup();
+			const { harness, close } = await s.open(await tempHome());
+			try {
+				const first = await s.say(harness);
+				await until(() => done(harness, first.turn));
+				const request = held(first.chat);
+				const newer = await s.say(harness);
+				await until(() => done(harness, newer.turn));
+				await harness.commit(async (tx) => {
+					const errand = await errandOf(tx, first.chat);
+					(await tx.doc(Permissions)).permissions.newer = {
+						tool: "propose_send",
+						match: { _route: routeOf(request) },
+						what: "send matching requests",
+						scope,
+						agent: LEAD,
+						at: Date.now(),
+						wait: 0,
+						...(scope === "task" ? { task: errand } : {}),
+					};
+				}, context);
+				s.proxy.pending.set(first.chat, [request]);
+				await sweepReceipts(s.holding, harness, Date.now, "recover");
+				await until(async () => {
+					if (s.proxy.sent.length > 0) return true;
+					const open = await harness.commit((tx) => liveWaits(tx, first.chat), context);
+					if (open.length === 0) return true;
+					for (const wait of open) {
+						const task = await harness.getTask(wait.id as TaskId, context);
+						const checkpoint = task?.state.checkpoint;
+						if (
+							checkpoint !== null &&
+							typeof checkpoint === "object" &&
+							!Array.isArray(checkpoint) &&
+							typeof checkpoint.invocation === "number" &&
+							checkpoint.invocation > 0
+						)
+							return true;
+					}
+					return false;
+				});
+				expect.soft(s.proxy.sent).toEqual([]);
+				const waits = await openWaits(harness);
+				expect(waits).toHaveLength(1);
+				const [wait] = waits;
+				expect(wait?.ask).toMatchObject({ type: "approval", args: { _ticket: request.ticket }, scopes: [] });
+				expect(wait?.ask).not.toHaveProperty("permission");
+				expect(wait?.ask).not.toHaveProperty("host");
+				expect(wait?.ask).not.toHaveProperty("errand");
+				expect(await approve(harness, wait!.key, { permission: { scope: "always" } })).toHaveProperty("refused");
+				await answer(harness, wait!.key, "deny", web, "bearer");
+				await until(() => done(harness, newer.turn));
+				expect(s.proxy.sent).toEqual([]);
+			} finally {
+				await close();
+			}
+		},
+	);
+
+	it("recovery repeated after durable storage and a lost ACK keeps one approval", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const first = await s.say(harness);
+			await until(() => done(harness, first.turn));
+			const request = held(first.chat);
+			s.proxy.pending.set(first.chat, [request]);
+			await expect(
+				sweepReceipts(s.holding, harness, Date.now, "recover", context, (point) => {
+					if (point === "recovery:stored") throw new Error("lost ACK");
+				}),
+			).rejects.toThrow("lost ACK");
+			const before = (await openWaits(harness)).map((wait) => wait.key);
+			expect(before).toHaveLength(1);
+			expect(s.proxy.acked).toEqual([]);
+			await sweepReceipts(s.holding, harness, Date.now, "recover");
+			expect((await openWaits(harness)).map((wait) => wait.key)).toEqual(before);
+			expect(s.proxy.acked).toEqual([request.ticket]);
+			expect(s.proxy.sent).toEqual([]);
+		} finally {
+			await close();
+		}
+	});
+
+	it.each(["%", "%FF"])("recovery keeps malformed escape %s exact and adopts neighboring requests", async (segment) => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const first = await s.say(harness);
+			await until(() => done(harness, first.turn));
+			const second = await s.say(harness, "later");
+			await until(() => done(harness, second.turn));
+			const malformed = held(first.chat, { path: `/items/${segment}` });
+			const neighbor = held(first.chat, { path: "/items/42" });
+			const later = held(second.chat, { path: "/later/7" });
+			s.proxy.pending.set(first.chat, [malformed, neighbor]);
+			s.proxy.pending.set(second.chat, [later]);
+			await sweepReceipts(s.holding, harness, Date.now, "recover");
+			const waits = await openWaits(harness);
+			expect(waits).toHaveLength(3);
+			for (const [request, route] of [
+				[malformed, `POST api.example.com/items/${segment}`],
+				[neighbor, "POST api.example.com/items/*"],
+				[later, "POST api.example.com/later/*"],
+			] as const) {
+				const wait = waits.find((one) => one.ask.type === "approval" && one.ask.args._ticket === request.ticket);
+				expect(wait?.ask).toMatchObject({
+					args: { _route: route, address: `https://api.example.com${request.path}` },
+				});
+				expect((await harness.snapshot(Tickets, context))?.tickets[request.ticket]).toMatchObject(request);
+			}
+			expect(s.proxy.sent).toEqual([]);
+			expect(s.proxy.acked.sort()).toEqual([malformed.ticket, neighbor.ticket, later.ticket].sort());
+		} finally {
+			await close();
+		}
+	});
+
+	it.each(["tool", "recovery"] as const)(
+		"concurrent intake and recovery retain one approval when %s wins",
+		async (first) => {
+			const s = setup();
+			const { harness, close } = await s.open(await tempHome());
+			try {
+				const chat = await s.say(harness);
+				await until(() => done(harness, chat.turn));
+				const request = held(chat.chat);
+				s.proxy.pending.set(chat.chat, [request]);
+				let tookBoth = () => {};
+				const both = new Promise<void>((resolve) => {
+					tookBoth = resolve;
+				});
+				let keptFirst = () => {};
+				const stored = new Promise<void>((resolve) => {
+					keptFirst = resolve;
+				});
+				let taken = 0;
+				const view = (
+					source: "tool" | "recovery",
+				): Pick<typeof s.holding, "retain" | "receiptChats" | "replay" | "take" | "ack"> => ({
+					retain: s.holding.retain,
+					receiptChats: () => s.proxy.receiptChats(),
+					replay: (request) => s.proxy.replay(request),
+					take: async (chat) => {
+						const snapshot = await s.proxy.take(chat);
+						if (++taken === 2) tookBoth();
+						await both;
+						if (source !== first) await stored;
+						return snapshot;
+					},
+					ack: async (chat, bytes, ids) => {
+						await s.proxy.ack(chat, bytes, ids);
+						if (source === first) keptFirst();
+					},
+				});
+				const [explanation] = await Promise.all([
+					intake(view("tool"), intakeApi(harness, chat.chat), context),
+					sweepReceipts(view("recovery"), harness, Date.now, "recover"),
+				]);
+				expect(explanation).not.toContain("this one is then sent");
+				const waits = await openWaits(harness);
+				expect(waits).toHaveLength(1);
+				expect(waits[0]?.ask).toMatchObject({ args: { _ticket: request.ticket } });
+				expect(waits[0]?.ask).toHaveProperty("scopes", first === "recovery" ? [] : expect.any(Array));
+				if (first === "recovery") expect(waits[0]?.ask).not.toHaveProperty("permission");
+				else expect(waits[0]?.ask).toHaveProperty("permission");
+				expect(s.proxy.sent).toEqual([]);
+				expect(Object.keys((await harness.snapshot(Tickets, context))?.tickets ?? {})).toEqual([request.ticket]);
+			} finally {
+				await close();
+			}
+		},
+	);
+
+	it.each(["missing", "unknown", "archived"] as const)(
+		"recovery resolves a %s target before ACK without reviving it",
+		async (target) => {
+			const s = setup();
+			const { harness, close } = await s.open(await tempHome());
+			try {
+				const first = await s.say(harness);
+				await until(() => done(harness, first.turn));
+				const chat = target === "missing" ? first.chat + 1000 : first.chat;
+				if (target !== "missing")
+					await harness.commit(async (tx) => {
+						(await tx.doc(AgentChats)).chats[chat] = "mara";
+						if (target === "archived")
+							(await tx.doc(Accepted)).files[agentPath("mara")] = {
+								sha: "x",
+								text: "---\nname: Mara\ndescription: Test\nstate: archived\n---\nBrief.\n",
+								at: 1,
+							};
+					}, context);
+				const request = held(chat);
+				s.proxy.pending.set(chat, [request]);
+				await sweepReceipts(s.holding, harness, Date.now, "recover");
+				const stored = (await harness.snapshot(Tickets, context))?.tickets[request.ticket];
+				expect(stored).toMatchObject({ ...request, notSent: target === "archived" ? "inactive" : "missing" });
+				expect(await openWaits(harness)).toEqual([]);
+				expect(s.proxy.sent).toEqual([]);
+				expect(s.proxy.acked).toEqual([request.ticket]);
+				await sweepReceipts(s.holding, harness, Date.now, "recover");
+				const events = (await harness.snapshot(ActivityLog, context))?.events.filter((event) =>
+					event.what.includes(request.ticket),
+				);
+				expect(events).toHaveLength(1);
+				expect(events?.[0]).not.toHaveProperty("outside");
+				if (target === "missing") expect(await harness.conversation(chat as ConversationId, context)).toBeUndefined();
+			} finally {
+				await close();
+			}
+		},
+	);
+
+	it.each(["active", "archived", "removed", "stale"] as const)(
+		"recovery respects a group's %s execution",
+		async (state) => {
+			const s = setup();
+			const { harness, close } = await s.open(await tempHome());
+			try {
+				const first = await s.say(harness);
+				await until(() => done(harness, first.turn));
+				const room = await s.core.groups.create(harness, { name: "Receipt group", members: [LEAD] });
+				const group = (await harness.snapshot(Groups, context))?.groups[room];
+				const chat = group?.executions[LEAD]?.chat;
+				expect(chat).toBeDefined();
+				if (state === "archived") await s.core.groups.archive(harness, room, true);
+				if (state === "removed") await s.core.groups.change(harness, room, { remove: [LEAD] });
+				if (state === "stale")
+					await harness.commit(async (tx) => {
+						(await tx.doc(Groups)).groups[room]!.executions[LEAD]!.chat = first.chat;
+					}, context);
+				const request = held(chat!);
+				s.proxy.pending.set(chat!, [request]);
+				await sweepReceipts(s.holding, harness, Date.now, "recover");
+				const waits = await openWaits(harness);
+				if (state === "active") {
+					expect(waits).toHaveLength(1);
+					expect(waits[0]).toMatchObject({ chat, ask: { args: { _ticket: request.ticket }, scopes: [] } });
+				} else {
+					expect(waits).toEqual([]);
+					expect((await harness.snapshot(Tickets, context))?.tickets[request.ticket]?.notSent).toBe("inactive");
+				}
+				expect(s.proxy.sent).toEqual([]);
+				expect(s.proxy.acked).toEqual([request.ticket]);
+			} finally {
+				await close();
+			}
+		},
+	);
+
+	it("recovery resolves WebSockets and requests beyond the approval limit once", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const first = await s.say(harness);
+			await until(() => done(harness, first.turn));
+			const socket = held(first.chat, { headers: [["Upgrade", "websocket"]] });
+			const requests = Array.from({ length: MAX_OPEN_ASKS + 1 }, (_, index) =>
+				held(first.chat, { at: socket.at + index + 1 }),
+			);
+			await harness.commit(async (tx) => {
+				(await tx.doc(Permissions)).permissions.standing = {
+					tool: "propose_send",
+					match: { _route: routeOf(requests[0]!) },
+					what: "send matching requests",
+					scope: "always",
+					agent: LEAD,
+					at: Date.now(),
+					wait: 0,
+				};
+			}, context);
+			s.proxy.pending.set(first.chat, [socket, ...requests]);
+			await sweepReceipts(s.holding, harness, Date.now, "recover");
+			expect(await openWaits(harness)).toHaveLength(MAX_OPEN_ASKS);
+			const tickets = (await harness.snapshot(Tickets, context))?.tickets;
+			expect(tickets?.[socket.ticket]?.notSent).toBe("websocket");
+			expect(tickets?.[requests.at(-1)!.ticket]?.notSent).toBe("limit");
+			const events = (await harness.snapshot(ActivityLog, context))?.events.filter((event) =>
+				event.what.startsWith("Did not send"),
+			);
+			expect(events).toHaveLength(2);
+			expect(events?.every((event) => event.outside === undefined)).toBe(true);
+			await sweepReceipts(s.holding, harness, Date.now, "recover");
+			expect(
+				(await harness.snapshot(ActivityLog, context))?.events.filter((event) => event.what.startsWith("Did not send")),
+			).toEqual(events);
+			expect(s.proxy.sent).toEqual([]);
+		} finally {
+			await close();
+		}
+	});
+
+	it("old ticket bytes remain while a release owns them, including during another chat's intake", async () => {
+		const s = setup();
+		const { harness, close } = await s.open(await tempHome());
+		try {
+			const first = await s.say(harness);
+			await until(() => done(harness, first.turn));
+			const second = await s.say(harness, "other");
+			await until(() => done(harness, second.turn));
+			const at = Date.now();
+			const original = held(first.chat);
+			s.proxy.pending.set(first.chat, [original]);
+			await intake(
+				s.holding,
+				intakeApi(harness, first.chat, () => at),
+				context,
+			);
+			for (const chat of [second.chat, first.chat]) {
+				s.proxy.pending.set(chat, [held(chat)]);
+				await intake(
+					s.holding,
+					intakeApi(harness, chat, () => at + TICKET_KEPT_MS + 1),
+					context,
+				);
+				expect((await harness.snapshot(Tickets, context))?.tickets[original.ticket]).toEqual({ ...original, kept: at });
+			}
+			expect(await openWaits(harness)).toHaveLength(3);
+			expect(s.proxy.sent).toEqual([]);
+		} finally {
+			await close();
+		}
+	});
+
+	it("a settled-only sweep logs sent writes without opening held requests or consuming reads", async () => {
 		const s = setup();
 		const { harness, close } = await s.open(await tempHome());
 		try {
@@ -628,12 +1046,12 @@ describe("a host the owner allowed", () => {
 			const request = held(42);
 			s.proxy.pending.set(42, [request]);
 			s.proxy.reads.set(42, ["example.com"]);
-			const egress = Object.assign(s.proxy, { sentChats: async () => [...s.proxy.sentOut.keys()] });
-			expect(await sweepSent(egress, harness, Date.now)).toBe(2);
+			const egress = Object.assign(s.holding, { receiptChats: async () => [...s.proxy.sentOut.keys()] });
+			expect(await sweepReceipts(egress, harness, Date.now, "settled")).toBe(2);
 			const events = (await harness.snapshot(ActivityLog, context))!.events.filter((e) => e.outside === "sent");
 			expect(events.map((e) => e.chat)).toEqual([41, 42]);
 			// a second sweep finds nothing; the held request and the reads wait for chat 42's next command
-			expect(await sweepSent(egress, harness, Date.now)).toBe(0);
+			expect(await sweepReceipts(egress, harness, Date.now, "settled")).toBe(0);
 			expect(s.proxy.pending.get(42)).toEqual([request]);
 			expect(s.proxy.reads.get(42)).toEqual(["example.com"]);
 			expect(s.proxy.acked).toEqual(["s0000000001", "s0000000002"]);
@@ -755,8 +1173,7 @@ describe("a held write's release", () => {
 			);
 			const request = held(chat);
 			await harness.commit(async (tx) => {
-				(await tx.doc(Tickets)).tickets[request.ticket] = request;
-				await s.holding.release(tx, chat, [request], Date.now());
+				await s.holding.retain(tx, chat, [request], Date.now(), "tool");
 			}, context);
 			const [wait] = await until(async () => {
 				const open = await openWaits(harness);

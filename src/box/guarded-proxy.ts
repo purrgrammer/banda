@@ -173,7 +173,7 @@ export function guardedProxy({
 			await control(transport, Empty, ["pass", String(chat), hash]);
 		},
 		take: (chat) => control(transport, Taken, ["take", String(chat)]),
-		sentChats: () => control(transport, Type.Array(Type.Integer({ minimum: 0 })), ["sent"]),
+		receiptChats: () => control(transport, Type.Array(Type.Integer({ minimum: 0 })), ["receipts"]),
 		ack: async (chat, readBytes, tickets) => {
 			await control(transport, Empty, ["ack", String(chat), String(readBytes), ...tickets]);
 		},

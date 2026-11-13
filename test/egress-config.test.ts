@@ -201,8 +201,8 @@ describe("what only the proxy knows", () => {
 	});
 });
 
-describe("the proxy's sent writes", () => {
-	it("are kept on their own volume, listed by chat for a sweep, taken, and forgotten only by their ids", () => {
+describe("the proxy's receipts", () => {
+	it("discover held and sent chats together, leaving reads and unacknowledged ids intact", () => {
 		const dir = fileURLToPath(new URL("../proxy/", import.meta.url));
 		const state = mkdtempSync(join(tmpdir(), "banda-proxy-sent-"));
 		try {
@@ -213,11 +213,17 @@ describe("the proxy's sent writes", () => {
 				"import ctl, state",
 				"a = state.sent(7, {'method': 'POST'})",
 				"b = state.sent(9, {'method': 'PUT'})",
+				"h = state.hold(7, {'chat': 7, 'method': 'POST'})",
+				"k = state.hold(11, {'chat': 11, 'method': 'POST'})",
+				"state.read(13, 'example.com')",
 				"state.outcome(7, a, {'status': 200})",
 				"state.outcome(7, a, {'failed': 'late'})",
-				"out = [ctl.sent_chats(), [r.get('status') for r in ctl.take('7')['sent']]]",
+				"out = [ctl.receipt_chats(), [r.get('status') for r in ctl.take('7')['sent']]]",
 				"ctl.ack('7', 0, [a, '../9/' + b])",
-				"out += [ctl.sent_chats(), sorted(os.listdir(os.path.join(os.environ['BANDA_KEPT'], 'sent')))]",
+				"out += [ctl.receipt_chats(), sorted(os.listdir(os.path.join(os.environ['BANDA_KEPT'], 'sent')))]",
+				"ctl.ack('7', 0, [h])",
+				"ctl.ack('11', 0, [k])",
+				"out += [ctl.receipt_chats(), ctl.take('13')['reads']]",
 				"print(json.dumps(out))",
 			].join("\n");
 			const out = execFileSync("python3", ["-I", "-B", "-c", script], {
@@ -225,7 +231,7 @@ describe("the proxy's sent writes", () => {
 				env: { ...process.env, BANDA_STATE: join(state, "tmpfs"), BANDA_KEPT: join(state, "volume") },
 			});
 			// the first outcome stands; an id with a path in it forgets nothing
-			expect(JSON.parse(out)).toEqual([[7, 9], [200], [9], ["7", "9"]]);
+			expect(JSON.parse(out)).toEqual([[7, 9, 11], [200], [7, 9, 11], ["7", "9"], [9], ["example.com"]]);
 		} finally {
 			rmSync(state, { recursive: true, force: true });
 		}

@@ -19,7 +19,7 @@ import { boxParts, containerBox, dockerAvailable, removeContainerBox } from "../
 import { boxEnv, boxTools } from "../src/box/tools.ts";
 import { fetchIn } from "../src/box/web-fetch.ts";
 import { ActivityLog } from "../src/core/activity.ts";
-import { proxyKnows, sweepSent } from "../src/core/egress.ts";
+import { proxyKnows, sweepReceipts } from "../src/core/egress.ts";
 import { OWNER, type Received } from "../src/core/gateway.ts";
 import { onPermissions, Permissions, revoke } from "../src/core/permissions.ts";
 import { RELEASE, RELEASED } from "../src/core/release.ts";
@@ -456,10 +456,10 @@ describe.skipIf(!docker)("git through the box's proxy", { timeout: 180_000 }, ()
 		const quiet = await sh(box.env(undefined, box.egress?.env(direct.chat)), pushing);
 		expect(quiet.out).toMatch(/code=0/);
 		expect(forgeMain()).toBe(third);
-		expect(await sweepSent(box.egress!, harness, Date.now)).toBe(1);
+		expect(await sweepReceipts(core.held(box.egress!), harness, Date.now, "settled")).toBe(1);
 		const swept = (await harness.snapshot(ActivityLog, context))?.events ?? [];
 		expect(swept.filter((e) => e.chat === direct.chat && e.outside === "sent")).toHaveLength(2);
-		expect(await sweepSent(box.egress!, harness, Date.now)).toBe(0);
+		expect(await sweepReceipts(core.held(box.egress!), harness, Date.now, "settled")).toBe(0);
 	});
 
 	it("a host taken back stops taking writes at the proxy before the revoke returns", async () => {

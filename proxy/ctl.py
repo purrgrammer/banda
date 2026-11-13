@@ -4,7 +4,7 @@ How the daemon talks to the proxy, over `docker exec` alone (never through the b
 - `config`: the daemon's config from stdin, refused when older than the one held (its generation, its login key, the
   forges whose git fetches read, its port, credentials, each chat's allowed hosts).
 - `take <chat>`: the requests held for it, the writes sent under a host permission, and the hosts it read.
-- `sent`: the chats with writes sent under a host permission not yet taken, for the daemon's sweep.
+- `receipts`: the chats with held or sent receipts not yet taken, for the daemon's sweep.
 - `ack <chat> <read bytes> [ticket or sent id...]`: forget what the daemon stored.
 - `pass <chat> <hash>`: let one write the owner approved in the browser through, by its hash.
 - `replay`: send one held request (stdin), exactly as held, to the address it resolves to now, if that is public;
@@ -62,16 +62,18 @@ def take(chat):
     return {"held": held, "sent": sent, "reads": hosts, "readBytes": len(reads)}
 
 
-def sent_chats():
-    """The chats with writes sent under a host permission that the daemon has not taken yet."""
+def receipt_chats():
+    """The chats with held requests or sent writes that the daemon has not taken yet."""
     with state.locked():
-        root = state.sent_path()
-        chats = sorted(os.listdir(root)) if os.path.isdir(root) else []
-        found = []
-        for chat in chats:
-            if chat.isdigit() and any(entry.endswith(".json") for entry in os.listdir(os.path.join(root, chat))):
-                found.append(int(chat))
-        return found
+        found = set()
+        for kind in ("held", "sent"):
+            root = state.kept(kind)
+            chats = os.listdir(root) if os.path.isdir(root) else []
+            for chat in chats:
+                folder = os.path.join(root, chat)
+                if chat.isdigit() and os.path.isdir(folder) and any(entry.endswith(".json") for entry in os.listdir(folder)):
+                    found.add(int(chat))
+        return sorted(found)
 
 
 def ack(chat, read_bytes, ids):
@@ -179,8 +181,8 @@ def main(argv):
         print(json.dumps(configure(json.load(sys.stdin))))
     elif command == "take":
         print(json.dumps(take(argv[2])))
-    elif command == "sent":
-        print(json.dumps(sent_chats()))
+    elif command == "receipts":
+        print(json.dumps(receipt_chats()))
     elif command == "ack":
         ack(argv[2], int(argv[3]), argv[4:])
         print("{}")
