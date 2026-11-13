@@ -131,11 +131,9 @@ for (const width of [390, 1440])
 					await click(page, tab("Review"));
 					await phase(page, "review");
 					expect(await page.run(`document.querySelectorAll('[role="switch"][aria-checked="true"]').length`)).toBe(0);
-					expect(
-						await page.run(
-							`[...document.querySelector('[data-tool="fs_read"]').querySelectorAll('button')].find(el => el.textContent === 'Allow').getAttribute('aria-checked')`,
-						),
-					).toBe("false");
+					expect(await page.run(`document.querySelector('[data-tool="fs_read"] [role="combobox"]').textContent`)).toBe(
+						"Ask",
+					);
 					await click(page, summary("Introduction from the server"));
 					await shot(page, `${width}-${theme}-review`);
 					await click(page, labelled("Sancho"));

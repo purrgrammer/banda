@@ -140,8 +140,9 @@ const withLinePage = (width: number, use: (page: Page) => Promise<void>) =>
 const line = `document.querySelector('[data-working-line]')`;
 const lineButton = `document.querySelector('[data-working-line] button')`;
 const dialog = `document.querySelector('[role="dialog"]')`;
-/** The header says nothing of work: no words, and no face moving. */
-const headerQuiet = `!/working/i.test(document.querySelector('header').innerText) && !document.querySelector('header [data-state="working"]')`;
+const chatHeading = (title: string) => `document.querySelector('header h1[aria-label=${JSON.stringify(title)}]')`;
+const headerQuiet = (title: string) =>
+	`(() => {const header = ${chatHeading(title)}?.closest('header'); return header?.getBoundingClientRect().height === 48 && !/working/i.test(header.innerText) && !header.querySelector('[data-state="working"]') && header.querySelector('[data-pane-icon]')?.getBoundingClientRect().width === 24;})()`;
 async function open(page: Page, hash: string) {
 	await page.until(`localStorage.getItem('banda.token')`);
 	await page.run(`location.hash=${JSON.stringify(hash)}`);
@@ -174,7 +175,7 @@ for (const width of [1440, 390])
 					).toBe(true);
 					expect(await page.run(`${line}.querySelector('[role="img"]').dataset.state`)).toBe("working");
 					expect(await page.run(`${lineButton}.getBoundingClientRect().height`)).toBeGreaterThanOrEqual(44);
-					expect(await page.run(headerQuiet)).toBe(true);
+					expect(await page.run(headerQuiet("Sancho"))).toBe(true);
 					// a tap opens the activity; closing it hands focus back to the line
 					await page.run(`${lineButton}.focus()`);
 					await page.run(`${lineButton}.click()`);
@@ -187,7 +188,7 @@ for (const width of [1440, 390])
 					await page.until(`document.body.innerText.includes('Reply from sancho: ${marker}')`);
 					expect(await page.run(`!${line}`)).toBe(true);
 					expect((await api<ChatRow[]>("/chats")).find((row) => row.chat === chat)?.state).not.toBe("idle");
-					expect(await page.run(headerQuiet)).toBe(true);
+					expect(await page.run(headerQuiet("Sancho"))).toBe(true);
 					after.get("sancho")?.open();
 					await idle();
 					expect(await page.run(`!${line}`)).toBe(true);
@@ -228,7 +229,7 @@ it.skipIf(!hasChrome())(
 				expect(await page.run(`document.querySelectorAll('[data-working-line]').length`)).toBe(1);
 				expect(await page.run(`${line}.querySelectorAll('[data-slot="avatar"]').length`)).toBe(2);
 				expect(await page.run(`${line}.innerText.trim()`)).toBe("Working…");
-				expect(await page.run(headerQuiet)).toBe(true);
+				expect(await page.run(headerQuiet("Line group"))).toBe(true);
 				// a tap opens both members' activity, one tab each; focus comes back to the line
 				await page.run(`${lineButton}.focus()`);
 				await page.run(`${lineButton}.click()`);
@@ -248,7 +249,7 @@ it.skipIf(!hasChrome())(
 				await page.until(`document.body.innerText.includes('Reply from sancho: LINE_GROUP_LIVE')`);
 				await page.until(`!${line}`);
 				expect((await api<GroupView>(`/groups/${room}`)).working.length).toBe(2);
-				expect(await page.run(headerQuiet)).toBe(true);
+				expect(await page.run(headerQuiet("Line group"))).toBe(true);
 				letAllGo();
 				await until(async () => (await api<GroupView>(`/groups/${room}`)).working.length === 0);
 				expect(await page.run(`!${line}`)).toBe(true);

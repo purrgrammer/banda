@@ -136,7 +136,10 @@ for (const width of [390, 1440])
 				expect(await axeFindings(page)).toEqual([]);
 				await click(page, button("Accept this version"));
 				await page.until(`document.querySelector('[data-skill-detail]')?.textContent.includes('Flatten the form')`);
-				await page.run(`location.hash='#/skills'`);
+				await page.until(
+					`document.querySelector('nav[aria-label="Breadcrumb"] [aria-current="page"] h1')?.textContent === '/pdf'`,
+				);
+				await click(page, `document.querySelector('nav[aria-label="Breadcrumb"] a[href="#/skills"]')`);
 				// a new draft's detail says an agent wrote it
 				await page.until(`document.body.textContent.includes('2 skills are waiting for your review')`);
 				await click(
@@ -171,7 +174,9 @@ for (const width of [390, 1440])
 				await page.until(`${button("Save and use")}?.disabled === false`);
 				await click(page, button("Save and use"));
 				await page.until(`location.hash === '#/skills/release-notes'`);
-				await page.until(`document.querySelector('[data-skill-detail]')?.textContent.includes('/release-notes')`);
+				await page.until(
+					`document.querySelector('nav[aria-label="Breadcrumb"] [aria-current="page"] h1')?.textContent === '/release-notes'`,
+				);
 			});
 		} finally {
 			await server.close();

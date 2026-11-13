@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
 import { Tile } from "./Cards.tsx";
+import { Bubble } from "./Feed.tsx";
 
 export type ApprovalState =
 	| { readonly kind: "open"; readonly editing?: boolean }
@@ -17,9 +18,6 @@ export type ApprovalState =
 	| { readonly kind: "declined" }
 	/** No answer came in time, or its run stopped first: nobody said no, so it never says they did. */
 	| { readonly kind: "expired" | "cancelled"; readonly words: string };
-
-/** How a settled card says what happened: as tall as the buttons it replaces, wrapping rather than leaving the card. */
-const SETTLED = "flex min-h-9 items-center gap-1.5 text-ui text-ink-2";
 
 export function ApprovalCard({
 	agent,
@@ -30,6 +28,7 @@ export function ApprovalCard({
 	object,
 	text,
 	scope,
+	bubble = false,
 	state = { kind: "open" },
 	disabled = false,
 	onApprove,
@@ -50,6 +49,8 @@ export function ApprovalCard({
 	text?: string | undefined;
 	/** The one scope offered: "Don't ask again for this task". */
 	scope?: string | undefined;
+	/** A native prompt without a rich preview uses the same surface as a message. */
+	bubble?: boolean;
 	state?: ApprovalState;
 	/** The buttons stand but take nothing yet: a card that just appeared or moved must hold still before a click lands. */
 	disabled?: boolean | undefined;
@@ -62,6 +63,8 @@ export function ApprovalCard({
 	const [draft, setDraft] = useState(text ?? "");
 	const [busy, setBusy] = useState(false);
 	const scopeId = useId();
+	const Surface = bubble ? Bubble : Tile;
+	const settled = `flex items-center gap-1.5 text-ui text-ink-2 ${bubble ? "min-h-8" : "min-h-9"}`;
 	const act = async (action: () => unknown | Promise<unknown>) => {
 		if (busy) return;
 		setBusy(true);
@@ -72,7 +75,7 @@ export function ApprovalCard({
 		}
 	};
 	return (
-		<Tile className="flex flex-col gap-3 p-4">
+		<Surface className={bubble ? "flex flex-col gap-2" : "flex flex-col gap-3 p-4"}>
 			<span className="flex flex-col gap-0.5">
 				<span className="text-meta text-ink-2">{agent} asks to</span>
 				<span className="text-body font-semibold text-ink [overflow-wrap:anywhere]">{what}</span>
@@ -109,6 +112,7 @@ export function ApprovalCard({
 					)}
 					<span className="flex flex-wrap items-center gap-2">
 						<Button
+							size={bubble ? "sm" : "default"}
 							disabled={busy || disabled}
 							onClick={() => void act(() => onApprove?.(scoped, editing ? draft : text))}
 						>
@@ -119,24 +123,29 @@ export function ApprovalCard({
 								Edit
 							</Button>
 						)}
-						<Button variant="ghost" disabled={busy || disabled} onClick={() => void act(() => onDecline?.())}>
+						<Button
+							size={bubble ? "sm" : "default"}
+							variant="ghost"
+							disabled={busy || disabled}
+							onClick={() => void act(() => onDecline?.())}
+						>
 							{declineLabel ?? `Don't ${verb.toLowerCase()}`}
 						</Button>
 					</span>
 				</>
 			) : state.kind === "done" ? (
 				// as tall as the buttons it replaces: the card keeps its height when it settles, until it folds
-				<span className={SETTLED}>
+				<span className={settled}>
 					<CheckIcon className="size-4 shrink-0 text-alive" />
 					<span className="min-w-0 [overflow-wrap:anywhere]">{state.words}</span>
 				</span>
 			) : state.kind === "declined" ? (
-				<span className={SETTLED}>
+				<span className={settled}>
 					<XIcon className="size-4 shrink-0" />
 					<span className="min-w-0 [overflow-wrap:anywhere]">You said no: didn't {verb.toLowerCase()}</span>
 				</span>
 			) : (
-				<span className={SETTLED}>
+				<span className={settled}>
 					{state.kind === "expired" ? (
 						<ClockIcon className="size-4 shrink-0" />
 					) : (
@@ -145,7 +154,7 @@ export function ApprovalCard({
 					<span className="min-w-0 [overflow-wrap:anywhere]">{state.words}</span>
 				</span>
 			)}
-		</Tile>
+		</Surface>
 	);
 }
 

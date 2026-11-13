@@ -35,6 +35,7 @@
 		"test:faults": "vitest run --project faults",
 		"test:docker": "vitest run --project docker",
 		"test:pbt": "BANDA_PBT_RUNS=20 vitest run --project unit --project browser",
+		"prompt:budget": "BANDA_PROMPT_BUDGET=update vitest run --project unit test/prompt-budget.test.ts",
 		"check": "biome check .",
 		"fix": "biome check --write .",
 		"cli:pack": "npm run build && node scripts/stage.ts --archive",

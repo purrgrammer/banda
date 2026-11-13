@@ -16,10 +16,34 @@ import type { CapabilitiesView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { startFakeMcp } from "./fixtures/mcp-server.ts";
 import { skipShippedSkills, tempHome, viteCacheDir } from "./helpers.ts";
-import { hasChrome, withPage } from "./smoke/chrome.ts";
+import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
-const choice = (tool: string, setting: string) =>
-	`[...document.querySelector('[data-tool="${tool}"]').querySelectorAll('[role="radio"]')].find(el => el.textContent.trim() === ${JSON.stringify(setting)})`;
+const permission = (tool: string) => `document.querySelector('[data-tool="${tool}"] [role="combobox"]')`;
+async function choosePermission(page: Page, tool: string, setting: string) {
+	const trigger = permission(tool);
+	const click = async (selector: string) => {
+		const point = `(() => {
+			const element = ${selector};
+			if (!element || element.disabled) return null;
+			const { x, y, width, height } = element.getBoundingClientRect();
+			const center = { x: x + width / 2, y: y + height / 2 };
+			return element.contains(document.elementFromPoint(center.x, center.y)) ? center : null;
+		})()`;
+		await page.until(`Boolean(${point})`);
+		const center = await page.run<{ x: number; y: number }>(point);
+		await page.input("Input.dispatchMouseEvent", { type: "mouseMoved", ...center });
+		await page.input("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", clickCount: 1, ...center });
+		await page.input("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", clickCount: 1, ...center });
+	};
+	await page.until(`${trigger} && !${trigger}.disabled && !document.querySelector('[role="listbox"]')`);
+	await page.run(`${trigger}.scrollIntoView({ block: 'center' })`);
+	await click(trigger);
+	const option = `[...document.querySelectorAll('[role="option"]')].find(el => el.textContent.trim() === ${JSON.stringify(setting)})`;
+	await click(option);
+	await page.until(
+		`${permission(tool)}.getAttribute('aria-expanded') === 'false' && !${permission(tool)}.disabled && ${permission(tool)}.textContent.trim() === ${JSON.stringify(setting)}`,
+	);
+}
 const switchOf = (agent: string) =>
 	`document.getElementById([...document.querySelectorAll('label')].find(el => el.textContent.trim() === ${JSON.stringify(agent)})?.htmlFor)`;
 
@@ -78,6 +102,9 @@ for (const width of [390, 1440])
 					await page.until(`document.body.textContent.includes('Sancho')`);
 					await page.run(`location.hash='#/connections?connection=${added.name}'`);
 					await page.until(`document.querySelector('[data-connection-details="${added.name}"]')`);
+					await page.until(
+						`document.querySelector('nav[aria-label="Breadcrumb"] [aria-current="page"] h1')?.textContent === 'Cal'`,
+					);
 					await page.until(`document.querySelector('[data-group="Events"]')`);
 					expect(await page.run(`document.documentElement.scrollWidth <= document.documentElement.clientWidth`)).toBe(
 						true,
@@ -92,16 +119,19 @@ for (const width of [390, 1440])
 						"Not known · asks until you say",
 					);
 					// Allow on what the server only proposed: it is a read now, and the owner's
-					await page.run(`${choice("list_events", "Allow")}.click()`);
-					await page.until(`${choice("list_events", "Allow")}.getAttribute('aria-checked') === 'true'`);
+					await choosePermission(page, "list_events", "Allow");
 					expect((await view()).tools.find((tool) => tool.title === "list_events")).toMatchObject({
 						classed: { kind: "read", from: "you" },
 						setting: "allow",
 					});
+					expect(await page.run(`document.querySelector('[aria-label="Every tool in Events"]').textContent`)).toBe(
+						"Mixed",
+					);
 					// Ask on it, at once
-					await page.run(`${choice("list_events", "Ask")}.click()`);
-					await page.until(`${choice("list_events", "Ask")}.getAttribute('aria-checked') === 'true'`);
+					await choosePermission(page, "list_events", "Ask");
 					expect((await view()).tools.find((tool) => tool.title === "list_events")?.setting).toBe("ask");
+					await choosePermission(page, "create_event", "Always ask");
+					expect((await view()).tools.find((tool) => tool.title === "create_event")?.setting).toBe("always");
 					// an agent, switched here
 					await page.until(switchOf("Sancho"));
 					await page.run(`${switchOf("Sancho")}.click()`);
@@ -120,7 +150,7 @@ for (const width of [390, 1440])
 					await page.until(
 						`document.querySelector('[data-tool="archive_events"]')?.textContent.includes('Off until you choose')`,
 					);
-					await page.run(`${choice("archive_events", "Off")}.click()`);
+					await choosePermission(page, "archive_events", "Off");
 					await page.until(
 						`!document.querySelector('[data-tool="archive_events"]').textContent.includes('Off until you choose')`,
 					);

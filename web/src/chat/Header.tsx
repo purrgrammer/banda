@@ -1,143 +1,171 @@
-/**
- * The chat's header: the agent's face and name, centred and floating over the feed, and under them its presence
- * (waiting on you, routines paused). It never says that an agent works, in words or in the face's motion: the feed's
- * working line does. It has no bar and no border: they sit on one small frosted shape, so the conversation scrolls
- * around and beneath it and keeps the screen. The face and the name open the panel; on the phone a back control leads
- * to the band. Its parent is `relative feed-scope`, and the feed's scroller `feed-scroll` and clears it with
- * `HEADER_CLEARANCE`.
- */
-import { ChevronLeftIcon, PanelRightIcon } from "lucide-react";
-import { type ReactNode, useId } from "react";
+import { ChevronLeftIcon, ChevronRightIcon, PanelRightIcon, UsersIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import type { AvatarFace } from "../../../src/core/avatar-face.ts";
 import { Face, FaceStack, type FaceState } from "./Face.tsx";
-import type { Who } from "./Row.tsx";
+import type { Who } from "./types.ts";
 
+export type PaneParent = { readonly title: string; readonly href: string };
+
+/** The title bar shared by chats and settings pages. */
+export function PaneHeader({
+	title,
+	icon,
+	parent,
+	onTitle,
+	navigation,
+	phone = false,
+	trailing,
+	detail,
+}: {
+	title: string;
+	icon: ReactNode;
+	parent?: PaneParent | undefined;
+	onTitle?: (() => void) | undefined;
+	navigation?: ReactNode;
+	phone?: boolean;
+	trailing?: ReactNode;
+	detail?: ReactNode;
+}) {
+	const heading =
+		onTitle === undefined ? (
+			<h1 data-page-title="" tabIndex={-1} className="truncate text-ui font-semibold text-ink focus:outline-none">
+				{title}
+			</h1>
+		) : (
+			<h1 aria-label={title} className="text-ui font-semibold text-ink">
+				<button
+					type="button"
+					aria-label={`${title}: open its panel`}
+					className="block max-w-full truncate rounded-field text-left hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+					onClick={onTitle}
+				>
+					{title}
+				</button>
+			</h1>
+		);
+	return (
+		<header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-line-soft bg-paper px-2.5">
+			{phone ? navigation : null}
+			<span
+				data-pane-icon=""
+				aria-hidden="true"
+				className="inline-flex size-6 shrink-0 items-center justify-center text-ink-2 [&>svg]:size-4"
+			>
+				{icon}
+			</span>
+			<div className="min-w-0 flex-1">
+				{parent === undefined ? (
+					heading
+				) : (
+					<nav aria-label="Breadcrumb">
+						<ol className="flex min-w-0 items-center gap-1.5">
+							<li className="min-w-0 max-w-[40%]">
+								<a
+									href={parent.href}
+									className="block truncate rounded-field text-ui text-ink-2 hover:text-ink hover:underline focus-visible:underline focus-visible:outline-2 focus-visible:outline-focus"
+								>
+									{parent.title}
+								</a>
+							</li>
+							<li aria-current="page" className="flex min-w-0 items-center gap-1.5">
+								<ChevronRightIcon aria-hidden="true" className="size-3 shrink-0 text-ink-2 rtl:rotate-180" />
+								{heading}
+							</li>
+						</ol>
+					</nav>
+				)}
+				{detail}
+			</div>
+			{trailing}
+			{phone ? null : navigation}
+		</header>
+	);
+}
+
+/** The chat's name opens its panel. Waiting and delegated activity have their own controls. */
 export function Header({
 	name,
-	faces,
+	face,
+	faces = [],
 	doing,
-	state = "idle",
+	state,
 	paused = false,
 	phone = false,
 	panelOpen = false,
 	onBack,
 	onPanel,
 	onActivity,
-	attention = false,
 	delegated,
 }: {
 	name: string;
-	faces: readonly (Who & { readonly state?: FaceState | undefined })[];
-	/** Its presence in words, when "waiting" alone does not say it: "A coding session waits on you". */
+	face?: AvatarFace | undefined;
+	faces?: readonly Who[] | undefined;
 	doing?: string | undefined;
 	state?: FaceState | undefined;
-	attention?: boolean;
-	delegated?: ReactNode;
 	paused?: boolean;
+	delegated?: ReactNode;
 	phone?: boolean;
 	panelOpen?: boolean;
 	onBack?: () => void;
-	/** The name opens the panel (a sheet on the phone); the button at the right toggles it. */
 	onPanel?: () => void;
-	/** The presence line opens what it waits on, not the panel. */
 	onActivity?: (() => void) | undefined;
 }) {
-	// work is said in the feed, by the working line: here a working face rests, as an idle one does
-	const rest = (each: FaceState | undefined): FaceState => (each === "working" || each === undefined ? "idle" : each);
-	const shown = rest(state);
-	const resting = faces.map((each) => ({ ...each, state: rest(each.state) }));
-	const [first] = resting;
-	const line = paused ? "Routines paused" : shown === "waiting" ? (doing ?? "Waiting on you") : undefined;
-	const face =
-		resting.length > 1 || first === undefined ? (
-			<FaceStack faces={resting} name={name} size="panel" waiting={attention || shown === "waiting"} />
+	const line = paused ? "Routines paused" : state === "waiting" ? (doing ?? "Waiting on you") : undefined;
+	const first = face ?? faces[0]?.face;
+	const icon =
+		faces.length > 1 ? (
+			<FaceStack faces={faces} name={name} size="mention" />
+		) : first === undefined ? (
+			<UsersIcon />
 		) : (
-			<Face face={first.face} name={name} size="panel" state={attention ? "waiting" : shown} paused={paused} />
+			<Face face={first} name={name} size="mention" />
 		);
 	return (
-		<header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center px-2.5 pt-2">
-			{phone ? (
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					aria-label="Back to the band"
-					className="pointer-events-auto absolute top-2.5 left-1.5"
-					onClick={onBack}
-				>
-					<ChevronLeftIcon className="size-5" />
-				</Button>
-			) : null}
-			<div className="pointer-events-auto relative isolate flex max-w-[min(20rem,calc(100%-6rem))] min-w-0 flex-col items-center">
-				<Contour name={name} line={line} />
-				<button
-					type="button"
-					className="flex min-w-0 max-w-full flex-col items-center text-ink outline-none focus-visible:[&>span:first-child]:ring-2 focus-visible:[&>span:first-child]:ring-line rounded-full"
-					aria-label={`${name}: open its panel`}
-					onClick={onPanel}
-				>
-					<span className="inline-flex rounded-full p-2">{face}</span>
-					<span className={cn("max-w-full truncate px-3 text-ui font-semibold", line === undefined && "pb-1.5")}>
-						{name}
-					</span>
-				</button>
-				{line === undefined ? null : (
+		<PaneHeader
+			title={name}
+			icon={icon}
+			onTitle={onPanel}
+			phone={phone}
+			navigation={
+				phone ? (
+					<Button variant="ghost" size="icon-sm" aria-label="Back to the band" className="text-ink-2" onClick={onBack}>
+						<ChevronLeftIcon className="size-5" />
+					</Button>
+				) : null
+			}
+			detail={
+				line === undefined ? null : onActivity === undefined || paused ? (
+					<p className="truncate text-meta text-ink-2">{line}</p>
+				) : (
 					<button
 						type="button"
 						onClick={onActivity}
-						disabled={onActivity === undefined || paused}
-						aria-label={onActivity === undefined || paused ? undefined : `Activity: ${line}`}
-						className="max-w-full min-w-0 truncate px-3 pb-1.5 text-center text-meta text-ink-2 enabled:hover:text-ink"
+						aria-label={`Activity: ${line}`}
+						className="block max-w-full truncate rounded-field text-left text-meta text-ink-2 hover:text-ink focus-visible:outline-2 focus-visible:outline-ring"
 					>
 						{line}
 					</button>
-				)}
-			</div>
-			<div className="pointer-events-auto absolute top-2.5 right-1.5 flex items-center gap-1">
-				{delegated}
-				{phone || onPanel === undefined ? null : (
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						className={cn("text-ink-2", panelOpen && "bg-paper-3 text-ink")}
-						aria-label={panelOpen ? "Hide the panel" : "Show the panel"}
-						aria-pressed={panelOpen}
-						onClick={onPanel}
-					>
-						<PanelRightIcon />
-					</Button>
-				)}
-			</div>
-		</header>
+				)
+			}
+			trailing={
+				<div className="flex shrink-0 items-center gap-1 empty:hidden">
+					{delegated}
+					{phone || onPanel === undefined ? null : (
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							className={cn("text-ink-2", panelOpen && "bg-paper-3 text-ink")}
+							aria-label={panelOpen ? "Hide the panel" : "Show the panel"}
+							aria-pressed={panelOpen}
+							onClick={onPanel}
+						>
+							<PanelRightIcon />
+						</Button>
+					)}
+				</div>
+			}
+		/>
 	);
 }
-
-/**
- * The shape behind the face and the name, following their outline: a circle round the face and a pill round the
- * words, melted into one where they meet (blurred a little, then cut at half its alpha), in the chat's own paper with
- * no line round it. It lifts with a soft shadow only once the feed scrolls under it (`header-lift`). It lays out the
- * same boxes as what it sits behind, words hidden, so it fits any name without measuring.
- */
-function Contour({ name, line }: { name: string; line: string | undefined }) {
-	const id = useId();
-	return (
-		<div aria-hidden="true" className="header-lift pointer-events-none absolute inset-0 -z-10">
-			<div className="flex h-full flex-col items-center" style={{ filter: `url(#${CSS.escape(id)})` }}>
-				<svg width="0" height="0" className="absolute" aria-hidden="true">
-					<filter id={id} x="-20%" y="-20%" width="140%" height="140%">
-						<feGaussianBlur in="SourceGraphic" stdDeviation="3" />
-						<feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -12" />
-					</filter>
-				</svg>
-				<span className="size-20 shrink-0 rounded-full bg-paper" />
-				<span className="-mt-2 flex max-w-full flex-col items-center rounded-full bg-paper px-3 pt-2 pb-1.5 text-transparent select-none">
-					<span className="max-w-full truncate text-ui font-semibold">{name}</span>
-					{line === undefined ? null : <span className="max-w-full truncate text-meta">{line}</span>}
-				</span>
-			</div>
-		</div>
-	);
-}
-
-/** How far the feed starts below the top, so its first message clears the floating header. */
-export const HEADER_CLEARANCE = "pt-32";

@@ -244,7 +244,7 @@ export function HarnessSessionPart({ chat, call }: { chat: number; call: string 
 }
 
 /** The header offers the same cards as the feed, then opens the selected session's steps. */
-export function useHarnessMenu(sessions: readonly HarnessSessionView[], waiting: boolean, phone: boolean) {
+export function useHarnessMenu(sessions: readonly HarnessSessionView[], waiting: boolean) {
 	const { harnesses, agents, companion } = useShell();
 	const [open, setOpen] = useState(false);
 	const [selected, setSelected] = useState<number>();
@@ -263,7 +263,6 @@ export function useHarnessMenu(sessions: readonly HarnessSessionView[], waiting:
 				<HarnessMenu
 					count={sessions.length}
 					waiting={waiting}
-					phone={phone}
 					open={open}
 					onOpenChange={setOpen}
 					triggerRef={trigger}

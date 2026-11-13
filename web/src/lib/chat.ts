@@ -324,12 +324,6 @@ export function tryAgainAfter(segments: readonly Segment[]): string | undefined 
 	return undefined;
 }
 
-/** The newest thing shown is a reply that reached the owner: no failure, stop, open ask or silence came after it. */
-export function answeredWell(segments: readonly Segment[]): boolean {
-	const newest = segments.filter((segment) => segment.kind !== "working").at(-1);
-	return newest?.kind === "companion" && !newest.undelivered;
-}
-
 /**
  * A run that ended without a word to the owner: their message is the newest thing shown, nothing runs or waits, and the
  * agent worked after it (its turn ran, and left only notes, which are never the owner's to read). The daemon nudges

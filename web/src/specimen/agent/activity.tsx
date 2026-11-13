@@ -299,7 +299,7 @@ export function ActivityChat() {
 					{playing ? "Pause stream" : "Play stream"}
 				</Button>
 			</div>
-			<ChatScreen name={MARA.name} faces={[MARA]} state={live ? "working" : "idle"}>
+			<ChatScreen name={MARA.name} face={MARA.face}>
 				<DaySeparator>Today</DaySeparator>
 				<Run time="10:41">
 					<Bubble copy={REQUEST}>{REQUEST}</Bubble>

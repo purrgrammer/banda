@@ -383,17 +383,15 @@ function HarnessHeaderSample({
 		<HeaderStage>
 			<Header
 				name={MARA.name}
-				faces={[MARA]}
+				face={MARA.face}
 				state={waiting ? "waiting" : "idle"}
 				doing={waiting ? "Waiting on you · Claude Code" : undefined}
-				attention={waiting}
 				phone={phone}
 				onActivity={() => setOpen(true)}
 				delegated={
 					<HarnessMenu
 						count={count}
 						waiting={waiting}
-						phone={phone}
 						open={open}
 						onOpenChange={setOpen}
 						onCloseAutoFocus={(event) => {

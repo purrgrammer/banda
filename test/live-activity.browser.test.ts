@@ -19,6 +19,7 @@ import type { ChatRow, GroupView, Item, ItemPage, Posted } from "../src/server/a
 import { hostBox } from "./fixtures/host-box.ts";
 import { skipShippedSkills, tempHome, until, type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
+import { chooseMessageAction } from "./smoke/message-actions.ts";
 
 let daemon: Daemon;
 let web: WebServer;
@@ -189,7 +190,7 @@ afterAll(async () => {
 async function open(page: Page, hash: string) {
 	await page.until(`localStorage.getItem('banda.token')`);
 	await page.run(`location.hash='#/a/sancho'`);
-	await page.until(`document.querySelector('[aria-label="View activity"]')`);
+	await page.until(`document.querySelector('[data-message-transcript]')`);
 	await page.run(`location.hash=${JSON.stringify(hash)}`);
 	await page.until(`document.querySelector('header')`);
 }
@@ -217,23 +218,10 @@ for (const width of [1440, 390, 320])
 		async () => {
 			await withPage(`${base}/#token=${token}`, { width, height: 900 }, async (page) => {
 				await open(page, `#/a/sancho?at=${firstMessage}`);
-				await page.until(`document.querySelector('[data-entry="${firstMessage}"] [aria-label="View activity"]')`);
-				const action = `document.querySelector('[data-entry="${firstMessage}"] [aria-label="View activity"]')`;
-				if (width < 768) {
-					const bubble = `${action}.closest('[class~="group/bubble"]')`;
-					// Long press is handled on the bubble; click its revealed action, without adding another menu.
-					await page.run(`${bubble}.scrollIntoView({block:'center'})`);
-					const point = await page.run<{ x: number; y: number }>(
-						`(()=>{const r=${bubble}.querySelector('[data-message-bubble]').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`,
-					);
-					await page.input("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
-					await page.until(`getComputedStyle(${action}).opacity==='1'`);
-					await page.input("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-				} else {
-					await page.run(`${action}.focus()`);
-					await page.until(`getComputedStyle(${action}).opacity==='1'`);
-				}
-				await page.run(`${action}.click()`);
+				await page.until(`document.querySelector('[data-entry="${firstMessage}"] [data-message-transcript]')`);
+				const action = `document.querySelector('[data-entry="${firstMessage}"] [data-message-transcript]')`;
+				if (width < 768) await page.until(`getComputedStyle(${action}).opacity==='1'`);
+				await chooseMessageAction(page, action, "Activity & transcript");
 				await page.until(`document.querySelector('[data-activity-timeline]')?.textContent.includes('BROWSER_SEED_0')`);
 				expect(
 					await page.run(
@@ -369,8 +357,8 @@ it.skipIf(!hasChrome())(
 	async () => {
 		await withPage(`${base}/#token=${token}`, { width: 320, height: 900 }, async (page) => {
 			await open(page, `#/g/${room}`);
-			await page.until(`document.querySelectorAll('[aria-label="View activity"]').length===4`);
-			await page.run(`document.querySelector('[aria-label="View activity"]').click()`);
+			await page.until(`document.querySelectorAll('[data-message-transcript]').length===4`);
+			await chooseMessageAction(page, `document.querySelector('[data-message-transcript]')`, "Activity & transcript");
 			await drill(page);
 			expect(
 				await page.run(
@@ -379,7 +367,11 @@ it.skipIf(!hasChrome())(
 			).toBe(true);
 			await noOverflow(page);
 			await close(page);
-			await page.run(`[...document.querySelectorAll('[aria-label="View activity"]')].at(-1).click()`);
+			await chooseMessageAction(
+				page,
+				`[...document.querySelectorAll('[data-message-transcript]')].at(-1)`,
+				"Activity & transcript",
+			);
 			await drill(page);
 			expect(
 				await page.run(

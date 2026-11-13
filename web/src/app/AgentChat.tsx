@@ -1,10 +1,10 @@
 /**
- * An agent's one chat: the header (its face, name and presence), the feed, the working line, the pill and the
+ * An agent's one chat: its title and presence, the feed, the working line, the pill and the
  * composer. Before its first message there is no chat yet: the first message starts it, on the agent's main thread.
  * What was rendered is read once the window has focus, so a row's unread follows what the owner saw.
  */
 import { SquareIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	Conversation,
 	ConversationContent,
@@ -13,19 +13,18 @@ import {
 } from "@/components/ai-elements/conversation";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import { agentMainThread } from "../../../src/core/gateway.ts";
-import { MOOD_BEAT_MS } from "../avatar/scene.ts";
 import { WaitingPill } from "../chat/Approval.tsx";
 import { Composer } from "../chat/Composer.tsx";
 import { Bubble, Run } from "../chat/Feed.tsx";
 import { Starters } from "../chat/FirstRun.tsx";
-import { HEADER_CLEARANCE, Header } from "../chat/Header.tsx";
+import { Header } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
 import { ChatLoading } from "../chat/Loading.tsx";
 import type { Who } from "../chat/Row.tsx";
 import { Mentionable } from "../components/MentionChip.tsx";
 import { type ChatRow, type Item, type Posted, postMessage, readChat, upload } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
-import { answeredWell, view } from "../lib/chat.ts";
+import { view } from "../lib/chat.ts";
 import type { ChatAgent } from "../lib/navigation.ts";
 import { useShell } from "../lib/shell.ts";
 import { useTranscript } from "../lib/transcript.ts";
@@ -110,18 +109,7 @@ export function AgentChat({
 	const agents = shell.agents;
 	const delegated = harnessActivity(shell.harnesses?.sessions ?? [], row === undefined ? [] : [row.chat]);
 	const status = chatActivity(state, doing, delegated);
-	// a reply just finished well; what the agent is really doing always wins over it
-	const [happy, setHappy] = useState(false);
-	const happyEnds = useRef<ReturnType<typeof setTimeout>>(undefined);
-	const onAnswered = useCallback(() => {
-		setHappy(true);
-		clearTimeout(happyEnds.current);
-		happyEnds.current = setTimeout(() => setHappy(false), MOOD_BEAT_MS.happy);
-	}, []);
-	useEffect(() => {
-		return () => clearTimeout(happyEnds.current);
-	}, []);
-	const coding = useHarnessMenu(delegated.sessions, delegated.waiting, phone);
+	const coding = useHarnessMenu(delegated.sessions, delegated.waiting);
 	// the lead gets every tool; another agent, what its accepted file names
 	const tools =
 		agent === "sancho"
@@ -138,13 +126,12 @@ export function AgentChat({
 		[agents, agent],
 	);
 	return (
-		<div className="feed-scope relative flex min-w-0 flex-1 flex-col bg-paper">
+		<div className="flex min-w-0 flex-1 flex-col bg-paper">
 			<Header
 				name={who.name}
-				faces={[who]}
-				state={happy && status.state === "idle" ? "happy" : status.state}
+				face={who.face}
+				state={status.state}
 				doing={status.doing}
-				attention={status.attention}
 				delegated={coding.menu}
 				phone={phone}
 				panelOpen={panelOpen}
@@ -155,8 +142,8 @@ export function AgentChat({
 			{coding.details}
 			{row === undefined ? (
 				<>
-					<div className="feed-scroll min-h-0 flex-1 overflow-y-auto">
-						<div className={`mx-auto flex w-full max-w-[44rem] flex-col gap-3 px-4 pb-5 ${HEADER_CLEARANCE}`}>
+					<div className="min-h-0 flex-1 overflow-y-auto">
+						<div className="flex w-full max-w-[44rem] flex-col gap-3 px-4 pt-4 pb-5 [&>[data-compact-agent-run]]:-ms-2">
 							<Run who={who} compact>
 								<Bubble>{firstWords(who.name, tools)}</Bubble>
 							</Run>
@@ -186,7 +173,6 @@ export function AgentChat({
 					at={at}
 					onMissing={onMissing}
 					onDoing={setDoing}
-					onAnswered={onAnswered}
 					onRoutine={onRoutine}
 					activity={activity}
 					onActivity={(entry) => setActivity({ anchor: entry })}
@@ -207,7 +193,6 @@ function Timeline({
 	tools,
 	at,
 	onDoing,
-	onAnswered,
 	onRoutine,
 	activity,
 	onActivity,
@@ -215,7 +200,6 @@ function Timeline({
 	onCloseActivity,
 	onMissing,
 }: {
-	onAnswered: () => void;
 	chat: number;
 	activity: { anchor?: number } | undefined;
 	onActivity: (entry: number) => void;
@@ -333,22 +317,14 @@ function Timeline({
 	useEffect(() => {
 		onDoing(doing);
 	}, [doing, onDoing]);
-	// the view is one snapshot, so the run's end and how it ended are read together
-	const wasWorking = useRef({ chat, working: false });
-	useEffect(() => {
-		const finished =
-			wasWorking.current.chat === chat && wasWorking.current.working && working === undefined && answeredWell(segments);
-		wasWorking.current = { chat, working: working !== undefined };
-		if (finished) onAnswered();
-	}, [chat, working, segments, onAnswered]);
 	const ask = segments.find(
 		(segment) => (segment.kind === "question" || segment.kind === "approval") && segment.open !== undefined,
 	);
 	return (
 		<Conversation className="flex flex-col">
 			<ConversationContent
-				scrollClassName="feed-scroll min-h-0 flex-1 overflow-y-auto"
-				className={`mx-auto w-full max-w-[44rem] px-4 pb-5 ${HEADER_CLEARANCE}`}
+				scrollClassName="min-h-0 flex-1 overflow-y-auto"
+				className="w-full px-4 pt-4 pb-5 [&>[data-compact-agent-run]]:-ms-2"
 			>
 				{transcript.older ? (
 					<button
