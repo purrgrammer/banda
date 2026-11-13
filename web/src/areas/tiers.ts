@@ -55,6 +55,8 @@ export type ProviderAccountView = {
 	/** The owner's name for it; the provider's name for its first, until the owner names that one. */
 	readonly label: string;
 	readonly connected: boolean;
+	/** Its credential came from a finished sign-in; a key or a cloud's settings is saved and not yet tried. */
+	readonly signedIn?: true;
 	/** Connected by a credential from around the daemon, not one connected here: unverified, and not ours to forget. */
 	readonly ambient?: boolean;
 	/** What that credential came from ("ANTHROPIC_API_KEY"), as pi-ai names it. */
@@ -74,6 +76,14 @@ export type ProviderView = {
 	readonly name: string;
 	readonly apiKey: boolean;
 	readonly oauth: boolean;
+	/** A cloud's own form, when signing in takes more than a key (`src/core/provider-forms.ts`). */
+	readonly form?: import("../../../src/core/provider-forms.ts").ProviderForm;
+	/** How many models pi-ai's catalog lists for it. */
+	readonly models: number;
+	/** Whether banda has Quick, Balanced and Deep picked for it; else the owner starts it on one model. */
+	readonly presets: boolean;
+	/** Its list can be read from the provider itself (pi-ai's refresh), not only pi-ai's catalog. */
+	readonly refresh?: true;
 	readonly accounts: readonly ProviderAccountView[];
 };
 

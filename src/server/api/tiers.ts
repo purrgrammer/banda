@@ -35,6 +35,11 @@ export type TiersView = {
  * configured model's), and one tier's own model (`modelId: null` back to the preset), of the provider in effect after.
  */
 export type TiersChange = {
+	/**
+	 * Start a provider without a preset on one of its models: all three tiers run it, until the owner refines one.
+	 * It changes what the band thinks with only when `provider` names it too.
+	 */
+	readonly start?: { readonly provider: string; readonly model: string };
 	readonly provider?: string;
 	readonly override?: { readonly tier: Tier; readonly modelId: string | null };
 };

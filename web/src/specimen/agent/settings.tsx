@@ -1,11 +1,38 @@
 /** Settings: the page, each of its tabs, and the provider accounts the band thinks with. */
 import { useContext, useState } from "react";
+import { type AddProviderActions, AddProviderSteps } from "../../chat/AddProvider.tsx";
 import { Band } from "../../chat/Band.tsx";
+import { CustomProviders } from "../../chat/CustomProviders.tsx";
+import { ServerSetup } from "../../chat/ServerSetup.tsx";
 import { AppSettings, ModelProviders, SettingsPage } from "../../chat/Settings.tsx";
 import { UsagePanel } from "../../chat/Usage.tsx";
 import type { Tier, TiersView } from "../../lib/api.ts";
-import { ATLAS, ROWS, SANCHO, SETTINGS, SETTINGS_PROVIDERS } from "../fixtures.ts";
+import {
+	ADD_PROVIDERS,
+	ATLAS,
+	CUSTOM_PROVIDERS,
+	ROWS,
+	SANCHO,
+	SERVER_LISTING,
+	SETTINGS,
+	SETTINGS_PROVIDERS,
+	TOGETHER_CATALOG,
+} from "../fixtures.ts";
 import { Section, StageContext } from "../stage.tsx";
+
+/** The dialog's daemon, as fixtures: nothing leaves the page. */
+const FIXTURE_ACTIONS: AddProviderActions = {
+	catalog: async () => TOGETHER_CATALOG,
+	refresh: async () => TOGETHER_CATALOG,
+	connect: async () => ({}),
+	providers: async () => ADD_PROVIDERS,
+	answer: async () => undefined,
+	cancel: async () => undefined,
+	start: async () => undefined,
+	list: async () => SERVER_LISTING,
+	saveServer: async () => "custom-ollama",
+	use: async () => undefined,
+};
 
 const example = {
 	input: 120_000,
@@ -129,6 +156,52 @@ export function SettingsSections() {
 				</SettingsPage>
 				<SettingsPage title="Settings, on a device" phone={phone}>
 					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} here={false} />
+				</SettingsPage>
+			</Section>
+			<Section
+				id="settings-custom-providers"
+				note="Add a provider: every provider pi-ai supports and servers of the owner's; a cloud's own form; a catalog to start from; a server's listed models, kept apart from the one it starts on; saved, then Use. The owner's servers, each with where it sends things."
+			>
+				<SettingsPage title="Add a provider" phone={phone}>
+					<AddProviderSteps providers={ADD_PROVIDERS} actions={FIXTURE_ACTIONS} onDone={() => {}} />
+				</SettingsPage>
+				<SettingsPage title="A cloud's own form" phone={phone}>
+					<AddProviderSteps
+						providers={ADD_PROVIDERS}
+						actions={FIXTURE_ACTIONS}
+						step={{ kind: "builtin", id: "cloudflare-ai-gateway" }}
+						onDone={() => {}}
+					/>
+				</SettingsPage>
+				<SettingsPage title="Starting a provider without a preset" phone={phone}>
+					<AddProviderSteps
+						providers={ADD_PROVIDERS}
+						actions={FIXTURE_ACTIONS}
+						step={{ kind: "builtin", id: "together" }}
+						onDone={() => {}}
+					/>
+				</SettingsPage>
+				<SettingsPage title="A server's models, found" phone={phone}>
+					<ServerSetup kind="ollama" listing={SERVER_LISTING} list={FIXTURE_ACTIONS.list} />
+				</SettingsPage>
+				<SettingsPage title="Saved, not used" phone={phone}>
+					<AddProviderSteps
+						providers={ADD_PROVIDERS}
+						actions={FIXTURE_ACTIONS}
+						step={{
+							kind: "saved",
+							id: "together",
+							name: "Together",
+							what: "Connected. It starts on Qwen3 235B for every tier; you can refine each later.",
+						}}
+						onDone={() => {}}
+					/>
+				</SettingsPage>
+				<SettingsPage title="Your own servers" phone={phone}>
+					<CustomProviders view={{ providers: CUSTOM_PROVIDERS }} current="custom-ollama" />
+				</SettingsPage>
+				<SettingsPage title="Your own servers, on a phone" phone={phone}>
+					<CustomProviders view={{ providers: CUSTOM_PROVIDERS }} current="anthropic" here={false} />
 				</SettingsPage>
 			</Section>
 		</>

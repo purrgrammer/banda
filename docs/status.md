@@ -2,6 +2,13 @@
 
 ## Current work
 
+Every pi-ai provider and servers of the owner's are in review on `feat/custom-providers` (#112): Add a provider in
+Settings and, searchable, at first run; cloud forms for Cloudflare, Bedrock, Vertex and Azure; Ollama, LM Studio,
+llama.cpp, vLLM and OpenAI-, Anthropic- and Mistral-compatible servers, their models listed from the server. First run
+on a local Ollama (qwen3:4b) answered through the app; Ollama's default 4,096-token context cut banda's prompt
+silently, so a model's context is now what the server runs it with, at least 16,384. Hosted providers, OAuth sign-ins,
+LM Studio, llama.cpp and vLLM are not yet run live; owner acceptance remains.
+
 Agent search is in review on `feat/agent-search`: messages, shared group histories and artifacts use the same
 retrieval as Cmd+K, with bounded results and source reads. Recall now searches saved facts only. Validation and
 owner acceptance remain pending; definition and attachment coverage is tracked in [Chat](chat.md). The local tool-access

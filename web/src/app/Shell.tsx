@@ -48,6 +48,7 @@ import { Onboarding, SkillsOnboarding, useShippedSkills } from "./Onboarding.tsx
 import { ownerEdits } from "./owner-edits.ts";
 import { EditRoutine, RoutineHistory, routineRows } from "./routines.tsx";
 import { SearchDialog } from "./SearchDialog.tsx";
+import { SettingsCustomProviders } from "./SettingsCustomProviders.tsx";
 import { SettingsDevices } from "./SettingsDevices.tsx";
 import { SettingsProviders } from "./SettingsProviders.tsx";
 import { SettingsUsage } from "./SettingsUsage.tsx";
@@ -736,7 +737,12 @@ function Main() {
 									},
 								}
 							: {})}
-						providers={<SettingsProviders current={tiers?.provider.id ?? ""} />}
+						providers={
+							<SettingsProviders
+								current={tiers?.provider.id ?? ""}
+								serverRows={<SettingsCustomProviders current={tiers?.provider.id ?? ""} />}
+							/>
+						}
 						usage={
 							<SettingsUsage
 								modelName={(id) => tiers?.catalog.find((model) => model.id === id)?.name}

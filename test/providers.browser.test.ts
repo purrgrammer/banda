@@ -19,6 +19,8 @@ const tab = (text: string) =>
 	`[...document.querySelectorAll('[role="tab"]')].find(el => el.textContent.trim() === ${JSON.stringify(text)})`;
 const button = (text: string) =>
 	`[...document.querySelectorAll('[role="alertdialog"] button')].find(el => el.textContent.trim() === ${JSON.stringify(text)})`;
+const dialogButton = (text: string) =>
+	`[...document.querySelectorAll('[role="dialog"] button')].find(el => el.getClientRects().length > 0 && el.textContent.trim() === ${JSON.stringify(text)})`;
 async function click(page: Page, selector: string) {
 	await page.until(selector).catch(async (error: Error) => {
 		throw new Error(
@@ -27,12 +29,6 @@ async function click(page: Page, selector: string) {
 	});
 	await page.run(
 		`(() => {const el=${selector}; el.scrollIntoView({block:'nearest'}); el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:0})); el.click();})()`,
-	);
-}
-async function fill(page: Page, label: string, value: string) {
-	await page.until(labelled(label));
-	await page.run(
-		`(() => {const el=${labelled(label)}; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true}));})()`,
 	);
 }
 
@@ -102,12 +98,31 @@ for (const width of [390, 1440])
 						`(location.hash.startsWith('#/settings') || (location.hash='#/settings', false)) && ${tab("Model")}`,
 					);
 					await click(page, tab("Model"));
-					await page.until(labelled("Connect OpenAI"));
-					expect(await page.run(`document.body.textContent.includes('In use')`)).toBe(true);
+					await page.until(labelled("Add a provider"));
+					await page.until(`document.body.textContent.includes('In use')`);
+					// Settings lists what is connected; another comes through Add a provider
+					expect(await page.run(`!!${labelled("Connect OpenAI")}`)).toBe(false);
 
-					await click(page, labelled("Connect OpenAI"));
-					await fill(page, "OpenAI key", "test-key");
-					await click(page, `${labelled("OpenAI key")}.form.querySelector('button[type="submit"]')`);
+					await click(page, labelled("Add a provider"));
+					await click(page, labelled("Search providers and servers"));
+					await page.input("Input.insertText", { text: "OpenAI" });
+					await click(
+						page,
+						`[...document.querySelectorAll('[role="option"]')].find(el => el.querySelector('span span')?.textContent.trim() === 'OpenAI')`,
+					);
+					const keyField = `document.getElementById([...document.querySelectorAll('[role="dialog"] label')].find(el => el.textContent.trim() === 'OpenAI API key')?.htmlFor)`;
+					await page.until(keyField);
+					await page.run(
+						`(() => {const el=${keyField}; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'test-key'); el.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+					);
+					await click(page, dialogButton("Connect"));
+					await page.until(
+						`document.body.textContent.includes('banda has Quick, Balanced and Deep picked for OpenAI')`,
+					);
+					// connecting it used nothing
+					expect((await tiers()).provider.id).toBe("anthropic");
+					await click(page, dialogButton("Save"));
+					await click(page, dialogButton("Use OpenAI"));
 					await page.until(`document.body.textContent.includes(${JSON.stringify(OPENAI.models.quick)})`);
 					expect((await tiers()).provider.id).toBe("openai");
 
@@ -115,10 +130,19 @@ for (const width of [390, 1440])
 					await page.until(`document.body.textContent.includes(${JSON.stringify(ANTHROPIC.models.quick)})`);
 					expect((await tiers()).provider.id).toBe("anthropic");
 
-					await click(page, labelled("Sign out of OpenAI"));
+					// rename, another account and sign out are one menu on the account's row
+					// a menu opens on the pointer going down, as a tap or a click does
+					await page.until(labelled("More for OpenAI"));
+					await page.run(
+						`${labelled("More for OpenAI")}.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true, button: 0, pointerType: 'mouse'}))`,
+					);
+					await click(
+						page,
+						`[...document.querySelectorAll('[role="menuitem"]')].find(el => el.textContent.trim() === "Sign out")`,
+					);
 					await page.until(`document.querySelector('[role="alertdialog"]')`);
 					await click(page, button("Sign out"));
-					await page.until(labelled("Connect OpenAI"));
+					await page.until(`!${labelled("More for OpenAI")}`);
 					expect((await tiers()).providers.map((each) => each.id)).toEqual(["anthropic"]);
 					expect(await page.run(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
 					expect(page.errors()).toEqual([]);

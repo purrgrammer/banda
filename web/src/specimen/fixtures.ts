@@ -396,6 +396,182 @@ export const SIGN_IN_WAYS = [
  * Settings' providers, one of each state: in use, connected, two accounts of one provider, set from outside banda,
  * connecting, failed, by sign-in and by key.
  */
+/** The owner's servers: Ollama on the computer banda runs on, and a hosted gateway that bills per token, whose check failed. */
+export const CUSTOM_PROVIDERS: readonly import("../areas/custom-providers.ts").CustomProviderView[] = [
+	{
+		id: "custom-ollama",
+		name: "Ollama",
+		kind: "ollama",
+		baseUrl: "http://localhost:11434/v1",
+		destination: { place: "computer", host: "localhost:11434", secure: false, url: "http://localhost:11434/v1" },
+		key: "none",
+		billing: "none",
+		models: [
+			{
+				id: "qwen3:8b",
+				images: false,
+				reasoning: true,
+				contextWindow: 40_960,
+				maxTokens: 8192,
+				source: { listed: true, limits: "owner" },
+			},
+		],
+		tiers: { quick: "qwen3:8b", balanced: "qwen3:8b", deep: "qwen3:8b" },
+		using: true,
+		checked: { ok: true, at: 0, model: "qwen3:8b", ms: 412, reply: "OK" },
+	},
+	{
+		id: "custom-team-gateway",
+		name: "Team gateway",
+		kind: "anthropic",
+		baseUrl: "https://llm.example.com",
+		destination: { place: "internet", host: "llm.example.com", secure: true, url: "https://llm.example.com" },
+		key: "stored",
+		billing: "rates",
+		models: [
+			{
+				id: "relay-fast",
+				images: false,
+				reasoning: false,
+				contextWindow: 128_000,
+				maxTokens: 8192,
+				cost: { input: 0.2, output: 0.8 },
+				source: { listed: true, limits: "server" },
+			},
+		],
+		tiers: { quick: "relay-fast", balanced: "relay-fast", deep: "relay-fast" },
+		using: false,
+		checked: {
+			ok: false,
+			at: 0,
+			model: "relay-fast",
+			failure: "auth",
+			status: 401,
+			detail: '401: {"message":"Incorrect API key provided: Bearer [key]"}',
+		},
+	},
+];
+
+/** What an Ollama server listed: a model with its context, one that reads images, one pi-ai's catalog also names, one embedding. */
+export const SERVER_LISTING: import("../areas/custom-providers.ts").ListingView = {
+	ok: true,
+	routes: ["GET /api/tags", "POST /api/show"],
+	models: [
+		{ id: "qwen3:8b", contextWindow: 40_960, images: false },
+		{ id: "llava:7b", contextWindow: 4096, images: true },
+		{
+			id: "Qwen/Qwen3-8B",
+			catalog: {
+				ref: "huggingface/Qwen/Qwen3-8B",
+				provider: "Hugging Face",
+				contextWindow: 40_960,
+				maxTokens: 32_768,
+				images: false,
+				reasoning: true,
+			},
+		},
+		{ id: "nomic-embed-text", images: false, chats: false },
+	],
+};
+
+/** Every provider, as Add a provider lists them: a few of pi-ai's, each way of signing in. */
+export const ADD_PROVIDERS: readonly import("../areas/tiers.ts").ProviderView[] = [
+	{
+		id: "anthropic",
+		name: "Anthropic",
+		apiKey: true,
+		oauth: true,
+		models: 17,
+		presets: true,
+		accounts: [{ id: "anthropic", label: "Anthropic", connected: true, connecting: false }],
+	},
+	{
+		id: "openai",
+		name: "OpenAI",
+		apiKey: true,
+		oauth: true,
+		models: 42,
+		presets: true,
+		accounts: [{ id: "openai", label: "OpenAI", connected: false, connecting: false }],
+	},
+	{
+		id: "cloudflare-ai-gateway",
+		name: "Cloudflare AI Gateway",
+		apiKey: true,
+		oauth: false,
+		models: 58,
+		presets: false,
+		form: {
+			note: "AI Gateway runs under your Cloudflare account: banda needs an API token, the account's id and the gateway's.",
+			methods: [
+				{
+					label: "API token",
+					note: "Kept on the computer banda runs on, with the account and gateway ids.",
+					fields: [
+						{ id: "key", label: "Cloudflare API token", secret: true, placeholder: "Paste it" },
+						{ id: "account", label: "Account ID", placeholder: "32 hex characters" },
+						{ id: "gateway", label: "Gateway ID" },
+					],
+				},
+			],
+		},
+		accounts: [{ id: "cloudflare-ai-gateway", label: "Cloudflare AI Gateway", connected: false, connecting: false }],
+	},
+	{
+		id: "together",
+		name: "Together",
+		apiKey: true,
+		oauth: false,
+		models: 15,
+		presets: false,
+		accounts: [{ id: "together", label: "Together", connected: true, connecting: false }],
+	},
+	{
+		id: "radius",
+		name: "Radius",
+		apiKey: true,
+		oauth: true,
+		models: 32,
+		presets: false,
+		refresh: true,
+		accounts: [{ id: "radius", label: "Radius", connected: false, connecting: false }],
+	},
+];
+
+/** A catalog as pi-ai has it, for a provider without banda's preset. */
+export const TOGETHER_CATALOG: import("../areas/custom-providers.ts").ModelsListView = {
+	source: "catalog",
+	models: [
+		{
+			id: "Qwen/Qwen3-235B-A22B",
+			name: "Qwen3 235B",
+			contextWindow: 262_144,
+			maxTokens: 32_768,
+			images: false,
+			reasoning: true,
+			cost: { input: 0.2, output: 0.6 },
+		},
+		{
+			id: "meta-llama/Llama-4-Maverick",
+			name: "Llama 4 Maverick",
+			contextWindow: 1_048_576,
+			maxTokens: 16_384,
+			images: true,
+			reasoning: false,
+			cost: { input: 0.27, output: 0.85 },
+		},
+		{
+			id: "deepseek-ai/DeepSeek-V4",
+			name: "DeepSeek V4",
+			contextWindow: 131_072,
+			maxTokens: 32_768,
+			images: false,
+			reasoning: true,
+			cost: { input: 0, output: 0 },
+		},
+	],
+};
+
 export const SETTINGS_PROVIDERS: readonly import("../chat/Settings.tsx").ProviderRow[] = [
 	{ id: "anthropic", name: "Anthropic", provider: "anthropic", label: "Personal", by: "sign-in", connected: true },
 	{ id: "anthropic@work", name: "Anthropic", provider: "anthropic", label: "Work", by: "sign-in", connected: true },

@@ -5,6 +5,7 @@
 import type { AreaModule } from "./area.ts";
 import { artifacts } from "./artifacts.ts";
 import { band } from "./band.ts";
+import { customProviders } from "./custom-providers.ts";
 import { faces } from "./faces.ts";
 import { groups } from "./groups.ts";
 import { harnessesArea } from "./harnesses.ts";
@@ -20,6 +21,7 @@ import { watches } from "./watches.ts";
 export const AREAS: readonly AreaModule[] = [
 	tiers,
 	providers,
+	customProviders,
 	usage,
 	permissions,
 	routines,
