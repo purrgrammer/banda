@@ -3,8 +3,15 @@
  * name in a group (in a 1:1 chat the header already says who); day separators, the unread divider, jump to latest.
  * Cards sit in the agent's column, outside the bubbles.
  */
-import { ArrowDownIcon, CheckIcon, CopyIcon, ListTreeIcon } from "lucide-react";
+import { ArrowDownIcon, CheckIcon, CopyIcon, EllipsisIcon, ListTreeIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
 import { Face } from "./Face.tsx";
 import type { Who } from "./Row.tsx";
@@ -12,7 +19,9 @@ import type { Who } from "./Row.tsx";
 /** Whose run a bubble is in: the owner's, or an agent's. */
 const Mine = createContext(false);
 
-/** A run of consecutive messages from one side. In a 1:1 chat the agent's run has no face or name, its time below. */
+const timeStyle = "text-[0.6875rem] leading-none tabular-nums text-ink-2";
+
+/** A run of consecutive messages from one side. In a 1:1 chat the header names the agent. */
 export function Run({
 	who,
 	time,
@@ -26,18 +35,32 @@ export function Run({
 	/** A 1:1 chat: neither face nor name, which the header already shows. */
 	compact?: boolean;
 }) {
-	if (who === undefined)
+	const mine = who === undefined;
+	if (mine || compact)
 		return (
-			<div className="flex flex-col items-end gap-1 pl-12">
-				<Mine.Provider value={true}>{children}</Mine.Provider>
-				{time === undefined ? null : <span className="px-1 text-meta text-ink-2">{time}</span>}
-			</div>
-		);
-	if (compact)
-		return (
-			<div className="flex flex-col items-start gap-1.5 pr-12">
-				{children}
-				{time === undefined ? null : <span className="px-1 text-meta text-ink-2">{time}</span>}
+			<div
+				data-compact-agent-run={mine ? undefined : ""}
+				className={cn(
+					"flex w-full max-w-[44rem] flex-col",
+					mine ? "items-end self-end ps-12" : "items-start self-start pe-12",
+				)}
+			>
+				<div
+					className={cn("relative flex w-fit max-w-full flex-col", mine ? "items-end gap-1" : "items-start gap-1.5")}
+				>
+					{time === undefined ? null : (
+						<span
+							className={cn(
+								timeStyle,
+								"absolute top-2.5 whitespace-nowrap",
+								mine ? "end-full me-1" : "start-full ms-1",
+							)}
+						>
+							{time}
+						</span>
+					)}
+					<Mine.Provider value={mine}>{children}</Mine.Provider>
+				</div>
 			</div>
 		);
 	return (
@@ -46,7 +69,7 @@ export function Run({
 			<div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
 				<span className="flex items-baseline gap-2">
 					<span className="text-body font-semibold text-ink">{who.name}</span>
-					{time === undefined ? null : <span className="text-meta text-ink-2">{time}</span>}
+					{time === undefined ? null : <span className={timeStyle}>{time}</span>}
 				</span>
 				{children}
 			</div>
@@ -61,6 +84,7 @@ export const useMine = () => useContext(Mine);
 export function Bubble({
 	mine: told,
 	children,
+	className,
 	reaction,
 	copy,
 	onActivity,
@@ -68,9 +92,10 @@ export function Bubble({
 	/** Whose it is; by default, its run's. */
 	mine?: boolean;
 	children: ReactNode;
-	/** The emoji an agent reacted with, under the owner's message. */
+	className?: string;
+	/** The emoji an agent reacted with, at the owner's bubble's lower-left corner. */
 	reaction?: string | undefined;
-	/** The message's words as they were written: a quiet Copy on hover, focus or a long press. */
+	/** The message's words as they were written, available through Copy. */
 	copy?: string | undefined;
 	/** Inspect the work behind this message, beside Copy. Off unless this surface supplies its recorded work. */
 	onActivity?: (() => void) | undefined;
@@ -78,16 +103,27 @@ export function Bubble({
 	const inMine = useContext(Mine);
 	const mine = told ?? inMine;
 	return (
-		<MessageActions copy={copy} onActivity={onActivity} reaction={reaction} mine={mine}>
+		<MessageActions copy={copy} onActivity={onActivity} mine={mine}>
 			<div
 				data-message-bubble=""
 				data-mine={mine ? "" : undefined}
 				className={cn(
-					"min-w-0 rounded-bubble px-3.5 py-2 text-body break-words [overflow-wrap:anywhere] [&_p+p]:mt-2",
+					"relative min-w-0 rounded-2xl px-3 pt-1.5 pb-2.5 text-body break-words [overflow-wrap:anywhere] [&_p+p]:mt-2",
 					mine ? "bg-paper-2 text-ink" : "border border-line-soft bg-paper text-ink",
+					className,
 				)}
 			>
 				{children}
+				{reaction === undefined ? null : (
+					<span
+						role="img"
+						aria-label={`reacted ${reaction}`}
+						title={reaction}
+						className="absolute -bottom-1 left-1 z-10 h-3.5 min-w-3.5 max-w-[calc(100%-0.25rem)] truncate rounded-full bg-paper px-0.5 text-center text-[10px] leading-3.5 ring-1 ring-line-soft ring-inset"
+					>
+						{reaction}
+					</span>
+				)}
 			</div>
 		</MessageActions>
 	);
@@ -98,118 +134,95 @@ export function MessageActions({
 	children,
 	copy,
 	onActivity,
-	reaction,
 	mine = false,
 }: {
 	children: ReactNode;
 	copy?: string | undefined;
 	onActivity?: (() => void) | undefined;
-	reaction?: string | undefined;
 	/** The owner's: the controls sit on its left, the side facing the chat, never off its right edge. */
 	mine?: boolean;
 }) {
-	const [pressed, setPressed] = useState(false);
-	const press = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-	const release = () => clearTimeout(press.current);
+	const hasCopy = copy !== undefined && copy.trim() !== "";
+	const hasActions = hasCopy || onActivity !== undefined;
+	const trigger = useRef<HTMLButtonElement>(null);
+	const openingActivity = useRef(false);
+	const [feedback, setFeedback] = useState<"Copied" | "Couldn't copy">();
+	useEffect(() => {
+		if (feedback === undefined) return;
+		const timer = setTimeout(() => setFeedback(undefined), 1500);
+		return () => clearTimeout(timer);
+	}, [feedback]);
 	return (
 		<div
 			className={cn(
-				"group/bubble relative flex max-w-[min(100%,var(--measure))] items-end gap-1",
+				"group/bubble relative flex max-w-[min(100%,var(--measure))] items-center gap-1",
 				mine && "flex-row-reverse",
-				reaction !== undefined && "mb-3",
 			)}
-			// A long press reveals the message's actions on touch; focus reveals them for keyboard users.
-			onPointerDown={(event) => {
-				if ((copy === undefined && onActivity === undefined) || event.pointerType !== "touch") return;
-				press.current = setTimeout(() => {
-					setPressed(true);
-					setTimeout(() => setPressed(false), 4000);
-				}, 450);
-			}}
-			onPointerUp={release}
-			onPointerCancel={release}
-			onPointerLeave={release}
 		>
 			{children}
-			{onActivity ? (
-				<div className="flex shrink-0 flex-col items-center gap-1">
-					{copy === undefined || copy.trim() === "" ? null : (
-						<CopyButton text={copy} shown={pressed} onDone={() => setPressed(false)} />
-					)}
-					<button
-						type="button"
-						aria-label="View activity"
-						title="View activity"
-						onClick={onActivity}
-						className={cn(
-							"flex size-7 shrink-0 items-center justify-center rounded-full bg-paper text-ink-2 ring-1 ring-line",
-							"opacity-0 transition-opacity duration-[var(--duration-fast)] group-hover/bubble:opacity-100 group-focus-within/bubble:opacity-100 hover:text-ink focus-visible:opacity-100 motion-reduce:transition-none",
-							pressed && "opacity-100",
-						)}
+			{hasActions ? (
+				<DropdownMenu modal={false}>
+					<DropdownMenuTrigger asChild>
+						<Button
+							ref={trigger}
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							aria-label="Message actions"
+							data-message-transcript={onActivity === undefined ? undefined : ""}
+							className={cn(
+								"text-ink-2 motion-reduce:transition-none",
+								feedback === undefined &&
+									"pointer-fine:opacity-0 group-hover/bubble:opacity-100 group-focus-within/bubble:opacity-100 data-[state=open]:opacity-100",
+							)}
+						>
+							{feedback === "Copied" ? <CheckIcon aria-hidden="true" /> : <EllipsisIcon aria-hidden="true" />}
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent
+						align={mine ? "end" : "start"}
+						onCloseAutoFocus={(event) => {
+							if (!openingActivity.current) return;
+							event.preventDefault();
+							openingActivity.current = false;
+							trigger.current?.focus({ preventScroll: true });
+							onActivity?.();
+						}}
 					>
-						<ListTreeIcon aria-hidden="true" className="size-3.5" />
-					</button>
-				</div>
-			) : copy === undefined || copy.trim() === "" ? null : (
-				<CopyButton text={copy} shown={pressed} onDone={() => setPressed(false)} />
-			)}
-			{reaction === undefined ? null : (
-				<span
-					role="img"
-					aria-label={`reacted ${reaction}`}
-					className="absolute -bottom-3 left-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-paper px-1 text-[14px] leading-none ring-1 ring-line"
-				>
-					{reaction}
-				</span>
-			)}
+						{hasCopy ? (
+							<DropdownMenuItem
+								className="pointer-coarse:min-h-11"
+								onSelect={async () => {
+									try {
+										await navigator.clipboard.writeText(copy);
+										setFeedback("Copied");
+									} catch {
+										setFeedback("Couldn't copy");
+									}
+								}}
+							>
+								<CopyIcon aria-hidden="true" />
+								Copy
+							</DropdownMenuItem>
+						) : null}
+						{onActivity === undefined ? null : (
+							<DropdownMenuItem
+								className="pointer-coarse:min-h-11"
+								onSelect={() => {
+									openingActivity.current = true;
+								}}
+							>
+								<ListTreeIcon aria-hidden="true" />
+								Activity &amp; transcript
+							</DropdownMenuItem>
+						)}
+					</DropdownMenuContent>
+					<span role="status" className="sr-only">
+						{feedback}
+					</span>
+				</DropdownMenu>
+			) : null}
 		</div>
-	);
-}
-
-/**
- * Copy occupies its own in-flow column beside the bubble, above the run's timestamp. Its space is reserved even
- * while quiet, so hover, keyboard focus and a long press change visibility without moving the message or its time;
- * it says Copied for a moment, or Couldn't copy when the browser refuses.
- */
-export function CopyButton({ text, shown = false, onDone }: { text: string; shown?: boolean; onDone?: () => void }) {
-	const [said, setSaid] = useState<"copied" | "failed" | undefined>(undefined);
-	const done = useRef(onDone);
-	done.current = onDone;
-	useEffect(() => {
-		if (said === undefined) return;
-		const timer = setTimeout(() => {
-			setSaid(undefined);
-			done.current?.();
-		}, 1500);
-		return () => clearTimeout(timer);
-	}, [said]);
-	const label = said === "copied" ? "Copied" : said === "failed" ? "Couldn't copy" : "Copy the message";
-	return (
-		<button
-			type="button"
-			aria-label={label}
-			title={label}
-			onClick={() =>
-				void navigator.clipboard.writeText(text).then(
-					() => setSaid("copied"),
-					() => setSaid("failed"),
-				)
-			}
-			className={cn(
-				"flex size-7 shrink-0 items-center justify-center rounded-full bg-paper text-ink-2 ring-1 ring-line",
-				"opacity-0 transition-opacity duration-[var(--duration-fast)] group-hover/bubble:opacity-100 group-focus-within/bubble:opacity-100 hover:text-ink focus-visible:opacity-100 motion-reduce:transition-none",
-				(shown || said !== undefined) && "opacity-100",
-			)}
-		>
-			{said === "copied" ? (
-				<CheckIcon aria-hidden="true" className="size-3.5" />
-			) : (
-				<CopyIcon aria-hidden="true" className="size-3.5" />
-			)}
-			<span role="status" className="sr-only">
-				{said === undefined ? "" : label}
-			</span>
-		</button>
 	);
 }
 

@@ -136,18 +136,21 @@ one that gives them one more thing to manage stays out.
   connection not reached, or an account to sign in to again. A skill the box removed has nothing to allow, and a
   connection's change is answered in the chat, so neither lights it: the dot never cries wolf. The footer holds only the
   daemon's notices. Collapsed, the rail shows faces alone, the menu below them.
-- **The chat** is one timeline where the owner's words, the agent's messages, events and cards share the transcript. The
-  header (48px) is the agent's face and name and, under it, its presence in a word or two (waiting on you, routines
-  paused); it never says that an agent works, in words or in the face's motion: the feed's working line does. Tapping
-  the name opens the panel on the phone and toggles it on the desktop. The owner's messages sit on
+- **The chat** is one timeline where the owner's words, the agent's messages, events and cards share the transcript.
+  Agent chats, groups, settings and artifacts share a 48px title bar. The agent's face, two faces for a group, or
+  the page's icon sits in the same slot before the title. Detail pages link back to their parent in the title bar.
+  A chat shows a short line when it needs the owner's attention. The feed's working
+  line shows when an agent works. Tapping the chat's name opens the panel
+  on the phone and toggles it on the desktop. The owner's messages sit on
   the right in ink-filled bubbles, the agent's on the left as bubbles, its face and name above each run of consecutive
   messages (on the phone the face alone, the name once at the top); day separators; an unread divider where the owner
   last read; "jump to latest" when scrolled up; times on hover or tap; paged backwards from any point, so a search
   result or a card from last month opens in place. A chat is read when its newest message was on screen with the window
   focused, and the row updates then. Each part of a message is its own affordance: text; files (below); a **question**
-  as a card with its choices or form and a way to dismiss it, an answer typed in the composer appearing as the owner's
-  words beneath it; a **draft** as the approval card (below); a **view** of the browser, live, with take-over; an
-  **artifact** card that opens in the panel; an **object** card; a sign-in handed to the owner; a reaction. Events and
+  in a bubble with its choices and a way to dismiss it, an answer typed in the composer appearing as the owner's words
+  beneath it; a **draft** in a bubble for a simple native approval or a card for a richer preview; a **view** of the
+  browser, live, with take-over; an **artifact** card that opens in the panel; an **object** card; a sign-in handed to the
+  owner; a reaction. Events and
   asks draw as lines in the feed, in place: a routine's run, a change to accept, a connection to finish signing in to,
   an error. Work in progress is said once, by the **working line** at the foot of the feed, above the owner's
   messages still waiting: while agents work and have shown nothing since their turn began, their faces (28px, side by
@@ -268,7 +271,7 @@ answered by a control, never by typing its id.
 - Each agent has an open-bot-avatar face, never an emoji identity: 40px in rows, 28px beside a message group's name in a group
   (a 1:1 chat names no one above its messages: the header says who),
   64px in the panel, 96px on the first-run screen. The face itself moves while working, in the band's rows and the
-  working line, never in a chat's header; a subtle dot marks waiting,
+  working line. A subtle dot marks waiting,
   and paused routines dim it. There is no disc or working icon. In voice mode its states include listening, thinking
   and speaking. The owner's face choice also supplies the first agent's favicon and installed app icons.
 - Surfaces: one hairline border, the card radius, no shadow; the composer alone casts one. One primary button per

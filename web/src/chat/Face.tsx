@@ -78,7 +78,7 @@ export function FaceStack({
 }: {
 	faces: readonly (Who & { state?: FaceState | undefined; paused?: boolean | undefined })[];
 	name: string;
-	size?: "message" | "row" | "panel";
+	size?: "mention" | "message" | "row" | "panel";
 	waiting?: boolean;
 	className?: string;
 }) {
@@ -122,7 +122,7 @@ export function FaceStack({
 					/>
 				</span>
 			))}
-			{faces.length > shown.length && (
+			{size !== "mention" && faces.length > shown.length && (
 				<span
 					aria-hidden="true"
 					className="absolute -top-1 -right-1 z-10 inline-flex min-w-4 items-center justify-center rounded-full bg-paper-3 px-0.5 text-[9px] font-semibold leading-4 text-ink ring-1 ring-paper"

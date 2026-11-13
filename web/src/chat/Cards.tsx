@@ -1,6 +1,5 @@
 /**
- * Cards in the chat: what an agent made (an artifact), what it is looking at (the browser, live), what it asks (a
- * question), and a page it hands to the owner (a sign-in). Each sits in the agent's column, outside the bubbles.
+ * Chat surfaces for artifacts, browser views, questions and sign-in handoffs.
  */
 import {
 	BookOpenIcon,
@@ -16,6 +15,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { pathEnds } from "@/lib/ends";
+import { Bubble } from "./Feed.tsx";
 import { KeepEnd } from "./KeepEnd.tsx";
 
 /** The frame every card shares: a hairline, the tile radius, the measure. */
@@ -148,18 +148,19 @@ export function QuestionCard({
 	onDismiss?: () => void;
 }) {
 	return (
-		<Tile className="flex flex-col gap-3 p-4">
-			<p className="text-body font-medium text-ink [overflow-wrap:anywhere]">{question}</p>
+		<Bubble mine={false} className="flex flex-col gap-2 [&_p+p]:mt-0">
+			<p>{question}</p>
 			{state.kind === "open" ? (
 				<>
-					<div className="flex flex-wrap gap-2">
+					<div className="flex flex-wrap gap-1.5">
 						{choices.map((choice) => (
 							// a long choice (a link, a token) wraps inside its button rather than pushing the card off the screen
 							<Button
 								key={choice}
+								size="sm"
 								variant="outline"
 								onClick={() => onChoose?.(choice)}
-								className="h-auto min-h-9 max-w-full py-1.5 text-left whitespace-normal [overflow-wrap:anywhere]"
+								className="h-auto min-h-8 max-w-full py-1.5 text-left whitespace-normal [overflow-wrap:anywhere]"
 							>
 								{choice}
 							</Button>
@@ -203,7 +204,7 @@ export function QuestionCard({
 					<span className="min-w-0 [overflow-wrap:anywhere]">{state.words}</span>
 				</p>
 			)}
-		</Tile>
+		</Bubble>
 	);
 }
 

@@ -15,7 +15,7 @@ import {
 import { Panel } from "../../chat/Panel.tsx";
 import { Search } from "../../chat/Search.tsx";
 import { AppSettings, SettingsPage } from "../../chat/Settings.tsx";
-import { MARA, OTTO, ROWS, SANCHO, SETTINGS } from "../fixtures.ts";
+import { MARA, OTTO, ROWS, SETTINGS } from "../fixtures.ts";
 import { ChatScreen } from "../screens/screens.tsx";
 import { Group, Section, StageContext } from "../stage.tsx";
 
@@ -31,7 +31,7 @@ export function States() {
 				wide
 			>
 				{phone ? null : <Band rows={[]} loading />}
-				<ChatScreen name="Mara" faces={[MARA]}>
+				<ChatScreen name="Mara" face={MARA.face}>
 					<ChatLoading />
 				</ChatScreen>
 				{phone ? null : (
@@ -47,7 +47,7 @@ export function States() {
 						selected="otto"
 					/>
 				)}
-				<ChatScreen name="Otto" faces={[OTTO]}>
+				<ChatScreen name="Otto" face={OTTO.face}>
 					<Run who={OTTO}>
 						<Bubble>{firstWords("Otto")}</Bubble>
 					</Run>
@@ -61,10 +61,10 @@ export function States() {
 					<Search autoFocus={false} query="porto" onRetry={() => {}} />
 				</Group>
 				<Group label="A new group: nothing said yet">
-					<GroupEmpty name="Sancho & Mara" faces={[SANCHO, MARA]} />
+					<GroupEmpty hasMembers />
 				</Group>
 				<Group label="A new group: nobody in it yet">
-					<GroupEmpty name="New group" faces={[]} />
+					<GroupEmpty hasMembers={false} />
 				</Group>
 				<Group label="An object: being read · can't be read" className="items-start">
 					<div className="w-[24rem] max-w-full">

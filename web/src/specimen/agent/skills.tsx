@@ -1,5 +1,5 @@
 /** Fixture-only exploration of /name, the chat feed item, the tool preview and the skill detail page. */
-import { BookOpenIcon, ChevronLeftIcon } from "lucide-react";
+import { BookOpenIcon } from "lucide-react";
 import { type CSSProperties, useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { skillTokens } from "../../../../src/core/skill-tokens.ts";
@@ -7,6 +7,7 @@ import { FromBanda, SkillForm, Waiting } from "../../app/Skills.tsx";
 import { RawRow, RawValue } from "../../chat/ActivityDetail.tsx";
 import { Composer } from "../../chat/Composer.tsx";
 import { Bubble, Run } from "../../chat/Feed.tsx";
+import { PaneHeader } from "../../chat/Header.tsx";
 import { Panel, PanelSection } from "../../chat/Panel.tsx";
 import {
 	SkillCatalogue,
@@ -280,7 +281,12 @@ export function SkillsSection() {
 			>
 				<div className="flex min-w-0 flex-col gap-6 p-4">
 					<PageState label="Shared">
-						<SkillDetail skill={REVIEW} />
+						<PaneHeader
+							title={`/${REVIEW.name}`}
+							parent={{ title: "Skills", href: "#/specimen?section=skills" }}
+							icon={<BookOpenIcon />}
+						/>
+						<SkillDetail skill={REVIEW} showTitle={false} />
 					</PageState>
 					<PageState label="Only you">
 						<SkillDetail
@@ -324,23 +330,21 @@ export function SkillDetailPreview({ name }: { name: string }) {
 	const skill = SKILLS.find((item) => item.name === name);
 	return (
 		<div style={{ colorScheme: scheme }} className="min-h-svh bg-paper text-ink" data-skill-detail-page="">
-			<header className="flex min-h-12 items-center justify-between gap-3 border-b border-line-soft px-4">
-				<Button variant="ghost" size="sm" asChild>
-					<a href="#/specimen?section=skills">
-						<ChevronLeftIcon />
-						Skills
-					</a>
-				</Button>
-				<span className="text-meta text-ink-2">Specimen · skill detail</span>
-				<Button variant="ghost" size="sm" onClick={() => setScheme(scheme === "light" ? "dark" : "light")}>
-					{scheme === "light" ? "Dark" : "Light"}
-				</Button>
-			</header>
+			<PaneHeader
+				title={`/${name}`}
+				parent={{ title: "Skills", href: "#/specimen?section=skills" }}
+				icon={<BookOpenIcon />}
+				trailing={
+					<Button variant="ghost" size="sm" onClick={() => setScheme(scheme === "light" ? "dark" : "light")}>
+						{scheme === "light" ? "Dark" : "Light"}
+					</Button>
+				}
+			/>
 			<main className="mx-auto max-w-2xl px-5 py-8">
 				{skill === undefined ? (
 					<p className="text-ui text-ink-2">This skill is not in the catalogue.</p>
 				) : (
-					<SkillDetail skill={skill} />
+					<SkillDetail skill={skill} showTitle={false} />
 				)}
 			</main>
 		</div>

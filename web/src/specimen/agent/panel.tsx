@@ -1,4 +1,5 @@
 /** The panel, settings and connections: the agent beside its chat, what opens there, and the pages behind the gear. */
+import { FileTextIcon, UserRoundPlusIcon, UsersIcon } from "lucide-react";
 import { isValidElement, type ReactNode, useContext } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
@@ -8,6 +9,7 @@ import { WatchDetail } from "../../app/watches.tsx";
 import { Band } from "../../chat/Band.tsx";
 import { BrowserWindow } from "../../chat/Browser.tsx";
 import type { FaceState } from "../../chat/Face.tsx";
+import { PaneHeader } from "../../chat/Header.tsx";
 import { MemorySettings } from "../../chat/MemorySettings.tsx";
 import {
 	AgentPanel,
@@ -519,6 +521,17 @@ export function PanelSections() {
 							<ArtifactViewer agent="Mara" title="Lisbon itinerary" versions={VERSIONS} showing={3} body={ITINERARY} />
 						</Panel>
 					</Specimen>
+					<Specimen label="An artifact opened in the main pane">
+						<div className="w-80 max-w-full overflow-hidden rounded-tile border border-line-soft bg-paper">
+							<PaneHeader
+								title="Lisbon itinerary"
+								parent={{ title: "Mara", href: "#/specimen?section=panel-app" }}
+								icon={<FileTextIcon />}
+								detail={<p className="text-meta text-ink-2">Document · version 3</p>}
+							/>
+							<p className="whitespace-pre-line p-4 text-ui">{ITINERARY}</p>
+						</div>
+					</Specimen>
 					<Specimen label="Editing it">
 						<Panel name="Mara">
 							<ArtifactViewer
@@ -686,7 +699,12 @@ export function PanelSections() {
 				</Group>
 			</Section>
 			<Section id="new-agent" note="A short sheet with the face picked for you; the rest is in its panel." bleed>
-				<SettingsPage title="New agent" phone footer={<Button className="flex-1">Add to the band</Button>}>
+				<SettingsPage
+					title="New agent"
+					icon={UserRoundPlusIcon}
+					phone
+					footer={<Button className="flex-1">Add to the band</Button>}
+				>
 					<div className="flex flex-col gap-2">
 						<p className="text-meta font-medium text-ink-2">Agent or group: tabs, so the arrow keys switch</p>
 						<span className="flex gap-3">
@@ -703,7 +721,12 @@ export function PanelSections() {
 				</SettingsPage>
 			</Section>
 			<Section id="new-group" note="Pick who is in it and name it." bleed>
-				<SettingsPage title="New group" phone footer={<Button className="flex-1">Start the group</Button>}>
+				<SettingsPage
+					title="New group"
+					icon={UsersIcon}
+					phone
+					footer={<Button className="flex-1">Start the group</Button>}
+				>
 					<label className="flex flex-col gap-1.5">
 						<span className="text-ui font-medium text-ink">Name</span>
 						<input

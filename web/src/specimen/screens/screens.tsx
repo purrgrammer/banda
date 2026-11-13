@@ -7,13 +7,12 @@ import { Band } from "../../chat/Band.tsx";
 import { ViewCard } from "../../chat/Cards.tsx";
 import { Composer } from "../../chat/Composer.tsx";
 import { ConnectCard } from "../../chat/Connect.tsx";
-import type { FaceState } from "../../chat/Face.tsx";
 import { Bubble, DaySeparator, Mention, Run, UnreadDivider } from "../../chat/Feed.tsx";
 import { ImageFile } from "../../chat/Files.tsx";
 import { BringBlock, type BringHarness, FirstBring, pickKey } from "../../chat/FirstBring.tsx";
 import { FirstRun, Starters } from "../../chat/FirstRun.tsx";
 import { FirstSkills } from "../../chat/FirstSkills.tsx";
-import { HEADER_CLEARANCE, Header } from "../../chat/Header.tsx";
+import { Header } from "../../chat/Header.tsx";
 import { Line } from "../../chat/Line.tsx";
 import { PullRequestCard } from "../../chat/Object.tsx";
 import { ProposalCard } from "../../chat/Proposal.tsx";
@@ -40,46 +39,36 @@ import { Section, StageContext } from "../stage.tsx";
 /** A chat: its header, its timeline, its composer. */
 export function ChatScreen({
 	name,
+	face,
 	faces,
-	doing,
-	state,
 	group = false,
 	pill,
 	keyboard = false,
 	panelOpen = false,
-	onActivity,
 	children,
 }: {
 	name: string;
-	faces: readonly (Who & { readonly state?: FaceState | undefined })[];
-	doing?: string | undefined;
-	state?: FaceState;
+	face?: Who["face"] | undefined;
+	faces?: readonly Who[];
 	group?: boolean;
 	pill?: string;
 	/** The phone's keyboard is up: the composer and the pill ride on it. */
 	keyboard?: boolean;
 	/** The panel is open beside it: its toggle shows pressed. */
 	panelOpen?: boolean;
-	/** The status line opens the work's activity. */
-	onActivity?: (() => void) | undefined;
 	children: ReactNode;
 }) {
 	const { width } = useContext(StageContext);
 	const phone = width === "phone";
 	return (
-		<div className="feed-scope relative flex min-w-0 flex-1 flex-col bg-paper">
-			<Header
-				name={name}
-				faces={faces}
-				doing={doing}
-				state={state ?? "idle"}
-				phone={phone}
-				panelOpen={panelOpen}
-				onPanel={() => {}}
-				onActivity={onActivity}
-			/>
-			<div className="feed-scroll min-h-0 flex-1 overflow-y-auto">
-				<div className={`mx-auto flex max-w-[44rem] flex-col gap-4 px-4 pb-5 ${HEADER_CLEARANCE}`}>{children}</div>
+		<div className="flex min-w-0 flex-1 flex-col bg-paper">
+			<Header name={name} face={face} faces={faces} phone={phone} panelOpen={panelOpen} onPanel={() => {}} />
+			<div className="min-h-0 flex-1 overflow-y-auto">
+				<div
+					className={`flex flex-col gap-4 px-4 pt-4 pb-5 ${group ? "mx-auto max-w-[44rem]" : "[&>[data-compact-agent-run]]:-ms-2"}`}
+				>
+					{children}
+				</div>
 			</div>
 			<div className="mx-auto flex w-full max-w-[44rem] flex-col items-center gap-2 px-3 pb-3">
 				{pill === undefined ? null : <WaitingPill ask={pill} />}
@@ -116,7 +105,7 @@ function Keyboard() {
 
 export function MaraChat({ keyboard = false, panelOpen = false }: { keyboard?: boolean; panelOpen?: boolean } = {}) {
 	return (
-		<ChatScreen name="Mara" faces={[MARA]} pill="book the 9:15 to Lisbon?" keyboard={keyboard} panelOpen={panelOpen}>
+		<ChatScreen name="Mara" face={MARA.face} pill="book the 9:15 to Lisbon?" keyboard={keyboard} panelOpen={panelOpen}>
 			<DaySeparator>Today</DaySeparator>
 			<Run time="10:20">
 				<VoiceMessage mine duration="0:05" segments={VOICE} />
@@ -175,7 +164,7 @@ export function MaraChat({ keyboard = false, panelOpen = false }: { keyboard?: b
 
 function AgentToolsChat() {
 	return (
-		<ChatScreen name="Mara" faces={[MARA]}>
+		<ChatScreen name="Mara" face={MARA.face}>
 			<DaySeparator>Today</DaySeparator>
 			<Run who={MARA} time="10:21">
 				<Bubble>I asked Atlas to check the dates and read its latest note.</Bubble>
@@ -380,7 +369,7 @@ export function Screens() {
 				bleed
 			>
 				{phone ? null : <Band rows={ROWS} selected="octo" />}
-				<ChatScreen name="Octo" faces={[OCTO]} state="working">
+				<ChatScreen name="Octo" face={OCTO.face}>
 					<Line icon={CalendarClockIcon} time="8:00">
 						Routine "PR watch" ran
 					</Line>
@@ -446,7 +435,7 @@ export function Screens() {
 			</Section>
 			<Section id="first-chat" note="The agent's first words, and requests a tap sends as written." bleed>
 				{phone ? null : <Band rows={ROWS.filter((row) => row.id === "sancho")} selected="sancho" />}
-				<ChatScreen name="Sancho" faces={[SANCHO]}>
+				<ChatScreen name="Sancho" face={SANCHO.face}>
 					<Run who={SANCHO} compact>
 						<Bubble>
 							<p>Hi, I'm Sancho. Ask me anything: I can read the web, write, plan and keep track of things for you.</p>
@@ -473,14 +462,7 @@ export function Screens() {
 			</Section>
 			<Section id="group" note="A message asks everyone unless it mentions someone; each answers under its face." bleed>
 				{phone ? null : <Band rows={ROWS} selected="trip" />}
-				<ChatScreen
-					name="Trip"
-					faces={[
-						{ ...SANCHO, state: "working" },
-						{ ...MARA, state: "working" },
-					]}
-					group
-				>
+				<ChatScreen name="Trip" faces={[SANCHO, MARA]} group>
 					<Run time="9:50">
 						<Bubble>Can we do Lisbon the weekend of the 14th? Check my calendar and flights.</Bubble>
 					</Run>

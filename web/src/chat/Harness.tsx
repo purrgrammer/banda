@@ -653,7 +653,6 @@ export function HarnessCard({
 export function HarnessMenu({
 	count,
 	waiting,
-	phone,
 	children,
 	open,
 	onOpenChange,
@@ -662,7 +661,6 @@ export function HarnessMenu({
 }: {
 	count: number;
 	waiting: boolean;
-	phone: boolean;
 	children: ReactNode;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
@@ -680,9 +678,8 @@ export function HarnessMenu({
 					className="shrink-0"
 					aria-label={`${waiting ? "Waiting on you: " : ""}${count} ${label}`}
 				>
-					<TerminalIcon />
+					<TerminalIcon aria-hidden="true" />
 					<span>{count}</span>
-					{phone ? null : <span>{label}</span>}
 				</Button>
 			</PopoverTrigger>
 			<PopoverContent

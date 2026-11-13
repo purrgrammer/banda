@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
+import { chooseMessageAction } from "./smoke/message-actions.ts";
 
 let server: WebServer;
 let url: string;
@@ -27,8 +28,8 @@ async function press(page: Page, selector: string) {
 	})()`);
 }
 /** A message's activity control, as the app has it: the first message's, or the newest's. */
-const first = `document.querySelector('[aria-label="View activity"]')`;
-const newest = `[...document.querySelectorAll('[aria-label="View activity"]')].at(-1)`;
+const first = `document.querySelector('[data-message-transcript]')`;
+const newest = `[...document.querySelectorAll('[data-message-transcript]')].at(-1)`;
 /** The nth step of the timeline that reads `title`, or the one whose state reads `state`. */
 const step = (title: string, n = 0) =>
 	`[...document.querySelectorAll('[role="dialog"] [aria-label="Inspect ${title}"]')][${n}]`;
@@ -49,7 +50,7 @@ for (const width of [320, 390, 1440]) {
 			await page.until(first);
 			expect(await page.run(`document.body.textContent.includes('browser_navigate')`)).toBe(false);
 			await press(page, tab("Dark"));
-			await press(page, first);
+			await chooseMessageAction(page, first, "Activity & transcript");
 			await page.until(`${dialogText}?.includes('Working')`);
 			expect(await page.run(`getComputedStyle(document.querySelector('[role="dialog"]')).colorScheme`)).toBe("dark");
 			expect(await page.run(`${dialogText}.includes('browser_navigate')`)).toBe(false);
@@ -76,11 +77,11 @@ for (const width of [320, 390, 1440]) {
 			await page.until(`${dialogText}?.includes('Working')`);
 			await press(page, button("Close"));
 			await page.until(`!document.querySelector('[role="dialog"]')`);
-			await page.until(`document.activeElement?.getAttribute('aria-label') === 'View activity'`);
+			await page.until(`document.activeElement?.getAttribute('aria-label') === 'Message actions'`);
 
 			await press(page, tab("Failure"));
-			await page.until(`document.querySelectorAll('[aria-label="View activity"]').length === 2`);
-			await press(page, newest);
+			await page.until(`document.querySelectorAll('[data-message-transcript]').length === 2`);
+			await chooseMessageAction(page, newest, "Activity & transcript");
 			await page.until(`${dialogText}?.includes('Failed')`);
 			await press(page, stepWith("Failed"));
 			await page.until(row("browser_navigate result", 2));
@@ -90,8 +91,8 @@ for (const width of [320, 390, 1440]) {
 			await page.until(`!document.querySelector('[role="dialog"]')`);
 
 			await press(page, tab("Finished"));
-			await page.until(`document.querySelector('[aria-label="View activity"]')`);
-			await press(page, `[...document.querySelectorAll('[aria-label="View activity"]')].at(-1)`);
+			await page.until(`document.querySelector('[data-message-transcript]')`);
+			await chooseMessageAction(page, newest, "Activity & transcript");
 			await page.until(`${dialogText}?.includes('How the work was done')`);
 			await press(page, step("Opening a page"));
 			await page.until(`document.querySelector('[aria-label="Tools"]')`);
@@ -132,7 +133,7 @@ for (const width of [320, 390, 1440]) {
 it.skipIf(!hasChrome())("streaming preserves inspection and keeps the sheet open when work completes", async () => {
 	await withPage(url, { width: 390, height: 740 }, async (page) => {
 		await page.until(first);
-		await press(page, first);
+		await chooseMessageAction(page, first, "Activity & transcript");
 		await page.until(step("Thinking"));
 		await press(page, step("Thinking"));
 		await page.until(`document.querySelector('[data-thinking]')`);

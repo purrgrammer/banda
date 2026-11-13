@@ -178,12 +178,12 @@ export function Labelled({ label, children }: { label: string; children: ReactNo
 	);
 }
 
-/** A floating header shown alone: the top of a chat, with a line of feed under it for the fade to fall on. */
+/** A chat header with a line of feed beneath it. */
 export function HeaderStage({ children }: { children: ReactNode }) {
 	return (
-		<div className="relative h-40 w-full overflow-hidden rounded-card border border-line-soft bg-paper">
+		<div className="w-full overflow-hidden rounded-card border border-line-soft bg-paper">
 			{children}
-			<p className="absolute inset-x-0 top-20 mx-auto max-w-[36rem] px-4 text-body text-ink-2">
+			<p className="mx-auto max-w-[36rem] px-4 py-4 text-body text-ink-2">
 				One pull request needs you: CI went red overnight. I've pulled the failing checks and the diff that changed
 				them.
 			</p>

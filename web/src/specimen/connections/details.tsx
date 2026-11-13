@@ -3,11 +3,13 @@
  * with the kinds it draws and a connection with no tools listed yet. Illustrative data, no daemon: a tap only changes what
  * is shown here.
  */
+import { PlugIcon } from "lucide-react";
 import { useState } from "react";
 import { type Classed, optionsOf, type Setting } from "../../../../src/core/tool-kinds.ts";
 import type { ConnectionToolView, ConnectionView } from "../../../../src/server/api.ts";
 import { ConnectionGone } from "../../app/ConnectionPage.tsx";
 import { type AgentsFor, ConnectionDetailsView } from "../../chat/ConnectionDetails.tsx";
+import { PaneHeader } from "../../chat/Header.tsx";
 import type { ChatAgent } from "../../lib/navigation.ts";
 import { MARA, SANCHO } from "../fixtures.ts";
 import { Labelled, Section } from "../stage.tsx";
@@ -152,7 +154,12 @@ export function ConnectionDetailsSection() {
 		>
 			<div className="flex flex-col gap-6">
 				<Labelled label="Details: changes are at once">
-					<div className="max-w-2xl">
+					<div className="flex max-w-2xl flex-col gap-4">
+						<PaneHeader
+							title="GitHub"
+							parent={{ title: "Connections", href: "#/specimen?section=connections" }}
+							icon={<PlugIcon />}
+						/>
 						<Live view={VIEW} mode="details" />
 					</div>
 				</Labelled>

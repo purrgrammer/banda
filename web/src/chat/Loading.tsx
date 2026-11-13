@@ -8,8 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/cn";
 import { Tile } from "./Cards.tsx";
-import { FaceStack } from "./Face.tsx";
-import type { Who } from "./Row.tsx";
 
 const Bone = ({ className }: { className?: string }) => (
 	<Skeleton className={cn("rounded-full bg-paper-3 motion-reduce:animate-none", className)} />
@@ -143,17 +141,13 @@ export function FileLoading({ name, size }: { name: string; size: string }) {
 	);
 }
 
-/** A group with nothing in it yet: its faces, its name, and how @ works. */
-export function GroupEmpty({ name, faces }: { name: string; faces: readonly Who[] }) {
+/** What to do in a group with nothing in it yet. */
+export function GroupEmpty({ hasMembers }: { hasMembers: boolean }) {
 	return (
-		<div className="flex flex-col items-center gap-2 py-10 text-center">
-			<FaceStack faces={faces} name={name} size="panel" />
-			<p className="mt-2 text-heading font-semibold text-ink">{name}</p>
-			<p className="max-w-xs text-ui text-ink-2">
-				{faces.length === 0
-					? "Nobody is in it yet. Add agents from its panel; until then, what you write here is kept for them."
-					: "A message asks everyone. Start one with @ and a name to ask just that one."}
-			</p>
-		</div>
+		<p className="mx-auto max-w-xs py-6 text-center text-ui text-ink-2">
+			{hasMembers
+				? "A message asks everyone. Start one with @ and a name to ask just that one."
+				: "Nobody is in it yet. Add agents from its panel; until then, what you write here is kept for them."}
+		</p>
 	);
 }

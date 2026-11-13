@@ -4,6 +4,7 @@
  * `#/` opens the chat last shown on this device, else the first agent's. The tab's title counts asks, then unread.
  */
 
+import { PlugIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -618,23 +619,35 @@ function Main() {
 					}}
 				/>
 			);
-		if (where.name === "artifact")
+		if (where.name === "artifact") {
+			const agentOf = (chat: number) => shell.rows.find((each) => each.chat === chat)?.agent;
+			const sourceOf = (chat: number) => {
+				const group = shell.groups?.find((each) => each.room === chat || Object.values(each.executions).includes(chat));
+				if (group !== undefined) return { title: group.name, href: hrefOf({ name: "group", room: group.room }) };
+				const agent = agentOf(chat);
+				return agent === undefined
+					? undefined
+					: { title: whoOf(agents, agent).name, href: hrefOf({ name: "agent", id: agent }) };
+			};
 			return (
 				<ArtifactPage
 					key={where.id}
 					id={where.id}
+					phone={phone}
 					v={where.v}
-					nameOf={(chat) => whoOf(agents, shell.rows.find((each) => each.chat === chat)?.agent ?? "sancho").name}
+					nameOf={(chat) => whoOf(agents, agentOf(chat) ?? "sancho").name}
+					sourceOf={sourceOf}
 					onBack={(chat) => {
-						const agent = shell.rows.find((each) => each.chat === chat)?.agent;
-						if (agent === undefined) back();
-						else go({ name: "agent", id: agent });
+						const source = chat === undefined ? undefined : sourceOf(chat);
+						if (source === undefined) back();
+						else location.hash = source.href;
 					}}
 					onVersion={(v) =>
 						location.replace(hrefOf({ name: "artifact", id: where.id, ...(v === undefined ? {} : { v }) }))
 					}
 				/>
 			);
+		}
 		if (where.name === "skills" || where.name === "skill")
 			return (
 				<SkillsPage
@@ -747,10 +760,21 @@ function Main() {
 				</SettingsPage>
 			);
 		if (where.name === "connections") {
+			const capabilities = shell.capabilities;
+			const parent = { title: "Connections", href: hrefOf({ name: "connections" }) };
+			const service =
+				capabilities?.connections.find((each) => each.name === where.connection)?.accepted?.connection?.service ??
+				capabilities?.shipped?.find((each) => each.name === where.connection)?.connection.service;
 			// adding keeps the setup, its route and its phases, through to the review; a connection there is one that is added
 			if (where.add)
 				return (
-					<SettingsPage title="Connections" phone={phone} onBack={() => go({ name: "connections" })}>
+					<SettingsPage
+						title={service ?? "Add MCP server"}
+						parent={parent}
+						icon={PlugIcon}
+						phone={phone}
+						onBack={() => go({ name: "connections" })}
+					>
 						<McpSetup
 							{...(where.connection === undefined ? {} : { connection: where.connection })}
 							onCreated={(connection) => go({ name: "connections", connection, add: true })}
@@ -760,11 +784,16 @@ function Main() {
 				);
 			if (where.connection)
 				return (
-					<SettingsPage title="Connections" phone={phone} onBack={() => go({ name: "connections" })}>
+					<SettingsPage
+						title={service ?? "Connection"}
+						parent={parent}
+						icon={PlugIcon}
+						phone={phone}
+						onBack={() => go({ name: "connections" })}
+					>
 						<ConnectionPage connection={where.connection} onClose={() => go({ name: "connections" })} />
 					</SettingsPage>
 				);
-			const capabilities = shell.capabilities;
 			// what banda can connect: those it ships and those added, each with its accounts; then what is coming
 			const names = [
 				...new Set([
@@ -791,7 +820,7 @@ function Main() {
 				};
 			});
 			return (
-				<SettingsPage title="Connections" phone={phone} onBack={back}>
+				<SettingsPage title="Connections" icon={PlugIcon} phone={phone} onBack={back}>
 					<span className="flex flex-wrap gap-2">
 						<Button className="self-start" onClick={() => go({ name: "connections", add: true })}>
 							Add MCP server

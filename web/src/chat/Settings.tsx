@@ -8,8 +8,10 @@ import {
 	ArchiveRestoreIcon,
 	ChevronLeftIcon,
 	EllipsisIcon,
+	type LucideIcon,
 	PencilIcon,
 	PlusIcon,
+	SettingsIcon,
 	XIcon,
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -46,6 +48,7 @@ import type { ModelView, TiersView } from "../lib/api.ts";
 import { Confirm } from "./Confirm.tsx";
 import { ConnectionIcon } from "./ConnectionIcon.tsx";
 import { Face, FaceStack } from "./Face.tsx";
+import { PaneHeader, type PaneParent } from "./Header.tsx";
 import { ModelPicker } from "./ModelPicker.tsx";
 import { ProviderAccountForm, ProviderAccountRename } from "./ProviderAccountForm.tsx";
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
@@ -56,6 +59,8 @@ import { shownTier, tierPicks } from "./tier-picks.ts";
 /** A settings page: a bar with back and the title, then sections at a reading width. */
 export function SettingsPage({
 	title,
+	icon: Icon = SettingsIcon,
+	parent,
 	phone = false,
 	footer,
 	onBack,
@@ -63,6 +68,8 @@ export function SettingsPage({
 	children,
 }: {
 	title: string;
+	icon?: LucideIcon;
+	parent?: PaneParent | undefined;
 	phone?: boolean;
 	/** A page that reads like a document (a skill's instructions): the whole pane, not the settings column. */
 	wide?: boolean;
@@ -73,20 +80,23 @@ export function SettingsPage({
 }) {
 	return (
 		<div className="flex h-full min-w-0 flex-1 flex-col bg-paper">
-			<header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-line-soft px-2.5">
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					aria-label={phone ? "Close" : "Back to the chat"}
-					className="text-ink-2"
-					onClick={onBack}
-				>
-					{phone ? <XIcon /> : <ChevronLeftIcon className="size-5" />}
-				</Button>
-				<h1 data-page-title="" tabIndex={-1} className="text-ui font-semibold text-ink focus:outline-none">
-					{title}
-				</h1>
-			</header>
+			<PaneHeader
+				title={title}
+				icon={<Icon />}
+				parent={parent}
+				phone={phone}
+				navigation={
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						aria-label={phone ? "Close" : "Back to the chat"}
+						className="text-ink-2"
+						onClick={onBack}
+					>
+						{phone ? <XIcon /> : <ChevronLeftIcon className="size-5" />}
+					</Button>
+				}
+			/>
 			<div className="min-h-0 flex-1 overflow-y-auto">
 				<div
 					className={cn("mx-auto flex flex-col gap-8 px-4 py-6", wide ? "w-full max-w-none md:px-8" : "max-w-[34rem]")}

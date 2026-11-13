@@ -92,15 +92,19 @@ export function SkillFeedItem({ name, href, agent }: { name: string; href: strin
 }
 
 /** A skill's files and metadata, as shown on its detail page. */
-export function SkillDetail({ skill }: { skill: SkillInfo }) {
+export function SkillDetail({ skill, showTitle = true }: { skill: SkillInfo; showTitle?: boolean }) {
 	return (
 		<article className="flex min-w-0 flex-col gap-6" data-skill-detail="">
 			<header className="flex min-w-0 items-start gap-3">
-				<span className="flex size-10 shrink-0 items-center justify-center rounded-field bg-paper-3 text-ink-2">
-					<BookOpenIcon aria-hidden="true" className="size-5" />
-				</span>
+				{showTitle ? (
+					<span className="flex size-10 shrink-0 items-center justify-center rounded-field bg-paper-3 text-ink-2">
+						<BookOpenIcon aria-hidden="true" className="size-5" />
+					</span>
+				) : null}
 				<div className="flex min-w-0 flex-col gap-1">
-					<h1 className="break-words font-mono text-heading font-semibold text-ink">/{skill.name}</h1>
+					{showTitle ? (
+						<h1 className="break-words font-mono text-heading font-semibold text-ink">/{skill.name}</h1>
+					) : null}
 					<p className="text-body text-ink-2">{skill.description}</p>
 					{skill.ownerOnly === true ? (
 						<p className="text-meta text-ink-2">

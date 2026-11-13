@@ -5,6 +5,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import type { RecordedActivity } from "../web/src/specimen/agent/recorded-types.ts";
 import { type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
+import { chooseMessageAction } from "./smoke/message-actions.ts";
 
 let server: WebServer;
 let home: string;
@@ -92,23 +93,13 @@ for (const width of [390, 1440])
 				expect(
 					await page.run(`document.querySelector('[data-recorded-chat]').textContent.includes('View activity')`),
 				).toBe(false);
-				const action = `document.querySelector('[data-recorded-chat] button[aria-label="View activity"]')`;
+				const action = `document.querySelector('[data-recorded-chat] button[data-message-transcript]')`;
 				const bubble = `${action}.closest('[class~="group/bubble"]')`;
 				const height = await page.run<number>(`${bubble}.getBoundingClientRect().height`);
-				expect(await page.run(`${bubble}.querySelector('button[aria-label="Copy the message"]') !== null`)).toBe(true);
 				await page.run(`${action}.focus()`);
 				await page.until(`getComputedStyle(${action}).opacity === '1'`);
-				await page.until(
-					`getComputedStyle(${bubble}.querySelector('[aria-label="Copy the message"]')).opacity === '1'`,
-				);
 				expect(await page.run(`${bubble}.getBoundingClientRect().height`)).toBe(height);
-				await page.run(
-					`document.activeElement.blur(); ${bubble}.dispatchEvent(new PointerEvent('pointerdown', {pointerType:'touch',bubbles:true}))`,
-				);
-				await page.until(`${action}.classList.contains('opacity-100')`);
-				await page.run(`${bubble}.dispatchEvent(new PointerEvent('pointerup', {pointerType:'touch',bubbles:true}))`);
-				expect(await page.run(`${bubble}.getBoundingClientRect().height`)).toBe(height);
-				await click(page, '[data-recorded-chat] button[aria-label="View activity"]');
+				await chooseMessageAction(page, action, "Activity & transcript");
 				await page.until(`document.querySelector('[aria-label="Inspect Reading a page"]')`);
 				expect(await page.run(`document.querySelector('[role="dialog"]').textContent.includes('Failed')`)).toBe(true);
 				await click(page, '[aria-label="Inspect Reading a page"]');
