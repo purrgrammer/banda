@@ -281,6 +281,8 @@ it.skipIf(!hasChrome())(
 				};
 				const open = async (who: string, words: string) => {
 					await page.input("Page.bringToFront", {});
+					// a menu still animating closed (behind a confirm just dismissed) would take the press and close instead
+					await page.until(`!document.querySelector('[role="menu"]')`);
 					await press(menu(who));
 					await press(item(words));
 				};

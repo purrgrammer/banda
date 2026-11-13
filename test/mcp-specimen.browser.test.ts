@@ -66,6 +66,8 @@ async function press(page: Page, expression: string) {
 /** Choose `words` in the row menu "More for `label`", as a person opens it. */
 async function menu(page: Page, label: string, words: string) {
 	await page.input("Page.bringToFront", {});
+	// a menu still animating closed (behind a confirm just dismissed) would take the press and close instead
+	await page.until(`!document.querySelector('[role="menu"]')`);
 	await press(page, `document.querySelector('[aria-label=${JSON.stringify(`More for ${label}`)}]')`);
 	await press(
 		page,
