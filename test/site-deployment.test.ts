@@ -30,8 +30,9 @@ it("deploys all landing changes since the last deployment, even beneath an unrel
 		git("add", ".");
 		git("commit", "-m", "unrelated tip", "--no-gpg-sign", "--quiet");
 		expect(decision(deployed)).toBe(1);
-		expect(decision("")).not.toBe(0);
-		expect(decision("missing-commit")).not.toBe(0);
+		// Vercel fails a deployment on any answer but 0 or 1: a commit it cannot diff against builds, with exactly 1
+		expect(decision("")).toBe(1);
+		expect(decision("missing-commit")).toBe(1);
 		expect(decision(git("rev-parse", "HEAD"))).toBe(0);
 		// the showcase draws the app's components: a change to one is a change to the landing
 		const before = git("rev-parse", "HEAD");
