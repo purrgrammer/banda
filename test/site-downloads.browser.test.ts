@@ -19,9 +19,11 @@ afterAll(async () => {
 
 for (const width of [390, 1440]) {
 	it.skipIf(!hasChrome())(`offers direct downloads with GitHub API blocked at ${width}px`, async () => {
-		await withPage(base, { width, height: 900 }, async (page) => {
+		await withPage("about:blank", { width, height: 900 }, async (page) => {
 			await page.input("Network.enable", {});
-			await page.input("Network.setBlockedURLs", { urls: ["*api.github.com*"] });
+			await page.input("Network.setBlockedURLs", {
+				urls: ["*api.github.com*", "*fonts.googleapis.com*", "*fonts.gstatic.com*"],
+			});
 			await page.input("Network.setUserAgentOverride", {
 				userAgent:
 					width === 390
