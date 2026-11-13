@@ -4,34 +4,36 @@
 
 General shows shared browser preparation, verified-download progress, safe failures and an explicit retry, separately
 from running pages. Opening Settings leaves browser preparation lazy. Ordinary backend checks and desktop/phone
-walkthroughs against throwaway daemons pass; independent review found no reproduced blocker. Exact packaged native
-qualification, public asset delivery and owner review remain open.
+walkthroughs against throwaway daemons pass; independent review found no reproduced blocker. The exact packaged
+Mac shell lifecycle passes. Native General availability after proxy recovery is under qualification. Public asset
+delivery and owner review remain open.
 
 Replacement-sign-in authority is implemented for connection drafts and reusable permissions. Ordinary tests and
-desktop/phone browser walkthroughs against a throwaway daemon pass; independent review findings are fixed. CI-only
-replacement publication and replay fault scenarios are authored but unrun. Owner acceptance remains open.
+desktop/phone browser walkthroughs against a throwaway daemon pass; independent review findings are fixed.
+Replacement publication and replay fault scenarios pass in CI. Owner acceptance remains open.
 
 Agent-definition publication is integrated into the native-computer candidate. Owner saves compare
 their accepted base inside the commit, keep publication intent with the accepted bytes, and preserve competing
 workspace versions. The app retains stale personality drafts and exposes saved and workspace history. Native
-insertion-race and open-descriptor checks pass. CI fault qualification, the hands-on desktop/phone walkthrough and
-owner acceptance remain open. Combined ordinary checks, types, build and contrast pass. Artifact, routine, watch and memory
+insertion-race, open-descriptor and CI fault checks pass. The hands-on desktop/phone walkthrough and owner acceptance
+remain open. Combined ordinary checks, types, build and contrast pass. Artifact, routine, watch and memory
 publication remain in [Workspace](workspace.md).
 
 Retained proxy requests now recover without another command, into a once-only owner approval or an explicit not-sent
 resolution. Ordinary checks, typecheck, build and independent review pass after rebasing onto main. Native macOS ARM64
-restart walkthroughs pass at desktop and phone widths. Owner acceptance remains open. CI-only receipt fault scenarios
-are authored but unrun.
+restart walkthroughs pass at desktop and phone widths. Receipt fault scenarios pass in CI. Owner acceptance remains open.
 
 The bundled computer is in `prototype/microvm-box`. The macOS ARM64 candidate has packaged desktop/phone-width
 walkthrough evidence, including lazy browser preparation, guarded sends and restart persistence. Linux x64 and
-ARM64 packaging and adapter work is under local verification; a native KVM run remains before either is accepted.
+ARM64 build and smoke checks pass, but native acceptance stopped at runner KVM and browser prerequisites. Revised
+runner setup and native qualification remain before either is accepted.
 Windows retains the existing backend while its native runtime boundaries are unresolved ([Operations](operations.md)).
 macOS support requires Apple silicon; Intel Macs are no longer a release target. Public browser download delivery
 and clean-machine distribution remain open.
 Workspace refreshes come from tool completion and owner actions; startup and explicit reads reconcile missed
 changes. Native Mac proxy and command-VM recovery have throwaway-home evidence, including concurrent homes;
-full CI fault qualification, host sleep/wake and recovery preflight latency remain open.
+CI fault and Docker qualification pass for the integrated authority and publication changes. Host sleep/wake and
+recovery preflight latency remain open.
 
 Agent search is in review on `feat/agent-search`: messages, shared group histories and artifacts use the same
 retrieval as Cmd+K, with bounded results and source reads. Recall now searches saved facts only. Validation and

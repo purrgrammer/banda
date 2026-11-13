@@ -322,8 +322,6 @@ export function microvmBox(input: string): BoxSetup {
 		const current = await loaded();
 		const vmName = names[role];
 		const existing = await current.inspect(vmName);
-		if (role === "proxy" && existing?.status !== "Running" && browserState.state === "ready")
-			browserSet({ state: "idle" });
 		if (existing === undefined) {
 			await current.run(
 				[

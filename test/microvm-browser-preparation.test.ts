@@ -1,7 +1,9 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BrowserPreparation } from "../src/box/browser-preparation.ts";
 import { microvmBox } from "../src/box/microvm.ts";
@@ -40,12 +42,15 @@ async function fixture(success = false) {
 		await writeFile(
 			msb,
 			`#!${process.execPath}
-import { readFileSync, writeFileSync, rmSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 const args = process.argv.slice(2);
 const path = (name) => join(process.env.MSB_HOME, name + ".json");
 if (args[0] === "image") {
-  process.stdout.write(JSON.stringify({ digest: "manifest", config: { digest: "browser" }, architecture: "arm64", os: "linux" }));
+  const digest = args[2] === "box" ? "base" : args[2];
+  process.stdout.write(JSON.stringify({ digest: "manifest", config: { digest }, architecture: "arm64", os: "linux" }));
+} else if (args[0] === "list") {
+  process.stdout.write("[]");
 } else if (args[0] === "create") {
   const name = args[args.indexOf("--name") + 1];
   const labels = {};
@@ -53,11 +58,19 @@ if (args[0] === "image") {
     if (args[i] === "--label") { const [key, value] = args[++i].split("="); labels[key] = value; }
   }
   writeFileSync(path(name), JSON.stringify({ name, status: "Running", config: { labels, manifest_digest: "manifest", network: { ports: [] } } }));
+  if (name.endsWith("-browser")) appendFileSync(join(process.env.MSB_HOME, "browser-launches"), "launched\\n");
+} else if (args[0] === "stop" || args[0] === "start") {
+  const vm = JSON.parse(readFileSync(path(args[1]), "utf8"));
+  vm.status = args[0] === "start" ? "Running" : "Stopped";
+  writeFileSync(path(args[1]), JSON.stringify(vm));
+  if (args[0] === "start" && args[1].endsWith("-browser")) appendFileSync(join(process.env.MSB_HOME, "browser-launches"), "launched\\n");
 } else if (args[0] === "inspect") {
   try { process.stdout.write(readFileSync(path(args[1]), "utf8")); }
   catch { process.stderr.write("sandbox not found: " + args[1]); process.exitCode = 1; }
 } else if (args[0] === "remove") {
   rmSync(path(args.at(-1)), { force: true });
+} else if (args[0] === "exec" && args.includes("/banda/ctl.py")) {
+  process.stdout.write(args.at(-1) === "ping" ? JSON.stringify({ up: true }) : "{}");
 }
 `,
 			{ mode: 0o700 },
@@ -78,23 +91,57 @@ if (args[0] === "image") {
 			url: `https://github.com/purrgrammer/banda/releases/download/v0.1.0-test/banda-browser-${sha}.tar`,
 		},
 	});
-	caches.push(
-		join(
-			process.platform === "darwin" ? "/private/tmp" : "/tmp",
-			`banda-msb-${process.getuid?.() ?? 0}-${createHash("sha256").update(home).digest("hex").slice(0, 16)}`,
-		),
+	const cache = join(
+		process.platform === "darwin" ? "/private/tmp" : "/tmp",
+		`banda-msb-${process.getuid?.() ?? 0}-${createHash("sha256").update(home).digest("hex").slice(0, 16)}`,
 	);
+	caches.push(cache);
 	const setup = microvmBox(home);
 	if (setup.browser === undefined) throw new Error("Missing browser capability");
 	const browser = setup.browser;
 	const states: BrowserPreparation[] = [];
 	browser.watch(() => states.push(browser.state()));
-	return { browser, states, close: () => setup.close?.().catch(() => undefined) };
+	const proxy = async () => {
+		const file = (await readdir(cache)).find((entry) => entry.endsWith("-proxy.json"));
+		if (file === undefined) throw new Error("Missing fixture proxy");
+		return file.slice(0, -5);
+	};
+	return {
+		browser,
+		states,
+		ensure: setup.ensure,
+		stopProxy: async () => promisify(execFile)(msb, ["stop", await proxy()], { env: { MSB_HOME: cache } }),
+		proxyState: async () => readFile(join(cache, `${await proxy()}.json`), "utf8"),
+		browserLaunches: () => readFile(join(cache, "browser-launches"), "utf8"),
+		close: () => setup.close?.().catch(() => undefined),
+	};
 }
 
 describe.skipIf(process.platform !== "darwin" && process.platform !== "linux")(
 	"native shared browser preparation without a VM",
 	() => {
+		it("keeps a prepared browser available when the base runtime repairs its proxy", async () => {
+			const { browser, states, ensure, stopProxy, proxyState, browserLaunches, close } = await fixture(true);
+			const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response(bytes));
+			vi.stubGlobal("fetch", fetcher);
+			try {
+				await ensure();
+				await browser.prepare();
+				expect(browser.state()).toEqual({ state: "ready" });
+				expect(await browserLaunches()).toBe("launched\n");
+				states.length = 0;
+				await stopProxy();
+				expect(await proxyState()).toContain('"status":"Stopped"');
+				await ensure();
+				expect(await proxyState()).toContain('"status":"Running"');
+				expect(browser.state()).toEqual({ state: "ready" });
+				expect(states).toEqual([]);
+				expect(fetcher).toHaveBeenCalledTimes(1);
+				expect(await browserLaunches()).toBe("launched\n");
+			} finally {
+				await close();
+			}
+		});
 		it("keeps readiness after the job settles, reuses verified bytes, and releases watchers", async () => {
 			const { browser, close } = await fixture(true);
 			const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response(bytes));
