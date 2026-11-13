@@ -97,10 +97,33 @@ jobs:
           echo "::error::Bundled computer redistribution review is pending: corresponding source, dependency notices and guest-image requirements must be qualified before a tagged release."
           exit 1
       - run: node scripts/smoke-release.ts
-      - name: Verify the native Linux computer through the app
+      - name: Prepare native Linux KVM access
         if: inputs.native_computer && startsWith(matrix.target, 'linux-')
         run: |
-          export CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          if [ ! -c /dev/kvm ]; then
+            echo "::error::Native Linux qualification requires /dev/kvm. This runner has no KVM device; Linux remains unqualified."
+            exit 1
+          fi
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+            sudo setfacl -m "u:$(id -u):rw" /dev/kvm
+          fi
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+            echo "::error::Native Linux qualification cannot access /dev/kvm after granting the runner account access."
+            exit 1
+          fi
+      - name: Prepare the native Linux acceptance browser
+        id: native-chrome
+        if: inputs.native_computer && startsWith(matrix.target, 'linux-')
+        uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
+        with:
+          chrome-version: "157.0.8103.78"
+          install-dependencies: true
+      - name: Verify the native Linux computer through the app
+        if: inputs.native_computer && startsWith(matrix.target, 'linux-')
+        env:
+          CHROME: ${{ steps.native-chrome.outputs.chrome-path }}
+        run: |
+          "$CHROME" --version
           node scripts/verify-computer.ts "${{ runner.temp }}/native-computer-evidence"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always() && inputs.native_computer && startsWith(matrix.target, 'linux-')

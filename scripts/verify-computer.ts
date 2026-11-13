@@ -2,24 +2,39 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { constants, createReadStream } from "node:fs";
+import { access, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { Type } from "@earendil-works/pi-ai";
+import { type Static, Type } from "@earendil-works/pi-ai";
 import { Value } from "typebox/value";
 import { BROWSERS, hold } from "../test/slots.ts";
 import { hasChrome, withPage } from "../test/smoke/chrome.ts";
 
-const root = join(import.meta.dirname, "../release/banda");
+const root = process.env.BANDA_RELEASE_ROOT ?? join(import.meta.dirname, "../release/banda");
+assert.ok(isAbsolute(root), "BANDA_RELEASE_ROOT must be an absolute path to a staged banda package.");
 const node = join(root, "node/node");
 if ((await realpath(process.execPath)) !== (await realpath(node))) {
 	const child = spawnSync(node, [fileURLToPath(import.meta.url), ...process.argv.slice(2)], { stdio: "inherit" });
 	process.exit(child.status ?? 1);
 }
 assert.ok(hasChrome(), "Native app verification requires Chrome (set CHROME to its executable).");
+if (process.platform === "linux") {
+	const kvm = await stat("/dev/kvm").catch((error: unknown) => {
+		if (error instanceof Error && "code" in error && error.code === "ENOENT")
+			throw new Error(
+				"Native Linux verification requires /dev/kvm. This runner has no KVM device; Linux is unqualified.",
+				{ cause: error },
+			);
+		throw error;
+	});
+	assert.ok(kvm.isCharacterDevice(), "Native Linux verification requires a KVM character device at /dev/kvm.");
+	await access("/dev/kvm", constants.R_OK | constants.W_OK).catch(() => {
+		throw new Error("Native Linux verification cannot access /dev/kvm. Grant the runner account read/write access.");
+	});
+}
 const output = process.argv[2] ?? (await mkdtemp(join(tmpdir(), "banda-native-evidence-")));
 if (process.argv[2] !== undefined) await mkdir(output);
 const app = join(root, "app");
@@ -67,6 +82,7 @@ const runtimeEnv = {
 const runtime = (args: readonly string[]) =>
 	execFileSync(assets.msb, [...args], { encoding: "utf8", env: runtimeEnv, timeout: 30_000 });
 let proxyRestarts = 0;
+let declinedPosts = 0;
 const stopProxy = () => {
 	const Listing = Type.Array(Type.Object({ name: Type.String() }));
 	const listed: unknown = JSON.parse(runtime(["list", "--format", "json"]));
@@ -107,7 +123,9 @@ faux.setResponses(
 		const previous = request.messages.at(-1);
 		if (previous?.role === "toolResult" && previous.toolName === "message_user") return fauxAssistantMessage("Done.");
 		if (previous?.role === "toolResult" && previous.toolName !== "tool_search") {
-			assert.ok(!previous.isError, JSON.stringify(previous.content));
+			const declined =
+				previous.toolName === "propose_send" && JSON.stringify(previous.content).includes("the owner denied it");
+			assert.ok(!previous.isError || declined, JSON.stringify(previous.content));
 			return fauxAssistantMessage([fauxToolCall("message_user", { text: JSON.stringify(previous.content) })], {
 				stopReason: "toolUse",
 			});
@@ -128,6 +146,8 @@ await writeFile(
 );
 let daemon: Awaited<ReturnType<typeof startDaemon>> | undefined;
 const log: string[] = [];
+let completed = false;
+let diagnostics: (() => Promise<unknown>) | undefined;
 const releaseBrowser = await hold(BROWSERS);
 try {
 	daemon = await startDaemon({
@@ -142,16 +162,127 @@ try {
 	const Published = Type.Object({ token: Type.String() });
 	assert.ok(Value.Check(Published, published));
 	const origin = `http://127.0.0.1:${daemon.port}`;
+	const headers = { authorization: `Bearer ${published.token}` };
+	diagnostics = async () => {
+		const reads = [];
+		for (const path of ["/status", "/chats"]) {
+			const response = await fetch(`${origin}/api${path}`, { headers, signal: AbortSignal.timeout(5_000) });
+			reads.push({ path, status: response.status, body: await response.text() });
+		}
+		return reads;
+	};
+	const Event = Type.Object({ type: Type.String() });
+	const Computer = Type.Object({
+		type: Type.Literal("computer"),
+		computer: Type.Object({
+			state: Type.Union([
+				Type.Literal("starting"),
+				Type.Literal("building"),
+				Type.Literal("up"),
+				Type.Literal("offline"),
+			]),
+			why: Type.Optional(Type.String()),
+			box: Type.String(),
+			network: Type.String(),
+			browser: Type.Object({ state: Type.String() }),
+		}),
+	});
+	const startup = new AbortController();
+	let computer: Static<typeof Computer>["computer"] | undefined;
+	const deadline = setTimeout(
+		() =>
+			startup.abort(
+				new Error(`Native computer did not become ready within 120 seconds; last state: ${JSON.stringify(computer)}`),
+			),
+		120_000,
+	);
+	try {
+		const response = await fetch(`${origin}/api/events`, { headers, signal: startup.signal });
+		assert.ok(response.ok, `/events: ${response.status}: ${response.ok ? "" : await response.text()}`);
+		assert.ok(response.body !== null, "Native computer readiness requires the shell event stream.");
+		let buffer = "";
+		ready: for await (const chunk of response.body.pipeThrough(new TextDecoderStream())) {
+			buffer += chunk;
+			for (let end = buffer.indexOf("\n\n"); end !== -1; end = buffer.indexOf("\n\n")) {
+				const frame = buffer.slice(0, end);
+				buffer = buffer.slice(end + 2);
+				if (!frame.startsWith("data: ")) continue;
+				const event: unknown = JSON.parse(frame.slice("data: ".length));
+				if (!Value.Check(Event, event) || event.type !== "computer") continue;
+				assert.ok(Value.Check(Computer, event), `Invalid native computer event: ${JSON.stringify(event)}`);
+				computer = event.computer;
+				log.push(`qualification: computer ${JSON.stringify(computer)}`);
+				assert.notEqual(
+					computer.state,
+					"offline",
+					`Native computer is offline: ${computer.why ?? JSON.stringify(computer)}`,
+				);
+				assert.equal(computer.box, "microvm");
+				assert.equal(computer.network, "guarded");
+				if (computer.state === "up") {
+					assert.equal(computer.browser.state, "idle");
+					break ready;
+				}
+			}
+		}
+		assert.equal(
+			computer?.state,
+			"up",
+			`Native computer event stream ended before readiness: ${JSON.stringify(computer)}`,
+		);
+	} finally {
+		clearTimeout(deadline);
+		startup.abort();
+	}
 	const api = async (path: string, body: object, method = "POST") => {
 		const response = await fetch(`${origin}/api${path}`, {
 			method,
-			headers: { authorization: `Bearer ${published.token}`, "content-type": "application/json" },
+			headers: { ...headers, "content-type": "application/json" },
 			body: JSON.stringify(body),
 		});
-		assert.ok(response.ok, `${path}: ${response.status}`);
+		assert.ok(response.ok, `${path}: ${response.status}: ${response.ok ? "" : await response.text()}`);
+	};
+	const Pending = Type.Object({
+		waits: Type.Array(
+			Type.Object({
+				key: Type.String(),
+				ask: Type.Object({
+					type: Type.Literal("approval"),
+					tool: Type.Literal("propose_send"),
+					verb: Type.Optional(Type.String()),
+					args: Type.Object({
+						method: Type.Literal("POST"),
+						address: Type.Literal("https://httpbingo.org/anything"),
+						body: Type.Literal("banda-native-proof"),
+					}),
+				}),
+			}),
+		),
+	});
+	const pending = async () => {
+		const response = await fetch(`${origin}/api/status`, { headers });
+		assert.ok(response.ok);
+		const value: unknown = await response.json();
+		assert.ok(Value.Check(Pending, value), "Only the deliberately held native test POST may await approval.");
+		return value.waits;
 	};
 	await api("/skills/shipped", { add: [] });
 	await api("/companion", { name: "Sancho", personality: "Brief." }, "PUT");
+	for (const width of [1440, 390]) {
+		await withPage(`${origin}/#token=${published.token}`, { width, height: 900 }, async (page) => {
+			await page.until("!location.hash.includes('token=') && document.body.innerText.length > 0");
+			await page.run("location.hash='#/settings'");
+			await page.until(
+				"document.body.innerText.includes('Prepared on first use, or prepare it now.') && document.body.innerText.includes('No browser pages running.')",
+			);
+			assert.equal(downloads, 0, "Opening General must leave browser preparation lazy.");
+			await page.run(
+				"[...document.querySelectorAll('h2')].find(el=>el.textContent==='The computer').scrollIntoView({block:'center'})",
+			);
+			await page.shoot(join(output, `computer-general-idle-${width}.png`));
+			assert.deepEqual(page.errors(), []);
+		});
+	}
 	for (const width of [1440, 390]) {
 		await withPage(`${origin}/#token=${published.token}`, { width, height: 900 }, async (page) => {
 			await page.until("!location.hash.includes('token=') && document.body.innerText.length > 0");
@@ -181,14 +312,68 @@ try {
 						`[...document.querySelectorAll('[data-message-bubble]:not([data-mine])')].some(el=>Number(el.closest('[data-entry]')?.getAttribute('data-entry')??0)>${after} && el.innerText.includes('Held, not sent: POST'))`,
 						30_000,
 					);
+					await page.until("document.querySelector('[data-open-ask]')", 30_000);
+					const waits = await pending();
+					assert.equal(waits.length, 1, "The held test POST must produce one approval.");
+					const [wait] = waits;
+					assert.ok(wait !== undefined);
+					const decline = `Don't ${(wait.ask.verb ?? "Allow").toLowerCase()}`;
+					const button = `[...document.querySelectorAll('[data-open-ask] button')].find(el=>el.textContent.trim()===${JSON.stringify(decline)})`;
+					await page.until(`${button} && !${button}.disabled`);
+					await page.run(`${button}.scrollIntoView({block:'center'})`);
+					const point = await page.run<{ x: number; y: number }>(
+						`(()=>{const r=${button}.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()`,
+					);
+					await page.shoot(join(output, `computer-held-${width}.png`));
+					await page.input("Input.dispatchMouseEvent", {
+						type: "mousePressed",
+						button: "left",
+						clickCount: 1,
+						...point,
+					});
+					await page.input("Input.dispatchMouseEvent", {
+						type: "mouseReleased",
+						button: "left",
+						clickCount: 1,
+						...point,
+					});
+					await page.until("!document.querySelector('[data-open-ask]')");
+					assert.equal((await pending()).length, 0);
+					declinedPosts++;
 				}
 			}
 			await page.shoot(join(output, `computer-${width}.png`));
+			await page.run("location.hash='#/settings'");
+			await page.until(
+				"document.body.innerText.includes('Available when needed.') && document.body.innerText.includes('1 browser page running.')",
+			);
+			await page.run(
+				"[...document.querySelectorAll('h2')].find(el=>el.textContent==='The computer').scrollIntoView({block:'center'})",
+			);
+			await page.shoot(join(output, `computer-general-ready-${width}.png`));
 			assert.deepEqual(page.errors(), []);
 		});
 	}
 	assert.equal(downloads, 1);
 	assert.equal(proxyRestarts, 2);
+	assert.equal(declinedPosts, 2);
+	completed = true;
+} catch (error) {
+	await writeFile(
+		join(output, "failure.json"),
+		JSON.stringify(
+			{
+				passed: false,
+				error: error instanceof Error ? error.stack : String(error),
+				home,
+				cache,
+				diagnostics: await diagnostics?.().catch((failure: unknown) => String(failure)),
+			},
+			null,
+			2,
+		),
+	);
+	throw error;
 } finally {
 	await releaseBrowser();
 	globalThis.fetch = nativeFetch;
@@ -208,8 +393,10 @@ try {
 		}),
 	);
 	assert.deepEqual(listed, []);
-	await rm(cache, { recursive: true, force: true });
-	await rm(home, { recursive: true, force: true });
+	if (completed) {
+		await rm(cache, { recursive: true, force: true });
+		await rm(home, { recursive: true, force: true });
+	}
 }
 await writeFile(
 	join(output, "result.json"),
@@ -218,6 +405,7 @@ await writeFile(
 			target: assets.target,
 			widths: [1440, 390],
 			proxyRestarts,
+			declinedPosts,
 			browserDownloads: downloads,
 			localArchiveDelivery: true,
 			command,
