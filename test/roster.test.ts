@@ -44,7 +44,7 @@ async function open() {
 	const core = defineCore({ blobs: blobStore(), gateway: () => new FakeGateway(), model: () => FAUX_MODEL });
 	const registry = createRegistry();
 	registry.install(core.extension);
-	registry.install(boxTools({ workspace: box.workspace }));
+	registry.install(boxTools({ box }));
 	const harness = await openStore(home, { models: echoModels().models, registry, env: boxEnv(box) });
 	harness.resume();
 	const workspace: Workspace = {

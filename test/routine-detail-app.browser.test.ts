@@ -7,11 +7,13 @@
  * waits for the owner, so Edit waits too and the daemon refuses an edit over it. At phone and desktop width, light and
  * dark. `BANDA_ROUTINE_SHOTS=<dir>` saves a screenshot at each step.
  */
+import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, getCurrentTools } from "@earendil-works/pi-ai";
 import { type ConversationId, createRegistry } from "@earendil-works/pi-durable";
 import { expect, it } from "vitest";
+import { agentMainThread } from "../src/core/gateway.ts";
 import { type RoutineRecord, Routines } from "../src/core/routines.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { startDaemon } from "../src/daemon.ts";
@@ -24,10 +26,12 @@ import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 const SHOTS = process.env.BANDA_ROUTINE_SHOTS;
 const FIRST = "2 PRs need you: #34 has red checks";
 const SECOND = "And #35 waits on a review.";
+const CHANGE_MARKER = "ROUTINE_DETAIL_PROPOSE_PENDING_EDIT";
+const CHANGE_CONTENT = "---\ndescription: Morning brief, longer\ncron: 0 9 * * 1-5\n---\nSPEAK about everything.\n";
 
 const visible = "el.getClientRects().length > 0";
 const button = (text: string, within = "document") =>
-	`[...${within}.querySelectorAll('button')].find(el => ${visible} && el.textContent.trim() === ${JSON.stringify(text)})`;
+	`[...((${within})?.querySelectorAll('button') ?? [])].find(el => ${visible} && el.textContent.trim() === ${JSON.stringify(text)})`;
 const named = (label: string) =>
 	`[...document.querySelectorAll('[aria-label]')].find(el => ${visible} && el.getAttribute('aria-label') === ${JSON.stringify(label)})`;
 const shows = (text: string) => `document.body.innerText.includes(${JSON.stringify(text)})`;
@@ -56,9 +60,20 @@ async function daemonOn(home: string) {
 	const faux = fauxProvider();
 	models.setProvider(faux.provider);
 	faux.setResponses(
-		Array.from({ length: 60 }, () => async (ctx: { messages: readonly { role: string; content?: unknown }[] }) => {
+		Array.from({ length: 60 }, () => async (ctx) => {
 			const said = ctx.messages.filter((m) => m.role !== "system");
 			const last = said.at(-1);
+			if (said.filter((message) => message.role === "user").at(-1)?.content === CHANGE_MARKER) {
+				if (last?.role === "toolResult" && last.toolName !== "tool_search") return fauxAssistantMessage("");
+				if (!getCurrentTools(ctx.messages).some((tool) => tool.name === "write"))
+					return fauxAssistantMessage([fauxToolCall("tool_search", { query: "write", limit: 1 })], {
+						stopReason: "toolUse",
+					});
+				return fauxAssistantMessage(
+					[fauxToolCall("write", { path: "routines/morning-brief.md", content: CHANGE_CONTENT })],
+					{ stopReason: "toolUse" },
+				);
+			}
 			if (last?.role === "toolResult") {
 				// after its first message, the speaking run sends a second, then ends
 				const before = JSON.stringify([...said].reverse().find((m) => m.role === "assistant")?.content ?? "");
@@ -289,19 +304,25 @@ for (const width of [390, 1440])
 						// the agent asks to change it: that waits for the owner, so Edit waits, and the daemon refuses one
 						const sha = (await api<ControlView>("/control")).routines.find((each) => each.name === "morning-brief")
 							?.accepted?.sha as string;
-						await writeFile(
-							join(home, "workspace", "routines", "morning-brief.md"),
-							"---\ndescription: Morning brief, longer\ncron: 0 9 * * 1-5\n---\nSPEAK about everything.\n",
-						);
+						await api("/messages", "POST", {
+							id: randomUUID(),
+							thread: agentMainThread("sancho"),
+							agent: "sancho",
+							text: CHANGE_MARKER,
+						});
 						await page.until(shows("Waiting for you: Sancho asks to change it"), 30_000);
-						expect(await page.run<boolean>(`${button("Edit")}.disabled`)).toBe(true);
+						const detailEdit = button(
+							"Edit",
+							"document.querySelector('section[aria-labelledby=\"routine-runs\"]')?.parentElement",
+						);
+						await page.until(`(${detailEdit})?.disabled === true`);
 						await expect(api("/routines/morning-brief/edit", "POST", { sha, description: "Sneaky" })).rejects.toThrow(
 							/409/,
 						);
 						await shot("9-change-waits");
 						await darkToo("9-change-waits");
 						await api("/routines/morning-brief/decline", "POST", {});
-						await page.until(`!${shows("Waiting for you")} && !${button("Edit")}.disabled`);
+						await page.until(`!${shows("Waiting for you")} && (${detailEdit})?.disabled === false`);
 
 						// Back: the list, on the Routines tab
 						await click(page, button("Routines"));

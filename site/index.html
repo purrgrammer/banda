@@ -347,7 +347,7 @@ footer nav { gap: 16px; }
 		const link = document.querySelector(`a[data-file="${kind}/${os}/${arch}/${ext}"]`);
 		if (!link) return;
 		button.href = link.href;
-		label.textContent = `Download for ${{ mac: "macOS", win: "Windows", linux: "Linux", android: "Android" }[os]}`;
+		label.textContent = `Download for ${{ mac: "macOS (Apple silicon)", win: "Windows", linux: "Linux", android: "Android" }[os]}`;
 	};
 	choose();
 	try {
