@@ -6,7 +6,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
-import { AgentDoc, type ConversationId, type ToolExecutionApi } from "@earendil-works/pi-durable";
+import { AgentDoc, type ConversationId, type TaskId, type ToolExecutionApi } from "@earendil-works/pi-durable";
 import fc from "fast-check";
 import { afterEach, describe, expect, it } from "vitest";
 import { ActivityLog } from "../src/core/activity.ts";
@@ -39,7 +39,7 @@ import {
 	signInAsOwner,
 	switchTool,
 } from "./fixtures/connected.ts";
-import { allowReads, closeAll, fakes, open, opened, web } from "./fixtures/connections-world.ts";
+import { allowReads, closeAll, fakes, open, opened, scripted, web } from "./fixtures/connections-world.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { type FakeMcp, startFakeMcp } from "./fixtures/mcp-server.ts";
 import { echoModels, tempHome, until } from "./helpers.ts";
@@ -1824,6 +1824,200 @@ describe("accounts", () => {
 		expect(existsSync(join(s.home, "auth/connections/cal"))).toBe(false);
 	});
 
+	it("a waiting draft cannot borrow a replacement sign-in for the same account", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const s = await open(fake);
+		await define(s, "cal", fileOf(fake));
+		fake.user = "ana";
+		await signInAsOwner(s.capabilities, "cal");
+		const originalTokens = new Set(fake.tokens);
+		s.model.plan([{ tool: "cal__create_event", args: { title: "Old tea", day: "mon" } }]);
+		const old = await s.say("tea on monday");
+		const waiting = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+		expect(waiting.ask).toMatchObject({ args: { account: { key: "ana", generation: expect.any(String) } } });
+		await signInAsOwner(s.capabilities, "cal", { choice: { account: "ana" } });
+		expect((await s.capabilities.view()).connections[0]?.finished).toMatchObject({ account: "ana", known: true });
+		const sent: { readonly title: unknown; readonly replacementSignIn: boolean }[] = [];
+		fake.onCall = async (_tool, args, authorization) => {
+			sent.push({ title: args.title, replacementSignIn: !originalTokens.has(authorization.slice(7)) });
+			return { text: "created" };
+		};
+		await answer(s.harness, waiting.key, "approve", web, "bearer");
+		await s.done(old.turn);
+		expect(sent).toEqual([]);
+		expect((await s.results(old.chat)).at(-1)?.error).toBe(true);
+
+		s.model.plan([{ tool: "cal__create_event", args: { title: "New tea", day: "tue" } }]);
+		const fresh = await s.say("tea on tuesday");
+		const approval = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+		await answer(s.harness, approval.key, "approve", web, "bearer");
+		await s.done(fresh.turn);
+		expect(sent).toEqual([{ title: "New tea", replacementSignIn: true }]);
+	});
+
+	it("a waiting draft may use refreshed credentials from its original sign-in", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const s = await open(fake);
+		await define(s, "cal", fileOf(fake));
+		await signInAsOwner(s.capabilities, "cal");
+		s.model.plan([{ tool: "cal__create_event", args: { title: "Tea", day: "mon" } }]);
+		const ran = await s.say("tea on monday");
+		const waiting = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+		fake.tokens.clear();
+		await answer(s.harness, waiting.key, "approve", web, "bearer");
+		await s.done(ran.turn);
+		expect(fake.refreshed).toHaveLength(1);
+		expect(fake.calls).toEqual([{ tool: "create_event", args: { title: "Tea", day: "mon" } }]);
+		expect((await s.results(ran.chat)).at(-1)?.error).toBe(false);
+	});
+
+	it("an interrupted replacement cannot put new credentials under an old draft's generation", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const model = scripted();
+		let interrupt = false;
+		const s = await openConnected({
+			home: await tempHome(),
+			respond: model.respond as never,
+			fault(point) {
+				if (interrupt && point === "oauth:kept") {
+					interrupt = false;
+					throw new Error("injected sign-in publication interruption");
+				}
+			},
+		});
+		opened.push(s);
+		await define(s, "cal", fileOf(fake));
+		fake.user = "ana";
+		await signInAsOwner(s.capabilities, "cal");
+		const generation = (await s.harness.snapshot(Connected, context))?.accounts.cal.ana.generation;
+		model.plan([{ tool: "cal__create_event", args: { title: "Old tea", day: "mon" } }]);
+		const ran = await s.core.receive(s.harness, {
+			id: crypto.randomUUID(),
+			origin: { gateway: "fake", peer: OWNER },
+			text: "tea",
+		});
+		if (!("turn" in ran)) throw new Error("the message started no turn");
+		const waiting = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+		interrupt = true;
+		expect((await signInAsOwner(s.capabilities, "cal", { choice: { account: "ana" } })).ok).toBe(false);
+		expect((await s.harness.snapshot(Connected, context))?.accounts.cal.ana.generation).toBe(generation);
+		expect((await s.capabilities.view()).connections[0]).toMatchObject({
+			state: "problem",
+			accounts: [{ stale: true }],
+		});
+		await answer(s.harness, waiting.key, "approve", web, "bearer");
+		await s.harness.waitForTask(ran.turn as TaskId, context);
+		expect(fake.calls).toEqual([]);
+		expect((await signInAsOwner(s.capabilities, "cal", { choice: { account: "ana" } })).ok).toBe(true);
+	});
+
+	it("a replacement during refresh cannot supply credentials to the original write", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const s = await open(fake);
+		await define(s, "cal", fileOf(fake));
+		fake.user = "ana";
+		await signInAsOwner(s.capabilities, "cal");
+		s.model.plan([{ tool: "cal__create_event", args: { title: "Tea", day: "mon" } }]);
+		const ran = await s.say("tea");
+		const waiting = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+		fake.tokens.clear();
+		fake.onRefresh = async () => {
+			expect((await signInAsOwner(s.capabilities, "cal", { choice: { account: "ana" } })).ok).toBe(true);
+		};
+		await answer(s.harness, waiting.key, "approve", web, "bearer");
+		await s.done(ran.turn);
+		expect(fake.calls).toEqual([]);
+		expect((await s.results(ran.chat)).at(-1)?.error).toBe(true);
+	});
+
+	it("a replacement sign-in cannot reuse a standing permission from its predecessor", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		const s = await open(fake);
+		await define(s, "cal", fileOf(fake));
+		fake.user = "ana";
+		await signInAsOwner(s.capabilities, "cal");
+		const write = async () => {
+			s.model.plan([{ tool: "cal__create_event", args: { title: "Tea", day: "mon" } }]);
+			return s.say("tea");
+		};
+		const first = await write();
+		const waiting = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+		await answer(s.harness, waiting.key, "approve", web, "bearer", { approving: { permission: { scope: "always" } } });
+		await s.done(first.turn);
+		const covered = await write();
+		await s.done(covered.turn);
+		expect(fake.calls).toHaveLength(2);
+		await signInAsOwner(s.capabilities, "cal", { choice: { account: "ana" } });
+		const replaced = await write();
+		const approval = await Promise.race([
+			s.done(replaced.turn).then(() => undefined),
+			until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval")),
+		]);
+		expect(approval?.ask.type).toBe("approval");
+		if (approval === undefined) throw new Error("a replacement sign-in reused the old permission");
+		expect(fake.calls).toHaveLength(2);
+		await answer(s.harness, approval.key, "approve", web, "bearer");
+		await s.done(replaced.turn);
+		expect(fake.calls).toHaveLength(3);
+	});
+
+	it("prepared sign-in identity preserves a server's account and arbitrary extra arguments", async () => {
+		const fake = await startFakeMcp({ auth: "oauth" });
+		fakes.push(fake);
+		fake.tools = fake.tools.map((tool) =>
+			tool.name !== "create_event"
+				? tool
+				: {
+						...tool,
+						inputSchema: {
+							...tool.inputSchema,
+							properties: { title: { type: "string" }, day: { type: "string" }, account: { type: "string" } },
+						},
+					},
+		);
+		const s = await open(fake);
+		await define(s, "cal", fileOf(fake));
+		await signInAsOwner(s.capabilities, "cal");
+		const args = { title: "Tea", day: "mon", account: "billing", generation: "provider field", extra: "kept" };
+		s.model.plan([{ tool: "cal__create_event", args }]);
+		const ran = await s.say("tea");
+		const waiting = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+		expect(waiting.ask).toMatchObject({ args: { account: "billing", as_account: { key: "owner" } } });
+		await answer(s.harness, waiting.key, "approve", web, "bearer");
+		await s.done(ran.turn);
+		expect(fake.calls).toEqual([{ tool: "create_event", args }]);
+	});
+
+	it("an unsigned tool treats provider-owned account identities as ordinary arguments", async () => {
+		const fake = await startFakeMcp();
+		fakes.push(fake);
+		fake.tools = fake.tools.map((tool) =>
+			tool.name !== "create_event"
+				? tool
+				: {
+						...tool,
+						inputSchema: {
+							...tool.inputSchema,
+							properties: { title: { type: "string" }, day: { type: "string" }, account: { type: "string" } },
+						},
+					},
+		);
+		const s = await open(fake);
+		await define(s, "cal", connectionDefinition({ url: fake.url, reads: ["list_events"] }));
+		const args = { title: "Tea", day: "mon", account: "billing", as_account: { key: "remote", generation: "remote" } };
+		s.model.plan([{ tool: "cal__create_event", args }]);
+		const ran = await s.say("tea");
+		const waiting = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
+		await answer(s.harness, waiting.key, "approve", web, "bearer");
+		await s.done(ran.turn);
+		expect(fake.calls).toEqual([{ tool: "create_event", args }]);
+	});
+
 	it("an agent gets an account only when the owner switches it on: its file names the connection, at once", async () => {
 		const fake = await startFakeMcp({ auth: "oauth" });
 		fakes.push(fake);
@@ -1853,7 +2047,10 @@ describe("accounts", () => {
 		s.model.plan([{ tool: "cal__create_event", args: { title: "Tea", day: "mon" } }]);
 		const write = await s.sayTo("mara", "tea on monday");
 		const wait = await until(async () => (await openWaits(s.harness)).find((w) => w.ask.type === "approval"));
-		expect(wait.ask).toMatchObject({ label: "Use Calendar's create_event as @owner", args: { account: "owner" } });
+		expect(wait.ask).toMatchObject({
+			label: "Use Calendar's create_event as @owner",
+			args: { account: { key: "owner", generation: expect.any(String) } },
+		});
 		await s.capabilities.switchAccount("mara", "cal", "owner", false);
 		await answer(s.harness, wait.key, "approve", web, "bearer");
 		await s.done(write.turn);

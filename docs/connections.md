@@ -68,6 +68,7 @@ in a throwaway home, at desktop and phone width.
 ## Open work
 
 - [x] Accounts: credentials, Settings, switches, the `account` parameter, bindings
+- [ ] Replacement sign-in: CI fault qualification and owner acceptance for waiting drafts, reusable permissions and token refresh
 - [x] The connect card by code and by redirect; the callback page for a failed sign-in is plain HTML
 - [x] GitHub and Gmail scope choices live in a dialog; the card stays compact while the owner changes scopes and re-consents
 - [x] Agents using a real GitHub account, read-only in an isolated home

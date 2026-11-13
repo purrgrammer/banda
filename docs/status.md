@@ -2,6 +2,10 @@
 
 ## Current work
 
+Replacement-sign-in authority is implemented for connection drafts and reusable permissions. Ordinary tests and
+desktop/phone browser walkthroughs against a throwaway daemon pass; independent review findings are fixed. CI-only
+replacement publication and replay fault scenarios are authored but unrun. Owner acceptance remains open.
+
 Retained proxy requests now recover without another command, into a once-only owner approval or an explicit not-sent
 resolution. Ordinary checks, typecheck, build and independent review pass after rebasing onto main. Native macOS ARM64
 restart walkthroughs pass at desktop and phone widths. Owner acceptance remains open. CI-only receipt fault scenarios

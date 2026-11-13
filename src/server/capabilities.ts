@@ -25,6 +25,8 @@ import {
 	type Tx,
 } from "@earendil-works/pi-durable";
 import type { McpClient } from "@earendil-works/pi-mcp";
+import { type Static, Type } from "typebox";
+import { Value } from "typebox/value";
 import { log } from "../core/activity.ts";
 import {
 	Accepted,
@@ -194,6 +196,15 @@ type Finished = {
 /** The argument a connection's tool takes its account in: `account`, unless the server's own tool has one so named. */
 const accountArg = (schema: JsonObject) =>
 	(schema.properties as { [key: string]: unknown } | undefined)?.account === undefined ? "account" : "as_account";
+
+const PreparedAccount = Type.Object(
+	{ key: Type.String({ minLength: 1 }), generation: Type.String({ minLength: 1 }) },
+	{ additionalProperties: false },
+);
+type PreparedAccount = Static<typeof PreparedAccount>;
+const readPreparedAccount = (value: unknown): PreparedAccount | undefined =>
+	Value.Check(PreparedAccount, value) ? value : undefined;
+const changedSignIn = "the sign-in changed since this was prepared; prepare it again";
 
 /** `args` without `arg`: what the server is sent, the account being the daemon's to choose, never the server's. */
 const without = (args: unknown, arg: string): JsonObject => {
@@ -368,12 +379,19 @@ export function openCapabilities(options: CapabilityOptions) {
 		harness.commit(async (tx) => (await tx.doc(Connected)).accounts[name]?.[account]?.generation, ctx);
 
 	/** Capture both authorities under the same lock used by every writer/remover. Network work never holds it. */
-	async function credentialSnapshot(name: string, account: string, ctx: Context): Promise<CredentialSnapshot> {
+	async function credentialSnapshot(
+		name: string,
+		account: string,
+		ctx: Context,
+		expectedGeneration?: string,
+	): Promise<CredentialSnapshot> {
 		return withCredentials(home, name, async (locked) => {
 			const generation = await generationOf(name, account, ctx);
+			if (expectedGeneration !== undefined && generation !== expectedGeneration) throw new Unauthorized(changedSignIn);
 			const credentials = await locked.read(account);
 			if (generation === undefined || credentials?.revision === undefined)
 				throw new Unauthorized("the owner signs in again");
+			if (credentials.generation !== generation) throw new Unauthorized("the owner signs in again");
 			return { credentials, generation };
 		});
 	}
@@ -392,7 +410,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		return withCredentials(home, name, async (locked) => {
 			const current = await locked.read(account);
 			const generation = await generationOf(name, account, ctx);
-			if (generation !== expected.generation || current === undefined)
+			if (generation !== expected.generation || current === undefined || current.generation !== generation)
 				throw new Error("the sign-in changed while it was refreshing; try again");
 			if (current.revision !== expected.credentials.revision) return { credentials: current, generation };
 			fault("credential:replace");
@@ -462,13 +480,15 @@ export function openCapabilities(options: CapabilityOptions) {
 		account: string | undefined,
 		ctx: Context,
 		used: (snapshot: CredentialSnapshot) => void,
+		expectedGeneration?: string,
 	): Promise<() => Promise<string | undefined>> {
 		const url = connection.url;
 		if (url === undefined) throw new Error("it runs in the companion's computer");
 		let snapshot: CredentialSnapshot | undefined;
 		let credentials: Credentials | undefined;
 		if (connection.auth !== "none") {
-			snapshot = account === undefined ? undefined : await credentialSnapshot(connection.name, account, ctx);
+			snapshot =
+				account === undefined ? undefined : await credentialSnapshot(connection.name, account, ctx, expectedGeneration);
 			credentials = snapshot?.credentials;
 			if (!fits(credentials, connection))
 				throw new Unauthorized(
@@ -493,7 +513,7 @@ export function openCapabilities(options: CapabilityOptions) {
 	/** Run `exchange` against a remote connection as `account`; a refused OAuth token is refreshed once and tried again. */
 	async function withServer<T>(
 		connection: Connection,
-		account: string | undefined,
+		account: string | PreparedAccount | undefined,
 		ctx: Context,
 		exchange: (client: McpClient | undefined, bearer?: string) => Promise<T>,
 		beforeRetry?: () => Promise<void>,
@@ -501,11 +521,20 @@ export function openCapabilities(options: CapabilityOptions) {
 	): Promise<T> {
 		const url = connection.url;
 		if (url === undefined) throw new Error("it runs in the companion's computer");
+		const key = typeof account === "string" ? account : account?.key;
+		let generation = typeof account === "object" ? account.generation : undefined;
 		let attempted: CredentialSnapshot | undefined;
 		const connect = async () => {
-			const authorize = await authorizationOf(connection, account, ctx, (snapshot) => {
-				attempted = snapshot;
-			});
+			const authorize = await authorizationOf(
+				connection,
+				key,
+				ctx,
+				(snapshot) => {
+					attempted = snapshot;
+					generation ??= snapshot.generation;
+				},
+				generation,
+			);
 			const header = await authorize();
 			if (header?.startsWith("Bearer ")) usedSecrets?.add(header.slice(7));
 			if (connection.api !== undefined) {
@@ -524,7 +553,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		try {
 			return await connect();
 		} catch (error) {
-			if (!(error instanceof Unauthorized) || connection.auth !== "oauth" || account === undefined) throw error;
+			if (!(error instanceof Unauthorized) || connection.auth !== "oauth" || key === undefined) throw error;
 			const expected = attempted;
 			const credentials = expected?.credentials;
 			if (
@@ -536,7 +565,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				throw error;
 			await refreshOnce(
 				connection,
-				account,
+				key,
 				expected,
 				ctx,
 				() => new Unauthorized("the sign-in ran out: the owner signs in again"),
@@ -563,7 +592,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		chat: number,
 		asked: { readonly name: unknown } | { readonly key: unknown },
 		tool?: string,
-	): Promise<{ readonly account?: string } | { readonly refused: string }> {
+	): Promise<{ readonly account?: PreparedAccount } | { readonly refused: string }> {
 		const agent = await agentOfChat(tx, chat);
 		if (!signsIn(connection))
 			return agent !== undefined && (await publicOn(tx, agent, connection.name))
@@ -571,13 +600,14 @@ export function openCapabilities(options: CapabilityOptions) {
 				: { refused: "the owner has not given this agent access to the connection" };
 		if (agent === undefined) return { refused: "this chat runs no agent" };
 		const granted = await accountsOn(tx, agent, connection.name);
+		const known = (await tx.doc(Connected)).accounts?.[connection.name] ?? {};
 		const held = new Map<string, Credentials>();
 		for (const key of granted) {
 			const credentials = await credentialsOf(home, connection.name, key);
-			if (fits(credentials, connection)) held.set(key, credentials);
+			if (fits(credentials, connection) && credentials.generation === known[key]?.generation)
+				held.set(key, credentials);
 		}
 		const on = [...held.keys()];
-		const known = (await tx.doc(Connected)).accounts?.[connection.name] ?? {};
 		const labelOfKey = (key: string) => accountLabel(known[key] ?? { id: key });
 		const labels = on.map(labelOfKey);
 		if (on.length === 0)
@@ -609,7 +639,8 @@ export function openCapabilities(options: CapabilityOptions) {
 			return {
 				refused: `${labelOfKey(key)} was not given access for this on ${connection.service}: the owner can change its access in Connections`,
 			};
-		return { account: key };
+		const generation = known[key]?.generation;
+		return generation === undefined ? { refused: changedSignIn } : { account: { key, generation } };
 	}
 
 	/** What a server's error says, in words, its credentials never among them. */
@@ -638,8 +669,11 @@ export function openCapabilities(options: CapabilityOptions) {
 		async (tx: Tx, args: JsonObject, chat: number): Promise<string | undefined> => {
 			const off = await allowed(tool.name, tool.connection)(tx);
 			if (off !== undefined) return off;
-			const resolved = await accountFor(tx, tool.connection, chat, { key: args[arg] }, tool.tool);
-			return "refused" in resolved ? resolved.refused : undefined;
+			const prepared = signsIn(tool.connection) ? readPreparedAccount(args[arg]) : undefined;
+			if (signsIn(tool.connection) && prepared === undefined) return changedSignIn;
+			const resolved = await accountFor(tx, tool.connection, chat, { key: prepared?.key }, tool.tool);
+			if ("refused" in resolved) return resolved.refused;
+			return resolved.account?.generation !== prepared?.generation ? changedSignIn : undefined;
 		};
 
 	/** A read's answer, and a write's: from outside, data and not instructions. */
@@ -804,8 +838,10 @@ export function openCapabilities(options: CapabilityOptions) {
 	function writeTool(tool: InEffect, accounts?: readonly string[]): ToolRegistration {
 		const arg = accountArg(tool.listed.schema);
 		const signed = signsIn(tool.connection);
-		const as = (args: JsonObject) =>
-			signed && typeof args[arg] === "string" ? ` as ${labelOf(tool.connection.name, args[arg] as string)}` : "";
+		const as = (args: JsonObject) => {
+			const account = readPreparedAccount(args[arg]);
+			return signed && account !== undefined ? ` as ${labelOf(tool.connection.name, account.key)}` : "";
+		};
 		const kinds = tool.connection.objects;
 		/** The object the draft acts on, as the connection's objects declare its writes. */
 		const on = (args: JsonObject) =>
@@ -860,7 +896,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			// the card draws the object it acts on, read as the account it acts as, and says that account
 			drawn: (args) => {
 				const given = args as JsonObject;
-				const account = signed && typeof given[arg] === "string" ? (given[arg] as string) : undefined;
+				const account = signed ? readPreparedAccount(given[arg])?.key : undefined;
 				const object = on(given);
 				const created = made(given);
 				const reading = kinds === undefined ? undefined : readOn(tool.connection.name, tool.tool, given, kinds);
@@ -950,7 +986,9 @@ export function openCapabilities(options: CapabilityOptions) {
 					ctx,
 				);
 				if ("refused" in resolved) return resolved.refused;
-				const account = await api.memo("account", resolved.account ?? "", ctx);
+				if (resolved.account === undefined) return changedSignIn;
+				const account = readPreparedAccount(await api.memo("account", resolved.account, ctx));
+				if (account === undefined) return changedSignIn;
 				const resolve = builtIn?.drafts?.resolve;
 				if (resolve === undefined) return { ...expanded, [arg]: account };
 				// read once as it is drafted, so a rerun shows the owner the same draft whatever changed at the service since
@@ -958,12 +996,8 @@ export function openCapabilities(options: CapabilityOptions) {
 				if (shown === undefined) {
 					const approved = without(expanded, arg);
 					try {
-						const read = await withServer(
-							tool.connection,
-							account === "" ? undefined : account,
-							ctx,
-							(_client, bearer) =>
-								resolve(bearer ?? "", tool.tool, approved as Record<string, unknown>, ctx.abortSignal, fetcher),
+						const read = await withServer(tool.connection, account, ctx, (_client, bearer) =>
+							resolve(bearer ?? "", tool.tool, approved as Record<string, unknown>, ctx.abortSignal, fetcher),
 						);
 						shown = await api.memo("drafted", JSON.parse(JSON.stringify(read)) as JsonObject, ctx);
 					} catch (error) {
@@ -977,7 +1011,8 @@ export function openCapabilities(options: CapabilityOptions) {
 			allowed: allowedAs(tool, arg),
 			run: async (args, { api, key }, ctx) => {
 				const chat = Number(api.conversationId);
-				const account = signed ? ((args as JsonObject)[arg] as string | undefined) : undefined;
+				const account = signed ? readPreparedAccount((args as JsonObject)[arg]) : undefined;
+				if (signed && account === undefined) return text(`${tool.name} did not run: ${changedSignIn}.`, true);
 				fault("connection:call");
 				let result: McpResult;
 				try {
@@ -1414,8 +1449,9 @@ export function openCapabilities(options: CapabilityOptions) {
 				const name = ask.tool.slice(0, ask.tool.indexOf("__"));
 				const connection = await acceptedConnection(tx, name);
 				if (connection !== undefined && !signsIn(connection)) continue;
-				const account = ask.args.as_account ?? ask.args.account;
-				if (typeof account !== "string" || accounts?.[name]?.[account] === undefined) found.push(wait.id);
+				const account = readPreparedAccount(ask.args.as_account ?? ask.args.account);
+				if (account === undefined || accounts?.[name]?.[account.key]?.generation !== account.generation)
+					found.push(wait.id);
 			}
 			return found;
 		}, ctx);
@@ -1455,8 +1491,8 @@ export function openCapabilities(options: CapabilityOptions) {
 		const permissions = await tx.doc(Permissions);
 		for (const [id, permission] of Object.entries(permissions.permissions)) {
 			if (!permission.tool.startsWith(`${name}__`)) continue;
-			const bound = permission.match.as_account ?? permission.match.account;
-			if (typeof bound === "string" && !keys.includes(bound)) continue;
+			const bound = readPreparedAccount(permission.match.as_account ?? permission.match.account);
+			if (bound !== undefined && !keys.includes(bound.key)) continue;
 			delete permissions.permissions[id];
 			await log(tx, { at: now(), what: `You took back: ${permission.what} (${why})` });
 		}
@@ -1556,7 +1592,10 @@ export function openCapabilities(options: CapabilityOptions) {
 						.filter(([, on]) => (on[name] ?? []).includes(key))
 						.map(([agent]) => agent)
 						.sort(),
-					...(connection !== undefined && !fits(credentials, connection) ? { stale: true } : {}),
+					...(connection !== undefined &&
+					(!fits(credentials, connection) || credentials.generation !== account.generation)
+						? { stale: true }
+						: {}),
 					...(credentials !== undefined && "oauth" in credentials ? { scopes: [...grantedScopes(credentials)] } : {}),
 					...(missing.length === 0 ? {} : { missing }),
 				});
@@ -1999,8 +2038,7 @@ export function openCapabilities(options: CapabilityOptions) {
 	/**
 	 * A sign-in came through with `credentials`: read whom it is for, keep them as that account's (an account known
 	 * already is signed in again, its switches kept), and switch it on for `agent` when it was for one; then list the
-	 * tools if they were not. The credentials are written before the commit that names the account: a kill between
-	 * leaves credentials no account is named for, which the next start forgets.
+	 * tools if they were not.
 	 */
 	async function signedIn(
 		name: string,
@@ -2027,7 +2065,8 @@ export function openCapabilities(options: CapabilityOptions) {
 						`that was ${accountLabel({ id })}, not ${labelOf(name, expected)}: nothing changed. Sign in again and choose ${labelOf(name, expected)}`,
 					);
 			}
-			await locked.keep(account, credentials);
+			const generation = crypto.randomUUID();
+			await locked.keep(account, { ...credentials, generation });
 			fault("oauth:kept");
 			const { known } = await harness.commit(async (tx) => {
 				if ((await acceptedConnection(tx, name))?.version !== connection.version)
@@ -2044,7 +2083,7 @@ export function openCapabilities(options: CapabilityOptions) {
 					id,
 					...(label === undefined ? {} : { label }),
 					at: now(),
-					generation: crypto.randomUUID(),
+					generation,
 				};
 				doc.epoch++;
 				await log(tx, {

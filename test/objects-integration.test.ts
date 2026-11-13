@@ -121,7 +121,7 @@ it.each([false, true])(
 		expect(wait.ask).toMatchObject({
 			type: "approval",
 			as: "@alice on GitHub",
-			permission: { match: { [accountArg]: "alice" } },
+			permission: { match: { [accountArg]: { key: "alice", generation: expect.any(String) } } },
 		});
 		if (wait.ask.type !== "approval") throw new Error("not approval");
 		expect(wait.ask.editable).not.toContain(accountArg);
@@ -136,7 +136,11 @@ it.each([false, true])(
 		});
 		await s.harness.waitForTask(first.turn as TaskId, context);
 		expect(Object.values((await s.harness.snapshot(Permissions, context))?.permissions ?? {})).toEqual(
-			expect.arrayContaining([expect.objectContaining({ match: expect.objectContaining({ [accountArg]: "alice" }) })]),
+			expect.arrayContaining([
+				expect.objectContaining({
+					match: expect.objectContaining({ [accountArg]: { key: "alice", generation: expect.any(String) } }),
+				}),
+			]),
 		);
 		planned = "bob";
 		const second = await say();

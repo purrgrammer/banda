@@ -32,7 +32,10 @@ afterEach(async () => {
 });
 
 /** A daemon whose lead may change Alice's calendar, and whose model makes `call` once, then says it is done. */
-async function connectedWith(call: { tool: string; args: JsonObject }) {
+async function connectedWith(
+	call: { tool: string; args: JsonObject },
+	wrapFetch: (fetcher: typeof fetch) => typeof fetch = (fetcher) => fetcher,
+) {
 	const home = await tempHome();
 	const shipped = join(home, "shipped");
 	mkdirSync(shipped, { recursive: true });
@@ -44,7 +47,7 @@ async function connectedWith(call: { tool: string; args: JsonObject }) {
 	const s = await openConnected({
 		home,
 		shipped,
-		fetch: google.fetch,
+		fetch: wrapFetch(google.fetch),
 		respond: ((ctx: { messages: readonly { role: string; content: unknown }[] }) => {
 			const heed = answerNudge(ctx.messages);
 			if (heed !== undefined) return heed;
@@ -77,10 +80,55 @@ async function connectedWith(call: { tool: string; args: JsonObject }) {
 			await new Promise((resolve) => setTimeout(resolve, 10));
 		}
 	};
-	return { s, google, turn, ask };
+	return { s, google, turn, ask, shipped };
 }
 
 describe("Calendar changes as drafts", () => {
+	it("an idempotent once-approved replay cannot switch to a replacement sign-in", async () => {
+		let writing!: () => void;
+		const reached = new Promise<void>((resolve) => {
+			writing = resolve;
+		});
+		const { s, google, turn, ask, shipped } = await connectedWith(
+			{
+				tool: "create_event",
+				args: { title: "Tea", start: "2026-11-09T09:00:00+01:00", end: "2026-11-09T10:00:00+01:00" },
+			},
+			(fetcher) => async (input, init) => {
+				if (init?.method === "POST" && String(input).includes("/calendar/v3/calendars/primary/events")) {
+					const signal = init.signal;
+					if (signal === undefined || signal === null) throw new Error("the write must be cancellable");
+					writing();
+					await new Promise<never>((_resolve, reject) => {
+						if (signal.aborted) reject(signal.reason);
+						else signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+					});
+				}
+				return fetcher(input, init);
+			},
+		);
+		const waiting = await ask();
+		await answer(s.harness, waiting.key, "approve", web, "bearer");
+		await reached;
+		const started = await s.capabilities.signIn("calendar", context, LEAD, { scopes: [READ, EVENTS] });
+		if (!("url" in started)) throw new Error("a sign-in opens a page");
+		expect(
+			await s.capabilities.callback({ state: new URL(started.url).searchParams.get("state") ?? "", code: "fake-code" }),
+		).toMatchObject({ ok: true });
+		await s.close();
+		opened.splice(opened.indexOf(s), 1);
+		const recovered = await openConnected({
+			home: s.home,
+			shipped,
+			fetch: google.fetch,
+			respond: () => fauxAssistantMessage("Done."),
+		});
+		opened.push(recovered);
+		await recovered.harness.waitForTask(turn, context);
+		expect(await openWaits(recovered.harness)).toEqual([]);
+		expect(google.writes).toEqual([]);
+	});
+
 	it("a created event is a draft in the owner's words; approved with edits, it runs once, as approved", async () => {
 		const { s, google, turn, ask } = await connectedWith({
 			tool: "create_event",
@@ -98,7 +146,13 @@ describe("Calendar changes as drafts", () => {
 			tool: "calendar__create_event",
 			label: "Create “Tea”",
 			verb: "Create",
-			args: { title: "Tea", attendees: "ana@example.test", location: "", description: "", account: expect.any(String) },
+			args: {
+				title: "Tea",
+				attendees: "ana@example.test",
+				location: "",
+				description: "",
+				account: { key: expect.any(String), generation: expect.any(String) },
+			},
 		});
 		expect([...(wait.ask.editable ?? [])].sort()).toEqual(
 			["attendees", "description", "end", "location", "start", "title"].sort(),

@@ -745,7 +745,7 @@ export type Credentials = (
 			readonly url: string;
 			readonly oauth: { readonly server: OAuthServer; readonly client: OAuthClient; readonly tokens: Tokens };
 	  }
-) & { readonly revision?: string };
+) & { readonly revision?: string; readonly generation?: string };
 
 const credentialsDir = (home: string) => join(home, "auth", "connections");
 const accountDir = (home: string, name: string, account: string) => join(credentialsDir(home), name, account);
