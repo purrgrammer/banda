@@ -13,6 +13,7 @@ import { Accepted, ChatTier, parseAgent } from "../../core/agents.ts";
 import { Companion, type CompanionDoc } from "../../core/companion.ts";
 import {
 	changeCustomProviders,
+	observingFetch,
 	readCustomProviders,
 	redact,
 	registerCustomProviders,
@@ -21,9 +22,11 @@ import {
 	type CustomCompat,
 	type CustomModel,
 	type CustomProvider,
+	checkFailure,
 	customId,
 	destinationOf,
 	modelName,
+	type Observed,
 	originOf,
 	problemsOf,
 } from "../../core/custom-providers.ts";
@@ -64,7 +67,10 @@ function definitionOf(value: unknown): Omit<CustomProvider, "id"> {
 	const models = body.models.map((each: unknown, n): CustomModel => {
 		if (typeof each !== "object" || each === null) throw new BadRequest(`provider.models.${n} is a model`);
 		const model = each as Record<string, unknown>;
-		const cost = (model.cost ?? { input: 0, output: 0 }) as Record<string, unknown>;
+		// a price is the owner's word, never a default: 0 is free, said so
+		if (typeof model.cost !== "object" || model.cost === null)
+			throw new BadRequest(`provider.models.${n}.cost is its price per million tokens in and out: 0 only if free`);
+		const cost = model.cost as Record<string, unknown>;
 		const name = model.name === undefined ? "" : text(model.name, `provider.models.${n}.name`).trim();
 		return {
 			id: text(model.id, `provider.models.${n}.id`).trim(),
@@ -74,8 +80,8 @@ function definitionOf(value: unknown): Omit<CustomProvider, "id"> {
 			contextWindow: number(model.contextWindow, `provider.models.${n}.contextWindow`),
 			maxTokens: number(model.maxTokens, `provider.models.${n}.maxTokens`),
 			cost: {
-				input: number(cost.input ?? 0, `provider.models.${n}.cost.input`),
-				output: number(cost.output ?? 0, `provider.models.${n}.cost.output`),
+				input: number(cost.input, `provider.models.${n}.cost.input`),
+				output: number(cost.output, `provider.models.${n}.cost.output`),
 			},
 		};
 	});
@@ -330,6 +336,8 @@ export const customProviders: AreaModule = {
 			if (checking.has(id)) throw new BadRequest("A check is under way already", 409);
 			checking.add(id);
 			const started = Date.now();
+			const seen: Observed[] = [];
+			const deadline = AbortSignal.timeout(CHECK_MS);
 			try {
 				const answer = await deps.models.completeSimple(
 					model,
@@ -338,23 +346,25 @@ export const customProviders: AreaModule = {
 						messages: [{ role: "user", content: "Are you there?", timestamp: started }],
 					},
 					// one request, as the owner was told: never retried
-					{ maxTokens: Math.min(64, model.maxTokens), maxRetries: 0, signal: AbortSignal.timeout(CHECK_MS) },
+					{ maxTokens: Math.min(64, model.maxTokens), maxRetries: 0, signal: deadline, fetch: observingFetch(seen) },
 				);
 				await record(answer);
 				const reply = answer.content
 					.flatMap((part) => (part.type === "text" ? [part.text] : []))
 					.join("")
 					.trim();
+				const last = seen.at(-1);
 				const checked: Checked =
 					answer.stopReason === "error" || answer.stopReason === "aborted"
 						? {
 								ok: false,
 								at: Date.now(),
 								model: modelName({ id: model.id, name: model.name }),
-								why:
-									answer.stopReason === "aborted"
-										? `No answer in ${CHECK_MS / 1000} seconds`
-										: redact(answer.errorMessage ?? "it answered with an error"),
+								failure: checkFailure(deadline.aborted, last),
+								...(last?.status === undefined ? {} : { status: last.status }),
+								detail: deadline.aborted
+									? `no answer in ${CHECK_MS / 1000} seconds`
+									: redact([last?.code, answer.errorMessage].filter(Boolean).join(": ") || "no detail"),
 							}
 						: {
 								ok: true,

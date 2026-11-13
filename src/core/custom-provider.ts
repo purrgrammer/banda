@@ -38,6 +38,7 @@ import {
 	MAX_PRICE,
 	MAX_URL,
 	modelName,
+	type Observed,
 	problemsOf,
 } from "./custom-providers.ts";
 
@@ -258,11 +259,29 @@ function clean(event: AssistantMessageEvent, key: string | undefined): Assistant
 
 /** pi-ai's openai-completions streams, every request through `guardedFetch` and every error redacted. */
 function guardedApi(definition: CustomProvider, api: ProviderStreams = openAICompletionsApi()): ProviderStreams {
-	const fetch = guardedFetch(definition);
+	// a caller's own fetch (a check's, which watches what its request showed) runs inside the guard, never around it
+	const guarded = (given: typeof fetch | undefined) => guardedFetch(definition, given ?? globalThis.fetch);
 	return {
-		stream: (model, context, options) => redacted(api.stream(model, context, { ...options, fetch }), options?.apiKey),
+		stream: (model, context, options) =>
+			redacted(api.stream(model, context, { ...options, fetch: guarded(options?.fetch) }), options?.apiKey),
 		streamSimple: (model, context, options) =>
-			redacted(api.streamSimple(model, context, { ...options, fetch }), options?.apiKey),
+			redacted(api.streamSimple(model, context, { ...options, fetch: guarded(options?.fetch) }), options?.apiKey),
+	};
+}
+
+/** `fetch` that keeps what each request showed in `seen`: its status, or its network error's code. */
+export function observingFetch(seen: Observed[], base: typeof fetch = globalThis.fetch): typeof fetch {
+	return async (input, init) => {
+		try {
+			const response = await base(input, init);
+			seen.push({ status: response.status });
+			return response;
+		} catch (error) {
+			const cause = (error as { cause?: { code?: unknown } }).cause;
+			const code = typeof cause?.code === "string" ? cause.code : (error as { code?: unknown }).code;
+			seen.push({ code: typeof code === "string" ? code : "UNKNOWN" });
+			throw error;
+		}
 	};
 }
 

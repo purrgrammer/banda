@@ -25,6 +25,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/cn";
 import {
+	type CheckFailure,
 	COMPAT_DEFAULTS,
 	type CustomCompat,
 	type CustomProvider,
@@ -47,10 +48,40 @@ export function placeWords(destination: Pick<Destination, "place" | "secure">, h
 }
 
 /** A check's outcome in a line. */
-export function checkedWords(checked: Checked): string {
-	if (!checked.ok) return `Didn't answer: ${checked.why}`;
+export function checkedWords(checked: Checked, host: string): string {
+	if (!checked.ok) return failureWords(checked.failure, host);
 	const reply = checked.reply === "" ? "an empty answer" : `“${checked.reply.slice(0, 60)}”`;
 	return `Answered in ${checked.ms} ms with ${checked.model}: ${reply}`;
+}
+
+/** What a failed check means, and what to do, in the owner's words: from the request, never from its error's text. */
+export function failureWords(failure: CheckFailure, host: string): string {
+	switch (failure) {
+		case "timeout":
+			return "No answer in 30 seconds. A local model may still be loading: try again in a moment.";
+		case "unreachable":
+			return `Nothing answered at ${host}. Is the server running, and reachable from the computer banda runs on?`;
+		case "unknown-host":
+			return `${host} can't be found. Check the address.`;
+		case "certificate":
+			return "Its certificate couldn't be verified, so nothing was sent. Check the address, or the server's certificate.";
+		case "redirect":
+			return "It sends banda to another address, which banda doesn't follow. Write the address it redirects to.";
+		case "auth":
+			return "It refused the key. Check the key in Edit, or whether it needs one at all.";
+		case "not-found":
+			return "It has no such model, or no API at that address. Check the model id, and that the address ends where its API starts (often /v1).";
+		case "rejected":
+			return "It refused the request. Check the model id; if that's right, try the compatibility settings in Edit.";
+		case "limited":
+			return "It's limiting requests, or the account is out of credit. Try again later.";
+		case "server":
+			return "It failed on its own side. Check the server and its logs, then try again.";
+		case "unreadable":
+			return "It answered, but not the way OpenAI's chat completions do. Try the compatibility settings in Edit.";
+		default:
+			return "It didn't answer as expected.";
+	}
 }
 
 const keyWords = (row: CustomProviderView) =>
@@ -93,15 +124,22 @@ export function CustomProviders({
 }) {
 	const [form, setForm] = useState<string | undefined>(openForm);
 	const [asking, setAsking] = useState<string | undefined>(openAsking);
+	/** The control that opened the form or the check's question: focus goes back to it when they close. */
+	const opener = useRef<HTMLElement | null>(null);
+	const opened = (event: { currentTarget: HTMLElement }) => {
+		opener.current = event.currentTarget;
+	};
+	const back = (event: Event) => {
+		if (opener.current?.isConnected !== true) return;
+		event.preventDefault();
+		opener.current.focus();
+	};
 	const providers = view?.providers ?? [];
 	const editing = form === undefined || form === "add" ? undefined : providers.find((row) => row.id === form);
 	const ask = providers.find((row) => row.id === asking);
 	const others = (id?: string) => providers.filter((row) => row.id !== id).map((row) => row.name);
 	return (
-		<Block
-			title="Your own providers"
-			note="Any address that speaks OpenAI's chat completions: a model on your computer, your network, or a service you pay. It sees what you ask while the band thinks with it."
-		>
+		<Block title="Your own providers" note="Add an OpenAI-compatible server. Some servers need compatibility settings.">
 			<Rows>
 				{providers.map((row) => {
 					const using = row.id === current;
@@ -109,59 +147,74 @@ export function CustomProviders({
 					const ready = row.key !== "missing" && mapped;
 					return (
 						<div key={row.id} className="flex flex-col" data-custom-provider={row.id}>
-							<RowOf
-								lead={<ServerIcon aria-hidden="true" className="size-5 shrink-0 text-ink-2" />}
-								title={row.name}
-								detail={
-									<>
-										<span className="block truncate">
-											{placeWords(row.destination, here)} · {row.destination.host}
+							{/* the address whole on a line of its own, and the actions under it on a phone */}
+							<div className="flex flex-col gap-2 px-3.5 py-2.5 sm:flex-row sm:items-center sm:gap-3">
+								<div className="flex min-w-0 flex-1 gap-3">
+									<ServerIcon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-ink-2" />
+									<span className="flex min-w-0 flex-1 flex-col">
+										<span className="text-ui text-ink">{row.name}</span>
+										<span className="text-meta text-ink-2">{placeWords(row.destination, here)}</span>
+										<span className="text-meta break-all text-ink-2" data-address>
+											{row.baseUrl}
 										</span>
-										<span className="block">
+										<span className="text-meta text-ink-2">
 											{using ? "In use · " : ""}
 											{keyWords(row)} · {row.models.length === 1 ? "1 model" : `${row.models.length} models`}
 											{mapped ? "" : " · No model for each tier yet: edit it"}
 										</span>
-									</>
-								}
-								end={
-									<span className="flex shrink-0 flex-wrap justify-end gap-1.5">
-										{!using && ready ? (
-											<Button
-												variant="outline"
-												size="xs"
-												aria-label={`Use ${row.name}`}
-												onClick={() => onUse?.(row.id)}
-											>
-												Use
-											</Button>
-										) : null}
-										<Button
-											variant="ghost"
-											size="xs"
-											aria-label={`Check ${row.name}`}
-											disabled={checking === row.id || row.key === "missing"}
-											onClick={() => setAsking(row.id)}
-										>
-											{checking === row.id ? <Spinner className="size-3" /> : null}
-											Check
-										</Button>
-										<Button variant="ghost" size="xs" aria-label={`Edit ${row.name}`} onClick={() => setForm(row.id)}>
-											Edit
-										</Button>
 									</span>
-								}
-							/>
+								</div>
+								<span className="flex flex-wrap gap-1.5 pl-8 sm:shrink-0 sm:justify-end sm:pl-0">
+									{!using && ready ? (
+										<Button variant="outline" size="xs" aria-label={`Use ${row.name}`} onClick={() => onUse?.(row.id)}>
+											Use
+										</Button>
+									) : null}
+									<Button
+										variant="ghost"
+										size="xs"
+										aria-label={`Check ${row.name}`}
+										disabled={checking === row.id || row.key === "missing"}
+										onClick={(event) => {
+											opened(event);
+											setAsking(row.id);
+										}}
+									>
+										{checking === row.id ? <Spinner className="size-3" /> : null}
+										Check
+									</Button>
+									<Button
+										variant="ghost"
+										size="xs"
+										aria-label={`Edit ${row.name}`}
+										onClick={(event) => {
+											opened(event);
+											setForm(row.id);
+										}}
+									>
+										Edit
+									</Button>
+								</span>
+							</div>
 							{row.checked === undefined || checking === row.id ? null : (
-								<p
+								<div
 									role="status"
 									className={cn(
 										"border-t border-line-soft px-3.5 py-2 pl-[2.875rem] text-meta break-words",
 										row.checked.ok ? "text-ink-2" : "text-danger",
 									)}
 								>
-									{checkedWords(row.checked)}
-								</p>
+									{checkedWords(row.checked, row.destination.host)}
+									{row.checked.ok ? null : (
+										<details className="mt-1 text-ink-2">
+											<summary className="cursor-pointer">Details</summary>
+											<span className="break-all">
+												{row.checked.status === undefined ? "" : `HTTP ${row.checked.status} · `}
+												{row.checked.detail}
+											</span>
+										</details>
+									)}
+								</div>
 							)}
 						</div>
 					);
@@ -170,7 +223,15 @@ export function CustomProviders({
 					className={providers.length === 0 ? "" : "border-t border-line-soft"}
 					title={<span className="text-ink-2">{providers.length === 0 ? "None yet" : "Another one"}</span>}
 					end={
-						<Button variant="ghost" size="xs" aria-label="Add a provider" onClick={() => setForm("add")}>
+						<Button
+							variant="ghost"
+							size="xs"
+							aria-label="Add a provider"
+							onClick={(event) => {
+								opened(event);
+								setForm("add");
+							}}
+						>
 							<PlusIcon />
 							Add a provider
 						</Button>
@@ -188,7 +249,7 @@ export function CustomProviders({
 				</p>
 			)}
 			<Dialog open={form !== undefined} onOpenChange={(open) => (open ? undefined : setForm(undefined))}>
-				<DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
+				<DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl" onCloseAutoFocus={back}>
 					<DialogHeader>
 						<DialogTitle>{editing === undefined ? "Add a provider" : `Edit ${editing.name}`}</DialogTitle>
 						<DialogDescription>Saving doesn't contact it. Check it once it's saved, from its row.</DialogDescription>
@@ -220,7 +281,7 @@ export function CustomProviders({
 			</Dialog>
 			<AlertDialog open={ask !== undefined} onOpenChange={(open) => (open ? undefined : setAsking(undefined))}>
 				{ask === undefined ? null : (
-					<AlertDialogContent size="sm">
+					<AlertDialogContent size="sm" onCloseAutoFocus={back}>
 						<AlertDialogHeader>
 							<AlertDialogTitle>Check {ask.name}?</AlertDialogTitle>
 							<AlertDialogDescription>
@@ -266,12 +327,13 @@ const blank = (): DraftModel => ({
 	key: nextKey++,
 	id: "",
 	name: "",
-	contextWindow: "32768",
-	maxTokens: "4096",
+	// nothing guessed: its limits and its price are the owner's to state, from its model card or its server
+	contextWindow: "",
+	maxTokens: "",
 	images: false,
 	reasoning: false,
-	input: "0",
-	output: "0",
+	input: "",
+	output: "",
 });
 const numberOf = (text: string) => (text.trim() === "" ? Number.NaN : Number(text.replace(/[,_\s]/g, "")));
 
@@ -450,6 +512,7 @@ export function CustomProviderForm({
 							value={name}
 							maxLength={60}
 							placeholder="LM Studio on my desk"
+							autoFocus={initial === undefined}
 							autoComplete="off"
 							onChange={(event) => setName(event.target.value)}
 						/>
@@ -479,8 +542,8 @@ export function CustomProviderForm({
 					<legend className="mb-1 text-meta font-medium text-ink">Key</legend>
 					{/* biome-ignore lint/a11y/noLabelWithoutControl: the switch inside is the control */}
 					<label className="flex items-center gap-3">
-						<Switch checked={needsKey} onCheckedChange={setNeedsKey} aria-label="It needs a key" />
-						<span className="text-ui text-ink">{needsKey ? "It needs a key" : "It needs no key"}</span>
+						<Switch checked={needsKey} onCheckedChange={setNeedsKey} aria-label="Requires an API key" />
+						<span className="text-ui text-ink">Requires an API key</span>
 					</label>
 					{needsKey ? (
 						<FieldOf
@@ -509,7 +572,9 @@ export function CustomProviderForm({
 			<section className="flex flex-col gap-3" aria-label="Models">
 				<div className="flex items-baseline justify-between gap-3">
 					<h3 className="text-ui font-medium text-ink">Models</h3>
-					<span className="text-meta text-ink-2">As the server names them; banda doesn't look them up.</span>
+					<span className="text-meta text-ink-2">
+						Its real limits and prices, from its model card or server. banda doesn't look them up.
+					</span>
 				</div>
 				{problem("models") === undefined ? null : (
 					<span role="alert" className="text-meta text-danger">
@@ -552,6 +617,7 @@ export function CustomProviderForm({
 									id={id}
 									inputMode="numeric"
 									value={model.contextWindow}
+									placeholder="From its model card"
 									onChange={(event) => change(model.key, { contextWindow: event.target.value })}
 								/>
 							)}
@@ -562,6 +628,7 @@ export function CustomProviderForm({
 									id={id}
 									inputMode="numeric"
 									value={model.maxTokens}
+									placeholder="From its model card"
 									onChange={(event) => change(model.key, { maxTokens: event.target.value })}
 								/>
 							)}
@@ -572,6 +639,7 @@ export function CustomProviderForm({
 									id={id}
 									inputMode="decimal"
 									value={model.input}
+									placeholder="0 only if free"
 									onChange={(event) => change(model.key, { input: event.target.value })}
 								/>
 							)}
@@ -582,6 +650,7 @@ export function CustomProviderForm({
 									id={id}
 									inputMode="decimal"
 									value={model.output}
+									placeholder="0 only if free"
 									onChange={(event) => change(model.key, { output: event.target.value })}
 								/>
 							)}

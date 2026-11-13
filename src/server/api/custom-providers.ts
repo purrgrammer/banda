@@ -1,11 +1,21 @@
 /** Custom providers' shapes (`../routes/custom-providers.ts`): `GET /api/custom-providers` and a check's outcome. */
-import type { CustomCompat, CustomModel, Destination } from "../../core/custom-providers.ts";
+import type { CheckFailure, CustomCompat, CustomModel, Destination } from "../../core/custom-providers.ts";
 import type { Tier } from "../../core/tiers.ts";
 
 /** A check's outcome, kept in memory until the daemon stops or the provider changes. */
 export type Checked =
 	| { readonly ok: true; readonly at: number; readonly model: string; readonly ms: number; readonly reply: string }
-	| { readonly ok: false; readonly at: number; readonly model: string; readonly why: string };
+	| {
+			readonly ok: false;
+			readonly at: number;
+			readonly model: string;
+			/** Why, from the request itself: the app says it in plain words. */
+			readonly failure: CheckFailure;
+			/** The HTTP status, when it answered with one. */
+			readonly status?: number;
+			/** What it or the network said, redacted: details, for whoever wants them. */
+			readonly detail: string;
+	  };
 
 /** `GET /api/custom-providers`. */
 export type CustomProvidersView = {

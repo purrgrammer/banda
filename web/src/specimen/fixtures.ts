@@ -446,7 +446,14 @@ export const CUSTOM_PROVIDERS: readonly import("../areas/custom-providers.ts").C
 		],
 		tiers: { quick: "fast-1", balanced: "fast-1", deep: "deep-1" },
 		using: false,
-		checked: { ok: false, at: 0, model: "fast-1", why: '401: {"message":"Incorrect API key provided: Bearer [key]"}' },
+		checked: {
+			ok: false,
+			at: 0,
+			model: "fast-1",
+			failure: "auth",
+			status: 401,
+			detail: '401: {"message":"Incorrect API key provided: Bearer [key]"}',
+		},
 	},
 ];
 

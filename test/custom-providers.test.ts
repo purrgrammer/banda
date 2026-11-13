@@ -18,7 +18,13 @@ import {
 	redact,
 	registerCustomProviders,
 } from "../src/core/custom-provider.ts";
-import { type CustomProvider, customId, destinationOf, problemsOf } from "../src/core/custom-providers.ts";
+import {
+	type CustomProvider,
+	checkFailure,
+	customId,
+	destinationOf,
+	problemsOf,
+} from "../src/core/custom-providers.ts";
 import { FileCredentialStore } from "../src/core/provider-credentials.ts";
 import { modelFor, TIERS } from "../src/core/tiers.ts";
 import { startDaemon } from "../src/daemon.ts";
@@ -121,10 +127,45 @@ describe("a definition", () => {
 		expect(problemsOf({ ...definition("http://localhost:1/v1"), models: [] })[0]?.field).toBe("models");
 	});
 
+	it("asks for a model's limits and prices rather than guessing them", () => {
+		const messages = problemsOf({
+			...definition("http://localhost:1/v1"),
+			models: [
+				model("m", { contextWindow: Number.NaN, maxTokens: Number.NaN, cost: { input: Number.NaN, output: 0 } }),
+			],
+		}).map((problem) => `${problem.field}: ${problem.message}`);
+		expect(messages).toEqual([
+			"models.0.contextWindow: Write its context window in tokens, as its server or model card says",
+			"models.0.maxTokens: Write the longest answer it gives, in tokens, as its server or model card says",
+			"models.0.cost.input: Write what it charges per million tokens: 0 only if it is free",
+		]);
+	});
+
 	it("gets an id of its own that no pi-ai provider or account has", () => {
 		expect(customId("LM Studio", new Set())).toBe("custom-lm-studio");
 		expect(customId("LM Studio", new Set(["custom-lm-studio"]))).toBe("custom-lm-studio-2");
 		expect(customId("🦙", new Set())).toBe("custom-provider");
+	});
+});
+
+describe("a failed check", () => {
+	it.each([
+		[true, { status: 500 }, "timeout"],
+		[false, { code: "ECONNREFUSED" }, "unreachable"],
+		[false, { code: "ENOTFOUND" }, "unknown-host"],
+		[false, { code: "CERT_HAS_EXPIRED" }, "certificate"],
+		[false, { code: "UNABLE_TO_VERIFY_LEAF_SIGNATURE" }, "certificate"],
+		[false, { status: 307 }, "redirect"],
+		[false, { status: 401 }, "auth"],
+		[false, { status: 403 }, "auth"],
+		[false, { status: 404 }, "not-found"],
+		[false, { status: 422 }, "rejected"],
+		[false, { status: 429 }, "limited"],
+		[false, { status: 503 }, "server"],
+		[false, { status: 200 }, "unreadable"],
+		[false, undefined, "other"],
+	] as const)("timed out %s, showing %j, is %s", (timedOut, observed, failure) => {
+		expect(checkFailure(timedOut, observed)).toBe(failure);
 	});
 });
 
@@ -431,13 +472,68 @@ describe("the daemon", () => {
 			expect(server.requests).toHaveLength(1);
 			server.set({ fail: { status: 500, message: "model crashed; token sk-leaky-abcdefghijkl" } });
 			const failed = await s.api<Checked>("/custom-providers/custom-local/check", s.json("POST", { model: "large" }));
-			expect(failed).toMatchObject({ ok: false, model: "large" });
+			expect(failed).toMatchObject({ ok: false, model: "large", failure: "server", status: 500 });
 			// a failed check is not retried: still one request each
 			expect(server.requests).toHaveLength(2);
-			expect(failed.ok ? "" : failed.why).toMatch(/500.*model crashed/);
-			expect(failed.ok ? "" : failed.why).not.toContain("sk-leaky");
+			expect(failed.ok ? "" : failed.detail).toMatch(/500.*model crashed/);
+			expect(failed.ok ? "" : failed.detail).not.toContain("sk-leaky");
 			expect((await s.api<CustomProvidersView>("/custom-providers")).providers[0]?.checked).toMatchObject({
 				ok: false,
+			});
+		} finally {
+			await s.daemon.close();
+		}
+	});
+
+	it("a failed check says why from the request itself: its status, or the network's error", async () => {
+		const home = await tempHome();
+		const server = await serve({ key: "sk-right-key-0000000000" });
+		const closed = await serve();
+		const nowhere = closed.url;
+		await closed.close();
+		servers.splice(servers.indexOf(closed), 1);
+		const s = await start(home);
+		const check = async (id: string) => s.api<Checked>(`/custom-providers/${id}/check`, s.json("POST", {}));
+		const add = (name: string, baseUrl: string, more: Partial<CustomProvider> = {}, key?: string) =>
+			s.api(
+				"/custom-providers",
+				s.json("POST", { provider: { ...body(baseUrl, more), name }, tiers: TIERS_ON, ...(key ? { key } : {}) }),
+			);
+		try {
+			await add("Wrong key", server.url, { key: "required" }, "sk-wrong-key-1111111111");
+			expect(await check("custom-wrong-key")).toMatchObject({ ok: false, failure: "auth", status: 401 });
+			await add("Wrong path", server.url.replace(/\/v1$/, "/v2"), { key: "required" }, "sk-right-key-0000000000");
+			expect(await check("custom-wrong-path")).toMatchObject({ ok: false, failure: "not-found", status: 404 });
+			await add("Nothing there", nowhere);
+			expect(await check("custom-nothing-there")).toMatchObject({ ok: false, failure: "unreachable" });
+			server.set({ key: undefined, refuses: ["max_tokens"] });
+			await add("Strict", server.url);
+			expect(await check("custom-strict")).toMatchObject({ ok: false, failure: "rejected", status: 400 });
+			server.set({ refuses: [], redirect: "http://127.0.0.1:9/v1/chat/completions" });
+			expect(await check("custom-strict")).toMatchObject({ ok: false, failure: "redirect" });
+			server.set({ redirect: undefined, fail: { status: 429, message: "slow down" } });
+			expect(await check("custom-strict")).toMatchObject({ ok: false, failure: "limited", status: 429 });
+		} finally {
+			await s.daemon.close();
+		}
+	});
+
+	it("takes a model's price only as the owner states it: none is no price, not free", async () => {
+		const home = await tempHome();
+		const server = await serve();
+		const s = await start(home);
+		try {
+			const { cost: _, ...priceless } = model("small");
+			const refused = await s.refused(
+				"/custom-providers",
+				s.json("POST", {
+					provider: { ...body(server.url), models: [priceless] },
+					tiers: { quick: "small", balanced: "small", deep: "small" },
+				}),
+			);
+			expect(refused).toEqual({
+				status: 400,
+				error: "provider.models.0.cost is its price per million tokens in and out: 0 only if free",
 			});
 		} finally {
 			await s.daemon.close();

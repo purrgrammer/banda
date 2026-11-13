@@ -58,6 +58,14 @@ async function click(page: Page, expression: string) {
 	await page.input("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", clickCount: 1, ...point });
 }
 
+/** A key pressed and let go, as the keyboard sends it. */
+async function press(page: Page, key: "Enter" | "Tab" | "Escape") {
+	const code = { Enter: 13, Tab: 9, Escape: 27 }[key];
+	await page.input("Input.dispatchKeyEvent", { type: "rawKeyDown", key, code: key, windowsVirtualKeyCode: code });
+	if (key === "Enter") await page.input("Input.dispatchKeyEvent", { type: "char", key, code: key, text: "\r" });
+	await page.input("Input.dispatchKeyEvent", { type: "keyUp", key, code: key, windowsVirtualKeyCode: code });
+}
+
 /** Type `value` into a text field as the owner would, replacing what it held. */
 async function fill(page: Page, expression: string, value: string) {
 	await page.until(expression);
@@ -150,15 +158,42 @@ for (const width of [390, 1440])
 						await page.until(shows("None yet"));
 						await shot("1-model-tab");
 
+						// by keyboard: Enter opens the form on its first field, Tab moves on, Escape closes it back on the button
+						await page.run(`(${named("Add a provider")}).focus()`);
+						await press(page, "Enter");
+						await page.until(`${dialog} && document.activeElement === ${field("Name")}`);
+						await press(page, "Tab");
+						await page.until(`document.activeElement === ${field("Address")}`);
+						await press(page, "Escape");
+						await page.until(`!${dialog} && document.activeElement === ${named("Add a provider")}`);
+
 						// what the form refuses, said by the field, before anything is sent
 						await click(page, named("Add a provider"));
 						await page.until(dialog);
+						// nothing is guessed for it: no limits, no prices
+						for (const label of [
+							"Context, tokens",
+							"Longest answer, tokens",
+							"$ per 1M tokens in",
+							"$ per 1M tokens out",
+						])
+							expect(await page.run<string>(`${field(label, model(1))}.value`), label).toBe("");
 						await fill(page, field("Address"), "http://api.example.com/v1");
 						await click(page, button("Save", dialog));
 						await page.until(shows("Give it a name you will know it by"));
 						expect(await page.run<boolean>(shows("Use https:// for api.example.com"))).toBe(true);
 						expect(await page.run<boolean>(shows("Write the model's name as the server knows it"))).toBe(true);
+						expect(
+							await page.run<boolean>(shows("Write its context window in tokens, as its server or model card says")),
+						).toBe(true);
+						expect(
+							await page.run<boolean>(shows("Write what it charges per million tokens: 0 only if it is free")),
+						).toBe(true);
 						expect(await page.run<boolean>(shows("things to fix above"))).toBe(true);
+						// the first thing to fix is in view
+						await page.until(
+							`(() => {const r=${dialog}.querySelector('[role="alert"]').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight;})()`,
+						);
 						await shot("2-add-errors");
 						await darkToo("2-add-errors");
 
@@ -168,9 +203,16 @@ for (const width of [390, 1440])
 						await page.until(shows(`Sends to 127.0.0.1:${local.port}: this computer, where banda runs.`));
 						await fill(page, field("Model id", model(1)), "scripted-small");
 						await fill(page, field("Name in banda", model(1)), "Scripted small");
+						await fill(page, field("Context, tokens", model(1)), "32768");
+						await fill(page, field("Longest answer, tokens", model(1)), "4096");
+						await fill(page, field("$ per 1M tokens in", model(1)), "0");
+						await fill(page, field("$ per 1M tokens out", model(1)), "0");
 						await click(page, button("Add a model", dialog));
 						await fill(page, field("Model id", model(2)), "scripted-large");
 						await fill(page, field("Context, tokens", model(2)), "65536");
+						await fill(page, field("Longest answer, tokens", model(2)), "8192");
+						await fill(page, field("$ per 1M tokens in", model(2)), "0");
+						await fill(page, field("$ per 1M tokens out", model(2)), "0");
 						await click(page, `${model(2)}.querySelector('[aria-label="Model 2 thinks first"]')`);
 						await choose(page, field("Deep", dialog), "scripted-large");
 						expect(await page.run<string>(`${field("Quick", dialog)}.selectedOptions[0].textContent`)).toBe(
@@ -183,7 +225,10 @@ for (const width of [390, 1440])
 						await page.until(row("custom-local-scripted"));
 						// saving is not a check: nothing reached it
 						expect(local.requests).toHaveLength(0);
-						await page.until(shows(`On this computer · 127.0.0.1:${local.port}`));
+						await page.until(
+							`${row("custom-local-scripted")}.querySelector('[data-address]').textContent === ${JSON.stringify(local.url)}`,
+						);
+						expect(await page.run<string>(`${row("custom-local-scripted")}.innerText`)).toContain("On this computer");
 						expect(await page.run<boolean>(shows("No key · 2 models"))).toBe(true);
 						await shot("4-listed");
 
@@ -242,14 +287,22 @@ for (const width of [390, 1440])
 						await fill(page, field("Name"), "Team gateway");
 						await fill(page, field("Address"), "https://llm.example.com/v1");
 						await page.until(shows("Sends everything the band says to llm.example.com, on the internet."));
-						await click(page, named("It needs a key"));
+						expect(await page.run<boolean>(shows("Requires an API key"))).toBe(true);
+						await click(page, named("Requires an API key"));
+						// the switch's words stay; only its state changes
+						expect(await page.run<boolean>(shows("Requires an API key"))).toBe(true);
 						await fill(page, field("Its key"), KEY);
 						await fill(page, field("Model id", model(1)), "fast-1");
+						await fill(page, field("Context, tokens", model(1)), "128000");
+						await fill(page, field("Longest answer, tokens", model(1)), "8192");
 						await fill(page, field("$ per 1M tokens in", model(1)), "0.2");
 						await fill(page, field("$ per 1M tokens out", model(1)), "0.8");
 						await click(page, button("Save", dialog));
 						await page.until(row("custom-team-gateway"));
-						await page.until(shows("On the internet · llm.example.com"));
+						await page.until(
+							`${row("custom-team-gateway")}.querySelector('[data-address]')?.textContent === 'https://llm.example.com/v1'`,
+						);
+						expect(await page.run<string>(`${row("custom-team-gateway")}.innerText`)).toContain("On the internet");
 						expect(await page.run<boolean>(shows("Key saved · 1 model"))).toBe(true);
 						expect(await page.run<boolean>(`document.documentElement.outerHTML.includes(${JSON.stringify(KEY)})`)).toBe(
 							false,
@@ -283,7 +336,14 @@ for (const width of [390, 1440])
 						local.set({ fail: { status: 500, message: "the model crashed while loading" } });
 						await click(page, named("Check Local scripted"));
 						await click(page, button("Send the check", alert));
-						await page.until(shows("Didn't answer: 500"));
+						await page.until(shows("It failed on its own side. Check the server and its logs, then try again."));
+						// the technical words only on asking, and redacted
+						expect(await page.run<boolean>(shows("HTTP 500"))).toBe(false);
+						await click(
+							page,
+							`[...${row("custom-local-scripted")}.querySelectorAll('summary')].find(el => el.textContent === 'Details')`,
+						);
+						await page.until(shows("HTTP 500 ·"));
 						await shot("12-check-failed");
 						local.set({ fail: undefined });
 

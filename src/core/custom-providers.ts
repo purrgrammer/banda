@@ -36,7 +36,10 @@ export type CustomModel = {
 	readonly contextWindow: number;
 	/** The most tokens one answer takes. */
 	readonly maxTokens: number;
-	/** What it costs, in dollars per million tokens; 0 when free or unknown. */
+	/**
+	 * What it costs, in dollars per million tokens, as the owner wrote it: 0 only when they said it is free. There is no
+	 * unknown price: usage is counted from these numbers, so the owner states them.
+	 */
 	readonly cost: { readonly input: number; readonly output: number };
 };
 
@@ -219,14 +222,21 @@ export function problemsOf(
 		else if (seen.has(id)) say(at("id"), `${id} is listed twice`);
 		seen.add(id);
 		if ((model.name ?? "").length > MAX_NAME) say(at("name"), `A name is at most ${MAX_NAME} characters`);
-		if (!whole(model.contextWindow, 1024, MAX_CONTEXT))
+		// none of these is guessed: a wrong context or limit breaks a chat, and a wrong price misreports what it spent
+		if (Number.isNaN(model.contextWindow))
+			say(at("contextWindow"), "Write its context window in tokens, as its server or model card says");
+		else if (!whole(model.contextWindow, 1024, MAX_CONTEXT))
 			say(at("contextWindow"), "The context is a whole number of tokens, from 1,024 to 10,000,000");
-		if (!whole(model.maxTokens, 16, MAX_OUTPUT))
+		if (Number.isNaN(model.maxTokens))
+			say(at("maxTokens"), "Write the longest answer it gives, in tokens, as its server or model card says");
+		else if (!whole(model.maxTokens, 16, MAX_OUTPUT))
 			say(at("maxTokens"), "The longest answer is a whole number of tokens, from 16 to 1,000,000");
 		else if (whole(model.contextWindow, 1024, MAX_CONTEXT) && model.maxTokens > model.contextWindow)
 			say(at("maxTokens"), "The longest answer cannot be more than the context it fits in");
-		if (!price(model.cost.input)) say(at("cost.input"), "A price is a number of dollars, 0 or more");
-		if (!price(model.cost.output)) say(at("cost.output"), "A price is a number of dollars, 0 or more");
+		for (const side of ["input", "output"] as const)
+			if (Number.isNaN(model.cost[side]))
+				say(at(`cost.${side}`), "Write what it charges per million tokens: 0 only if it is free");
+			else if (!price(model.cost[side])) say(at(`cost.${side}`), "A price is a number of dollars, 0 or more");
 	});
 	return problems;
 }
@@ -234,3 +244,46 @@ export function problemsOf(
 /** A model's name in the app. */
 export const modelName = (model: Pick<CustomModel, "id" | "name">): string =>
 	model.name === undefined || model.name.trim() === "" ? model.id : model.name.trim();
+
+/**
+ * Why a check got no answer, from what the request itself showed, never from the words an endpoint or a library put in
+ * an error: the check's own deadline, the HTTP status, or the network's error code.
+ */
+export type CheckFailure =
+	| "timeout"
+	| "unreachable"
+	| "unknown-host"
+	| "certificate"
+	| "redirect"
+	| "auth"
+	| "not-found"
+	| "rejected"
+	| "limited"
+	| "server"
+	| "unreadable"
+	| "other";
+
+/** What one request of a check showed: its status, or the code of the network error it ended on. */
+export type Observed = { readonly status?: number; readonly code?: string };
+
+const CERTIFICATE = /^(CERT_|ERR_TLS|UNABLE_TO_|DEPTH_ZERO_|SELF_SIGNED_|ERR_SSL)/;
+
+/** Why a check that ended in an error failed: `timedOut` when its deadline passed, `observed` its last request. */
+export function checkFailure(timedOut: boolean, observed: Observed | undefined): CheckFailure {
+	if (timedOut) return "timeout";
+	if (observed === undefined) return "other";
+	if (observed.code !== undefined) {
+		if (observed.code === "ENOTFOUND" || observed.code === "EAI_AGAIN") return "unknown-host";
+		if (CERTIFICATE.test(observed.code)) return "certificate";
+		return "unreachable";
+	}
+	const status = observed.status ?? 0;
+	if (status >= 300 && status < 400) return "redirect";
+	if (status === 401 || status === 403) return "auth";
+	if (status === 404) return "not-found";
+	if (status === 400 || status === 422) return "rejected";
+	if (status === 429) return "limited";
+	if (status >= 500) return "server";
+	if (status >= 200 && status < 300) return "unreadable";
+	return "other";
+}
