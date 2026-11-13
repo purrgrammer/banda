@@ -75,23 +75,32 @@ const runtimeEnv = {
 	MSB_PATH: assets.msb,
 	MSB_LIBKRUNFW_PATH: assets.firmware,
 };
-const runtime = (args: readonly string[]) =>
-	execFileSync(assets.msb, [...args], { encoding: "utf8", env: runtimeEnv, timeout: 30_000 });
+const runtime = (args: readonly string[], timeout = 30_000) =>
+	execFileSync(assets.msb, [...args], {
+		encoding: "utf8",
+		env: runtimeEnv,
+		timeout,
+		killSignal: "SIGKILL",
+		maxBuffer: 1 << 20,
+	});
+const VMName = Type.String({ pattern: "^banda-microvm-[a-f0-9]{10}-[a-f0-9]{12}(?:-(?:proxy|browser))?$" });
+const Listing = Type.Array(Type.Object({ name: VMName }));
+const Owned = Type.Object({
+	name: VMName,
+	config: Type.Object({
+		labels: Type.Object({ "banda.home": Type.Literal(home), "banda.runtime": Type.Literal("microvm") }),
+	}),
+});
 let proxyRestarts = 0;
 let declinedPosts = 0;
 const stopProxy = () => {
-	const Listing = Type.Array(Type.Object({ name: Type.String() }));
 	const listed: unknown = JSON.parse(runtime(["list", "--format", "json"]));
 	assert.ok(Value.Check(Listing, listed));
 	const proxy = listed.find((vm) => vm.name.endsWith("-proxy"));
 	assert.ok(proxy !== undefined);
-	const Owned = Type.Object({
-		config: Type.Object({
-			labels: Type.Object({ "banda.home": Type.Literal(home), "banda.runtime": Type.Literal("microvm") }),
-		}),
-	});
 	const inspected: unknown = JSON.parse(runtime(["inspect", proxy.name, "--format", "json"]));
 	assert.ok(Value.Check(Owned, inspected));
+	assert.equal(inspected.name, proxy.name);
 	runtime(["stop", proxy.name]);
 	proxyRestarts++;
 };
@@ -341,6 +350,34 @@ try {
 	assert.equal(declinedPosts, 2);
 	completed = true;
 } catch (error) {
+	const runtimeDiagnostics: unknown[] = [];
+	try {
+		const listed: unknown = JSON.parse(runtime(["list", "--format", "json"], 5_000));
+		assert.ok(Value.Check(Listing, listed), "Invalid owned VM diagnostic inventory.");
+		assert.ok(listed.length <= 3, "The native proof owns at most one command, proxy and browser VM.");
+		for (const vm of listed) {
+			const inspected: unknown = JSON.parse(runtime(["inspect", vm.name, "--format", "json"], 5_000));
+			assert.ok(Value.Check(Owned, inspected), "Refusing diagnostics for an unowned VM.");
+			assert.equal(inspected.name, vm.name);
+			const captured = spawnSync(assets.msb, ["logs", "--source", "system", "--json", "--tail", "200", vm.name], {
+				encoding: "utf8",
+				env: runtimeEnv,
+				timeout: 5_000,
+				killSignal: "SIGKILL",
+				maxBuffer: 1 << 20,
+			});
+			runtimeDiagnostics.push({
+				name: vm.name,
+				status: captured.status,
+				signal: captured.signal,
+				stdout: captured.stdout,
+				stderr: captured.stderr,
+				error: captured.error?.message,
+			});
+		}
+	} catch (failure) {
+		runtimeDiagnostics.push({ error: failure instanceof Error ? failure.stack : String(failure) });
+	}
 	await writeFile(
 		join(output, "failure.json"),
 		JSON.stringify(
@@ -349,6 +386,7 @@ try {
 				error: error instanceof Error ? error.stack : String(error),
 				home,
 				cache,
+				runtimeDiagnostics,
 				diagnostics: await diagnostics?.().catch((failure: unknown) => String(failure)),
 			},
 			null,

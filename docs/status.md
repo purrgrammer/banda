@@ -24,9 +24,10 @@ resolution. Ordinary checks, typecheck, build and independent review pass after 
 restart walkthroughs pass at desktop and phone widths. Receipt fault scenarios pass in CI. Owner acceptance remains open.
 
 The bundled computer is in `prototype/microvm-box`. The macOS ARM64 candidate has packaged desktop/phone-width
-walkthrough evidence, including lazy browser preparation, guarded sends and restart persistence. Linux x64 and
-ARM64 build and smoke checks pass, but native acceptance stopped at runner KVM and browser prerequisites. Revised
-runner setup and native qualification remain before either is accepted.
+walkthrough evidence, including lazy browser preparation, guarded sends and restart persistence. General shows
+browser preparation and retry, and the packaged app preserves that status through proxy recovery. Linux x64 and
+ARM64 build and smoke checks pass, but neither has native acceptance. The ARM64 runner has no KVM device. The x64
+runtime aborts before its relay starts. Its cause and native qualification remain open.
 Windows retains the existing backend while its native runtime boundaries are unresolved ([Operations](operations.md)).
 macOS support requires Apple silicon; Intel Macs are no longer a release target. Public browser download delivery
 and clean-machine distribution remain open.
