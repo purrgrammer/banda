@@ -55,6 +55,7 @@ import { cacheLong } from "./core/long-cache.ts";
 import { MemoryLock, memoryExtension } from "./core/memory.ts";
 import { nowExtension } from "./core/now.ts";
 import { onPermissions, Permissions, revoke } from "./core/permissions.ts";
+import { backendOf } from "./core/provider-accounts.ts";
 import { FileCredentialStore } from "./core/provider-credentials.ts";
 import { Control, RoutineRefused, Routines } from "./core/routines.ts";
 import { Search } from "./core/search.ts";
@@ -431,6 +432,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 				model,
 				models.getModel(model.provider, model.modelId)?.baseUrl ?? models.getProvider(model.provider)?.baseUrl,
 				isCustomProvider(model.provider) ? models.getProvider(model.provider)?.name : undefined,
+				models.getProvider(backendOf(model.provider))?.name,
 			);
 		harness = await openStore(home, {
 			models,

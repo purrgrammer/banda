@@ -38,11 +38,11 @@ const LOOPBACK = /^[a-z]+:\/\/(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:\d+)?(\/|$
 
 /**
  * Who sees a chat run with `model`, whose endpoint is `baseUrl` when known; `own` is the name the owner gave a custom
- * provider, which no list here knows.
+ * provider, which no list here knows; `catalog` pi-ai's name for a provider this list does not name.
  */
-export function seenBy(model: ModelRef, baseUrl: string | undefined, own?: string): SeenBy {
+export function seenBy(model: ModelRef, baseUrl: string | undefined, own?: string, catalog?: string): SeenBy {
 	const backend = backendOf(model.provider);
-	const name = own ?? NAMES[backend] ?? backend.replace(/[-_]+/g, " ");
+	const name = own ?? NAMES[backend] ?? catalog ?? backend.replace(/[-_]+/g, " ");
 	const local = backend === "faux" || (baseUrl !== undefined && LOOPBACK.test(baseUrl));
 	return { name, local };
 }

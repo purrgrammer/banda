@@ -13,6 +13,7 @@ import { Accepted, ChatTier, parseAgent } from "../../core/agents.ts";
 import { Companion, type CompanionDoc } from "../../core/companion.ts";
 import {
 	changeCustomProviders,
+	guardedFetch,
 	observingFetch,
 	readCustomProviders,
 	redact,
@@ -25,19 +26,57 @@ import {
 	checkFailure,
 	customId,
 	destinationOf,
+	isCustomProvider,
+	isServerKind,
 	modelName,
 	type Observed,
 	originOf,
 	problemsOf,
 } from "../../core/custom-providers.ts";
+import { listModels, Unreadable } from "../../core/model-listing.ts";
 import { FileCredentialStore } from "../../core/provider-credentials.ts";
 import { context } from "../../core/store.ts";
 import { usageRecorder } from "../../core/system-usage.ts";
 import { providerOf, TIERS, type Tier } from "../../core/tiers.ts";
-import type { Checked, CustomProvidersView } from "../api/custom-providers.ts";
+import type { CatalogMatch, Checked, CustomProvidersView, ListingView } from "../api/custom-providers.ts";
 import { BadRequest } from "../http.ts";
 import type { AreaModule, Deps } from "./area.ts";
 import { clearTiers, setTiers } from "./tiers.ts";
+
+/** How long a listing waits for the server, every request of it together. */
+const LIST_MS = 20_000;
+
+/**
+ * pi-ai's built-in catalog by model id, where one id names one model's limits: a match a server's model may be offered,
+ * never taken for it. An id two providers list with different limits is no match.
+ */
+function catalogIndex(deps: Deps): Map<string, CatalogMatch> {
+	const index = new Map<string, CatalogMatch | null>();
+	for (const provider of deps.models.getProviders()) {
+		if (isCustomProvider(provider.id) || provider.id.includes("@")) continue;
+		for (const model of provider.getModels()) {
+			const match: CatalogMatch = {
+				ref: `${provider.id}/${model.id}`,
+				provider: provider.name,
+				contextWindow: model.contextWindow,
+				maxTokens: model.maxTokens,
+				images: model.input.includes("image"),
+				reasoning: model.reasoning,
+			};
+			const before = index.get(model.id);
+			if (before === undefined) index.set(model.id, match);
+			else if (
+				before !== null &&
+				(before.contextWindow !== match.contextWindow ||
+					before.maxTokens !== match.maxTokens ||
+					before.images !== match.images ||
+					before.reasoning !== match.reasoning)
+			)
+				index.set(model.id, null);
+		}
+	}
+	return new Map([...index].flatMap(([id, match]) => (match === null ? [] : [[id, match] as const])));
+}
 
 /** How long a check waits for an answer. */
 const CHECK_MS = 30_000;
@@ -63,14 +102,32 @@ function definitionOf(value: unknown): Omit<CustomProvider, "id"> {
 	const body = value as Record<string, unknown>;
 	const key = body.key;
 	if (key !== "required" && key !== "none") throw new BadRequest('provider.key is "required" or "none"');
+	if (!isServerKind(body.kind)) throw new BadRequest("provider.kind is the kind of server it is");
+	const kind = body.kind;
+	// whether it charges per token is the owner's word, never a default
+	const billing = body.billing;
+	if (billing !== "none" && billing !== "rates")
+		throw new BadRequest('provider.billing says whether it charges per token: "none" or "rates"');
 	if (!Array.isArray(body.models)) throw new BadRequest("provider.models is a list");
 	const models = body.models.map((each: unknown, n): CustomModel => {
 		if (typeof each !== "object" || each === null) throw new BadRequest(`provider.models.${n} is a model`);
 		const model = each as Record<string, unknown>;
-		// a price is the owner's word, never a default: 0 is free, said so
-		if (typeof model.cost !== "object" || model.cost === null)
-			throw new BadRequest(`provider.models.${n}.cost is its price per million tokens in and out: 0 only if free`);
-		const cost = model.cost as Record<string, unknown>;
+		let cost: CustomModel["cost"];
+		if (billing === "rates") {
+			if (typeof model.cost !== "object" || model.cost === null)
+				throw new BadRequest(`provider.models.${n}.cost is what it charges per million tokens in and out`);
+			const given = model.cost as Record<string, unknown>;
+			cost = {
+				input: number(given.input, `provider.models.${n}.cost.input`),
+				output: number(given.output, `provider.models.${n}.cost.output`),
+			};
+		} else if (model.cost !== undefined)
+			throw new BadRequest(`provider.models.${n}.cost: it charges no per-token price, so a model has none`);
+		const source = (model.source ?? {}) as Record<string, unknown>;
+		const limits = source.limits;
+		const catalog = (limits as { catalog?: unknown } | undefined)?.catalog;
+		if (limits !== "server" && limits !== "owner" && typeof catalog !== "string")
+			throw new BadRequest(`provider.models.${n}.source.limits says where its limits came from`);
 		const name = model.name === undefined ? "" : text(model.name, `provider.models.${n}.name`).trim();
 		return {
 			id: text(model.id, `provider.models.${n}.id`).trim(),
@@ -79,9 +136,10 @@ function definitionOf(value: unknown): Omit<CustomProvider, "id"> {
 			reasoning: flag(model.reasoning ?? false, `provider.models.${n}.reasoning`),
 			contextWindow: number(model.contextWindow, `provider.models.${n}.contextWindow`),
 			maxTokens: number(model.maxTokens, `provider.models.${n}.maxTokens`),
-			cost: {
-				input: number(cost.input, `provider.models.${n}.cost.input`),
-				output: number(cost.output, `provider.models.${n}.cost.output`),
+			...(cost === undefined ? {} : { cost }),
+			source: {
+				listed: flag(source.listed ?? false, `provider.models.${n}.source.listed`),
+				limits: typeof catalog === "string" ? { catalog } : (limits as "server" | "owner"),
 			},
 		};
 	});
@@ -107,11 +165,20 @@ function definitionOf(value: unknown): Omit<CustomProvider, "id"> {
 	const destination = destinationOf(baseUrl);
 	return {
 		name: text(body.name, "provider.name").trim(),
+		kind,
 		baseUrl: "error" in destination ? baseUrl : destination.url,
 		key,
+		billing,
 		models,
 		...(compat === undefined || Object.keys(compat).length === 0 ? {} : { compat }),
 	};
+}
+
+/** The model a new server starts on, from a request's body: one of `models`, for every tier. */
+function startOf(value: unknown, models: readonly CustomModel[]): { readonly [T in Tier]: string } {
+	if (typeof value !== "string" || !models.some((model) => model.id === value))
+		throw new BadRequest("Pick the model it starts on: one of those you keep");
+	return { quick: value, balanced: value, deep: value };
 }
 
 /** The tiers in a request's body: one of `models` each. */
@@ -205,7 +272,9 @@ export const customProviders: AreaModule = {
 					return {
 						id: provider.id,
 						name: provider.name,
+						kind: provider.kind,
 						baseUrl: provider.baseUrl,
+						billing: provider.billing,
 						destination:
 							"error" in destination
 								? { place: "internet", host: provider.baseUrl, secure: false, url: provider.baseUrl }
@@ -236,7 +305,8 @@ export const customProviders: AreaModule = {
 				file.providers.map((each) => each.name),
 			);
 			if (problem !== undefined) throw new BadRequest(problem.message);
-			const tiers = tiersOf(body.tiers, definition.models);
+			// one model the owner picked runs every tier until they refine one; nothing is used until they say Use
+			const tiers = startOf(body.start, definition.models);
 			const key = keyOf(body.key);
 			if (definition.key === "required" && key === undefined)
 				throw new BadRequest("Give its key, or say it needs none");
@@ -257,7 +327,7 @@ export const customProviders: AreaModule = {
 					: new BadRequest(thrown instanceof Error ? thrown.message : String(thrown));
 			});
 			await register();
-			await setTiers(deps, id, tiers, body.use === true);
+			await setTiers(deps, id, tiers);
 			deps.changed();
 			return { id };
 		};
@@ -272,7 +342,13 @@ export const customProviders: AreaModule = {
 				file.providers.filter((each) => each.id !== id).map((each) => each.name),
 			);
 			if (problem !== undefined) throw new BadRequest(problem.message);
-			const tiers = tiersOf(body.tiers, definition.models);
+			const current = (await deps.harness.snapshot(Companion, context))?.overrides?.[id] ?? {};
+			const tiers =
+				body.tiers !== undefined
+					? tiersOf(body.tiers, definition.models)
+					: body.start !== undefined
+						? startOf(body.start, definition.models)
+						: tiersOf(current, definition.models);
 			const key = keyOf(body.key);
 			if (definition.key === "none" && key !== undefined) throw new BadRequest("It needs no key: leave the key out");
 			const had = (await credentials.read(id)) !== undefined;
@@ -320,6 +396,70 @@ export const customProviders: AreaModule = {
 			await register();
 			deps.changed();
 			return {};
+		};
+
+		/**
+		 * The models the server lists, when the owner asks: the route its kind documents, through the same guard as every
+		 * request to it, which asks no model to answer. A model of the same id in pi-ai's catalog is offered beside it, its
+		 * limits for the owner to take or not: an id is no promise that a server runs the same model, so nothing is taken
+		 * on its word, and never its price.
+		 */
+		const list = async (body: Record<string, unknown>): Promise<ListingView> => {
+			const given = (typeof body.provider === "object" && body.provider !== null ? body.provider : {}) as Record<
+				string,
+				unknown
+			>;
+			if (!isServerKind(given.kind)) throw new BadRequest("provider.kind is the kind of server it is");
+			const kind = given.kind;
+			const destination = destinationOf(text(given.baseUrl, "provider.baseUrl"));
+			if ("error" in destination) throw new BadRequest(destination.error);
+			const keyless = given.key === "none";
+			let key = keyless ? undefined : keyOf(body.key);
+			// an edit lists with the key kept for it, and only at the address it was given for
+			if (!keyless && key === undefined && typeof body.id === "string") {
+				const before = (await readCustomProviders(deps.home)).providers.find((each) => each.id === body.id);
+				const stored = await credentials.read(body.id);
+				if (
+					before !== undefined &&
+					originOf(before.baseUrl) === originOf(destination.url) &&
+					stored?.type === "api_key"
+				)
+					key = stored.key;
+			}
+			if (!keyless && key === undefined) throw new BadRequest("Give its key first: it is sent with the request");
+			const seen: Observed[] = [];
+			const deadline = AbortSignal.timeout(LIST_MS);
+			try {
+				const listed = await listModels(
+					{ kind, baseUrl: destination.url },
+					key,
+					guardedFetch({ key: keyless ? "none" : "required" }, observingFetch(seen)),
+					deadline,
+				);
+				const catalog = catalogIndex(deps);
+				return {
+					ok: true,
+					routes: listed.routes,
+					models: listed.models.map((model) => {
+						const match = catalog.get(model.id);
+						return match === undefined ? model : { ...model, catalog: match };
+					}),
+				};
+			} catch (thrown) {
+				const last = seen.at(-1);
+				const unreadable = thrown instanceof Unreadable;
+				return {
+					ok: false,
+					failure: unreadable ? "unreadable" : checkFailure(deadline.aborted, last),
+					...(last?.status === undefined ? {} : { status: last.status }),
+					detail: deadline.aborted
+						? `no answer in ${LIST_MS / 1000} seconds`
+						: redact(
+								[last?.code, thrown instanceof Error ? thrown.message : String(thrown)].filter(Boolean).join(": "),
+								[key],
+							),
+				};
+			}
 		};
 
 		/** One short request to the endpoint, with `modelId` (its Quick model unless given): the owner asked for it. */
@@ -386,6 +526,8 @@ export const customProviders: AreaModule = {
 				if (request.path === "/custom-providers" && request.method === "GET") return { body: await view() };
 				if (request.path === "/custom-providers" && request.method === "POST")
 					return { body: await add(await request.json()) };
+				if (request.path === "/custom-providers/list" && request.method === "POST")
+					return { body: await list(await request.json()) };
 				const matched = /^\/custom-providers\/(custom-[a-z0-9-]+)(\/check)?$/.exec(request.path);
 				if (matched === null) return undefined;
 				const id = matched[1] ?? "";

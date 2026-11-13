@@ -74,6 +74,14 @@ export type ProviderView = {
 	readonly name: string;
 	readonly apiKey: boolean;
 	readonly oauth: boolean;
+	/** A cloud's own form, when signing in takes more than a key (`src/core/provider-forms.ts`). */
+	readonly form?: import("../../../src/core/provider-forms.ts").ProviderForm;
+	/** How many models pi-ai's catalog lists for it. */
+	readonly models: number;
+	/** Whether banda has Quick, Balanced and Deep picked for it; else the owner starts it on one model. */
+	readonly presets: boolean;
+	/** Its list can be read from the provider itself (pi-ai's refresh), not only pi-ai's catalog. */
+	readonly refresh?: true;
 	readonly accounts: readonly ProviderAccountView[];
 };
 

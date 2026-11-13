@@ -18,6 +18,8 @@
  */
 import type { AuthPrompt } from "@earendil-works/pi-ai";
 import { accountsOf, registerAccount } from "../../core/account-provider.ts";
+import { redact } from "../../core/custom-provider.ts";
+import { isCustomProvider } from "../../core/custom-providers.ts";
 import {
 	accountSlug,
 	backendOf,
@@ -27,8 +29,10 @@ import {
 	parseAccount,
 } from "../../core/provider-accounts.ts";
 import { FileCredentialStore } from "../../core/provider-credentials.ts";
-import { PRESETS } from "../../core/tiers.ts";
+import { answersOf, PROVIDER_FORMS } from "../../core/provider-forms.ts";
+import { PRESETS, presetOf } from "../../core/tiers.ts";
 import { deviceId } from "../../home.ts";
+import type { ModelsListView } from "../api/custom-providers.ts";
 import { BadRequest } from "../http.ts";
 import type { AreaModule, Deps } from "./area.ts";
 import { leaveProvider, selectConnectedProvider } from "./tiers.ts";
@@ -53,7 +57,30 @@ type Attempt = {
 
 /** An account the owner is adding: its label, until its credential is stored. */
 type Adding = ReadonlyMap<string, string>;
-const supported = [...new Set(PRESETS.map((preset) => preset.provider).filter((id) => id !== "openai-codex"))];
+/**
+ * pi-ai's providers banda offers: every one built in with chat models, those with presets first in their order, the
+ * rest by name. Not OpenAI Codex, which pi-ai keeps as a legacy duplicate of OpenAI's own sign-in; nor the owner's own
+ * servers (`./custom-providers.ts`) or an account beyond a backend's first, which are listed with what they belong to.
+ */
+export function builtIns(models: Deps["models"]): string[] {
+	const order = PRESETS.map((preset) => preset.provider);
+	return models
+		.getProviders()
+		.filter(
+			(provider) =>
+				provider.id !== "openai-codex" &&
+				!isCustomProvider(provider.id) &&
+				!isClone(provider.id) &&
+				provider.getModels().length > 0,
+		)
+		.sort((a, b) => {
+			const [x, y] = [order.indexOf(a.id), order.indexOf(b.id)];
+			if (x !== -1 || y !== -1) return (x === -1 ? order.length : x) - (y === -1 ? order.length : y);
+			return a.name.localeCompare(b.name);
+		})
+		.map((provider) => provider.id);
+}
+const supportedIn = (deps: Deps, backend: string) => builtIns(deps.models).includes(backend);
 
 /**
  * pi-ai's label for a key it holds for the owner; every other api-key source it reports names where it found one
@@ -90,7 +117,7 @@ async function view(
 	const labels = await new FileCredentialStore(deps.home).labels();
 	return (
 		await Promise.all(
-			supported.flatMap(async (backend) => {
+			builtIns(deps.models).flatMap(async (backend) => {
 				const provider = deps.models.getProvider(backend);
 				if (provider === undefined) return [];
 				const auth = provider.auth;
@@ -112,12 +139,17 @@ async function view(
 						};
 					}),
 				);
+				const form = PROVIDER_FORMS[backend];
 				return [
 					{
 						id: backend,
 						name: provider.name,
 						apiKey: auth.apiKey?.login !== undefined,
 						oauth: auth.oauth !== undefined,
+						...(form === undefined ? {} : { form }),
+						models: provider.getModels().length,
+						presets: presetOf(backend) !== undefined,
+						...(provider.refreshModels === undefined ? {} : { refresh: true as const }),
 						accounts,
 					},
 				];
@@ -156,6 +188,31 @@ async function holding(deps: Deps, id: string, key: string): Promise<string | un
 	return undefined;
 }
 
+/** When each provider's list was last refreshed from the provider itself, in this daemon's life. */
+const refreshed = new Map<string, number>();
+
+/**
+ * A built-in provider's models as pi-ai lists them, with what pi-ai says of each: a catalog, not a promise that the
+ * owner's account reaches every one, nor of a price their plan may change. `refreshed` when the provider's own list
+ * (pi-ai's refresh) has been read since the daemon started.
+ */
+function catalogOf(deps: Deps, id: string): ModelsListView {
+	const at = refreshed.get(backendOf(id));
+	return {
+		source: at === undefined ? "catalog" : "refreshed",
+		...(at === undefined ? {} : { at }),
+		models: deps.models.getModels(id).map((model) => ({
+			id: model.id,
+			name: model.name,
+			contextWindow: model.contextWindow,
+			maxTokens: model.maxTokens,
+			images: model.input.includes("image"),
+			reasoning: model.reasoning,
+			cost: { input: model.cost.input, output: model.cost.output },
+		})),
+	};
+}
+
 export function providersArea(options: { readonly timeoutMs?: number } = {}): AreaModule {
 	const timeoutMs = options.timeoutMs ?? SIGN_IN_TIMEOUT_MS;
 	return {
@@ -184,7 +241,7 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 			};
 			const connect = async (id: string, body: Record<string, unknown>) => {
 				const provider = deps.models.getProvider(id);
-				if (provider === undefined || !supported.includes(backendOf(id)))
+				if (provider === undefined || !supportedIn(deps, backendOf(id)))
 					throw new BadRequest("that provider is not available in banda");
 				const type = body.type;
 				if (type !== "api_key" && type !== "oauth") throw new BadRequest("type is api_key or oauth");
@@ -192,13 +249,33 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 					throw new BadRequest(`${provider.name} does not take a key here`);
 				if (type === "oauth" && provider.auth.oauth === undefined)
 					throw new BadRequest(`${provider.name} does not support sign-in`);
-				const key = body.key;
-				if (type === "api_key" && (typeof key !== "string" || key === "")) throw new BadRequest("key is required");
-				if (type === "api_key") {
-					const already = await holding(deps, id, key as string);
+				const method = typeof body.method === "string" ? body.method : undefined;
+				// a cloud's form answers its login's prompts in order; any other key login asks for the key alone
+				const form = PROVIDER_FORMS[backendOf(id)];
+				let answers: string[] = [];
+				let settings: Readonly<Record<string, string>> = {};
+				let key: string | undefined;
+				if (type === "api_key" && form !== undefined) {
+					const fields = (typeof body.fields === "object" && body.fields !== null ? body.fields : {}) as Record<
+						string,
+						unknown
+					>;
+					const read = answersOf(form, method, fields);
+					if ("missing" in read) throw new BadRequest(read.missing);
+					answers = [...read.answers];
+					settings = read.env;
+					key = read.key;
+				} else if (type === "api_key") {
+					if (typeof body.key !== "string" || body.key === "") throw new BadRequest("key is required");
+					key = body.key;
+					answers = [key];
+				}
+				if (type === "api_key" && key !== undefined) {
+					const already = await holding(deps, id, key);
 					if (already !== undefined) throw new BadRequest(`that key is connected already, as ${already}`, 409);
 				}
-				const method = typeof body.method === "string" ? body.method : undefined;
+				// connecting from Add a provider says nothing about using it: the owner picks Use after
+				const use = body.use !== false;
 				// the latest attempt wins: the earlier one ends, and its callback server with it, before this one binds
 				await end(id, "a newer sign-in replaced this one");
 				let reveal!: (url: string) => void;
@@ -219,7 +296,11 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 				timer.unref();
 				const installation = await deviceId(deps.home);
 				const prompt = (ask: AuthPrompt) => {
-					if (type === "api_key") return Promise.resolve(key as string);
+					if (type === "api_key") {
+						// a form's chosen method answers the login's choice; its fields, in order, the rest
+						if (ask.type === "select") return Promise.resolve(method ?? ask.options[0]?.id ?? "");
+						return Promise.resolve(answers.shift() ?? "");
+					}
 					if (ask.type === "select") {
 						attempt.methods = ask.options.map((option) => ({ id: option.id, label: option.label }));
 						const chosen = ask.options.find((option) => option.id === method) ?? ask.options[0];
@@ -257,12 +338,20 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 					)
 					.then(async () => {
 						settle();
+						// a form's settings that are no prompt (Azure's resource) go with the credential, as pi-ai reads them
+						if (Object.keys(settings).length > 0)
+							await store.modify(id, async (current) =>
+								current?.type === "api_key" ? { ...current, env: { ...current.env, ...settings } } : undefined,
+							);
 						const label = adding.get(id);
 						if (label !== undefined) {
 							await store.label(id, label);
 							adding.delete(id);
 						}
-						if (attempt.quiet !== true) await selectConnectedProvider(deps, id);
+						// a provider with presets thinks at once, as first run expects; one without waits for the owner to
+						// start it on a model they pick
+						if (attempt.quiet !== true && use && presetOf(backendOf(id)) !== undefined)
+							await selectConnectedProvider(deps, id);
 					})
 					.then(
 						() => deps.changed(),
@@ -286,7 +375,7 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 			 * else an id of its own. It signs in as `connect` does.
 			 */
 			const add = async (backend: string, body: Record<string, unknown>) => {
-				if (!supported.includes(backend) || deps.models.getProvider(backend) === undefined)
+				if (!supportedIn(deps, backend) || deps.models.getProvider(backend) === undefined)
 					throw new BadRequest("that provider is not available in banda");
 				const label = await labelOf(deps, backend, body.label, adding);
 				const accounts = accountsOf(deps.models, backend);
@@ -310,6 +399,29 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 				route: async (request) => {
 					if (request.path === "/providers" && request.method === "GET")
 						return { body: await view(deps, pending, failures, adding) };
+					const listing = /^\/providers\/([^/]+)\/(models|refresh)$/.exec(request.path);
+					if (listing !== null) {
+						const id = decodeURIComponent(listing[1] ?? "");
+						const provider = deps.models.getProvider(id);
+						if (provider === undefined || !supportedIn(deps, backendOf(id)))
+							throw new BadRequest("that provider is not available in banda", 404);
+						if (listing[2] === "models" && request.method === "GET") return { body: catalogOf(deps, id) };
+						if (listing[2] === "refresh" && request.method === "POST") {
+							if (provider.refreshModels === undefined)
+								throw new BadRequest(`${provider.name}'s list is pi-ai's catalog: there is nothing to refresh`);
+							if ((await deps.models.checkAuth(id).catch(() => undefined)) === undefined)
+								throw new BadRequest(`Connect ${provider.name} first: its list comes with your account`);
+							// the provider's own refresh, through pi-ai: a list of models, which runs none
+							const { errors } = await deps.models.refresh({ providers: [id], allowNetwork: true, force: true });
+							const error = errors.get(id);
+							if (error !== undefined)
+								throw new BadRequest(`${provider.name} didn't list its models: ${redact(error.message)}`, 502);
+							refreshed.set(id, Date.now());
+							deps.changed();
+							return { body: catalogOf(deps, id) };
+						}
+						return undefined;
+					}
 					const matched = /^\/providers\/([^/]+)(?:\/(answer|sign-in|accounts|label))?$/.exec(request.path);
 					if (matched === null) return undefined;
 					const id = decodeURIComponent(matched[1] ?? "");
@@ -333,7 +445,7 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 						return { body: {} };
 					}
 					if (request.method === "PUT" && matched[2] === "label") {
-						if (deps.models.getProvider(id) === undefined || !supported.includes(backendOf(id)))
+						if (deps.models.getProvider(id) === undefined || !supportedIn(deps, backendOf(id)))
 							throw new BadRequest("there is no such account", 404);
 						const label = await labelOf(deps, backendOf(id), (await request.json()).label, adding, id);
 						if (adding.has(id)) adding.set(id, label);

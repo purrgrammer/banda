@@ -21,8 +21,10 @@ export type CompatOptions = {
 	readonly base?: string;
 	/** A key the server requires as `Authorization: Bearer <key>`; it answers 401, echoing what it got, without it. */
 	readonly key?: string;
-	/** The models `GET /models` lists. */
-	readonly models?: readonly string[];
+	/** The models it has, as each listing route tells them (`GET /models`, Ollama's, LM Studio's…). */
+	readonly models?: readonly (string | FixtureModel)[];
+	/** Whose `GET /v1/models` shape it answers in. Default OpenAI's. */
+	readonly flavor?: "openai" | "anthropic" | "mistral";
 	/** The text of an answer, from the request. Default: "OK from <model>". */
 	readonly reply?: (body: Record<string, unknown>) => string;
 	/** Answer `POST /chat/completions` with a redirect here instead. */
@@ -38,6 +40,17 @@ export type CompatOptions = {
 	readonly speak?: string;
 	/** Hold each chat completion this long before answering, as a slow model does. */
 	readonly delayMs?: number;
+};
+
+/** A model as the fixture lists it; each route says of it what its documentation says such a server does. */
+export type FixtureModel = {
+	readonly id: string;
+	readonly context?: number;
+	readonly maxTokens?: number;
+	readonly vision?: boolean;
+	readonly thinking?: boolean;
+	readonly embedding?: boolean;
+	readonly displayName?: string;
 };
 
 export type CompatServer = {
@@ -60,6 +73,41 @@ async function bodyOf(request: IncomingMessage): Promise<Record<string, unknown>
 	}
 }
 
+/** An answer as Anthropic's Messages API streams one. */
+function anthropicAnswer(
+	response: import("node:http").ServerResponse,
+	body: Record<string, unknown> | undefined,
+	options: CompatOptions,
+) {
+	if (options.fail !== undefined) {
+		response.writeHead(options.fail.status, { "content-type": "application/json" });
+		return response.end(JSON.stringify({ type: "error", error: { type: "api_error", message: options.fail.message } }));
+	}
+	const model = String(body?.model ?? "scripted-model");
+	const text = options.reply?.(body ?? {}) ?? `OK from ${model}`;
+	response.writeHead(200, { "content-type": "text/event-stream" });
+	const send = (type: string, data: Record<string, unknown>) =>
+		response.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
+	send("message_start", {
+		message: {
+			id: "msg_scripted",
+			type: "message",
+			role: "assistant",
+			model,
+			content: [],
+			stop_reason: null,
+			stop_sequence: null,
+			usage: { input_tokens: 12, output_tokens: 0 },
+		},
+	});
+	send("content_block_start", { index: 0, content_block: { type: "text", text: "" } });
+	send("content_block_delta", { index: 0, delta: { type: "text_delta", text } });
+	send("content_block_stop", { index: 0 });
+	send("message_delta", { delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 4 } });
+	send("message_stop", {});
+	response.end();
+}
+
 export async function compatServer(initial: CompatOptions = {}, port = 0): Promise<CompatServer> {
 	let options: CompatOptions = { ...initial };
 	const requests: Recorded[] = [];
@@ -73,19 +121,125 @@ export async function compatServer(initial: CompatOptions = {}, port = 0): Promi
 				response.writeHead(status, { "content-type": "application/json" });
 				response.end(JSON.stringify(value));
 			};
-			if (options.key !== undefined && request.headers.authorization !== `Bearer ${options.key}`)
+			const given =
+				request.headers.authorization ??
+				(request.headers["x-api-key"] ? `Bearer ${request.headers["x-api-key"]}` : undefined);
+			if (options.key !== undefined && given !== `Bearer ${options.key}`)
 				return json(401, {
 					error: {
-						message: `Incorrect API key provided: ${request.headers.authorization ?? "none"}`,
+						message: `Incorrect API key provided: ${given ?? "none"}`,
 						type: "invalid_request_error",
 					},
 				});
-			if (request.method === "GET" && path === `${base}/models`)
+			// a listing that redirects, as a misconfigured proxy does
+			if (request.method === "GET" && options.redirect !== undefined) {
+				response.writeHead(307, { location: options.redirect });
+				return response.end();
+			}
+			const models = (options.models ?? ["scripted-model"]).map((each) =>
+				typeof each === "string" ? ({ id: each } as FixtureModel) : each,
+			);
+			if (request.method === "GET" && path === `${base}/models`) {
+				// each as its server documents it
+				if (options.flavor === "anthropic")
+					return json(200, {
+						data: models.map((model) => ({
+							type: "model",
+							id: model.id,
+							display_name: model.displayName ?? model.id,
+							created_at: "2026-01-01T00:00:00Z",
+							max_input_tokens: model.context ?? null,
+							max_tokens: model.maxTokens ?? null,
+							capabilities: {
+								image_input: { supported: model.vision === true },
+								thinking: { supported: model.thinking === true, types: {} },
+							},
+						})),
+						has_more: false,
+						first_id: models[0]?.id ?? null,
+						last_id: models.at(-1)?.id ?? null,
+					});
+				if (options.flavor === "mistral")
+					return json(
+						200,
+						models.map((model) => ({
+							id: model.id,
+							object: "model",
+							created: 0,
+							owned_by: "scripted",
+							capabilities: {
+								completion_chat: model.embedding !== true,
+								completion_fim: false,
+								function_calling: true,
+								fine_tuning: false,
+								vision: model.vision === true,
+								classification: false,
+							},
+							max_context_length: model.context ?? 32768,
+							aliases: [],
+							TYPE: "base",
+						})),
+					);
 				return json(200, {
 					object: "list",
-					data: (options.models ?? ["scripted-model"]).map((id) => ({ id, object: "model", owned_by: "scripted" })),
+					data: models.map((model) => ({
+						id: model.id,
+						object: "model",
+						owned_by: "scripted",
+						...(model.context === undefined ? {} : { meta: { n_ctx_train: model.context } }),
+					})),
 				});
-			if (request.method !== "POST" || path !== `${base}/chat/completions`)
+			}
+			// Ollama's own routes
+			if (request.method === "GET" && path === "/api/tags")
+				return json(200, {
+					models: models.map((model) => ({
+						name: model.id,
+						model: model.id,
+						modified_at: "2026-01-01T00:00:00Z",
+						size: 1,
+						digest: "0",
+						details: { format: "gguf", family: "llama", parameter_size: "8B", quantization_level: "Q4_0" },
+					})),
+				});
+			if (request.method === "POST" && path === "/api/show") {
+				const model = models.find((each) => each.id === body?.model);
+				if (model === undefined) return json(404, { error: `model '${String(body?.model)}' not found` });
+				return json(200, {
+					modelfile: "",
+					parameters: "",
+					template: "",
+					details: { format: "gguf", family: "llama" },
+					model_info: {
+						"general.architecture": "llama",
+						...(model.context === undefined ? {} : { "llama.context_length": model.context }),
+					},
+					capabilities: model.embedding === true ? ["embedding"] : ["completion", ...(model.vision ? ["vision"] : [])],
+				});
+			}
+			// LM Studio's
+			if (request.method === "GET" && path === "/api/v0/models")
+				return json(200, {
+					object: "list",
+					data: models.map((model) => ({
+						id: model.id,
+						object: "model",
+						type: model.embedding ? "embeddings" : model.vision ? "vlm" : "llm",
+						publisher: "scripted",
+						arch: "llama",
+						compatibility_type: "gguf",
+						quantization: "Q4_K_M",
+						state: "not-loaded",
+						...(model.context === undefined ? {} : { max_context_length: model.context }),
+					})),
+				});
+			// llama.cpp's
+			if (request.method === "GET" && path === "/props")
+				return json(200, { default_generation_settings: { n_ctx: models[0]?.context ?? 4096 } });
+			if (request.method === "POST" && path === `${base}/messages` && options.redirect === undefined)
+				return anthropicAnswer(response, body, options);
+			const generating = [`${base}/chat/completions`, `${base}/messages`, `${base}/responses`];
+			if (request.method !== "POST" || !generating.includes(path))
 				return json(404, { error: { message: `no route ${request.method} ${path}` } });
 			if (path === `${base}/chat/completions` && (options.delayMs ?? 0) > 0) {
 				const held = options.delayMs ?? 0;

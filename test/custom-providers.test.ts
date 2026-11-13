@@ -50,14 +50,16 @@ const model = (id: string, more: Partial<CustomProvider["models"][number]> = {})
 	reasoning: false,
 	contextWindow: 32_768,
 	maxTokens: 4096,
-	cost: { input: 0, output: 0 },
+	source: { listed: false, limits: "owner" as const },
 	...more,
 });
 const definition = (baseUrl: string, more: Partial<CustomProvider> = {}): CustomProvider => ({
 	id: "custom-local",
 	name: "Local",
+	kind: "openai",
 	baseUrl,
 	key: "none",
+	billing: "none",
 	models: [model("small"), model("large")],
 	...more,
 });
@@ -107,8 +109,10 @@ describe("a definition", () => {
 		const problems = problemsOf(
 			{
 				name: " ",
+				kind: "openai",
 				baseUrl: "http://example.com/v1",
 				key: "none",
+				billing: "none",
 				models: [model("a b"), model("ok", { contextWindow: 1000 }), model("ok", { maxTokens: 64_000 })],
 			},
 			[],
@@ -127,9 +131,10 @@ describe("a definition", () => {
 		expect(problemsOf({ ...definition("http://localhost:1/v1"), models: [] })[0]?.field).toBe("models");
 	});
 
-	it("asks for a model's limits and prices rather than guessing them", () => {
+	it("asks for a model's limits and, when it charges per token, its rates, rather than guessing them", () => {
 		const messages = problemsOf({
 			...definition("http://localhost:1/v1"),
+			billing: "rates",
 			models: [
 				model("m", { contextWindow: Number.NaN, maxTokens: Number.NaN, cost: { input: Number.NaN, output: 0 } }),
 			],
@@ -137,8 +142,22 @@ describe("a definition", () => {
 		expect(messages).toEqual([
 			"models.0.contextWindow: Write its context window in tokens, as its server or model card says",
 			"models.0.maxTokens: Write the longest answer it gives, in tokens, as its server or model card says",
-			"models.0.cost.input: Write what it charges per million tokens: 0 only if it is free",
+			"models.0.cost.input: Write what it charges per million tokens, as its provider bills it",
 		]);
+		// a model of a server that charges none has no price at all, never a 0 standing in for one
+		expect(
+			problemsOf({
+				...definition("http://localhost:1/v1"),
+				models: [model("m", { cost: { input: 0, output: 0 } })],
+			})[0],
+		).toMatchObject({ field: "models.0.cost.input" });
+		expect(problemsOf({ ...definition("http://localhost:1/v1"), billing: undefined as never })[0]).toMatchObject({
+			field: "billing",
+		});
+		// compatibility settings only for chat completions
+		expect(
+			problemsOf({ ...definition("https://a.example/v1"), kind: "anthropic", compat: { store: true } })[0],
+		).toMatchObject({ field: "compat" });
 	});
 
 	it("gets an id of its own that no pi-ai provider or account has", () => {
@@ -334,20 +353,25 @@ describe("the daemon", () => {
 		try {
 			const { id } = await s.api<{ id: string }>(
 				"/custom-providers",
-				s.json("POST", { provider: body(server.url), tiers: TIERS_ON, use: true }),
+				s.json("POST", { provider: body(server.url), start: "small" }),
 			);
 			expect(id).toBe("custom-local");
 			// saving is not a check: nothing was sent
 			expect(server.requests).toHaveLength(0);
 			expect((await stat(customProvidersPath(home))).mode & 0o777).toBe(0o600);
 			const view = await s.api<CustomProvidersView>("/custom-providers");
+			// saved, started on one model for every tier, and not used until the owner says so
 			expect(view.providers[0]).toMatchObject({
 				id,
 				key: "none",
-				using: true,
-				tiers: TIERS_ON,
+				billing: "none",
+				using: false,
+				tiers: { quick: "small", balanced: "small", deep: "small" },
 				destination: { place: "computer" },
 			});
+			expect((await s.api<TiersView>("/tiers")).provider.id).not.toBe(id);
+			await s.api("/tiers", s.json("PUT", { provider: id }));
+			await s.api("/tiers", s.json("PUT", { override: { tier: "deep", modelId: "large" } }));
 			const tiers = await s.api<TiersView>("/tiers");
 			expect(tiers.provider).toMatchObject({ id, name: "Local", local: true });
 			expect(tiers.models.quick.id).toBe("small");
@@ -382,7 +406,8 @@ describe("the daemon", () => {
 		const server = await serve({ delayMs: 60_000 });
 		let s = await start(home);
 		try {
-			await s.api("/custom-providers", s.json("POST", { provider: body(server.url), tiers: TIERS_ON, use: true }));
+			await s.api("/custom-providers", s.json("POST", { provider: body(server.url), start: "small" }));
+			await s.api("/tiers", s.json("PUT", { provider: "custom-local" }));
 			await s.api("/messages", s.json("POST", { id: randomUUID(), thread: randomUUID(), text: "slow one" }));
 			await until(() => server.requests.some((request) => request.path.endsWith("/chat/completions")));
 		} finally {
@@ -431,14 +456,14 @@ describe("the daemon", () => {
 		try {
 			const missing = await s.refused(
 				"/custom-providers",
-				s.json("POST", { provider: body(server.url, { key: "required" }), tiers: TIERS_ON }),
+				s.json("POST", { provider: body(server.url, { key: "required" }), start: "small" }),
 			);
 			expect(missing).toEqual({ status: 400, error: "Give its key, or say it needs none" });
 			await s.api(
 				"/custom-providers",
 				s.json("POST", {
 					provider: body(server.url, { key: "required" }),
-					tiers: TIERS_ON,
+					start: "small",
 					key: "sk-hosted-key-7777777",
 				}),
 			);
@@ -466,7 +491,7 @@ describe("the daemon", () => {
 		const server = await serve();
 		const s = await start(home);
 		try {
-			await s.api("/custom-providers", s.json("POST", { provider: body(server.url), tiers: TIERS_ON }));
+			await s.api("/custom-providers", s.json("POST", { provider: body(server.url), start: "small" }));
 			const ok = await s.api<Checked>("/custom-providers/custom-local/check", s.json("POST", {}));
 			expect(ok).toMatchObject({ ok: true, model: "small", reply: "OK from small" });
 			expect(server.requests).toHaveLength(1);
@@ -497,7 +522,7 @@ describe("the daemon", () => {
 		const add = (name: string, baseUrl: string, more: Partial<CustomProvider> = {}, key?: string) =>
 			s.api(
 				"/custom-providers",
-				s.json("POST", { provider: { ...body(baseUrl, more), name }, tiers: TIERS_ON, ...(key ? { key } : {}) }),
+				s.json("POST", { provider: { ...body(baseUrl, more), name }, start: "small", ...(key ? { key } : {}) }),
 			);
 		try {
 			await add("Wrong key", server.url, { key: "required" }, "sk-wrong-key-1111111111");
@@ -518,23 +543,30 @@ describe("the daemon", () => {
 		}
 	});
 
-	it("takes a model's price only as the owner states it: none is no price, not free", async () => {
+	it("counts cost only as the owner says it is billed: no per-token charge, or its rates, never a silent 0", async () => {
 		const home = await tempHome();
 		const server = await serve();
 		const s = await start(home);
 		try {
-			const { cost: _, ...priceless } = model("small");
-			const refused = await s.refused(
-				"/custom-providers",
-				s.json("POST", {
-					provider: { ...body(server.url), models: [priceless] },
-					tiers: { quick: "small", balanced: "small", deep: "small" },
-				}),
-			);
-			expect(refused).toEqual({
+			const { billing: _, ...unsaid } = body(server.url);
+			expect(await s.refused("/custom-providers", s.json("POST", { provider: unsaid, start: "small" }))).toEqual({
 				status: 400,
-				error: "provider.models.0.cost is its price per million tokens in and out: 0 only if free",
+				error: 'provider.billing says whether it charges per token: "none" or "rates"',
 			});
+			expect(
+				await s.refused(
+					"/custom-providers",
+					s.json("POST", { provider: { ...body(server.url), billing: "rates" }, start: "small" }),
+				),
+			).toEqual({ status: 400, error: "provider.models.0.cost is what it charges per million tokens in and out" });
+			const priced = {
+				...body(server.url),
+				billing: "rates",
+				models: [model("small", { cost: { input: 0.25, output: 1 } })],
+			};
+			await s.api("/custom-providers", s.json("POST", { provider: priced, start: "small" }));
+			const kept = (await s.api<CustomProvidersView>("/custom-providers")).providers[0];
+			expect(kept).toMatchObject({ billing: "rates", models: [{ id: "small", cost: { input: 0.25, output: 1 } }] });
 		} finally {
 			await s.daemon.close();
 		}
@@ -545,7 +577,8 @@ describe("the daemon", () => {
 		const server = await serve();
 		const s = await start(home);
 		try {
-			await s.api("/custom-providers", s.json("POST", { provider: body(server.url), tiers: TIERS_ON, use: true }));
+			await s.api("/custom-providers", s.json("POST", { provider: body(server.url), start: "small" }));
+			await s.api("/tiers", s.json("PUT", { provider: "custom-local" }));
 			const inUse = await s.refused("/custom-providers/custom-local", { method: "DELETE" });
 			expect(inUse.status).toBe(409);
 			expect(inUse.error).toMatch(/The band thinks with it: use another provider first/);
@@ -554,10 +587,10 @@ describe("the daemon", () => {
 				"/custom-providers",
 				s.json("POST", {
 					provider: { ...body(server.url), name: "Other" },
-					tiers: TIERS_ON,
-					use: true,
+					start: "small",
 				}),
 			);
+			await s.api("/tiers", s.json("PUT", { provider: "custom-other" }));
 			expect((await s.api<TiersView>("/tiers")).provider.id).toBe("custom-other");
 			// an agent's file names a model of the first: it stays until the file names another
 			const named = "---\ndescription: writes\nmodel: custom-local/large\n---\nWrite.\n";
@@ -578,7 +611,7 @@ describe("the daemon", () => {
 				"/custom-providers/custom-other",
 				s.json("PUT", {
 					provider: { ...body(server.url, { models: [model("small")] }), name: "Other" },
-					tiers: TIERS_ON,
+					tiers: { quick: "small", balanced: "small", deep: "large" },
 				}),
 			);
 			expect(kept).toEqual({ status: 400, error: "Pick one of its models for Deep" });

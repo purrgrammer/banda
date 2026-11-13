@@ -22,9 +22,107 @@ export const MAX_OUTPUT = 1_000_000;
 /** The highest price, in dollars per million tokens, a model may declare: a typo, past it. */
 export const MAX_PRICE = 10_000;
 
-/** A model the owner declares: what the endpoint calls it, and what it can do, by their word. */
+/** The adapters of pi-ai a server of the owner's may speak: each honours the guard every request goes through. */
+export const CUSTOM_APIS = [
+	"openai-completions",
+	"openai-responses",
+	"anthropic-messages",
+	"mistral-conversations",
+] as const;
+export type CustomApi = (typeof CUSTOM_APIS)[number];
+
+/** How banda reads a server's list of models: a route it knows the answer of, or none. */
+export type Listing = "openai" | "ollama" | "lmstudio" | "llamacpp" | "anthropic" | "mistral";
+
+/**
+ * The kinds of server the owner may add: which of pi-ai's adapters it speaks, which list of models banda may ask it
+ * for, and where such a server usually answers. A named local server (Ollama, LM Studio, llama.cpp, vLLM) speaks
+ * OpenAI's chat completions; its name only says where it listens and how it lists what it has.
+ */
+export const SERVER_KINDS = {
+	openai: {
+		label: "OpenAI-compatible server",
+		about: "Chat completions, as most servers and gateways speak them.",
+		api: "openai-completions",
+		listing: "openai",
+		address: "https://llm.example.com/v1",
+	},
+	ollama: {
+		label: "Ollama",
+		about: "Ollama's OpenAI-compatible API.",
+		api: "openai-completions",
+		listing: "ollama",
+		address: "http://localhost:11434/v1",
+	},
+	lmstudio: {
+		label: "LM Studio",
+		about: "LM Studio's local server.",
+		api: "openai-completions",
+		listing: "lmstudio",
+		address: "http://localhost:1234/v1",
+	},
+	llamacpp: {
+		label: "llama.cpp server",
+		about: "llama-server's OpenAI-compatible API.",
+		api: "openai-completions",
+		listing: "llamacpp",
+		address: "http://localhost:8080/v1",
+	},
+	vllm: {
+		label: "vLLM",
+		about: "vLLM's OpenAI-compatible server.",
+		api: "openai-completions",
+		listing: "openai",
+		address: "http://localhost:8000/v1",
+	},
+	"openai-responses": {
+		label: "OpenAI Responses API",
+		about: "A server that speaks OpenAI's Responses API.",
+		api: "openai-responses",
+		listing: "openai",
+		address: "https://llm.example.com/v1",
+	},
+	anthropic: {
+		label: "Anthropic-compatible server",
+		about: "A server that speaks Anthropic's Messages API.",
+		api: "anthropic-messages",
+		listing: "anthropic",
+		address: "https://llm.example.com",
+	},
+	mistral: {
+		label: "Mistral-compatible server",
+		about: "A server that speaks Mistral's chat API.",
+		api: "mistral-conversations",
+		listing: "mistral",
+		address: "https://llm.example.com",
+	},
+} as const satisfies {
+	readonly [kind: string]: {
+		readonly label: string;
+		readonly about: string;
+		readonly api: CustomApi;
+		readonly listing: Listing;
+		readonly address: string;
+	};
+};
+export type ServerKind = keyof typeof SERVER_KINDS;
+export const isServerKind = (value: unknown): value is ServerKind =>
+	typeof value === "string" && Object.hasOwn(SERVER_KINDS, value);
+
+/**
+ * Where a model's facts came from, so the app says it and the owner can tell a server's word from a guess: `listed`
+ * when the server's own list named it (else the owner added it by id); its limits as the server reported them, as
+ * pi-ai's catalog has them for a model of the same id (`catalog`, its `provider/id`; the owner chose to take them), or
+ * as the owner typed them.
+ */
+export type ModelSource = {
+	readonly listed: boolean;
+	readonly limits: "server" | "owner" | { readonly catalog: string };
+};
+
+/** A model of a server, as the owner kept it: what the server calls it, and what it can do. */
 export type CustomModel = {
-	/** The endpoint's own name for it, sent as `model`. */
+	/** The server's own name for it, sent as `model`. */
 	readonly id: string;
 	/** Its name in the app; the id when unset. */
 	readonly name?: string;
@@ -37,15 +135,18 @@ export type CustomModel = {
 	/** The most tokens one answer takes. */
 	readonly maxTokens: number;
 	/**
-	 * What it costs, in dollars per million tokens, as the owner wrote it: 0 only when they said it is free. There is no
-	 * unknown price: usage is counted from these numbers, so the owner states them.
+	 * What it costs, in dollars per million tokens, as the owner wrote it, when the server charges per token (`billing`
+	 * is `rates`); absent when it charges none. Never guessed, and never copied from a catalog: a server's prices are its
+	 * own.
 	 */
-	readonly cost: { readonly input: number; readonly output: number };
+	readonly cost?: { readonly input: number; readonly output: number };
+	readonly source: ModelSource;
 };
 
 /**
- * How the endpoint differs from OpenAI's own, where they commonly do; unset fields take banda's defaults for an
- * endpoint it does not know (`COMPAT_DEFAULTS`), which most local servers accept. A bounded set, never free-form.
+ * How chat completions on the server differ from OpenAI's own, where they commonly do; unset fields take banda's
+ * defaults for an endpoint it does not know (`COMPAT_DEFAULTS`), which most local servers accept. Only for a server
+ * that speaks chat completions; a bounded set, never free-form.
  */
 export type CustomCompat = {
 	/** The role of the instructions to a reasoning model: `developer` (OpenAI's) or `system`. */
@@ -65,14 +166,20 @@ export const COMPAT_DEFAULTS: Required<CustomCompat> = {
 	reasoningEffort: false,
 };
 
-/** A custom provider as `<home>/custom-providers.json` holds it. */
+/** A server of the owner's, as `<home>/custom-providers.json` holds it. */
 export type CustomProvider = {
 	readonly id: string;
 	readonly name: string;
-	/** The address its API answers under, as `https://host/v1`: `chat/completions` follows it. */
+	readonly kind: ServerKind;
+	/** The address its API answers under, as its kind says (`SERVER_KINDS`): `https://host/v1`, or the host alone. */
 	readonly baseUrl: string;
 	/** Whether it takes a key; the key itself is a provider credential, never here. */
 	readonly key: "required" | "none";
+	/**
+	 * Whether it charges per token, as the owner said: `none` (their own hardware, or a flat plan: usage is counted at no
+	 * cost), or `rates`, each model's own.
+	 */
+	readonly billing: "none" | "rates";
 	readonly models: readonly CustomModel[];
 	readonly compat?: CustomCompat;
 };
@@ -208,6 +315,11 @@ export function problemsOf(
 	else if (name.length > MAX_NAME) say("name", `The name is at most ${MAX_NAME} characters`);
 	else if (others.some((other) => other.trim().toLowerCase() === name.toLowerCase()))
 		say("name", `There is a provider called ${name} already: name this one differently`);
+	if (!isServerKind(provider.kind)) say("kind", "Pick the kind of server it is");
+	else if (provider.compat !== undefined && SERVER_KINDS[provider.kind].api !== "openai-completions")
+		say("compat", "Compatibility settings are for chat completions alone");
+	if (provider.billing !== "none" && provider.billing !== "rates")
+		say("billing", "Say whether it charges per token: banda counts what a model costs from it");
 	const destination = destinationOf(provider.baseUrl);
 	if ("error" in destination) say("baseUrl", destination.error);
 	if (provider.models.length === 0) say("models", "Add the model it runs: at least one");
@@ -233,10 +345,15 @@ export function problemsOf(
 			say(at("maxTokens"), "The longest answer is a whole number of tokens, from 16 to 1,000,000");
 		else if (whole(model.contextWindow, 1024, MAX_CONTEXT) && model.maxTokens > model.contextWindow)
 			say(at("maxTokens"), "The longest answer cannot be more than the context it fits in");
-		for (const side of ["input", "output"] as const)
-			if (Number.isNaN(model.cost[side]))
-				say(at(`cost.${side}`), "Write what it charges per million tokens: 0 only if it is free");
-			else if (!price(model.cost[side])) say(at(`cost.${side}`), "A price is a number of dollars, 0 or more");
+		if (provider.billing === "rates")
+			for (const side of ["input", "output"] as const) {
+				const value = model.cost?.[side];
+				if (value === undefined || Number.isNaN(value))
+					say(at(`cost.${side}`), "Write what it charges per million tokens, as its provider bills it");
+				else if (!price(value)) say(at(`cost.${side}`), "A price is a number of dollars, 0 or more");
+			}
+		else if (model.cost !== undefined)
+			say(at("cost.input"), "It charges no per-token price: leave the prices out, or say it charges per token");
 	});
 	return problems;
 }

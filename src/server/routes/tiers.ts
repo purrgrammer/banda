@@ -11,12 +11,12 @@ import { isCustomProvider } from "../../core/custom-providers.ts";
 import { accountTitle, backendOf, parseAccount } from "../../core/provider-accounts.ts";
 import { FileCredentialStore } from "../../core/provider-credentials.ts";
 import { context } from "../../core/store.ts";
-import { isTier, modelFor, PRESETS, presetOf, providerOf, TIERS, type Tier } from "../../core/tiers.ts";
+import { isTier, modelFor, presetOf, providerOf, TIERS, type Tier } from "../../core/tiers.ts";
 import { DEFAULT_MODEL } from "../../home.ts";
 import type { TiersView } from "../api.ts";
 import { BadRequest } from "../http.ts";
 import type { AreaModule, Deps } from "./area.ts";
-import { credentialOf } from "./providers.ts";
+import { builtIns, credentialOf } from "./providers.ts";
 
 /** Each daemon's switch, by its core: the task it installs is the one its routes create. */
 const switches = new WeakMap<object, ReturnType<typeof defineTierSwitch>>();
@@ -24,14 +24,14 @@ const switches = new WeakMap<object, ReturnType<typeof defineTierSwitch>>();
 /** A provider in plain words, as who sees a chat names it. */
 const providerName = (deps: Deps, provider: string) => deps.seen({ provider, modelId: "" })?.name ?? provider;
 
-/** The custom providers registered here, by id (`../../core/custom-provider.ts`). */
+/** The owner's own servers registered here, by id (`../../core/custom-provider.ts`). */
 export const customIds = (deps: Pick<Deps, "models">): string[] =>
 	deps.models
 		.getProviders()
 		.map((provider) => provider.id)
 		.filter(isCustomProvider);
 
-/** Whether each tier of custom provider `id` names one of its models, as the owner chose them. */
+/** Whether each tier of provider `id` names one of its models, as the owner chose them (a start, then refinements). */
 export const mapped = (deps: Pick<Deps, "models">, choice: CompanionDoc, id: string): boolean =>
 	TIERS.every((tier) => {
 		const modelId = choice.overrides?.[id]?.[tier];
@@ -39,22 +39,28 @@ export const mapped = (deps: Pick<Deps, "models">, choice: CompanionDoc, id: str
 	});
 
 /**
- * The provider accounts the owner may pick: those of backends with presets that have credentials, the configured
- * model's, and the custom providers that can be reached (a key given, or none needed) and have a model for each tier;
- * each named by its backend, with its label once the backend has more than one, and `ambient` with its `source` when
- * its credential came from outside banda.
+ * The provider accounts the owner may pick: every built-in provider's account and every server of the owner's that can
+ * be reached (a credential given, or none needed), and the configured model's; one without a preset only once the owner
+ * started it on a model of its own (`start`), so picking one never leaves a tier without a model. Each is named by its
+ * backend, with its label once the backend has more than one, and `ambient` with its `source` when its credential came
+ * from outside banda.
  */
 export async function offered(deps: Deps, fallback: ModelRef): Promise<TiersView["providers"][number][]> {
-	const customs = customIds(deps);
-	const choice: CompanionDoc = customs.length === 0 ? {} : ((await deps.harness.snapshot(Companion, context)) ?? {});
-	const candidates = [
+	const all = [
 		...new Set([
-			...PRESETS.flatMap((preset) => accountsOf(deps.models, preset.provider)),
+			...builtIns(deps.models).flatMap((backend) => accountsOf(deps.models, backend)),
 			...accountsOf(deps.models, backendOf(fallback.provider)),
 			fallback.provider,
-			...customs.filter((id) => mapped(deps, choice, id)),
+			...customIds(deps),
 		]),
 	];
+	const presetless = all.filter((id) => presetOf(id) === undefined && id !== fallback.provider);
+	// read only when it says something: a provider without a preset is offered once started
+	const choice: CompanionDoc =
+		presetless.length === 0 || deps.harness === undefined
+			? {}
+			: ((await deps.harness.snapshot(Companion, context)) ?? {});
+	const candidates = all.filter((id) => !presetless.includes(id) || mapped(deps, choice, id));
 	const usable = await Promise.all(
 		candidates.map(async (id) => {
 			try {
@@ -85,12 +91,13 @@ async function view(deps: Deps): Promise<TiersView> {
 	const choice: CompanionDoc = (await deps.harness.snapshot(Companion, context)) ?? {};
 	const fallback = deps.config.model;
 	const id = providerOf(choice, fallback);
-	const custom = isCustomProvider(id);
-	const presets = presetOf(id) !== undefined || custom;
+	const preset = presetOf(id) !== undefined;
+	// its tiers can each run another of its models: a preset's, or one the owner started on a model of its own
+	const presets = preset || mapped(deps, choice, id);
 	const seen = deps.seen(modelFor("quick", choice, fallback));
 	const model = (tier: Tier) => {
 		const ref = modelFor(tier, choice, fallback);
-		const own = presets && !custom && choice.overrides?.[id]?.[tier] !== undefined;
+		const own = preset && choice.overrides?.[id]?.[tier] !== undefined;
 		return {
 			id: ref.modelId,
 			name: deps.models.getModel(ref.provider, ref.modelId)?.name ?? ref.modelId,
@@ -120,11 +127,31 @@ async function view(deps: Deps): Promise<TiersView> {
 async function change(deps: Deps, body: Record<string, unknown>): Promise<void> {
 	const choice: CompanionDoc = (await deps.harness.snapshot(Companion, context)) ?? {};
 	const fallback = deps.config.model;
+	let start: { provider: string; modelId: string } | undefined;
+	if (body.start !== undefined) {
+		const { provider: of, model } = (body.start ?? {}) as { provider?: unknown; model?: unknown };
+		if (typeof of !== "string" || typeof model !== "string")
+			throw new BadRequest("start is the provider and the model its tiers start on");
+		if (deps.models.getModel(of, model) === undefined)
+			throw new BadRequest(`${providerName(deps, of)} has no model "${model}"`);
+		const reachable = await deps.models.getAvailable(of).then(
+			(models) => models.length > 0,
+			() => false,
+		);
+		if (!reachable) throw new BadRequest(`${providerName(deps, of)} has no key set up here: add one first`);
+		start = { provider: of, modelId: model };
+	}
 	let provider: string | undefined;
 	if (body.provider !== undefined) {
 		if (typeof body.provider !== "string") throw new BadRequest("provider is a provider's id, as text");
-		if (!(await offered(deps, fallback)).some((each) => each.id === body.provider))
-			throw new BadRequest(`${providerName(deps, body.provider)} has no key set up here: add one, then pick it`);
+		const startsIt = start?.provider === body.provider;
+		if (!startsIt && !(await offered(deps, fallback)).some((each) => each.id === body.provider))
+			throw new BadRequest(
+				presetOf(body.provider) === undefined &&
+					(await deps.models.getAvailable(body.provider).catch(() => [])).length > 0
+					? `Pick the model ${providerName(deps, body.provider)} starts on first`
+					: `${providerName(deps, body.provider)} has no key set up here: add one, then pick it`,
+			);
 		provider = body.provider;
 	}
 	let override: { provider: string; tier: Tier; modelId: string | null } | undefined;
@@ -134,9 +161,10 @@ async function change(deps: Deps, body: Record<string, unknown>): Promise<void> 
 		if (modelId !== null && typeof modelId !== "string")
 			throw new BadRequest("override.modelId is a model's id, or null for the preset");
 		const of = provider ?? providerOf(choice, fallback);
-		if (presetOf(of) === undefined && !isCustomProvider(of))
+		const preset = presetOf(of) !== undefined;
+		if (!preset && !mapped(deps, choice, of))
 			throw new BadRequest(`${providerName(deps, of)} runs one model on every tier: there is no tier to change`);
-		if (modelId === null && isCustomProvider(of))
+		if (modelId === null && !preset)
 			throw new BadRequest(`${providerName(deps, of)} has no preset: each tier runs one of its models, as you chose`);
 		if (modelId !== null && deps.models.getModel(of, modelId) === undefined)
 			throw new BadRequest(`${providerName(deps, of)} has no model "${modelId}"`);
@@ -145,6 +173,9 @@ async function change(deps: Deps, body: Record<string, unknown>): Promise<void> 
 	const switcher = switches.get(deps.core);
 	if (switcher === undefined) throw new Error("the tiers area started before it was installed");
 	await deps.harness.commit(async (tx) => {
+		if (start !== undefined)
+			for (const tier of TIERS)
+				await setModels(tx, { override: { provider: start.provider, tier, modelId: start.modelId } });
 		await setModels(tx, {
 			...(provider === undefined ? {} : { provider }),
 			...(override === undefined ? {} : { override }),

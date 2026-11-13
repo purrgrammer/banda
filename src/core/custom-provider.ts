@@ -23,11 +23,15 @@ import {
 	type Static,
 	Type,
 } from "@earendil-works/pi-ai";
+import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
+import { mistralConversationsApi } from "@earendil-works/pi-ai/api/mistral-conversations.lazy";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
+import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
 import { Value } from "typebox/value";
 import {
 	COMPAT_DEFAULTS,
 	CUSTOM_PREFIX,
+	type CustomApi,
 	type CustomProvider,
 	type CustomProvidersFile,
 	MAX_CONTEXT,
@@ -40,10 +44,13 @@ import {
 	modelName,
 	type Observed,
 	problemsOf,
+	SERVER_KINDS,
+	type ServerKind,
 } from "./custom-providers.ts";
 
 export const customProvidersPath = (home: string) => join(home, "custom-providers.json");
 
+const Price = Type.Number({ minimum: 0, maximum: MAX_PRICE });
 const Model_ = Type.Object(
 	{
 		id: Type.String({ minLength: 1, maxLength: MAX_MODEL_ID }),
@@ -52,10 +59,15 @@ const Model_ = Type.Object(
 		reasoning: Type.Boolean(),
 		contextWindow: Type.Integer({ minimum: 1024, maximum: MAX_CONTEXT }),
 		maxTokens: Type.Integer({ minimum: 16, maximum: MAX_OUTPUT }),
-		cost: Type.Object(
+		cost: Type.Optional(Type.Object({ input: Price, output: Price }, { additionalProperties: false })),
+		source: Type.Object(
 			{
-				input: Type.Number({ minimum: 0, maximum: MAX_PRICE }),
-				output: Type.Number({ minimum: 0, maximum: MAX_PRICE }),
+				listed: Type.Boolean(),
+				limits: Type.Union([
+					Type.Literal("server"),
+					Type.Literal("owner"),
+					Type.Object({ catalog: Type.String({ minLength: 3, maxLength: 300 }) }, { additionalProperties: false }),
+				]),
 			},
 			{ additionalProperties: false },
 		),
@@ -71,8 +83,10 @@ export const CustomProvidersSchema = Type.Object(
 				{
 					id: Type.String({ pattern: `^${CUSTOM_PREFIX}[a-z0-9-]{1,40}$` }),
 					name: Type.String({ minLength: 1, maxLength: MAX_NAME }),
+					kind: Type.Union(Object.keys(SERVER_KINDS).map((kind) => Type.Literal(kind as ServerKind))),
 					baseUrl: Type.String({ minLength: 1, maxLength: MAX_URL }),
 					key: Type.Union([Type.Literal("required"), Type.Literal("none")]),
+					billing: Type.Union([Type.Literal("none"), Type.Literal("rates")]),
 					models: Type.Array(Model_, { minItems: 1, maxItems: MAX_MODELS }),
 					compat: Type.Optional(
 						Type.Object(
@@ -178,6 +192,9 @@ export function changeCustomProviders<T>(
 const KEYLESS = "banda-keyless";
 /** pi-ai's label for a stored credential (`../server/routes/providers.ts`). */
 const STORED = "stored credential";
+/** The headers an adapter carries a key in. */
+const KEY_HEADERS = ["authorization", "x-api-key"] as const;
+
 /** What a keyless provider's auth says it came from. */
 export const NO_KEY = "no key";
 
@@ -208,7 +225,8 @@ function auth(definition: CustomProvider): ApiKeyAuth {
 export function guardedFetch(definition: Pick<CustomProvider, "key">, base: typeof fetch = fetch): typeof fetch {
 	return async (input, init) => {
 		const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
-		if (definition.key === "none") headers.delete("authorization");
+		// a keyless server is sent no key in any adapter's header: OpenAI's and Mistral's bearer, Anthropic's own
+		if (definition.key === "none") for (const name of KEY_HEADERS) headers.delete(name);
 		const response = await base(input, { ...init, headers, redirect: "manual" });
 		if (response.status >= 300 && response.status < 400 && response.headers.has("location")) {
 			await response.body?.cancel().catch(() => {});
@@ -286,21 +304,27 @@ export function observingFetch(seen: Observed[], base: typeof fetch = globalThis
 }
 
 /** The pi-ai model a declared one is. */
-export function modelOf(definition: CustomProvider, index: number): Model<"openai-completions"> {
+export function modelOf(definition: CustomProvider, index: number): Model<CustomApi> {
 	const model = definition.models[index];
 	if (model === undefined) throw new Error(`${definition.id} has no model ${index}`);
-	const compat = { ...COMPAT_DEFAULTS, ...definition.compat };
-	return {
+	const api = SERVER_KINDS[definition.kind].api;
+	const base = {
 		id: model.id,
 		name: modelName(model),
-		api: "openai-completions",
+		api,
 		provider: definition.id,
 		baseUrl: definition.baseUrl.replace(/\/+$/, ""),
-		input: model.images ? ["text", "image"] : ["text"],
+		input: model.images ? (["text", "image"] as ("text" | "image")[]) : (["text"] as ("text" | "image")[]),
 		reasoning: model.reasoning,
 		contextWindow: model.contextWindow,
 		maxTokens: model.maxTokens,
-		cost: { input: model.cost.input, output: model.cost.output, cacheRead: 0, cacheWrite: 0 },
+		// what it charges, as the owner said: nothing per token, or its own rates
+		cost: { input: model.cost?.input ?? 0, output: model.cost?.output ?? 0, cacheRead: 0, cacheWrite: 0 },
+	};
+	if (api !== "openai-completions") return base;
+	const compat = { ...COMPAT_DEFAULTS, ...definition.compat };
+	return {
+		...base,
 		compat: {
 			supportsDeveloperRole: compat.instructions === "developer",
 			maxTokensField: compat.maxTokensField,
@@ -312,8 +336,16 @@ export function modelOf(definition: CustomProvider, index: number): Model<"opena
 			sendSessionAffinityHeaders: false,
 			supportsLongCacheRetention: false,
 		},
-	};
+	} as Model<CustomApi>;
 }
+
+/** pi-ai's adapter for `api`, loaded when first used. */
+const ADAPTERS: { readonly [A in CustomApi]: () => ProviderStreams } = {
+	"openai-completions": openAICompletionsApi,
+	"openai-responses": openAIResponsesApi,
+	"anthropic-messages": anthropicMessagesApi,
+	"mistral-conversations": mistralConversationsApi,
+};
 
 /** The pi-ai provider `definition` makes. */
 export function customProvider(definition: CustomProvider, api?: ProviderStreams): Provider {
@@ -323,7 +355,7 @@ export function customProvider(definition: CustomProvider, api?: ProviderStreams
 		baseUrl: definition.baseUrl,
 		auth: { apiKey: auth(definition) },
 		models: definition.models.map((_, n) => modelOf(definition, n)),
-		api: guardedApi(definition, api),
+		api: guardedApi(definition, api ?? ADAPTERS[SERVER_KINDS[definition.kind].api]()),
 	});
 }
 

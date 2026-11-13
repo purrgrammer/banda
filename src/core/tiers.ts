@@ -3,7 +3,6 @@
  * provider banda has a preset for maps them to models of pi-ai's built-in catalog (`test/tiers.test.ts` fails when an
  * id leaves it); a provider without one runs the configured model on every tier. Plain data, shared with the web.
  */
-import { isCustomProvider } from "./custom-providers.ts";
 import { backendOf } from "./provider-accounts.ts";
 
 export const TIERS = ["quick", "balanced", "deep"] as const;
@@ -74,15 +73,18 @@ export type ModelChoice = {
 export const providerOf = (choice: ModelChoice, fallback: ModelId): string => choice.provider ?? fallback.provider;
 
 /**
- * The model `tier` runs on: the provider's preset, or the owner's override of it; the configured model (`fallback`) on
- * every tier when the provider has no preset. A custom provider (`./custom-providers.ts`) has no preset: the owner's
- * choice for each tier is all it runs, and a tier without one names no model (`modelId` empty), so a run on it fails
- * saying so rather than thinking with another provider's model.
+ * The model `tier` runs on: the provider's preset, or the owner's model for the tier over it. A provider without a
+ * preset (most of pi-ai's, and every server of the owner's) runs the model the owner started it on for each tier, the
+ * same one on all three until they refine it; the configured model (`fallback`) runs only on its own provider. A tier
+ * with none of those names no model (`modelId` empty), so a run on it fails saying so rather than thinking with
+ * another provider's model.
  */
 export function modelFor(tier: Tier, choice: ModelChoice, fallback: ModelId): ModelId {
 	const provider = providerOf(choice, fallback);
-	if (isCustomProvider(provider)) return { provider, modelId: choice.overrides?.[provider]?.[tier] ?? "" };
+	const own = choice.overrides?.[provider]?.[tier];
 	const preset = presetOf(provider);
-	if (preset === undefined) return { provider: fallback.provider, modelId: fallback.modelId };
-	return { provider, modelId: choice.overrides?.[provider]?.[tier] ?? preset.models[tier] };
+	if (preset !== undefined) return { provider, modelId: own ?? preset.models[tier] };
+	if (own !== undefined) return { provider, modelId: own };
+	if (provider === fallback.provider) return { provider: fallback.provider, modelId: fallback.modelId };
+	return { provider, modelId: "" };
 }
