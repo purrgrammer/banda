@@ -1349,13 +1349,13 @@
 						"on": "comments.comments[*]",
 						"kind": "added",
 						"does": "wake",
-						"says": "new comment"
+						"says": "new comment (author not known)"
 					},
 					{
 						"on": "comments.comments[*].replies[*]",
 						"kind": "added",
 						"does": "wake",
-						"says": "new reply"
+						"says": "new reply (author not known)"
 					}
 				],
 				"ends": {
