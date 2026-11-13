@@ -46,7 +46,7 @@ changes.
 - [ ] Make owner definition saves and box publication crash-safe and concurrency-safe across all publishers before accepting avatar identity changes
 - [x] Draw favicon, manifest icons and iOS touch icon from the first agent's accepted face; account for maskable safe area and icon caching
 - [x] Ship avatar-generation instructions by default and bound validation time, resources and concurrency before accepting generated geometry
-- [ ] Re-audit avatar geometry preflight on every open-bot-avatar upgrade; verify native colour selection and installed-icon refresh across supported browsers and platforms
+- [ ] Re-audit avatar geometry preflight on every open-bot-avatar upgrade (`npm run avatar:bench`, and `node scripts/avatar-bench.ts <checkout>` on the previous pin); verify native colour selection and installed-icon refresh across supported browsers and platforms
 - [ ] Verify meta-tools end to end in a throwaway home: direct agent messages, bounded chat reads, proposals for agents/groups/existing agents, and owner acceptance/rejection at desktop and phone widths
 - [x] Add thrown-fault and SIGKILL sweeps for message delivery, proposal creation and group acceptance; retries create one message and one group, and existing-agent proposals refuse stale bases
 - [x] Verify context-sensitive `@` autocomplete in phone and desktop browser widths: direct chat sends references only; group mentions keep their existing targeting behavior

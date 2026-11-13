@@ -272,7 +272,8 @@ it.skipIf(!hasChrome())(
 				await post("LINE_MOTION_LIVE");
 				await until(() => Promise.resolve(before.get("sancho")?.held === 1));
 				await page.until(line);
-				const drawing = `${line}.querySelector('[role="img"]').innerHTML`;
+				// a live face paints a canvas, which moves without touching the DOM: compare what it shows
+				const drawing = `(()=>{const face=${line}.querySelector('[role="img"]');const canvas=face.querySelector('canvas');return canvas?canvas.toDataURL():face.innerHTML})()`;
 				await page.until(`${line}.querySelector('[role="img"] canvas, [role="img"] svg')`);
 				// waited on, since the live scene mounts only once the face is seen on screen; three drawings are the still
 				// one, the live scene, and a pose it moved to

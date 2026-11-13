@@ -35,6 +35,7 @@ const paths = [
 	" ",
 	"M10 10Z",
 	"M10 10L90 90Z",
+	`M10 50${"c0-40 80-40 80 0c0 40-80 40-80 0".repeat(150)}`, // adaptive flattening: within every cap but the points
 ];
 function assertRefused(path: string): void {
 	const candidate = { ...face.definition, body: { path } };

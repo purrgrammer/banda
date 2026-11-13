@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import type { AvatarDefinition } from "open-bot-avatar";
+import { refuseUnbounded } from "../core/avatar-geometry.ts";
 
 export type AvatarValidation = { ok: true; definition: AvatarDefinition } | { ok: false; errors: string[] };
 
@@ -13,12 +14,7 @@ const OPEN_BOT_AVATAR = pathToFileURL(createRequire(import.meta.url).resolve("op
 const VALIDATOR = `
 const { parentPort, workerData } = require("node:worker_threads");
 import(workerData.validator).then(({ validateAvatar }) => {
-  const input = JSON.parse(workerData.text);
-  if (typeof input?.body?.path !== "string" || input.body.path.trim() === "") {
-    parentPort.postMessage({ ok: false, errors: ["body.path must be a non-empty SVG path."] });
-    return;
-  }
-  const result = validateAvatar(input);
+  const result = validateAvatar(JSON.parse(workerData.text));
   parentPort.postMessage(result.ok ? { ok: true, definition: result.value } : { ok: false, errors: result.errors });
 }, (error) => parentPort.postMessage({ broken: String(error) })).catch(() => parentPort.postMessage({ ok: false, errors: ["Face validation failed."] }));
 `;
@@ -42,6 +38,15 @@ export async function validateAvatarCandidate(
 ): Promise<AvatarValidation> {
 	if (text.length > 16_384 || new TextEncoder().encode(text).byteLength > 16_384)
 		return { ok: false, errors: ["The face definition is too large (16 KB maximum)."] };
+	let input: unknown;
+	try {
+		input = JSON.parse(text);
+	} catch {
+		return { ok: false, errors: ["A face must be a JSON object."] };
+	}
+	// The same bounds as reading a face, so a candidate the worker passes is one an agent file can hold.
+	const refused = refuseUnbounded(input);
+	if (refused) return refused;
 	if (running >= AVATAR_VALIDATORS && waiting.length >= AVATAR_VALIDATION_QUEUE)
 		return { ok: false, errors: ["Face validation is busy. Try again."] };
 	return new Promise((resolve) => {
