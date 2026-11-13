@@ -260,6 +260,10 @@ export type RoutineRunRecord = {
 	due?: number;
 	owner?: true;
 	chat?: number;
+	/** The conversation it ran in, apart from the chat: its work and its usage are there. */
+	run?: number;
+	/** Its line's entry in the chat, when it ran apart and drew one there. */
+	line?: number;
 	turn?: number;
 	ended?: number;
 	result?: "answered" | "failed" | "stopped";
@@ -331,6 +335,38 @@ export type WakeData = {
 export const WAKE = "banda.routine-wake";
 
 /**
+ * Each run's conversation, apart from its agent's chat (DESIGN.md "Routines"): the agent it runs as, the routine, the
+ * chat what it sends is said in, the wake its line says, and that line once the chat drew it. Kept after the run ends: its usage is
+ * read by routine.
+ */
+export type RoutineRun = {
+	readonly agent: string;
+	readonly routine: string;
+	readonly chat: number;
+	readonly wake: WakeData;
+	/** Its line's entry in the chat, once it sent something. */
+	line?: number;
+};
+export const RoutineRuns = defineDoc<{ runs: { [run: string]: RoutineRun } }>({
+	kind: "banda.routine-runs",
+	version: 1,
+	scope: "session",
+	initial: () => ({ runs: {} }),
+	checkpointWhen: (_value, _ops, info) => info.deltasSinceBase >= 64,
+});
+
+/** What a run sent, said in its agent's chat: the chat draws it as the agent's message, and its model reads it. */
+export type RoutineSaidData = {
+	readonly routine: string;
+	readonly run: number;
+	readonly call: string;
+	readonly text: string;
+	readonly files?: readonly string[];
+	readonly at: number;
+};
+export const ROUTINE_SAID = "banda.routine-said";
+
+/**
  * A routine in trouble, as its chat's entry says it: its newest run failed (`why`, in the daemon's words), a due time
  * was skipped because its last run still goes (`due`), or it ran the most times a day it may and paused alone
  * (`runsADay`). The chat draws it as an error line, and it counts as unread.
@@ -373,12 +409,15 @@ function wakeText(routine: Routine, due: number, owner = false): string {
 }
 
 export type RoutinesOptions = {
-	/** Queue an input to `chat`, after its other inputs, watched by a Turn: the Turn's id. */
-	readonly followUp: (
+	/**
+	 * Start a run of routine `routine` for chat `chat`'s agent in a conversation of its own, its input queued there and
+	 * watched by a Turn: the run's conversation and the Turn's id.
+	 */
+	readonly startRun: (
 		tx: Tx,
 		chat: number,
-		input: { readonly key: string; readonly text: string; readonly entry: { kind: string; data: JsonObject } },
-	) => Promise<number>;
+		input: { readonly key: string; readonly text: string; readonly wake: WakeData },
+	) => Promise<{ readonly run: number; readonly turn: number }>;
 	/**
 	 * Agent `agent`'s one chat, made and routed if it has none yet; undefined when that agent is not active (archived or
 	 * gone), so nothing runs as another agent instead.
@@ -439,6 +478,7 @@ export function defineRoutines(options: RoutinesOptions) {
 				await runtime.commit(async (tx) => {
 					const pre = (await tx.doc(Routines)).routines[name];
 					const prior = pre?.turn === undefined ? undefined : await tx.task(pre.turn as TaskId);
+					const runs = (await tx.doc(RoutineRuns)).runs;
 					const routine = await acceptedRoutine(tx, name);
 					const record = (await tx.doc(Routines)).routines[name];
 					const now = runtime.now();
@@ -453,7 +493,9 @@ export function defineRoutines(options: RoutinesOptions) {
 						if (record.turn !== undefined && record.stalled !== record.turn) {
 							record.stalled = record.turn;
 							await log(tx, { at: now, routine: name, what: "skipped a turn: its last run is still going" });
-							const { chat } = prior.input as { chat: number };
+							// told in its agent's chat, not the conversation the run goes on in
+							const { chat: ran } = prior.input as { chat: number };
+							const chat = runs[ran]?.chat ?? ran;
 							addRun(record, { at: now, due, chat, skipped: "running" });
 							await troubleIn(tx, chat, {
 								routine: name,
@@ -505,14 +547,11 @@ export function defineRoutines(options: RoutinesOptions) {
 						return next;
 					}
 					const data: WakeData = { routine: name, due, description: routine.description };
-					record.turn = await options.followUp(tx, chat, {
-						key: `routine:${name}:${due}`,
-						text,
-						entry: { kind: WAKE, data },
-					});
+					const { run, turn } = await options.startRun(tx, chat, { key: `routine:${name}:${due}`, text, wake: data });
+					record.turn = turn;
 					record.wakes = [...(record.wakes ?? []), now];
 					record.last = now;
-					addRun(record, { at: now, due, chat, turn: record.turn });
+					addRun(record, { at: now, due, chat, run, turn });
 					await log(tx, { at: now, routine: name, what: "ran" });
 					return next;
 				}, ctx);
@@ -674,14 +713,15 @@ export function defineRoutines(options: RoutinesOptions) {
 			const chat = await options.agentChat(tx, agent);
 			if (chat === undefined) throw new RoutineRefused(`${agent} is not active: it cannot run as anyone else`, 409);
 			const data: WakeData = { routine: name, due: at, description: routine.description, owner: true };
-			record.turn = await options.followUp(tx, chat, {
+			const { run, turn } = await options.startRun(tx, chat, {
 				key: `routine:${name}:owner:${key}`,
 				text: wakeText(routine, at, true),
-				entry: { kind: WAKE, data },
+				wake: data,
 			});
+			record.turn = turn;
 			record.wakes = [...(record.wakes ?? []).filter((each) => each > at - DAY), at];
 			record.last = at;
-			addRun(record, { at, due: at, owner: true, chat, turn: record.turn });
+			addRun(record, { at, due: at, owner: true, chat, run, turn });
 			record.ranNow = [...(record.ranNow ?? []).slice(-(RAN_NOW_KEPT - 1)), key];
 			await log(tx, { at, routine: name, what: "You ran it now" });
 			return "ran" as const;

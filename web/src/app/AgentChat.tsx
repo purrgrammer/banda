@@ -456,8 +456,10 @@ function OpenAt({
 		const timer = setTimeout(() => {
 			target.removeAttribute("data-found");
 		}, 1600);
+		// opened elsewhere before the mark faded: this one goes now, so only one is ever marked
 		return () => {
 			clearTimeout(timer);
+			target.removeAttribute("data-found");
 		};
 	}, [at, first, loaded, older, loadOlder, stopScroll]);
 	return null;

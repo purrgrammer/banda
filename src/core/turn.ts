@@ -88,7 +88,19 @@ import { FLOOR_WORDS } from "./permissions.ts";
 import { decidedText, makeProposal, PROPOSAL_DECIDED, type Proposal, proposalTools } from "./proposals.ts";
 import { defineReleases, RELEASED, stoppable } from "./release.ts";
 import { rosterSection } from "./roster.ts";
-import { defineRoutines, failureKey, Routines, routinePath, troubleIn, WAKE, type WakeData } from "./routines.ts";
+import {
+	defineRoutines,
+	failureKey,
+	ROUTINE_SAID,
+	type RoutineRun,
+	RoutineRuns,
+	type RoutineSaidData,
+	Routines,
+	routinePath,
+	troubleIn,
+	WAKE,
+	type WakeData,
+} from "./routines.ts";
 import { skillTokens } from "./skill-tokens.ts";
 import { acceptedSkills, ownerSkillEntry, type Skill } from "./skills.ts";
 import { context } from "./store.ts";
@@ -881,7 +893,11 @@ export function defineCore(options: CoreOptions) {
 			if ((await tx.doc(Groups)).byExecution[chat] !== undefined)
 				return { refused: "in a group, message_group posts to the room" };
 
-			const target = (await targetOf(tx, chat)) ?? toOwner();
+			// a routine's run says what it sends in its agent's chat (DESIGN.md "Routines")
+			const runs = (await tx.doc(RoutineRuns)).runs;
+			const run = runs[chat];
+			// a run sends where its chat's messages go
+			const target = (await targetOf(tx, run?.chat ?? chat)) ?? toOwner();
 			if (target === undefined) return { refused: "nobody to send it to: the owner is on no gateway" };
 			const { to, input } = target;
 			const first = input !== undefined && (await tx.doc(Routes)).sends[routeKey(to)]?.input !== input.key;
@@ -894,13 +910,44 @@ export function defineCore(options: CoreOptions) {
 			for (const file of files ?? []) await hold(tx, chat, file, "agent", api.now());
 			const id = await enqueueMessage(
 				tx,
-				{ chat, origin: to, out, notify: true, call: api.callId },
+				{ chat: run?.chat ?? chat, origin: to, out, notify: true, call: api.callId },
 				{ kind: "task", taskId: api.taskId },
 				input?.key,
 			);
 			of.tasks[name] = id;
+			if (run !== undefined) await saidByRun(tx, chat, run, { call: api.callId ?? name, text, files, at: api.now() });
 			return id;
 		}, ctx);
+
+	/**
+	 * In chat `run.chat`, what run `chat` of routine `run.routine` sent: its line, the first time it says anything, then the
+	 * message, drawn as the agent's and read by the chat's model at its next request, starting no turn there.
+	 */
+	async function saidByRun(
+		tx: Tx,
+		chat: number,
+		run: RoutineRun,
+		{ call, text, files, at }: { call: string; text: string; files?: readonly Attachment[] | undefined; at: number },
+	): Promise<void> {
+		const into = run.chat as ConversationId;
+		if (run.line === undefined)
+			run.line = Number((await tx.appendEntry(into, { kind: WAKE, data: run.wake as unknown as JsonObject })).id);
+		const names = (files ?? []).map((file) => file.name);
+		const said: RoutineSaidData = {
+			routine: run.routine,
+			run: chat,
+			call,
+			text,
+			...(names.length === 0 ? {} : { files: names }),
+			at,
+		};
+		const words = `Your routine ${JSON.stringify(run.routine)} ran apart from this chat and sent the owner:\n\n${text}`;
+		await tx.appendEntry(into, {
+			kind: ROUTINE_SAID,
+			data: said as unknown as JsonObject,
+			model: [{ role: "user", content: words, timestamp: at }],
+		});
+	}
 
 	/**
 	 * Check whether the run that ended at `answer` left the owner unanswered (`unanswered.ts`), once per run, in the commit
@@ -1182,8 +1229,14 @@ export function defineCore(options: CoreOptions) {
 					result = { failed: typeof detail === "string" && detail !== "" ? `${reason}: ${detail}` : reason };
 				}
 				await runtime.commit(async (tx) => {
+					// a routine's run apart from its chat: what it says of how it ended goes to that chat
+					const ran = (await tx.doc(RoutineRuns)).runs[task.input.chat];
+					const agents = (await tx.doc(AgentChats)).chats;
 					if (answer !== undefined) await check(tx, task.input, answer);
-					const { chat, internal } = task.input;
+					const { internal } = task.input;
+					const chat = ran?.chat ?? task.input.chat;
+					// its run is over: it is no longer one of the agent's chats, which a definition's change reaches
+					if (ran !== undefined) delete agents[task.input.chat];
 					const wake = internal?.kind === WAKE ? (internal.data as WakeData) : undefined;
 					const routine = wake === undefined ? undefined : (await tx.doc(Routines)).routines[wake.routine];
 					// the run's history says how it ended, and where its wake and answer are in the chat
@@ -1216,6 +1269,11 @@ export function defineCore(options: CoreOptions) {
 								notify: true,
 							});
 						// a routine whose run fails says so on its row, and in its chat as trouble, which counts as unread
+						if (wake !== undefined && !told && ran !== undefined && ran.line === undefined)
+							ran.line = Number(
+								(await tx.appendEntry(chat as ConversationId, { kind: WAKE, data: ran.wake as unknown as JsonObject }))
+									.id,
+							);
 						if (wake !== undefined && !told)
 							await troubleIn(tx, chat, {
 								routine: wake.routine,
@@ -1237,12 +1295,18 @@ export function defineCore(options: CoreOptions) {
 								};
 						}
 					}
+					// where its history opens the chat: the line it drew there, if any
+					if (run !== undefined && ran?.line !== undefined) run.line = ran.line;
 					return { status: "terminal", outcome: { status: "completed", result } };
 				}, ctx);
 			},
 		},
-		abort: (_task, runtime, ctx) =>
-			runtime.commit(() => ({ status: "terminal", outcome: { status: "aborted", reason: "aborted" } }), ctx),
+		abort: (task, runtime, ctx) =>
+			runtime.commit(async (tx) => {
+				const ran = (await tx.doc(RoutineRuns)).runs[task.input.chat];
+				if (ran !== undefined) delete (await tx.doc(AgentChats)).chats[task.input.chat];
+				return { status: "terminal", outcome: { status: "aborted", reason: "aborted" } };
+			}, ctx),
 	});
 
 	/**
@@ -1423,6 +1487,38 @@ export function defineCore(options: CoreOptions) {
 	}
 
 	/**
+	 * A run of routine `routine` for chat `chat`'s agent, in a conversation of its own (DESIGN.md "Routines"): started as
+	 * that agent, routed nowhere so no list shows it, its input queued at once rather than behind the chat's.
+	 */
+	async function startRun(
+		tx: Tx,
+		chat: number,
+		{ key, text, wake }: { key: string; text: string; wake: WakeData },
+	): Promise<{ run: number; turn: number }> {
+		const home = (await tx.doc(Routes)).chats[chat];
+		if (home === undefined) throw new Error(`chat ${chat} has no home origin`);
+		const name = (await tx.doc(AgentChats)).chats[chat];
+		const agent = name === undefined ? undefined : await acceptedAgent(tx, name);
+		if (agent === undefined) throw new Error(`chat ${chat} runs no active agent`);
+		const created = await tx.createConversation({ ownership: { kind: "ownerless" } });
+		const named = await nameOf(tx);
+		await startAs(tx, created.id, agent, {
+			model: options.model(),
+			...(options.tools === undefined ? {} : { tools: options.tools() }),
+			...(named === undefined ? {} : { name: named }),
+			connected: await connectionToolsOf(tx, agent),
+		});
+		const run = Number(created.id);
+		(await tx.doc(RoutineRuns)).runs[run] = { agent: agent.id, routine: wake.routine, chat, wake };
+		const entry = { kind: WAKE, data: wake as unknown as JsonObject };
+		const input: Input = { chat: run, origin: home.origin, message: { id: key, text }, internal: entry };
+		const placement = { ownership: { kind: "conversation" }, background: true, conversationId: created.id } as const;
+		const admit = await tx.createTask(Admit, input, placement);
+		const turn = await tx.createTask(Turn, { ...input, admit: Number(admit) }, placement);
+		return { run, turn: Number(turn) };
+	}
+
+	/**
 	 * Agent `name`'s one chat, where its routines wake: the chat routed at its home origin, or one made, routed and started
 	 * as that agent there, as the owner's first message would. Undefined when that agent is not active (archived or gone):
 	 * a routine never runs as another.
@@ -1552,7 +1648,7 @@ export function defineCore(options: CoreOptions) {
 		}, ctx);
 
 	const routines = defineRoutines({
-		followUp,
+		startRun,
 		agentChat,
 
 		...(options.workspace === undefined ? {} : { workspace: options.workspace }),

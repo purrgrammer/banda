@@ -16,7 +16,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
-import type { ControlView } from "../src/server/api.ts";
+import type { ControlView, Item, RoutineRunsPage } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { tempHome, until } from "./helpers.ts";
 
@@ -131,6 +131,94 @@ describe("a permanent agent's routines", () => {
 			expect(control.routines.find((each) => each.name === "daily-digest")?.agent).toBe("researcher");
 			const rows = await api<{ origin: { thread?: string }; agent: string }[]>("/chats");
 			expect(rows.filter((row) => row.agent === "researcher").map((row) => row.origin.thread)).toEqual([main]);
+		} finally {
+			await daemon.close();
+		}
+	}, 90_000);
+
+	it("a run starts fresh, apart from the chat: it reads none of the chat, and what it sends is said there", async () => {
+		const home = await tempHome();
+		await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
+		const web = join(home, "web");
+		await mkdir(web, { recursive: true });
+		await writeFile(join(web, "index.html"), "<!doctype html><title>banda</title>");
+		const faux = fauxProvider();
+		const models = createModels();
+		models.setProvider(faux.provider);
+		const requests: { readonly text: string; readonly all: string }[] = [];
+		const respond = (ctx: ModelContext) => {
+			const all = JSON.stringify(ctx.messages.filter((m) => m.role !== "system"));
+			const last = ctx.messages.filter((m) => m.role !== "system").at(-1);
+			requests.push({ text: textOf(last?.content), all });
+			if (last?.role === "toolResult") return fauxAssistantMessage("done");
+			if (textOf(last?.content).includes("schedule tea"))
+				return fauxAssistantMessage(
+					[
+						fauxToolCall("schedule", {
+							name: "tea",
+							description: "Tea",
+							every: "1d",
+							ask: "TEA ASK: remind them.",
+						}),
+					],
+					{ stopReason: "toolUse" },
+				);
+			const said = textOf(last?.content).includes("TEA ASK") ? "TEA SAID" : "CHAT SAID";
+			return fauxAssistantMessage([fauxToolCall("message_user", { text: said })], { stopReason: "toolUse" });
+		};
+		faux.setResponses(Array.from({ length: 200 }, () => respond as never));
+		const daemon = await startDaemon({ home, port: 0, models, log: () => {}, box: hostBox(home), web });
+		const token = (await readDaemonFile(home))!.token!;
+		const api = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
+			const response = await fetch(`http://127.0.0.1:${daemon.port}/api${path}`, {
+				...init,
+				headers: { authorization: `Bearer ${token}`, ...init.headers },
+			});
+			if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+			return (await response.json()) as T;
+		};
+		const say = (text: string) =>
+			api<{ chat: number }>("/messages", {
+				method: "POST",
+				body: JSON.stringify({ id: randomUUID(), thread: "agent:sancho", text }),
+			});
+		try {
+			await until(async () => existsSync(join(home, "workspace", "agents", "sancho.md")));
+			await say("CHAT HISTORY: schedule tea");
+			const routine = await until(async () =>
+				(await api<ControlView>("/control")).routines.find((each) => each.name === "tea"),
+			);
+			const sha = routine.change !== undefined && "sha" in routine.change ? routine.change.sha : null;
+			await api("/routines/tea/accept", { method: "POST", body: JSON.stringify({ sha }) });
+			await api("/routines/tea/run", { method: "POST", body: JSON.stringify({ key: "run-tea" }) });
+			const run = await until(async () => requests.find((request) => request.text.includes("TEA ASK")));
+			// the run read its wake, and nothing the chat holds
+			expect(run.all).not.toContain("CHAT HISTORY");
+			// what it sent is the agent's message in its agent's chat, after the routine's line, which its history opens
+			const { line } = await until(
+				async () => (await api<RoutineRunsPage>("/routines/tea/runs")).runs.find((each) => each.line !== undefined)!,
+			);
+			const items = await until(async () => {
+				const page = await api<{ items: Item[] }>(`/chats/${line!.chat}/items?after=0`);
+				return page.items.some(
+					(item) => item.role === "assistant" && JSON.stringify(item.calls ?? []).includes("TEA SAID"),
+				)
+					? page.items
+					: undefined;
+			});
+			const drawn = items.findIndex((item) => item.role === "wake" && item.routine === "tea");
+			const said = items.findIndex(
+				(item) => item.role === "assistant" && JSON.stringify(item.calls ?? []).includes("TEA SAID"),
+			);
+			expect(items[drawn]?.id).toBe(line!.entry);
+			expect(said).toBeGreaterThan(drawn);
+			// the chat's model reads it at its next turn
+			await api("/messages", {
+				method: "POST",
+				body: JSON.stringify({ id: randomUUID(), chat: line!.chat, text: "NEXT TURN" }),
+			});
+			const next = await until(async () => requests.find((request) => request.text.includes("NEXT TURN")));
+			expect(next.all).toContain("TEA SAID");
 		} finally {
 			await daemon.close();
 		}

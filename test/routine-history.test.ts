@@ -8,7 +8,15 @@ import { type ConversationId, createRegistry, type Harness, type SetTimer } from
 import { describe, expect, it } from "vitest";
 import { Accepted, shaOf } from "../src/core/agents.ts";
 import { OWNER } from "../src/core/gateway.ts";
-import { addRun, type RoutineRecord, Routines, RUNS_KEPT, routinePath, WAKE } from "../src/core/routines.ts";
+import {
+	addRun,
+	type RoutineRecord,
+	RoutineRuns,
+	Routines,
+	RUNS_KEPT,
+	routinePath,
+	WAKE,
+} from "../src/core/routines.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore, Routes } from "../src/core/turn.ts";
 import type { Item, RoutineRunView } from "../src/server/api.ts";
@@ -170,8 +178,10 @@ describe("a routine's history from the store", () => {
 		await run("fail");
 
 		const page = await routineRuns(harness, "tea", undefined);
+		// each run went on apart from the chat; only the one that spoke and the one that failed drew a line there
+		expect(Object.keys((await harness.snapshot(RoutineRuns, context))?.runs ?? {})).toHaveLength(4);
 		const wakes = await wakeEntries(harness);
-		expect(wakes).toHaveLength(4);
+		expect(wakes).toHaveLength(2);
 		expect(page?.earlier).toBeUndefined();
 		const runs = page?.runs ?? [];
 		expect(runs.map((each) => each.state)).toEqual(["failed", "quiet", "said", "quiet"]);
@@ -179,10 +189,10 @@ describe("a routine's history from the store", () => {
 		const [failed, quiet, said] = runs as [RoutineRunView, RoutineRunView, RoutineRunView];
 		expect(said.said).toBe("Tea!");
 		// a run that spoke opens its own wake in the chat; a quiet one opens nothing
-		expect(said.line).toEqual(wakes[1]);
+		expect(said.line).toEqual(wakes[0]);
 		expect(quiet.line).toBeUndefined();
 		expect(failed.why).toMatch(/overloaded/);
-		expect(failed.line).toEqual(wakes[3]);
+		expect(failed.line).toEqual(wakes[1]);
 		await harness.close(context);
 	});
 

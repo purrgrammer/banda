@@ -10,6 +10,7 @@ import {
 	Control,
 	failureKey,
 	parseRoutine,
+	RoutineRuns,
 	Routines,
 	routinePath,
 	TROUBLE,
@@ -165,10 +166,11 @@ function setup(home: string, models: ReturnType<typeof createModels> = echoModel
 	return { gateway, core, open, allow, clock: time.clock };
 }
 
+/** Every wake a run read: each run's input, in its own conversation apart from the chat. */
 const wakes = async (harness: Harness) => {
-	const routes: Record<string, { chat: number }> = (await harness.snapshot(Routes, context))?.routes ?? {};
+	const runs = Object.keys((await harness.snapshot(RoutineRuns, context))?.runs ?? {}).map(Number);
 	const found: { routine: string; due: number }[] = [];
-	for (const { chat } of Object.values(routes)) {
+	for (const chat of runs.sort((a, b) => a - b)) {
 		const page = await (await harness.conversation(chat as never, context))!.entries(
 			{ order: "ascending" },
 			1000,

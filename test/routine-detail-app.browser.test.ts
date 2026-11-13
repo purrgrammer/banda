@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { type ConversationId, createRegistry } from "@earendil-works/pi-durable";
 import { expect, it } from "vitest";
-import { type RoutineRecord, Routines } from "../src/core/routines.ts";
+import { ROUTINE_SAID, type RoutineRecord, Routines } from "../src/core/routines.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
@@ -130,29 +130,38 @@ for (const width of [390, 1440])
 				expect(failed?.state).toBe("failed");
 				expect(failed?.line).toBeDefined();
 
-				// a fixture: a run whose line the feed does not draw (its message_user's result, a step of the run), as
-				// a record the store could hold; the daemon stops for it and starts again on the same home
+				// a fixture: a run whose line the feed does not draw, as a record the store could hold, saying its second
+				// message (read in its own conversation after its first message's result); the chat holds an entry it does
+				// not draw and the run's next message after it; the daemon stops for it and starts again on the same home
 				await daemon.close();
 				const store = await openStore(home, { models: createModels(), registry: createRegistry() });
 				const said = real.runs[1];
-				// its message_user's result: drawn as nothing; the run's second message comes after it
 				const chat = said?.line?.chat as number;
-				const entries = await (await store.conversation(chat as ConversationId, context))!.entries(
-					{ order: "ascending", minEntryId: ((said?.line?.entry as number) + 1) as never },
-					20,
+				const records = (await store.snapshot(Routines, context))?.routines["morning-brief"]?.runs ?? [];
+				const copied = records.find((run) => run.line === said?.line?.entry);
+				const ran = await (await store.conversation(copied?.run as ConversationId, context))!.entries(
+					{ order: "ascending" },
+					50,
 					undefined,
 					context,
 				);
-				const missing = Number(entries.items.find((entry) => entry.model?.[0]?.role === "toolResult")?.id);
-				const after = Number(
-					entries.items.find((entry) => Number(entry.id) > missing && entry.model?.[0]?.role === "assistant")?.id,
-				);
+				const result = Number(ran.items.find((entry) => entry.model?.[0]?.role === "toolResult")?.id);
+				let missing = 0;
+				let after = 0;
 				await store.commit(async (tx) => {
+					missing = Number((await tx.appendEntry(chat as ConversationId, { kind: "test.undrawn", data: {} })).id);
+					after = Number(
+						(
+							await tx.appendEntry(chat as ConversationId, {
+								kind: ROUTINE_SAID,
+								data: { routine: "morning-brief", run: copied?.run ?? 0, call: "fixture", text: SECOND, at: 1 },
+							})
+						).id,
+					);
 					const record = (await tx.doc(Routines)).routines["morning-brief"] as RoutineRecord;
-					const copied = record.runs?.find((run) => run.entry === said?.line?.entry);
 					record.runs = [
 						...(record.runs ?? []),
-						{ ...copied, at: (record.runs?.at(-1)?.at ?? 0) + 1, entry: missing } as NonNullable<
+						{ ...copied, at: (record.runs?.at(-1)?.at ?? 0) + 1, entry: result, line: missing } as NonNullable<
 							RoutineRecord["runs"]
 						>[number],
 					];

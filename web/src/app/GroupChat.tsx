@@ -406,8 +406,10 @@ function OpenAt({ at, ready }: { at: number | undefined; ready: boolean }) {
 		target.scrollIntoView({ block: "center" });
 		target.setAttribute("data-found", "");
 		const timer = setTimeout(() => target.removeAttribute("data-found"), 1600);
+		// opened elsewhere before the mark faded: this one goes now, so only one is ever marked
 		return () => {
 			clearTimeout(timer);
+			target.removeAttribute("data-found");
 		};
 	}, [at, ready, stopScroll]);
 	return null;

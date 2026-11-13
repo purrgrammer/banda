@@ -50,7 +50,17 @@ import {
 	type ProposalEdits,
 } from "../core/proposals.ts";
 import { RELEASED } from "../core/release.ts";
-import { Control, ROUTINE_TASK, Routines, TROUBLE, type TroubleData, WAKE, type WakeData } from "../core/routines.ts";
+import {
+	Control,
+	ROUTINE_SAID,
+	ROUTINE_TASK,
+	type RoutineSaidData,
+	Routines,
+	TROUBLE,
+	type TroubleData,
+	WAKE,
+	type WakeData,
+} from "../core/routines.ts";
 import { localTime } from "../core/schedule.ts";
 import { openWaits, status } from "../core/status.ts";
 import { context } from "../core/store.ts";
@@ -328,7 +338,19 @@ export function itemOf(entry: EntryRecord): Item | undefined {
 			routine: data.routine,
 			text: data.description,
 			...(data.owner === true ? { owner: true as const } : {}),
-			...(message ? { at: message.timestamp } : {}),
+			// a run apart from the chat draws its line with no model message: it says when it was due
+			at: message ? message.timestamp : data.due,
+		};
+	}
+	// what a routine's run sent, drawn as the agent's message
+	if (entry.kind === ROUTINE_SAID) {
+		const data = entry.data as unknown as RoutineSaidData;
+		return {
+			id,
+			role: "assistant",
+			text: "",
+			calls: [{ id: data.call, name: "message_user", args: { text: data.text } }],
+			at: data.at,
 		};
 	}
 	if (entry.kind === TROUBLE) {

@@ -630,13 +630,17 @@ gives it, the open asks it covers, and an ask a permission covers by the time it
   the accepted file is what runs; the store holds only each routine's task (its next due time, its runs). A promise
   the agent makes ("I'll check tomorrow") is a routine or a Wait, so it is kept whether or not the model remembers it.
   A routine that stalls or fails is itself news, told once while it keeps failing the same way.
-- **A routine belongs to one agent and runs in that agent's chat**, never in a chat of its own. The agent writes one
+- **A routine belongs to one agent and speaks in that agent's chat, but runs apart from it.** The agent writes one
   (a card in its chat the owner accepts) or the owner does from the panel, in effect at once. A `schedule` call is
   that card, never a tool row.
-- **A wake is an event in the chat**: a line with the routine's name and when it fired, and then the agent's reply
-  as its message. A wake draws its line only when the agent replied or the run failed, so a quiet run leaves no
-  trace in the chat. A run that failed, stalled or ran the most it may today draws an error line and marks the chat
-  unread. The panel's row says the rest ("last ran 8:00, nothing to say").
+- **Each run starts fresh**: a conversation of its own, started as its agent (instructions, memory, connections,
+  permissions), holding the wake and nothing of the chat's history. The chat's length never reaches a run, and a run's
+  work never reaches the chat; only what it sends does. Its usage is its own, counted per routine.
+- **A wake is an event in the chat**: a line with the routine's name and when it fired, and then what the run sent
+  as the agent's message, which the chat's model also reads at its next turn. A wake draws its line only when the run
+  sent something or failed, so a quiet run leaves no trace in the chat. A run that failed, stalled or ran the most it
+  may today draws an error line and marks the chat unread. The panel's row says the rest ("last ran 8:00, nothing to
+  say").
 - **The owner's own edits take effect at once**: when a routine runs (picked from presets, or a cron line), pausing and
   deleting. A change rewrites only that line of the file, bound to the version the owner saw; the store accepts it
   first and notes that the box still needs it, so a restart between the two finishes the box's copy, and an edit over

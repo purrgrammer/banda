@@ -18,6 +18,7 @@ import { OWNER } from "../src/core/gateway.ts";
 import {
 	parseRoutine,
 	RoutineRefused,
+	RoutineRuns,
 	Routines,
 	routinePath,
 	WAKE,
@@ -40,7 +41,7 @@ import {
 	zoneWords,
 } from "../src/core/schedule.ts";
 import { context, openStore } from "../src/core/store.ts";
-import { defineCore, Routes } from "../src/core/turn.ts";
+import { defineCore } from "../src/core/turn.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { ChatRow, ControlView, Item } from "../src/server/api.ts";
@@ -412,10 +413,11 @@ describe("run now", () => {
 		return { harness, core, gate, gateway, time };
 	}
 
+	/** Every wake a run read: each run's input, in its own conversation apart from the chat. */
 	const wakes = async (harness: Harness) => {
-		const routes: Record<string, { chat: number }> = (await harness.snapshot(Routes, context))?.routes ?? {};
+		const runs = Object.keys((await harness.snapshot(RoutineRuns, context))?.runs ?? {}).map(Number);
 		const found: WakeData[] = [];
-		for (const { chat } of Object.values(routes)) {
+		for (const chat of runs.sort((a, b) => a - b)) {
 			const page = await (await harness.conversation(chat as ConversationId, context))!.entries(
 				{ order: "ascending" },
 				1000,

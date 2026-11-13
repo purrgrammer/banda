@@ -82,14 +82,15 @@ async function runView(harness: Harness, name: string, run: RoutineRunRecord, ct
 		// it waits on its admission: queued behind the chat's other inputs
 		return { ...base, state: turn.state.status === "waiting" ? "waiting" : "running" };
 	}
+	// a run apart from its chat is read in its own conversation, and its line is the one it drew in the chat
+	const where = run.run ?? run.chat;
 	const left =
-		run.chat === undefined || run.entry === undefined
+		where === undefined || run.entry === undefined
 			? { shown: false }
-			: runSaid(await runItems(harness, run.chat, run.entry, ctx), name);
+			: runSaid(await runItems(harness, where, run.entry, ctx), name);
+	const drawn = run.run === undefined ? run.entry : run.line;
 	const line =
-		left.shown && run.chat !== undefined && run.entry !== undefined
-			? { line: { chat: run.chat, entry: run.entry } }
-			: {};
+		left.shown && run.chat !== undefined && drawn !== undefined ? { line: { chat: run.chat, entry: drawn } } : {};
 	if (run.result === "failed")
 		return { ...base, state: "failed", ...(run.why === undefined ? {} : { why: run.why }), ...line };
 	if (run.result === "stopped") return { ...base, state: "stopped", ...line };
