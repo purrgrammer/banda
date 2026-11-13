@@ -191,6 +191,8 @@ export type Routes = {
 	) => Promise<Attachment | undefined>;
 	/** Chat `chat`'s tab as the owner sees it: its state, and its frames while they watch, until `signal` aborts. */
 	readonly browser?: (chat: number, write: (event: ViewEvent) => void, signal: AbortSignal) => Promise<void>;
+	/** Prepare the shared browser independently of this request's lifetime. False when unsupported. */
+	readonly prepareBrowser?: () => boolean;
 	/** The owner takes chat `chat`'s tab, or gives it back; throws `BadRequest` with why not. */
 	readonly browserControl?: (chat: number, hold: boolean) => Promise<BrowserView>;
 	/** The owner's input on chat `chat`'s tab's live view; throws `BadRequest` unless they hold it. */
@@ -902,6 +904,14 @@ export function handler(
 				await Promise.all([routes.shell(write, gone.signal), live]);
 				return true;
 			});
+		}
+		if (route === "POST /computer/browser/prepare") {
+			const body = (await uploaded(req, "the body", JSON_BODY)).toString("utf8").trim();
+			if (url.search !== "" || (body !== "" && body !== "{}"))
+				return reply(res, 400, { error: "Browser preparation takes no arguments." });
+			return routes.prepareBrowser?.() === true
+				? reply(res, 202, { ok: true })
+				: reply(res, 409, { error: "Browsing is not available on this computer." });
 		}
 		// a chat's tab, in the browser of the agent it runs
 		const tab = /^\/chats\/(\d{1,12})\/browser(?:\/(control|input))?$/.exec(path);

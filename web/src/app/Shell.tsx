@@ -21,7 +21,7 @@ import { MemorySettings, type NewFactSpec } from "../chat/MemorySettings.tsx";
 import { AgentPanel, firstTab, Panel, Routines, Watching } from "../chat/Panel.tsx";
 import { AppSettings, Archive, Personality, SettingsPage } from "../chat/Settings.tsx";
 import { SkillCatalogue } from "../chat/Skill.tsx";
-import { actOnFact, readMemory, setPaused, signOutSite } from "../lib/api.ts";
+import { actOnFact, prepareBrowser, readMemory, setPaused, signOutSite } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { agentMainOf } from "../lib/chats.ts";
 import { useMidnight } from "../lib/midnight.ts";
@@ -755,6 +755,7 @@ function Main() {
 							centred,
 							paused: shell.control?.paused !== undefined,
 							...(shell.computer === undefined ? {} : { computer: shell.computer }),
+							runningBrowsers: shell.browsers.filter((browser) => browser.running).length,
 							signedIn: (shell.capabilities?.signedIn ?? []).map(({ agent, site, at }) => ({
 								agent: { ...whoOf(agents, agent), id: agent },
 								site,
@@ -787,6 +788,7 @@ function Main() {
 						onTheme={setTheme}
 						onCentred={centreBand}
 						onPause={(paused) => void setPaused(paused)}
+						onPrepareBrowser={prepareBrowser}
 						onConnect={() => go({ name: "connections" })}
 						onSignOut={(agent, site) => void signOutSite(agent, site).then(showCapabilities)}
 						onDetails={(connection) => go({ name: "connections", connection })}

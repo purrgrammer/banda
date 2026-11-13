@@ -14,7 +14,8 @@ import {
 } from "../../chat/Loading.tsx";
 import { Panel } from "../../chat/Panel.tsx";
 import { Search } from "../../chat/Search.tsx";
-import { AppSettings, SettingsPage } from "../../chat/Settings.tsx";
+import { AppSettings, Computer, SettingsPage } from "../../chat/Settings.tsx";
+import type { ComputerView } from "../../lib/api.ts";
 import { MARA, OTTO, ROWS, SETTINGS } from "../fixtures.ts";
 import { ChatScreen } from "../screens/screens.tsx";
 import { Group, Section, StageContext } from "../stage.tsx";
@@ -102,6 +103,7 @@ export function States() {
 										why: "Docker isn't running: start Docker Desktop (or the Docker service), and the computer starts by itself.",
 										box: "container",
 										network: "guarded",
+										browser: { state: "idle" },
 									},
 									signedIn: [],
 								}}
@@ -113,7 +115,10 @@ export function States() {
 					<div className="h-[520px] w-[30rem] max-w-full overflow-hidden rounded-tile border border-line-soft">
 						<SettingsPage title="Settings">
 							<AppSettings
-								data={{ ...SETTINGS, computer: { state: "building", box: "container", network: "guarded" } }}
+								data={{
+									...SETTINGS,
+									computer: { state: "building", box: "container", network: "guarded", browser: { state: "idle" } },
+								}}
 							/>
 						</SettingsPage>
 					</div>
@@ -122,7 +127,10 @@ export function States() {
 					<div className="h-[520px] w-[30rem] max-w-full overflow-hidden rounded-tile border border-line-soft">
 						<SettingsPage title="Settings">
 							<AppSettings
-								data={{ ...SETTINGS, computer: { state: "building", box: "microvm", network: "guarded" } }}
+								data={{
+									...SETTINGS,
+									computer: { state: "building", box: "microvm", network: "guarded", browser: { state: "idle" } },
+								}}
 							/>
 						</SettingsPage>
 					</div>
@@ -137,11 +145,46 @@ export function States() {
 										state: "offline",
 										box: "microvm",
 										network: "guarded",
+										browser: { state: "idle" },
 										why: "The computer's bundled files are incomplete. Reinstall this build of banda.",
 									},
 								}}
 							/>
 						</SettingsPage>
+					</div>
+				</Group>
+				{(
+					[
+						["Browser prepared on demand", { state: "idle" }],
+						["Browser checking its files", { state: "preparing", phase: "checking" }],
+						[
+							"Browser download progress",
+							{ state: "preparing", phase: "downloading", received: 24_000_000, total: 80_000_000 },
+						],
+						["Browser starting after download", { state: "preparing", phase: "starting" }],
+						["Browser download unavailable, with retry", { state: "failed", problem: "download-unavailable" }],
+						["Browser download interrupted, with retry", { state: "failed", problem: "download-failed" }],
+						["Browser verification failed, with retry", { state: "failed", problem: "integrity" }],
+						["Browser startup failed, with retry", { state: "failed", problem: "startup" }],
+						["Browser available without a running page", { state: "ready" }],
+						["Browser unavailable on this computer", { state: "unavailable" }],
+					] satisfies readonly (readonly [string, ComputerView["browser"]])[]
+				).map(([label, browser]) => (
+					<Group key={label} label={label} className="items-start">
+						<div className="w-[30rem] max-w-full">
+							<Computer
+								computer={{ state: "up", box: "microvm", network: "guarded", browser }}
+								onPrepareBrowser={async () => {}}
+							/>
+						</div>
+					</Group>
+				))}
+				<Group label="Browser with two running pages" className="items-start">
+					<div className="w-[30rem] max-w-full">
+						<Computer
+							computer={{ state: "up", box: "microvm", network: "guarded", browser: { state: "ready" } }}
+							runningBrowsers={2}
+						/>
 					</div>
 				</Group>
 			</Section>

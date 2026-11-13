@@ -101,7 +101,7 @@ describe("host mode", () => {
 			const { home, computer, post } = await start({ models, boxKind: "host" }, logged);
 			expect(logged).toContainEqual(expect.stringMatching(/^box: no box: commands run on this computer/));
 			const view = await computer((v) => v.state === "up");
-			expect(view).toMatchObject({ box: "host", network: "none", state: "up" });
+			expect(view).toMatchObject({ box: "host", network: "none", state: "up", browser: { state: "unavailable" } });
 			const posted = await post("where are you?");
 			expect(posted.ok).toBe(true);
 			const workspace = join(home, "workspace");

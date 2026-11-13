@@ -92,7 +92,18 @@ import {
 } from "./server/routines.ts";
 import { seenBy } from "./server/seen.ts";
 import { acceptSkill, acceptSkills, chooseShippedSkills, saveSkill, shippedSkills, skills } from "./server/skills.ts";
-import { chatContext, chatPrompt, chats, image, item, items, live, messageFile, shell } from "./server/transcript.ts";
+import {
+	chatContext,
+	chatPrompt,
+	chats,
+	image,
+	item,
+	items,
+	live,
+	messageFile,
+	type ShellChange,
+	shell,
+} from "./server/transcript.ts";
 
 /** How often blobs no chat holds are swept. */
 const SWEEP_EVERY_MS = 6 * 60 * 60_000;
@@ -340,7 +351,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			setupOf === undefined
 				? undefined
 				: openBrowsers({
-						setup: setupOf,
+						setup: (agent) => setupOf.forAgent(agent),
 						ensure: () => agentBox.ensure(),
 						// a chat drives the browser of the agent it runs, never another's
 						agentOf: async (chat) => {
@@ -521,8 +532,12 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		settleReceipts = () => collectReceipts("settled");
 		sweepingReceipts = setInterval(() => void recoverReceipts(), SENT_SWEEP_MS);
 		sweepingReceipts.unref();
+		let receiptBoxState = agentBox.state();
 		const sweepAtBringUp = agentBox.watch(() => {
-			if (agentBox.state().state === "up") void recoverReceipts();
+			const now = agentBox.state();
+			if (now === receiptBoxState) return;
+			receiptBoxState = now;
+			if (now.state === "up") void recoverReceipts();
 		});
 		const workspace: Workspace = {
 			env: () => agentBox.env(),
@@ -653,9 +668,9 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		const receive = (inbound: Parameters<typeof core.receive>[1]) => core.receive(open, inbound);
 		for (const gateway of gateways.values()) await gateway.start(receive);
 
-		const listeners = new Set<() => void>();
-		const changed = () => {
-			for (const listener of listeners) listener();
+		const listeners = new Set<(change: ShellChange) => void>();
+		const changed = (change: ShellChange = "all") => {
+			for (const listener of listeners) listener(change);
 		};
 		const changingWorkspace = async <T>(run: () => Promise<T>): Promise<T> => {
 			try {
@@ -665,9 +680,13 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			}
 		};
 		// the app hears at once when the companion's computer comes up or goes offline
+		let observedBoxState = agentBox.state();
 		const unwatchState = agentBox.watch(() => {
-			if (agentBox.state().state === "up") void seedWorkspace().then(changed);
-			else changed();
+			const now = agentBox.state();
+			const newBaseState = now !== observedBoxState;
+			observedBoxState = now;
+			if (newBaseState && now.state === "up") void seedWorkspace().then(() => changed());
+			else changed(newBaseState ? "all" : "computer");
 		});
 		unwatchBox = () => {
 			unwatchState();
@@ -680,11 +699,12 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 				...(now.state === "offline" ? { why: now.why } : {}),
 				box: agentBox.kind,
 				network: agentBox.egress === undefined ? "none" : "guarded",
+				browser: agentBox.browser?.state() ?? { state: "unavailable" },
 			};
 		};
 		memoryChanged = changed;
 		capabilitiesChanged = changed;
-		browserChanged = changed;
+		browserChanged = () => changed("browsers");
 		workspaceChanged = changed;
 
 		// a message as the owner: the blobs are checked and the message that holds them received under one lock, so no
@@ -835,6 +855,15 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 					file: async (chat, call, n) => {
 						const attachment = await messageFile(open, chat, call, n);
 						return attachment === undefined ? undefined : { attachment, bytes: await blobs.read(attachment.sha) };
+					},
+					prepareBrowser: () => {
+						if (agentBox.browser === undefined) return false;
+						void agentBox.browser
+							.prepare()
+							.catch((error: unknown) =>
+								log(`browser: preparation failed: ${error instanceof Error ? error.message : String(error)}`),
+							);
+						return true;
 					},
 					shell: (write, signal) =>
 						shell(

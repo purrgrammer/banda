@@ -717,17 +717,20 @@ export type ShellSources = {
 	readonly areas?: readonly Area[];
 };
 
+export type ShellChange = "all" | "computer" | "browsers";
+type RuntimeShellPart = Exclude<ShellChange, "all">;
+
 /**
  * Write the shell to `write`: the chat list, the companion, the control room, the agents, memory, the computer, the
  * capabilities, the browsers and each area's events, each when it changed since last written; then again whenever the
  * task graph (a task that is not a timer), the docs the shell reads or `subscribe` (tool and owner changes) say something
- * changed, until `signal` aborts. A change to a doc an area owns (`Area.own`) writes that area's events alone. Changes
- * in a burst are written once.
+ * changed, until `signal` aborts. Runtime notifications read only their computer or browsers source. A change to a doc
+ * an area owns (`Area.own`) writes that area's events alone. Changes in a burst are written once.
  */
 export async function shell(
 	harness: Harness,
 	{ agents, control, memory, computer, capabilities, browsers, areas = [] }: ShellSources,
-	subscribe: (listener: () => void) => () => void,
+	subscribe: (listener: (change: ShellChange) => void) => () => void,
 	write: (event: ShellEvent) => void,
 	signal: AbortSignal,
 	ctx: Context = context,
@@ -767,6 +770,27 @@ export async function shell(
 			// the store closed, or what the area reads is not up: a later change tries again
 		}
 	};
+	const pushComputer = () => {
+		if (computer === undefined) return;
+		const now = computer();
+		if (JSON.stringify(now) !== machine) {
+			machine = JSON.stringify(now);
+			write({ type: "computer", computer: now });
+		}
+	};
+	const pushBrowsers = () => {
+		if (browsers === undefined) return;
+		const now = browsers();
+		if (JSON.stringify(now) !== browsing) {
+			browsing = JSON.stringify(now);
+			write({ type: "browsers", browsers: now });
+		}
+	};
+	const pushPart = async (part: Area | RuntimeShellPart) => {
+		if (part === "computer") pushComputer();
+		else if (part === "browsers") pushBrowsers();
+		else await pushArea(part);
+	};
 	/** The whole shell, each part written when it changed. */
 	const push = async () => {
 		try {
@@ -779,21 +803,8 @@ export async function shell(
 			// the store closed under the stream, which ends with it
 			return;
 		}
-		if (computer !== undefined) {
-			// written when it changed, like the companion
-			const now = computer();
-			if (JSON.stringify(now) !== machine) {
-				machine = JSON.stringify(now);
-				write({ type: "computer", computer: now });
-			}
-		}
-		if (browsers !== undefined) {
-			const now = browsers();
-			if (JSON.stringify(now) !== browsing) {
-				browsing = JSON.stringify(now);
-				write({ type: "browsers", browsers: now });
-			}
-		}
+		pushComputer();
+		pushBrowsers();
 		try {
 			const now = await control();
 			if (JSON.stringify(now) !== room) {
@@ -843,9 +854,8 @@ export async function shell(
 			// the box is not up, or the store closed: a later change tries again
 		}
 	};
-	// what changed since the last push: the whole shell, or some areas' own docs alone
 	let whole = true;
-	const partial = new Set<Area>();
+	const partial = new Set<Area | RuntimeShellPart>();
 	// pushes in flight, so the stream ends only after them: none writes into a response that ended
 	const pushing = new Set<Promise<void>>();
 	const pushed = () => {
@@ -854,15 +864,15 @@ export async function shell(
 		const some = [...partial];
 		whole = false;
 		partial.clear();
-		const running = (all ? push() : Promise.all(some.map(pushArea)).then(() => undefined)).finally(() =>
+		const running = (all ? push() : Promise.all(some.map(pushPart)).then(() => undefined)).finally(() =>
 			pushing.delete(running),
 		);
 		pushing.add(running);
 		return running;
 	};
-	const changed = async (area?: Area) => {
-		if (area === undefined) whole = true;
-		else partial.add(area);
+	const changed = async (part: Area | ShellChange = "all") => {
+		if (part === "all") whole = true;
+		else partial.add(part);
 		timer ??= setTimeout(() => void pushed(), 100);
 	};
 	// watching before the first push, so a change while it reads is pushed after it
@@ -893,7 +903,7 @@ export async function shell(
 			own?.start(() => changed(area));
 			watches.push(own);
 		}
-	const unsubscribe = subscribe(() => void changed());
+	const unsubscribe = subscribe((change) => void changed(change));
 	await pushed();
 	try {
 		// a client gone during the first push has aborted already: a listener would wait for nothing, forever

@@ -632,6 +632,8 @@ export type SettingsData = {
 	 * what it can reach.
 	 */
 	readonly computer?: ComputerView | undefined;
+	/** The browser pages currently running. Preparation alone does not open one. */
+	readonly runningBrowsers?: number;
 	/** Sites an agent's browser is signed in to, as the owner: each its own credential, to sign out. */
 	readonly signedIn?:
 		| readonly { readonly agent: Who & { readonly id: string }; readonly site: string; readonly when: string }[]
@@ -639,6 +641,7 @@ export type SettingsData = {
 };
 
 export type SettingsActions = {
+	readonly onPrepareBrowser?: () => Promise<unknown>;
 	readonly onTheme?: (theme: SettingsData["theme"]) => void;
 	readonly onCentred?: (centred: boolean) => void;
 	readonly onPause?: (paused: boolean) => void;
@@ -978,7 +981,13 @@ export function AppSettings({
 						</label>
 					</Rows>
 				</Block>
-				{data.computer === undefined ? null : <Computer computer={data.computer} />}
+				{data.computer === undefined ? null : (
+					<Computer
+						computer={data.computer}
+						runningBrowsers={data.runningBrowsers ?? 0}
+						onPrepareBrowser={act.onPrepareBrowser}
+					/>
+				)}
 			</TabsContent>
 			{memory === undefined ? null : (
 				<TabsContent value="memory" className="flex flex-col gap-8">
@@ -1425,7 +1434,15 @@ function ConnectionRows({ connections, act }: { connections: readonly Connection
 }
 
 /** The band's computer, alive or not, and what keeps it apart: where its commands run and what it can reach. */
-function Computer({ computer }: { computer: NonNullable<SettingsData["computer"]> }) {
+export function Computer({
+	computer,
+	runningBrowsers = 0,
+	onPrepareBrowser,
+}: {
+	computer: NonNullable<SettingsData["computer"]>;
+	runningBrowsers?: number;
+	onPrepareBrowser?: SettingsActions["onPrepareBrowser"];
+}) {
 	const { state, why, box, network } = computer;
 	const coming = state === "starting" || state === "building";
 	return (
@@ -1471,12 +1488,13 @@ function Computer({ computer }: { computer: NonNullable<SettingsData["computer"]
 						) : state === "building" ? (
 							"The first run takes several minutes; it is ready once this says Running."
 						) : state === "starting" ? (
-							"A moment: its files and browser are coming up."
+							"A moment: its files and commands are coming up."
 						) : (
-							"Ready to browse, run commands and keep files."
+							"Ready to run commands and keep files."
 						)
 					}
 				/>
+				<ComputerBrowser computer={computer} running={runningBrowsers} onPrepare={onPrepareBrowser} />
 				<RowOf
 					lead={<span className="w-8 shrink-0" />}
 					title={box === "host" ? "On this computer, unguarded" : "In a sandbox of its own"}
@@ -1497,6 +1515,111 @@ function Computer({ computer }: { computer: NonNullable<SettingsData["computer"]
 				/>
 			</Rows>
 		</Block>
+	);
+}
+
+const BROWSER_PROBLEMS = {
+	"download-unavailable": "The browser download is unavailable. Try again later.",
+	"download-failed": "The browser download could not finish. Try again.",
+	integrity: "The browser download could not be verified. Try again.",
+	startup: "The browser could not start. Try again.",
+} satisfies Record<Extract<ComputerView["browser"], { state: "failed" }>["problem"], string>;
+
+function browserDetail(browser: ComputerView["browser"]): string {
+	switch (browser.state) {
+		case "unavailable":
+			return "Not available on this computer.";
+		case "idle":
+			return "Prepared on first use, or prepare it now.";
+		case "failed":
+			return BROWSER_PROBLEMS[browser.problem];
+		case "preparing":
+			return browser.phase === "checking"
+				? "Checking browser files…"
+				: browser.phase === "starting"
+					? "Starting the browser…"
+					: "Downloading browser…";
+		case "ready":
+			return "Available when needed.";
+		default: {
+			const exhaustive: never = browser;
+			return exhaustive;
+		}
+	}
+}
+
+function ComputerBrowser({
+	computer,
+	running,
+	onPrepare,
+}: {
+	computer: ComputerView;
+	running: number;
+	onPrepare: SettingsActions["onPrepareBrowser"];
+}) {
+	const [pending, setPending] = useState(false);
+	const [refused, setRefused] = useState(false);
+	const browser = computer.browser;
+	const available = computer.state === "up";
+	const downloading = browser.state === "preparing" && browser.phase === "downloading" ? browser : undefined;
+	const detail = available ? browserDetail(browser) : "Waiting for the computer to start.";
+	const action = available && (browser.state === "idle" || browser.state === "failed") && onPrepare !== undefined;
+	return (
+		<RowOf
+			lead={<span className="w-8 shrink-0" />}
+			title="Browser"
+			detail={
+				<>
+					<span className="block" role="status">
+						{detail}
+					</span>
+					{available && downloading !== undefined ? (
+						<>
+							<progress
+								aria-label="Browser download"
+								className="mt-1 block w-full accent-alive"
+								value={downloading.received}
+								max={downloading.total}
+							/>
+							<span className="block tabular-nums">
+								{(downloading.received / 1_000_000).toFixed(1)} of {(downloading.total / 1_000_000).toFixed(1)} MB
+							</span>
+						</>
+					) : null}
+					{available && browser.state !== "unavailable" ? (
+						<span className="block">
+							{running === 0
+								? "No browser pages running."
+								: `${running} ${running === 1 ? "browser page" : "browser pages"} running.`}
+						</span>
+					) : null}
+					{refused && action ? (
+						<span className="block text-ink" role="alert">
+							Could not request browser preparation. Try again.
+						</span>
+					) : null}
+				</>
+			}
+			end={
+				action ? (
+					<Button
+						variant="outline"
+						size="xs"
+						disabled={pending}
+						onClick={() => {
+							setRefused(false);
+							setPending(true);
+							void onPrepare()
+								.catch(() => setRefused(true))
+								.finally(() => setPending(false));
+						}}
+					>
+						{pending ? <Spinner /> : null}
+						{browser.state === "failed" ? "Retry" : "Prepare browser"}
+					</Button>
+				) : null
+			}
+		/>
 	);
 }
 

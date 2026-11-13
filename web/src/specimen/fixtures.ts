@@ -436,6 +436,6 @@ export const SETTINGS: import("../chat/Settings.tsx").SettingsData = {
 	theme: "system",
 	paused: false,
 	notify: "off",
-	computer: { state: "up", box: "container", network: "guarded" },
+	computer: { state: "up", box: "container", network: "guarded", browser: { state: "ready" } },
 	signedIn: [{ agent: { ...MARA, id: "mara" }, site: "renfe.com", when: "2 Nov" }],
 };

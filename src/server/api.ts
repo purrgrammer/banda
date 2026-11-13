@@ -353,6 +353,7 @@ export type ComputerView = {
 	/** `host`: no box, its commands run on the daemon's own machine, unguarded (host mode, asked for by name). */
 	readonly box: import("../box/box.ts").BoxKind;
 	readonly network: "guarded" | "none";
+	readonly browser: import("../box/browser-preparation.ts").BrowserPreparation;
 };
 
 /** A model provider in plain words ("Anthropic"), and whether it runs on this computer, so nothing leaves it. */

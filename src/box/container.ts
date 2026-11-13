@@ -17,6 +17,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { packagedDaemon } from "@earendil-works/pi-env";
 import type { BoxSetup } from "./box.ts";
+import type { BrowserPreparation } from "./browser-preparation.ts";
 import { BROWSER_UID, browserStart } from "./browser-start.ts";
 import { guardedProxy, type ProxyTransport, proxyReady, TRUST_ENV } from "./guarded-proxy.ts";
 
@@ -289,7 +290,14 @@ export function containerBox(home: string): BoxSetup {
 		},
 	};
 	const guarded = guardedProxy({ home, endpoint: `proxy:${PROXY_PORT}`, transport });
-	return {
+	let browserState: BrowserPreparation = { state: "idle" };
+	const browserListeners = new Set<() => void>();
+	const browserSet = (next: BrowserPreparation) => {
+		if (JSON.stringify(next) === JSON.stringify(browserState)) return;
+		browserState = next;
+		for (const listener of browserListeners) listener();
+	};
+	const setup: BoxSetup = {
 		kind: "container",
 		workspace: VOLUMES.workspace,
 		attachments: `${VOLUMES.work}/attachments`,
@@ -303,38 +311,84 @@ export function containerBox(home: string): BoxSetup {
 					return { failed: down };
 				}),
 		},
-		browser: (agent) => ({
-			command: async () => [
-				"docker",
-				"exec",
-				"--interactive",
-				"--user",
-				`${BROWSER_UID}:${BROWSER_UID}`,
-				"--env",
-				`HOME=/browser/agents/${agent}/home`,
-				name,
-				"/bin/sh",
-				"-c",
-				browserStart({ agent, proxy: `proxy:${PROXY_PORT}`, trust: TRUST_ENV.SSL_CERT_FILE }),
-			],
-			...guarded.browser(agent),
-		}),
+		browser: {
+			prepare: () => (browserState.state === "ready" ? Promise.resolve() : setup.ensure()),
+			state: () => browserState,
+			watch: (listener) => {
+				browserListeners.add(listener);
+				return () => browserListeners.delete(listener);
+			},
+			forAgent: (agent) => ({
+				command: async () => [
+					"docker",
+					"exec",
+					"--interactive",
+					"--user",
+					`${BROWSER_UID}:${BROWSER_UID}`,
+					"--env",
+					`HOME=/browser/agents/${agent}/home`,
+					name,
+					"/bin/sh",
+					"-c",
+					browserStart({ agent, proxy: `proxy:${PROXY_PORT}`, trust: TRUST_ENV.SSL_CERT_FILE }),
+				],
+				...guarded.browser(agent),
+			}),
+		},
 		ensure: async (building = () => {}) => {
-			await dockerReady();
-			const [boxTag, proxyTag] = await Promise.all([boxImage(building), proxyImage(building)]);
-			await network(inside, home, true);
-			await network(outside, home, false);
-			// the proxy first: the box never runs without it, so it never has a network of its own
-			await bringUp(
-				proxy,
-				home,
-				[
+			if (browserState.state !== "ready") browserSet({ state: "preparing", phase: "checking" });
+			try {
+				await dockerReady();
+				const [boxTag, proxyTag] = await Promise.all([boxImage(building), proxyImage(building)]);
+				await network(inside, home, true);
+				await network(outside, home, false);
+				// the proxy first: the box never runs without it, so it never has a network of its own
+				await bringUp(
+					proxy,
+					home,
+					[
+						"--hostname",
+						"proxy",
+						"--network",
+						`name=${outside}`,
+						"--network",
+						`name=${inside},alias=proxy`,
+						"--user",
+						`${uid}:${gid}`,
+						"--read-only",
+						"--cap-drop",
+						"ALL",
+						"--security-opt",
+						"no-new-privileges",
+						"--pids-limit",
+						"512",
+						"--tmpfs",
+						"/state:rw,nosuid,nodev,size=256m,mode=1777",
+						...Object.entries(PROXY_VOLUMES).flatMap(([volume, path]) => [
+							"--mount",
+							`type=volume,src=${name}-${volume},dst=${path}`,
+						]),
+						proxyTag,
+					],
+					false,
+				);
+				// up once it trusts its own authority and listens; then it gets the daemon's config, whatever it had
+				const deadline = Date.now() + 60_000;
+				for (;;) {
+					const ping = await proxyReady(transport).catch(() => false);
+					if (ping) break;
+					if (Date.now() > deadline) throw new DockerError("the egress proxy did not come up");
+					await new Promise((r) => setTimeout(r, 200));
+				}
+				// in line with every other push, read from the store at its turn: a revoke made while it came up is in it
+				if ((await guarded.egress.configure()) !== "told")
+					throw new DockerError("the egress proxy could not be told its config");
+				// how the box runs, which decides its confinement: a box made otherwise is made again, never reused
+				const run = [
 					"--hostname",
-					"proxy",
+					"box",
 					"--network",
-					`name=${outside}`,
-					"--network",
-					`name=${inside},alias=proxy`,
+					inside,
 					"--user",
 					`${uid}:${gid}`,
 					"--read-only",
@@ -342,67 +396,38 @@ export function containerBox(home: string): BoxSetup {
 					"ALL",
 					"--security-opt",
 					"no-new-privileges",
+					"--init",
 					"--pids-limit",
-					"512",
+					"4096",
+					"--memory",
+					BOX_MEMORY,
+					"--memory-swap",
+					BOX_MEMORY,
 					"--tmpfs",
-					"/state:rw,nosuid,nodev,size=256m,mode=1777",
-					...Object.entries(PROXY_VOLUMES).flatMap(([volume, path]) => [
+					"/tmp:rw,nosuid,nodev,size=1g",
+					...Object.entries(VOLUMES).flatMap(([volume, path]) => [
 						"--mount",
 						`type=volume,src=${name}-${volume},dst=${path}`,
 					]),
-					proxyTag,
-				],
-				false,
-			);
-			// up once it trusts its own authority and listens; then it gets the daemon's config, whatever it had
-			const deadline = Date.now() + 60_000;
-			for (;;) {
-				const ping = await proxyReady(transport).catch(() => false);
-				if (ping) break;
-				if (Date.now() > deadline) throw new DockerError("the egress proxy did not come up");
-				await new Promise((r) => setTimeout(r, 200));
-			}
-			// in line with every other push, read from the store at its turn: a revoke made while it came up is in it
-			if ((await guarded.egress.configure()) !== "told")
-				throw new DockerError("the egress proxy could not be told its config");
-			// how the box runs, which decides its confinement: a box made otherwise is made again, never reused
-			const run = [
-				"--hostname",
-				"box",
-				"--network",
-				inside,
-				"--user",
-				`${uid}:${gid}`,
-				"--read-only",
-				"--cap-drop",
-				"ALL",
-				"--security-opt",
-				"no-new-privileges",
-				"--init",
-				"--pids-limit",
-				"4096",
-				"--memory",
-				BOX_MEMORY,
-				"--memory-swap",
-				BOX_MEMORY,
-				"--tmpfs",
-				"/tmp:rw,nosuid,nodev,size=1g",
-				...Object.entries(VOLUMES).flatMap(([volume, path]) => [
 					"--mount",
-					`type=volume,src=${name}-${volume},dst=${path}`,
-				]),
-				"--mount",
-				`type=volume,src=${name}-trust,dst=/etc/ssl/certs,readonly`,
-				...Object.entries(TRUST_ENV).flatMap(([variable, value]) => ["--env", `${variable}=${value}`]),
-				boxTag,
-			];
-			const first = !started;
-			started = true;
-			// A daemon that starts takes the box over clean: a process a command detached from its group (setsid, a
-			// daemonized server) outlives the pi-env that started it, and would outlive this daemon too.
-			await bringUp(name, home, run, first);
+					`type=volume,src=${name}-trust,dst=/etc/ssl/certs,readonly`,
+					...Object.entries(TRUST_ENV).flatMap(([variable, value]) => ["--env", `${variable}=${value}`]),
+					boxTag,
+				];
+				const first = !started;
+				started = true;
+				// A daemon that starts takes the box over clean: a process a command detached from its group (setsid, a
+				// daemonized server) outlives the pi-env that started it, and would outlive this daemon too.
+				await bringUp(name, home, run, first);
+				browserSet({ state: "ready" });
+			} catch (error) {
+				browserSet({ state: "failed", problem: "startup" });
+				throw error;
+			}
 		},
+		close: async () => browserSet({ state: "idle" }),
 	};
+	return setup;
 }
 
 /** Remove `home`'s box, its proxy, their networks and volumes: everything in it is gone. */

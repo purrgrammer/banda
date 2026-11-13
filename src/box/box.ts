@@ -9,7 +9,7 @@ import type { Context } from "@earendil-works/chord";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { Connection, RemoteExecutionEnv } from "@earendil-works/pi-env";
 import type { EgressControl } from "../core/egress.ts";
-import type { BrowserSetup } from "./browser.ts";
+import type { PreparedBrowser } from "./browser-preparation.ts";
 import { containerBox, dockerReady, sweepBoxes } from "./container.ts";
 import type { Pushed } from "./egress-config.ts";
 import { hostBox } from "./host.ts";
@@ -73,8 +73,7 @@ export type BoxSetup = {
 	readonly command: readonly string[];
 	/** Its egress proxy, when its network is closed but for one; a box without one is a test's. */
 	readonly egress?: BoxEgress;
-	/** How it starts agent `agent`'s browser (each its own profile and proxy login), when it has browsers. */
-	readonly browser?: (agent: string) => BrowserSetup;
+	readonly browser?: PreparedBrowser;
 	/** Release owned runtime resources after pi-env stops; retain persistent files. */
 	close?(): Promise<void>;
 };
@@ -92,8 +91,7 @@ export type Box = {
 	readonly kind: BoxKind;
 	readonly attachments: string;
 	readonly egress?: BoxEgress;
-	/** How it starts agent `agent`'s browser (each its own profile and proxy login), when it has browsers. */
-	readonly browser?: (agent: string) => BrowserSetup;
+	readonly browser?: PreparedBrowser;
 	/** Bring it up, if it is not; what failed, thrown. */
 	ensure(): Promise<void>;
 	/** The box as an `ExecutionEnv`, at `cwd` (default the workspace), with `env` added to every command's environment. */
@@ -169,6 +167,9 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 				? recoveringEgress(setup.egress, ensure)
 				: setup.egress;
 	const browserOf = setup.browser;
+	const unwatchBrowser = browserOf?.watch(() => {
+		for (const listener of listeners) listener();
+	});
 	return {
 		workspace: setup.workspace,
 		attachments: setup.attachments,
@@ -177,17 +178,26 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 		...(browserOf === undefined
 			? {}
 			: {
-					browser: (agent: string) => {
-						const browser = browserOf(agent);
-						return {
-							...browser,
-							command: async () => {
-								await ensure();
-								const command = await browser.command();
-								if (closed) throw new Error("The computer is closed");
-								return command;
-							},
-						};
+					browser: {
+						state: () => browserOf.state(),
+						watch: (listener: () => void) => browserOf.watch(listener),
+						prepare: async () => {
+							await ensure();
+							await browserOf.prepare();
+							if (closed) throw new Error("The computer is closed");
+						},
+						forAgent: (agent: string) => {
+							const browser = browserOf.forAgent(agent);
+							return {
+								...browser,
+								command: async () => {
+									await ensure();
+									const command = await browser.command();
+									if (closed) throw new Error("The computer is closed");
+									return command;
+								},
+							};
+						},
 					},
 				}),
 		ensure,
@@ -212,6 +222,7 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 		close: () => {
 			if (closing !== undefined) return closing;
 			closed = true;
+			unwatchBrowser?.();
 			clearTimeout(retry);
 			connection.close();
 			closing = (async () => {

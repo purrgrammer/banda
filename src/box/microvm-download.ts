@@ -7,6 +7,14 @@ const PUBLISHERS = new Set(["github.com", "release-assets.githubusercontent.com"
 const MAX_REDIRECTS = 4;
 const DOWNLOAD_MS = 15 * 60_000;
 
+export class BrowserDownloadError extends Error {
+	readonly problem: "download-unavailable" | "download-failed" | "integrity";
+	constructor(problem: BrowserDownloadError["problem"], message: string, options?: ErrorOptions) {
+		super(message, options);
+		this.problem = problem;
+	}
+}
+
 async function cacheDirectory(home: string): Promise<string> {
 	let directory = await realpath(home);
 	for (const part of ["cache", "computer", "browser"]) {
@@ -35,7 +43,10 @@ function publisher(address: string): URL {
 		url.username !== "" ||
 		url.password !== ""
 	)
-		throw new Error("The browser download was redirected outside its trusted publisher.");
+		throw new BrowserDownloadError(
+			"download-failed",
+			"The browser download was redirected outside its trusted publisher.",
+		);
 	return url;
 }
 
@@ -47,7 +58,7 @@ async function responseFor(address: string, fetcher: typeof fetch, signal: Abort
 		await response.body?.cancel();
 		const location = response.headers.get("location");
 		if (redirects >= MAX_REDIRECTS || location === null)
-			throw new Error("The browser download has too many redirects.");
+			throw new BrowserDownloadError("download-failed", "The browser download has too many redirects.");
 		url = publisher(new URL(location, url).href);
 	}
 }
@@ -83,12 +94,15 @@ export async function downloadMicrovmBrowser(options: {
 		const response = await responseFor(browser.url, options.fetch ?? fetch, signal);
 		if (!response.ok || response.body === null) {
 			await response.body?.cancel();
-			throw new Error(`The browser download answered HTTP ${response.status}. Check your connection and try again.`);
+			throw new BrowserDownloadError(
+				response.status === 404 || response.status === 410 ? "download-unavailable" : "download-failed",
+				`The browser download answered HTTP ${response.status}. Check your connection and try again.`,
+			);
 		}
 		reader = response.body.getReader();
 		const length = response.headers.get("content-length");
 		if (length !== null && Number(length) !== browser.bytes)
-			throw new Error("The browser download has the wrong size.");
+			throw new BrowserDownloadError("integrity", "The browser download has the wrong size.");
 		const file = await open(temporary, "wx", 0o600);
 		try {
 			options.progress?.({ received: 0, total: browser.bytes });
@@ -97,24 +111,27 @@ export async function downloadMicrovmBrowser(options: {
 				const { done, value } = await reader.read();
 				if (done) break;
 				received += value.byteLength;
-				if (received > browser.bytes) throw new Error("The browser download exceeds its pinned size.");
+				if (received > browser.bytes)
+					throw new BrowserDownloadError("integrity", "The browser download exceeds its pinned size.");
 				await file.writeFile(value);
 				options.progress?.({ received, total: browser.bytes });
 			}
 			signal.throwIfAborted();
-			if (received !== browser.bytes) throw new Error("The browser download ended early. Try again.");
+			if (received !== browser.bytes)
+				throw new BrowserDownloadError("download-failed", "The browser download ended early. Try again.");
 			await file.sync();
 		} finally {
 			await file.close();
 		}
 		if ((await fileSha256(temporary)) !== browser.sha256)
-			throw new Error("The browser download failed SHA-256 verification. Try again.");
+			throw new BrowserDownloadError("integrity", "The browser download failed SHA-256 verification. Try again.");
 		signal.throwIfAborted();
 		await rename(temporary, archive);
 		return result;
 	} catch (error) {
 		if (options.signal.aborted) throw options.signal.reason;
-		throw error;
+		if (error instanceof BrowserDownloadError) throw error;
+		throw new BrowserDownloadError("download-failed", "The browser download failed. Try again.", { cause: error });
 	} finally {
 		signal.removeEventListener("abort", cancel);
 		await reader?.cancel().catch(() => undefined);

@@ -45,13 +45,21 @@ for (const width of [390, 1440]) {
 			log: () => {},
 			box: {
 				...hostBox(home),
-				browser: () => ({
-					command: async () => {
+				browser: {
+					state: () => ({ state: "idle" }),
+					watch: () => () => {},
+					prepare: async () => {
 						await preparing;
 						throw new Error("The browser download was unavailable.");
 					},
-					login: { username: "test", password: "test" },
-				}),
+					forAgent: () => ({
+						command: async () => {
+							await preparing;
+							throw new Error("The browser download was unavailable.");
+						},
+						login: { username: "test", password: "test" },
+					}),
+				},
 			},
 		});
 		let web: WebServer | undefined;

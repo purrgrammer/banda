@@ -181,6 +181,9 @@ export const { events, shellEvents, takeReopen } = one;
 export const browserEvents = (chat: number, onEvent: (event: ViewEvent) => void, signal: AbortSignal) =>
 	stream(`/chats/${chat}/browser`, onEvent, signal);
 
+/** Prepare the shared browser without opening a page. Progress arrives through the computer events. */
+export const prepareBrowser = () => api<{ readonly ok: true }>("/computer/browser/prepare", { method: "POST" });
+
 /** Take chat `chat`'s browser tab, or give it back; the tab as it is after, or rejects with why. */
 export const holdBrowser = (chat: number, hold: boolean) =>
 	api<BrowserView>(`/chats/${chat}/browser/control`, { method: "POST", body: JSON.stringify({ hold }) });

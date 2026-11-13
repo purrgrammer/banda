@@ -2,6 +2,40 @@ import { describe, expect, it } from "vitest";
 import { openBox } from "../src/box/box.ts";
 
 describe("owned box resources", () => {
+	it("forwards runtime browser state through the existing box watcher", async () => {
+		let changed = () => {};
+		let watches = 0;
+		let unwatched = false;
+		const box = openBox(
+			{
+				kind: "microvm",
+				workspace: "/workspace",
+				attachments: "/work/attachments",
+				command: ["unused"],
+				ensure: async () => {},
+				browser: {
+					forAgent: () => ({ command: async () => ["unused"], login: { username: "u", password: "p" } }),
+					prepare: async () => {},
+					state: () => ({ state: "idle" }),
+					watch: (listener) => {
+						changed = listener;
+						return () => {
+							unwatched = true;
+						};
+					},
+				},
+			},
+			() => {},
+		);
+		const unwatch = box.watch(() => watches++);
+		changed();
+		expect(watches).toBe(1);
+		expect(box.browser?.state()).toEqual({ state: "idle" });
+		unwatch();
+		await box.close();
+		expect(watches).toBe(1);
+		expect(unwatched).toBe(true);
+	});
 	it("keeps the base computer up when optional browser preparation fails", async () => {
 		const box = openBox(
 			{
@@ -10,17 +44,25 @@ describe("owned box resources", () => {
 				attachments: "/work/attachments",
 				command: ["unused"],
 				ensure: async () => {},
-				browser: () => ({
-					command: async () => {
+				browser: {
+					state: () => ({ state: "idle" }),
+					watch: () => () => {},
+					prepare: async () => {
 						throw new Error("browser download failed");
 					},
-					login: { username: "u", password: "p" },
-				}),
+					forAgent: () => ({
+						command: async () => {
+							throw new Error("browser download failed");
+						},
+						login: { username: "u", password: "p" },
+					}),
+				},
 			},
 			() => {},
 		);
 		try {
-			await expect(box.browser?.("mara").command()).rejects.toThrow("browser download failed");
+			await expect(box.browser?.forAgent("mara").command()).rejects.toThrow("browser download failed");
+			await expect(box.browser?.prepare()).rejects.toThrow("browser download failed");
 			expect(box.state()).toEqual({ state: "up" });
 			await expect(box.ensure()).resolves.toBeUndefined();
 		} finally {

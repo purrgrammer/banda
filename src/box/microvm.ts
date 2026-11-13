@@ -9,10 +9,11 @@ import { fileURLToPath } from "node:url";
 import { type Static, type TSchema, Type } from "@earendil-works/pi-ai";
 import { Value } from "typebox/value";
 import type { BoxSetup } from "./box.ts";
+import type { BrowserPreparation } from "./browser-preparation.ts";
 import { BROWSER_UID, browserStart } from "./browser-start.ts";
 import { guardedProxy, type ProxyTransport, proxyReady, TRUST, TRUST_ENV } from "./guarded-proxy.ts";
 import { installedMicrovmAssets, type MicrovmAssets, microvmTarget } from "./microvm-assets.ts";
-import { downloadMicrovmBrowser } from "./microvm-download.ts";
+import { BrowserDownloadError, downloadMicrovmBrowser } from "./microvm-download.ts";
 
 const CacheHome = Type.Object({ home: Type.String() }, { additionalProperties: false });
 const Inspection = Type.Object({
@@ -257,6 +258,22 @@ export function microvmBox(input: string): BoxSetup {
 	let computer: Runtime | undefined;
 	const bridges = new Map<"box" | "browser", ReturnType<typeof forwarding>>();
 	let browserBringing: Promise<void> | undefined;
+	let browserState: BrowserPreparation = { state: "idle" };
+	const browserListeners = new Set<() => void>();
+	const browserSet = (next: BrowserPreparation) => {
+		const previous = browserState;
+		browserState = next;
+		if (JSON.stringify(previous) === JSON.stringify(next)) return;
+		if (
+			previous.state === "preparing" &&
+			previous.phase === "downloading" &&
+			next.state === "preparing" &&
+			next.phase === "downloading" &&
+			Math.floor((previous.received * 100) / previous.total) === Math.floor((next.received * 100) / next.total)
+		)
+			return;
+		for (const listener of browserListeners) listener();
+	};
 	let closing: Promise<void> | undefined;
 	let closed = false;
 	let takenOver = false;
@@ -305,6 +322,8 @@ export function microvmBox(input: string): BoxSetup {
 		const current = await loaded();
 		const vmName = names[role];
 		const existing = await current.inspect(vmName);
+		if (role === "proxy" && existing?.status !== "Running" && browserState.state === "ready")
+			browserSet({ state: "idle" });
 		if (existing === undefined) {
 			await current.run(
 				[
@@ -477,6 +496,7 @@ export function microvmBox(input: string): BoxSetup {
 	const ensureBrowser = () => {
 		assertOpen();
 		if (browserBringing !== undefined) return browserBringing;
+		browserSet({ state: "preparing", phase: "checking" });
 		browserBringing = (async () => {
 			const current = await loaded();
 			assertOpen();
@@ -484,8 +504,12 @@ export function microvmBox(input: string): BoxSetup {
 				home: current.home,
 				browser: current.assets.browser,
 				signal: startup.signal,
+				progress: (progress) => {
+					if (!closed) browserSet({ state: "preparing", phase: "downloading", ...progress });
+				},
 			});
 			assertOpen();
+			browserSet({ state: "preparing", phase: "starting" });
 			const manifest = await image(current, asset, () => {}, startup.signal);
 			assertOpen();
 			const storage = join(current.home, "computer");
@@ -503,9 +527,17 @@ export function microvmBox(input: string): BoxSetup {
 				`${join(storage, "proxy", "trust")}:/etc/ssl/certs:ro,uid=1000,gid=1000`,
 			]);
 			await relay("browser");
-		})().finally(() => {
-			browserBringing = undefined;
-		});
+			assertOpen();
+			browserSet({ state: "ready" });
+		})()
+			.catch((error: unknown) => {
+				if (!closed)
+					browserSet({ state: "failed", problem: error instanceof BrowserDownloadError ? error.problem : "startup" });
+				throw error;
+			})
+			.finally(() => {
+				browserBringing = undefined;
+			});
 		return browserBringing;
 	};
 	return {
@@ -520,19 +552,28 @@ export function microvmBox(input: string): BoxSetup {
 				return guarded.egress.configure();
 			},
 		},
-		browser: (agent) => ({
-			...guarded.browser(agent),
-			command: async () => {
-				if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(agent)) throw new Error("Invalid computer browser identifier.");
-				await ensureBrowser();
-				assertOpen();
-				return [process.execPath, launcher, "browser", homeArg, names.browser, agent];
+		browser: {
+			prepare: ensureBrowser,
+			state: () => browserState,
+			watch: (listener) => {
+				browserListeners.add(listener);
+				return () => browserListeners.delete(listener);
 			},
-		}),
+			forAgent: (agent) => ({
+				...guarded.browser(agent),
+				command: async () => {
+					if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(agent)) throw new Error("Invalid computer browser identifier.");
+					await ensureBrowser();
+					assertOpen();
+					return [process.execPath, launcher, "browser", homeArg, names.browser, agent];
+				},
+			}),
+		},
 		ensure,
 		close: () =>
 			(closing ??= (async () => {
 				closed = true;
+				browserSet({ state: "idle" });
 				startup.abort();
 				await browserBringing?.catch(() => undefined);
 				await loading?.catch(() => undefined);

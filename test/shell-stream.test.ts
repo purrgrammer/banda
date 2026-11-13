@@ -1,8 +1,3 @@
-/**
- * The shell stream (`shell` in src/server/transcript.ts): what a change pushes to a connected client. A doc an area
- * owns pushes that area's events alone; a timer's task (a watch's, a routine's) waking and sleeping pushes nothing;
- * everything else pushes the whole shell, each part written when it changed.
- */
 import type { Op } from "@earendil-works/chord/delta";
 import { createRegistry, type TaskGraph, type TaskGraphNode } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
@@ -10,9 +5,9 @@ import { ROUTINE_TASK, Routines } from "../src/core/routines.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
 import { WATCH_TASK, Watches } from "../src/core/watches.ts";
-import type { ControlView, MemoryView, ShellEvent } from "../src/server/api.ts";
+import type { ComputerView, ControlView, MemoryView, ShellEvent } from "../src/server/api.ts";
 import { graphNews, shell } from "../src/server/transcript.ts";
-import { blobStore, echoModels, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
+import { blobStore, echoModels, FAUX_MODEL, FakeGateway, tempHome, until as waitUntil } from "./helpers.ts";
 
 const node = (id: number, kind: string, status: "sleeping" | "running", blocked?: string): TaskGraphNode =>
 	({
@@ -52,6 +47,76 @@ describe("what a task graph frame tells the shell", () => {
 });
 
 describe("the shell stream", () => {
+	for (const scope of ["computer", "browsers"] satisfies ("computer" | "browsers")[]) {
+		it(`${scope} updates leave workspace and store views unread`, async () => {
+			const core = defineCore({ blobs: blobStore(), gateway: () => new FakeGateway(), model: () => FAUX_MODEL });
+			const registry = createRegistry();
+			registry.install(core.extension);
+			const harness = await openStore(await tempHome(), { models: echoModels().models, registry });
+			const stop = new AbortController();
+			const reads = { agents: 0, memory: 0, control: 0, capabilities: 0, areas: 0 };
+			let computer: ComputerView = { state: "up", box: "microvm", network: "guarded", browser: { state: "idle" } };
+			let running = false;
+			let notify: (scope: "all" | "computer" | "browsers") => void = () => {};
+			const events: ShellEvent[] = [];
+			const streaming = shell(
+				harness,
+				{
+					computer: () => computer,
+					browsers: () => [{ agent: "mara", tab: 1, running, preparing: false, control: "agent" }],
+					agents: async () => {
+						reads.agents++;
+						return [];
+					},
+					memory: async () => {
+						reads.memory++;
+						return { facts: [] };
+					},
+					control: async () => {
+						reads.control++;
+						return { routines: [], activity: [], permissions: [], removed: {} };
+					},
+					capabilities: async () => {
+						reads.capabilities++;
+						return { connections: [] };
+					},
+					areas: [
+						{
+							shell: async () => {
+								reads.areas++;
+								return [];
+							},
+						},
+					],
+				},
+				(listener) => {
+					notify = listener;
+					return () => {};
+				},
+				(event) => events.push(event),
+				stop.signal,
+			);
+			try {
+				await waitUntil(() => events.some((event) => event.type === "capabilities"));
+				const before = { ...reads };
+				const seen = events.length;
+				computer = { ...computer, browser: { state: "preparing", phase: "downloading", received: 3, total: 10 } };
+				running = true;
+				notify(scope);
+				await waitUntil(() => events.length > seen);
+				expect(reads).toEqual(before);
+				expect(events.slice(seen).map((event) => event.type)).toEqual([scope]);
+				notify("all");
+				await waitUntil(() => reads.capabilities > before.capabilities);
+				expect(reads).toEqual(Object.fromEntries(Object.entries(before).map(([key, value]) => [key, value + 1])));
+			} finally {
+				stop.abort();
+				await streaming;
+				await harness.close(context);
+			}
+		});
+	}
+
 	it("a doc an area owns pushes that area's events alone; a doc the shell reads pushes the whole shell, where it changed", async () => {
 		const home = await tempHome();
 		const core = defineCore({ blobs: blobStore(), gateway: () => new FakeGateway(), model: () => FAUX_MODEL });
