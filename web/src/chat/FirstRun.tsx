@@ -2,8 +2,8 @@
  * First run: the first agent, and the model providers to pick from. The one picked signs the owner in, or takes a key
  * where it has no sign-in; one screen, no other step. Then the chat opens with the agent's first words.
  */
-import { ChevronRightIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { ChevronRightIcon, SearchIcon } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { cn } from "@/lib/cn";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import { Face } from "./Face.tsx";
@@ -28,6 +28,19 @@ export type ProviderChoice = {
 	readonly way?: string | undefined;
 };
 
+/** Every other way to think, found by search: a provider set up in Add a provider, or a server of the owner's. */
+export type OtherChoice = {
+	readonly id: string;
+	readonly name: string;
+	readonly note: string;
+	/** Words a search finds it by besides its name (`local`, `self-hosted`). */
+	readonly keywords?: readonly string[];
+	readonly mark: ReactNode;
+};
+
+/** More than this many choices, and the list can be searched. */
+const SEARCH_FROM = 6;
+
 export function FirstRun({
 	providers,
 	open,
@@ -39,7 +52,12 @@ export function FirstRun({
 	onWay,
 	onCancel,
 	more,
+	others = [],
+	onOther,
 }: {
+	/** What a search finds past the providers listed: Add a provider opens on the one picked. */
+	others?: readonly OtherChoice[];
+	onOther?: (id: string) => void;
 	/** Every other provider, and servers of the owner's: Add a provider. */
 	more?: ReactNode;
 	providers: readonly ProviderChoice[];
@@ -56,6 +74,12 @@ export function FirstRun({
 	onWay?: (id: string, way: string) => void;
 	onCancel?: (id: string) => void;
 }) {
+	const [search, setSearch] = useState("");
+	const needle = search.trim().toLowerCase();
+	const finds = (...words: readonly string[]) => words.some((word) => word.toLowerCase().includes(needle));
+	const shown = needle === "" ? providers : providers.filter((provider) => finds(provider.name, provider.id));
+	const found = needle === "" ? [] : others.filter((other) => finds(other.name, other.id, ...(other.keywords ?? [])));
+	const searchable = providers.length + others.length > SEARCH_FROM;
 	return (
 		<div className="flex h-full flex-col items-center overflow-y-auto bg-paper px-4 py-12">
 			<div className="flex w-full max-w-sm shrink-0 flex-col items-center gap-3 text-center">
@@ -65,8 +89,29 @@ export function FirstRun({
 					I'm the first of your band. Pick the model I think with, and we can start.
 				</p>
 			</div>
-			<ul className="mt-8 flex w-full max-w-sm shrink-0 flex-col divide-y divide-line-soft overflow-y-auto overscroll-contain max-h-[min(24rem,50dvh)] rounded-tile border border-line-soft">
-				{providers.map((provider) => {
+			{searchable ? (
+				<label className="mt-8 flex h-10 w-full max-w-sm shrink-0 items-center gap-2 rounded-tile border border-line-soft px-3.5 focus-within:ring-2 focus-within:ring-ring">
+					<SearchIcon aria-hidden="true" className="size-4 shrink-0 text-ink-3" />
+					<input
+						type="search"
+						value={search}
+						onChange={(event) => setSearch(event.target.value)}
+						placeholder={`Search ${providers.length + others.length} providers and servers`}
+						aria-label="Search providers and servers"
+						autoComplete="off"
+						spellCheck={false}
+						className="min-w-0 flex-1 bg-transparent text-ui text-ink outline-none placeholder:text-ink-3"
+					/>
+				</label>
+			) : null}
+			<ul
+				className={cn(
+					"flex w-full max-w-sm shrink-0 flex-col divide-y divide-line-soft overflow-y-auto overscroll-contain max-h-[min(24rem,50dvh)] rounded-tile border border-line-soft",
+					searchable ? "mt-2" : "mt-8",
+					shown.length + found.length === 0 && "hidden",
+				)}
+			>
+				{shown.map((provider) => {
 					const signing = provider.by === "sign-in" && (provider.id === waiting || provider.connecting === true);
 					return (
 						<li key={provider.id}>
@@ -108,7 +153,28 @@ export function FirstRun({
 						</li>
 					);
 				})}
+				{found.map((other) => (
+					<li key={other.id}>
+						<button
+							type="button"
+							onClick={() => onOther?.(other.id)}
+							className="flex w-full items-center gap-3 px-3.5 py-3 text-left hover:bg-paper-2"
+						>
+							<span className="flex size-6 shrink-0 items-center justify-center">{other.mark}</span>
+							<span className="flex min-w-0 flex-1 flex-col">
+								<span className="text-ui font-medium text-ink">{other.name}</span>
+								<span className="text-meta text-ink-2">{other.note}</span>
+							</span>
+							<ChevronRightIcon className="size-4 text-ink-3" />
+						</button>
+					</li>
+				))}
 			</ul>
+			{shown.length + found.length === 0 ? (
+				<p role="status" className="mt-3 max-w-sm text-center text-ui text-ink-2">
+					Nothing called “{search.trim()}”. A server of your own can be added by its address.
+				</p>
+			) : null}
 			{more}
 			{error === undefined ? null : (
 				<p role="alert" className="mt-4 max-w-sm text-center text-ui text-danger">

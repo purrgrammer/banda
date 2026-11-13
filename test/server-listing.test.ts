@@ -55,18 +55,21 @@ describe("a listing", () => {
 		try {
 			const ollama = await serve({
 				models: [
-					{ id: "qwen3:8b", context: 40_960 },
-					{ id: "llava:7b", context: 4096, vision: true },
+					// the context is what Ollama runs it with: num_ctx, or the loaded model's; the model's most is a hint
+					{ id: "qwen3:8b", context: 40_960, numCtx: 32_768, thinking: true },
+					{ id: "qwen3:4b", context: 262_144, loaded: 4096, thinking: true },
+					{ id: "llava:7b", context: 4096, vision: true, noTools: true },
 					{ id: "nomic-embed-text", embedding: true },
 				],
 			});
 			expect(await list({ kind: "ollama", baseUrl: ollama.url, key: "none" })).toEqual({
 				ok: true,
-				routes: ["GET /api/tags", "POST /api/show"],
+				routes: ["GET /api/tags", "GET /api/ps", "POST /api/show"],
 				models: [
-					{ id: "qwen3:8b", contextWindow: 40_960, images: false },
-					{ id: "llava:7b", contextWindow: 4096, images: true },
-					{ id: "nomic-embed-text", images: false, chats: false },
+					{ id: "qwen3:8b", contextWindow: 32_768, contextLimit: 40_960, images: false, reasoning: true },
+					{ id: "qwen3:4b", contextWindow: 4096, contextLimit: 262_144, images: false, reasoning: true },
+					{ id: "llava:7b", contextLimit: 4096, images: true, reasoning: false, tools: false },
+					{ id: "nomic-embed-text", images: false, reasoning: false, chats: false },
 				],
 			});
 			// /api/show describes a model; it does not run one
@@ -82,7 +85,8 @@ describe("a listing", () => {
 				ok: true,
 				routes: ["GET /api/v0/models"],
 				models: [
-					{ id: "gemma-4-e4b", contextWindow: 131_072, images: true },
+					// the most it takes, not what LM Studio loads it with: a hint, never the context
+					{ id: "gemma-4-e4b", contextLimit: 131_072, images: true },
 					{ id: "text-embedding-x", images: false, chats: false },
 				],
 			});

@@ -14,6 +14,7 @@ import { Accepted, ChatTier, parseAgent } from "../../core/agents.ts";
 import { Companion, type CompanionDoc } from "../../core/companion.ts";
 import {
 	changeCustomProviders,
+	fileProblem,
 	guardedFetch,
 	observingFetch,
 	readCustomProviders,
@@ -250,9 +251,18 @@ export const customProviders: AreaModule = {
 		const checking = new Set<string>();
 		const record = usageRecorder(deps.harness, "check.provider", deps.log);
 		let error: string | undefined;
-		/** Register what the file says now; a file that does not fit registers none, and the view says why. */
-		const register = async () => {
-			error = (await registerCustomProviders(deps.models, deps.home, deps.log)).error;
+		let registering: Promise<void> = Promise.resolve();
+		/**
+		 * Register what the file says now; a file that does not fit registers none, and the view says why. One at a time,
+		 * so the last to run read the file last: an earlier change's read never lands after a later one's.
+		 */
+		const register = () => {
+			registering = registering
+				.catch(() => {})
+				.then(async () => {
+					error = (await registerCustomProviders(deps.models, deps.home, deps.log)).error;
+				});
+			return registering;
 		};
 		void register().then(deps.changed);
 
@@ -315,11 +325,10 @@ export const customProviders: AreaModule = {
 			let kept: string | undefined;
 			const id = await changeCustomProviders(deps.home, async (now) => {
 				const id = customId(definition.name, new Set(now.providers.map((each) => each.id)));
-				// the key first: a provider never stands registered without the key it said it takes
-				if (key !== undefined) {
-					await keep(id, key);
-					kept = id;
-				}
+				// the key first: a provider never stands registered without the key it said it takes, and a keyless one
+				// never inherits a key left under its id
+				await keep(id, key ?? null);
+				if (key !== undefined) kept = id;
 				return { file: { providers: [...now.providers, { id, ...definition }] }, result: id };
 			}).catch(async (thrown: unknown) => {
 				if (kept !== undefined) await keep(kept, null);
@@ -366,16 +375,30 @@ export const customProviders: AreaModule = {
 				const reasons = await stillOn(deps, id, removed);
 				if (reasons.length > 0) throw new BadRequest(`It still runs a model you removed. ${reasons.join(". ")}.`, 409);
 			}
+			// the whole file as it will be, checked before anything changes: nothing below is half done by a bad edit
+			const next = { providers: file.providers.map((each) => (each.id === id ? { id, ...definition } : each)) };
+			const unfit = fileProblem(next);
+			if (unfit !== undefined) throw new BadRequest(unfit);
+			const previousKey = had ? await credentials.read(id) : undefined;
 			// the tiers first, so nothing follows them onto a model that is about to go
 			await setTiers(deps, id, tiers);
-			await changeCustomProviders(deps.home, async (now) => {
-				if (key !== undefined) await keep(id, key);
-				else if (definition.key === "none" && had) await keep(id, null);
-				return {
-					file: { providers: now.providers.map((each) => (each.id === id ? { id, ...definition } : each)) },
-					result: undefined,
-				};
-			});
+			try {
+				await changeCustomProviders(deps.home, async (now) => {
+					if (key !== undefined) await keep(id, key);
+					else if (definition.key === "none" && had) await keep(id, null);
+					return {
+						file: { providers: now.providers.map((each) => (each.id === id ? { id, ...definition } : each)) },
+						result: undefined,
+					};
+				});
+			} catch (thrown) {
+				// the write failed: the tiers and the key go back to what the file still says
+				if (TIERS.every((tier) => before.models.some((model) => model.id === current[tier])))
+					await setTiers(deps, id, current as { readonly [T in Tier]: string });
+				if (previousKey === undefined) await keep(id, null);
+				else await credentials.modify(id, async () => previousKey);
+				throw thrown;
+			}
 			checks.delete(id);
 			await register();
 			deps.changed();
@@ -387,11 +410,11 @@ export const customProviders: AreaModule = {
 			if (!file.providers.some((each) => each.id === id)) throw new BadRequest("There is no such provider", 404);
 			const reasons = await stillOn(deps, id);
 			if (reasons.length > 0) throw new BadRequest(`It is still in use. ${reasons.join(". ")}.`, 409);
-			await changeCustomProviders(deps.home, async (now) => ({
-				file: { providers: now.providers.filter((each) => each.id !== id) },
-				result: undefined,
-			}));
-			await keep(id, null);
+			await changeCustomProviders(deps.home, async (now) => {
+				// the key first: a crash between leaves a provider asking for its key, never a key for one that is gone
+				await keep(id, null);
+				return { file: { providers: now.providers.filter((each) => each.id !== id) }, result: undefined };
+			});
 			await clearTiers(deps, id);
 			checks.delete(id);
 			await register();

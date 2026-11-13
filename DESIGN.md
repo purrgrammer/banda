@@ -356,19 +356,25 @@ for a cloud's API. Its models are pi-ai's catalog, said to be a catalog: an acco
 may price them otherwise; a provider whose list pi-ai can read from the provider itself refreshes it when the owner
 asks. A server of the owner's speaks one of pi-ai's adapters that every request can be guarded on (chat completions,
 the Responses API, Anthropic's and Mistral's), never Gemini's, which takes no guard; its kind (Ollama, LM Studio,
-llama.cpp, vLLM, or one of those APIs) says where it listens and how it lists its models. Finding them is the owner's
-ask, a route its server documents, which runs no model; nothing is promised free. What a route says of a model is the
+llama.cpp, vLLM, or one of those APIs) says where it listens and how it lists its models. Finding them is a route its
+server documents, which runs no model: asked as the form opens for a server on this computer that takes no key, else
+when the owner asks; nothing is promised free. What a route says of a model is the
 server's word and is shown as such; a model of the same id in pi-ai's catalog is offered beside it and never taken on
-its own, nor ever its price; whatever is still missing is asked only for a model the owner keeps. Which models it keeps
+its own, nor ever its price; whatever is still missing is asked only for a model the owner keeps. A model's context is
+what the server runs it with, never the most the model takes (Ollama and LM Studio run far less unless told, and cut a
+longer prompt silently, so the agent loses its instructions); it is at least banda's minimum, and the form says how to
+raise it on that kind of server. A model that calls no tools is not offered. An answer's cap left unsaid is the
+context, which pi-ai trims to the room each request leaves. Which models it keeps
 and the one it starts on are two choices. Whether it charges per token is the owner's word, never a silent zero: no
-per-token charge, or each kept model's rates. A provider without banda's preset starts on the one model the owner
+per-token charge, or each kept model's rates; a server on the owner's computer or network is said, where they see and
+can change it, to charge none. A provider without banda's preset starts on the one model the owner
 picks, on every tier, until they refine one; a tier without a model names none, so a run fails rather than thinking
-with another provider's model. Saving uses nothing: Use does. A server's definition is a typed file in the home,
+with another provider's model. Saving uses nothing: Use does, except at first run, where nothing thinks yet and saving is the pick. A server's definition is a typed file in the home,
 outside the box and the store, written only through the owner's API and checked on every read, a file that does not
 fit registering none; its key is a provider credential like any other and never comes back out; servers register
 before the store opens, so a turn that ran on one resumes on it. Its address is a destination trusted with every
-prompt: plain http is refused past the owner's own network, credentials in the address and link-local addresses are
-refused, a redirect is refused rather than followed, a keyless one sends no key in any header, a new address asks for
+prompt: plain http is refused past the owner's own network, judged again by the address its name resolves to as each
+request goes; credentials in the address, link-local addresses and clouds' metadata services are refused; a redirect is refused rather than followed, a keyless one sends no key in any header, a new address asks for
 the key again, and an error is told without the key and in words from the request itself (its status, the network's
 error), never guessed from its text. A check is one short request the owner asks for, told first where it goes and
 that it may cost. A provider or model the band, an agent's file or a chat still runs on is not removed until the owner

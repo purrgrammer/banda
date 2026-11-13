@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type { CustomProvider, ServerKind } from "../../../src/core/custom-providers.ts";
+import { knowServerKinds } from "../chat/ProviderMark.tsx";
 import { api, type Checked, type CustomProvidersView, type ListingView, type ModelsListView } from "../lib/api.ts";
 import { changeModels, connectProvider, type ProviderView, readProviders, readTiers } from "./tiers.ts";
 
@@ -21,7 +22,12 @@ export type CustomProviderSave = {
 
 const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
 
-export const readCustomProviders = () => api<CustomProvidersView>("/custom-providers");
+/** The owner's servers; each read also tells their marks which kind each server is. */
+export const readCustomProviders = async () => {
+	const view = await api<CustomProvidersView>("/custom-providers");
+	knowServerKinds(view.providers);
+	return view;
+};
 export const addCustomProvider = (save: CustomProviderSave) =>
 	api<{ id: string }>("/custom-providers", json("POST", save));
 export const editCustomProvider = (id: string, save: CustomProviderSave) =>

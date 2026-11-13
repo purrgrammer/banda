@@ -5,7 +5,7 @@
  * computer banda runs on, so the dialog says to sign in there.
  */
 import { PlusIcon } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { type ReactNode, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	addCustomProvider,
@@ -64,7 +64,17 @@ export function useAddProviderActions(): AddProviderActions {
 	);
 }
 
-export function SettingsProviders({ current, servers = [] }: { current: string; servers?: readonly string[] }) {
+export function SettingsProviders({
+	current,
+	servers = [],
+	serverRows,
+}: {
+	current: string;
+	/** The owner's servers' names, which a new one must not repeat. */
+	servers?: readonly string[];
+	/** The owner's servers, as rows of the providers' list. */
+	serverRows?: ReactNode;
+}) {
 	const { providers, open, waiting, error, pick, answer, cancel, key, use, signOut, add, rename } =
 		useProviderConnect();
 	const [adding, setAdding] = useState(false);
@@ -109,6 +119,7 @@ export function SettingsProviders({ current, servers = [] }: { current: string; 
 				onCancel={(id) => void cancel(id)}
 				onAdd={(provider, label, value) => void add(provider, label, value)}
 				onRename={(id, label) => void rename(id, label)}
+				{...(serverRows === undefined ? {} : { servers: serverRows })}
 				add={
 					<Button
 						variant="outline"

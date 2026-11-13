@@ -1113,9 +1113,12 @@ export function ModelProviders({
 	renaming: openRenaming,
 	here = true,
 	add,
+	servers,
 }: {
 	/** Add a provider: the control that opens every provider banda can think with, under the list. */
 	add?: ReactNode;
+	/** The owner's own servers, as rows of the same list (`./CustomProviders.tsx`, bare). */
+	servers?: ReactNode;
 	/** The provider account the band thinks with. */
 	current: string;
 	/** On the computer banda runs on, where providers are connected; false on a device. */
@@ -1158,13 +1161,18 @@ export function ModelProviders({
 			title="Providers"
 			note={
 				add !== undefined
-					? "The ones you connected. Only the one in use sees what you ask."
+					? "The ones you connected, and servers of your own. Only the one in use sees what you ask."
 					: here
 						? "Connect another to switch between them. Only the one in use sees what you ask."
 						: "Connect another on the computer banda runs on. Only the one in use sees what you ask."
 			}
 		>
-			<Rows className="max-h-[min(24rem,50dvh)] overflow-y-auto overscroll-contain">
+			<Rows
+				className={cn(
+					"max-h-[min(24rem,50dvh)] overflow-y-auto overscroll-contain",
+					shown.length === 0 && servers === undefined && "hidden",
+				)}
+			>
 				{shown.map((provider, n) => {
 					const name = title(provider);
 					const using = provider.id === current;
@@ -1380,6 +1388,7 @@ export function ModelProviders({
 						</div>
 					);
 				})}
+				{servers}
 			</Rows>
 			{add}
 			{error === undefined ? null : (

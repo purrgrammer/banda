@@ -8,7 +8,9 @@
  * not follow redirects, so neither the key nor a prompt is sent anywhere the owner did not write; a keyless one sends
  * no Authorization header at all; and an error it answers with is told without the key or anything shaped like one.
  */
+import { lookup } from "node:dns/promises";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { isIP } from "node:net";
 import { join } from "node:path";
 import {
 	type ApiKeyAuth,
@@ -41,8 +43,10 @@ import {
 	MAX_OUTPUT,
 	MAX_PRICE,
 	MAX_URL,
+	MIN_CONTEXT,
 	modelName,
 	type Observed,
+	placeOf,
 	problemsOf,
 	SERVER_KINDS,
 	type ServerKind,
@@ -57,7 +61,7 @@ const Model_ = Type.Object(
 		name: Type.Optional(Type.String({ maxLength: MAX_NAME })),
 		images: Type.Boolean(),
 		reasoning: Type.Boolean(),
-		contextWindow: Type.Integer({ minimum: 1024, maximum: MAX_CONTEXT }),
+		contextWindow: Type.Integer({ minimum: MIN_CONTEXT, maximum: MAX_CONTEXT }),
 		maxTokens: Type.Integer({ minimum: 16, maximum: MAX_OUTPUT }),
 		cost: Type.Optional(Type.Object({ input: Price, output: Price }, { additionalProperties: false })),
 		source: Type.Object(
@@ -179,9 +183,11 @@ export function changeCustomProviders<T>(
 			return result;
 		});
 	chains.set(key, run);
-	void run.finally(() => {
+	// the caller hears of a failure; this cleanup must not raise it a second time, unheard
+	const forget = () => {
 		if (chains.get(key) === run) chains.delete(key);
-	});
+	};
+	run.then(forget, forget);
 	return run;
 }
 
@@ -218,27 +224,51 @@ function auth(definition: CustomProvider): ApiKeyAuth {
 	};
 }
 
+/** A name's addresses, as the system resolves it. */
+export type Resolve = (host: string) => Promise<readonly { readonly address: string; readonly family: number }[]>;
+const resolveName: Resolve = (host) => lookup(host, { all: true });
+
+/** A refusal the adapters tell as it is, once: an answer of its own, not a thrown error a client would retry. */
+const refusal = (message: string) => Response.json({ error: { message } }, { status: 421 });
+
+/**
+ * Why a plain-http address may not be sent to, by where its name resolves now: only this computer or the owner's own
+ * network, never the internet or a link-local or metadata address, whatever the name looks like. A name that does not
+ * resolve is left to the request, which fails saying so.
+ */
+async function plainHttpProblem(url: URL, resolve: Resolve): Promise<string | undefined> {
+	if (url.protocol !== "http:" || isIP(url.hostname.replace(/^\[|\]$/g, "")) !== 0) return undefined;
+	const addresses = await resolve(url.hostname).catch(() => []);
+	for (const { address, family } of addresses) {
+		const place = placeOf(family === 6 ? `[${address}]` : address);
+		if (typeof place !== "string") return `${url.hostname} resolves to ${address}: ${place.refused}`;
+		if (place === "internet")
+			return `${url.hostname} resolves to ${address}, on the internet: use https://, or an address on your own network`;
+	}
+	return undefined;
+}
+
 /**
  * `fetch` for one provider's requests: a redirect is refused, not followed, so a prompt and a key go only to the
- * address the owner wrote; a keyless provider's carry no Authorization header.
+ * address the owner wrote; plain http goes only where the name resolves to this computer or the owner's network; a
+ * keyless provider's carry no Authorization header.
  */
-export function guardedFetch(definition: Pick<CustomProvider, "key">, base: typeof fetch = fetch): typeof fetch {
+export function guardedFetch(
+	definition: Pick<CustomProvider, "key">,
+	base: typeof fetch = fetch,
+	resolve: Resolve = resolveName,
+): typeof fetch {
 	return async (input, init) => {
+		const problem = await plainHttpProblem(new URL(input instanceof Request ? input.url : String(input)), resolve);
+		if (problem !== undefined) return refusal(problem);
 		const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
 		// a keyless server is sent no key in any adapter's header: OpenAI's and Mistral's bearer, Anthropic's own
 		if (definition.key === "none") for (const name of KEY_HEADERS) headers.delete(name);
 		const response = await base(input, { ...init, headers, redirect: "manual" });
 		if (response.status >= 300 && response.status < 400 && response.headers.has("location")) {
 			await response.body?.cancel().catch(() => {});
-			// an answer of its own, not a thrown error: the client would retry a failed connection and say only that it
-			// failed, where this is told as it is, once (421 is not one it retries)
-			return Response.json(
-				{
-					error: {
-						message: `the endpoint redirects (${response.status}) and banda does not follow a custom provider's redirects: write the address it redirects to`,
-					},
-				},
-				{ status: 421 },
+			return refusal(
+				`the endpoint redirects (${response.status}) and banda does not follow a custom provider's redirects: write the address it redirects to`,
 			);
 		}
 		return response;

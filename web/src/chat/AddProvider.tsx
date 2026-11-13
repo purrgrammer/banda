@@ -6,7 +6,7 @@
  * nothing: the last step asks, and only Use changes what the band thinks with.
  */
 import { ArrowLeftIcon, ServerIcon } from "lucide-react";
-import { type ComponentProps, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ComponentProps, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -17,7 +17,7 @@ import { SERVER_KINDS, type ServerKind } from "../../../src/core/custom-provider
 import type { FormField, FormMethod } from "../../../src/core/provider-forms.ts";
 import type { Connecting, CustomProviderSave, ModelsListView } from "../areas/custom-providers.ts";
 import type { ProviderAccountView, ProviderView } from "../areas/tiers.ts";
-import { ProviderMark } from "./ProviderMark.tsx";
+import { ProviderMark, ServerMark } from "./ProviderMark.tsx";
 import { ProviderSignIn } from "./ProviderSignIn.tsx";
 import { FieldOf, ServerSetup, tokens } from "./ServerSetup.tsx";
 
@@ -98,14 +98,17 @@ export function AddProviderSteps({
 	step: openStep,
 	onDone,
 	dialog = false,
+	useOnSave = false,
 }: {
+	/** Use what was saved at once, with no step to ask: first run, where the band thinks with nothing yet. */
+	useOnSave?: boolean;
 	providers: readonly ProviderView[];
 	/** The owner's servers' names, which a new one must not repeat. */
 	servers?: readonly string[];
 	here?: boolean;
 	actions: AddProviderActions;
 	/** A step shown at first, for the specimen. */
-	step?: Step;
+	step?: Step | undefined;
 	onDone: () => void;
 	/** Inside the dialog, whose title and description these are. */
 	dialog?: boolean;
@@ -121,7 +124,9 @@ export function AddProviderSteps({
 					? "A server of your own"
 					: step.kind === "server"
 						? SERVER_KINDS[step.server].label
-						: `${step.name} saved`;
+						: useOnSave
+							? `Starting with ${step.name}`
+							: `${step.name} saved`;
 	const description =
 		step.kind === "choose"
 			? "Every provider banda can think with, and servers of your own."
@@ -194,7 +199,7 @@ export function AddProviderSteps({
 					}}
 				/>
 			) : step.kind === "saved" ? (
-				<Saved id={step.id} name={step.name} actions={actions} onDone={onDone} />
+				<Saved id={step.id} name={step.name} actions={actions} onDone={onDone} auto={useOnSave} />
 			) : null}
 		</div>
 	);
@@ -212,7 +217,7 @@ function KindItem({ kind, onServer }: { kind: ServerKind; onServer: (kind: Serve
 			keywords={[kind, "local", "self-hosted", "server"]}
 			onSelect={() => onServer(kind)}
 		>
-			<ServerIcon aria-hidden="true" className="size-4 text-ink-2" />
+			<ServerMark kind={kind} />
 			<span className="flex min-w-0 flex-1 flex-col">
 				<span className="break-words">{SERVER_KINDS[kind].label}</span>
 				<span className="break-words text-meta text-ink-2">{SERVER_KINDS[kind].about}</span>
@@ -743,14 +748,34 @@ function Saved({
 	name,
 	actions,
 	onDone,
+	auto,
 }: {
 	id: string;
 	name: string;
 	actions: AddProviderActions;
 	onDone: () => void;
+	/** Use it at once, without asking. */
+	auto: boolean;
 }) {
-	const [busy, setBusy] = useState(false);
+	const [busy, setBusy] = useState(auto);
 	const [error, setError] = useState<string | undefined>(undefined);
+	// once: the dialog's onDone is a new function each render
+	const started = useRef(false);
+	useEffect(() => {
+		if (!auto || started.current) return;
+		started.current = true;
+		void actions.use(id).then((why) => {
+			setBusy(false);
+			if (why === undefined) onDone();
+			else setError(why);
+		});
+	}, [auto, actions, id, onDone]);
+	if (auto && error === undefined)
+		return (
+			<span className="flex items-center gap-1.5 text-meta text-ink-2">
+				<Spinner className="size-3" /> Starting with {name}…
+			</span>
+		);
 	return (
 		<div className="flex flex-col gap-3">
 			<p className="text-ui text-ink">

@@ -17,6 +17,12 @@ export const MAX_NAME = 60;
 export const MAX_MODELS = 32;
 export const MAX_MODEL_ID = 200;
 export const MAX_URL = 2000;
+/**
+ * The least context a model may run with, in tokens: banda's instructions and tools alone take about 8,000, and a chat
+ * needs room past them. A server that runs a model with less cuts the prompt (Ollama does so silently), so the agent
+ * loses its instructions and never answers.
+ */
+export const MIN_CONTEXT = 16_384;
 /** The widest context a model may declare, and the most it may answer, in tokens. */
 export const MAX_CONTEXT = 10_000_000;
 export const MAX_OUTPUT = 1_000_000;
@@ -41,13 +47,6 @@ export type Listing = "openai" | "ollama" | "lmstudio" | "llamacpp" | "anthropic
  * OpenAI's chat completions; its name only says where it listens and how it lists what it has.
  */
 export const SERVER_KINDS = {
-	openai: {
-		label: "OpenAI-compatible server",
-		about: "Chat completions, as most servers and gateways speak them.",
-		api: "openai-completions",
-		listing: "openai",
-		address: "https://llm.example.com/v1",
-	},
 	ollama: {
 		label: "Ollama",
 		about: "Ollama's OpenAI-compatible API.",
@@ -75,6 +74,13 @@ export const SERVER_KINDS = {
 		api: "openai-completions",
 		listing: "openai",
 		address: "http://localhost:8000/v1",
+	},
+	openai: {
+		label: "OpenAI-compatible server",
+		about: "Chat completions, as most servers and gateways speak them.",
+		api: "openai-completions",
+		listing: "openai",
+		address: "https://llm.example.com/v1",
 	},
 	"openai-responses": {
 		label: "OpenAI Responses API",
@@ -211,9 +217,20 @@ const ipv4 = (host: string): number[] | undefined => {
 	return numbers.every((n) => n <= 255) ? numbers : undefined;
 };
 
+/** Clouds' metadata services, by name and address: they hand out the computer's own credentials, and run no model. */
+const METADATA = new Set([
+	"metadata",
+	"metadata.google.internal",
+	"instance-data",
+	"instance-data.ec2.internal",
+	"100.100.100.200",
+	"[fd00:ec2::254]",
+]);
+
 /** Where `host` (a URL's hostname, an IPv6 one in brackets) is, or why banda will not send anything there. */
-function placeOf(host: string): Place | { readonly refused: string } {
+export function placeOf(host: string): Place | { readonly refused: string } {
 	const name = host.toLowerCase().replace(/\.$/, "");
+	if (METADATA.has(name)) return { refused: `${name} is a cloud's metadata service, not a model` };
 	if (name === "localhost" || name.endsWith(".localhost")) return "computer";
 	const v4 = ipv4(name);
 	if (v4 !== undefined) {
@@ -338,8 +355,13 @@ export function problemsOf(
 		// none of these is guessed: a wrong context or limit breaks a chat, and a wrong price misreports what it spent
 		if (Number.isNaN(model.contextWindow))
 			say(at("contextWindow"), "Write its context window in tokens, as its server or model card says");
-		else if (!whole(model.contextWindow, 1024, MAX_CONTEXT))
-			say(at("contextWindow"), "The context is a whole number of tokens, from 1,024 to 10,000,000");
+		else if (!whole(model.contextWindow, 1, MAX_CONTEXT))
+			say(at("contextWindow"), "The context is a whole number of tokens, up to 10,000,000");
+		else if (model.contextWindow < MIN_CONTEXT)
+			say(
+				at("contextWindow"),
+				`banda needs at least ${MIN_CONTEXT.toLocaleString("en-US")} tokens of context: its instructions alone take about 8,000. Run the model with more first`,
+			);
 		if (Number.isNaN(model.maxTokens))
 			say(
 				at("maxTokens"),
@@ -347,8 +369,11 @@ export function problemsOf(
 			);
 		else if (!whole(model.maxTokens, 16, MAX_OUTPUT))
 			say(at("maxTokens"), "The answer cap is a whole number of tokens, from 16 to 1,000,000");
-		else if (whole(model.contextWindow, 1024, MAX_CONTEXT) && model.maxTokens > model.contextWindow)
+		else if (whole(model.contextWindow, MIN_CONTEXT, MAX_CONTEXT) && model.maxTokens > model.contextWindow)
 			say(at("maxTokens"), "The answer cap cannot be more than the context it fits in");
+		const limits = model.source?.limits;
+		if (typeof limits === "object" && (limits.catalog.length < 3 || limits.catalog.length > 300))
+			say(at("source"), "A catalog model is named provider/id");
 		if (provider.billing === "rates")
 			for (const side of ["input", "output"] as const) {
 				const value = model.cost?.[side];

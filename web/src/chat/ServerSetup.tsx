@@ -4,10 +4,12 @@
  * route its kind documents, which runs no model) or added by id when it has none to give. Which models it keeps and the
  * one it starts on are two choices: every kept model can run, the start one runs all three tiers until the owner refines
  * them. Only what is missing is asked, and only for a model the owner keeps: a fact the server said is shown as its,
- * a model of the same id in pi-ai's catalog is offered and never taken, and a price is the owner's alone.
+ * a model of the same id in pi-ai's catalog is offered and never taken, and a price is the owner's alone. A server on
+ * this computer that takes no key is asked for its list as the form opens, and one that charges nothing is said to; an
+ * answer's cap left unsaid is the context, which pi-ai trims to the room each request leaves.
  */
 import { ChevronDownIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { type ReactNode, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -21,6 +23,7 @@ import {
 	type CustomModel,
 	type CustomProvider,
 	destinationOf,
+	MIN_CONTEXT,
 	type ModelSource,
 	modelName,
 	problemsOf,
@@ -63,6 +66,19 @@ type Entry = {
 let next = 1;
 const numberOf = (text: string) => (text.trim() === "" ? Number.NaN : Number(text.replace(/[,_\s]/g, "")));
 const known = (text: string) => !Number.isNaN(numberOf(text));
+/** The most one answer may take: as given, or else the whole context, which pi-ai trims to the room a request leaves. */
+const capOf = (entry: Pick<Entry, "maxTokens" | "contextWindow">) =>
+	known(entry.maxTokens) ? numberOf(entry.maxTokens) : numberOf(entry.contextWindow);
+/** A model banda can run: one that chats and calls tools. */
+const usable = (entry: Entry) => entry.server.chats !== false && entry.server.tools !== false;
+
+/** Where to raise the context a server runs a model with, by its kind. */
+const RAISE: Partial<Record<ServerKind, string>> = {
+	ollama:
+		"Ollama runs models with 4,096 tokens unless told otherwise, and silently cuts what doesn't fit. Start it with OLLAMA_CONTEXT_LENGTH=32768 (or raise Context length in its settings), then write that here.",
+	lmstudio: "Set the model's context length to 32,768 or more in LM Studio, then write that here.",
+	llamacpp: "Start llama-server with -c 32768 or more, then Find models again.",
+};
 
 function fromListed(model: Listed): Entry {
 	const { id, catalog, ...server } = model;
@@ -112,7 +128,9 @@ function sourceOf(entry: Entry): ModelSource {
 		? "owner"
 		: entry.fromCatalog && entry.catalog !== undefined
 			? { catalog: entry.catalog.ref }
-			: entry.listed && entry.server.contextWindow !== undefined && entry.server.maxTokens !== undefined
+			: entry.listed &&
+					entry.server.contextWindow !== undefined &&
+					(entry.server.maxTokens !== undefined || entry.maxTokens === "")
 				? "server"
 				: "owner";
 	return { listed: entry.listed, limits };
@@ -122,7 +140,9 @@ function sourceOf(entry: Entry): ModelSource {
 function factsOf(entry: Entry): string {
 	const parts = [
 		known(entry.contextWindow) ? `${tokens(numberOf(entry.contextWindow))} context` : undefined,
-		known(entry.maxTokens) ? `answer cap ${tokens(numberOf(entry.maxTokens))}` : undefined,
+		known(entry.maxTokens) && numberOf(entry.maxTokens) !== numberOf(entry.contextWindow)
+			? `answer cap ${tokens(numberOf(entry.maxTokens))}`
+			: undefined,
 		entry.images ? "reads images" : undefined,
 		entry.reasoning ? "thinks first" : undefined,
 	].filter(Boolean);
@@ -141,11 +161,10 @@ function originOf(entry: Entry): string {
 
 /** What the model still needs before it can be kept, in words. */
 function missingOf(entry: Entry): string | undefined {
-	const missing = [
-		known(entry.contextWindow) ? undefined : "its context",
-		known(entry.maxTokens) ? undefined : "its answer cap",
-	].filter(Boolean);
-	return missing.length === 0 ? undefined : `Needs ${missing.join(" and ")}`;
+	if (!known(entry.contextWindow)) return "Needs its context";
+	if (numberOf(entry.contextWindow) < MIN_CONTEXT)
+		return `Runs with ${tokens(numberOf(entry.contextWindow))} tokens; banda needs ${tokens(MIN_CONTEXT)}`;
+	return undefined;
 }
 
 export function FieldOf({
@@ -234,7 +253,12 @@ export function ServerSetup({
 		...(openListing?.ok === true ? openListing.models.map(fromListed) : []),
 	]);
 	const [start, setStart] = useState<number | undefined>(undefined);
-	const [billing, setBilling] = useState<"none" | "rates" | undefined>(initial?.billing);
+	const [billing, setBilling] = useState<"none" | "rates" | undefined>(() => {
+		if (initial !== undefined) return initial.billing;
+		// a server of the owner's own computer or network runs on their hardware: no per-token charges, said and changeable
+		const at = destinationOf(about.address);
+		return "error" in at || at.place === "internet" ? undefined : "none";
+	});
 	const [compat, setCompat] = useState<Required<CustomCompat>>({ ...COMPAT_DEFAULTS, ...initial?.compat });
 	const [listing, setListing] = useState<ListingView | undefined>(openListing);
 	const [listingBusy, setListingBusy] = useState(false);
@@ -263,7 +287,7 @@ export function ServerSetup({
 				images: entry.images,
 				reasoning: entry.reasoning,
 				contextWindow: numberOf(entry.contextWindow),
-				maxTokens: numberOf(entry.maxTokens),
+				maxTokens: capOf(entry),
 				...(billing === "rates" ? { cost: { input: numberOf(entry.input), output: numberOf(entry.output) } } : {}),
 				source: sourceOf(entry),
 			}),
@@ -290,8 +314,14 @@ export function ServerSetup({
 	const change = (at: number, patch: Partial<Entry>) =>
 		setEntries((all) => all.map((entry) => (entry.key === at ? { ...entry, ...patch } : entry)));
 
+	/** The latest listing asked for: an earlier one that answers later is dropped. */
+	const asking = useRef(0);
+	/** The address the models in the form were listed from. */
+	const listedFrom = useRef<string | undefined>(undefined);
 	const find = async () => {
 		if (list === undefined || "error" in destination) return;
+		const ask = ++asking.current;
+		const from = destination.url;
 		setListingBusy(true);
 		setRefused(undefined);
 		const read = await list(
@@ -305,9 +335,16 @@ export function ServerSetup({
 				detail: thrown instanceof Error ? thrown.message : String(thrown),
 			}),
 		);
+		if (ask !== asking.current) return;
 		setListingBusy(false);
 		setListing(read);
 		if (!read.ok) return;
+		// models another address listed are not this one's: those the owner typed nothing for go
+		const moved = listedFrom.current !== undefined && listedFrom.current !== from;
+		listedFrom.current = from;
+		// one model it can run starts, with nothing to pick
+		const runs = read.models.filter((model) => model.chats !== false && model.tools !== false);
+		const only = runs.length === 1 ? runs[0]?.id : undefined;
 		// the next choice is the model it starts on: there, once the list shows
 		requestAnimationFrame(() => {
 			const first = form.current?.querySelector<HTMLElement>('input[name="start"]');
@@ -315,7 +352,13 @@ export function ServerSetup({
 			first?.focus();
 		});
 		// what the owner already kept or typed stays; a listed model new to the form joins it
-		setEntries((all) => {
+		if (moved)
+			setStart((was) => {
+				const entry = entries.find((each) => each.key === was);
+				return entry === undefined || (entry.listed && !entry.typed) ? undefined : was;
+			});
+		setEntries((before) => {
+			const all = moved ? before.filter((entry) => !entry.listed || entry.typed) : before;
 			const have = new Set(all.map((entry) => entry.id));
 			return [
 				...all.map((entry) => {
@@ -334,7 +377,25 @@ export function ServerSetup({
 				...read.models.filter((model) => !have.has(model.id)).map(fromListed),
 			];
 		});
+		if (only !== undefined && !editing) startOnly.current = only;
 	};
+	/** The id of the one model a listing found to run: it starts once its row is in the form. */
+	const startOnly = useRef<string | undefined>(undefined);
+	useEffect(() => {
+		const entry = entries.find((each) => each.id === startOnly.current);
+		if (entry === undefined) return;
+		startOnly.current = undefined;
+		setStart((was) => was ?? entry.key);
+	}, [entries]);
+	// a new server on this computer that takes no key is asked for its list as the form opens, never as an address is
+	// typed: Find models asks again
+	const asked = useRef(false);
+	useEffect(() => {
+		if (asked.current) return;
+		asked.current = true;
+		if (editing || needsKey || list === undefined || "error" in destination || destination.place !== "computer") return;
+		void find();
+	});
 	const addManual = () => {
 		const id = manual.trim();
 		if (id === "" || entries.some((entry) => entry.id === id)) return;
@@ -374,13 +435,13 @@ export function ServerSetup({
 	/** A model's row: in the start list (a radio), the keep list (a checkbox), or an edit's one list (a checkbox). */
 	const row = (entry: Entry, mode: "start" | "keep" | "edit") => {
 		const missing = missingOf(entry);
-		const chats = entry.server.chats !== false;
+		const chats = usable(entry);
 		const isStart = entry.key === start;
 		const keptHere = entry.keep || isStart;
 		// a start row asks what the start model lacks; a keep row, what a kept or opened model lacks
 		const showFields =
 			mode === "start"
-				? isStart && (missing !== undefined || entry.open || billing === "rates")
+				? isStart && (missing !== undefined || entry.open || entry.typed || billing === "rates")
 				: !isStart && (entry.open || (entry.keep && billing === "rates"));
 		return (
 			<li
@@ -404,9 +465,29 @@ export function ServerSetup({
 							{entry.name.trim() === "" ? null : <span className="text-meta text-ink-2"> · {entry.id}</span>}
 						</span>
 						{factsOf(entry) === "" ? null : <span className="text-meta text-ink-2">{factsOf(entry)}</span>}
-						<span className="text-meta text-ink-2">{originOf(entry)}</span>
+						<span className="text-meta text-ink-2">
+							{originOf(entry)}
+							{chats && (mode !== "start" || isStart) ? (
+								<>
+									{" · "}
+									<button
+										type="button"
+										aria-expanded={entry.open}
+										aria-label={`${entry.open ? "Hide" : "Show"} ${entry.id}'s details`}
+										className="underline decoration-line underline-offset-[3px] hover:text-ink"
+										onClick={() => change(entry.key, { open: !entry.open })}
+									>
+										{entry.open ? "Hide details" : "Details"}
+									</button>
+								</>
+							) : null}
+						</span>
 						{!chats ? (
-							<span className="text-meta text-ink-2">It doesn't chat (an embedding model): banda can't use it.</span>
+							<span className="text-meta text-ink-2">
+								{entry.server.chats === false
+									? "It doesn't chat (an embedding model): banda can't use it."
+									: "It can't call tools, which banda's agents use: banda can't run it."}
+							</span>
 						) : missing !== undefined && mode !== "start" ? (
 							<span className="text-meta text-ink-2">
 								{missing}: not usable until you add {missing.includes(" and ") ? "them" : "it"}.{" "}
@@ -460,32 +541,43 @@ export function ServerSetup({
 								</Button>
 							</div>
 						) : null}
-						{known(entry.contextWindow) && entry.server.contextWindow !== undefined && !entry.open ? null : (
-							<FieldOf label="Context, tokens" problem={modelProblem(entry, "contextWindow")}>
+						{missing === undefined && entry.server.contextWindow !== undefined && !entry.open ? null : (
+							<FieldOf
+								className="sm:col-span-2"
+								label="Context it runs with, tokens"
+								problem={modelProblem(entry, "contextWindow")}
+								note={[
+									entry.server.contextLimit === undefined
+										? undefined
+										: `The model takes up to ${tokens(entry.server.contextLimit)}, but the server decides what it runs with.`,
+									RAISE[kind] ?? `As the server runs it: at least ${tokens(MIN_CONTEXT)}.`,
+								]
+									.filter(Boolean)
+									.join(" ")}
+							>
 								{(id) => (
 									<Input
 										id={id}
+										className="sm:max-w-48"
 										inputMode="numeric"
-										placeholder="As the server allows"
+										placeholder="Tokens"
 										value={entry.contextWindow}
-										onChange={(event) =>
-											change(entry.key, { contextWindow: event.target.value, typed: true, open: true })
-										}
+										onChange={(event) => change(entry.key, { contextWindow: event.target.value, typed: true })}
 									/>
 								)}
 							</FieldOf>
 						)}
-						{known(entry.maxTokens) && entry.server.maxTokens !== undefined && !entry.open ? null : (
+						{!entry.open ? null : (
 							<FieldOf
-								label="Answer cap, tokens"
+								label="Answer cap, tokens (optional)"
 								problem={modelProblem(entry, "maxTokens")}
-								note="Sent as max_tokens with each request: no more than the server allows."
+								note="Sent as max_tokens with each request. Left empty, an answer may take what room the context leaves."
 							>
 								{(id) => (
 									<Input
 										id={id}
 										inputMode="numeric"
-										placeholder="As the server allows"
+										placeholder="As room allows"
 										value={entry.maxTokens}
 										onChange={(event) => change(entry.key, { maxTokens: event.target.value, typed: true, open: true })}
 									/>
@@ -689,7 +781,7 @@ export function ServerSetup({
 							className="flex flex-col divide-y divide-line-soft rounded-panel border border-line-soft"
 							aria-label="The model it starts on"
 						>
-							{entries.filter((entry) => entry.server.chats !== false).map((entry) => row(entry, "start"))}
+							{entries.filter(usable).map((entry) => row(entry, "start"))}
 						</ul>
 						{start === undefined || entries.length < 2 ? null : (
 							<Collapsible open={othersOpen} onOpenChange={setOthersOpen}>

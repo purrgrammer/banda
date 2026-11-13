@@ -196,15 +196,12 @@ async function holding(deps: Deps, id: string, key: string): Promise<string | un
 	return undefined;
 }
 
-/** When each provider's list was last refreshed from the provider itself, in this daemon's life. */
-const refreshed = new Map<string, number>();
-
 /**
  * A built-in provider's models as pi-ai lists them, with what pi-ai says of each: a catalog, not a promise that the
  * owner's account reaches every one, nor of a price their plan may change. `refreshed` when the provider's own list
  * (pi-ai's refresh) has been read since the daemon started.
  */
-function catalogOf(deps: Deps, id: string): ModelsListView {
+function catalogOf(deps: Deps, id: string, refreshed: ReadonlyMap<string, number>): ModelsListView {
 	const at = refreshed.get(backendOf(id));
 	return {
 		source: at === undefined ? "catalog" : "refreshed",
@@ -223,6 +220,8 @@ function catalogOf(deps: Deps, id: string): ModelsListView {
 
 export function providersArea(options: { readonly timeoutMs?: number } = {}): AreaModule {
 	const timeoutMs = options.timeoutMs ?? SIGN_IN_TIMEOUT_MS;
+	/** When each provider's list was last refreshed from the provider itself, in this daemon's life. */
+	const refreshed = new Map<string, number>();
 	return {
 		start: (deps) => {
 			const pending = new Map<string, Attempt>();
@@ -413,7 +412,7 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 						const provider = deps.models.getProvider(id);
 						if (provider === undefined || !supportedIn(deps, backendOf(id)))
 							throw new BadRequest("that provider is not available in banda", 404);
-						if (listing[2] === "models" && request.method === "GET") return { body: catalogOf(deps, id) };
+						if (listing[2] === "models" && request.method === "GET") return { body: catalogOf(deps, id, refreshed) };
 						if (listing[2] === "refresh" && request.method === "POST") {
 							if (provider.refreshModels === undefined)
 								throw new BadRequest(`${provider.name}'s list is pi-ai's catalog: there is nothing to refresh`);
@@ -424,9 +423,9 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 							const error = errors.get(id);
 							if (error !== undefined)
 								throw new BadRequest(`${provider.name} didn't list its models: ${redact(error.message)}`, 502);
-							refreshed.set(id, Date.now());
+							refreshed.set(backendOf(id), Date.now());
 							deps.changed();
-							return { body: catalogOf(deps, id) };
+							return { body: catalogOf(deps, id, refreshed) };
 						}
 						return undefined;
 					}

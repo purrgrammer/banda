@@ -7,10 +7,12 @@
  * as picked before. Then the skills banda ships, once; then the band opens.
  */
 import { useEffect, useState } from "react";
+import { SERVER_KINDS, type ServerKind } from "../../../src/core/custom-providers.ts";
 import { useProviderConnect, wayLabel } from "../areas/tiers.ts";
-import { AddProvider } from "../chat/AddProvider.tsx";
+import { AddProvider, type Step, setupWords } from "../chat/AddProvider.tsx";
 import { FirstRun } from "../chat/FirstRun.tsx";
 import { FirstSkills } from "../chat/FirstSkills.tsx";
+import { ProviderMark, ServerMark } from "../chat/ProviderMark.tsx";
 import { chooseShippedSkills, runsOnDevice, type ShippedSkillsView, shippedSkills } from "../lib/api.ts";
 import { useAddProviderActions } from "./SettingsProviders.tsx";
 
@@ -20,7 +22,8 @@ const FIRST = ["anthropic", "openai", "github-copilot", "google"];
 export function Onboarding() {
 	const { providers, open, waiting, error, pick, answer, cancel, key, use } = useProviderConnect();
 	const actions = useAddProviderActions();
-	const [more, setMore] = useState(false);
+	/** Add a provider, open at a step: all of them, one provider, or a kind of server. */
+	const [more, setMore] = useState<Step | undefined>(undefined);
 	// the providers banda has tiers picked for, and any already connected, one tap each; every other one, and a server
 	// of the owner's, through More providers
 	const offered = providers.filter(
@@ -32,6 +35,25 @@ export function Onboarding() {
 		const account = provider.accounts.find((each) => each.id === provider.id);
 		return account === undefined ? [] : [{ provider, account }];
 	});
+	// what a search finds past those: every other provider, and each kind of server
+	const others = [
+		...providers
+			.filter((provider) => !offered.includes(provider))
+			.map((provider) => ({
+				id: `provider:${provider.id}`,
+				name: provider.name,
+				note: setupWords(provider),
+				mark: <ProviderMark provider={provider.id} className="size-6" />,
+			})),
+		...(Object.keys(SERVER_KINDS) as ServerKind[]).map((kind) => ({
+			id: `server:${kind}`,
+			name: SERVER_KINDS[kind].label,
+			note: SERVER_KINDS[kind].about,
+			keywords: ["local", "self-hosted", "server", kind],
+			mark: <ServerMark kind={kind} className="size-6" />,
+		})),
+	];
+	const byForm = new Set(providers.filter((provider) => provider.form !== undefined).map((provider) => provider.id));
 	return (
 		<FirstRun
 			providers={first.map(({ provider, account }) => ({
@@ -54,10 +76,18 @@ export function Onboarding() {
 			open={open}
 			waiting={waiting}
 			error={error}
-			onPick={(id) =>
+			onPick={(id) => {
 				// an ambient key is usable as it is: the tap is the owner's pick of it (Settings connects over it)
-				void (first.find((each) => each.account.id === id)?.account.ambient === true ? use(id) : pick(id))
-			}
+				if (first.find((each) => each.account.id === id)?.account.ambient === true) void use(id);
+				// a cloud's own form (Azure, Vertex, Bedrock) asks more than a key: it opens in Add a provider
+				else if (byForm.has(id)) setMore({ kind: "builtin", id });
+				else void pick(id);
+			}}
+			others={others}
+			onOther={(id) => {
+				const [what, value = ""] = id.split(":");
+				setMore(what === "server" ? { kind: "server", server: value as ServerKind } : { kind: "builtin", id: value });
+			}}
 			onKey={(id, value) => void key(id, value)}
 			onAnswer={(id, value) => void answer(id, value)}
 			onWay={(id, way) => void pick(id, way)}
@@ -67,16 +97,18 @@ export function Onboarding() {
 					<button
 						type="button"
 						className="mt-3 text-ui text-ink-2 underline decoration-line underline-offset-[3px] hover:text-ink"
-						onClick={() => setMore(true)}
+						onClick={() => setMore({ kind: "choose" })}
 					>
 						More providers, or a server of your own
 					</button>
 					<AddProvider
-						open={more}
-						onOpenChange={setMore}
+						open={more !== undefined}
+						onOpenChange={(open) => setMore(open ? (more ?? { kind: "choose" }) : undefined)}
+						step={more}
 						providers={providers}
 						here={!runsOnDevice}
 						actions={actions}
+						useOnSave
 					/>
 				</>
 			}

@@ -738,10 +738,10 @@ function Main() {
 								}
 							: {})}
 						providers={
-							<>
-								<SettingsProviders current={tiers?.provider.id ?? ""} />
-								<SettingsCustomProviders current={tiers?.provider.id ?? ""} />
-							</>
+							<SettingsProviders
+								current={tiers?.provider.id ?? ""}
+								serverRows={<SettingsCustomProviders current={tiers?.provider.id ?? ""} />}
+							/>
 						}
 						usage={
 							<SettingsUsage

@@ -4,7 +4,6 @@
  * and the model it will use, and it may cost; Edit opens its form (`./ServerSetup.tsx`). Removing one the band or an
  * agent still runs on is refused by the daemon, which says what to move first.
  */
-import { ServerIcon } from "lucide-react";
 import { type ComponentProps, useRef, useState } from "react";
 import {
 	AlertDialog,
@@ -23,8 +22,9 @@ import { cn } from "@/lib/cn";
 import { type CheckFailure, type Destination, modelName, SERVER_KINDS } from "../../../src/core/custom-providers.ts";
 import { TIERS } from "../../../src/core/tiers.ts";
 import type { Checked, CustomProviderSave, CustomProviderView } from "../areas/custom-providers.ts";
+import { ServerMark } from "./ProviderMark.tsx";
 import { ServerSetup } from "./ServerSetup.tsx";
-import { Block, Rows } from "./Settings.tsx";
+import { Block, RowOf, Rows } from "./Settings.tsx";
 
 /** Where an address sends things, in the owner's words; on a phone, the computer is still banda's, never the phone. */
 export function placeWords(destination: Pick<Destination, "place" | "secure">, here: boolean): string {
@@ -71,11 +71,6 @@ export function failureWords(failure: CheckFailure, host: string): string {
 	}
 }
 
-const keyWords = (row: CustomProviderView) =>
-	row.key === "none" ? "No key" : row.key === "stored" ? "Key saved" : "Needs its key";
-const billingWords = (row: CustomProviderView) =>
-	row.billing === "none" ? "No per-token charges" : "Charges per token";
-
 /**
  * The owner's servers, each with where it sends things and how it stands; Use, Check and Edit. Adding one is the Add a
  * provider dialog's (`./AddProvider.tsx`). `form` and `asking` open a server's form or a check's question at first, for
@@ -94,7 +89,10 @@ export function CustomProviders({
 	onCheck,
 	form: openForm,
 	asking: openAsking,
+	bare = false,
 }: {
+	/** Its rows alone, inside the providers' list, rather than a block of its own. */
+	bare?: boolean;
 	view: { readonly providers: readonly CustomProviderView[]; readonly error?: string } | undefined;
 	/** The provider the band thinks with. */
 	current: string;
@@ -129,99 +127,104 @@ export function CustomProviders({
 	const editing = form === undefined ? undefined : providers.find((row) => row.id === form);
 	const ask = providers.find((row) => row.id === asking);
 	const others = (id?: string) => providers.filter((row) => row.id !== id).map((row) => row.name);
-	return (
-		<Block title="Your own servers" note="Servers you added, by their address. Some need compatibility settings.">
-			<Rows>
-				{providers.map((row) => {
-					const using = row.id === current;
-					const mapped = TIERS.every((tier) => row.models.some((model) => model.id === row.tiers[tier]));
-					const ready = row.key !== "missing" && mapped;
-					return (
-						<div key={row.id} className="flex flex-col" data-custom-provider={row.id}>
-							{/* the address whole on a line of its own, and the actions under it on a phone */}
-							<div className="flex flex-col gap-2 px-3.5 py-2.5 sm:flex-row sm:items-center sm:gap-3">
-								<div className="flex min-w-0 flex-1 gap-3">
-									<ServerIcon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-ink-2" />
-									<span className="flex min-w-0 flex-1 flex-col">
-										<span className="text-ui text-ink">{row.name}</span>
-										<span className="text-meta text-ink-2">{placeWords(row.destination, here)}</span>
-										<span className="text-meta break-all text-ink-2" data-address>
-											{row.baseUrl}
-										</span>
-										<span className="text-meta text-ink-2">
-											{using ? "In use · " : ""}
-											{SERVER_KINDS[row.kind].label} · {keyWords(row)} · {billingWords(row)} ·{" "}
-											{row.models.length === 1 ? "1 model" : `${row.models.length} models`}
-											{mapped ? "" : " · No model for each tier yet: edit it"}
-										</span>
-									</span>
-								</div>
-								<span className="flex flex-wrap gap-1.5 pl-8 sm:shrink-0 sm:justify-end sm:pl-0">
-									{!using && ready ? (
-										<Button variant="outline" size="xs" aria-label={`Use ${row.name}`} onClick={() => onUse?.(row.id)}>
-											Use
-										</Button>
-									) : null}
-									<Button
-										variant="ghost"
-										size="xs"
-										aria-label={`Check ${row.name}`}
-										disabled={checking === row.id || row.key === "missing"}
-										onClick={(event) => {
-											opened(event);
-											setAsking(row.id);
-										}}
-									>
-										{checking === row.id ? <Spinner className="size-3" /> : null}
-										Check
-									</Button>
-									<Button
-										variant="ghost"
-										size="xs"
-										aria-label={`Edit ${row.name}`}
-										onClick={(event) => {
-											opened(event);
-											setForm(row.id);
-										}}
-									>
-										Edit
-									</Button>
+	const rows = providers.map((row) => {
+		const using = row.id === current;
+		const mapped = TIERS.every((tier) => row.models.some((model) => model.id === row.tiers[tier]));
+		const ready = row.key !== "missing" && mapped;
+		const notes = [
+			using ? "In use" : undefined,
+			placeWords(row.destination, here),
+			row.key === "missing" ? "Needs its key: edit it" : undefined,
+			mapped ? undefined : "No model for each tier yet: edit it",
+		].filter(Boolean);
+		return (
+			<div key={row.id} className="flex flex-col" data-custom-provider={row.id}>
+				<RowOf
+					lead={<ServerMark kind={row.kind} className="size-5" />}
+					title={row.name}
+					detail={
+						<>
+							{notes.join(" · ")}
+							<span className="block break-all" data-address>
+								{row.baseUrl}
+							</span>
+						</>
+					}
+					end={
+						<span className="flex shrink-0 flex-wrap justify-end gap-1.5">
+							{!using && ready ? (
+								<Button variant="outline" size="xs" aria-label={`Use ${row.name}`} onClick={() => onUse?.(row.id)}>
+									Use
+								</Button>
+							) : null}
+							<Button
+								variant="ghost"
+								size="xs"
+								aria-label={`Check ${row.name}`}
+								disabled={checking === row.id || row.key === "missing"}
+								onClick={(event) => {
+									opened(event);
+									setAsking(row.id);
+								}}
+							>
+								{checking === row.id ? <Spinner className="size-3" /> : null}
+								Check
+							</Button>
+							<Button
+								variant="ghost"
+								size="xs"
+								aria-label={`Edit ${row.name}`}
+								onClick={(event) => {
+									opened(event);
+									setForm(row.id);
+								}}
+							>
+								Edit
+							</Button>
+						</span>
+					}
+				/>
+				{row.checked === undefined || checking === row.id ? null : (
+					<div
+						role="status"
+						className={cn(
+							"border-t border-line-soft px-3.5 py-2 pl-[2.875rem] text-meta break-words",
+							row.checked.ok ? "text-ink-2" : "text-danger",
+						)}
+					>
+						{checkedWords(row.checked, row.destination.host)}
+						{row.checked.ok ? null : (
+							<details className="mt-1 text-ink-2">
+								<summary className="cursor-pointer">Details</summary>
+								<span className="break-all">
+									{row.checked.status === undefined ? "" : `HTTP ${row.checked.status} · `}
+									{row.checked.detail}
 								</span>
-							</div>
-							{row.checked === undefined || checking === row.id ? null : (
-								<div
-									role="status"
-									className={cn(
-										"border-t border-line-soft px-3.5 py-2 pl-[2.875rem] text-meta break-words",
-										row.checked.ok ? "text-ink-2" : "text-danger",
-									)}
-								>
-									{checkedWords(row.checked, row.destination.host)}
-									{row.checked.ok ? null : (
-										<details className="mt-1 text-ink-2">
-											<summary className="cursor-pointer">Details</summary>
-											<span className="break-all">
-												{row.checked.status === undefined ? "" : `HTTP ${row.checked.status} · `}
-												{row.checked.detail}
-											</span>
-										</details>
-									)}
-								</div>
-							)}
-						</div>
-					);
-				})}
-			</Rows>
-			{view?.error === undefined ? null : (
-				<p role="alert" className="text-ui text-danger">
-					banda could not read your servers, so none of them can think until this is fixed: {view.error}
-				</p>
-			)}
-			{error === undefined ? null : (
-				<p role="alert" className="text-ui text-danger">
-					{error}
-				</p>
-			)}
+							</details>
+						)}
+					</div>
+				)}
+			</div>
+		);
+	});
+	const problems = [
+		view?.error === undefined
+			? undefined
+			: `banda could not read your servers, so none of them can think until this is fixed: ${view.error}`,
+		error,
+	].flatMap((each) =>
+		each === undefined
+			? []
+			: [
+					<p key={each} role="alert" className={cn("text-ui text-danger", bare && "px-3.5 py-2.5")}>
+						{each}
+					</p>,
+				],
+	);
+	const body = (
+		<>
+			{bare ? rows : <Rows>{rows}</Rows>}
+			{problems}
 			<Dialog open={editing !== undefined} onOpenChange={(open) => (open ? undefined : setForm(undefined))}>
 				<DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl" onCloseAutoFocus={back}>
 					<DialogHeader>
@@ -283,6 +286,13 @@ export function CustomProviders({
 					</AlertDialogContent>
 				)}
 			</AlertDialog>
+		</>
+	);
+	return bare ? (
+		body
+	) : (
+		<Block title="Your own servers" note="Servers you added, by their address.">
+			{body}
 		</Block>
 	);
 }

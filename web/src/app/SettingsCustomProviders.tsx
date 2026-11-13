@@ -22,6 +22,7 @@ export function SettingsCustomProviders({ current }: { current: string }) {
 			onRemove={remove}
 			onUse={(id) => void use(id)}
 			onCheck={(id) => void check(id)}
+			bare
 		/>
 	);
 }

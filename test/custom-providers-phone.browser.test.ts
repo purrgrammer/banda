@@ -297,8 +297,7 @@ it.skipIf(!hasChrome())(
 				expect(local.requests.map((request) => `${request.method} ${request.path}`)).toEqual(["GET /v1/models"]);
 				expect(carried).toContain("POST /api/custom-providers/list");
 				await click(page, named("Start with scripted-small"));
-				await fill(page, field("Context, tokens", modelRow("scripted-small")), "32768");
-				await fill(page, field("Answer cap, tokens", modelRow("scripted-small")), "4096");
+				await fill(page, field("Context it runs with, tokens", modelRow("scripted-small")), "32768");
 				await click(page, labelled("No per-token charges", dialog));
 				await page.run(`(${field("Address", dialog)}).scrollIntoView({block:'center'})`);
 				await shot("2-form");

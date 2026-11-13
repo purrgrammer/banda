@@ -6,7 +6,7 @@
  * while something runs on it, and a check the owner asks for.
  */
 import { randomUUID } from "node:crypto";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, readFile, stat, writeFile } from "node:fs/promises";
 import { createModels } from "@earendil-works/pi-ai";
 import type { ModelRef } from "@earendil-works/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
@@ -14,6 +14,7 @@ import { shaOf } from "../src/core/agents.ts";
 import {
 	customProvider,
 	customProvidersPath,
+	guardedFetch,
 	readCustomProviders,
 	redact,
 	registerCustomProviders,
@@ -92,6 +93,9 @@ describe("an address", () => {
 		["http://169.254.169.254/v1", /link-local/],
 		["http://0.0.0.0:8000/v1", /127\.0\.0\.1/],
 		["http://[fe80::1]/v1", /link-local/],
+		["http://metadata.google.internal/v1", /metadata service/],
+		["http://100.100.100.200/v1", /metadata service/],
+		["http://[fd00:ec2::254]/v1", /metadata service/],
 		["localhost:11434", /^That is not an address|http:\/\/ or https:\/\//],
 		["", /Write the address/],
 	])("%s is refused", (url, why) => {
@@ -279,6 +283,29 @@ describe("a request to the endpoint", () => {
 		expect(elsewhere.requests).toHaveLength(0);
 	});
 
+	it("plain http goes only where the name resolves now to this computer or the owner's network", async () => {
+		const sent: string[] = [];
+		const base = (async (input: string | URL | Request) => {
+			sent.push(String(input));
+			return new Response("{}");
+		}) as typeof fetch;
+		const at = (address: string) => async () => [{ address, family: address.includes(":") ? 6 : 4 }];
+		// a one-word name looks local; where it resolves decides
+		const outside = await guardedFetch({ key: "none" }, base, at("203.0.113.9"))("http://gpu-box:8000/v1/models");
+		expect(outside.status).toBe(421);
+		expect(((await outside.json()) as { error: { message: string } }).error.message).toMatch(/on the internet/);
+		const metadata = await guardedFetch({ key: "none" }, base, at("169.254.169.254"))("http://gpu-box/v1/models");
+		expect(((await metadata.json()) as { error: { message: string } }).error.message).toMatch(/link-local/);
+		expect(sent).toEqual([]);
+		await guardedFetch({ key: "none" }, base, at("192.168.1.20"))("http://gpu-box:8000/v1/models");
+		// https is the certificate's to vouch for: never looked up
+		const never = async () => {
+			throw new Error("looked up");
+		};
+		await guardedFetch({ key: "none" }, base, never)("https://llm.example.com/v1/models");
+		expect(sent).toEqual(["http://gpu-box:8000/v1/models", "https://llm.example.com/v1/models"]);
+	});
+
 	it("an error that echoes the key is told without it", async () => {
 		const home = await tempHome();
 		const server = await serve({ key: "sk-the-right-one-000000" });
@@ -445,6 +472,38 @@ describe("the daemon", () => {
 			expect((await s.api<TiersView>("/tiers")).models.deep.id).toBe("large");
 			expect(server.requests).toHaveLength(0);
 		} finally {
+			await s.daemon.close();
+		}
+	});
+
+	it("an edit whose file can't be written changes nothing: not the tiers, not the key", async () => {
+		const home = await tempHome();
+		const server = await serve({ key: "sk-first-key-1111111" });
+		const s = await start(home);
+		try {
+			const provider = body(server.url, { key: "required" });
+			await s.api("/custom-providers", s.json("POST", { provider, start: "small", key: "sk-first-key-1111111" }));
+			await s.api("/custom-providers/custom-local", s.json("PUT", { provider, tiers: TIERS_ON }));
+			// the file is written beside itself and renamed into place: a home that takes no new file fails the write
+			await chmod(home, 0o500);
+			const refused = await s.refused(
+				"/custom-providers/custom-local",
+				s.json("PUT", {
+					provider,
+					tiers: { quick: "large", balanced: "large", deep: "large" },
+					key: "sk-second-key-2222222",
+				}),
+			);
+			await chmod(home, 0o700);
+			expect(refused.status).toBeGreaterThanOrEqual(400);
+			const view = await s.api<CustomProvidersView>("/custom-providers");
+			expect(view.providers[0]?.tiers).toEqual(TIERS_ON);
+			expect(await new FileCredentialStore(home).read("custom-local")).toEqual({
+				type: "api_key",
+				key: "sk-first-key-1111111",
+			});
+		} finally {
+			await chmod(home, 0o700);
 			await s.daemon.close();
 		}
 	});

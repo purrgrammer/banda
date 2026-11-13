@@ -136,10 +136,13 @@ for (const width of [390, 1440])
 			const local = await compatServer({
 				speak: SPOKEN,
 				models: [
-					{ id: "qwen3:8b", context: 40_960 },
+					// Ollama runs it with num_ctx; the model's most is a hint
+					{ id: "qwen3:8b", context: 40_960, numCtx: 32_768, thinking: true },
+					// not loaded, no num_ctx: what Ollama runs it with is unknown, so it is asked
 					{ id: "llava:7b", context: 4096, vision: true },
 					{ id: "Qwen/Qwen3-8B" },
 					{ id: "nomic-embed-text", embedding: true },
+					{ id: "gemma:2b", context: 8192, noTools: true },
 				],
 			});
 			let daemon: Daemon | undefined;
@@ -286,22 +289,35 @@ for (const width of [390, 1440])
 						await shot("6-server-form");
 						expect(local.requests).toHaveLength(0);
 						await click(page, button("Find models", dialog));
-						await page.until(shows("It listed 4 models."));
+						await page.until(shows("It listed 5 models."));
 						// the listing asked no model to answer
 						expect(local.requests.every((request) => !request.path.endsWith("/chat/completions"))).toBe(true);
 						expect(local.requests.map((request) => `${request.method} ${request.path}`)).toContain("GET /api/tags");
-						// what each says, and what it cannot be
-						expect(await page.run<string>(`${model("qwen3:8b")}.innerText`)).toContain("40,960 context");
+						// what each says: the context Ollama runs it with, never the model's most
+						expect(await page.run<string>(`${model("qwen3:8b")}.innerText`)).toContain("32,768 context");
+						expect(await page.run<string>(`${model("qwen3:8b")}.innerText`)).toContain("thinks first");
 						expect(await page.run<string>(`${model("qwen3:8b")}.innerText`)).toContain(
 							"Listed by the server · limits from the server",
 						);
 						expect(await page.run<string>(`${model("llava:7b")}.innerText`)).toContain("reads images");
 						// the next choice is the start model: focus is on it
 						await page.until(`document.activeElement?.getAttribute('name') === 'start'`);
-						// an embedding model is no start choice
+						// a model that doesn't chat, or calls no tools, is no start choice
 						expect(await page.run<boolean>(`!!${model("nomic-embed-text")}`)).toBe(false);
+						expect(await page.run<boolean>(`!!${model("gemma:2b")}`)).toBe(false);
+						// a server on this computer charges nothing, said and changeable
+						expect(
+							await page.run<boolean>(`${labelled("No per-token charges", dialog)}.querySelector("input").checked`),
+						).toBe(true);
 						// keeping and starting are two choices: it starts on qwen3, and keeps llava once llava is complete
 						await click(page, named("Start with qwen3:8b"));
+						// nothing is missing for qwen3: no field is asked, and its answers may take what room the context leaves
+						expect(await page.run<boolean>(`!!${field("Context it runs with, tokens", model("qwen3:8b"))}`)).toBe(
+							false,
+						);
+						expect(await page.run<boolean>(`!!${field("Answer cap, tokens (optional)", model("qwen3:8b"))}`)).toBe(
+							false,
+						);
 						// the others wait under "Also keep other models"
 						await click(
 							page,
@@ -309,33 +325,29 @@ for (const width of [390, 1440])
 						);
 						await page.until(keepRow("nomic-embed-text"));
 						expect(await page.run<string>(`${keepRow("nomic-embed-text")}.innerText`)).toContain("It doesn't chat");
+						expect(await page.run<string>(`${keepRow("gemma:2b")}.innerText`)).toContain("It can't call tools");
 						expect(await page.run<string>(`${keepRow("Qwen/Qwen3-8B")}.innerText`)).toContain(
-							"not usable until you add them",
+							"Needs its context: not usable until you add it",
 						);
 						expect(
 							await page.run<boolean>(`${keepRow("Qwen/Qwen3-8B")}.querySelector('[role="checkbox"]').disabled`),
 						).toBe(true);
-						// only what the start model lacks is asked, and only for it
-						await page.until(`${field("Answer cap, tokens", model("qwen3:8b"))}`);
-						expect(await page.run<boolean>(`!!${field("Context, tokens", model("qwen3:8b"))}`)).toBe(false);
-						await click(page, button("Save", dialog));
-						await page.until(shows("Say whether it charges per token."));
-						await page.until(
-							shows(
-								"Write how many tokens banda may ask for in one answer (sent as max_tokens), within what the server allows",
-							),
-						);
 						await shot("7-server-found");
 						await darkToo("7-server-found");
-						await fill(page, field("Answer cap, tokens", model("qwen3:8b")), "8192");
 						expect(await page.run<boolean>(`${keepRow("llava:7b")}.querySelector('[role="checkbox"]').disabled`)).toBe(
 							true,
 						);
 						await click(page, button("Complete it", keepRow("llava:7b")));
-						await page.until(field("Answer cap, tokens", keepRow("llava:7b")));
-						await fill(page, field("Answer cap, tokens", keepRow("llava:7b")), "2048");
+						await page.until(field("Context it runs with, tokens", keepRow("llava:7b")));
+						// the hint says how to raise it on Ollama, and the model's most is told apart
+						expect(await page.run<string>(`${keepRow("llava:7b")}.innerText`)).toContain("OLLAMA_CONTEXT_LENGTH");
+						expect(await page.run<string>(`${keepRow("llava:7b")}.innerText`)).toContain("The model takes up to 4,096");
+						// less than banda's instructions need is refused before anything is saved
+						await fill(page, field("Context it runs with, tokens", keepRow("llava:7b")), "4096");
+						await page.until(shows("Runs with 4,096 tokens; banda needs 16,384"));
+						await fill(page, field("Context it runs with, tokens", keepRow("llava:7b")), "16384");
+						await page.until(`!${keepRow("llava:7b")}.querySelector('[role="checkbox"]').disabled`);
 						await click(page, `${keepRow("llava:7b")}.querySelector('[role="checkbox"]')`);
-						await click(page, labelled("No per-token charges", dialog));
 						await click(page, button("Save", dialog));
 						await page.until(shows("Ollama saved"));
 						await shot("8-server-saved");
@@ -349,8 +361,14 @@ for (const width of [390, 1440])
 							billing: "none",
 							tiers: { quick: "qwen3:8b", balanced: "qwen3:8b", deep: "qwen3:8b" },
 							models: [
-								{ id: "qwen3:8b", contextWindow: 40_960, maxTokens: 8192, source: { listed: true, limits: "owner" } },
-								{ id: "llava:7b", contextWindow: 4096, maxTokens: 2048, images: true },
+								{
+									id: "qwen3:8b",
+									contextWindow: 32_768,
+									maxTokens: 32_768,
+									reasoning: true,
+									source: { listed: true, limits: "server" },
+								},
+								{ id: "llava:7b", contextWindow: 16_384, maxTokens: 16_384, images: true, source: { limits: "owner" } },
 							],
 						});
 						expect(kept?.models[0]).not.toHaveProperty("cost");

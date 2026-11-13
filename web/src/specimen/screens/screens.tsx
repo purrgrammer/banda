@@ -1,6 +1,7 @@
 /** Whole screens: the app on the desktop and the phone, first run, the first chat, a group. */
 import { CalendarClockIcon } from "lucide-react";
 import { type ReactNode, useContext, useState } from "react";
+import { SERVER_KINDS } from "../../../../src/core/custom-providers.ts";
 import { AgentMessage } from "../../chat/AgentMessage.tsx";
 import { ApprovalCard, Facts, WaitingPill } from "../../chat/Approval.tsx";
 import { Band } from "../../chat/Band.tsx";
@@ -16,6 +17,7 @@ import { Header } from "../../chat/Header.tsx";
 import { Line } from "../../chat/Line.tsx";
 import { PullRequestCard } from "../../chat/Object.tsx";
 import { ProposalCard } from "../../chat/Proposal.tsx";
+import { ProviderMark, ServerMark } from "../../chat/ProviderMark.tsx";
 import { RowActions, type RowView, type Who } from "../../chat/Row.tsx";
 import { VoiceMessage } from "../../chat/Voice.tsx";
 import { WorkingLine } from "../../chat/WorkingLine.tsx";
@@ -383,9 +385,31 @@ export function Screens() {
 					<WorkingLine who={[OCTO]} onOpen={() => {}} />
 				</ChatScreen>
 			</Section>
-			<Section id="first-run" note="The first agent, and the providers to pick from: one screen." bleed>
+			<Section
+				id="first-run"
+				note="The first agent, and the providers to pick from: one screen. A search finds every other provider, and each kind of server (try “ollama”)."
+				bleed
+			>
 				<div className="flex-1">
-					<FirstRun providers={PROVIDERS} open="google" />
+					<FirstRun
+						providers={PROVIDERS}
+						open="google"
+						others={[
+							{
+								id: "provider:huggingface",
+								name: "Hugging Face",
+								note: "API key",
+								mark: <ProviderMark provider="huggingface" className="size-6" />,
+							},
+							...(["ollama", "lmstudio", "llamacpp", "vllm"] as const).map((kind) => ({
+								id: `server:${kind}`,
+								name: SERVER_KINDS[kind].label,
+								note: SERVER_KINDS[kind].about,
+								keywords: ["local", "server"],
+								mark: <ServerMark kind={kind} className="size-6" />,
+							})),
+						]}
+					/>
 				</div>
 			</Section>
 			<Section

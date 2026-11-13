@@ -45,7 +45,14 @@ export type CompatOptions = {
 /** A model as the fixture lists it; each route says of it what its documentation says such a server does. */
 export type FixtureModel = {
 	readonly id: string;
+	/** The most the model was made for (Ollama's `model_info`, LM Studio's `max_context_length`, llama.cpp's own). */
 	readonly context?: number;
+	/** Ollama: the context it runs the model with, set by `num_ctx` in its parameters. */
+	readonly numCtx?: number;
+	/** Ollama: loaded now, with this context (`/api/ps`). */
+	readonly loaded?: number;
+	/** Ollama: the model calls no tools. */
+	readonly noTools?: boolean;
 	readonly maxTokens?: number;
 	readonly vision?: boolean;
 	readonly thinking?: boolean;
@@ -207,16 +214,32 @@ export async function compatServer(initial: CompatOptions = {}, port = 0): Promi
 				if (model === undefined) return json(404, { error: `model '${String(body?.model)}' not found` });
 				return json(200, {
 					modelfile: "",
-					parameters: "",
+					parameters: model.numCtx === undefined ? "temperature 0.6" : `temperature 0.6\nnum_ctx ${model.numCtx}`,
 					template: "",
 					details: { format: "gguf", family: "llama" },
 					model_info: {
 						"general.architecture": "llama",
 						...(model.context === undefined ? {} : { "llama.context_length": model.context }),
 					},
-					capabilities: model.embedding === true ? ["embedding"] : ["completion", ...(model.vision ? ["vision"] : [])],
+					capabilities:
+						model.embedding === true
+							? ["embedding"]
+							: [
+									"completion",
+									...(model.noTools ? [] : ["tools"]),
+									...(model.thinking ? ["thinking"] : []),
+									...(model.vision ? ["vision"] : []),
+								],
 				});
 			}
+			if (request.method === "GET" && path === "/api/ps")
+				return json(200, {
+					models: models.flatMap((model) =>
+						model.loaded === undefined
+							? []
+							: [{ name: model.id, model: model.id, size: 1, digest: "0", context_length: model.loaded }],
+					),
+				});
 			// LM Studio's
 			if (request.method === "GET" && path === "/api/v0/models")
 				return json(200, {
