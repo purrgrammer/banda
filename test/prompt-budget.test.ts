@@ -12,10 +12,13 @@
  *
  * What is fixed so the numbers are the same on every machine: the clock (Wednesday 7 January 2026, 09:30 UTC) and the
  * time zone (UTC), which the status line spells out; the agents, their files and the group; and a fresh home, so memory
- * is empty and no connection is installed. Tools are measured in pi-ai's provider-neutral declaration (`name`,
+ * is empty and no connection is installed. The computer section's two actual paths are checked, then canonicalized
+ * to /workspace and /work/attachments before counting; the run's temporary home must occur nowhere else.
+ * Tools are measured in pi-ai's provider-neutral declaration (`name`,
  * `description`, `parameters`), not one provider's wire shape. The host box has no browser and no egress proxy, so the
  * tools those install, all of them loaded on demand, are not named in the prompt's on-demand groups here.
  */
+import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -58,13 +61,28 @@ type Variant = "lead" | "helper" | "group";
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
 
 /** A first request's system prompt and tools, in bytes, section by section and tool by tool. */
-function measure(context: Context): Budget {
+function measure(context: Context, home: string): Budget {
 	const system = context.messages.filter((message): message is SystemMessage => message.role === "system");
 	// a fresh chat's first request: one leading system message, nothing the model said before
 	expect(system).toHaveLength(1);
 	expect(context.messages.some((message) => message.role === "assistant" || message.role === "toolResult")).toBe(false);
-	const [head] = system as [SystemMessage];
-	const prompt = getCurrentSystemPrompt(context.messages);
+	const [captured] = system as [SystemMessage];
+	const computer = captured.sections?.computer;
+	assert.ok(typeof computer === "string");
+	const workspace = JSON.stringify(join(home, "workspace"));
+	const attachments = JSON.stringify(join(home, "work", "attachments"));
+	expect(computer).toContain(workspace);
+	expect(computer).toContain(attachments);
+	const head: SystemMessage = {
+		...captured,
+		sections: {
+			...captured.sections,
+			computer: computer.replace(workspace, '"/workspace"').replace(attachments, '"/work/attachments"'),
+		},
+	};
+	const messages = context.messages.map((message) => (message === captured ? head : message));
+	expect(JSON.stringify({ ...context, messages })).not.toContain(home);
+	const prompt = getCurrentSystemPrompt(messages);
 	expect(getSystemMessageText(head)).toBe(prompt);
 	const tools: Tool[] = getCurrentTools(context.messages).map(({ name, description, parameters }) => ({
 		name,
@@ -158,7 +176,7 @@ describe("what a fresh chat sends before its first word", () => {
 			expect(getCurrentSystemPrompt(lead.messages)).toContain(
 				"It is Wednesday, 7 January 2026, between 09:00 and 10:00 UTC (UTC).",
 			);
-			measured.lead = measure(lead);
+			measured.lead = measure(lead, home);
 
 			// another agent's first direct chat: its file names no tools, so it gets what every agent gets
 			for (const [id, text] of [
@@ -169,7 +187,7 @@ describe("what a fresh chat sends before its first word", () => {
 			from = sent.length;
 			await api("/messages", { id: randomUUID(), text: "hello", thread: randomUUID(), agent: "helper" });
 			const helper = await firstOf("HELPER INSTRUCTIONS.", from);
-			measured.helper = measure(helper);
+			measured.helper = measure(helper, home);
 
 			// a member's first run in a group, mentioned in its room
 			const { room } = await api<{ room: number }>("/groups", { members: ["helper", "reviewer"] });
@@ -177,10 +195,7 @@ describe("what a fresh chat sends before its first word", () => {
 			await api(`/groups/${room}/messages`, { key: randomUUID(), text: "Look it up", mentions: ["reviewer"] });
 			const group = await firstOf("REVIEWER INSTRUCTIONS.", from);
 			expect(getCurrentTools(group.messages).map((tool) => tool.name)).toContain(MESSAGE_GROUP);
-			measured.group = measure(group);
-
-			// the measured prompt names no path of this run's temp home, so the numbers are the same on every machine
-			for (const context of [lead, helper, group]) expect(JSON.stringify(context)).not.toContain(home);
+			measured.group = measure(group, home);
 
 			if (UPDATE) {
 				if (process.env.CI !== undefined)

@@ -1,11 +1,12 @@
 {
 	"lead": {
 		"system": {
-			"total": 1981,
+			"total": 2121,
 			"sections": {
 				"speaking": 969,
 				"roster": 95,
 				"avatar_design": 0,
+				"computer": 138,
 				"memory": 37,
 				"now": 265,
 				"tool_discovery": 292,
@@ -43,11 +44,12 @@
 	},
 	"helper": {
 		"system": {
-			"total": 2011,
+			"total": 2151,
 			"sections": {
 				"speaking": 969,
 				"roster": 387,
 				"avatar_design": 0,
+				"computer": 138,
 				"memory": 37,
 				"now": 265,
 				"tool_discovery": 292,
@@ -85,9 +87,10 @@
 	},
 	"group": {
 		"system": {
-			"total": 1563,
+			"total": 1703,
 			"sections": {
 				"group": 914,
+				"computer": 138,
 				"memory": 37,
 				"now": 267,
 				"tool_discovery": 284,
