@@ -3,5 +3,5 @@
 	"framework": null,
 	"buildCommand": "npm run build:site",
 	"outputDirectory": "dist/site",
-	"ignoreCommand": "git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- site docs/screenshots web/public/icon.svg web/public/providers package.json package-lock.json vercel.json || exit 1"
+	"ignoreCommand": "sh scripts/vercel-ignore.sh"
 }
