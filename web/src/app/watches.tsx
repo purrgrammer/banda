@@ -247,7 +247,7 @@ export function WatchDetail({
 							</Confirm>
 						) : (
 							<Button
-								variant="ghost"
+								variant="destructive"
 								size="sm"
 								onClick={() =>
 									void watchActions.remove(watch.name).then(() => {

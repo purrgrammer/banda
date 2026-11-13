@@ -80,7 +80,7 @@ export function BrowserWindow({
 				)}
 				{landscape ? null : (
 					<>
-						<Button variant="ghost" size="sm" className="text-danger" onClick={onStop}>
+						<Button variant="destructive" size="sm" onClick={onStop}>
 							Stop
 						</Button>
 						<Button variant="ghost" size="icon-sm" aria-label="Close" className="text-ink-2" onClick={onClose}>

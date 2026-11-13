@@ -89,6 +89,8 @@ export function Controls() {
 						<DropdownMenuItem>Pause routines</DropdownMenuItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem>Show how the work is done</DropdownMenuItem>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem variant="destructive">Archive</DropdownMenuItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
 				<Popover>

@@ -107,7 +107,7 @@ export function WatchProposal({
 					: `banda reads it on its own and wakes ${watch.agent} with what changed; ${watch.agent} stays quiet when nothing matters.`}
 			</p>
 			<span className="flex items-center gap-2">
-				<Button onClick={onAllow}>
+				<Button variant={kind === "removed" ? "destructive" : "default"} onClick={onAllow}>
 					{kind === "removed" ? "Stop it" : kind === "changed" ? "Change it" : "Follow it"}
 				</Button>
 				<Button variant="ghost" onClick={onDecline}>

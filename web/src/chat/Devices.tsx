@@ -351,7 +351,7 @@ function DeviceRow({ device, act, here }: { device: DeviceView; act: DevicesActi
 							keep={`Keep ${device.name}`}
 							onConfirm={act.onRevoke === undefined ? undefined : () => act.onRevoke?.(device.id)}
 						>
-							<Button variant="outline" size="xs" aria-label={`Revoke ${device.name}`}>
+							<Button variant="destructive" size="xs" aria-label={`Revoke ${device.name}`}>
 								Revoke
 							</Button>
 						</Confirm>

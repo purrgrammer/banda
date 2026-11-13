@@ -119,6 +119,7 @@ function Proposed({ routine, onAllow, onDecline, settled }: Props) {
 			) : (
 				<span className="flex items-center gap-2">
 					<Button
+						variant={kind === "removed" ? "destructive" : "default"}
 						disabled={badWhen !== undefined || badAsk !== undefined}
 						onClick={() => onAllow?.(Object.keys(edit).length === 0 ? undefined : edit)}
 					>

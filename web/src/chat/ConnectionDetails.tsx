@@ -440,7 +440,7 @@ export function ConnectionDetailsView({
 										</Button>
 									)}
 									{onSignOut === undefined ? null : (
-										<Button variant="ghost" size="xs" disabled={busy} onClick={() => onSignOut(account)}>
+										<Button variant="destructive" size="xs" disabled={busy} onClick={() => onSignOut(account)}>
 											Sign out
 										</Button>
 									)}

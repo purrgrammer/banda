@@ -452,12 +452,7 @@ function FactList({
 												keep="Keep it"
 												onConfirm={() => void save(() => onForget(fact.id))}
 											>
-												<Button
-													variant="ghost"
-													size="icon-xs"
-													className="text-ink-2"
-													aria-label={`Forget: ${fact.text}`}
-												>
+												<Button variant="destructive" size="icon-xs" aria-label={`Forget: ${fact.text}`}>
 													<Trash2Icon />
 												</Button>
 											</Confirm>

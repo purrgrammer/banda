@@ -19,6 +19,18 @@ export type ApprovalState =
 	/** No answer came in time, or its run stopped first: nobody said no, so it never says they did. */
 	| { readonly kind: "expired" | "cancelled"; readonly words: string };
 
+const DESTRUCTIVE_VERBS = new Set([
+	"Delete",
+	"Remove",
+	"Remove label",
+	"Archive",
+	"Revoke",
+	"Forget",
+	"Disconnect",
+	"Stop",
+	"Sign out",
+]);
+
 export function ApprovalCard({
 	agent,
 	what,
@@ -112,6 +124,7 @@ export function ApprovalCard({
 					)}
 					<span className="flex flex-wrap items-center gap-2">
 						<Button
+							variant={DESTRUCTIVE_VERBS.has(verb) ? "destructive" : "default"}
 							size={bubble ? "sm" : "default"}
 							disabled={busy || disabled}
 							onClick={() => void act(() => onApprove?.(scoped, editing ? draft : text))}

@@ -381,7 +381,7 @@ function RoutineRow({
 					</span>
 				</span>
 				<span className="flex gap-1.5">
-					<Button size="xs" onClick={routine.onAllow}>
+					<Button variant={routine.waiting === "stop" ? "destructive" : "default"} size="xs" onClick={routine.onAllow}>
 						{WAITING_ALLOW[routine.waiting]}
 					</Button>
 					<Button variant="ghost" size="xs" onClick={routine.onDecline}>
@@ -603,7 +603,7 @@ function WatchRow({
 					</span>
 				</span>
 				<span className="flex gap-1.5">
-					<Button size="xs" onClick={watch.onAllow}>
+					<Button variant={watch.waiting === "stop" ? "destructive" : "default"} size="xs" onClick={watch.onAllow}>
 						{WATCH_ALLOW[watch.waiting]}
 					</Button>
 					<Button variant="ghost" size="xs" onClick={watch.onDecline}>
@@ -843,9 +843,9 @@ export function GroupPanel({
 									onConfirm={() => onRemove(member)}
 								>
 									<Button
-										variant="ghost"
+										variant="destructive"
 										size="xs"
-										className="text-ink-2 opacity-0 group-hover/member:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+										className="opacity-0 group-hover/member:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
 									>
 										Remove
 									</Button>

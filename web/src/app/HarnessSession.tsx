@@ -342,7 +342,7 @@ function HarnessActivitySheet({
 						onSteer={(text) => void attempt("send your note", () => steerHarness(session.task, text))}
 					/>
 					{session.ended === undefined ? (
-						<Button variant="outline" onClick={() => void attempt("stop it", () => stopHarness(session.task))}>
+						<Button variant="destructive" onClick={() => void attempt("stop it", () => stopHarness(session.task))}>
 							Stop {session.service}
 						</Button>
 					) : null}

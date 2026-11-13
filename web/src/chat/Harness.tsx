@@ -634,9 +634,9 @@ export function HarnessCard({
 				{live(state) && onStop !== undefined ? (
 					<Button
 						type="button"
-						variant="ghost"
+						variant="destructive"
 						size="icon-sm"
-						className="mr-1 size-11 shrink-0 text-ink-2"
+						className="mr-1 size-11 shrink-0"
 						aria-label={`Stop ${harness}`}
 						title={`Stop ${harness}`}
 						onClick={onStop}

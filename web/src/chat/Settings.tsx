@@ -346,7 +346,7 @@ export function Connections({
 									keep="Keep it"
 									onConfirm={() => onSwitch?.(row, account, false)}
 								>
-									<Button variant="ghost" size="icon-xs" className="text-ink-2" aria-label={`Remove ${what}`}>
+									<Button variant="destructive" size="icon-xs" aria-label={`Remove ${what}`}>
 										<XIcon />
 									</Button>
 								</Confirm>
@@ -1260,7 +1260,7 @@ export function ModelProviders({
 													onConfirm={onSignOut === undefined ? undefined : () => onSignOut(provider.id)}
 												>
 													<Button
-														variant="ghost"
+														variant="destructive"
 														size="xs"
 														className={renamable ? "hidden sm:inline-flex" : undefined}
 														aria-label={`Sign out of ${name}`}
@@ -1294,7 +1294,7 @@ export function ModelProviders({
 												</Button>
 												{extra && !signing ? (
 													<Button
-														variant="ghost"
+														variant="destructive"
 														size="xs"
 														aria-label={`Remove ${name}`}
 														onClick={() => onSignOut?.(provider.id)}
@@ -1539,7 +1539,7 @@ function SignedIn({
 									keep="Stay signed in"
 									onConfirm={() => onSignOut?.(agent.id, site)}
 								>
-									<Button variant="outline" size="xs">
+									<Button variant="destructive" size="xs">
 										Sign out
 									</Button>
 								</Confirm>

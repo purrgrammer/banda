@@ -602,7 +602,7 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 							keep={anonymous ? "Keep it" : "Stay connected"}
 							onConfirm={actions.signOut}
 						>
-							<Button variant="outline" size="sm" disabled={busy || (!anonymous && account === "")}>
+							<Button variant="destructive" size="sm" disabled={busy || (!anonymous && account === "")}>
 								{anonymous ? "Remove" : "Sign out"}
 							</Button>
 						</Confirm>
