@@ -5,7 +5,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { ModelProviders, type ProviderRow } from "./Settings.tsx";
+import { accountMenu, ModelProviders, type ProviderRow } from "./Settings.tsx";
 
 const providers: readonly ProviderRow[] = [
 	{ id: "anthropic", name: "Anthropic", by: "sign-in", connected: true },
@@ -41,7 +41,8 @@ describe("Settings' providers", () => {
 		expect(page).not.toContain('aria-label="Connect');
 		expect(page).toContain('aria-label="Use OpenAI"');
 		expect(page).toContain('aria-label="Use xAI"');
-		expect(page).toContain('aria-label="Sign out of OpenAI"');
+		// signing out is in the account's menu
+		expect(page).toContain('aria-label="More for OpenAI"');
 		expect(page).toContain("on the computer banda runs on");
 	});
 
@@ -55,11 +56,14 @@ describe("Settings' providers", () => {
 			createElement(ModelProviders, { current: "anthropic@work", providers: accounts, onAdd: () => {} }),
 		);
 		expect(page).toContain('aria-label="Use Anthropic · Personal"');
-		expect(page).toContain('aria-label="Sign out of Anthropic · Work"');
+		expect(page).toContain('aria-label="More for Anthropic · Work"');
 		// one account of a provider is named by the provider alone
 		expect(page).toContain('aria-label="Use OpenAI"');
-		expect(page).toContain('aria-label="Add another Anthropic account"');
-		expect(page).toContain('aria-label="Add another OpenAI account"');
+		// another account is in each row's menu, not a row of its own
+		expect(page).not.toContain("Another Anthropic account");
+		const can = { here: true, rename: false, add: true };
+		expect(accountMenu(accounts[0] as ProviderRow, accounts, can)).toEqual(["another", "sign out"]);
+		expect(accountMenu(accounts[2] as ProviderRow, accounts, can)).toEqual(["another", "sign out"]);
 		expect(page).toContain('src="/providers/anthropic.svg"');
 		expect(page).not.toContain("anthropic@work.svg");
 		const adding = renderToStaticMarkup(
@@ -75,7 +79,8 @@ describe("Settings' providers", () => {
 		const device = renderToStaticMarkup(
 			createElement(ModelProviders, { current: "anthropic", providers: accounts, onAdd: () => {}, here: false }),
 		);
-		expect(device).not.toContain("Add another");
+		expect(accountMenu(accounts[0] as ProviderRow, accounts, { ...can, here: false })).toEqual(["sign out"]);
+		expect(device).toContain('aria-label="More for Anthropic · Work"');
 	});
 
 	it("renames an account only where a provider has more than one, starting from its name", () => {
@@ -87,12 +92,12 @@ describe("Settings' providers", () => {
 		const page = renderToStaticMarkup(
 			createElement(ModelProviders, { current: "anthropic", providers: accounts, onRename: () => {} }),
 		);
-		expect(page).toContain('aria-label="Rename Anthropic"');
-		expect(page).toContain('aria-label="Rename Anthropic · Work"');
-		expect(page).not.toContain('aria-label="Rename OpenAI"');
-		// a phone gathers Rename and Sign out under one menu, where a label makes the row long
+		// Rename, another account and Sign out are one menu, on a phone and a desktop alike
 		expect(page).toContain('aria-label="More for Anthropic · Work"');
-		expect(page).not.toContain('aria-label="More for OpenAI"');
+		const can = { here: true, rename: true, add: false };
+		expect(accountMenu(accounts[0] as ProviderRow, accounts, can)).toEqual(["rename", "sign out"]);
+		expect(accountMenu(accounts[1] as ProviderRow, accounts, can)).toEqual(["rename", "sign out"]);
+		expect(accountMenu(accounts[2] as ProviderRow, accounts, can)).toEqual(["sign out"]);
 		const renaming = renderToStaticMarkup(
 			createElement(ModelProviders, {
 				current: "anthropic",

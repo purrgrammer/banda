@@ -130,10 +130,19 @@ for (const width of [390, 1440])
 					await page.until(`document.body.textContent.includes(${JSON.stringify(ANTHROPIC.models.quick)})`);
 					expect((await tiers()).provider.id).toBe("anthropic");
 
-					await click(page, labelled("Sign out of OpenAI"));
+					// rename, another account and sign out are one menu on the account's row
+					// a menu opens on the pointer going down, as a tap or a click does
+					await page.until(labelled("More for OpenAI"));
+					await page.run(
+						`${labelled("More for OpenAI")}.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true, button: 0, pointerType: 'mouse'}))`,
+					);
+					await click(
+						page,
+						`[...document.querySelectorAll('[role="menuitem"]')].find(el => el.textContent.trim() === "Sign out")`,
+					);
 					await page.until(`document.querySelector('[role="alertdialog"]')`);
 					await click(page, button("Sign out"));
-					await page.until(`!${labelled("Sign out of OpenAI")}`);
+					await page.until(`!${labelled("More for OpenAI")}`);
 					expect((await tiers()).providers.map((each) => each.id)).toEqual(["anthropic"]);
 					expect(await page.run(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
 					expect(page.errors()).toEqual([]);
