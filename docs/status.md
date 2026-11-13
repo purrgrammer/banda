@@ -26,11 +26,14 @@ restart walkthroughs pass at desktop and phone widths. Receipt fault scenarios p
 The bundled computer is in `prototype/microvm-box`. The macOS ARM64 candidate has packaged desktop/phone-width
 walkthrough evidence, including lazy browser preparation, guarded sends and restart persistence. General shows
 browser preparation and retry, and the packaged app preserves that status through proxy recovery. Linux x64 and
-ARM64 build and smoke checks pass, but neither has native acceptance. The ARM64 runner has no KVM device. The x64
-runtime aborts before its relay starts. Its cause and native qualification remain open.
+ARM64 source builds, ABI and smoke checks pass, but neither has native acceptance. The ARM64 runner has no KVM device.
+The x64 command VM aborts before its agent relay starts; its proxy boots. The abort's cause and native qualification
+remain open.
 The current recovery fix makes guest command sessions connect only to running VMs and orders proxy startup with
 policy updates. Native packaging builds that CLI capability from pinned source. Ordinary suites and real native
-execution-boundary checks pass. The packaged recovery walkthrough and updated CI qualification remain.
+execution-boundary checks, packaged recovery walkthroughs and all six fault shards and Docker in CI pass. Mac,
+Windows and Android artifact builds pass. The owner accepted the source and notice packet for the unsigned Mac
+pre-release; the final public-download check remains.
 Windows retains the existing backend while its native runtime boundaries are unresolved ([Operations](operations.md)).
 macOS support requires Apple silicon; Intel Macs are no longer a release target. Public browser download delivery
 and clean-machine distribution remain open.

@@ -1,0 +1,55 @@
+{
+	"catalogSha256": "ccfb9f580560a3c1fee6d56cf0d949598eb42427e40d7f33681cbe004fd59afc",
+	"inputs": {
+		"applicationVersion": "0.1.0-alpha.12",
+		"target": "darwin-arm64",
+		"vendorArchiveSha256": "9cc2bd2874cc1aa98cb139429a9482830b1e64b48255aa9f40a25b8979a23a9f",
+		"runtimeBuild": {
+			"execution": "require-running",
+			"source": {
+				"commit": "60fc5071b34e6cc2671c84c8dc07709795d45d27",
+				"sha256": "7b733474c8b540f53854f85c476ebe397392c023335eb7faab27bf6e93098a66"
+			},
+			"patchSha256": "c262fa4505bec4fe2e55f3c4bee19901358f9bf758d3046d870326c994358cdb",
+			"lockSha256": "11825ddbb8eb7f1f9bde497521c4a315fc46c1eb428b2c220cda422457f9bf47",
+			"recipeSha256": "c2623fc298be32ff94104e5ea60713d1e197859735ddc8ff264e8b10bbd0c44e",
+			"environment": {
+				"platform": "darwin",
+				"minimumVersion": "14.0"
+			},
+			"compiler": {
+				"version": "1.99.1",
+				"target": "aarch64-apple-darwin",
+				"rustc": "23948a0a9c162fd2952defb3fb0462c44e8fcfd1a4ab8a274a1e1bdb2cf810a3",
+				"cargo": "685e563d94db1f003ffa5f5831439eec02569b9950b69867953c8213269c1eaf",
+				"std": "fe79d6ab5a0321de26463999d8c112b8ad3eafbcbcf822d66a2300b45dde1031"
+			},
+			"agentdSha256": "6eb84756979eb1310b7dd54c5684b108ff7a4c0de643337a8462729b04cb770d",
+			"features": "embed-binaries,net,ssh,keyring"
+		},
+		"msbSha256": "fc076b283e82bdb943989b697f11d78213d3d2e0ccee65fdd84c828c33ed5c51",
+		"firmwareSha256": "0104316ba962bb6f4bbf6da882e4b1dc5eb0453af8153c3e636d7433508d80ef",
+		"images": {
+			"target": "linux-arm64",
+			"box": {
+				"archive": "box.tar",
+				"sha256": "52593c1fec76c0419ffeb4b693db713d79fe8f15511a6a9ac37201ff8a68249f",
+				"ref": "banda-box:8abb9b1df49e",
+				"digest": "sha256:0426222ee2dd2893626b2a52a5d1a7a3d55bc747acba2646f2544fcf6ccd9b2b"
+			},
+			"proxy": {
+				"archive": "proxy.tar",
+				"sha256": "10064fd7fa872952dea939bb80fb229989b94a9054f8597442e25a5687a81d8d",
+				"ref": "banda-proxy:531576e80b31",
+				"digest": "sha256:f3be199fea4b231df30c114d0a726ade23cb3a8a0030b1f0bc8029ae16a4e721"
+			},
+			"browser": {
+				"sha256": "824b0112077836de25793facc4832c57a1b5d191cfdb4cb0967913ca2d233190",
+				"ref": "banda-browser:dfd4e1008061",
+				"digest": "sha256:723969e42a4bd3e0aab5f4a7c147bba43574c0d0f6aa0718837d485b4fe31853",
+				"bytes": 412044800,
+				"archive": "banda-browser-824b0112077836de25793facc4832c57a1b5d191cfdb4cb0967913ca2d233190.tar"
+			}
+		}
+	}
+}

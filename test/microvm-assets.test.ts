@@ -91,7 +91,7 @@ async function fixture() {
 			firmwareLgpl: await file("notices/LIBKRUNFW-LGPL-2.1"),
 			inventory: await file("notices/INVENTORY.md"),
 		},
-		redistribution: "review-required",
+		redistribution: "reviewed",
 	};
 	await writeFile(join(root, "box.tar"), "box");
 	await writeFile(join(root, "proxy.tar"), "proxy");
@@ -116,6 +116,11 @@ describe("installed computer assets", () => {
 		expect(omitted.execution).toBe("require-running");
 		await writeFile(join(root, "manifest.json"), JSON.stringify(old));
 		await expect(readMicrovmAssets(root)).rejects.toThrow(/manifest/);
+	});
+	it("loads a Mac candidate before its distribution inputs have been reviewed", async () => {
+		const { root, manifest } = await fixture();
+		await writeFile(join(root, "manifest.json"), JSON.stringify({ ...manifest, redistribution: "review-required" }));
+		await expect(readMicrovmAssets(root)).resolves.toHaveProperty("target", "darwin-arm64");
 	});
 	it("rejects mismatched compiler, agent and baseline provenance before execution", async () => {
 		const { root, manifest } = await fixture();
@@ -244,20 +249,21 @@ describe("installed computer assets", () => {
 			expect(entitlements.hypervisor).toBe(true);
 			const vendor = MICROVM_PLATFORMS[target];
 			await writeFile(join(root, vendor.firmware), vendor.firmware);
-			await writeFile(
-				join(root, "manifest.json"),
-				JSON.stringify({
-					...common,
-					target,
-					vendorArchiveSha256: vendor.sha256,
-					runtimeBuild: runtimeBuild(target),
-					firmware: { path: vendor.firmware, sha256: sum(vendor.firmware) },
-				}),
-			);
+			const linux = {
+				...common,
+				target,
+				redistribution: "review-required",
+				vendorArchiveSha256: vendor.sha256,
+				runtimeBuild: runtimeBuild(target),
+				firmware: { path: vendor.firmware, sha256: sum(vendor.firmware) },
+			};
+			await writeFile(join(root, "manifest.json"), JSON.stringify(linux));
 			const loaded = await readMicrovmAssets(root, target);
 			expect(loaded.target).toBe(target);
 			expect(loaded.firmware).toBe(join(await realpath(root), vendor.firmware));
 			await expect(readMicrovmAssets(root, "darwin-arm64")).rejects.toThrow(/different operating system or CPU/);
+			await writeFile(join(root, "manifest.json"), JSON.stringify({ ...linux, redistribution: "reviewed" }));
+			await expect(readMicrovmAssets(root, target)).rejects.toThrow(/manifest/);
 		},
 	);
 });

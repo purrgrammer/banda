@@ -35,6 +35,13 @@ upstream digest-pinned manylinux 2.28 Docker image and checks that baseline befo
 requirements. The installed native Mac and Linux applications use their bundled executables and need neither Rust
 nor Docker. Windows keeps its existing backend until native qualification.
 
+The reviewed Mac bundle ships matching corresponding sources and third-party notices as release assets. Build-time
+review records name the exact accepted native and image inputs. Only matching inputs receive `reviewed`; other Mac
+candidates and Linux manifests retain `review-required`.
+
+Manual release runs build qualification artifacts. A version tag drafts release metadata; the verified material set
+is uploaded separately, so an automatic build cannot replace the selected runtime, notices or source assets.
+
 ## Open work
 
 - [ ] Qualify native recovery through host sleep/wake and prolonged outages, and reduce the preflight cost without
@@ -42,8 +49,8 @@ nor Docker. Windows keeps its existing backend until native qualification.
 - [ ] Qualify the bundled Linux computer on x64 and ARM64 with KVM: staged runtime and image hashes,
   guarded networking, persistent folders, lazy browser loading, desktop/phone-width use and complete cleanup.
   The release workflow's optional native-computer check runs `scripts/verify-computer.ts`; ordinary release
-  smoke checks do not exercise the VM. The browser archive is supplied locally with its exact pinned bytes,
-  so public download delivery remains separate.
+  smoke checks do not exercise the VM. By default the browser archive is supplied locally with its exact pinned
+  bytes. `BANDA_VERIFY_PUBLIC_BROWSER=1` exercises its published URL; public delivery remains a separate check.
 - [ ] Spike the Windows native computer's directory ACLs, local named-pipe permissions and VM mount isolation
   before selecting it in the desktop app. The current runtime ships Windows binaries and requires WHP;
   the banda adapter is not qualified for Windows. The native Mac computer requires Apple silicon and macOS 14 or newer.
@@ -52,7 +59,8 @@ Recheck these items against current code before implementation; an unchecked ite
 defect. Remove it only when its fix and acceptance evidence are recorded in a commit.
 
 - [ ] Rootless box, and a supervisor that alone holds the Docker socket
-- [ ] The box's runtime brought by banda: no Docker installed by hand. Pre-release binaries still require it
+- [ ] Bring a qualified native runtime on every platform. The reviewed Apple-silicon bundle includes it; Windows
+  keeps its existing backend and Linux native acceptance remains open
 - [ ] Sign and notarize the desktop app (Developer ID, Windows code signing), then add updates that back up first and
   activate atomically. Pre-release binaries are unsigned and update by hand
 - [ ] Run the release workflow end to end and fix what each runner turns up (Windows fast tests, linux arm64 deb).

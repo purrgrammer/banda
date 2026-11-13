@@ -52,6 +52,10 @@ const { createModels, fauxProvider }: typeof import("@earendil-works/pi-ai") = a
 	pathToFileURL(join(app, "node_modules/@earendil-works/pi-ai/dist/index.js")).href
 );
 const assets = await installedMicrovmAssets();
+const runtimeManifestSha256 = createHash("sha256")
+	.update(await readFile(join(app, "computer/manifest.json")))
+	.digest("hex");
+const publicBrowserDelivery = process.env.BANDA_VERIFY_PUBLIC_BROWSER === "1";
 const archive = join(root, "..", new URL(assets.browser.url).pathname.split("/").at(-1) ?? "missing-browser.tar");
 const nativeFetch = globalThis.fetch;
 let downloads = 0;
@@ -59,6 +63,7 @@ globalThis.fetch = (input, init) => {
 	const url = input instanceof Request ? input.url : String(input);
 	if (url !== assets.browser.url) return nativeFetch(input, init);
 	downloads++;
+	if (publicBrowserDelivery) return nativeFetch(input, init);
 	return Promise.resolve(
 		new Response(Readable.toWeb(createReadStream(archive)), {
 			headers: { "content-length": String(assets.browser.bytes) },
@@ -386,6 +391,9 @@ try {
 		JSON.stringify(
 			{
 				passed: false,
+				releaseRoot: root,
+				runtimeManifestSha256,
+				publicBrowserDelivery,
 				error: error instanceof Error ? error.stack : String(error),
 				home,
 				cache,
@@ -428,11 +436,15 @@ await writeFile(
 	JSON.stringify(
 		{
 			target: assets.target,
+			releaseRoot: root,
+			runtimeManifestSha256,
 			widths: [1440, 390],
 			proxyRestarts,
 			declinedPosts,
 			browserDownloads: downloads,
-			localArchiveDelivery: true,
+			localArchiveDelivery: !publicBrowserDelivery,
+			publicBrowserDelivery,
+			browserUrl: assets.browser.url,
 			command,
 			cleaned: true,
 			passed: true,

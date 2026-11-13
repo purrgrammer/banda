@@ -1,49 +1,15 @@
-A pre-release build of banda, for convenience. It is not a qualified release: expect rough edges.
+Unsigned Mac pre-release for Apple silicon on macOS 14 or newer.
 
-Every release has three parts: the **desktop app**, the **command line** and the **phone app**. `SHA256SUMS` lists
-every file's checksum.
+- The computer starts with the app. Docker is not required on Mac.
+- The browser downloads on first use. General settings shows its preparation and running pages.
+- Files and installed tools persist under `~/.banda/computer`.
 
-**Docker is required** on the computer that runs banda: the agents' computer runs in a container. Install Docker
-Desktop, OrbStack or Colima (macOS), Docker Desktop (Windows) or Docker Engine (Linux), and start it. Without it banda
-runs, but says its computer is off.
+Open the DMG and drag banda to Applications. This build is unsigned and not notarized. Follow [Apple's instructions for opening an unidentified app](https://support.apple.com/en-us/102445) if you choose to install it.
 
-**A home from another version won't open.** Before 1.0, banda changes how it stores things without converting them. If
-the app says so, rename `~/.banda` to keep it and start fresh, or go back to the version that made it.
+Older pre-release homes may need a fresh start. Keep a backup of an existing `~/.banda` before upgrading.
 
-## Desktop
+The command-line archive includes Node.js. Unpack it and put `banda/bin` on your PATH. The desktop app and `banda serve` use the same home.
 
-| You have | Download |
-|---|---|
-| Mac with Apple silicon | `banda-<version>-mac-arm64.dmg` |
-| Windows | `banda-<version>-win-x64.exe` |
-| Linux | `banda-<version>-linux-x64.AppImage` or `.deb` |
-| Linux on ARM | `banda-<version>-linux-arm64.AppImage` or `.deb` |
+`SHA256SUMS` covers the downloads. `computer-distribution.json` binds the app, browser, source shards and notice materials. `RELEASE-REVIEW.md` explains how to reconstruct and verify the sources and notices.
 
-- **macOS requires Apple silicon.** Open the `.dmg` and drag banda onto Applications. The app is not notarized yet, so the first time, open
-  it, then go to System Settings → Privacy & Security → Open Anyway. Or run
-  `xattr -dr com.apple.quarantine /Applications/banda.app`.
-- **Windows:** the installer is unsigned: SmartScreen → More info → Run anyway.
-
-## Command line
-
-| You have | Download |
-|---|---|
-| Mac with Apple silicon | `banda-cli-<version>-mac-arm64.tar.gz` |
-| Windows | `banda-cli-<version>-win-x64.zip` |
-| Linux | `banda-cli-<version>-linux-x64.tar.gz` |
-| Linux on ARM | `banda-cli-<version>-linux-arm64.tar.gz` |
-
-Unpack the archive, put its `banda/bin` folder on your PATH, and run `banda serve`. It brings its own Node.js.
-`banda --help` lists the commands. The desktop app and `banda serve` share `~/.banda`. If `banda serve` is already
-running, the app opens it instead of starting another, and quitting the app stops it.
-
-## Phone
-
-| You have | Download |
-|---|---|
-| Android phone (arm64) | `banda-<version>-android-arm64.apk` |
-
-Install the APK on an Android phone (allow installs from your browser or files app when it asks). Open it, then on
-the computer that runs banda open Settings → Devices → Pair a phone and scan the code. Approve the phone there and it
-opens your band, at home or away: it reaches your computer through Iroh's relays, never through an open port. A newer
-APK installs over this one. Your computer reaches no relay until you pair a phone.
+This release publishes Mac assets only. Other platforms retain their previous downloads. Native Linux qualification and clean-Mac installation testing remain open.

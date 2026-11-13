@@ -175,6 +175,7 @@ export const MicrovmManifest = Type.Union([
 		{
 			...manifest,
 			target: Type.Literal("darwin-arm64"),
+			redistribution: Type.Union([Type.Literal("review-required"), Type.Literal("reviewed")]),
 			vendorArchiveSha256: Type.Literal(MICROVM_PLATFORMS["darwin-arm64"].sha256),
 			firmware: file("libkrunfw.5.dylib"),
 			entitlements: Type.Object(

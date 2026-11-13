@@ -1,6 +1,5 @@
-# Pre-release binaries: the desktop app and the CLI archive for each platform, each built and smoke-run on its own
-# runner (native addons and binaries are per platform). A `v*` tag makes a draft pre-release; publishing it stays a
-# person's click. A manual run only uploads workflow artifacts, to try a candidate without publishing anything.
+# Manual runs build platform candidates. Tags draft release metadata; accepted artifacts and their matching
+# source/notice materials are attached separately so CI cannot replace a verified release with another build.
 name: release
 
 on:
@@ -26,7 +25,7 @@ concurrency:
 
 jobs:
   computer-images:
-    if: inputs.linux_start_diagnostic != true
+    if: github.event_name == 'workflow_dispatch' && inputs.linux_start_diagnostic != true
     strategy:
       fail-fast: false
       matrix:
@@ -86,9 +85,6 @@ jobs:
         with:
           path: release/cache/computer/runtime
           key: native-runtime-${{ matrix.target }}-${{ hashFiles('scripts/microvm-runtime.*', 'src/box/microvm-assets.ts') }}
-      - name: The tag names the version being built
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
       - run: npm ci
       # once, on Linux, as CI runs them; every target proves its own build with the smoke run below
       - name: Format, lint, types and the ordinary suites
@@ -102,11 +98,6 @@ jobs:
       - run: npm run cli:pack
         env:
           BANDA_COMPUTER_IMAGES: ${{ matrix.computer != '' && format('{0}/computer-images', runner.temp) || '' }}
-      - name: Bundled computer distribution qualification
-        if: matrix.computer != '' && startsWith(github.ref, 'refs/tags/v')
-        run: |
-          echo "::error::Bundled computer redistribution review is pending: corresponding source, dependency notices and guest-image requirements must be qualified before a tagged release."
-          exit 1
       - run: node scripts/smoke-release.ts
       - name: Prepare native Linux KVM access
         if: inputs.native_computer && startsWith(matrix.target, 'linux-')
@@ -164,7 +155,7 @@ jobs:
   # Java it needs). A tag's APK is signed with banda's key from the repository's secrets, so each release installs over
   # the one before; a manual run without the key uploads an unsigned APK, to try the build and nothing more.
   android:
-    if: inputs.linux_start_diagnostic != true
+    if: github.event_name == 'workflow_dispatch' && inputs.linux_start_diagnostic != true
     name: build (android-arm64)
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -303,7 +294,6 @@ jobs:
           if-no-files-found: ignore
 
   publish:
-    needs: [build, android-sign]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -313,25 +303,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          path: out
-          # the downloads alone: not the android job's unsigned APK
-          pattern: banda-*
-          merge-multiple: true
-      # the artifacts keep their folders (release/desktop/…); the release lists files side by side
-      - name: Checksums
-        working-directory: out
-        run: |
-          find . -mindepth 2 -type f -exec mv -t . {} +
-          find . -mindepth 1 -type d -empty -delete
-          sha256sum -- * > SHA256SUMS && cat SHA256SUMS
+      - name: The tag names the version being released
+        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
       - name: Draft pre-release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: >
-          gh release create "$GITHUB_REF_NAME" out/*
-          --draft --prerelease --verify-tag
-          --title "banda $GITHUB_REF_NAME"
-          --notes-file .github/release-notes.md
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release exists; its accepted artifacts are unchanged."
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --draft --prerelease --verify-tag \
+            --title "banda $GITHUB_REF_NAME" \
+            --notes-file .github/release-notes.md
