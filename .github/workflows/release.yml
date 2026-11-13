@@ -12,6 +12,10 @@ on:
         description: Verify the staged Linux computer through the app (requires KVM and Chrome on the runner)
         type: boolean
         default: false
+      linux_start_diagnostic:
+        description: Diagnose the owned Linux x64 startup abort; does not qualify or publish a release
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -22,6 +26,7 @@ concurrency:
 
 jobs:
   computer-images:
+    if: inputs.linux_start_diagnostic != true
     strategy:
       fail-fast: false
       matrix:
@@ -159,6 +164,7 @@ jobs:
   # Java it needs). A tag's APK is signed with banda's key from the repository's secrets, so each release installs over
   # the one before; a manual run without the key uploads an unsigned APK, to try the build and nothing more.
   android:
+    if: inputs.linux_start_diagnostic != true
     name: build (android-arm64)
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -242,6 +248,59 @@ jobs:
           name: banda-android-arm64
           if-no-files-found: error
           path: release/banda-*-android-arm64*.apk
+
+  linux-start-diagnostic:
+    if: github.event_name == 'workflow_dispatch' && inputs.linux_start_diagnostic
+    name: diagnose Linux x64 startup (not qualification)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+      - name: Verify the retained image run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: test "$(gh api "repos/$GH_REPO/actions/runs/43462401258" --jq .head_sha)" = 1cbab783d4996e6d12e0e858bc5c6c2a72dd073c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: computer-images-x64
+          path: ${{ runner.temp }}/computer-images
+          run-id: 43462401258
+          github-token: ${{ github.token }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: release/cache/computer/runtime
+          key: native-runtime-linux-x64-${{ hashFiles('scripts/microvm-runtime.*', 'src/box/microvm-assets.ts') }}
+      - run: npm ci
+      - run: npm run build
+      - name: Stage the source-built runtime with verified retained images
+        run: node scripts/stage.ts
+        env:
+          BANDA_COMPUTER_IMAGES: ${{ runner.temp }}/computer-images
+      - name: Require native KVM access
+        run: |
+          test -c /dev/kvm
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+            sudo setfacl -m "u:$(id -u):rw" /dev/kvm
+          fi
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Capture startup evidence while preserving the original failure
+        run: node scripts/diagnose-linux-start.ts --out "$RUNNER_TEMP/native-start-diagnostic" --run
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: linux-x64-start-diagnostic
+          path: ${{ runner.temp }}/native-start-diagnostic
+          if-no-files-found: ignore
 
   publish:
     needs: [build, android-sign]

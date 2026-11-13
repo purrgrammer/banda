@@ -14,6 +14,7 @@ import { Value } from "typebox/value";
 import { nativeComputerReply } from "../test/fixtures/native-computer-model.ts";
 import { BROWSERS, hold } from "../test/slots.ts";
 import { hasChrome, withPage } from "../test/smoke/chrome.ts";
+import { hostDiagnostics } from "./native-diagnostics.ts";
 
 const root = process.env.BANDA_RELEASE_ROOT ?? join(import.meta.dirname, "../release/banda");
 assert.ok(isAbsolute(root), "BANDA_RELEASE_ROOT must be an absolute path to a staged banda package.");
@@ -39,6 +40,7 @@ if (process.platform === "linux") {
 }
 const output = process.argv[2] ?? (await mkdtemp(join(tmpdir(), "banda-native-evidence-")));
 if (process.argv[2] !== undefined) await mkdir(output);
+const hostBefore = process.platform === "linux" ? await hostDiagnostics() : undefined;
 const app = join(root, "app");
 const { startDaemon }: typeof import("../src/daemon.ts") = await import(
 	pathToFileURL(join(app, "dist/daemon.js")).href
@@ -368,6 +370,7 @@ try {
 			});
 			runtimeDiagnostics.push({
 				name: vm.name,
+				inspection: inspected,
 				status: captured.status,
 				signal: captured.signal,
 				stdout: captured.stdout,
@@ -386,6 +389,8 @@ try {
 				error: error instanceof Error ? error.stack : String(error),
 				home,
 				cache,
+				hostBefore,
+				hostAfter: process.platform === "linux" ? await hostDiagnostics() : undefined,
 				runtimeDiagnostics,
 				diagnostics: await diagnostics?.().catch((failure: unknown) => String(failure)),
 			},
