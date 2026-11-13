@@ -9,6 +9,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { AGENT_PUBLICATION_POINTS, type AgentPublicationPoint } from "../src/server/agent-publication.ts";
 import type { Fault, FaultPoint } from "./fault/faults.ts";
 import { pool, runWorker } from "./fault/kill.ts";
 import { startFakeMcp } from "./fixtures/mcp-server.ts";
@@ -22,6 +23,7 @@ type Summary = {
 	box: boolean;
 	credentials: string[];
 	commits: number;
+	points: Record<AgentPublicationPoint, number>;
 };
 
 const run = async (schedules: readonly (readonly Fault[])[]) => {
@@ -59,6 +61,7 @@ describe("accounts under faults", () => {
 	it("sweep: one kill at every commit, and at each step of signing in, switching and signing out", async () => {
 		const clean = await run([]);
 		check(clean);
+		for (const point of AGENT_PUBLICATION_POINTS) expect(clean.points[point]).toBeGreaterThan(0);
 		const points: [FaultPoint, number][] = [
 			["oauth:exchanged", 1],
 			["account:read", 1],
@@ -76,6 +79,8 @@ describe("accounts under faults", () => {
 			["account:named", 1],
 		];
 		const faults: Fault[] = points.map(([point, hit]) => ({ point, hit, kind: "kill" }));
+		for (const point of AGENT_PUBLICATION_POINTS)
+			for (let hit = 1; hit <= clean.points[point]; hit++) faults.push({ point, hit, kind: "kill" });
 		for (let hit = 1; hit <= clean.commits; hit++)
 			faults.push({ point: "commit:before", hit, kind: "kill" }, { point: "commit:after", hit, kind: "kill" });
 		await pool(

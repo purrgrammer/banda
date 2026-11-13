@@ -13,6 +13,7 @@ import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { Accepted, parseAgent, shaOf } from "../../src/core/agents.ts";
 import { Connected } from "../../src/core/connections.ts";
 import { context } from "../../src/core/store.ts";
+import { AGENT_PUBLICATION_POINTS } from "../../src/server/agent-publication.ts";
 import { openConnected, signInAsOwner } from "../fixtures/connected.ts";
 import { type Fault, type FaultPoint, Faults } from "./faults.ts";
 
@@ -111,6 +112,7 @@ console.log(
 		box: readFileSync(join(s.box.workspace, "agents", "mara.md"), "utf8") === accepted,
 		credentials,
 		commits: faults.hits("commit:after"),
+		points: Object.fromEntries(AGENT_PUBLICATION_POINTS.map((point) => [point, faults.hits(point)])),
 	}),
 );
 await s.close();

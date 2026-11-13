@@ -1,10 +1,7 @@
-/** Cut an existing-agent proposal between its box write and store acceptance; retry must finish atomically. */
-import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createModels, fauxProvider } from "@earendil-works/pi-ai";
 import { type ConversationId, createRegistry, type Storage } from "@earendil-works/pi-durable";
-import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { type Box, openBox } from "../../src/box/box.ts";
 import { Accepted, agentPath, shaOf } from "../../src/core/agents.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
@@ -12,6 +9,7 @@ import type { Gateway } from "../../src/core/gateway.ts";
 import { PROPOSAL_DECIDED, PROPOSAL_RESULT, type Proposal, Proposals } from "../../src/core/proposals.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore } from "../../src/core/turn.ts";
+import { AGENT_PUBLICATION_POINTS, recoverAgentPublications } from "../../src/server/agent-publication.ts";
 import type { Workspace } from "../../src/server/agents.ts";
 import type { Area, Deps } from "../../src/server/routes/area.ts";
 import { proposals as proposalArea } from "../../src/server/routes/proposals.ts";
@@ -74,33 +72,18 @@ async function setup(): Promise<Running> {
 	const box = openBox(hostBox(home!), () => {});
 	await mkdir(join(box.workspace, "agents"), { recursive: true });
 	const path = join(box.workspace, "agents", "reader.md");
-	if (!existsSync(path)) await writeFile(path, before);
-	const env = box.env();
-	const writing = new Proxy(env, {
-		get(target, key) {
-			if (key === "writeFile") {
-				const write: ExecutionEnv["writeFile"] = async (...args) => {
-					if (armed) {
-						faults.hit("proposal:apply");
-						faults.hit("agent:write:before");
-					}
-					const written = await target.writeFile(...args);
-					if (armed) faults.hit("agent:write:after");
-					return written;
-				};
-				return write;
-			}
-			const value = Reflect.get(target, key, target) as unknown;
-			return typeof value === "function" ? value.bind(target) : value;
-		},
-	});
 	const workspace: Workspace = {
-		env: () => writing,
+		env: () => box.env(),
 		root: box.workspace,
 		tools: () => [],
 		known: () => true,
+		publicationPoint: (point) => {
+			if (armed) faults.hit(point);
+		},
 	};
 	const harness = await openStore(home!, { models, registry, wrapStorage });
+	if ((await harness.snapshot(Accepted, context))?.files[agentPath("reader")] === undefined)
+		await writeFile(path, before);
 	await harness.commit(async (tx) => {
 		const accepted = await tx.doc(Accepted);
 		accepted.files[agentPath("reader")] ??= { text: before, sha: shaOf(before), at: 1 };
@@ -123,6 +106,7 @@ async function setup(): Promise<Running> {
 			proposals.proposals.change = proposal as unknown as import("@earendil-works/pi-durable").JsonObject;
 		}
 	}, context);
+	await recoverAgentPublications(harness, workspace);
 	harness.resume();
 	const area = proposalArea.start?.({
 		harness,
@@ -179,9 +163,7 @@ console.log(
 		results: entries.items.filter((entry) => entry.kind === PROPOSAL_RESULT).length,
 		decided: entries.items.filter((entry) => entry.kind === PROPOSAL_DECIDED).length,
 		commits: faults.hits("commit:after"),
-		proposalApply: faults.hits("proposal:apply"),
-		writeBefore: faults.hits("agent:write:before"),
-		writeAfter: faults.hits("agent:write:after"),
+		points: Object.fromEntries(AGENT_PUBLICATION_POINTS.map((point) => [point, faults.hits(point)])),
 	}),
 );
 await current.harness.close(context);

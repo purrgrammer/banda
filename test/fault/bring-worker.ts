@@ -14,6 +14,7 @@ import { Accepted, shaOf } from "../../src/core/agents.ts";
 import { Companion } from "../../src/core/companion.ts";
 import { acceptedSkills } from "../../src/core/skills.ts";
 import { context, openStore } from "../../src/core/store.ts";
+import { AGENT_PUBLICATION_POINTS, recoverAgentPublications } from "../../src/server/agent-publication.ts";
 import type { Workspace } from "../../src/server/agents.ts";
 import { bringable, chooseBring } from "../../src/server/bring.ts";
 import { hostBox } from "../fixtures/host-box.ts";
@@ -62,7 +63,16 @@ async function open() {
 	const models = createModels();
 	models.setProvider(fauxProvider().provider);
 	const harness = await openStore(home, { models, registry: createRegistry(), wrapStorage });
-	const workspace: Workspace = { env: () => box.env(), root: box.workspace, tools: () => [], known: () => true };
+	const workspace: Workspace = {
+		env: () => box.env(),
+		root: box.workspace,
+		tools: () => [],
+		known: () => true,
+		publicationPoint: (point) => {
+			if (armed) faults.hit(point);
+		},
+	};
+	await recoverAgentPublications(harness, workspace);
 	return { box, harness, workspace };
 }
 
@@ -112,6 +122,7 @@ console.log(
 		expected: { review: shaOf(skill("review")), plan: shaOf(skill("plan")) },
 		chosen: { bring: companion?.bringChosen === true, skills: companion?.skillsChosen === true },
 		commits: faults.hits("commit:after"),
+		points: Object.fromEntries(AGENT_PUBLICATION_POINTS.map((point) => [point, faults.hits(point)])),
 	}),
 );
 await run.harness.close(context);

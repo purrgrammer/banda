@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AGENT_PUBLICATION_POINTS, type AgentPublicationPoint } from "../src/server/agent-publication.ts";
 import type { Fault } from "./fault/faults.ts";
 import { pool, runWorker } from "./fault/kill.ts";
 import { tempHome } from "./helpers.ts";
@@ -11,9 +12,7 @@ type State = {
 	results: number;
 	decided: number;
 	commits: number;
-	proposalApply: number;
-	writeBefore: number;
-	writeAfter: number;
+	points: Record<AgentPublicationPoint, number>;
 };
 const run = async (faults: readonly Fault[]) => {
 	const { last, kills } = await runWorker(worker, [await tempHome()], [faults]);
@@ -32,19 +31,15 @@ describe("accepting an existing-agent proposal across box and store faults", () 
 		const clean = await run([]);
 		expectAccepted(clean);
 		expect(clean.state.commits).toBeGreaterThan(0);
-		expect(clean.state.proposalApply).toBe(1);
-		expect(clean.state.writeBefore).toBe(1);
-		expect(clean.state.writeAfter).toBe(1);
+		for (const point of AGENT_PUBLICATION_POINTS) expect(clean.state.points[point]).toBeGreaterThan(0);
 	});
 
 	for (const kind of ["error", "kill"] as const) {
-		it(`${kind}: every commit and write boundary recovers as one accepted change`, async () => {
+		it(`${kind}: every commit and publication boundary recovers as one accepted change`, async () => {
 			const clean = await run([]);
-			const faults: Fault[] = [
-				{ point: "proposal:apply", hit: 1, kind },
-				{ point: "agent:write:before", hit: 1, kind },
-				{ point: "agent:write:after", hit: 1, kind },
-			];
+			const faults: Fault[] = [];
+			for (const point of AGENT_PUBLICATION_POINTS)
+				for (let hit = 1; hit <= clean.state.points[point]; hit++) faults.push({ point, hit, kind });
 			for (let hit = 1; hit <= clean.state.commits; hit++)
 				for (const point of ["commit:before", "commit:after"] as const) faults.push({ point, hit, kind });
 			await pool(

@@ -17,6 +17,7 @@ import type { Gateway } from "../../src/core/gateway.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore } from "../../src/core/turn.ts";
 import { revive } from "../../src/core/wait.ts";
+import { recoverAgentPublications } from "../../src/server/agent-publication.ts";
 import type { Workspace } from "../../src/server/agents.ts";
 import { type Capabilities, openCapabilities } from "../../src/server/capabilities.ts";
 import { hostBox } from "./host-box.ts";
@@ -98,6 +99,7 @@ export async function openConnected({
 		root: box.workspace,
 		tools: () => names().filter((name) => name !== "message_user"),
 		known: () => true,
+		...(fault === undefined ? {} : { publicationPoint: fault }),
 	};
 	const capabilities = openCapabilities({
 		home,
@@ -117,6 +119,7 @@ export async function openConnected({
 	await revive(harness);
 	await capabilities.carryListings();
 	await capabilities.install();
+	await recoverAgentPublications(harness, workspace);
 	harness.resume();
 	await capabilities.reconcile();
 	return {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { shaOf } from "../src/core/agents.ts";
+import { AGENT_PUBLICATION_POINTS, type AgentPublicationPoint } from "../src/server/agent-publication.ts";
 import type { Fault } from "./fault/faults.ts";
 import { pool, runWorker } from "./fault/kill.ts";
 import { tempHome } from "./helpers.ts";
@@ -11,6 +12,7 @@ type State = {
 	expected: { review: string; plan: string };
 	chosen: { bring: boolean; skills: boolean };
 	commits: number;
+	points: Record<AgentPublicationPoint, number>;
 };
 const worker = "test/fault/bring-worker.ts";
 
@@ -38,11 +40,14 @@ describe("bringing from the other harnesses, cut at its boundaries", () => {
 		it(`${kind}: at each write, accept, agent save and store commit, bringing again ends with exactly the picks`, async () => {
 			const clean = await run();
 			invariant(clean.state);
+			for (const point of AGENT_PUBLICATION_POINTS) expect(clean.state.points[point]).toBeGreaterThan(0);
 			const faults: Fault[] = (["bring:written", "bring:accepted", "bring:agent"] as const).map((point) => ({
 				point,
 				hit: 1,
 				kind,
 			}));
+			for (const point of AGENT_PUBLICATION_POINTS)
+				for (let hit = 1; hit <= clean.state.points[point]; hit++) faults.push({ point, hit, kind });
 			for (let hit = 1; hit <= clean.state.commits; hit++)
 				for (const point of ["commit:before", "commit:after"] as const) faults.push({ point, hit, kind });
 			await pool(
