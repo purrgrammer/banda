@@ -150,6 +150,15 @@ code {
 .p-deepseek { mask-image: url(../web/public/providers/deepseek.svg); }
 .p-groq { mask-image: url(../web/public/providers/groq.svg); }
 .p-cerebras { mask-image: url(../web/public/providers/cerebras.svg); }
+.p-ollama { mask-image: url(../web/public/providers/ollama.svg); }
+.p-lmstudio { mask-image: url(../web/public/providers/lmstudio.svg); }
+.p-vllm { mask-image: url(../web/public/providers/vllm.svg); }
+.p-huggingface { mask-image: url(../web/public/providers/huggingface.svg); }
+.p-cloudflare { mask-image: url(../web/public/providers/cloudflare.svg); }
+.p-together { mask-image: url(../web/public/providers/together.svg); }
+.p-fireworks { mask-image: url(../web/public/providers/fireworks.svg); }
+.p-nvidia { mask-image: url(../web/public/providers/nvidia.svg); }
+.p-server { mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='2' width='20' height='8' rx='2'/%3E%3Crect x='2' y='14' width='20' height='8' rx='2'/%3E%3Cline x1='6' x2='6.01' y1='6' y2='6'/%3E%3Cline x1='6' x2='6.01' y1='18' y2='18'/%3E%3C/svg%3E"); }
 
 /* the showcase: the app's own components drawing short chats (showcase.tsx) */
 .chats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
@@ -162,6 +171,7 @@ code {
 .tool > p { margin: 0 0 24px; color: var(--ink-2); font-size: 16px; max-width: 40rem; }
 .providers + .chats { margin-top: 28px; }
 .section-lede + .providers { margin-top: 0; }
+.providers + .section-lede { margin-top: 28px; margin-bottom: 16px; }
 .chat { min-width: 0; }
 [data-showcase] { min-width: 0; }
 .acp i { width: 16px; height: 16px; background: var(--ink); mask-position: center; mask-size: contain; mask-repeat: no-repeat; }
@@ -209,6 +219,7 @@ footer nav { gap: 16px; }
 			<a href="#what" class="hide-sm">What it does</a>
 			<a href="#connections" class="hide-sm">Connections</a>
 			<a href="#acp" class="hide-sm">Coding agents</a>
+			<a href="#models" class="hide-sm">Models</a>
 			<a href="#start">Get started</a>
 			<a href="https://github.com/purrgrammer/banda">GitHub</a>
 		</nav>
@@ -302,6 +313,29 @@ footer nav { gap: 16px; }
 		</div>
 	</section>
 
+	<section id="models">
+		<div class="wrap">
+			<h2>Any model, even your own</h2>
+			<p class="section-lede">Run the model on your own computer or network, and what you ask never goes to a model provider. banda finds the models your server has.</p>
+			<div class="providers">
+				<span><i class="p-ollama" aria-hidden="true"></i>Ollama</span>
+				<span><i class="p-lmstudio" aria-hidden="true"></i>LM Studio</span>
+				<span><i class="p-server" aria-hidden="true"></i>llama.cpp</span>
+				<span><i class="p-vllm" aria-hidden="true"></i>vLLM</span>
+				<span><i class="p-server" aria-hidden="true"></i>Any OpenAI-, Anthropic- or Mistral-compatible server</span>
+			</div>
+			<p class="section-lede">Or any of the providers pi-ai supports, with a sign-in or a key:</p>
+			<div class="providers">
+				<span><i class="p-huggingface" aria-hidden="true"></i>Hugging Face</span>
+				<span><i class="p-cloudflare" aria-hidden="true"></i>Cloudflare</span>
+				<span><i class="p-together" aria-hidden="true"></i>Together</span>
+				<span><i class="p-fireworks" aria-hidden="true"></i>Fireworks</span>
+				<span><i class="p-nvidia" aria-hidden="true"></i>NVIDIA</span>
+				<span>and dozens more</span>
+			</div>
+		</div>
+	</section>
+
 	<section id="start">
 		<div class="wrap">
 			<h2>Get started</h2>
@@ -314,8 +348,8 @@ footer nav { gap: 16px; }
 				</div>
 				<div class="step">
 					<b>2</b>
-					<h3>Choose a provider</h3>
-					<p>Sign in with your account or paste an API key.</p>
+					<h3>Choose a model</h3>
+					<p>Sign in with your account, paste an API key, or pick a model running on your own computer.</p>
 				</div>
 				<div class="step">
 					<b>3</b>

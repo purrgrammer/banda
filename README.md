@@ -36,8 +36,11 @@ sends, posts or can't be undone waits for your OK.
   in your project folder, and when it asks for permission, the ask comes to you.
 - **Memory and skills.** Agents keep facts you can read, edit and delete, and use the skills you add.
 - **Pages and documents.** Agents make pages and documents you can print and keep.
-- **Your models.** Sign in with your account where the provider offers it, or paste an API key: Anthropic, OpenAI,
-  GitHub Copilot, OpenRouter, Google and more.
+- **Any model, or your own.** Every provider [pi-ai](https://github.com/earendil-works/pi/tree/main/packages/ai) supports: sign in with
+  your account where the provider offers it, or paste an API key (Anthropic, OpenAI, GitHub Copilot, OpenRouter,
+  Google, Cloudflare, Hugging Face and many more). Or run the model on your own computer or network with Ollama,
+  LM Studio, llama.cpp or vLLM, or point banda at any OpenAI-, Anthropic- or Mistral-compatible server. banda finds
+  the models it has, and what you ask never goes to a model provider.
 - **Desktop and phone.** The app runs on macOS, Linux and Windows. An Android app pairs with it.
 
 > **Pre-release.** Expect rough edges and breaking changes, and run it on a machine you trust. The sandbox is not yet
@@ -60,8 +63,18 @@ node dist/cli/index.js serve
 ```
 
 Open the link it prints, pick a model provider and sign in. Anthropic, OpenAI, GitHub Copilot, OpenRouter, xAI and
-Meta use your account; Google, Azure, Vertex AI, Amazon Bedrock, Mistral, DeepSeek, Groq and Cerebras take an API key.
-The first start builds the agents' computer, which takes a few minutes.
+Meta use your account; Google, Azure, Vertex AI, Amazon Bedrock, Mistral, DeepSeek, Groq and Cerebras take an API key;
+search the list for every other provider. The first start builds the agents' computer, which takes a few minutes.
+
+To think with a model on your own computer, start it first, with room for banda's instructions (at least 16,384 tokens
+of context), then search for its server and pick it:
+
+```sh
+OLLAMA_CONTEXT_LENGTH=32768 ollama serve   # then: ollama pull qwen3:8b
+```
+
+In LM Studio, load a model with a context length of 32,768 or more and start its local server. banda reads the models
+the server has; a model that can't call tools isn't offered.
 
 Your data lives in `~/.banda`. Ctrl-C stops banda; the agents' containers stay, and `npm run boxes:sweep` removes those
 of deleted homes. To start over, delete `~/.banda` and sweep.
