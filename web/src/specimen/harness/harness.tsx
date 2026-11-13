@@ -177,7 +177,7 @@ const LONG_DIFF = [
 ].join("\n");
 
 /** A session as the API says it, for the asks fixtures: only what HarnessAsks reads. */
-const askSession = (asks: SessionApiView["asks"]): SessionApiView => ({
+export const askSession = (asks: SessionApiView["asks"]): SessionApiView => ({
 	task: 7,
 	chat: 1,
 	agent: "mara",
@@ -192,7 +192,7 @@ const askSession = (asks: SessionApiView["asks"]): SessionApiView => ({
 	...(asks === undefined ? {} : { asks }),
 });
 
-const EXECUTE_ASK = { id: "a1", kind: "execute", command: COMMAND } as const;
+export const EXECUTE_ASK = { id: "a1", kind: "execute", command: COMMAND } as const;
 const EDIT_ASK = { id: "a2", kind: "edit", command: "src/auth.ts", title: "src/auth.ts", detail: LONG_DIFF } as const;
 const FETCH_ASK = { id: "a3", kind: "fetch", command: "https://nodejs.org/api/crypto.html" } as const;
 /** Enough folded asks that the "more waiting" line must truncate, never overflow. */
@@ -216,7 +216,7 @@ const STEPS: readonly { id: Step; label: string }[] = [
 ];
 const order = (step: Step) => STEPS.findIndex((each) => each.id === step);
 
-function sessionAt(step: Step, notes: readonly HarnessStep[]): HarnessSessionView {
+export function sessionAt(step: Step, notes: readonly HarnessStep[]): HarnessSessionView {
 	const steps: HarnessStep[] =
 		step === "working"
 			? [...BEFORE_ASK]

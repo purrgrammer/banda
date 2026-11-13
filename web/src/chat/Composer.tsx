@@ -271,8 +271,8 @@ function MentionPicker({ members }: { members: readonly Who[] }) {
 		document.addEventListener("selectionchange", track);
 		return () => document.removeEventListener("selectionchange", track);
 	}, []);
-	const caret = caretNow();
-	const query = mentionQuery(textInput.value, caret);
+	// with no @ there is nothing to offer, so the field is read only once there is: a render never reaches for the DOM first
+	const query = textInput.value.includes("@") ? mentionQuery(textInput.value, caretNow()) : undefined;
 	const shown =
 		query === undefined || closed === textInput.value
 			? []

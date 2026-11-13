@@ -86,12 +86,17 @@ describe("untrusted avatar validation", () => {
 		expect(result.ok).toBe(false);
 		expect((await validateAvatarCandidate(JSON.stringify(getExample("chat")))).ok).toBe(true);
 	});
-	it("rejects empty paths even though upstream validation accepts them", async () => {
+	it("rejects empty paths before starting a worker", async () => {
 		const candidate = { ...getExample("chat"), body: { path: "" } };
 		expect(await validateAvatarCandidate(JSON.stringify(candidate))).toEqual({
 			ok: false,
 			errors: ["body.path must be a non-empty SVG path."],
 		});
+	});
+	it("refuses geometry too detailed to read back from an agent file", async () => {
+		const path = `M10 50${"c0-40 80-40 80 0c0 40-80 40-80 0".repeat(150)}`;
+		const result = await validateAvatarCandidate(JSON.stringify({ ...getExample("chat"), body: { path } }));
+		expect(result).toEqual({ ok: false, errors: ["body.path is too detailed: use fewer, simpler curves."] });
 	});
 	it("ends work when its deadline expires", async () => {
 		const result = await validateAvatarCandidate(JSON.stringify(getExample("chat")), 0);

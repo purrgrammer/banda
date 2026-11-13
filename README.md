@@ -19,6 +19,27 @@ sends, posts or can't be undone waits for your OK.
 | ![Mara's browser, live, reading Wikipedia's article on the Dom Luís I Bridge](docs/screenshots/browser.png) | ![A printable comparison page Otto made from Mara's research](docs/screenshots/page.png) |
 | You can watch its browser, take over, or stop it. | It makes pages and documents you can print and keep. |
 
+## What it does
+
+- **Agents, each a chat.** Give each one a face, a name and a personality. Put several in a group and they work together.
+- **A computer of its own.** Each agent browses, writes and runs code in its own container. Watch its browser live,
+  take over, or stop it.
+- **It asks before it acts.** Before anything that sends, posts or can't be undone, it shows you exactly what will
+  happen, and you say yes or no.
+- **Routines.** Agents wake on a schedule, in your time zone, and report back.
+- **Watches.** Ask an agent to follow a pull request, an inbox or a calendar. It wakes when something changes and
+  stays quiet when nothing matters.
+- **Connections.** GitHub, Slack, Gmail, Google Calendar, Google Drive, Google Contacts or any MCP server, for the
+  agents you pick. What they find comes into the chat as cards.
+- **Coding agents, over ACP.** banda speaks the Agent Client Protocol, so your agents can hand code work to any coding
+  agent that speaks it too, like those in the [ACP registry](https://github.com/agentclientprotocol/registry). It works
+  in your project folder, and when it asks for permission, the ask comes to you.
+- **Memory and skills.** Agents keep facts you can read, edit and delete, and use the skills you add.
+- **Pages and documents.** Agents make pages and documents you can print and keep.
+- **Your models.** Sign in with your account where the provider offers it, or paste an API key: Anthropic, OpenAI,
+  GitHub Copilot, OpenRouter, Google and more.
+- **Desktop and phone.** The app runs on macOS, Linux and Windows. An Android app pairs with it.
+
 > **Pre-release.** Expect rough edges and breaking changes, and run it on a machine you trust. The sandbox is not yet
 > hardened against hostile code or content ([open work](docs/README.md)).
 
