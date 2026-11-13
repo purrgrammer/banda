@@ -4,6 +4,7 @@
  * tests and the manual smoke run; nothing in the product uses it.
  */
 
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -23,6 +24,8 @@ export type Page = {
 	readonly goto: (url: string) => Promise<void>;
 	/** Native CDP input, for pointer, keyboard and touch acceptance checks. */
 	readonly input: (method: string, params: object) => Promise<unknown>;
+	/** Scroll to the current element, wait for stable geometry, then click once with native input. Never retry a failure. */
+	readonly click: (expression: string) => Promise<void>;
 	/** The page's uncaught exceptions and console errors so far. */
 	readonly errors: () => readonly string[];
 };
@@ -121,6 +124,88 @@ export async function withPage<T>(
 				}
 			},
 			input: (method, params) => send(method, params, sessionId),
+			click: async (expression) => {
+				const key = JSON.stringify(`banda-click-${randomUUID()}`);
+				try {
+					const point = await run<{ x: number; y: number }>(`new Promise((resolve, reject) => {
+						const find = () => (${expression});
+						const end = performance.now() + ${COMMAND_MS};
+						let previous, scrolled, stable = 0, reason = 'missing element';
+						const describe = el => el instanceof Element ? el.tagName + (el.id ? '#' + el.id : '') + ' ' + el.textContent.trim().slice(0, 80) : String(el);
+						const inspect = (el, x, y) => {
+							if (!(el instanceof Element) || !el.isConnected) return 'missing or disconnected element';
+							if (el.matches(':disabled, [aria-disabled="true"]') || el.closest('[inert], [aria-disabled="true"]')) return 'disabled element';
+							const rect = el.getBoundingClientRect();
+							if (rect.width <= 0 || rect.height <= 0 || rect.left < 0 || rect.top < 0 || rect.right > innerWidth || rect.bottom > innerHeight) return 'element outside viewport';
+							const hit = document.elementFromPoint(x, y);
+							if (!hit || !el.contains(hit)) return 'hit ' + describe(hit) + ' instead of ' + describe(el);
+						};
+						const sample = () => {
+							const el = find();
+							if (el instanceof Element && el.isConnected) {
+								if (el !== scrolled) {
+									el.scrollIntoView({block: 'center', inline: 'center'});
+									scrolled = el;
+								}
+								const rect = el.getBoundingClientRect();
+								const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
+								reason = inspect(el, x, y);
+								const geometry = [el, rect.x, rect.y, rect.width, rect.height];
+								stable = !reason && previous?.every((value, index) => value === geometry[index]) ? stable + 1 : 0;
+								previous = reason ? undefined : geometry;
+								if (stable >= 2) {
+									const events = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+									const state = {error: undefined, clicks: 0, remove: () => events.forEach(type => window.removeEventListener(type, guard, true))};
+									const guard = event => {
+										const current = find();
+										const problem = inspect(current, event.clientX, event.clientY);
+										if (state.error || problem || !current.contains(event.target)) {
+											state.error ??= event.type + ': ' + (problem ?? 'event targeted ' + describe(event.target));
+											event.preventDefault();
+											event.stopImmediatePropagation();
+										} else if (event.type === 'click') state.clicks++;
+									};
+									window[${key}] = state;
+									events.forEach(type => window.addEventListener(type, guard, true));
+									resolve({x, y});
+									return;
+								}
+							} else {
+								reason = 'missing or disconnected element';
+								previous = undefined;
+								stable = 0;
+							}
+							if (performance.now() >= end) reject(new Error('No stable click target: ' + (reason ?? 'element is moving')));
+							else requestAnimationFrame(sample);
+						};
+						requestAnimationFrame(sample);
+					})`);
+					try {
+						await page.input("Input.dispatchMouseEvent", {
+							type: "mousePressed",
+							button: "left",
+							clickCount: 1,
+							...point,
+						});
+					} finally {
+						await page.input("Input.dispatchMouseEvent", {
+							type: "mouseReleased",
+							button: "left",
+							clickCount: 1,
+							...point,
+						});
+					}
+					const result = await run<{ error?: string; clicks: number }>(
+						`({error: window[${key}].error, clicks: window[${key}].clicks})`,
+					);
+					if (result.error !== undefined || result.clicks !== 1)
+						throw new Error(
+							`Native click refused for ${expression}: ${result.error ?? `received ${result.clicks} clicks`}`,
+						);
+				} finally {
+					await run(`window[${key}]?.remove(); delete window[${key}]`);
+				}
+			},
 			shoot: async (file) => {
 				const { data } = await send<{ data: string }>("Page.captureScreenshot", { format: "png" }, sessionId);
 				await writeFile(file, Buffer.from(data, "base64"));

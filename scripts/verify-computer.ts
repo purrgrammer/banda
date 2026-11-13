@@ -313,22 +313,8 @@ try {
 					const button = `[...document.querySelectorAll('[data-open-ask] button')].find(el=>el.textContent.trim()===${JSON.stringify(decline)})`;
 					await page.until(`${button} && !${button}.disabled`);
 					await page.run(`${button}.scrollIntoView({block:'center'})`);
-					const point = await page.run<{ x: number; y: number }>(
-						`(()=>{const r=${button}.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()`,
-					);
 					await page.shoot(join(output, `computer-held-${width}.png`));
-					await page.input("Input.dispatchMouseEvent", {
-						type: "mousePressed",
-						button: "left",
-						clickCount: 1,
-						...point,
-					});
-					await page.input("Input.dispatchMouseEvent", {
-						type: "mouseReleased",
-						button: "left",
-						clickCount: 1,
-						...point,
-					});
+					await page.click(button);
 					await page.until("!document.querySelector('[data-open-ask]')");
 					const settled = AbortSignal.timeout(30_000);
 					for (;;) {
