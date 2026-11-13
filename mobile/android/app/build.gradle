@@ -48,6 +48,9 @@ android {
     packaging {
         // the iroh library is loaded by name (System.loadLibrary), so it is stored uncompressed and aligned
         jniLibs { useLegacyPackaging = false }
+        // iroh-android's jar also carries the desktop builds as JNA resources (for JVM unit tests on a computer);
+        // a phone never loads them. This only shapes the APK: the unit tests' classpath still has them.
+        resources { excludes += ['win32-*/**', 'darwin-*/**', 'linux-*/**'] }
     }
 }
 
