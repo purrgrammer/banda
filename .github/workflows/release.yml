@@ -15,6 +15,10 @@ on:
         description: Diagnose the owned Linux x64 startup abort; does not qualify or publish a release
         type: boolean
         default: false
+      public_delivery:
+        description: Verify the accepted alpha.12 public downloads and source/notice materials without rebuilding or publishing
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -25,7 +29,7 @@ concurrency:
 
 jobs:
   computer-images:
-    if: github.event_name == 'workflow_dispatch' && inputs.linux_start_diagnostic != true
+    if: github.event_name == 'workflow_dispatch' && inputs.linux_start_diagnostic != true && inputs.public_delivery != true
     strategy:
       fail-fast: false
       matrix:
@@ -155,7 +159,7 @@ jobs:
   # Java it needs). A tag's APK is signed with banda's key from the repository's secrets, so each release installs over
   # the one before; a manual run without the key uploads an unsigned APK, to try the build and nothing more.
   android:
-    if: github.event_name == 'workflow_dispatch' && inputs.linux_start_diagnostic != true
+    if: github.event_name == 'workflow_dispatch' && inputs.linux_start_diagnostic != true && inputs.public_delivery != true
     name: build (android-arm64)
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -241,7 +245,7 @@ jobs:
           path: release/banda-*-android-arm64*.apk
 
   linux-start-diagnostic:
-    if: github.event_name == 'workflow_dispatch' && inputs.linux_start_diagnostic
+    if: github.event_name == 'workflow_dispatch' && inputs.linux_start_diagnostic && inputs.public_delivery != true
     name: diagnose Linux x64 startup (not qualification)
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -293,8 +297,41 @@ jobs:
           path: ${{ runner.temp }}/native-start-diagnostic
           if-no-files-found: ignore
 
+  public-delivery:
+    if: github.event_name == 'workflow_dispatch' && inputs.public_delivery
+    name: verify accepted alpha.12 public delivery
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Verify the checkers without network requests
+        run: |
+          env -i PATH="$PATH" node scripts/verify-public-delivery.test.mjs
+          env -i PATH="$PATH" python3 scripts/verify-public-delivery-consumer.test.py
+      - name: GET and hash all 15 accepted public release assets
+        run: env -i PATH="$PATH" node scripts/verify-public-delivery.mjs --out "$GITHUB_WORKSPACE/scripts/public-delivery-download" --run
+      - name: Reconstruct the accepted sources and verify notice origins
+        run: env -i PATH="$PATH" python3 scripts/verify-public-delivery-consumer.py --delivery "$GITHUB_WORKSPACE/scripts/public-delivery-download" --out "$GITHUB_WORKSPACE/scripts/public-delivery-consumer"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: public-delivery-alpha12-evidence
+          if-no-files-found: ignore
+          path: |
+            scripts/public-delivery-download/result.json
+            scripts/public-delivery-consumer/result.json
+            scripts/public-delivery-consumer/source.log
+            scripts/public-delivery-consumer/notices.log
+
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && inputs.public_delivery != true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
