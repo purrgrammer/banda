@@ -1,12 +1,13 @@
 /**
- * Custom providers (`../../core/custom-providers.ts`): the owner adds, edits and removes them here, and checks one when
- * they say so. Saving never reaches the endpoint; a check is one short request, asked for by name, to the address it
- * shows. The key goes to the provider credentials (`auth/providers.json`) and never comes back out; the definition
- * goes to `<home>/custom-providers.json`, and the tiers the owner chose for it to the companion's choice of models, as
- * any provider's own models do.
+ * Servers of the owner's (`../../core/custom-providers.ts`): added, edited and removed here; listed (the models the
+ * server says it has) and checked (one short answer from it) only when the owner asks. Saving never reaches the server
+ * and uses nothing: a new one starts on the model the owner picked, on every tier, and the band thinks with it only
+ * once they pick Use. The key goes to the provider credentials (`auth/providers.json`) and never comes back out; the
+ * definition goes to `<home>/custom-providers.json`, and its tiers to the companion's choice of models, as any
+ * provider's own models do.
  *
- * A provider the band thinks with, or that an agent's file or a chat still runs on, is not removed, nor a model of it
- * one still runs on, until the owner moves them: nothing switches to another model on its own.
+ * A server the band thinks with, or that an agent's file or a chat still runs on, is not removed, nor a model of it one
+ * still runs on, until the owner moves them: nothing switches to another model on its own.
  */
 import { AgentDoc, type ConversationId, LiveDoc } from "@earendil-works/pi-durable";
 import { Accepted, ChatTier, parseAgent } from "../../core/agents.ts";

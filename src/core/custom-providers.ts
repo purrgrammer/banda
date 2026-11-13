@@ -1,9 +1,10 @@
 /**
- * Custom providers (DESIGN.md "How hard it thinks is three words"): an endpoint the owner names that speaks OpenAI's
- * chat completions, hosted or on a computer of their own, with the models they declare by hand. pi-ai has no loader for
- * such a provider; banda owns its definition, `<home>/custom-providers.json`, outside the box and the store, written
- * only through the owner's API (`../server/routes/custom-providers.ts`) and checked against `./custom-provider.ts`'s
- * schema on every read. Its key, if it takes one, is a provider credential like any other (`./provider-credentials.ts`).
+ * Servers of the owner's (DESIGN.md "Every provider pi-ai supports is offered, and a server of the owner's"): an address
+ * they name, hosted or on a computer of their own, that speaks one of pi-ai's adapters (`CUSTOM_APIS`), with the models
+ * it listed or they added, each saying where its facts came from. pi-ai has no loader for such a provider; banda owns
+ * its definition, `<home>/custom-providers.json`, outside the box and the store, written only through the owner's API
+ * (`../server/routes/custom-providers.ts`) and checked against `./custom-provider.ts`'s schema on every read. Its key,
+ * if it takes one, is a provider credential like any other (`./provider-credentials.ts`).
  *
  * Plain data and rules, shared with the web, which says the same things before the daemon refuses them.
  */
