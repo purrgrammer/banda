@@ -5,9 +5,9 @@
  * from anyone's words; a card whose artifact left the Library says so. A message showing a version its own run's
  * publish already drew draws no second card (`once`).
  */
-import type { ArtifactKind, ArtifactView } from "../../../../src/server/api.ts";
+import type { ArtifactKind, ArtifactView, Item } from "../../../../src/server/api.ts";
 import type { Segment } from "../chat.ts";
-import type { FeedState } from "../feed.ts";
+import { type FeedState, startsRun } from "../feed.ts";
 import type { Segmenter } from "./types.ts";
 
 /** An artifact's card: the version a call published, or one the owner made, once the Library knows it. */
@@ -66,26 +66,29 @@ export function artifactLine(segment: ArtifactSegment): { state: FeedState; text
 	};
 }
 
-/** What starts a run: an input to the chat (the owner's words or version, another agent's message, a wake, a change). */
-const INPUTS: ReadonlySet<Segment["kind"]> = new Set<Segment["kind"]>([
-	"owner",
-	"owner-message",
-	"agentMessage",
-	"wake",
-	"watch",
-]);
-
 /**
  * Each artifact once per run (DESIGN.md "Messages"): a card a message shows again is left out when a publish of the
- * same run, since the chat's last input, already drew that very version (its id and n, both from the store). Another
- * version, or the same one in a later run, is shown on purpose: it stays.
+ * same run already drew that very version (its id and n, both from the store). Another version, or the same one in a
+ * later run, is shown on purpose: it stays. A card's run is that of the entry whose call made it (its key's first
+ * part), counted from the items as `feed.ts` counts runs, so an answer typed to a question goes on with its run.
  */
-function once(segments: readonly Segment[]): Segment[] {
+function once(segments: readonly Segment[], items: readonly Item[]): Segment[] {
+	const runs = new Map<number, number>();
+	let run = 0;
+	for (const item of items) {
+		if (startsRun(item)) run = item.id;
+		runs.set(item.id, run);
+	}
 	const drawn = new Set<string>();
 	return segments.filter((segment) => {
-		if (INPUTS.has(segment.kind) || (segment.kind === "artifact" && segment.by === "owner")) drawn.clear();
-		if (segment.kind !== "artifact" || segment.id === undefined || segment.n === undefined) return true;
-		const version = `${segment.id}:${segment.n}`;
+		if (
+			segment.kind !== "artifact" ||
+			segment.by !== "companion" ||
+			segment.id === undefined ||
+			segment.n === undefined
+		)
+			return true;
+		const version = `${runs.get(Number(segment.key.slice(0, segment.key.indexOf(":"))))}:${segment.id}:${segment.n}`;
 		if (segment.shown === true) return !drawn.has(version);
 		if (segment.call !== undefined) drawn.add(version);
 		return true;
@@ -181,7 +184,7 @@ export const artifacts: Segmenter = {
 			}
 			return segment;
 		});
-		return once(cards);
+		return once(cards, items);
 	},
 	shown: (segment) =>
 		segment.kind !== "artifact"

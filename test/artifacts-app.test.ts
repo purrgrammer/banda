@@ -182,6 +182,35 @@ describe("artifacts in the app", () => {
 			"a1:1",
 			"a1:1 again",
 		]);
+		const told: Item = { id: 4, role: "agentMessage", from: "writer", text: "Look at it again", at: 4 };
+		expect(cards([asked(1), ...publish(2, "p1"), told, ...show(5, "s1", [{ id: "a1", n: 1 }])])).toEqual([
+			"a1:1",
+			"a1:1 again",
+		]);
+		// the owner's words answering its question are that call's result, drawn on their side: the run goes on
+		const answered: Item[] = [
+			{
+				id: 4,
+				role: "assistant",
+				text: "",
+				at: 4,
+				calls: [{ id: "q1", name: "ask_user", args: { question: "Good?" } }],
+			},
+			{
+				id: 5,
+				role: "wait",
+				call: "q1",
+				ask: { type: "question", question: "Good?" },
+				outcome: "answered",
+				answer: "yes",
+				message: "m1",
+				at: 5,
+			},
+			{ id: 6, role: "tool", call: "q1", name: "ask_user", text: "yes", error: false, at: 6 },
+		];
+		expect(cards([asked(1), ...publish(2, "p1"), ...answered, ...show(7, "s1", [{ id: "a1", n: 1 }])])).toEqual([
+			"a1:1",
+		]);
 		// an older version than the run published: not the card it drew
 		expect(cards([asked(1), ...publish(2, "p2"), ...show(4, "s1", [{ id: "a1", n: 1 }])])).toEqual([
 			"a1:2",

@@ -93,7 +93,6 @@ async function daemon() {
 			async () => asked > before && (await api<ChatRow[]>("/chats")).find((row) => row.chat === chat)?.state === "idle",
 		);
 	};
-	/** The chat's artifact cards, as the app draws them from the transcript and the Library. */
 	/**
 	 * The chat's artifact cards, as the app draws them from the transcript and the Library: from the live tail (the
 	 * items after the newest the app already had, as the stream appends them) and from history (the newest page a
