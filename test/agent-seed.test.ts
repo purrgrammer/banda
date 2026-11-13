@@ -1,12 +1,13 @@
 /** The accepted agent files reach a new box: nothing the daemon never wrote there is offered as the box's removal. */
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createRegistry } from "@earendil-works/pi-durable";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { openBox } from "../src/box/box.ts";
 import { Accepted, agentPath, LEAD_TEXT } from "../src/core/agents.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
+import { AgentPublications } from "../src/server/agent-publication.ts";
 import { accept, agents, save, seed, type Workspace } from "../src/server/agents.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { blobStore, echoModels, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
@@ -142,18 +143,24 @@ describe("seeding a new box with the accepted agents", () => {
 			);
 			await seed(harness, workspace);
 			await rm(join(workspace.root, "agents"), { recursive: true });
-			const env = workspace.env();
-			const write = env.writeFile.bind(env);
 			let failed = false;
-			vi.spyOn(env, "writeFile").mockImplementation(async (path, content, ctx) => {
-				if (typeof content === "string" && content.includes("Be practical.") && !failed) {
-					failed = true;
-					if (point === "partial") await write(path, content.slice(0, 4), ctx);
-					throw new Error("restoration interrupted");
-				}
-				return write(path, content, ctx);
-			});
-			const interrupted: Workspace = { ...workspace, env: () => env };
+			const interrupted: Workspace = {
+				...workspace,
+				publicationPoint: async (boundary) => {
+					if (boundary === (point === "partial" ? "agent:stage:after" : "agent:stage:before") && !failed) {
+						failed = true;
+						if (point === "partial") {
+							const doc = await harness.snapshot(AgentPublications, context);
+							const latest = Math.max(...Object.values(doc?.current ?? {}));
+							const folder = join(workspace.root, "agents/.banda-publications", String(latest));
+							const attempt = (await readdir(folder)).find((name) => name.startsWith("attempt-"));
+							if (attempt === undefined) throw new Error("missing stage");
+							await writeFile(join(folder, attempt, "owner"), "---\n");
+						}
+						throw new Error("restoration interrupted");
+					}
+				},
+			};
 			await expect(seed(harness, interrupted)).rejects.toThrow("restoration interrupted");
 			expect((await agents(harness, workspace)).every((row) => row.change === undefined)).toBe(true);
 			await seed(harness, interrupted);

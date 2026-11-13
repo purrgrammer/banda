@@ -22,6 +22,14 @@ import {
 import { sizeOf } from "../core/blobs.ts";
 
 import { context } from "../core/store.ts";
+import {
+	type AgentPublicationPoint,
+	agentPublicationView,
+	finishAgentPublication,
+	queueAgentPublication,
+	recoverAgentPublications,
+	supersedeAgentPublication,
+} from "./agent-publication.ts";
 import type { AgentView } from "./api.ts";
 import { BadRequest } from "./http.ts";
 
@@ -33,6 +41,7 @@ export type Workspace = {
 	readonly tools: () => readonly string[];
 	/** Whether the daemon knows a model. */
 	readonly known: (model: ModelRef) => boolean;
+	readonly publicationPoint?: (point: AgentPublicationPoint) => void | Promise<void>;
 };
 
 /** Reconcile chats in the same commit that changes which definition is accepted. */
@@ -138,41 +147,50 @@ const view = (workspace: Workspace, name: string, file: AcceptedFile) => {
 export async function agents(harness: Harness, workspace: Workspace, ctx: Context = context): Promise<AgentView[]> {
 	const doc = await harness.snapshot(Accepted, ctx);
 	const accepted = doc?.files ?? {};
-	const { files: boxed } = await boxFiles(workspace, ctx);
+	let available = true;
+	const { files: boxed } = await boxFiles(workspace, ctx).catch(() => {
+		available = false;
+		return { files: new Map<string, Read>() };
+	});
 	const names = new Set([
 		...Object.keys(accepted).flatMap((path) => /^agents\/(.+)\.md$/.exec(path)?.slice(1) ?? []),
 		...boxed.keys(),
 	]);
-	const rows = [...names].map((name): AgentView => {
-		const file = accepted[agentPath(name)];
-		const box = boxed.get(name);
-		const change =
-			box === undefined
-				? file === undefined || doc?.seeded !== true
-					? undefined
-					: ({ kind: "removed" } as const)
-				: "unreadable" in box
-					? ({
-							kind: file === undefined ? "added" : "changed",
-							errors: [`agents/${name}.md: ${box.unreadable}`],
-						} as const)
-					: shaOf(box.text) === file?.sha
+	const rows = await Promise.all(
+		[...names].map(async (name): Promise<AgentView> => {
+			const file = accepted[agentPath(name)];
+			const box = boxed.get(name);
+			const change = !available
+				? undefined
+				: box === undefined
+					? file === undefined || doc?.seeded !== true
 						? undefined
-						: (() => {
-								const parsed = check(workspace, name, box.text);
-								return {
-									kind: file === undefined ? ("added" as const) : ("changed" as const),
-									sha: shaOf(box.text),
-									text: box.text,
-									...("errors" in parsed ? { errors: parsed.errors } : { agent: parsed.agent }),
-								};
-							})();
-		return {
-			name,
-			...(file === undefined ? {} : { accepted: view(workspace, name, file) }),
-			...(change === undefined ? {} : { change }),
-		};
-	});
+						: ({ kind: "removed" } as const)
+					: "unreadable" in box
+						? ({
+								kind: file === undefined ? "added" : "changed",
+								errors: [`agents/${name}.md: ${box.unreadable}`],
+							} as const)
+						: shaOf(box.text) === file?.sha
+							? undefined
+							: (() => {
+									const parsed = check(workspace, name, box.text);
+									return {
+										kind: file === undefined ? ("added" as const) : ("changed" as const),
+										sha: shaOf(box.text),
+										text: box.text,
+										...("errors" in parsed ? { errors: parsed.errors } : { agent: parsed.agent }),
+									};
+								})();
+			const publication = await agentPublicationView(harness, workspace, name, ctx);
+			return {
+				name,
+				...(file === undefined ? {} : { accepted: view(workspace, name, file) }),
+				...(change === undefined ? {} : { change }),
+				...(publication === undefined ? {} : { publication }),
+			};
+		}),
+	);
 	return rows.sort((a, b) => (a.name === LEAD ? -1 : b.name === LEAD ? 1 : a.name.localeCompare(b.name)));
 }
 
@@ -188,6 +206,7 @@ export async function accept(
 	changed: AgentChanged,
 	ctx: Context = context,
 ): Promise<AgentView[]> {
+	const base = (await harness.snapshot(Accepted, ctx))?.files[agentPath(name)]?.sha ?? null;
 	const box = (await boxFiles(workspace, ctx)).files.get(name);
 	if (sha === null) {
 		if (name === LEAD)
@@ -196,7 +215,10 @@ export async function accept(
 		if ((await harness.snapshot(Accepted, ctx))?.seeded !== true)
 			throw new BadRequest(`agents/${name}.md is not in the box yet: the daemon writes it there first`, 409);
 		await harness.commit(async (tx) => {
+			if (((await tx.doc(Accepted)).files[agentPath(name)]?.sha ?? null) !== base)
+				throw new BadRequest(`agents/${name}.md changed since you saw it: look again`, 409);
 			await keepOneActive(tx, name, undefined);
+			await supersedeAgentPublication(tx, name);
 			await unaccept(tx, agentPath(name), Date.now());
 			await changed(tx, name);
 		}, ctx);
@@ -207,7 +229,10 @@ export async function accept(
 	const parsed = check(workspace, name, box.text);
 	if ("errors" in parsed) throw new BadRequest(parsed.errors.join("\n"));
 	await harness.commit(async (tx) => {
+		if (((await tx.doc(Accepted)).files[agentPath(name)]?.sha ?? null) !== base)
+			throw new BadRequest(`agents/${name}.md changed since you saw it: look again`, 409);
 		await keepOneActive(tx, name, box.text);
+		await supersedeAgentPublication(tx, name);
 		(await tx.doc(Accepted)).files[agentPath(name)] = { sha, text: box.text, at: Date.now() };
 		await changed(tx, name);
 	}, ctx);
@@ -220,23 +245,48 @@ export async function decline(
 	workspace: Workspace,
 	name: string,
 	ctx: Context = context,
+	reviewedSha?: string | null,
+	expectedId?: string,
 ): Promise<AgentView[]> {
 	if (!AGENT_NAME.test(name)) throw new BadRequest(`"${name}" is not an agent name`);
 	const file = (await harness.snapshot(Accepted, ctx))?.files[agentPath(name)];
-	const env = workspace.env();
-	const path = `${dirOf(workspace)}/${name}.md`;
-	if (file === undefined) {
-		const removed = await env.remove(path, { force: true }, ctx);
-		if (!removed.ok) throw removed.error;
-	} else await write(env, workspace, path, file.text, ctx);
+	const box = (await boxFiles(workspace, ctx)).files.get(name);
+	const workingBase = box === undefined ? null : "text" in box ? shaOf(box.text) : "unreadable";
+	if (reviewedSha !== undefined && reviewedSha !== workingBase)
+		throw new BadRequest(`agents/${name}.md changed since you saw it: look again`, 409);
+	await harness.commit(async (tx) => {
+		await queueAgentPublication(tx, {
+			name,
+			file: file ?? null,
+			base: file?.sha ?? null,
+			workingBase,
+			...(expectedId === undefined ? {} : { expectedId }),
+		});
+	}, ctx);
+	await finishAgentPublication(harness, workspace, name, ctx);
 	return agents(harness, workspace, ctx);
+}
+
+export async function retryPublication(
+	harness: Harness,
+	workspace: Workspace,
+	name: string,
+	id: string,
+	boxSha: string | null,
+	ctx: Context = context,
+): Promise<AgentView[]> {
+	if (!AGENT_NAME.test(name)) throw new BadRequest(`"${name}" is not an agent name`);
+	const publication = await agentPublicationView(harness, workspace, name, ctx);
+	if (publication?.id !== id) throw new BadRequest("This change was updated. Review it again.", 409);
+	return decline(harness, workspace, name, ctx, boxSha, id);
 }
 
 /**
  * Save the owner's own text for agent `name`, in effect at once, as the owner wrote it. `base` is the accepted hash the
  * owner edited (null for a new agent); a file the box or another save changed since is refused, so nothing is lost.
  * A new agent (`base` null) with no accepted file may still supersede an unaccepted proposal the box wrote: the owner
- * reviewed it, and their version, written and accepted together, takes the box file's place.
+ * reviewed it. Acceptance and publication intent commit together. A recoverable publication then updates the box,
+ * retaining displaced files and reporting a conflict when another writer arrived.
  */
 export async function save(
 	harness: Harness,
@@ -260,14 +310,14 @@ export async function save(
 		// no accepted file: the box may hold an unaccepted proposal, which the owner's reviewed version supersedes
 	} else if ((accepted?.sha ?? null) !== base || boxSha !== base)
 		throw new BadRequest(`agents/${name}.md changed since you opened it: copy your text, and look again`, 409);
-	// refused before the box is written: a file the store would not take never reaches it
-	await harness.commit((tx) => keepOneActive(tx, name, text), ctx);
-	await write(workspace.env(), workspace, `${dirOf(workspace)}/${name}.md`, text, ctx);
 	await harness.commit(async (tx) => {
 		await keepOneActive(tx, name, text);
-		(await tx.doc(Accepted)).files[agentPath(name)] = { sha: shaOf(text), text, at: Date.now() };
+		const file = { sha: shaOf(text), text, at: Date.now() };
+		await queueAgentPublication(tx, { name, file, base, workingBase: boxSha });
+		(await tx.doc(Accepted)).files[agentPath(name)] = file;
 		await changed(tx, name);
 	}, ctx);
+	await finishAgentPublication(harness, workspace, name, ctx);
 	return agents(harness, workspace, ctx);
 }
 
@@ -279,6 +329,7 @@ export async function save(
  */
 export async function seed(harness: Harness, workspace: Workspace, ctx: Context = context): Promise<void> {
 	const env = workspace.env();
+	await recoverAgentPublications(harness, workspace, ctx);
 	// The first owner edit can arrive before a chat starts and initializes the accepted definition.
 	let doc = await harness.snapshot(Accepted, ctx);
 	if (doc === undefined) {
@@ -298,27 +349,16 @@ export async function seed(harness: Harness, workspace: Workspace, ctx: Context 
 	const { files: boxed } = await boxFiles(workspace, ctx);
 	for (const [path, file] of Object.entries(doc?.files ?? {})) {
 		const name = /^agents\/(.+)\.md$/.exec(path)?.[1];
-		if (name !== undefined && !boxed.has(name)) await seedFile(env, workspace, path, file.text, ctx);
+		if (name !== undefined && !boxed.has(name)) {
+			await harness.commit(async (tx) => {
+				await queueAgentPublication(tx, { name, file, base: file.sha, workingBase: null });
+			}, ctx);
+			await finishAgentPublication(harness, workspace, name, ctx);
+		}
 	}
 	await harness.commit(async (tx) => {
 		(await tx.doc(Accepted)).seeded = true;
 	}, ctx);
-}
-
-async function seedFile(env: ExecutionEnv, workspace: Workspace, path: string, text: string, ctx: Context) {
-	const temporary = `${workspace.root}/.banda-seed-${shaOf(`${path}\0${text}`)}.tmp`;
-	try {
-		await write(env, workspace, temporary, text, ctx);
-		const flushed = await env.flushFile(temporary, ctx);
-		if (!flushed.ok) throw flushed.error;
-		const target = `${workspace.root}/${path}`;
-		const made = await env.createDir(posix.dirname(target), { recursive: true }, ctx);
-		if (!made.ok) throw made.error;
-		const published = await env.renameFile(temporary, target, ctx);
-		if (!published.ok) throw published.error;
-	} finally {
-		await env.remove(temporary, { force: true }, ctx);
-	}
 }
 
 /** Write a workspace file, its folder made first. */

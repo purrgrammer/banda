@@ -18,6 +18,7 @@ artifactName: banda-${version}-${os}-${arch}.${ext}
 publish: null
 mac:
   category: public.app-category.productivity
+  minimumSystemVersion: "14.0"
   # scripts/desktop-icons.ts draws it: the face alone, as large as the canvas allows
   icon: build/icon-mac.png
   target: [dmg, zip]

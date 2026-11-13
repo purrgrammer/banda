@@ -7,6 +7,7 @@ import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { Value } from "typebox/value";
 import { Accepted, shaOf } from "../../src/core/agents.ts";
 import { context, openStore } from "../../src/core/store.ts";
+import { AGENT_PUBLICATION_POINTS } from "../../src/server/agent-publication.ts";
 import { agents, seed, type Workspace } from "../../src/server/agents.ts";
 import { echoModels } from "../fixtures/models.ts";
 import { Faults, InjectedFault } from "./faults.ts";
@@ -20,13 +21,7 @@ const Schedule = Type.Array(
 		point: Type.Union([
 			Type.Literal("commit:before"),
 			Type.Literal("commit:after"),
-			Type.Literal("agent:write:before"),
-			Type.Literal("agent:write:after"),
-			Type.Literal("agent:write:partial"),
-			Type.Literal("agent:rename:before"),
-			Type.Literal("agent:rename:after"),
-			Type.Literal("agent:flush:before"),
-			Type.Literal("agent:flush:after"),
+			...AGENT_PUBLICATION_POINTS.map((point) => Type.Literal(point)),
 		]),
 		hit: Type.Integer({ minimum: 1 }),
 		kind: Type.Union([Type.Literal("kill"), Type.Literal("error")]),
@@ -49,34 +44,15 @@ const wrapStorage = (storage: Storage): Storage => {
 };
 const root = join(home, "workspace");
 const env = new NodeExecutionEnv({ cwd: home });
-const write = env.writeFile.bind(env);
-env.writeFile = async (...args) => {
-	if (armed) faults.hit("agent:write:before");
-	if (armed) {
-		const [path, content, ctx] = args;
-		const partial = await write(path, content.slice(0, 4), ctx);
-		if (!partial.ok) return partial;
-		faults.hit("agent:write:partial");
-	}
-	const result = await write(...args);
-	if (armed) faults.hit("agent:write:after");
-	return result;
+const workspace: Workspace = {
+	root,
+	env: () => env,
+	tools: () => [],
+	known: () => true,
+	publicationPoint: (point) => {
+		if (armed) faults.hit(point);
+	},
 };
-const rename = env.renameFile.bind(env);
-env.renameFile = async (...args) => {
-	if (armed) faults.hit("agent:rename:before");
-	const result = await rename(...args);
-	if (armed) faults.hit("agent:rename:after");
-	return result;
-};
-const flush = env.flushFile.bind(env);
-env.flushFile = async (...args) => {
-	if (armed) faults.hit("agent:flush:before");
-	const result = await flush(...args);
-	if (armed) faults.hit("agent:flush:after");
-	return result;
-};
-const workspace: Workspace = { root, env: () => env, tools: () => [], known: () => true };
 const open = () => openStore(home, { models: echoModels().models, registry: createRegistry(), wrapStorage });
 let harness = await open();
 try {
@@ -120,6 +96,7 @@ try {
 			seeded: accepted?.seeded === true,
 			changes: (await agents(harness, workspace)).filter((row) => row.change !== undefined).length,
 			commits: faults.hits("commit:after"),
+			points: Object.fromEntries(AGENT_PUBLICATION_POINTS.map((point) => [point, faults.hits(point)])),
 		}),
 	);
 } finally {

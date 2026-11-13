@@ -169,7 +169,7 @@ function ChangeLine({ who, segment }: { who: Who; segment: Extract<Segment, { ki
 					)
 				}
 				onKeep={() =>
-					void attempt("keep it as it is", () => answerAgent(name, false, null)).then(
+					void attempt("keep it as it is", () => answerAgent(name, false, removed ? null : (change.sha ?? null))).then(
 						(done) => done && showAgents(done),
 					)
 				}

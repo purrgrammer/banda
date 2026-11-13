@@ -107,9 +107,8 @@ function withFace(text: string, face: AvatarFace): string {
 }
 
 /**
- * Change the companion as the owner picked. Face and personality are written into the lead's accepted agent file,
- * before the rest is stored: a box that cannot take it stores nothing. New
- * chats start with what is stored; existing chats receive it at their next safe model boundary.
+ * Face and personality use the lead's accepted definition and recoverable workspace publication. Other picks are
+ * stored afterward. Existing chats receive accepted instructions at their next safe model boundary.
  */
 export async function change(
 	harness: Harness,

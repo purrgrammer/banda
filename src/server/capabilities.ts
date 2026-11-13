@@ -142,7 +142,8 @@ import {
 } from "../core/tool-kinds.ts";
 import { liveWaits, TasksOf } from "../core/wait.ts";
 import { endWatches } from "../core/watches.ts";
-import { type AgentChanged, boxFiles, type Workspace, write } from "./agents.ts";
+import { finishAgentPublication, queueAgentPublication } from "./agent-publication.ts";
+import { type AgentChanged, boxFiles, type Workspace } from "./agents.ts";
 import type {
 	AccountView,
 	CapabilitiesView,
@@ -1912,7 +1913,8 @@ export function openCapabilities(options: CapabilityOptions) {
 	 * The owner switches account `account` of connection `name` on or off for agent `agent`, in effect at once: its idle
 	 * chats get or lose the tools now, a busy one after its run, and a call or a draft waiting on the owner is checked
 	 * again as it starts. Switched on for an agent whose file does not name the connection, the file is rewritten to name
-	 * it (the owner's edit, written and accepted together); with a change of the agent's own waiting, that is refused.
+	 * it. Acceptance and the account switch commit with durable publication intent; the workspace update follows,
+	 * preserving competing edits. A change of the agent's own waiting is refused before that commit.
 	 */
 	async function switchAccount(
 		agent: string,
@@ -1941,6 +1943,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		}, ctx);
 		if ("refused" in plan) throw new BadRequest(plan.refused as string, 404);
 		let rewritten: string | undefined;
+		let workingBase: string | null = null;
 		if (plan.text !== undefined) {
 			const parsed = parseAgent(agent, plan.text);
 			const named = "agent" in parsed ? [...(parsed.agent.connections ?? []), name] : [name];
@@ -1951,9 +1954,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			const box = (await boxFiles(workspace, ctx)).files.get(agent);
 			if (box === undefined || "unreadable" in box || (box.text !== plan.text && box.text !== rewritten))
 				throw new BadRequest("it proposes a change to its own file: allow or decline that first", 409);
-			if (box.text !== rewritten)
-				await write(workspace.env(), workspace, `${workspace.root}/${agentPath(agent)}`, rewritten, ctx);
-			fault("account:file");
+			workingBase = shaOf(box.text);
 		}
 		const refused = await harness.commit(async (tx) => {
 			if (expectedConnection !== undefined && (await acceptedConnection(tx, name))?.version !== expectedConnection)
@@ -1961,12 +1962,18 @@ export function openCapabilities(options: CapabilityOptions) {
 			if (rewritten !== undefined) {
 				const accepted = (await tx.doc(Accepted)).files;
 				if (accepted[agentPath(agent)]?.sha !== plan.sha) return "its file changed meanwhile: look again";
-				accepted[agentPath(agent)] = { sha: shaOf(rewritten), text: rewritten, at: now() };
+				const file = { sha: shaOf(rewritten), text: rewritten, at: now() };
+				await queueAgentPublication(tx, { name: agent, file, base: plan.sha ?? null, workingBase });
+				accepted[agentPath(agent)] = file;
 			}
 			return turn(tx, agent, name, account, on);
 		}, ctx);
 		if (refused !== undefined) throw new BadRequest(refused, 409);
 		fault("account:switched");
+		if (rewritten !== undefined) {
+			await finishAgentPublication(harness, workspace, agent, ctx);
+			fault("account:file");
+		}
 		await install(ctx);
 		options.changed?.();
 	}

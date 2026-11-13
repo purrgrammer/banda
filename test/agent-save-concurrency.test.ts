@@ -1,10 +1,5 @@
-/**
- * Known publication blockers, not passing durability claims. The expected-failure cases assert the required
- * invariant; remove `.fails` only once store acceptance and every box publisher share a crash-safe protocol.
- */
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { describe, expect, it } from "vitest";
 import { Accepted, agentPath, shaOf } from "../src/core/agents.ts";
 import { context } from "../src/core/store.ts";
@@ -21,37 +16,29 @@ const latch = () => {
 	return { promise, resolve };
 };
 
-/** Pause a particular publication after its snapshot checks, before its filesystem effect. */
-function pausedWrite(workspace: Workspace, text: string) {
+/** Pause after acceptance, before staged filesystem publication. */
+function pausedWrite(workspace: Workspace) {
 	const entered = latch();
 	const release = latch();
-	const env = workspace.env();
-	const proxy = new Proxy(env, {
-		get(target, key) {
-			if (key === "writeFile") {
-				const write: ExecutionEnv["writeFile"] = async (path, content, ctx) => {
-					if (content === text) {
-						entered.resolve();
-						await release.promise;
-					}
-					return target.writeFile(path, content, ctx);
-				};
-				return write;
+	const paused: Workspace = {
+		...workspace,
+		publicationPoint: async (point) => {
+			if (point === "agent:stage:before") {
+				entered.resolve();
+				await release.promise;
 			}
-			const value = Reflect.get(target, key, target) as unknown;
-			return typeof value === "function" ? value.bind(target) : value;
 		},
-	});
-	return { workspace: { ...workspace, env: () => proxy }, entered: entered.promise, release: release.resolve };
+	};
+	return { workspace: paused, entered: entered.promise, release: release.resolve };
 }
 
-describe("agent publication blockers", () => {
-	it.fails("two tabs saving the same base: only one succeeds and its bytes stay accepted and published", async () => {
+describe("agent publication concurrency", () => {
+	it("two tabs saving the same base: only one succeeds and its bytes stay accepted and published", async () => {
 		const { harness, workspace, accepted } = await agentSaveScenario(await tempHome());
 		const original = await accepted();
 		const first = `${original.text}\nFirst tab's personality.\n`;
 		const second = `${original.text}\nSecond tab's personality.\n`;
-		const pause = pausedWrite(workspace, first);
+		const pause = pausedWrite(workspace);
 		let saving: Promise<unknown> | undefined;
 		try {
 			// Settled immediately to avoid an unhandled rejection if the corrected implementation rejects this save.
@@ -71,12 +58,12 @@ describe("agent publication blockers", () => {
 		}
 	});
 
-	it.fails("a box proposal accepted during owner publication cannot be overwritten by the stale owner save", async () => {
+	it("a box proposal accepted during owner publication cannot be overwritten by the stale owner save", async () => {
 		const { harness, workspace, accepted } = await agentSaveScenario(await tempHome());
 		const original = await accepted();
 		const owner = `${original.text}\nOwner edit.\n`;
 		const proposal = `${original.text}\nAccepted box edit.\n`;
-		const pause = pausedWrite(workspace, owner);
+		const pause = pausedWrite(workspace);
 		let saving: Promise<unknown> | undefined;
 		try {
 			saving = Promise.allSettled([save(harness, pause.workspace, "sancho", owner, original.sha, changed)]);
@@ -96,12 +83,12 @@ describe("agent publication blockers", () => {
 		}
 	});
 
-	it.fails("an independent accepted-file writer cannot be undone after the owner's snapshot checks", async () => {
+	it("an independent accepted-file writer cannot be undone after the owner's snapshot checks", async () => {
 		const { harness, workspace, accepted } = await agentSaveScenario(await tempHome());
 		const original = await accepted();
 		const owner = `${original.text}\nOwner edit.\n`;
 		const concurrent = `${original.text}\nIndependent acceptance.\n`;
-		const pause = pausedWrite(workspace, owner);
+		const pause = pausedWrite(workspace);
 		let saving: Promise<unknown> | undefined;
 		try {
 			saving = Promise.allSettled([save(harness, pause.workspace, "sancho", owner, original.sha, changed)]);

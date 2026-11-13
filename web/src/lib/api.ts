@@ -7,6 +7,7 @@
  */
 import type { Setting } from "../../../src/core/tool-kinds.ts";
 import type {
+	AgentPublicationHistory,
 	AgentView,
 	Answer,
 	Approving,
@@ -335,8 +336,14 @@ export const transcriptItem = (chat: number, item: number) => api<Item>(`/chats/
 export const answerAgent = (name: string, allow: boolean, sha: string | null) =>
 	api<AgentView[]>(`/agents/${name}/${allow ? "accept" : "decline"}`, {
 		method: "POST",
-		...(allow ? { body: JSON.stringify({ sha }) } : {}),
+		body: JSON.stringify({ sha }),
 	});
+
+export const agentPublications = (name: string, before?: number) =>
+	api<AgentPublicationHistory>(`/agents/${name}/publications${before === undefined ? "" : `?before=${before}`}`);
+
+export const retryAgentPublication = (name: string, id: string, sha: string | null) =>
+	api<AgentView[]>(`/agents/${name}/publication`, { method: "POST", body: JSON.stringify({ id, sha }) });
 
 /** Design a face from the owner's description, or from the agent's name alone: a validated candidate, stored nowhere. */
 export const designFace = async (description: string, name: string) =>

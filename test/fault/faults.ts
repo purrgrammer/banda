@@ -10,6 +10,7 @@ import type { Storage } from "@earendil-works/pi-durable";
 
 export type FaultPoint =
 	| import("../../src/server/remote.ts").KeyPoint
+	| import("../../src/server/agent-publication.ts").AgentPublicationPoint
 	| "commit:before"
 	| "commit:after"
 	| "send:before"

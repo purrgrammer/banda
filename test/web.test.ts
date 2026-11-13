@@ -16,7 +16,7 @@ import {
 	type MutableModels,
 } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { LEAD_TEXT } from "../src/core/agents.ts";
+import { LEAD_TEXT, shaOf } from "../src/core/agents.ts";
 import { writeAvatarFace } from "../src/core/avatar-face.ts";
 import { DEFAULT_FACE, DEFAULT_PERSONALITY, withPersonality } from "../src/core/choices.ts";
 import { MAX_MEMORY_CHARS } from "../src/core/memory.ts";
@@ -311,7 +311,7 @@ describe("web", () => {
 				send("/agents/reader/accept", { sha: (broken?.change as { sha?: string } | undefined)?.sha }),
 			).rejects.toThrow(/^400 /);
 			// declined, the accepted file is written back
-			await send("/agents/reader/decline", {});
+			await send("/agents/reader/decline", { sha: shaOf("---\ntools: [nope]\n---\n") });
 			expect(await readFile(join(dir, "reader.md"), "utf8")).toBe(text);
 			// a removal is accepted like any change; the lead's never is
 			await run("rm", [join(dir, "reader.md"), join(dir, "sancho.md")]);
@@ -320,7 +320,7 @@ describe("web", () => {
 				["reader", "removed"],
 			]);
 			await expect(send("/agents/sancho/accept", { sha: null })).rejects.toThrow(/^400 .*cannot be removed/);
-			await send("/agents/sancho/decline", {});
+			await send("/agents/sancho/decline", { sha: null });
 			expect((await send("/agents/reader/accept", { sha: null })).map((agent) => agent.name)).toEqual(["sancho"]);
 			// The owner's direct path saves only the reviewed preview and accepts those same bytes at once.
 			const planner = "---\nname: Mira\ndescription: Plans trips\ntier: balanced\ntools: [read]\n---\nBe practical.\n";

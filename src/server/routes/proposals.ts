@@ -4,6 +4,7 @@ import { Accepted, type Agent, agentPath, agentText, shaOf } from "../../core/ag
 import { editProposal, PROPOSAL_RESULT, type Proposal, Proposals, proposalSummary } from "../../core/proposals.ts";
 import { context } from "../../core/store.ts";
 import type { defineCore } from "../../core/turn.ts";
+import { supersedeAgentPublication } from "../agent-publication.ts";
 import { boxFiles, save, type Workspace } from "../agents.ts";
 import { BadRequest } from "../http.ts";
 import type { AreaModule } from "./area.ts";
@@ -158,6 +159,7 @@ async function accept(proposal: Proposal, harness: Harness, workspace: Workspace
 						409,
 					);
 				files.files[agentPath(name)] = { text, sha: shaOf(text), at: Date.now() };
+				await supersedeAgentPublication(tx, name);
 				await core.agentChanged(tx, name);
 				await finish(tx, proposal, "accepted", core);
 			}, context);

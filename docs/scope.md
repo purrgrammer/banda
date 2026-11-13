@@ -6,6 +6,7 @@ hiding features to obtain a passing release. Keep the one-daemon architecture an
 
 The desktop and CLI release targets are macOS on Apple silicon, Windows x64, and Linux x64 and ARM64.
 The phone release targets Android ARM64. Intel Macs are unsupported.
+The native Mac desktop requires macOS 14 or newer.
 
 ## Work
 

@@ -34,7 +34,7 @@ Follow [Delivery](delivery.md) and the relevant gates in [Verification](verifica
   so public download delivery remains separate.
 - [ ] Spike the Windows native computer's directory ACLs, local named-pipe permissions and VM mount isolation
   before selecting it in the desktop app. The current runtime ships Windows binaries and requires WHP;
-  the banda adapter is not qualified for Windows. macOS support requires Apple silicon.
+  the banda adapter is not qualified for Windows. The native Mac computer requires Apple silicon and macOS 14 or newer.
 
 Recheck these items against current code before implementation; an unchecked item is not a freshly verified
 defect. Remove it only when its fix and acceptance evidence are recorded in a commit.

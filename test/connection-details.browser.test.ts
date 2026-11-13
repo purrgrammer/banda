@@ -47,9 +47,14 @@ async function choosePermission(page: Page, tool: string, setting: string) {
 const switchOf = (agent: string) =>
 	`document.getElementById([...document.querySelectorAll('label')].find(el => el.textContent.trim() === ${JSON.stringify(agent)})?.htmlFor)`;
 
-for (const width of [390, 1440])
+for (const { width, delayed } of [
+	{ width: 390, delayed: false },
+	{ width: 1440, delayed: false },
+	{ width: 390, delayed: true },
+	{ width: 1440, delayed: true },
+])
 	it.skipIf(!hasChrome())(
-		`owner checks and changes a connection's details at ${width}`,
+		`owner checks and changes a connection's details at ${width}${delayed ? " with delayed route delivery" : ""}`,
 		async () => {
 			const home = await tempHome();
 			const fake = await startFakeMcp();
@@ -99,6 +104,30 @@ for (const width of [390, 1440])
 				if (!address || typeof address === "string") throw new Error("No app port");
 				const url = `http://127.0.0.1:${address.port}/#token=${token}`;
 				await withPage(url, { width, height: 900 }, async (page) => {
+					if (delayed) {
+						await page.input("Page.enable", {});
+						await page.input("Page.addScriptToEvaluateOnNewDocument", {
+							source: `(() => {
+								const add = window.addEventListener.bind(window);
+								const remove = window.removeEventListener.bind(window);
+								const wrapped = new Map();
+								window.delayedHashChanges = [];
+								window.addEventListener = (type, listener, options) => {
+									if (type !== 'hashchange') return add(type, listener, options);
+									const handler = event => {
+										const deliver = () => typeof listener === 'function' ? listener.call(window, event) : listener.handleEvent(event);
+										if (window.delayRoute && new URL(event.newURL).hash === '#/connections') window.delayedHashChanges.push(deliver);
+										else deliver();
+									};
+									wrapped.set(listener, handler);
+									return add(type, handler, options);
+								};
+								window.removeEventListener = (type, listener, options) => remove(type, type === 'hashchange' ? wrapped.get(listener) ?? listener : listener, options);
+							})()`,
+						});
+						await page.goto(url.replace("/#token=", "/?route_delivery=delayed#token="));
+						await page.until("Array.isArray(window.delayedHashChanges)");
+					}
 					await page.until(`document.body.textContent.includes('Sancho')`);
 					await page.run(`location.hash='#/connections?connection=${added.name}'`);
 					await page.until(`document.querySelector('[data-connection-details="${added.name}"]')`);
@@ -156,6 +185,7 @@ for (const width of [390, 1440])
 					);
 					expect((await view()).tools.find((tool) => tool.title === "archive_events")?.waiting).toBeUndefined();
 					// Remove, confirmed, takes it whole and comes back to the list
+					if (delayed) await page.run("window.delayRoute = true");
 					await page.run(
 						`[...document.querySelectorAll('button')].find(el => el.textContent.trim().startsWith('Remove ')).click()`,
 					);
@@ -163,6 +193,14 @@ for (const width of [390, 1440])
 					await page.run(
 						`[...document.querySelector('[role="alertdialog"]').querySelectorAll('button')].find(el => el.textContent.trim() === 'Remove').click()`,
 					);
+					if (delayed) {
+						await page.until("window.delayedHashChanges.length > 0");
+						await page.run("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+						await page.run(`(() => {
+							window.delayRoute = false;
+							for (const deliver of window.delayedHashChanges.splice(0)) deliver();
+						})()`);
+					}
 					await page.until(
 						`!document.querySelector('[data-tool-list]') && document.body.textContent.includes('Add MCP server')`,
 					);

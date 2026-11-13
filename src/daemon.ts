@@ -70,7 +70,8 @@ import { CliGateway } from "./gateways/cli.ts";
 import { WebGateway } from "./gateways/web.ts";
 import { daemonFile, egressCredentials, keepEgressCredential, maxFileBytes, ownerToken, readConfig } from "./home.ts";
 
-import { accept, agents, decline, save, seed, type Workspace } from "./server/agents.ts";
+import { publicationHistory } from "./server/agent-publication.ts";
+import { accept, agents, decline, retryPublication, save, seed, type Workspace } from "./server/agents.ts";
 import type { ComputerView, OwnerInput, Posted, PostMessage, ViewEvent } from "./server/api.ts";
 import { acceptedIconFace } from "./server/avatar-icon-face.ts";
 import { bringable, chooseBring } from "./server/bring.ts";
@@ -875,7 +876,10 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 							await settleAgents();
 							return views;
 						}),
-					decline: (name) => changingWorkspace(() => decline(open, workspace, name)),
+					decline: (name, sha) => changingWorkspace(() => decline(open, workspace, name, context, sha)),
+					agentPublications: (name, before) => publicationHistory(open, workspace, name, before),
+					retryAgentPublication: (name, id, sha) =>
+						changingWorkspace(() => retryPublication(open, workspace, name, id, sha)),
 					saveAgent: (name, text, base) =>
 						changingWorkspace(async () => {
 							const views = await save(open, workspace, name, text, base, core.agentChanged);

@@ -4,6 +4,7 @@ import { isValidElement, type ReactNode, useContext } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import type { RoutineRunView } from "../../../../src/server/api.ts";
+import { AgentPublication } from "../../app/AgentPublication.tsx";
 import { MakeTabsList } from "../../app/NewSheet.tsx";
 import { WatchDetail } from "../../app/watches.tsx";
 import { Band } from "../../chat/Band.tsx";
@@ -340,6 +341,33 @@ export function PanelSections() {
 							<GroupPanel name="Desk" members={[SANCHO, MARA]} others={[OCTO, ATLAS]} most={2} onRemove={() => {}} />
 						</Panel>
 					</Specimen>
+				</div>
+			</Section>
+			<Section
+				id="agent-publication"
+				note="Saved changes stay in effect while competing workspace versions remain recoverable."
+			>
+				<div className="flex max-w-md flex-col gap-4" inert>
+					{(["pending", "conflict", "retained"] as const).map((state) => (
+						<AgentPublication
+							key={state}
+							agent={{
+								name: "mara",
+								publication: {
+									id: "1",
+									state,
+									message:
+										state === "pending"
+											? "Your change is saved. Its workspace file is still being updated."
+											: state === "conflict"
+												? "Your change is saved. Another version is also kept for review."
+												: "Earlier versions are kept so you can recover their text.",
+									retained: [],
+								},
+							}}
+							onSaved={() => {}}
+						/>
+					))}
 				</div>
 			</Section>
 			<Section

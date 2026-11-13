@@ -5,10 +5,10 @@
  */
 
 import { PlugIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { DEFAULT_FACE } from "../../../src/core/choices.ts";
+import { DEFAULT_FACE, personalityOf } from "../../../src/core/choices.ts";
 import type { CompanionView, FactView } from "../../../src/server/api.ts";
 import { centreBand, pinRow, useBand } from "../areas/band.ts";
 import { archiveGroup, setGroupLimits } from "../areas/groups.ts";
@@ -30,6 +30,8 @@ import { setTheme, useTheme } from "../lib/prefs.ts";
 import { showAgents, showCapabilities, showControl, showMemory, useShell } from "../lib/shell.ts";
 import { AccessTab, reachesSomething } from "./Access.tsx";
 import { AgentChat } from "./AgentChat.tsx";
+import { AgentPersonality, createPersonalityDrafts } from "./AgentPersonality.tsx";
+import { AgentPublication } from "./AgentPublication.tsx";
 import { ArtifactPage } from "./ArtifactPage.tsx";
 import { BringOnboarding, BringSettings, useBring } from "./Bring.tsx";
 import { bandRows, titleOf, whoOf } from "./band.ts";
@@ -59,14 +61,31 @@ import { hrefOf, lastOf, parse, type Where } from "./where.ts";
 
 const LAST = "banda.last";
 
-function useWhere(): Where {
+function useWhere(): { readonly where: Where; readonly removedConnection: () => void } {
 	const [hash, setHash] = useState(location.hash);
+	const heading = useRef<{ readonly name: "connections" } | undefined>(undefined);
 	useEffect(() => {
-		const changed = () => setHash(location.hash);
+		const changed = (event: HashChangeEvent) => {
+			const next = event.newURL === "" ? location.hash : new URL(event.newURL).hash;
+			if (heading.current !== undefined && next !== hrefOf(heading.current)) heading.current = undefined;
+			setHash(location.hash);
+		};
 		addEventListener("hashchange", changed);
 		return () => removeEventListener("hashchange", changed);
 	}, []);
-	return parse(hash);
+	useLayoutEffect(() => {
+		const target = heading.current;
+		if (target === undefined || hash !== hrefOf(target) || location.hash !== hrefOf(target)) return;
+		heading.current = undefined;
+		document.querySelector<HTMLElement>("h1[data-page-title]")?.focus();
+	}, [hash]);
+	return {
+		where: parse(hash),
+		removedConnection: () => {
+			heading.current = { name: "connections" };
+			go(heading.current);
+		},
+	};
 }
 
 const go = (where: Where) => {
@@ -136,6 +155,7 @@ function Main() {
 	// Debounce typing, but submit identity picks at once. Each agent's saves use the newest accepted file.
 	const latest = useRef(shell);
 	latest.current = shell;
+	const [personalityDrafts] = useState(createPersonalityDrafts);
 	const [edit] = useState(() =>
 		ownerEdits((agent, change) =>
 			attempt("save the agent's changes", async () => {
@@ -158,7 +178,7 @@ function Main() {
 		} catch {}
 		go(lastOf(stored) ?? { name: "home" });
 	};
-	const where = useWhere();
+	const { where, removedConnection } = useWhere();
 	const phone = usePhone();
 	const { pinned, centred } = useBand();
 	// closed by default, so the screen is the conversation; it opens for what needs room (a routine, the face tapped)
@@ -483,8 +503,9 @@ function Main() {
 						}}
 					/>
 				);
-			const agentFile = shell.agents.find((each) => each.accepted?.agent?.id === where.id)?.accepted;
-			const personality = where.id === "sancho" ? companion.personality : agentFile?.agent?.instructions;
+			const agentView = shell.agents.find((each) => each.accepted?.agent?.id === where.id);
+			const agentFile = agentView?.accepted;
+			const personality = where.id === "sancho" ? personalityOf(agentFile?.text ?? "") : agentFile?.agent?.instructions;
 			const agentPanel = (
 				<Panel name={who.name} phone={phone} onClose={() => setSheet(false)}>
 					{editor ?? (
@@ -568,11 +589,24 @@ function Main() {
 							}
 							about={
 								<>
-									<Personality
-										key={`${where.id}-personality-${personality === undefined ? "none" : "read"}`}
-										text={personality}
-										onChange={(text) => edit(where.id, { personality: text })}
-									/>
+									{agentView === undefined ? null : (
+										<AgentPublication key={`${where.id}-publication`} agent={agentView} onSaved={showAgents} />
+									)}
+									{agentFile === undefined ? (
+										<Personality text={personality} />
+									) : (
+										<AgentPersonality
+											key={where.id}
+											agent={where.id}
+											file={agentFile}
+											text={personality ?? ""}
+											drafts={personalityDrafts}
+											onSaved={(updated) => {
+												latest.current = { ...latest.current, agents: updated };
+												showAgents(updated);
+											}}
+										/>
+									)}
 									<ChatThinking key={`${where.id}-thinking`} chat={row?.chat} />
 									<SkillCatalogue skills={skillSummaries} hrefFor={(name) => `#/skills/${name}`} />
 									<a href="#/skills" className="text-ui text-ink-2 underline underline-offset-4">
@@ -794,7 +828,11 @@ function Main() {
 						phone={phone}
 						onBack={() => go({ name: "connections" })}
 					>
-						<ConnectionPage connection={where.connection} onClose={() => go({ name: "connections" })} />
+						<ConnectionPage
+							connection={where.connection}
+							onClose={() => go({ name: "connections" })}
+							onRemoved={removedConnection}
+						/>
 					</SettingsPage>
 				);
 			// what banda can connect: those it ships and those added, each with its accounts; then what is coming

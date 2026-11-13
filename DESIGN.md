@@ -921,6 +921,10 @@ effect:
   and prompts and loading read only from there. Until then the accepted version stays in effect, and the tool that made
   the change tells the model so. The owner's own write through the app is accepted in the commit that stores it. The app
   shows the agent's change as a plain question ("Allow this change?"), not a diff.
+- An owner's saved version can be in effect while its workspace file is still being updated. The app distinguishes
+  a saved change, unfinished publication and a competing version. Interrupted publication is recoverable; competing
+  workspace bytes and the exact owner version remain available for deliberate resolution. A matching hash alone
+  never authorizes deleting an earlier file that another process may still have open.
 - **After**: everything else, memory included, takes effect at once. Admission still guards every effect that leaves
   the box.
 - The daemon opens workspace files without following symlinks.

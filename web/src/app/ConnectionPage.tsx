@@ -35,7 +35,15 @@ export function ConnectionGone({ onConnections }: { onConnections: () => void })
 	);
 }
 
-export function ConnectionPage({ connection, onClose }: { connection: string; onClose: () => void }) {
+export function ConnectionPage({
+	connection,
+	onClose,
+	onRemoved,
+}: {
+	connection: string;
+	onClose: () => void;
+	onRemoved: () => void;
+}) {
 	const shell = useShell();
 	const view = shell.capabilities?.connections.find((each) => each.name === connection);
 	const shipped = shell.capabilities?.shipped?.find((each) => each.name === connection);
@@ -114,10 +122,8 @@ export function ConnectionPage({ connection, onClose }: { connection: string; on
 					void run(async () => {
 						const next = await actOnCapability({ action: "remove", name: connection });
 						// the page goes first: without its connection in the shell's view, it has nothing to draw
-						onClose();
+						onRemoved();
 						showCapabilities(next);
-						// the Remove button is gone with the page: focus lands on the list's own heading, not on nothing
-						requestAnimationFrame(() => document.querySelector<HTMLElement>("h1[data-page-title]")?.focus());
 					})
 				}
 			/>

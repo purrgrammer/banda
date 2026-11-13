@@ -3,9 +3,9 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Storage } from "@earendil-works/pi-durable";
-import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { agentPath } from "../../src/core/agents.ts";
 import { context } from "../../src/core/store.ts";
+import { AGENT_PUBLICATION_POINTS } from "../../src/server/agent-publication.ts";
 import { save } from "../../src/server/agents.ts";
 import { agentSaveScenario } from "./agent-save-scenario.ts";
 import { type Fault, Faults, InjectedFault } from "./faults.ts";
@@ -32,35 +32,22 @@ const attempted = join(home, "owner-attempted");
 if (!existsSync(attempted)) {
 	const original = await scenario.accepted();
 	const text = `${original.text}\nOwner revision.\n`;
-	const env = scenario.env;
-	const writing = new Proxy(env, {
-		get(target, key) {
-			if (key === "writeFile") {
-				const write: ExecutionEnv["writeFile"] = async (...args) => {
-					faults.hit("agent:write:before");
-					const result = await target.writeFile(...args);
-					faults.hit("agent:write:after");
-					return result;
-				};
-				return write;
-			}
-			const value = Reflect.get(target, key, target) as unknown;
-			return typeof value === "function" ? value.bind(target) : value;
-		},
-	});
 	await writeFile(attempted, text);
 	armed = true;
 	try {
 		await save(
 			scenario.harness,
-			{ ...scenario.workspace, env: () => writing },
+			{ ...scenario.workspace, publicationPoint: (point) => faults.hit(point) },
 			"sancho",
 			text,
 			original.sha,
 			async () => {},
 		);
 	} catch (error) {
-		if (!(error instanceof InjectedFault)) throw error;
+		let injected = false;
+		for (let cause = error; cause instanceof Error; cause = cause.cause)
+			if (cause instanceof InjectedFault) injected = true;
+		if (!injected) throw error;
 		armed = false;
 		await scenario.harness.close(context).catch(() => {});
 		scenario = await agentSaveScenario(home);
@@ -69,4 +56,11 @@ if (!existsSync(attempted)) {
 const file = await scenario.accepted();
 const box = await readFile(join(scenario.workspace.root, agentPath("sancho")), "utf8");
 await scenario.harness.close(context);
-console.log(JSON.stringify({ accepted: file.text, box, commits: faults.hits("commit:after") }));
+console.log(
+	JSON.stringify({
+		accepted: file.text,
+		box,
+		commits: faults.hits("commit:after"),
+		points: Object.fromEntries(AGENT_PUBLICATION_POINTS.map((point) => [point, faults.hits(point)])),
+	}),
+);

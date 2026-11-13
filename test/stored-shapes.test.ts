@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { createModels } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc } from "@earendil-works/pi-durable";
 import { expect, it } from "vitest";
-import { LEAD } from "../src/core/agents.ts";
+import { Accepted, agentPath, LEAD, LEAD_TEXT, shaOf } from "../src/core/agents.ts";
 import { Connected, ToolSettings } from "../src/core/connections.ts";
 import { Devices, INVITE_MS, pairingState } from "../src/core/devices.ts";
 import { Harnesses } from "../src/core/harness.ts";
@@ -17,9 +17,36 @@ import { Permissions } from "../src/core/permissions.ts";
 import { FileCredentialStore } from "../src/core/provider-credentials.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { Followed } from "../src/core/watches.ts";
+import { AgentPublications, queueAgentPublication } from "../src/server/agent-publication.ts";
 import { tempHome } from "./helpers.ts";
 
 const open = (home: string) => openStore(home, { models: createModels(), registry: createRegistry() });
+
+it("reopens the exact pending owner publication and accepted bytes without a migration", async () => {
+	const home = await tempHome();
+	const before = await open(home);
+	const text = `${LEAD_TEXT}\nA saved owner revision.\n`;
+	const file = { text, sha: shaOf(text), at: 123 };
+	await before.commit(async (tx) => {
+		await queueAgentPublication(tx, { name: LEAD, file, base: shaOf(LEAD_TEXT), workingBase: shaOf(LEAD_TEXT) });
+		(await tx.doc(Accepted)).files[agentPath(LEAD)] = file;
+	}, context);
+	const expected = await before.snapshot(AgentPublications, context);
+	await before.close(context);
+	const after = await open(home);
+	try {
+		expect(await after.snapshot(AgentPublications, context)).toEqual(expected);
+		expect((await after.snapshot(AgentPublications, context))?.operations["1"]).toMatchObject({
+			id: 1,
+			name: LEAD,
+			file,
+			state: { kind: "pending" },
+		});
+		expect((await after.snapshot(Accepted, context))?.files[agentPath(LEAD)]).toEqual(file);
+	} finally {
+		await after.close(context);
+	}
+});
 
 it("reads a host permission given before permissions named their agent (Permissions version 1) as the lead's", async () => {
 	const home = await tempHome();

@@ -21,6 +21,7 @@ import { FULL, GLIMPSE, type Preview, preview } from "../core/preview.ts";
 import type { Approving } from "../core/wait.ts";
 import type { Heard } from "../gateways/cli.ts";
 import type {
+	AgentPublicationHistory,
 	AgentView,
 	Answer,
 	BrowserView,
@@ -126,7 +127,9 @@ export type Routes = {
 	}) => Promise<BringView>;
 	/** Throws `BadRequest` when the file changed since `sha` was shown, or does not parse. */
 	readonly accept: (name: string, sha: string | null) => Promise<AgentView[]>;
-	readonly decline: (name: string) => Promise<AgentView[]>;
+	readonly decline: (name: string, sha: string | null) => Promise<AgentView[]>;
+	readonly agentPublications: (name: string, before?: number) => Promise<AgentPublicationHistory>;
+	readonly retryAgentPublication: (name: string, id: string, sha: string | null) => Promise<AgentView[]>;
 	/** Save the owner's reviewed definition, accepted at once; `base` is null for a new agent. */
 	readonly saveAgent: (name: string, text: string, base: string | null) => Promise<AgentView[]>;
 	/** The control room, from the store. */
@@ -625,9 +628,24 @@ export function handler(
 			return reply(res, 405, { error: "method not allowed" });
 		}
 		if (route === "GET /agents") return reply(res, 200, await routes.agents());
-		const agent = /^\/agents\/([a-z0-9-]+)(?:\/(accept|decline))?$/.exec(path);
+		const agent = /^\/agents\/([a-z0-9-]+)(?:\/(accept|decline|publication|publications))?$/.exec(path);
 		if (agent !== null) {
 			const [, name = "", action] = agent;
+			if (action === "publications" && req.method === "GET") {
+				const cursor = url.searchParams.get("before");
+				const before = cursor === null ? undefined : Number(cursor);
+				if (before !== undefined && (!Number.isSafeInteger(before) || before < 1))
+					return reply(res, 400, { error: "before is an earlier publication number" });
+				return reply(res, 200, await routes.agentPublications(name, before));
+			}
+			if (action === "publication" && req.method === "POST") {
+				const { id, sha } = await json(req);
+				if (typeof id !== "string" || id.length === 0 || id.length > 128)
+					return reply(res, 400, { error: "id is the saved change you reviewed" });
+				if (sha !== null && (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)))
+					return reply(res, 400, { error: "sha is the current file you reviewed, or null when absent" });
+				return reply(res, 200, await routes.retryAgentPublication(name, id, sha));
+			}
 			if (action === undefined && req.method === "PUT") {
 				const { text, base } = await json(req);
 				if (typeof text !== "string") return reply(res, 400, { error: "text is the reviewed agent definition" });
@@ -641,7 +659,12 @@ export function handler(
 					return reply(res, 400, { error: "sha is the hash of the text shown, or null for a removal" });
 				return reply(res, 200, await routes.accept(name, sha));
 			}
-			if (action === "decline" && req.method === "POST") return reply(res, 200, await routes.decline(name));
+			if (action === "decline" && req.method === "POST") {
+				const { sha } = await json(req);
+				if (sha !== null && (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)))
+					return reply(res, 400, { error: "sha is the change you reviewed, or null for a removal" });
+				return reply(res, 200, await routes.decline(name, sha));
+			}
 			return reply(res, 405, { error: "method not allowed" });
 		}
 		if (route === "GET /control") return reply(res, 200, await routes.control());

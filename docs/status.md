@@ -6,6 +6,13 @@ Replacement-sign-in authority is implemented for connection drafts and reusable 
 desktop/phone browser walkthroughs against a throwaway daemon pass; independent review findings are fixed. CI-only
 replacement publication and replay fault scenarios are authored but unrun. Owner acceptance remains open.
 
+Agent-definition publication is integrated into the native-computer candidate. Owner saves compare
+their accepted base inside the commit, keep publication intent with the accepted bytes, and preserve competing
+workspace versions. The app retains stale personality drafts and exposes saved and workspace history. Native
+insertion-race and open-descriptor checks pass. CI fault qualification, the hands-on desktop/phone walkthrough and
+owner acceptance remain open. Combined ordinary checks, types, build and contrast pass. Artifact, routine, watch and memory
+publication remain in [Workspace](workspace.md).
+
 Retained proxy requests now recover without another command, into a once-only owner approval or an explicit not-sent
 resolution. Ordinary checks, typecheck, build and independent review pass after rebasing onto main. Native macOS ARM64
 restart walkthroughs pass at desktop and phone widths. Owner acceptance remains open. CI-only receipt fault scenarios

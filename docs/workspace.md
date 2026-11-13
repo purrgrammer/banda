@@ -25,5 +25,10 @@ Follow [Delivery](delivery.md) and the relevant gates in [Verification](verifica
 Recheck these items against current code before implementation; an unchecked item is not a freshly verified
 defect. Remove it only when its fix and acceptance evidence are recorded in a commit.
 
+- [ ] Qualify agent-definition publication under CI faults and through the running app at desktop and phone width.
+  Verify saved owner versions separately from retained mutable workspace files, including late writes through an
+  old descriptor, conflicts after restart and stale resolution actions. Retained history is still writable by box
+  code; it is recoverable history, not a boundary against deliberate deletion. Complete its retention and cleanup
+  contract before claiming the whole workspace section finished.
 - [ ] An owner's version written back: the box's file is absent for the moment it is moved aside (a read then finds none); a new file the box makes at the path in the instant between the check and the rename in is replaced; a kill or an abort mid-write leaves `.<name>.<task>.tmp` or `.aside` beside the file until that write-back reruns (an aborted one never does), and a moved-aside file whose bytes the artifact does not know is left beside it
 - [ ] A card's publish shows "removed" for a moment when the chat's items reach the app before the artifact does

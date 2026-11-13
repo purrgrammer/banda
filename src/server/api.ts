@@ -473,6 +473,29 @@ export type AgentView = {
 	readonly name: string;
 	readonly accepted?: AgentFileView;
 	readonly change?: ({ readonly kind: "added" | "changed" } & Partial<AgentFileView>) | { readonly kind: "removed" };
+	readonly publication?: AgentPublicationView;
+};
+
+export type RetainedAgentFile =
+	| { readonly kind: "text"; readonly path: string; readonly text: string; readonly sha: string }
+	| { readonly kind: "unreadable"; readonly path: string; readonly message: string };
+
+export type AgentPublicationView = {
+	readonly id: string;
+	readonly state: "pending" | "conflict" | "retained";
+	readonly message: string;
+	readonly retained: readonly RetainedAgentFile[];
+};
+
+export type AgentPublicationHistory = {
+	readonly items: readonly {
+		readonly id: string;
+		readonly at: number;
+		readonly state: "pending" | "published" | "conflict" | "superseded";
+		readonly saved: { readonly sha: string; readonly text: string } | null;
+		readonly retained: readonly RetainedAgentFile[];
+	}[];
+	readonly next?: number;
 };
 
 /** It started a Turn, answered the chat's open question, or was refused (an answer, or a chat not the owner's). */

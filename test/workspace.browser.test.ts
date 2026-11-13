@@ -11,6 +11,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { Value } from "typebox/value";
 import { expect, it } from "vitest";
+import { shaOf } from "../src/core/agents.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import { hostBox } from "./fixtures/host-box.ts";
@@ -81,6 +82,7 @@ for (const width of [390, 1440])
 				const kept = await fetch(`${base}/api/agents/reader/decline`, {
 					method: "POST",
 					headers: { authorization: `Bearer ${token}` },
+					body: JSON.stringify({ sha: shaOf("---\ndescription: Reads carefully\n---\nRead carefully.\n") }),
 				});
 				expect(kept.ok).toBe(true);
 				await page.until("![...document.querySelectorAll('button')].some(el=>el.innerText==='Keep as is')");

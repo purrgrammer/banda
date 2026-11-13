@@ -255,6 +255,13 @@ export const SECTIONS: readonly Entry[] = [
 		sources: [PANEL, SETTINGS, "web/src/chat/MemorySettings.tsx"],
 	},
 	{
+		id: "agent-publication",
+		title: "Saved and competing versions",
+		group: "agent",
+		status: "app",
+		sources: ["web/src/app/AgentPublication.tsx", "web/src/app/AgentPersonality.tsx"],
+	},
+	{
 		id: "routine-detail",
 		title: "Routine detail",
 		group: "agent",
