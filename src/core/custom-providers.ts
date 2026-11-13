@@ -341,11 +341,14 @@ export function problemsOf(
 		else if (!whole(model.contextWindow, 1024, MAX_CONTEXT))
 			say(at("contextWindow"), "The context is a whole number of tokens, from 1,024 to 10,000,000");
 		if (Number.isNaN(model.maxTokens))
-			say(at("maxTokens"), "Write the longest answer it gives, in tokens, as its server or model card says");
+			say(
+				at("maxTokens"),
+				"Write how many tokens banda may ask for in one answer (sent as max_tokens), within what the server allows",
+			);
 		else if (!whole(model.maxTokens, 16, MAX_OUTPUT))
-			say(at("maxTokens"), "The longest answer is a whole number of tokens, from 16 to 1,000,000");
+			say(at("maxTokens"), "The answer cap is a whole number of tokens, from 16 to 1,000,000");
 		else if (whole(model.contextWindow, 1024, MAX_CONTEXT) && model.maxTokens > model.contextWindow)
-			say(at("maxTokens"), "The longest answer cannot be more than the context it fits in");
+			say(at("maxTokens"), "The answer cap cannot be more than the context it fits in");
 		if (provider.billing === "rates")
 			for (const side of ["input", "output"] as const) {
 				const value = model.cost?.[side];

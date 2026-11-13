@@ -55,6 +55,8 @@ export type ProviderAccountView = {
 	/** The owner's name for it; the provider's name for its first, until the owner names that one. */
 	readonly label: string;
 	readonly connected: boolean;
+	/** Its credential came from a finished sign-in; a key or a cloud's settings is saved and not yet tried. */
+	readonly signedIn?: true;
 	/** Connected by a credential from around the daemon, not one connected here: unverified, and not ours to forget. */
 	readonly ambient?: boolean;
 	/** What that credential came from ("ANTHROPIC_API_KEY"), as pi-ai names it. */

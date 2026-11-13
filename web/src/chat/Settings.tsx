@@ -1070,6 +1070,8 @@ export type ProviderRow = {
 	/** Signs in, or takes a key. */
 	readonly by: "sign-in" | "key";
 	readonly connected: boolean;
+	/** A sign-in finished for it; otherwise its key is saved, which nothing has tried. */
+	readonly signedIn?: boolean | undefined;
 	/**
 	 * Connected by a credential from around the daemon (ANTHROPIC_API_KEY and its kind), not one connected here:
 	 * the band can think with it, but nothing has tried it and signing out cannot take it away.
@@ -1202,7 +1204,9 @@ export function ModelProviders({
 									: using
 										? "In use"
 										: provider.connected
-											? "Connected"
+											? provider.signedIn === true
+												? "Signed in"
+												: "Key saved, not yet used"
 											: provider.by === "sign-in"
 												? "Sign in with your account"
 												: "Use a key";

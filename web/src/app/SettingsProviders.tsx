@@ -81,6 +81,7 @@ export function SettingsProviders({ current, servers = [] }: { current: string; 
 				label: account.label,
 				by: provider.oauth ? ("sign-in" as const) : ("key" as const),
 				connected: account.connected,
+				...(account.signedIn === true ? { signedIn: true } : {}),
 				...(account.ambient === true ? { ambient: true as const } : {}),
 				...(account.source === undefined ? {} : { source: account.source }),
 				connecting: account.connecting,

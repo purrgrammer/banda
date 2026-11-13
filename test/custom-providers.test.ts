@@ -141,7 +141,7 @@ describe("a definition", () => {
 		}).map((problem) => `${problem.field}: ${problem.message}`);
 		expect(messages).toEqual([
 			"models.0.contextWindow: Write its context window in tokens, as its server or model card says",
-			"models.0.maxTokens: Write the longest answer it gives, in tokens, as its server or model card says",
+			"models.0.maxTokens: Write how many tokens banda may ask for in one answer (sent as max_tokens), within what the server allows",
 			"models.0.cost.input: Write what it charges per million tokens, as its provider bills it",
 		]);
 		// a model of a server that charges none has no price at all, never a 0 standing in for one

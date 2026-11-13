@@ -50,6 +50,27 @@ const model = (id: string) => `${dialog}.querySelector('li[data-model=${JSON.str
 const labelled = (text: string, within = "document") =>
 	`[...${within}.querySelectorAll('label')].find(el => ${visible} && el.textContent.includes(${JSON.stringify(text)}))`;
 const row = (id: string) => `document.querySelector('[data-custom-provider="${id}"]')`;
+const keepRow = (id: string) => `${dialog}.querySelector('li[data-keep=${JSON.stringify(id)}]')`;
+/**
+ * The open dialog fits the screen: it runs past neither side, does not scroll sideways, nothing in it sticks out of it,
+ * and no text in it is clipped (a field's own value aside). "ok", or what does not fit; "ok" with no dialog open.
+ */
+const fits = `(() => {
+	const d = document.querySelector('[role="dialog"]');
+	if (!d) return 'ok';
+	const box = d.getBoundingClientRect();
+	if (box.left < -1 || box.right > innerWidth + 1) return 'the dialog runs off the screen: ' + Math.round(box.left) + '..' + Math.round(box.right);
+	if (d.scrollWidth > d.clientWidth + 1) return 'the dialog scrolls sideways: ' + d.scrollWidth + ' > ' + d.clientWidth;
+	for (const el of d.querySelectorAll('*')) {
+		if (['INPUT', 'TEXTAREA', 'SELECT', 'OPTION'].includes(el.tagName)) continue;
+		const r = el.getBoundingClientRect();
+		if (r.width < 2 || r.height < 2) continue;
+		const what = el.tagName + ' ' + (el.textContent ?? '').trim().slice(0, 40);
+		if (r.left < box.left - 1 || r.right > box.right + 1) return 'sticks out of the dialog: ' + what;
+		if (getComputedStyle(el).overflowX !== 'visible' && el.scrollWidth > el.clientWidth + 1) return 'clipped sideways: ' + what;
+	}
+	return 'ok';
+})()`;
 
 /** A click as a person makes one: on the control's centre, which must be the control and not something over it. */
 async function click(page: Page, expression: string) {
@@ -139,6 +160,7 @@ for (const width of [390, 1440])
 								`${name}: no sideways scroll`,
 							).toBe(true);
 							expect(page.errors(), `${name}: no page errors`).toEqual([]);
+							expect(await page.run<string>(fits), `${name}: the dialog fits`).toBe("ok");
 							await page.until(
 								"document.getAnimations().every(a => a.playState !== 'running' || !(a.effect?.getComputedTiming().endTime < 2000))",
 							);
@@ -172,10 +194,23 @@ for (const width of [390, 1440])
 						await press(page, "Enter");
 						await page.until(`${dialog} && document.activeElement === ${named("Search providers and servers")}`);
 						const listed = await page.run<number>(`document.querySelectorAll('[role="option"]').length`);
-						// every provider pi-ai has with chat models but the legacy Codex, and eight kinds of server
+						// every provider pi-ai has with chat models but the legacy Codex, then one way to a server of your own
 						expect(listed).toBeGreaterThan(40);
+						// providers first: the dialog opens on pi-ai's, not on the kinds of server
+						expect(await page.run<string>(`document.querySelector('[role="option"] span span').textContent`)).toBe(
+							"Anthropic",
+						);
+						expect(await page.run<boolean>(`!!${option("Ollama")}`)).toBe(false);
+						expect(await page.run<boolean>(`!!${option("A server of your own")}`)).toBe(true);
 						await shot("2-every-provider");
 						await darkToo("2-every-provider");
+						// the longest name reads whole, wrapped rather than cut
+						await page.input("Input.insertText", { text: "Qwen Token Plan Individual" });
+						await page.until(option("Qwen Token Plan Individual"));
+						expect(await page.run<string>(fits)).toBe("ok");
+						await page.run(
+							`(() => {const el=${named("Search providers and servers")}; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,''); el.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+						);
 						await page.input("Input.insertText", { text: "cloudflare" });
 						await page.until(`document.querySelectorAll('[role="option"]').length === 2`);
 						await press(page, "Escape");
@@ -190,12 +225,21 @@ for (const width of [390, 1440])
 						await fill(page, field("Cloudflare API token", dialog), CLOUDFLARE_TOKEN);
 						await fill(page, field("Account ID", dialog), "0123456789abcdef0123456789abcdef");
 						await click(page, button("Connect", dialog));
-						await page.until(shows("Gateway ID is needed"));
+						// said under the field, before anything is sent
+						await page.until(
+							`${field("Gateway ID", dialog)}?.parentElement.querySelector('[role="alert"]')?.textContent === 'Gateway ID is needed'`,
+						);
+						expect(await new FileCredentialStore(home).list()).toEqual([]);
+						await shot("3-cloud-form-missing");
 						await fill(page, field("Gateway ID", dialog), "band-gateway");
+						// filled, it is no longer said
+						await page.until(`!${shows("Gateway ID is needed")}`);
 						await shot("3-cloud-form");
 						await darkToo("3-cloud-form");
 						await click(page, button("Connect", dialog));
 						await page.until(shows("From pi-ai's catalog. Your account may not reach every model"));
+						// saved, never "connected": nothing has used it
+						expect(await page.run<boolean>(shows("Saved. banda hasn't used it yet"))).toBe(true);
 						expect(await new FileCredentialStore(home).read("cloudflare-ai-gateway")).toEqual({
 							type: "api_key",
 							key: CLOUDFLARE_TOKEN,
@@ -210,7 +254,9 @@ for (const width of [390, 1440])
 						await click(page, `${dialog}.querySelector('input[name="start"]')`);
 						await shot("4-catalog-start");
 						await click(page, button("Save", dialog));
-						await page.until(shows("is ready"));
+						await page.until(shows("Cloudflare AI Gateway saved"));
+						expect(await page.run<boolean>(shows("Its credentials are saved; banda hasn't used them yet."))).toBe(true);
+						expect(await page.run<boolean>(shows("is ready"))).toBe(false);
 						await shot("5-saved-not-used");
 						await darkToo("5-saved-not-used");
 						// saved, started, not used
@@ -220,11 +266,18 @@ for (const width of [390, 1440])
 						await click(page, button("Not now", dialog));
 						await page.until(`!${dialog}`);
 						expect(first).toMatch(/^Start with /);
+						// Settings says the same: a saved key, not a connection anything has tried
+						await page.until(shows("Key saved, not yet used"));
+						expect(await page.run<boolean>(shows("Connected"))).toBe(false);
 
 						// a server of the owner's: Ollama, its models found on asking
 						await click(page, named("Add a provider"));
 						await page.until(`document.activeElement === ${named("Search providers and servers")}`);
-						await page.input("Input.insertText", { text: "Ollama" });
+						await click(page, option("A server of your own"));
+						await page.until(
+							`${dialog}?.getAttribute('data-add-provider') === 'servers' || ${dialog}.querySelector('[data-add-provider="servers"]')`,
+						);
+						await shot("6-server-kinds");
 						await click(page, option("Ollama"));
 						await page.until(`${dialog} && document.activeElement === ${field("Name", dialog)}`);
 						expect(await page.run<string>(`${field("Address", dialog)}.value`)).toBe("http://localhost:11434/v1");
@@ -243,34 +296,48 @@ for (const width of [390, 1440])
 							"Listed by the server · limits from the server",
 						);
 						expect(await page.run<string>(`${model("llava:7b")}.innerText`)).toContain("reads images");
-						expect(await page.run<string>(`${model("nomic-embed-text")}.innerText`)).toContain("It doesn't chat");
-						expect(await page.run<string>(`${model("Qwen/Qwen3-8B")}.innerText`)).toContain(
+						// the next choice is the start model: focus is on it
+						await page.until(`document.activeElement?.getAttribute('name') === 'start'`);
+						// an embedding model is no start choice
+						expect(await page.run<boolean>(`!!${model("nomic-embed-text")}`)).toBe(false);
+						// keeping and starting are two choices: it starts on qwen3, and keeps llava once llava is complete
+						await click(page, named("Start with qwen3:8b"));
+						// the others wait under "Also keep other models"
+						await click(
+							page,
+							`[...${dialog}.querySelectorAll('button')].find(el => el.textContent.startsWith('Also keep other models'))`,
+						);
+						await page.until(keepRow("nomic-embed-text"));
+						expect(await page.run<string>(`${keepRow("nomic-embed-text")}.innerText`)).toContain("It doesn't chat");
+						expect(await page.run<string>(`${keepRow("Qwen/Qwen3-8B")}.innerText`)).toContain(
 							"not usable until you add them",
 						);
 						expect(
-							await page.run<boolean>(`${model("Qwen/Qwen3-8B")}.querySelector('[role="checkbox"]').disabled`),
+							await page.run<boolean>(`${keepRow("Qwen/Qwen3-8B")}.querySelector('[role="checkbox"]').disabled`),
 						).toBe(true);
-						// keeping and starting are two choices: it starts on qwen3, and keeps llava once llava is complete
-						await click(page, named("Start with qwen3:8b"));
 						// only what the start model lacks is asked, and only for it
-						await page.until(`${field("Longest answer, tokens", model("qwen3:8b"))}`);
+						await page.until(`${field("Answer cap, tokens", model("qwen3:8b"))}`);
 						expect(await page.run<boolean>(`!!${field("Context, tokens", model("qwen3:8b"))}`)).toBe(false);
 						await click(page, button("Save", dialog));
 						await page.until(shows("Say whether it charges per token."));
-						await page.until(shows("Write the longest answer it gives, in tokens, as its server or model card says"));
+						await page.until(
+							shows(
+								"Write how many tokens banda may ask for in one answer (sent as max_tokens), within what the server allows",
+							),
+						);
 						await shot("7-server-found");
 						await darkToo("7-server-found");
-						await fill(page, field("Longest answer, tokens", model("qwen3:8b")), "8192");
-						expect(await page.run<boolean>(`${model("llava:7b")}.querySelector('[role="checkbox"]').disabled`)).toBe(
+						await fill(page, field("Answer cap, tokens", model("qwen3:8b")), "8192");
+						expect(await page.run<boolean>(`${keepRow("llava:7b")}.querySelector('[role="checkbox"]').disabled`)).toBe(
 							true,
 						);
-						await click(page, button("Complete it", model("llava:7b")));
-						await page.until(field("Longest answer, tokens", model("llava:7b")));
-						await fill(page, field("Longest answer, tokens", model("llava:7b")), "2048");
-						await click(page, `${model("llava:7b")}.querySelector('[role="checkbox"]')`);
+						await click(page, button("Complete it", keepRow("llava:7b")));
+						await page.until(field("Answer cap, tokens", keepRow("llava:7b")));
+						await fill(page, field("Answer cap, tokens", keepRow("llava:7b")), "2048");
+						await click(page, `${keepRow("llava:7b")}.querySelector('[role="checkbox"]')`);
 						await click(page, labelled("No per-token charges", dialog));
 						await click(page, button("Save", dialog));
-						await page.until(shows("Ollama is ready"));
+						await page.until(shows("Ollama saved"));
 						await shot("8-server-saved");
 						// saving sent nothing and used nothing
 						expect(local.requests.every((request) => !request.path.endsWith("/chat/completions"))).toBe(true);

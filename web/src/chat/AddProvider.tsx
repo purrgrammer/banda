@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { SERVER_KINDS, type ServerKind } from "../../../src/core/custom-providers.ts";
-import type { FormMethod } from "../../../src/core/provider-forms.ts";
+import type { FormField, FormMethod } from "../../../src/core/provider-forms.ts";
 import type { Connecting, CustomProviderSave, ModelsListView } from "../areas/custom-providers.ts";
 import type { ProviderAccountView, ProviderView } from "../areas/tiers.ts";
 import { ProviderMark } from "./ProviderMark.tsx";
@@ -41,6 +41,7 @@ export type AddProviderActions = {
 export type Step =
 	| { readonly kind: "choose" }
 	| { readonly kind: "builtin"; readonly id: string }
+	| { readonly kind: "servers" }
 	| { readonly kind: "server"; readonly server: ServerKind }
 	| { readonly kind: "saved"; readonly id: string; readonly name: string; readonly what: string };
 
@@ -51,6 +52,14 @@ export function setupWords(provider: ProviderView): string {
 	if (provider.oauth) return "Sign in";
 	return "API key";
 }
+
+/** What a provider's setup has shown, in words: a sign-in is the provider's yes; a saved key or setting is not. */
+const saved = (account: ProviderAccountView) =>
+	account.signedIn === true
+		? "Signed in."
+		: account.ambient === true
+			? `Its credential comes from ${account.source ?? "your environment"}, outside banda.`
+			: "Its credentials are saved; banda hasn't used them yet.";
 
 /** A price from the catalog, as people read one; none when the catalog has none. */
 const priceOf = (cost: { readonly input: number; readonly output: number }) =>
@@ -108,29 +117,34 @@ export function AddProviderSteps({
 			? "Add a provider"
 			: step.kind === "builtin"
 				? (provider?.name ?? "Provider")
-				: step.kind === "server"
-					? SERVER_KINDS[step.server].label
-					: `${step.name} is ready`;
+				: step.kind === "servers"
+					? "A server of your own"
+					: step.kind === "server"
+						? SERVER_KINDS[step.server].label
+						: `${step.name} saved`;
 	const description =
 		step.kind === "choose"
 			? "Every provider banda can think with, and servers of your own."
 			: step.kind === "builtin"
 				? "Connect it, then pick the model it starts on."
-				: step.kind === "server"
-					? `${SERVER_KINDS[step.server].about} Saving doesn't contact it.`
-					: step.what;
+				: step.kind === "servers"
+					? "Pick what it runs or speaks: banda reads its models the way that kind documents."
+					: step.kind === "server"
+						? `${SERVER_KINDS[step.server].about} Saving doesn't contact it.`
+						: step.what;
 	const Title = dialog ? DialogTitle : "h2";
 	const Description = dialog ? DialogDescription : "p";
 	return (
-		<div className="flex flex-col gap-4" data-add-provider={step.kind}>
+		// min-w-0: the dialog lays it out on a grid, where a child is as wide as its widest line unless told otherwise
+		<div className="flex min-w-0 flex-col gap-4" data-add-provider={step.kind}>
 			<DialogHeaderOrNot dialog={dialog}>
 				<span className="flex items-center gap-2 pr-8">
-					{step.kind === "builtin" || step.kind === "server" ? (
+					{step.kind === "builtin" || step.kind === "server" || step.kind === "servers" ? (
 						<Button
 							variant="ghost"
 							size="icon-xs"
-							aria-label="Back to every provider"
-							onClick={() => setStep({ kind: "choose" })}
+							aria-label={step.kind === "server" ? "Back to the kinds of server" : "Back to every provider"}
+							onClick={() => setStep(step.kind === "server" ? { kind: "servers" } : { kind: "choose" })}
 						>
 							<ArrowLeftIcon />
 						</Button>
@@ -144,7 +158,10 @@ export function AddProviderSteps({
 					providers={providers}
 					onBuiltin={(id) => setStep({ kind: "builtin", id })}
 					onServer={(server) => setStep({ kind: "server", server })}
+					onServers={() => setStep({ kind: "servers" })}
 				/>
+			) : step.kind === "servers" ? (
+				<ServerKinds onServer={(server) => setStep({ kind: "server", server })} />
 			) : step.kind === "builtin" && provider !== undefined ? (
 				<BuiltinSetup
 					key={provider.id}
@@ -160,7 +177,7 @@ export function AddProviderSteps({
 					here={here}
 					others={servers}
 					list={actions.list}
-					onCancel={() => setStep({ kind: "choose" })}
+					onCancel={() => setStep({ kind: "servers" })}
 					onSave={async (save) => {
 						try {
 							const id = await actions.saveServer(save);
@@ -187,37 +204,51 @@ function DialogHeaderOrNot({ dialog, children }: { dialog: boolean; children: Re
 	return dialog ? <DialogHeader>{children}</DialogHeader> : <div className="flex flex-col gap-1.5">{children}</div>;
 }
 
-/** Every provider, searchable: servers of the owner's first, by kind, then pi-ai's, with how each signs in. */
+/** A kind of server, as the lists show one. */
+function KindItem({ kind, onServer }: { kind: ServerKind; onServer: (kind: ServerKind) => void }) {
+	return (
+		<CommandItem
+			value={`server ${SERVER_KINDS[kind].label}`}
+			keywords={[kind, "local", "self-hosted", "server"]}
+			onSelect={() => onServer(kind)}
+		>
+			<ServerIcon aria-hidden="true" className="size-4 text-ink-2" />
+			<span className="flex min-w-0 flex-1 flex-col">
+				<span className="break-words">{SERVER_KINDS[kind].label}</span>
+				<span className="break-words text-meta text-ink-2">{SERVER_KINDS[kind].about}</span>
+			</span>
+		</CommandItem>
+	);
+}
+
+/**
+ * Every provider, searchable: pi-ai's first, each with how it signs in, then one way to a server of the owner's. A
+ * search reaches the kinds of server too, so "ollama" finds Ollama.
+ */
 function Choose({
 	providers,
 	onBuiltin,
 	onServer,
+	onServers,
 }: {
 	providers: readonly ProviderView[];
 	onBuiltin: (id: string) => void;
 	onServer: (kind: ServerKind) => void;
+	onServers: () => void;
 }) {
+	const [search, setSearch] = useState("");
+	const searching = search.trim() !== "";
 	return (
-		<Command className="rounded-panel border border-line-soft" loop>
-			<CommandInput placeholder="Search providers and servers" aria-label="Search providers and servers" autoFocus />
+		<Command className="min-w-0 rounded-panel border border-line-soft" loop>
+			<CommandInput
+				placeholder="Search providers and servers"
+				aria-label="Search providers and servers"
+				autoFocus
+				value={search}
+				onValueChange={setSearch}
+			/>
 			<CommandList className="max-h-[min(28rem,60dvh)]">
 				<CommandEmpty>No provider by that name. A server of your own can be added by its address.</CommandEmpty>
-				<CommandGroup heading="Your own server">
-					{(Object.keys(SERVER_KINDS) as ServerKind[]).map((kind) => (
-						<CommandItem
-							key={kind}
-							value={`server ${SERVER_KINDS[kind].label}`}
-							keywords={[kind, "local", "self-hosted", "server"]}
-							onSelect={() => onServer(kind)}
-						>
-							<ServerIcon aria-hidden="true" className="size-4 text-ink-2" />
-							<span className="flex min-w-0 flex-1 flex-col">
-								<span className="truncate">{SERVER_KINDS[kind].label}</span>
-								<span className="truncate text-meta text-ink-2">{SERVER_KINDS[kind].about}</span>
-							</span>
-						</CommandItem>
-					))}
-				</CommandGroup>
 				<CommandGroup heading="Providers">
 					{providers.map((provider) => {
 						const connected = provider.accounts.some((account) => account.connected);
@@ -230,15 +261,47 @@ function Choose({
 							>
 								<ProviderMark provider={provider.id} />
 								<span className="flex min-w-0 flex-1 flex-col">
-									<span className="truncate">{provider.name}</span>
-									<span className="truncate text-meta text-ink-2">
+									<span className="break-words">{provider.name}</span>
+									<span className="break-words text-meta text-ink-2">
 										{setupWords(provider)} · {provider.models === 1 ? "1 model" : `${provider.models} models`}
-										{connected ? " · connected" : ""}
+										{connected ? " · set up" : ""}
 									</span>
 								</span>
 							</CommandItem>
 						);
 					})}
+				</CommandGroup>
+				<CommandGroup heading="Your own server">
+					{searching ? (
+						(Object.keys(SERVER_KINDS) as ServerKind[]).map((kind) => (
+							<KindItem key={kind} kind={kind} onServer={onServer} />
+						))
+					) : (
+						<CommandItem value="server of your own" onSelect={onServers}>
+							<ServerIcon aria-hidden="true" className="size-4 text-ink-2" />
+							<span className="flex min-w-0 flex-1 flex-col">
+								<span className="break-words">A server of your own</span>
+								<span className="break-words text-meta text-ink-2">
+									Ollama, LM Studio, llama.cpp, vLLM, or an OpenAI-, Anthropic- or Mistral-compatible API.
+								</span>
+							</span>
+						</CommandItem>
+					)}
+				</CommandGroup>
+			</CommandList>
+		</Command>
+	);
+}
+
+/** The kinds of server, one choice each. */
+function ServerKinds({ onServer }: { onServer: (kind: ServerKind) => void }) {
+	return (
+		<Command className="min-w-0 rounded-panel border border-line-soft" loop>
+			<CommandList className="max-h-[min(28rem,60dvh)]">
+				<CommandGroup>
+					{(Object.keys(SERVER_KINDS) as ServerKind[]).map((kind) => (
+						<KindItem key={kind} kind={kind} onServer={onServer} />
+					))}
 				</CommandGroup>
 			</CommandList>
 		</Command>
@@ -282,6 +345,18 @@ function Connect({
 	const form = provider.form;
 	const [method, setMethod] = useState<FormMethod | undefined>(form?.methods[0]);
 	const [values, setValues] = useState<Record<string, string>>({});
+	const [tried, setTried] = useState(false);
+	/** What a field still needs, as the daemon would say it, once the owner tried to connect. */
+	const needs = (field: FormField): string | undefined => {
+		if (!tried || method === undefined) return undefined;
+		const empty = (id: string) => (values[id] ?? "").trim() === "";
+		if (field.optional !== true) return empty(field.id) ? `${field.label} is needed` : undefined;
+		const either = method.fields.filter((each) => each.env !== undefined);
+		// one of a pair is needed (Azure's resource or its endpoint): said once, under the first
+		return either[0] === field && either.every((each) => empty(each.id))
+			? `Give ${either.map((each) => each.label.replace(/^Or /, "").toLowerCase()).join(" or ")}`
+			: undefined;
+	};
 	const [key, setKey] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | undefined>(account?.error);
@@ -353,6 +428,13 @@ function Connect({
 					onSubmit={(event) => {
 						event.preventDefault();
 						if (method === undefined) return;
+						setTried(true);
+						const either = method.fields.filter((each) => each.env !== undefined);
+						const empty = (id: string) => (values[id] ?? "").trim() === "";
+						const missing =
+							method.fields.some((field) => field.optional !== true && empty(field.id)) ||
+							(either.length > 0 && either.every((each) => empty(each.id)));
+						if (missing) return;
 						void connectWith({
 							type: "api_key",
 							...(method.id === undefined ? {} : { method: method.id }),
@@ -387,6 +469,7 @@ function Connect({
 						<FieldOf
 							key={`${method.label}-${field.id}`}
 							label={field.optional ? `${field.label} (optional)` : field.label}
+							problem={needs(field)}
 						>
 							{(id) => (
 								<Input
@@ -396,7 +479,11 @@ function Connect({
 									spellCheck={false}
 									placeholder={field.placeholder}
 									value={values[field.id] ?? ""}
-									onChange={(event) => setValues((was) => ({ ...was, [field.id]: event.target.value }))}
+									onChange={(event) => {
+										// what the daemon refused was about what was typed then
+										setError(undefined);
+										setValues((was) => ({ ...was, [field.id]: event.target.value }));
+									}}
 								/>
 							)}
 						</FieldOf>
@@ -427,7 +514,10 @@ function Connect({
 										autoComplete="off"
 										placeholder="Paste it"
 										value={key}
-										onChange={(event) => setKey(event.target.value)}
+										onChange={(event) => {
+											setError(undefined);
+											setKey(event.target.value);
+										}}
 									/>
 								)}
 							</FieldOf>
@@ -522,8 +612,8 @@ function Models({
 			onSaved(
 				account.id,
 				provider.presets
-					? `Connected. It runs banda's picks for Quick, Balanced and Deep; you can change each later.`
-					: `Connected. It starts on ${name} for every tier; you can refine each later.`,
+					? `${saved(account)} It runs banda's picks for Quick, Balanced and Deep; you can change each later.`
+					: `${saved(account)} It starts on ${name} for every tier; you can refine each later.`,
 			);
 		} catch (thrown) {
 			setError(thrown instanceof Error ? thrown.message : String(thrown));
@@ -535,7 +625,11 @@ function Models({
 		<div className="flex flex-col gap-3">
 			<span className="flex items-center gap-2 text-meta text-ink-2">
 				<ProviderMark provider={provider.id} />{" "}
-				{account.ambient ? `From ${account.source ?? "your environment"}` : "Connected"}
+				{account.ambient
+					? `From ${account.source ?? "your environment"}, outside banda`
+					: account.signedIn
+						? "Signed in"
+						: "Saved. banda hasn't used it yet: the first answer will say whether it works."}
 			</span>
 			<p className="text-meta text-ink-2">
 				{listing?.source === "refreshed"

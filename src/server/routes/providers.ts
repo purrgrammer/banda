@@ -98,13 +98,20 @@ const CONNECTED_HERE = "stored credential";
 export async function credentialOf(
 	models: Deps["models"],
 	id: string,
-): Promise<{ readonly connected: boolean; readonly ambient?: true; readonly source?: string }> {
+): Promise<{
+	readonly connected: boolean;
+	readonly ambient?: true;
+	readonly source?: string;
+	/** A sign-in finished: the provider itself said yes. A key or a cloud's settings is only saved, never tried. */
+	readonly signedIn?: true;
+}> {
 	const check = await models.checkAuth(id).then(
 		(result) => result,
 		() => undefined,
 	);
 	if (check === undefined) return { connected: false };
-	if (check.type === "oauth" || check.source === CONNECTED_HERE) return { connected: true };
+	if (check.type === "oauth") return { connected: true, signedIn: true };
+	if (check.source === CONNECTED_HERE) return { connected: true };
 	return { connected: true, ambient: true, ...(check.source === undefined ? {} : { source: check.source }) };
 }
 
@@ -123,12 +130,13 @@ async function view(
 				const auth = provider.auth;
 				const accounts = await Promise.all(
 					accountsOf(deps.models, backend).map(async (id) => {
-						const { connected, ambient, source } = await credentialOf(deps.models, id);
+						const { connected, ambient, source, signedIn } = await credentialOf(deps.models, id);
 						const attempt = pending.get(id);
 						return {
 							id,
 							label: labels[id] ?? adding.get(id) ?? parseAccount(id).account ?? provider.name,
 							connected,
+							...(signedIn ? { signedIn } : {}),
 							...(ambient ? { ambient } : {}),
 							...(source === undefined ? {} : { source }),
 							connecting: attempt !== undefined,

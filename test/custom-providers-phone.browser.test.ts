@@ -44,6 +44,26 @@ const option = (text: string) =>
 	`[...document.querySelectorAll('[role="option"]')].find(el => ${visible} && el.querySelector('span span')?.textContent.trim() === ${JSON.stringify(text)})`;
 const labelled = (text: string, within = "document") =>
 	`[...${within}.querySelectorAll('label')].find(el => ${visible} && el.textContent.includes(${JSON.stringify(text)}))`;
+/**
+ * The open dialog fits the screen: it runs past neither side, does not scroll sideways, nothing in it sticks out of it,
+ * and no text in it is clipped (a field's own value aside). "ok", or what does not fit; "ok" with no dialog open.
+ */
+const fits = `(() => {
+	const d = document.querySelector('[role="dialog"]');
+	if (!d) return 'ok';
+	const box = d.getBoundingClientRect();
+	if (box.left < -1 || box.right > innerWidth + 1) return 'the dialog runs off the screen: ' + Math.round(box.left) + '..' + Math.round(box.right);
+	if (d.scrollWidth > d.clientWidth + 1) return 'the dialog scrolls sideways: ' + d.scrollWidth + ' > ' + d.clientWidth;
+	for (const el of d.querySelectorAll('*')) {
+		if (['INPUT', 'TEXTAREA', 'SELECT', 'OPTION'].includes(el.tagName)) continue;
+		const r = el.getBoundingClientRect();
+		if (r.width < 2 || r.height < 2) continue;
+		const what = el.tagName + ' ' + (el.textContent ?? '').trim().slice(0, 40);
+		if (r.left < box.left - 1 || r.right > box.right + 1) return 'sticks out of the dialog: ' + what;
+		if (getComputedStyle(el).overflowX !== 'visible' && el.scrollWidth > el.clientWidth + 1) return 'clipped sideways: ' + what;
+	}
+	return 'ok';
+})()`;
 const row = (id: string) => `document.querySelector('[data-custom-provider="${id}"]')`;
 
 async function click(page: Page, expression: string) {
@@ -222,6 +242,7 @@ it.skipIf(!hasChrome())(
 					await page.until(
 						"document.getAnimations().every(a => a.playState !== 'running' || !(a.effect?.getComputedTiming().endTime < 2000))",
 					);
+					expect(await page.run<string>(fits), `${name}: the dialog fits`).toBe("ok");
 					if (SHOTS !== undefined) await page.shoot(join(SHOTS, `phone-${scheme}-${name}.png`));
 				};
 				const darkToo = async (name: string) => {
@@ -277,13 +298,13 @@ it.skipIf(!hasChrome())(
 				expect(carried).toContain("POST /api/custom-providers/list");
 				await click(page, named("Start with scripted-small"));
 				await fill(page, field("Context, tokens", modelRow("scripted-small")), "32768");
-				await fill(page, field("Longest answer, tokens", modelRow("scripted-small")), "4096");
+				await fill(page, field("Answer cap, tokens", modelRow("scripted-small")), "4096");
 				await click(page, labelled("No per-token charges", dialog));
 				await page.run(`(${field("Address", dialog)}).scrollIntoView({block:'center'})`);
 				await shot("2-form");
 				await darkToo("2-form");
 				await click(page, button("Save", dialog));
-				await page.until(shows("Desk server is ready"));
+				await page.until(shows("Desk server saved"));
 				await click(page, button("Not now", dialog));
 				await page.until(row("custom-desk-server"));
 				const text = await page.run<string>(`${row("custom-desk-server")}.innerText`);
