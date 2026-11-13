@@ -1,0 +1,275 @@
+{
+	"from": "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json",
+	"agents": [
+		{
+			"id": "agoragentic-acp",
+			"name": "Agoragentic",
+			"link": "https://agoragentic.com",
+			"icon": true
+		},
+		{
+			"id": "amp-acp",
+			"name": "Amp",
+			"link": "https://github.com/tao12345666333/amp-acp",
+			"icon": true
+		},
+		{
+			"id": "auggie",
+			"name": "Auggie CLI",
+			"link": "https://www.augmentcode.com/",
+			"icon": true
+		},
+		{
+			"id": "autohand",
+			"name": "Autohand Code",
+			"link": "https://github.com/autohandai/code-cli/blob/main/docs/guides/ACP.md",
+			"icon": true
+		},
+		{
+			"id": "bob",
+			"name": "Bob",
+			"link": "https://bob.ibm.com",
+			"icon": true
+		},
+		{
+			"id": "claude-acp",
+			"name": "Claude Agent",
+			"link": "https://github.com/agentclientprotocol/claude-agent-acp",
+			"icon": true
+		},
+		{
+			"id": "cline",
+			"name": "Cline",
+			"link": "https://cline.bot/cli",
+			"icon": true
+		},
+		{
+			"id": "codebuddy-code",
+			"name": "Codebuddy Code",
+			"link": "https://www.codebuddy.cn/cli/",
+			"icon": true
+		},
+		{
+			"id": "codex-acp",
+			"name": "Codex",
+			"link": "https://github.com/agentclientprotocol/codex-acp",
+			"icon": true
+		},
+		{
+			"id": "cortex-code",
+			"name": "Cortex Code",
+			"link": "https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code",
+			"icon": true
+		},
+		{
+			"id": "corust-agent",
+			"name": "Corust Agent",
+			"link": "https://corust.ai/",
+			"icon": true
+		},
+		{
+			"id": "crow-cli",
+			"name": "crow-cli",
+			"link": "https://crow-ai.dev",
+			"icon": true
+		},
+		{
+			"id": "cursor",
+			"name": "Cursor",
+			"link": "https://cursor.com/docs/cli/acp",
+			"icon": true
+		},
+		{
+			"id": "deepagents",
+			"name": "DeepAgents",
+			"link": "https://docs.langchain.com/oss/javascript/deepagents/overview",
+			"icon": true
+		},
+		{
+			"id": "devin",
+			"name": "Devin",
+			"link": "https://docs.devin.ai/cli",
+			"icon": true
+		},
+		{
+			"id": "dimcode",
+			"name": "DimCode",
+			"link": "https://dimagent.cn/",
+			"icon": true
+		},
+		{
+			"id": "dirac",
+			"name": "Dirac",
+			"link": "https://dirac.run",
+			"icon": true
+		},
+		{
+			"id": "factory-droid",
+			"name": "Factory Droid",
+			"link": "https://factory.ai/product/cli",
+			"icon": true
+		},
+		{
+			"id": "fast-agent",
+			"name": "fast-agent",
+			"link": "https://fast-agent.ai",
+			"icon": true
+		},
+		{
+			"id": "gemini",
+			"name": "Gemini CLI",
+			"link": "https://geminicli.com",
+			"icon": true
+		},
+		{
+			"id": "github-copilot-cli",
+			"name": "GitHub Copilot",
+			"link": "https://github.com/features/copilot/cli/",
+			"icon": true
+		},
+		{
+			"id": "glm-acp-agent",
+			"name": "GLM Agent",
+			"link": "https://github.com/stefandevo/glm-acp-agent",
+			"icon": true
+		},
+		{
+			"id": "antigravity-acp",
+			"name": "Google Antigravity",
+			"link": "https://antigravity.google/docs/ide/extensions",
+			"icon": true
+		},
+		{
+			"id": "goose",
+			"name": "goose",
+			"link": "https://block.github.io/goose/",
+			"icon": true
+		},
+		{
+			"id": "grok-build",
+			"name": "Grok Build",
+			"link": "https://x.ai/cli",
+			"icon": true
+		},
+		{
+			"id": "harn",
+			"name": "Harn",
+			"link": "https://harnlang.com",
+			"icon": true
+		},
+		{
+			"id": "junie",
+			"name": "Junie",
+			"link": "https://junie.jetbrains.com",
+			"icon": true
+		},
+		{
+			"id": "kilo",
+			"name": "Kilo",
+			"link": "https://kilo.ai/",
+			"icon": true
+		},
+		{
+			"id": "kimchi",
+			"name": "Kimchi",
+			"link": "https://kimchi.dev",
+			"icon": true
+		},
+		{
+			"id": "kimi",
+			"name": "Kimi CLI (Legacy)",
+			"link": "https://moonshotai.github.io/kimi-cli/",
+			"icon": true
+		},
+		{
+			"id": "kimi-code",
+			"name": "Kimi Code",
+			"link": "https://moonshotai.github.io/kimi-code/",
+			"icon": true
+		},
+		{
+			"id": "kiro",
+			"name": "Kiro CLI",
+			"link": "https://kiro.dev/docs/cli/acp/",
+			"icon": true
+		},
+		{
+			"id": "minimax-code",
+			"name": "MiniMax Code",
+			"link": "https://agent.minimax.io",
+			"icon": true
+		},
+		{
+			"id": "minion-code",
+			"name": "Minion Code",
+			"link": "https://github.com/femto/minion-code",
+			"icon": true
+		},
+		{
+			"id": "mistral-vibe",
+			"name": "Mistral Vibe",
+			"link": "https://mistral.ai/products/vibe",
+			"icon": true
+		},
+		{
+			"id": "nova",
+			"name": "Nova",
+			"link": "https://www.compassap.ai/portfolio/nova.html",
+			"icon": true
+		},
+		{
+			"id": "opencode",
+			"name": "OpenCode",
+			"link": "https://opencode.ai",
+			"icon": true
+		},
+		{
+			"id": "opencode-v2",
+			"name": "OpenCode V2",
+			"link": "https://opencode.ai",
+			"icon": true
+		},
+		{
+			"id": "pi-acp",
+			"name": "pi ACP",
+			"link": "https://github.com/svkozak/pi-acp",
+			"icon": true
+		},
+		{
+			"id": "poolside",
+			"name": "Poolside",
+			"link": "https://poolside.ai",
+			"icon": true
+		},
+		{
+			"id": "qoder",
+			"name": "Qoder CLI",
+			"link": "https://qoder.com",
+			"icon": true
+		},
+		{
+			"id": "qwen-code",
+			"name": "Qwen Code",
+			"link": "https://qwenlm.github.io/qwen-code-docs/en/users/overview",
+			"icon": true
+		},
+		{
+			"id": "sigit",
+			"name": "siGit Code",
+			"link": "https://github.com/getsigit/sigit",
+			"icon": false
+		},
+		{
+			"id": "stakpak",
+			"name": "Stakpak",
+			"link": "https://stakpak.dev",
+			"icon": true
+		},
+		{
+			"id": "vtcode",
+			"name": "VT Code",
+			"link": "https://github.com/vinhnx/VTCode/blob/main/docs/guides/zed-acp.md",
+			"icon": true
+		}
+	]
+}

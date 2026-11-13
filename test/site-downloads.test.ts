@@ -57,7 +57,8 @@ describe("landing downloads", () => {
 		];
 		const result = updateDownloads(html, releases);
 		const links = [...result.matchAll(/data-file="([^"]+)" href="([^"]+)"/g)];
-		expect(links).toHaveLength(13);
+		// every file once in the list, and each shortcut to one (the hero's) follows the release too
+		expect(new Set(links.map(([, key]) => key)).size).toBe(13);
 		for (const [, key, url] of links)
 			expect(url).toContain(`/releases/download/${key.startsWith("phone") ? "phone2" : "v2"}/`);
 		expect(result).toContain("/v2/SHA256SUMS");

@@ -36,7 +36,10 @@ for (const width of [390, 1440]) {
 			expect(
 				await page.run(`document.querySelector('#download').href.endsWith('${width === 390 ? ".apk" : ".exe"}')`),
 			).toBe(true);
-			expect(await page.run(`document.querySelectorAll('a[data-file]').length`)).toBe(13);
+			// every file once in the list; the hero's shortcuts repeat some, and are checked like the rest below
+			expect(
+				await page.run(`new Set([...document.querySelectorAll('a[data-file]')].map((a) => a.dataset.file)).size`),
+			).toBe(13);
 			expect(
 				await page.run(
 					`[...document.querySelectorAll('a[data-file]')].every(a => a.href.includes('/releases/download/') && a.getBoundingClientRect().height > 0)`,

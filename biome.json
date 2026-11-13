@@ -13,6 +13,8 @@
 			"evals/**",
 			"scripts/**",
 			"site/**",
+			"!site/acp",
+			"!site/platforms",
 			"desktop/**",
 			"!desktop/dist",
 			"!desktop/node_modules",
