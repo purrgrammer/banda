@@ -45,6 +45,8 @@ import { compactionExtension, compactionSettings } from "./core/compaction.ts";
 import { Companion } from "./core/companion.ts";
 import { Connected } from "./core/connections.ts";
 import { pause, pauseRoutine, resume } from "./core/control.ts";
+import { registerCustomProviders } from "./core/custom-provider.ts";
+import { isCustomProvider } from "./core/custom-providers.ts";
 import { GIT_HOSTS, proxyKnows, sweepSent } from "./core/egress.ts";
 import { dropEmptyReplies } from "./core/empty-replies.ts";
 import { type Gateway, INLINE_IMAGES, mimeOf, OWNER, routeKey } from "./core/gateway.ts";
@@ -421,8 +423,15 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			log(`provider accounts: ${error instanceof Error ? error.message : String(error)}`);
 			return [];
 		});
+		// the owner's custom providers, before the store opens: a chat that ran on one resumes on it
+		await registerCustomProviders(models, home, log);
 		for (const { providerId } of stored) registerAccount(models, providerId);
-		const seen = (model: ModelRef) => seenBy(model, models.getModel(model.provider, model.modelId)?.baseUrl);
+		const seen = (model: ModelRef) =>
+			seenBy(
+				model,
+				models.getModel(model.provider, model.modelId)?.baseUrl ?? models.getProvider(model.provider)?.baseUrl,
+				isCustomProvider(model.provider) ? models.getProvider(model.provider)?.name : undefined,
+			);
 		harness = await openStore(home, {
 			models,
 			registry,

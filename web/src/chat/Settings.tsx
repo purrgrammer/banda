@@ -41,7 +41,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/cn";
-import { accountTitle, backendOf } from "../../../src/core/provider-accounts.ts";
+import { accountTitle } from "../../../src/core/provider-accounts.ts";
 import { TIER_WORDS, TIERS, type Tier } from "../../../src/core/tiers.ts";
 import { AvatarChoices } from "../avatar/Choices.tsx";
 import type { ModelView, TiersView } from "../lib/api.ts";
@@ -52,6 +52,7 @@ import { PaneHeader, type PaneParent } from "./Header.tsx";
 import { ModelPicker } from "./ModelPicker.tsx";
 import { ProviderAccountForm, ProviderAccountRename } from "./ProviderAccountForm.tsx";
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
+import { ProviderMark } from "./ProviderMark.tsx";
 import { ProviderSignIn, type SignInWay } from "./ProviderSignIn.tsx";
 import type { Who } from "./Row.tsx";
 import { shownTier, tierPicks } from "./tier-picks.ts";
@@ -995,7 +996,7 @@ export function AppSettings({
 				<Block title="Model provider" note="Who thinks for the band. Your provider sees what you ask.">
 					<Rows>
 						<RowOf
-							lead={<img src={`/providers/${backendOf(data.provider.id)}.svg`} alt="" className="size-5 dark:invert" />}
+							lead={<ProviderMark provider={data.provider.id} className="size-5" />}
 							title={data.provider.name}
 							detail="Thinks for every agent of the band"
 						/>

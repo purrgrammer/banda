@@ -396,6 +396,60 @@ export const SIGN_IN_WAYS = [
  * Settings' providers, one of each state: in use, connected, two accounts of one provider, set from outside banda,
  * connecting, failed, by sign-in and by key.
  */
+/** The owner's own providers: a keyless model on the computer banda runs on, and a hosted one whose check failed. */
+export const CUSTOM_PROVIDERS: readonly import("../areas/custom-providers.ts").CustomProviderView[] = [
+	{
+		id: "custom-lm-studio",
+		name: "LM Studio",
+		baseUrl: "http://localhost:1234/v1",
+		destination: { place: "computer", host: "localhost:1234", secure: false, url: "http://localhost:1234/v1" },
+		key: "none",
+		models: [
+			{
+				id: "qwen3-8b",
+				name: "Qwen3 8B",
+				images: false,
+				reasoning: true,
+				contextWindow: 32_768,
+				maxTokens: 8192,
+				cost: { input: 0, output: 0 },
+			},
+		],
+		tiers: { quick: "qwen3-8b", balanced: "qwen3-8b", deep: "qwen3-8b" },
+		using: true,
+		checked: { ok: true, at: 0, model: "Qwen3 8B", ms: 412, reply: "OK" },
+	},
+	{
+		id: "custom-team-gateway",
+		name: "Team gateway",
+		baseUrl: "https://llm.example.com/v1",
+		destination: { place: "internet", host: "llm.example.com", secure: true, url: "https://llm.example.com/v1" },
+		key: "stored",
+		models: [
+			{
+				id: "fast-1",
+				images: false,
+				reasoning: false,
+				contextWindow: 128_000,
+				maxTokens: 8192,
+				cost: { input: 0.2, output: 0.8 },
+			},
+			{
+				id: "deep-1",
+				name: "Deep 1",
+				images: true,
+				reasoning: true,
+				contextWindow: 200_000,
+				maxTokens: 32_000,
+				cost: { input: 3, output: 15 },
+			},
+		],
+		tiers: { quick: "fast-1", balanced: "fast-1", deep: "deep-1" },
+		using: false,
+		checked: { ok: false, at: 0, model: "fast-1", why: '401: {"message":"Incorrect API key provided: Bearer [key]"}' },
+	},
+];
+
 export const SETTINGS_PROVIDERS: readonly import("../chat/Settings.tsx").ProviderRow[] = [
 	{ id: "anthropic", name: "Anthropic", provider: "anthropic", label: "Personal", by: "sign-in", connected: true },
 	{ id: "anthropic@work", name: "Anthropic", provider: "anthropic", label: "Work", by: "sign-in", connected: true },

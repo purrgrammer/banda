@@ -3,6 +3,7 @@
  * provider banda has a preset for maps them to models of pi-ai's built-in catalog (`test/tiers.test.ts` fails when an
  * id leaves it); a provider without one runs the configured model on every tier. Plain data, shared with the web.
  */
+import { isCustomProvider } from "./custom-providers.ts";
 import { backendOf } from "./provider-accounts.ts";
 
 export const TIERS = ["quick", "balanced", "deep"] as const;
@@ -74,10 +75,13 @@ export const providerOf = (choice: ModelChoice, fallback: ModelId): string => ch
 
 /**
  * The model `tier` runs on: the provider's preset, or the owner's override of it; the configured model (`fallback`) on
- * every tier when the provider has no preset.
+ * every tier when the provider has no preset. A custom provider (`./custom-providers.ts`) has no preset: the owner's
+ * choice for each tier is all it runs, and a tier without one names no model (`modelId` empty), so a run on it fails
+ * saying so rather than thinking with another provider's model.
  */
 export function modelFor(tier: Tier, choice: ModelChoice, fallback: ModelId): ModelId {
 	const provider = providerOf(choice, fallback);
+	if (isCustomProvider(provider)) return { provider, modelId: choice.overrides?.[provider]?.[tier] ?? "" };
 	const preset = presetOf(provider);
 	if (preset === undefined) return { provider: fallback.provider, modelId: fallback.modelId };
 	return { provider, modelId: choice.overrides?.[provider]?.[tier] ?? preset.models[tier] };

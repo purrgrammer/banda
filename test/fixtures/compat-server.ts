@@ -1,0 +1,185 @@
+/**
+ * A scripted OpenAI-compatible server on loopback, standing in for a local model server (Ollama, LM Studio, llama.cpp,
+ * vLLM) or a hosted gateway: `POST <base>/chat/completions`, streamed or not, and `GET <base>/models`. It records each
+ * request it answers, so a test can see what banda sent (its headers, its body); it can require a key, redirect, fail,
+ * or refuse a field the way a strict server does. No model runs: the answer is scripted.
+ *
+ * Run by hand: `node test/fixtures/compat-server.ts [port] [key]` serves on 127.0.0.1 until stopped.
+ */
+import { createServer, type IncomingMessage, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+
+export type Recorded = {
+	readonly method: string;
+	readonly path: string;
+	readonly headers: Readonly<Record<string, string | string[] | undefined>>;
+	readonly body: Record<string, unknown> | undefined;
+};
+
+export type CompatOptions = {
+	/** The path the API answers under. Default `/v1`. */
+	readonly base?: string;
+	/** A key the server requires as `Authorization: Bearer <key>`; it answers 401, echoing what it got, without it. */
+	readonly key?: string;
+	/** The models `GET /models` lists. */
+	readonly models?: readonly string[];
+	/** The text of an answer, from the request. Default: "OK from <model>". */
+	readonly reply?: (body: Record<string, unknown>) => string;
+	/** Answer `POST /chat/completions` with a redirect here instead. */
+	readonly redirect?: string;
+	/** Answer with this status and message instead. */
+	readonly fail?: { readonly status: number; readonly message: string };
+	/** Fields the server refuses with 400, as a strict one does (`store`, `max_completion_tokens`). */
+	readonly refuses?: readonly string[];
+	/**
+	 * Answer a chat turn as banda's agents speak, when the request offers `message_user`: a call of it with this text,
+	 * then, once its result comes back, an empty answer that ends the turn.
+	 */
+	readonly speak?: string;
+	/** Hold each chat completion this long before answering, as a slow model does. */
+	readonly delayMs?: number;
+};
+
+export type CompatServer = {
+	readonly url: string;
+	readonly port: number;
+	readonly requests: Recorded[];
+	/** Change how it answers from the next request on. */
+	set(options: Partial<CompatOptions>): void;
+	close(): Promise<void>;
+};
+
+async function bodyOf(request: IncomingMessage): Promise<Record<string, unknown> | undefined> {
+	const chunks: Buffer[] = [];
+	for await (const chunk of request) chunks.push(chunk as Buffer);
+	if (chunks.length === 0) return undefined;
+	try {
+		return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+	} catch {
+		return undefined;
+	}
+}
+
+export async function compatServer(initial: CompatOptions = {}, port = 0): Promise<CompatServer> {
+	let options: CompatOptions = { ...initial };
+	const requests: Recorded[] = [];
+	const server: Server = createServer((request, response) => {
+		void (async () => {
+			const base = options.base ?? "/v1";
+			const path = new URL(request.url ?? "/", "http://x").pathname;
+			const body = await bodyOf(request);
+			requests.push({ method: request.method ?? "GET", path, headers: { ...request.headers }, body });
+			const json = (status: number, value: unknown) => {
+				response.writeHead(status, { "content-type": "application/json" });
+				response.end(JSON.stringify(value));
+			};
+			if (options.key !== undefined && request.headers.authorization !== `Bearer ${options.key}`)
+				return json(401, {
+					error: {
+						message: `Incorrect API key provided: ${request.headers.authorization ?? "none"}`,
+						type: "invalid_request_error",
+					},
+				});
+			if (request.method === "GET" && path === `${base}/models`)
+				return json(200, {
+					object: "list",
+					data: (options.models ?? ["scripted-model"]).map((id) => ({ id, object: "model", owned_by: "scripted" })),
+				});
+			if (request.method !== "POST" || path !== `${base}/chat/completions`)
+				return json(404, { error: { message: `no route ${request.method} ${path}` } });
+			if (path === `${base}/chat/completions` && (options.delayMs ?? 0) > 0) {
+				const held = options.delayMs ?? 0;
+				await new Promise<void>((resolve) => {
+					const timer = setTimeout(resolve, held);
+					request.socket.once("close", () => {
+						clearTimeout(timer);
+						resolve();
+					});
+				});
+				if (request.socket.destroyed) return;
+			}
+			if (options.redirect !== undefined) {
+				response.writeHead(307, { location: options.redirect });
+				return response.end();
+			}
+			if (options.fail !== undefined) return json(options.fail.status, { error: { message: options.fail.message } });
+			const refused = (options.refuses ?? []).find((field) => body !== undefined && field in body);
+			if (refused !== undefined)
+				return json(400, { error: { message: `Unrecognized request argument supplied: ${refused}` } });
+			const model = String(body?.model ?? "scripted-model");
+			const tools = (body?.tools ?? []) as { function?: { name?: string } }[];
+			const messages = (body?.messages ?? []) as { role?: string }[];
+			const speaks =
+				options.speak !== undefined && tools.some((tool) => tool.function?.name === "message_user")
+					? messages.at(-1)?.role === "tool"
+						? ""
+						: options.speak
+					: undefined;
+			const text = speaks === undefined ? (options.reply?.(body ?? {}) ?? `OK from ${model}`) : "";
+			const usage = { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 };
+			const created = Math.floor(Date.now() / 1000);
+			if (body?.stream !== true)
+				return json(200, {
+					id: "chatcmpl-scripted",
+					object: "chat.completion",
+					created,
+					model,
+					choices: [{ index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" }],
+					usage,
+				});
+			response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+			const chunk = (delta: Record<string, unknown>, finish: string | null, extra: Record<string, unknown> = {}) =>
+				response.write(
+					`data: ${JSON.stringify({ id: "chatcmpl-scripted", object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta, finish_reason: finish }], ...extra })}\n\n`,
+				);
+			chunk({ role: "assistant", content: "" }, null);
+			if (speaks !== undefined && speaks !== "") {
+				chunk(
+					{
+						tool_calls: [
+							{
+								index: 0,
+								id: `call_${requests.length}`,
+								type: "function",
+								function: { name: "message_user", arguments: JSON.stringify({ text: speaks }) },
+							},
+						],
+					},
+					null,
+				);
+				chunk({}, "tool_calls", { usage });
+				return response.end("data: [DONE]\n\n");
+			}
+			for (const word of text.split(/(?<= )/)) if (word !== "") chunk({ content: word }, null);
+			chunk({}, "stop", { usage });
+			response.end("data: [DONE]\n\n");
+		})().catch((error: unknown) => {
+			response.writeHead(500);
+			response.end(String(error));
+		});
+	});
+	await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
+	const bound = (server.address() as AddressInfo).port;
+	return {
+		url: `http://127.0.0.1:${bound}${options.base ?? "/v1"}`,
+		port: bound,
+		requests,
+		set: (next) => {
+			options = { ...options, ...next };
+		},
+		close: () =>
+			new Promise<void>((resolve) => {
+				server.closeAllConnections();
+				server.close(() => resolve());
+			}),
+	};
+}
+
+if (import.meta.main) {
+	const [port, key] = process.argv.slice(2);
+	const server = await compatServer(
+		{ ...(key === undefined ? {} : { key }), models: ["scripted-small", "scripted-large"] },
+		Number(port ?? 0),
+	);
+	console.log(`scripted OpenAI-compatible server at ${server.url}${key === undefined ? "" : " (key required)"}`);
+}

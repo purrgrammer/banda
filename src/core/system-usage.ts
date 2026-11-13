@@ -8,7 +8,7 @@ import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import { defineDoc, type Harness } from "@earendil-works/pi-durable";
 import { context } from "./store.ts";
 
-export type System = "inference.face";
+export type System = "inference.face" | "check.provider";
 
 type StoredUsage = JsonRepresentation<Usage>;
 

@@ -340,6 +340,13 @@ export const SECTIONS: readonly Entry[] = [
 		sources: [SETTINGS, "web/src/chat/Usage.tsx", "web/src/chat/ModelPicker.tsx"],
 	},
 	{ id: "settings-providers", title: "Settings, providers", group: "agent", status: "app", sources: [SETTINGS] },
+	{
+		id: "settings-custom-providers",
+		title: "Settings, your own providers",
+		group: "agent",
+		status: "app",
+		sources: ["web/src/chat/CustomProviders.tsx"],
+	},
 	{ id: "devices", title: "Devices", group: "agent", status: "app", sources: [DEVICES, SETTINGS] },
 	{ id: "devices-states", title: "Devices, each state", group: "agent", status: "app", sources: [DEVICES] },
 	{

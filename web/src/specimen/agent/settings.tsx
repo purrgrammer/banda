@@ -1,10 +1,11 @@
 /** Settings: the page, each of its tabs, and the provider accounts the band thinks with. */
 import { useContext, useState } from "react";
 import { Band } from "../../chat/Band.tsx";
+import { CustomProviderForm, CustomProviders } from "../../chat/CustomProviders.tsx";
 import { AppSettings, ModelProviders, SettingsPage } from "../../chat/Settings.tsx";
 import { UsagePanel } from "../../chat/Usage.tsx";
 import type { Tier, TiersView } from "../../lib/api.ts";
-import { ATLAS, ROWS, SANCHO, SETTINGS, SETTINGS_PROVIDERS } from "../fixtures.ts";
+import { ATLAS, CUSTOM_PROVIDERS, ROWS, SANCHO, SETTINGS, SETTINGS_PROVIDERS } from "../fixtures.ts";
 import { Section, StageContext } from "../stage.tsx";
 
 const example = {
@@ -129,6 +130,29 @@ export function SettingsSections() {
 				</SettingsPage>
 				<SettingsPage title="Settings, on a device" phone={phone}>
 					<ModelProviders current="anthropic" providers={SETTINGS_PROVIDERS} here={false} />
+				</SettingsPage>
+			</Section>
+			<Section
+				id="settings-custom-providers"
+				note="An OpenAI-compatible address of the owner's: where each sends things, its key, a check's outcome; the form to add or edit one, with its models and tiers."
+			>
+				<SettingsPage title="Settings, your own providers" phone={phone}>
+					<CustomProviders view={{ providers: CUSTOM_PROVIDERS }} current="custom-lm-studio" />
+				</SettingsPage>
+				<SettingsPage title="Settings, your own providers on a phone" phone={phone}>
+					<CustomProviders view={{ providers: CUSTOM_PROVIDERS }} current="anthropic" here={false} />
+				</SettingsPage>
+				<SettingsPage title="Settings, none yet, and a file that does not fit" phone={phone}>
+					<CustomProviders
+						view={{ providers: [], error: "custom-providers.json does not fit its schema: /providers/0/key" }}
+						current="anthropic"
+					/>
+				</SettingsPage>
+				<SettingsPage title="Adding one" phone={phone}>
+					<CustomProviderForm />
+				</SettingsPage>
+				<SettingsPage title="Editing one, refused while in use" phone={phone}>
+					<CustomProviderForm initial={CUSTOM_PROVIDERS[1]} onRemove={async () => undefined} />
 				</SettingsPage>
 			</Section>
 		</>

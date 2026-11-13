@@ -348,6 +348,23 @@ account is the provider itself; another thinks only with the credential connecte
 banda, and leaves with its sign-in. The tiers are the provider's whichever account runs them, and what a run spends is
 counted against the account it ran on. An account's name shows only once its provider has more than one.
 
+**The owner may bring a provider of their own.** Any address that speaks OpenAI's chat completions (a model server on
+the computer banda runs on, one on the owner's network, a hosted gateway) is a custom provider: a name, the address,
+a key or none, and the models it runs, each declared by hand with what it can do (context, longest answer, images,
+thinking, price), since such an endpoint's list of models says none of it. Each tier runs one of its models, the owner's
+pick, the same one on several if they like; it has no preset, so a tier without a model names none and a run on it
+fails saying so, never thinking with another provider. The definition is the owner's alone: a typed file in the home,
+outside the box and the store, written only through the owner's API and checked on every read, a file that does not
+fit registering none; its key is a provider credential like any other and never comes back out. Custom providers are
+registered before the store opens, so a turn that ran on one resumes on it. The address is a destination trusted with
+every prompt: plain http is refused past the owner's own network, credentials in the address and link-local addresses
+are refused, a redirect is refused rather than followed, a keyless one sends no Authorization header, a new address
+asks for the key again, and an error is told without the key. Saving never reaches it; a check is one short request
+the owner asks for, told first where it goes and that it may cost. A provider the band, an agent's file or a chat still
+runs on, or a model of one, is not removed until the owner moves them. "This computer" in its address is the computer
+banda runs on, also when the owner reads it on a phone. How the endpoint departs from OpenAI's API is a short, fixed
+set of choices with defaults most local servers take; no claim is made that every server works.
+
 **The face is never the trust.** Personality makes an agent pleasant; it does not make it safe. Trust lives in the
 structural rules, and the warmth of an agent never softens an approval: the card that asks is the daemon's, plain, and
 identical whoever the agent is.

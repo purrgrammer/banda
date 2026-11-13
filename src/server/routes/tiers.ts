@@ -7,6 +7,7 @@ import type { ModelRef } from "@earendil-works/pi-durable";
 import { accountsOf } from "../../core/account-provider.ts";
 import { ChatTier, defineTierSwitch } from "../../core/agents.ts";
 import { Companion, type CompanionDoc, setModels } from "../../core/companion.ts";
+import { isCustomProvider } from "../../core/custom-providers.ts";
 import { accountTitle, backendOf, parseAccount } from "../../core/provider-accounts.ts";
 import { FileCredentialStore } from "../../core/provider-credentials.ts";
 import { context } from "../../core/store.ts";
@@ -23,17 +24,35 @@ const switches = new WeakMap<object, ReturnType<typeof defineTierSwitch>>();
 /** A provider in plain words, as who sees a chat names it. */
 const providerName = (deps: Deps, provider: string) => deps.seen({ provider, modelId: "" })?.name ?? provider;
 
+/** The custom providers registered here, by id (`../../core/custom-provider.ts`). */
+export const customIds = (deps: Pick<Deps, "models">): string[] =>
+	deps.models
+		.getProviders()
+		.map((provider) => provider.id)
+		.filter(isCustomProvider);
+
+/** Whether each tier of custom provider `id` names one of its models, as the owner chose them. */
+export const mapped = (deps: Pick<Deps, "models">, choice: CompanionDoc, id: string): boolean =>
+	TIERS.every((tier) => {
+		const modelId = choice.overrides?.[id]?.[tier];
+		return modelId !== undefined && deps.models.getModel(id, modelId) !== undefined;
+	});
+
 /**
- * The provider accounts the owner may pick: those of backends with presets that have credentials, and the configured
- * model's; each named by its backend, with its label once the backend has more than one, and `ambient` with its
- * `source` when its credential came from outside banda.
+ * The provider accounts the owner may pick: those of backends with presets that have credentials, the configured
+ * model's, and the custom providers that can be reached (a key given, or none needed) and have a model for each tier;
+ * each named by its backend, with its label once the backend has more than one, and `ambient` with its `source` when
+ * its credential came from outside banda.
  */
 export async function offered(deps: Deps, fallback: ModelRef): Promise<TiersView["providers"][number][]> {
+	const customs = customIds(deps);
+	const choice: CompanionDoc = customs.length === 0 ? {} : ((await deps.harness.snapshot(Companion, context)) ?? {});
 	const candidates = [
 		...new Set([
 			...PRESETS.flatMap((preset) => accountsOf(deps.models, preset.provider)),
 			...accountsOf(deps.models, backendOf(fallback.provider)),
 			fallback.provider,
+			...customs.filter((id) => mapped(deps, choice, id)),
 		]),
 	];
 	const usable = await Promise.all(
@@ -49,6 +68,7 @@ export async function offered(deps: Deps, fallback: ModelRef): Promise<TiersView
 	const labels = await new FileCredentialStore(deps.home).labels();
 	return Promise.all(
 		kept.map(async (id) => {
+			if (isCustomProvider(id)) return { id, name: deps.models.getProvider(id)?.name ?? id };
 			const { ambient, source } = await credentialOf(deps.models, id);
 			const many = kept.filter((each) => backendOf(each) === backendOf(id)).length > 1;
 			return {
@@ -65,11 +85,12 @@ async function view(deps: Deps): Promise<TiersView> {
 	const choice: CompanionDoc = (await deps.harness.snapshot(Companion, context)) ?? {};
 	const fallback = deps.config.model;
 	const id = providerOf(choice, fallback);
-	const presets = presetOf(id) !== undefined;
+	const custom = isCustomProvider(id);
+	const presets = presetOf(id) !== undefined || custom;
 	const seen = deps.seen(modelFor("quick", choice, fallback));
 	const model = (tier: Tier) => {
 		const ref = modelFor(tier, choice, fallback);
-		const own = presets && choice.overrides?.[id]?.[tier] !== undefined;
+		const own = presets && !custom && choice.overrides?.[id]?.[tier] !== undefined;
 		return {
 			id: ref.modelId,
 			name: deps.models.getModel(ref.provider, ref.modelId)?.name ?? ref.modelId,
@@ -113,8 +134,10 @@ async function change(deps: Deps, body: Record<string, unknown>): Promise<void> 
 		if (modelId !== null && typeof modelId !== "string")
 			throw new BadRequest("override.modelId is a model's id, or null for the preset");
 		const of = provider ?? providerOf(choice, fallback);
-		if (presetOf(of) === undefined)
+		if (presetOf(of) === undefined && !isCustomProvider(of))
 			throw new BadRequest(`${providerName(deps, of)} runs one model on every tier: there is no tier to change`);
+		if (modelId === null && isCustomProvider(of))
+			throw new BadRequest(`${providerName(deps, of)} has no preset: each tier runs one of its models, as you chose`);
 		if (modelId !== null && deps.models.getModel(of, modelId) === undefined)
 			throw new BadRequest(`${providerName(deps, of)} has no model "${modelId}"`);
 		override = { provider: of, tier, modelId };
@@ -127,6 +150,33 @@ async function change(deps: Deps, body: Record<string, unknown>): Promise<void> 
 			...(override === undefined ? {} : { override }),
 		});
 		await switcher.modelsChanged(tx);
+	}, context);
+}
+
+/**
+ * Run custom provider `provider`'s tiers on `models`, one of its models each (the same one on several is fine), and
+ * think with it when `use`; in one commit, so a chat that follows the tiers moves with them.
+ */
+export async function setTiers(
+	deps: Deps,
+	provider: string,
+	models: { readonly [T in Tier]: string },
+	use = false,
+): Promise<void> {
+	const switcher = switches.get(deps.core);
+	if (switcher === undefined) throw new Error("the tiers area started before it was installed");
+	await deps.harness.commit(async (tx) => {
+		for (const tier of TIERS) await setModels(tx, { override: { provider, tier, modelId: models[tier] } });
+		if (use) await setModels(tx, { provider });
+		const choice = await tx.doc(Companion);
+		if (providerOf(choice, deps.config.model) === provider) await switcher.modelsChanged(tx);
+	}, context);
+}
+
+/** Forget custom provider `provider`'s tiers: it is gone. */
+export async function clearTiers(deps: Deps, provider: string): Promise<void> {
+	await deps.harness.commit(async (tx) => {
+		for (const tier of TIERS) await setModels(tx, { override: { provider, tier, modelId: null } });
 	}, context);
 }
 
