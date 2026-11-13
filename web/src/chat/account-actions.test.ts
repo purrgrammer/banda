@@ -176,6 +176,36 @@ describe("the MCP setup's connected step", () => {
 		// Sign out acts on one account: it is in that account's menu, not a button beside the list
 		expect(words).not.toContain("Sign out");
 	});
+
+	it("keeps each account's menu and Add account usable while the server is not connected", () => {
+		const problem = renderToStaticMarkup(
+			createElement(McpSetupView, {
+				state: {
+					phase: "done",
+					view: { ...view, state: "problem", problem: "The server answered 401." },
+					agents: AGENTS,
+					busy: false,
+					error: "",
+					credential: "",
+					account: "work",
+					label: "",
+					selected: ["sancho"],
+					chosen: {},
+				},
+				actions: new Proxy({}, { get: () => () => {} }) as Parameters<typeof McpSetupView>[0]["actions"],
+			}),
+		);
+		// signing a broken account out, or another in, is how the owner gets out of it
+		const trigger = row(problem, "work").match(/<button[^>]*aria-label="More for @work"[^>]*>/)?.[0];
+		expect(trigger).not.toMatch(/\bdisabled=""/);
+		const add = problem.match(/<button[^>]*>(?:(?!<\/button>).)*Add account<\/button>/)?.[0];
+		expect(add).toBeDefined();
+		expect(add).not.toMatch(/\bdisabled=""/);
+		// what it can't change until it is connected again stays off
+		const switches = [...problem.matchAll(/<button[^>]*role="switch"[^>]*>/g)].map((each) => each[0]);
+		expect(switches.length).toBeGreaterThan(0);
+		for (const each of switches) expect(each).toMatch(/\bdisabled=""/);
+	});
 });
 
 describe("Settings' provider accounts", () => {

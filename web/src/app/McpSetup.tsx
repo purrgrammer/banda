@@ -571,7 +571,8 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 						onChoose={actions.setChosen}
 						onSetTools={actions.setTools}
 						agents={agents}
-						busy={busy || view.state !== "connected"}
+						busy={busy}
+						locked={view.state !== "connected"}
 						onAdd={anonymous ? undefined : actions.addAccount}
 						onSignOut={(each) => actions.signOut(each.account)}
 						agentsFor={

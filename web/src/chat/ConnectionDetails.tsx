@@ -340,6 +340,7 @@ export function ConnectionDetailsView({
 	onAdd,
 	onRemove,
 	busy = false,
+	locked = false,
 	error = "",
 }: {
 	view: ConnectionView;
@@ -360,6 +361,8 @@ export function ConnectionDetailsView({
 	/** Remove the connection whole; absent in the review on adding, where there is nothing yet to remove. */
 	onRemove?: (() => void) | undefined;
 	busy?: boolean | undefined;
+	/** Its tools and who can use it can't change yet (the server isn't connected); its accounts still can be acted on. */
+	locked?: boolean | undefined;
 	error?: string | undefined;
 }) {
 	const review = mode === "review";
@@ -404,7 +407,7 @@ export function ConnectionDetailsView({
 					groups={view.groups}
 					settingOf={settingOf}
 					onTools={onTools}
-					disabled={busy}
+					disabled={busy || locked}
 					expanded={review}
 				/>
 			</Part>
@@ -432,7 +435,13 @@ export function ConnectionDetailsView({
 						{agentsFor.map((each) => (
 							<div key={each.key} className="flex flex-col gap-2 px-3.5 py-3">
 								{each.label === undefined ? null : <p className="text-meta font-medium text-ink-2">{each.label}</p>}
-								<McpAgents agents={agents} selected={each.selected} onSwitch={each.onSwitch} disabled={busy} plain />
+								<McpAgents
+									agents={agents}
+									selected={each.selected}
+									onSwitch={each.onSwitch}
+									disabled={busy || locked}
+									plain
+								/>
 							</div>
 						))}
 					</div>
