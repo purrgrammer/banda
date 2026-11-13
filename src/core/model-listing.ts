@@ -54,8 +54,10 @@ const list = (value: unknown, where: string): unknown[] => {
 	if (!Array.isArray(value)) throw new Unreadable(`${where} is not a list`);
 	return value.slice(0, MAX_LISTED);
 };
-const drop = <T extends object>(value: T): T =>
-	Object.fromEntries(Object.entries(value).filter(([, each]) => each !== undefined)) as T;
+/** A listed model with only the facts its route gave: an unknown one is left out, never kept as undefined. */
+const drop = (
+	value: { readonly id: string } & { readonly [K in Exclude<keyof Listed, "id">]?: Listed[K] | undefined },
+): Listed => Object.fromEntries(Object.entries(value).filter(([, each]) => each !== undefined)) as Listed;
 
 /** The address with its API's path (`/v1`) taken off: where a server's own routes (`/api/tags`, `/props`) answer. */
 export function rootOf(baseUrl: string): string {

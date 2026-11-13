@@ -1,16 +1,21 @@
 /**
- * Custom providers through the app, as a person uses them, against a throwaway daemon and a scripted OpenAI-compatible
- * server on loopback (`./fixtures/compat-server.ts`; no model runs, no live provider, nothing written outside the
- * temporary home): the form refuses what it should, saying why; a keyless provider is added with two models and a
- * tier each, and saving it sends nothing; a check is asked first, naming where it goes, and is the one request it
- * makes; the band thinks with it and answers a chat; a keyed one keeps its key out of sight; an edit is cancelled; a
- * removal is refused while the band thinks with it and goes once it moved; a failing check says why; after a restart
- * it is all still there. At phone and desktop width, light and dark. `BANDA_CUSTOM_PROVIDER_SHOTS=<dir>` saves a
+ * Adding providers through the app, as a person does, against a throwaway daemon that has pi-ai's real built-in
+ * catalog (every provider, no credential from this computer) and a scripted OpenAI-compatible server on loopback
+ * answering as Ollama documents (`./fixtures/compat-server.ts`). No live provider is reached: the cloud's sign-in is
+ * pi-ai's own login, which stores what it is given and calls nothing; a catalog is pi-ai's, read locally; and only the
+ * scripted server is ever asked anything.
+ *
+ * Add a provider lists every one, searchable and by keyboard; a cloud is signed in by its own form and started on a
+ * model of its catalog, then not used; a server's models are found on asking, kept apart from the one it starts on,
+ * and only what that one lacks is asked; saving sends nothing and uses nothing, Use does; the band answers a chat on
+ * it; a check that fails says why in words; a removal is refused while the band thinks with it; and after a restart it
+ * is all still there. At phone and desktop width, light and dark. `BANDA_CUSTOM_PROVIDER_SHOTS=<dir>` saves a
  * screenshot at each step.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createModels, fauxProvider } from "@earendil-works/pi-ai";
+import { fauxProvider } from "@earendil-works/pi-ai";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { expect, it } from "vitest";
 import { customProvidersPath } from "../src/core/custom-provider.ts";
 import { FileCredentialStore } from "../src/core/provider-credentials.ts";
@@ -23,8 +28,8 @@ import { skipShippedSkills, tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const SHOTS = process.env.BANDA_CUSTOM_PROVIDER_SHOTS;
-const KEY = "sk-team-gateway-0123456789";
 const SPOKEN = "Hello from the scripted local model.";
+const CLOUDFLARE_TOKEN = "cf-token-for-the-test-0000";
 
 const visible = "el.getClientRects().length > 0";
 const shows = (text: string) => `document.body.innerText.includes(${JSON.stringify(text)})`;
@@ -36,10 +41,14 @@ const dialog = `document.querySelector('[role="dialog"]')`;
 const alert = `document.querySelector('[role="alertdialog"]')`;
 const tab = (text: string) =>
 	`[...document.querySelectorAll('[role="tab"]')].find(el => el.textContent.trim() === ${JSON.stringify(text)})`;
-/** The control a visible label names, within `within` (a model's fieldset, say). */
+const option = (text: string) =>
+	`[...document.querySelectorAll('[role="option"]')].find(el => ${visible} && el.querySelector('span span')?.textContent.trim() === ${JSON.stringify(text)})`;
+/** The control a visible label names, within `within`. */
 const field = (label: string, within = "document") =>
 	`document.getElementById([...${within}.querySelectorAll('label')].find(el => ${visible} && el.textContent.trim() === ${JSON.stringify(label)})?.htmlFor)`;
-const model = (n: number) => `${dialog}.querySelector('fieldset[aria-label="Model ${n}"]')`;
+const model = (id: string) => `${dialog}.querySelector('li[data-model=${JSON.stringify(id)}]')`;
+const labelled = (text: string, within = "document") =>
+	`[...${within}.querySelectorAll('label')].find(el => ${visible} && el.textContent.includes(${JSON.stringify(text)}))`;
 const row = (id: string) => `document.querySelector('[data-custom-provider="${id}"]')`;
 
 /** A click as a person makes one: on the control's centre, which must be the control and not something over it. */
@@ -59,8 +68,8 @@ async function click(page: Page, expression: string) {
 }
 
 /** A key pressed and let go, as the keyboard sends it. */
-async function press(page: Page, key: "Enter" | "Tab" | "Escape") {
-	const code = { Enter: 13, Tab: 9, Escape: 27 }[key];
+async function press(page: Page, key: "Enter" | "Tab" | "Escape" | "ArrowDown") {
+	const code = { Enter: 13, Tab: 9, Escape: 27, ArrowDown: 40 }[key];
 	await page.input("Input.dispatchKeyEvent", { type: "rawKeyDown", key, code: key, windowsVirtualKeyCode: code });
 	if (key === "Enter") await page.input("Input.dispatchKeyEvent", { type: "char", key, code: key, text: "\r" });
 	await page.input("Input.dispatchKeyEvent", { type: "keyUp", key, code: key, windowsVirtualKeyCode: code });
@@ -76,17 +85,10 @@ async function fill(page: Page, expression: string, value: string) {
 	await page.until(`(${expression}).value === ${JSON.stringify(value)}`);
 }
 
-/** Pick `option` (its text) in a select. */
-async function choose(page: Page, expression: string, option: string) {
-	await page.until(expression);
-	await page.run(
-		`(() => {const el=${expression}; const o=[...el.options].find(o => o.textContent.trim() === ${JSON.stringify(option)}); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(el,o.value); el.dispatchEvent(new Event('change',{bubbles:true}));})()`,
-	);
-	await page.until(`(${expression}).selectedOptions[0]?.textContent.trim() === ${JSON.stringify(option)}`);
-}
+const nowhere = { env: async () => undefined, fileExists: async () => false };
 
 async function daemonOn(home: string, port = 0) {
-	const models = createModels({ credentials: new FileCredentialStore(home) });
+	const models = builtinModels({ credentials: new FileCredentialStore(home), authContext: nowhere });
 	models.setProvider(fauxProvider().provider);
 	const daemon = await startDaemon({ home, port, models, box: hostBox(home), log: () => {} });
 	const base = `http://127.0.0.1:${daemon.port}`;
@@ -105,12 +107,20 @@ async function daemonOn(home: string, port = 0) {
 
 for (const width of [390, 1440])
 	it.skipIf(!hasChrome())(
-		`the owner adds, checks, uses, edits and removes a custom provider, at ${width}`,
+		`the owner adds a cloud provider and a server of their own, uses one and removes it, at ${width}`,
 		async () => {
 			const home = await tempHome();
 			if (SHOTS !== undefined) await mkdir(SHOTS, { recursive: true });
 			await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
-			const local = await compatServer({ speak: SPOKEN });
+			const local = await compatServer({
+				speak: SPOKEN,
+				models: [
+					{ id: "qwen3:8b", context: 40_960 },
+					{ id: "llava:7b", context: 4096, vision: true },
+					{ id: "Qwen/Qwen3-8B" },
+					{ id: "nomic-embed-text", embedding: true },
+				],
+			});
 			let daemon: Daemon | undefined;
 			try {
 				const started = await daemonOn(home);
@@ -150,121 +160,147 @@ for (const width of [390, 1440])
 								`(location.hash.startsWith('#/settings') || (location.hash='#/settings', false)) && ${tab("Model")}`,
 							);
 							await click(page, tab("Model"));
-							await page.until(shows("Your own providers"));
+							await page.until(named("Add a provider"));
 						};
 
 						await page.until(shows("Sancho"));
 						await settings();
-						await page.until(shows("None yet"));
 						await shot("1-model-tab");
 
-						// by keyboard: Enter opens the form on its first field, Tab moves on, Escape closes it back on the button
+						// by keyboard: Enter opens every provider with the search focused; Escape closes back on the button
 						await page.run(`(${named("Add a provider")}).focus()`);
 						await press(page, "Enter");
-						await page.until(`${dialog} && document.activeElement === ${field("Name")}`);
-						await press(page, "Tab");
-						await page.until(`document.activeElement === ${field("Address")}`);
+						await page.until(`${dialog} && document.activeElement === ${named("Search providers and servers")}`);
+						const listed = await page.run<number>(`document.querySelectorAll('[role="option"]').length`);
+						// every provider pi-ai has with chat models but the legacy Codex, and eight kinds of server
+						expect(listed).toBeGreaterThan(40);
+						await shot("2-every-provider");
+						await darkToo("2-every-provider");
+						await page.input("Input.insertText", { text: "cloudflare" });
+						await page.until(`document.querySelectorAll('[role="option"]').length === 2`);
 						await press(page, "Escape");
 						await page.until(`!${dialog} && document.activeElement === ${named("Add a provider")}`);
 
-						// what the form refuses, said by the field, before anything is sent
+						// a cloud, by its own form: pi-ai's own login stores it, and nothing is called
 						await click(page, named("Add a provider"));
-						await page.until(dialog);
-						// nothing is guessed for it: no limits, no prices
-						for (const label of [
-							"Context, tokens",
-							"Longest answer, tokens",
-							"$ per 1M tokens in",
-							"$ per 1M tokens out",
-						])
-							expect(await page.run<string>(`${field(label, model(1))}.value`), label).toBe("");
-						await fill(page, field("Address"), "http://api.example.com/v1");
+						await page.until(`document.activeElement === ${named("Search providers and servers")}`);
+						await page.input("Input.insertText", { text: "AI Gateway" });
+						await click(page, option("Cloudflare AI Gateway"));
+						await page.until(shows("banda needs an API token, the account's id and the gateway's"));
+						await fill(page, field("Cloudflare API token", dialog), CLOUDFLARE_TOKEN);
+						await fill(page, field("Account ID", dialog), "0123456789abcdef0123456789abcdef");
+						await click(page, button("Connect", dialog));
+						await page.until(shows("Gateway ID is needed"));
+						await fill(page, field("Gateway ID", dialog), "band-gateway");
+						await shot("3-cloud-form");
+						await darkToo("3-cloud-form");
+						await click(page, button("Connect", dialog));
+						await page.until(shows("From pi-ai's catalog. Your account may not reach every model"));
+						expect(await new FileCredentialStore(home).read("cloudflare-ai-gateway")).toEqual({
+							type: "api_key",
+							key: CLOUDFLARE_TOKEN,
+							env: { CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef", CLOUDFLARE_GATEWAY_ID: "band-gateway" },
+						});
+						// its models are the catalog's; it has no preset, so it starts on one picked here
 						await click(page, button("Save", dialog));
-						await page.until(shows("Give it a name you will know it by"));
-						expect(await page.run<boolean>(shows("Use https:// for api.example.com"))).toBe(true);
-						expect(await page.run<boolean>(shows("Write the model's name as the server knows it"))).toBe(true);
-						expect(
-							await page.run<boolean>(shows("Write its context window in tokens, as its server or model card says")),
-						).toBe(true);
-						expect(
-							await page.run<boolean>(shows("Write what it charges per million tokens: 0 only if it is free")),
-						).toBe(true);
-						expect(await page.run<boolean>(shows("things to fix above"))).toBe(true);
-						// the first thing to fix is in view
-						await page.until(
-							`(() => {const r=${dialog}.querySelector('[role="alert"]').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight;})()`,
+						await page.until(shows("Pick the model it starts on."));
+						const first = await page.run<string>(
+							`${dialog}.querySelector('input[name="start"]').getAttribute('aria-label')`,
 						);
-						await shot("2-add-errors");
-						await darkToo("2-add-errors");
-
-						// a keyless provider on this computer, two models, a tier each
-						await fill(page, field("Name"), "Local scripted");
-						await fill(page, field("Address"), local.url);
-						await page.until(shows(`Sends to 127.0.0.1:${local.port}: this computer, where banda runs.`));
-						await fill(page, field("Model id", model(1)), "scripted-small");
-						await fill(page, field("Name in banda", model(1)), "Scripted small");
-						await fill(page, field("Context, tokens", model(1)), "32768");
-						await fill(page, field("Longest answer, tokens", model(1)), "4096");
-						await fill(page, field("$ per 1M tokens in", model(1)), "0");
-						await fill(page, field("$ per 1M tokens out", model(1)), "0");
-						await click(page, button("Add a model", dialog));
-						await fill(page, field("Model id", model(2)), "scripted-large");
-						await fill(page, field("Context, tokens", model(2)), "65536");
-						await fill(page, field("Longest answer, tokens", model(2)), "8192");
-						await fill(page, field("$ per 1M tokens in", model(2)), "0");
-						await fill(page, field("$ per 1M tokens out", model(2)), "0");
-						await click(page, `${model(2)}.querySelector('[aria-label="Model 2 thinks first"]')`);
-						await choose(page, field("Deep", dialog), "scripted-large");
-						expect(await page.run<string>(`${field("Quick", dialog)}.selectedOptions[0].textContent`)).toBe(
-							"Scripted small",
-						);
-						await shot("3-add-filled");
-						await darkToo("3-add-filled");
+						await click(page, `${dialog}.querySelector('input[name="start"]')`);
+						await shot("4-catalog-start");
 						await click(page, button("Save", dialog));
+						await page.until(shows("is ready"));
+						await shot("5-saved-not-used");
+						await darkToo("5-saved-not-used");
+						// saved, started, not used
+						const afterCloud = await api<TiersView>("/tiers");
+						expect(afterCloud.provider.id).toBe("faux");
+						expect(afterCloud.providers.map((each) => each.id)).toContain("cloudflare-ai-gateway");
+						await click(page, button("Not now", dialog));
 						await page.until(`!${dialog}`);
-						await page.until(row("custom-local-scripted"));
-						// saving is not a check: nothing reached it
+						expect(first).toMatch(/^Start with /);
+
+						// a server of the owner's: Ollama, its models found on asking
+						await click(page, named("Add a provider"));
+						await page.until(`document.activeElement === ${named("Search providers and servers")}`);
+						await page.input("Input.insertText", { text: "Ollama" });
+						await click(page, option("Ollama"));
+						await page.until(`${dialog} && document.activeElement === ${field("Name", dialog)}`);
+						expect(await page.run<string>(`${field("Address", dialog)}.value`)).toBe("http://localhost:11434/v1");
+						await fill(page, field("Address", dialog), local.url);
+						await page.until(shows(`Find models asks 127.0.0.1:${local.port} which models it has. No model runs.`));
+						await shot("6-server-form");
 						expect(local.requests).toHaveLength(0);
-						await page.until(
-							`${row("custom-local-scripted")}.querySelector('[data-address]').textContent === ${JSON.stringify(local.url)}`,
+						await click(page, button("Find models", dialog));
+						await page.until(shows("It listed 4 models."));
+						// the listing asked no model to answer
+						expect(local.requests.every((request) => !request.path.endsWith("/chat/completions"))).toBe(true);
+						expect(local.requests.map((request) => `${request.method} ${request.path}`)).toContain("GET /api/tags");
+						// what each says, and what it cannot be
+						expect(await page.run<string>(`${model("qwen3:8b")}.innerText`)).toContain("40,960 context");
+						expect(await page.run<string>(`${model("qwen3:8b")}.innerText`)).toContain(
+							"Listed by the server · limits from the server",
 						);
-						expect(await page.run<string>(`${row("custom-local-scripted")}.innerText`)).toContain("On this computer");
-						expect(await page.run<boolean>(shows("No key · 2 models"))).toBe(true);
-						await shot("4-listed");
-
-						// a check, asked first with where it goes and what it may cost; the one request
-						await click(page, named("Check Local scripted"));
-						await page.until(alert);
-						expect(await page.run<string>(`${alert}.innerText`)).toMatch(
-							new RegExp(
-								`one short message to 127\\.0\\.0\\.1:${local.port} \\(on this computer\\) with Scripted small[\\s\\S]*costs a few tokens`,
-							),
+						expect(await page.run<string>(`${model("llava:7b")}.innerText`)).toContain("reads images");
+						expect(await page.run<string>(`${model("nomic-embed-text")}.innerText`)).toContain("It doesn't chat");
+						expect(await page.run<string>(`${model("Qwen/Qwen3-8B")}.innerText`)).toContain(
+							"not usable until you add them",
 						);
-						await shot("5-check-ask");
-						await darkToo("5-check-ask");
-						await click(page, button("Send the check", alert));
-						await page.until(shows("Answered in"));
-						expect(await page.run<boolean>(shows("with Scripted small: “OK from scripted-small”"))).toBe(true);
-						expect(local.requests).toHaveLength(1);
-						await shot("6-checked");
-
-						// the band thinks with it: the tiers are its models
-						await click(page, named("Use Local scripted"));
-						await page.until(`${row("custom-local-scripted")}.innerText.includes('In use')`);
+						expect(
+							await page.run<boolean>(`${model("Qwen/Qwen3-8B")}.querySelector('[role="checkbox"]').disabled`),
+						).toBe(true);
+						// keeping and starting are two choices: it starts on qwen3, and keeps llava once llava is complete
+						await click(page, named("Start with qwen3:8b"));
+						// only what the start model lacks is asked, and only for it
+						await page.until(`${field("Longest answer, tokens", model("qwen3:8b"))}`);
+						expect(await page.run<boolean>(`!!${field("Context, tokens", model("qwen3:8b"))}`)).toBe(false);
+						await click(page, button("Save", dialog));
+						await page.until(shows("Say whether it charges per token."));
+						await page.until(shows("Write the longest answer it gives, in tokens, as its server or model card says"));
+						await shot("7-server-found");
+						await darkToo("7-server-found");
+						await fill(page, field("Longest answer, tokens", model("qwen3:8b")), "8192");
+						expect(await page.run<boolean>(`${model("llava:7b")}.querySelector('[role="checkbox"]').disabled`)).toBe(
+							true,
+						);
+						await click(page, button("Complete it", model("llava:7b")));
+						await page.until(field("Longest answer, tokens", model("llava:7b")));
+						await fill(page, field("Longest answer, tokens", model("llava:7b")), "2048");
+						await click(page, `${model("llava:7b")}.querySelector('[role="checkbox"]')`);
+						await click(page, labelled("No per-token charges", dialog));
+						await click(page, button("Save", dialog));
+						await page.until(shows("Ollama is ready"));
+						await shot("8-server-saved");
+						// saving sent nothing and used nothing
+						expect(local.requests.every((request) => !request.path.endsWith("/chat/completions"))).toBe(true);
+						expect((await api<TiersView>("/tiers")).provider.id).toBe("faux");
+						const kept = (await api<CustomProvidersView>("/custom-providers")).providers[0];
+						expect(kept).toMatchObject({
+							id: "custom-ollama",
+							kind: "ollama",
+							billing: "none",
+							tiers: { quick: "qwen3:8b", balanced: "qwen3:8b", deep: "qwen3:8b" },
+							models: [
+								{ id: "qwen3:8b", contextWindow: 40_960, maxTokens: 8192, source: { listed: true, limits: "owner" } },
+								{ id: "llava:7b", contextWindow: 4096, maxTokens: 2048, images: true },
+							],
+						});
+						expect(kept?.models[0]).not.toHaveProperty("cost");
+						await click(page, button("Use Ollama", dialog));
+						await page.until(`!${dialog}`);
 						const tiers = await api<TiersView>("/tiers");
-						expect(tiers.provider).toMatchObject({ id: "custom-local-scripted", name: "Local scripted", local: true });
+						expect(tiers.provider).toMatchObject({ id: "custom-ollama", name: "Ollama", local: true });
 						expect([tiers.models.quick.id, tiers.models.balanced.id, tiers.models.deep.id]).toEqual([
-							"scripted-small",
-							"scripted-small",
-							"scripted-large",
+							"qwen3:8b",
+							"qwen3:8b",
+							"qwen3:8b",
 						]);
-						await page.until(
-							`[...document.querySelectorAll('button')].some(el => el.getAttribute('aria-label')?.startsWith('Change Deep model: scripted-large'))`,
-						);
-						await shot("7-in-use");
-						await darkToo("7-in-use");
+						await page.until(`${row("custom-ollama")}?.innerText.includes('In use')`);
+						await shot("9-in-use");
+						await darkToo("9-in-use");
 
-						// and answers a chat on it
+						// it answers a chat
 						await page.run(`location.hash='#/a/sancho'`);
 						const composer = `document.querySelector('textarea[name="message"]')`;
 						await page.until(composer);
@@ -272,103 +308,44 @@ for (const width of [390, 1440])
 						await page.input("Input.insertText", { text: "Are you running on my own model?" });
 						await click(page, `document.querySelector('button[aria-label="Send"]')`);
 						await page.until(shows(SPOKEN), 30_000);
-						expect(
-							local.requests
-								.filter((request) => request.path.endsWith("/chat/completions"))
-								.slice(1)
-								.every((request) => request.body?.model === "scripted-small"),
-						).toBe(true);
-						await shot("8-chat-answered");
-						await darkToo("8-chat-answered");
+						const asked = local.requests.filter((request) => request.path.endsWith("/chat/completions"));
+						expect(asked.length).toBeGreaterThan(0);
+						expect(asked.every((request) => request.body?.model === "qwen3:8b")).toBe(true);
+						await shot("10-chat-answered");
 
-						// a hosted one with a key: saved, never contacted, its key out of sight
+						// a check that fails says why, in words; its details on asking
 						await settings();
-						await click(page, named("Add a provider"));
-						await fill(page, field("Name"), "Team gateway");
-						await fill(page, field("Address"), "https://llm.example.com/v1");
-						await page.until(shows("Sends everything the band says to llm.example.com, on the internet."));
-						expect(await page.run<boolean>(shows("Requires an API key"))).toBe(true);
-						await click(page, named("Requires an API key"));
-						// the switch's words stay; only its state changes
-						expect(await page.run<boolean>(shows("Requires an API key"))).toBe(true);
-						await fill(page, field("Its key"), KEY);
-						await fill(page, field("Model id", model(1)), "fast-1");
-						await fill(page, field("Context, tokens", model(1)), "128000");
-						await fill(page, field("Longest answer, tokens", model(1)), "8192");
-						await fill(page, field("$ per 1M tokens in", model(1)), "0.2");
-						await fill(page, field("$ per 1M tokens out", model(1)), "0.8");
-						await click(page, button("Save", dialog));
-						await page.until(row("custom-team-gateway"));
-						await page.until(
-							`${row("custom-team-gateway")}.querySelector('[data-address]')?.textContent === 'https://llm.example.com/v1'`,
-						);
-						expect(await page.run<string>(`${row("custom-team-gateway")}.innerText`)).toContain("On the internet");
-						expect(await page.run<boolean>(shows("Key saved · 1 model"))).toBe(true);
-						expect(await page.run<boolean>(`document.documentElement.outerHTML.includes(${JSON.stringify(KEY)})`)).toBe(
-							false,
-						);
-						expect(await readFile(customProvidersPath(home), "utf8")).not.toContain(KEY);
-						await shot("9-two-providers");
-						await darkToo("9-two-providers");
-
-						// an edit, cancelled: nothing changes
-						await click(page, named("Edit Local scripted"));
-						await page.until(`${dialog}?.innerText.includes('Edit Local scripted')`);
-						await fill(page, field("Name"), "Renamed but not saved");
-						await shot("10-editing");
-						await click(page, button("Cancel", dialog));
-						await page.until(`!${dialog}`);
-						expect(await page.run<boolean>(shows("Renamed but not saved"))).toBe(false);
-						expect((await api<CustomProvidersView>("/custom-providers")).providers[0]?.name).toBe("Local scripted");
-
-						// a removal is refused while the band thinks with it, saying what to do
-						await click(page, named("Edit Local scripted"));
-						await click(page, button("Remove provider", dialog));
-						await page.until(alert);
-						await click(page, button("Remove", alert));
-						await page.until(shows("The band thinks with it: use another provider first"));
-						await shot("11-remove-refused");
-						await darkToo("11-remove-refused");
-						await click(page, button("Cancel", dialog));
-						await page.until(`!${dialog}`);
-
-						// a failing check says why, without the key
 						local.set({ fail: { status: 500, message: "the model crashed while loading" } });
-						await click(page, named("Check Local scripted"));
+						await click(page, named("Check Ollama"));
+						await page.until(alert);
+						expect(await page.run<string>(`${alert}.innerText`)).toContain("costs a few tokens");
 						await click(page, button("Send the check", alert));
 						await page.until(shows("It failed on its own side. Check the server and its logs, then try again."));
-						// the technical words only on asking, and redacted
 						expect(await page.run<boolean>(shows("HTTP 500"))).toBe(false);
-						await click(
-							page,
-							`[...${row("custom-local-scripted")}.querySelectorAll('summary')].find(el => el.textContent === 'Details')`,
-						);
-						await page.until(shows("HTTP 500 ·"));
-						await shot("12-check-failed");
+						await shot("11-check-failed");
+						await darkToo("11-check-failed");
 						local.set({ fail: undefined });
 
-						// once the band moved, it goes
-						await click(page, named("Use Team gateway"));
-						await page.until(`${row("custom-team-gateway")}.innerText.includes('In use')`);
-						await click(page, named("Edit Local scripted"));
-						await click(page, button("Remove provider", dialog));
+						// a removal is refused while the band thinks with it
+						await click(page, named("Edit Ollama"));
+						await click(page, button("Remove server", dialog));
 						await click(page, button("Remove", alert));
-						await page.until(`!${row("custom-local-scripted")}`);
-						expect((await api<TiersView>("/tiers")).provider.id).toBe("custom-team-gateway");
-						await shot("13-removed");
+						await page.until(shows("The band thinks with it: use another provider first"));
+						await shot("12-remove-refused");
+						await click(page, button("Cancel", dialog));
+						await page.until(`!${dialog}`);
 
-						// a restart: the daemon registers it before anything resumes, and the app shows it as it was
+						// a restart: registered before anything resumes, shown as it was
 						const port = daemon?.port ?? 0;
 						await daemon?.close();
 						daemon = (await daemonOn(home, port)).daemon;
 						await page.run("location.reload()");
-						// a phone reopens on Settings itself, without the band beside it
 						await page.until(`document.readyState === 'complete' && ${tab("Model")}`);
 						await settings();
-						await page.until(row("custom-team-gateway"));
-						await page.until(`${row("custom-team-gateway")}.innerText.includes('In use')`);
-						await shot("14-after-restart");
-						await darkToo("14-after-restart");
+						await page.until(`${row("custom-ollama")}?.innerText.includes('In use')`);
+						await shot("13-after-restart");
+						await darkToo("13-after-restart");
+						expect(await readFile(customProvidersPath(home), "utf8")).not.toContain(CLOUDFLARE_TOKEN);
 					});
 				} finally {
 					await server.close();
@@ -378,5 +355,5 @@ for (const width of [390, 1440])
 				await local.close();
 			}
 		},
-		180_000,
+		240_000,
 	);

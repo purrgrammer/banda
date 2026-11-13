@@ -12,7 +12,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
-import { createModels, fauxProvider } from "@earendil-works/pi-ai";
+import { fauxProvider } from "@earendil-works/pi-ai";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { expect, it } from "vitest";
 import { FileCredentialStore } from "../src/core/provider-credentials.ts";
 import { startDaemon } from "../src/daemon.ts";
@@ -38,7 +39,11 @@ const tab = (text: string) =>
 	`[...document.querySelectorAll('[role="tab"]')].find(el => el.textContent.trim() === ${JSON.stringify(text)})`;
 const field = (label: string, within = "document") =>
 	`document.getElementById([...${within}.querySelectorAll('label')].find(el => ${visible} && el.textContent.trim() === ${JSON.stringify(label)})?.htmlFor)`;
-const model = (n: number) => `${dialog}.querySelector('fieldset[aria-label="Model ${n}"]')`;
+const modelRow = (id: string) => `${dialog}.querySelector('li[data-model=${JSON.stringify(id)}]')`;
+const option = (text: string) =>
+	`[...document.querySelectorAll('[role="option"]')].find(el => ${visible} && el.querySelector('span span')?.textContent.trim() === ${JSON.stringify(text)})`;
+const labelled = (text: string, within = "document") =>
+	`[...${within}.querySelectorAll('label')].find(el => ${visible} && el.textContent.includes(${JSON.stringify(text)}))`;
 const row = (id: string) => `document.querySelector('[data-custom-provider="${id}"]')`;
 
 async function click(page: Page, expression: string) {
@@ -94,193 +99,221 @@ const plugin = (bridge: string, daemon: string, device: string) => `(() => {
 	window.Capacitor = { isNativePlatform: () => true, Plugins: { Banda } };
 })();`;
 
-// WIP: the injected plugin is not picked up yet (the page shows "Connect to banda"); the direction changed before it was
-// fixed, so it is kept, skipped, for the rework
-it.skip("on a paired phone, an address on localhost is the computer banda runs on, never the phone", async () => {
-	const home = await tempHome();
-	if (SHOTS !== undefined) await mkdir(SHOTS, { recursive: true });
-	await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
-	const models = createModels({ credentials: new FileCredentialStore(home) });
-	models.setProvider(fauxProvider().provider);
-	const daemon = await startDaemon({
-		home,
-		port: 0,
-		models,
-		box: hostBox(home),
-		log: () => {},
-		remote: { reach: "loopback" },
-	});
-	const local = await compatServer();
-	const phone = await testDevice();
-	const base = `http://127.0.0.1:${daemon.port}`;
-	const token = (await readDaemonFile(home))!.token!;
-	const owner = async <T>(path: string, method = "GET", body?: object): Promise<T> => {
-		const response = await fetch(`${base}/api${path}`, {
-			method,
-			headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-			...(body === undefined ? {} : { body: JSON.stringify(body) }),
+it.skipIf(!hasChrome())(
+	"on a paired phone, an address on localhost is the computer banda runs on, never the phone",
+	async () => {
+		const home = await tempHome();
+		if (SHOTS !== undefined) await mkdir(SHOTS, { recursive: true });
+		await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
+		// pi-ai's real providers, with no credential from this computer
+		const models = builtinModels({
+			credentials: new FileCredentialStore(home),
+			authContext: { env: async () => undefined, fileExists: async () => false },
 		});
-		if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);
-		return response.json() as Promise<T>;
-	};
-	let bridge: http.Server | undefined;
-	let server: Awaited<ReturnType<typeof webServer>> | undefined;
-	try {
-		await skipShippedSkills(daemon.port, token);
-		// the owner pairs the phone, as Settings → Devices does
-		const invite = await owner<InviteView>("/devices/invites", "POST");
-		const connection = await phone.dial(invite.ticket);
-		expect(await phone.request("POST", "/api/devices/pair", { invite: invite.secret, name: "Pixel 9" })).toEqual({
-			status: 202,
-			body: { state: "pending" },
+		models.setProvider(fauxProvider().provider);
+		const daemon = await startDaemon({
+			home,
+			port: 0,
+			models,
+			box: hostBox(home),
+			log: () => {},
+			remote: { reach: "loopback" },
 		});
-		await owner(`/devices/requests/${phone.id}/approve`, "POST", { name: "Pixel 9" });
-		const daemonId = (await owner<DevicesView>("/devices")).endpoint!.id;
-
-		// what the shell's plugin does, over Iroh from the paired device; every path it carried is kept
-		const carried: string[] = [];
-		const overIroh = (method: string, path: string, headers: Record<string, string>) =>
-			http.request({
+		const local = await compatServer({ models: ["scripted-small"] });
+		const phone = await testDevice();
+		const base = `http://127.0.0.1:${daemon.port}`;
+		const token = (await readDaemonFile(home))!.token!;
+		const owner = async <T>(path: string, method = "GET", body?: object): Promise<T> => {
+			const response = await fetch(`${base}/api${path}`, {
 				method,
-				path,
-				createConnection: () => streamSocket(connection.openBi()),
-				headers: { ...headers, host: "banda.iroh" },
+				headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+				...(body === undefined ? {} : { body: JSON.stringify(body) }),
 			});
-		const cors = { "access-control-allow-origin": "*", "access-control-expose-headers": "x-status, x-headers" };
-		bridge = http.createServer((req, res) => {
-			void (async () => {
-				const chunks: Buffer[] = [];
-				for await (const chunk of req) chunks.push(chunk as Buffer);
-				const options = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
-					method?: string;
-					path: string;
-					headers: Record<string, string>;
-					body?: string;
-				};
-				carried.push(`${options.method ?? "GET"} ${options.path}`);
-				const out = overIroh(options.method ?? "GET", options.path, options.headers);
-				if (req.url === "/stream") {
-					res.on("close", () => out.destroy());
-					out.on("response", (answer) => {
-						res.writeHead(200, {
-							...cors,
-							"x-status": String(answer.statusCode ?? 0),
-							"x-headers": JSON.stringify(answer.headers),
+			if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);
+			return response.json() as Promise<T>;
+		};
+		let bridge: http.Server | undefined;
+		let server: Awaited<ReturnType<typeof webServer>> | undefined;
+		try {
+			await skipShippedSkills(daemon.port, token);
+			// the owner pairs the phone, as Settings → Devices does
+			const invite = await owner<InviteView>("/devices/invites", "POST");
+			const connection = await phone.dial(invite.ticket);
+			expect(await phone.request("POST", "/api/devices/pair", { invite: invite.secret, name: "Pixel 9" })).toEqual({
+				status: 202,
+				body: { state: "pending" },
+			});
+			await owner(`/devices/requests/${phone.id}/approve`, "POST", { name: "Pixel 9" });
+			const daemonId = (await owner<DevicesView>("/devices")).endpoint!.id;
+
+			// what the shell's plugin does, over Iroh from the paired device; every path it carried is kept
+			const carried: string[] = [];
+			const overIroh = (method: string, path: string, headers: Record<string, string>) =>
+				http.request({
+					method,
+					path,
+					createConnection: () => streamSocket(connection.openBi()),
+					headers: { ...headers, host: "banda.iroh" },
+				});
+			const cors = { "access-control-allow-origin": "*", "access-control-expose-headers": "x-status, x-headers" };
+			bridge = http.createServer((req, res) => {
+				void (async () => {
+					const chunks: Buffer[] = [];
+					for await (const chunk of req) chunks.push(chunk as Buffer);
+					const options = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+						method?: string;
+						path: string;
+						headers: Record<string, string>;
+						body?: string;
+					};
+					carried.push(`${options.method ?? "GET"} ${options.path}`);
+					const out = overIroh(options.method ?? "GET", options.path, options.headers);
+					if (req.url === "/stream") {
+						res.on("close", () => out.destroy());
+						out.on("response", (answer) => {
+							res.writeHead(200, {
+								...cors,
+								"x-status": String(answer.statusCode ?? 0),
+								"x-headers": JSON.stringify(answer.headers),
+							});
+							res.flushHeaders();
+							answer.pipe(res);
 						});
-						res.flushHeaders();
-						answer.pipe(res);
+						out.on("error", () => res.destroy());
+						out.end();
+						return;
+					}
+					out.on("response", (answer) => {
+						const body: Buffer[] = [];
+						answer.on("data", (chunk: Buffer) => body.push(chunk));
+						answer.on("end", () => {
+							res.writeHead(200, { ...cors, "content-type": "application/json" });
+							res.end(
+								JSON.stringify({
+									status: answer.statusCode ?? 0,
+									headers: Object.fromEntries(
+										Object.entries(answer.headers).map(([key, value]) => [key, String(value)]),
+									),
+									body: Buffer.concat(body).toString("base64"),
+								}),
+							);
+						});
 					});
-					out.on("error", () => res.destroy());
-					out.end();
-					return;
-				}
-				out.on("response", (answer) => {
-					const body: Buffer[] = [];
-					answer.on("data", (chunk: Buffer) => body.push(chunk));
-					answer.on("end", () => {
-						res.writeHead(200, { ...cors, "content-type": "application/json" });
-						res.end(
-							JSON.stringify({
-								status: answer.statusCode ?? 0,
-								headers: Object.fromEntries(Object.entries(answer.headers).map(([key, value]) => [key, String(value)])),
-								body: Buffer.concat(body).toString("base64"),
-							}),
-						);
+					out.on("error", (error) => {
+						res.writeHead(502, cors);
+						res.end(String(error));
 					});
-				});
-				out.on("error", (error) => {
-					res.writeHead(502, cors);
-					res.end(String(error));
-				});
-				out.end(options.body === undefined ? undefined : Buffer.from(options.body, "base64"));
-			})();
-		});
-		await new Promise<void>((resolve) => bridge?.listen(0, "127.0.0.1", resolve));
-		const bridgeUrl = `http://127.0.0.1:${(bridge.address() as AddressInfo).port}`;
-		// no proxy to the daemon: the page reaches it only through the plugin
-		server = await webServer();
-		const origin = server.origin;
+					out.end(options.body === undefined ? undefined : Buffer.from(options.body, "base64"));
+				})();
+			});
+			await new Promise<void>((resolve) => bridge?.listen(0, "127.0.0.1", resolve));
+			const bridgeUrl = `http://127.0.0.1:${(bridge.address() as AddressInfo).port}`;
+			// no proxy to the daemon: the page reaches it only through the plugin
+			server = await webServer();
+			const origin = server.origin;
 
-		await withPage("about:blank", { width: 390, height: 900 }, async (page) => {
-			let scheme = "light";
-			const shot = async (name: string) => {
-				expect(
-					await page.run("document.documentElement.scrollWidth <= innerWidth"),
-					`${name}: no sideways scroll`,
-				).toBe(true);
+			await withPage("about:blank", { width: 390, height: 900 }, async (page) => {
+				let scheme = "light";
+				const shot = async (name: string) => {
+					expect(
+						await page.run("document.documentElement.scrollWidth <= innerWidth"),
+						`${name}: no sideways scroll`,
+					).toBe(true);
+					await page.until(
+						"document.getAnimations().every(a => a.playState !== 'running' || !(a.effect?.getComputedTiming().endTime < 2000))",
+					);
+					if (SHOTS !== undefined) await page.shoot(join(SHOTS, `phone-${scheme}-${name}.png`));
+				};
+				const darkToo = async (name: string) => {
+					scheme = "dark";
+					await page.input("Emulation.setEmulatedMedia", {
+						features: [{ name: "prefers-color-scheme", value: "dark" }],
+					});
+					await shot(name);
+					scheme = "light";
+					await page.input("Emulation.setEmulatedMedia", {
+						features: [{ name: "prefers-color-scheme", value: "light" }],
+					});
+				};
+				// the shell's plugin is there before the app's first line runs
+				await page.input("Page.enable", {});
+				await page.input("Page.addScriptToEvaluateOnNewDocument", { source: plugin(bridgeUrl, daemonId, phone.id) });
+				await page.goto(`${origin}/#/settings`);
+				await page.until(`window.Capacitor?.isNativePlatform?.() === true`);
 				await page.until(
-					"document.getAnimations().every(a => a.playState !== 'running' || !(a.effect?.getComputedTiming().endTime < 2000))",
+					`(location.hash.startsWith('#/settings') || (location.hash='#/settings', false)) && ${tab("Model")}`,
+					30_000,
 				);
-				if (SHOTS !== undefined) await page.shoot(join(SHOTS, `phone-${scheme}-${name}.png`));
-			};
-			const darkToo = async (name: string) => {
-				scheme = "dark";
-				await page.input("Emulation.setEmulatedMedia", {
-					features: [{ name: "prefers-color-scheme", value: "dark" }],
-				});
-				await shot(name);
-				scheme = "light";
-				await page.input("Emulation.setEmulatedMedia", {
-					features: [{ name: "prefers-color-scheme", value: "light" }],
-				});
-			};
-			await page.input("Page.addScriptToEvaluateOnNewDocument", { source: plugin(bridgeUrl, daemonId, phone.id) });
-			await page.goto(`${origin}/#/settings`);
-			await page.until(
-				`(location.hash.startsWith('#/settings') || (location.hash='#/settings', false)) && ${tab("Model")}`,
-				30_000,
-			);
-			await click(page, tab("Model"));
-			await page.until(shows("Your own providers"));
-			// it runs as the device: the built-in providers say they connect on the computer
-			await page.until(shows("Connect another on the computer banda runs on."));
-			expect(carried.some((path) => path === "GET /api/custom-providers")).toBe(true);
+				await click(page, tab("Model"));
+				await page.until(named("Add a provider"));
+				// it runs as the device: every request it made went over Iroh, and it holds no token
+				expect(carried.some((path) => path === "GET /api/tiers")).toBe(true);
+				expect(await page.run<string>("location.hash")).not.toContain("token=");
 
-			await click(page, named("Add a provider"));
-			await fill(page, field("Name"), "Desk server");
-			await fill(page, field("Address"), `http://localhost:${local.port}/v1`);
-			await page.until(shows(`Sends to localhost:${local.port}: the computer banda runs on, not this phone.`));
-			await fill(page, field("Model id", model(1)), "scripted-small");
-			await fill(page, field("Context, tokens", model(1)), "32768");
-			await fill(page, field("Longest answer, tokens", model(1)), "4096");
-			await fill(page, field("$ per 1M tokens in", model(1)), "0");
-			await fill(page, field("$ per 1M tokens out", model(1)), "0");
-			await page.run(`(${field("Address")}).scrollIntoView({block:'center'})`);
-			await shot("1-form");
-			await darkToo("1-form");
-			await click(page, button("Save", dialog));
-			await page.until(row("custom-desk-server"));
-			expect(local.requests).toHaveLength(0);
-			expect(carried).toContain("POST /api/custom-providers");
-			const text = await page.run<string>(`${row("custom-desk-server")}.innerText`);
-			expect(text).toContain("On the computer banda runs on, not this phone");
-			expect(text).toContain(`http://localhost:${local.port}/v1`);
-			await page.run(`(${row("custom-desk-server")}).scrollIntoView({block:'center'})`);
-			await shot("2-listed");
-			await darkToo("2-listed");
+				await click(page, named("Add a provider"));
+				// on a phone, a person taps the search field
+				await click(page, named("Search providers and servers"));
+				await page.until(`document.activeElement === ${named("Search providers and servers")}`);
+				// a sign-in comes back to the computer banda runs on, not this phone
+				await page.input("Input.insertText", { text: "Anthropic" });
+				await click(page, option("Anthropic"));
+				await page.until(shows("Signing in to Anthropic comes back to the computer banda runs on: do it there."));
+				await shot("1-sign-in-elsewhere");
+				await click(page, named("Back to every provider"));
+				// on a phone, a person taps the search field
+				await click(page, named("Search providers and servers"));
+				await page.until(`document.activeElement === ${named("Search providers and servers")}`);
+				await page.input("Input.insertText", { text: "OpenAI-compatible" });
+				await click(page, option("OpenAI-compatible server"));
+				await fill(page, field("Name", dialog), "Desk server");
+				await fill(page, field("Address", dialog), `http://localhost:${local.port}/v1`);
+				await page.until(shows(`Sends to localhost:${local.port}: the computer banda runs on, not this phone.`));
+				await click(page, labelled("Requires an API key", dialog));
+				await page.until(`!${field("Its key", dialog)}`);
+				await click(page, button("Find models", dialog));
+				await page.until(shows("It listed 1 model."));
+				// the daemon asked, on its computer; the phone only asked the daemon
+				expect(local.requests.map((request) => `${request.method} ${request.path}`)).toEqual(["GET /v1/models"]);
+				expect(carried).toContain("POST /api/custom-providers/list");
+				await click(page, named("Start with scripted-small"));
+				await fill(page, field("Context, tokens", modelRow("scripted-small")), "32768");
+				await fill(page, field("Longest answer, tokens", modelRow("scripted-small")), "4096");
+				await click(page, labelled("No per-token charges", dialog));
+				await page.run(`(${field("Address", dialog)}).scrollIntoView({block:'center'})`);
+				await shot("2-form");
+				await darkToo("2-form");
+				await click(page, button("Save", dialog));
+				await page.until(shows("Desk server is ready"));
+				await click(page, button("Not now", dialog));
+				await page.until(row("custom-desk-server"));
+				const text = await page.run<string>(`${row("custom-desk-server")}.innerText`);
+				expect(text).toContain("On the computer banda runs on, not this phone");
+				expect(text).toContain(`http://localhost:${local.port}/v1`);
+				await page.run(`(${row("custom-desk-server")}).scrollIntoView({block:'center'})`);
+				await shot("3-listed");
+				await darkToo("3-listed");
 
-			await click(page, named("Check Desk server"));
-			await page.until(alert);
-			expect(await page.run<string>(`${alert}.innerText`)).toContain(
-				`one short message to localhost:${local.port} (on the computer banda runs on, not this phone)`,
-			);
-			await shot("3-check-ask");
-			await darkToo("3-check-ask");
-			await click(page, button("Send the check", alert));
-			await page.until(shows("Answered in"));
-			// the daemon reached it, on its computer: the phone only asked
-			expect(local.requests).toHaveLength(1);
-			expect(carried).toContain("POST /api/custom-providers/custom-desk-server/check");
-			await page.run(`(${row("custom-desk-server")}).scrollIntoView({block:'center'})`);
-			await shot("4-checked");
-			expect(page.errors()).toEqual([]);
-		});
-	} finally {
-		await server?.close();
-		await new Promise<void>((resolve) => (bridge === undefined ? resolve() : bridge.close(() => resolve())));
-		bridge?.closeAllConnections();
-		await phone.close();
-		await daemon.close();
-		await local.close();
-	}
-}, 120_000);
+				await click(page, named("Check Desk server"));
+				await page.until(alert);
+				expect(await page.run<string>(`${alert}.innerText`)).toContain(
+					`one short message to localhost:${local.port} (on the computer banda runs on, not this phone)`,
+				);
+				await shot("4-check-ask");
+				await darkToo("4-check-ask");
+				await click(page, button("Send the check", alert));
+				await page.until(shows("Answered in"));
+				expect(local.requests.filter((request) => request.path.endsWith("/chat/completions"))).toHaveLength(1);
+				expect(carried).toContain("POST /api/custom-providers/custom-desk-server/check");
+				expect(page.errors()).toEqual([]);
+			});
+		} finally {
+			await server?.close();
+			await new Promise<void>((resolve) => (bridge === undefined ? resolve() : bridge.close(() => resolve())));
+			bridge?.closeAllConnections();
+			await phone.close();
+			await daemon.close();
+			await local.close();
+		}
+	},
+	120_000,
+);

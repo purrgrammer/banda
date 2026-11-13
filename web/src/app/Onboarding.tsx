@@ -8,16 +8,25 @@
  */
 import { useEffect, useState } from "react";
 import { useProviderConnect, wayLabel } from "../areas/tiers.ts";
+import { AddProvider } from "../chat/AddProvider.tsx";
 import { FirstRun } from "../chat/FirstRun.tsx";
 import { FirstSkills } from "../chat/FirstSkills.tsx";
-import { chooseShippedSkills, type ShippedSkillsView, shippedSkills } from "../lib/api.ts";
+import { chooseShippedSkills, runsOnDevice, type ShippedSkillsView, shippedSkills } from "../lib/api.ts";
+import { useAddProviderActions } from "./SettingsProviders.tsx";
 
 /** Providers whose own sign-in comes first; the rest follow in the daemon's order. */
 const FIRST = ["anthropic", "openai", "github-copilot", "google"];
 
 export function Onboarding() {
 	const { providers, open, waiting, error, pick, answer, cancel, key, use } = useProviderConnect();
-	const sorted = [...providers].sort((a, b) => (FIRST.indexOf(a.id) + 1 || 99) - (FIRST.indexOf(b.id) + 1 || 99));
+	const actions = useAddProviderActions();
+	const [more, setMore] = useState(false);
+	// the providers banda has tiers picked for, and any already connected, one tap each; every other one, and a server
+	// of the owner's, through More providers
+	const offered = providers.filter(
+		(provider) => provider.presets || provider.accounts.some((account) => account.connected),
+	);
+	const sorted = [...offered].sort((a, b) => (FIRST.indexOf(a.id) + 1 || 99) - (FIRST.indexOf(b.id) + 1 || 99));
 	// first run connects a provider's first account alone; more come later, in Settings
 	const first = sorted.flatMap((provider) => {
 		const account = provider.accounts.find((each) => each.id === provider.id);
@@ -53,6 +62,24 @@ export function Onboarding() {
 			onAnswer={(id, value) => void answer(id, value)}
 			onWay={(id, way) => void pick(id, way)}
 			onCancel={(id) => void cancel(id)}
+			more={
+				<>
+					<button
+						type="button"
+						className="mt-3 text-ui text-ink-2 underline decoration-line underline-offset-[3px] hover:text-ink"
+						onClick={() => setMore(true)}
+					>
+						More providers, or a server of your own
+					</button>
+					<AddProvider
+						open={more}
+						onOpenChange={setMore}
+						providers={providers}
+						here={!runsOnDevice}
+						actions={actions}
+					/>
+				</>
+			}
 		/>
 	);
 }

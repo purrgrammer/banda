@@ -1110,7 +1110,10 @@ export function ModelProviders({
 	adding: openAdding,
 	renaming: openRenaming,
 	here = true,
+	add,
 }: {
+	/** Add a provider: the control that opens every provider banda can think with, under the list. */
+	add?: ReactNode;
 	/** The provider account the band thinks with. */
 	current: string;
 	/** On the computer banda runs on, where providers are connected; false on a device. */
@@ -1152,9 +1155,11 @@ export function ModelProviders({
 		<Block
 			title="Providers"
 			note={
-				here
-					? "Connect another to switch between them. Only the one in use sees what you ask."
-					: "Connect another on the computer banda runs on. Only the one in use sees what you ask."
+				add !== undefined
+					? "The ones you connected. Only the one in use sees what you ask."
+					: here
+						? "Connect another to switch between them. Only the one in use sees what you ask."
+						: "Connect another on the computer banda runs on. Only the one in use sees what you ask."
 			}
 		>
 			<Rows className="max-h-[min(24rem,50dvh)] overflow-y-auto overscroll-contain">
@@ -1204,7 +1209,7 @@ export function ModelProviders({
 					return (
 						<div key={provider.id} className="flex flex-col">
 							<RowOf
-								lead={<img src={`/providers/${backend(provider)}.svg`} alt="" className="size-5 dark:invert" />}
+								lead={<ProviderMark provider={backend(provider)} className="size-5" />}
 								title={name}
 								detail={detail}
 								end={
@@ -1372,6 +1377,7 @@ export function ModelProviders({
 					);
 				})}
 			</Rows>
+			{add}
 			{error === undefined ? null : (
 				<p role="alert" className="text-ui text-danger">
 					{error}

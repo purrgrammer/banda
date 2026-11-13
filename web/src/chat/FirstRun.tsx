@@ -3,10 +3,12 @@
  * where it has no sign-in; one screen, no other step. Then the chat opens with the agent's first words.
  */
 import { ChevronRightIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import { Face } from "./Face.tsx";
 import { ProviderKeyForm } from "./ProviderKeyForm.tsx";
+import { ProviderMark } from "./ProviderMark.tsx";
 import { ProviderSignIn, type SignInWay } from "./ProviderSignIn.tsx";
 
 const FIRST_FACE = defaultAvatarFace();
@@ -36,7 +38,10 @@ export function FirstRun({
 	onAnswer,
 	onWay,
 	onCancel,
+	more,
 }: {
+	/** Every other provider, and servers of the owner's: Add a provider. */
+	more?: ReactNode;
 	providers: readonly ProviderChoice[];
 	/** The provider whose key form is open. */
 	open?: string | undefined;
@@ -74,7 +79,7 @@ export function FirstRun({
 									provider.id === open && "bg-paper-2",
 								)}
 							>
-								<img src={`/providers/${provider.id}.svg`} alt="" className="size-6 shrink-0 dark:invert" />
+								<ProviderMark provider={provider.id} className="size-6" />
 								<span className="flex min-w-0 flex-1 flex-col">
 									<span className="text-ui font-medium text-ink">{provider.name}</span>
 									<span className="text-meta text-ink-2">
@@ -104,6 +109,7 @@ export function FirstRun({
 					);
 				})}
 			</ul>
+			{more}
 			{error === undefined ? null : (
 				<p role="alert" className="mt-4 max-w-sm text-center text-ui text-danger">
 					{error}
