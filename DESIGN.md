@@ -360,7 +360,7 @@ it to them; each starts independently against the same shared history, and the m
 nobody in it, a message asks nobody and stays for whoever joins. The composer
 says so beneath the field ("To everyone · @ to pick one"). A mention, in the composer and in any message, shows as the
 agent's face and name, a link that opens its chat. A member speaks only in the room: `message_group` posts its
-words, files and artifacts (by id, each at its version then) there, and its other speaking tools act there (`ask_user` asks the owner in the room, `react` puts its
+words, files and artifacts (by id, each at its version then, once per run as in "Messages") there, and its other speaking tools act there (`ask_user` asks the owner in the room, `react` puts its
 emoji on the owner's message its turn answers, `publish` shows its card); `message_user` and `propose_avatar` are not
 offered in a group, and
 `message_group` nowhere else. Its `ask` names the members whose work is needed, each starting a turn: its schema is an
@@ -548,7 +548,11 @@ carries:
 - **text**, markdown; a link the daemon recognises as an object draws its card beneath;
 - **file**: a path in the box, sent as an attachment and shown inline where it can be;
 - **artifacts**: ids of artifacts in the Library (`publish` returns its id), each drawn as its card at the version
-  current when it was sent; an id the Library does not hold is refused before anything is sent;
+  current when it was sent; an id the Library does not hold is refused before anything is sent. An artifact is shown
+  once per run: a card a `publish` of the same run (since its chat's last input: the owner's words, another agent's
+  message, a wake, a watch's change) already drew at that very version is not drawn again, while the same version in a
+  later run, or another version, is its own card. Derived when the chat is drawn, from the store's facts (the
+  message's version, the version each publish made, the order of entries), so history draws what live did;
 - **view**: a live view of something in the box (the browser's page).
 
 The other acts: **question** (`ask_user`): choices, a form or free text; the call opens a Wait and returns its answer;
