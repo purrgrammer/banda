@@ -616,14 +616,14 @@ export function PanelSections() {
 							/>
 						</Panel>
 					</Specimen>
-					<Specimen label="Editing what ends it and what matters">
+					<Specimen label="Editing what ends it, its wakes a day and what matters">
 						<Panel name="Mara">
 							<WatchDetail
 								agent={{ id: "mara", name: "Mara" }}
 								chat={undefined}
 								watch={WATCH_VIEW}
 								now={SPECIMEN_NOW}
-								edit={{ step: "editing", until: null, ask: WATCH_VIEW.accepted?.watch?.ask ?? "" }}
+								edit={{ step: "editing", until: null, wakesADay: "24", ask: WATCH_VIEW.accepted?.watch?.ask ?? "" }}
 								onDone={() => {}}
 							/>
 						</Panel>
@@ -646,7 +646,12 @@ export function PanelSections() {
 								chat={undefined}
 								watch={WATCH_CONTACT_VIEW}
 								now={SPECIMEN_NOW}
-								edit={{ step: "editing", until: null, ask: WATCH_CONTACT_VIEW.accepted?.watch?.ask ?? "" }}
+								edit={{
+									step: "editing",
+									until: null,
+									wakesADay: "24",
+									ask: WATCH_CONTACT_VIEW.accepted?.watch?.ask ?? "",
+								}}
 								onDone={() => {}}
 							/>
 						</Panel>
@@ -661,6 +666,7 @@ export function PanelSections() {
 								edit={{
 									step: "refused",
 									until: "closed",
+									wakesADay: "6",
 									ask: WATCH_VIEW.accepted?.watch?.ask ?? "",
 									why: "it changed since you saw it: look again",
 								}}

@@ -69,6 +69,8 @@ export type WatchProposalView = {
 	readonly until: string;
 	/** The account it looks with, when the service has one. */
 	readonly account?: string;
+	/** The most times it may wake in a day, when the file gives one. */
+	readonly wakesADay?: number;
 	/** What matters, and what to do about it. */
 	readonly ask: string;
 };
@@ -97,6 +99,7 @@ export function WatchProposal({
 					rows={[
 						["Until", watch.until],
 						...(watch.account === undefined ? [] : ([["As", watch.account]] as const)),
+						...(watch.wakesADay === undefined ? [] : ([["Wakes", `at most ${watch.wakesADay} a day`]] as const)),
 						["What matters", watch.ask],
 					]}
 				/>

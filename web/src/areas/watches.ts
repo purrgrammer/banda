@@ -22,8 +22,17 @@ export const shell: ShellHandlers = {
 export type WatchAct =
 	| { readonly action: "accept"; readonly sha: string | null }
 	| { readonly action: "decline" | "pause" | "resume" | "remove" }
-	/** Change what ends it (null: any of its ends) and what matters, over the version `sha` the owner saw. */
-	| { readonly action: "edit"; readonly sha: string; readonly until?: string | null; readonly ask?: string }
+	/**
+	 * Change what ends it (null: any of its ends), the most times it may wake in a day and what matters, over the
+	 * version `sha` the owner saw.
+	 */
+	| {
+			readonly action: "edit";
+			readonly sha: string;
+			readonly until?: string | null;
+			readonly wakesADay?: number;
+			readonly ask?: string;
+	  }
 	/** Look now; `key` names the click, so a click sent twice looks once. */
 	| { readonly action: "check"; readonly key: string };
 

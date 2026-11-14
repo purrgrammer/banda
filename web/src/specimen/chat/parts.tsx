@@ -727,6 +727,18 @@ export function Parts() {
 								ask: "Tell me when it is approved or a check fails. If Ana asks for changes, summarise what she wants.",
 							}}
 						/>
+						<WatchProposal
+							watch={{
+								agent: "Mara",
+								title: "purrgrammer/banda #142",
+								object: <Named>{FOLLOWED.pr.object}</Named>,
+								kind: "changed",
+								until: "merged",
+								account: "@bandarra",
+								wakesADay: 6,
+								ask: "Tell me when it is approved or a check fails.",
+							}}
+						/>
 						<Line icon={EyeIcon}>
 							Mara followed <Named>{FOLLOWED.pr.object}</Named>
 						</Line>

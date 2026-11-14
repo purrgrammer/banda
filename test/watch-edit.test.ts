@@ -1,12 +1,18 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createRegistry } from "@earendil-works/pi-durable";
+import {
+	createRegistry,
+	type JsonObject,
+	type ToolExecutionApi,
+	type ToolRegistration,
+} from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
 import { openBox } from "../src/box/box.ts";
 import { Accepted, shaOf } from "../src/core/agents.ts";
+import { Connected } from "../src/core/connections.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore } from "../src/core/turn.ts";
-import { Followed, type Looked, Watches, watchPath, withUntil } from "../src/core/watches.ts";
+import { Followed, type Looked, Watches, watchPath, withUntil, withWakesADay } from "../src/core/watches.ts";
 import type { Workspace } from "../src/server/agents.ts";
 import { changeWatch, createWatch, watches } from "../src/server/watches.ts";
 import { githubObjectDefinition } from "./fixtures/github-objects.ts";
@@ -22,7 +28,12 @@ const WATCH =
 async function setUp() {
 	const home = await tempHome();
 	const box = openBox(hostBox(home), () => {});
-	const core = defineCore({ blobs: blobStore(), gateway: () => new FakeGateway(), model: () => FAUX_MODEL });
+	const core = defineCore({
+		blobs: blobStore(),
+		gateway: () => new FakeGateway(),
+		model: () => FAUX_MODEL,
+		workspace: () => box.workspace,
+	});
 	const registry = createRegistry();
 	registry.install(core.extension);
 	const harness = await openStore(home, { models: echoModels().models, registry });
@@ -30,6 +41,10 @@ async function setUp() {
 	shipping(definition("github", githubObjectDefinition("https://example.com/mcp")));
 	await harness.commit(async (tx) => {
 		await added(tx, "github", NOW);
+		// the lead's one GitHub account, as a sign-in leaves it
+		const connected = await tx.doc(Connected);
+		connected.accounts.github = { bandarra: { id: "bandarra", at: NOW } };
+		connected.on.sancho = { github: ["bandarra"] };
 		const files = (await tx.doc(Accepted)).files;
 		files[watchPath("banda-142")] = { sha: shaOf(WATCH), text: WATCH, at: NOW };
 		(await tx.doc(Watches)).watches["banda-142"] = {
@@ -57,7 +72,15 @@ async function setUp() {
 		await harness.close(context);
 		box.close();
 	};
-	return { box, harness, workspace, accepted, boxed, close };
+	/** The agent's `watch` call, from a chat of the lead's. */
+	const watch = async (args: JsonObject) => {
+		const got = await core.receive(harness, { id: "seed", origin: { gateway: "fake", peer: "owner" }, text: "hi" });
+		if (!("chat" in got)) throw new Error("no chat");
+		const tool = (core.extension.tools as readonly ToolRegistration[]).find((one) => one.name === "watch");
+		const api = { conversationId: got.chat, commit: harness.commit.bind(harness), env: box.env() };
+		return tool?.execute(args, api as unknown as ToolExecutionApi, context);
+	};
+	return { box, harness, workspace, accepted, boxed, watch, close };
 }
 
 const reconcile = async () => {};
@@ -83,6 +106,26 @@ describe("the owner's follow of an object", () => {
 	});
 });
 
+describe("the agent's watch call", () => {
+	it("writes the wakes a day it gives into the file, for the owner to allow; out of bounds writes nothing", async () => {
+		const { box, watch, close } = await setUp();
+		try {
+			const object = "https://github.com/acme/banda/pull/150";
+			const file = () => readFile(join(box.workspace, watchPath("acme-banda-150")), "utf8");
+			const refused = await watch({ object, wakes_a_day: 1001, ask: "Tell me when it is approved." });
+			expect(refused).toMatchObject({ isError: true });
+			await expect(file()).rejects.toMatchObject({ code: "ENOENT" });
+			const wrote = await watch({ object, wakes_a_day: 6, ask: "Tell me when it is approved." });
+			expect(wrote).toMatchObject({ details: { receipt: { kind: "watch", name: "acme-banda-150", change: "added" } } });
+			expect(await file()).toBe(
+				`---\nobject: ${object}\naccount: bandarra\nwakes_a_day: 6\n---\nTell me when it is approved.\n`,
+			);
+		} finally {
+			await close();
+		}
+	});
+});
+
 describe("the owner's edit of a watch", () => {
 	it("sets, replaces or drops the until line alone, every other byte kept", () => {
 		expect(withUntil(WATCH, "closed")).toBe(WATCH.replace("until: merged", "until: closed"));
@@ -90,6 +133,37 @@ describe("the owner's edit of a watch", () => {
 		const none = WATCH.replace("until: merged\n", "");
 		expect(withUntil(none, "merged")).toBe(WATCH);
 		expect(withUntil("no frontmatter", "merged")).toBeUndefined();
+	});
+
+	it("sets or replaces the wakes_a_day line alone, after the fields before it, every other byte kept", () => {
+		const limited = WATCH.replace("until: merged\n", "until: merged\nwakes_a_day: 6\n");
+		expect(withWakesADay(WATCH, 6)).toBe(limited);
+		expect(withWakesADay(limited, 40)).toBe(limited.replace("wakes_a_day: 6", "wakes_a_day: 40"));
+		// with no until, it goes after the account; an until set later goes before it
+		const none = WATCH.replace("until: merged\n", "");
+		expect(withWakesADay(none, 6)).toBe(none.replace("bandarra\n", "bandarra\nwakes_a_day: 6\n"));
+		expect(withUntil(withWakesADay(none, 6) as string, "merged")).toBe(limited);
+		expect(withWakesADay("no frontmatter", 6)).toBeUndefined();
+	});
+
+	it("wakes a day changes its line alone, in the store and the box, and the view says it; out of bounds is refused", async () => {
+		const { harness, workspace, accepted, boxed, close } = await setUp();
+		try {
+			const [view] = await watches(harness, workspace);
+			expect(view?.accepted?.watch?.wakesADay).toBe(24);
+			await changeWatch(harness, workspace, reconcile, "banda-142", { wakesADay: 6 }, shaOf(WATCH), NOW);
+			const limited = WATCH.replace("until: merged\n", "until: merged\nwakes_a_day: 6\n");
+			expect(await accepted()).toBe(limited);
+			expect(await boxed()).toBe(limited);
+			const [after] = await watches(harness, workspace);
+			expect(after?.accepted?.watch).toMatchObject({ until: "merged", wakesADay: 6 });
+			await expect(
+				changeWatch(harness, workspace, reconcile, "banda-142", { wakesADay: 1001 }, shaOf(limited), NOW),
+			).rejects.toMatchObject({ status: 400, message: expect.stringContaining("wakes_a_day") });
+			expect(await accepted()).toBe(limited);
+		} finally {
+			await close();
+		}
 	});
 
 	it("rewrites only the line it changes, in the store and the box; the view offers the kind's ends", async () => {

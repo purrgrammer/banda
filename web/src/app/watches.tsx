@@ -1,13 +1,15 @@
 /**
  * An agent's watches in its panel, on the daemon's data: the rows (`watchRows`, from `../lib/watches.ts`, wired to
  * the owner's answers) and the detail the owner opens on one (`WatchDetail`): the object's card, what matters, and
- * the actions, each in effect at once; Edit changes what ends it and what matters.
+ * the actions, each in effect at once; Edit changes what ends it, its wakes a day and what matters.
  */
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { DEFAULT_WAKES_A_DAY, MAX_WAKES_A_DAY } from "../../../src/core/watch-limits.ts";
 import type { WatchView } from "../../../src/server/api.ts";
 import { clickKey } from "../areas/routines.ts";
 import { actOnWatch, follow } from "../areas/watches.ts";
@@ -28,8 +30,11 @@ export const watchActions = {
 	pause: (name: string, paused: boolean) =>
 		actOnWatch(name, { action: paused ? "pause" : "resume" }).then(showWatching),
 	remove: (name: string) => actOnWatch(name, { action: "remove" }).then(showWatching),
-	edit: (name: string, sha: string, change: { readonly until?: string | null; readonly ask?: string }) =>
-		actOnWatch(name, { action: "edit", sha, ...change }).then(showWatching),
+	edit: (
+		name: string,
+		sha: string,
+		change: { readonly until?: string | null; readonly wakesADay?: number; readonly ask?: string },
+	) => actOnWatch(name, { action: "edit", sha, ...change }).then(showWatching),
 	follow: (made: Parameters<typeof follow>[0]) =>
 		follow(made).then(({ control, watches }) => showWatching({ control, watches })),
 };
@@ -41,8 +46,19 @@ export const watchRows = (all: readonly WatchView[], agent: string, now: number)
 		decline: (name) => void watchActions.decline(name),
 	});
 
-/** A watch's words as its editor holds them: what ends it (null: any of its ends) and what matters. */
-type WatchDraft = { readonly until: string | null; readonly ask: string };
+/**
+ * A watch's words as its editor holds them: what ends it (null: any of its ends), the most times it may wake in a day
+ * (as typed) and what matters.
+ */
+type WatchDraft = { readonly until: string | null; readonly wakesADay: string; readonly ask: string };
+
+/** The wakes a day a draft gives, when it is a whole number the file may hold. */
+const wakesOf = (draft: WatchDraft): number | undefined => {
+	const wakes = Number(draft.wakesADay);
+	return draft.wakesADay.trim() !== "" && Number.isInteger(wakes) && wakes >= 1 && wakes <= MAX_WAKES_A_DAY
+		? wakes
+		: undefined;
+};
 
 /** The detail's editor: closed, being written, being saved, or refused in the daemon's words. */
 export type WatchEdit =
@@ -55,7 +71,7 @@ const ANY = "*";
 
 /**
  * One watch, opened from its row: the object's card as the daemon reads it, what the watch is for, how it stands, and
- * its actions. Edit turns what ends it and what matters into fields, saved over the version shown. `onDone` goes back.
+ * its actions. Edit turns what ends it, its wakes a day and what matters into fields, saved over the version shown. `onDone` goes back.
  */
 export function WatchDetail({
 	agent,
@@ -85,10 +101,13 @@ export function WatchDetail({
 	const save = (draft: WatchDraft) => {
 		if (file === undefined || sha === undefined) return;
 		const until = file.until ?? null;
+		const wakes = wakesOf(draft);
+		if (wakes === undefined) return;
 		setEdit({ step: "saving", ...draft });
 		watchActions
 			.edit(watch.name, sha, {
 				...(draft.until === until ? {} : { until: draft.until }),
+				...(wakes === (file.wakesADay ?? DEFAULT_WAKES_A_DAY) ? {} : { wakesADay: wakes }),
 				...(draft.ask === file.ask ? {} : { ask: draft.ask }),
 			})
 			.then(
@@ -125,7 +144,12 @@ export function WatchDetail({
 						...(watch.next === undefined || paused || watch.done !== undefined
 							? []
 							: ([["Next look", near(watch.next, now)]] as const)),
-						...(file === undefined || edit.step !== "closed" ? [] : ([["What matters", file.ask]] as const)),
+						...(file === undefined || edit.step !== "closed"
+							? []
+							: ([
+									["Wakes", `at most ${file.wakesADay ?? DEFAULT_WAKES_A_DAY} a day`],
+									["What matters", file.ask],
+								] as const)),
 					]}
 				/>
 				{watch.failed?.off === true && watch.object !== undefined ? (
@@ -145,7 +169,7 @@ export function WatchDetail({
 						className="flex flex-col gap-4"
 						onSubmit={(event) => {
 							event.preventDefault();
-							if (edit.ask.trim() !== "") save(edit);
+							if (edit.ask.trim() !== "" && wakesOf(edit) !== undefined) save(edit);
 						}}
 					>
 						{ends.length === 0 ? null : (
@@ -169,6 +193,24 @@ export function WatchDetail({
 								</Select>
 							</Field>
 						)}
+						<Field
+							label="Wakes a day"
+							hint={`The most times it may wake ${agent.name} in a day, from 1 to ${MAX_WAKES_A_DAY}; past it, it pauses itself.`}
+						>
+							<Input
+								type="number"
+								inputMode="numeric"
+								aria-label="Wakes a day"
+								aria-invalid={wakesOf(edit) === undefined}
+								min={1}
+								max={MAX_WAKES_A_DAY}
+								step={1}
+								value={edit.wakesADay}
+								disabled={edit.step === "saving"}
+								className="w-24"
+								onChange={(event) => setEdit({ ...edit, step: "editing", wakesADay: event.target.value })}
+							/>
+						</Field>
 						<Field label="What matters" hint={`${agent.name} reads this at every wake.`}>
 							<Textarea
 								value={edit.ask}
@@ -184,7 +226,11 @@ export function WatchDetail({
 							</p>
 						) : null}
 						<span className="flex flex-wrap items-center gap-2">
-							<Button type="submit" size="sm" disabled={edit.step === "saving" || edit.ask.trim() === ""}>
+							<Button
+								type="submit"
+								size="sm"
+								disabled={edit.step === "saving" || edit.ask.trim() === "" || wakesOf(edit) === undefined}
+							>
 								{edit.step === "saving" ? "Saving…" : "Save"}
 							</Button>
 							<Button
@@ -213,7 +259,14 @@ export function WatchDetail({
 							<Button
 								variant="outline"
 								size="sm"
-								onClick={() => setEdit({ step: "editing", until: file.until ?? null, ask: file.ask })}
+								onClick={() =>
+									setEdit({
+										step: "editing",
+										until: file.until ?? null,
+										wakesADay: String(file.wakesADay ?? DEFAULT_WAKES_A_DAY),
+										ask: file.ask,
+									})
+								}
 							>
 								Edit
 							</Button>

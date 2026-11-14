@@ -640,6 +640,12 @@
 					"maxLength": 200,
 					"description": "Which account to look with, when you have more than one of that connection."
 				},
+				"wakes_a_day": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 1000,
+					"description": "The most times it may wake you in a day before it pauses itself: 1 to 1000, default 24. Leave it out unless the owner asks for another."
+				},
 				"ask": {
 					"type": "string",
 					"minLength": 1,

@@ -1,12 +1,12 @@
 /**
  * Watches in full: the owner follows an object (`POST /api/watches`), allows or declines the box's change to one
- * (`POST /api/watches/:name/accept` with the `sha` shown or null, `/decline`), changes what ends one and what matters
- * (`/edit` with the `sha` shown; `until: null` is any end), pauses, resumes or removes one, and looks now (`/check`),
- * each in effect at once and answered with the control view. On start it finishes an owner's edit a restart cut
+ * (`POST /api/watches/:name/accept` with the `sha` shown or null, `/decline`), changes what ends one, its wakes a day
+ * and what matters (`/edit` with the `sha` shown; `until: null` is any end), pauses, resumes or removes one, and looks
+ * now (`/check`), each in effect at once and answered with the control view. On start it finishes an owner's edit a restart cut
  * short, so the box holds what the store accepted.
  */
 
-import { Followed, Watches } from "../../core/watches.ts";
+import { Followed, MAX_WAKES_A_DAY, Watches } from "../../core/watches.ts";
 import { BadRequest } from "../http.ts";
 import {
 	accept,
@@ -93,10 +93,18 @@ export const watches: AreaModule = {
 						now,
 					);
 				} else if (action === "edit") {
-					const { sha, until } = body;
+					const { sha, until, wakesADay } = body;
 					if (typeof sha !== "string" || !SHA.test(sha)) throw new BadRequest("sha is the hash of the version you saw");
 					if (until !== undefined && until !== null && (typeof until !== "string" || until.length > 32))
 						throw new BadRequest("until is one of its ends, or null for any of them");
+					if (
+						wakesADay !== undefined &&
+						(typeof wakesADay !== "number" ||
+							!Number.isInteger(wakesADay) ||
+							wakesADay < 1 ||
+							wakesADay > MAX_WAKES_A_DAY)
+					)
+						throw new BadRequest(`wakes a day is a whole number from 1 to ${MAX_WAKES_A_DAY}`);
 					const ask = optional(body, "ask", 8000);
 					await changeWatch(
 						deps.harness,
@@ -105,6 +113,7 @@ export const watches: AreaModule = {
 						name,
 						{
 							...(until === undefined ? {} : { until: until as string | null }),
+							...(wakesADay === undefined ? {} : { wakesADay }),
 							...(ask === undefined ? {} : { ask }),
 						},
 						sha,

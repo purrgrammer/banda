@@ -1,7 +1,7 @@
 /**
  * A watch through the app, as a person uses it, against a throwaway daemon and a fake GitHub: the connection banda
- * ships, a pull request is followed from the agent's panel, its end is
- * edited, a change wakes the agent's chat, and the watch is paused, resumed and stopped. No live provider or network.
+ * ships, a pull request is followed from the agent's panel, its end and its wakes a day
+ * are edited, a change wakes the agent's chat, and the watch is paused, resumed and stopped. No live provider or network.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -159,10 +159,16 @@ for (const width of [390, 1440])
 						page,
 						`[...document.querySelectorAll('[role="option"]')].find(el => el.textContent.trim() === 'When merged')`,
 					);
+					// a limit the file may not hold keeps Save off; one it may is saved with the end
+					await paste(page, "Wakes a day", "0");
+					await page.until(`${button("Save")}.disabled`);
+					await paste(page, "Wakes a day", "6");
+					await page.until(`!${button("Save")}.disabled`);
 					await shot("6-editing");
 					await click(page, button("Save"));
 					await page.until(button("Edit"));
 					await page.until(shows("merged"));
+					await page.until(shows("at most 6 a day"));
 					await shot("7-ends-merged");
 
 					// its first look is its baseline: GitHub changing before it would be no change at all

@@ -35,6 +35,7 @@ import {
 	watchPath,
 	watchText,
 	withUntil,
+	withWakesADay,
 } from "../core/watches.ts";
 import { boxFiles, type Workspace, write } from "./agents.ts";
 import type { WatchFileView, WatchState, WatchSummary, WatchView } from "./api.ts";
@@ -312,12 +313,16 @@ export async function pause(
 	return found;
 }
 
-/** What the owner changes in a watch, from its detail: what ends it (null: any of the kind's ends), what matters. */
-export type WatchChange = { readonly until?: string | null; readonly ask?: string };
+/**
+ * What the owner changes in a watch, from its detail: what ends it (null: any of the kind's ends), the most times it
+ * may wake in a day, what matters.
+ */
+export type WatchChange = { readonly until?: string | null; readonly wakesADay?: number; readonly ask?: string };
 
 /**
- * Change watch `name` as the owner: what ends it and what matters; `sha` is the version in effect they saw. Only the
- * lines changed are rewritten, every other byte kept. It is the owner's edit, so it takes effect at once: the store
+ * Change watch `name` as the owner: what ends it, its wakes a day and what matters; `sha` is the version in effect
+ * they saw. Only the lines changed are rewritten, every other byte kept. It is the owner's edit, so it takes effect at
+ * once: the store
  * accepts the new text and notes that the box still needs it, then the box gets it and the note goes, then the task
  * reads the new file. Refused when the version in effect is not the one shown, when `until` is none of the kind's
  * ends, or when the box holds a change of its own waiting to be allowed: an edit over it would allow what the owner
@@ -348,6 +353,7 @@ export async function changeWatch(
 		throw new BadRequest("it has a change waiting for you to allow it: answer that first", 409);
 	let text: string | undefined = file.text;
 	if (change.until !== undefined) text = withUntil(text, change.until);
+	if (change.wakesADay !== undefined && text !== undefined) text = withWakesADay(text, change.wakesADay);
 	if (change.ask !== undefined && text !== undefined) text = withAsk(text, change.ask);
 	const parsed = text === undefined ? undefined : parseWatch(name, text);
 	if (text === undefined || parsed === undefined || "errors" in parsed)

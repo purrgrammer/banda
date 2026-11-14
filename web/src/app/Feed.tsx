@@ -17,6 +17,7 @@ import {
 import { type ReactNode, useContext } from "react";
 import { cn } from "@/lib/cn";
 import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
+import { DEFAULT_WAKES_A_DAY } from "../../../src/core/watch-limits.ts";
 import { actOnRoutine } from "../areas/routines.ts";
 import { actOnWatch } from "../areas/watches.ts";
 import { AvatarCandidateMessage } from "../avatar/CandidateMessage.tsx";
@@ -338,6 +339,10 @@ function WatchCallLine({
 						(watch.object?.ends?.length === 0 ? "you stop it" : watch.object?.ends?.join(" or ")) ??
 						"any of its ends",
 					...(shown?.account === undefined ? {} : { account: shown.account }),
+					// the limit is said when the file gives one of its own
+					...(shown?.wakesADay === undefined || shown.wakesADay === DEFAULT_WAKES_A_DAY
+						? {}
+						: { wakesADay: shown.wakesADay }),
 					ask: shown?.ask ?? "",
 				}}
 				onAllow={() =>

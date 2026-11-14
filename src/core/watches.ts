@@ -82,6 +82,7 @@ import { Control } from "./routines.ts";
 import { localTime, parseEvery } from "./schedule.ts";
 import { context } from "./store.ts";
 import { missed, newestWithin, readTail } from "./tail.ts";
+import { DEFAULT_WAKES_A_DAY, MAX_WAKES_A_DAY } from "./watch-limits.ts";
 
 /** A watch's name, which is its file's: lowercase words joined by `-`, as an agent's. */
 export const WATCH_NAME = AGENT_NAME;
@@ -101,10 +102,7 @@ export const MAX_TAIL_BYTES = MAX_READING_BYTES / 4;
 const DAY = 24 * 60 * 60_000;
 /** The most changes one wake or tell names, in its line and the model's text; the rest are counted. */
 export const CHANGES_SAID = 20;
-/** Wakes a day a watch may have unless its file says otherwise (`wakes_a_day`). */
-export const DEFAULT_WAKES_A_DAY = 24;
-/** The most `wakes_a_day` a watch file may give. */
-export const MAX_WAKES_A_DAY = 1000;
+export { DEFAULT_WAKES_A_DAY, MAX_WAKES_A_DAY };
 
 /** A watch as its accepted file says. */
 export type Watch = {
@@ -173,24 +171,34 @@ export function watchText(watch: Omit<Watch, "name">): string {
 }
 
 /**
- * A watch file's text with its `until` line set to `until`, or gone for null, every other byte as it was: the owner
- * changing what ends it changes nothing else. A new line goes after the object and the account. Undefined when the
- * text has no frontmatter.
+ * A watch file's text with its `field` line set to `value`, or gone for null, every other byte as it was. A new line
+ * goes after the fields that come before it in the file's order. Undefined when the text has no frontmatter.
  */
-export function withUntil(text: string, until: string | null): string | undefined {
+function withLine(text: string, field: (typeof FIELDS)[number], value: string | null): string | undefined {
 	const match = /^(---\r?\n)([\s\S]*?)(\r?\n---[ \t]*(?:\r?\n|$))/.exec(text);
 	if (match === null) return undefined;
 	const lines = (match[2] ?? "").split(/\r?\n/);
-	const at = lines.findIndex((each) => each.startsWith("until:"));
-	if (until === null) {
+	const at = lines.findIndex((each) => each.startsWith(`${field}:`));
+	if (value === null) {
 		if (at !== -1) lines.splice(at, 1);
-	} else if (at !== -1) lines[at] = `until: ${until}`;
+	} else if (at !== -1) lines[at] = `${field}: ${value}`;
 	else {
-		const after = lines.reduce((last, each, n) => (/^(object|account):/.test(each) ? n : last), -1);
-		lines.splice(after + 1, 0, `until: ${until}`);
+		const before = FIELDS.slice(0, FIELDS.indexOf(field));
+		const after = lines.reduce((last, each, n) => (before.some((one) => each.startsWith(`${one}:`)) ? n : last), -1);
+		lines.splice(after + 1, 0, `${field}: ${value}`);
 	}
 	return `${match[1]}${lines.join("\n")}${match[3]}${text.slice(match[0].length)}`;
 }
+
+/**
+ * A watch file's text with its `until` line set to `until`, or gone for null, every other byte as it was: the owner
+ * changing what ends it changes nothing else. Undefined when the text has no frontmatter.
+ */
+export const withUntil = (text: string, until: string | null): string | undefined => withLine(text, "until", until);
+
+/** A watch file's text with its `wakes_a_day` line set to `wakes`, every other byte as it was. */
+export const withWakesADay = (text: string, wakes: number): string | undefined =>
+	withLine(text, "wakes_a_day", String(wakes));
 
 /**
  * What a `watch` call wrote, in its result's details: the watch by name, the hash of the file, and whether it made one
@@ -1786,7 +1794,7 @@ export function defineWatches(options: WatchesOptions) {
 	 */
 	async function propose(
 		api: Parameters<ToolRegistration["execute"]>[1],
-		args: { object: string; until?: string; account?: string; ask: string },
+		args: { object: string; until?: string; account?: string; wakes_a_day?: number; ask: string },
 		ctx: Context,
 	): Promise<{ readonly text: string; readonly receipt: WatchReceipt }> {
 		const root = options.workspace?.();
@@ -1820,6 +1828,7 @@ export function defineWatches(options: WatchesOptions) {
 				object,
 				...(picked.id === undefined ? {} : { account: picked.id }),
 				...(args.until === undefined ? {} : { until: args.until }),
+				...(args.wakes_a_day === undefined ? {} : { wakesADay: args.wakes_a_day }),
 				ask: args.ask,
 			});
 			const parsed = parseWatch(name, text);
@@ -1883,6 +1892,15 @@ export function defineWatches(options: WatchesOptions) {
 					minLength: 1,
 					maxLength: 200,
 					description: "Which account to look with, when you have more than one of that connection.",
+				}),
+			),
+			wakes_a_day: Type.Optional(
+				Type.Integer({
+					minimum: 1,
+					maximum: MAX_WAKES_A_DAY,
+					description:
+						`The most times it may wake you in a day before it pauses itself: 1 to ${MAX_WAKES_A_DAY}, default ` +
+						`${DEFAULT_WAKES_A_DAY}. Leave it out unless the owner asks for another.`,
 				}),
 			),
 			ask: Type.String({
