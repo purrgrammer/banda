@@ -38,6 +38,11 @@ if (!values.run) {
 	}
 	await mkdir(values.out, { mode: 0o700 });
 	const output = values.out;
+	const tracer = "/usr/bin/strace";
+	const tracerVersion = childProcess.execFileSync(tracer, ["--version"], { encoding: "utf8", timeout: 5_000 });
+	const tracerHelp = childProcess.execFileSync(tracer, ["--help"], { encoding: "utf8", timeout: 5_000 });
+	assert.ok(tracerHelp.includes("--kill-on-exit"), "The tracer must kill its traced children when it exits.");
+	await writeFile(join(output, "strace-version.txt"), tracerVersion);
 	const app = join(root, "app");
 	const assetsModule: typeof import("../src/box/microvm-assets.ts") = await import(
 		pathToFileURL(join(app, "dist/box/microvm-assets.js")).href
@@ -108,63 +113,96 @@ if (!values.run) {
 	let evidenceFailure: unknown;
 	let cleanup: unknown;
 	const attached = () =>
-		new Promise((resolveCapture) => {
-			const argv = ["exec", "--no-stdin", "--no-tty", name, "--", "/bin/true"];
+		new Promise((resolveCapture, rejectCapture) => {
+			const runtimeArgv = ["exec", "--no-stdin", "--no-tty", name, "--", "/bin/true"];
+			const argv = [
+				"--kill-on-exit",
+				"-f",
+				"-ttt",
+				"-s",
+				"4096",
+				"-o",
+				"/dev/fd/3",
+				"-e",
+				"trace=write,writev,tgkill,tkill,kill",
+				assets.msb,
+				...runtimeArgv,
+			];
 			const child = observeChild(
-				originalSpawn(assets.msb, argv, {
+				originalSpawn(tracer, argv, {
 					cwd: assets.root,
 					env: { ...runtimeEnv, RUST_BACKTRACE: "1" },
 					detached: true,
-					stdio: ["ignore", "pipe", "pipe"],
+					stdio: ["ignore", "pipe", "pipe", "pipe"],
 				}),
 			);
 			let size = 0;
-			let stdout = "";
-			let stderr = "";
+			const streams = { stdout: child.stdout, stderr: child.stderr, trace: child.stdio[3] };
+			const chunks: { stdout: Buffer[]; stderr: Buffer[]; trace: Buffer[] } = { stdout: [], stderr: [], trace: [] };
 			let settled = false;
 			let controlError: string | undefined;
 			let timer: NodeJS.Timeout;
+			let termination: { reason: string; timer: NodeJS.Timeout } | undefined;
 			const finish = (reason: string, code: number | null, signal: NodeJS.Signals | null) => {
 				if (settled) return;
 				settled = true;
 				clearTimeout(timer);
-				if (reason !== "closed" && child.pid !== undefined) {
+				clearTimeout(termination?.timer);
+				for (const stream of Object.values(streams)) stream?.destroy();
+				const stdout = Buffer.concat(chunks.stdout);
+				const stderr = Buffer.concat(chunks.stderr);
+				const trace = Buffer.concat(chunks.trace);
+				const capture = {
+					binary: tracer,
+					argv,
+					runtimeArgv,
+					tracerVersion,
+					environmentDelta: { RUST_BACKTRACE: "1" },
+					reason: reason === "closed" ? (termination?.reason ?? reason) : reason,
+					closed: reason === "closed",
+					code,
+					signal,
+					stdout: stdout.toString("utf8"),
+					stderr: stderr.toString("utf8"),
+					rawFiles: { stdout: "syscall-stdout.bin", stderr: "syscall-stderr.bin", trace: "syscall-trace.log" },
+					traceBytes: trace.length,
+					pid: child.pid,
+					bytesObserved: size,
+					bytesRetained: Math.min(size, 1 << 20),
+					controlError,
+				};
+				void Promise.all([
+					writeFile(join(output, capture.rawFiles.stdout), stdout),
+					writeFile(join(output, capture.rawFiles.stderr), stderr),
+					writeFile(join(output, capture.rawFiles.trace), trace),
+				]).then(() => resolveCapture(capture), rejectCapture);
+			};
+			const stop = (reason: string) => {
+				if (settled || termination) return;
+				clearTimeout(timer);
+				termination = { reason, timer: setTimeout(() => finish("close-timeout", null, null), 5_000) };
+				if (child.pid !== undefined) {
 					try {
 						process.kill(-child.pid, "SIGKILL");
 					} catch (error) {
 						if (!(error instanceof Error && "code" in error && error.code === "ESRCH"))
 							controlError = String(error).slice(0, 4000);
 					}
-					child.stdout?.destroy();
-					child.stderr?.destroy();
 				}
-				resolveCapture({
-					argv,
-					environmentDelta: { RUST_BACKTRACE: "1" },
-					reason,
-					code,
-					signal,
-					stdout,
-					stderr,
-					pid: child.pid,
-					bytesRetained: Math.min(size, 1 << 20),
-					controlError,
-				});
 			};
-			for (const channel of ["stdout", "stderr"] as const)
-				child[channel]?.on("data", (chunk: Buffer) => {
+			for (const channel of ["stdout", "stderr", "trace"] as const)
+				streams[channel]?.on("data", (chunk: Buffer) => {
 					const retained = chunk.subarray(0, Math.max(0, (1 << 20) - size));
 					size += chunk.length;
-					if (channel === "stdout") stdout += retained.toString("utf8");
-					else stderr += retained.toString("utf8");
-					if (size > 1 << 20) finish("output-limit", null, null);
+					if (retained.length > 0) chunks[channel].push(retained);
+					if (size > 1 << 20) stop("output-limit");
 				});
 			child.once("error", (error) => {
 				controlError = error.message.slice(0, 4000);
 				finish("spawn-error", null, null);
 			});
 			child.once("close", (code, signal) => finish("closed", code, signal));
-			timer = setTimeout(() => finish("deadline", null, null), 20_000);
+			timer = setTimeout(() => stop("deadline"), 20_000);
 		});
 	const diagnose = failedCreateObserver(owner, async () => {
 		const image = diagnosticImage(owner, query(["image", "inspect", assets.box.ref, "--format", "json"]));

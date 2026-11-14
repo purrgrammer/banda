@@ -288,6 +288,10 @@ jobs:
             sudo setfacl -m "u:$(id -u):rw" /dev/kvm
           fi
           test -r /dev/kvm && test -w /dev/kvm
+      - name: Install the startup syscall tracer
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends strace
       - name: Capture startup evidence while preserving the original failure
         run: node scripts/diagnose-linux-start.ts --out "$RUNNER_TEMP/native-start-diagnostic" --run
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
