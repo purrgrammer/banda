@@ -20,11 +20,14 @@ const FEATURED = [
 	"qwen-code",
 	"mistral-vibe",
 ];
+/** The name people know an agent by, where the registry lists it under another. */
+const KNOWN_AS: Record<string, string> = { "claude-acp": "Claude Code" };
 
 if (list) {
 	const featured = FEATURED.flatMap((id) => registry.agents.filter((agent) => agent.id === id));
 	for (const agent of featured) {
 		const item = document.createElement("span");
+		const name = KNOWN_AS[agent.id] ?? agent.name;
 		const url = agent.icon ? icons[`./acp/${agent.id}.svg`] : undefined;
 		if (url) {
 			const icon = document.createElement("i");
@@ -35,9 +38,9 @@ if (list) {
 		if (agent.link) {
 			const link = document.createElement("a");
 			link.href = agent.link;
-			link.textContent = agent.name;
+			link.textContent = name;
 			item.append(link);
-		} else item.append(agent.name);
+		} else item.append(name);
 		list.append(item);
 	}
 	const more = document.createElement("span");
