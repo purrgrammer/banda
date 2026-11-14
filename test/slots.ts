@@ -29,12 +29,13 @@ const FIRST = 31_500;
 export const SIGN_IN: Slots = { first: FIRST, size: 1, patience: 120_000 };
 
 /**
- * A browser test's page load is the most a test asks of the machine: one Chrome rendering, one Vite compiling. Every run
- * on the machine must work this out alike, so it comes from the machine alone.
+ * A browser test's page load is the most a test asks of the machine: one Chrome rendering, one Vite compiling, each of
+ * several processes, so a slot is four cores. Every run on the machine must work this out alike, so it comes from the
+ * machine alone.
  */
 export const BROWSERS: Slots = {
 	first: FIRST + 10,
-	size: size("BANDA_TEST_BROWSERS", Math.max(2, Math.floor(availableParallelism() / 3)), 90),
+	size: size("BANDA_TEST_BROWSERS", Math.max(2, Math.floor(availableParallelism() / 4)), 90),
 };
 
 /** Any other test file: as many at once as the machine has cores, whatever each run's own worker count. */
