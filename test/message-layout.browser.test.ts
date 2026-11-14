@@ -28,6 +28,21 @@ const directChat = 30;
 const directText = `Ask @Mara, then @mara, and @Ana María about @${longName}, @Cervantes too, but not @Nobody.`;
 const live = (event: object) => `data: ${JSON.stringify({ type: "live", chat: directChat, event })}\n\n`;
 const groupMention = words.length + 2;
+// an artifact that is an image, as the Library holds it: two versions, each its own blob, wider than a message shows
+const coastShas = ["c".repeat(64), "d".repeat(64)];
+const coast = {
+	id: "c0a57c0a57c0a57c",
+	title: "Coast photo",
+	path: "/workspace/coast.svg",
+	mimeType: "image/svg+xml",
+	kind: "image",
+	versions: coastShas.map((sha, i) => ({ n: i + 1, sha, size: 100, at, by: "companion" })),
+	published: {},
+	chat: 21,
+	at,
+};
+const coastBytes =
+	'<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" fill="#9db0c6"/></svg>';
 const group = {
 	room: 20,
 	name: "Layout group",
@@ -53,6 +68,8 @@ const group = {
 			artifacts: [
 				{ id: "a1b2c3d4e5f60718", n: 2, title: "banda landing", kind: "page" },
 				{ id: "0f1e2d3c4b5a6978", n: 1, title: "Launch checklist", kind: "markdown" },
+				// an image: drawn as the image itself, at the version the message shows
+				{ id: coast.id, n: 1, title: coast.title, kind: "image" },
 			],
 		},
 		{ entry: groupMention, text: "Ask @Mara about it.", author: { owner: true }, mentions: ["mara"], at },
@@ -106,6 +123,7 @@ beforeAll(async () => {
 						if (path === "/api/events") {
 							res.setHeader("content-type", "text/event-stream");
 							res.write(": fixture\n\n");
+							res.write(`data: ${JSON.stringify({ type: "artifacts", artifacts: [coast] })}\n\n`);
 							if ((req.url ?? "").includes(`chat=${directChat}`)) {
 								res.write(live({ type: "ready", tail: 1, busy: false, partial: [], running: [] }));
 								res.write(live({ type: "queued", queued: [{ id: "q1", text: "Later, @Mara." }] }));
@@ -114,6 +132,11 @@ beforeAll(async () => {
 						}
 						// a message being sent stays on its way, for the test to see it there
 						if (path === "/api/messages") return;
+						if (path === `/api/blobs/${coastShas[0]}`) {
+							res.setHeader("content-type", "image/svg+xml");
+							res.end(coastBytes);
+							return;
+						}
 						if (path?.startsWith("/api/")) {
 							res.setHeader("content-type", "application/json");
 							const items = { items: [{ id: 1, role: "user", text: directText, at }] };
@@ -219,6 +242,41 @@ for (const width of [390, 1440])
 					`[...document.querySelectorAll(${JSON.stringify(`${entry} button`)})].filter(b=>b.textContent.trim()==='Open')[1].click()`,
 				);
 				expect(await page.run<string>("location.hash")).toBe("#/artifact/0f1e2d3c4b5a6978?v=1");
+			});
+		},
+		60_000,
+	);
+
+for (const width of [390, 1440])
+	it.skipIf(!hasChrome())(
+		`an artifact that is an image shows as the image, captioned, and a tap opens the artifact at ${width}px`,
+		async () => {
+			await withLayoutPage(width, async (page) => {
+				const shown = `#group [data-entry="${words.length + 1}"] [data-artifact-image]`;
+				const q = JSON.stringify(shown);
+				// the bytes of the version the message shows (the first), never the newest's: only that blob is served
+				await page.until(`document.querySelector(${JSON.stringify(`${shown} img`)})?.naturalWidth > 0`);
+				const image = await page.run<{ width: number; right: number; alt: string }>(
+					`(()=>{const i=document.querySelector(${JSON.stringify(`${shown} img`)});const r=i.getBoundingClientRect();return {width:r.width,right:r.right,alt:i.alt}})()`,
+				);
+				// as an attached image: 280px at most, inside the page
+				expect(image.width).toBeGreaterThan(200);
+				expect(image.width).toBeLessThanOrEqual(280);
+				expect(image.right).toBeLessThanOrEqual(width);
+				expect(image.alt).toBe("Coast photo");
+				expect(await page.run<boolean>("document.documentElement.scrollWidth <= innerWidth")).toBe(true);
+				// its caption: the title and, with more than one version, how many; no card, no Open
+				expect(await page.run<string>(`document.querySelector(${q}).querySelector('figcaption').textContent`)).toBe(
+					"Coast photo· 2 versions",
+				);
+				expect(await page.run<boolean>(`document.querySelector(${q}).closest('[data-tile]') === null`)).toBe(true);
+				// a tap opens the artifact at the message's version, not the zoom
+				await page.run(`document.querySelector(${JSON.stringify(`${shown} button`)}).click()`);
+				expect(await page.run<string>("location.hash")).toBe(`#/artifact/${coast.id}?v=1`);
+				expect(await page.run<boolean>("document.querySelector('dialog[open]') === null")).toBe(true);
+				expect(
+					await page.run<number>(`document.querySelectorAll(${JSON.stringify(`${shown} [data-rmiz]`)}).length`),
+				).toBe(0);
 			});
 		},
 		60_000,

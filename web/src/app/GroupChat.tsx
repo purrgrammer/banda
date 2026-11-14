@@ -20,7 +20,7 @@ import {
 	useConversation,
 } from "@/components/ai-elements/conversation";
 import { archiveGroup, groupOf, postToGroup } from "../areas/groups.ts";
-import { ArtifactCard, QuestionCard } from "../chat/Cards.tsx";
+import { QuestionCard } from "../chat/Cards.tsx";
 import { Composer } from "../chat/Composer.tsx";
 import { Bubble, MessageActions, Run } from "../chat/Feed.tsx";
 import { Header } from "../chat/Header.tsx";
@@ -37,7 +37,7 @@ import { mentionParts, mentionsIn } from "../lib/mentions.ts";
 import type { ChatAgent } from "../lib/navigation.ts";
 import { useShell } from "../lib/shell.ts";
 import { ActivitySheet, type ActivityTarget } from "./Activity.tsx";
-import { kindWords } from "./ArtifactPage.tsx";
+import { ArtifactPart } from "./ArtifactPart.tsx";
 import { whoOf } from "./band.ts";
 import { DraftApproval } from "./DraftApproval.tsx";
 import { useHarnessMenu } from "./HarnessSession.tsx";
@@ -293,11 +293,12 @@ export function GroupChat({
 											objects
 										)}
 										{artifacts.map((artifact) => (
-											<ArtifactCard
+											<ArtifactPart
 												key={`${artifact.id}:${artifact.n}`}
+												id={artifact.id}
+												n={artifact.n}
 												title={artifact.title}
-												kind={kindWords(artifact.kind)}
-												version={`Version ${artifact.n}`}
+												kind={artifact.kind}
 												onOpen={() => {
 													location.hash = `#/artifact/${artifact.id}?v=${artifact.n}`;
 												}}

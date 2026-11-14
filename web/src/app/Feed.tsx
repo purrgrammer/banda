@@ -23,7 +23,7 @@ import { actOnWatch } from "../areas/watches.ts";
 import { AvatarCandidateMessage } from "../avatar/CandidateMessage.tsx";
 import { AgentMessage } from "../chat/AgentMessage.tsx";
 import { ChangeCard } from "../chat/Approval.tsx";
-import { ArtifactCard, Browsed, QuestionCard } from "../chat/Cards.tsx";
+import { Browsed, QuestionCard } from "../chat/Cards.tsx";
 import { Done, Settling } from "../chat/Done.tsx";
 import { EDITED_WORDS } from "../chat/EditableText.tsx";
 import { Bubble, DaySeparator, MessageActions, Run, UnreadDivider } from "../chat/Feed.tsx";
@@ -44,7 +44,7 @@ import { changeNoun, changeWords } from "../lib/segments/changes.ts";
 import { watchCallWords, watchObject } from "../lib/segments/watches.ts";
 import { showAgents, showControl, showWatching, useShell } from "../lib/shell.ts";
 import { AgentPreview } from "./AgentPreview.tsx";
-import { kindWords } from "./ArtifactPage.tsx";
+import { ArtifactPart } from "./ArtifactPart.tsx";
 import { ConnectFlowCard } from "./ConnectFlow.tsx";
 import { DraftApproval } from "./DraftApproval.tsx";
 import { FilePart } from "./FilePart.tsx";
@@ -868,10 +868,12 @@ function partOf(
 		case "artifact": {
 			const id = segment.id;
 			return id === undefined ? null : (
-				<ArtifactCard
+				<ArtifactPart
+					id={id}
+					n={segment.n}
 					title={segment.title}
-					kind={kindWords(segment.artifactKind ?? "file")}
-					version={`Version ${segment.n ?? 1}${segment.change === undefined ? "" : ` · ${segment.change}`}`}
+					kind={segment.artifactKind ?? "file"}
+					change={segment.change}
 					{...(onOpenArtifact === undefined ? {} : { onOpen: () => onOpenArtifact(id, segment.n) })}
 				/>
 			);

@@ -14,7 +14,15 @@ import {
 } from "lucide-react";
 import { type ReactNode, useContext, useState } from "react";
 import { ApprovalCard, ChangeCard, Details, Facts, WaitingPill } from "../../chat/Approval.tsx";
-import { ArtifactCard, Browsed, QuestionCard, type QuestionState, SignInCard, ViewCard } from "../../chat/Cards.tsx";
+import {
+	ArtifactCard,
+	ArtifactImage,
+	Browsed,
+	QuestionCard,
+	type QuestionState,
+	SignInCard,
+	ViewCard,
+} from "../../chat/Cards.tsx";
 import { Composer } from "../../chat/Composer.tsx";
 import { Bubble, DaySeparator, JumpToLatest, Mention, Run, UnreadDivider } from "../../chat/Feed.tsx";
 import { FileChanges } from "../../chat/FileChanges.tsx";
@@ -345,6 +353,15 @@ export function Parts() {
 			<Section id="cards" note="What an agent made, sees, asks, or hands you.">
 				<div className="flex max-w-2xl flex-col gap-3">
 					<ArtifactCard title="Lisbon long weekend" kind="Plan" version="3 versions · you edited the last" />
+					<Group label="An artifact that is an image: the image, as an attached one shows; a tap opens the artifact">
+						<ArtifactImage src={PAGE} title="Lisbon coast" versions={3} onOpen={() => {}} />
+						<ArtifactImage
+							src={PAGE}
+							title="A first sketch, with one version and a long title"
+							versions={1}
+							onOpen={() => {}}
+						/>
+					</Group>
 					<ViewCard host="flights.example" title="Lisbon, Fri 14 Nov" shot={PAGE} />
 					<Group label="After the browser closed: what it opened stays, where it happened">
 						<Browsed pages={["https://en.wikipedia.org/wiki/Lisbon"]} />

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { pathEnds } from "@/lib/ends";
 import { Bubble } from "./Feed.tsx";
+import { ImageFile, MESSAGE_IMAGE_WIDTH } from "./Files.tsx";
 import { KeepEnd } from "./KeepEnd.tsx";
 
 /** The frame every card shares: a hairline, the tile radius, the measure. */
@@ -67,6 +68,33 @@ export function ArtifactCard({
 				Open
 			</Button>
 		</Tile>
+	);
+}
+
+/**
+ * An artifact that is an image: the image as an attached one shows, and beneath it its title and, once it has more
+ * than one version, how many. A tap opens the artifact (its versions, restore), where an attached image zooms.
+ */
+export function ArtifactImage({
+	src,
+	title,
+	versions,
+	onOpen,
+}: {
+	src: string;
+	title: string;
+	/** How many versions the artifact has now. */
+	versions: number;
+	onOpen?: (() => void) | undefined;
+}) {
+	return (
+		<figure data-artifact-image="" className="m-0 flex max-w-full flex-col items-start gap-1">
+			<ImageFile src={src} alt={title} width={MESSAGE_IMAGE_WIDTH} onOpen={onOpen} />
+			<figcaption className="flex max-w-full gap-1 px-0.5 text-meta text-ink-2" style={{ width: MESSAGE_IMAGE_WIDTH }}>
+				<span className="truncate font-medium text-ink">{title}</span>
+				{versions > 1 ? <span className="shrink-0">· {versions} versions</span> : null}
+			</figcaption>
+		</figure>
 	);
 }
 

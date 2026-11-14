@@ -95,13 +95,45 @@ export function CodeLines({ code, tokens }: { code: string; tokens?: Token[][] |
 	);
 }
 
-export function ImageFile({ src, alt, width = 320 }: { src: string; alt: string; width?: number }) {
+/** How wide an image shows in a message, at most: an attached one, and an artifact that is an image. */
+export const MESSAGE_IMAGE_WIDTH = 280;
+
+export function ImageFile({
+	src,
+	alt,
+	width = 320,
+	onOpen,
+}: {
+	src: string;
+	alt: string;
+	width?: number;
+	/** A tap opens it somewhere of its own (an artifact, in its pane) in place of the zoom. */
+	onOpen?: (() => void) | undefined;
+}) {
+	const image = <img src={src} alt={alt} className="block h-auto w-full" />;
 	return (
 		<span className="inline-block max-w-full overflow-hidden rounded-tile border border-line-soft" style={{ width }}>
-			<Zoom zoomMargin={40} wrapElement="span" a11yNameButtonZoom={`Open ${alt}`} a11yNameButtonUnzoom="Close">
-				<img src={src} alt={alt} className="block h-auto w-full" />
-			</Zoom>
+			{onOpen === undefined ? (
+				<Zoom zoomMargin={40} wrapElement="span" a11yNameButtonZoom={`Open ${alt}`} a11yNameButtonUnzoom="Close">
+					{image}
+				</Zoom>
+			) : (
+				<button type="button" aria-label={`Open ${alt}`} onClick={onOpen} className="block w-full cursor-pointer">
+					{image}
+				</button>
+			)}
 		</span>
+	);
+}
+
+/** An image whose bytes are on their way: the room it will take. */
+export function ImageLoading({ name }: { name: string }) {
+	return (
+		<span
+			role="img"
+			aria-label={`${name}, loading`}
+			className="block h-40 w-60 max-w-full animate-pulse rounded-tile bg-paper-3 motion-reduce:animate-none"
+		/>
 	);
 }
 

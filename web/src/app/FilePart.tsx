@@ -11,6 +11,8 @@ import {
 	DocumentFile,
 	type FileMeta,
 	ImageFile,
+	ImageLoading,
+	MESSAGE_IMAGE_WIDTH,
 	PdfFile,
 	PlainFile,
 	SheetFile,
@@ -83,7 +85,10 @@ const previewOf = (chat: number, file: SegmentFile, full: boolean): Promise<File
 type Loaded<T> = { state: "loading" } | { state: "ready"; value: T } | { state: "failed"; why: string };
 
 /** Load once per key; `retry` loads again. */
-function useLoad<T>(key: string | undefined, load: () => Promise<T> | undefined): Loaded<T> & { retry: () => void } {
+export function useLoad<T>(
+	key: string | undefined,
+	load: () => Promise<T> | undefined,
+): Loaded<T> & { retry: () => void } {
 	const [loaded, setLoaded] = useState<Loaded<T>>({ state: "loading" });
 	const [attempt, setAttempt] = useState(0);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the key names what is loaded
@@ -148,15 +153,11 @@ export function FilePart({ chat, file }: { chat: number; file: SegmentFile }) {
 	);
 	if (file.image)
 		return bytes.state === "ready" ? (
-			<ImageFile src={bytes.value} alt={file.name} width={280} />
+			<ImageFile src={bytes.value} alt={file.name} width={MESSAGE_IMAGE_WIDTH} />
 		) : bytes.state === "failed" ? (
 			<PlainFile file={{ name: file.name, size: "" }} kind="Image, couldn't load · Try again" onOpen={bytes.retry} />
 		) : (
-			<span
-				role="img"
-				aria-label={`${file.name}, loading`}
-				className="block h-40 w-60 max-w-full animate-pulse rounded-tile bg-paper-3 motion-reduce:animate-none"
-			/>
+			<ImageLoading name={file.name} />
 		);
 	if (!ready || drawn.state === "loading")
 		return <PlainFile file={{ name: file.name, size: "" }} kind={ready ? "Opening…" : "Sending…"} />;
