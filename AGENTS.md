@@ -113,6 +113,9 @@ A banda daemon may be running from another checkout, possibly the one you are ru
 - `test/prompt-budget.test.ts` holds a fresh chat's system prompt and first-step tools to the UTF-8 byte counts in
   `test/prompt-budget.json`, by equality. A change that moves them reruns `npm run prompt:budget` (it rewrites the file
   and fails; never under CI) and commits the new file with the change, saying why in the commit message.
+- `test/stream-budget.test.ts` caps the UTF-8 bytes of the shell stream's first push, event by event, and of a
+  transcript page. A change that grows one past its cap raises the cap there (`BANDA_STREAM_BUDGET=print` prints what
+  it measured), saying the measured size and why in the commit message.
 
 ## Changes
 - Work lands on `main` as small commits; push and open pull requests only when the owner says so.

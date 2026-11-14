@@ -113,14 +113,14 @@ import type { Area } from "./routes/area.ts";
 import { appendArgument } from "./stream-args.ts";
 
 /** Entries scanned per step of a page; bookkeeping entries show nothing. */
-const PAGE = 50;
+export const PAGE = 50;
 /**
  * Messages (the owner's and the agent's words) a page back in time holds, scanning on past tool steps, which fold into
  * one line each run: a page of entries could otherwise be all steps and show next to nothing.
  */
-const PAGE_MESSAGES = 10;
+export const PAGE_MESSAGES = 10;
 /** Entries a page scans at most, however few messages they hold. */
-const PAGE_SCAN = 2000;
+export const PAGE_SCAN = 2000;
 
 const textOf = (content: string | readonly { type: string; text?: string }[]) =>
 	typeof content === "string"
