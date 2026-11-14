@@ -9,6 +9,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { crc32, deflateSync } from "node:zlib";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { startDaemon } from "../../src/daemon.ts";
 import { readDaemonFile, webLink } from "../../src/home.ts";
@@ -19,10 +20,35 @@ import { hasChrome, withPage } from "./chrome.ts";
 
 const PORT = Number(process.env.BANDA_SMOKE_PORT ?? 7788);
 
+/** A PNG of one colour, 600 by 400: wider than a message shows an image. */
+function picture(rgb: readonly [number, number, number]): Buffer {
+	const [width, height] = [600, 400];
+	const chunk = (type: string, data: Buffer) => {
+		const body = Buffer.concat([Buffer.from(type, "latin1"), data]);
+		const framed = Buffer.alloc(body.length + 8);
+		framed.writeUInt32BE(data.length, 0);
+		body.copy(framed, 4);
+		framed.writeUInt32BE(crc32(body), body.length + 4);
+		return framed;
+	};
+	const header = Buffer.alloc(13);
+	header.writeUInt32BE(width, 0);
+	header.writeUInt32BE(height, 4);
+	header.set([8, 2, 0, 0, 0], 8);
+	// each row: no filter, then its pixels
+	const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, Buffer.from(rgb))]);
+	return Buffer.concat([
+		Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+		chunk("IHDR", header),
+		chunk("IDAT", deflateSync(Buffer.concat(Array.from({ length: height }, () => row)))),
+		chunk("IEND", Buffer.alloc(0)),
+	]);
+}
+
 /**
  * The faux model for a run without a key: it answers `re: <message>` with message_user, and acts on a few words so
  * every card can be tried: "ask" a question with options, "pick" several, "form" a form, "read" a file first (a
- * working line), "file" a message with a file, "remind" a routine every minute,
+ * working line), "file" a message with a file, "make a picture" an artifact that is an image, "remind" a routine every minute,
  * and a routine's wake its reply (none when its ask says "quiet"; a failed run when it says "fail"); "always <fact>" keeps
  * a global fact, "note <fact>" one for this agent, "about <person> <fact>" one about someone else
  * for a task, and "recall <words>" finds facts and answers naming them as what shaped it; "tell <name>" drafts a message
@@ -117,6 +143,20 @@ function scripted() {
 		if (/\bthanks\b/i.test(text)) return call({ reaction: "👍" });
 		if (/\bread\b/i.test(text))
 			return fauxAssistantMessage([fauxToolCall("bash", { command: "sleep 3; echo read" })], { stopReason: "toolUse" });
+		// an artifact that is an image: "make a picture", then "change the picture" for its next version
+		const pictured = /\b(make a|change the) picture\b/i.exec(text);
+		if (pictured !== null) {
+			const change = /change/i.test(pictured[1] ?? "");
+			const bytes = picture(change ? [0xd9, 0x8f, 0x6a] : [0x9d, 0xb0, 0xc6]).toString("base64");
+			return fauxAssistantMessage(
+				[
+					fauxToolCall("bash", { command: `printf '%s' '${bytes}' | base64 -d > coast.png` }),
+					fauxToolCall("publish", { path: "coast.png", title: "Coast", ...(change ? { change: "at sunset" } : {}) }),
+					fauxToolCall("message_user", { text: change ? "Now at sunset." : "Here is the picture." }),
+				],
+				{ stopReason: "toolUse" },
+			);
+		}
 		// artifacts: "make a plan", "change the plan", "make a table", "make a page", each published to the Library
 		const made = /\b(make a|change the) (plan|table|page)\b/i.exec(text);
 		if (made !== null) {
@@ -131,14 +171,12 @@ function scripted() {
 			return fauxAssistantMessage(
 				[
 					fauxToolCall("bash", { command: `printf '%b' "${bytes.replace(/"/g, '\\"')}" > ${file}` }),
-					fauxToolCall("message_user", {
-						text: change ? "I added the train back." : `Here is the ${kind}.`,
-						artifact: {
-							path: file,
-							title: { plan: "Lisbon trip plan", table: "Flat prices", page: "Budget page" }[kind],
-							...(change ? { change: "added the return train" } : {}),
-						},
+					fauxToolCall("publish", {
+						path: file,
+						title: { plan: "Lisbon trip plan", table: "Flat prices", page: "Budget page" }[kind],
+						...(change ? { change: "added the return train" } : {}),
 					}),
+					fauxToolCall("message_user", { text: change ? "I added the train back." : `Here is the ${kind}.` }),
 				],
 				{ stopReason: "toolUse" },
 			);
