@@ -265,6 +265,9 @@ export function ArtifactViewer({
 			{old ? (
 				<div className="flex items-center gap-2 border-b border-line-soft bg-paper-2 px-4 py-2">
 					<span className="flex-1 text-meta text-ink-2">An older version. The newest is {newest}.</span>
+					<Button variant="ghost" size="xs">
+						Open the newest
+					</Button>
 					<Button size="xs">Restore this</Button>
 				</div>
 			) : null}
