@@ -453,7 +453,7 @@ footer .wrap { padding-block: 48px 32px; }
 
 <!-- Vercel Web Analytics, for this page alone: the app banda serves to its owner never loads it -->
 <script>
-window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+window.va = window.va || ((...event) => { window.vaq = window.vaq || []; window.vaq.push(event); });
 </script>
 <script defer src="/_vercel/insights/script.js"></script>
 <script type="module" src="./band.ts"></script>
