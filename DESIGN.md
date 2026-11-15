@@ -112,9 +112,14 @@ one that gives them one more thing to manage stays out.
   sign-in. One screen, no other step. A credential found outside banda (an ANTHROPIC_API_KEY around the daemon) is
   named by where it came from wherever providers show, never passes for one connected here, and can be connected
   over; first run stays until the owner picks it, so a key they never saw is never what the band silently thinks with.
-  Then the chat opens with complete, broadly useful requests a tap sends as written, none needing a connection, and
-  nothing else: an agent that has said nothing is given no words, in its chat or on its row. Every new agent's chat
-  starts so, and the starters go once the owner has written.
+  Then the chat opens with the agent's first message, which is its own: the first time the owner opens an agent's
+  chat that does not exist yet, the daemon makes it and asks the agent, in the daemon's words, to introduce itself
+  and then offer what it could do, as a question with options. What the owner reads was said by a run, in that agent's
+  voice and fitting its tools and connections; it is kept in the chat and read by every later run, and the option
+  the owner taps, or what they type instead, answers it and is what the agent does next. It is asked for once, in
+  the commit that makes the chat: a chat the owner's message, a routine or another agent started is not greeted. An
+  agent that has said nothing is given no words, in its chat or on its row; only when it cannot be asked does the
+  chat offer banda's own requests a tap sends as written.
   Returning owners open straight into their last chat. While the box starts, the chat says so in a line ("Mara's
   computer is starting…"), never only a footer notice. If a provider later fails, the chat says who, what and the fix
   ("Mara can't answer: your Anthropic sign-in expired · Sign in again").
