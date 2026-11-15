@@ -47,7 +47,7 @@ export function McpServerForm({ busy, onSubmit }: { busy: boolean; onSubmit: (co
 						placeholder="https://example.com/mcp"
 						disabled={busy}
 					/>
-					<FieldDescription>The server’s remote MCP endpoint, without credentials.</FieldDescription>
+					<FieldDescription>The server’s address.</FieldDescription>
 				</Field>
 				<Field>
 					<FieldLabel htmlFor={`${id}-name`}>Name</FieldLabel>
@@ -111,9 +111,7 @@ export function McpServerForm({ busy, onSubmit }: { busy: boolean; onSubmit: (co
 					) : null}
 				</FieldGroup>
 			</details>
-			<p className="text-ui text-ink-2">
-				We’ll check how it connects and save its definition. Nothing is given to your agents yet.
-			</p>
+			<p className="text-ui text-ink-2">Nothing is given to your agents yet.</p>
 			<Button type="submit" disabled={busy || !url.trim()} className="self-start">
 				{busy ? <Spinner data-icon="inline-start" /> : null}
 				{busy ? "Checking server…" : "Check server"}
@@ -157,7 +155,7 @@ export function McpAgents({
 	return (
 		<FieldSet>
 			<FieldLegend variant="label">Who can use it?</FieldLegend>
-			<FieldDescription>Only the agents you select get this connection’s introduction and tools.</FieldDescription>
+			<FieldDescription>Only the agents you pick can use it.</FieldDescription>
 			{switches}
 		</FieldSet>
 	);

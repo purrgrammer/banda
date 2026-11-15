@@ -182,8 +182,8 @@ export function ConnectDialog({
 					title: `${connection} access`,
 					detail:
 						account === undefined
-							? "Choose what Banda can access. You can change this later by signing in again."
-							: `Choose what Banda can access as ${account}, then sign in as ${account}.`,
+							? "Choose what banda can access. You can change it later by signing in again."
+							: `Choose what banda can access as ${account}, then sign in as ${account}.`,
 				}
 			: step.kind === "starting"
 				? { title: `Sign in on ${connection}`, detail: `Waiting for ${connection}…` }
@@ -195,7 +195,7 @@ export function ConnectDialog({
 					: step.kind === "agents"
 						? {
 								title: `Use ${connection} with`,
-								detail: `Signed in as ${step.login}. The agents switched on may read with it; they ask before anything they write.`,
+								detail: `Signed in as ${step.login}. The agents you switch on read with it, and ask before they write.`,
 							}
 						: { title: title(agent, connection, step), detail: detail(agent, connection, step) };
 	// a sign-in again starts where the first did: on the access to grant, when the connection has choices
@@ -445,9 +445,7 @@ export function ConnectionPermissions({
 				);
 			})}
 			<p className="text-ink-3">
-				{readonly
-					? `Change access and sign in again on the computer Banda runs on. Connected ${service} accounts are available on this device.`
-					: note}
+				{readonly ? `Change access on the computer banda runs on; its ${service} accounts work here too.` : note}
 			</p>
 		</fieldset>
 	);

@@ -569,8 +569,8 @@ export function McpSetupView({ state, actions }: { state: McpSetupState; actions
 						<>
 							<p className="text-meta text-ink-2">
 								{selected.length
-									? "Only the agents you selected will get access."
-									: "No agents have access unless you select them. You can do this later."}
+									? "Only the agents you pick can use it."
+									: "No agent can use it until you pick one. You can do this later."}
 							</p>
 							<Button
 								className="self-start"

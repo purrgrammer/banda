@@ -478,7 +478,7 @@ export function ConnectionDetailsView({
 				</Part>
 			)}
 			{agentsFor.length === 0 ? null : (
-				<Part title="Who can use it?" note="Only the agents you select get this connection’s introduction and tools.">
+				<Part title="Who can use it?" note="Only the agents you pick can use it.">
 					<div className="flex flex-col divide-y divide-line-soft rounded-field border border-line-soft">
 						{agentsFor.map((each) => (
 							<div key={each.key} className="flex flex-col gap-2 px-3.5 py-3">
