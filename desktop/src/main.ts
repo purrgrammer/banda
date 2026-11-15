@@ -5,7 +5,7 @@
  * the shell crashes, the daemon lives on and the next launch attaches to it.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync } from "node:fs";
+import { closeSync, mkdirSync, mkdtempSync, openSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
@@ -47,7 +47,8 @@ function release() {
 
 /**
  * Where Docker's CLI lives when the app is started from the Finder, a launcher or the Start menu, whose PATH is the
- * system's bare one. Added after the inherited PATH, so a shell's own order still wins.
+ * system's bare one: Windows' box is Docker's, and elsewhere a home from an earlier version brings its files from
+ * Docker once. Added after the inherited PATH, so a shell's own order still wins.
  */
 function dockerPath(inherited: string | undefined): string {
 	const user = homedir();
@@ -142,11 +143,6 @@ async function ensureDaemon(): Promise<Published> {
 		env: {
 			...process.env,
 			BANDA_HOME: home,
-			BANDA_BOX:
-				process.env.BANDA_BOX ??
-				(app.isPackaged && existsSync(join(process.resourcesPath, "banda/app/computer/manifest.json"))
-					? "microvm"
-					: "container"),
 			PATH: dockerPath(path),
 		},
 		stdio: ["ignore", output, output],

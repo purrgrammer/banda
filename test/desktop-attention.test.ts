@@ -28,8 +28,9 @@ describe("the desktop tray's dot", () => {
 			const center = [Math.floor(width - 3 * unit), Math.floor(3.75 * unit)] as const;
 			// 3.25pt above the centre is past the dot and inside the ring
 			const onRing = [center[0], Math.floor(0.5 * unit)] as const;
-			const near = (got: number[], want: number[]) =>
-				got.forEach((value, at) => expect(Math.abs(value - (want[at] ?? 0))).toBeLessThanOrEqual(8));
+			const near = (got: number[], want: number[]) => {
+				for (const [at, value] of got.entries()) expect(Math.abs(value - (want[at] ?? 0))).toBeLessThanOrEqual(8);
+			};
 			const colored = withDot(icon, width, [255, 255, 255], [28, 28, 28]);
 			expect(icon.every((value) => value === 128)).toBe(true);
 			expect(pixel(colored, ...center)).toEqual([28, 28, 28, 255]);

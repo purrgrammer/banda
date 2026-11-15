@@ -101,7 +101,9 @@ account, object, harness, session, artifact, memory, box, workspace, gateway, in
 A banda daemon may be running from another checkout, possibly the one you are running inside of.
 - The home is `~/.banda`. Never run `banda serve`, `say`, `approve`, `deny` or any write command against it.
 - For a manual run use a throwaway home and port: `BANDA_HOME=$(mktemp -d) node dist/cli/index.js serve --port 7788`,
-  then open the link it prints.
+  then open the link it prints. Its computer is the bundled one, from the `computer/` that
+  `node scripts/microvm-bundle.ts --prepare` makes in the checkout once; without it the computer stays offline, and
+  `--box container` (Docker) or `--box host` (no box) are asked for by name.
 - A box outlives its daemon. When you are done with a throwaway home, stop its daemon and run `npm run boxes:sweep`
   (never while tests run: a test's box has no daemon). A test run sweeps the boxes of homes that are gone after it
   ends, and a daemon at start sweeps them too.

@@ -48,8 +48,9 @@ sends, posts or can't be undone waits for your OK.
 
 ## Get started
 
-banda needs Docker running (Docker Desktop on macOS, Docker Engine 25+ on Linux), because each agent's computer is a
-container. It runs on macOS and Linux. Windows is untested.
+banda runs on Apple silicon Macs (macOS 14 or newer) and on Linux x64 (Debian 12, Ubuntu 22.04 or newer). Each
+agent's computer is a small virtual machine banda ships, so there is nothing else to install; on Linux your account
+needs access to `/dev/kvm`. Windows is untested.
 
 The [releases page](https://github.com/purrgrammer/banda/releases) has a desktop app and a CLI. Builds are unsigned,
 and each release's notes say how to open them.
@@ -64,7 +65,12 @@ node dist/cli/index.js serve
 
 Open the link it prints, pick a model provider and sign in. Anthropic, OpenAI, GitHub Copilot, OpenRouter, xAI and
 Meta use your account; Google, Azure, Vertex AI, Amazon Bedrock, Mistral, DeepSeek, Groq and Cerebras take an API key;
-search the list for every other provider. The first start builds the agents' computer, which takes a few minutes.
+search the list for every other provider.
+
+From source, the agents' computer comes from a bundle you prepare once with `node scripts/microvm-bundle.ts --prepare`
+(it builds the runtime and its images, with Docker and a C toolchain at build time only). Without it the computer
+stays offline; `serve --box container` uses a Docker container instead, and `serve --box host` runs commands on your
+own computer with no box at all.
 
 To think with a model on your own computer, start it first, with room for banda's instructions (at least 16,384 tokens
 of context), then search for its server and pick it:

@@ -13,9 +13,12 @@ const { version } = JSON.parse(readFileSync(new URL("../../package.json", import
 export const usage = `banda ${version}
 
 usage:
-  banda serve [--port <n>] [--box container|microvm|host]
+  banda serve [--port <n>] [--box microvm|container|host]
                                      run the daemon and its web UI (default port 7787);
-                                     --box host (or BANDA_BOX=host): no box, commands
+                                     each agent's computer is the one banda ships
+                                     (microvm) on Apple silicon Macs and Linux;
+                                     --box container (or BANDA_BOX=container) uses
+                                     Docker instead; --box host: no box, commands
                                      run on this computer without the network guard
   banda say [--thread <t>] <text>   send a message as the owner and print the messages
                                      and asks sent back until the agent is done

@@ -862,26 +862,29 @@ default) wherever it comes from or goes.
 scratch.
 
 ## The box
-The agents share one computer: a container where tools run, files live and the browsers draw. Their chat transcripts
+The agents share one computer: small virtual machines banda ships and runs itself (through the system's hypervisor on
+an Apple silicon Mac, through KVM on Linux), where tools run, files live and the browsers draw. Their chat transcripts
 remain in the store and are not shared, but workspace files are not a privacy boundary between agents and two agents
 may race on them. A later box per agent closes that structural boundary without changing chats or groups. The daemon
-reaches the box through pi-env: it starts pi-env's daemon in the box with `docker exec -i`, and every tool call and
+reaches the box through pi-env: it starts pi-env's daemon in the box through the runtime's exec channel, and every tool call and
 file read goes over that one connection, as a pi-durable `ExecutionEnv`. The agent loop, the store and every
 credential stay in the daemon, so the box is disposable: it can be destroyed and made again mid-chat and nothing is
-lost. pi-env isolates nothing: the boundary is the container's. Each command runs in its own process group, killed
+lost. pi-env isolates nothing: the boundary is the virtual machine's. Each command runs in its own process group, killed
 whole on cancel or timeout, with an allow-listed environment. A tool call a crash interrupted is reported interrupted,
 never run again.
 
 What the box holds: `/workspace` (what the agents are made of, their memory and their files), `/work` (attachments,
-dependencies) and `/tools` (toolchains), each a volume. Nothing of the host's: no `auth/`, no store, no host home. It
-runs as the owner's uid, with a read-only root, all capabilities dropped, no new privileges, and limits on memory and
-processes. The box's runtime is the app's to bring, never the owner's to install by hand.
+dependencies) and `/tools` (toolchains), each a folder of the home's `computer/` mounted in. Nothing else of the host's:
+no `auth/`, no store, no host home. It runs as an ordinary user with limits on memory and processors. The box's runtime
+and images ship in the app: the owner installs nothing, and Docker is never needed. A home from a version whose box ran
+in Docker brings those three folders out of Docker the first time it opens, once. Where banda ships no computer
+(Windows), the box is a container in Docker, as it is anywhere the owner asks for one by name (`serve --box container`).
 
-**Network.** The box sits on an internal network whose only other member is the egress proxy. It resolves no outside
-names and has no route out; only the proxy reaches the internet. The proxy terminates TLS with the app's own
+**Network.** The box has no network of its own: its one way out is a socket to the egress proxy, a machine of its
+own. It resolves no outside names and has no route out; only the proxy reaches the internet. The proxy terminates TLS with the app's own
 certificate authority, the only one the box trusts, and pins the address it resolves; a request whose Host or TLS name
 names another server than its tunnel's is refused. A command reaches the proxy as its chat, by a login only the daemon
-can mark, so what the box sends is always someone's. The daemon talks to the proxy over `docker exec` alone. With no
+can mark, so what the box sends is always someone's. The daemon talks to the proxy over the runtime's exec channel alone. With no
 proxy the box does not run: the app says its computer is offline, never that its network is open. Host mode
 (`serve --box host`) is the one exception, opt-in by name and never a fallback: there is no box, commands run on the
 daemon's own machine in the home's workspace and drop every guarantee here, and the CLI and the app say so for as
@@ -925,10 +928,10 @@ long as it runs.
   response that echoes one has it scrubbed. A request the box sends carrying a credential of its own is on the floor.
   A request that acts as nobody (`web_fetch`'s) gets none: the box can only ever give one up that way.
 
-**The browser.** Each agent has its own browser: Chromium, headless in the box, started when first needed and closed
+**The browser.** Each agent has its own browser: Chromium, headless in a machine beside the box, started when first needed and closed
 when idle, as a uid of its own whose profiles only it can read: the agents' commands never read its sessions, its cache
 or its memory. Each agent's profile is its own, so what the owner signed in to for one agent no other acts with. The
-daemon drives it over DevTools on a pipe through `docker exec`, never a port. Each chat has its own tab in its agent's
+daemon drives it over DevTools on a pipe through the runtime's exec channel, never a port. Each chat has its own tab in its agent's
 browser, so an agent's chats never take a page from each other. The browser reaches the proxy by its agent's login, and
 the daemon stamps every request a tab lets go with that tab's chat and a mark only the daemon makes, replacing anything
 the page set; the proxy takes the request as that chat's, only while the chat holds a tab there, and refuses one with no
@@ -1076,7 +1079,6 @@ workspace lives in the box.
 - Approvals on the floor confirmed with the device's own authenticator (a passkey), so a tap on a forged screen cannot
   confirm them.
 - Tools and connections the agent builds itself, offered once the owner accepts their definition.
-- Packaging the box's runtime so no owner installs Docker: a bundled VM, Podman, or a managed host.
 - Push to the phone without a vendor seeing the content: a notification that only says to open the app.
 - A guest in a group, through an invite scoped to that group.
 - Sending a copy of an agent's files to another banda.

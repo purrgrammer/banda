@@ -1,6 +1,6 @@
 Unsigned pre-release for Apple silicon Macs on macOS 14 or newer, and for Linux x64 on Debian 12 or newer and Ubuntu 22.04 or newer.
 
-- The computer starts with the app. Docker is not required.
+- Each agent's computer is a small virtual machine banda ships. It starts with the app, and with `banda serve`; Docker is not required. `banda serve --box container` still uses Docker when asked.
 - The browser downloads on first use. General settings shows its preparation and running pages.
 - Files and installed tools persist under `~/.banda/computer`.
 

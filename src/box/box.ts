@@ -14,6 +14,7 @@ import { containerBox, dockerReady, sweepBoxes } from "./container.ts";
 import type { Pushed } from "./egress-config.ts";
 import { hostBox } from "./host.ts";
 import { microvmBox, sweepMicrovmBoxes } from "./microvm.ts";
+import { microvmTarget } from "./microvm-assets.ts";
 
 /** What the daemon tells the egress proxy: whose logins it trusts, credentials, and what goes straight through. */
 export type EgressConfig = {
@@ -275,12 +276,25 @@ function recoveringEgress(egress: BoxEgress, ensure: () => Promise<void>): BoxEg
 /** How long an offline box waits before trying to come up again. */
 const RETRY_OFFLINE_MS = 15_000;
 
-/** Which box: the container (the default), or host mode, which the owner asks for by name and nothing falls back to. */
+/**
+ * Which box: the computer banda ships (a microVM, the default wherever there is one), the container, which needs
+ * Docker and is asked for by name, or host mode, which the owner asks for by name and nothing falls back to.
+ */
 export type BoxKind = "container" | "microvm" | "host";
 
-/** The box kind `value` names (`--box`, `BANDA_BOX`); unset is the container. */
-export function boxKind(value: string | undefined, platform: NodeJS.Platform = process.platform): BoxKind {
-	if (value === undefined || value === "" || value === "container") return "container";
+/** The box a home gets unless one is named: the bundled computer, on the platforms it is built for; else the container. */
+export function defaultBox(platform: string = process.platform, arch: string = process.arch): BoxKind {
+	return microvmTarget({ platform, arch }) === undefined ? "container" : "microvm";
+}
+
+/** The box kind `value` names (`--box`, `BANDA_BOX`); unset is `defaultBox`. */
+export function boxKind(
+	value: string | undefined,
+	platform: NodeJS.Platform = process.platform,
+	arch: string = process.arch,
+): BoxKind {
+	if (value === undefined || value === "") return defaultBox(platform, arch);
+	if (value === "container") return "container";
 	if (value === "microvm") return "microvm";
 	// host mode runs pi-env under `/usr/bin/env -i` (host.ts), which Windows does not have
 	if (value === "host" && platform === "win32")
@@ -300,7 +314,7 @@ export const HOST_WARNING =
 export async function chooseBox(
 	home: string,
 	log: (line: string) => void = () => {},
-	kind: BoxKind = "container",
+	kind: BoxKind = defaultBox(),
 ): Promise<BoxSetup> {
 	if (kind === "host") return hostBox(home);
 	// what computers of homes since deleted left running goes, in the background, as the container boxes below

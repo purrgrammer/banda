@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
-import { boxKind } from "../src/box/box.ts";
+import { boxKind, defaultBox } from "../src/box/box.ts";
 import { type Daemon, type DaemonOptions, startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { ComputerView } from "../src/server/api.ts";
@@ -62,10 +62,14 @@ async function start(options: Omit<DaemonOptions, "home" | "port" | "log">, logg
 }
 
 describe("host mode", () => {
-	it("is asked for by name: unset is the container, and an unknown kind is refused", () => {
-		expect(boxKind(undefined)).toBe("container");
-		expect(boxKind("")).toBe("container");
-		expect(boxKind("container")).toBe("container");
+	it("is asked for by name: unset is the computer banda ships, Docker only by name, and an unknown kind is refused", () => {
+		expect(boxKind(undefined, "darwin", "arm64")).toBe("microvm");
+		expect(boxKind("", "linux", "x64")).toBe("microvm");
+		expect(boxKind(undefined, "linux", "arm64")).toBe("microvm");
+		// no bundled computer is built for these: the container is all there is
+		expect(boxKind(undefined, "darwin", "x64")).toBe("container");
+		expect(boxKind(undefined, "win32", "x64")).toBe("container");
+		expect(boxKind("container", "linux", "x64")).toBe("container");
 		expect(boxKind("microvm")).toBe("microvm");
 		expect(boxKind("host")).toBe("host");
 		expect(() => boxKind("hots")).toThrow("--box is container, microvm or host, not hots");
@@ -73,7 +77,7 @@ describe("host mode", () => {
 
 	it("is refused on Windows, which has no /usr/bin/env to run it under", () => {
 		expect(() => boxKind("host", "win32")).toThrow("--box host needs macOS or Linux");
-		expect(boxKind(undefined, "win32")).toBe("container");
+		expect(boxKind(undefined, "win32", "x64")).toBe("container");
 		expect(boxKind("host", "linux")).toBe("host");
 	});
 
@@ -116,13 +120,32 @@ describe("host mode", () => {
 		}
 	});
 
-	it("without it and with no Docker, the box is offline, never on the host", async () => {
+	it.skipIf(defaultBox() !== "microvm")(
+		"unnamed, the box is the computer banda ships: without one installed it is offline, and never Docker's",
+		async () => {
+			const path = process.env.PATH;
+			process.env.PATH = await mkdtemp(join(tmpdir(), "banda-no-docker-"));
+			const logged: string[] = [];
+			try {
+				const { computer } = await start({ models: echoModels().models }, logged);
+				const view = await computer((v) => v.state === "offline");
+				expect(view).toMatchObject({ box: "microvm", state: "offline" });
+				expect(view.why).not.toMatch(/Docker/);
+				expect(logged.some((line) => /Docker/.test(line))).toBe(false);
+				expect(logged.some((line) => line.includes("no box"))).toBe(false);
+			} finally {
+				process.env.PATH = path;
+			}
+		},
+	);
+
+	it("the container without Docker is offline, never on the host", async () => {
 		const path = process.env.PATH;
 		// no docker on the path: the container box cannot come up
 		process.env.PATH = await mkdtemp(join(tmpdir(), "banda-no-docker-"));
 		const logged: string[] = [];
 		try {
-			const { computer } = await start({ models: echoModels().models }, logged);
+			const { computer } = await start({ models: echoModels().models, boxKind: "container" }, logged);
 			const view = await computer((v) => v.state === "offline");
 			expect(view).toMatchObject({ box: "container", network: "guarded", state: "offline" });
 			// the app says why, in plain words

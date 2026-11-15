@@ -172,22 +172,37 @@ async function openRuntime(home: string): Promise<Runtime> {
 	return computer;
 }
 
-async function image(computer: Runtime, asset: MicrovmAssets["box"], building: () => void, signal: AbortSignal) {
+/**
+ * Make `asset` the image under its name, from its verified archive, and give its manifest digest. An image already
+ * there is used only when its config is the bundle's: one an earlier version loaded under the same name (built again
+ * from the same sources, with other bytes) is replaced from the archive, never refused for good and never trusted.
+ */
+export async function image(
+	computer: Pick<Runtime, "run" | "assets">,
+	asset: MicrovmAssets["box"],
+	building: () => void,
+	signal: AbortSignal,
+) {
 	signal.throwIfAborted();
-	let present = await computer.run(["image", "inspect", asset.ref, "--format", "json"]).then(
-		(text) => parse(Image, text),
-		(error: unknown) => {
-			if (error instanceof Error && /image.*not found|not found.*image|image.*does not exist/i.test(error.message))
-				return undefined;
-			throw error;
-		},
-	);
-	if (present === undefined) {
+	const inspect = () =>
+		computer.run(["image", "inspect", asset.ref, "--format", "json"]).then(
+			(text) => parse(Image, text),
+			(error: unknown) => {
+				if (error instanceof Error && /image.*not found|not found.*image|image.*does not exist/i.test(error.message))
+					return undefined;
+				throw error;
+			},
+		);
+	let present = await inspect();
+	if (present?.config.digest !== asset.digest) {
 		building();
+		// the earlier version's sandboxes were retired before this, so nothing runs from what is removed
+		if (present !== undefined) await computer.run(["image", "remove", "--force", "--quiet", asset.ref]);
 		await computer.run(["load", "--input", asset.archive, "--tag", asset.ref], undefined, 300_000, signal);
-		present = parse(Image, await computer.run(["image", "inspect", asset.ref, "--format", "json"]));
+		present = await inspect();
 	}
-	if (present.config.digest !== asset.digest) throw new Error("The computer image differs from its verified bundle.");
+	if (present === undefined || present.config.digest !== asset.digest)
+		throw new Error("The computer image differs from its verified bundle.");
 	if (present.architecture !== (computer.assets.target === "linux-x64" ? "amd64" : "arm64"))
 		throw new Error("The computer image was built for a different CPU.");
 	return present.digest;
