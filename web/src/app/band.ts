@@ -8,6 +8,7 @@ import type { ChatRow, GroupRow, HarnessSessionView } from "../../../src/server/
 import type { FaceState, RowView, Who } from "../chat/types.ts";
 import { agentMainOf } from "../lib/chats.ts";
 import type { ChatAgent } from "../lib/navigation.ts";
+import { firstWords } from "./first-words.ts";
 import { askNotice, harnessActivity } from "./harness-activity.ts";
 
 /** The time at a row's right: the hour today, the weekday this week, else the day and month. */
@@ -64,8 +65,8 @@ export function bandRows(
 			to: { name: "agent", id: agent.id },
 			name: agent.name,
 			faces: [{ id: agent.id, face: agent.face, name: agent.name }],
-			// before anything was said the row has no line: nothing is quoted that the agent never said
-			excerpt: main?.excerpt ?? "",
+			// before anything was said, its first words, as its chat shows them
+			excerpt: main?.excerpt ?? firstWords(agent.name, agent.id === "sancho" ? undefined : (agent.tools ?? [])),
 			...(main?.by === "owner" ? { by: "You" } : {}),
 			time: rowTime(main?.said, now),
 			at,

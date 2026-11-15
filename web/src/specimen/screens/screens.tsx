@@ -457,26 +457,13 @@ export function Screens() {
 					done="3 skills and 1 agent"
 				/>
 			</Section>
-			<Section
-				id="first-chat"
-				note="Requests a tap sends as written (the agent has said nothing yet), and the first reply."
-				bleed
-			>
+			<Section id="first-chat" note="The agent's first words, and requests a tap sends as written." bleed>
 				{phone ? null : <Band rows={ROWS.filter((row) => row.id === "sancho")} selected="sancho" />}
 				<ChatScreen name="Sancho" face={SANCHO.face}>
-					<Starters
-						starters={[
-							"Plan a long weekend somewhere warm in November",
-							"Summarise today's tech news in five bullets",
-							"Every weekday at 8, tell me what's on my plate",
-						]}
-					/>
-					<Run time="9:41">
-						<Bubble>Keep an eye on my pull requests</Bubble>
-					</Run>
 					<Run who={SANCHO} compact>
 						<Bubble>
-							<p>Connect GitHub and I'll keep an eye on them.</p>
+							<p>Hi, I'm Sancho. Ask me anything: I can read the web, write, plan and keep track of things for you.</p>
+							<p>Connect GitHub and I'll keep an eye on your pull requests.</p>
 						</Bubble>
 						<ConnectCard
 							agent="Sancho"
@@ -488,6 +475,13 @@ export function Screens() {
 							}}
 						/>
 					</Run>
+					<Starters
+						starters={[
+							"Plan a long weekend somewhere warm in November",
+							"Summarise today's tech news in five bullets",
+							"Every weekday at 8, tell me what's on my plate",
+						]}
+					/>
 				</ChatScreen>
 			</Section>
 			<Section id="group" note="A message asks everyone unless it mentions someone; each answers under its face." bleed>

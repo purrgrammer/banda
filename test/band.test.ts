@@ -42,16 +42,26 @@ describe("band rows", () => {
 		);
 		expect(rows.map((row) => row.name)).toEqual(["Mara", "Sancho"]);
 		expect(rows[0]).toMatchObject({ excerpt: "Three fit.", unread: 2, ask: "Book the 9:15?", state: "waiting" });
-		expect(rows[1]).toMatchObject({ excerpt: "", time: "" });
+		expect(rows[1]).toMatchObject({
+			excerpt:
+				"Hi, I'm Sancho. Ask me anything: I can read the web, write, plan and keep track of things for you, and wake up on a schedule to check on something.",
+			time: "",
+		});
 		expect(titleOf(rows)).toBe("(1 waiting, 2 unread) banda");
 	});
 
-	it("quotes nothing an agent never said: a row before anything was said has no line", () => {
+	it("greets with what an agent's tools can do: the web only when it has the web or a browser", () => {
 		const made = [
 			{ id: "sancho", name: "Sancho", face: defaultAvatarFace() },
 			{ id: "otto", name: "Otto", face: defaultAvatarFace(), tools: ["bash"] },
+			{ id: "iris", name: "Iris", face: defaultAvatarFace(), tools: ["web_fetch"] },
 		];
-		for (const row of bandRows(made, [], [], false, NOW)) expect(row.excerpt).toBe("");
+		const excerpts = Object.fromEntries(bandRows(made, [], [], false, NOW).map((row) => [row.name, row.excerpt]));
+		expect(excerpts.Sancho).toContain("I can read the web, write");
+		expect(excerpts.Iris).toContain("I can read the web, write");
+		expect(excerpts.Otto).toBe(
+			"Hi, I'm Otto. Ask me anything: I can write, plan and keep track of things for you, and wake up on a schedule to check on something.",
+		);
 	});
 
 	it("moves a row only when something reached the owner, never on a run's own steps", () => {
@@ -82,7 +92,7 @@ describe("band rows", () => {
 			NOW,
 		);
 		expect(rows.map((row) => row.name)).toEqual(["Rosa", "Mara", "Sancho"]);
-		expect(rows[0]?.excerpt).toBe("");
+		expect(rows[0]?.excerpt).toMatch(/^Hi, I'm Rosa\./);
 	});
 
 	it("lists a group with its members' faces, who spoke last and its unread", () => {
