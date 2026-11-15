@@ -7,7 +7,6 @@
 /** The phone's native shell, when the page runs in it: read once, as the transport is. */
 const native = nativeShell();
 
-import { Analytics } from "@vercel/analytics/react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { PairDevice } from "./app/PairDevice.tsx";
@@ -39,35 +38,22 @@ export function App() {
 	}, []);
 	if (specimen)
 		return (
-			<>
-				<Suspense fallback={null}>
-					<Specimen />
-				</Suspense>
-				<Analytics />
-			</>
+			<Suspense fallback={null}>
+				<Specimen />
+			</Suspense>
 		);
 	if (native !== undefined)
 		return (
-			<>
-				<PairDevice shell={native}>
-					<Shell />
-					<Toaster />
-				</PairDevice>
-				<Analytics />
-			</>
+			<PairDevice shell={native}>
+				<Shell />
+				<Toaster />
+			</PairDevice>
 		);
-	if (refused)
-		return (
-			<>
-				<Connect />
-				<Analytics />
-			</>
-		);
+	if (refused) return <Connect />;
 	return (
 		<>
 			<Shell />
 			<Toaster />
-			<Analytics />
 		</>
 	);
 }
