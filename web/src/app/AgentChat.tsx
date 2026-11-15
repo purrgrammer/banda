@@ -21,7 +21,7 @@ import { Line } from "../chat/Line.tsx";
 import { ChatLoading } from "../chat/Loading.tsx";
 import type { Who } from "../chat/Row.tsx";
 import { Mentionable } from "../components/MentionChip.tsx";
-import { type ChatRow, greetAgent, type Item, type Posted, postMessage, readChat, upload } from "../lib/api.ts";
+import { type ChatRow, type Item, type Posted, postMessage, readChat, upload } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { view } from "../lib/chat.ts";
 import type { ChatAgent } from "../lib/navigation.ts";
@@ -124,20 +124,6 @@ export function AgentChat({
 			}),
 		[agents, agent],
 	);
-	// a chat that does not exist yet starts with the agent's own first message: the daemon is asked for it once, and
-	// the chat it makes arrives on the shell stream
-	const started = row !== undefined;
-	const [ungreeted, setUngreeted] = useState<string>();
-	useEffect(() => {
-		if (started) return;
-		let gone = false;
-		greetAgent(agent).catch(() => {
-			if (!gone) setUngreeted(agent);
-		});
-		return () => {
-			gone = true;
-		};
-	}, [agent, started]);
 	return (
 		<div className="flex min-w-0 flex-1 flex-col bg-paper">
 			<Header
@@ -157,15 +143,11 @@ export function AgentChat({
 				<>
 					<div className="min-h-0 flex-1 overflow-y-auto">
 						<div className="flex w-full max-w-[44rem] flex-col gap-3 px-4 pt-4 pb-5 [&>[data-compact-agent-run]]:-ms-2">
-							{/* the agent's own first message is on its way; banda's starters only when it could not be asked for */}
-							{ungreeted === agent ? (
-								<Starters
-									starters={[...(defaultFace(who) ? [FACE_STARTER] : []), ...firstStarters(tools)]}
-									onPick={(starter) => void attempt("send it", () => send(agent, starter, []))}
-								/>
-							) : (
-								<ChatLoading />
-							)}
+							{/* what to try, and nothing else: the agent has said nothing yet, and nothing is said for it */}
+							<Starters
+								starters={[...(defaultFace(who) ? [FACE_STARTER] : []), ...firstStarters(tools)]}
+								onPick={(starter) => void attempt("send it", () => send(agent, starter, []))}
+							/>
 						</div>
 					</div>
 					<Foot

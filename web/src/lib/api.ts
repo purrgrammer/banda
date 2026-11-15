@@ -30,7 +30,6 @@ import type {
 } from "../../../src/server/api.ts";
 import type { BringPick, BringView } from "../../../src/server/bring.ts";
 import type { DesignedFace } from "../../../src/server/routes/faces.ts";
-import type { Greeted } from "../../../src/server/routes/greeting.ts";
 import type { ShippedSkillsView, SkillView } from "../../../src/server/skills.ts";
 import { oneStream } from "./one-stream.ts";
 import { pickTransport } from "./transport.ts";
@@ -286,9 +285,6 @@ export async function image(chat: number, item: number, n: number): Promise<stri
 /** Post the owner's message: to a new thread (a browser-made UUID, which starts a chat) or to a chat. */
 export const postMessage = (message: PostMessage) =>
 	api<Posted>("/messages", { method: "POST", body: JSON.stringify(message) });
-
-/** Ask agent `agent` for its first message: the daemon starts its chat with it, once; a chat that exists is left alone. */
-export const greetAgent = (agent: string) => api<Greeted>(`/agents/${agent}/greet`, { method: "POST" });
 
 /** What the owner may change of the companion: any of its picks. */
 export type CompanionPicks = Partial<Pick<CompanionView, "name" | "face" | "personality">>;

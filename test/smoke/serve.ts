@@ -11,7 +11,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
-import { GREET } from "../../src/core/turn.ts";
 import { startDaemon } from "../../src/daemon.ts";
 import { readDaemonFile, webLink } from "../../src/home.ts";
 import { WEB } from "../../src/server/http.ts";
@@ -47,8 +46,7 @@ function picture(rgb: readonly [number, number, number]): Buffer {
 }
 
 /**
- * The faux model for a run without a key: it greets in its own words, then asks with three offers, when the daemon asks for an
- * agent's first message, answers `re: <message>` with message_user, and acts on a few words so
+ * The faux model for a run without a key: it answers `re: <message>` with message_user, and acts on a few words so
  * every card can be tried: "ask" a question with options, "pick" several, "form" a form, "read" a file first (a
  * working line), "file" a message with a file, "make a picture" an artifact that is an image, "remind" a routine every minute,
  * and a routine's wake its reply (none when its ask says "quiet"; a failed run when it says "fail"); "always <fact>" keeps
@@ -78,9 +76,6 @@ function scripted() {
 				text: "Going by what I know of you, the 10:40 with a window seat.",
 			});
 		if (/Remembered|Wrote \[|Already/.test(result)) return call({ text: "Noted." });
-		// what the owner picked of a greeting's offers is acted on as their message would be
-		const picked = /The owner answered:\\n([^"\\]+)/.exec(result)?.[1];
-		if (picked !== undefined) return respond({ messages: [{ role: "user", content: picked }] });
 		if (/Sent to|Paid/.test(result)) return call({ text: "Done." });
 		if (/Proposed:|already waits/.test(result)) return fauxAssistantMessage("Proposed.");
 		if (/Not proposed/.test(result)) return call({ text: "I won't ask that again." });
@@ -90,27 +85,6 @@ function scripted() {
 		const tool = (name: string, args: object) =>
 			fauxAssistantMessage([fauxToolCall(name, args as never)], { stopReason: "toolUse" });
 		const said = text.replace(/^"|"$/g, "");
-		// the daemon's ask for an agent's first message: it says who it is, by the name its prompt gives it, and offers
-		// what the words below act on
-		if (text.includes(GREET)) {
-			const name = /Your name is ([^.]+)\./.exec(JSON.stringify(context))?.[1] ?? "your agent";
-			return fauxAssistantMessage(
-				[
-					fauxToolCall("message_user", {
-						text: `Hi, I'm ${name}. I look things up, write and plan with you, and I can check on something on a schedule.`,
-					}),
-					fauxToolCall("ask_user", {
-						question: "What would you like to start with?",
-						options: [
-							"Make a plan for a trip to Lisbon",
-							"Remind me to stretch every minute",
-							"Make a picture of the coast",
-						],
-					}),
-				],
-				{ stopReason: "toolUse" },
-			);
-		}
 		if (/^always /i.test(said)) return tool("remember", { fact: said.slice(7), scope: "global" });
 		if (/^note /i.test(said)) return tool("remember", { fact: said.slice(5), scope: "agent" });
 		if (/^about /i.test(said)) {

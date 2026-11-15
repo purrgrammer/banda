@@ -71,7 +71,6 @@ import { thinkingMs, thinkingTimes } from "../core/timing.ts";
 import { isMessageTool, MESSAGE_GROUP, messageArgs } from "../core/toolsets.ts";
 import {
 	AGENT_MESSAGE,
-	GREETING,
 	goesOn,
 	Routes,
 	type Unanswered,
@@ -328,9 +327,8 @@ export function itemOf(entry: EntryRecord): Item | undefined {
 			...(message === undefined ? {} : { at: message.timestamp }),
 		};
 	}
-	// the daemon's words to a nudged run, its ask for an agent's first message, or its word that the owner decided a
-	// proposal (the card shows the decision)
-	if (goesOn(entry.kind) || entry.kind === GREETING || entry.kind === PROPOSAL_DECIDED)
+	// the daemon's words to a nudged run, or its word that the owner decided a proposal (the card shows the decision)
+	if (goesOn(entry.kind) || entry.kind === PROPOSAL_DECIDED)
 		return {
 			id,
 			role: "instruction",

@@ -149,19 +149,6 @@ export const bounded = (_value: unknown, _ops: unknown, info: { deltasSinceBase:
 export const NUDGE = "banda.nudge";
 /** A message one agent sent to another agent's direct chat. */
 export const AGENT_MESSAGE = "banda.agent-message";
-/** The input that asks an agent for its first message (DESIGN.md "The app"): the daemon's words, never the owner's. */
-export const GREETING = "banda.greeting";
-/**
- * The greeting's words: fixed, the same whoever the agent is. Who it is, how it speaks and what it can do come from its
- * own prompt, so each agent's first message and the things it offers are its own.
- */
-export const GREET =
-	"The owner just opened their chat with you for the first time and has written nothing yet. First introduce " +
-	"yourself with `message_user`, in your own voice and in two or three short sentences: who you are and what you " +
-	"are good at. Then call `ask_user`: a short question asking what they would like to start with, and in " +
-	"`options` three or four things you could do for them right now, each a complete request in a few words, " +
-	"fitting who you are and the tools and connections you have. When they answer, do what they asked. This " +
-	"instruction is automatic, not from the owner.";
 /** How many times a run that left the owner unanswered is nudged before the chat says so: once. */
 export const NUDGES = 1;
 
@@ -1531,10 +1518,6 @@ export function defineCore(options: CoreOptions) {
 		return { run, turn: Number(turn) };
 	}
 
-	/** Where agent `name`'s one chat is routed: its main thread on the web, unless the options say otherwise. */
-	const homeOf = (name: string): Origin =>
-		options.agentOrigin?.(name) ?? { gateway: "web", peer: OWNER, thread: agentMainThread(name) };
-
 	/**
 	 * Agent `name`'s one chat, where its routines wake: the chat routed at its home origin, or one made, routed and started
 	 * as that agent there, as the owner's first message would. Undefined when that agent is not active (archived or gone):
@@ -1542,7 +1525,7 @@ export function defineCore(options: CoreOptions) {
 	 */
 	async function agentChat(tx: Tx, name: string): Promise<number | undefined> {
 		if (await isArchived(tx, name)) return undefined;
-		const origin = homeOf(name);
+		const origin = options.agentOrigin?.(name) ?? { gateway: "web", peer: OWNER, thread: agentMainThread(name) };
 		const doc = await tx.doc(Routes);
 		const routed = doc.routes[routeKey(origin)]?.chat;
 		if (routed !== undefined) return routed;
@@ -1560,23 +1543,6 @@ export function defineCore(options: CoreOptions) {
 		doc.chats[chat] = { origin, agent: agent.id };
 		doc.routes[routeKey(origin)] = { chat };
 		return chat;
-	}
-
-	/**
-	 * Agent `name`'s first message (DESIGN.md "The app"): when its chat does not exist yet, make it and queue the
-	 * greeting's input in that commit, so the agent's own run says who it is and offers what it can do, and the chat
-	 * holds what it said. A chat that exists (the owner wrote first, a routine woke it, it was greeted) is left as it is,
-	 * so it happens once. Undefined when that agent is not active.
-	 */
-	async function greet(harness: Harness, name: string, ctx: Context = context) {
-		return harness.commit(async (tx) => {
-			const routed = (await tx.doc(Routes)).routes[routeKey(homeOf(name))]?.chat;
-			if (routed !== undefined) return { chat: routed };
-			const chat = await agentChat(tx, name);
-			if (chat === undefined) return undefined;
-			const turn = await followUp(tx, chat, { key: "first", text: GREET, entry: { kind: GREETING, data: {} } });
-			return { chat, turn };
-		}, ctx);
 	}
 
 	const messageAgent: AgentMessaging = (api, recipient, text, ctx) =>
@@ -1921,8 +1887,6 @@ export function defineCore(options: CoreOptions) {
 		reconcileTools: (harness: Harness, ctx: Context = context) => reconcileTools(harness, ctx),
 		/** Queue an input nobody wrote to a chat, after its other inputs, watched by a Turn: in the caller's commit. */
 		followUp,
-		/** Ask an agent for its first message, once, when its chat does not exist yet. */
-		greet,
 		/** Tell the agent the owner decided its proposal, in the caller's commit with the decision; it starts no turn. */
 		proposalDecided,
 		routineEdited,
