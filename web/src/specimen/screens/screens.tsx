@@ -2,6 +2,7 @@
 import { CalendarClockIcon } from "lucide-react";
 import { type ReactNode, useContext, useState } from "react";
 import { SERVER_KINDS } from "../../../../src/core/custom-providers.ts";
+import { firstNote } from "../../app/first-words.ts";
 import { AgentMessage } from "../../chat/AgentMessage.tsx";
 import { ApprovalCard, Facts, WaitingPill } from "../../chat/Approval.tsx";
 import { Band } from "../../chat/Band.tsx";
@@ -457,13 +458,27 @@ export function Screens() {
 					done="3 skills and 1 agent"
 				/>
 			</Section>
-			<Section id="first-chat" note="The agent's first words, and requests a tap sends as written." bleed>
+			<Section
+				id="first-chat"
+				note="banda's note (the agent has said nothing yet), requests a tap sends as written, and the first reply."
+				bleed
+			>
 				{phone ? null : <Band rows={ROWS.filter((row) => row.id === "sancho")} selected="sancho" />}
 				<ChatScreen name="Sancho" face={SANCHO.face}>
+					<p className="text-ui text-ink-2">{firstNote("Sancho")}</p>
+					<Starters
+						starters={[
+							"Plan a long weekend somewhere warm in November",
+							"Summarise today's tech news in five bullets",
+							"Every weekday at 8, tell me what's on my plate",
+						]}
+					/>
+					<Run time="9:41">
+						<Bubble>Keep an eye on my pull requests</Bubble>
+					</Run>
 					<Run who={SANCHO} compact>
 						<Bubble>
-							<p>Hi, I'm Sancho. Ask me anything: I can read the web, write, plan and keep track of things for you.</p>
-							<p>Connect GitHub and I'll keep an eye on your pull requests.</p>
+							<p>Connect GitHub and I'll keep an eye on them.</p>
 						</Bubble>
 						<ConnectCard
 							agent="Sancho"
@@ -475,13 +490,6 @@ export function Screens() {
 							}}
 						/>
 					</Run>
-					<Starters
-						starters={[
-							"Plan a long weekend somewhere warm in November",
-							"Summarise today's tech news in five bullets",
-							"Every weekday at 8, tell me what's on my plate",
-						]}
-					/>
 				</ChatScreen>
 			</Section>
 			<Section id="group" note="A message asks everyone unless it mentions someone; each answers under its face." bleed>

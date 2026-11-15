@@ -1,8 +1,8 @@
 /** Empty and loading: every place that waits on the daemon, and every place that can have nothing in it yet. */
 import { useContext } from "react";
-import { firstStarters, firstWords } from "../../app/first-words.ts";
+import { firstNote, firstStarters } from "../../app/first-words.ts";
 import { Band } from "../../chat/Band.tsx";
-import { Bubble, Run } from "../../chat/Feed.tsx";
+
 import { Starters } from "../../chat/FirstRun.tsx";
 import {
 	ChatLoading,
@@ -44,14 +44,12 @@ export function States() {
 			<Section id="empty-chat" note="Nothing said yet: the agent, and what to say first." bleed>
 				{phone ? null : (
 					<Band
-						rows={[{ id: "otto", name: "Otto", faces: [OTTO], excerpt: "New", time: "now" }, ...ROWS]}
+						rows={[{ id: "otto", name: "Otto", faces: [OTTO], excerpt: "Nothing said yet", time: "now" }, ...ROWS]}
 						selected="otto"
 					/>
 				)}
 				<ChatScreen name="Otto" face={OTTO.face}>
-					<Run who={OTTO}>
-						<Bubble>{firstWords("Otto")}</Bubble>
-					</Run>
+					<p className="text-ui text-ink-2">{firstNote("Otto")}</p>
 					<Starters starters={firstStarters()} />
 				</ChatScreen>
 			</Section>

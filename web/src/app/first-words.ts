@@ -1,8 +1,8 @@
 import { TOOLSETS } from "../../../src/core/toolsets.ts";
 
 /**
- * What an agent's empty chat starts with: who it is and what to try, broadly useful, none needing a connection. Both
- * follow its tools (`tools`, as its file names them; undefined for the lead, which gets every tool), so an agent never
+ * What an agent's empty chat starts with: what it can do and what to try, broadly useful, none needing a connection.
+ * Both follow its tools (`tools`, as its file names them; undefined for the lead, which gets every tool), so an agent never
  * offers what it cannot do.
  */
 const reachesWeb = (tools: readonly string[] | undefined) =>
@@ -21,6 +21,10 @@ export const firstStarters = (tools?: readonly string[]): readonly string[] => [
  */
 export const FACE_STARTER = "Design yourself a face that fits your name";
 
-export const firstWords = (name: string, tools?: readonly string[]) =>
-	`Hi, I'm ${name}. Ask me anything: I can ${reachesWeb(tools) ? "read the web, " : ""}write, plan and keep track of ` +
-	"things for you, and wake up on a schedule to check on something.";
+/**
+ * banda's note in an agent's empty chat, in banda's voice: the agent has said nothing yet, and nothing is put in its
+ * mouth. The model never sees it, and it is stored nowhere.
+ */
+export const firstNote = (name: string, tools?: readonly string[]) =>
+	`Ask ${name} anything. It can ${reachesWeb(tools) ? "read the web, " : ""}write, plan and keep track of things ` +
+	"for you, and wake up on a schedule to check on something.";

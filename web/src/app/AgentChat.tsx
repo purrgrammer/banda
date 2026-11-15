@@ -15,7 +15,7 @@ import { defaultAvatarFace } from "../../../src/core/avatar-face.ts";
 import { agentMainThread } from "../../../src/core/gateway.ts";
 import { WaitingPill } from "../chat/Approval.tsx";
 import { Composer } from "../chat/Composer.tsx";
-import { Bubble, Run } from "../chat/Feed.tsx";
+
 import { Starters } from "../chat/FirstRun.tsx";
 import { Header } from "../chat/Header.tsx";
 import { Line } from "../chat/Line.tsx";
@@ -30,7 +30,7 @@ import { useShell } from "../lib/shell.ts";
 import { useTranscript } from "../lib/transcript.ts";
 import { ActivitySheet } from "./Activity.tsx";
 import { FeedView } from "./Feed.tsx";
-import { FACE_STARTER, firstStarters, firstWords } from "./first-words.ts";
+import { FACE_STARTER, firstNote, firstStarters } from "./first-words.ts";
 import { useHarnessMenu } from "./HarnessSession.tsx";
 import { chatActivity, harnessActivity } from "./harness-activity.ts";
 import { type PendingMessage, settledByAnswer, shownMessages, stillPending } from "./outgoing.ts";
@@ -144,9 +144,8 @@ export function AgentChat({
 				<>
 					<div className="min-h-0 flex-1 overflow-y-auto">
 						<div className="flex w-full max-w-[44rem] flex-col gap-3 px-4 pt-4 pb-5 [&>[data-compact-agent-run]]:-ms-2">
-							<Run who={who} compact>
-								<Bubble>{firstWords(who.name, tools)}</Bubble>
-							</Run>
+							{/* banda's note, not the agent's words: it has said nothing yet */}
+							<p className="text-ui text-ink-2">{firstNote(who.name, tools)}</p>
 							<Starters
 								starters={[...(defaultFace(who) ? [FACE_STARTER] : []), ...firstStarters(tools)]}
 								onPick={(starter) => void attempt("send it", () => send(agent, starter, []))}
@@ -336,11 +335,9 @@ function Timeline({
 					</button>
 				) : null}
 				{transcript.loaded ? null : <ChatLoading />}
-				{/* the chat's beginning, once reached: the agent's first words, as the empty chat showed them */}
+				{/* the chat's beginning, once reached: banda's note, as the empty chat showed it */}
 				{transcript.loaded && !transcript.older ? (
-					<Run who={who} compact>
-						<Bubble>{firstWords(who.name, tools)}</Bubble>
-					</Run>
+					<p className="text-ui text-ink-2">{firstNote(who.name, tools)}</p>
 				) : null}
 				<Mentionable.Provider value={named}>
 					<FeedView
