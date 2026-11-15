@@ -1,7 +1,7 @@
 /**
  * First run: the first agent, one line on what agents do, and the model providers to pick from. The one picked signs
- * the owner in, or takes a key where it has no sign-in; one screen, no other step. Then the chat opens with banda's
- * note and what to say first.
+ * the owner in, or takes a key where it has no sign-in; one screen, no other step. Then the chat opens with the
+ * agent's first words.
  */
 import { ChevronRightIcon, SearchIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
