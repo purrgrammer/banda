@@ -90,8 +90,8 @@ export function FirstRun({
 					I'm the first of your band. Pick the model I think with, and we can start.
 				</p>
 				<p className="text-ui text-ink-3">
-					Agents browse, write and run routines on a computer of their own, and ask you before anything that sends or
-					can't be undone.
+					Agents browse, write and run routines on a computer of their own. What they send through your accounts waits
+					for your OK, unless you allowed it.
 				</p>
 			</div>
 			{searchable ? (
