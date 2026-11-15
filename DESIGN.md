@@ -112,9 +112,9 @@ one that gives them one more thing to manage stays out.
   sign-in. One screen, no other step. A credential found outside banda (an ANTHROPIC_API_KEY around the daemon) is
   named by where it came from wherever providers show, never passes for one connected here, and can be connected
   over; first run stays until the owner picks it, so a key they never saw is never what the band silently thinks with.
-  Then the chat opens with the agent's first words (who it is and what to try) and
-  complete, broadly useful requests a tap sends as written, none needing a connection; every new agent's chat starts
-  so, and the first words stay at the chat's beginning (the starters go once the owner has written).
+  Then the chat opens with complete, broadly useful requests a tap sends as written, none needing a connection, and
+  nothing else: an agent that has said nothing is given no words, in its chat or on its row. Every new agent's chat
+  starts so, and the starters go once the owner has written.
   Returning owners open straight into their last chat. While the box starts, the chat says so in a line ("Mara's
   computer is starting…"), never only a footer notice. If a provider later fails, the chat says who, what and the fix
   ("Mara can't answer: your Anthropic sign-in expired · Sign in again").

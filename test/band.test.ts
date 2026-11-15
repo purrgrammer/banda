@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { defaultAvatarFace } from "../src/core/avatar-face.ts";
 import type { ChatRow, GroupRow } from "../src/server/api.ts";
 import { bandRows, titleOf } from "../web/src/app/band.ts";
-import { firstNote } from "../web/src/app/first-words.ts";
 
 const NOW = Date.parse("2026-11-03T12:00:00");
 const agents = [
@@ -43,26 +42,16 @@ describe("band rows", () => {
 		);
 		expect(rows.map((row) => row.name)).toEqual(["Mara", "Sancho"]);
 		expect(rows[0]).toMatchObject({ excerpt: "Three fit.", unread: 2, ask: "Book the 9:15?", state: "waiting" });
-		expect(rows[1]).toMatchObject({ excerpt: "Nothing said yet", time: "" });
+		expect(rows[1]).toMatchObject({ excerpt: "", time: "" });
 		expect(titleOf(rows)).toBe("(1 waiting, 2 unread) banda");
 	});
 
-	it("quotes nothing an agent never said: a row before anything was said says so", () => {
+	it("quotes nothing an agent never said: a row before anything was said has no line", () => {
 		const made = [
 			{ id: "sancho", name: "Sancho", face: defaultAvatarFace() },
 			{ id: "otto", name: "Otto", face: defaultAvatarFace(), tools: ["bash"] },
 		];
-		for (const row of bandRows(made, [], [], false, NOW)) expect(row.excerpt).toBe("Nothing said yet");
-	});
-
-	it("banda's note in an empty chat follows the agent's tools: the web only when it has the web or a browser", () => {
-		expect(firstNote("Sancho")).toBe(
-			"Ask Sancho anything. It can read the web, write, plan and keep track of things for you, and wake up on a schedule to check on something.",
-		);
-		expect(firstNote("Iris", ["web_fetch"])).toContain("It can read the web, write");
-		expect(firstNote("Otto", ["bash"])).toBe(
-			"Ask Otto anything. It can write, plan and keep track of things for you, and wake up on a schedule to check on something.",
-		);
+		for (const row of bandRows(made, [], [], false, NOW)) expect(row.excerpt).toBe("");
 	});
 
 	it("moves a row only when something reached the owner, never on a run's own steps", () => {
@@ -93,7 +82,7 @@ describe("band rows", () => {
 			NOW,
 		);
 		expect(rows.map((row) => row.name)).toEqual(["Rosa", "Mara", "Sancho"]);
-		expect(rows[0]?.excerpt).toBe("Nothing said yet");
+		expect(rows[0]?.excerpt).toBe("");
 	});
 
 	it("lists a group with its members' faces, who spoke last and its unread", () => {

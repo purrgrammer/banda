@@ -2,7 +2,6 @@
 import { CalendarClockIcon } from "lucide-react";
 import { type ReactNode, useContext, useState } from "react";
 import { SERVER_KINDS } from "../../../../src/core/custom-providers.ts";
-import { firstNote } from "../../app/first-words.ts";
 import { AgentMessage } from "../../chat/AgentMessage.tsx";
 import { ApprovalCard, Facts, WaitingPill } from "../../chat/Approval.tsx";
 import { Band } from "../../chat/Band.tsx";
@@ -460,12 +459,11 @@ export function Screens() {
 			</Section>
 			<Section
 				id="first-chat"
-				note="banda's note (the agent has said nothing yet), requests a tap sends as written, and the first reply."
+				note="Requests a tap sends as written (the agent has said nothing yet), and the first reply."
 				bleed
 			>
 				{phone ? null : <Band rows={ROWS.filter((row) => row.id === "sancho")} selected="sancho" />}
 				<ChatScreen name="Sancho" face={SANCHO.face}>
-					<p className="text-ui text-ink-2">{firstNote("Sancho")}</p>
 					<Starters
 						starters={[
 							"Plan a long weekend somewhere warm in November",

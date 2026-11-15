@@ -64,8 +64,8 @@ export function bandRows(
 			to: { name: "agent", id: agent.id },
 			name: agent.name,
 			faces: [{ id: agent.id, face: agent.face, name: agent.name }],
-			// before anything was said, say so: nothing is quoted that the agent never said
-			excerpt: main?.excerpt ?? "Nothing said yet",
+			// before anything was said the row has no line: nothing is quoted that the agent never said
+			excerpt: main?.excerpt ?? "",
 			...(main?.by === "owner" ? { by: "You" } : {}),
 			time: rowTime(main?.said, now),
 			at,
