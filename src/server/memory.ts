@@ -1,6 +1,6 @@
 /** Owner memory controls. Files hold facts; their canonical paths bind global or agent scope. */
 import { posix } from "node:path";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Harness } from "@earendil-works/pi-durable";
 import { AGENT_NAME, acceptedAgent } from "../core/agents.ts";
 import {

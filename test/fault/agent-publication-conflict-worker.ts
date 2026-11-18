@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Type } from "@earendil-works/pi-ai";
 import type { Storage } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { agentPath } from "../../src/core/agents.ts";
 import { context } from "../../src/core/store.ts";

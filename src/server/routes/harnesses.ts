@@ -9,8 +9,8 @@
  */
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
-import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool, type ToolRegistration } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { AgentChats } from "../../core/agents.ts";
 import {
 	addHarness,

@@ -53,11 +53,11 @@
 		"mobile:test": "npm --prefix mobile test"
 	},
 	"dependencies": {
-		"@earendil-works/chord": "1.4.0",
-		"@earendil-works/pi-ai": "1.4.0",
-		"@earendil-works/pi-durable": "1.4.0",
-		"@earendil-works/pi-env": "1.4.0",
-		"@earendil-works/pi-mcp": "1.4.0",
+		"@earendil-works/chord": "1.5.2",
+		"@earendil-works/pi-ai": "1.5.2",
+		"@earendil-works/pi-durable": "1.5.2",
+		"@earendil-works/pi-env": "1.5.2",
+		"@earendil-works/pi-mcp": "1.5.2",
 		"@number0/iroh": "1.2.0",
 		"@resvg/resvg-js": "2.6.2",
 		"open-bot-avatar": "0.2.1",
@@ -99,5 +99,10 @@
 		"use-stick-to-bottom": "1.1.6",
 		"vite": "7.3.7",
 		"vitest": "4.1.12"
+	},
+	"overrides": {
+		"@earendil-works/chord": {
+			"react": "$react"
+		}
 	}
 }

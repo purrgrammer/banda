@@ -558,14 +558,10 @@ describe("web", () => {
 			streams.push(stream);
 			await stream.until((events) => events.some((event) => event.type === "ready"));
 			await post("stream arguments", thread);
-			// Faux exposes the identity immediately, but no parsed arguments until toolcall_end.
+			// The call shows as soon as it starts, its arguments as far as they have been parsed.
 			await stream.until((events) =>
 				events.some(
-					(event) =>
-						event.type === "start" &&
-						event.partial.some(
-							(block) => block.call?.name === "not_offered" && Object.keys(block.call.args).length === 0,
-						),
+					(event) => event.type === "start" && event.partial.some((block) => block.call?.name === "not_offered"),
 				),
 			);
 			const again = listen(`${url}/api/chats/${chat}/events`, token);
@@ -581,7 +577,16 @@ describe("web", () => {
 			const called = items
 				.flatMap((item) => (item.role === "assistant" ? (item.calls ?? []) : []))
 				.find((call) => call.name === "not_offered");
-			expect(called?.args).toEqual({ nested: { value }, values: [value] });
+			const final = { nested: { value }, values: [value] };
+			expect(called?.args).toEqual(final);
+			// whatever was streamed of the arguments is a beginning of what the model sent: nothing invented
+			const streamed = [...stream.events, ...again.events].flatMap((event) =>
+				event.type === "start" || event.type === "ready"
+					? event.partial.flatMap((block) => (block.call?.name === "not_offered" ? [block.call.args] : []))
+					: [],
+			);
+			expect(streamed.length).toBeGreaterThan(0);
+			for (const args of streamed) expect(beginsWith(args, final), JSON.stringify(args)).toBe(true);
 		} finally {
 			for (const stream of streams) stream.close();
 			await daemon.close();
@@ -1354,3 +1359,28 @@ describe("web", () => {
 		}
 	});
 });
+
+/** Whether `partial` is what `final` looks like while still being parsed: strings cut short, objects and arrays so far. */
+function beginsWith(partial: unknown, final: unknown): boolean {
+	if (typeof partial === "string") return typeof final === "string" && final.startsWith(partial);
+	if (Array.isArray(partial))
+		return (
+			Array.isArray(final) &&
+			partial.length <= final.length &&
+			partial.every((item, index) =>
+				index < partial.length - 1
+					? item === final[index] || JSON.stringify(item) === JSON.stringify(final[index])
+					: beginsWith(item, final[index]),
+			)
+		);
+	if (typeof partial === "object" && partial !== null)
+		return (
+			typeof final === "object" &&
+			final !== null &&
+			!Array.isArray(final) &&
+			Object.entries(partial).every(
+				([key, value]) => Object.hasOwn(final, key) && beginsWith(value, (final as Record<string, unknown>)[key]),
+			)
+		);
+	return partial === final;
+}

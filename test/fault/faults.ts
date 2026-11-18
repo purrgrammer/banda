@@ -6,7 +6,7 @@
  * what happens: `kill` ends the process with SIGKILL, as a power cut or the OOM killer would; `error` throws there,
  * as a failing disk, network or provider does. A storage error fails the Harness, which closes itself.
  */
-import type { Storage, StorageWrite } from "@earendil-works/pi-durable";
+import type { Seq, Storage, StorageWrite } from "@earendil-works/pi-durable";
 
 export type FaultPoint =
 	| import("../../src/server/remote.ts").KeyPoint
@@ -195,6 +195,9 @@ export class Faults {
 	readonly #schedule: readonly Fault[];
 	readonly #hits = new Map<FaultPoint, number>();
 	readonly #commits: string[] = [];
+	/** Storage commit calls under way, and commits handed to the store whose receipt has not gone back. */
+	#calls = 0;
+	#unreceipted = 0;
 
 	constructor(schedule: readonly Fault[] = []) {
 		this.#schedule = schedule;
@@ -207,6 +210,11 @@ export class Faults {
 		const fault = this.#schedule.find((f) => f.point === point && f.hit === hits);
 		if (fault?.kind === "kill") process.kill(process.pid, "SIGKILL");
 		if (fault?.kind === "error") throw new InjectedFault(`${point} #${hits}`);
+	}
+
+	/** What the fault storage is in the middle of, for a hung worker's diagnostics. */
+	inFlight(): { readonly calls: number; readonly unreceipted: number } {
+		return { calls: this.#calls, unreceipted: this.#unreceipted };
 	}
 
 	hits(point: FaultPoint): number {
@@ -227,14 +235,46 @@ export class Faults {
 		return this.#commits;
 	}
 
-	/** Storage whose commits pass `commit:before` and, once stored, `commit:after`. */
+	/**
+	 * Storage whose commits pass `commit:before` and, once stored, `commit:after`. pi-durable hands Storage a group of
+	 * commits in one call; each is passed on alone, so every commit is a boundary of its own, as when each was a call.
+	 * The receipts go back once the group is stored (or before a failure is rethrown), as `Storage.commit()` promises.
+	 */
 	storage(inner: Storage): Storage {
-		const commit: Storage["commit"] = async (writes, context) => {
-			this.#commits.push(writes.map(writeWords).sort().join("; "));
-			this.hit("commit:before");
-			const seq = await inner.commit(writes, context);
-			this.hit("commit:after");
-			return seq;
+		const commit: Storage["commit"] = async (batches, receive, context) => {
+			const receipts: [number, Seq][] = [];
+			const settle = () => {
+				this.#unreceipted -= receipts.length;
+				for (const [index, seq] of receipts) receive(index, seq);
+				receipts.length = 0;
+			};
+			this.#calls++;
+			try {
+				for (const [index, writes] of batches.entries()) {
+					this.#commits.push(writes.map(writeWords).sort().join("; "));
+					this.hit("commit:before");
+					const result = await inner.commit(
+						[writes],
+						(_, seq) => {
+							receipts.push([index, seq]);
+							this.#unreceipted++;
+						},
+						context,
+					);
+					if (result.stored === 0) {
+						settle();
+						return { stored: index, ...(result.refused === undefined ? {} : { refused: result.refused }) };
+					}
+					this.hit("commit:after");
+				}
+			} catch (error) {
+				settle();
+				throw error;
+			} finally {
+				this.#calls--;
+			}
+			settle();
+			return { stored: batches.length };
 		};
 		return new Proxy(inner, {
 			get: (target, property) => {

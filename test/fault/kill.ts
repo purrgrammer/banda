@@ -3,6 +3,8 @@
  * every scheduled kill lands in a process of its own and the last process recovers.
  */
 import { execFile } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Inbound } from "../../src/core/gateway.ts";
 import type { Fault } from "./faults.ts";
 import { readSent, type Sent, type Summary } from "./sut.ts";
@@ -40,10 +42,21 @@ export async function runWorker(
 			kills++;
 			continue;
 		}
-		if (result.status !== 0) throw new Error(`worker failed (${result.status ?? result.signal}): ${result.stderr}`);
+		if (result.status !== 0)
+			throw new Error(`worker failed (${result.status ?? result.signal}): ${result.stderr}${diagnosis(args[0])}`);
 		return { last: JSON.parse(result.stdout.trim().split("\n").at(-1)!), kills };
 	}
 	throw new Error("the worker never finished");
+}
+
+/** What a worker that hung wrote of what it waited on (`./diagnose.ts`), if it wrote any. */
+function diagnosis(home: string | undefined): string {
+	if (home === undefined) return "";
+	try {
+		return ` DIAG ${readFileSync(join(home, "diag.json"), "utf8")}`;
+	} catch {
+		return "";
+	}
 }
 
 function worker(

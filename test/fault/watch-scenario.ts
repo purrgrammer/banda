@@ -28,7 +28,7 @@ import { type Gateway, OWNER } from "../../src/core/gateway.ts";
 import type { McpTool } from "../../src/core/mcp.ts";
 import { Readings } from "../../src/core/objects.ts";
 import { Control } from "../../src/core/routines.ts";
-import { status } from "../../src/core/status.ts";
+import { stuck } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore, Routes, type TurnResult } from "../../src/core/turn.ts";
 import {
@@ -49,6 +49,7 @@ import { githubObjectDefinition } from "../fixtures/github-objects.ts";
 import { hostBox } from "../fixtures/host-box.ts";
 import { echoModels, FAUX_MODEL } from "../fixtures/models.ts";
 import { added, definition, shipping } from "../fixtures/shipped.ts";
+import { diagnoseOnTimeout } from "./diagnose.ts";
 import type { Faults } from "./faults.ts";
 
 /** Monday 2 November 2026, 09:00. */
@@ -232,6 +233,13 @@ export type Scene = {
 
 /** How a scenario differs from the pull request's life. */
 export type ScenarioOptions = {
+	/** A hung run says what it waited on when the sweep's timeout ends it (`./diagnose.ts`): its worker only. */
+	readonly diagnose?: true;
+	/**
+	 * Retry a request the host died during at once (`retry.baseDelayMs: 0`): its worker only, whose clock stands at
+	 * the scenario's step, so pi-durable 1.5's backoff on the Harness clock would never end (backoff.faults times it).
+	 */
+	readonly retryAtOnce?: true;
 	readonly second?: boolean;
 	/** More objects Mara follows as the same account, a watch each: `banda-142-2`, `banda-142-3`, … */
 	readonly more?: readonly string[];
@@ -332,8 +340,10 @@ export async function watchScenario(
 		env: boxEnv(box),
 		now,
 		setTimer,
+		...(options.retryAtOnce ? { settings: { retry: { baseDelayMs: 0 } } } : {}),
 		wrapStorage: (storage) => faults.storage(storage),
 	});
+	if (options.diagnose) diagnoseOnTimeout(home, () => harness, faults, now);
 	harness.resume();
 	try {
 		// the connection, the agent and the account, as a signed-in connection leaves them; the watch, allowed once
@@ -430,11 +440,11 @@ export async function watchScenario(
 			for (const name of names) if (options.only?.(name, i + 1) ?? true) await core.checkWatch(harness, name, key);
 		}
 		const idle = async () => {
-			const graph = await harness.taskGraph(context);
+			const graph = await harness.watchTaskGraph(context);
 			const busy = Object.values(graph.value.tasks).some(
 				(task) => task.kind !== "banda.watch" && task.kind !== "banda.routine",
 			);
-			graph.dispose();
+			await graph.stop();
 			return !busy;
 		};
 		while (!(await idle())) await new Promise((r) => setTimeout(r, 5));
@@ -502,7 +512,7 @@ export async function watchScenario(
 			held,
 			turns,
 			sent: readFileSync(join(home, "sent.jsonl"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean),
-			parked: (await status(harness)).parked,
+			parked: await stuck(harness),
 			reads: readFileSync(join(home, "reads.jsonl"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean)
 				.length,
 			looks: faults.hits("watch:read"),
@@ -662,11 +672,11 @@ export function watchProblems(summary: WatchSummary): string[] {
 /** Until no run (a turn, a send) is live: a look made while its watch's last run goes holds what it sees for it. */
 export async function runsEnded(harness: Harness): Promise<void> {
 	for (;;) {
-		const graph = await harness.taskGraph(context);
+		const graph = await harness.watchTaskGraph(context);
 		const busy = Object.values(graph.value.tasks).some(
 			(task) => task.kind !== "banda.watch" && task.kind !== "banda.routine",
 		);
-		graph.dispose();
+		await graph.stop();
 		if (!busy) return;
 		await new Promise((r) => setTimeout(r, 5));
 	}

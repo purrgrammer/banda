@@ -17,10 +17,10 @@
  * The daemon talks to the proxy through `EgressControl` alone, which the container box implements over `docker exec`.
  */
 import { createHash } from "node:crypto";
-import type { Context } from "@earendil-works/chord";
-import { Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
 import type { Harness, JsonObject, ToolExecutionApi, ToolExecutionResult } from "@earendil-works/pi-durable";
 import { defineDoc, type Tx } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { log } from "./activity.ts";
 import { AgentChats } from "./agents.ts";
 import type { EffectApi, EffectTool } from "./ask.ts";

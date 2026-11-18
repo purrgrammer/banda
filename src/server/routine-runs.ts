@@ -3,7 +3,7 @@
  * time, each with how it stands now (its Turn read when it has not ended) and what it left in its chat, read there as
  * the feed reads it, so a run that spoke says its first line and opens its line, and a quiet one opens nothing.
  */
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { ConversationId, EntryId, Harness, TaskId } from "@earendil-works/pi-durable";
 import { Accepted } from "../core/agents.ts";
 import { type RoutineRunRecord, RoutineRuns, Routines, RUNS_KEPT, routinePath, routineRef } from "../core/routines.ts";

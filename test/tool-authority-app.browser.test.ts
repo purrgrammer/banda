@@ -9,10 +9,8 @@ import {
 	fauxProvider,
 	fauxToolCall,
 	getCurrentTools,
-	type Static,
-	type TSchema,
-	Type,
 } from "@earendil-works/pi-ai";
+import { type Static, type TSchema, Type } from "typebox";
 import { Value } from "typebox/value";
 import { expect, it } from "vitest";
 import { startDaemon } from "../src/daemon.ts";

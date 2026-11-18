@@ -5,7 +5,7 @@
  * file's to say. The name reaches the model as the first line of the lead's instructions, set when a chat starts and
  * never after, so a rename never changes a running chat's prompt prefix.
  */
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import { defineDoc, type Harness, type Tx } from "@earendil-works/pi-durable";
 import { DEFAULT_NAME } from "./choices.ts";
 import { context } from "./store.ts";

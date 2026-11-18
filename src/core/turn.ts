@@ -3,8 +3,7 @@
  * its notes, never sent: an agent speaks with its speaking tools (`message_user`, `ask_user`, `react`, …), whose messages a Message task delivers at least once and
  * in order per origin.
  */
-import type { Context } from "@earendil-works/chord";
-import type { TSchema } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
 import {
 	AssistantEntry,
 	CompactionEntry,
@@ -29,6 +28,7 @@ import {
 	type Tx,
 	wrapSection,
 } from "@earendil-works/pi-durable";
+import type { TSchema } from "typebox";
 import {
 	Accepted,
 	type Agent,
@@ -593,11 +593,11 @@ export async function stop(harness: Harness, target: Origin | number, ctx = cont
 	if (id === undefined) return false;
 	const chat = await harness.conversation(id as ConversationId, ctx);
 	// inputs not yet admitted first, so none reaches the chat while its run is being stopped
-	const graph = await harness.taskGraph(ctx);
+	const graph = await harness.watchTaskGraph(ctx);
 	const admits = Object.values(graph.value.tasks).filter(
 		(node) => node.kind === "banda.admit" && Number(node.conversationId) === id,
 	);
-	graph.dispose();
+	await graph.stop();
 	// what left in the agent's name is still told: else it would not know, and might send it again
 	for (const admit of admits)
 		if (((await harness.getTask(admit.id, ctx))?.input as Partial<Input> | undefined)?.internal?.kind !== RELEASED)

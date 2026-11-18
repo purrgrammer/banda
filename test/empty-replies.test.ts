@@ -62,10 +62,14 @@ describe("empty replies", () => {
 		expect(emptyReply(reply([{ type: "toolCall", id: "c", name: "t", arguments: {} }]))).toBe(false);
 	});
 
-	it("put a system message before a user message in pi-ai's Anthropic request (the cause)", async () => {
+	// pi-ai 1.4 released a held system message ahead of an empty reply it then dropped, so it landed before a user
+	// message; 1.5 no longer does (earendil-works/pi#11091). Kept as the guard's reason, should it come back.
+	it("no longer put a system message before a user message in pi-ai's own Anthropic request (the cause, fixed)", async () => {
 		const roles = await anthropicPayload(builtinModels(), transcript);
-		const system = roles.indexOf("system");
-		expect(roles[system + 1]).toBe("user");
+		roles.forEach((role, i) => {
+			if (role === "system") expect([undefined, "assistant", "system"]).toContain(roles[i + 1]);
+		});
+		expect(roles).toContain("system");
 	});
 
 	it("never reach a provider, so every system message precedes an assistant message or ends the request", async () => {

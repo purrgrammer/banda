@@ -8,7 +8,7 @@ import { isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { Value } from "typebox/value";
 import {
 	deliverCreateResult,

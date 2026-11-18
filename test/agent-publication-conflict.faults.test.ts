@@ -1,5 +1,5 @@
-import { type Static, Type } from "@earendil-works/pi-ai";
 import fc from "fast-check";
+import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
 import { AGENT_PUBLICATION_POINTS } from "../src/server/agent-publication.ts";

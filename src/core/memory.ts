@@ -5,8 +5,7 @@
  * model boundary without rewriting the cached prefix.
  */
 import { createHash, randomUUID } from "node:crypto";
-import type { Context } from "@earendil-works/chord";
-import { Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
 import {
 	type ConversationId,
 	defineExtension,
@@ -17,6 +16,7 @@ import {
 	type ToolRegistration,
 	type Tx,
 } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { AGENT_NAME, AgentChats } from "./agents.ts";
 import { WAKE, type WakeData } from "./routines.ts";
 import type { Search } from "./search.ts";

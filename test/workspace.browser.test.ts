@@ -1,14 +1,8 @@
 /** Tool completion refreshes the running app; no filesystem watcher is needed. */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-	createModels,
-	fauxAssistantMessage,
-	fauxProvider,
-	fauxToolCall,
-	getCurrentTools,
-	Type,
-} from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, getCurrentTools } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { expect, it } from "vitest";
 import { shaOf } from "../src/core/agents.ts";

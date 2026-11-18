@@ -6,7 +6,6 @@ import {
 	fauxProvider,
 	fauxToolCall,
 	type Context as ModelContext,
-	Type,
 } from "@earendil-works/pi-ai";
 import {
 	type ConversationId,
@@ -16,6 +15,7 @@ import {
 	type JsonObject,
 	type TaskId,
 } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { openBox } from "../src/box/box.ts";
 import { Accepted, agentPath, shaOf } from "../src/core/agents.ts";

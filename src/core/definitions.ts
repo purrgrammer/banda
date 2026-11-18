@@ -8,7 +8,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Static, Type } from "@earendil-works/pi-ai";
+import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 import { shaOf } from "./agents.ts";
 import { type Connection, connectionOf, MAX_DEFINITION_BYTES } from "./connections.ts";

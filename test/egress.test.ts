@@ -233,11 +233,11 @@ function setup(options: { gate?: () => Promise<void>; report?: boolean; afterFai
 /** Turn `turn` ended, and so did what it held: no release left, and no Turn waking the agent with one. */
 const done = async (harness: Harness, turn: number) => {
 	if ((await harness.getTask(turn as TaskId, context))?.state.status !== "terminal") return false;
-	const graph = await harness.taskGraph(context);
+	const graph = await harness.watchTaskGraph(context);
 	try {
 		return !Object.values(graph.value.tasks).some((node) => node.kind === RELEASE || node.kind === "banda.turn");
 	} finally {
-		graph.dispose();
+		await graph.stop();
 	}
 };
 
@@ -1778,11 +1778,11 @@ describe("a held write's release", () => {
 	/** Nothing of the chat's is on its way: no Turn runs, and `ticket`, if given, was told. */
 	const quiet = (harness: Harness, chat: number, ticket?: string) =>
 		until(async () => {
-			const graph = await harness.taskGraph(context);
+			const graph = await harness.watchTaskGraph(context);
 			try {
 				if (Object.values(graph.value.tasks).some((node) => node.kind === "banda.turn")) return false;
 			} finally {
-				graph.dispose();
+				await graph.stop();
 			}
 			return ticket === undefined || (await wakeUps(harness, chat)).flat().includes(ticket);
 		});
@@ -1942,11 +1942,11 @@ describe("a held write's release", () => {
 					for (const ticket of asks) expect(stored[ticket]?.notSent).toBeUndefined();
 					for (const wait of await openWaits(harness)) await answer(harness, wait.key, "deny", web, "bearer");
 					await until(async () => {
-						const graph = await harness.taskGraph(context);
+						const graph = await harness.watchTaskGraph(context);
 						try {
 							return !Object.values(graph.value.tasks).some((n) => n.kind === RELEASE || n.kind === "banda.turn");
 						} finally {
-							graph.dispose();
+							await graph.stop();
 						}
 					});
 					// only what the owner approved left, once, from the ticket they saw; a repeat never leaves
@@ -2621,11 +2621,11 @@ describe("a held write's release", () => {
 						await answer(harness, wait.key, verdict.get(String(wait.ask.args._ticket))!, web, "bearer");
 					}
 					await until(async () => {
-						const graph = await harness.taskGraph(context);
+						const graph = await harness.watchTaskGraph(context);
 						try {
 							return !Object.values(graph.value.tasks).some((n) => n.kind === RELEASE || n.kind === "banda.turn");
 						} finally {
-							graph.dispose();
+							await graph.stop();
 						}
 					});
 					expect(s.proxy.sent.map((h) => h.ticket).sort()).toEqual(

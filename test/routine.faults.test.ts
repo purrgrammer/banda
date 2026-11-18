@@ -88,8 +88,8 @@ describe("the owner's routine actions under faults", () => {
 		await pool(
 			8,
 			faults.map((fault) => async () => {
-				const killed = await run([[fault]]);
 				try {
+					const killed = await run([[fault]]);
 					expect(killed.kills).toBe(1);
 					check(killed);
 				} catch (error) {

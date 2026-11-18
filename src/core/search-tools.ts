@@ -1,8 +1,8 @@
 /** Read-only tools over the same local corpus as the owner's Cmd+K search. */
 
-import type { Context } from "@earendil-works/chord";
-import { Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
 import { defineExtension, defineTool, type ToolExecutionApi } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { AgentChats } from "./agents.ts";
 import type { searchService } from "./search-service.ts";
 

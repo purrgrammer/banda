@@ -22,13 +22,12 @@ import {
 	type MutableModels,
 	type Provider,
 	type ProviderStreams,
-	type Static,
-	Type,
 } from "@earendil-works/pi-ai";
 import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
 import { mistralConversationsApi } from "@earendil-works/pi-ai/api/mistral-conversations.lazy";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
+import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 import {
 	COMPAT_DEFAULTS,

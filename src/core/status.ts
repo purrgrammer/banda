@@ -1,7 +1,7 @@
 /** Status (DESIGN.md "Flows"), derived from the task graph and the tasks' own inputs: nothing records it. */
 
-import type { Context } from "@earendil-works/chord";
-import type { Harness, TaskGraphNode, TaskId } from "@earendil-works/pi-durable";
+import type { Context } from "@earendil-works/chord/context";
+import type { Harness, TaskGraphNode, TaskId, Tx } from "@earendil-works/pi-durable";
 import { LEAD } from "./agents.ts";
 
 import type { Origin } from "./gateway.ts";
@@ -37,7 +37,7 @@ export type OpenWait = {
 	readonly call?: string;
 };
 
-/** A task that cannot run, and why: the restart limit parked it (`retryTask` runs it again), or nothing takes it. */
+/** A task that cannot run, and why: no registered definition takes it, or the restart limit ended it (`cutOff`). */
 export type Parked = {
 	readonly task: number;
 	readonly kind: string;
@@ -48,10 +48,7 @@ export type Parked = {
 export type Status = {
 	readonly chats: readonly ChatStatus[];
 	readonly waits: readonly OpenWait[];
-	/**
-	 * Tasks that cannot run, and why: the restart limit parked them (`retryTask` runs one again), or no registered
-	 * definition takes them, which is a bug in the daemon.
-	 */
+	/** Tasks that cannot run because no registered definition takes them, which is a bug in the daemon. */
 	readonly parked: readonly Parked[];
 };
 
@@ -73,11 +70,11 @@ export function stateOf(nodes: readonly TaskGraphNode[], chat: number): State {
 }
 
 async function nodes(harness: Harness, ctx: Context): Promise<TaskGraphNode[]> {
-	const graph = await harness.taskGraph(ctx);
+	const graph = await harness.watchTaskGraph(ctx);
 	try {
 		return Object.values(graph.value.tasks);
 	} finally {
-		graph.dispose();
+		await graph.stop();
 	}
 }
 
@@ -201,4 +198,42 @@ export async function status(harness: Harness, ctx: Context = context): Promise<
 			: [{ task: Number(node.id), kind: node.kind, chat: Number(node.conversationId), reason: node.blocked }],
 	);
 	return { chats, waits, parked };
+}
+
+/**
+ * The tasks the restart limit ended: cut off by crashes `settings.restartLimit` times in a row, pi-durable ends a task
+ * with a failure whose detail is `{ reason: "restart_limit" }` instead of running it again. Read from the stored
+ * terminal records, so it holds whichever process ended them. A scan of every ended task: for checks, not a live view.
+ */
+export async function cutOff(harness: Harness, ctx: Context = context): Promise<Parked[]> {
+	return harness.commit(async (tx) => {
+		const found: Parked[] = [];
+		let cursor: Parameters<Tx["scanTasks"]>[2];
+		do {
+			const page = await tx.scanTasks({ status: "terminal" }, 100, cursor);
+			for (const task of page.items) {
+				const outcome = task.state.status === "terminal" ? task.state.outcome : undefined;
+				const detail = outcome?.error?.detail;
+				if (
+					typeof detail === "object" &&
+					detail !== null &&
+					!Array.isArray(detail) &&
+					detail.reason === "restart_limit"
+				)
+					found.push({
+						task: Number(task.id),
+						kind: task.kind,
+						chat: Number(task.conversationId),
+						reason: "restart_limit",
+					});
+			}
+			cursor = page.next;
+		} while (cursor !== undefined);
+		return found;
+	}, ctx);
+}
+
+/** The work that will not finish: tasks that cannot run (`parked`) and those the restart limit ended (`cutOff`). */
+export async function stuck(harness: Harness, ctx: Context = context): Promise<Parked[]> {
+	return [...(await status(harness, ctx)).parked, ...(await cutOff(harness, ctx))];
 }

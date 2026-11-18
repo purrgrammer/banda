@@ -5,7 +5,7 @@
  * decided in the commit that reads the slot, so an answer and an expiry never both win.
  */
 import { randomInt } from "node:crypto";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import {
 	type ConversationId,
 	defineDoc,
@@ -619,21 +619,12 @@ export async function answer(
 }
 
 /**
- * Run again every task the restart limit parked while it waited on an open Wait. pi-durable counts a crash against a
- * task whose state has not changed since, and a tool blocked on a Wait changes nothing while it waits: so five
- * restarts during one ask would park the tool, though waiting is all it did. A parked task with no open Wait under it
- * stays parked.
+ * Run again every task the restart limit parked while it waited on an open Wait. pi-durable 1.5 parks nothing: it ends
+ * a task cut off `settings.restartLimit` times in a row and has no way to run it again (`retryTask` is gone), so there
+ * is nothing here to revive. Kept where it is called until it is decided what a Wait's tool does through restarts.
  */
-export async function revive(harness: Harness, ctx: Context = context): Promise<number[]> {
-	const graph = await harness.taskGraph(ctx);
-	const nodes = Object.values(graph.value.tasks);
-	graph.dispose();
-	const waiting = new Set(nodes.filter((node) => node.kind === WAIT).map((node) => Number(node.owner)));
-	const revived = nodes
-		.filter((node) => node.blocked === "restart_limit" && waiting.has(Number(node.id)))
-		.map((node) => Number(node.id));
-	for (const id of revived) await harness.retryTask(id as TaskId, ctx);
-	return revived;
+export async function revive(_harness: Harness, _ctx: Context = context): Promise<number[]> {
+	return [];
 }
 
 /** How an ask ended, in a few words for where it was shown: `✓ Approved`, `✓ blue`, `✗ Expired`. */
@@ -834,8 +825,9 @@ export const defineWait = (
 						};
 						runtime.signal.addEventListener("abort", () => reject(runtime.signal.reason), { once: true });
 						timer = setTimeout(check, Math.max(task.input.deadline - runtime.now(), 0));
-						watch.start(async (value) => {
-							if (value?.answer !== undefined || value?.dismissed === true) check();
+						watch.start(async (call) => {
+							if (call.kind !== "value") return;
+							if (call.value?.answer !== undefined || call.value?.dismissed === true) check();
 						});
 						// A fill may commit between the first slot read and registration. Check once after watching.
 						check();

@@ -9,8 +9,7 @@
  * runs and its answer comes back framed as foreign data; a write is a draft the owner approves, its floor respected.
  */
 import { fileURLToPath } from "node:url";
-import type { Context } from "@earendil-works/chord";
-import { withAbortSignal } from "@earendil-works/chord/context";
+import { type Context, withAbortSignal } from "@earendil-works/chord/context";
 import {
 	AgentDoc,
 	type ConversationId,

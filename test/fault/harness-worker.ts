@@ -14,7 +14,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createRegistry, defineDoc, defineExtension } from "@earendil-works/pi-durable";
 import { answerAsk, defineHarnesses, Harnesses, steer } from "../../src/core/harness.ts";
-import { status } from "../../src/core/status.ts";
+import { stuck } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { echoModels } from "../fixtures/models.ts";
 import { type Fault, Faults } from "./faults.ts";
@@ -130,7 +130,7 @@ const count = () => {
 };
 const orphans = count();
 if (orphans > 0) execFileSync("pkill", ["-f", `: ${mark};`]);
-const { parked } = await status(harness);
+const parked = await stuck(harness);
 console.log(
 	JSON.stringify({
 		state: session?.state,

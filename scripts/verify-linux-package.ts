@@ -5,7 +5,7 @@ import { closeSync, createReadStream, openSync } from "node:fs";
 import { lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { type Static, Type } from "@earendil-works/pi-ai";
+import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 
 const root = resolve(import.meta.dirname, "..");

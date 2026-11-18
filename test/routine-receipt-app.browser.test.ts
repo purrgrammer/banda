@@ -1,16 +1,9 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-	createModels,
-	fauxAssistantMessage,
-	fauxProvider,
-	fauxToolCall,
-	type Static,
-	type TSchema,
-	Type,
-} from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { createRegistry } from "@earendil-works/pi-durable";
+import { type Static, type TSchema, Type } from "typebox";
 import { Value } from "typebox/value";
 import { expect, it } from "vitest";
 import type { BoxEgress } from "../src/box/box.ts";

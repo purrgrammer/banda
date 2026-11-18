@@ -15,14 +15,22 @@ import { BlobStore } from "../../src/core/blobs.ts";
 import { type Gateway, OWNER } from "../../src/core/gateway.ts";
 
 import { Routines, routinePath, WAKE, type WakeData } from "../../src/core/routines.ts";
-import { status } from "../../src/core/status.ts";
+import { stuck } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore, Routes, type TurnResult } from "../../src/core/turn.ts";
 import { echoModels, FAUX_MODEL } from "../fixtures/models.ts";
+import { diagnoseOnTimeout } from "./diagnose.ts";
 import { type Fault, Faults } from "./faults.ts";
 
 const [home, scheduleJson] = process.argv.slice(2) as [string, string];
 const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
+// a hung run says what it waited on when the sweep's timeout ends it
+diagnoseOnTimeout(
+	home,
+	() => harness,
+	faults,
+	() => now,
+);
 
 const MINUTE = 60_000;
 const START = new Date(2026, 10, 2, 8, 0).getTime();
@@ -71,6 +79,9 @@ const harness = await openStore(home, {
 	registry,
 	now: () => now,
 	setTimer,
+	// pi-durable 1.5 retries a request the host died during after `retry.baseDelayMs` on the Harness clock, which this
+	// worker moves only once its work settles: retried at once, so a kill there resumes as a retry (test/backoff.faults.test.ts times the delay)
+	settings: { retry: { baseDelayMs: 0 } },
 	wrapStorage: (storage) => faults.storage(storage),
 });
 harness.resume();
@@ -95,9 +106,9 @@ await core.reconcile(harness);
 const settled = async () => {
 	const { routines } = (await harness.snapshot(Routines, context)) ?? { routines: {} };
 	if (!Object.keys(files).every((name) => (routines[name]?.fired ?? START) >= now)) return false;
-	const graph = await harness.taskGraph(context);
+	const graph = await harness.watchTaskGraph(context);
 	const busy = Object.values(graph.value.tasks).some((task) => task.kind !== "banda.routine");
-	graph.dispose();
+	await graph.stop();
 	return !busy;
 };
 for (;;) {
@@ -146,7 +157,7 @@ console.log(
 		sent: sent.map((line) => JSON.parse(line).out.text as string),
 
 		live,
-		parked: (await status(harness)).parked,
+		parked: await stuck(harness),
 		commits: faults.hits("commit:after"),
 		models: faults.hits("model"),
 	}),

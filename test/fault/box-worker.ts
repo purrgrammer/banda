@@ -10,7 +10,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { type ConversationId, createRegistry, type TaskId } from "@earendil-works/pi-durable";
 import type { ShellExecOptions } from "@earendil-works/pi-durable/env";
@@ -18,7 +18,7 @@ import { type Box, openBox } from "../../src/box/box.ts";
 import { boxEnv, boxTools } from "../../src/box/tools.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
 import { type Gateway, OWNER } from "../../src/core/gateway.ts";
-import { status } from "../../src/core/status.ts";
+import { stuck } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore, type TurnResult } from "../../src/core/turn.ts";
 import { revive } from "../../src/core/wait.ts";
@@ -140,7 +140,7 @@ try {
 }
 // an orphan found is the failure, not left to run on
 if (orphans > 0) execFileSync("pkill", ["-f", `: ${mark};`]);
-const { parked } = await status(harness);
+const parked = await stuck(harness);
 console.log(
 	JSON.stringify({
 		outcome,

@@ -17,8 +17,7 @@
  * and the page theirs since). Taking the browser cuts a call at work short; Stop ends a call at once. Tools that do not
  * drive the browser go on as they would, so a run that never touches it is not held up.
  */
-import type { Context } from "@earendil-works/chord";
-import { type Static, type TSchema, Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
 import type { Harness } from "@earendil-works/pi-durable";
 import {
 	defineDoc,
@@ -29,6 +28,7 @@ import {
 	type ToolRegistration,
 	type Tx,
 } from "@earendil-works/pi-durable";
+import { type Static, type TSchema, Type } from "typebox";
 import { log } from "../core/activity.ts";
 import { AgentChats } from "../core/agents.ts";
 import type { EffectTool } from "../core/ask.ts";

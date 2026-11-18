@@ -5,7 +5,7 @@
  *
  * argv: home, fault schedule JSON (Fault[])
  */
-import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, Type } from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import {
 	AgentDoc,
 	type ConversationId,
@@ -14,6 +14,7 @@ import {
 	defineTool,
 	type Harness,
 } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { Accepted, agentPath, ChatAgent, ChatTier, shaOf } from "../../src/core/agents.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
 import { type Gateway, OWNER } from "../../src/core/gateway.ts";

@@ -2,7 +2,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Harness } from "@earendil-works/pi-durable";
 import { Accepted, shaOf } from "../core/agents.ts";
 import { Companion } from "../core/companion.ts";

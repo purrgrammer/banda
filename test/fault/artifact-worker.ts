@@ -18,7 +18,7 @@ import { boxEnv } from "../../src/box/tools.ts";
 import { ARTIFACT_EDIT, Artifacts, artifactId, defineArtifacts } from "../../src/core/artifacts.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
 import { type Gateway, OWNER } from "../../src/core/gateway.ts";
-import { status } from "../../src/core/status.ts";
+import { stuck } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore, type TurnResult } from "../../src/core/turn.ts";
 import { revive } from "../../src/core/wait.ts";
@@ -117,7 +117,7 @@ for (;;) {
 }
 const sha = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 const stored = await versions();
-const { parked } = await status(open);
+const parked = await stuck(open);
 console.log(
 	JSON.stringify({
 		versions: stored.map(({ n, by, sha, box, restored }) => ({ n, by, sha, box, restored })),

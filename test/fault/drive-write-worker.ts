@@ -16,7 +16,7 @@ import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { TaskId } from "@earendil-works/pi-durable";
 import { LEAD } from "../../src/core/agents.ts";
 import { OWNER } from "../../src/core/gateway.ts";
-import { openWaits, status } from "../../src/core/status.ts";
+import { openWaits, stuck } from "../../src/core/status.ts";
 import { context } from "../../src/core/store.ts";
 import type { TurnResult } from "../../src/core/turn.ts";
 import { openConnected } from "../fixtures/connected.ts";
@@ -135,7 +135,7 @@ while (!(await Promise.race([ended, new Promise<false>((r) => setTimeout(r, 10, 
 }
 
 const outcome = (await s.harness.getTask(received.turn as TaskId<TurnResult>, context))?.state.outcome;
-const { parked } = await status(s.harness);
+const parked = await stuck(s.harness);
 const answers = readFileSync(join(home, "answers.txt"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean);
 const files = Object.values(google.files());
 console.log(

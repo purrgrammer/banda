@@ -1,9 +1,9 @@
 /** Restore an already seeded folder after loss, cut at each store commit and filesystem write. */
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Type } from "@earendil-works/pi-ai";
 import { createRegistry, type Storage } from "@earendil-works/pi-durable";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
+import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { Accepted, shaOf } from "../../src/core/agents.ts";
 import { context, openStore } from "../../src/core/store.ts";

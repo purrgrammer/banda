@@ -8,7 +8,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import { defineDoc, type Harness, type Tx } from "@earendil-works/pi-durable";
 import { context } from "./store.ts";
 

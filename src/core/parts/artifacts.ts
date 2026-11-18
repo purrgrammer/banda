@@ -3,8 +3,9 @@
  * after the message. The id is checked against the Library before anything is sent, and the version each card shows is
  * the one current then, kept in the call's receipt, so an old message keeps showing what it showed.
  */
-import { Type } from "@earendil-works/pi-ai";
+
 import type { JsonObject } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { ARTIFACT_ID, Artifacts } from "../artifacts.ts";
 import type { MessagePart } from "./part.ts";
 

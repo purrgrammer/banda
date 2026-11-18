@@ -6,9 +6,9 @@
  * owner's. The owner may trim the list before approving. It offers no scope: a permission covering it would let
  * an agent grant itself hosts, so every call asks.
  */
-import type { Context } from "@earendil-works/chord";
-import { Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
 import type { Harness, JsonObject, ToolExecutionResult, Tx } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { acceptedAgent, LEAD } from "./agents.ts";
 import type { EffectTool } from "./ask.ts";
 import { OWNER } from "./gateway.ts";

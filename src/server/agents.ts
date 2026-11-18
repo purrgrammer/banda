@@ -4,7 +4,7 @@
  * and only the store's copy ever starts a chat. Files are read without following a symbolic link.
  */
 import { posix } from "node:path";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Harness, ModelRef, Tx } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import {

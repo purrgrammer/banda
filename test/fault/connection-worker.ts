@@ -25,7 +25,7 @@ import type { TaskId } from "@earendil-works/pi-durable";
 import { Connected } from "../../src/core/connections.ts";
 import { OWNER } from "../../src/core/gateway.ts";
 import { Permissions } from "../../src/core/permissions.ts";
-import { openWaits, status } from "../../src/core/status.ts";
+import { openWaits, stuck } from "../../src/core/status.ts";
 import { context } from "../../src/core/store.ts";
 import type { TurnResult } from "../../src/core/turn.ts";
 import { answer } from "../../src/core/wait.ts";
@@ -260,7 +260,7 @@ if (mode === "carry") {
 	outcome = await finish(fresh.turn, false);
 }
 
-const { parked } = await status(s.harness);
+const parked = await stuck(s.harness);
 const accepted = (await s.harness.snapshot(Connected, context))?.added.cal !== undefined || (await hasRecord());
 const connected = (await s.harness.snapshot(Connected, context))?.connections.cal !== undefined;
 const answers = answersGiven(home);

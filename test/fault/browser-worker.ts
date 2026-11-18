@@ -17,7 +17,7 @@ import { browserTools, keepSignedIn } from "../../src/box/browser-tools.ts";
 import { ActivityLog } from "../../src/core/activity.ts";
 import { LEAD } from "../../src/core/agents.ts";
 import { OWNER } from "../../src/core/gateway.ts";
-import { openWaits, status } from "../../src/core/status.ts";
+import { openWaits, stuck } from "../../src/core/status.ts";
 import { context } from "../../src/core/store.ts";
 import type { TurnResult } from "../../src/core/turn.ts";
 import { keepEgressCredential } from "../../src/home.ts";
@@ -119,7 +119,7 @@ while (!(await Promise.race([ended, new Promise<false>((r) => setTimeout(r, 10, 
 }
 
 const outcome = (await s.harness.getTask(received.turn as TaskId<TurnResult>, context))?.state.outcome;
-const { parked } = await status(s.harness);
+const parked = await stuck(s.harness);
 const read = (name: string) =>
 	readFileSync(join(home, name), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean);
 console.log(

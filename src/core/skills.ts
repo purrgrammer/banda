@@ -1,7 +1,6 @@
 /** Accepted skill prompt files. The box may write drafts; only the owner's accepted bytes enter a model request. */
 
 import type { AssistantMessage, Message, ToolResultMessage, Usage } from "@earendil-works/pi-ai";
-import { Type } from "@earendil-works/pi-ai";
 import {
 	defineExtension,
 	defineTool,
@@ -10,6 +9,7 @@ import {
 	type JsonObject,
 	section,
 } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { Accepted, type AcceptedFile, shaOf } from "./agents.ts";
 import { parseSkill, SKILL_NAME, type Skill } from "./skill-file.ts";
 

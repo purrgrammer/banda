@@ -5,7 +5,7 @@
  * every push, so a change to the file by hand or by an agent shows with the next one. The file is read without
  * following a link, and one the daemon does not read is never written over.
  */
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import {
 	BAND_FILE,
 	type BandFile,

@@ -4,9 +4,9 @@ import {
 	fauxProvider,
 	fauxToolCall,
 	type Context as ModelContext,
-	Type,
 } from "@earendil-works/pi-ai";
 import { createRegistry, defineExtension, defineTool, type Harness, type TaskId } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { EVERY_AGENT } from "../src/core/agents.ts";
 import { OWNER } from "../src/core/gateway.ts";

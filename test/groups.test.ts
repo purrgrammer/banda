@@ -1,5 +1,6 @@
-import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, Type } from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { createRegistry, defineExtension, defineTool, type Harness, type TaskId } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { Accepted, AgentChats, agentPath, shaOf } from "../src/core/agents.ts";
 import { defineGroups, type GroupMessage, Groups } from "../src/core/groups.ts";

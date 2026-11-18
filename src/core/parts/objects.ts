@@ -4,8 +4,9 @@
  * agent uses; one named in the text stays in the text, as its name, and opens its card there. The agent names the thing
  * alone: what the card says is the daemon's reading, never the model's words.
  */
-import { Type } from "@earendil-works/pi-ai";
+
 import type { JsonObject } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import type { MessagePart } from "./part.ts";
 
 /** How many objects one message shows. */

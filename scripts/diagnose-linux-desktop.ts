@@ -6,7 +6,7 @@ import { lstat, mkdir, open, realpath, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { type Static, type TSchema, Type } from "@earendil-works/pi-ai";
+import { type Static, type TSchema, Type } from "typebox";
 import { Value } from "typebox/value";
 import { BrowserPreparation } from "../src/box/browser-preparation.ts";
 import { fileSha256 as hash, readMicrovmAssets } from "../src/box/microvm-assets.ts";

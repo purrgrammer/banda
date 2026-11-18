@@ -6,7 +6,7 @@ import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, rename, rm, stat, writeF
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { imageSpecs } from "../src/box/container.ts";
 import {

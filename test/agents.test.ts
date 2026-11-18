@@ -1,4 +1,4 @@
-import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, Type } from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import {
 	AgentDoc,
 	type ConversationId,
@@ -9,6 +9,7 @@ import {
 	type TaskId,
 } from "@earendil-works/pi-durable";
 import fc from "fast-check";
+import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import {
 	Accepted,

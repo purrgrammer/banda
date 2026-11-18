@@ -5,7 +5,7 @@
  * at once, whoever wrote it, and only changes what the app shows. A pin names an agent by its id (`sancho`) or a group
  * by its room (`group:3`). With no file, Sancho is pinned; an empty list pins nothing.
  */
-import { type Static, Type } from "@earendil-works/pi-ai";
+import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 
 export const BAND_FILE = "band.json";

@@ -7,7 +7,6 @@ import {
 	getCurrentSystemPrompt,
 	getCurrentTools,
 	type Message,
-	Type,
 } from "@earendil-works/pi-ai";
 import {
 	type ConversationId,
@@ -16,6 +15,7 @@ import {
 	type PromptInput,
 	type TaskId,
 } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { Accepted, agentPath, shaOf } from "../src/core/agents.ts";
 import { AVATAR_INSTRUCTIONS, avatarInstructionsExtension, avatarSection } from "../src/core/avatar-instructions.ts";

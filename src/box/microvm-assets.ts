@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Static, Type } from "@earendil-works/pi-ai";
+import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 
 export const MICROSANDBOX_VERSION = "0.7.14";

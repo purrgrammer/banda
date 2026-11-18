@@ -17,8 +17,7 @@
  * paused it. Its task is only a timer over them, so a task can be dropped and made again (a changed file, a pause) and
  * the routine goes on where it was.
  */
-import type { Context } from "@earendil-works/chord";
-import { Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
 import {
 	type ConversationId,
 	defineDoc,
@@ -30,6 +29,7 @@ import {
 	type ToolRegistration,
 	type Tx,
 } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { log } from "./activity.ts";
 import { Accepted, AGENT_NAME, agentWords, ChatAgent, frontmatter, isArchived, LEAD, shaOf } from "./agents.ts";
 

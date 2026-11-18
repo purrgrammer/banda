@@ -10,7 +10,8 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, Type } from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import type { EffectTool } from "../src/core/ask.ts";
 import { agentMainThread } from "../src/core/gateway.ts";

@@ -15,7 +15,7 @@ import { ActivityLog } from "../../src/core/activity.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
 import type { EgressControl, Taken } from "../../src/core/egress.ts";
 import { type Gateway, OWNER } from "../../src/core/gateway.ts";
-import { openWaits, status } from "../../src/core/status.ts";
+import { openWaits, stuck } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore, type TurnResult } from "../../src/core/turn.ts";
 import { revive, WAIT, type WaitEnded } from "../../src/core/wait.ts";
@@ -121,7 +121,7 @@ const page = await (await harness.conversation(received.chat as ConversationId, 
 	undefined,
 	context,
 );
-const { parked } = await status(harness);
+const parked = await stuck(harness);
 console.log(
 	JSON.stringify({
 		waits: page.items.filter((e) => e.kind === WAIT).map((e) => e.data as unknown as WaitEnded),

@@ -5,8 +5,8 @@
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Type } from "@earendil-works/pi-ai";
 import { createRegistry } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
 import type { BoxEgress, EgressConfig } from "../src/box/box.ts";

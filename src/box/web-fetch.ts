@@ -12,8 +12,7 @@
  * `MAX_HOPS`. What comes back is foreign content: framed as data, bounded (the body read up to `MAX_BODY_BYTES`, the
  * text cut at `MAX_TEXT_CHARS`), HTML read as text (`html-text.ts`), anything that is not text said for what it is.
  */
-import type { Context } from "@earendil-works/chord";
-import { Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
 import {
 	defineTool,
 	type ToolExecutionApi,
@@ -21,6 +20,7 @@ import {
 	type ToolRegistration,
 } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
+import { Type } from "typebox";
 import { log } from "../core/activity.ts";
 import { type HoldingEgress, intake, withIntake } from "../core/egress.ts";
 import { htmlToText } from "../core/html-text.ts";

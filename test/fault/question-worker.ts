@@ -5,7 +5,7 @@ import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "
 import { type ConversationId, createRegistry, type TaskId } from "@earendil-works/pi-durable";
 import { BlobStore } from "../../src/core/blobs.ts";
 import { type Gateway, OWNER } from "../../src/core/gateway.ts";
-import { openWaits, status } from "../../src/core/status.ts";
+import { openWaits, stuck } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore, type TurnResult } from "../../src/core/turn.ts";
 import { dismissQuestion, revive, WAIT, type WaitEnded } from "../../src/core/wait.ts";
@@ -80,7 +80,7 @@ const page = await (await harness.conversation(got.chat as ConversationId, conte
 );
 const waits = page.items.filter((entry) => entry.kind === WAIT).map((entry) => entry.data as unknown as WaitEnded);
 const outcome = (await harness.getTask(got.turn as TaskId<TurnResult>, context))?.state.outcome;
-const { parked } = await status(harness);
+const parked = await stuck(harness);
 console.log(
 	JSON.stringify({
 		outcome,

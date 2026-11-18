@@ -1,9 +1,9 @@
 /**
  * What the web reads (DESIGN.md "Clients"): chats from the routes, transcripts paged from the entries, live
- * events from pi-durable's agent event stream. All derived from the store; nothing here writes.
+ * events from the chat's conversation view as it changes. All derived from the store; nothing here writes.
  */
 
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Op } from "@earendil-works/chord/delta";
 import {
 	type AssistantMessage,
@@ -17,17 +17,18 @@ import {
 import {
 	CompactionEntry,
 	type ConversationId,
+	type ConversationView,
 	type EntryId,
 	type EntryRecord,
 	type Harness,
 	InboxDoc,
 	LiveDoc,
-	type MessageChange,
+	type LiveState,
 	type SubmissionId,
 	type TaskGraph,
 	type TaskGraphNode,
+	type ToolSlot,
 	UsageDoc,
-	watchEvents,
 } from "@earendil-works/pi-durable";
 import type { AgentBrowserView } from "../box/browsers.ts";
 import { ActivityLog } from "../core/activity.ts";
@@ -116,7 +117,6 @@ import { companion } from "./companion.ts";
 import { approvalLabel, doing } from "./doing.ts";
 import { proposalView } from "./proposals.ts";
 import type { Area } from "./routes/area.ts";
-import { appendArgument } from "./stream-args.ts";
 
 /** Entries scanned per step of a page; bookkeeping entries show nothing. */
 export const PAGE = 50;
@@ -937,9 +937,10 @@ export async function shell(
 		...(await Promise.all(areas.flatMap((area) => area.watch ?? []).map((doc) => harness.watchDoc(doc, ctx)))),
 	];
 	// a timer's task waking and sleeping is not news: its doc says what it did, and pushes what reads it
-	graph?.start(async (value, ops) => {
-		if (graphNews(ops, before)) await changed();
-		before = value;
+	graph?.start(async (call) => {
+		if (call.kind !== "value") return;
+		if (graphNews(call.ops, before)) await changed();
+		before = call.value;
 	});
 	for (const watch of watches.slice(1)) watch?.start(() => changed());
 	for (const area of areas)
@@ -1126,28 +1127,45 @@ export async function queuedInputs(harness: Harness, id: number, ctx: Context = 
 	});
 }
 
+/** What a chat's live stream reads of its view: the run, the answer being generated, its tools and newest entries. */
+type Snapshot = {
+	readonly run?: LiveState["run"];
+	readonly generation?: LiveState["generation"];
+	readonly tools: readonly ToolSlot[];
+	readonly entries: readonly EntryRecord[];
+};
+
+const snapshotOf = (view: ConversationView): Snapshot => {
+	const live = (view.docs[LiveDoc.definition.kind] ?? {}) as LiveState;
+	return {
+		...(live.run === undefined ? {} : { run: live.run }),
+		...(live.generation === undefined ? {} : { generation: live.generation }),
+		tools: live.tools ?? [],
+		entries: view.entries,
+	};
+};
+
 /**
- * Stream a chat's live events to `write` until `signal` aborts or the stream ends (the store closed). Resolves
- * with false when there is no such chat.
+ * A chat's live events from its views, one view after another: what changed since the last, in the order a client
+ * applies them. `ready` says it whole; `next` says what a later view changed, or `ready` again when the window lost
+ * entries the client has not seen (more were appended than the window keeps), so the client fetches them by id.
  */
-export async function live(
-	harness: Harness,
-	id: number,
+export function follow(
 	write: (event: LiveEvent) => void,
-	signal: AbortSignal,
-	ctx: Context = context,
-): Promise<boolean> {
-	if ((await harness.conversation(id as ConversationId, ctx)) === undefined) return false;
-	const stream = await watchEvents(harness, id as ConversationId, ctx);
+	inputEntry: (inputs: readonly SubmissionId[] | undefined) => Promise<number | undefined>,
+	clock: () => number = Date.now,
+) {
 	let partial: Block[] = [];
+	let seen: Snapshot = { tools: [], entries: [] };
+	let tail = 0;
 	// A thinking block's start: the daemon's stamp on the message when the stream carries it, else when it was seen.
 	const started = (index: number, message?: AssistantMessage) =>
 		(message === undefined ? undefined : thinkingTimes(message).get(index)?.start) ??
 		partial[index]?.startedAt ??
-		Date.now();
+		clock();
 	// A thinking block ends when a later block begins.
 	const opened = (index: number) => {
-		const now = Date.now();
+		const now = clock();
 		partial = partial.map((b, i) =>
 			i < index && b.type === "thinking" && b.endedAt === undefined ? { ...b, endedAt: now } : b,
 		);
@@ -1160,9 +1178,151 @@ export async function live(
 			const end =
 				thinkingTimes(message).get(index)?.end ??
 				partial[index]?.endedAt ??
-				(index < message.content.length - 1 ? Date.now() : undefined);
+				(index < message.content.length - 1 ? clock() : undefined);
 			return { ...b, startedAt: started(index, message), ...(end === undefined ? {} : { endedAt: end }) };
 		});
+	// a model's call's arguments: in its answer, the newest assistant entry, else in the answer being generated
+	const argsOf = (snapshot: Snapshot, call: string) => {
+		const answer = [...snapshot.entries].reverse().find((entry) => entry.model?.[0]?.role === "assistant")?.model?.[0];
+		const block =
+			answer?.role === "assistant"
+				? answer.content.find((each) => each.type === "toolCall" && each.id === call)
+				: snapshot.generation?.message?.content.find((each) => each.type === "toolCall" && each.id === call);
+		return block?.type === "toolCall" ? block.arguments : undefined;
+	};
+	const ready = async (view: ConversationView) => {
+		const snapshot = snapshotOf(view);
+		seen = snapshot;
+		tail = Number(snapshot.entries.at(-1)?.id ?? view.before ?? 0);
+		const input = await inputEntry(snapshot.run?.inputs);
+		const message = snapshot.generation?.message as AssistantMessage | undefined;
+		partial = [];
+		partial = message === undefined ? [] : fromMessage(message);
+		const running = snapshot.tools.flatMap((slot): RunningTool[] => {
+			if (slot.status === "done") return [];
+			const args = argsOf(snapshot, slot.callId);
+			const label = doing(slot.name, args);
+			return [
+				{
+					call: slot.callId,
+					name: slot.name,
+					output: slot.output ?? "",
+					...((slot.droppedBytes ?? 0) > 0 ? { dropped: true } : {}),
+					...(label === undefined ? {} : { doing: args === undefined ? "working" : label }),
+				},
+			];
+		});
+		write({
+			type: "ready",
+			tail,
+			busy: snapshot.run !== undefined,
+			...(input === undefined ? {} : { input }),
+			partial,
+			running,
+		});
+	};
+	// the answer being generated, against the blocks already written: appended text is a delta, anything else a start
+	const answering = (message: AssistantMessage | undefined) => {
+		if (message === undefined) {
+			partial = [];
+			return;
+		}
+		for (let index = partial.length; index < message.content.length; index++) opened(index);
+		const blocks = fromMessage(message);
+		const grown =
+			blocks.length === partial.length &&
+			partial.every(
+				(known, index) =>
+					known.type === blocks[index]?.type &&
+					known.call === undefined &&
+					blocks[index]?.call === undefined &&
+					blocks[index]?.text.startsWith(known.text),
+			);
+		if (!grown) {
+			partial = blocks;
+			write({ type: "start", partial });
+			return;
+		}
+		const before = partial;
+		partial = blocks;
+		blocks.forEach((block, index) => {
+			const text = block.text.slice(before[index]?.text.length ?? 0);
+			if (text !== "") write({ type: "delta", index, text });
+		});
+	};
+	// the run's inputs: a run hands over to a new task each tool round, the same run with the same inputs
+	const runOf = (snapshot: Snapshot) => (snapshot.run === undefined ? undefined : JSON.stringify(snapshot.run.inputs));
+	const next = async (view: ConversationView): Promise<"ready" | undefined> => {
+		const before = view.before === undefined ? undefined : Number(view.before);
+		// entries past the tail left the window before they were read: say it whole again, for the client to fetch them
+		if (before !== undefined && before > tail) {
+			await ready(view);
+			return "ready";
+		}
+		const now = snapshotOf(view);
+		const was = seen;
+		seen = now;
+		const slots = new Map(was.tools.map((slot) => [slot.callId, slot]));
+		// a call that ended goes before its result entry, as the client expects
+		for (const slot of was.tools) {
+			if (slot.status === "done") continue;
+			const current = now.tools.find((each) => each.callId === slot.callId);
+			if (current === undefined || current.status === "done") write({ type: "toolEnd", call: slot.callId });
+		}
+		// the entries, before the answer being generated: an assistant entry clears the client's answer, so the next
+		// answer's blocks follow it
+		for (const entry of now.entries) {
+			if (Number(entry.id) <= tail) continue;
+			tail = Number(entry.id);
+			const item = itemOf(entry);
+			if (item !== undefined) write({ type: "entry", item });
+		}
+		if (runOf(now) !== runOf(was)) {
+			if (now.run === undefined) write({ type: "busy", busy: false });
+			else {
+				const input = await inputEntry(now.run.inputs);
+				write({ type: "busy", busy: true, ...(input === undefined ? {} : { input }) });
+			}
+		}
+		const message = now.generation?.message as AssistantMessage | undefined;
+		if (message !== was.generation?.message) answering(message);
+		// a call that started or whose output changed: the model's own calls, not nested ones
+		for (const slot of now.tools) {
+			if (slot.status === "done") continue;
+			const old = slots.get(slot.callId);
+			if (old === undefined) {
+				const label = doing(slot.name, argsOf(now, slot.callId));
+				write({ type: "tool", call: slot.callId, name: slot.name, ...(label === undefined ? {} : { doing: label }) });
+			}
+			const [had, has] = [old?.output ?? "", slot.output ?? ""];
+			if (has === had) continue;
+			write(
+				has.startsWith(had)
+					? { type: "output", call: slot.callId, append: has.slice(had.length) }
+					: { type: "output", call: slot.callId, set: has },
+			);
+		}
+		return undefined;
+	};
+	return { ready, next };
+}
+
+/**
+ * Stream a chat's live events to `write` until `signal` aborts or the stream ends (the store closed). Resolves
+ * with false when there is no such chat.
+ */
+export async function live(
+	harness: Harness,
+	id: number,
+	write: (event: LiveEvent) => void,
+	signal: AbortSignal,
+	ctx: Context = context,
+): Promise<boolean> {
+	const conversation = await harness.conversation(id as ConversationId, ctx);
+	if (conversation === undefined) return false;
+	// the newest entries and the run's live doc, whose changes say what the run does: commits made while one is being
+	// read arrive together, as their newest value
+	const stream = await conversation.watch(ctx);
 	const inputEntry = async (inputs: readonly SubmissionId[] | undefined) => {
 		const first = inputs?.[0];
 		if (first === undefined) return undefined;
@@ -1170,72 +1330,9 @@ export async function live(
 		const submission = await handle?.status(ctx);
 		return submission?.entry === undefined ? undefined : Number(submission.entry);
 	};
-	const ready = async (snapshot: typeof stream.snapshot) => {
-		const input = await inputEntry(snapshot.run?.inputs);
-		const message = snapshot.generation?.message;
-		partial = [];
-		partial = message === undefined ? [] : fromMessage(message);
-		// a model's call's arguments are in its answer, the newest assistant entry
-		const answer = [...snapshot.entries].reverse().find((entry) => entry.model?.[0]?.role === "assistant")?.model?.[0];
-		const argsOf = (call: string) =>
-			answer?.role === "assistant"
-				? answer.content.find((block) => block.type === "toolCall" && block.id === call)
-				: undefined;
-		const running = snapshot.tools.flatMap((slot): RunningTool[] => {
-			if (slot.status === "done") return [];
-			const block = argsOf(slot.callId);
-			const label = block?.type === "toolCall" ? doing(slot.name, block.arguments) : doing(slot.name, undefined);
-			return [
-				{
-					call: slot.callId,
-					name: slot.name,
-					output: slot.output ?? "",
-					...((slot.droppedBytes ?? 0) > 0 ? { dropped: true } : {}),
-					...(label === undefined ? {} : { doing: block === undefined ? "working" : label }),
-				},
-			];
-		});
-		write({
-			type: "ready",
-			tail: Number(snapshot.entries.at(-1)?.id ?? 0),
-			busy: snapshot.run !== undefined,
-			...(input === undefined ? {} : { input }),
-			partial,
-			running,
-		});
-	};
-	const change = (c: MessageChange) => {
-		if (c.type === "text_delta" || c.type === "thinking_delta") {
-			const known = partial[c.contentIndex];
-			if (known === undefined) {
-				opened(c.contentIndex);
-				partial[c.contentIndex] =
-					c.type === "text_delta"
-						? { type: "text", text: c.delta }
-						: { type: "thinking", text: c.delta, startedAt: started(c.contentIndex) };
-				write({ type: "start", partial });
-			} else {
-				partial[c.contentIndex] = { ...known, text: known.text + c.delta };
-				write({ type: "delta", index: c.contentIndex, text: c.delta });
-			}
-		} else if (c.type === "toolcall_delta") {
-			const known = partial[c.contentIndex];
-			if (known?.call) {
-				const args = appendArgument(known.call.args, c.path, c.delta) as ToolCall["args"];
-				partial[c.contentIndex] = { ...known, call: { ...known.call, args } };
-				write({ type: "start", partial });
-			}
-		} else if (c.type === "message") {
-			partial = fromMessage(c.message);
-			write({ type: "start", partial });
-		} else if ("block" in c) {
-			if (partial[c.contentIndex] === undefined) opened(c.contentIndex);
-			const b = blockOf(c.block);
-			partial[c.contentIndex] = b.type === "thinking" ? { ...b, startedAt: started(c.contentIndex) } : b;
-			write({ type: "start", partial });
-		}
-	};
-	await ready(stream.snapshot);
+	const following = follow(write, inputEntry);
+	let inboxSeen = JSON.stringify(stream.value.docs[InboxDoc.definition.kind] ?? null);
+	await following.ready(stream.value);
 	// the open asks, from the task graph: written whole whenever they change
 	let asked = "";
 	const asks = async () => {
@@ -1286,51 +1383,19 @@ export async function live(
 	};
 	await asks();
 	await inbox();
-	stream.start(async (events) => {
-		for (const event of events) {
-			if (event.type === "snapshot") {
-				await ready(event);
-				// after a fresh `ready` the asks come again, whether or not they changed
-				asked = "";
-				waiting = "";
-				queued = queued.then(asks);
-				inboxed = inboxed.then(inbox);
-			} else if (event.type === "inbox_update") inboxed = inboxed.then(inbox);
-			else if (event.type === "run_start") {
-				const input = await inputEntry(event.inputs);
-				write({ type: "busy", busy: true, ...(input === undefined ? {} : { input }) });
-			} else if (event.type === "run_end") write({ type: "busy", busy: false });
-			else if (event.type === "tool_execution_start" && event.parentToolCallId === undefined) {
-				const label = doing(event.toolName, event.args);
-				write({
-					type: "tool",
-					call: event.toolCallId,
-					name: event.toolName,
-					...(label === undefined ? {} : { doing: label }),
-				});
-			} else if (event.type === "tool_execution_update" && event.parentToolCallId === undefined && event.output) {
-				const o = event.output;
-				write(
-					"set" in o
-						? { type: "output", call: event.toolCallId, set: o.set }
-						: {
-								type: "output",
-								call: event.toolCallId,
-								...(o.trimStart === undefined ? {} : { trim: o.trimStart }),
-								...(o.append === undefined ? {} : { append: o.append }),
-							},
-				);
-			} else if (event.type === "tool_execution_end" && event.parentToolCallId === undefined)
-				write({ type: "toolEnd", call: event.toolCallId });
-			else if (event.type === "message_start" && event.message.role === "assistant") {
-				partial = [];
-				partial = fromMessage(event.message);
-				write({ type: "start", partial });
-			} else if (event.type === "message_update") for (const c of event.changes) change(c);
-			else if (event.type === "message_end" || event.type === "entry_appended") {
-				const item = itemOf(event.entry);
-				if (item !== undefined) write({ type: "entry", item });
-			}
+	stream.start(async (call) => {
+		if (call.kind !== "value") return;
+		if ((await following.next(call.value)) === "ready") {
+			// after a fresh `ready` the asks and the queue come again, whether or not they changed
+			asked = "";
+			waiting = "";
+			queued = queued.then(asks);
+			inboxed = inboxed.then(inbox);
+		}
+		const inboxNow = JSON.stringify(call.value.docs[InboxDoc.definition.kind] ?? null);
+		if (inboxNow !== inboxSeen) {
+			inboxSeen = inboxNow;
+			inboxed = inboxed.then(inbox);
 		}
 	});
 	const stop = () => void stream.stop();

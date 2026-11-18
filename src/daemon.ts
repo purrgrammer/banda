@@ -460,11 +460,12 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			registry,
 			env: boxEnv(agentBox),
 			settings: { compaction: compactionSettings(models), ...options.settings },
-			onReport: (error, info) => log(`${info.type}: ${error instanceof Error ? error.message : String(error)}`),
+			onReport: (report) =>
+				log(`${report.kind}: ${report.error instanceof Error ? report.error.message : String(report.error)}`),
 		});
 		const open = harness;
 		void open.closed.then((end) => {
-			if (end.reason !== "failed") return;
+			if (end.kind !== "failed") return;
 			failed = true;
 			log(`the store failed: ${end.error instanceof Error ? end.error.message : String(end.error)}`);
 			void close();
@@ -1050,11 +1051,8 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 									return capabilitiesView();
 								},
 							}),
-					retry: async (task) => {
-						if (!(await status(open)).parked.some((parked) => parked.task === task)) return false;
-						await open.retryTask(task as TaskId, context);
-						return true;
-					},
+					// pi-durable 1.5 parks no task to run again (no `retryTask`): no task has a retry
+					retry: async () => false,
 				},
 				() => port,
 				token,

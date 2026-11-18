@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Harness, TaskId } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
 import { Accepted } from "../src/core/agents.ts";
@@ -122,11 +122,11 @@ describe("a watch on a pull request", () => {
 		// a look while its last wake's run still goes holds what it sees for that run: wait for the runs first
 		const settled = async (harness: Harness) => {
 			for (;;) {
-				const graph = await harness.taskGraph(context);
+				const graph = await harness.watchTaskGraph(context);
 				const busy = Object.values(graph.value.tasks).some(
 					(task) => task.kind !== "banda.watch" && task.kind !== "banda.routine",
 				);
-				graph.dispose();
+				await graph.stop();
 				if (!busy) return;
 				await new Promise((r) => setTimeout(r, 5));
 			}

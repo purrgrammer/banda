@@ -1,4 +1,5 @@
-import { type Message, Type } from "@earendil-works/pi-ai";
+import type { Message } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { expect, it } from "vitest";
 import { nativeComputerReply } from "./fixtures/native-computer-model.ts";
 

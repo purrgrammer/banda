@@ -17,7 +17,7 @@
  * a held request offers its host (`host`), a permission for anything sent there, always, which holds even in a chat
  * that read foreign content. It binds a second shape the tool declares, never a wider value of the first.
  */
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import {
 	type ConversationId,
 	defineDoc,

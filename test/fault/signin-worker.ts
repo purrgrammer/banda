@@ -6,7 +6,7 @@ import { Value } from "typebox/value";
 import { Connected, credentialsOf } from "../../src/core/connections.ts";
 import { OWNER } from "../../src/core/gateway.ts";
 import { Permissions } from "../../src/core/permissions.ts";
-import { openWaits, status } from "../../src/core/status.ts";
+import { openWaits, stuck } from "../../src/core/status.ts";
 import { context } from "../../src/core/store.ts";
 import { connectionDefinition, openConnected, signInAsOwner } from "../fixtures/connected.ts";
 import { answerNudge } from "../fixtures/models.ts";
@@ -170,7 +170,7 @@ async function run(): Promise<SigninSummary> {
 		const proofCompleted = (await s.harness.waitForTask(proof, context)).state.outcome.status === "completed";
 		const current = await account();
 		const held = await credential();
-		const { parked } = await status(s.harness);
+		const parked = await stuck(s.harness);
 		return {
 			oldCompleted,
 			freshCompleted,

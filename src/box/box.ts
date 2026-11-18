@@ -5,11 +5,12 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
-import { Connection, RemoteExecutionEnv } from "@earendil-works/pi-env";
+import { RemoteExecutionEnv } from "@earendil-works/pi-env";
 import type { EgressControl } from "../core/egress.ts";
 import type { PreparedBrowser } from "./browser-preparation.ts";
+import { BoxConnection } from "./connection.ts";
 import { containerBox, dockerReady, sweepBoxes } from "./container.ts";
 import type { Pushed } from "./egress-config.ts";
 import { hostBox } from "./host.ts";
@@ -159,7 +160,7 @@ export function openBox(setup: BoxSetup, log: (line: string) => void): Box {
 			.finally(() => (running = undefined));
 		return running;
 	};
-	const connection = new Connection({
+	const connection = new BoxConnection({
 		command: async () => {
 			await ensure();
 			if (closed) throw new Error("The computer is closed");

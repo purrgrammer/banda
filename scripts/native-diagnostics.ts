@@ -4,7 +4,7 @@ import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { type Static, Type } from "@earendil-works/pi-ai";
+import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 
 const fileLimit = 64 << 10;

@@ -1,5 +1,5 @@
 /** The owner's read position: entries and tasks derive everything else about unread chats. */
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import { type ConversationId, defineDoc, type Harness } from "@earendil-works/pi-durable";
 import { context } from "./store.ts";
 

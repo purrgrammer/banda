@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import type { Static } from "@earendil-works/pi-ai";
+import type { Static } from "typebox";
 import { Value } from "typebox/value";
 import { expect, it } from "vitest";
 import {

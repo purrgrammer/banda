@@ -6,7 +6,7 @@ import { lstat, mkdir, open, realpath, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { type Static, Type } from "@earendil-works/pi-ai";
+import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 import { assertDiagnosticIdentity, parseDiagnosticIdentity } from "./native-diagnostics.ts";
 import { parseLinuxRunnerAccount } from "./verify-linux-computer.ts";

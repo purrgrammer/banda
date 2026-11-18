@@ -4,14 +4,8 @@
  */
 import { mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import {
-	type AuthOperationOptions,
-	type Credential,
-	type CredentialInfo,
-	type CredentialStore,
-	type Static,
-	Type,
-} from "@earendil-works/pi-ai";
+import type { AuthOperationOptions, Credential, CredentialInfo, CredentialStore } from "@earendil-works/pi-ai";
+import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 import { MAX_LABEL } from "./provider-accounts.ts";
 

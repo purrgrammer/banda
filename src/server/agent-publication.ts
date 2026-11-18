@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { link, lstat, open, readlink, rename, symlink } from "node:fs/promises";
 import { posix } from "node:path";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import { defineDoc, type Harness, type Tx } from "@earendil-works/pi-durable";
 import type { ExecutionEnv, FileInfo } from "@earendil-works/pi-durable/env";
 import { Accepted, type AcceptedFile, agentPath, MAX_AGENT_BYTES, shaOf } from "../core/agents.ts";

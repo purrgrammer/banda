@@ -25,7 +25,7 @@ import {
 import { Search } from "../../src/core/search.ts";
 import { searchService } from "../../src/core/search-service.ts";
 import { searchExtension } from "../../src/core/search-tools.ts";
-import { status } from "../../src/core/status.ts";
+import { stuck } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore, type TurnResult } from "../../src/core/turn.ts";
 import { revive } from "../../src/core/wait.ts";
@@ -150,7 +150,7 @@ const rows = search.rows();
 const fresh = new Search(join(home, `rebuilt-${process.pid}.db`));
 await fresh.memory(boxed, context);
 await fresh.messages(harness, context);
-const { parked } = await status(harness);
+const parked = await stuck(harness);
 // what the app would show: every chat's items, whole, and memory as the daemon reports it
 const transcripts: Item[][] = [];
 for (const row of await chats(harness)) {

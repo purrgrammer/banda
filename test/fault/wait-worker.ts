@@ -7,11 +7,12 @@
  */
 import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, Type } from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { type ConversationId, createRegistry, defineExtension, type TaskId } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { BlobStore } from "../../src/core/blobs.ts";
 import { type Gateway, OWNER } from "../../src/core/gateway.ts";
-import { openWaits, status } from "../../src/core/status.ts";
+import { openWaits, stuck } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore, type TurnResult } from "../../src/core/turn.ts";
 import { revive, WAIT, type WaitEnded } from "../../src/core/wait.ts";
@@ -81,7 +82,7 @@ const page = await (await harness.conversation(received.chat as ConversationId, 
 const results = page.items.filter((e) => e.kind === "pi.tool-result").map((e) => JSON.stringify(e.model?.[0] ?? null));
 const waits = page.items.filter((e) => e.kind === WAIT).map((e) => e.data as unknown as WaitEnded);
 const runs = readFileSync(join(home, "runs.jsonl"), { encoding: "utf8", flag: "a+" }).split("\n").filter(Boolean);
-const { parked } = await status(harness);
+const parked = await stuck(harness);
 console.log(
 	JSON.stringify({
 		outcome,

@@ -95,18 +95,24 @@ async function finish() {
 	if (!("turn" in received)) throw new Error("not admitted");
 	await run.harness.waitForTask(received.turn as TaskId, context);
 }
-try {
+// pi-durable 1.5 stores some commits after the call that made them returned (the Session's writer flushes them), so a
+// cut commit can fail the Session after `finish()` resolved; it shows at the Session's next use, and is recovered alike
+const settled = async () => {
 	await finish();
+	armed = false;
+	return run.harness.snapshot(Routes, context);
+};
+let routes: Awaited<ReturnType<typeof settled>>;
+try {
+	routes = await settled();
 } catch (error) {
 	if (!injected(error)) throw error;
 	await run.harness.close(context).catch(() => {});
 	armed = false;
 	run = await setup();
 	armed = true;
-	await finish();
+	routes = await settled();
 }
-armed = false;
-const routes = await run.harness.snapshot(Routes, context);
 const chat = Object.values(routes?.routes ?? {})[0]?.chat;
 if (chat === undefined) throw new Error("no chat after admission");
 const conversation = (await run.harness.conversation(chat as ConversationId, context))!;

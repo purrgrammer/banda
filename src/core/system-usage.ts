@@ -3,7 +3,7 @@
  * `usage` sums only the requests that reported numbers; the others are counted in `unreported`, so an unknown never
  * reads as zero.
  */
-import type { JsonRepresentation } from "@earendil-works/chord";
+import type { JsonRepresentation } from "@earendil-works/chord/json";
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import { defineDoc, type Harness } from "@earendil-works/pi-durable";
 import { context } from "./store.ts";

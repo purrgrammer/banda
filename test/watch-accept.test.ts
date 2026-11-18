@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import { createRegistry, type Harness } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
 import { openBox } from "../src/box/box.ts";

@@ -1,12 +1,5 @@
 import { join } from "node:path";
-import {
-	createModels,
-	fauxAssistantMessage,
-	fauxProvider,
-	fauxToolCall,
-	getCurrentTools,
-	Type,
-} from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, getCurrentTools } from "@earendil-works/pi-ai";
 import {
 	AgentDoc,
 	type ConversationId,
@@ -15,6 +8,7 @@ import {
 	type Storage,
 	type TaskId,
 } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { Accepted, agentPath, shaOf } from "../../src/core/agents.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
 import { OWNER } from "../../src/core/gateway.ts";

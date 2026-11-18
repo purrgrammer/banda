@@ -4,7 +4,6 @@ import {
 	fauxProvider,
 	fauxToolCall,
 	type Context as ModelContext,
-	Type,
 } from "@earendil-works/pi-ai";
 import {
 	type ConversationId,
@@ -15,6 +14,7 @@ import {
 	type JsonObject,
 	type TaskId,
 } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { type Inbound, type Origin, OWNER, type Received, routeKey } from "../src/core/gateway.ts";
 import { PROPOSAL_DECIDED } from "../src/core/proposals.ts";

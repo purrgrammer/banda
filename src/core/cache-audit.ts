@@ -2,7 +2,7 @@
  * Whether a home used the provider's prompt cache well, from what its store already holds: pure over rows, so the
  * reading of the store stays in `scripts/cache-audit.ts`. Aggregates only; message text never reaches it.
  */
-import type { JsonRepresentation } from "@earendil-works/chord";
+import type { JsonRepresentation } from "@earendil-works/chord/json";
 import type { Usage } from "@earendil-works/pi-ai";
 import type { Line, System, SystemUsageValue } from "./system-usage.ts";
 

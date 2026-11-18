@@ -5,7 +5,7 @@
  * stopped already finds it set; routines' due times missed meanwhile come together as one wake each after the resume. The
  * owner's own messages still run: they are the owner's decision.
  */
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Harness } from "@earendil-works/pi-durable";
 import { log } from "./activity.ts";
 import { agentWords, isArchived } from "./agents.ts";

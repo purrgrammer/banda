@@ -3,7 +3,7 @@
  * sends a message to someone (a permission binds the recipient; the owner may edit the text), and `pay` pays someone, on the
  * floor. Each run is told to `ran`, so a test sees what ran and with what.
  */
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { EffectTool } from "../../src/core/ask.ts";
 
 export type Ran = { readonly tool: string; readonly args: { readonly [key: string]: unknown } };

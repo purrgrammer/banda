@@ -1,6 +1,6 @@
 /** Shared retrieval for Cmd+K and agents. Only owner-visible sources enter the result audience. */
 import { createHash } from "node:crypto";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Harness } from "@earendil-works/pi-durable";
 import { acceptedAgent } from "./agents.ts";
 import { Artifacts } from "./artifacts.ts";

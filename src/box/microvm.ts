@@ -6,7 +6,7 @@ import { createServer, type Server, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Static, type TSchema, Type } from "@earendil-works/pi-ai";
+import { type Static, type TSchema, Type } from "typebox";
 import { Value } from "typebox/value";
 import type { BoxSetup } from "./box.ts";
 import type { BrowserPreparation } from "./browser-preparation.ts";

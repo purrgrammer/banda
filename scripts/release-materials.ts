@@ -5,7 +5,7 @@
  * through `verifyReleaseMaterials`.
  */
 import { createHash } from "node:crypto";
-import { type Static, Type } from "@earendil-works/pi-ai";
+import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 import { MICROVM_SOURCE } from "../src/box/microvm-assets.ts";
 

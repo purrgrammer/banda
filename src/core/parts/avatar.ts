@@ -1,6 +1,7 @@
 /** A generated face is a message part, not an identity change. Only the owner's card can apply it. */
-import { Type } from "@earendil-works/pi-ai";
+
 import { AssistantEntry, type JsonObject, type ToolTaskInput } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { validateAvatarCandidate } from "../../server/avatar-validation.ts";
 import { PROPOSE_AVATAR } from "../toolsets.ts";
 import type { MessagePart } from "./part.ts";

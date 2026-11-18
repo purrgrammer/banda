@@ -16,8 +16,7 @@
  * and made again and the watch goes on where it was.
  */
 import { createHash } from "node:crypto";
-import type { Context } from "@earendil-works/chord";
-import { Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
 import {
 	type ConversationId,
 	defineDoc,
@@ -29,6 +28,7 @@ import {
 	type ToolRegistration,
 	type Tx,
 } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { log } from "./activity.ts";
 import { Accepted, AGENT_NAME, agentWords, ChatAgent, frontmatter, isArchived, LEAD, shaOf } from "./agents.ts";
 import { toolWords } from "./ask.ts";

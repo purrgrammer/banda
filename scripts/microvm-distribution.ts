@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
-import { type Static, Type } from "@earendil-works/pi-ai";
+import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 import { MicrovmImages, MicrovmRuntimeBuild, type MicrovmTarget } from "../src/box/microvm-assets.ts";
 

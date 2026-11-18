@@ -9,7 +9,7 @@
 import { lstat, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join, relative, sep } from "node:path";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Harness } from "@earendil-works/pi-durable";
 import {
 	Accepted,

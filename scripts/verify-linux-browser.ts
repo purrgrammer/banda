@@ -5,7 +5,7 @@ import { chmod, lstat, mkdir, open, readFile, readlink, realpath, stat, truncate
 import { release } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { type Static, Type } from "@earendil-works/pi-ai";
+import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 
 const Observation = Type.Union([

@@ -8,11 +8,9 @@ import {
 	fauxAssistantMessage,
 	fauxProvider,
 	fauxToolCall,
-	type Static,
-	type TSchema,
-	Type,
 } from "@earendil-works/pi-ai";
 import { createRegistry } from "@earendil-works/pi-durable";
+import { type Static, type TSchema, Type } from "typebox";
 import { Value } from "typebox/value";
 import { expect, it } from "vitest";
 import { Connected } from "../src/core/connections.ts";

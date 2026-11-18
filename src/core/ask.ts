@@ -5,8 +5,7 @@
  * once the owner approved it. They find their messages and Waits by the tool task, so a rerun after a restart waits on
  * the same ones instead of sending or asking again.
  */
-import type { Context } from "@earendil-works/chord";
-import { type Static, type TSchema, Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
 import {
 	defineDoc,
 	defineTool,
@@ -17,6 +16,7 @@ import {
 	type ToolRegistration,
 	type Tx,
 } from "@earendil-works/pi-durable";
+import { type Static, type TSchema, Type } from "typebox";
 import { log } from "./activity.ts";
 import { publishedBy } from "./artifacts.ts";
 import { type Attachment, attachmentLine, type BlobStore, safeName, sizeOf, tooBig } from "./blobs.ts";
@@ -730,7 +730,8 @@ export function effect<P extends TSchema>(asking: Asking, tool: EffectTool<P>): 
 		replay: "safe",
 		// effects leave the box in the order the model wrote them, each checked against the permissions as it starts
 		executionMode: "sequential",
-		execute: async (called, api, ctx) => running(called, await api.memo("key", crypto.randomUUID(), ctx), api, ctx),
+		execute: async (called, api, ctx) =>
+			running(called as Static<P>, await api.memo("key", crypto.randomUUID(), ctx), api, ctx),
 	} as ToolRegistration<P>) as ToolRegistration;
 }
 

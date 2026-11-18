@@ -9,7 +9,7 @@ import { isAbsolute, join } from "node:path";
 import { Readable } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { type Static, Type } from "@earendil-works/pi-ai";
+import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 import { BrowserPreparation } from "../src/box/browser-preparation.ts";
 import { nativeComputerReply } from "../test/fixtures/native-computer-model.ts";

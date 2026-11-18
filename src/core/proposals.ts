@@ -1,6 +1,5 @@
 /** Owner-reviewed proposals agents may make about the band. Pending proposals are data, never definitions in effect. */
-import type { Context } from "@earendil-works/chord";
-import { type TSchema, Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
 import {
 	type ConversationId,
 	defineDoc,
@@ -10,6 +9,7 @@ import {
 	type ToolExecutionResult,
 	type ToolRegistration,
 } from "@earendil-works/pi-durable";
+import { type TSchema, Type } from "typebox";
 import type { Agent } from "./agents.ts";
 import { Accepted, AGENT_NAME, AgentChats, acceptedAgent, agentText, MAX_AGENT_BYTES, parseAgent } from "./agents.ts";
 import { type AvatarFace, defaultAvatarFace, readAvatarFace } from "./avatar-face.ts";

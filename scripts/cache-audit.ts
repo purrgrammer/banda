@@ -8,7 +8,7 @@ import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import type { JsonRepresentation } from "@earendil-works/chord";
+import type { JsonRepresentation } from "@earendil-works/chord/json";
 import { createModels, type Usage } from "@earendil-works/pi-ai";
 import { type ConversationId, createRegistry, type Harness, type Tx, UsageDoc } from "@earendil-works/pi-durable";
 import { type AuditRow, auditCache, CACHE_WINDOW, type CacheAudit } from "../src/core/cache-audit.ts";

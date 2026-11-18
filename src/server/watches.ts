@@ -4,7 +4,7 @@
  * and only the store's copy runs. The owner's own actions (following an object from its card, pausing a watch,
  * removing it, checking now) take effect at once.
  */
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Harness } from "@earendil-works/pi-durable";
 import { log } from "../core/activity.ts";
 import {

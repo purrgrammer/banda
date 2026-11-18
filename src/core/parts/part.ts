@@ -4,9 +4,9 @@
  * sent. One that `message_user` and `message_group` carry adds optional parameters to them and says what the model is
  * told of them; the other speaking tools (`react`, `publish`, …) give their own. `index.ts` lists them all.
  */
-import type { Context } from "@earendil-works/chord";
-import type { TSchema } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
 import type { JsonObject, ToolExecutionApi } from "@earendil-works/pi-durable";
+import type { TSchema } from "typebox";
 import type { BlobStore } from "../blobs.ts";
 
 /**

@@ -1,6 +1,5 @@
 /** Model usage from pi-durable's conversation ledgers and Banda's system ledger. */
-import type { Context } from "@earendil-works/chord";
-import { Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
 import {
 	type ConversationId,
 	type DocumentReader,
@@ -8,6 +7,7 @@ import {
 	defineTool,
 	UsageDoc,
 } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { AgentChats, LEAD } from "./agents.ts";
 import { backendOf } from "./provider-accounts.ts";
 import { RoutineRuns } from "./routines.ts";

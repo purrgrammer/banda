@@ -5,7 +5,7 @@
  * after the commit (`stopArchived`), and again at every start, so a crash between the two leaves nothing running.
  * Restoring is the same file saying `state: active`: its routines stay paused and its permissions stay gone.
  */
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { ConversationId, Harness, TaskId, Tx } from "@earendil-works/pi-durable";
 import { log } from "./activity.ts";
 import { Accepted, AgentChats, agentPath, agentWords, archivedFile } from "./agents.ts";
@@ -67,13 +67,13 @@ export async function stopArchived(harness: Harness, ctx: Context = context): Pr
 	}, ctx);
 	if (archived.size === 0) return;
 	const mine = new Set(chats);
-	const graph = await harness.taskGraph(ctx);
+	const graph = await harness.watchTaskGraph(ctx);
 	const nodes = Object.values(graph.value.tasks).filter(
 		(node) =>
 			((node.kind === "banda.admit" || node.kind === RELEASE) && mine.has(Number(node.conversationId))) ||
 			node.kind === "banda.group-turn",
 	);
-	graph.dispose();
+	await graph.stop();
 	for (const node of nodes) {
 		const task = await harness.getTask(node.id as TaskId, ctx);
 		if (task === undefined || task.state.status === "terminal") continue;

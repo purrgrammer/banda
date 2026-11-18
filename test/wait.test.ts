@@ -1,12 +1,5 @@
-import type { Context } from "@earendil-works/chord";
-import {
-	createModels,
-	fauxAssistantMessage,
-	fauxProvider,
-	fauxToolCall,
-	type Message,
-	Type,
-} from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, type Message } from "@earendil-works/pi-ai";
 import {
 	type ConversationId,
 	createRegistry,
@@ -14,6 +7,7 @@ import {
 	type Harness,
 	type JsonObject,
 } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { type Inbound, type Origin, OWNER, type Received } from "../src/core/gateway.ts";
 import { openWaits, status } from "../src/core/status.ts";
@@ -77,7 +71,7 @@ function setup() {
 		registry.install(
 			defineExtension({ name: "test", tools: [effect("deploy", "unsafe"), effect("publish", "idempotent")] }),
 		);
-		const harness = await openStore(home, { models, registry, now, onReport: (error) => reports.push(error) });
+		const harness = await openStore(home, { models, registry, now, onReport: (report) => reports.push(report) });
 		harness.resume();
 		return harness;
 	};

@@ -252,11 +252,11 @@ boxSuite(`git through the box's proxy (${realBox.kind})`, { timeout: 180_000 }, 
 	};
 	const done = async (turn: number) => {
 		if ((await harness.getTask(turn as TaskId, context))?.state.status !== "terminal") return false;
-		const graph = await harness.taskGraph(context);
+		const graph = await harness.watchTaskGraph(context);
 		try {
 			return !Object.values(graph.value.tasks).some((node) => node.kind === RELEASE || node.kind === "banda.turn");
 		} finally {
-			graph.dispose();
+			await graph.stop();
 		}
 	};
 	/** What the agent was woken with about the held requests of `chat`. */

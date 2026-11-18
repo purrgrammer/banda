@@ -20,7 +20,7 @@ function setup(gateway = new FakeGateway()) {
 	const open = async (home: string) => {
 		const registry = createRegistry();
 		registry.install(core.extension);
-		const harness = await openStore(home, { models, registry, onReport: (error) => reports.push(error) });
+		const harness = await openStore(home, { models, registry, onReport: (report) => reports.push(report) });
 		harness.resume();
 		return harness;
 	};

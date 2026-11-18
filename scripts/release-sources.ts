@@ -25,7 +25,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { parseArgs } from "node:util";
 import { createGunzip } from "node:zlib";
-import { type Static, type TSchema, Type } from "@earendil-works/pi-ai";
+import { type Static, type TSchema, Type } from "typebox";
 import { Value } from "typebox/value";
 import {
 	fileSha256,

@@ -6,7 +6,7 @@
  * the app opens in a chat.
  */
 import { createHash } from "node:crypto";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import {
 	AgentDoc,
 	type ConversationId,

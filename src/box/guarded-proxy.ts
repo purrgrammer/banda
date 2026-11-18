@@ -1,7 +1,7 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Static, type TSchema, Type } from "@earendil-works/pi-ai";
+import { type Static, type TSchema, Type } from "typebox";
 import { Value } from "typebox/value";
 import { setsCredential } from "../core/egress.ts";
 import type { BoxEgress, EgressConfig } from "./box.ts";

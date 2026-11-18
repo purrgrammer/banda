@@ -1,5 +1,5 @@
-import type { Context } from "@earendil-works/chord";
-import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall, Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import {
 	type ConversationId,
 	createRegistry,
@@ -8,6 +8,7 @@ import {
 	type TaskId,
 } from "@earendil-works/pi-durable";
 import fc from "fast-check";
+import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { ActivityLog } from "../src/core/activity.ts";
 import { AgentChats, LEAD } from "../src/core/agents.ts";

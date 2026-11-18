@@ -1,4 +1,4 @@
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Harness } from "@earendil-works/pi-durable";
 import { Accepted, acceptedAgent } from "../core/agents.ts";
 import type { BlobStore } from "../core/blobs.ts";

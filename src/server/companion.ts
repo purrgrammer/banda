@@ -3,7 +3,7 @@
  * are stored (`Companion`); the face and personality (the whole body, as any agent's) are read from the lead's
  * accepted file.
  */
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Harness } from "@earendil-works/pi-durable";
 import { Accepted, agentPath, LEAD, parseAgent } from "../core/agents.ts";
 import { type AvatarFace, readAvatarFace, writeAvatarFace } from "../core/avatar-face.ts";

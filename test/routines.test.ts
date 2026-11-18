@@ -480,7 +480,9 @@ describe("run now", () => {
 		expect(Number(run[0])).not.toBe(chat);
 		const row = async () => (await status(harness)).chats.find((each) => each.chat === chat);
 		await until(async () => (await row())?.state === "running");
-		expect(stateOf(Object.values((await harness.taskGraph(context)).value.tasks), chat)).toBe("idle");
+		const graph = await harness.watchTaskGraph(context);
+		expect(stateOf(Object.values(graph.value.tasks), chat)).toBe("idle");
+		await graph.stop();
 		release();
 		await until(() => gateway.sent.length === 1);
 		await until(async () => (await row())?.state === "idle");

@@ -4,7 +4,7 @@
  * showed them ("Allow this routine?"), and only the store's copy runs. The owner's own changes (removing a routine, pausing
  * one, when it runs, running it now) take effect at once.
  */
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Harness, TaskId, Tx } from "@earendil-works/pi-durable";
 import { ActivityLog, log } from "../core/activity.ts";
 import {

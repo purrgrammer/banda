@@ -8,7 +8,7 @@
  */
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { ConversationId, EntryId, Tx } from "@earendil-works/pi-durable";
 import { allFactsByFile, type Fact, type MemoryFiles, parseFacts } from "./memory.ts";
 import { isMessageTool, messageArgs } from "./toolsets.ts";

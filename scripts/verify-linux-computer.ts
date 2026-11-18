@@ -6,7 +6,7 @@ import { access, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { constants as osConstants } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { type Static, Type } from "@earendil-works/pi-ai";
+import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 import { MicrovmManifest } from "../src/box/microvm-assets.ts";
 import {

@@ -12,4 +12,6 @@ const [home, name, scheduleJson] = process.argv.slice(2) as [string, string, str
 const scenario = { ...SCENARIOS, ...SLACK_SCENARIOS }[name];
 if (scenario === undefined) throw new Error(`no watch scenario named ${name}`);
 const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
-console.log(JSON.stringify(await watchScenario(home, faults, scenario.options)));
+console.log(
+	JSON.stringify(await watchScenario(home, faults, { ...scenario.options, diagnose: true, retryAtOnce: true })),
+);

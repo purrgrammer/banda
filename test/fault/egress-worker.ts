@@ -35,7 +35,7 @@ import {
 import { type Gateway, OWNER } from "../../src/core/gateway.ts";
 import { Permissions } from "../../src/core/permissions.ts";
 import { RELEASE, RELEASED } from "../../src/core/release.ts";
-import { openWaits, status } from "../../src/core/status.ts";
+import { openWaits, stuck } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { defineCore, type TurnResult } from "../../src/core/turn.ts";
 import { revive, WAIT, type WaitEnded } from "../../src/core/wait.ts";
@@ -165,12 +165,12 @@ harness.resume();
 const web = { gateway: "web", peer: OWNER };
 /** How many releases and Turns are still live. */
 async function settledReleases(): Promise<number> {
-	const graph = await harness.taskGraph(context);
+	const graph = await harness.watchTaskGraph(context);
 	try {
 		return Object.values(graph.value.tasks).filter((node) => node.kind === RELEASE || node.kind === "banda.turn")
 			.length;
 	} finally {
-		graph.dispose();
+		await graph.stop();
 	}
 }
 
@@ -224,7 +224,7 @@ const sends = readFileSync(join(home, "sends.jsonl"), { encoding: "utf8", flag: 
 	.split("\n")
 	.filter(Boolean)
 	.map((line) => (JSON.parse(line) as HeldRequest).ticket);
-const { parked } = await status(harness);
+const parked = await stuck(harness);
 console.log(
 	JSON.stringify({
 		waits,

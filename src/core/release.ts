@@ -16,7 +16,7 @@
  * leaves its outcome for the last, and a release that stops going without ending (it asks, or is stopped) tells what was
  * left when no other is still to go.
  */
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import {
 	type ConversationId,
 	defineDoc,
