@@ -66,15 +66,31 @@ async function setup(allowed: readonly string[] = []) {
 	// a sign-out of nothing starts the tab without driving it
 	await browser.forget("nothing.example");
 	let n = 0;
+	/** The document standing in each frame, by frame id: its loader and address. */
+	const documents = new Map<string, { readonly loader: string; readonly url: string }>();
 	const request = async (
 		url: string,
 		over: { method?: string; type?: string; frame?: string; cookie?: boolean; redirectedFrom?: string } = {},
 	) => {
 		const id = `r${++n}`;
+		const frame = over.frame ?? "top";
+		const type = over.type ?? "Document";
+		// a request a document made names that document, as the renderer tells of it
+		const made = documents.get(frame);
+		if (type !== "Document" && made !== undefined)
+			cdp.emit("Network.requestWillBeSent", {
+				requestId: `n${n}`,
+				loaderId: made.loader,
+				documentURL: made.url,
+				frameId: frame,
+				type,
+				request: { url, method: over.method ?? "GET", headers: {} },
+			});
 		cdp.emit("Fetch.requestPaused", {
 			requestId: id,
-			resourceType: over.type ?? "Document",
-			frameId: over.frame ?? "top",
+			networkId: `n${n}`,
+			resourceType: type,
+			frameId: frame,
 			...(over.redirectedFrom === undefined ? {} : { redirectedRequestId: over.redirectedFrom }),
 			request: {
 				method: over.method ?? "GET",
@@ -84,8 +100,13 @@ async function setup(allowed: readonly string[] = []) {
 		});
 		return { id, done: await cdp.answered(id) };
 	};
-	const page = (url: string, frame = "top") =>
-		cdp.emit("Page.frameNavigated", { frame: { id: frame, url, ...(frame === "top" ? {} : { parentId: "top" }) } });
+	const page = (url: string, frame = "top") => {
+		const loader = `L${++n}`;
+		documents.set(frame, { loader, url });
+		cdp.emit("Page.frameNavigated", {
+			frame: { id: frame, loaderId: loader, url, ...(frame === "top" ? {} : { parentId: "top" }) },
+		});
+	};
 	return { cdp, browser, request, page };
 }
 
@@ -149,6 +170,7 @@ describe("a site the owner signed in to, at the browser", () => {
 		expect(opened.done.params).not.toHaveProperty("headers");
 		s.page(`https://${SIGNED}/`);
 		const own = await s.request(`https://${SIGNED}/api`, { type: "XHR" });
+		expect(own.done.method).toBe("Fetch.continueRequest");
 		expect(own.done.params).not.toHaveProperty("headers");
 		expect(own.done.params).not.toHaveProperty("interceptResponse");
 		const elsewhere = await s.request("https://cdn.example/app.js", { type: "Script" });
