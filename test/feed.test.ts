@@ -353,3 +353,50 @@ describe("a routine's events", () => {
 		expect(shownOf([wake(1)], { busy: true, running: [], thinking: true })).toEqual([["working", "Thinking…"]]);
 	});
 });
+
+describe("reading the web", () => {
+	const fetched = (id: number, call: string, url: string) => called(id, call, "web_fetch", { url });
+	const read = (id: number, call: string, error = false) =>
+		answered(id, call, "web_fetch", { error, text: error ? "https://b.example/ answered HTTP 503." : "Read it." });
+	const shownOf = (items: Item[], live = IDLE) =>
+		view(items, [], live).map((segment) => [segment.kind, "text" in segment ? segment.text : ""]);
+
+	it("draws no row for the pages read, however many, and keeps the answer with its links (#145)", () => {
+		const items: Item[] = [
+			{ id: 1, role: "user", text: "When is the next eclipse?" },
+			fetched(2, "a", "https://a.example/eclipses"),
+			read(3, "a"),
+			fetched(4, "b", "https://b.example/down"),
+			read(5, "b", true),
+			fetched(6, "c", "https://c.example/2027"),
+			read(7, "c"),
+			called(8, "say", "message_user", {
+				text: "On 2 August 2027, per [a.example](https://a.example/eclipses) and [c.example](https://c.example/2027).",
+			}),
+			answered(9, "say", "message_user"),
+			{ id: 10, role: "user", text: "And the one after?" },
+			fetched(11, "d", "https://d.example/2028"),
+			read(12, "d"),
+			{ id: 13, role: "assistant", text: "", error: "overloaded" },
+		];
+		expect(shownOf(items)).toEqual([
+			["owner-message", "When is the next eclipse?"],
+			[
+				"companion",
+				"On 2 August 2027, per [a.example](https://a.example/eclipses) and [c.example](https://c.example/2027).",
+			],
+			["owner-message", "And the one after?"],
+			// a reply that failed still says so: only the reads' own rows are gone
+			["notice", "Couldn't get a reply: the model provider is busy or out of quota. Try again in a moment."],
+		]);
+	});
+
+	it("a read in progress is the working line's, never a row", () => {
+		const items: Item[] = [{ id: 1, role: "user", text: "Look it up" }, fetched(2, "a", "https://a.example/")];
+		const live: Live = { busy: true, running: [{ call: "a", doing: "reading a.example" }], thinking: false };
+		expect(shownOf(items, live)).toEqual([
+			["owner-message", "Look it up"],
+			["working", "Reading a.example…"],
+		]);
+	});
+});

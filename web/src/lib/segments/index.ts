@@ -11,7 +11,6 @@ import { refusals } from "./refusals.ts";
 import { routines } from "./routines.ts";
 import type { Segmenter } from "./types.ts";
 import { watches } from "./watches.ts";
-import { web } from "./web.ts";
 
 export const SEGMENTERS: readonly Segmenter[] = [
 	refusals,
@@ -23,7 +22,6 @@ export const SEGMENTERS: readonly Segmenter[] = [
 	connect,
 	harness,
 	browser,
-	web,
 	memory,
 	changes,
 ];

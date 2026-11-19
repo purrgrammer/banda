@@ -946,8 +946,6 @@ function partOf(
 			);
 		case "browsed":
 			return <Browsed pages={segment.pages} />;
-		case "read":
-			return <Browsed verb="Read" pages={segment.pages} />;
 		case "refusal":
 			return (
 				<Line icon={CircleAlertIcon} tone="danger">

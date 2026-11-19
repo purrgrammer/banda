@@ -390,20 +390,6 @@ export function Parts() {
 							]}
 						/>
 					</Group>
-					<Group label="Reading the web: the pages a stretch of reads read, the same quiet line">
-						<Browsed verb="Read" pages={["https://docs.python.org/3/library/asyncio.html"]} />
-						<Browsed
-							verb="Read"
-							pages={["https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/text-overflow"]}
-						/>
-						<Browsed
-							verb="Read"
-							pages={[
-								"https://www.visitportugal.com/en/content/lisbon-card",
-								"https://en.wikipedia.org/wiki/Lisbon_Metro",
-							]}
-						/>
-					</Group>
 					<QuestionCard
 						question="Which flight should I book?"
 						choices={["TP 1351 at 9:15", "IB 3105 at 11:05", "Neither"]}
