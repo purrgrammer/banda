@@ -315,7 +315,7 @@ export function itemOf(entry: EntryRecord): Item | undefined {
 	// a held request's end wakes its agent; its approval's card and the activity already say how it ended
 	if (entry.kind === RELEASED) return undefined;
 	if (entry.kind === AGENT_MESSAGE) {
-		const data = entry.data as { from?: unknown; text?: unknown; at?: unknown } | undefined;
+		const data = entry.data as { from?: unknown; text?: unknown; at?: unknown; call?: unknown } | undefined;
 		if (typeof data?.from !== "string" || typeof data.text !== "string") return undefined;
 		return {
 			id,
@@ -323,6 +323,7 @@ export function itemOf(entry: EntryRecord): Item | undefined {
 			from: data.from,
 			text: data.text,
 			...(typeof data.at === "number" ? { at: data.at } : {}),
+			...(typeof data.call === "string" ? { call: data.call } : {}),
 		};
 	}
 	if (entry.kind === "banda.notice") {

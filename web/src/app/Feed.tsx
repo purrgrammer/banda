@@ -56,11 +56,12 @@ import { RunLine } from "./RunLine.tsx";
 import { AskRef, approvalKind, didNotWords, didWords, sawFold, sawOpen, wasOpen } from "./Settled.tsx";
 import { approvalState, notDoneKind, questionState } from "./settled-states.ts";
 import { routineTitle } from "./titles.ts";
+import { hrefOf } from "./where.ts";
 
-const day = (at: number) => new Date(at).toDateString();
-const time = (at: number | undefined) =>
+export const day = (at: number) => new Date(at).toDateString();
+export const time = (at: number | undefined) =>
 	at === undefined ? undefined : new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-const dayLabel = (at: number) => {
+export const dayLabel = (at: number) => {
 	const now = new Date();
 	if (day(at) === now.toDateString()) return "Today";
 	if (day(at) === new Date(now.getTime() - 86_400_000).toDateString()) return "Yesterday";
@@ -867,8 +868,27 @@ function partOf(
 		case "proposal":
 			return <ProposalFeedCard segment={segment} />;
 		case "agentMessage":
-			return messageAuthor === undefined ? null : (
-				<AgentMessage author={messageAuthor(segment.from)} text={segment.text} time={time(segment.at)} />
+			return messageAuthor === undefined || agent === undefined ? null : (
+				<AgentMessage
+					other={messageAuthor(segment.from)}
+					direction="in"
+					href={hrefOf({
+						name: "exchange",
+						a: agent,
+						b: segment.from,
+						...(segment.call === undefined ? {} : { call: segment.call }),
+					})}
+					time={time(segment.at)}
+				/>
+			);
+		case "messaged":
+			return messageAuthor === undefined || agent === undefined ? null : (
+				<AgentMessage
+					other={messageAuthor(segment.to)}
+					direction="out"
+					href={hrefOf({ name: "exchange", a: agent, b: segment.to, call: segment.call })}
+					time={time(segment.at)}
+				/>
 			);
 		case "wake":
 			// a line in a run's own conversation opens nothing further: a run holds no runs

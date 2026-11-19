@@ -27,6 +27,7 @@ export type * from "./api/backups.ts";
 export type * from "./api/band.ts";
 export type * from "./api/custom-providers.ts";
 export type * from "./api/devices.ts";
+export type * from "./api/exchanges.ts";
 export type * from "./api/groups.ts";
 export type * from "./api/harnesses.ts";
 export type * from "./api/permissions.ts";
@@ -256,6 +257,8 @@ export type Item =
 			readonly from: string;
 			readonly text: string;
 			readonly at?: number;
+			/** The sender's tool call that sent it: the exchange between the two opens at it. */
+			readonly call?: string;
 	  }
 	/** A routine woke its agent: which, what it is for, and whether the owner ran it now. */
 	| {

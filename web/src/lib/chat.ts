@@ -7,7 +7,7 @@
  * Pure, so it is unit-tested beside the server's tests; it imports types alone.
  */
 import type { TroubleData } from "../../../src/core/routines.ts";
-import { isOwnerMessage, messageArgs, PROPOSE_AVATAR } from "../../../src/core/toolsets.ts";
+import { isOwnerMessage, MESSAGE_AGENT, messageArgs, PROPOSE_AVATAR } from "../../../src/core/toolsets.ts";
 import type { WatchTroubleData } from "../../../src/core/watches.ts";
 import type { Answer, Ask, Item, PermissionScope, Queued, RunningTool, ShownWait } from "../../../src/server/api.ts";
 import { routineTitle } from "../app/titles.ts";
@@ -134,6 +134,17 @@ type CoreSegment =
 			readonly key: string;
 			readonly from: string;
 			readonly text: string;
+			readonly at?: number;
+			/** The sender's call that sent it: the exchange between the two opens at it. */
+			readonly call?: string;
+	  }
+	/** A message this chat's agent sent another agent (`message_agent`), as a feed line: the exchange opens at it. */
+	| {
+			readonly kind: "messaged";
+			readonly key: string;
+			readonly to: string;
+			readonly text: string;
+			readonly call: string;
 			readonly at?: number;
 	  }
 	/**
@@ -478,6 +489,21 @@ export function view(
 				const key = `${item.id}:${made.id}`;
 				// every speaking tool's call reads as one message's parts
 				const call = isOwnerMessage(made.name) ? { ...made, args: messageArgs(made.name, made.args) } : made;
+				if (call.name === MESSAGE_AGENT) {
+					// refused by the daemon (no such agent, a group chat…): nothing reached anyone; the agent was told why
+					const to = (call.args as { agent?: unknown }).agent;
+					const text = (call.args as { text?: unknown }).text;
+					if (results.get(call.id)?.error !== true && typeof to === "string" && typeof text === "string")
+						segments.push({
+							kind: "messaged",
+							key,
+							to,
+							text,
+							call: call.id,
+							...(item.at === undefined ? {} : { at: item.at }),
+						});
+					continue;
+				}
 				if (!isOwnerMessage(call.name)) {
 					const at = { ...withResult(results.get(call.id)), asks: () => asks(key, call.id), context };
 					let own: Segment[] | undefined;
@@ -594,6 +620,7 @@ export function view(
 				from: item.from,
 				text: item.text,
 				...(item.at === undefined ? {} : { at: item.at }),
+				...(item.call === undefined ? {} : { call: item.call }),
 			});
 		else if (item.role === "notice")
 			segments.push({
@@ -829,6 +856,8 @@ export function shown(segment: Segment): string[] {
 			];
 		case "agentMessage":
 			return [segment.from, segment.text];
+		case "messaged":
+			return [segment.to, segment.text];
 		case "notice":
 		case "wake":
 		case "working":
@@ -848,6 +877,7 @@ const CORE_KINDS: ReadonlySet<string> = new Set<CoreSegment["kind"]>([
 	"effect",
 	"proposal",
 	"agentMessage",
+	"messaged",
 	"wake",
 	"watch",
 	"working",

@@ -18,6 +18,7 @@ import type {
 	ChatPrompt,
 	CompanionView,
 	ControlView,
+	ExchangeView,
 	FilePreview,
 	Item,
 	LiveEvent,
@@ -344,6 +345,12 @@ export const actOnFact = (act: FactAct) =>
 		: act.action === "edit"
 			? api<MemoryView>(`/memory/${act.id}`, { method: "PUT", body: JSON.stringify({ text: act.text }) })
 			: api<MemoryView>(`/memory/${act.id}`, { method: "DELETE" });
+
+/** What agents `a` and `b` said to each other: the newest page, or the one before cursor `before`. */
+export const exchange = (a: string, b: string, before?: string) =>
+	api<ExchangeView>(
+		`/exchanges/${encodeURIComponent(a)}/${encodeURIComponent(b)}${before === undefined ? "" : `?before=${encodeURIComponent(before)}`}`,
+	);
 
 /** One item of a chat's transcript: the message a fact came from. */
 export const transcriptItem = (chat: number, item: number) => api<Item>(`/chats/${chat}/items/${item}`);

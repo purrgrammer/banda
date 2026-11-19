@@ -74,7 +74,7 @@ beforeAll(async () => {
 					function App(){const [state,setState]=React.useState('pending'); const [sent,setSent]=React.useState(''); const [groupSent,setGroupSent]=React.useState('');
 					return <main style={{padding:16,maxWidth:700,margin:'auto'}}><ProposalCard proposal={proposal} state={state}
 					 onAct={async action=>{const next=action==='accept'?'accepted':'declined';setState(next);return next;}} />
-					 <section id="agent-message"><AgentMessage author={{...agent,id:'reader'}} text="The details of the message are here." time="10:24" /></section>
+					 <section id="agent-message"><AgentMessage other={{...agent,id:'reader'}} direction="in" href="#/x/mara/reader?call=c1" time="10:24" /><AgentMessage other={{...agent,id:'reader'}} direction="out" href="#/x/mara/reader?call=c2" time="10:25" /></section>
 					 <section id="direct"><h2>Direct chat</h2><Composer to="Mara" mentionables={[agent]} onSend={async text=>setSent(text)} /></section>
 					 <p id="sent">{sent}</p><section id="group"><h2>Group chat</h2><Composer to="Research" group mentionables={[agent]} onSend={async text=>setGroupSent(text)} /></section>
 					 <p id="group-sent">{groupSent}</p></main>}; createRoot(document.getElementById('root')).render(<App/>);`;
@@ -130,28 +130,20 @@ for (const width of [320, 390, 1440]) {
 			expect(proposalActions).toContain("Cancel");
 			expect(proposalActions).toContain("Create agent");
 			expect(proposalActions).not.toContain("Keep as is");
-			const collapsed = await page.run(`(() => { const row=document.querySelector('#agent-message');
-				return row.querySelector('button[aria-expanded="false"]') !== null && !row.innerText.includes('details of the message'); })()`);
-			expect(collapsed).toBe(true);
-			expect(await page.run(`document.querySelector('#agent-message a').getAttribute('href')`)).toBe("#/a/reader");
-			await page.run(`document.querySelector('#agent-message button[aria-expanded]').click()`);
-			await page.until(`document.querySelector('#agent-message button[aria-expanded="true"]')`);
-			expect(await page.run(`document.querySelector('#agent-message').innerText`)).toContain("details of the message");
+			// each line is one link to the exchange at its message, in words that say which way it went
 			expect(
 				await page.run(
-					`getComputedStyle(document.querySelector('#agent-message [aria-label^="Hide message"]')).textAlign`,
+					`[...document.querySelectorAll('#agent-message a')].map(a => [a.getAttribute('href'), a.dataset.agentMessage, a.innerText.replace(/\\s+/g, ' ').trim()])`,
 				),
-			).toBe("center");
-			const centeredOpen =
-				await page.run(`(() => { const root=document.querySelector('#agent-message').firstElementChild;
+			).toEqual([
+				["#/x/mara/reader?call=c1", "in", "Reader sent a message"],
+				["#/x/mara/reader?call=c2", "out", "Messaged Reader"],
+			]);
+			expect(await page.run(`document.querySelector('#agent-message').innerText`)).toContain("10:24");
+			const centred = await page.run(`(() => { const root=document.querySelector('#agent-message').firstElementChild;
 				const item=root.firstElementChild.getBoundingClientRect(); const line=root.getBoundingClientRect();
 				return Math.abs((item.left+item.right-line.left-line.right)/2) < 2; })()`);
-			expect(centeredOpen).toBe(true);
-			await page.run(`document.querySelector('#agent-message button[aria-label="Hide message from Reader"]').click()`);
-			await page.until(`document.querySelector('#agent-message button[aria-expanded="false"]')`);
-			expect(await page.run(`document.querySelector('#agent-message').innerText`)).not.toContain(
-				"details of the message",
-			);
+			expect(centred).toBe(true);
 			const overflow = await page.run(`document.documentElement.scrollWidth > innerWidth`);
 			expect(overflow).toBe(false);
 			await page.run(`(() => { const field=document.querySelector('#direct textarea[name="message"]');
