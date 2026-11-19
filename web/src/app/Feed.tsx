@@ -299,18 +299,16 @@ function RoutineLine({
 						? {}
 						: { schedule: shown.schedule, ...(shown.zone === undefined ? {} : { zone: shown.zone }) }),
 				}}
-				// a refusal (a time that has passed by the time it arrives, a version changed since) says why, and the card
-				// keeps the owner's edit to correct
+				// a refusal (a time that has passed by the time it arrives, a version changed since, a routine gone since) is
+				// said on the card, which keeps its buttons and the owner's edit to correct
 				onAllow={(edit) =>
-					void attempt(change.kind === "removed" ? "stop it" : "set it up", () =>
-						actOnRoutine(id, {
-							action: "accept",
-							sha: change.kind === "removed" ? null : (change.sha ?? null),
-							...edit,
-						}).then(showControl),
-					)
+					actOnRoutine(id, {
+						action: "accept",
+						sha: change.kind === "removed" ? null : (change.sha ?? null),
+						...edit,
+					}).then(showControl)
 				}
-				onDecline={() => void attempt("decline it", () => actOnRoutine(id, { action: "decline" }).then(showControl))}
+				onDecline={() => actOnRoutine(id, { action: "decline" }).then(showControl)}
 			/>
 		);
 	}

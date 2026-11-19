@@ -667,8 +667,11 @@ gives it, the open asks it covers, and an ask a permission covers by the time it
   routine in the shared `routines/` belongs to the agent the store recorded for it, else the lead. Its id,
   `<agent>/<name>` or a shared one's `<name>`, names it everywhere: the store, its task, its wakes, its card, the API,
   its history. Two agents' routines of one name, and a shared one of it, are separate routines; nothing resolves a
-  bare name to whichever exists. Writing the same name again changes the writer's own. A shared routine is never moved
-  into an agent's folder by guessing whose it is.
+  bare name to whichever exists: an action names its routine by id in its path and again in its body, and a bare name
+  without that is an older app's, refused with what to do (the daemon decides from the request, never from anything
+  the app would have to read). An action on a routine that is nowhere is an error, never a quiet success. Writing the
+  same name again changes the writer's own. A shared routine is never moved into an agent's folder by guessing whose
+  it is.
 - **A routine's card says what runs.** Whoever wrote the file, the card says who asks (the chat's agent) and whom it
   runs as (its folder's agent, or a shared one's), and whether it is that agent's own or shared; allowing it allows
   exactly that. Writing into another agent's folder is a request like any other change of a "before" file, the

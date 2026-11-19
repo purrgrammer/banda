@@ -235,6 +235,34 @@ const identified = (id: string) => {
 };
 
 /**
+ * The routine a request acts on: `id` as its path names it, and `named`, the id its body gives. An app of this build
+ * names the routine in both, and they agree. A bare name in the path with no id in the body is how an app built when a
+ * routine's id was its name alone asks (before agents had folders): it may mean the shared routine of that name or an
+ * agent's own, and both may exist, so it is refused and told to update, never resolved to whichever exists
+ * (DESIGN.md "Routines"). `<agent>/<name>` is a form only an app of this build sends, so it stands on its own.
+ */
+export function requested(id: string, named: unknown): string {
+	identified(id);
+	if (named !== undefined) {
+		if (named !== id) throw new BadRequest(`id names the routine as the path does, ${id}`);
+		return id;
+	}
+	if (routineRef(id)?.agent !== undefined) return id;
+	throw new BadRequest(
+		`this app names a routine by its name alone, ${id}, which may be a shared routine or an agent's own: update the app, then try again`,
+	);
+}
+
+/** Whether routine `id` is anywhere: a version in effect in the store, or a file in the box. */
+async function exists(harness: Harness, workspace: Workspace, id: string, ctx: Context): Promise<boolean> {
+	if ((await harness.snapshot(Accepted, ctx))?.files[routinePath(id)] !== undefined) return true;
+	return (await routineFile(workspace, id, ctx)) !== undefined;
+}
+
+/** Refused, 404: routine `id` is in neither the store nor the box, so nothing is done to anything. */
+const none = (id: string) => new BadRequest(`there is no routine ${id}: it is gone from the box and the store`, 404);
+
+/**
  * Allow the box's change to routine `id`, as the owner saw it: `sha` is the hash of the text shown, or null for a
  * removal. A file changed since is refused, as is one that does not parse. Its task follows at once.
  *
@@ -256,6 +284,8 @@ export async function accept(
 	told?: (tx: Tx, agent: string, fields: readonly string[]) => Promise<void>,
 ): Promise<void> {
 	const box = await routineFile(workspace, identified(id), ctx);
+	// nothing anywhere is no stale card: there is no routine to allow a change of
+	if (box === undefined && !(await exists(harness, workspace, id, ctx))) throw none(id);
 	if (sha === null) {
 		if (Object.keys(change).length > 0) throw new BadRequest("a removal has nothing to edit");
 		if (box !== undefined) throw new BadRequest(`${routinePath(id)} is back in the box: look again`, 409);
@@ -336,17 +366,24 @@ function editedText(
 	return fields.length === 0 ? { text, fields } : { text: next, fields };
 }
 
-/** Decline the box's change to routine `id`: the accepted file is written back, or a new one removed. */
+/**
+ * Decline the box's change to routine `id`: the accepted file is written back, or a new one removed. A routine that is
+ * in neither the store nor the box is refused (404): a decline that removes nothing resolved nothing.
+ */
 export async function decline(harness: Harness, workspace: Workspace, id: string, ctx: Context = context) {
 	const file = (await harness.snapshot(Accepted, ctx))?.files[routinePath(identified(id))];
 	const env = workspace.env();
 	const path = `${workspace.root}/${routinePath(id)}`;
 	if (file !== undefined) return write(env, workspace, path, file.text, ctx);
+	if ((await routineFile(workspace, id, ctx)) === undefined) throw none(id);
 	const removed = await env.remove(path, { force: true }, ctx);
 	if (!removed.ok) throw removed.error;
 }
 
-/** Remove routine `id`, as the owner: its file goes from the box and the store, and it never runs again. */
+/**
+ * Remove routine `id`, as the owner: its file goes from the box and the store, and it never runs again. One that is in
+ * neither is refused (404): nothing was removed.
+ */
 export async function remove(
 	harness: Harness,
 	workspace: Workspace,
@@ -355,9 +392,8 @@ export async function remove(
 	now: number,
 	ctx: Context = context,
 ): Promise<void> {
-	const removed = await workspace
-		.env()
-		.remove(`${workspace.root}/${routinePath(identified(id))}`, { force: true }, ctx);
+	if (!(await exists(harness, workspace, identified(id), ctx))) throw none(id);
+	const removed = await workspace.env().remove(`${workspace.root}/${routinePath(id)}`, { force: true }, ctx);
 	if (!removed.ok) throw removed.error;
 	await harness.commit(async (tx) => {
 		const files = (await tx.doc(Accepted)).files;

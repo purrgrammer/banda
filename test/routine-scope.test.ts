@@ -224,8 +224,10 @@ describe("two agents' routines of one name", () => {
 			expect(mine(paused, "curro")).toMatchObject({ state: "paused" });
 			expect(mine(paused, "sancho")).toMatchObject({ state: "active" });
 			expect(mine(paused, "sancho")?.next).toBeDefined();
-			// the bare name names only a shared routine, and there is none
-			await expect(post(`/routines/${NAME}/run`, { key: "bare" })).rejects.toThrow(/404/);
+			// the bare name alone is an older app's, which may mean either: refused, told to update, never guessed
+			await expect(post(`/routines/${NAME}/run`, { key: "bare" })).rejects.toThrow(/400.*update the app/);
+			// named again in the body, it names only a shared routine, and there is none
+			await expect(post(`/routines/${NAME}/run`, { key: "bare", id: NAME })).rejects.toThrow(/404/);
 		} finally {
 			await started.close();
 		}
@@ -251,7 +253,7 @@ describe("two agents' routines of one name", () => {
 			await writeFile(shared, sharedText);
 			const waiting = await until(async () => (await routines()).find((each) => each.id === NAME && each.change));
 			expect(waiting).toMatchObject({ shared: true, agent: "sancho", name: NAME });
-			await post(`/routines/${NAME}/accept`, { sha: pendingSha(waiting) });
+			await post(`/routines/${NAME}/accept`, { sha: pendingSha(waiting), id: NAME });
 
 			await say("curro schedules", "agent:curro");
 			const first = await until(async () =>
@@ -305,7 +307,7 @@ describe("an agent's own routine beside a shared one that wakes it too", () => {
 				"---\ndescription: Old\nevery: 1d\n---\nOLD.\n",
 			);
 			const shared = await until(async () => (await routines()).find((each) => each.id === NAME && each.change));
-			await post(`/routines/${NAME}/accept`, { sha: pendingSha(shared) });
+			await post(`/routines/${NAME}/accept`, { sha: pendingSha(shared), id: NAME });
 			await say("sancho schedules", "agent:sancho");
 			const own = await until(async () =>
 				(await routines()).find((each) => each.id === `sancho/${NAME}` && each.change),
@@ -389,8 +391,9 @@ describe("a routine's folders are folders", () => {
 			await symlink(join(agents, "curro"), join(agents, "sancho"));
 			expect(await ids()).toEqual(["curro/probe"]);
 			const reconcile = async () => {};
+			// a file reached through a link is nowhere: there is no such routine to allow
 			await expect(accept(harness, workspace, reconcile, "sancho/probe", shaOf(text), Date.now())).rejects.toThrow(
-				/changed since you saw it/,
+				/there is no routine sancho\/probe/,
 			);
 			// the agents folder itself a link: no agent's routine is read through it
 			const elsewhere = join(home, "elsewhere");
@@ -398,7 +401,7 @@ describe("a routine's folders are folders", () => {
 			await symlink(elsewhere, agents);
 			expect(await ids()).toEqual([]);
 			await expect(accept(harness, workspace, reconcile, "curro/probe", shaOf(text), Date.now())).rejects.toThrow(
-				/changed since you saw it/,
+				/there is no routine curro\/probe/,
 			);
 			expect(
 				Object.keys((await harness.snapshot(Accepted, context))?.files ?? {}).filter((path) =>
@@ -594,4 +597,98 @@ describe("a home made before agents had folders", () => {
 		]);
 		await harness.close(context);
 	});
+});
+
+describe("an app built when a routine's id was its name alone", () => {
+	it("is refused on a bare name, told to update, and nothing moves; an app of this build names the routine twice", async () => {
+		const {
+			home,
+			daemon: started,
+			post,
+			say,
+			routines,
+		} = await daemon({
+			"curro schedules": plan("Curro", "30 9 * * *"),
+		});
+		try {
+			const workspace = join(home, "workspace");
+			// a shared routine of the name, and Curro's own: two routines, both waiting for the owner
+			await mkdir(join(workspace, "routines"), { recursive: true });
+			const sharedText = "---\ndescription: Shared summary\nevery: 1d\n---\nSHARED ASK.\n";
+			await writeFile(join(workspace, "routines", `${NAME}.md`), sharedText);
+			await say("curro schedules", "agent:curro");
+			const both = await until(async () => {
+				const all = (await routines()).filter((each) => each.name === NAME && each.change !== undefined);
+				return all.length === 2 ? all : undefined;
+			});
+			const own = both.find((each) => each.id === `curro/${NAME}`);
+			const ownPath = join(workspace, "agents", "curro", "routines", `${NAME}.md`);
+			const ownText = await readFile(ownPath, "utf8");
+			const sharedPath = join(workspace, "routines", `${NAME}.md`);
+			const unchanged = async () => {
+				expect(await readFile(ownPath, "utf8")).toBe(ownText);
+				expect(await readFile(sharedPath, "utf8")).toBe(sharedText);
+				const views = (await routines()).filter((each) => each.name === NAME);
+				expect(views.map((each) => [each.id, each.state, each.accepted === undefined])).toEqual([
+					[`curro/${NAME}`, "allow", true],
+					[NAME, "allow", true],
+				]);
+			};
+			// the older app means Curro's card, but says only the name, which is also the shared one's id: every action
+			// is refused with what to do, and neither routine is touched, declined or removed
+			const legacy = [
+				["accept", { sha: pendingSha(own) }],
+				["decline", {}],
+				["remove", {}],
+				["pause", {}],
+				["resume", {}],
+				["run", { key: "legacy-click" }],
+				["when", { when: "every 3h", sha: pendingSha(own) }],
+				["edit", { ask: "Other.", sha: pendingSha(own) }],
+			] as const;
+			for (const [action, body] of legacy) {
+				await expect(post(`/routines/${NAME}/${action}`, body), action).rejects.toThrow(
+					/400.*names a routine by its name alone.*update the app/,
+				);
+			}
+			await unchanged();
+			// a body that names another routine than the path, or no routine, is refused too
+			await expect(post(`/routines/${NAME}/decline`, { id: `curro/${NAME}` })).rejects.toThrow(/400.*as the path does/);
+			await expect(post(`/routines/curro/${NAME}/decline`, { id: NAME })).rejects.toThrow(/400.*as the path does/);
+			await expect(post(`/routines/${NAME}/decline`, { id: 7 })).rejects.toThrow(/400.*id is the routine's id/);
+			await expect(post(`/routines/${NAME}/accept`, { sha: pendingSha(own), id: NAME, name: NAME })).rejects.toThrow(
+				/400.*name cannot be edited/,
+			);
+			await unchanged();
+
+			// this build names the shared one twice: declined, its file alone goes; Curro's is byte for byte as it was
+			await post(`/routines/${NAME}/decline`, { id: NAME });
+			expect(existsSync(sharedPath)).toBe(false);
+			expect(await readFile(ownPath, "utf8")).toBe(ownText);
+			expect((await routines()).filter((each) => each.name === NAME).map((each) => each.id)).toEqual([`curro/${NAME}`]);
+			// declined again, there is nothing to decline: an error, never a quiet success
+			await expect(post(`/routines/${NAME}/decline`, { id: NAME })).rejects.toThrow(/404.*there is no routine/);
+			await expect(post(`/routines/${NAME}/remove`, { id: NAME })).rejects.toThrow(/404.*there is no routine/);
+			await expect(post(`/routines/${NAME}/accept`, { sha: pendingSha(own), id: NAME })).rejects.toThrow(
+				/404.*there is no routine/,
+			);
+			// Curro's, in the form only this build sends, with the body naming it or not: allowed, and in effect
+			const allowed = await post<ControlView>(`/routines/curro/${NAME}/accept`, {
+				sha: pendingSha(own),
+				id: `curro/${NAME}`,
+			});
+			expect(allowed.routines.find((each) => each.id === `curro/${NAME}`)).toMatchObject({ state: "active" });
+			const paused = await post<ControlView>(`/routines/curro/${NAME}/pause`);
+			expect(paused.routines.find((each) => each.id === `curro/${NAME}`)).toMatchObject({ state: "paused" });
+			// a well-formed id naming nothing: 404, never "changed since you saw it"
+			await expect(post("/routines/curro/nope/accept", { sha: "0".repeat(64) })).rejects.toThrow(
+				/404.*there is no routine curro\/nope/,
+			);
+			await expect(post("/routines/curro/nope/decline")).rejects.toThrow(/404/);
+			await expect(post("/routines/curro/nope/remove")).rejects.toThrow(/404/);
+			expect(existsSync(join(workspace, "agents", "curro", "routines", "nope.md"))).toBe(false);
+		} finally {
+			await started.close();
+		}
+	}, 90_000);
 });
