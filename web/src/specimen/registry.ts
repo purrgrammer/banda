@@ -240,7 +240,7 @@ export const SECTIONS: readonly Entry[] = [
 		title: "Agent-to-agent tools in a chat",
 		group: "screens",
 		status: "app",
-		sources: ["web/src/chat/Proposal.tsx", LINE],
+		sources: ["web/src/chat/BandChange.tsx", "web/src/chat/Proposal.tsx", LINE],
 	},
 	{ id: "rows", title: "Rows", group: "screens", status: "app", sources: [ROW] },
 	{ id: "sidebar", title: "The sidebar", group: "screens", status: "app", sources: [BAND] },

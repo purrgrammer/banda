@@ -32,7 +32,7 @@ async function fill(page: Page, selector: string, value: string, type = "HTMLInp
 }
 
 for (const width of [390, 1440])
-	it.skipIf(!hasChrome())(`skill owner flow, Activity and pending box edits at ${width}px`, async () => {
+	it.skipIf(!hasChrome())(`skill owner flow, Activity and a box edit in effect at ${width}px`, async () => {
 		const home = await tempHome();
 		await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
 		const faux = fauxProvider();
@@ -123,13 +123,11 @@ for (const width of [390, 1440])
 					join(home, "workspace/skills/research/SKILL.md"),
 					"---\nname: research\ndescription: Gather sources\n---\n\n# Research\nCheck every source.",
 				);
+				// the box's version is in effect as soon as the page reads it: nothing to accept
 				await page.run(`dispatchEvent(new Event('banda.skills-changed'))`);
-				await page.until(`document.body.textContent.includes('An agent changed this skill')`);
-				expect(
-					await page.run(`document.querySelector('[data-skill-detail]')?.textContent.includes('Cite your sources.')`),
-				).toBe(true);
-				await click(page, button("Accept this version"));
 				await page.until(`document.querySelector('[data-skill-detail]')?.textContent.includes('Check every source.')`);
+				expect(await page.run(`document.body.textContent.includes('An agent changed this skill')`)).toBe(false);
+				expect(await page.run(`!!${button("Accept this version")}`)).toBe(false);
 				// a shipped skill the owner chose at first run works like any other
 				await page.run(`location.hash='#/a/sancho'`);
 				await fill(

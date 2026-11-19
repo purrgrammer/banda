@@ -161,7 +161,7 @@ const reAdded = (before: readonly Message[], after: readonly Message[]) =>
 const offered = (messages: readonly Message[]) => getCurrentTools(messages).map((tool) => tool.name);
 
 describe("the face guide, once propose_avatar has loaded", () => {
-	it("loads without re-adding every section, and stays through a re-add for the first skill and a compaction", async () => {
+	it("loads without re-adding every section, and stays through the first skill and a compaction", async () => {
 		const chat = await faceChat(await tempHome());
 		try {
 			const start = await chat.say("hello");
@@ -171,13 +171,14 @@ describe("the face guide, once propose_avatar has loaded", () => {
 			expect(reAdded(start, loaded)).toBe(false);
 			expect(getCurrentSystemPrompt(loaded)).toContain(AVATAR_INSTRUCTIONS);
 
-			// the first accepted skill re-adds every section; the next request still has the whole guide
+			// the skills section is there from the start (how to write one), so the first accepted skill changes it in
+			// place rather than re-adding every section; the next request still has the whole guide
 			await chat.accept(
 				"skills/research/SKILL.md",
 				"---\nname: research\ndescription: Research with citations\n---\n\nCite.",
 			);
 			const skilled = await chat.say("hello again");
-			expect(reAdded(loaded, skilled)).toBe(true);
+			expect(reAdded(loaded, skilled)).toBe(false);
 			expect(getCurrentSystemPrompt(skilled)).toContain("research: Research with citations");
 			expect(getCurrentSystemPrompt(skilled)).toContain(AVATAR_INSTRUCTIONS);
 

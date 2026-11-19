@@ -5,6 +5,7 @@ import { SERVER_KINDS } from "../../../../src/core/custom-providers.ts";
 import { AgentMessage } from "../../chat/AgentMessage.tsx";
 import { ApprovalCard, Facts, WaitingPill } from "../../chat/Approval.tsx";
 import { Band } from "../../chat/Band.tsx";
+import { BandChangeRow } from "../../chat/BandChange.tsx";
 import { ViewCard } from "../../chat/Cards.tsx";
 import { Composer } from "../../chat/Composer.tsx";
 import { ConnectCard } from "../../chat/Connect.tsx";
@@ -144,21 +145,19 @@ export function MaraChat({ keyboard = false, panelOpen = false }: { keyboard?: b
 					}
 				/>
 			</Run>
-			<ProposalCard
-				proposal={{
-					id: "specimen:proposal",
-					chat: 1,
-					from: "mara",
+			<BandChangeRow
+				receipt={{
 					kind: "agent",
-					agentId: "researcher",
-					name: "Researcher",
-					face: OCTO.face,
-					description: "Finds sources and checks claims.",
-					instructions: "Research carefully. Show sources and separate facts from guesses.",
-					at: 0,
-					state: "pending",
+					change: "created",
+					id: "researcher",
+					agent: {
+						name: "Researcher",
+						face: OCTO.face,
+						description: "Finds sources and checks claims.",
+						instructions: "Research carefully. Show sources and separate facts from guesses.",
+					},
 				}}
-				state="pending"
+				time="10:26"
 			/>
 		</ChatScreen>
 	);
@@ -176,73 +175,51 @@ function AgentToolsChat() {
 				text="Friday looks clear; I found two morning flights under €250."
 				time="10:24"
 			/>
-			<ProposalCard
-				proposal={{
-					id: "specimen:propose-agent",
-					chat: 1,
-					from: "mara",
+			{/* what the agent made or changed, in the call itself: a row that links to it, which opens into its card */}
+			<BandChangeRow
+				receipt={{
 					kind: "agent",
-					agentId: "researcher",
-					name: "Researcher",
-					face: OCTO.face,
-					description: "Finds sources and checks claims.",
-					model: { provider: "anthropic", modelId: "claude-sonnet-5-5" },
-					tier: "deep",
-					instructions: "Research carefully. Show sources and separate facts from guesses.",
-					at: 0,
-					state: "pending",
-				}}
-				state="pending"
-				onAct={async (action) => (action === "accept" ? "accepted" : "declined")}
-			/>
-			<ProposalCard
-				proposal={{
-					id: "specimen:propose-group",
-					chat: 1,
-					from: "mara",
-					kind: "group",
-					name: "Lisbon research",
-					members: ["mara", "atlas"],
-					memberNames: ["Mara", "Atlas"],
-					at: 0,
-					state: "pending",
-				}}
-				state="pending"
-				onAct={async (action) => (action === "accept" ? "accepted" : "declined")}
-			/>
-			<ProposalCard
-				proposal={{
-					id: "specimen:propose-agent-change",
-					chat: 1,
-					from: "mara",
-					kind: "agentChange",
-					agent: "atlas",
-					displayName: "Atlas",
-					base: "accepted-version",
-					before: "---\nname: Atlas\ndescription: Tracks dates.\n---\nCompare dates carefully.\n",
-					result:
-						"---\nname: Atlas\nface: {…}\nstate: active\ndescription: Checks travel dates and fares.\ntier: balanced\n---\nCompare dates and report sources.\n",
-					beforeAgent: {
-						name: "Atlas",
-						face: ATLAS.face,
-						description: "Tracks dates.",
-						instructions: "Compare dates carefully.",
+					change: "created",
+					id: "researcher",
+					agent: {
+						name: "Researcher",
+						face: OCTO.face,
+						description: "Finds sources and checks claims.",
+						instructions: "Research carefully. Show sources and separate facts from guesses.",
 					},
-					proposedAgent: {
+				}}
+				time="10:26"
+			/>
+			<BandChangeRow
+				receipt={{
+					kind: "group",
+					room: 12,
+					name: "Lisbon research",
+					members: [
+						{ id: "mara", name: "Mara" },
+						{ id: "atlas", name: "Atlas" },
+						{ id: "researcher", name: "Researcher" },
+					],
+				}}
+				time="10:27"
+			/>
+			<BandChangeRow
+				receipt={{
+					kind: "agent",
+					change: "updated",
+					id: "atlas",
+					agent: {
 						name: "Atlas",
 						face: OCTO.face,
 						description: "Checks travel dates and fares.",
-						tier: "balanced",
 						instructions: "Compare dates and report sources.",
 					},
-					name: "Atlas",
-					description: "Checks travel dates and fares.",
-					at: 0,
-					state: "pending",
+					before: { face: ATLAS.face, description: "Tracks dates.", instructions: "Compare dates carefully." },
 				}}
-				state="pending"
-				onAct={async (action) => (action === "accept" ? "accepted" : "declined")}
+				time="10:31"
+				open
 			/>
+			{/* a card from a home made before #58, which the owner still answers: the one proposal left */}
 			<ProposalCard
 				proposal={{
 					id: "specimen:propose-agent-edited",
@@ -511,7 +488,7 @@ export function Screens() {
 			</Section>
 			<Section
 				id="agent-meta-tools"
-				note="Messages between agents as feed lines; proposals as cards for your review."
+				note="Messages between agents as feed lines; what an agent made or changed in the band as rows that link to it, each opening into its card. The last card is one from before, which the owner answered."
 				bleed
 			>
 				<AgentToolsChat />

@@ -4,6 +4,7 @@
  * the new feed does not draw yet falls back to its area's view, until slice 5b ports it.
  */
 import {
+	BookOpenIcon,
 	BrainIcon,
 	CalendarClockIcon,
 	CalendarXIcon,
@@ -13,6 +14,8 @@ import {
 	FilePenIcon,
 	FileXIcon,
 	RotateCwIcon,
+	UserRoundPlusIcon,
+	UsersIcon,
 } from "lucide-react";
 import { type ReactNode, useContext } from "react";
 import { cn } from "@/lib/cn";
@@ -24,6 +27,7 @@ import { actOnWatch } from "../areas/watches.ts";
 import { AvatarCandidateMessage } from "../avatar/CandidateMessage.tsx";
 import { AgentMessage } from "../chat/AgentMessage.tsx";
 import { ChangeCard } from "../chat/Approval.tsx";
+import { BandChangeRow } from "../chat/BandChange.tsx";
 import { Browsed, QuestionCard } from "../chat/Cards.tsx";
 import { Done, Settling } from "../chat/Done.tsx";
 import { EDITED_WORDS } from "../chat/EditableText.tsx";
@@ -41,7 +45,9 @@ import { actOnProposal, answerAgent, answerWait, dismissQuestion } from "../lib/
 import { attempt } from "../lib/attempt.ts";
 import { type Segment, tryAgainAfter } from "../lib/chat.ts";
 import { linkMentions } from "../lib/mentions.ts";
+import { bandWords } from "../lib/segments/band.ts";
 import { changeNoun, changeWords } from "../lib/segments/changes.ts";
+import { skillChangeWords } from "../lib/segments/skill-changes.ts";
 import { watchCallWords, watchObject } from "../lib/segments/watches.ts";
 import { showAgents, showControl, showWatching, useShell } from "../lib/shell.ts";
 import { AgentPreview } from "./AgentPreview.tsx";
@@ -952,6 +958,26 @@ function partOf(
 			return (
 				<Line icon={CircleAlertIcon} tone="danger">
 					{segment.why}
+				</Line>
+			);
+		case "band":
+			// done by the agent's own call: a row that links to what it made, never a card to answer
+			return segment.state === "done" && segment.receipt !== undefined ? (
+				<BandChangeRow receipt={segment.receipt} time={time(segment.at)} />
+			) : (
+				<Line
+					icon={segment.tool === "create_group" ? UsersIcon : UserRoundPlusIcon}
+					tone={segment.state === "refused" ? "danger" : "quiet"}
+				>
+					{bandWords(segment)}
+				</Line>
+			);
+		case "skillChange":
+			return (
+				<Line icon={BookOpenIcon} time={time(segment.at)}>
+					<a href={`#/skills/${segment.name}`} className="text-ink-2 no-underline hover:underline">
+						{skillChangeWords(segment)}
+					</a>
 				</Line>
 			);
 		default:

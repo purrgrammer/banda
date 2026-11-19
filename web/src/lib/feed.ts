@@ -75,7 +75,7 @@ export function refusalWhy(result: Pick<ToolResult, "text"> | undefined): string
 	if (text.startsWith("Validation failed for tool")) return "it was not asked in a form that works";
 	const line = (text.split("\n").find((each) => each.trim() !== "") ?? "")
 		.trim()
-		.replace(/^(?:Not (?:proposed|written|sent|kept|done)|Refused)\s*[:.]\s*/i, "")
+		.replace(/^(?:Not (?:proposed|created|updated|written|sent|kept|done)|Refused)\s*[:.]\s*/i, "")
 		.replace(/`/g, "")
 		.replace(/\.$/, "");
 	if (line === "") return "it was refused";

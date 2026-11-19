@@ -1,4 +1,8 @@
-/** Shared skill catalogue: box files are proposals; accepted snapshots alone enter a prompt. */
+/**
+ * Shared skill catalogue: accepted snapshots alone enter a prompt, and a SKILL.md in the box is accepted as soon as the
+ * daemon sees it (at a tool's end, and here at start), when it parses and hides no character; a file that does not is
+ * shown to the owner with what is wrong.
+ */
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,7 +10,15 @@ import type { Context } from "@earendil-works/chord";
 import type { Harness } from "@earendil-works/pi-durable";
 import { Accepted, shaOf } from "../core/agents.ts";
 import { Companion } from "../core/companion.ts";
-import { acceptedSkills, MAX_SKILL_BYTES, parseSkill, SKILL_FILE, SKILL_NAME, type Skill } from "../core/skills.ts";
+import {
+	acceptedSkills,
+	MAX_SKILL_BYTES,
+	parseSkill,
+	putSkill,
+	SKILL_FILE,
+	SKILL_NAME,
+	type Skill,
+} from "../core/skills.ts";
 import { context } from "../core/store.ts";
 import { readBytes, textOf, type Workspace, write } from "./agents.ts";
 import { BadRequest } from "./http.ts";
@@ -82,6 +94,34 @@ export async function skills(harness: Harness, workspace: Workspace, ctx: Contex
 		});
 	}
 	return views;
+}
+
+/**
+ * Every SKILL.md in the box put in effect as it stands (`putSkill`), for what changed while no tool told the daemon: at
+ * start, and when the box comes up. The names put in effect; a file that cannot be is left for the Skills page to say.
+ */
+export async function reconcileSkills(
+	harness: Harness,
+	workspace: Workspace,
+	ctx: Context = context,
+): Promise<string[]> {
+	const listed = await workspace.env().listDir(directory(workspace), ctx);
+	if (!listed.ok) {
+		if (listed.error.code === "not_found") return [];
+		throw listed.error;
+	}
+	const accepted = (await harness.snapshot(Accepted, ctx))?.files ?? {};
+	const put: string[] = [];
+	for (const entry of listed.value) {
+		if (entry.kind !== "directory" || !SKILL_NAME.test(entry.name)) continue;
+		const found = await candidate(workspace, entry.name, ctx);
+		if (found.text === undefined || found.errors !== undefined || found.sha === accepted[SKILL_FILE(entry.name)]?.sha)
+			continue;
+		const text = found.text;
+		const result = await harness.commit((tx) => putSkill(tx, entry.name, text, Date.now()), ctx);
+		if ("change" in result && result.change !== "same") put.push(entry.name);
+	}
+	return put;
 }
 
 /** The most skills one acceptance takes: a pack the owner reviewed as one list. */

@@ -34,6 +34,7 @@ import { ActivityLog } from "../core/activity.ts";
 import { Accepted, AgentChats, ChatTier } from "../core/agents.ts";
 import { ARTIFACT_EDIT } from "../core/artifacts.ts";
 import { EFFECT, type EffectRan } from "../core/ask.ts";
+import { readBandReceipt } from "../core/band-tools.ts";
 import type { Attachment } from "../core/blobs.ts";
 import { ChatReads } from "../core/chat-reads.ts";
 import { budgetPolicy } from "../core/compaction.ts";
@@ -165,6 +166,9 @@ const RECEIPTS: { readonly [tool: string]: Receipt["kind"] } = {
 	message_user: "artifacts",
 	message_group: "artifacts",
 	skill: "skill",
+	create_agent: "agent",
+	update_agent: "agent",
+	create_group: "group",
 };
 
 /**
@@ -176,6 +180,7 @@ export function receiptOf(tool: string, isError: boolean, details: unknown): Rec
 	if (kind === undefined || isError) return undefined;
 	const receipt = (details as { receipt?: unknown } | undefined)?.receipt as Record<string, unknown> | undefined;
 	if (typeof receipt !== "object" || receipt === null || receipt.kind !== kind) return undefined;
+	if (kind === "agent" || kind === "group") return readBandReceipt(receipt);
 	if (
 		kind === "avatar" &&
 		Number.isSafeInteger(receipt.assistant) &&

@@ -1,6 +1,7 @@
 /**
- * The Skills page against a throwaway daemon, as the owner would use it: what waits for review first, the list flat
- * and filterable, shipped skills added any time, the form refusing bad and taken names in words, acceptance clearing
+ * The Skills page against a throwaway daemon, as the owner would use it: a skill the box wrote in effect at once, the
+ * one file that does not read waiting first with what is wrong, the list flat and filterable, shipped skills added any
+ * time, the form refusing bad and taken names in words, a fixed file clearing
  * the menu's dot; with an axe pass over the page and a detail. Both widths.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -81,29 +82,35 @@ for (const width of [390, 1440])
 						method: "PUT",
 						body: JSON.stringify({ text: file(name, `Work with ${name} files`, "Read it first."), base: null }),
 					});
-				// the box changes one accepted skill and drafts two new ones
+				// the box changes one accepted skill, drafts two new ones, and leaves one that does not read
 				await writeFile(
 					join(home, "workspace/skills/pdf/SKILL.md"),
 					file("pdf", "Work with pdf files", "Flatten the form after filling it."),
 				);
-				for (const name of ["meeting-notes", "charts"]) {
+				for (const name of ["meeting-notes", "charts", "broken"]) {
 					await mkdir(join(home, "workspace/skills", name), { recursive: true });
 					await writeFile(
 						join(home, "workspace/skills", name, "SKILL.md"),
-						file(name, `Help with ${name}`, "Keep it short."),
+						name === "broken" ? "no frontmatter" : file(name, `Help with ${name}`, "Keep it short."),
 					);
 				}
 				await page.run(`location.hash='#/skills'`);
 				await page.run(`dispatchEvent(new Event('banda.skills-changed'))`);
-				// the page opens on the list, nothing collapsed, with the waiting block above it
-				await page.until(`document.body.textContent.includes('3 skills are waiting for your review')`);
-				await page.until(`document.querySelector('[data-skill-list] a[href="#/skills/pdf"]')`);
+				// the page opens on the list: what reads is in effect, and the one file that does not waits above it
+				await page.until(`document.body.textContent.includes('1 skill is waiting for your review')`);
+				await page.until(`document.querySelector('[data-skill-list] a[href="#/skills/meeting-notes"]')`);
+				await page.until(`document.querySelector('[data-skill-list] a[href="#/skills/charts"]')`);
 				expect(
 					await page.run(
 						`(() => { const waiting = document.querySelector('section[aria-label="Skills waiting for review"]'); const list = document.querySelector('[data-skill-list]'); return (waiting.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0; })()`,
 					),
 				).toBe(true);
-				// quiet markers: owner-only and a change that waits
+				expect(
+					await page.run(
+						`document.querySelector('section[aria-label="Skills waiting for review"]').textContent.includes("can't be read")`,
+					),
+				).toBe(true);
+				// quiet markers: owner-only; the changed skill is in effect, so it carries no mark
 				expect(
 					await page.run(
 						`[...document.querySelectorAll('[data-skill-list] a')].find((a) => a.textContent.includes('/catch-me-up'))?.textContent.includes('Only you')`,
@@ -113,46 +120,49 @@ for (const width of [390, 1440])
 					await page.run(
 						`document.querySelector('[data-skill-list] a[href="#/skills/pdf"]')?.textContent.includes('Changed')`,
 					),
-				).toBe(true);
-				// nine accepted skills: the filter appears, matches case aside, and says when nothing does
+				).toBe(false);
+				// a dozen accepted skills: the filter appears, matches case aside, and says when nothing does
 				await fill(page, `document.querySelector('input[aria-label="Filter skills"]')`, "PDF");
 				await page.until(`document.querySelectorAll('[data-skill-list] a').length === 1`);
 				await fill(page, `document.querySelector('input[aria-label="Filter skills"]')`, "zzz");
 				await page.until(`document.body.textContent.includes('No skill matches \u201czzz\u201d.')`);
 				await fill(page, `document.querySelector('input[aria-label="Filter skills"]')`, "");
-				await page.until(`document.querySelectorAll('[data-skill-list] a').length >= 9`);
+				await page.until(`document.querySelectorAll('[data-skill-list] a').length >= 11`);
 				// the axe pass over the full page
 				expect(await axeFindings(page)).toEqual([]);
 				// From banda: the one left at first run joins with one tap, accepted, and the section empties away
 				await click(page, `document.querySelector('button[aria-label="Add /diagram-design"]')`);
 				await page.until(`document.querySelector('[data-skill-list] a[href="#/skills/diagram-design"]')`);
 				await page.until(`!document.querySelector('section[aria-label="Skills from banda"]')`);
-				// the changed skill's detail: the agent's version, accepted by the bytes shown
+				// the changed skill's detail: the box's version, in effect, with nothing to accept
 				await click(page, `document.querySelector('[data-skill-list] a[href="#/skills/pdf"]')`);
-				await page.until(`document.body.textContent.includes('An agent changed this skill')`);
-				expect(await page.run(`document.body.textContent.includes("Proposed version · agents don't use it yet")`)).toBe(
-					true,
-				);
-				expect(await axeFindings(page)).toEqual([]);
-				await click(page, button("Accept this version"));
 				await page.until(`document.querySelector('[data-skill-detail]')?.textContent.includes('Flatten the form')`);
+				expect(await page.run(`document.body.textContent.includes('An agent changed this skill')`)).toBe(false);
+				expect(await page.run(`document.body.textContent.includes('Accept this version')`)).toBe(false);
+				expect(await axeFindings(page)).toEqual([]);
 				await page.until(
 					`document.querySelector('nav[aria-label="Breadcrumb"] [aria-current="page"] h1')?.textContent === '/pdf'`,
 				);
 				await click(page, `document.querySelector('nav[aria-label="Breadcrumb"] a[href="#/skills"]')`);
-				// a new draft's detail says an agent wrote it
-				await page.until(`document.body.textContent.includes('2 skills are waiting for your review')`);
+				// the file that does not read: its detail says what is wrong, and offers nothing to accept
+				await page.until(`document.body.textContent.includes('1 skill is waiting for your review')`);
 				await click(
 					page,
-					`[...document.querySelectorAll('section[aria-label="Skills waiting for review"] button')].find((el) => el.textContent.trim() === '/meeting-notes')`,
+					`[...document.querySelectorAll('section[aria-label="Skills waiting for review"] button')].find((el) => el.textContent.trim() === '/broken')`,
 				);
 				await page.until(`document.body.textContent.includes('An agent wrote this skill')`);
-				expect(await page.run(`document.body.textContent.includes("New skill · agents don't use it yet")`)).toBe(true);
+				expect(await page.run(`document.body.textContent.includes('needs name and description')`)).toBe(true);
+				expect(await page.run(`!!${button("Accept this version")}`)).toBe(false);
+				expect(await axeFindings(page)).toEqual([]);
+				// fixed in the workspace, it is in effect: the waiting block goes, and the menu's dot with it
+				await writeFile(
+					join(home, "workspace/skills/broken/SKILL.md"),
+					file("broken", "Help with broken things", "Mend it."),
+				);
 				await page.run(`location.hash='#/skills'`);
-				// Accept all takes the rest; nothing waits, and the menu's dot goes
-				await click(page, button("Accept all 2 skills"));
+				await page.run(`dispatchEvent(new Event('banda.skills-changed'))`);
 				await page.until(`!document.querySelector('section[aria-label="Skills waiting for review"]')`);
-				await page.until(`document.querySelector('[data-skill-list] a[href="#/skills/meeting-notes"]')`);
+				await page.until(`document.querySelector('[data-skill-list] a[href="#/skills/broken"]')`);
 				if (width === 1440) {
 					await page.until(`document.querySelector('button[aria-label="Menu"]')`);
 					expect(await page.run(`!!document.querySelector('button[aria-label="Menu, something waits on you"]')`)).toBe(

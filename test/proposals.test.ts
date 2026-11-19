@@ -33,75 +33,33 @@ import { hostBox } from "./fixtures/host-box.ts";
 import { blobStore, FAUX_MODEL, FakeGateway, tempHome } from "./helpers.ts";
 
 describe("agent proposals", () => {
-	it("stores an owner-reviewed proposal as a feed entry without making it effective", async () => {
-		const faux = fauxProvider();
-		const models = createModels();
-		models.setProvider(faux.provider);
-		let first = true;
-		let answered = false;
-		const respond = (_request: ModelContext) => {
-			if (first) {
-				first = false;
-				return fauxAssistantMessage(
-					[
-						fauxToolCall("propose_agent", {
-							id: "writer",
-							name: "Writer",
-							face: JSON.parse(JSON.stringify(defaultAvatarFace())),
-							description: "Writes drafts",
-							model: { provider: "openai", modelId: "gpt-6.1-sol" },
-							tier: "deep",
-							instructions: "Write clearly and wait for review.",
-						}),
-						fauxToolCall("propose_agent_change", { description: "The lead agent." }),
-						fauxToolCall("message_user", { text: "I proposed a writer agent for your review." }),
-					],
-					{ stopReason: "toolUse" },
-				);
-			}
-			if (!answered) {
-				answered = true;
-				return fauxAssistantMessage([fauxToolCall("react", { reaction: "👍" })], { stopReason: "toolUse" });
-			}
-			return fauxAssistantMessage("done");
-		};
-		faux.setResponses(Array.from({ length: 10 }, () => respond as never));
-		const registry = createRegistry();
-		const core = defineCore({ blobs: blobStore(), gateway: () => new FakeGateway(), model: () => FAUX_MODEL });
-		registry.install(core.extension);
-		const harness = await openStore(await tempHome(), { models, registry });
-		harness.resume();
-		const started = await core.receive(harness, {
-			id: "owner-1",
-			origin: { gateway: "fake", peer: OWNER, thread: "main" },
-			text: "Propose a writer agent.",
+	/**
+	 * A change to the lead an earlier banda's agent proposed, still pending in `chat`: the proposal and its card's entry,
+	 * as `propose_agent_change` recorded them. No tool makes one now; a home may still hold one.
+	 */
+	async function seedChange(harness: Awaited<ReturnType<typeof openStore>>, chat: number): Promise<Proposal> {
+		const before = "---\nname: Sancho\ndescription: Sancho agent\n---\nYou are Sancho.\n";
+		const result = "---\nname: Sancho\ndescription: The lead agent.\n---\nYou are Sancho.\n";
+		const proposal: Proposal = {
+			id: "legacy:change",
+			chat,
+			from: "sancho",
+			kind: "agentChange",
 			agent: "sancho",
-		});
-		if (!("turn" in started)) throw new Error(JSON.stringify(started));
-		await harness.waitForTask(started.turn as TaskId<TurnResult>, context);
-		const doc = await harness.snapshot(Proposals, context);
-		const allProposals = Object.values(doc?.proposals ?? {});
-		const proposal = allProposals.find((item) => item.kind === "agent");
-		const selfChange = allProposals.find((item) => item.kind === "agentChange");
-		expect(selfChange).toMatchObject({ kind: "agentChange", agent: "sancho", description: "The lead agent." });
-		expect(selfChange).not.toHaveProperty("beforeAgent");
-		expect(selfChange).not.toHaveProperty("proposedAgent");
-		expect(proposal).toMatchObject({
-			kind: "agent",
-			agentId: "writer",
-			name: "Writer",
-			tier: "deep",
+			displayName: "Sancho",
+			base: shaOf(before),
+			before,
+			result,
+			description: "The lead agent.",
+			at: 1,
 			state: "pending",
-		});
-		const accepted = await harness.snapshot(Accepted, context);
-		expect(accepted?.files[agentPath("writer")]).toBeUndefined();
-		const items = await harness.commit(
-			(tx) => tx.scanEntries({ conversationId: started.chat as ConversationId, order: "descending" }, 30),
-			context,
-		);
-		expect(items.items.some((item) => item.kind === PROPOSAL_ENTRY)).toBe(true);
-		await harness.close(context);
-	});
+		};
+		await harness.commit(async (tx) => {
+			(await tx.doc(Proposals)).proposals[proposal.id] = proposal as unknown as JsonObject;
+			await tx.appendEntry(chat as ConversationId, { kind: PROPOSAL_ENTRY, data: proposal as unknown as JsonObject });
+		}, context);
+		return proposal;
+	}
 
 	it("accepts a proposed agent into the accepted file and marks its card in the same save", async () => {
 		const home = await tempHome();
@@ -325,13 +283,9 @@ describe("agent proposals", () => {
 		const respond = (request: ModelContext) => {
 			seen.push(request);
 			if (asked(request) === "Propose a change.")
-				return fauxAssistantMessage(
-					[
-						fauxToolCall("propose_agent_change", { description: "The lead agent." }),
-						fauxToolCall("message_user", { text: "I proposed a change for your review." }),
-					],
-					{ stopReason: "toolUse" },
-				);
+				return fauxAssistantMessage([fauxToolCall("message_user", { text: "I proposed a change for your review." })], {
+					stopReason: "toolUse",
+				});
 			if (asked(request) === "Thanks.")
 				return fauxAssistantMessage([fauxToolCall("message_user", { text: "Noted, thanks." })], {
 					stopReason: "toolUse",
@@ -350,9 +304,7 @@ describe("agent proposals", () => {
 			const first = await core.receive(harness, { id: "owner-1", origin, text: "Propose a change.", agent: "sancho" });
 			if (!("turn" in first)) throw new Error(JSON.stringify(first));
 			await harness.waitForTask(first.turn as TaskId<TurnResult>, context);
-			const proposal = Object.values((await harness.snapshot(Proposals, context))?.proposals ?? {}).find(
-				(item) => item.kind === "agentChange",
-			) as unknown as Proposal;
+			const proposal = await seedChange(harness, first.chat);
 			expect(proposal).toMatchObject({ state: "pending", chat: first.chat });
 			const area = proposalArea.start?.({
 				harness,
@@ -378,7 +330,7 @@ describe("agent proposals", () => {
 				).items;
 			const notice = decidedText(proposal, "declined");
 			expect(notice).toBe(
-				'The owner declined your proposal: changes to "sancho" (description). This notice is automatic, not from the owner.',
+				'The owner declined your proposal: changes to "Sancho" (description). This notice is automatic, not from the owner.',
 			);
 			const decided = (await entries()).filter((entry) => entry.kind === PROPOSAL_DECIDED);
 			expect(decided).toHaveLength(1);
@@ -427,13 +379,9 @@ describe("agent proposals", () => {
 		const respond = (request: ModelContext) => {
 			seen.push(request);
 			if (asked(request) === "Propose a change.")
-				return fauxAssistantMessage(
-					[
-						fauxToolCall("propose_agent_change", { description: "The lead agent." }),
-						fauxToolCall("message_user", { text: "I proposed a change for your review." }),
-					],
-					{ stopReason: "toolUse" },
-				);
+				return fauxAssistantMessage([fauxToolCall("message_user", { text: "I proposed a change for your review." })], {
+					stopReason: "toolUse",
+				});
 			if (asked(request) === "Go on.")
 				return fauxAssistantMessage([fauxToolCall("hold", {})], { stopReason: "toolUse" });
 			if (asked(request).startsWith("The owner declined"))
@@ -467,9 +415,7 @@ describe("agent proposals", () => {
 			const first = await core.receive(harness, { id: "owner-1", origin, text: "Propose a change.", agent: "sancho" });
 			if (!("turn" in first)) throw new Error(JSON.stringify(first));
 			await harness.waitForTask(first.turn as TaskId<TurnResult>, context);
-			const proposal = Object.values((await harness.snapshot(Proposals, context))?.proposals ?? {}).find(
-				(item) => item.kind === "agentChange",
-			) as unknown as Proposal;
+			const proposal = await seedChange(harness, first.chat);
 			const area = proposalArea.start?.({
 				harness,
 				core,

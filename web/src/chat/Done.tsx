@@ -5,6 +5,7 @@
  */
 import type { LucideIcon } from "lucide-react";
 import {
+	BookOpenIcon,
 	CalendarCheckIcon,
 	CalendarClockIcon,
 	ChevronRightIcon,
@@ -23,6 +24,7 @@ import {
 	TagIcon,
 	TicketIcon,
 	UserRoundPlusIcon,
+	UsersIcon,
 	XIcon,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -44,6 +46,8 @@ export type DoneKind =
 	| "label"
 	| "push"
 	| "agent"
+	| "group"
+	| "skill"
 	| "permission"
 	| "change"
 	| "routine"
@@ -66,6 +70,8 @@ const KIND: Record<DoneKind, { icon: LucideIcon; tone: string }> = {
 	label: { icon: TagIcon, tone: "text-ink-2" },
 	push: { icon: GitCommitHorizontalIcon, tone: "text-ink-2" },
 	agent: { icon: UserRoundPlusIcon, tone: "text-alive" },
+	group: { icon: UsersIcon, tone: "text-alive" },
+	skill: { icon: BookOpenIcon, tone: "text-ink-2" },
 	permission: { icon: ShieldCheckIcon, tone: "text-ink-2" },
 	change: { icon: FilePenIcon, tone: "text-ink-2" },
 	routine: { icon: CalendarCheckIcon, tone: "text-ink-2" },
@@ -133,7 +139,7 @@ export function Done({
 	time?: string | undefined;
 	/** The card it folded from, shown again (settled, nothing left to do) when the row opens. */
 	card?: ReactNode;
-	open?: boolean;
+	open?: boolean | undefined;
 }) {
 	const [open, setOpen] = useState(initiallyOpen);
 	const panel = useId();

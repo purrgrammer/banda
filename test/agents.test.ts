@@ -91,9 +91,9 @@ describe("agent files", () => {
 			"propose_avatar",
 			"message_agent",
 			"read_agent_chat",
-			"propose_agent",
-			"propose_group",
-			"propose_agent_change",
+			"create_agent",
+			"create_group",
+			"update_agent",
 		];
 		expect(new Set(direct.filter((tool) => !directOnly.includes(tool) && tool !== "message_user"))).toEqual(
 			new Set(group.filter((tool) => tool !== "message_group")),

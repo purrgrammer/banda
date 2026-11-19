@@ -1,6 +1,7 @@
 /** Every area's segmenter (`types.ts`), in one list that already names each: an area fills its own file. */
 import { artifacts } from "./artifacts.ts";
 import { avatar } from "./avatar.ts";
+import { band } from "./band.ts";
 import { browser } from "./browser.ts";
 import { changes } from "./changes.ts";
 import { connect } from "./connect.ts";
@@ -9,6 +10,7 @@ import { memory } from "./memory.ts";
 import { reactions } from "./reactions.ts";
 import { refusals } from "./refusals.ts";
 import { routines } from "./routines.ts";
+import { skillChanges } from "./skill-changes.ts";
 import type { Segmenter } from "./types.ts";
 import { watches } from "./watches.ts";
 import { web } from "./web.ts";
@@ -25,5 +27,7 @@ export const SEGMENTERS: readonly Segmenter[] = [
 	browser,
 	web,
 	memory,
+	band,
+	skillChanges,
 	changes,
 ];

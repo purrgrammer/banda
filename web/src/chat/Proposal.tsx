@@ -6,7 +6,7 @@ import type { ProposalEdits, ProposalText } from "../../../src/core/proposals.ts
 import type { AgentDefinitionPreview, ProposalView } from "../../../src/server/proposals.ts";
 import { EDITED_WORDS, EditableText } from "./EditableText.tsx";
 
-function AvatarPreview({ face, label }: { face: Agent["face"]; label: string }) {
+export function AvatarPreview({ face, label }: { face: Agent["face"]; label: string }) {
 	return (
 		<img
 			className="size-7 shrink-0"
@@ -18,7 +18,7 @@ function AvatarPreview({ face, label }: { face: Agent["face"]; label: string }) 
 	);
 }
 
-function FieldChange({ label, before, after }: { label: string; before: string; after: string }) {
+export function FieldChange({ label, before, after }: { label: string; before: string; after: string }) {
 	return (
 		<div>
 			<p className="text-meta font-medium text-ink-2">{label}</p>

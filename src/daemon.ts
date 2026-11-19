@@ -75,7 +75,12 @@ import { CliGateway } from "./gateways/cli.ts";
 import { WebGateway } from "./gateways/web.ts";
 import { daemonFile, egressCredentials, keepEgressCredential, maxFileBytes, ownerToken, readConfig } from "./home.ts";
 
-import { publicationHistory } from "./server/agent-publication.ts";
+import {
+	agentWorkingBase,
+	finishAgentPublication,
+	publicationHistory,
+	queueAgentPublication,
+} from "./server/agent-publication.ts";
 import { accept, agents, decline, retryPublication, save, seed, type Workspace } from "./server/agents.ts";
 import type { ComputerView, OwnerInput, Posted, PostMessage, ViewEvent } from "./server/api.ts";
 import { acceptedIconFace } from "./server/avatar-icon-face.ts";
@@ -96,7 +101,15 @@ import {
 	remove as removeRoutine,
 } from "./server/routines.ts";
 import { seenBy } from "./server/seen.ts";
-import { acceptSkill, acceptSkills, chooseShippedSkills, saveSkill, shippedSkills, skills } from "./server/skills.ts";
+import {
+	acceptSkill,
+	acceptSkills,
+	chooseShippedSkills,
+	reconcileSkills,
+	saveSkill,
+	shippedSkills,
+	skills,
+} from "./server/skills.ts";
 import {
 	chatContext,
 	chatPrompt,
@@ -305,6 +318,19 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			box: attachmentsIn(agentBox),
 
 			workspace: () => agentBox.workspace,
+			// a model an agent names for an agent must be one this daemon can ask
+			knownModel: (model) => models.getModel(model.provider, model.modelId) !== undefined,
+			// what an agent's create_agent or update_agent put in effect is written to the box as the owner's save is
+			band: {
+				workingBase: (name, ctx) => agentWorkingBase(workspace, name, ctx),
+				queue: queueAgentPublication,
+				finish: async (name, ctx) => {
+					if (harness !== undefined) await finishAgentPublication(harness, workspace, name, ctx);
+				},
+				groupMade: async (ctx) => {
+					if (harness !== undefined) await core.groups.asks(harness, ctx);
+				},
+			},
 			gateway: (name) => gateways.get(name),
 			model: () => config.model,
 			// every tool installed, which the lead's new chats get
@@ -650,6 +676,10 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		let seeding: Promise<void> | undefined;
 		const seedWorkspace = () =>
 			(seeding ??= seed(open, workspace)
+				.then(() => reconcileSkills(open, workspace))
+				.then((put) => {
+					if (put.length > 0) log(`skills: in effect from the workspace: ${put.join(", ")}`);
+				})
 				.catch((error: unknown) => log(`agents: ${(error as Error).message}`))
 				.finally(() => {
 					seeding = undefined;
@@ -904,7 +934,13 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						),
 					stop: (chat) => stopChat(open, chat),
 					agents: listAgents,
-					skills: () => skills(open, workspace),
+					// an explicit read reconciles: a SKILL.md that reached the box since is in effect before the page shows it
+					skills: async () => {
+						await reconcileSkills(open, workspace).catch((error: unknown) =>
+							log(`skills: ${(error as Error).message}`),
+						);
+						return skills(open, workspace);
+					},
 					acceptSkill: (name, sha) => changingWorkspace(() => acceptSkill(open, workspace, name, sha)),
 					acceptSkills: (wanted) => changingWorkspace(() => acceptSkills(open, workspace, wanted)),
 					saveSkill: (name, text, base) => changingWorkspace(() => saveSkill(open, workspace, name, text, base)),

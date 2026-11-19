@@ -1,7 +1,7 @@
 /**
  * The owner edits what an agent wrote before accepting it (#53), in the app against a running daemon on a throwaway
- * home, as a person would: a pull request's title, an agent proposal and a change to the lead, and a routine's schedule
- * and ask. What reaches the service, the accepted files and the box is the owner's text, exactly and once; what is not
+ * home, as a person would: a pull request's title, and a routine's schedule and ask (an agent's creation and changes
+ * are its own now, `create_agent` and `update_agent`, with nothing to accept). What reaches the service, the accepted files and the box is the owner's text, exactly and once; what is not
  * text, or not theirs to edit, is refused by the daemon whatever the page sends. The model is pi-ai's faux provider and
  * GitHub a fake MCP server: nothing leaves the machine. `BANDA_EDIT_SHOTS=<dir>` keeps screenshots, light and dark.
  */
@@ -16,7 +16,6 @@ import {
 	type Context as ModelContext,
 } from "@earendil-works/pi-ai";
 import { expect, it } from "vitest";
-import { defaultAvatarFace } from "../src/core/avatar-face.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { ControlView, Item, ShownWait } from "../src/server/api.ts";
@@ -69,17 +68,6 @@ const PLANS: { readonly [said: string]: readonly [string, object] } = {
 			base: "main",
 		},
 	],
-	"hire a writer": [
-		"propose_agent",
-		{
-			id: "writer",
-			name: "Writer",
-			face: JSON.parse(JSON.stringify(defaultAvatarFace())),
-			description: "Writes drafts",
-			instructions: "Write clearly.",
-		},
-	],
-	"change yourself": ["propose_agent_change", { instructions: "Proposed lead instructions." }],
 	"tea routine": [
 		"schedule",
 		{ name: "tea", description: "Tea time", cron: "0 16 * * *", ask: "Remind the owner to drink tea." },
@@ -409,83 +397,6 @@ for (const [width, height, delivery] of [
 						return;
 					}
 
-					// ---- a new agent: its description and instructions are the owner's to edit; a blank holds the button back
-					await say("hire a writer");
-					await page.until(`${cardWith("Create agent")}?.querySelector('[aria-label="Edit description"]')`, 60_000);
-					const writer = tile("Create Writer");
-					const proposal = await until(async () =>
-						(await items(chat)).find(
-							(i): i is Extract<Item, { role: "proposal" }> => i.role === "proposal" && i.proposal.kind === "agent",
-						),
-					);
-					for (const [body, why] of [
-						[{ action: "accept", edits: { name: "Mallory" } }, /name cannot be edited/],
-						[{ action: "accept", edits: { tools: ["bash"] } }, /tools cannot be edited/],
-						[{ action: "accept", edits: { description: "two\nlines" } }, /one line/],
-						[
-							{ action: "decline", edits: { description: "Declined anyway" } },
-							/only an accepted proposal carries edits/,
-						],
-					] as const)
-						expect(await refused(`/proposals/${encodeURIComponent(proposal.proposal.id)}`, body)).toMatch(why);
-					await page.run(`${writer}.querySelector('[aria-label="Edit description"]').click()`);
-					await typeOver(page, `${writer}.querySelector('input')`, "Writes the owner's drafts");
-					await page.run(`${writer}.querySelector('[aria-label="Done editing description"]').click()`);
-					await page.run(`${writer}.querySelector('details').open = true`);
-					await page.run(`${writer}.querySelector('[aria-label="Edit instructions"]').click()`);
-					await typeOver(page, `${writer}.querySelector('textarea')`, "");
-					await page.until(`${writer}.querySelector('[role="alert"]')?.textContent.includes('not empty')`);
-					expect(await page.run(`${button(writer, "Create agent")}.disabled`)).toBe(true);
-					await snap("agent-invalid", writer);
-					await typeOver(page, `${writer}.querySelector('textarea')`, "Write plainly, and ask before sending.");
-					await page.until(`!${writer}.querySelector('[role="alert"]')`);
-					await snap("agent-edited", writer);
-					await page.run(`${button(writer, "Create agent")}.click()`);
-					await page.until(`${writer}.innerText.includes('Accepted · Edited by you')`);
-					const written = await until(async () => {
-						const text = await readFile(join(home, "workspace", "agents", "writer.md"), "utf8").catch(() => "");
-						return text.includes("Write plainly") ? text : undefined;
-					});
-					expect(written).toContain("description: Writes the owner's drafts");
-					expect(written).toContain("Write plainly, and ask before sending.");
-					expect(written).not.toContain("Write clearly.");
-					expect(written).toContain("name: Writer");
-					await snap("agent-accepted", writer);
-
-					// ---- a change to the lead: only what it proposes is editable
-					await say("change yourself");
-					await page.until(`${cardWith("Update agent")}?.querySelector('details')`, 60_000);
-					const lead = tile("Update sancho");
-					// what it proposes for the instructions is two disclosures deep: Agent details, then Instructions
-					await page.run(`${lead}.querySelectorAll('details').forEach((d) => { d.open = true; })`);
-					await page.until(`${lead}.querySelector('[aria-label="Edit proposed instructions"]')`);
-					expect(await page.run(`${lead}.querySelector('[aria-label="Edit description"]')`)).toBe(null);
-					const change = await until(async () =>
-						(await items(chat)).find(
-							(i): i is Extract<Item, { role: "proposal" }> =>
-								i.role === "proposal" && i.proposal.kind === "agentChange" && i.proposal.state === "pending",
-						),
-					);
-					expect(
-						await refused(`/proposals/${encodeURIComponent(change.proposal.id)}`, {
-							action: "accept",
-							edits: { description: "Not proposed" },
-						}),
-					).toMatch(/description is not part of this change/);
-					await page.run(`${lead}.querySelector('[aria-label="Edit proposed instructions"]').click()`);
-					await typeOver(page, `${lead}.querySelector('textarea')`, "The owner's lead instructions.");
-					await snap("lead-edited", lead);
-					await page.run(`${button(lead, "Update agent")}.click()`);
-					// the card says it, or has folded into its row already: the chat moved on as the lead changed
-					await page.until(
-						`(${lead})?.innerText.includes('Accepted · Edited by you') || /Updated\\s+sancho/.test(document.body.innerText)`,
-					);
-					const sancho = await until(async () => {
-						const text = await readFile(join(home, "workspace", "agents", "sancho.md"), "utf8").catch(() => "");
-						return text.includes("The owner's lead instructions.") ? text : undefined;
-					});
-					expect(sancho).not.toContain("Proposed lead instructions.");
-
 					// ---- a routine: when it runs and what it asks
 					await say("tea routine");
 					await page.until(`${cardWith("Set it up")}?.querySelector('[aria-label="Edit when"]')`, 60_000);
@@ -564,21 +475,17 @@ for (const [width, height, delivery] of [
 					await page.reload();
 					await page.until(`document.body.textContent.includes('Sancho')`);
 					await page.run(`location.hash = '#/a/sancho'`);
-					await page.until(`/Created\\s+Writer/.test(document.body.innerText)`);
+					await page.until(`/Opened a pull request/.test(document.body.innerText)`);
 					const feed = await page.run<string>("document.body.innerText");
-					expect(feed).not.toContain("Writes drafts");
-					expect(feed).toMatch(/Opened a pull request/);
+					expect(feed).not.toContain("Drafted title");
 					// a narrow row keeps only what was done and to what; opening the row shows the card, which says the rest
-					if (width >= 768) {
-						expect(feed).toMatch(/Created\s+Writer\s+Writes the owner's drafts/);
-						expect(feed.match(/as you edited it/g)?.length).toBe(4);
-					}
+					if (width >= 768) expect(feed.match(/as you edited it/g)?.length).toBe(2);
 					await snap("folded");
 					await page.run(
-						`[...document.querySelectorAll('[data-done]')].find(row => /Created\\s+Writer/.test(row.innerText)).querySelector('[aria-label="Show details"]').click()`,
+						`[...document.querySelectorAll('[data-done]')].find(row => /Opened a pull request/.test(row.innerText)).querySelector('[aria-label="Show details"]').click()`,
 					);
-					await page.until(`document.body.innerText.includes('Accepted · Edited by you')`);
-					await snap("folded-open", tile("Create Writer"));
+					await page.until(`document.body.innerText.includes('Approved as you edited it')`);
+					await snap("folded-open", tile("Approved as you edited it"));
 					expect(page.errors().filter((e) => !/Failed to load resource/.test(e))).toEqual([]);
 				});
 			} finally {

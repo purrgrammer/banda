@@ -1,13 +1,13 @@
 /**
  * Toolsets (DESIGN.md "Agents"): labels for groups of tools, for the web to show and to give or take away a group at
  * once. Plain data with no dependencies, so the daemon and the web read the same lists. A tool that asks the owner to
- * accept something is `propose_<what>`; a tool that acts is a plain verb.
+ * accept something is `propose_<what>`; a tool that acts is a plain verb (`create_agent` makes one, at once).
  */
 export const TOOLSETS: { readonly [name: string]: readonly string[] } = {
 	files: ["read", "write", "edit"],
 	shell: ["bash"],
 	skills: ["skill"],
-	agents: ["message_agent", "read_agent_chat", "propose_agent", "propose_group", "propose_agent_change"],
+	agents: ["message_agent", "read_agent_chat", "create_agent", "create_group", "update_agent"],
 	requests: ["ask_hosts"],
 	routines: ["schedule"],
 	watches: ["watch"],
@@ -76,18 +76,12 @@ export function messageArgs(name: string, args: Readonly<Record<string, unknown>
 export const MESSAGE_AGENT = "message_agent";
 /** Read another agent's direct chat as untrusted, bounded data. */
 export const READ_AGENT_CHAT = "read_agent_chat";
-/** Owner-reviewed proposals, accepted before they change definitions. */
-export const PROPOSE_AGENT = "propose_agent";
-export const PROPOSE_GROUP = "propose_group";
-export const PROPOSE_AGENT_CHANGE = "propose_agent_change";
+/** The band's own tools: each takes effect in its call, and its receipt shows the owner what it did (`band-tools.ts`). */
+export const CREATE_AGENT = "create_agent";
+export const CREATE_GROUP = "create_group";
+export const UPDATE_AGENT = "update_agent";
 /** Tools available only in direct agent chats, never a group's execution chat. */
-export const DIRECT_META_TOOLS = [
-	MESSAGE_AGENT,
-	READ_AGENT_CHAT,
-	PROPOSE_AGENT,
-	PROPOSE_GROUP,
-	PROPOSE_AGENT_CHANGE,
-] as const;
+export const DIRECT_META_TOOLS = [MESSAGE_AGENT, READ_AGENT_CHAT, CREATE_AGENT, CREATE_GROUP, UPDATE_AGENT] as const;
 
 /**
  * The extension every group member's chat selects besides its own (`groupToolsName`): `message_group`, its one way to
