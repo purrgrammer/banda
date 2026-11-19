@@ -17,7 +17,8 @@ through the daemon into the chat's blob store.
 Entry points: ../src/core/connections.ts, ../src/core/mcp.ts, ../src/core/mcp-remote.ts, ../src/core/oauth.ts,
 ../src/core/gmail-rest.ts, ../src/server/capabilities.ts, ../shipped/connections/ and
 ../scripts/shipped-github.ts. Harnesses:
-../src/core/acp.ts, ../src/core/harness.ts, ../src/core/harness-files.ts, ../src/server/routes/harnesses.ts,
+../src/core/acp.ts, ../src/core/acp-v2.ts, ../src/core/harness.ts, ../src/core/harness-lifecycle.ts,
+../src/core/harness-files.ts, ../src/server/routes/harnesses.ts,
 ../shipped/harnesses/, ../web/src/chat/Harness.tsx and ../web/src/app/HarnessSession.tsx.
 
 ## Work and acceptance
@@ -61,9 +62,13 @@ interrupted sign-in, disconnect, tool switches and tools a server adds later.
 
 **Harnesses.** Any ACP agent, shipped as a file or added by its command line, connected in a folder per agent; one
 tool starts a session without a draft; the harness's asks, the owner's notes and Stop in the chat; the agent woken once
-at the end. A fake ACP harness (test/fixtures/fake-acp-agent.ts) stands in for the real ones in tests; the session
-runs under test/harness.faults.test.ts (a kill at every commit and harness boundary). Real runs use a scratch repository
-in a throwaway home, at desktop and phone width.
+at the end. A fake ACP harness (test/fixtures/fake-acp-agent.ts) stands in for the real ones in tests, in v1 or, with
+`FAKE_ACP_V2`, in v2 orders read from claude-agent-acp 0.100.0 and codex-acp 2.5.0's source (short of Claude Code's
+own follow-up run on finished background work, below); when a
+session may end is a pure function of what the harness said (test/harness-lifecycle.test.ts, a property over a
+simulated v2 agent); the session runs under test/harness.faults.test.ts (a kill at every commit and harness boundary,
+over v1 and v2, with Stop reaching background work). Real runs use a scratch repository in a throwaway home, at
+desktop and phone width.
 
 ## Open work
 
@@ -96,3 +101,21 @@ in a throwaway home, at desktop and phone width.
 - [ ] Harnesses: their asks reach the owner only in the web app, not on other gateways; the agent still hears the end
 - [ ] Harnesses: a step may flicker between flushes (a note the harness has not taken yet); sessions are keyed by the model's call id, as artifacts and groups are
 - [ ] Harnesses: the adapters are not in a release (Claude Code's SDK is Anthropic's, all rights reserved); Connections says how to install them
+- [ ] Harnesses: the ACP v2 lifecycle is shown against the fake only; real Claude Code and Codex runs (a backgrounded
+  command, a monitor and its cancel, an async subagent with a command and an ask of its own, cancel and close with
+  work listed, a note during a live subagent, the adapter killed with work listed then resumed, a model's own
+  `nohup`, Codex with a background terminal) need paid model calls the owner has not authorized yet
+- [ ] Harnesses: decide how Claude Code's own follow-up on finished background work is kept. claude-agent-acp reports
+  that run only at the model's first output, after the list has emptied (its `startAutonomousCycle`), so a session
+  ends done just before Claude Code reacts to what its background command or subagent found, and that reaction is
+  lost. Alternatives: owe a run for each item a list drops while idle (hangs, until Stop, if Claude Code never runs
+  one); hold for a stated time after the list empties; or keep the harness past the end and wake its agent again
+- [ ] Harnesses: decide what a harness that reports no background work gets (every v1 harness, pi, and codex-acp
+  2.5.0 over v2): it ends closed with its turn and banda stops what is left; holding it open until Stop, or for a
+  stated time, are the alternatives
+- [ ] Harnesses: a v1 session that ended while a subagent it started was live (seen before ACP v2) is not explained; v2
+  does not show it gone
+- [ ] Harnesses: a harness that took a prompt in and reports no run nor idle for it (claude-agent-acp's
+  `/remote-control`), or that stops sending lists after naming work, holds its session until Stop
+- [ ] Harnesses: on macOS a process a harness started that left its group and its parent (a double fork) escapes the
+  kill at a session's end: `ps -E` hides a platform binary's environment, so the marker cannot find it

@@ -313,7 +313,7 @@ describe("a harness session", () => {
 		}, context);
 		await until(() => s.woke.length > 0);
 		const ended = (await s.session())[task];
-		expect(ended?.state).toBe("done");
+		expect(ended?.state).toBe("closed");
 		expect(ended?.call).toBe("c1");
 		expect(ended?.steps.map((step) => step.kind)).toEqual(["asked", "edit", "run", "steered", "decided", "said"]);
 		// the decided step keeps the ask's kind: the folded row says "You allowed: run a command", never the command
@@ -329,7 +329,7 @@ describe("a harness session", () => {
 			files: [{ path: "src/a.ts", added: 2, removed: 1 }],
 		});
 		expect(s.woke[0]?.text).toContain(`call harness__fake with session ${task}`);
-		expect(s.woke).toEqual([expect.objectContaining({ chat: s.chat, key: `harness:${task}`, state: "done" })]);
+		expect(s.woke).toEqual([expect.objectContaining({ chat: s.chat, key: `harness:${task}`, state: "closed" })]);
 		await s.harness.close(context);
 	});
 
@@ -384,7 +384,7 @@ describe("a harness session", () => {
 			.split("\n")
 			.map((line) => JSON.parse(line) as { [key: string]: unknown });
 		expect(entries).toContainEqual(expect.objectContaining({ closed: sessionId }));
-		expect((await s.session())[task]?.state).toBe("done");
+		expect((await s.session())[task]?.state).toBe("closed");
 		await s.harness.close(context);
 	});
 
@@ -435,7 +435,7 @@ describe("a harness session", () => {
 			await answerAsk(tx, task, asks[0]?.id ?? "", true);
 		}, context);
 		await until(() => s.woke.length > 0);
-		expect((await s.session())[task]?.state).toBe("done");
+		expect((await s.session())[task]?.state).toBe("closed");
 		await s.harness.close(context);
 	});
 
@@ -722,7 +722,7 @@ describe("following up on a session", () => {
 		const second = await s.begin("say second", first);
 		await until(() => s.woke.length === 2);
 		const after = (await s.sessions())[second];
-		expect(after).toMatchObject({ continues: first, resume: opened, state: "done", continuation: "native" });
+		expect(after).toMatchObject({ continues: first, resume: opened, state: "closed", continuation: "native" });
 		// what it replayed ("words from before", a read of old.txt) is not this session's
 		expect(after?.steps.map((step) => step.kind)).toEqual(["asked", "said"]);
 		const log = await s.logged();
@@ -745,7 +745,7 @@ describe("following up on a session", () => {
 		const second = await s.begin("say second", first);
 		await until(() => s.woke.length === 2);
 		const after = (await s.sessions())[second];
-		expect(after).toMatchObject({ continues: first, resume: opened, state: "done", continuation: "native" });
+		expect(after).toMatchObject({ continues: first, resume: opened, state: "closed", continuation: "native" });
 		// nothing replayed: the second session's steps are its own
 		expect(after?.steps.map((step) => step.kind)).toEqual(["asked", "said"]);
 		const log = await s.logged();
@@ -798,7 +798,7 @@ describe("following up on a session", () => {
 		vi.stubEnv("FAKE_ACP_REFUSE_REOPEN", "1");
 		const second = await s.begin("say second", first);
 		await until(() => s.woke.length === 2);
-		expect((await s.sessions())[second]).toMatchObject({ state: "done", continuation: "summary" });
+		expect((await s.sessions())[second]).toMatchObject({ state: "closed", continuation: "summary" });
 		const prompts = (await s.logged()).flatMap((entry) => (entry.prompt === undefined ? [] : [entry.prompt]));
 		expect(prompts[1]).toContain("<earlier-work>");
 		expect(prompts[1]?.endsWith("say second")).toBe(true);

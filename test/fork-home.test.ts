@@ -194,7 +194,7 @@ describe("the processes a forked store remembers", () => {
 				return session?.ended === undefined ? undefined : session;
 			});
 			expect({ state: ended.state, outcome: ended.state === "failed" ? ended.outcome : undefined }).toEqual({
-				state: "done",
+				state: "closed",
 				outcome: undefined,
 			});
 		} finally {

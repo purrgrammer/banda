@@ -5,7 +5,8 @@
  * and each wake is counted in the store, so what happened survives a killed process. Prints a summary as its last line.
  *
  * With `continue`, the session goes on from an ended one instead: the fake reopens that one's own session, so the
- * follow-up is sent alone.
+ * follow-up is sent alone. With `v2`, the fake speaks ACP v2 and its turn ends while a background command it reports
+ * runs on; with `v2stop`, the owner stops the session once its turn is over and that command still runs.
  *
  * argv: home, mark, optionally `continue`, then the fault schedule JSON (Fault[])
  */
@@ -13,7 +14,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createRegistry, defineDoc, defineExtension } from "@earendil-works/pi-durable";
-import { answerAsk, defineHarnesses, Harnesses, steer } from "../../src/core/harness.ts";
+import { answerAsk, defineHarnesses, Harnesses, steer, stopSession } from "../../src/core/harness.ts";
 import { status } from "../../src/core/status.ts";
 import { context, openStore } from "../../src/core/store.ts";
 import { echoModels } from "../fixtures/models.ts";
@@ -25,6 +26,8 @@ const scheduleJson = rest.at(-1) ?? "[]";
 const mode = rest.length > 1 ? rest[0] : undefined;
 const continuing = mode === "continue";
 const noting = mode === "note";
+const v2 = mode === "v2" || mode === "v2stop";
+if (v2) process.env.FAKE_ACP_V2 = "1";
 const NOTE = "say followed up";
 const faults = new Faults(JSON.parse(scheduleJson) as Fault[]);
 const FAKE = join(import.meta.dirname, "../fixtures/fake-acp-agent.ts");
@@ -33,7 +36,9 @@ mkdirSync(folder, { recursive: true });
 process.env.FAKE_ACP_LOG = join(home, "fake.jsonl");
 const ASK = continuing
 	? `ask npm test\nbackground ${mark}\nsay again`
-	: `edit src/a.ts +1 -0\nask npm test\nbackground ${mark}\nsay fixed`;
+	: v2
+		? `edit src/a.ts +1 -0\nask npm test\nbackground ${mark}\nbg ${mode === "v2stop" ? 600_000 : 300}\nsay fixed`
+		: `edit src/a.ts +1 -0\nask npm test\nbackground ${mark}\nsay fixed`;
 /** The ended session a follow-up goes on from: its harness's session is what the fake reopens. */
 const EARLIER = 9999;
 
@@ -107,6 +112,14 @@ for (;;) {
 	for (const ask of session?.asks ?? [])
 		if (session?.answers?.[ask.id] === undefined)
 			await harness.commit((tx) => answerAsk(tx, task, ask.id, true), context);
+	// its turn over, its background command running on: the owner stops it
+	if (
+		mode === "v2stop" &&
+		session?.stop !== true &&
+		session?.background?.foreground === "idle" &&
+		session.background.items.length > 0
+	)
+		await harness.commit((tx) => stopSession(tx, task), context);
 	await new Promise((resolve) => setTimeout(resolve, 20));
 }
 const session = (await harness.snapshot(Harnesses, context))?.sessions[task];

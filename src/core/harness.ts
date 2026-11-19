@@ -17,15 +17,20 @@ import {
 import { ansiStripper } from "../box/ansi.ts";
 import {
 	type AcpConnection,
+	AcpError,
 	type AcpPermissionOutcome,
 	type AcpPermissionRequest,
 	type AcpUpdate,
 	cancel,
+	cancelItem,
 	closeSession,
 	openSession,
 	prompt,
+	REQUEST_CANCELLED,
 	startAcp,
 } from "./acp.ts";
+import { type DiffPart, V2Updates } from "./acp-v2.ts";
+import { type BackgroundItem, type EndedItem, type Foreground, Lifecycle } from "./harness-lifecycle.ts";
 import { killGroups, killMarked, MARKER, type ProcessGroup, treeGroups } from "./processes.ts";
 
 /** Host supervision currently relies on POSIX process groups and the platform's process listing. */
@@ -86,7 +91,33 @@ export type HarnessStep =
 	| { readonly kind: "decided"; readonly command: string; readonly allowed: boolean; readonly ask?: string }
 	| { readonly kind: "said"; readonly text: string };
 
-export type HarnessState = "starting" | "working" | "waiting" | "done" | "stopped" | "interrupted" | "failed";
+/**
+ * `done` ends on evidence that nothing it started runs (ACP v2: its turn idle and its background list empty); `closed`
+ * ends when its turns are over and no ask is open, but its agent does not report background work (ACP v1, or a v2 agent
+ * that leaves the list out), so whether everything it started had finished is not known: banda stopped what was left.
+ */
+export type HarnessState =
+	| "starting"
+	| "working"
+	| "waiting"
+	| "done"
+	| "closed"
+	| "stopped"
+	| "interrupted"
+	| "failed";
+
+/** What a v2 session last said of its work: its foreground, and the background list when it reports one. */
+export type HarnessBackground = {
+	foreground: Foreground;
+	/** The root's latest list was reported: false is "not reported", never "nothing runs". */
+	reported: boolean;
+	/** How many pieces of work the root's list names now: a subagent once, with whatever work of its own. */
+	running: number;
+	/** What its lists name now, bounded. */
+	items: BackgroundItem[];
+	/** What lists dropped, with the final status the agent sent first, if any; bounded, newest kept. */
+	ended?: EndedItem[];
+};
 
 /** The latest useful update of each kind a session keeps; message and thought chunks are steps, never kept here. */
 export type SessionUpdates = {
@@ -178,6 +209,8 @@ export type HarnessSession = {
 	/** The process groups the harness and what it started were seen in: what a restart kills, when it lost the tree. */
 	groups?: ProcessGroup[];
 	sessionId?: string;
+	/** ACP v2 only: its foreground and background work as last reported, committed on each change. */
+	background?: HarnessBackground;
 };
 
 /** What the owner connected: one folder per harness, and the agents it is on for. */
@@ -223,6 +256,8 @@ export const MAX_NOTES = 50;
 const OPEN_MS = 60_000;
 /** How long a harness told to stop has to end its turn before it is ended, its process and all it started with it. */
 const STOP_MS = 15_000;
+/** Background items a session's record keeps, listed and ended each. */
+const BACKGROUND_KEPT = 32;
 /** The last lines of a harness's stderr kept, for the reason a failed session gives. */
 const TAIL = 6;
 
@@ -415,13 +450,11 @@ export function diffOf(
 	return { added: added.length, removed: removed.length, diff: cut(diff, max) };
 }
 
-type ToolContent = {
-	type?: string;
-	path?: string;
-	oldText?: string | null;
-	newText?: string;
-	content?: { text?: string };
-};
+type ToolContent = DiffPart & { content?: { text?: string } };
+
+/** A diff part's lines: v1's from its texts, v2's from its patch (none when it carried none). */
+const diffLines = (part: DiffPart, max = MAX_TEXT) =>
+	part.lines ?? (part.changes === undefined ? diffOf(part.oldText ?? "", part.newText ?? "", max) : undefined);
 
 const textOf = (content: unknown): string => {
 	if (!Array.isArray(content)) return "";
@@ -461,9 +494,10 @@ export function applyUpdate(steps: HarnessStep[], update: AcpUpdate): void {
 	if (toolKind === "edit" || toolKind === "delete" || toolKind === "move" || prior?.kind === "edit") {
 		const diffs = ((update.content as ToolContent[] | undefined) ?? []).filter((part) => part.type === "diff");
 		const counted = (update._meta as { banda?: { added?: number; removed?: number } } | undefined)?.banda;
+		const counted2 = diffs.every((part) => diffLines(part) !== undefined);
 		const totals = diffs.reduce(
 			(sum, part) => {
-				const one = diffOf(part.oldText ?? "", part.newText ?? "");
+				const one = diffLines(part) ?? { added: 0, removed: 0, diff: "" };
 				return {
 					added: sum.added + one.added,
 					removed: sum.removed + one.removed,
@@ -473,8 +507,10 @@ export function applyUpdate(steps: HarnessStep[], update: AcpUpdate): void {
 			{ added: 0, removed: 0, diff: "" },
 		);
 		const before = prior?.kind === "edit" ? prior : undefined;
-		const added = diffs.length > 0 ? totals.added : (counted?.added ?? before?.added);
-		const removed = diffs.length > 0 ? totals.removed : (counted?.removed ?? before?.removed);
+		// a v2 diff with no patch names its file and says no lines: unknown, never a made-up zero
+		const said = diffs.length > 0 && counted2;
+		const added = said ? totals.added : diffs.length > 0 ? undefined : (counted?.added ?? before?.added);
+		const removed = said ? totals.removed : diffs.length > 0 ? undefined : (counted?.removed ?? before?.removed);
 		const diff = diffs.length > 0 ? totals.diff : before?.diff;
 		// a harness that names the file in its diff and not its title (Codex's "Editing files")
 		const edited =
@@ -496,7 +532,8 @@ export function applyUpdate(steps: HarnessStep[], update: AcpUpdate): void {
 			kind: "run",
 			command,
 			...(output === undefined || output === "" ? {} : { output: cut(output) }),
-			running: !done,
+			// an update with no status (more output) leaves it as it was
+			running: typeof update.status === "string" ? !done : (before?.running ?? true),
 			...(call === undefined ? {} : { call }),
 		};
 	} else {
@@ -572,15 +609,17 @@ function howItEnded(session: HarnessSession, reason?: string): string {
 		? reason === undefined
 			? "finished"
 			: `finished short (${reason})`
-		: session.state === "stopped"
-			? session.stoppedBy === "agent"
-				? "was stopped by you"
-				: "was stopped by the owner"
-			: session.state === "interrupted"
-				? "was interrupted when banda restarted; the ask was not sent again"
-				: session.prompted === true
-					? `ended with a problem (${reason ?? "it did not say why"})`
-					: `could not start (${reason ?? "it did not say why"}): the ask was never sent, so nothing was done`;
+		: session.state === "closed"
+			? `ended its turn${reason === undefined ? "" : ` short (${reason})`}; it does not report work left running in the background, so whether everything it started had finished is not known`
+			: session.state === "stopped"
+				? session.stoppedBy === "agent"
+					? "was stopped by you"
+					: "was stopped by the owner"
+				: session.state === "interrupted"
+					? "was interrupted when banda restarted; the ask was not sent again"
+					: session.prompted === true
+						? `ended with a problem (${reason ?? "it did not say why"})`
+						: `could not start (${reason ?? "it did not say why"}): the ask was never sent, so nothing was done`;
 }
 
 /** What a wake's result may weigh, as JSON: past it, the least needed goes first. */
@@ -616,6 +655,19 @@ export function resultOf(task: number, session: HarnessSession, reason?: string)
 		decisions: session.steps.flatMap((step) =>
 			step.kind === "decided" ? [{ command: cut(step.command, 300), allowed: step.allowed }] : [],
 		),
+		// v2: what ran on past its turns, as the agent reported it; "not said" is an end it gave no status for
+		...(session.background === undefined
+			? {}
+			: {
+					background: {
+						reported: session.background.reported,
+						// listed still when it ended: banda stopped them
+						stopped: session.background.items.map((item) => item.type),
+						ended: (session.background.ended ?? [])
+							.slice(-10)
+							.map((item) => ({ type: item.type, status: item.status ?? "not said" })),
+					},
+				}),
 	};
 	const size = () => Buffer.byteLength(JSON.stringify(result));
 	if (size() > RESULT_MAX) result.commands = result.commands.map(({ command }) => ({ command }));
@@ -785,12 +837,15 @@ export function defineHarnesses(options: HarnessOptions) {
 			typeof raw.command === "string"
 				? raw.command
 				: (call.title ?? (typeof raw.file_path === "string" ? raw.file_path : "an action"));
+		if ((call as { unreviewable?: unknown }).unreviewable === true)
+			throw new Error("The coding agent asked about something it did not show. Its action was refused.");
 		const diffs = ((call.content as ToolContent[] | undefined) ?? []).filter((part) => part.type === "diff");
+		// a v2 change that names its file but shows no patch cannot be reviewed whole: refused, never approved blind
+		if (diffs.some((part) => diffLines(part, Infinity) === undefined))
+			throw new Error("The coding agent asked to change a file without showing the change. Its action was refused.");
 		const detail =
 			diffs.length > 0
-				? diffs
-						.map((part) => `${part.path ?? ""}\n${diffOf(part.oldText ?? "", part.newText ?? "", Infinity).diff}`)
-						.join("\n")
+				? diffs.map((part) => `${part.path ?? ""}\n${diffLines(part, Infinity)?.diff ?? ""}`).join("\n")
 				: typeof raw.url === "string"
 					? raw.url
 					: textOf(call.content);
@@ -886,6 +941,7 @@ export function defineHarnesses(options: HarnessOptions) {
 					// the groups its tree is in, every couple of seconds: what a later daemon kills if this one dies
 					const seen = Date.now() - lastSeen > 2000 ? treeGroups(connection?.pid) : undefined;
 					if (seen !== undefined) lastSeen = Date.now();
+					const work = backgroundRecord();
 					await runtime.commit(async (tx) => {
 						const session = (await tx.doc(Harnesses)).sessions[id];
 						if (session === undefined || session.ended !== undefined) return undefined;
@@ -898,6 +954,7 @@ export function defineHarnesses(options: HarnessOptions) {
 						session.steps = [...kept, ...pending];
 						session.dropped += lost;
 						if (Object.keys(infos).length > 0) session.updates = infos;
+						if (work !== undefined) session.background = work;
 						bounded(session);
 						return undefined;
 					}, ctx);
@@ -919,9 +976,9 @@ export function defineHarnesses(options: HarnessOptions) {
 				>();
 				let cancelled = false;
 				let closing = false;
-				const asked = async (request: AcpPermissionRequest): Promise<AcpPermissionOutcome> => {
+				const asked = async (request: AcpPermissionRequest, withdrawn?: AbortSignal): Promise<AcpPermissionOutcome> => {
 					fault("harness:ask");
-					if (cancelled || closing) return { outcome: "cancelled" };
+					if (cancelled || closing || withdrawn?.aborted === true) return { outcome: "cancelled" };
 					let ask: HarnessAsk;
 					try {
 						ask = askOf(request);
@@ -932,6 +989,31 @@ export function defineHarnesses(options: HarnessOptions) {
 					const outcome = new Promise<AcpPermissionOutcome>((resolve) => {
 						open.set(ask.id, { resolve, request });
 					});
+					// the harness withdrew it (the tool that asked stopped on its own): the owner no longer has it to answer
+					withdrawn?.addEventListener(
+						"abort",
+						() => {
+							const waiting = open.get(ask.id);
+							if (waiting === undefined) return;
+							open.delete(ask.id);
+							waiting.resolve({ outcome: "cancelled" });
+							busy++;
+							void runtime
+								.commit(async (tx) => {
+									const session = (await tx.doc(Harnesses)).sessions[id];
+									if (session === undefined || session.ended !== undefined) return undefined;
+									session.asks = (session.asks ?? []).filter((one) => one.id !== ask.id);
+									if (session.asks.length === 0 && session.state === "waiting") session.state = "working";
+									return undefined;
+								}, ctx)
+								.catch((error: unknown) => options.log(`${definition.name}: ${(error as Error).message}`))
+								.finally(() => {
+									busy--;
+									check();
+								});
+						},
+						{ once: true },
+					);
 					await flushing;
 					await flush();
 					await runtime.commit(async (tx) => {
@@ -967,8 +1049,26 @@ export function defineHarnesses(options: HarnessOptions) {
 				};
 				// a reopened session replays its history as updates: none is this run's until its session is open
 				let live = false;
-				let outstanding = 0;
+				// what the agent said of its turns and work: when it may end, and on what (harness-lifecycle.ts)
+				let life: Lifecycle | undefined;
+				const translated = new V2Updates();
+				// commits of notes and answers under way: the session holds while one is
+				let busy = 0;
+				let prompts = 0;
 				let short: string | undefined;
+				// a v2 turn that ended in error: the session fails, as a v1 prompt the harness refused does
+				let failedTurn: string | undefined;
+				const cancelledItems = new Set<string>();
+				const backgroundRecord = (): HarnessBackground | undefined =>
+					life === undefined || life.protocol !== 2
+						? undefined
+						: {
+								foreground: life.foreground,
+								reported: life.reported,
+								running: life.running,
+								items: life.background.slice(-BACKGROUND_KEPT),
+								...(life.ended.length === 0 ? {} : { ended: life.ended.slice(-BACKGROUND_KEPT) }),
+							};
 				const taken = new Set<number>(start.notes.flatMap((note, index) => (note.sent === true ? [index] : [])));
 				let finished: (state: HarnessState) => void = () => {};
 				let stopClock: NodeJS.Timeout | undefined;
@@ -983,7 +1083,40 @@ export function defineHarnesses(options: HarnessOptions) {
 				const stopTurn = () => {
 					if (closing || connection === undefined || sessionId === undefined) return;
 					cancel(connection, sessionId);
-					stopClock = setTimeout(() => finished("stopped"), options.stopMs ?? STOP_MS);
+					cancelListed();
+					stopClock ??= setTimeout(() => finished("stopped"), options.stopMs ?? STOP_MS);
+					check();
+				};
+				// v2: Stop reaches what runs on past the turn, each item once: a cancel spares background work
+				const cancelListed = () => {
+					if (connection === undefined || life === undefined) return;
+					// work with no cancel of its own ends only with session/close: Stop closes now, not at its clock
+					if (life.background.some((item) => !["terminal", "tool_call", "subagent"].includes(item.type)))
+						return finished("stopped");
+					for (const item of life.background) {
+						const one = `${item.session}\u0000${item.type}\u0000${item.id}`;
+						if (cancelledItems.has(one)) continue;
+						cancelledItems.add(one);
+						// a cancel that fails leaves the item to session/close and the kill of its tree, at Stop's clock
+						try {
+							fault("harness:cancel-item");
+							void cancelItem(connection, item);
+						} catch (error) {
+							options.log(`${definition.name}: a cancel of its ${item.type} failed: ${(error as Error).message}`);
+						}
+					}
+				};
+				// whether it may end now: only on what the agent said (harness-lifecycle.ts), never on a clock
+				const check = () => {
+					if (closing || busy > 0 || life === undefined) return;
+					const verdict = life.verdict(open.size);
+					if (verdict.kind === "open") return;
+					if (cancelled) return finished("stopped");
+					if (failedTurn !== undefined) {
+						why ??= failedTurn;
+						return finished("failed");
+					}
+					finished(verdict.kind === "quiet" ? "done" : "closed");
 				};
 				let stopped: () => void = () => {};
 				const stopping = new Promise<"stopped">((resolve) => {
@@ -994,21 +1127,50 @@ export function defineHarnesses(options: HarnessOptions) {
 				const strip = ansiStripper();
 				let why: string | undefined;
 				const reason = () => why ?? tail.at(-1) ?? "it ended without saying why";
+				// a turn cut short (out of tokens, a refusal) is said, not taken for finished work
+				const ended = (stopReason: unknown) => {
+					if (typeof stopReason === "string" && stopReason !== "end_turn" && stopReason !== "cancelled")
+						short ??= `it stopped: ${stopReason}`;
+				};
 				const send = (text: string) => {
-					if (connection === undefined || sessionId === undefined) return;
-					outstanding++;
-					prompt(connection, sessionId, text).then(
-						({ stopReason }) => {
-							// a turn cut short (out of tokens, a refusal) is said, not taken for finished work
-							if (stopReason !== "end_turn" && stopReason !== "cancelled") short ??= `it stopped: ${stopReason}`;
-							outstanding--;
-							if (outstanding === 0) finished(cancelled ? "stopped" : "done");
-						},
-						(error: unknown) => {
-							why ??= (error as Error).message;
-							finished(cancelled ? "stopped" : "failed");
-						},
-					);
+					if (connection === undefined || sessionId === undefined || life === undefined) return;
+					const id = ++prompts;
+					const lifecycle = life;
+					lifecycle.sent(id);
+					// taken as it is read, in the agent's order: a v2 turn's states come right after the answer
+					prompt(connection, sessionId, text, (answer) => {
+						if (answer instanceof AcpError) {
+							// v2: a prompt Stop withdrew before the harness took it in owes nothing
+							if (cancelled && answer.code === REQUEST_CANCELLED) {
+								lifecycle.refused(id);
+								return check();
+							}
+							why ??= answer.message;
+							return finished(cancelled ? "stopped" : "failed");
+						}
+						// v1 answers at the end of its turn; v2 once it took the prompt in, its turn reported apart
+						if (lifecycle.protocol === 1) {
+							ended(answer.stopReason);
+							lifecycle.answered(id, answer.stopReason);
+						} else lifecycle.accepted(id);
+						check();
+					}).catch(() => {});
+				};
+				// a v2 state_update: the lifecycle's, and the record's when what runs changed
+				const stateOf = (from: string, update: AcpUpdate) => {
+					if (life === undefined || life.protocol !== 2) return;
+					const changed = life.state(from, String(update.state), update.stopReason, update.background);
+					if (from === life.root && update.state === "idle") {
+						if (update.stopReason === "error") {
+							const error = (update.error as { message?: unknown } | null | undefined)?.message;
+							failedTurn ??= typeof error === "string" ? error : "its turn failed";
+						} else ended(update.stopReason);
+					}
+					if (changed) {
+						if (cancelled) cancelListed();
+						schedule();
+					}
+					check();
 				};
 				// the owner's notes, Stop and answers, as the record changes: watched from before the harness starts
 				const watch = await runtime.watchDoc(Harnesses, ctx);
@@ -1035,7 +1197,7 @@ export function defineHarnesses(options: HarnessOptions) {
 					if (unsent.length === 0 && answered.length === 0) return;
 					// Keep the session alive while committing the sends. Every queued note/answer checks the latest Stop,
 					// including a disconnect or permission change, rather than trusting this watch's older snapshot.
-					outstanding++;
+					busy++;
 					try {
 						let accepted:
 							| { notes: HarnessSession["notes"]; decisions: { ask: string; allowed: boolean }[] }
@@ -1087,8 +1249,8 @@ export function defineHarnesses(options: HarnessOptions) {
 						why = (error as Error).message;
 						finished("failed");
 					} finally {
-						outstanding--;
-						if (outstanding === 0 && !closing) finished(cancelled ? "stopped" : "done");
+						busy--;
+						check();
 					}
 				});
 				try {
@@ -1100,15 +1262,29 @@ export function defineHarnesses(options: HarnessOptions) {
 						// everything it starts carries the marker, so its end, or a later daemon, finds and kills it all
 						env: { ...process.env, [MARKER]: marker },
 						handlers: {
-							update: (_session, update) => {
+							update: (from, update) => {
 								fault("harness:update");
+								if (update.sessionUpdate === "state_update") return stateOf(from, update);
 								if (!live || update.sessionUpdate === "user_message_chunk") return;
-								// the latest useful update of each kind is kept apart from the steps
-								if (keepUpdate(latest, update)) {
-									schedule();
-									return;
+								const v2 = life?.protocol === 2;
+								if (v2 && life !== undefined) {
+									// a final status comes before the list that drops the item: kept for when it does
+									if (update.sessionUpdate === "tool_call_update" && typeof update.status === "string")
+										life.final(from, "tool_call", String(update.toolCallId), update.status);
+									if (
+										update.sessionUpdate === "terminal_update" &&
+										typeof update.exitStatus === "object" &&
+										update.exitStatus !== null
+									)
+										life.final(from, "terminal", String(update.terminalId), "exited");
 								}
-								applyUpdate(steps, update);
+								for (const one of v2 ? translated.take(update) : [update]) {
+									// a subagent's own session streams its tool calls into the steps; its words are not the session's
+									if (v2 && from !== sessionId && one.sessionUpdate !== "tool_call_update") continue;
+									// the latest useful update of each kind is kept apart from the steps
+									if (keepUpdate(latest, one)) continue;
+									applyUpdate(steps, one);
+								}
 								bound();
 								schedule();
 							},
@@ -1155,6 +1331,7 @@ export function defineHarnesses(options: HarnessOptions) {
 					if (!go) throw new Stopped();
 					sessionId = opened.sessionId;
 					canClose = opened.canClose;
+					life = new Lifecycle(opened.protocol, opened.sessionId);
 					live = true;
 					fault("harness:prompted");
 					// a harness that reopened its session remembers; one that could not is told what it did
@@ -1178,7 +1355,13 @@ export function defineHarnesses(options: HarnessOptions) {
 					if (state === "failed")
 						options.log(`${definition.name} failed: ${reason()}; it last printed: ${tail.join(" | ")}`);
 					await runtime.commit(async (tx) => {
-						await ending(tx, id, state, service, state === "failed" ? reason() : state === "done" ? short : undefined);
+						await ending(
+							tx,
+							id,
+							state,
+							service,
+							state === "failed" ? reason() : state === "done" || state === "closed" ? short : undefined,
+						);
 						return terminal;
 					}, ctx);
 				} catch (error) {
@@ -1474,7 +1657,13 @@ export async function sessionOf(
 	if (session === undefined || session.agent !== agent) return undefined;
 	const how =
 		session.ended === undefined
-			? `${session.state === "waiting" ? "waiting on the owner" : session.state}, for ${ago(at - session.at).replace(" ago", "")}`
+			? `${
+					session.state === "waiting"
+						? "waiting on the owner"
+						: session.background?.foreground === "idle" && session.background.running > 0
+							? `working: its turn is over and ${session.background.running} piece(s) of work it reports run on in the background`
+							: session.state
+				}, for ${ago(at - session.at).replace(" ago", "")}`
 			: `${howItEnded(session, session.outcome)}, ${ago(at - session.ended)}`;
 	const waiting = (session.asks ?? []).map((ask) => `- ${ask.command}`);
 	const files = filesOf(session.steps).map(
