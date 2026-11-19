@@ -21,8 +21,9 @@ usage:
                                      --box container (or BANDA_BOX=container) uses
                                      Docker instead; --box host: no box, commands
                                      run on this computer without the network guard
-  banda say [--thread <t>] <text>   send a message as the owner and print the messages
-                                     and asks sent back until the agent is done
+  banda say [--agent <name>] <text> send a message as the owner to an agent's chat (the
+                                     first agent's when none is named) and print the
+                                     messages and asks sent back until it is done
   banda status                      the web UI's link, chats, open asks,
                                      and parked tasks
   banda providers                   connected model providers
@@ -56,7 +57,7 @@ async function main(argv: string[]): Promise<number> {
 			home: { type: "string" },
 			port: { type: "string" },
 			box: { type: "string" },
-			thread: { type: "string" },
+			agent: { type: "string" },
 			to: { type: "string" },
 			"no-computer": { type: "boolean" },
 			"no-browser": { type: "boolean" },
@@ -95,7 +96,7 @@ async function main(argv: string[]): Promise<number> {
 		if (text === "") throw new Error("say needs a message");
 		const lines = await stream(home, "/api/say", {
 			text,
-			...(values.thread === undefined ? {} : { thread: values.thread }),
+			...(values.agent === undefined ? {} : { agent: values.agent }),
 		});
 		for await (const line of lines as AsyncIterable<{
 			message?: string;

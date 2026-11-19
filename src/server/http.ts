@@ -57,9 +57,12 @@ export type Routes = {
 	readonly companion: () => Promise<CompanionView>;
 	/** Change the companion as the owner picked; throws `BadRequest` with why a pick is refused. */
 	readonly change: (body: Record<string, unknown>) => Promise<CompanionView>;
-	/** A message as the owner, and how its Turn ended; each message and ask sent to its thread meanwhile goes to `heard`. */
+	/**
+	 * A message as the owner to `agent`'s chat (the first agent's when none), and how its Turn ended; each message and
+	 * ask sent back meanwhile goes to `heard`.
+	 */
 	readonly say: (
-		body: { text: string; thread?: string },
+		body: { text: string; agent?: string },
 		signal: AbortSignal,
 		heard: (heard: Heard) => void,
 	) => Promise<{ ended: string }>;
@@ -423,9 +426,15 @@ export function handler(
 		if (route === "POST /say") {
 			const body = await json(req);
 			if (typeof body.text !== "string" || body.text === "") return reply(res, 400, { error: "text is required" });
-			if (body.thread !== undefined && typeof body.thread !== "string")
-				return reply(res, 400, { error: "thread must be a string" });
-			const said = { text: body.text, ...(body.thread === undefined ? {} : { thread: body.thread }) };
+			// an agent is the target, by its name: a thread names nothing
+			if (body.thread !== undefined) return reply(res, 400, { error: "say takes an agent, not a thread" });
+			if (
+				body.agent !== undefined &&
+				(typeof body.agent !== "string" ||
+					mainAgentOf({ gateway: "web", peer: OWNER, thread: `agent:${body.agent}` }) === undefined)
+			)
+				return reply(res, 400, { error: "agent is an agent's name" });
+			const said = { text: body.text, ...(body.agent === undefined ? {} : { agent: body.agent }) };
 			// newline-delimited JSON: a `message` or `ask` line for each sent meanwhile, then how it `ended`, or an `error`
 			const line = (value: unknown) => {
 				if (!res.headersSent)

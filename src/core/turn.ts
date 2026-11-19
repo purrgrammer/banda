@@ -72,6 +72,7 @@ import { connectionToolsOf } from "./connections.ts";
 import { CUT_OFF, cutOff } from "./cut-off.ts";
 import {
 	agentMainThread,
+	chatOrigin,
 	type Gateway,
 	type Image,
 	type Inbound,
@@ -486,19 +487,23 @@ export async function unansweredAt(tx: Tx, chat: number, entry: number): Promise
 }
 
 /**
- * Where an inbound goes: its chat, by its origin's route, or, for one the gateway addressed to a chat
- * (the web), that chat, answered at its home. Only the owner writes to a chat by its id, and only to
- * the owner's: another's belongs to them, and banda answers them there.
+ * Where an inbound goes: its chat, by the route of the origin that names it (`home`, where a new chat starts),
+ * answered where it came from; or, for one the gateway addressed to a chat (the web), that chat, answered at its
+ * home. Only the owner writes to a chat by its id, and only to the owner's: another's belongs to them, and banda
+ * answers them there.
  */
 function routeOf(
 	doc: { chats: { [id: string]: { origin: Origin } }; routes: { [key: string]: { chat: number } } },
 	inbound: Inbound,
-): { chat?: number; replyTo: Origin } | Extract<Received, { refused: string }> {
-	if (inbound.chat === undefined) return { replyTo: inbound.origin, ...doc.routes[routeKey(inbound.origin)] };
+): { chat?: number; replyTo: Origin; home: Origin } | Extract<Received, { refused: string }> {
+	if (inbound.chat === undefined) {
+		const home = chatOrigin(inbound.origin);
+		return { replyTo: inbound.origin, home, ...doc.routes[routeKey(home)] };
+	}
 	const home = doc.chats[inbound.chat]?.origin;
 	if (home === undefined) return { refused: "no such chat" };
 	if (inbound.origin.peer !== OWNER) return { refused: "only the owner writes to a chat by its id" };
-	return { chat: inbound.chat, replyTo: home };
+	return { chat: inbound.chat, replyTo: home, home };
 }
 
 /** What the owner wrote elsewhere, as a quote: its first lines. */
@@ -1362,7 +1367,7 @@ export function defineCore(options: CoreOptions) {
 			if ("refused" in routed) return routed;
 			const { replyTo } = routed;
 			let { chat } = routed;
-			const mainAgent = mainAgentOf(inbound.origin);
+			const mainAgent = mainAgentOf(chatOrigin(inbound.origin));
 			if (mainAgent !== undefined && inbound.agent !== undefined && inbound.agent !== mainAgent)
 				return { refused: `this is ${mainAgent}'s main chat, not ${inbound.agent}'s` };
 			if (chat !== undefined) {
@@ -1403,14 +1408,13 @@ export function defineCore(options: CoreOptions) {
 					connected: await connectionToolsOf(tx, agent),
 				});
 				doc.chats[chat] = {
-					origin: inbound.origin,
+					origin: routed.home,
 					agent: agent.id,
 				};
 			}
 			// read back: the doc tracks changes through its own objects, not the one assigned
 			const home = doc.chats[chat];
 			if (home === undefined) throw new Error(`chat ${chat} has no home origin`);
-			const key = routeKey(replyTo);
 			const files = inbound.files ?? [];
 			for (const file of files) await hold(tx, chat, file, "owner", options.now?.() ?? Date.now());
 			// the model finds what came with the message as files in its box
@@ -1442,7 +1446,7 @@ export function defineCore(options: CoreOptions) {
 				placement,
 			);
 			const turn = await tx.createTask(Turn, { ...input, admit: Number(admit) }, placement);
-			doc.routes[key] ??= { chat };
+			doc.routes[routeKey(routed.home)] ??= { chat };
 			home.lastAdmit = Number(admit);
 			refs.messages[ref] = { chat, turn: Number(turn) };
 			return { turn: Number(turn), chat };

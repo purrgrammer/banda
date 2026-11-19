@@ -23,7 +23,10 @@ import { echoModels } from "../models.ts";
 
 /** What a fixture holds, for the test that opens it: kept beside it as `expected.json`. */
 export type Expected = {
-	/** What was said in each chat, by the CLI's thread ("" the main one), and what came back. */
+	/**
+	 * What was said in each chat and what came back. `thread` is "" for the first agent's chat; a home from before the
+	 * CLI wrote to an agent's one chat kept a chat of the CLI's own per thread, which the store still holds.
+	 */
 	readonly said: { readonly thread: string; readonly text: string; readonly reply: string }[];
 	readonly permissions: unknown;
 	readonly devices: unknown;
@@ -50,20 +53,15 @@ async function make(): Promise<void> {
 		const daemon = await startDaemon({ home, port: 0, models: echoModels().models, log: () => {}, box: hostBox(home) });
 		const said: Expected["said"][number][] = [];
 		try {
-			for (const [thread, text] of [
-				["", "is anyone there"],
-				["work", "the tide tables for Thursday"],
-				["work", "and for Friday"],
-			] as const) {
-				const args = thread === "" ? [text] : ["--thread", thread, text];
+			for (const text of ["is anyone there", "the tide tables for Thursday", "and for Friday"]) {
 				const { stdout } = await promisify(execFile)(process.execPath, [
 					join(here, "../../../src/cli/index.ts"),
 					"say",
-					...args,
+					text,
 					"--home",
 					home,
 				]);
-				said.push({ thread, text, reply: stdout.trimEnd() });
+				said.push({ thread: "", text, reply: stdout.trimEnd() });
 			}
 		} finally {
 			await daemon.close();

@@ -829,6 +829,8 @@ or not the model remembers it.
 - **Inbound** is one commit: the routing (creating the chat if new), the message ref, and the Turn, keyed by the
   message id; a redelivery starts nothing.
 - **Routing** is deterministic: `gateway:peer:thread` names a chat; the model never chooses where a message goes.
+  The owner's target is an agent, on every gateway: the CLI names one (the first when it names none) and writes to
+  that agent's one chat, the one the app shows; it starts no chat of its own.
 - **A group's visible history has one copy.** Its canonical room conversation never runs a model. Each agent has one
   persistent hidden execution chat for that group, preserving its permissions and cache. Posting a message and
   admitting one Turn per mentioned agent is one durable operation, deduplicated by the message id. Those Turns run in

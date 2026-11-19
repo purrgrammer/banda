@@ -811,7 +811,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 							await change(open, workspace, picks, core.agentChanged);
 							return companion(open);
 						}),
-					say: async ({ text, thread }, signal, heard) => ({ ended: await cli.say(text, thread, signal, heard) }),
+					say: async ({ text, agent }, signal, heard) => ({ ended: await cli.say(text, agent, signal, heard) }),
 					answer: async (key, value, via, type, approving) => {
 						const filled = await answer(open, key, value, { gateway: via, peer: OWNER }, "bearer", {
 							...(type === undefined ? {} : { type }),

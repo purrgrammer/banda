@@ -7,9 +7,10 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { agentMainThread, isAgentMain, isMain, MAIN_THREAD, mainAgentOf, OWNER } from "../src/core/gateway.ts";
+import type { Status } from "../src/core/status.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
-import type { AgentView, ChatRow, Posted } from "../src/server/api.ts";
+import type { AgentView, ChatRow, Item, Posted } from "../src/server/api.ts";
 import { agentMainOf, mainOf } from "../web/src/lib/chats.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { echoModels, tempHome, until } from "./helpers.ts";
@@ -43,7 +44,16 @@ async function daemonAt(home: string) {
 		if (!("chat" in posted) || posted.chat === undefined) throw new Error(`refused: ${JSON.stringify(posted)}`);
 		return posted.chat;
 	};
-	return { daemon, api, post };
+	/** What `banda say` sends: the lines the daemon answered with. */
+	const say = async (text: string, to: { agent?: string; thread?: string } = {}) => {
+		const response = await fetch(`http://127.0.0.1:${daemon.port}/api/say`, {
+			method: "POST",
+			headers: { authorization: `Bearer ${token}` },
+			body: JSON.stringify({ text, ...to }),
+		});
+		return response.text();
+	};
+	return { daemon, api, post, say };
 }
 
 describe("the main chat", () => {
@@ -140,6 +150,77 @@ describe("the main chat", () => {
 		const { daemon, post } = await daemonAt(home);
 		try {
 			expect(await post({ thread: agentMainThread("reader") }, "after restart")).toBe(readerMain);
+		} finally {
+			await daemon.close();
+		}
+	}, 60_000);
+
+	it("is the chat the CLI writes to: the first agent's when it names none, another's by its name", async () => {
+		const home = await tempHome();
+		await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
+		const { daemon, api, post, say } = await daemonAt(home);
+		try {
+			// the CLI first: the chat it starts is the one the app shows
+			expect(await say("from the terminal")).toContain("re: from the terminal");
+			const main = await post({ thread: MAIN_THREAD }, "from the app");
+			expect(await say("and again")).toContain("re: and again");
+			const dir = join(home, "workspace", "agents");
+			await mkdir(dir, { recursive: true });
+			await writeFile(
+				join(dir, "reader.md"),
+				"---\ndescription: Reads carefully\ntools: [read]\n---\nRead carefully.\n",
+			);
+			const change = await until(async () => {
+				const reader = (await api<AgentView[]>("/agents")).find((agent) => agent.name === "reader");
+				return reader?.change !== undefined && "sha" in reader.change ? reader.change : undefined;
+			});
+			await api("/agents/reader/accept", { method: "POST", body: JSON.stringify({ sha: change.sha }) });
+			// another agent by its name, the CLI first again
+			expect(await say("reader, from the terminal", { agent: "reader" })).toContain("re: reader, from the terminal");
+			const readerMain = await post({ thread: agentMainThread("reader") }, "hello reader");
+			expect(await say("reader, again", { agent: "reader" })).toContain("re: reader, again");
+			// an agent is the only target: a thread, a name that is none, or an agent that is not there starts nothing
+			expect(await say("to a thread", { thread: "work" })).toContain("say takes an agent, not a thread");
+			expect(await say("to no name", { agent: "Not A Name" })).toContain("agent is an agent's name");
+			expect(await say("to nobody", { agent: "nobody" })).toContain("there is no agent named nobody");
+			const { chats } = await api<Status>("/status");
+			expect(chats.map(({ chat, origin }) => ({ chat, origin })).sort((a, b) => a.chat - b.chat)).toEqual([
+				{ chat: main, origin: { gateway: "web", peer: OWNER, thread: MAIN_THREAD } },
+				{ chat: readerMain, origin: { gateway: "web", peer: OWNER, thread: "agent:reader" } },
+			]);
+		} finally {
+			await daemon.close();
+		}
+	}, 60_000);
+
+	it("shows what a routine's run says after the owner last wrote from the CLI", async () => {
+		const home = await tempHome();
+		await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
+		const { daemon, api, say } = await daemonAt(home);
+		try {
+			expect(await say("from the terminal")).toContain("re: from the terminal");
+			const main = (await api<Status>("/status")).chats[0]!.chat;
+			const json = { "content-type": "application/json" };
+			const { name } = await api<{ name: string }>("/routines", {
+				method: "POST",
+				headers: json,
+				body: JSON.stringify({ agent: "sancho", description: "Tea", when: "every 24h", ask: "TEA ASK: remind them." }),
+			});
+			await api(`/routines/sancho/${name}/run`, {
+				method: "POST",
+				headers: json,
+				body: JSON.stringify({ key: "run-tea" }),
+			});
+			// the run's message is in the agent's chat, where the app reads it, though the owner's last word came from the CLI
+			const said = (items: readonly Item[]) =>
+				items.filter((item) => item.role === "assistant" && JSON.stringify(item.calls ?? []).includes("TEA ASK"));
+			const shown = await until(async () => {
+				const found = said((await api<{ items: Item[] }>(`/chats/${main}/items?after=0`)).items);
+				return found.length > 0 ? found : undefined;
+			});
+			expect(shown).toHaveLength(1);
+			// and the app's next message goes on in that chat
+			expect((await api<Status>("/status")).chats.map(({ chat }) => chat)).toEqual([main]);
 		} finally {
 			await daemon.close();
 		}
