@@ -8,28 +8,20 @@ The path from a fork to a pull request, for anyone, with or without write access
   ([Checks by change](AGENTS.md#checks-by-change)): open an issue first and wait for an answer. [docs/](docs/README.md)
   holds the plan.
 - A security issue goes privately, as [SECURITY.md](SECURITY.md) says: never in an issue or a pull request.
-- You contribute under the project's license, [AGPL-3.0](LICENSE).
 
 ## Set up safely
 Working on banda needs no keys, accounts or real data.
 - Node 26 (`mise install`), then `npm ci`.
-- `npm run check`, `npm run typecheck`, `npm test`: temp homes and a fake model, no network or keys. While editing,
-  `npm run test:fast -- <file>`. `test:faults`, `test:computer` and `test:docker` run in CI, not on your machine.
-- A banda daemon, as it starts (some tests start one), and `npm run boxes:sweep` remove what the computers of homes they
-  cannot find on this disk left behind: as this OS user, and on the Docker engine this shell reaches. So work as an OS
-  user, and against a Docker engine, where every banda home is yours and on a disk mounted now: never a Docker engine
-  others share (check `docker context show` and `DOCKER_HOST`). To see which homes they hold computers for, without
-  changing anything:
-  ```sh
-  docker ps --all --filter label=banda.home --format '{{.Label "banda.home"}}' | sort -u
-  cat /private/tmp/banda-msb-$(id -u)-*/home.json   # on Linux: /tmp/banda-msb-…
-  ```
-  Each path should be a home of yours on this computer, or one you are done with.
+- `npm run check`, `npm run typecheck`, `npm test`: temp homes and a fake model, no network or keys. A test run removes
+  afterwards only the boxes its own tests left. While editing, `npm run test:fast -- <file>`. `test:faults`,
+  `test:computer` and `test:docker` run in CI, not on your machine.
 - To try the app: `npm run build`, then `BANDA_HOME=$(mktemp -d) node dist/cli/index.js serve --port 7788`, and open
   the link it prints. It needs a model: one on your own computer ([README](README.md#get-started)) or your own
   provider account. Invent every piece of data you give it. Never point it at your `~/.banda`, and never use
   `npm run home:fork` for a contribution.
-- Done: Ctrl-C, delete the temp home, then `npm run boxes:sweep` (on the setup above, and never while tests run).
+- Done: Ctrl-C, then delete the temp home. Whatever computer it made stays behind (a cache in the temporary folder,
+  or with `--box container` a container with its networks and volumes): banda removes no box as it starts.
+  `npm run boxes:sweep` is no step of this path: it removes the boxes of every home it cannot find, others' included.
 
 ## Open a pull request from your fork
 1. Fork, branch from `main`, small commits prefixed `feat:`, `fix:`, `docs:`, `refactor:` or `test:`; each message

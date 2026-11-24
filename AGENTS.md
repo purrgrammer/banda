@@ -108,11 +108,11 @@ A banda daemon may be running from another checkout, possibly the one you are ru
   then open the link it prints. Its computer is the bundled one, from the `computer/` that
   `node scripts/microvm-bundle.ts --prepare` makes in the checkout once; without it the computer stays offline, and
   `--box container` (Docker) or `--box host` (no box) are asked for by name.
-- A box outlives its daemon. When you are done with a throwaway home, stop its daemon and run `npm run boxes:sweep`
-  (never while tests run: a test's box has no daemon). A test run sweeps, after it ends, only the boxes of homes under
-  its own run folder. A daemon at start, and `boxes:sweep`, sweep the boxes of every home they cannot find on this
-  disk, as this OS user and on the Docker engine the shell reaches: use them only where every banda home is yours and
-  on a disk mounted now, never against a Docker engine others share (CONTRIBUTING.md says how to check).
+- A box outlives its daemon, and a daemon touches no box but its own home's: a throwaway home's box stays after its
+  daemon stops and the home goes. A test run removes, after it ends, only the boxes of homes under its own run folder.
+  `npm run boxes:sweep` removes the boxes of every home it cannot find on this disk, on the Docker engine the shell
+  reaches, whoever's they are, and those of throwaway homes whose daemon does not run (a test's box has none): it is
+  no step of a manual run, only a deliberate cleanup, never while tests run.
 - To try the app with the owner's setup and conversations, fork the home instead of onboarding again:
   `npm run home:fork` copies the store (a consistent backup while its daemon runs), blobs, config, the owner's token,
   proxy credentials and the box's volumes into a temporary home, links the provider sign-in, and pauses routines there;

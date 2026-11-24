@@ -93,10 +93,10 @@ In LM Studio, load a model with a context length of 32,768 or more and start its
 the server has; a model that can't call tools isn't offered.
 
 An installed banda keeps your data in `~/.banda`; a run from source, in the home `BANDA_HOME` names. Ctrl-C stops
-banda; the agents' computer stays. A daemon as it starts, and `npm run boxes:sweep`, remove what the computers of homes
-they cannot find on this disk left behind, as this OS user and on the Docker engine this shell reaches: run them only
-where every banda home is yours and on a disk mounted now, never against a Docker engine others share
-([CONTRIBUTING.md](CONTRIBUTING.md#set-up-safely) says how to check). To start over, delete the home and sweep.
+banda; the agents' computer stays. banda removes no other home's computer as it starts, so what a deleted home left
+behind (a computer's cache, or a container with its networks and volumes) stays until it is removed on purpose.
+`npm run boxes:sweep` removes those of every home it cannot find on this disk, on the Docker engine this shell
+reaches, whoever's they are: it is no step of running from source. To start over, delete the home.
 
 ## Contribute
 
