@@ -461,46 +461,7 @@ window.va = window.va || function () { (window.vaq = window.vaq || []).push(argu
 <script defer src="/_vercel/insights/script.js"></script>
 <script type="module" src="./band.ts"></script>
 <script type="module" src="./page.ts"></script>
-<script>
-// Download links are published in the HTML by scripts/site-downloads.ts. Device detection only picks a shortcut.
-(async () => {
-	const label = document.getElementById("download-label");
-	const button = document.getElementById("download");
-	const ua = navigator.userAgent;
-	const data = navigator.userAgentData;
-	const platform = (data?.platform || navigator.platform || "").toLowerCase();
-	let os = /mac/.test(platform) || /Mac OS X/.test(ua) ? "mac" : /linux/.test(platform) || /Linux/.test(ua) ? "linux" : null;
-	if (/Android/.test(ua)) os = "android";
-	else if (/iPhone|iPad/.test(ua) || (/mac/.test(platform) && navigator.maxTouchPoints > 1)) os = null;
-	button.href = "#downloads";
-	label.textContent = "Choose your platform";
-	if (!os) return;
-	let arch = os === "mac" || os === "android" ? "arm64" : /aarch64|arm64|armv[5-8]/i.test(`${platform} ${ua}`) ? "arm64" : "x64";
-	const choose = () => {
-		button.href = "#downloads";
-		label.textContent = "Choose your platform";
-		const ext = { mac: "dmg", linux: "deb", android: "apk" }[os];
-		const kind = os === "android" ? "phone" : "desktop";
-		const link = document.querySelector(`a[data-file="${kind}/${os}/${arch}/${ext}"][href]`);
-		if (!link) {
-			if (os === "linux" && arch === "x64") {
-				button.href = "https://github.com/purrgrammer/banda/releases";
-				label.textContent = "View releases";
-			}
-			return;
-		}
-		button.href = link.href;
-		label.textContent = `Download for ${{ mac: "macOS (Apple silicon)", linux: "Linux (Debian, Ubuntu, x64)", android: "Android" }[os]}`;
-	};
-	choose();
-	try {
-		const high = await data?.getHighEntropyValues?.(["architecture"]);
-		if (high?.architecture && os !== "android") {
-			arch = high.architecture === "arm" ? "arm64" : "x64";
-			choose();
-		}
-	} catch {}
-})();
-</script>
+<!-- Download links are published in the HTML by scripts/site-downloads.ts. Device detection only picks a shortcut. -->
+<script type="module" src="./download-button.ts"></script>
 </body>
 </html>
