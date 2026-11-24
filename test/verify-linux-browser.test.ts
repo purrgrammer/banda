@@ -9,14 +9,18 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 import { fixture, run } from "./fixtures/linux-browser.ts";
 
-it.skipIf(process.platform === "win32")(
-	"keeps the fatal first bytes and actual abort after a long stack trace",
-	async () => {
-		const { home, output } = await fixture();
-		const binary = join(home, "owned-fatal-child");
-		await writeFile(
-			binary,
-			`#!/bin/sh
+/**
+ * Two cases signal processes: one stand-in aborts itself, and the unresponsive one ends only by the helper's SIGKILL.
+ * CI runs them (the check job sets CI); a development machine skips them, as it skips process-kill sweeps.
+ */
+const signals = process.platform === "win32" || process.env.CI === undefined;
+
+it.skipIf(signals)("keeps the fatal first bytes and actual abort after a long stack trace", async () => {
+	const { home, output } = await fixture();
+	const binary = join(home, "owned-fatal-child");
+	await writeFile(
+		binary,
+		`#!/bin/sh
 if [ "$1" = --version ]; then printf 'owned fatal fixture\\n'; exit 0; fi
 printf 'FATAL first diagnostic\\n' >&2
 i=0
@@ -24,22 +28,21 @@ while [ "$i" -lt 400 ]; do printf 'stack frame without original fatal reason\\n'
 printf '[end of stack trace]\\n' >&2
 kill -ABRT $$
 `,
-			{ mode: 0o700 },
-		);
-		const { status, result } = await run(binary, output);
-		expect(status).toBe(1);
-		expect(result.primaryFailure).toContain("SIGABRT");
-		expect(result.helperExit).toContain("SIGABRT");
-		expect(result.cleanup.kind).toBe("complete");
-		expect(result.stderr.complete).toBe(true);
-		expect(result.process.browserObservation).toBe("unobserved");
-		const raw = await readFile(join(output, "chrome.stderr"), "utf8");
-		expect(raw.startsWith("FATAL first diagnostic\n")).toBe(true);
-		expect(raw.endsWith("[end of stack trace]\n")).toBe(true);
-		expect(raw.length).toBeGreaterThan(2000);
-		expect(existsSync(result.process.profile ?? "")).toBe(false);
-	},
-);
+		{ mode: 0o700 },
+	);
+	const { status, result } = await run(binary, output);
+	expect(status).toBe(1);
+	expect(result.primaryFailure).toContain("SIGABRT");
+	expect(result.helperExit).toContain("SIGABRT");
+	expect(result.cleanup.kind).toBe("complete");
+	expect(result.stderr.complete).toBe(true);
+	expect(result.process.browserObservation).toBe("unobserved");
+	const raw = await readFile(join(output, "chrome.stderr"), "utf8");
+	expect(raw.startsWith("FATAL first diagnostic\n")).toBe(true);
+	expect(raw.endsWith("[end of stack trace]\n")).toBe(true);
+	expect(raw.length).toBeGreaterThan(2000);
+	expect(existsSync(result.process.profile ?? "")).toBe(false);
+});
 
 it.skipIf(process.platform === "win32")(
 	"fails overflow while retaining a bounded beginning and the original byte count",
@@ -68,17 +71,19 @@ exit 7
 	},
 );
 
-it.skipIf(process.platform === "win32")(
+it.skipIf(signals)(
 	"preserves the command timeout before the helper's forced cleanup and leaves no owned child",
 	async () => {
 		const { home, output } = await fixture();
 		const binary = join(home, "owned-unresponsive-child");
+		// it answers nothing, so only SIGKILL ends it while the preflight lives; once that parent is gone (a run killed
+		// midway), it is re-parented and ends itself instead of outliving the run
 		const node = `'${process.execPath.replaceAll("'", "'\\''")}'`;
 		await writeFile(
 			binary,
 			`#!/bin/sh
 if [ "$1" = --version ]; then printf 'owned unresponsive fixture\\n'; exit 0; fi
-exec ${node} -e 'setInterval(() => {}, 1000)'
+exec ${node} -e 'const parent = process.ppid; setInterval(() => { if (process.ppid !== parent) process.exit(); }, 200)'
 `,
 			{ mode: 0o700 },
 		);
