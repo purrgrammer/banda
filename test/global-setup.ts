@@ -2,12 +2,13 @@
  * Every test run gets a temporary folder of its own, and every temporary folder a test, a daemon, a Chrome or a Vite
  * server makes goes in it: it all goes with the run, whatever a test forgot to remove. A run that was killed leaves its
  * folder, and a later run on the machine removes it once its process is gone and it has been quiet for an hour. After the run, what a box left behind
- * goes too: a box whose home is gone is the leftover of a test that died before its own teardown. Only gone homes:
- * another run's test may be using its box right now.
+ * goes too: a box whose home was under this run's folder is the leftover of one of its tests that died before its own
+ * teardown. Only this run's: another run's test may be using its box right now, and a home this machine cannot find
+ * (another machine's on a shared Docker engine, one on a disk not mounted now) was never this run's to remove.
  */
-import { mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { dockerAvailable, sweepBoxes } from "../src/box/container.ts";
 import { sweepMicrovmBoxes } from "../src/box/microvm.ts";
 
@@ -43,8 +44,10 @@ export default async function setup() {
 	await writeFile(join(run, MARK), "");
 	process.env.TMPDIR = run;
 	return async () => {
+		// both spellings, read before the folder goes: a box's label may name its home either way (/var is /private/var)
+		const roots = [resolve(run), await realpath(run).catch(() => resolve(run))];
 		await rm(run, { recursive: true, force: true, maxRetries: 5 }).catch(() => undefined);
-		await sweepMicrovmBoxes().catch(() => undefined);
-		if (await dockerAvailable()) await sweepBoxes();
+		await sweepMicrovmBoxes({ within: roots }).catch(() => undefined);
+		if (await dockerAvailable()) await sweepBoxes({ within: roots });
 	};
 }
