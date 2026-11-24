@@ -49,7 +49,8 @@ account, object, harness, session, artifact, memory, box, workspace, gateway, in
 
 ## Setup and checks
 - Node 26, as `mise.toml` says (`mise install` gets it). `npm ci`, then `npm run check` (Biome: format and lint;
-  `npm run fix` applies it), `npm run typecheck` and `npm test` (the fast ordinary suites). All green before every commit.
+  `npm run fix` applies it), `npm run typecheck` and `npm test` (the fast ordinary suites). Before every commit, the
+  checks its kind of change calls for (Checks by change, below) are green.
 - Fast tests only locally: `npm test` and `npm run test:fast` run the ordinary suites without Docker tests or
   process-kill sweeps. During edits use `npm run test:fast -- <test-file>`. Do not run full/deep fault sweeps or
   Docker suites on development machines.
@@ -61,7 +62,8 @@ account, object, harness, session, artifact, memory, box, workspace, gateway, in
 - Fault suites run nightly in CI; the box suites (the `box` project: a real box, its proxy, git and the browser) run in
   CI on pushes to main, all of them on the computer banda ships (`npm run test:computer`, a runner's KVM) and again on
   Docker (`npm run test:docker`, for `serve --box container`). `BANDA_TEST_BOX` names the box; a box named and missing
-  fails the suite. For an additional fault or box check, dispatch the `ci` workflow on the candidate ref.
+  fails the suite. For an additional fault or box check, someone with write access dispatches the `ci` workflow on
+  the candidate ref; without it, ask for the run in the pull request.
   `npm run test:faults`, `npm run test:computer` and `npm run test:docker` are CI commands, not local pre-commit gates. Fault suites run one file at a time with at most two child jobs per runner.
 - The web UI is in `web/`: `npm run build:web` builds what the daemon serves, `npm run web:dev` serves it with hot
   reload against a daemon on `BANDA_PORT`, `npm run web:contrast` audits the palette, and `#/specimen` shows every
@@ -107,8 +109,10 @@ A banda daemon may be running from another checkout, possibly the one you are ru
   `node scripts/microvm-bundle.ts --prepare` makes in the checkout once; without it the computer stays offline, and
   `--box container` (Docker) or `--box host` (no box) are asked for by name.
 - A box outlives its daemon. When you are done with a throwaway home, stop its daemon and run `npm run boxes:sweep`
-  (never while tests run: a test's box has no daemon). A test run sweeps the boxes of homes that are gone after it
-  ends, and a daemon at start sweeps them too.
+  (never while tests run: a test's box has no daemon). A test run sweeps, after it ends, only the boxes of homes under
+  its own run folder. A daemon at start, and `boxes:sweep`, sweep the boxes of every home they cannot find on this
+  disk, as this OS user and on the Docker engine the shell reaches: use them only where every banda home is yours and
+  on a disk mounted now, never against a Docker engine others share (CONTRIBUTING.md says how to check).
 - To try the app with the owner's setup and conversations, fork the home instead of onboarding again:
   `npm run home:fork` copies the store (a consistent backup while its daemon runs), blobs, config, the owner's token,
   proxy credentials and the box's volumes into a temporary home, links the provider sign-in, and pauses routines there;
@@ -128,23 +132,38 @@ A banda daemon may be running from another checkout, possibly the one you are ru
   transcript page. A change that grows one past its cap raises the cap there (`BANDA_STREAM_BUDGET=print` prints what
   it measured), saying the measured size and why in the commit message.
 
+## Checks by change
+What a change can break sets its checks, not its size: a one-line change in core is a core change. The pull request
+says which kind it is, what ran and what did not; a suite that skipped or could not run is reported as such, never as
+green. A change that fits several kinds takes the strictest.
+- **Words** (docs, comments, a string or copy in the UI): `npm run check` when it touches a file Biome covers, and the
+  test that holds the words, if one does. A screenshot before and after only when the words show in the app. No
+  model, demo or full suite.
+- **A bounded fix** (one behaviour, outside core): a regression test that fails before the fix and passes after,
+  `npm run check`, `npm run typecheck` and `npm run test:fast -- <files>` for the files that cover the code it touches.
+  A visible change adds screenshots at desktop and phone width, a GIF for an interaction.
+- **A slice** (a feature): principle 9: `npm run check`, `npm run typecheck`, `npm test`, and its use through the app
+  against a running daemon on a throwaway home, at desktop and phone width.
+- **Core**: trust and its boundaries (the box, the egress proxy, permissions, drafts, credentials, pairing and
+  devices, the browser), durability (the store, blobs, durable flows), stored shapes and the home format with its
+  migrations, and what removes or reaches resources outside the change's own (sweeps, cleanup, processes, Docker).
+  Everything a slice needs, plus tests at its boundaries (what is accepted and what is refused), fault points for each
+  new effect under `test/fault/` (principle 10), the fault or box suites in CI when it touches what they cover, and an
+  adversarial review (principle 11).
+
 ## Changes
-- Work lands on `main` as small commits; push and open pull requests only when the owner says so.
-- Small commits with conventional prefixes (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`).
+- Small commits with conventional prefixes (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`), on a branch of the
+  change's own; they reach `main` through a reviewed pull request.
 - The commit message carries the why: what changed, the decisions taken and the caveats left (principle 8).
-- A PR's proof is posted as one comment once checks, typecheck and tests are green: before (origin/main)
-  and after (the branch), at desktop and phone width. Screenshots for a visual change; a GIF (ffmpeg, under
-  8 MB) for an interaction. Record on a throwaway home with invented data and the faux provider, never
-  a `home:fork`: the repo is public. Media go on the orphan branch `pr-proof` under `pr-<N>/` and are linked
-  as `https://raw.githubusercontent.com/purrgrammer/banda/pr-proof/pr-<N>/<file>`.
+- A pull request's proof is what its kind of change asks (Checks by change), attached to its description or a
+  comment: before (`main`) and after (the branch). Record on a throwaway home with invented data, never a
+  `home:fork`: the repo is public.
 - What a home holds stays on the machine: the repo is public, and so is everything written into it. A commit
   message, a pull request, an issue, a comment and a test never carry what was read from the owner's home or a
   `home:fork` of it: no routine's, chat's or agent's name, no id of a conversation, task or session, no time
   something ran, no usage or cost figure, no line of a log or a transcript. Say what was found in general words ("a
   routine's run started a session", "the report fell short by its runs"), give numbers only from a throwaway home or
   a test, and read the message again for these before every commit and before every post.
-- Push to GitHub only (`git push https://github.com/purrgrammer/banda <branch>`): `origin` also pushes to
-  a nostr mirror that rejects force pushes.
 - An upgrade keeps the owner's home: a home made by 0.1.0-alpha.14 (format 3) or any later build opens in every later
   one. A stored shape (a doc, a task's input or checkpoint, a file in the home, what a pinned dependency keeps there)
   changes only together with three things: a step appended to `MIGRATIONS` in src/core/format.ts, which moves the
