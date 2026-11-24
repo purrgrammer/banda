@@ -79,9 +79,11 @@ describe("the Google Contacts specimen, as first drawn", () => {
 				"Open in Google Contacts",
 				"Add “Bo Lindqvist” to your contacts",
 				"Delete this contact from your contacts",
-				"AG",
 			])
 				expect(text, words).toContain(words);
+			// Ana García has no photo: her avatar shows her initials
+			const faces = elements(section ?? "", /<span\b[^>]*\sdata-slot="avatar-fallback"[^>]*>/).map(textOf);
+			expect(faces).toContain("AG");
 			const drafts = elements(section ?? "", /<[a-z]+\b[^>]*\saria-label="Contact draft"[^>]*>/);
 			expect(drafts.length).toBeGreaterThan(0);
 			for (const draft of drafts) expect(inside(draft)).not.toMatch(/<(textarea|input)\b/);
