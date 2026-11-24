@@ -20,8 +20,13 @@ Working on banda needs no keys, accounts or real data.
   provider account. Invent every piece of data you give it. Never point it at your `~/.banda`, and never use
   `npm run home:fork` for a contribution.
 - Done: Ctrl-C, then delete the temp home. Whatever computer it made stays behind (a cache in the temporary folder,
-  or with `--box container` a container with its networks and volumes): banda removes no box as it starts.
+  or with `--box container` a container with its networks and volumes): banda removes no box as it starts. What
+  stays keeps holding disk, a computer that may still run, and Docker networks with their address ranges, and enough
+  of it can keep a new box from being made. banda has no command that removes one home's box alone, and
   `npm run boxes:sweep` is no step of this path: it removes the boxes of every home it cannot find, others' included.
+  So try the app in a throwaway environment of its own (a virtual machine, or an OS user with a Docker engine no one
+  else uses) that goes away with what it holds. If you remove anything by hand, remove only what you know your own
+  throwaway home made, never by a pattern or a prune.
 
 ## Open a pull request from your fork
 1. Fork, branch from `main`, small commits prefixed `feat:`, `fix:`, `docs:`, `refactor:` or `test:`; each message

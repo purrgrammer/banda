@@ -94,7 +94,9 @@ the server has; a model that can't call tools isn't offered.
 
 An installed banda keeps your data in `~/.banda`; a run from source, in the home `BANDA_HOME` names. Ctrl-C stops
 banda; the agents' computer stays. banda removes no other home's computer as it starts, so what a deleted home left
-behind (a computer's cache, or a container with its networks and volumes) stays until it is removed on purpose.
+behind (a computer's cache, or a container with its networks and volumes) stays until it is removed on purpose. It
+keeps holding what it holds: disk, a computer that may still run, and Docker networks with their address ranges, so
+enough of them can keep a new box from being made. banda has no command that removes one home's box alone, and
 `npm run boxes:sweep` removes those of every home it cannot find on this disk, on the Docker engine this shell
 reaches, whoever's they are: it is no step of running from source. To start over, delete the home.
 
