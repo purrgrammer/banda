@@ -98,7 +98,8 @@ behind (a computer's cache, or a container with its networks and volumes) stays 
 keeps holding what it holds: disk, a computer that may still run, and Docker networks with their address ranges, so
 enough of them can keep a new box from being made. banda has no command that removes one home's box alone, and
 `npm run boxes:sweep` removes those of every home it cannot find on this disk, on the Docker engine this shell
-reaches, whoever's they are: it is no step of running from source. To start over, delete the home.
+reaches, whoever's they are: it is no step of running from source. To start over from source, use a new throwaway
+home (`BANDA_HOME=$(mktemp -d)`); deleting a home frees nothing its box holds.
 
 ## Contribute
 
