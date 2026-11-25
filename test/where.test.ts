@@ -10,6 +10,8 @@ describe("where", () => {
 			"#/a/mara-2?at=41",
 			"#/g/7",
 			"#/g/7?at=3",
+			"#/x/mara/atlas",
+			"#/x/mara/atlas?call=toolu_01AB.cd%3A1",
 			"#/settings",
 			"#/connections",
 			"#/specimen",
@@ -22,6 +24,20 @@ describe("where", () => {
 		expect(parse("#/a/Bad Name")).toEqual({ name: "home" });
 		expect(parse("#/a/mara?at=-3")).toEqual({ name: "agent", id: "mara" });
 		expect(parse("")).toEqual({ name: "home" });
+	});
+
+	it("reads an exchange between two different agents, at a call when one is given", () => {
+		expect(parse("#/x/mara/atlas?call=toolu_01AB.cd%3A1")).toEqual({
+			name: "exchange",
+			a: "mara",
+			b: "atlas",
+			call: "toolu_01AB.cd:1",
+		});
+		// a call that is no id drops; an agent with itself, or a bad id, is no exchange
+		expect(parse("#/x/mara/atlas?call=%3Cscript%3E")).toEqual({ name: "exchange", a: "mara", b: "atlas" });
+		expect(parse("#/x/mara/mara")).toEqual({ name: "home" });
+		expect(parse("#/x/mara/Bad Name")).toEqual({ name: "home" });
+		expect(lastOf("#/x/mara/atlas")).toBeUndefined();
 	});
 
 	it("remembers only a chat as the last place", () => {

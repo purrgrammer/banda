@@ -2,6 +2,7 @@
 import { CalendarClockIcon } from "lucide-react";
 import { type ReactNode, useContext, useState } from "react";
 import { SERVER_KINDS } from "../../../../src/core/custom-providers.ts";
+import { ExchangeScreen } from "../../app/Exchange.tsx";
 import { AgentMessage } from "../../chat/AgentMessage.tsx";
 import { ApprovalCard, Facts, WaitingPill } from "../../chat/Approval.tsx";
 import { Band } from "../../chat/Band.tsx";
@@ -36,7 +37,7 @@ import {
 	SKILL_OFFERS,
 	VOICE,
 } from "../fixtures.ts";
-import { Section, StageContext } from "../stage.tsx";
+import { Labelled, Section, StageContext } from "../stage.tsx";
 
 /** A chat: its header, its timeline, its composer. */
 export function ChatScreen({
@@ -119,11 +120,7 @@ export function MaraChat({ keyboard = false, panelOpen = false }: { keyboard?: b
 				</Bubble>
 				<ViewCard host="flights.example" title="Lisbon, Fri 14 Nov" shot={PAGE} />
 			</Run>
-			<AgentMessage
-				author={{ ...ATLAS, id: "atlas" }}
-				text="Friday looks clear; I found two morning flights under €250."
-				time="10:24"
-			/>
+			<AgentMessage other={{ ...ATLAS, id: "atlas" }} direction="in" href="#/x/mara/atlas" time="10:24" />
 			<UnreadDivider count={2} />
 			<Run who={MARA} time="10:42" compact>
 				<Bubble>Three fit. The 9:15 is the one I'd take: €214, window 14A, back Sunday 18:40.</Bubble>
@@ -164,6 +161,70 @@ export function MaraChat({ keyboard = false, panelOpen = false }: { keyboard?: b
 	);
 }
 
+const EXCHANGE_PAIR = [
+	{ ...MARA, id: "mara" },
+	{ ...ATLAS, id: "atlas" },
+] as const;
+const AT = Date.now() - 3 * 60 * 60_000;
+const EXCHANGE = [
+	{
+		chat: 2,
+		entry: 40,
+		from: "mara",
+		to: "atlas",
+		text: "Are Friday mornings clear for Ana? She asked for Lisbon.",
+		at: AT,
+		call: "c1",
+	},
+	{
+		chat: 1,
+		entry: 51,
+		from: "atlas",
+		to: "mara",
+		text: "Friday looks clear; I found two morning flights under €250.\n\n- TP 1351, 9:15\n- TP 1353, 11:40",
+		at: AT + 3 * 60_000,
+		call: "c2",
+	},
+	{
+		chat: 2,
+		entry: 44,
+		from: "mara",
+		to: "atlas",
+		text: "Thanks. I'll offer the 9:15 and hold the 11:40 as a fallback.",
+		at: AT + 5 * 60_000,
+		call: "c3",
+	},
+];
+
+function AgentExchange() {
+	const phone = useContext(StageContext).width === "phone";
+	return (
+		<div className="flex flex-col gap-6">
+			<div className="flex h-[36rem] min-h-0 flex-col overflow-hidden border border-line-soft bg-paper">
+				<ExchangeScreen pair={EXCHANGE_PAIR} items={EXCHANGE} loaded phone={phone} onBack={() => {}} />
+			</div>
+			<Labelled label="Nothing in the newest page, older pages behind it: no empty state until every page was read">
+				<div className="flex h-[14rem] min-h-0 flex-col overflow-hidden border border-line-soft bg-paper">
+					<ExchangeScreen
+						pair={EXCHANGE_PAIR}
+						items={[]}
+						loaded
+						older
+						onOlder={async () => {}}
+						phone={phone}
+						onBack={() => {}}
+					/>
+				</div>
+			</Labelled>
+			<Labelled label="Nothing between them at all">
+				<div className="flex h-[14rem] min-h-0 flex-col overflow-hidden border border-line-soft bg-paper">
+					<ExchangeScreen pair={EXCHANGE_PAIR} items={[]} loaded phone={phone} onBack={() => {}} />
+				</div>
+			</Labelled>
+		</div>
+	);
+}
+
 function AgentToolsChat() {
 	return (
 		<ChatScreen name="Mara" face={MARA.face}>
@@ -171,11 +232,8 @@ function AgentToolsChat() {
 			<Run who={MARA} time="10:21">
 				<Bubble>I asked Atlas to check the dates and read its latest note.</Bubble>
 			</Run>
-			<AgentMessage
-				author={{ ...ATLAS, id: "atlas" }}
-				text="Friday looks clear; I found two morning flights under €250."
-				time="10:24"
-			/>
+			<AgentMessage other={{ ...ATLAS, id: "atlas" }} direction="out" href="#/x/mara/atlas" time="10:21" />
+			<AgentMessage other={{ ...ATLAS, id: "atlas" }} direction="in" href="#/x/mara/atlas" time="10:24" />
 			<ProposalCard
 				proposal={{
 					id: "specimen:propose-agent",
@@ -511,10 +569,17 @@ export function Screens() {
 			</Section>
 			<Section
 				id="agent-meta-tools"
-				note="Messages between agents as feed lines; proposals as cards for your review."
+				note="Messages between agents as feed lines, each a link to what the two said to each other; proposals as cards for your review."
 				bleed
 			>
 				<AgentToolsChat />
+			</Section>
+			<Section
+				id="agent-exchange"
+				note="What two agents said to each other, opened from either chat's line at that message, marked for a moment. Read only: no composer."
+				bleed
+			>
+				<AgentExchange />
 			</Section>
 		</>
 	);

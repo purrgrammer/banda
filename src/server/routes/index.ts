@@ -7,6 +7,7 @@ import { artifacts } from "./artifacts.ts";
 import { backups } from "./backups.ts";
 import { band } from "./band.ts";
 import { customProviders } from "./custom-providers.ts";
+import { exchanges } from "./exchanges.ts";
 import { faces } from "./faces.ts";
 import { groups } from "./groups.ts";
 import { harnessesArea } from "./harnesses.ts";
@@ -29,6 +30,7 @@ export const AREAS: readonly AreaModule[] = [
 	watches,
 	artifacts,
 	groups,
+	exchanges,
 	proposals,
 	search,
 	faces,

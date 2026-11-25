@@ -242,6 +242,13 @@ export const SECTIONS: readonly Entry[] = [
 		status: "app",
 		sources: ["web/src/chat/Proposal.tsx", LINE],
 	},
+	{
+		id: "agent-exchange",
+		title: "What two agents said to each other",
+		group: "screens",
+		status: "app",
+		sources: ["web/src/app/Exchange.tsx", "web/src/chat/AgentMessage.tsx", HEADER],
+	},
 	{ id: "rows", title: "Rows", group: "screens", status: "app", sources: [ROW] },
 	{ id: "sidebar", title: "The sidebar", group: "screens", status: "app", sources: [BAND] },
 	{ id: "search", title: "Search", group: "screens", status: "app", sources: ["web/src/chat/Search.tsx"] },

@@ -39,6 +39,7 @@ import { attentionOf, bandRows, titleOf, whoOf } from "./band.ts";
 import { ChatThinking } from "./ChatThinking.tsx";
 import { ConnectFlow, freshAccounts } from "./ConnectFlow.tsx";
 import { ConnectionPage } from "./ConnectionPage.tsx";
+import { ExchangePage } from "./Exchange.tsx";
 import { saveEdit, setAgentState } from "./edits.ts";
 import { GroupChat } from "./GroupChat.tsx";
 import { AddHarnessButton, HarnessConnectionTile } from "./HarnessConnections.tsx";
@@ -672,6 +673,19 @@ function Main() {
 					}}
 				/>
 			);
+		if (where.name === "exchange") {
+			const known = [...agents, ...archived];
+			return (
+				<ExchangePage
+					key={`${where.a}/${where.b}`}
+					pair={[whoOf(known, where.a), whoOf(known, where.b)]}
+					call={where.call}
+					phone={phone}
+					onBack={back}
+					gone={<Gone what="This conversation" onHome={() => go({ name: "home" })} />}
+				/>
+			);
+		}
 		if (where.name === "artifact") {
 			const agentOf = (chat: number) => shell.rows.find((each) => each.chat === chat)?.agent;
 			const sourceOf = (chat: number) => {

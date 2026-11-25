@@ -1,13 +1,16 @@
 import { sourceLink } from "../../../src/core/source-link.ts";
 /**
  * Where the app is, in the hash, so the daemon serves one page: `#/` the last chat (or the first agent's), `#/a/<id>` an
- * agent's chat, `#/g/<room>` a group's, `#/settings`, `#/connections`, `#/specimen`. `?at=<entry>` opens a chat at
- * an entry, as a search result does. Pure, so the tests read and write it too.
+ * agent's chat, `#/g/<room>` a group's, `#/x/<a>/<b>` what two agents said to each other, `#/settings`,
+ * `#/connections`, `#/specimen`. `?at=<entry>` opens a chat at an entry, as a search result does; `?call=<id>` opens
+ * an exchange at the message a call sent. Pure, so the tests read and write it too.
  */
 export type Where =
 	| { readonly name: "home" }
 	| { readonly name: "agent"; readonly id: string; readonly at?: number }
 	| { readonly name: "group"; readonly room: number; readonly at?: number }
+	/** The messages agents `a` and `b` sent each other, read only; `call`, the one it opens at. */
+	| { readonly name: "exchange"; readonly a: string; readonly b: string; readonly call?: string }
 	/** An artifact in the main pane; `v`, one of its versions (the newest when absent). */
 	| { readonly name: "artifact"; readonly id: string; readonly v?: number }
 	| { readonly name: "settings" }
@@ -16,7 +19,11 @@ export type Where =
 	| { readonly name: "skill"; readonly id: string }
 	| { readonly name: "specimen" };
 
-const AGENT = /^\/a\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)$/;
+const AGENT_ID = "[a-z][a-z0-9]*(?:-[a-z0-9]+)*";
+const AGENT = new RegExp(`^\\/a\\/(${AGENT_ID})$`);
+const EXCHANGE = new RegExp(`^\\/x\\/(${AGENT_ID})\\/(${AGENT_ID})$`);
+/** A tool call's id as providers make them. */
+const CALL = /^[\w.:-]{1,128}$/;
 const GROUP = /^\/g\/(\d{1,12})$/;
 const ARTIFACT = /^\/artifact\/([0-9a-z]{1,64})$/;
 
@@ -41,6 +48,11 @@ export function parse(hash: string): Where {
 	if (path === "/specimen") return { name: "specimen" };
 	const agent = AGENT.exec(path)?.[1];
 	if (agent !== undefined) return { name: "agent", id: agent, ...entry };
+	const pair = EXCHANGE.exec(path);
+	if (pair?.[1] !== undefined && pair[2] !== undefined && pair[1] !== pair[2]) {
+		const call = new URLSearchParams(query).get("call");
+		return { name: "exchange", a: pair[1], b: pair[2], ...(call !== null && CALL.test(call) ? { call } : {}) };
+	}
 	const artifact = ARTIFACT.exec(path)?.[1];
 	if (artifact !== undefined) {
 		const v = Number(new URLSearchParams(query).get("v") ?? Number.NaN);
@@ -61,6 +73,8 @@ export function hrefOf(where: Where): string {
 			return `#/a/${where.id}${at}`;
 		case "group":
 			return `#/g/${where.room}${at}`;
+		case "exchange":
+			return `#/x/${where.a}/${where.b}${where.call === undefined ? "" : `?call=${encodeURIComponent(where.call)}`}`;
 		case "connections": {
 			const query = [where.connection ? `connection=${where.connection}` : "", where.add ? "add=true" : ""]
 				.filter((part) => part !== "")
