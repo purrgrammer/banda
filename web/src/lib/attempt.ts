@@ -2,7 +2,9 @@
  * Recoverable failures (DESIGN.md "Copy": an error names who, what and the fix): every action the owner takes runs
  * through `attempt`, so none fails in silence. A failure says what did not happen and why, in words: the daemon's own
  * refusal when it answered (it says what to change), or that banda on this computer did not answer; and it offers
- * Try again, which runs the same action again.
+ * Try again, which runs the same action again. A refusal that carries the daemon's fixed word (`code`: the keychain
+ * locked, this home's id lost, a commit not yet synced) was meant for the owner whatever its status, so its words are
+ * shown; only a 5xx without one (a fault nobody named) reads as the generic problem.
  */
 import { toast } from "sonner";
 import { Refused, Unauthorized } from "./api.ts";
@@ -11,7 +13,8 @@ import { Refused, Unauthorized } from "./api.ts";
 export function failureWords(error: unknown): string {
 	if (error instanceof Unauthorized) return "This page lost its sign-in to banda: open the link banda printed again.";
 	if (error instanceof Refused) {
-		if (error.status >= 500) return "banda on this computer hit a problem. Try again in a moment.";
+		if (error.status >= 500 && error.code === undefined)
+			return "banda on this computer hit a problem. Try again in a moment.";
 		return error.message.replace(/^./, (c) => c.toUpperCase());
 	}
 	return "banda on this computer didn't answer. Check it's still running.";

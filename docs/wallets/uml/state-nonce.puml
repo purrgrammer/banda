@@ -28,44 +28,44 @@ state "blocked" as nonce_blocked
 
 [*] --> nonce_free
 
-' row 237
+' row 249
 nonce_free : lane_turn [queued and not can_sign and not chain_ahead] / Sign (C4,C16)
-' row 238
-nonce_free : lane_turn [not queued and not chain_ahead] / Sign (-)
-' row 252
-nonce_free : power_loss / PowerLoss (C21)
-' row 244
-nonce_in_flight : included_latest [more_in_flight] / Track (C5)
-' row 246
-nonce_in_flight : foreign_at_nonce [above_final and not verified] / Track (C7)
-' row 247
-nonce_in_flight : foreign_at_nonce [not above_final] / Track (C7)
-' row 248
-nonce_in_flight : reorg_undoes_inclusion / Reorg (C5,C12)
 ' row 250
-nonce_in_flight : crash / Crash (C6)
-' row 253
-nonce_in_flight : power_loss / PowerLoss (C21)
-' row 254
-nonce_blocked : power_loss / PowerLoss (C21)
+nonce_free : lane_turn [not queued and not chain_ahead] / Sign (-)
+' row 264
+nonce_free : power_loss / PowerLoss (C21)
 ' row 256
+nonce_in_flight : included_latest [more_in_flight] / Track (C5)
+' row 258
+nonce_in_flight : foreign_at_nonce [above_final and not verified] / Track (C7)
+' row 259
+nonce_in_flight : foreign_at_nonce [not above_final] / Track (C7)
+' row 260
+nonce_in_flight : reorg_undoes_inclusion / Reorg (C5,C12)
+' row 262
+nonce_in_flight : crash / Crash (C6)
+' row 265
+nonce_in_flight : power_loss / PowerLoss (C21)
+' row 266
+nonce_blocked : power_loss / PowerLoss (C21)
+' row 268
 nonce_blocked : finality [not above_final] / RaiseLedger (C5)
 
-' row 236
+' row 248
 nonce_free --> nonce_signing : lane_turn [queued and can_sign and not chain_ahead] / Sign (C2,C4)
-' row 239
-nonce_free --> nonce_blocked : lane_turn [chain_ahead] / Sign (C5,C21)
-' row 240
-nonce_signing --> nonce_in_flight : start_commit [not ledger_moved and recheck_ok] / StartCommit (C4,C5)
-' row 241
-' row 242
 ' row 251
+nonce_free --> nonce_blocked : lane_turn [chain_ahead] / Sign (C5,C21)
+' row 252
+nonce_signing --> nonce_in_flight : start_commit [not ledger_moved and recheck_ok] / StartCommit (C4,C5)
+' row 253
+' row 254
+' row 263
 nonce_signing --> nonce_free : start_commit [ledger_moved or not recheck_ok] / Redo (C4)\ncrash / Crash (C4)\npower_loss / PowerLoss (C4,C21)
-' row 243
-' row 245
-nonce_in_flight --> nonce_free : included_latest [not more_in_flight] / Track (C5)\nforeign_at_nonce [above_final and verified] / Track (C7)
-' row 249
-nonce_free --> nonce_in_flight : reorg_undoes_inclusion / Reorg (C5,C12)
 ' row 255
+' row 257
+nonce_in_flight --> nonce_free : included_latest [not more_in_flight] / Track (C5)\nforeign_at_nonce [above_final and verified] / Track (C7)
+' row 261
+nonce_free --> nonce_in_flight : reorg_undoes_inclusion / Reorg (C5,C12)
+' row 267
 nonce_blocked --> nonce_free : finality [above_final] / RaiseLedger (C5)
 @enduml

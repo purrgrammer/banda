@@ -1,0 +1,228 @@
+{
+	"said": [
+		{
+			"thread": "",
+			"text": "is anyone there",
+			"reply": "re: is anyone there"
+		},
+		{
+			"thread": "work",
+			"text": "the tide tables for Thursday",
+			"reply": "re: the tide tables for Thursday"
+		},
+		{
+			"thread": "work",
+			"text": "and for Friday",
+			"reply": "re: and for Friday"
+		}
+	],
+	"permissions": {
+		"permissions": {
+			"1": {
+				"tool": "tides__read",
+				"match": {
+					"port": "Vigo"
+				},
+				"what": "read the tide tables for Vigo",
+				"scope": "always",
+				"agent": "sancho",
+				"at": 1700000000000,
+				"wait": 0
+			}
+		},
+		"next": 2
+	},
+	"devices": {
+		"devices": {
+			"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+				"name": "Pixel",
+				"paired": 1700000000000
+			},
+			"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+				"name": "Tablet",
+				"paired": 1700000000000,
+				"revoked": 1700000100000
+			}
+		},
+		"invites": {},
+		"requests": {}
+	},
+	"wallets": {
+		"wallets": {
+			"0x804e4bBc0037B43A1b6a4B6508beE7e7Dc188B3f": {
+				"name": "Groceries",
+				"network": "base-sepolia",
+				"state": "ready",
+				"backup": "saved",
+				"default": "ask",
+				"disclosed": true,
+				"request": "create-1",
+				"reveal": {
+					"expires": 1700000600000,
+					"digest": "6666666666666666666666666666666666666666666666666666666666666666"
+				},
+				"reveals": [
+					{
+						"at": 1700000020000,
+						"kind": "later",
+						"id": "5a1b2c3d-0000-4000-8000-000000000005"
+					}
+				],
+				"code": {
+					"hash": "5555555555555555555555555555555555555555555555555555555555555555",
+					"block": 4,
+					"acknowledged": 1700000040000
+				},
+				"moved": {
+					"act": "confirm_saved",
+					"version": 3
+				},
+				"version": 4,
+				"at": 1700000000000
+			},
+			"0x58EefDB29003c3588e2B7Bedf811968F6fE779c3": {
+				"name": "Holiday",
+				"network": "base-sepolia",
+				"state": "archived",
+				"backup": "saved",
+				"default": "deny",
+				"disclosed": true,
+				"request": "create-3",
+				"reveals": [
+					{
+						"at": 1700000061000,
+						"kind": "creation"
+					}
+				],
+				"moved": {
+					"act": "archive",
+					"version": 3
+				},
+				"version": 3,
+				"at": 1700000060000
+			},
+			"0xB25F2CbEf3290a2163cD4298885a945167aB611E": {
+				"name": "Pocket money",
+				"network": "base-sepolia",
+				"state": "ready",
+				"backup": "unsaved",
+				"default": "ask",
+				"disclosed": false,
+				"request": "create-2",
+				"device": true,
+				"version": 2,
+				"at": 1700000050000
+			}
+		},
+		"recipients": {},
+		"ledger": {},
+		"open": {},
+		"recipientVersion": {},
+		"lease": 1,
+		"removed": {
+			"0x08d087FD332d97Bae7addB048CE2Ea0077d8c92c": 1700000070000
+		}
+	},
+	"accounts": {
+		"0x804e4bbc0037b43a1b6a4b6508bee7e7dc188b3f": {
+			"account": {
+				"id": "0x804e4bBc0037B43A1b6a4B6508beE7e7Dc188B3f",
+				"at": 1700000030000,
+				"generation": "generation-1"
+			},
+			"credentials": {
+				"wallet": {
+					"account": "3e4aeade-6e35-4090-8d15-a78d672d9948/wallet/0x804e4bBc0037B43A1b6a4B6508beE7e7Dc188B3f",
+					"address": "0x804e4bBc0037B43A1b6a4B6508beE7e7Dc188B3f",
+					"network": "base-sepolia"
+				},
+				"generation": "generation-1",
+				"revision": "dbb611e9e12dea7dbe39802b1f990f1330b8efa0ccc898dd"
+			}
+		},
+		"0xb25f2cbef3290a2163cd4298885a945167ab611e": {
+			"account": {
+				"id": "0xB25F2CbEf3290a2163cD4298885a945167aB611E",
+				"at": 1700000050000,
+				"generation": "generation-1"
+			},
+			"credentials": {
+				"wallet": {
+					"account": "3e4aeade-6e35-4090-8d15-a78d672d9948/wallet/0xB25F2CbEf3290a2163cD4298885a945167aB611E",
+					"address": "0xB25F2CbEf3290a2163cD4298885a945167aB611E",
+					"network": "base-sepolia"
+				},
+				"generation": "generation-1",
+				"revision": "6b83bedce8bbe6670aff5bb0c7f5f11c4b727bdcb3d0688d"
+			}
+		},
+		"0x58eefdb29003c3588e2b7bedf811968f6fe779c3": {
+			"account": {
+				"id": "0x58EefDB29003c3588e2B7Bedf811968F6fE779c3",
+				"at": 1700000060000,
+				"generation": "generation-1"
+			},
+			"credentials": {
+				"wallet": {
+					"account": "3e4aeade-6e35-4090-8d15-a78d672d9948/wallet/0x58EefDB29003c3588e2B7Bedf811968F6fE779c3",
+					"address": "0x58EefDB29003c3588e2B7Bedf811968F6fE779c3",
+					"network": "base-sepolia"
+				},
+				"generation": "generation-1",
+				"revision": "c6f2bef2fc472330eadae3e8d5d9e3df6cea8788ad019598"
+			}
+		}
+	},
+	"incoming": {
+		"rows": {
+			"0x3333333333333333333333333333333333333333333333333333333333333333:7": {
+				"wallet": "0x804e4bBc0037B43A1b6a4B6508beE7e7Dc188B3f",
+				"asset": "usdc",
+				"amount": "2500000",
+				"from": "0xdddddddddddddddddddddddddddddddddddddddd",
+				"block": 101
+			},
+			"native:104:0x804e4bBc0037B43A1b6a4B6508beE7e7Dc188B3f": {
+				"wallet": "0x804e4bBc0037B43A1b6a4B6508beE7e7Dc188B3f",
+				"asset": "native",
+				"amount": "1000000000000000",
+				"block": 104
+			}
+		},
+		"cursors": {
+			"base-sepolia": 104
+		},
+		"read": {
+			"0x804e4bBc0037B43A1b6a4B6508beE7e7Dc188B3f": 104
+		},
+		"gaps": {
+			"0x804e4bBc0037B43A1b6a4B6508beE7e7Dc188B3f": [
+				{
+					"from": 10,
+					"to": 12,
+					"why": "state"
+				},
+				{
+					"from": 20,
+					"to": 20,
+					"why": "unexplained"
+				},
+				{
+					"from": 30,
+					"to": 31,
+					"why": "code"
+				}
+			]
+		},
+		"dropped": {
+			"0x804e4bBc0037B43A1b6a4B6508beE7e7Dc188B3f": 100
+		}
+	},
+	"config": {
+		"wallets": {
+			"rpc": {
+				"base-sepolia": "https://rpc.example/base-sepolia"
+			}
+		}
+	}
+}

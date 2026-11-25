@@ -36,6 +36,72 @@ Feature: The signer proves the key and the lease before it signs
     Then the signer is "online"
     And banda never signs with a key that does not derive the address
 
+  # H-317: a lock or a loss seen while the wallet is already offline replaces the reason it shows; only a restore
+  # leaves key_missing (C9, H-290).
+  @UC-19 @UC-04 @H-026 @H-317
+  Scenario Outline: The keychain locks while the wallet is offline for another reason, and it shows the lock
+    Given the signer is "<from>"
+    When the keychain locks
+    Then the signer is "locked"
+
+    @t:signing:locked:keychain_locks:T
+    Examples: already locked
+      | from   |
+      | locked |
+
+    @t:signing:wrong_key:keychain_locks:T
+    Examples: another key
+      | from      |
+      | wrong_key |
+
+    @t:signing:other_home:keychain_locks:T
+    Examples: another home
+      | from       |
+      | other_home |
+
+    @t:signing:offline_host_mode:keychain_locks:T
+    Examples: host mode
+      | from              |
+      | offline_host_mode |
+
+  @UC-19 @UC-04 @H-021 @H-317
+  Scenario Outline: The keychain item disappears while the wallet is offline for another reason, and it shows the key missing
+    Given the signer is "<from>"
+    When the keychain item disappears
+    Then the signer is "key_missing"
+
+    @t:signing:locked:item_lost:T
+    Examples: locked
+      | from   |
+      | locked |
+
+    @t:signing:wrong_key:item_lost:T
+    Examples: another key
+      | from      |
+      | wrong_key |
+
+    @t:signing:other_home:item_lost:T
+    Examples: another home
+      | from       |
+      | other_home |
+
+    @t:signing:offline_host_mode:item_lost:T
+    Examples: host mode
+      | from              |
+      | offline_host_mode |
+
+    @t:signing:key_missing:item_lost:T
+    Examples: already missing
+      | from        |
+      | key_missing |
+
+  @UC-19 @UC-04 @H-290 @H-317
+  @t:signing:key_missing:keychain_locks:T
+  Scenario: The keychain locks while the key is missing, and the wallet stays key missing until a restore
+    Given the signer is "key_missing"
+    When the keychain locks
+    Then the signer is "key_missing"
+
   # OD-6: Restore key accepts only a key that derives the record's address; there is no import.
   @UC-19 @H-014 @security
   @t:signing:key_missing:restore_key:!derives

@@ -61,7 +61,7 @@ export function PaneHeader({
 				) : (
 					<nav aria-label="Breadcrumb">
 						<ol className="flex min-w-0 items-center gap-1.5">
-							<li className="min-w-0 max-w-[40%]">
+							<li className="min-w-0 max-w-[40%] shrink-0">
 								<a
 									href={parent.href}
 									className="block truncate rounded-field text-body text-ink-2 hover:text-ink hover:underline focus-visible:underline focus-visible:outline-2 focus-visible:outline-focus"

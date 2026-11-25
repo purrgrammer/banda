@@ -9,11 +9,25 @@ import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync } from "node:fs
 import { mkdir, readFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell, Tray } from "electron";
+import { pathToFileURL } from "node:url";
+import {
+	app,
+	BrowserWindow,
+	clipboard,
+	dialog,
+	ipcMain,
+	Menu,
+	nativeImage,
+	session,
+	shell,
+	systemPreferences,
+	Tray,
+} from "electron";
 import { attentionFrom, NOTHING, tooltipOf, wantsOwner, withDot } from "./attention.js";
 import { backupFolder, profileHeld, restoreWaits } from "./backups.js";
 import { shellPath } from "./environment.js";
 import { failurePage, type Trouble, trouble } from "./trouble.js";
+import { KEY_PAGE, secretClipboard, stopSigners, WALLET_ACTS, type WalletDeps, walletDeps } from "./wallets.js";
 
 const windows = process.platform === "win32";
 const home = resolve(process.env.BANDA_HOME ?? join(homedir(), ".banda"));
@@ -339,6 +353,107 @@ function answerBackups(): void {
 	});
 }
 
+/**
+ * A wallet's key, in a local window of its own: the page bundled with the app (wallets.ts `KEY_PAGE`), in a session
+ * that keeps nothing and loads nothing but that page, hidden from screen capture where the platform allows, the key
+ * handed to it over its preload. It closes when it loses focus, and the key goes with it.
+ */
+function keyWindow(address: string, key: string): Promise<void> {
+	const page = join(app.getAppPath(), ...KEY_PAGE);
+	const pageUrl = pathToFileURL(page).href;
+	const partition = "banda-key";
+	const keySession = session.fromPartition(partition, { cache: false });
+	keySession.webRequest.onBeforeRequest((details, answer) => answer({ cancel: details.url !== pageUrl }));
+	keySession.setPermissionRequestHandler((_contents, _permission, grant) => grant(false));
+	const shown = new BrowserWindow({
+		width: 560,
+		height: 360,
+		title: "Your wallet's private key",
+		autoHideMenuBar: true,
+		...(window === undefined || window.isDestroyed() ? {} : { parent: window }),
+		webPreferences: {
+			contextIsolation: true,
+			sandbox: true,
+			nodeIntegration: false,
+			webviewTag: false,
+			partition,
+			preload: join(import.meta.dirname, "key-preload.cjs"),
+		},
+	});
+	shown.setContentProtection(true);
+	shown.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+	shown.webContents.on("will-navigate", (event) => event.preventDefault());
+	// the key is held here until the window loses focus or closes, then dropped (H-274): switching away closes the
+	// window, and opening it again asks for the owner again
+	const held: { key?: string } = { key };
+	const copy = (event: Electron.IpcMainEvent) => {
+		if (event.sender !== shown.webContents || held.key === undefined) return;
+		void secret.copy(held.key);
+	};
+	ipcMain.on("banda:key-copy", copy);
+	shown.on("blur", () => {
+		delete held.key;
+		if (!shown.isDestroyed()) shown.close();
+	});
+	shown.on("closed", () => {
+		delete held.key;
+		ipcMain.removeListener("banda:key-copy", copy);
+	});
+	shown.webContents.once("did-finish-load", () => {
+		if (held.key !== undefined) shown.webContents.send("banda:key", { address, key: held.key });
+	});
+	return shown.loadFile(page);
+}
+
+/** The key last put on the clipboard: cleared after `CLIPBOARD_CLEAR`, and when banda quits, while it still holds it. */
+const secret = secretClipboard(clipboard);
+
+/** What the wallets' acts use (wallets.ts `walletDeps`), with this app's release, daemon and window. */
+function wallets(): WalletDeps {
+	return walletDeps({
+		release,
+		home,
+		daemon: () => attachedDaemon,
+		// Touch ID alone: a Mac without it, or with it off, re-authenticates no one, so it shows no key after creation
+		...(reauthenticates() ? { authenticate: (why: string) => systemPreferences.promptTouchID(why) } : {}),
+		show: keyWindow,
+	});
+}
+
+/**
+ * Whether this computer asks the owner who they are (Touch ID on a Mac): without it no key is shown after its wallet is
+ * made, nor restored, nor signing moved (OD-2, H-266), and the page words its key steps by this.
+ */
+const reauthenticates = () => process.platform === "darwin" && systemPreferences.canPromptTouchID();
+
+/**
+ * For the home's wallets, from the daemon's own page alone (wallets.ts `WALLET_ACTS`): show a key on this computer
+ * behind the OS's re-authentication, restore a missing one, move signing here, export or delete a key without a
+ * wallet, and keep the page's own window from
+ * screen capture while a new key is on it. A key never reaches the daemon.
+ */
+function answerWallets(): void {
+	// asked once, as a page's preload starts (before its own frame says where it is): a fact of this computer, no key
+	ipcMain.on("banda:reauthenticates", (event) => {
+		event.returnValue = reauthenticates();
+	});
+	for (const [channel, act] of Object.entries(WALLET_ACTS))
+		ipcMain.handle(channel, (event, ...args: unknown[]) => {
+			if (!fromOwnPage(event)) throw new Error("Only banda's own page may act on a wallet's key.");
+			return act(wallets(), ...args);
+		});
+	ipcMain.handle("banda:protect-screen", (event, on: unknown) => {
+		if (!fromOwnPage(event)) throw new Error("Only banda's own page may protect its window.");
+		if (typeof on !== "boolean") throw new Error("Protection is on or off.");
+		BrowserWindow.fromWebContents(event.sender)?.setContentProtection(on);
+	});
+	ipcMain.handle("banda:copy-secret", (event, text: unknown) => {
+		if (!fromOwnPage(event)) throw new Error("Only banda's own page may copy a wallet's key.");
+		if (typeof text !== "string") throw new Error("A copy is text.");
+		return text === "" ? secret.clear() : secret.copy(text);
+	});
+}
+
 function show(): void {
 	if (window === undefined || window.isDestroyed()) return;
 	if (window.isMinimized()) window.restore();
@@ -429,7 +544,9 @@ else {
 		if (quitting) return;
 		quitting = true;
 		event.preventDefault();
-		void stopDaemon().finally(() => app.quit());
+		// the wallet acts' signer children first: their deadlines are timers here, gone once the app exits (H-034, C20)
+		stopSigners();
+		void Promise.all([stopDaemon(), secret.clear().catch(() => {})]).finally(() => app.quit());
 	});
 	app.on("window-all-closed", () => {
 		// the tray keeps the app; nothing to do
@@ -443,6 +560,7 @@ else {
 		answerFolders();
 		answerAttention();
 		answerBackups();
+		answerWallets();
 		if (!app.isPackaged && process.env.BANDA_HOME === undefined) {
 			// a development shell never touches the owner's home (AGENTS.md "Never touch a live banda")
 			window = openWindow(

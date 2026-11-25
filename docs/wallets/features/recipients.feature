@@ -5,7 +5,7 @@
 # Evidence: spikes/banda-integration/README.md (Always = a permission of scope always over {account, chain, to};
 # Deny in `allowed`); model/RecipientRule.tla (the two machines, PermissionUnderRecipient).
 
-Feature: Recipients, their refusals and names, and each agent's permission
+Feature: Recipients, their denies and names, and each agent's permission
 
   @UC-08 @H-073 @best
   Scenario Outline: A card answer names a recipient seen for the first time

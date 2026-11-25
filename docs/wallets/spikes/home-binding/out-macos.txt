@@ -1,0 +1,7 @@
+platform darwin arm64, node v24.22.1
+birthtime differs from ctime at creation
+statx birth time present
+entries made, renamed, removed: dev=same ino=same birthtimeNs=same ctimeNs=moved
+renamed away and back: dev=same ino=same birthtimeNs=same ctimeNs=moved
+cp -Rp copy: dev=same ino=moved birthtimeNs=moved ctimeNs=moved
+disk image detached and attached again: dev=moved ino=same birthtimeNs=same ctimeNs=same

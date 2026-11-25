@@ -58,8 +58,8 @@ end
 == Save your key at creation (requirement 5; the creating client, C16) ==
 note over D, Store
   The ready commit above also minted a creation capability bound to the create
-  request id: consumed once, within 10 min, on that request's own connection, before
-  the address is shown. No OS re-authentication is needed, so this works on a Linux
+  request id: consumed once, within 10 min, with a secret only that request's own
+  answer carries, before the address is shown. No OS re-authentication is needed, so this works on a Linux
   desktop, in a loopback browser of `banda serve` and on the host TTY of
   `banda wallet create`. No daemon route reveals a key to a token alone.
 end note
@@ -77,7 +77,7 @@ Web -> Owner : 0x + 64 hex beside the address\n(hidden after 30 s)
 
 == A later reveal (OD-2): not on the daemon's HTTP API (C16, INV-S8) ==
 Owner -> Shell : Show key (weeks later)
-Shell -> Owner : OS re-authentication (Touch ID or password; none on Linux)
+Shell -> Owner : Touch ID (a Mac with it set up; refused elsewhere)
 Owner --> Shell : authenticated
 Shell -> S ** : Electron main spawns the signer itself, over pipes it owns
 S -> KC : get A

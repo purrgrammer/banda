@@ -847,10 +847,45 @@
   },
   {
    "machine": "wallet",
+   "from": "ready_skipped",
+   "event": "confirm_saved",
+   "guard": "pasted_derives",
+   "to": "ready_saved",
+   "effects": [
+    "mark backed up"
+   ],
+   "hazards": [
+    "H-263",
+    "H-275"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "ConfirmSaved"
+  },
+  {
+   "machine": "wallet",
    "from": "ready_unsaved",
    "event": "confirm_saved",
    "guard": "not pasted_derives",
    "to": "ready_unsaved",
+   "effects": [
+    "say the pasted key does not open this wallet"
+   ],
+   "hazards": [
+    "H-263"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "ConfirmSaved"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_skipped",
+   "event": "confirm_saved",
+   "guard": "not pasted_derives",
+   "to": "ready_skipped",
    "effects": [
     "say the pasted key does not open this wallet"
    ],
@@ -1444,7 +1479,7 @@
    "machine": "wallet",
    "from": "removing",
    "event": "delete_item",
-   "guard": "kc_up and removable",
+   "guard": "kc_up and item == 'ours' and removable",
    "to": "removing",
    "effects": [
     "delete the keychain item"
@@ -1461,7 +1496,7 @@
    "machine": "wallet",
    "from": "removing",
    "event": "delete_item",
-   "guard": "kc_up and not removable",
+   "guard": "kc_up and item == 'ours' and not removable",
    "to": "archived",
    "effects": [
     "funds or a payment arrived since removal began: roll back (C17)"
@@ -1473,6 +1508,44 @@
     "C17"
    ],
    "tla": "CancelRemove"
+  },
+  {
+   "machine": "wallet",
+   "from": "removing",
+   "event": "delete_item",
+   "guard": "kc_up and item == 'other'",
+   "to": "removed",
+   "effects": [
+    "the item holds a key that does not open this wallet: never delete it, its address's funds were never checked",
+    "the wallet's own key is gone already (deleted before a stop, or lost): commit removed with its account",
+    "the item stays, listed as a key without a wallet (H-045)"
+   ],
+   "hazards": [
+    "H-045",
+    "H-024"
+   ],
+   "rules": [
+    "C15",
+    "C17"
+   ],
+   "tla": "Removed"
+  },
+  {
+   "machine": "wallet",
+   "from": "removing",
+   "event": "delete_item",
+   "guard": "kc_up and item == 'empty'",
+   "to": "removing",
+   "effects": [
+    "nothing to delete: the delete happened before a stop, and item_gone ends the removal whatever reached the address"
+   ],
+   "hazards": [
+    "H-044"
+   ],
+   "rules": [
+    "C15"
+   ],
+   "tla": "Removed"
   },
   {
    "machine": "wallet",
@@ -1543,6 +1616,184 @@
    ],
    "rules": [
     "C4",
+    "C16"
+   ],
+   "tla": "LoseItem"
+  },
+  {
+   "machine": "signing",
+   "from": "locked",
+   "event": "keychain_locks",
+   "guard": "True",
+   "to": "locked",
+   "effects": [
+    "offline: the keychain is locked"
+   ],
+   "hazards": [
+    "H-026",
+    "H-317"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "Lock"
+  },
+  {
+   "machine": "signing",
+   "from": "locked",
+   "event": "item_lost",
+   "guard": "True",
+   "to": "key_missing",
+   "effects": [
+    "offline: 'Key missing from this computer'"
+   ],
+   "hazards": [
+    "H-021",
+    "H-317"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "LoseItem"
+  },
+  {
+   "machine": "signing",
+   "from": "wrong_key",
+   "event": "keychain_locks",
+   "guard": "True",
+   "to": "locked",
+   "effects": [
+    "offline: the keychain is locked"
+   ],
+   "hazards": [
+    "H-026",
+    "H-317"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "Lock"
+  },
+  {
+   "machine": "signing",
+   "from": "wrong_key",
+   "event": "item_lost",
+   "guard": "True",
+   "to": "key_missing",
+   "effects": [
+    "offline: 'Key missing from this computer'"
+   ],
+   "hazards": [
+    "H-021",
+    "H-317"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "LoseItem"
+  },
+  {
+   "machine": "signing",
+   "from": "other_home",
+   "event": "keychain_locks",
+   "guard": "True",
+   "to": "locked",
+   "effects": [
+    "offline: the keychain is locked"
+   ],
+   "hazards": [
+    "H-026",
+    "H-317"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "Lock"
+  },
+  {
+   "machine": "signing",
+   "from": "other_home",
+   "event": "item_lost",
+   "guard": "True",
+   "to": "key_missing",
+   "effects": [
+    "offline: 'Key missing from this computer'"
+   ],
+   "hazards": [
+    "H-021",
+    "H-317"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "LoseItem"
+  },
+  {
+   "machine": "signing",
+   "from": "offline_host_mode",
+   "event": "keychain_locks",
+   "guard": "True",
+   "to": "locked",
+   "effects": [
+    "offline: the keychain is locked"
+   ],
+   "hazards": [
+    "H-026",
+    "H-317"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "Lock"
+  },
+  {
+   "machine": "signing",
+   "from": "offline_host_mode",
+   "event": "item_lost",
+   "guard": "True",
+   "to": "key_missing",
+   "effects": [
+    "offline: 'Key missing from this computer'"
+   ],
+   "hazards": [
+    "H-021",
+    "H-317"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "LoseItem"
+  },
+  {
+   "machine": "signing",
+   "from": "key_missing",
+   "event": "keychain_locks",
+   "guard": "True",
+   "to": "key_missing",
+   "effects": [
+    "still key missing: only a restore leaves it"
+   ],
+   "hazards": [
+    "H-290",
+    "H-317"
+   ],
+   "rules": [
+    "C9",
+    "C16"
+   ],
+   "tla": "Lock"
+  },
+  {
+   "machine": "signing",
+   "from": "key_missing",
+   "event": "item_lost",
+   "guard": "True",
+   "to": "key_missing",
+   "effects": [],
+   "hazards": [
+    "H-021"
+   ],
+   "rules": [
     "C16"
    ],
    "tla": "LoseItem"

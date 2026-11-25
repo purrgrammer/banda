@@ -10,7 +10,7 @@ TLC must then find the counterexample the rule exists to prevent; a bug configur
 
 | Module | Machine (table) | What it holds |
 |---|---|---|
-| `WalletLifecycle.tla` | wallet, signing | Creation (draw, keychain write, read-back fused into the ready commit, reconcile after a crash) and the key-save step (the creation reveal on the creating client only, paste-back confirm, skip). The address is withheld until the key is saved or skipped (`AddressOnlyAfterSaveStep`), and removal is refused once the address left banda while the key was never confirmed saved. Archive and removal, guarded and re-checked at delete. Keychain lock, loss and restore, a planted item, a backup restored beside the home, and the lease with its home secret. |
+| `WalletLifecycle.tla` | wallet, signing | Creation (draw, keychain write, read-back fused into the ready commit, reconcile after a crash) and the key-save step (the creation reveal on the creating client only, paste-back confirm, skip). The address is withheld until the key is saved or skipped (`AddressOnlyAfterSaveStep`), and removal is refused once the address left banda while the key was never confirmed saved. Archive and removal, guarded and re-checked at delete; a removal deletes only the wallet's own key (`ForeignKeyKept`). Keychain lock, loss and restore, a planted item, a backup restored beside the home, and the lease with its home secret. |
 | `RecipientRule.tla` | recipient, permission | A recipient of the wallet (label, Deny for every agent, OD-1) and each agent's Always on it (a permission), under versioned acts from two devices (C8): the card answers, the list's Ask, Always and Deny, rename and forget. An Always exists only under an Ask recipient (`PermissionUnderRecipient`). |
 | `PaymentLane.tla` | payment | One wallet's payments from the call to a terminal state: admission (access > Deny > Always > Ask > the default, C3), the card answers (C9), the FIFO lane (C2), signing in the signer, the fused start commit (C4: the re-check, compare-and-set on the ledger, the version appended and synced), broadcast, fee bumps and the owner's cancel replacement (C6), receipt, a foreign nonce proven from two sources or a lying RPC (C7), revert, reorg and finality (C12). The store is a synced prefix (C21): a crash keeps every commit, a power loss goes back to the last sync. Also switch-off, archive and default changes against the lane (C17), a backup restored over the live home (C16), RPC outages, keychain faults, a rising base fee, funding and the owner's own Send. |
 | `NonceAlloc.tla` | nonce | The nonce ledger of one wallet, shared by two agents, the owner and an external spender holding the same key: raised only at finalized (C5), a foreign nonce re-admitted only at finalized (C7), every version synced before it leaves (C21, bumps included), one in flight except after a reorg, compare-and-set at the start commit. |
@@ -44,6 +44,7 @@ larger bounds than the composition allows.
 - `KeyNeverInStoreOrBox`, `RevealOnlyOnHost`, `RevealOnce`, `NeverSignWithForeignKey`, `OneSigningHome`,
   `NoOrphanItem`, `ReadyOnlyWithKey`, `AddressOnlyAfterSaveStep`, `FundsNeverOrphanedByBanda`: key material never
   enters the store, the box or a log; banda never signs with a key that does not derive the address; one home signs.
+- `ForeignKeyKept`: a removal never deletes an item that holds another key (H-045).
 - `ReportedIsTrue`, `PaidByObservingChat`, `SignedOnlyObserved`: what the chat is told matches the chain at
   finalized; only the chat that observed a 402 can pay it, and only on the observed terms.
 - `ForwardOnly`: the payment's state changes are exactly the edges of `transitions.json`.
@@ -119,8 +120,8 @@ Runs with every design rule on:
 | `PaymentLane_rules` | all design rules; owner, rule and label races | pass | 10,977,536 | 36 |
 | `NonceAlloc_live` | liveness under weak fairness, all design rules | pass | 737,968 | 39 |
 | `NonceAlloc_safety` | all design rules: 2 agents + owner + external spender (2 spends), 2 reorgs, 2 crashes, 1 power loss, 1 bump | pass | 24,937,170 | 51 |
-| `WalletLifecycle_live` | Liveness under weak fairness (the keychain eventually answers) | pass | 794,220 | 38 |
-| `WalletLifecycle_safety` | All design rules on: two wallets, two homes (a backup restored beside), every fault once | pass | 2,272,572 | 40 |
+| `WalletLifecycle_live` | Liveness under weak fairness (the keychain eventually answers) | pass | 636,236 | 37 |
+| `WalletLifecycle_safety` | All design rules on: two wallets, two homes (a backup restored beside), every fault once | pass | 1,812,796 | 39 |
 | `RecipientRule_safety` | versioned acts, default Ask, 4 acts by two devices | pass | 12,982 | 7 |
 | `RecipientRule_safety_default_deny` | versioned acts, default Deny, 4 acts by two devices | pass | 12,982 | 7 |
 | `X402_default_deny` | all design rules; the default for unknown endpoints is Deny | pass | 51,895,656 | 45 |
@@ -158,12 +159,13 @@ Runs with one rule switched off (or a mutation of a guard); each must fail on th
 | `WalletLifecycle_bug_C15a` | C15 off: the keychain is written before the store holds the address | fails as intended: NoOrphanItem | 30 | 4 |
 | `WalletLifecycle_bug_C15b` | C15 off: ready is committed on the write's word, without reading back | fails as intended: ReadyOnlyWithKey | 17 | 4 |
 | `WalletLifecycle_bug_C16lease` | C16 off: no home secret; a backup restored beside its original signs too | fails as intended: OneSigningHome | 22 | 5 |
-| `WalletLifecycle_bug_C16proof` | C16 off: the signer does not prove the key derives the address | fails as intended: NeverSignWithForeignKey | 2,744 | 10 |
+| `WalletLifecycle_bug_C16proof` | C16 off: the signer does not prove the key derives the address | fails as intended: NeverSignWithForeignKey | 2,778 | 10 |
 | `WalletLifecycle_bug_C17` | C17 off: a wallet holding funds can be removed | fails as intended: FundsNeverOrphanedByBanda | 305 | 9 |
-| `WalletLifecycle_bug_C17recheck` | C17 narrowed: removal checks the balance only when it begins (the design before the model) | fails as intended: FundsNeverOrphanedByBanda | 4,251 | 9 |
+| `WalletLifecycle_bug_C17recheck` | C17 narrowed: removal checks the balance only when it begins (the design before the model) | fails as intended: FundsNeverOrphanedByBanda | 4,247 | 9 |
 | `WalletLifecycle_bug_C20` | C20 off: the key enters the daemon's durable state | fails as intended: KeyNeverInStoreOrBox | 2 | 2 |
 | `WalletLifecycle_bug_H005` | H-005 off: Receive is shown before the key was saved or skipped | fails as intended: AddressOnlyAfterSaveStep | 18 | 5 |
 | `WalletLifecycle_bug_OD2` | OD-2 off: a paired device can mint the reveal capability | fails as intended: RevealOnlyOnHost | 51 | 6 |
+| `WalletLifecycle_bug_H045` | H-045 off: a removal deletes whatever item is under the wallet's account | fails as intended: ForeignKeyKept | 884 | 8 |
 | `RecipientRule_bug_C8` | C8 off: an act applies on a version it did not see | fails as intended: NoLostUpdate | 39 | 3 |
 | `RecipientRule_mut_alwaysdeny` | mutation: a card's Always applies under Deny (the guard must fail) | fails as intended: DenyExcludesAlways | 59 | 3 |
 | `RecipientRule_mut_forget` | mutation: Forget keeps the permissions (the guard must fail) | fails as intended: UnknownNeverAlways | 97 | 3 |

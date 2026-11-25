@@ -1,10 +1,11 @@
 /**
  * Fault injection at the effect boundaries: storage commits (before the write, and after it is stored), gateway sends
- * (before the bytes go out, and after), model requests, answers to Waits, effects in the middle of running, commands
- * in the box (before they start, and while they run), memory files written (before and after), search catching up, a permission revoked,
- * tickets taken from the egress proxy and held requests sent, artifacts stored and written back. A schedule names a point, the hit on which it fires, and
- * what happens: `kill` ends the process with SIGKILL, as a power cut or the OOM killer would; `error` throws there,
- * as a failing disk, network or provider does. A storage error fails the Harness, which closes itself.
+ * (before the bytes go out, and after), model requests, answers to Waits, effects in the middle of running, commands in
+ * the box (before they start, and while they run), memory files written (before and after), search catching up, a
+ * permission revoked, tickets taken from the egress proxy and held requests sent, artifacts stored and written back, a
+ * wallet's keychain items and the money its indexer reads coming in. A schedule names a point, the hit on which it
+ * fires, and what happens: `kill` ends the process with SIGKILL, as a power cut or the OOM killer would; `error` throws
+ * there, as a failing disk, network or provider does. A storage error fails the Harness, which closes itself.
  */
 import type { Storage, StorageWrite } from "@earendil-works/pi-durable";
 
@@ -15,7 +16,13 @@ export type FaultPoint =
 	| import("../../src/core/backup.ts").BackupPoint
 	/** A home brought to the build's format: the runner's boundaries, and those inside a test step. */
 	| import("../../src/core/format.ts").FormatPoint
+	/** A home's installation id made: its temporary file written and flushed, then linked into place. */
+	| import("../../src/home.ts").IdPoint
 	| import("./format-scenario.ts").StepPoint
+	/** A wallet: its keychain items, and the indexer's rows for a range. */
+	| import("../../src/wallet/docs.ts").WalletPoint
+	/** A sync of the store to disk (C21). */
+	| import("../../src/core/store.ts").SyncPoint
 	| "commit:before"
 	| "commit:after"
 	| "send:before"
@@ -55,7 +62,10 @@ export type FaultPoint =
 	/** A held request sent: before the proxy sends it, and once it answered, before the store records it. */
 	| "replay"
 	| "replay:sent"
-	/** A held request's release: before its effect, once it ended and before that is stored; then before the agent is woken with it. */
+	/**
+	 * A held request's release: before its effect, once it ended and before that is stored; then before the agent is
+	 * woken with it.
+	 */
 	| "release:run"
 	| "release:ran"
 	| "release:told"

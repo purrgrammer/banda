@@ -1,0 +1,18 @@
+language js
+
+// The modules that hold a key (H-002): no random source of their own. A key comes from noble's `randomSecretKey`
+// alone (src/wallet/sign.ts); every other draw is a named helper of src/wallet/draws.ts.
+or {
+  `Math.random($...)`,
+  `$receiver.$method($...)` where {
+    $method <: or { `getRandomValues`, `randomBytes`, `randomInt`, `randomUUID`, `randomFill`, `randomFillSync`, `pseudoRandomBytes` }
+  },
+  `$name($...)` where {
+    $name <: or { `getRandomValues`, `randomBytes`, `randomInt`, `randomUUID`, `randomFill`, `randomFillSync`, `pseudoRandomBytes` }
+  }
+} as $call where {
+  register_diagnostic(
+    span = $call,
+    message = "A module that holds a key draws no random value of its own (H-002): a key comes from noble's randomSecretKey, any other draw from src/wallet/draws.ts."
+  )
+}

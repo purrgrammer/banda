@@ -1,0 +1,15 @@
+language js
+
+// The modules that hold a key (H-010): no call that keeps or prints what it is given. pi-durable's memo, checkpoint
+// and step write their values into the store; a log or console line writes them out of the process.
+or {
+  `$receiver.$method($...)` where {
+    $method <: or { `memo`, `checkpoint`, `step`, `log`, `info`, `warn`, `error`, `debug`, `trace` }
+  },
+  `$name($...)` where { $name <: or { `memo`, `checkpoint`, `step`, `log`, `activity` } }
+} as $call where {
+  register_diagnostic(
+    span = $call,
+    message = "A module that holds a key keeps no value in the store and writes no log line (H-010): no memo, checkpoint, step or log call here."
+  )
+}

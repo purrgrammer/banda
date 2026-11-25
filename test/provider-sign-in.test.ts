@@ -30,6 +30,8 @@ async function start(timeoutMs?: number) {
 	const area = providersArea(timeoutMs === undefined ? {} : { timeoutMs }).start!({
 		home,
 		models,
+		// a home with no wallets: the sign-in makes the installation id it names itself by (H-261)
+		harness: { snapshot: async () => undefined },
 		changed: () => {},
 		log: () => {},
 	} as unknown as Deps);

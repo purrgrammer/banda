@@ -10,6 +10,7 @@ import { AgentDoc, type ConversationId, type TaskId, type ToolExecutionApi } fro
 import fc from "fast-check";
 import { afterEach, describe, expect, it } from "vitest";
 import { ActivityLog } from "../src/core/activity.ts";
+import { publicAddress } from "../src/core/addresses.ts";
 import { Accepted, parseAgent, shaOf } from "../src/core/agents.ts";
 import {
 	accountNamed,
@@ -17,13 +18,20 @@ import {
 	type Connection,
 	connectionTools,
 	connectionToolsOf,
+	credentialsOf,
+	fits,
+	keepCredentials,
 	nameForm,
+	scrub,
+	secrets,
+	WALLET,
+	walletOf,
 } from "../src/core/connections.ts";
 import { readDefinition } from "../src/core/definitions.ts";
 import { OWNER } from "../src/core/gateway.ts";
 import { MAX_NOTES, notesOf } from "../src/core/mcp.ts";
 import { Permissions } from "../src/core/permissions.ts";
-import { publicAddress, publicFetch } from "../src/core/public-fetch.ts";
+import { publicFetch } from "../src/core/public-fetch.ts";
 import { openWaits } from "../src/core/status.ts";
 import { context } from "../src/core/store.ts";
 import { answer } from "../src/core/wait.ts";
@@ -2557,4 +2565,69 @@ it("a connection installed after startup stays deferred until pi search loads it
 	await s.done(revoked.turn);
 	expect(getCurrentTools(s.model.requests.at(-1)!.messages).map((tool) => tool.name)).not.toContain("cal__list_events");
 	expect(fake.calls).toHaveLength(1);
+});
+
+describe("a wallet's credentials", () => {
+	const shipped = (name: string) => {
+		const read = readDefinition(name, readFileSync(join(SHIPPED, `${name}.json`), "utf8"));
+		if ("errors" in read) throw new Error(read.errors.join("; "));
+		return read.connection;
+	};
+	const wallet = shipped("wallet");
+	const held = {
+		wallet: { account: "home/wallet/0xAb", address: "0x00000000000000000000000000000000000000AB", network: "base" },
+	} as const;
+
+	it("fit only the wallet connection, whatever its URL; no other credentials fit it", () => {
+		expect(fits(held, wallet)).toBe(true);
+		expect(fits(held, { ...wallet, url: "https://another-rpc.example" })).toBe(true);
+		expect(fits(held, shipped("gmail"))).toBe(false);
+		expect(fits(held, { ...wallet, auth: "key" })).toBe(false);
+		expect(fits({ url: wallet.url, key: "k3y-at-the-same-url" }, wallet)).toBe(false);
+		expect(fits({ url: wallet.url, key: "k3y-at-the-same-url" }, { ...wallet, auth: "key" })).toBe(true);
+	});
+
+	it("fit only when whole: a file that marks a wallet and holds anything else, or less, is no wallet's", () => {
+		const partial = [
+			{ wallet: null },
+			{ wallet: {} },
+			{ wallet: { ...held.wallet, network: "mainnet" } },
+			{ wallet: { ...held.wallet, address: "0xAb" } },
+			// a mixed case whose checksum fails, and a form other than the EIP-55 one a wallet is kept in
+			{ wallet: { ...held.wallet, address: "0x00000000000000000000000000000000000000Ab" } },
+			{ wallet: { ...held.wallet, address: "0x00000000000000000000000000000000000000ab" } },
+			{ wallet: { ...held.wallet, key: "0x01" } },
+			{ ...held, key: "k3y-beside-a-wallet" },
+		];
+		for (const credentials of partial) {
+			expect(fits(credentials as never, wallet)).toBe(false);
+			expect(walletOf(credentials as never)).toBeUndefined();
+		}
+		expect(walletOf({ ...held, generation: "g-1", revision: "r-1" })).toEqual(held.wallet);
+	});
+
+	it("hide a key or a token kept beside a wallet's members", async () => {
+		const home = await tempHome();
+		await keepCredentials(home, WALLET, "0xab", { ...held, key: "k3y-beside-a-wallet" } as never);
+		await keepCredentials(home, WALLET, "0xcd", {
+			...held,
+			oauth: { tokens: { access: "acc3ss-beside-a-wallet", refresh: "r3fresh-beside-a-wallet" }, client: {} },
+		} as never);
+		await keepCredentials(home, WALLET, "0xef", { wallet: null } as never);
+		expect((await secrets(home)).sort()).toEqual(
+			["acc3ss-beside-a-wallet", "k3y-beside-a-wallet", "r3fresh-beside-a-wallet"].sort(),
+		);
+	});
+
+	it("hold no secret: a home with a key and a wallet scrubs the key alone, and nothing of the wallet", async () => {
+		const home = await tempHome();
+		await keepCredentials(home, "linear", "a-1", { url: "https://linear.example/mcp", key: "lin_s3cr3t_key" });
+		await keepCredentials(home, WALLET, "0xab", held);
+		expect(await secrets(home)).toEqual(["lin_s3cr3t_key"]);
+		const text = `0x00000000000000000000000000000000000000AB home/wallet/0xAb lin_s3cr3t_key`;
+		expect(scrub(text, await secrets(home))).toBe(
+			"0x00000000000000000000000000000000000000AB home/wallet/0xAb [a credential, hidden]",
+		);
+		expect(await credentialsOf(home, WALLET, "0xab")).toMatchObject(held);
+	});
 });

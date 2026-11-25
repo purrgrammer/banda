@@ -118,17 +118,24 @@ async function call(path: string, init: RequestInit = {}, as: "request" | "strea
 /** The daemon answered, and refused: its status, and why in its words. Any other failure did not reach it. */
 export class Refused extends Error {
 	readonly status: number;
-	constructor(message: string, status: number) {
+	/** The fixed word some refusals carry beside their words, to branch on instead of them. */
+	readonly code: string | undefined;
+	constructor(message: string, status: number, code?: string) {
 		super(message);
 		this.status = status;
+		this.code = code;
 	}
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 	const response = await call(path, init);
 	if (!response.ok) {
-		const refused = (await response.json().catch(() => ({}))) as { error?: string };
-		throw new Refused(refused.error ?? `HTTP ${response.status}`, response.status);
+		const refused = (await response.json().catch(() => ({}))) as { error?: string; code?: unknown };
+		throw new Refused(
+			refused.error ?? `HTTP ${response.status}`,
+			response.status,
+			typeof refused.code === "string" ? refused.code : undefined,
+		);
 	}
 	return (await response.json()) as T;
 }

@@ -1,0 +1,9 @@
+{
+	"service": "Wallet",
+	"about": "Wallets your agents can pay from, each with its own address",
+	"auth": "wallet",
+	"reads": [
+		"address",
+		"balance"
+	]
+}

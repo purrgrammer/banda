@@ -50,7 +50,7 @@ guidance for the step definitions, not part of the mapping. "gaps §X" there poi
 | `the signer writes the key to the keychain` | event | `wallet.keychain_write` | the signer child's write, fault point `keychain:write` |
 | `the signer reads the key back` | event | `wallet.read_back` | the signer child's read-back and derive |
 | `the daemon restarts while the wallet is in that state` | event | `wallet.restart` | SIGKILL the daemon, start it on the same home |
-| `the owner asks to reveal the key` | event | `wallet.reveal` | the reveal route with a capability |
+| `the owner asks to reveal the key` | event | `wallet.reveal` | at creation, the reveal route with the creation's secret; later, the desktop's own signer after an OS re-authentication, which then tells the daemon (`POST /wallets/<a>/revealed`) |
 | `the owner pastes the key back` | event | `wallet.confirm_saved` | the confirm route with the pasted text |
 | `the owner skips saving the key` | event | `wallet.skip_save` | the skip route |
 | `the owner opens Receive` | event | `wallet.show_receive` | the receive route (address and QR payload) |
@@ -63,10 +63,10 @@ guidance for the step definitions, not part of the mapping. "gaps §X" there poi
 | `the keychain does not answer` | atom | `wallet.kc_up = False` | keystore throws "Couldn't access platform storage", or the signer child is killed at its deadline |
 | `the keychain holds no item for the address` | atom | `wallet.item = empty` | no entry under `<home-id>/wallet/<address>` |
 | `the keychain item derives the wallet's address` | atom | `wallet.item = ours` | the entry holds the key drawn for this wallet |
-| `the keychain item holds another key` | atom | `wallet.item = other` | an entry planted under the account before the write |
-| `the reveal comes from the host's desktop shell` | atom | `wallet.cap_host = True` | the capability Electron main mints after OS re-authentication, over the signer pipe it owns, never the owner token (C16) |
-| `the reveal comes from the client that created the wallet` | atom | `wallet.cap_host = True` | the creation capability: minted in the ready commit for the create request id, consumed once within 10 min, before the address is shown (C16; Linux desktop, `banda serve` with a loopback browser, `banda wallet create` on the host TTY) |
-| `the reveal comes from a paired device or the token alone` | atom | `wallet.cap_host = False` | a phone, a browser device, a script in the web UI's origin, or a local process with the owner's token |
+| `the keychain item holds another key` | atom | `wallet.item = other` | an entry under the account whose key does not derive the wallet's address (planted, or not a key) |
+| `the reveal comes from the host's desktop shell` | atom | `wallet.cap_host = True` | Electron main after an OS re-authentication (Touch ID): its own signer child reads the key at this home's lease and shows it in a bundled page, and the daemon never holds it (C16, C20); for the code acknowledgement and the desktop's word that a key was seen, any request on this computer with the owner's token (see the next rows) |
+| `the reveal comes from the client that created the wallet` | atom | `wallet.cap_host = True` | the creation's secret: only the create answer carries it, the ready commit keeps its SHA-256 for the create request id, and it is spent once within 10 min, before the address is shown, with no OS re-authentication (C16; the desktop, `banda serve` with a loopback browser, `banda wallet create` on the host TTY) |
+| `the reveal comes from a paired device or the token alone` | atom | `wallet.cap_host = False` | for a reveal: a phone, a browser device, a script in the web UI's origin, or a local process with the owner's token and no creation secret; for the code acknowledgement and the desktop's word that a key was seen: a paired device only, since the owner's token on this computer counts as the host for those two acts (a process holding it can already do every owner act, and a false word adds a reveal to the record, hiding none) |
 | `the reveal capability is fresh and unused` | atom | `wallet.cap_fresh = True` | a capability minted within its lifetime, never consumed |
 | `the reveal capability is used or expired` | atom | `wallet.cap_fresh = False` | a replayed or stale capability (injected clock) |
 | `the pasted key derives the wallet's address` | atom | `wallet.pasted_derives = True` | the key the test drew |
@@ -80,7 +80,7 @@ guidance for the step definitions, not part of the mapping. "gaps §X" there poi
 | `the wallet's address has code` | atom | `wallet.has_code = True` | `anvil_setCode` on the address (an EIP-7702 delegation `0xef0100…` made with the exported key) |
 | `the wallet's address has no code` | atom | `wallet.has_code = False` | `eth_getCode` returns `0x` |
 | `an agent reads the wallet's address` | event | `wallet.agent_reads_address` | `wallet__address` (or `wallet__balance`) from the agent's tool call |
-| `the owner acknowledges the address's code` | event | `wallet.acknowledge_code` | the acknowledge route with a capability |
+| `the owner acknowledges the address's code` | event | `wallet.acknowledge_code` | the acknowledge route, refused to a paired device |
 | `the owner confirmed the key saved` | atom | `wallet.saved = True` | the paste-back check passed before |
 | `the owner never confirmed the key saved` | atom | `wallet.saved = False` | no paste-back check passed |
 | `the owner's wallet act carries the current version` | atom | `wallet.version_current = True` | the act sends the wallet doc's current version |
@@ -227,7 +227,7 @@ guidance for the step definitions, not part of the mapping. "gaps §X" there poi
 | Phrase | Kind | Maps to | Realised by |
 |---|---|---|---|
 | `the x402 payment is "<state>"` | state | `x402` | the observation's and authorization's state in the store (`none` = no observation) |
-| `the proxy sees a 402 from the box's request` | event | `x402.proxy_sees_402` | the test 402 server (`@x402/express` 2.32.0) answers the box through the proxy |
+| `the proxy sees a 402 from the box's request` | event | `x402.proxy_sees_402` | the test 402 server (`@x402/express` 2.30.0) answers the box through the proxy |
 | `the agent pays the observation` | event | `x402.call` | `wallet__pay_x402` naming the observation id |
 | `the owner taps Pay on the x402 card` | event | `x402.card_pay` | the card's Pay |
 | `the owner taps Always pay on the x402 card` | event | `x402.card_always` | the card's Always pay |
@@ -298,10 +298,11 @@ guidance for the step definitions, not part of the mapping. "gaps §X" there poi
 | `no act applies on a version it did not see` | invariant | `RecipientRule.NoLostUpdate` | every applied act's version equals the doc's at its commit |
 | `the key is never in the store or the box` | invariant | `WalletLifecycle.KeyNeverInStoreOrBox` | a scan of the store, blobs, logs and the box's filesystem for the key's hex finds nothing |
 | `the address leaves banda only after the key was saved or the step skipped` | invariant | `WalletLifecycle.AddressOnlyAfterSaveStep` | Receive, `wallet__address` and `wallet__balance` refuse in `ready_unsaved` |
-| `banda never removes a wallet with funds or work in flight` | invariant | `WalletLifecycle.FundsNeverOrphanedByBanda` | no `removed` wallet had funds at `safe` or a non-terminal entry |
+| `banda never destroys the only copy of a funded wallet's key` | invariant | `WalletLifecycle.FundsNeverOrphanedByBanda` | a wallet whose own key is gone while its address holds funds had its key saved, never had its address leave banda, or lost its key to the OS (the item deleted outside banda), as C17's `Removable` gives it; banda deletes the item only while the balance reads empty and nothing is in flight |
 | `banda never signs with a key that does not derive the address` | invariant | `WalletLifecycle.NeverSignWithForeignKey` | every signature's recovered address equals the record's |
 | `only one home signs for the wallet` | invariant | `WalletLifecycle.OneSigningHome` | signatures come from the lease holder only |
-| `no keychain item is left without a record` | invariant | `WalletLifecycle.NoOrphanItem` | every keychain item of the home has a record, or is listed as an orphan; listed in the signer child by `findCredentials(<the scenario's service>)`, accounts only, and a listing that throws (Linux, locked) fails the check (gaps §H) |
+| `banda never deletes a key that does not open its wallet` | invariant | `WalletLifecycle.ForeignKeyKept` | any item under the account that does not derive the wallet's address is the same after the removal; the signer's remove reads and derives before it deletes |
+| `no keychain item is left without a record` | invariant | `WalletLifecycle.NoOrphanItem` | every keychain item of the home that derives its wallet's address has a record (an item of another key is kept and listed as an orphan: `WalletLifecycle.ForeignKeyKept`); listed in the signer child by `findCredentials(<the scenario's service>)`, accounts only, and a listing that throws (Linux, locked) fails the check (gaps §H) |
 | `the key is revealed only on the host` | invariant | `WalletLifecycle.RevealOnlyOnHost` | no reveal answered to a paired device or a bare token |
 | `a ready wallet always has its key` | invariant | `WalletLifecycle.ReadyOnlyWithKey` | a ready record's item reads back and derives |
 | `a reveal capability is used once` | invariant | `WalletLifecycle.RevealOnce` | the capability is consumed in the reveal's commit |

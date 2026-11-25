@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 import type { OpenWait, Status } from "../core/status.ts";
 import { type Ask, fieldLines } from "../core/wait.ts";
 import { ownerToken, readDaemonFile, resolveHome, webLink } from "../home.ts";
+import { call, daemonOf } from "./daemon.ts";
 
 const { version } = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as {
 	version: string;
@@ -20,7 +21,9 @@ usage:
                                      (microvm) on Apple silicon Macs and Linux;
                                      --box container (or BANDA_BOX=container) uses
                                      Docker instead; --box host: no box, commands
-                                     run on this computer without the network guard
+                                     run on this computer without the network guard,
+                                     and wallets are offline for agents: their
+                                     commands run as you
   banda say [--thread <t>] <text>   send a message as the owner and print the messages
                                      and asks sent back until the agent is done
   banda status                      the web UI's link, chats, open asks,
@@ -44,6 +47,12 @@ usage:
   banda restore --finish            put a restore the app made ready in the home's
                                      place, the home as it is kept beside its backups;
                                      serve and the desktop app do this as they start
+  banda wallet list                 the home's wallets
+  banda wallet receive <name>       a wallet's address to pay into, as Receive gives it
+  banda wallet create --network <id> <name>
+                                     make a wallet on that network (base, base-sepolia)
+                                     and show its private key once, here, to save it;
+                                     --request <id> finishes one a run left unfinished
 
 options:
   --home <dir>   the home (default $BANDA_HOME or ~/.banda)`;
@@ -61,6 +70,8 @@ async function main(argv: string[]): Promise<number> {
 			"no-computer": { type: "boolean" },
 			"no-browser": { type: "boolean" },
 			finish: { type: "boolean" },
+			network: { type: "string" },
+			request: { type: "string" },
 			help: { type: "boolean", short: "h" },
 		},
 	});
@@ -173,6 +184,14 @@ async function main(argv: string[]): Promise<number> {
 		console.log(`Open this link to connect ${id}:\n${started.url}\n\nThen run: banda providers`);
 		return 0;
 	}
+	if (command === "wallet") {
+		const [action, ...extra] = rest;
+		const { walletCommand } = await import("./wallet.ts");
+		return walletCommand(home, action, extra, {
+			...(values.network === undefined ? {} : { network: values.network }),
+			...(values.request === undefined ? {} : { request: values.request }),
+		});
+	}
 	if (command === "backup") {
 		if (rest.length > 0) throw new Error("backup takes no argument; --to names its folder");
 		const { backupHome, backupName, backupsOf } = await import("../core/backup.ts");
@@ -256,8 +275,7 @@ function describe(ask: Ask, key: string): string {
 
 /** POST `body` to `path` and yield each line of the newline-delimited JSON answer. */
 async function* stream(home: string, path: string, body: unknown): AsyncGenerator<unknown> {
-	const daemon = await readDaemonFile(home);
-	if (daemon?.port === undefined || daemon.token === undefined) throw new Error(`no banda daemon runs on ${home}`);
+	const daemon = await daemonOf(home);
 	const response = await fetch(`http://127.0.0.1:${daemon.port}${path}`, {
 		method: "POST",
 		headers: { authorization: `Bearer ${daemon.token}`, "content-type": "application/json" },
@@ -277,19 +295,6 @@ async function* stream(home: string, path: string, body: unknown): AsyncGenerato
 			end = buffered.indexOf("\n");
 		}
 	}
-}
-
-async function call(home: string, method: string, path: string, body?: unknown): Promise<unknown> {
-	const daemon = await readDaemonFile(home);
-	if (daemon?.port === undefined || daemon.token === undefined) throw new Error(`no banda daemon runs on ${home}`);
-	const response = await fetch(`http://127.0.0.1:${daemon.port}${path}`, {
-		method,
-		headers: { authorization: `Bearer ${daemon.token}`, "content-type": "application/json" },
-		...(body === undefined ? {} : { body: JSON.stringify(body) }),
-	});
-	const json = (await response.json()) as { error?: string };
-	if (!response.ok) throw new Error(json.error ?? `HTTP ${response.status}`);
-	return json;
 }
 
 main(process.argv.slice(2)).then(

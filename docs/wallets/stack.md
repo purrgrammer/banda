@@ -67,9 +67,9 @@ How each is used, as rules for the one module that imports them (nothing else in
 |---|---|---|---|
 | `@scure/bip32`, `@scure/bip39` | 2.4.0 | Not shipped | No phrase: an independent key per wallet (section 5); tests use anvil's known keys [4] |
 | `ox` | 1.8.20 | Fallback only | Equally correct, but 15 packages with a second copy of the curve library, 2 without provenance, 42.4 MB, process-wide mutable crypto settings, and 1.8.20 was published the day of the spike (120 releases in 2026) [4] |
-| `viem` | 2.58.4 | Tests only, if at all | Declares `@noble/curves` 1.9.1 and `@scure/bip32` 1.7.0 (a duplicate curve library); its nonce manager failed 10 of 20 two-process runs in the nonce spike [1][10] |
+| `viem` | 2.57.17 (spike: 2.58.4) | Tests only (`devDependencies`) | The pin is the release the x402 SDK resolves under the cooldown of section 5. Declares `@noble/curves` 1.9.1 and `@scure/bip32` 1.7.0 (a duplicate curve library); its nonce manager failed 10 of 20 two-process runs in the nonce spike [1][10] |
 | `ethers` | 6.17.0 | Not used | Pins `@noble/curves` 1.2.0 and `@noble/hashes` 1.3.2, no provenance attestation, one stable release in 2026 [1] |
-| `@x402/core`, `@x402/evm`, `@x402/fetch`, `@x402/express` | 2.32.0 | Test harness only (`devDependencies`) | The client's signing choices above; the server ran the handler once per concurrent copy and accepted cross-resource payments [9][11] |
+| `@x402/core`, `@x402/evm`, `@x402/fetch`, `@x402/express` | 2.30.0 (spike: 2.32.0) | Test harness only (`devDependencies`) | The client's signing choices above; the server ran the handler once per concurrent copy and accepted cross-resource payments [9][11] |
 | `x402`, `x402-fetch`, `x402-express` (v1) | 1.2.0 | Not used | v1 SDK; banda reads v2 headers only (H-232) [11] |
 | `keytar`, `@github/keytar` | 7.9.0, 7.10.6 | Not used | Upstream archived 2022-12-15; `@github/keytar` deprecated on npm [5] |
 | `cross-keychain` | 2.0.0 | Not used | 15 days old at the research date, single maintainer [5] |
@@ -80,9 +80,10 @@ Test tooling (never shipped): anvil 1.9.0 (Foundry; 1.10.0, released 2026-11-19,
 version it runs) [7][13], pinned in `mise.toml` as `foundry = "1.9.0"` (mise's `aqua:foundry-rs/foundry` backend,
 checksum-verified) beside Node, so `mise install` provisions it; a scenario that starts a chain skips with
 "anvil 1.9.0 not found (mise install)" when it is absent, as Docker suites skip, and CI's ordinary job runs `mise
-install` first [20]; op-geth or base-reth in Docker for the replacement and eviction rules anvil does not model
-(anvil accepts a 1% bump; geth's PriceBump is 10%) [7][10]; `@x402/express` 2.32.0 with `express` 5.3.0 as the
-hostile and honest test servers [9].
+install` first, with mise itself pinned to 2026.11.5 in the workflow [20]; op-geth or base-reth in Docker for the replacement and eviction rules anvil does not model
+(anvil accepts a 1% bump; geth's PriceBump is 10%) [7][10]; `@x402/express` 2.30.0 with `express` 5.3.0 as the
+hostile and honest test servers [9]. The spike ran the SDK at 2.32.0; the repo pins 2.30.0, the newest release older
+than the cooldown of section 5, and its viem and ox resolve under the same cooldown.
 
 ## 4. Advisories and incidents
 
@@ -93,7 +94,7 @@ Point-in-time facts, queried 2026-11-23; CI re-queries them (section 5).
 | OSV and GitHub advisories for `@noble/curves`, `@noble/hashes`, `@scure/*`, `micro-eth-signer`, `ox`, `viem`, `ethers` | Zero entries for every package (sanity check: lodash 4.17.15 returned 5) [1] | None today |
 | `@napi-rs/keyring` | No advisory found in the research; the prebuilt binaries' crates are listed above for `cargo audit` [5][6] | Scan the embedded crates in CI |
 | GHSA-96hv-2xvq-fx4p (`ws`, memory exhaustion DoS) and GHSA-58qx-3vcg-4xpx (`ws` < 8.20.1, uninitialized memory disclosure) | `ws` is a runtime dependency of viem and ethers [1] | Not shipped (viem and ethers are not in the daemon); 8.21.0 is above both ranges |
-| GHSA-3j63-5h8p-gf7c (x402 resource servers on SDK versions below 0.5.2, high) | Server-side builders [11] | banda is a payer; the SDK is a test dependency at 2.32.0 |
+| GHSA-3j63-5h8p-gf7c (x402 resource servers on SDK versions below 0.5.2, high) | Server-side builders [11] | banda is a payer; the SDK is a test dependency at 2.30.0 |
 | CVE-2024-54134, `@solana/web3.js` 1.95.6 and 1.95.7 (December 2024) | Phished publisher; 1.95.7 exfiltrated private keys [1][14] | The class banda's key path must survive: exact pins, cooldown, single importer, golden vectors |
 | `@ledgerhq/connect-kit` 1.1.5 to 1.1.7 (December 2023) | A wallet's own package hijacked into a drainer [1] | Same class, through a loader |
 | `chalk` 5.6.1, `debug` 4.4.2 and others (September 2025) | Transitive compromise rewriting wallet destinations in browsers [1] | Any transitive package in the daemon's tree is in scope |
@@ -110,16 +111,16 @@ vectors are banda's own check, not an audit.
 | Risk | Control | Where it is enforced | Status |
 |---|---|---|---|
 | A malicious version of a signing or keychain package | Exact pins; committed lockfile with integrity hashes; `npm ci` | `package.json`, `package-lock.json`, CI | In place for the repo (AGENTS.md); wallet packages join it |
-| An install-time payload | `npm ci --ignore-scripts` with an allowlist of the few packages that need a build step, for the whole tree | CI and release builds | To verify that the repo's current dependencies build without install scripts [1] |
-| A fresh compromised release adopted by an upgrade | A release-age cooldown of 14 days for the whole tree (the trusted computing base of section 1), with banda's lockstep packages exempted by name so pi-durable, pi-ai, pi-env, chord and pi-mcp still move together on release day: a decision, since npm's `min-release-age` applies to every package, not one closure | `.npmrc` `min-release-age=14` and `min-release-age-exclude=@earendil-works/*` | npm documents `min-release-age` (days, "only versions that were available more than the given number of days ago will be installed") in npm 11.19.1 on this machine [15]; to confirm both keys in the npm bundled with the repo's Node 26.13.0 before relying on it (H-307); if the exclude key is absent there, a CI test reads the lockfile and the registry's publish times instead |
-| A registry-level substitution | `npm audit signatures` (registry signatures and provenance) over the whole tree | CI on every lockfile change | To add |
-| A newly published advisory | OSV query for the lockfile, and `cargo audit bin` on the keychain module's `.node` files | CI, nightly with the fault suites | To add |
-| A typosquat or scope look-alike | The daemon's, the desktop shell's and `web/`'s production trees must equal an approved set, and the signing module's closure an approved list (the six packages above plus the keychain module and its platform packages); a change to either is a reviewed diff | A test reading the lockfile | To add (H-303) |
-| A second curve library slipping in | The same check asserts exactly one `@noble/curves` and one `@noble/hashes` in production | Same test | To add (H-308) |
-| A generic signer, 7702 or permits creeping in | One importer module; a lint rule forbids importing the signing libraries elsewhere; a test enumerates the module's exports and fails on any change | Lint and unit test | To add (H-153, H-306) |
-| An upgrade that changes signing semantics (hedging, chain id defaults, encoding) | Golden vectors: the EIP-155 example, the EIP-712 `Mail` example, the spike's EIP-1559 transfer and EIP-3009 authorization, signed with `extraEntropy: false` | Unit test | To add from the keys spike (H-304) |
-| A swapped native binary | Lockfile integrity for each platform package, verified at install; the binary is code-signed inside the signed desktop app. Process isolation is not the control: a swapped binary runs inside the signer, which holds the key | Release workflow | To add (H-302) |
-| The x402 SDK on the payer path | `@x402/*` allowed only in `devDependencies`; the dependency-set check refuses them in production | Same test | To add (H-244) |
+| An install-time payload | The root tree runs no install script wherever it is installed, a developer's computer (where the keychain is) included: its `.npmrc` sets `ignore-scripts=true`, and CI and release pass `--ignore-scripts` too. It needs none (its four are a no-op, protobufjs's version check, esbuild's binary check and fsevents), and it has no pre or post hooks, which the setting would skip. npm exports the setting to what an `npm run` starts, so the pack scripts install the desktop and phone trees with `--ignore-scripts=false`; those trees run only the scripts their `allowScripts` names: npm's `allowScripts` alone only warns and runs the script, so their `.npmrc` sets `strict-allow-scripts=true`, which fails the install instead [21] | Every install of the three trees; `test/wallet-deps.test.ts` holds each `.npmrc` to its setting, the npm the checks run with to running no script under the root one and failing an unnamed script under the other two, and every install script each lockfile holds to its `allowScripts` | In place [1] |
+| A fresh compromised release adopted by an upgrade | A release-age cooldown of 14 days for the whole tree (the trusted computing base of section 1), with banda's lockstep packages exempted by name so pi-durable, pi-ai, pi-env, chord and pi-mcp still move together on release day: a decision, since npm's `min-release-age` applies to every package, not one closure | `min-release-age=14` and `min-release-age-exclude[]=@earendil-works/*` in the `.npmrc` of each of the three trees, held there by `test/wallet-deps.test.ts`; `scripts/release-age.ts` holds every version the three lockfiles pin, on every platform, to its tree's cooldown by the registry's publish time, so a version resolved before the setting, by another npm or by hand, is found, in `.github/workflows/supply-chain.yml` (CI on every change and nightly, and before a release publishes) | In place (H-307): npm documents `min-release-age` (days, "only versions that were available more than the given number of days ago will be installed") [15]; the same test holds the npm the checks run with to reading both keys from each `.npmrc` as settings it knows; the release-age check is tested against a registry of `test/supply-chain.test.ts`'s own |
+| A registry-level substitution | `scripts/registry-signatures.ts` over the three lockfiles, every platform's packages included: the registry serves the pinned integrity hash; that hash carries a valid registry signature (ECDSA P-256) by a key current when the version was published; and an advertised provenance attestation is served and its statements name this version and this tarball's digest; every package of the signing path (the signer's and the keychain's closures, 19 packages) must advertise one, so a release published without provenance, as by a phished token, is refused there, and no exception excuses a fault on that path. It does not verify the attestation's sigstore chain (the Fulcio certificate and the Rekor entry), so provenance is checked for consistency, not authenticity; the registry signature is the control. A package the registry cannot vouch for is named in the script with its fault and reported on every run. Each refusal is tested against a registry of the test's own (`test/supply-chain.test.ts`). Back to `npm audit signatures`, or a sigstore verification of each bundle, once that list is empty: the script says so | `.github/workflows/supply-chain.yml`: CI on every change and nightly, and before a release publishes | In place; the missing sigstore verification is an owner decision |
+| A newly published advisory | `scripts/osv-audit.ts` asks OSV about every package of the three lockfiles, every page of each answer; an accepted advisory is named in the script with why and whether the reason holds where the package ships, reported on every run, and named again once OSV stops reporting it. A package counts as shipped when a production tree installs it or its name is in a shipped set of `test/production-packages.json` (the web app's bundle and the desktop shell are dev to npm), and an acceptance for dev only does not cover it; `test/wallet-deps.test.ts` also holds every such acceptance off the computed shipped sets. `cargo audit bin` reads the twelve keychain `.node` files (built with cargo-auditable), each tarball fetched by `scripts/keychain-binaries.ts` and checked against its pinned sha512 | `.github/workflows/supply-chain.yml`: CI on every change and nightly, and before a release publishes | In place; its first run on GitHub's runner is still to record |
+| A typosquat or scope look-alike | The daemon's, the desktop shell's and `web/`'s production trees must equal an approved set, and the signing module's closure an approved list (the six packages above plus the keychain module and its platform packages); a change to either is a reviewed diff. `web/`'s and the desktop shell's packages are dev to npm, so their trees are the closures of what the files `web/src` reaches import (the daemon's sources it imports by relative path included; an `import type` is erased and loads nothing) and of Electron with what `desktop/src` imports | `test/wallet-deps.test.ts` reading the lockfiles and the sources | In place (H-303) |
+| A second curve library slipping in | The same check asserts that the production tree holds `@noble/curves` and `@noble/hashes` once, and that every copy of either in any shipped set is the signer's 2.4.0 | Same test | In place (H-308) |
+| A generic signer, 7702 or permits creeping in | One importer module; a lint rule forbids importing the signing libraries elsewhere; a test enumerates the module's four exports (`generateKey`, `addressOf`, `signTransfer`, `signTransferWithAuthorization`) and fails on any change; an address's EIP-55 form, which the store keys by, is `src/wallet/address.ts`'s, on Node's own keccak-256, so the store never loads the signing libraries; a test signs a transfer carrying calldata, a type-4 type, an access list and a delegation beside its fields and gets the same bytes | Lint and unit test (`test/wallet-imports.test.ts`, `test/wallet-sign.test.ts`) | In place (H-150, H-151, H-153, H-306) |
+| An upgrade that changes signing semantics (hedging, chain id defaults, encoding) | Golden vectors through the module's own exports, signed with `extraEntropy: false` and each cross-checked once with viem and cast: the spike's EIP-1559 transfer on 31337, a USDC transfer on 84532 and on 8453, and an EIP-3009 authorization with a 100 s window under each network's USDC domain on 84532 and 8453. The spike's own authorization (valid from 0) is past C19's 185 s, so the test holds viem to its bytes and the module to refusing it; the EIP-155 and EIP-712 `Mail` examples are shapes the module cannot sign (H-150 to H-153), and tests may not import the library to reach them | `test/wallet-sign.test.ts` | In place (H-155, H-161, H-304) |
+| A swapped native binary | Lockfile integrity for each platform package, verified at install, and the registry signature of all twelve on every platform (`scripts/registry-signatures.ts`); the binary is code-signed inside the signed desktop app. Process isolation is not the control: a swapped binary runs inside the signer, which holds the key | Release workflow and `.github/workflows/supply-chain.yml` | Integrity and signatures in place; the signed bundle to add (H-302) |
+| The x402 SDK on the payer path | `@x402/*` allowed only in `devDependencies`; the dependency-set check refuses them, the v1 SDK, viem, ox, ethers (v5's `@ethersproject/*` too) and keytar, under any scope, in every shipped set, and Biome refuses importing them outside tests | Same test, and `biome.json` held by `test/wallet-imports.test.ts` | In place (H-244) |
 
 **Upgrade ritual** for any package of the signing path: read the changelog and the diff of the files the signer
 calls; wait the cooldown; rerun the golden vectors, the anvil suite and the keychain tests; move the three noble and
@@ -146,13 +147,13 @@ micro packages together; say what changed and the measured result in the commit 
   the daemon at its deadline. The child also signs, so the key never enters the daemon process (C20). Reason: a call
   behind an unanswered prompt ignores `AbortSignal`, four of them starve libuv's pool (`fs`, `crypto`, `dns`), and the
   process cannot exit except by SIGKILL.
-- `null` alone never means "key missing" or "make a key": a canary account `<home-id>/probe` tells a missing key from a
-  keychain that cannot answer (H-037).
+- `null` alone never means "key missing" or "make a key": a canary account `<home-id>/canary/<slot>`, one of a few the home
+  overwrites and never found by listing the keychain, tells a missing key from a keychain that cannot answer (H-037).
 - The id in the account name only says which home made the item; which home may sign is the lease of C16 (the item
   `<home-id>/lease`, compare-and-set on its epoch), proven by a home secret kept outside the home directory (the item
-  `<home-id>/home-secret`, bound to the home's realpath and inode), so no backup, restore, fork or hand copy carries a
-  matching one (R-12). Each wallet has exactly one key item; the home has one lease, one home-secret and one canary
-  item besides, and only the lease's epoch is ever rewritten (C15, C16).
+  `<home-id>/home-secret`, bound to the home's realpath, inode and, off Linux, birth time), so no backup, restore, fork or hand copy carries a
+  matching one (R-12). Each wallet has exactly one key item; the home has one lease, one home-secret and at most a few
+  canary slots besides; a claim rewrites only the lease's epoch, and the owner's move the home secret too (C15, C16).
 
 **What this protects against, stated plainly** (TA-1): on macOS the item's ACL trusts an executable, not a script, so
 anything run by the bundled Node can read it; the released app is signed ad hoc, so each release that changes the
@@ -204,6 +205,7 @@ length [12].
 | Finality used | inclusion about 200 ms (`latest`); `safe` about 2 min ("Confirmed"); `finalized` about 20 min (re-admission after a foreign nonce, R-4) | same |
 | Fee | operator fee + gasUsed × (base fee + priority) + L1 fee; the reserve uses `getL1FeeUpperBound` on the GasPriceOracle at `0x420000000000000000000000000000000000000F` | same |
 | Replacement | both fee fields +12.5% at least (covers geth's 10% PriceBump and reth) | same |
+| Explorer a row links to | `https://basescan.org` | `https://sepolia.basescan.org` |
 
 Sources: [11][16][17][18][19]. The USDC domain names were read on chain (`name()`, `version()`) in the x402 research;
 banda re-reads them before signing and goes offline for x402 on a mismatch (H-250).
@@ -241,9 +243,7 @@ All accessed 2026-11-23 unless stated.
     https://specs.optimism.io/protocol/deposits.html).
 13. Foundry releases: `gh api repos/foundry-rs/foundry/releases/latest` (v1.10.0, 2026-11-19), as cited in [7].
 14. CVE-2024-54134: https://nvd.nist.gov/vuln/detail/CVE-2024-54134 (as cited in [1]).
-15. npm `min-release-age`: the npm 11.19.1 documentation installed with Node 24.22.1 on this machine,
-    `docs/content/using-npm/config.md`, section "min-release-age" (read 2026-11-23); `npm config ls -l` shows the key
-    with default null.
+15. npm `min-release-age`: npm's documentation, `docs/content/using-npm/config.md`, section "min-release-age".
 16. Base Denim upgrade: https://docs.base.org/upgrades/denim/migrate-from-flashblocks.
 17. Base finality: https://docs.base.org/specifications/transactions/transaction-finality.
 18. Base fees: https://docs.base.org/specifications/transactions/network-fees and
@@ -253,3 +253,5 @@ All accessed 2026-11-23 unless stated.
     the backend `aqua:foundry-rs/foundry`; mise-versions (https://mise-versions.jdx.dev/tools/foundry) lists a sha256
     checksum for its releases (both read 2026-11-23). To confirm `mise install foundry@1.9.0` on darwin-arm64 and
     linux-x64 before relying on it.
+21. npm `strict-allow-scripts` and `allowScripts`: npm's documentation, `docs/content/using-npm/config.md`, sections
+    "strict-allow-scripts" and "allow-scripts" (npm 11.19.1, read 2026-11-24).

@@ -3,6 +3,7 @@
  * parts grow side by side without editing a shared list. An area may install extensions before the store opens (tools
  * the agents get), answer requests under `/api`, and push events on the shell stream. `routes/index.ts` lists them all.
  */
+import type { Socket } from "node:net";
 import type { MutableModels } from "@earendil-works/pi-ai";
 import type { Extension, Harness, ModelRef, Registry, SessionDocToken } from "@earendil-works/pi-durable";
 import type { BoxKind } from "../../box/box.ts";
@@ -10,6 +11,7 @@ import type { BlobStore } from "../../core/blobs.ts";
 import type { searchService } from "../../core/search-service.ts";
 import type { defineCore } from "../../core/turn.ts";
 import type { Config } from "../../home.ts";
+import type { RpcClients } from "../../wallet/config.ts";
 import type { Workspace } from "../agents.ts";
 import type {
 	AgentView,
@@ -23,6 +25,7 @@ import type {
 	SeenBy,
 	ShellEvent,
 } from "../api.ts";
+import type { Capabilities } from "../capabilities.ts";
 import type { MemoryDesk } from "../memory.ts";
 
 /** What an area may use before the store opens. */
@@ -37,6 +40,10 @@ export type Boot = {
 	/** The workspace's root in the box. */
 	readonly root: string;
 	readonly log: (line: string) => void;
+	/** The fetch outside services are reached with; a test's faux one, or the platform's. */
+	readonly fetch?: typeof fetch;
+	/** The daemon's one set of RPC clients for the wallets' networks, one bucket per RPC (H-198); a test may leave it out. */
+	readonly rpc?: RpcClients;
 };
 
 /** What an area may use once the daemon is up. */
@@ -58,6 +65,9 @@ export type Deps = Boot & {
 	readonly capabilities: () => Promise<CapabilitiesView>;
 	/** A message as the owner, as `POST /api/messages` takes it; throws `BadRequest` with why it was refused. */
 	readonly post: (message: PostMessage) => Promise<Posted>;
+	/** The wallet connection's accounts (D0): a wallet joins it as it is made, and is switched on agent by agent. */
+	readonly connections: Pick<Capabilities, "addWallet" | "removeWallet" | "switchAccount" | "walletKept"> &
+		Partial<Pick<Capabilities, "checksWallets">>;
 };
 
 /** A request under `/api`, authorized: the owner's. */
@@ -80,7 +90,13 @@ export type AreaRequest = {
  */
 export type AreaReply =
 	| { readonly status?: number; readonly body: unknown }
-	| { readonly file: { readonly name: string; readonly mimeType: string; readonly bytes: Buffer } };
+	| { readonly file: { readonly name: string; readonly mimeType: string; readonly bytes: Buffer } }
+	/**
+	 * The request's own connection, for a response the daemon must not hold (a wallet's key, written by the signer child
+	 * it is handed to): `hand` answers undefined once the connection is no longer the daemon's, or a reply to send as any.
+	 * Never for a paired device's request, which comes on no socket of this computer's.
+	 */
+	| { readonly hand: (connection: Socket) => Promise<AreaReply | undefined>; readonly body?: never };
 
 /** A doc the shell stream watches for an area: a change pushes the shell again. */
 // biome-ignore lint/suspicious/noExplicitAny: a doc of any shape

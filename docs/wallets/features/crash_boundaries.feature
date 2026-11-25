@@ -28,15 +28,27 @@ Feature: A crash at any boundary resumes from the last commit
       | the keychain answers | the keychain item derives the wallet's address | ready_unsaved |
 
     @t:wallet:creating:restart:kc_up&item!=ours
-    Examples: killed before the write, or an item that is not ours
+    Examples: killed before the write
       | keychain             | item                                       | after   |
       | the keychain answers | the keychain holds no item for the address | dropped |
-      | the keychain answers | the keychain item holds another key        | dropped |
 
     @t:wallet:creating:restart:!kc_up
     Examples: the keychain does not answer at start
       | keychain                     | item                                           | after    |
       | the keychain does not answer | the keychain item derives the wallet's address | creating |
+
+  # H-045: an item of another key under the wallet's account is not the wallet's: the record is dropped, and the item
+  # stays, listed as an orphan and never deleted.
+  @UC-01 @H-045 @crash
+  @t:wallet:creating:restart:kc_up&item!=ours
+  Scenario: The daemon restarts while a wallet is being created, and the keychain item holds another key
+    Given the wallet is "creating"
+    And the keychain answers
+    And the keychain item holds another key
+    When the daemon restarts while the wallet is in that state
+    Then the wallet is "dropped"
+    And a ready wallet always has its key
+    And banda never deletes a key that does not open its wallet
 
   @UC-11 @H-113 @H-114 @H-115 @H-116 @H-117 @H-119 @H-120 @H-121 @H-122 @crash @spike
   Scenario Outline: The daemon is killed with the payment at a boundary and resumes it from the last commit

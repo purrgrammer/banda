@@ -185,7 +185,14 @@ describe("a home's backup", () => {
 		expect(existsSync(join(noComputer.path, "computer"))).toBe(false);
 		const restored = join(area, "restored");
 		await restoreHome(noComputer.path, restored, { format });
-		expect(readdirSync(restored).sort()).toEqual(["auth", "blobs", "config.json", "durable.db", "format"]);
+		expect(readdirSync(restored).sort()).toEqual([
+			"auth",
+			"blobs",
+			"config.json",
+			"durable.db",
+			"format",
+			"restored.json",
+		]);
 		expect(await chatOf(restored)).toBe(7);
 	});
 

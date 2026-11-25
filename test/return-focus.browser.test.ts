@@ -66,7 +66,7 @@ beforeAll(async () => {
 							return;
 						}
 						res.setHeader("content-type", "application/json");
-						res.end("{}");
+						res.end(path === "/api/wallets" ? JSON.stringify({ wallets: [], networks: [] }) : "{}");
 					});
 				},
 			},

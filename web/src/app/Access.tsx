@@ -1,4 +1,4 @@
-/** Compact per-account and harness access, with add flows in dialogs. */
+/** Compact per-account, wallet and harness access, with add flows in dialogs. */
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -7,11 +7,13 @@ import type { CapabilitiesView, ControlView, PermissionView } from "../../../src
 import { Confirm } from "../chat/Confirm.tsx";
 import { Block, type ConnectionRow, Connections, Permissions, RowOf, Rows } from "../chat/Settings.tsx";
 import { allowHost, revokePermission, switchAccount, switchPublicConnection } from "../lib/api.ts";
+import type { ChatAgent } from "../lib/navigation.ts";
 import { useReturnFocus } from "../lib/return-focus.ts";
 import { showCapabilities, showControl, useShell } from "../lib/shell.ts";
 import { ConnectFlow } from "./ConnectFlow.tsx";
 import { AddHarnessButton, HarnessAccessTile } from "./HarnessConnections.tsx";
 import { McpSetup } from "./McpSetup.tsx";
+import { AccessWallets } from "./WalletPages.tsx";
 import { hrefOf } from "./where.ts";
 
 /**
@@ -66,10 +68,13 @@ export function scopeWords(permission: Pick<PermissionView, "scope" | "until">):
 
 export function AccessTab({
 	agent,
+	everyone,
 	capabilities,
 	control,
 }: {
 	agent: { readonly id: string; readonly name: string };
+	/** Every agent, archived ones too, which name the agents a wallet serves. */
+	everyone: readonly ChatAgent[];
 	capabilities: CapabilitiesView | undefined;
 	control: ControlView | undefined;
 }) {
@@ -163,6 +168,7 @@ export function AccessTab({
 				<ConnectFlow key={pick} connection={pick} agent={agent} onClose={() => setPick(undefined)} />
 			) : null}
 			{error === undefined ? null : <p className="-mt-5 text-meta text-danger">{error}</p>}
+			<AccessWallets agent={agent} everyone={everyone} />
 			<HarnessAccess agent={agent} />
 			<Permissions
 				agent={agent.name}

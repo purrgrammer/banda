@@ -20,61 +20,61 @@ state "always" as permission_always
 
 [*] --> permission_none
 
-' row 133
-permission_none : card_always [version_current and not (rcpt != 'deny')] / CardAlways (C9)
-' row 135
-permission_none : card_always [not version_current] / CardAlways (C8)
-' row 139
-permission_none : list_set_always [version_current and not (rcpt == 'ask')] / SetAlways (C9)
-' row 141
-permission_none : list_set_always [not version_current] / SetAlways (C8)
-' row 143
-permission_none : card_never [version_current] / CardNever (C8,C9)
 ' row 145
-permission_none : card_never [not version_current] / CardNever (C8)
+permission_none : card_always [version_current and not (rcpt != 'deny')] / CardAlways (C9)
 ' row 147
-permission_none : list_set_deny [version_current] / SetDeny (C8,C9)
-' row 149
-permission_none : list_set_deny [not version_current] / SetDeny (C8)
+permission_none : card_always [not version_current] / CardAlways (C8)
 ' row 151
-permission_none : list_set_ask [version_current] / SetAsk (C8,C9)
+permission_none : list_set_always [version_current and not (rcpt == 'ask')] / SetAlways (C9)
 ' row 153
-permission_none : list_set_ask [not version_current] / SetAsk (C8)
+permission_none : list_set_always [not version_current] / SetAlways (C8)
 ' row 155
-permission_none : forget [version_current] / Forget (C8,C9)
+permission_none : card_never [version_current] / CardNever (C8,C9)
 ' row 157
-permission_none : forget [not version_current] / Forget (C8)
+permission_none : card_never [not version_current] / CardNever (C8)
 ' row 159
+permission_none : list_set_deny [version_current] / SetDeny (C8,C9)
+' row 161
+permission_none : list_set_deny [not version_current] / SetDeny (C8)
+' row 163
+permission_none : list_set_ask [version_current] / SetAsk (C8,C9)
+' row 165
+permission_none : list_set_ask [not version_current] / SetAsk (C8)
+' row 167
+permission_none : forget [version_current] / Forget (C8,C9)
+' row 169
+permission_none : forget [not version_current] / Forget (C8)
+' row 171
 permission_none : rename / Rename (C18)
-' row 132
+' row 144
 permission_always : card_always [version_current and rcpt != 'deny'] / CardAlways (C8,C9)
-' row 134
-permission_always : card_always [version_current and not (rcpt != 'deny')] / CardAlways (C9)
-' row 136
-permission_always : card_always [not version_current] / CardAlways (C8)
-' row 138
-permission_always : list_set_always [version_current and rcpt == 'ask'] / SetAlways (C8,C9)
-' row 140
-permission_always : list_set_always [version_current and not (rcpt == 'ask')] / SetAlways (C9)
-' row 142
-permission_always : list_set_always [not version_current] / SetAlways (C8)
 ' row 146
-permission_always : card_never [not version_current] / CardNever (C8)
+permission_always : card_always [version_current and not (rcpt != 'deny')] / CardAlways (C9)
+' row 148
+permission_always : card_always [not version_current] / CardAlways (C8)
 ' row 150
-permission_always : list_set_deny [not version_current] / SetDeny (C8)
+permission_always : list_set_always [version_current and rcpt == 'ask'] / SetAlways (C8,C9)
+' row 152
+permission_always : list_set_always [version_current and not (rcpt == 'ask')] / SetAlways (C9)
 ' row 154
-permission_always : list_set_ask [not version_current] / SetAsk (C8)
+permission_always : list_set_always [not version_current] / SetAlways (C8)
 ' row 158
+permission_always : card_never [not version_current] / CardNever (C8)
+' row 162
+permission_always : list_set_deny [not version_current] / SetDeny (C8)
+' row 166
+permission_always : list_set_ask [not version_current] / SetAsk (C8)
+' row 170
 permission_always : forget [not version_current] / Forget (C8)
-' row 160
+' row 172
 permission_always : rename / Rename (C18)
 
-' row 131
-' row 137
+' row 143
+' row 149
 permission_none --> permission_always : card_always [version_current and rcpt != 'deny'] / CardAlways (C8,C9)\nlist_set_always [version_current and rcpt == 'ask'] / SetAlways (C8,C9)
-' row 144
-' row 148
-' row 152
 ' row 156
+' row 160
+' row 164
+' row 168
 permission_always --> permission_none : card_never [version_current] / CardNever (C8,C9)\nlist_set_deny [version_current] / SetDeny (C8,C9)\nlist_set_ask [version_current] / SetAsk (C8,C9)\nforget [version_current] / Forget (C8,C9)
 @enduml

@@ -1,6 +1,5 @@
 {
 	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
-	"plugins": ["./biome/effects.grit"],
 	"files": {
 		"includes": [
 			"src/**",
@@ -10,6 +9,8 @@
 			"!web/iroh/pkg",
 			"!web/iroh/target",
 			"!web/src/assets/providers",
+			"!test/fixtures/homes/format-*",
+			"!test/fixtures/homes/0.*",
 			"!!.local",
 			"!!.worktrees",
 			"!!release",
@@ -31,18 +32,253 @@
 			"!.claude"
 		]
 	},
-	"formatter": { "indentStyle": "tab", "lineWidth": 120 },
-	"css": { "parser": { "tailwindDirectives": true } },
-	"assist": { "actions": { "source": { "organizeImports": "on" } } },
+	"formatter": {
+		"indentStyle": "tab",
+		"lineWidth": 120
+	},
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
+	},
+	"assist": {
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
+	},
+	"linter": {
+		"domains": {
+			"react": "recommended"
+		},
+		"rules": {
+			"style": {
+				"noRestrictedImports": {
+					"level": "error",
+					"options": {
+						"patterns": [
+							{
+								"group": [
+									"@noble/**",
+									"@scure/**",
+									"micro-eth-signer",
+									"micro-eth-signer/**",
+									"micro-packed",
+									"micro-packed/**"
+								],
+								"message": "Only src/wallet/sign.ts imports the signing libraries (H-306)."
+							},
+							{
+								"group": ["@napi-rs/keyring", "@napi-rs/keyring/**"],
+								"message": "Only src/wallet/keystore.ts imports the keychain module."
+							},
+							{
+								"group": [
+									"@x402/**",
+									"x402",
+									"x402/**",
+									"x402-*",
+									"viem",
+									"viem/**",
+									"ox",
+									"ox/**",
+									"ethers",
+									"ethers/**",
+									"ethers-*",
+									"keytar",
+									"keytar/**",
+									"@ethersproject/**",
+									"@*/viem",
+									"@*/viem/**",
+									"@*/ox",
+									"@*/ox/**",
+									"@*/ethers",
+									"@*/ethers/**",
+									"@*/keytar",
+									"@*/keytar/**"
+								],
+								"message": "The x402 SDK, viem and ethers are for tests only: banda signs with its own module (H-244)."
+							}
+						]
+					}
+				}
+			}
+		}
+	},
 	"overrides": [
 		{
-			"includes": ["web/src/styles/**"],
-			"linter": { "rules": { "complexity": { "noImportantStyles": "off" } } }
+			"includes": ["**", "!web/src/components/ui/**", "!web/src/components/ai-elements/**", "!web/src/hooks/**"],
+			"plugins": ["./biome/effects.grit"]
 		},
-		{ "includes": ["test/**"], "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } } },
+		{
+			"includes": ["web/src/styles/**"],
+			"linter": {
+				"rules": {
+					"complexity": {
+						"noImportantStyles": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["test/**"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noNonNullAssertion": "off"
+					}
+				}
+			}
+		},
 		{
 			"includes": ["web/src/components/ui/**", "web/src/components/ai-elements/**", "web/src/hooks/**"],
-			"linter": { "enabled": false }
+			"linter": {
+				"domains": {
+					"react": "none"
+				},
+				"rules": {
+					"recommended": false
+				}
+			}
+		},
+		{
+			"includes": ["test/**"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": {
+							"level": "error",
+							"options": {
+								"patterns": [
+									{
+										"group": [
+											"@noble/**",
+											"@scure/**",
+											"micro-eth-signer",
+											"micro-eth-signer/**",
+											"micro-packed",
+											"micro-packed/**"
+										],
+										"message": "Only src/wallet/sign.ts imports the signing libraries (H-306)."
+									},
+									{
+										"group": ["@napi-rs/keyring", "@napi-rs/keyring/**"],
+										"message": "Only src/wallet/keystore.ts imports the keychain module."
+									}
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"includes": [
+				"src/wallet/signer.ts",
+				"src/wallet/signer-protocol.ts",
+				"src/wallet/sign.ts",
+				"src/wallet/keystore.ts",
+				"src/wallet/home-id.ts"
+			],
+			"plugins": ["./biome/signer.grit", "./biome/random.grit"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noConsole": "error"
+					},
+					"style": {
+						"noRestrictedImports": {
+							"level": "error",
+							"options": {
+								"patterns": [
+									{
+										"group": [
+											"@noble/**",
+											"@scure/**",
+											"micro-eth-signer",
+											"micro-eth-signer/**",
+											"micro-packed",
+											"micro-packed/**"
+										],
+										"message": "Only src/wallet/sign.ts imports the signing libraries (H-306)."
+									},
+									{
+										"group": ["@napi-rs/keyring", "@napi-rs/keyring/**"],
+										"message": "Only src/wallet/keystore.ts imports the keychain module."
+									},
+									{
+										"group": [
+											"@x402/**",
+											"x402",
+											"x402/**",
+											"x402-*",
+											"viem",
+											"viem/**",
+											"ox",
+											"ox/**",
+											"ethers",
+											"ethers/**",
+											"ethers-*",
+											"keytar",
+											"keytar/**",
+											"@ethersproject/**",
+											"@*/viem",
+											"@*/viem/**",
+											"@*/ox",
+											"@*/ox/**",
+											"@*/ethers",
+											"@*/ethers/**",
+											"@*/keytar",
+											"@*/keytar/**"
+										],
+										"message": "The x402 SDK, viem and ethers are for tests only: banda signs with its own module (H-244)."
+									},
+									{
+										"group": [
+											"@earendil-works/pi-durable",
+											"@earendil-works/pi-durable/**",
+											"**/core/store.ts",
+											"**/core/activity.ts",
+											"**/server/**",
+											"**/daemon.ts"
+										],
+										"message": "A module that holds a key imports neither the store nor the log (H-010): what it is given never reaches them."
+									}
+								],
+								"paths": {
+									"node:crypto": {
+										"importNames": [
+											"randomBytes",
+											"randomInt",
+											"randomUUID",
+											"randomFill",
+											"randomFillSync",
+											"pseudoRandomBytes",
+											"getRandomValues",
+											"webcrypto"
+										],
+										"message": "A module that holds a key draws no random value of its own (H-002): any draw but a key's comes from src/wallet/draws.ts."
+									},
+									"crypto": {
+										"importNames": [
+											"randomBytes",
+											"randomInt",
+											"randomUUID",
+											"randomFill",
+											"randomFillSync",
+											"pseudoRandomBytes",
+											"getRandomValues",
+											"webcrypto"
+										],
+										"message": "A module that holds a key draws no random value of its own (H-002): any draw but a key's comes from src/wallet/draws.ts."
+									}
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 	]
 }

@@ -10,6 +10,19 @@ describe("cli", () => {
 		expect(stdout).toMatch(/^banda \d+\.\d+\.\d+/);
 		expect(stdout).toContain("banda say");
 		expect(stdout).toContain("banda approve <id>");
+		// host mode, where it is chosen, says agents lose their wallets (H-064)
+		const host = stdout.slice(stdout.indexOf("--box host"), stdout.indexOf("banda say"));
+		expect(host.replace(/\s+/g, " ")).toContain("wallets are offline for agents: their commands run as you");
+	});
+
+	it("loads no store module for src/home.ts, which every command imports", async () => {
+		// a command that reads only the home starts without node:sqlite and the store's schemas (they load lazily)
+		const { stdout } = await run(process.execPath, [
+			"--input-type=module",
+			"-e",
+			"await import('./src/home.ts'); console.log(process.moduleLoadList.some((m) => m.includes('sqlite')))",
+		]);
+		expect(stdout.trim()).toBe("false");
 	});
 
 	it("says there is no daemon when none runs", async () => {

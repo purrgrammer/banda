@@ -53,19 +53,35 @@ export function Confirm({
 	if (children === undefined && open === true && !was.current) opener.current = openerOf();
 	was.current = open === true;
 	return (
-		<AlertDialog {...(open === undefined ? {} : { open })} {...(onOpenChange === undefined ? {} : { onOpenChange })}>
+		<AlertDialog
+			{...(open === undefined ? {} : { open })}
+			onOpenChange={(next) => {
+				// opened by its own control: that control, noted while it has the focus, for the same return
+				if (next && children !== undefined) opener.current = openerOf();
+				onOpenChange?.(next);
+			}}
+		>
 			{children === undefined ? null : <AlertDialogTrigger asChild>{children}</AlertDialogTrigger>}
 			<AlertDialogContent
 				size="sm"
 				onCloseAutoFocus={(event) => {
 					const to = opener.current;
-					if (to === null || !to.isConnected || to.matches(":disabled")) return;
+					if (to === null) return;
+					if (to.isConnected && !to.matches(":disabled")) {
+						event.preventDefault();
+						to.focus();
+						return;
+					}
+					// the act took its opener away (an Archive the archive put Unarchive in place of) or disabled it while
+					// it runs (a Remove): the focus goes to the page's title, never to the page
+					const title = document.querySelector<HTMLElement>("h1[data-page-title]");
+					if (title === null) return;
 					event.preventDefault();
-					to.focus();
+					title.focus();
 				}}
 			>
 				<AlertDialogHeader>
-					<AlertDialogTitle>{title}</AlertDialogTitle>
+					<AlertDialogTitle className="[overflow-wrap:anywhere]">{title}</AlertDialogTitle>
 					<AlertDialogDescription>{body}</AlertDialogDescription>
 				</AlertDialogHeader>
 				<AlertDialogFooter>

@@ -8,14 +8,14 @@ import { join } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
-import { type Connection, readItems } from "../src/core/connections.ts";
+import { type Connection, connectionOf, readItems, WALLET, WALLET_URL } from "../src/core/connections.ts";
 import { type Definition, readDefinition, readDefinitions } from "../src/core/definitions.ts";
 import { FLOORS } from "../src/core/floor.ts";
 import { REST_APIS } from "../src/core/rest.ts";
 import { SHIPPED } from "../src/server/capabilities.ts";
 import { pbtRuns } from "./pbt.ts";
 
-const NAMES = ["calendar", "contacts", "drive", "github", "gmail", "slack"];
+const NAMES = ["calendar", "contacts", "drive", "github", "gmail", "slack", "wallet"];
 const text = (name: string) => readFileSync(join(SHIPPED, `${name}.json`), "utf8");
 const definition = (name: string) => JSON.parse(text(name)) as Definition;
 const errorsOf = (name: string, value: unknown) => {
@@ -24,7 +24,7 @@ const errorsOf = (name: string, value: unknown) => {
 };
 
 describe("the definitions banda ships", () => {
-	it("are the six, each passing its schema and its checks, with the line and the access the app shows", () => {
+	it("are the seven, each passing its schema and its checks, with the line and the access the app shows", () => {
 		expect(
 			readdirSync(SHIPPED)
 				.filter((file) => file.endsWith(".json"))
@@ -36,8 +36,11 @@ describe("the definitions banda ships", () => {
 		expect([...read.keys()].sort()).toEqual(NAMES);
 		for (const [name, connection] of read) {
 			expect(connection.about, name).toMatch(/^\S/);
-			expect(connection.access?.choices.length, name).toBeGreaterThan(0);
+			// a wallet is no sign-in: it has no access to choose
+			if (connection.auth !== "wallet") expect(connection.access?.choices.length, name).toBeGreaterThan(0);
 		}
+		// the wallet's reads are its tools, and none of them on a floor: the money floor stays for the owner's own money
+		expect(read.get("wallet")).toMatchObject({ auth: "wallet", reads: ["address", "balance"], floors: {} });
 		expect(read.get("gmail")?.access).toMatchObject({
 			required: "Read email",
 			choices: [
@@ -94,6 +97,51 @@ describe("the definitions banda ships", () => {
 		const { version: _a, ...one } = a.connection;
 		const { version: _b, ...other } = spaced.connection;
 		expect(other).toEqual(one);
+	});
+
+	const gmail = () => definition("gmail");
+	it("a wallet is banda's own connection: named wallet, with no built-in API and no account read", () => {
+		const wallet = definition("wallet");
+		const refused = '"auth: wallet" is banda\'s own connection named wallet, with no "api" and no "account"';
+		expect(errorsOf("wallet", wallet)).toEqual([]);
+		expect(errorsOf("purse", wallet)).toEqual([refused]);
+		expect(errorsOf("wallet", { ...wallet, account: "address.id" })).toEqual([refused]);
+		expect(errorsOf("gmail", { ...gmail(), auth: "wallet", client: undefined, scopes: undefined })).toContain(refused);
+	});
+
+	it("a wallet names no url, client, scopes or access: it signs in to nothing and reaches its network's RPC", () => {
+		const wallet = definition("wallet");
+		expect(readDefinitions(SHIPPED, () => {}).get("wallet")?.url).toBe(WALLET_URL);
+		expect(errorsOf("wallet", { ...wallet, url: "https://base-rpc.publicnode.com" })).toEqual([
+			'"auth: wallet" names no "url": a wallet reaches its network\'s RPC, which config.json sets',
+		]);
+		const notOAuth = '"client" and "scopes" are for a server the owner signs in to: add "auth: oauth" or drop them';
+		expect(errorsOf("wallet", { ...wallet, client: "banda" })).toEqual([notOAuth]);
+		expect(errorsOf("wallet", { ...wallet, scopes: ["read"] })).toEqual([notOAuth]);
+		expect(errorsOf("wallet", { ...wallet, access: gmail().access })).toContain(
+			'"access" is for a server the owner signs in to: a wallet asks for none',
+		);
+		// any other connection still names its server
+		const { url: _url, ...nowhere } = gmail();
+		expect(errorsOf("gmail", nowhere)).toContain('add "url:", the server\'s address');
+	});
+
+	it("a wallet names only its reads: no floor, object, group, need or ask, which its tools have no use for", () => {
+		const wallet = definition("wallet");
+		const only = '"auth: wallet" names only its reads: no floors, "objects", "groups", "needs" or "ask"';
+		for (const change of [
+			{ floors: { money: ["pay"] } },
+			{ objects: gmail().objects },
+			{ groups: { pay: ["pay"] } },
+			{ needs: { balance: ["read"] } },
+			{ ask: "always" },
+		])
+			expect(errorsOf("wallet", { ...wallet, ...change }), JSON.stringify(change)).toContain(only);
+		expect(errorsOf("wallet", { ...wallet, floors: {} })).toEqual([]);
+		const unknown = connectionOf(WALLET, { service: "Wallet", url: undefined, auth: "purse", reads: [], floors: {} });
+		expect("errors" in unknown && unknown.errors).toContain(
+			'"auth: purse": use none, key (the owner types one in), oauth (the owner signs in) or wallet (banda\'s own)',
+		);
 	});
 
 	it("one that does not pass is left out, and said", () => {

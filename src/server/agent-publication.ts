@@ -5,6 +5,7 @@ import type { Context } from "@earendil-works/chord";
 import { defineDoc, type Harness, type Tx } from "@earendil-works/pi-durable";
 import type { ExecutionEnv, FileInfo } from "@earendil-works/pi-durable/env";
 import { Accepted, type AcceptedFile, agentPath, MAX_AGENT_BYTES, shaOf } from "../core/agents.ts";
+import { keyedSerial } from "../core/keyed-serial.ts";
 import { context } from "../core/store.ts";
 import type { Workspace } from "./agents.ts";
 import type { AgentPublicationHistory, AgentPublicationView, RetainedAgentFile } from "./api.ts";
@@ -271,22 +272,15 @@ async function displace(env: ExecutionEnv, target: string, kept: string, ctx: Co
 	return "moved";
 }
 
-const queues = new WeakMap<Harness, Map<string, Promise<void>>>();
+const queues = new WeakMap<Harness, ReturnType<typeof keyedSerial>>();
 
 async function serial(harness: Harness, name: string, work: () => Promise<void>) {
 	let names = queues.get(harness);
 	if (names === undefined) {
-		names = new Map();
+		names = keyedSerial();
 		queues.set(harness, names);
 	}
-	const before = names.get(name) ?? Promise.resolve();
-	const running = before.catch(() => {}).then(work);
-	names.set(name, running);
-	try {
-		await running;
-	} finally {
-		if (names.get(name) === running) names.delete(name);
-	}
+	await names(name, work);
 }
 
 export async function finishAgentPublication(

@@ -13,11 +13,11 @@ package "OS keychain  <<never in the store, a backup or the box>>" as KCP #FBEFE
   }
   class KeychainLease <<keychain>> {
     account : "<home-id>/lease" (one per home)
-    epoch : int (compare-and-set; the only item ever rewritten)
+    epoch : int (compare-and-set; rewritten by a claim or a move)
     homeSecretHash : bytes32
   }
   class Canary <<keychain>> {
-    account : "<home-id>/probe"
+    account : "<home-id>/canary"
   }
 }
 
@@ -25,7 +25,7 @@ package "Outside the home directory (no backup, restore, fork or copy carries it
   class HomeSecret <<keychain>> {
     account : "<home-id>/home-secret"
     {field} secret : bytes
-    {field} boundTo : home realpath + (dev, inode, birth time)
+    {field} boundTo : home realpath + (inode, birth time off Linux); rewritten by a move
   }
 }
 

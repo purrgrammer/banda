@@ -42,6 +42,7 @@ import { basename, dirname, join, resolve, sep } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
+import { markRestored, RESTORED_MARKER } from "./restored.ts";
 
 export const MANIFEST = "manifest.json";
 const STORE = "durable.db";
@@ -273,6 +274,9 @@ export async function restoreHome(from: string, home: string, options: RestoreOp
 			);
 		if (Number((await readFile(join(stage, "format"), "utf8")).trim()) !== manifest.format)
 			throw new BackupRefused(`${from}: its format file and its manifest disagree, and nothing was restored`);
+		// never the home it came from, wherever it lands: its wallets sign again only once the owner moves signing here
+		await markRestored(stage);
+		await sync(join(stage, RESTORED_MARKER));
 		await sync(join(stage, STORE));
 		await sync(stage);
 		hit("restore:verified");

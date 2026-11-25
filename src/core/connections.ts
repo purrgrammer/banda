@@ -13,23 +13,42 @@
  */
 
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdir, open, readdir, readFile, rm } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { defineDoc, type JsonObject, type Tx } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
+import { Value } from "typebox/value";
+import { checksummed } from "../wallet/address.ts";
+import { NetworkId } from "../wallet/networks.ts";
 import { Accepted, AGENT_NAME, type Agent, agentPath, LEAD, parseAgent } from "./agents.ts";
 import { shippedDefinition, shippedDefinitions } from "./definitions.ts";
+import { writeDurably } from "./durable-file.ts";
 import { type DefinedFloor, FLOORS, type Floor } from "./floor.ts";
 import { harnessToolsOf } from "./harness.ts";
 import { CLIENTS, clientNamed, type OAuthClient, type OAuthServer, type Pending, type Tokens } from "./oauth.ts";
-import { type ObjectKinds, parseObjects, plainLine } from "./objects.ts";
+import { type ObjectKinds, parseObjects } from "./objects.ts";
+import { plainLine } from "./plain-line.ts";
 import { REST_APIS, type RestApiName, restApiNamed } from "./rest.ts";
 import type { Said } from "./tool-kinds.ts";
 
 /** What a definition banda ships may weigh. */
 export const MAX_DEFINITION_BYTES = 64 * 1024;
 
-/** How the daemon signs in to a remote server: not at all, with a key the owner types, or with OAuth. */
-export type AuthKind = "none" | "key" | "oauth";
+/**
+ * How the daemon signs in to a remote server: not at all, with a key the owner types, or with OAuth; or, for banda's
+ * own wallet connection alone, as a wallet whose key the OS keychain holds (docs/wallets.md "Architecture").
+ */
+export type AuthKind = "none" | "key" | "oauth" | "wallet";
+
+/** The connection each wallet is an account of. */
+export const WALLET = "wallet";
+
+/**
+ * Where the wallet connection is, for the shape every connection has: a name under `.invalid` (RFC 6761), which no
+ * resolver answers. A wallet reaches its network's RPC (src/wallet/networks.ts, config.json), never this, and its
+ * definition names no url.
+ */
+export const WALLET_URL = "https://wallet.invalid";
 
 /** A connection, as its definition or record says. */
 export type Connection = {
@@ -163,7 +182,11 @@ export function connectionOf(name: string, fields: ConnectionFields): ParsedConn
 	if (!AGENT_NAME.test(name)) errors.push(nameError(name));
 	const service = fields.service ?? "";
 	if (service === "") errors.push(`add "service:", the service as the owner calls it, such as "your calendar"`);
-	const { url, client, scopes } = fields;
+	const { client, scopes } = fields;
+	const wallet = fields.auth === "wallet";
+	if (wallet && fields.url !== undefined)
+		errors.push(`"auth: wallet" names no "url": a wallet reaches its network's RPC, which config.json sets`);
+	const url = wallet ? WALLET_URL : fields.url;
 	const apiName = fields.api;
 	const api = apiName === undefined ? undefined : restApiNamed(apiName);
 	const builtIn = api === undefined ? undefined : REST_APIS[api];
@@ -176,8 +199,24 @@ export function connectionOf(name: string, fields: ConnectionFields): ParsedConn
 				.join(", ")}`,
 		);
 	const auth = fields.auth ?? "none";
-	if (auth !== "none" && auth !== "key" && auth !== "oauth")
-		errors.push(`"auth: ${auth}": use none, key (the owner types one in) or oauth (the owner signs in)`);
+	if (auth !== "none" && auth !== "key" && auth !== "oauth" && auth !== "wallet")
+		errors.push(
+			`"auth: ${auth}": use none, key (the owner types one in), oauth (the owner signs in) or wallet (banda's own)`,
+		);
+	if (auth === "wallet" && (name !== WALLET || apiName !== undefined || fields.account !== undefined))
+		errors.push(`"auth: wallet" is banda's own connection named ${WALLET}, with no "api" and no "account"`);
+	if (auth === "wallet" && fields.access !== undefined)
+		errors.push(`"access" is for a server the owner signs in to: a wallet asks for none`);
+	// a wallet's tools are banda's own reads; what it pays is asked in its own words, never under a floor
+	if (
+		auth === "wallet" &&
+		(Object.values(fields.floors).some((tools) => (tools ?? []).length > 0) ||
+			fields.objects !== undefined ||
+			fields.groups !== undefined ||
+			fields.needs !== undefined ||
+			fields.ask !== undefined)
+	)
+		errors.push(`"auth: wallet" names only its reads: no floors, "objects", "groups", "needs" or "ask"`);
 	const ask = fields.ask;
 	if (ask !== undefined && ask !== "always")
 		errors.push('"ask: always" is for a remote connection whose non-read tools must ask every time');
@@ -794,24 +833,78 @@ export async function connectionToolsOf(tx: Tx, agent: Pick<Agent, "id" | "conne
 // Credentials, in `auth/connections/<connection>/<account>/`: the daemon's alone, owner-only files, written whole (a
 // temp file, renamed).
 
-/** An account's credentials, bound to the URL they were given for. */
+/**
+ * A wallet account's credentials: where its key is, never the key. `account` is the keychain item's account, and the
+ * address and network the key must prove when it is read (C20). Bound to no URL: changing the network's RPC leaves
+ * the wallet as it was.
+ */
+export type WalletCredentials = {
+	readonly wallet: { readonly account: string; readonly address: string; readonly network: NetworkId };
+};
+
+const WalletFile = Type.Object(
+	{
+		wallet: Type.Object(
+			{
+				account: Type.String({ minLength: 1 }),
+				address: Type.String({ pattern: "^0x[0-9a-fA-F]{40}$" }),
+				network: NetworkId,
+			},
+			{ additionalProperties: false },
+		),
+		revision: Type.Optional(Type.String()),
+		generation: Type.Optional(Type.String()),
+	},
+	{ additionalProperties: false },
+);
+
+/**
+ * A wallet's credentials, when the file holds exactly what one is, its address in the EIP-55 form a wallet is kept in;
+ * a file that marks a wallet and fails is none.
+ */
+export const walletOf = (credentials: Credentials | undefined): WalletCredentials["wallet"] | undefined =>
+	Value.Check(WalletFile, credentials) && canonical(credentials.wallet.address) ? credentials.wallet : undefined;
+
+function canonical(address: string): boolean {
+	try {
+		return checksummed(address) === address;
+	} catch {
+		return false;
+	}
+}
+
+/** An account's credentials, bound to the URL they were given for; a wallet's, to none. */
 export type Credentials = (
 	| { readonly url: string; readonly key: string }
 	| {
 			readonly url: string;
 			readonly oauth: { readonly server: OAuthServer; readonly client: OAuthClient; readonly tokens: Tokens };
 	  }
+	| WalletCredentials
 ) & { readonly revision?: string; readonly generation?: string };
 
 const credentialsDir = (home: string) => join(home, "auth", "connections");
 const accountDir = (home: string, name: string, account: string) => join(credentialsDir(home), name, account);
 const pendingDir = (home: string) => join(home, "auth", "oauth");
 
+/**
+ * Owner-only, whole and on disk before it is answered: the store's commit naming the account follows it, and a power
+ * cut between must never leave an account whose file is gone (a wallet is never signed in again to write it back).
+ * The folders made for it are flushed into their parents too.
+ */
 async function writePrivate(path: string, value: unknown): Promise<void> {
-	await mkdir(join(path, ".."), { recursive: true, mode: 0o700 });
-	const temp = `${path}.${randomBytes(6).toString("hex")}`;
-	await writeFile(temp, JSON.stringify(value), { mode: 0o600 });
-	await rename(temp, path);
+	const folder = dirname(path);
+	const made = await mkdir(folder, { recursive: true, mode: 0o700 });
+	await writeDurably(path, JSON.stringify(value), { mode: 0o600 });
+	if (made === undefined || process.platform === "win32") return;
+	for (let at = folder; at !== dirname(made); at = dirname(at)) {
+		const directory = await open(dirname(at), "r");
+		try {
+			await directory.sync();
+		} finally {
+			await directory.close();
+		}
+	}
 }
 
 async function readPrivate<T>(path: string): Promise<T | undefined> {
@@ -842,7 +935,10 @@ export const requiredOf = (connection: Pick<Connection, "api">): readonly string
  * or changing the client needs a new sign-in; the old token is never stretched to cover it.
  */
 export function fits(credentials: Credentials | undefined, connection: Connection): credentials is Credentials {
-	if (credentials === undefined || credentials.url !== connection.url) return false;
+	if (credentials === undefined) return false;
+	// a file that marks a wallet is one only when it holds exactly what a wallet's do
+	if ("wallet" in credentials) return connection.auth === "wallet" && walletOf(credentials) !== undefined;
+	if (connection.auth === "wallet" || credentials.url !== connection.url) return false;
 	if (!("oauth" in credentials)) return connection.auth === "key";
 	if (connection.auth !== "oauth") return false;
 	const shipped = clientNamed(connection.client);
@@ -946,14 +1042,18 @@ export async function secrets(home: string): Promise<string[]> {
 	const found: string[] = [];
 	for (const [name, accounts] of Object.entries(await credentialed(home)))
 		for (const account of accounts) {
-			const credentials = await credentialsOf(home, name, account);
-			if (credentials === undefined) continue;
-			if ("key" in credentials) found.push(credentials.key);
-			else {
-				found.push(credentials.oauth.tokens.access);
-				if (credentials.oauth.tokens.refresh !== undefined) found.push(credentials.oauth.tokens.refresh);
-				if (credentials.oauth.client.secret !== undefined) found.push(credentials.oauth.client.secret);
-			}
+			// read as the file is, whatever else it holds: a wallet's members name where its key is and are no secret, but
+			// a file that also carries a key or a token still has that hidden
+			const held = (await credentialsOf(home, name, account)) as
+				| {
+						key?: unknown;
+						oauth?: { tokens?: { access?: unknown; refresh?: unknown }; client?: { secret?: unknown } };
+				  }
+				| undefined;
+			if (typeof held !== "object" || held === null) continue;
+			const oauth = typeof held.oauth === "object" && held.oauth !== null ? held.oauth : undefined;
+			for (const secret of [held.key, oauth?.tokens?.access, oauth?.tokens?.refresh, oauth?.client?.secret])
+				if (typeof secret === "string") found.push(secret);
 		}
 	return found.filter((secret) => secret.length >= 8);
 }

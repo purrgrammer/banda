@@ -49,140 +49,140 @@ payment_Failed --> [*]
 payment_Cancelled --> [*]
 payment_Restored --> [*]
 
-' row 218
+' row 230
 payment_Idle : crash / Crash (C4,C6,C13)
-' row 224
+' row 236
 payment_Idle : power_loss / PowerLoss (C21)
-' row 232
+' row 244
 payment_Idle : restore_backup / Restore (C6,C16)
-' row 169
-payment_Waiting : card_pay [not (payer == 'agent' and rule == 'deny') and not host_ok] / Pay (C9,C16)
-' row 171
-payment_Waiting : card_always [payer == 'agent' and not host_ok] / AlwaysPay (C9,C16)
-' row 173
-payment_Waiting : card_always [payer == 'owner'] / AlwaysPay (-)
-' row 176
-payment_Waiting : card_never [payer == 'owner'] / NeverPay (-)
-' row 179
-payment_Waiting : deny_committed [payer == 'owner'] / SetDeny (-)
-' row 185
-payment_Waiting : always_committed [payer == 'owner'] / GrantAlways (-)
-' row 200
-payment_Waiting : start_commit / StartCommit (C4)
-' row 219
-payment_Waiting : crash / Crash (C4,C6,C13)
-' row 225
-payment_Waiting : power_loss / PowerLoss (C21)
-' row 180
-payment_Queued : deny_committed [payer == 'owner'] / SetDeny (-)
-' row 193
-payment_Queued : sign / Sign (C4,C20)
-' row 194
-payment_Queued : start_commit [ledger_moved] / StartCommit (C4,C5)
-' row 220
-payment_Queued : crash / Crash (C4,C6,C13)
-' row 226
-payment_Queued : power_loss / PowerLoss (C21)
 ' row 181
-payment_Signed : deny_committed / SetDeny (C13)
-' row 188
-payment_Signed : cancel_or_switch_off / Cancel (C13)
-' row 221
-payment_Signed : crash / Crash (C4,C6,C13)
-' row 227
-payment_Signed : power_loss / PowerLoss (C21)
-' row 233
-payment_Signed : restore_backup / Restore (C6,C16)
-' row 182
-payment_Sent : deny_committed / SetDeny (C13)
-' row 189
-payment_Sent : cancel_or_switch_off / Cancel (C13)
-' row 204
-payment_Sent : broadcast / Broadcast (C6,C12)
-' row 205
-payment_Sent : bump / Bump (C6,C21)
-' row 206
-payment_Sent : cancel_replace / CancelReplace (C6,C13,C21)
-' row 209
-payment_Sent : receipt [blk == 'foreign' and blk_fin and not verified] / LieForeign (C7)
-' row 210
-payment_Sent : receipt [blk == 'foreign' and not blk_fin] / Track (C7)
-' row 211
-payment_Sent : receipt [blk == 'none'] / Track (C12)
-' row 222
-payment_Sent : crash / Crash (C4,C6,C13)
-' row 228
-payment_Sent : power_loss / PowerLoss (C21)
-' row 234
-payment_Sent : restore_backup / Restore (C6,C16)
+payment_Waiting : card_pay [not (payer == 'agent' and rule == 'deny') and not host_ok] / Pay (C9,C16)
 ' row 183
-payment_Included : deny_committed / SetDeny (C13)
-' row 190
-payment_Included : cancel_or_switch_off / Cancel (C13)
-' row 216
-payment_Included : finality [blk_fin and blk != 'own_cancel' and not blk_ok and not verified] / LieStatus0 (C12)
-' row 217
-payment_Included : finality [not blk_fin] / Settle (C12)
-' row 223
-payment_Included : crash / Crash (C4,C6,C13)
-' row 229
-payment_Included : power_loss / PowerLoss (C21)
+payment_Waiting : card_always [payer == 'agent' and not host_ok] / AlwaysPay (C9,C16)
+' row 185
+payment_Waiting : card_always [payer == 'owner'] / AlwaysPay (-)
+' row 188
+payment_Waiting : card_never [payer == 'owner'] / NeverPay (-)
+' row 191
+payment_Waiting : deny_committed [payer == 'owner'] / SetDeny (-)
+' row 197
+payment_Waiting : always_committed [payer == 'owner'] / GrantAlways (-)
+' row 212
+payment_Waiting : start_commit / StartCommit (C4)
+' row 231
+payment_Waiting : crash / Crash (C4,C6,C13)
+' row 237
+payment_Waiting : power_loss / PowerLoss (C21)
+' row 192
+payment_Queued : deny_committed [payer == 'owner'] / SetDeny (-)
+' row 205
+payment_Queued : sign / Sign (C4,C20)
+' row 206
+payment_Queued : start_commit [ledger_moved] / StartCommit (C4,C5)
+' row 232
+payment_Queued : crash / Crash (C4,C6,C13)
+' row 238
+payment_Queued : power_loss / PowerLoss (C21)
+' row 193
+payment_Signed : deny_committed / SetDeny (C13)
+' row 200
+payment_Signed : cancel_or_switch_off / Cancel (C13)
+' row 233
+payment_Signed : crash / Crash (C4,C6,C13)
+' row 239
+payment_Signed : power_loss / PowerLoss (C21)
+' row 245
+payment_Signed : restore_backup / Restore (C6,C16)
+' row 194
+payment_Sent : deny_committed / SetDeny (C13)
 ' row 201
-payment_Refused : start_commit / StartCommit (C4)
+payment_Sent : cancel_or_switch_off / Cancel (C13)
+' row 216
+payment_Sent : broadcast / Broadcast (C6,C12)
+' row 217
+payment_Sent : bump / Bump (C6,C21)
+' row 218
+payment_Sent : cancel_replace / CancelReplace (C6,C13,C21)
+' row 221
+payment_Sent : receipt [blk == 'foreign' and blk_fin and not verified] / LieForeign (C7)
+' row 222
+payment_Sent : receipt [blk == 'foreign' and not blk_fin] / Track (C7)
+' row 223
+payment_Sent : receipt [blk == 'none'] / Track (C12)
+' row 234
+payment_Sent : crash / Crash (C4,C6,C13)
+' row 240
+payment_Sent : power_loss / PowerLoss (C21)
+' row 246
+payment_Sent : restore_backup / Restore (C6,C16)
+' row 195
+payment_Included : deny_committed / SetDeny (C13)
 ' row 202
+payment_Included : cancel_or_switch_off / Cancel (C13)
+' row 228
+payment_Included : finality [blk_fin and blk != 'own_cancel' and not blk_ok and not verified] / LieStatus0 (C12)
+' row 229
+payment_Included : finality [not blk_fin] / Settle (C12)
+' row 235
+payment_Included : crash / Crash (C4,C6,C13)
+' row 241
+payment_Included : power_loss / PowerLoss (C21)
+' row 213
+payment_Refused : start_commit / StartCommit (C4)
+' row 214
 payment_NotPaid : start_commit / StartCommit (C4)
 
-' row 161
-' row 162
-' row 163
-' row 167
-payment_Idle --> payment_Refused : call [not wallet_usable] / Call (C3)\ncall [wallet_usable and payer == 'agent' and eff == 'deny'] / Call (C3)\ncall [wallet_usable and payer == 'agent' and eff != 'deny' and not fits] / Call (C3,C11)\ncall [wallet_usable and payer == 'owner' and not fits] / Call (C11)
-' row 164
-' row 166
-payment_Idle --> payment_Queued : call [wallet_usable and payer == 'agent' and eff == 'always' and fits] / Call (C2,C3,C11)\ncall [wallet_usable and payer == 'owner' and fits] / Call (C2,C14)
-' row 165
-payment_Idle --> payment_Waiting : call [wallet_usable and payer == 'agent' and eff == 'ask' and fits] / Call (C3,C10,C11)
-' row 168
+' row 173
 ' row 174
 ' row 175
-' row 177
-' row 186
-payment_Waiting --> payment_Refused : card_pay [payer == 'agent' and rule == 'deny'] / Pay (C1,C8)\ncard_dont_pay / DontPay (C9)\ncard_never [payer == 'agent'] / NeverPay (C9)\ndeny_committed [payer == 'agent'] / SetDeny (C9)\ncancel_or_switch_off / Cancel (C13,C17)
-' row 170
-' row 172
-' row 184
-payment_Waiting --> payment_Queued : card_pay [not (payer == 'agent' and rule == 'deny') and host_ok] / Pay (C2,C8,C9)\ncard_always [payer == 'agent' and host_ok] / AlwaysPay (C9)\nalways_committed [payer == 'agent'] / GrantAlways (C9)
+' row 179
+payment_Idle --> payment_Refused : call [not wallet_usable] / Call (C3)\ncall [wallet_usable and payer == 'agent' and eff == 'deny'] / Call (C3)\ncall [wallet_usable and payer == 'agent' and eff != 'deny' and not fits] / Call (C3,C11)\ncall [wallet_usable and payer == 'owner' and not fits] / Call (C11)
+' row 176
 ' row 178
+payment_Idle --> payment_Queued : call [wallet_usable and payer == 'agent' and eff == 'always' and fits] / Call (C2,C3,C11)\ncall [wallet_usable and payer == 'owner' and fits] / Call (C2,C14)
+' row 177
+payment_Idle --> payment_Waiting : call [wallet_usable and payer == 'agent' and eff == 'ask' and fits] / Call (C3,C10,C11)
+' row 180
+' row 186
 ' row 187
-' row 195
-' row 196
+' row 189
 ' row 198
-payment_Queued --> payment_Refused : deny_committed [payer == 'agent'] / SetDeny (C9)\ncancel_or_switch_off / Cancel (C13,C17)\nstart_commit [not ledger_moved and not wallet_usable] / StartCommit (C4,C17)\nstart_commit [not ledger_moved and wallet_usable and payer == 'agent' and eff == 'deny'] / StartCommit (C4)\nstart_commit [not ledger_moved and wallet_usable and start_ok and not fits] / StartCommit (C4,C11)
-' row 191
-payment_Waiting --> payment_NotPaid : deadline / Deadline (C10)
-' row 192
-payment_Queued --> payment_NotPaid : deadline / Deadline (C10)
-' row 197
-payment_Queued --> payment_Waiting : start_commit [not ledger_moved and wallet_usable and not (payer == 'agent' and eff == 'deny') and not start_ok] / StartCommit (C4,C10)
+payment_Waiting --> payment_Refused : card_pay [payer == 'agent' and rule == 'deny'] / Pay (C1,C8)\ncard_dont_pay / DontPay (C9)\ncard_never [payer == 'agent'] / NeverPay (C9)\ndeny_committed [payer == 'agent'] / SetDeny (C9)\ncancel_or_switch_off / Cancel (C13,C17)
+' row 182
+' row 184
+' row 196
+payment_Waiting --> payment_Queued : card_pay [not (payer == 'agent' and rule == 'deny') and host_ok] / Pay (C2,C8,C9)\ncard_always [payer == 'agent' and host_ok] / AlwaysPay (C9)\nalways_committed [payer == 'agent'] / GrantAlways (C9)
+' row 190
 ' row 199
-payment_Queued --> payment_Signed : start_commit [not ledger_moved and wallet_usable and start_ok and fits] / StartCommit (C4,C5,C6,C13,C21)
-' row 203
-payment_Signed --> payment_Sent : broadcast / Broadcast (C6,C12)
 ' row 207
-payment_Sent --> payment_Included : receipt [blk == 'own' or blk == 'own_cancel'] / Track (C6,C12)
 ' row 208
-payment_Sent --> payment_Waiting : receipt [blk == 'foreign' and blk_fin and verified] / Track (C7)
-' row 212
-' row 235
-payment_Included --> payment_Sent : reorg / Reorg (C5,C12)\nrestore_backup / Restore (C12,C16)
-' row 213
-payment_Included --> payment_Cancelled : finality [blk_fin and blk == 'own_cancel'] / Settle (C12,C13)
-' row 214
-payment_Included --> payment_Confirmed : finality [blk_fin and blk != 'own_cancel' and blk_ok] / Settle (C12)
+' row 210
+payment_Queued --> payment_Refused : deny_committed [payer == 'agent'] / SetDeny (C9)\ncancel_or_switch_off / Cancel (C13,C17)\nstart_commit [not ledger_moved and not wallet_usable] / StartCommit (C4,C17)\nstart_commit [not ledger_moved and wallet_usable and payer == 'agent' and eff == 'deny'] / StartCommit (C4)\nstart_commit [not ledger_moved and wallet_usable and start_ok and not fits] / StartCommit (C4,C11)
+' row 203
+payment_Waiting --> payment_NotPaid : deadline / Deadline (C10)
+' row 204
+payment_Queued --> payment_NotPaid : deadline / Deadline (C10)
+' row 209
+payment_Queued --> payment_Waiting : start_commit [not ledger_moved and wallet_usable and not (payer == 'agent' and eff == 'deny') and not start_ok] / StartCommit (C4,C10)
+' row 211
+payment_Queued --> payment_Signed : start_commit [not ledger_moved and wallet_usable and start_ok and fits] / StartCommit (C4,C5,C6,C13,C21)
 ' row 215
+payment_Signed --> payment_Sent : broadcast / Broadcast (C6,C12)
+' row 219
+payment_Sent --> payment_Included : receipt [blk == 'own' or blk == 'own_cancel'] / Track (C6,C12)
+' row 220
+payment_Sent --> payment_Waiting : receipt [blk == 'foreign' and blk_fin and verified] / Track (C7)
+' row 224
+' row 247
+payment_Included --> payment_Sent : reorg / Reorg (C5,C12)\nrestore_backup / Restore (C12,C16)
+' row 225
+payment_Included --> payment_Cancelled : finality [blk_fin and blk == 'own_cancel'] / Settle (C12,C13)
+' row 226
+payment_Included --> payment_Confirmed : finality [blk_fin and blk != 'own_cancel' and blk_ok] / Settle (C12)
+' row 227
 payment_Included --> payment_Failed : finality [blk_fin and blk != 'own_cancel' and not blk_ok and verified] / Settle (C12)
-' row 230
+' row 242
 payment_Waiting --> payment_Restored : restore_backup / Restore (C5,C16)
-' row 231
+' row 243
 payment_Queued --> payment_Restored : restore_backup / Restore (C5,C16)
 @enduml

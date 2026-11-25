@@ -44,8 +44,10 @@ docs/status.md (current work and acceptance) and the relevant section's open wor
 
 ## Words
 agent, band, group, chat, turn, queue, message, part, tool, wait, draft, permission, routine, watch, event, connection,
-account, object, harness, session, artifact, memory, box, workspace, gateway, inference, device, as DESIGN.md defines them. One word per thing, in code, docs and the UI
-(a harness is "coding agent" in what the owner reads).
+account, object, harness, session, artifact, memory, box, workspace, gateway, inference, device, as DESIGN.md defines them;
+wallet and the words its section adds (payment, lane, recipient, rule, lease), as docs/wallets.md "Words" defines them
+until DESIGN.md takes them. One word per thing, in code, docs and the UI (a harness is "coding agent" in what the owner
+reads).
 
 ## Setup and checks
 - Node 26, as `mise.toml` says (`mise install` gets it). `npm ci`, then `npm run check` (Biome: format and lint;

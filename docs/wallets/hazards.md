@@ -66,7 +66,7 @@ The lens catalogs disagreed in places. These are resolved here, with the reason,
 | R-9 | An x402 Ask approved hours after the 402 | DUR-145: refuse past `maxTimeoutSeconds`; PRO D10: sign at approval with a fresh window if the observation is under a day old | **PRO D10**: the payer chooses the window (x402 spike: the facilitator accepts a shorter one and sets no upper bound), so the daemon signs at approval with a window from chain time, if the observation is under 24 h old (the Ask deadline); the server judges the price again on the retry. |
 | R-10 | One unconfirmed transaction per lane, or several in nonce order? | DUR I2: one; nonce spike R8: rebroadcast all unconfirmed in nonce order | **One** (C5). It removes nonce gaps, cascading evictions (nonce spike section 7) and out-of-order replacement as a class; R8 still applies to all versions of that one nonce. Raise only with a measured need on Base Sepolia. |
 | R-11 | Networks per wallet | RFC: "the chains"; DUR-059: a lane per (wallet, chain); PRO D9: one network per wallet | **One network per wallet, fixed at creation** (OD-9); a testnet wallet is another wallet. The lane is then per wallet. |
-| R-12 | What names a home, and what lets it sign | RFC: "the home's own id"; banda-integration spike: put `auth/device-id` in the keychain service name; SEC-121 and DUR-153: a restored backup must not sign beside its original | **The id names, the lease decides.** The keychain account carries a home id for findability; signing needs the lease of C16, proven by a home secret kept outside the home directory: a keychain item `<home-id>/home-secret` bound to the home's realpath and (dev, inode, birth time), so no backup, restore, fork or hand copy (`cp -a`, rsync, Time Machine) carries a secret that matches. |
+| R-12 | What names a home, and what lets it sign | RFC: "the home's own id"; banda-integration spike: put `auth/device-id` in the keychain service name; SEC-121 and DUR-153: a restored backup must not sign beside its original | **The id names, the lease decides.** The keychain account carries a home id for findability; signing needs the lease of C16, proven by a home secret kept outside the home directory: a keychain item `<home-id>/home-secret` bound to the home's realpath, its folder's inode and birth time (no birth time on Linux; no device number, which a remount can change: spikes/home-binding), so no backup, restore, fork or hand copy (`cp -a`, rsync, Time Machine) carries a secret that matches. |
 | R-13 | The keychain account name | PRO and SEC: a random name committed before the write; keychain spike: `<home-id>/wallet/<address>` | **The address** (keychain spike): the `creating` record holds the address before the write, so recovery never guesses, a retried create can only ever write that one key, and nobody can plant an item for an address not yet made. |
 
 Owner decisions (each entry that depends on one names it):
@@ -83,7 +83,7 @@ Owner decisions (each entry that depends on one names it):
 | OD-8 | An Ask over the available balance | Refused at the call, with the available amount; no draft |
 | OD-9 | Networks per wallet | One, fixed at creation |
 | OD-10 | A routine's payment ask nobody answers | Deadline 24 h (`DEFAULT_DEADLINE`), then "Not paid: no answer" |
-| OD-11 | A separate, signed signer helper with a keychain access group (narrows TA-1) | Designed and spiked as its own step (wallets.md, Spikes). A precondition for wallets beside a host coding agent on macOS: until it ships, a host harness that runs commands without a per-command ask takes wallets offline (H-065) |
+| OD-11 | A separate, signed signer helper with a keychain access group (narrows TA-1) | Designed and spiked as its own step (wallets.md, Spikes). A precondition for wallets beside a coding agent on macOS: until it ships, any connected coding agent takes wallets offline (H-065) |
 | OD-12 | A burst pause on Always (drop to Ask after N payments an hour) | Off: not built, not even as an opt-in. Requirement 2 makes the balance the only cap |
 | OD-13 | A wallet default of Deny for unknown recipients | Ask (requirement 3: the first payment to an unknown recipient asks); Deny only as the owner's opt-in per wallet. Under Deny an unknown recipient or endpoint is refused in words with no card, and the change refuses open unknown-recipient asks in its commit (C9) |
 
@@ -92,10 +92,10 @@ Owner decisions (each entry that depends on one names it):
 - **TA-1** The owner's OS account is trusted, and only the owner's own acts are: code running as the owner on the
   computer banda runs on can read every wallet key (spike K1: the macOS keychain authorises the binary, not the
   script; any `node -e` read every item in 24 ms). Code banda launches as the owner that an agent can steer (host
-  mode, a coding agent on the host that runs commands without a per-command ask, a development branch run against a
-  `home:fork`) is not the owner: while any of it can run, wallets are offline for every agent with the reason shown
-  (H-064, H-065). OD-11 is the only structural narrowing on macOS; on Linux nothing structural protects the key, and
-  the wallet says so. The balance bounds the loss.
+  mode, a connected coding agent, a development branch run against a `home:fork`) is not the owner: while any of it
+  can run, wallets are offline for every agent with the reason shown (H-064, H-065). OD-11 is the only structural
+  narrowing on macOS; on Linux nothing structural protects the key, and the wallet says so. The balance bounds the
+  loss.
 - **TA-2** What banda ships is trusted: its release and its pinned dependencies (stack.md), and for a browser device
   the files app.banda.rocks serves.
 - **TA-3** The model, the box, every page and every other agent are untrusted: they can steer calls, never admit them.
@@ -239,11 +239,12 @@ Owner decisions (each entry that depends on one names it):
 - Trigger: spike K1: a second script in another folder read the item silently in 24 ms. A coding agent on the host, a
   host-mode command, an npm script or malware can run the bundled Node and read the wallets; on Linux an unlocked
   Secret Service answers any process of the user without a prompt.
-- Expected: stated as TA-1, not hidden: Settings → Wallets and the harness's enable card say a program the owner runs
-  can use the wallets; host mode signs nothing (separate entry); the export still needs the desktop gesture; the
-  item's label tells the owner to deny any other app that asks.
-- Mitigation: words where the owner grants it; OD-11 signer helper with a keychain access group, after a signed-bundle
-  spike; the balance bounds the loss.
+- Expected: stated as TA-1, not hidden: Settings → Wallets, the create page and a coding agent's enable card (once a
+  wallet exists) say a program the owner runs can use the wallets and to deny another app the keychain asks about;
+  host mode signs nothing (separate entry); the export still needs the desktop gesture.
+- Mitigation: words where the owner grants it; the keychain item carries no label of banda's (@napi-rs/keyring sets
+  none on macOS or Windows), so the words stand where the owner sees them; OD-11 signer helper with a keychain access
+  group, after a signed-bundle spike; the balance bounds the loss.
 - Rules: C20 · From: SEC-010, SEC-040, PRO-103, PRO-104
 
 **H-017** · edge · high · design rule · An update changes the binary the keychain trusts
@@ -430,7 +431,7 @@ Owner decisions (each entry that depends on one names it):
 - Trigger: on Linux with a session bus but no default collection, `get` returns `null` and `delete` returns `false`,
   the same answers as a missing item (keychain spike, "notstarted").
 - Expected: `null` never means "make a key" and never, alone, means "key missing": the signer sets, gets and deletes a
-  canary account `<home-id>/probe`; if the canary works the wallet's key is missing, otherwise the canary's error names
+  canary account `<home-id>/canary/<slot>`, one of a few the home overwrites and never found by listing the keychain; if the canary works the wallet's key is missing, otherwise the canary's error names
   the keychain state.
 - Mitigation: the canary in every "key missing" decision; tests per state of the spike's table.
 - Rules: C16, C20 · From: new (spike)
@@ -587,10 +588,11 @@ Owner decisions (each entry that depends on one names it):
 
 **H-057** · best · medium · design rule · An agent with two wallets picks one
 - Trigger: Mara has Travel and Office; she calls `wallet__send` without saying which, or with a label.
-- Expected: the tool's `wallet` argument is required when the agent has more than one, an enum of the given wallets'
-  names with their short addresses; a missing or ambiguous value is refused with the choices; the draft card and the
-  result name the wallet.
-- Mitigation: the tool schema is built per agent; identity is the address (C18).
+- Expected: the tools take an optional `account` that names no wallet, the same for every agent (H-072); a missing or
+  ambiguous `account` from an agent with several wallets is refused with the agent's own wallets only, each as its
+  name and short address; the draft card and the result name the wallet.
+- Mitigation: which wallet a call reads or pays from is resolved in the commit that lets it run, against the agent's
+  wallets then; identity is the address (C18).
 - Rules: C3, C18 · From: PRO-081, PRO-082
 
 **H-058** · race · low · implementation note · A wallet given or taken away during a conversation
@@ -647,13 +649,13 @@ Owner decisions (each entry that depends on one names it):
 
 **H-065** · security · critical · design rule · A coding agent on the host uses the owner's authority
 - Trigger: a harness (coding agent) running on the host reads the owner's token or the keychain.
-- Expected: treated like host mode (H-064): while any harness whose mode runs commands on the host without a
-  per-command owner ask is enabled, wallets are offline for every agent ("a coding agent on this computer could read
-  the keys"); the owner's own Send stays. A reveal is not on the daemon's HTTP API at all (C16), so the token gives
-  nothing. Shipping wallets beside such a harness on macOS waits for OD-11; on Linux the wallet says plainly that
-  nothing structural protects the key.
-- Mitigation: admission check 6 of C3 reads "no unasked host harness enabled"; a harness test in which a host
-  command tries to read a wallet item finds the wallet already offline; OD-11.
+- Expected: treated like host mode (H-064): while any coding agent is connected, whatever its mode and whichever
+  agents it serves, wallets are offline for every agent ("a coding agent on this computer could read the keys"); the
+  owner's own Send stays. A harness's mode does not prove it asks the owner before each command, so until OD-11 ships
+  every connected coding agent counts as one that does not. A reveal is not on the daemon's HTTP API at all (C16), so
+  the token gives nothing. On Linux the wallet says plainly that nothing structural protects the key.
+- Mitigation: admission check 6 of C3 reads "no coding agent connected"; a test connects a coding agent for no agent
+  and finds the wallet offline, and online again once it is gone; OD-11.
 - Rules: C3, C16, C20 · From: SEC-040
 
 **H-066** · security · critical · design rule · A gateway client or an inference caller reaches the wallet tools
@@ -695,9 +697,11 @@ Owner decisions (each entry that depends on one names it):
 - Trigger: banda-integration spike: `multiAccount` lists every account's label in the `account` argument of every
   agent's schema, and an unlabeled account's label is its address, so Mara's prompt carries Sancho's wallet names and
   addresses (`accountFor` still refuses them).
-- Expected: each agent's schema lists only its own wallets; another agent's wallets are never in its prompt; a wallet
-  always has a name.
-- Mitigation: the wallet's own tool builder narrows the enum per agent; a test compares two agents' first-step tools.
+- Expected: no agent's schema names a wallet: one schema, the same for every agent, with an optional `account`; an
+  agent's own wallets are named only in the refusal that asks it to choose, and another agent's never; a wallet always
+  has a name.
+- Mitigation: the wallet's own tool builder offers that one schema instead of `multiAccount`'s; a test compares two
+  agents' first-step schemas and finds no wallet named.
 - Rules: C3 · From: new (spike)
 
 **H-072** · edge · medium · implementation note · Wallet tools grow every chat's prompt
@@ -1120,10 +1124,10 @@ Confirmed, Failed, Refused, Not paid (conflicts.md, payment state machine).
 - Trigger: the store runs WAL with `synchronous=NORMAL`: a crash of the process keeps every commit, a power loss can
   drop the newest; the start commit is lost but the bytes were broadcast.
 - Expected: the lane must never sign a second payment at another nonce. The start commit is made durable before the
-  broadcast (I12, pending spike), and at start the lane compares the chain's nonce with its ledger: a chain count
+  broadcast (C21: the store syncs every commit), and at start the lane compares the chain's nonce with its ledger: a chain count
   above the ledger freezes the lane until the stored history explains it or the owner looks.
-- Mitigation: C21 (durable before the effect; freeze on chain count > ledger); spike I12 measures a per-commit
-  `fsync` (or `synchronous=FULL` for the wallet's commits) on the shipped build.
+- Mitigation: C21 (durable before the effect; freeze on chain count > ledger); the store runs `synchronous=FULL`, so
+  every commit's log is synced as it is made.
 - Rules: C5, C21 · From: DUR-030
 
 **H-130** · error · high · design rule · The start commit fails (disk full or any commit error)
@@ -1266,8 +1270,9 @@ Confirmed, Failed, Refused, Not paid (conflicts.md, payment state machine).
 - Trigger: a page or a tool asks for an authorization tuple, or a type-4 transaction.
 - Expected: the signer has no function that makes one; micro-eth-signer's `authorization.sign` is not exposed by banda's
   signer module.
-- Mitigation: the signer exports exactly `signTransfer` (ERC-20 transfer and ETH send, type 2) and
-  `signTransferWithAuthorization` (EIP-3009 with USDC's domain); an export-enumeration test (stack.md).
+- Mitigation: the signer's only signing exports are `signTransfer` (ERC-20 transfer and ETH send, type 2, built from
+  its own fields alone) and `signTransferWithAuthorization` (EIP-3009 with USDC's domain); an export-enumeration test
+  (stack.md).
 - Rules: C20 · From: SEC-085
 
 **H-151** · security · critical · design rule · Approvals and permits
@@ -1315,8 +1320,9 @@ Confirmed, Failed, Refused, Not paid (conflicts.md, payment state machine).
 - Expected: wallet offline for agents ("this address delegates to a contract; banda will not sign"); Receive and the
   QR give way to a warning ("this address has code another key set; do not fund it"); the owner's Send waits for an
   acknowledgement on the host; the owner can still see balances.
-- Mitigation: `eth_getCode` on the wallet's own address at unlock and before Receive, its reading stored with its block
-  (C22); the `acknowledge_code` rows; `owner_send_receive.feature`.
+- Mitigation: `eth_getCode` on the wallet's own address at unlock, before Receive, and with its balances on every pass
+  of the indexer, its reading dated by the block and the RPC it was read through (C22): the notice follows a new RPC,
+  an RPC that answers again and a delegation cleared; the `acknowledge_code` rows; `owner_send_receive.feature`.
 - Rules: C3, C17 · From: SEC-091
 
 **H-158** · error · high · implementation note · The token issuer freezes the wallet's own address
@@ -1343,7 +1349,7 @@ Confirmed, Failed, Refused, Not paid (conflicts.md, payment state machine).
 - Trigger: micro-eth-signer 0.20.1 adds random entropy to every signature unless told not to (keys spike).
 - Expected: every call passes `extraEntropy: false`; golden vectors pin the bytes; a hedged signature never reaches the
   store (a re-sign would otherwise produce a second hash for the same nonce).
-- Mitigation: C6; the keys spike's vectors as a unit test.
+- Mitigation: C6; golden vectors per network through the module's exports (stack.md section 5).
 - Rules: C6 · From: new (spike)
 
 **H-162** · edge · high · implementation note · noble's `sign` hashes its input again by default
@@ -1587,13 +1593,21 @@ Confirmed, Failed, Refused, Not paid (conflicts.md, payment state machine).
 - Trigger: the owner pastes an Alchemy or Infura URL with its key.
 - Expected: stored as a secret beside proxy credentials, never in logs, the store's public docs, or tool results;
   shown masked.
-- Mitigation: the secret store banda already has for proxy credentials.
+- Mitigation: the secret store banda already has for proxy credentials. Shown and logged as `maskedRpc` gives it: the
+  scheme, host and port, with userinfo, path, query and fragment as `•••`; a userinfo key reaches the RPC as a Basic
+  `Authorization` header, never in the URL `fetch` is given; a config error names a network, never a key or a value.
+  Open (owner): docs/wallets.md places the RPC in `config.json`, which this case's Expected contradicts; the choice
+  is open in docs/wallets.md "Spikes before any of this is design".
 - Rules: — · From: SEC-100
 
 **H-196** · security · medium · implementation note · A plain-HTTP or private-address RPC
 - Trigger: `http://` or a private IP as RPC.
 - Expected: refused unless it is localhost (for anvil in tests and development); https only otherwise.
-- Mitigation: URL check at save.
+- Mitigation: URL check at save and at every read. A literal address is refused when private, link-local, special
+  purpose, or an IPv6 address that embeds one (IPv4-compatible, mapped, SIIT, NAT64, 6to4); a host name is resolved
+  once when the owner saves it, and each answer gets the same check a literal address gets: refused when private,
+  link-local or special purpose, including an IPv4 address an IPv6 answer embeds. A name that resolves elsewhere later
+  (DNS rebinding) is not covered.
 - Rules: — · From: SEC-101
 
 **H-197** · edge · low · out of scope · The RPC learns the address and the owner's IP
@@ -1724,7 +1738,8 @@ Confirmed, Failed, Refused, Not paid (conflicts.md, payment state machine).
 **H-213** · edge · medium · design rule · A reorg removes an incoming row
 - Trigger: an incoming transfer seen at `latest` disappears.
 - Expected: incoming rows are Received until `safe`, Confirmed after; the indexer re-reads the last unsafe range on
-  each pass and deletes rows whose block hash changed; balances follow.
+  each pass and deletes the rows in the blocks it read that it no longer shows; balances follow. A row above the head
+  a pass read stays: a node behind the chain (a load-balanced RPC) has not seen its block yet, which says nothing of it.
 - Mitigation: C12 (Confirmed only at `safe`), C22.
 - Rules: C12, C22 · From: new (critic)
 
@@ -2098,11 +2113,13 @@ Confirmed, Failed, Refused, Not paid (conflicts.md, payment state machine).
 
 **H-264** · security · critical · design rule · Export asked from a paired device
 - Trigger: the phone or a browser device opens Save your key or Show private key.
-- Expected: refused: the reveal is host-only, in the desktop app (OD-2); the phone shows "open banda on your computer to
-  see the key"; the API route refuses device tokens structurally (the route checks the caller is the local desktop
-  shell, not a token).
-- Mitigation: C16: a one-time reveal capability minted by the desktop shell after an OS re-authentication, bound to
-  the wallet and expiring in 60 s.
+- Expected: refused: a later reveal is host-only, in the desktop app (OD-2), and the phone shows "open banda on your
+  computer to see the key"; a paired device's creation mints no reveal, and its request for one is refused (403), as
+  every request that comes over Iroh is, whatever its token.
+- Mitigation: C16: a later reveal is not on the daemon's API (the desktop's main process asks the OS re-authentication
+  and its own signer child); the creation's reveal is bound to a secret that only the creation's own answer carries,
+  of which the daemon keeps the SHA-256 alone and compares it in constant time; it is spent once, lapses 10 minutes
+  after the creation, and its response, `no-store`, is written onto the request's socket by the signer child.
 - Rules: C16 · From: SEC-023, PRO-011
 
 **H-265** · security · critical · design rule · The agent or a page asks for the key
@@ -2113,21 +2130,36 @@ Confirmed, Failed, Refused, Not paid (conflicts.md, payment state machine).
 
 **H-266** · security · high · design rule · Export later than creation
 - Trigger: the owner skipped at creation and wants the key weeks later.
-- Expected: OD-2: Show private key on the host, behind an OS re-authentication (Touch ID or password), listed in the
-  wallet's activity ("key shown on this computer").
-- Mitigation: C16 reveal capability.
+- Expected: OD-2: Show private key on the host, behind an OS re-authentication (Touch ID), listed in the wallet's
+  activity ("key shown on this computer"). Where nothing re-authenticates the owner (Linux, Windows, a Mac without
+  Touch ID or with it off) the key is shown only as its wallet is made, and Restore and Move signing are refused too,
+  until OD-2 settles how those computers re-authenticate.
+- Mitigation: C16: the desktop's main process re-authenticates the owner, its own signer child exports the key, and the
+  daemon is only told (it lists the reveal) before the key is shown in a local window.
 - Rules: C16 · From: SEC-025, PRO-010
 
 **H-267** · security · high · design rule · A local process calls the export route with the owner's token
 - Trigger: a script on the host reads the owner token and calls the reveal route.
-- Expected: the token alone cannot reveal: the route needs the desktop shell's one-time capability, minted after the OS
-  re-authentication; a CLI owner never gets a reveal route.
+- Expected: the token alone cannot reveal: no route reveals a key later (only the desktop's main process does, behind
+  the OS re-authentication), and the creation's reveal answers only with the secret the creation's own answer
+  carried, once, within 10 minutes; a request without it is refused and spends nothing.
 - Mitigation: C16.
 - Rules: C16 · From: SEC-026
 
 **H-268** · security · high · design rule · A reveal capability is replayed
-- Trigger: the one-time capability is captured (logs, devtools) and used again.
-- Expected: consumed in the commit that reveals; a second use is refused; it expires in 60 s; it never appears in logs.
+- Trigger: the creation's request id is captured (logs, devtools) and sent again.
+- Expected: the reveal is spent in the commit that proves the key, before the key is written onto the connection; a
+  second request is refused as spent; it lapses 10 minutes after the ready commit (which, for a creation the keychain
+  answered late or a restart settled, comes after the creation itself); a request id alone opens nothing, since the
+  reveal answers only with the secret one answer to the creation carried. That answer is the first answer to the same
+  request, from this computer, that finds the reveal unclaimed and in its window: the creation's own, or a repeat after
+  a creation that waited on the keychain, a restart that settled it, a ready commit not synced, or an answer lost on
+  the way. Its digest is on disk before it goes, so every later repeat in the same process is answered none; a
+  process killed between that commit and its answer cannot say whether it went, so the first repeat after the restart
+  claims again with a new secret, whose digest replaces the old: the secret before stops spending, and still one
+  secret spends. Until it is claimed, the request id with the owner's token is that capability: a residual accepted, since
+  both live on this computer and the token alone already acts as the owner; `banda wallet create` prints the id only
+  for the owner to repeat a creation that waited.
 - Mitigation: C16; C14 (consumed once).
 - Rules: C14, C16 · From: new (critic)
 
@@ -2154,9 +2186,13 @@ Confirmed, Failed, Refused, Not paid (conflicts.md, payment state machine).
 - Rules: — · From: SEC-028, PRO-012
 
 **H-272** · edge · medium · out of scope · Browser extensions read the reveal
-- Trigger: the owner uses a browser device with extensions.
-- Expected: the reveal is not available in a browser at all (host desktop app only), so this cannot happen there.
-- Mitigation: OD-2. Out of scope as a threat because the surface does not exist.
+- Trigger: the owner makes a wallet from `banda serve` in a loopback browser, which has extensions.
+- Expected: a browser device and a paired phone get no reveal (C16), and a later reveal is the desktop app's alone
+  (OD-2); the creation's reveal does reach a loopback browser, once, and an extension with access to the page can read
+  the key there. Outside the desktop app, the create screen (before Create) and the save screen (before Show) say so
+  and point to the desktop app or `banda wallet create`, where no extension runs; the owner may go on.
+- Mitigation: a residual accepted (OOS-10): banda cannot see or govern the owner's extensions, and refusing the
+  loopback browser would leave a home with no desktop app no way to save its key.
 - Rules: C16 · From: SEC-029
 
 **H-273** · error · high · implementation note · The owner never saved the key
@@ -2233,9 +2269,9 @@ Confirmed, Failed, Refused, Not paid (conflicts.md, payment state machine).
   not match the fork, so every wallet in the fork is offline ("this is a copy of another home"); lanes are paused like
   routines; stored versions are not rebroadcast. This holds only while the fork runs unmodified code (TA-1): a
   development branch can drop the check and read the live home's items, so `home:fork` replaces wallet records with
-  watch-only records, and dev and test builds use a keychain service the release's items are not under.
+  records that sign nothing, and dev and test builds use a keychain service the release's items are not under.
 - Mitigation: C16 (lease epoch plus home secret outside the home); a fault test copies a home byte for byte and finds
-  the copy offline; a test forks a home with a lane in flight and finds watch-only wallets.
+  the copy offline; a test forks a home with a lane in flight and finds wallets that sign nothing.
 - Rules: C16 · From: DUR-150, SEC-120, PRO-121
 
 **H-284** · race · critical · design rule · A backup restored on the same machine, beside its original
@@ -2362,9 +2398,12 @@ Confirmed, Failed, Refused, Not paid (conflicts.md, payment state machine).
 **H-301** · security · critical · design rule · A dependency is compromised
 - Trigger: a malicious release of a signing, keychain or transitive package (CVE-2024-54134 in `@solana/web3.js`;
   Ledger Connect Kit; chalk and debug; Shai-Hulud).
-- Expected: banda's signing path has 6 packages, all provenance-attested, exact pins, lockfile integrity, installs
-  with `--ignore-scripts`, `npm audit signatures` and OSV in CI, a release-age cooldown before an upgrade (pending), and
-  golden vectors that fail on any change in signed bytes.
+- Expected: banda's signing path has 6 packages, which with the keychain's 13 must all be provenance-attested (a
+  release without an attestation is refused), exact pins, lockfile integrity, installs with `--ignore-scripts` on
+  every computer (the root `.npmrc`; the desktop and phone trees with an allowlist npm enforces), registry signatures
+  and provenance subjects (`scripts/registry-signatures.ts`, which does not verify the attestations' sigstore chain) and
+  OSV in CI and before every release, a release-age cooldown before an upgrade, and golden vectors that fail on any
+  change in signed bytes.
 - Mitigation: stack.md controls.
 - Rules: — · From: SEC-105, PRO-129
 
@@ -2373,7 +2412,7 @@ Confirmed, Failed, Refused, Not paid (conflicts.md, payment state machine).
 - Expected: the platform packages are pinned with integrity hashes in the lockfile, verified at install and code-signed
   inside the signed desktop app. Process isolation is not the control: a swapped binary runs inside the signer, which
   holds the key.
-- Mitigation: stack.md section 5 (integrity, `npm audit signatures`, the signed bundle); OD-11.
+- Mitigation: stack.md section 5 (integrity, the registry signature of every platform package, the signed bundle); OD-11.
 - Rules: C20 · From: SEC-106
 
 **H-303** · security · medium · design rule · A typosquat
@@ -2407,9 +2446,10 @@ Confirmed, Failed, Refused, Not paid (conflicts.md, payment state machine).
 
 **H-307** · security · medium · design rule · An upgrade lands minutes after its publication
 - Trigger: `ox` 1.8.20 was published on the day of this analysis; a fresh version could be a compromised one.
-- Expected: no dependency of the signing path is upgraded to a version younger than the cooldown (proposed 14 days,
-  pending a decision on tooling).
-- Mitigation: stack.md release-age cooldown (gap).
+- Expected: no dependency of the signing path is upgraded to a version younger than the cooldown of 14 days.
+- Mitigation: stack.md release-age cooldown: `min-release-age=14` in each tree's `.npmrc`, banda's lockstep packages
+  exempted by name, held by test/wallet-deps.test.ts; scripts/release-age.ts holds every pin of the three lockfiles to
+  it by publish time, in CI and before a release.
 - Rules: — · From: new (critic)
 
 **H-308** · edge · low · implementation note · Two copies of the curve library

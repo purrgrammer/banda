@@ -109,6 +109,7 @@ import {
 	type ShellChange,
 	shell,
 } from "./server/transcript.ts";
+import { rpcClients } from "./wallet/rpc.ts";
 
 /** How often blobs no chat holds are swept. */
 const SWEEP_EVERY_MS = 6 * 60 * 60_000;
@@ -435,8 +436,21 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 		// the date, the hour and how full memory is, for every agent, as a prompt section after the prompt's fixed start
 		registry.install(nowExtension(Date.now, memoryFiles));
 		registry.install(toolDiscoveryExtension);
+		// one bucket per RPC for everything that reads a wallet's network: agents' reads, the indexer, the owner's routes
+		const walletClients = rpcClients(options.fetch === undefined ? {} : { fetch: options.fetch });
 		// each area's extensions, before the store opens: what it installs is there when anything resumes
-		const boot: Boot = { core, blobs, config, home, box: agentBox.kind, retrieval, root: agentBox.workspace, log };
+		const boot: Boot = {
+			core,
+			blobs,
+			config,
+			home,
+			box: agentBox.kind,
+			retrieval,
+			root: agentBox.workspace,
+			log,
+			...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+			rpc: walletClients,
+		};
 		for (const area of AREAS) for (const extension of area.install?.(boot) ?? []) registry.install(extension);
 		const credentials = new FileCredentialStore(home);
 		const models = cacheLong(timeThinking(dropEmptyReplies(options.models ?? builtinModels({ credentials }))));
@@ -581,6 +595,8 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 			log,
 			changed: () => capabilitiesChanged(),
 			agentChanged: core.agentChanged,
+			host: agentBox.kind === "host",
+			rpc: walletClients,
 			...(options.shipped === undefined ? {} : { shipped: options.shipped }),
 			...(options.fetch === undefined ? {} : { fetch: options.fetch }),
 		});
@@ -774,6 +790,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 							memory: () => memory(desk, Date.now()),
 							capabilities: () => seedWorkspace().then(() => capabilitiesView()),
 							post,
+							connections: capabilities,
 						}),
 					],
 		)
@@ -987,7 +1004,14 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						else if (act.action === "disconnect") await capabilities.disconnect(act.name);
 						else if (act.action === "key") await capabilities.setKey(act.name, act.key, context, act.agent);
 						else if (act.action === "account")
-							await capabilities.switchAccount(act.agent, act.name, act.account, act.on, context, act.version);
+							await capabilities.switchConnectionAccount(
+								act.agent,
+								act.name,
+								act.account,
+								act.on,
+								context,
+								act.version,
+							);
 						else if (act.action === "signout") await capabilities.signOut(act.name, act.account);
 						else if (act.action === "label") await capabilities.labelAccount(act.name, act.account, act.label);
 						else if (act.action === "add") await capabilities.addShipped(act.name);
@@ -995,7 +1019,7 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						else if (act.action === "tools")
 							await capabilities.setTools(act.name, act.settings, act.version, context, act.group === true);
 						else if (act.action === "public")
-							await capabilities.switchAccount(act.agent, act.name, undefined, act.on, context, act.version);
+							await capabilities.switchConnectionAccount(act.agent, act.name, undefined, act.on, context, act.version);
 						else if (act.action === "refresh") await capabilities.refresh(act.name);
 						changed();
 						return capabilitiesView();

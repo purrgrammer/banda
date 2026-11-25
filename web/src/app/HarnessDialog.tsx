@@ -19,9 +19,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { addHarness, connectHarness, foldersAt, removeHarness, switchHarness } from "../areas/harnesses.ts";
+import { useWallets } from "../areas/wallets.ts";
 import { Confirm } from "../chat/Confirm.tsx";
 import { FolderBrowser, folderName, projectsIn, projectsWord } from "../chat/FolderPicker.tsx";
 import { HarnessMark } from "../chat/Harness.tsx";
+import { CODING_AGENT_WALLETS } from "../chat/Wallets.tsx";
 import type { FolderListing } from "../lib/api.ts";
 import { chatAgents } from "../lib/navigation.ts";
 import { useReturnFocus } from "../lib/return-focus.ts";
@@ -46,6 +48,7 @@ export function HarnessDialog({
 	agent?: { readonly id: string; readonly name: string } | undefined;
 }) {
 	const shell = useShell();
+	const hasWallets = (useWallets()?.wallets.length ?? 0) > 0;
 	// opened from state (Connect, Edit, an agent's Access), with no Radix trigger: closed, focus returns to the opener
 	const returnFocus = useReturnFocus(open);
 	const view = shell.harnesses;
@@ -302,6 +305,7 @@ export function HarnessDialog({
 								unsupported choices are refused. If its required permission mode cannot be set, banda stops the session
 								before sending work.
 							</p>
+							{hasWallets ? <p className="text-meta text-ink-2">{CODING_AGENT_WALLETS}</p> : null}
 						</>
 					)}
 					{error === undefined ? null : <p className="text-meta text-danger">{error}</p>}

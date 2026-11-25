@@ -10,7 +10,7 @@ import { createRegistry, defineDoc, defineExtension } from "@earendil-works/pi-d
 import { expect, it } from "vitest";
 import { Accepted, agentPath, LEAD, LEAD_TEXT, shaOf } from "../src/core/agents.ts";
 import { EffectRun } from "../src/core/ask.ts";
-import { Connected, ToolSettings } from "../src/core/connections.ts";
+import { Connected, credentialsOf, ToolSettings, WALLET, walletOf } from "../src/core/connections.ts";
 import { Devices, INVITE_MS, pairingState } from "../src/core/devices.ts";
 import { Harnesses } from "../src/core/harness.ts";
 import { keepReading, Readings } from "../src/core/objects.ts";
@@ -20,6 +20,18 @@ import { context, openStore } from "../src/core/store.ts";
 import { defineWait } from "../src/core/wait.ts";
 import { Followed } from "../src/core/watches.ts";
 import { AgentPublications, queueAgentPublication } from "../src/server/agent-publication.ts";
+import { checksummed } from "../src/wallet/address.ts";
+import {
+	Incoming,
+	incomingKey,
+	nativeKey,
+	type PaymentState,
+	Payments,
+	type PaymentValue,
+	track,
+	Wallets,
+	type WalletsValue,
+} from "../src/wallet/docs.ts";
 import { tempHome } from "./helpers.ts";
 
 const open = (home: string) => openStore(home, { models: createModels(), registry: createRegistry() });
@@ -518,4 +530,286 @@ it("reads auth/providers.json as stored: credentials by account, and the labels 
 	// a file that does not fit its schema is refused, never read as no credentials
 	await writeFile(join(home, "auth", "providers.json"), JSON.stringify({ credentials: { anthropic: { key: "x" } } }));
 	await expect(credentials.read("anthropic")).rejects.toThrow(/schema/);
+});
+
+it("reads a wallet's auth/connections credentials as stored: where its key is, never the key, and nothing else", async () => {
+	const home = await tempHome();
+	const address = checksummed(`0x${"c".repeat(40)}`);
+	const shape = {
+		wallet: { account: `home-1/wallet/${address}`, address, network: "base-sepolia" },
+		revision: "r-1",
+		generation: "g-1",
+	};
+	const dir = join(home, "auth", "connections", WALLET, address.toLowerCase());
+	await mkdir(dir, { recursive: true });
+	await writeFile(join(dir, "credentials.json"), JSON.stringify(shape));
+	const read = await credentialsOf(home, WALLET, address.toLowerCase());
+	expect(read).toEqual(shape);
+	expect(walletOf(read)).toEqual(shape.wallet);
+	// a file that holds more than a wallet is none, never read as one
+	await writeFile(join(dir, "credentials.json"), JSON.stringify({ ...shape, key: "0x01" }));
+	expect(walletOf(await credentialsOf(home, WALLET, address.toLowerCase()))).toBeUndefined();
+});
+
+it("reopens wallets, their recipients, ledgers, open payments and every signed version as they were stored", async () => {
+	const home = await tempHome();
+	const wallet = checksummed(`0x${"a".repeat(40)}`);
+	const ana = `address:base-sepolia:${checksummed(`0x${"b".repeat(40)}`)}`;
+	const weather = `x402:base-sepolia:${checksummed("0x036cbd53842c5426634e7929541ec2318f3dcf7e")}:${checksummed(`0x${"c".repeat(40)}`)}:https://api.weather.example/v1/forecast`;
+	const payment: PaymentValue = {
+		by: "agent",
+		agent: "sancho",
+		wallet,
+		to: ana,
+		amount: "1500000",
+		asset: "usdc",
+		reserve: "162500000000",
+		state: "Sent",
+		versions: [
+			{
+				kind: "pay",
+				raw: "0x02f8aa",
+				hash: `0x${"1".repeat(64)}`,
+				nonce: 6,
+				gas: "65000",
+				maxFee: "2000000",
+				tip: "1000000",
+				at: 5,
+			},
+			{
+				kind: "bump",
+				raw: "0x02f8ab",
+				hash: `0x${"2".repeat(64)}`,
+				nonce: 6,
+				gas: "65000",
+				maxFee: "2250000",
+				tip: "1125000",
+				at: 6,
+			},
+			{
+				kind: "cancel",
+				raw: "0x02f8ad",
+				hash: `0x${"5".repeat(64)}`,
+				nonce: 6,
+				gas: "65000",
+				maxFee: "2500000",
+				tip: "1250000",
+				at: 7,
+			},
+		],
+		nonce: 6,
+		foreign: { hash: `0x${"6".repeat(64)}`, at: 3 },
+		approvedAt: 4,
+		version: 3,
+		at: 4,
+	};
+	const send: PaymentValue = {
+		by: "owner",
+		wallet,
+		to: ana,
+		amount: "1",
+		asset: "native",
+		reserve: "21000",
+		state: "Confirmed",
+		versions: [
+			{
+				kind: "pay",
+				raw: "0x02f8ac",
+				hash: `0x${"4".repeat(64)}`,
+				nonce: 5,
+				gas: "21000",
+				maxFee: "1",
+				tip: "1",
+				at: 2,
+			},
+		],
+		nonce: 5,
+		included: { hash: `0x${"4".repeat(64)}`, block: 8 },
+		version: 5,
+		at: 2,
+	};
+	const wallets: WalletsValue = {
+		wallets: {
+			[wallet]: {
+				name: "Groceries",
+				network: "base-sepolia",
+				state: "ready",
+				backup: "unsaved",
+				default: "deny",
+				disclosed: true,
+				request: "create-1",
+				reveal: { expires: 600_001, digest: "7".repeat(64) },
+				device: true,
+				reveals: [
+					{ at: 2, kind: "creation" },
+					{ at: 3, kind: "later" },
+					// a later reveal as the desktop app tells it, by the id its take-back is keyed on
+					{ at: 4, kind: "later", id: "5a1b2c3d-0000-4000-8000-000000000004" },
+				],
+				code: { hash: "6".repeat(64), block: 3, acknowledged: 3 },
+				// the owner's act that last moved its state, at the version its commit gave: a retry's test (C21)
+				moved: { act: "skip_save", version: 3 },
+				version: 4,
+				at: 1,
+			},
+			// an archived wallet, as the owner's archive leaves it: no reveal, the act named
+			"0x0000000000000000000000000000000000000002": {
+				name: "Holiday",
+				network: "base-sepolia",
+				state: "archived",
+				backup: "saved",
+				default: "ask",
+				disclosed: false,
+				request: "create-2",
+				moved: { act: "archive", version: 2 },
+				version: 2,
+				at: 1,
+			},
+		},
+		recipients: {
+			[wallet]: {
+				[ana]: { name: "Ana", kind: "address", version: 2, at: 2 },
+				[weather]: { kind: "x402", deny: true, version: 3, at: 3 },
+			},
+		},
+		ledger: { [wallet]: { next: 7, frozen: { count: 8, at: 7 }, paused: { at: 7 }, foreign: [6, 7] } },
+		open: {},
+		recipientVersion: { [wallet]: 3 },
+		lease: 2,
+		removed: { "0x0000000000000000000000000000000000000001": 1 },
+	};
+	const refused: PaymentValue = {
+		by: "agent",
+		agent: "sancho",
+		wallet,
+		to: weather,
+		amount: "10000",
+		asset: "usdc",
+		reserve: "0",
+		state: "Refused",
+		reason: "denied",
+		versions: [],
+		version: 2,
+		at: 3,
+	};
+	track(wallets, "p1", payment, "new");
+	track(wallets, "p0", send, "new");
+	track(wallets, "p2", refused, "new");
+	expect(wallets.open).toEqual({ [wallet]: ["p1"] });
+	const incoming = {
+		rows: {
+			[incomingKey(`0x${"3".repeat(64)}`, 2)]: {
+				wallet,
+				asset: "usdc" as const,
+				amount: "5000000",
+				from: `0x${"f".repeat(40)}`,
+				block: 9,
+			},
+			[nativeKey(wallet, 9)]: { wallet, asset: "native" as const, amount: "100", block: 9 },
+		},
+		cursors: { "base-sepolia": 10 },
+		read: { [wallet]: 10 },
+		gaps: {
+			[wallet]: [
+				{ from: 1, to: 4, why: "state" as const },
+				{ from: 6, to: 6, why: "unexplained" as const },
+				{ from: 7, to: 8, why: "code" as const },
+			],
+		},
+		dropped: { [wallet]: 5 },
+	};
+	const before = await open(home);
+	await before.commit(async (tx) => {
+		Object.assign(await tx.doc(Wallets), structuredClone(wallets));
+		await tx.doc(Payments, "p1", structuredClone(payment));
+		await tx.doc(Payments, "p0", structuredClone(send));
+		await tx.doc(Payments, "p2", structuredClone(refused));
+		Object.assign(await tx.doc(Incoming), structuredClone(incoming));
+	}, context);
+	// an open that is not the creating one passes no seed: an existing member opens as it is
+	await before.commit(async (tx) => {
+		expect((await tx.doc(Payments, "p1", null)).version).toBe(3);
+	}, context);
+	await before.close(context);
+	const after = await open(home);
+	try {
+		expect(await after.snapshot(Wallets, context)).toEqual(wallets);
+		expect(await after.snapshot(Payments, "p1", context)).toEqual(payment);
+		expect(await after.snapshot(Payments, "p0", context)).toEqual(send);
+		expect(await after.snapshot(Payments, "p2", context)).toEqual(refused);
+		expect(await after.snapshot(Incoming, context)).toEqual(incoming);
+	} finally {
+		await after.close(context);
+	}
+});
+
+it("keeps a wallet's open payments until they end, the queued ones in queue-commit order (C2)", () => {
+	const wallet = checksummed(`0x${"a".repeat(40)}`);
+	const other = checksummed(`0x${"b".repeat(40)}`);
+	const wallets: WalletsValue = { wallets: {}, recipients: {}, ledger: {}, open: {}, recipientVersion: {} };
+	const states = new Map<string, PaymentState>();
+	const move = (id: string, state: PaymentState, at = wallet) => {
+		track(wallets, id, { wallet: at, state }, states.get(id) ?? "new");
+		states.set(id, state);
+	};
+	// the lane as PaymentLane.tla stores it: its queue, read from `open`
+	const lane = (at = wallet) => (wallets.open[at] ?? []).filter((id) => states.get(id) === "Queued");
+	move("p1", "Waiting");
+	move("p3", "Waiting");
+	// Pay appends in the commit that queues: p3 approved before p1 goes first
+	move("p3", "Queued");
+	move("p1", "Queued");
+	expect(lane()).toEqual(["p3", "p1"]);
+	// a payment created Queued (an Always covered the call) appends too
+	move("p4", "Queued");
+	expect(lane()).toEqual(["p3", "p1", "p4"]);
+	// a change that keeps it Queued keeps its place
+	move("p3", "Queued");
+	expect(lane()).toEqual(["p3", "p1", "p4"]);
+	// the start commit removes the head; it stays open
+	move("p3", "Signed");
+	expect(lane()).toEqual(["p1", "p4"]);
+	expect(wallets.open[wallet]).toContain("p3");
+	// sent back to Waiting and approved again, it appends behind those queued since
+	move("p1", "Waiting");
+	expect(lane()).toEqual(["p4"]);
+	move("p1", "Queued");
+	expect(lane()).toEqual(["p4", "p1"]);
+	move("p3", "Sent");
+	move("p3", "Waiting");
+	move("p3", "Queued");
+	expect(lane()).toEqual(["p4", "p1", "p3"]);
+	move("p5", "Signed", other);
+	expect(lane(other)).toEqual([]);
+	expect(wallets.open[other]).toEqual(["p5"]);
+	move("p4", "Refused");
+	move("p1", "Cancelled");
+	expect(wallets.open).toEqual({ [wallet]: ["p3"], [other]: ["p5"] });
+	move("p3", "Confirmed");
+	move("p5", "Failed", other);
+	expect(wallets.open).toEqual({});
+});
+
+it("opens no payment that was never created: an absent id with no seed throws and stores nothing", async () => {
+	const home = await tempHome();
+	const store = await open(home);
+	try {
+		await expect(
+			store.commit(async (tx) => {
+				await tx.doc(Payments, "stale", null);
+			}, context),
+		).rejects.toThrow(/^no such payment$/);
+		expect(await store.snapshot(Payments, "stale", context)).toBeUndefined();
+	} finally {
+		await store.close(context);
+	}
+});
+
+it("names an address in every key by its EIP-55 form", () => {
+	const lower = `0x${"ab".repeat(20)}`;
+	const wallet = checksummed(lower);
+	expect(wallet).not.toBe(lower);
+	expect(checksummed(wallet)).toBe(wallet);
+	expect(() => checksummed(wallet.replace(/[A-F]/, (c) => c.toLowerCase()))).toThrow(/not an address/);
+	expect(nativeKey(lower, 9)).toBe(`native:9:${wallet}`);
 });

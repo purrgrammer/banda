@@ -27,16 +27,31 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # anvil, for the wallet's chain suites (they skip without it): mise.toml pins foundry. It runs before setup-node,
+      # so setup-node's node comes first on PATH
+      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        with:
+          version: 2026.11.5
+          install_args: foundry
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run check
       - run: npm run web:contrast
       - run: npm run typecheck
+      # the desktop app's main process and preloads, otherwise typechecked only when the release workflow packs it
+      - run: npm --prefix desktop ci --ignore-scripts
+      - run: npx --no-install tsc -p tsconfig.json --noEmit
+        working-directory: desktop
       - run: npm run test:fast
       - run: npm run build
+
+  # The supply-chain checks of docs/wallets/stack.md section 5, on each change and nightly: an advisory can be published
+  # for a version already pinned. The release workflow runs them too, and publishes nothing without them.
+  supply-chain:
+    uses: ./.github/workflows/supply-chain.yml
 
   faults:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -56,7 +71,7 @@ jobs:
         with:
           node-version: 26
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run test:faults -- --shard=${{ matrix.shard }}/6
 
   docker:
@@ -74,7 +89,7 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # lets buildx reach GitHub's cache service
       - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: node scripts/prebuild-images.ts
         env:
           BANDA_IMAGE_CACHE: gha
@@ -103,7 +118,7 @@ jobs:
         with:
           path: release/cache/computer/runtime
           key: native-runtime-linux-x64-${{ hashFiles('scripts/microvm-runtime.*', 'src/box/microvm-assets.ts') }}
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - name: Prepare the development computer
         run: node scripts/microvm-bundle.ts --prepare
       - name: Keep the native runtime build

@@ -8,6 +8,7 @@
  * A remote server is called by the daemon, outside the box, with credentials only the daemon reads (`auth/`): a read
  * runs and its answer comes back framed as foreign data; a write is a draft the owner approves, its floor respected.
  */
+
 import { fileURLToPath } from "node:url";
 import type { Context } from "@earendil-works/chord";
 import { withAbortSignal } from "@earendil-works/chord/context";
@@ -92,11 +93,15 @@ import {
 	toolAuthority,
 	toolName,
 	validToolAuthority,
+	WALLET,
+	type WalletCredentials,
+	walletOf,
 	withCredentials,
 } from "../core/connections.ts";
 import { readDefinitions, setDefinitions } from "../core/definitions.ts";
 import { followWords, kindLabel } from "../core/follow.ts";
 import { gmailAttachment, MAX_GMAIL_ATTACHMENT_BYTES, MAX_GMAIL_SEND_ATTACHMENT_BYTES } from "../core/gmail-rest.ts";
+import { keyedSerial } from "../core/keyed-serial.ts";
 import { InsufficientScope, type McpResult, type McpTool, notesOf, Unauthorized } from "../core/mcp.ts";
 import { connectionWord, type McpConfig, mcpConfig, serviceOf } from "../core/mcp-config.ts";
 import { remoteCall, remoteListing, remoteSession } from "../core/mcp-remote.ts";
@@ -122,16 +127,16 @@ import {
 	forgetReadings,
 	nameOf,
 	type ObjectRef,
-	plainLine,
 	readArgs,
 	readOn,
 	refKey,
 } from "../core/objects.ts";
 import { agentOfChat, canonical, Permissions, retireInvalidPermissions } from "../core/permissions.ts";
+import { plainLine } from "../core/plain-line.ts";
 import { REST_APIS, type RestApi } from "../core/rest.ts";
 import { retryOf } from "../core/retry-after.ts";
 import { slackFile } from "../core/slack-rest.ts";
-import { context } from "../core/store.ts";
+import { context, syncNow } from "../core/store.ts";
 import {
 	type Classed,
 	classOf,
@@ -146,6 +151,14 @@ import {
 } from "../core/tool-kinds.ts";
 import { liveWaits, TasksOf } from "../core/wait.ts";
 import { endWatches } from "../core/watches.ts";
+import { checksummed } from "../wallet/address.ts";
+import { type RpcClients, rpcOf } from "../wallet/config.ts";
+import { Wallets } from "../wallet/docs.ts";
+import { walletLabel } from "../wallet/label.ts";
+import type { Signing } from "../wallet/lifecycle.ts";
+import type { Network, NetworkId } from "../wallet/networks.ts";
+import { type Rpc, rpcClients } from "../wallet/rpc.ts";
+import { chooseWallet, offlineWords, WALLET_INCOMPLETE, WALLET_TOOLS, walletReadTool } from "../wallet/tools.ts";
 import { finishAgentPublication, queueAgentPublication } from "./agent-publication.ts";
 import { type AgentChanged, boxFiles, type Workspace } from "./agents.ts";
 import type {
@@ -182,6 +195,12 @@ export type CapabilityOptions = {
 	readonly agentChanged?: AgentChanged;
 	/** How long after a listing failed it is tried again, in ms; the last repeats until it is listed, unless a test says. */
 	readonly retryDelays?: readonly number[];
+	/** The daemon's one set of RPC clients, shared with the wallets' area (H-198); its own over `fetch` unless given. */
+	readonly rpc?: RpcClients;
+	/** Agents' commands run on this computer as the owner (`serve --box host`): wallets are offline for agents (H-064). */
+	readonly host?: boolean;
+	/** Makes a wallet read's commits survive power loss before its answer (C21): `syncNow`, unless a test fails it. */
+	readonly sync?: () => Promise<void>;
 };
 
 /** A sign-in that just finished, for the card that started it: whom it signed in as, for which agent, and when. */
@@ -205,6 +224,12 @@ const PreparedAccount = Type.Object(
 type PreparedAccount = Static<typeof PreparedAccount>;
 const readPreparedAccount = (value: unknown): PreparedAccount | undefined =>
 	Value.Check(PreparedAccount, value) ? value : undefined;
+/** Credentials a server is sent: a key or an OAuth token, never a wallet's, which banda's own tools reach. */
+const served = (credentials: Credentials): Exclude<Credentials, WalletCredentials> => {
+	if ("wallet" in credentials) throw new Error("a wallet is reached by banda's own tools, never as a server");
+	return credentials;
+};
+
 const changedSignIn = "the sign-in changed since this was prepared; prepare it again";
 
 /** `args` without `arg`: what the server is sent, the account being the daemon's to choose, never the server's. */
@@ -271,7 +296,8 @@ const text = (value: string, isError = false): ToolExecutionResult => ({
 });
 
 /** Where a connection reaches, in words: a host. */
-const whereOf = (connection: Connection) => new URL(connection.url).host;
+const whereOf = (connection: Connection) =>
+	connection.auth === "wallet" ? "this computer" : new URL(connection.url).host;
 
 const summaryOf = (connection: Connection): ConnectionSummary => ({
 	service: connection.service,
@@ -503,15 +529,17 @@ export function openCapabilities(options: CapabilityOptions) {
 		}
 		const authorization = async () => {
 			if (credentials === undefined || snapshot === undefined) return undefined;
+			const sent = served(credentials);
 			used(snapshot);
-			if ("key" in credentials) return `Bearer ${credentials.key}`;
-			const { tokens } = credentials.oauth;
-			if (tokens.expires !== undefined && tokens.expires < now() + 60_000 && tokens.refresh !== undefined) {
-				snapshot = await refreshOnce(connection, account as string, snapshot, ctx);
-				credentials = snapshot.credentials;
-				used(snapshot);
-			}
-			return `Bearer ${"oauth" in credentials ? credentials.oauth.tokens.access : credentials.key}`;
+			if ("key" in sent) return `Bearer ${sent.key}`;
+			const { tokens } = sent.oauth;
+			if (tokens.expires === undefined || tokens.expires >= now() + 60_000 || tokens.refresh === undefined)
+				return `Bearer ${tokens.access}`;
+			snapshot = await refreshOnce(connection, account as string, snapshot, ctx);
+			credentials = snapshot.credentials;
+			used(snapshot);
+			const refreshed = served(credentials);
+			return `Bearer ${"key" in refreshed ? refreshed.key : refreshed.oauth.tokens.access}`;
 		};
 		return authorization;
 	}
@@ -837,6 +865,57 @@ export function openCapabilities(options: CapabilityOptions) {
 		});
 	}
 
+	/** The wallets' networks' clients, from the daemon's one set unless this is made without it (a test). */
+	let reader: ((network: Network) => Promise<Rpc>) | undefined;
+	const walletRpcOf = (network: Network): Promise<Rpc> => {
+		reader ??= rpcOf(home, options.rpc ?? rpcClients({ fetch: fetcher }));
+		return reader(network);
+	};
+
+	/**
+	 * How a wallet's key was last found in this process, as the wallets' area checks it (`checksWallets`): a read that
+	 * hands out an address asks it, so no agent gives out one whose key is gone and was never saved (H-021, H-261).
+	 */
+	let walletSigning: ((address: string) => Signing | undefined) | undefined;
+	/**
+	 * The wallets' area's barrier, once it gave one: a read's barrier is its, so one that passes ends what a failed one
+	 * froze in the wallets' view (C21).
+	 */
+	let walletSync: (() => Promise<void>) | undefined;
+	/** The wallets' area says how it knows each wallet's key, once its lifecycle is open, and the barrier it runs. */
+	function checksWallets(signing: (address: string) => Signing | undefined, sync?: () => Promise<void>): void {
+		walletSigning = signing;
+		walletSync = sync;
+	}
+
+	/** A wallet's read: it reads the wallet the agent names, or its one, among those switched on for it now. */
+	function walletTool(tool: InEffect): ToolRegistration {
+		return walletReadTool(tool, {
+			signing: (address) => (walletSigning === undefined ? "unchecked" : walletSigning(address)),
+			resolve: async (tx, args, chat) => {
+				const off = await allowed(tool.name, tool.connection)(tx);
+				if (off !== undefined) return { refused: off };
+				const offline = await offlineWords(tx, options.host === true);
+				if (offline !== undefined) return { refused: offline };
+				const agent = await agentOfChat(tx, chat);
+				if (agent === undefined) return { refused: "this chat runs no agent" };
+				const chosen = await chooseWallet(tx, await accountsOn(tx, agent, tool.connection.name), args.account);
+				if ("refused" in chosen) return chosen;
+				// a wallet is never signed in to: credentials that do not fit, or are not the ones the store names, are not
+				// a sign-in to redo but a wallet for the owner to look at
+				const credentials = await credentialsOf(home, tool.connection.name, chosen.key);
+				const wallet = walletOf(credentials);
+				const known = (await tx.doc(Connected)).accounts?.[tool.connection.name]?.[chosen.key];
+				if (wallet === undefined || known === undefined || credentials?.generation !== known.generation)
+					return { refused: WALLET_INCOMPLETE };
+				return { account: chosen.key, agent, wallet };
+			},
+			rpc: walletRpcOf,
+			sync: options.sync ?? (() => (walletSync ?? (() => syncNow(harness)))()),
+			now,
+		});
+	}
+
 	/**
 	 * A remote server's write: a draft the owner approves, run once as approved. The draft names the account it acts as
 	 * (the agent's one, when the model gave none), so the approval says it and a permission from it binds that account.
@@ -1155,6 +1234,11 @@ export function openCapabilities(options: CapabilityOptions) {
 		const registrations: ToolRegistration[] = [];
 		for (const tool of tools)
 			try {
+				if (tool.connection.auth === "wallet") {
+					if (!tool.read) throw new Error("a wallet's write is not a tool this build has");
+					registrations.push(walletTool(tool));
+					continue;
+				}
 				const accounts = multi[tool.connection.name];
 				registrations.push(
 					tool.read
@@ -1318,9 +1402,10 @@ export function openCapabilities(options: CapabilityOptions) {
 		if (connection === undefined) return false;
 		const account = await listingAccount(connection, ctx);
 		if (signsIn(connection) && account === undefined) return false;
-		if (connection.api !== undefined) {
+		if (connection.api !== undefined || connection.auth === "wallet") {
 			fault("connect:listed");
-			await keepListing(name, connection.version, REST_APIS[connection.api].tools, ctx, undefined, new Set(), true);
+			const own = connection.api === undefined ? WALLET_TOOLS : REST_APIS[connection.api].tools;
+			await keepListing(name, connection.version, own, ctx, undefined, new Set(), true);
 			problems.delete(name);
 			options.changed?.();
 			return false;
@@ -1431,13 +1516,14 @@ export function openCapabilities(options: CapabilityOptions) {
 			const { connections } = await tx.doc(Connected);
 			for (const name of await acceptedNames(tx)) {
 				const connection = await acceptedConnection(tx, name);
-				// a built-in API's tools are this daemon's own: listed again at every start, so a new build's words reach
-				// the model with no version moving
+				// a built-in API's tools, and the wallet's, are this daemon's own: listed again at every start, so a new
+				// build's words reach the model with no version moving
 				if (
 					connection?.url !== undefined &&
 					(connections[name]?.version !== connection.version ||
 						connections[name]?.due === true ||
-						connection.api !== undefined)
+						connection.api !== undefined ||
+						connection.auth === "wallet")
 				)
 					names.push(name);
 			}
@@ -1571,6 +1657,8 @@ export function openCapabilities(options: CapabilityOptions) {
 			const definition = definitions.get(name);
 			const server = connected.servers[name];
 			const connection = current[name];
+			// Settings, Wallets shows the wallets: they are not connections to the owner
+			if ((connection ?? definition)?.auth === "wallet") continue;
 			const version = connection?.version;
 			const file = {
 				version: version ?? "",
@@ -1776,14 +1864,25 @@ export function openCapabilities(options: CapabilityOptions) {
 		options.changed?.();
 	}
 
+	/**
+	 * Refused for the wallet connection: its accounts end with their wallets, in the wallet's own lifecycle (C17), so an
+	 * owner's route for any connection never drops one and leaves its record behind.
+	 */
+	async function notAWallet(name: string, ctx: Context): Promise<void> {
+		const auth = (await harness.commit((tx) => acceptedConnection(tx, name), ctx))?.auth ?? definitions.get(name)?.auth;
+		if (auth === "wallet") throw new BadRequest("a wallet is managed in Settings, Wallets", 409);
+	}
+
 	/** Remove what the owner no longer wants. */
 	async function remove(name: string, ctx: Context = context): Promise<void> {
+		await notAWallet(name, ctx);
 		fault(definitions.has(name) ? "shipped:remove" : "server:remove");
 		await forget(name, ctx);
 	}
 
 	/** Disconnect: every account signed out, its tools gone; the connection stays allowed, to sign in to again. */
 	async function disconnect(name: string, ctx: Context = context): Promise<void> {
+		await notAWallet(name, ctx);
 		await withCredentials(home, name, async (locked) => {
 			await harness.commit(async (tx) => {
 				const doc = await tx.doc(Connected);
@@ -1811,6 +1910,7 @@ export function openCapabilities(options: CapabilityOptions) {
 	 * credentials the store names no account for, which the next start forgets, and asks it ends.
 	 */
 	async function signOut(name: string, account: string, ctx: Context = context): Promise<void> {
+		await notAWallet(name, ctx);
 		await withCredentials(home, name, async (locked) => {
 			const label = await harness.commit(async (tx) => {
 				const doc = await tx.doc(Connected);
@@ -1841,6 +1941,7 @@ export function openCapabilities(options: CapabilityOptions) {
 	 * them and to the models that act as it. Its key, and so its credentials and who may use it, stay as they are.
 	 */
 	async function labelAccount(name: string, account: string, label: unknown, ctx: Context = context): Promise<void> {
+		await notAWallet(name, ctx);
 		const wanted = plainLine(label);
 		if (wanted === "") throw new BadRequest("give the account a name");
 		if ([...wanted].length > ACCOUNT_LABEL_MAX)
@@ -1914,17 +2015,13 @@ export function openCapabilities(options: CapabilityOptions) {
 		if (Object.keys(mine).length === 0) delete doc.on[agent];
 		const connection = await acceptedConnection(tx, name);
 		const who = await agentWords(tx, agent);
-		if (!on)
-			await endWatches(
-				tx,
-				{ connection: name, account, agent },
-				`${connection?.service ?? name} as ${accountLabel(known)} was switched off for ${who}`,
-				now(),
-			);
-		await log(tx, {
-			at: now(),
-			what: `You ${on ? "let" : "stopped"} ${who} ${on ? "use" : "using"} ${connection?.service ?? name} as ${accountLabel(known)}`,
-		});
+		// a wallet is told by the owner's name for it and its short address, never as a sign-in
+		const words =
+			connection?.auth === "wallet"
+				? `the wallet ${walletLabel(checksummed(account), (await tx.doc(Wallets)).wallets[checksummed(account)])}`
+				: `${connection?.service ?? name} as ${accountLabel(known)}`;
+		if (!on) await endWatches(tx, { connection: name, account, agent }, `${words} was switched off for ${who}`, now());
+		await log(tx, { at: now(), what: `You ${on ? "let" : "stopped"} ${who} ${on ? "use" : "using"} ${words}` });
 		await options.agentChanged?.(tx, agent);
 		return undefined;
 	}
@@ -2008,6 +2105,12 @@ export function openCapabilities(options: CapabilityOptions) {
 		credentials: Credentials,
 		ctx: Context,
 	): Promise<{ readonly id: string; readonly numbered?: true }> {
+		// a wallet is its address: nothing to ask a server
+		if ("wallet" in credentials) {
+			const wallet = walletOf(credentials);
+			if (wallet === undefined) throw new Error("that is not a whole wallet");
+			return { id: wallet.address };
+		}
 		const read = connection.account;
 		const url = connection.url as string;
 		const bearer = "key" in credentials ? credentials.key : credentials.oauth.tokens.access;
@@ -2075,14 +2178,23 @@ export function openCapabilities(options: CapabilityOptions) {
 		expected?: string,
 	): Promise<Finished> {
 		const connection = await harness.commit((tx) => acceptedConnection(tx, name), ctx);
-		if (connection?.url !== credentials.url) throw new Error("that connection changed while you signed in");
+		const changed =
+			"wallet" in credentials
+				? "the wallet connection changed while the wallet was made"
+				: "that connection changed while you signed in";
+		// a wallet's credentials are bound to no URL: the RPC is the network's, and changing it changes no wallet
+		if (
+			connection === undefined ||
+			("wallet" in credentials ? connection.auth !== "wallet" : connection.url !== credentials.url)
+		)
+			throw new Error(changed);
 		const { id, account, known } = await withCredentials(home, name, async (locked) => {
 			// Allocate unidentified sign-ins under the same connection lock as publication: concurrent callbacks must not share a number.
 			const { id, numbered } = await readAccount(connection, credentials, ctx);
 			fault("account:read");
 			const account = accountKey(id);
 			const current = await harness.commit((tx) => acceptedConnection(tx, name), ctx);
-			if (current?.version !== connection.version) throw new Error("that connection changed while you signed in");
+			if (current?.version !== connection.version) throw new Error(changed);
 			// signing one account in again came back as another the owner already has: its access was chosen for the
 			// first, so neither changes
 			if (expected !== undefined && expected !== account) {
@@ -2096,8 +2208,7 @@ export function openCapabilities(options: CapabilityOptions) {
 			await locked.keep(account, { ...credentials, generation });
 			fault("oauth:kept");
 			const { known } = await harness.commit(async (tx) => {
-				if ((await acceptedConnection(tx, name))?.version !== connection.version)
-					throw new Error("that connection changed while you signed in");
+				if ((await acceptedConnection(tx, name))?.version !== connection.version) throw new Error(changed);
 				const doc = await tx.doc(Connected);
 				doc.accounts ??= {};
 				doc.accounts[name] ??= {};
@@ -2105,7 +2216,7 @@ export function openCapabilities(options: CapabilityOptions) {
 				const accounts = doc.accounts[name];
 				const was = accounts[account] !== undefined;
 				// named in the commit that adds it, so concurrent sign-ins cannot take the same name
-				const label = numbered ? defaultAccountLabel(credentials.url, Object.values(accounts)) : undefined;
+				const label = numbered ? defaultAccountLabel(connection.url, Object.values(accounts)) : undefined;
 				accounts[account] = {
 					id,
 					...(label === undefined ? {} : { label }),
@@ -2113,10 +2224,18 @@ export function openCapabilities(options: CapabilityOptions) {
 					generation,
 				};
 				doc.epoch++;
-				await log(tx, {
-					at: now(),
-					what: `You ${was ? "signed in again" : "signed in"} to ${connection.service} as ${accountLabel({ id, ...(label === undefined ? {} : { label }) })}`,
-				});
+				if ("wallet" in credentials) {
+					// a wallet is made, never signed in to: made again, it is the same one
+					if (!was) {
+						const address = checksummed(id);
+						const record = (await tx.doc(Wallets)).wallets[address];
+						await log(tx, { at: now(), what: `You made the wallet ${walletLabel(address, record)}` });
+					}
+				} else
+					await log(tx, {
+						at: now(),
+						what: `You ${was ? "signed in again" : "signed in"} to ${connection.service} as ${accountLabel({ id, ...(label === undefined ? {} : { label }) })}`,
+					});
 				// a permission is the owner's word about an account, bound to its sign-in so nothing prepared under an
 				// earlier one borrows it: signing the same account in again carries each over to this sign-in, in the
 				// commit that records it, so none is left granted yet matching nothing
@@ -2164,8 +2283,9 @@ export function openCapabilities(options: CapabilityOptions) {
 				accessProblem = error.message;
 			});
 		// A new account of a connection banda ships, signed in for no agent, is on for the lead: its tools are curated,
-		// and an account nobody can use reads as a broken connection. One added by URL waits for the owner's switch.
-		else if (!known && definitions.has(name))
+		// and an account nobody can use reads as a broken connection. One added by URL waits for the owner's switch, and
+		// so does a wallet: money is switched on agent by agent (OD-1)
+		else if (!known && definitions.has(name) && connection.auth !== "wallet")
 			await switchAccount(LEAD, name, account, true, ctx, connection.version).catch((error: unknown) => {
 				if (!(error instanceof BadRequest)) throw error;
 			});
@@ -2492,14 +2612,17 @@ export function openCapabilities(options: CapabilityOptions) {
 
 	async function shippedView(ctx: Context): Promise<ShippedView[]> {
 		const added = (await harness.snapshot(Connected, ctx))?.added ?? {};
-		return [...definitions].map(([name, connection]) => ({
-			name,
-			connection: summaryOf(connection),
-			about: connection.about ?? "",
-			...(connection.access === undefined ? {} : { access: connection.access }),
-			reads: connection.reads.length,
-			added: Object.hasOwn(added, name),
-		}));
+		// the wallet is not added as a connection: it comes with the first wallet the owner makes
+		return [...definitions]
+			.filter(([, connection]) => connection.auth !== "wallet")
+			.map(([name, connection]) => ({
+				name,
+				connection: summaryOf(connection),
+				about: connection.about ?? "",
+				...(connection.access === undefined ? {} : { access: connection.access }),
+				reads: connection.reads.length,
+				added: Object.hasOwn(added, name),
+			}));
 	}
 
 	/**
@@ -2509,6 +2632,7 @@ export function openCapabilities(options: CapabilityOptions) {
 	async function addShipped(name: string, ctx: Context = context): Promise<void> {
 		const connection = definitions.get(name);
 		if (connection === undefined) throw new BadRequest(`banda ships no connection named ${name}`, 404);
+		if (connection.auth === "wallet") throw new BadRequest("a wallet is made in Settings, Wallets", 409);
 		fault("shipped:before");
 		const added = await harness.commit(async (tx) => {
 			const doc = await tx.doc(Connected);
@@ -2541,12 +2665,8 @@ export function openCapabilities(options: CapabilityOptions) {
 	}
 
 	// Setting up a server is serialized, so concurrent retries of the same address find one connection.
-	let addingServer: Promise<unknown> = Promise.resolve();
-	function serialized<T>(work: () => Promise<T>): Promise<T> {
-		const operation = addingServer.then(work);
-		addingServer = operation.catch(() => {});
-		return operation;
-	}
+	const addingServer = keyedSerial();
+	const serialized = <T>(work: () => Promise<T>): Promise<T> => addingServer("server", work);
 
 	/** The owner sets up a server, given its configuration (the app's form): its name, in the end. */
 	async function addMcp(input: unknown, ctx: Context = context): Promise<string> {
@@ -2679,6 +2799,7 @@ export function openCapabilities(options: CapabilityOptions) {
 		/** The settings are one of a group's control: Allow may not say a tool reads when nobody said so. */
 		group = false,
 	): Promise<void> {
+		await notAWallet(name, ctx);
 		if (typeof expected !== "string") throw new BadRequest("give the version of the connection you saw");
 		if (typeof given !== "object" || given === null || Array.isArray(given) || Object.keys(given).length > 500)
 			throw new BadRequest("give the settings as tool names, each with allow, ask, always or off");
@@ -2986,8 +3107,102 @@ export function openCapabilities(options: CapabilityOptions) {
 			...(object.follow === undefined ? {} : { follow: followWords(object.follow) }),
 		}));
 
+	/**
+	 * A wallet the owner made is an account of the wallet connection: its credentials say where its key is (never the
+	 * key), its id is its address, and it is on for no agent until the owner switches it on for one (OD-1). The
+	 * connection is added with the first one. A wallet kept already is signed in again, its switches kept.
+	 */
+	async function addWallet(
+		wallet: { readonly account: string; readonly address: string; readonly network: NetworkId },
+		ctx: Context = context,
+	): Promise<Finished> {
+		const connection = definitions.get(WALLET);
+		if (connection?.auth !== "wallet") throw new Error("this build ships no wallet connection");
+		const credentials: Credentials = {
+			wallet: { account: wallet.account, address: checksummed(wallet.address), network: wallet.network },
+		};
+		if (walletOf(credentials) === undefined) throw new Error("that is not a whole wallet");
+		await harness.commit(async (tx) => {
+			const doc = await tx.doc(Connected);
+			if (Object.hasOwn(doc.added, WALLET)) return;
+			doc.added[WALLET] = { at: now() };
+		}, ctx);
+		return signedIn(WALLET, credentials, undefined, ctx);
+	}
+
+	/**
+	 * Whether the wallet at `address` is an account whose credentials are on disk, fit a wallet's, name its address and
+	 * are the generation the store names: a power cut can keep the account and lose the file, and a wallet is never
+	 * signed in again, so recovery rewrites them through `addWallet` (they hold no secret, only what the record says).
+	 */
+	async function walletKept(address: string, ctx: Context = context): Promise<boolean> {
+		const account = accountKey(checksummed(address));
+		const known = await harness.commit(async (tx) => {
+			const named = (await tx.doc(Connected)).accounts?.[WALLET]?.[account];
+			return named === undefined ? undefined : { generation: named.generation };
+		}, ctx);
+		if (known === undefined) return false;
+		const credentials = await credentialsOf(home, WALLET, account);
+		const wallet = walletOf(credentials);
+		return (
+			wallet !== undefined &&
+			checksummed(wallet.address) === checksummed(address) &&
+			credentials?.generation === known.generation
+		);
+	}
+
+	/**
+	 * The wallet at `address` removed (C15, C17): in one commit `removed` changes the wallet's own record and its account
+	 * ends as a sign-out does, off for every agent and its permissions taken back; then its credentials are forgotten. A
+	 * kill between leaves credentials the store names no account for, which the next start forgets. When `removed`
+	 * answers that it left the record alone, the account stays and so do its credentials; the answer is the same.
+	 */
+	async function removeWallet(
+		address: string,
+		removed: (tx: Tx) => Promise<boolean>,
+		ctx: Context = context,
+	): Promise<boolean> {
+		const account = accountKey(checksummed(address));
+		const done = await withCredentials(home, WALLET, async (locked) => {
+			const ended = await harness.commit(async (tx) => {
+				if (!(await removed(tx))) return false;
+				const doc = await tx.doc(Connected);
+				if (doc.accounts?.[WALLET]?.[account] === undefined) return true;
+				await endAccounts(tx, WALLET, [account], "you removed the wallet");
+				if (doc.accounts?.[WALLET] === undefined) delete doc.connections[WALLET];
+				await retireInvalidPermissions(tx, now());
+				return true;
+			}, ctx);
+			if (!ended) return false;
+			fault("account:signed-out");
+			await locked.forget(account);
+			return true;
+		});
+		if (!done) return false;
+		await endGone(ctx);
+		await install(ctx);
+		options.changed?.();
+		return true;
+	}
+
 	/** The connections banda ships, as this banda ships them. */
 	const shipped = async (): Promise<Connection[]> => [...definitions.values()];
+
+	/**
+	 * The owner's switch of an account for an agent from a connection's own routes, which never reach a wallet: a wallet
+	 * is switched on in Settings, Wallets alone, and only while it is ready (OD-1).
+	 */
+	async function switchConnectionAccount(
+		agent: string,
+		name: string,
+		account: string | undefined,
+		on: boolean,
+		ctx: Context = context,
+		expectedConnection?: string,
+	): Promise<void> {
+		await notAWallet(name, ctx);
+		await switchAccount(agent, name, account, on, ctx, expectedConnection);
+	}
 
 	return {
 		readFor,
@@ -3014,6 +3229,11 @@ export function openCapabilities(options: CapabilityOptions) {
 		signOut,
 		labelAccount,
 		switchAccount,
+		switchConnectionAccount,
+		addWallet,
+		removeWallet,
+		walletKept,
+		checksWallets,
 	};
 }
 

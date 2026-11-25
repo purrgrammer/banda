@@ -22,10 +22,10 @@ import {
 } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { log } from "../core/activity.ts";
+import { publicAddress } from "../core/addresses.ts";
 import { type HoldingEgress, intake, withIntake } from "../core/egress.ts";
 import { htmlToText } from "../core/html-text.ts";
 import { MAX_RESULT_CHARS } from "../core/mcp.ts";
-import { publicAddress } from "../core/public-fetch.ts";
 
 export const WEB_FETCH = "web_fetch";
 

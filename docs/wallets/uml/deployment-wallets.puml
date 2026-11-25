@@ -22,7 +22,7 @@ node "Owner's computer\n«macOS on Apple silicon, or Linux»" as Host {
   node "OS keychain service\n«Security.framework (macOS)\n/ Secret Service over D-Bus (Linux)»" as KCN {
     artifact "item per wallet: service banda's,\naccount <home-id>/wallet/<address>,\nsecret 0x + 64 hex" as ItemA
     artifact "lease <home-id>/lease: epoch (compare-and-set)\n+ home-secret hash (C16)" as LeaseA
-    artifact "canary <home-id>/probe (H-037)" as CanaryA
+    artifact "canary <home-id>/canary (H-037)" as CanaryA
     artifact "home secret <home-id>/home-secret,\nbound to the home's realpath and inode\n(outside the home directory: no backup,\nrestore, fork or hand copy carries it)" as SecretA
   }
   node "Box\n«microVM: Hypervisor.framework or KVM;\nor a Docker container (serve ~--box container)»" as BoxN {

@@ -32,7 +32,7 @@ else no Secret Service, or no session bus ("Platform failure: DBus error: ...")
   Sup -> Store : offline: "no keychain on this computer" (no file fallback: it would put the key in backups)
 else null
   KC --> S : null
-  S -> KC : canary: set, get, delete "<home-id>/probe" (H-037)
+  S -> KC : canary: set, get, delete "<home-id>/canary" (H-037)
   alt the canary works
     S --> Sup : code KEY_MISSING
     Sup -> Store : signing key_missing; the lane opens a Wait "Restore key"

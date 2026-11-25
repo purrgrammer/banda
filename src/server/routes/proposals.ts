@@ -1,6 +1,8 @@
 /** Owner review and acceptance for agent-authored proposals. Nothing in a pending proposal is effective. */
+
 import type { ConversationId, Harness, JsonObject, Tx } from "@earendil-works/pi-durable";
 import { Accepted, type Agent, agentPath, agentText, shaOf } from "../../core/agents.ts";
+import { keyedSerial } from "../../core/keyed-serial.ts";
 import { editProposal, PROPOSAL_RESULT, type Proposal, Proposals, proposalSummary } from "../../core/proposals.ts";
 import { context } from "../../core/store.ts";
 import type { defineCore } from "../../core/turn.ts";
@@ -55,17 +57,7 @@ export const proposals: AreaModule = {
 		const ready = harness.commit(async (tx) => {
 			await tx.doc(Proposals);
 		}, context);
-		const locks = new Map<string, Promise<unknown>>();
-		const serialized = async <T>(id: string, action: () => Promise<T>): Promise<T> => {
-			const prior = locks.get(id) ?? Promise.resolve();
-			const current = prior.then(action, action);
-			locks.set(id, current);
-			try {
-				return await current;
-			} finally {
-				if (locks.get(id) === current) locks.delete(id);
-			}
-		};
+		const serialized = keyedSerial();
 		return {
 			watch: [Proposals],
 			route: async ({ method, path, json }) => {

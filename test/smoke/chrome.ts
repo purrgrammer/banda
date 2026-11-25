@@ -179,7 +179,9 @@ export async function withPage<T>(
 					for (;;) {
 						try {
 							const point = await run<{ x: number; y: number }>(`new Promise((resolve, reject) => {
-						const find = () => (${expression});
+						// a target that throws (a parent not drawn yet) is one not there yet: thrown inside a frame callback, it
+						// would end the sampling with the promise never settled, and the click would hang until CDP gave up
+						const find = () => { try { return (${expression}); } catch { return undefined; } };
 						const end = performance.now() + ${Math.max(0, end - Date.now())};
 						let previous, scrolled, stable = 0, reason = 'missing element';
 						const describe = el => el instanceof Element ? el.tagName + (el.id ? '#' + el.id : '') + ' ' + el.textContent.trim().slice(0, 80) : String(el);

@@ -17,6 +17,7 @@ import { routines } from "./routines.ts";
 import { search } from "./search.ts";
 import { tiers } from "./tiers.ts";
 import { usage } from "./usage.ts";
+import { wallets } from "./wallets.ts";
 import { watches } from "./watches.ts";
 
 export const AREAS: readonly AreaModule[] = [
@@ -35,4 +36,5 @@ export const AREAS: readonly AreaModule[] = [
 	harnessesArea,
 	band,
 	backups,
+	wallets,
 ];

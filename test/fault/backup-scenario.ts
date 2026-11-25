@@ -8,8 +8,10 @@ import { lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, symlinkS
 import { basename, dirname, join } from "node:path";
 import { createModels } from "@earendil-works/pi-ai";
 import { createRegistry } from "@earendil-works/pi-durable";
+import { Value } from "typebox/value";
 import type { BackupPoint } from "../../src/core/backup.ts";
 import { MANIFEST } from "../../src/core/backup.ts";
+import { RESTORED_MARKER, Restored } from "../../src/core/restored.ts";
 import { Control } from "../../src/core/routines.ts";
 import { context, openStore } from "../../src/core/store.ts";
 
@@ -132,6 +134,12 @@ export function whole(to: string, home: string): { backup: boolean; home: boolea
 		};
 		for (const name of [...Object.keys(manifest.files), ...Object.keys(manifest.trees)])
 			if (!present(join(home, name))) throw new Error(`${home} is half a home: no ${name}`);
+		// the home's binding reads the mark at every start: a restored home without a whole one could never sign
+		let mark: unknown;
+		try {
+			mark = JSON.parse(readFileSync(join(home, RESTORED_MARKER), "utf8"));
+		} catch {}
+		if (!Value.Check(Restored, mark)) throw new Error(`${home} has no valid restore mark`);
 	}
 	return { backup, home: restored };
 }

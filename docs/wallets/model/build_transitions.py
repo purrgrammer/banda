@@ -195,10 +195,12 @@ row(W, READY, "reveal", "cap_host and cap_fresh and kc_up and item == 'ours'", "
 row(W, READY, "reveal", "not (cap_host and cap_fresh) or not kc_up or item != 'ours'", "=",
     ["refuse: a device token, a replayed or expired capability, or the key unreadable",
      "phone: 'open banda on your computer to see the key'"], ["H-264", "H-267", "H-268", "H-021"], ["C16"], "MintCap")
-row(W, "ready_unsaved", "confirm_saved", "pasted_derives", "ready_saved", ["mark backed up"], ["H-263", "H-275"],
-    ["C16"], "ConfirmSaved")
-row(W, "ready_unsaved", "confirm_saved", "not pasted_derives", "=", ["say the pasted key does not open this wallet"],
-    ["H-263"], ["C16"], "ConfirmSaved")
+# A skipped save is not final: the owner who skipped at creation and reveals the key later (H-266) proves the copy
+# the same way, and the wallet becomes backed up (UC-02 step 4).
+row(W, ["ready_unsaved", "ready_skipped"], "confirm_saved", "pasted_derives", "ready_saved", ["mark backed up"],
+    ["H-263", "H-275"], ["C16"], "ConfirmSaved")
+row(W, ["ready_unsaved", "ready_skipped"], "confirm_saved", "not pasted_derives", "=",
+    ["say the pasted key does not open this wallet"], ["H-263"], ["C16"], "ConfirmSaved")
 row(W, "ready_unsaved", "skip_save", "True", "ready_skipped", ["mark Not backed up"], ["H-273"], [], "Skip")
 row(W, "ready_unsaved", "show_receive", "True", "=", ["withhold: save or skip the key first"], ["H-005"], ["C15"],
     "Disclose")
@@ -230,10 +232,17 @@ row(W, READY + ["archived"], "begin_remove", "version_current and removable", "r
 row(W, READY + ["archived"], "begin_remove", "not (version_current and removable)", "=",
     ["refuse in words: funds, a payment in flight, or a key never saved for an address that left banda"],
     ["H-043", "H-046", "H-050"], ["C17"], "BeginRemove")
-row(W, "removing", "delete_item", "kc_up and removable", "=", ["delete the keychain item"], ["H-044"], ["C15"],
-    "DeleteItem")
-row(W, "removing", "delete_item", "kc_up and not removable", "archived",
+row(W, "removing", "delete_item", "kc_up and item == 'ours' and removable", "=", ["delete the keychain item"],
+    ["H-044"], ["C15"], "DeleteItem")
+row(W, "removing", "delete_item", "kc_up and item == 'ours' and not removable", "archived",
     ["funds or a payment arrived since removal began: roll back (C17)"], ["H-046"], ["C17"], "CancelRemove")
+row(W, "removing", "delete_item", "kc_up and item == 'other'", "removed",
+    ["the item holds a key that does not open this wallet: never delete it, its address's funds were never checked",
+     "the wallet's own key is gone already (deleted before a stop, or lost): commit removed with its account",
+     "the item stays, listed as a key without a wallet (H-045)"], ["H-045", "H-024"], ["C15", "C17"], "Removed")
+row(W, "removing", "delete_item", "kc_up and item == 'empty'", "=",
+    ["nothing to delete: the delete happened before a stop, and item_gone ends the removal whatever reached the address"],
+    ["H-044"], ["C15"], "Removed")
 row(W, "removing", "delete_item", "not kc_up", "=", ["retry when the keychain answers"], ["H-044"], ["C15"], "DeleteItem")
 row(W, "removing", "item_gone", "True", "removed", ["commit removed"], ["H-044"], ["C15"], "Removed")
 
@@ -243,6 +252,16 @@ row(S, "online", "keychain_locks", "True", "locked", ["one owner Wait 'unlock th
     "nothing is burnt: queued payments stay queued and age out (C10)"], ["H-026", "H-027"], ["C4", "C20"], "Lock")
 row(S, "online", "item_lost", "True", "key_missing", ["'Key missing from this computer'; reads keep working",
     "payments past the burn point keep tracking (they need no key)"], ["H-021"], ["C4", "C16"], "LoseItem")
+# a lock or a loss seen while already offline: the wallet shows the newest reason (H-317); only a restore leaves
+# key_missing (C9, H-290)
+for frm in ["locked", "wrong_key", "other_home", "offline_host_mode"]:
+    row(S, frm, "keychain_locks", "True", "locked", ["offline: the keychain is locked"], ["H-026", "H-317"], ["C16"],
+        "Lock")
+    row(S, frm, "item_lost", "True", "key_missing", ["offline: 'Key missing from this computer'"], ["H-021", "H-317"],
+        ["C16"], "LoseItem")
+row(S, "key_missing", "keychain_locks", "True", "=", ["still key missing: only a restore leaves it"],
+    ["H-290", "H-317"], ["C9", "C16"], "Lock")
+row(S, "key_missing", "item_lost", "True", "=", [], ["H-021"], ["C16"], "LoseItem")
 row(S, "online", "unlock_check", "derives and lease_mine and not host_mode", "online", ["sign"], ["H-009"], ["C16"],
     "CanSign")
 row(S, "online", "unlock_check", "not derives", "wrong_key", ["offline: the key in the keychain does not open the wallet"],

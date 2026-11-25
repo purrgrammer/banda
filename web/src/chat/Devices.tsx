@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import type { DevicesView, DeviceView, PairingRequestView } from "../../../src/server/api.ts";
 import { QrCode } from "../components/QrCode.tsx";
+import { useNow } from "../lib/now.ts";
 import { fingerprint } from "../lib/pairing.ts";
 import { Confirm } from "./Confirm.tsx";
 import { Block, RowOf, Rows } from "./Settings.tsx";
@@ -32,19 +33,6 @@ export type DevicesActions = {
 	readonly onRename?: ((id: string, name: string) => void) | undefined;
 	readonly onRevoke?: ((id: string) => void) | undefined;
 };
-
-/** The time now, a second at a time while `on`. */
-function useNow(on: boolean, fixed?: number): number {
-	const [now, setNow] = useState(() => fixed ?? Date.now());
-	useEffect(() => {
-		if (!on || fixed !== undefined) return;
-		setNow(Date.now());
-		const timer = setInterval(() => setNow(Date.now()), 1000);
-		return () => clearInterval(timer);
-	}, [on, fixed]);
-	// When a code first appears, do not render one frame against the clock from before the async response arrived.
-	return fixed ?? (on ? Date.now() : now);
-}
 
 /** Minutes and seconds left, as a clock reads: 9:05. */
 export const countdown = (ms: number) => {
@@ -78,7 +66,7 @@ export function DevicesSettings({
 } & DevicesActions) {
 	const act: DevicesActions = here ? given : {};
 	const requests = here ? (devices?.requests ?? []) : [];
-	const now = useNow(invite !== undefined || requests.length > 0, fixed);
+	const now = useNow(invite !== undefined || requests.length > 0 ? 1000 : undefined, fixed);
 	const off = devices !== undefined && (devices.remote === "off" || devices.remote === "unavailable");
 	const list = devices?.devices ?? [];
 	const expired = invite !== undefined && invite.expires <= now;

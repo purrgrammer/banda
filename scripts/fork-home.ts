@@ -5,6 +5,8 @@
  * model providers' sign-in linked rather than copied, and the box's volumes copied into the fork's own box. Routines
  * start paused in the fork. The derived search index is rebuilt by the fork's daemon.
  *
+ * A fork signs nothing: its marker (src/wallet/home-id.ts) makes it refuse the wallets' lease, so it never signs.
+ *
  * The provider sign-in is a link: an OAuth refresh rotates the refresh token, so a copy that refreshed would sign the
  * forked-from home out; through the link both read and write the one file. Two daemons refreshing at the same instant
  * can still race, and the loser signs in again.
@@ -21,6 +23,7 @@ import { containerName, dockerAvailable, VOLUMES } from "../src/box/container.ts
 import { Control } from "../src/core/routines.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { resolveHome } from "../src/home.ts";
+import { markFork } from "../src/wallet/home-id.ts";
 
 export type ForkOptions = {
 	/** Copy the browser's profile too: the sites the owner signed in to, so the fork can act as them there. */
@@ -46,6 +49,7 @@ export async function forkHome(from: string, to: string, options: ForkOptions = 
 	if ((await realpath(to)) === (await realpath(from))) throw new Error("a home cannot be forked onto itself");
 	if ((await readdir(to)).length > 0) throw new Error(`${to} is not empty`);
 	const done: string[] = [];
+	await markFork(to);
 
 	// the store, whole and consistent although its daemon writes on
 	const source = new DatabaseSync(join(from, "durable.db"), { readOnly: true });

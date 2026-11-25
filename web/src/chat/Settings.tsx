@@ -44,6 +44,7 @@ import type { ComputerView } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { accountTitle } from "../../../src/core/provider-accounts.ts";
 import { TIER_WORDS, TIERS, type Tier } from "../../../src/core/tiers.ts";
+import type { SettingsTab } from "../app/where.ts";
 import { AvatarChoices } from "../avatar/Choices.tsx";
 import type { ModelView, TiersView } from "../lib/api.ts";
 import { Confirm } from "./Confirm.tsx";
@@ -107,7 +108,9 @@ export function SettingsPage({
 				</div>
 			</div>
 			{footer === undefined ? null : (
-				<div className="mx-auto flex w-full max-w-[34rem] gap-2 border-t border-line-soft px-4 py-3">{footer}</div>
+				<div className="mx-auto flex w-full max-w-[34rem] flex-wrap gap-2 border-t border-line-soft px-4 py-3">
+					{footer}
+				</div>
 			)}
 		</div>
 	);
@@ -868,14 +871,6 @@ export function ArchivedAgents({
 	);
 }
 
-/**
- * Settings, in tabs as the agent's panel has them: General (appearance, notifications, routines, the computer),
- * Memory (the shared facts and each agent's own, one set, never copies), Model (the provider and the models the
- * tiers use), Usage (model spend and caching), Connections (every account), Agents (the limits on groups; the archived agents and groups, to restore),
- * Devices (the phones paired, and pairing one).
- */
-export type SettingsTab = "general" | "memory" | "model" | "usage" | "connections" | "agents" | "wallets" | "devices";
-
 export function AppSettings({
 	data,
 	tab = "general",
@@ -887,10 +882,13 @@ export function AppSettings({
 	wallets,
 	backups,
 	bring,
+	onTab,
 	...act
 }: {
 	data: SettingsData;
 	tab?: SettingsTab;
+	/** The tab picked: given, `tab` is the one shown, so the page's address can say it. */
+	onTab?: ((tab: SettingsTab) => void) | undefined;
 	memory?: ReactNode;
 	/** The home's backups, to take, restore and delete, on the computer banda runs on (`BackupsSettings`). */
 	backups?: ReactNode;
@@ -909,9 +907,28 @@ export function AppSettings({
 		onChange: (tier: Tier, id: string | null) => void;
 	};
 } & SettingsActions) {
+	const tabs = useRef<HTMLDivElement>(null);
+	// a link or Back may open a tab past a phone's width: the chosen one is scrolled into the tab list's view, and only
+	// the list scrolls (scrollIntoView would scroll the page around it too)
+	// biome-ignore lint/correctness/useExhaustiveDependencies: each tab chosen is scrolled to
+	useEffect(() => {
+		const list = tabs.current;
+		const active = list?.querySelector<HTMLElement>('[role="tab"][data-state="active"]');
+		if (list === null || active === null || active === undefined) return;
+		const at = active.getBoundingClientRect();
+		const start = at.left - list.getBoundingClientRect().left + list.scrollLeft;
+		const end = start + at.width;
+		if (start < list.scrollLeft) list.scrollLeft = start;
+		else if (end > list.scrollLeft + list.clientWidth) list.scrollLeft = end - list.clientWidth;
+	}, [tab]);
 	return (
-		<Tabs defaultValue={tab} className="gap-6">
-			<TabsList aria-label="Settings" className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none]">
+		<Tabs
+			{...(onTab === undefined
+				? { defaultValue: tab }
+				: { value: tab, onValueChange: (next) => onTab(next as SettingsTab) })}
+			className="gap-6"
+		>
+			<TabsList ref={tabs} aria-label="Settings" className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none]">
 				<TabsTrigger value="general">General</TabsTrigger>
 				{memory === undefined ? null : <TabsTrigger value="memory">Memory</TabsTrigger>}
 				<TabsTrigger value="model">Model</TabsTrigger>

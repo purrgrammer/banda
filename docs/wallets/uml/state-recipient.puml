@@ -20,100 +20,100 @@ state "deny" as recipient_deny
 
 [*] --> recipient_unknown
 
-' row 85
-recipient_unknown : card_pay [not version_current] / CardPay (C8)
-' row 91
-recipient_unknown : card_always [not version_current] / CardAlways (C8)
 ' row 97
-recipient_unknown : card_dont_pay [not version_current] / CardDontPay (C8)
+recipient_unknown : card_pay [not version_current] / CardPay (C8)
 ' row 103
-recipient_unknown : card_never [not version_current] / CardNever (C8)
-' row 118
-recipient_unknown : list_set_ask / SetAsk (-)
-' row 121
-recipient_unknown : list_set_always / SetAlways (-)
-' row 124
-recipient_unknown : list_set_deny / SetDeny (-)
-' row 127
-recipient_unknown : rename / Rename (-)
-' row 130
-recipient_unknown : forget / Forget (-)
-' row 83
-recipient_ask : card_pay [version_current] / CardPay (C8,C9)
-' row 86
-recipient_ask : card_pay [not version_current] / CardPay (C8)
-' row 89
-recipient_ask : card_always [version_current] / CardAlways (C8,C9)
-' row 92
-recipient_ask : card_always [not version_current] / CardAlways (C8)
-' row 95
-recipient_ask : card_dont_pay [version_current] / CardDontPay (C8,C9)
-' row 98
-recipient_ask : card_dont_pay [not version_current] / CardDontPay (C8)
-' row 104
-recipient_ask : card_never [not version_current] / CardNever (C8)
-' row 106
-recipient_ask : list_set_ask [version_current] / SetAsk (C4,C8)
-' row 108
-recipient_ask : list_set_always [version_current] / SetAlways (C8,C9)
-' row 112
-recipient_ask : rename [version_current] / Rename (C8,C18)
-' row 116
-recipient_ask : list_set_ask [not version_current] / SetAsk (C8)
-' row 119
-recipient_ask : list_set_always [not version_current] / SetAlways (C8)
-' row 122
-recipient_ask : list_set_deny [not version_current] / SetDeny (C8)
-' row 125
-recipient_ask : rename [not version_current] / Rename (C8)
-' row 128
-recipient_ask : forget [not version_current] / Forget (C8)
-' row 84
-recipient_deny : card_pay [version_current] / CardPay (C9)
-' row 87
-recipient_deny : card_pay [not version_current] / CardPay (C8)
-' row 90
-recipient_deny : card_always [version_current] / CardAlways (C9)
-' row 93
-recipient_deny : card_always [not version_current] / CardAlways (C8)
-' row 96
-recipient_deny : card_dont_pay [version_current] / CardDontPay (C9)
-' row 99
-recipient_deny : card_dont_pay [not version_current] / CardDontPay (C8)
-' row 102
-recipient_deny : card_never [version_current] / CardNever (C9)
-' row 105
-recipient_deny : card_never [not version_current] / CardNever (C8)
+recipient_unknown : card_always [not version_current] / CardAlways (C8)
 ' row 109
-recipient_deny : list_set_always [version_current] / SetAlways (C8,C9)
-' row 111
-recipient_deny : list_set_deny [version_current] / SetDeny (C8,C9)
-' row 113
-recipient_deny : rename [version_current] / Rename (C8,C18)
-' row 117
-recipient_deny : list_set_ask [not version_current] / SetAsk (C8)
+recipient_unknown : card_dont_pay [not version_current] / CardDontPay (C8)
+' row 115
+recipient_unknown : card_never [not version_current] / CardNever (C8)
+' row 130
+recipient_unknown : list_set_ask / SetAsk (-)
+' row 133
+recipient_unknown : list_set_always / SetAlways (-)
+' row 136
+recipient_unknown : list_set_deny / SetDeny (-)
+' row 139
+recipient_unknown : rename / Rename (-)
+' row 142
+recipient_unknown : forget / Forget (-)
+' row 95
+recipient_ask : card_pay [version_current] / CardPay (C8,C9)
+' row 98
+recipient_ask : card_pay [not version_current] / CardPay (C8)
+' row 101
+recipient_ask : card_always [version_current] / CardAlways (C8,C9)
+' row 104
+recipient_ask : card_always [not version_current] / CardAlways (C8)
+' row 107
+recipient_ask : card_dont_pay [version_current] / CardDontPay (C8,C9)
+' row 110
+recipient_ask : card_dont_pay [not version_current] / CardDontPay (C8)
+' row 116
+recipient_ask : card_never [not version_current] / CardNever (C8)
+' row 118
+recipient_ask : list_set_ask [version_current] / SetAsk (C4,C8)
 ' row 120
-recipient_deny : list_set_always [not version_current] / SetAlways (C8)
+recipient_ask : list_set_always [version_current] / SetAlways (C8,C9)
+' row 124
+recipient_ask : rename [version_current] / Rename (C8,C18)
+' row 128
+recipient_ask : list_set_ask [not version_current] / SetAsk (C8)
+' row 131
+recipient_ask : list_set_always [not version_current] / SetAlways (C8)
+' row 134
+recipient_ask : list_set_deny [not version_current] / SetDeny (C8)
+' row 137
+recipient_ask : rename [not version_current] / Rename (C8)
+' row 140
+recipient_ask : forget [not version_current] / Forget (C8)
+' row 96
+recipient_deny : card_pay [version_current] / CardPay (C9)
+' row 99
+recipient_deny : card_pay [not version_current] / CardPay (C8)
+' row 102
+recipient_deny : card_always [version_current] / CardAlways (C9)
+' row 105
+recipient_deny : card_always [not version_current] / CardAlways (C8)
+' row 108
+recipient_deny : card_dont_pay [version_current] / CardDontPay (C9)
+' row 111
+recipient_deny : card_dont_pay [not version_current] / CardDontPay (C8)
+' row 114
+recipient_deny : card_never [version_current] / CardNever (C9)
+' row 117
+recipient_deny : card_never [not version_current] / CardNever (C8)
+' row 121
+recipient_deny : list_set_always [version_current] / SetAlways (C8,C9)
 ' row 123
-recipient_deny : list_set_deny [not version_current] / SetDeny (C8)
-' row 126
-recipient_deny : rename [not version_current] / Rename (C8)
+recipient_deny : list_set_deny [version_current] / SetDeny (C8,C9)
+' row 125
+recipient_deny : rename [version_current] / Rename (C8,C18)
 ' row 129
+recipient_deny : list_set_ask [not version_current] / SetAsk (C8)
+' row 132
+recipient_deny : list_set_always [not version_current] / SetAlways (C8)
+' row 135
+recipient_deny : list_set_deny [not version_current] / SetDeny (C8)
+' row 138
+recipient_deny : rename [not version_current] / Rename (C8)
+' row 141
 recipient_deny : forget [not version_current] / Forget (C8)
 
-' row 82
-' row 88
 ' row 94
-recipient_unknown --> recipient_ask : card_pay [version_current] / CardPay (C8,C9)\ncard_always [version_current] / CardAlways (C8,C9)\ncard_dont_pay [version_current] / CardDontPay (C8,C9)
 ' row 100
+' row 106
+recipient_unknown --> recipient_ask : card_pay [version_current] / CardPay (C8,C9)\ncard_always [version_current] / CardAlways (C8,C9)\ncard_dont_pay [version_current] / CardDontPay (C8,C9)
+' row 112
 recipient_unknown --> recipient_deny : card_never [version_current] / CardNever (C8,C9)
-' row 101
-' row 110
+' row 113
+' row 122
 recipient_ask --> recipient_deny : card_never [version_current] / CardNever (C8,C9)\nlist_set_deny [version_current] / SetDeny (C8,C9)
-' row 107
+' row 119
 recipient_deny --> recipient_ask : list_set_ask [version_current] / SetAsk (C4,C8)
-' row 114
+' row 126
 recipient_ask --> recipient_unknown : forget [version_current] / Forget (C4,C8)
-' row 115
+' row 127
 recipient_deny --> recipient_unknown : forget [version_current] / Forget (C4,C8)
 @enduml

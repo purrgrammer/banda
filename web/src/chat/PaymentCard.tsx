@@ -20,8 +20,9 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
+import { shortAddress } from "../../../src/wallet/label.ts";
 import { Tile } from "./Cards.tsx";
-import { type Network, type PaymentState, PaymentStatus, short, type Token, WalletNotice } from "./Wallets.tsx";
+import { type Network, type PaymentState, PaymentStatus, type Token, WalletNotice } from "./Wallets.tsx";
 
 export type PaymentRecipient = {
 	/** The owner's name for it; absent for a recipient nobody has named. */
@@ -88,7 +89,7 @@ function To({ recipient, kind }: { recipient: PaymentRecipient; kind: "transfer"
 				<span className="font-code text-meta text-ink [overflow-wrap:anywhere]">{recipient.identity}</span>
 				{recipient.payTo === undefined ? null : (
 					<span className="text-meta text-ink-2">
-						pays <span className="font-code">{short(recipient.payTo)}</span>
+						pays <span className="font-code">{shortAddress(recipient.payTo)}</span>
 					</span>
 				)}
 				<span className="text-meta text-ink-2">on {recipient.network}</span>
@@ -121,8 +122,9 @@ export function PaymentCard({
 	state = { kind: "open" },
 	phone = false,
 }: PaymentCardProps) {
-	const name = recipient.name ?? recipient.suggested ?? (kind === "x402" ? "this endpoint" : short(recipient.identity));
-	const what = `Pay ${recipient.name ?? (kind === "x402" ? recipient.identity.split("/")[0] : short(recipient.identity))} ${amount} ${token}`;
+	const name =
+		recipient.name ?? recipient.suggested ?? (kind === "x402" ? "this endpoint" : shortAddress(recipient.identity));
+	const what = `Pay ${recipient.name ?? (kind === "x402" ? recipient.identity.split("/")[0] : shortAddress(recipient.identity))} ${amount} ${token}`;
 	return (
 		<Tile className="flex flex-col gap-3 p-4">
 			<span className="flex flex-col gap-0.5">

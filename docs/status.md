@@ -61,6 +61,13 @@ walkthroughs and fresh six-shard fault and Docker CI pass. Workspace refreshes c
 actions; startup and explicit reads reconcile missed changes. Concurrent native Mac homes have recovery evidence.
 Prolonged outages, broader recovery qualification, preflight latency and clean-machine distribution remain open.
 
+Wallets' slice 1 ([Wallets](wallets.md)) is in code: a wallet made from Settings → Wallets or an agent's Access, its
+key shown once to the client that made it and later only in banda's desktop app, its copy checked, Receive, the
+money that came in, its agents, archive and removal, each network's RPC masked, and the locked and other-home
+notices. Its tests, through the app at phone and desktop width, pass on the in-memory test keystore against anvil.
+Open before slice 2: a manual run on a throwaway home against anvil with the real macOS keychain and throwaway
+items, then `npm run boxes:sweep`; the checks again on the Node that `mise.toml` pins; and owner review.
+
 banda is a chat: a band of agents in a sidebar, one conversation each, groups, a panel, and no other screen, as
 DESIGN.md says. The specimen and the wiring slices are in code; what remains of them is each section's open work.
 

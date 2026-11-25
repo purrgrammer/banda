@@ -1,17 +1,9 @@
 import fc from "fast-check";
 import { expect, it } from "vitest";
 import { GITHUB_OBJECTS } from "../scripts/github-objects.ts";
-import {
-	cardOf,
-	draftedOn,
-	editableOf,
-	parseObjects,
-	plainLine,
-	readArgs,
-	recognise,
-	refKey,
-} from "../src/core/objects.ts";
+import { cardOf, draftedOn, editableOf, parseObjects, readArgs, recognise, refKey } from "../src/core/objects.ts";
 import { objects } from "../src/core/parts/objects.ts";
+import { plainLine } from "../src/core/plain-line.ts";
 import { githubObjectTools } from "./fixtures/github-objects.ts";
 import { definition } from "./fixtures/shipped.ts";
 import { pbtRuns } from "./pbt.ts";

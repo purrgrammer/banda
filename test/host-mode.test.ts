@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
-import { boxKind, defaultBox } from "../src/box/box.ts";
+import { boxKind, defaultBox, HOST_WARNING } from "../src/box/box.ts";
 import { type Daemon, type DaemonOptions, startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { ComputerView } from "../src/server/api.ts";
@@ -104,6 +104,8 @@ describe("host mode", () => {
 		try {
 			const { home, computer, post } = await start({ models, boxKind: "host" }, logged);
 			expect(logged).toContainEqual(expect.stringMatching(/^box: no box: commands run on this computer/));
+			// where host mode is chosen, the owner is told agents lose their wallets (H-064)
+			expect(logged).toContainEqual(expect.stringMatching(/wallets are offline for agents/));
 			const view = await computer((v) => v.state === "up");
 			expect(view).toMatchObject({ box: "host", network: "none", state: "up", browser: { state: "unavailable" } });
 			const posted = await post("where are you?");
@@ -155,5 +157,11 @@ describe("host mode", () => {
 		} finally {
 			process.env.PATH = path;
 		}
+	});
+});
+
+describe("host mode's words where it is chosen (H-064)", () => {
+	it("say at start that wallets are offline for agents", () => {
+		expect(HOST_WARNING).toContain("wallets are offline for agents");
 	});
 });

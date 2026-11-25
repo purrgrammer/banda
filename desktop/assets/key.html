@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-iTriNkBLmM8wYHy9MhlwXeSHv7+z8vFvKHb4mIhjtH4='; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Your wallet's private key</title>
+<style>
+body { font: 14px/1.45 -apple-system, system-ui, sans-serif; margin: 24px; color: #1c1c1c; background: #fff; }
+@media (prefers-color-scheme: dark) { body { color: #ececec; background: #1c1c1c; } }
+code { display: block; word-break: normal; overflow-wrap: anywhere; font: 13px/1.5 ui-monospace, Menlo, monospace;
+  padding: 10px; border: 1px solid #8884; border-radius: 6px; user-select: all; }
+p { margin: 0 0 12px; }
+.meta { font-size: 12px; opacity: 0.75; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+button { font: inherit; padding: 6px 12px; margin-right: 8px; }
+</style></head><body>
+<p>Whoever has this key has the wallet's funds. Save it somewhere only you can reach, then close this window.</p>
+<p>Address</p><code id="address"></code>
+<p style="margin-top:12px">Private key<span id="hidden" class="sr-only">, hidden</span></p><code id="key" aria-hidden="true"></code>
+<p class="meta" style="margin-top:8px">Wallet apps such as MetaMask open it as a private key (Import account → Private key). There is no seed phrase: this key is the whole wallet.</p>
+<p class="meta" style="margin-top:8px">It hides again after 30 seconds, and this window closes when you switch away. A screen reader reads it aloud.</p>
+<p style="margin-top:12px"><button id="show" type="button" disabled>Show key</button><button id="copy" type="button" disabled>Copy the key</button></p>
+<p class="meta" id="note"></p>
+<script>
+const key = document.getElementById("key");
+const label = document.getElementById("hidden");
+const show = document.getElementById("show");
+const copy = document.getElementById("copy");
+const note = document.getElementById("note");
+const HIDDEN = "Hidden. Press Show key to see it for 30 seconds.";
+let given = "";
+let hiding;
+const groups = (text) => text.match(/.{1,4}/g).join(" ");
+const hide = () => {
+	clearTimeout(hiding);
+	key.textContent = HIDDEN;
+	key.setAttribute("aria-hidden", "true");
+	label.textContent = ", hidden";
+	show.disabled = given === "";
+	copy.disabled = given === "";
+};
+const drop = () => {
+	given = "";
+	hide();
+	note.textContent = "The key left this window when you switched away. Open it again from the wallet's settings.";
+};
+window.bandaKey.shown((shown) => {
+	document.getElementById("address").textContent = shown.address;
+	given = shown.key;
+	hide();
+});
+show.addEventListener("click", () => {
+	if (given === "") return;
+	key.textContent = groups(given);
+	key.removeAttribute("aria-hidden");
+	label.textContent = "";
+	show.disabled = true;
+	clearTimeout(hiding);
+	hiding = setTimeout(hide, 30000);
+});
+const copied = () => {
+	window.bandaKey.copy();
+	copy.textContent = "Copied";
+	note.textContent =
+		"The clipboard is cleared in a minute. A clipboard manager, or a clipboard shared with your other devices, may keep a copy of its own.";
+};
+// a copy selected by hand is the key as wallet apps take it, without the groups' spaces, and is cleared like Copy's
+key.addEventListener("copy", (event) => {
+	event.preventDefault();
+	if (given !== "" && !key.hasAttribute("aria-hidden")) copied();
+});
+copy.addEventListener("click", () => {
+	if (given !== "") copied();
+});
+window.addEventListener("blur", drop);
+document.addEventListener("visibilitychange", () => {
+	if (document.visibilityState === "hidden") drop();
+});
+</script>
+</body></html>

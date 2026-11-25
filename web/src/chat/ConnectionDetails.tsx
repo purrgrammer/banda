@@ -420,14 +420,16 @@ export function ConnectionDetailsView({
 }) {
 	const [leaving, setLeaving] = useState<AccountView>();
 	// the account signed out of takes its row, and the menu button the focus was on, with it: the focus goes to the
-	// list of those left, so a keyboard or a screen reader stays where the owner was
+	// list of those left, so a keyboard or a screen reader stays where the owner was. A focus with nowhere to go waits on
+	// the page's title (the confirm puts it there while the sign-out runs): the list is nearer, so it takes it from there
 	const left = useRef<string>(undefined);
 	const list = useRef<HTMLUListElement>(null);
 	const here = view.accounts?.some((each) => each.account === left.current) ?? false;
 	useEffect(() => {
 		if (left.current === undefined || here) return;
 		left.current = undefined;
-		if (document.activeElement === null || document.activeElement === document.body) list.current?.focus();
+		const active = document.activeElement;
+		if (active === null || active === document.body || active.matches("h1[data-page-title]")) list.current?.focus();
 	}, [here]);
 	const review = mode === "review";
 	const settingOf = (tool: Settable): Setting => (review ? (chosen[tool.title] ?? tool.setting) : tool.setting);

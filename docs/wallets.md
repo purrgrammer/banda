@@ -55,7 +55,7 @@ One word per thing (principle 7). The wallet adds these, and uses banda's own wo
 | **recipient** | Who a payment goes to, by its identity (below), with the owner's label | "payee", "contact" |
 | **rule** | The umbrella for a recipient's Always, Ask or Deny | |
 | **permission** | An Always: banda's permission with scope `always`, per (wallet, agent, identity) | |
-| **refusal** | A Deny: a stored refusal per (wallet, identity), for every agent of the wallet | |
+| **deny** | A Deny: the rule stored per (wallet, identity) that refuses every payment to it, for every agent of the wallet | "refusal", which is banda's word for a request refused, as everywhere else |
 | **lease** | Which home may sign with the keychain's keys (C16) | |
 
 The payment states are C12's. The model's `Queued` is shown to the owner as **"In line"**, so the screen never says
@@ -80,14 +80,14 @@ Most of the rest is already there:
   `{endpoint, payTo, asset, network}` for x402. A partial match is refused in the commit that would store it, and
   `covering` refuses one for wallet tools (C9). It never binds the amount.
 - **"Ask" is the draft.** An effect with no permission covering it already becomes a draft the owner approves.
-- **"Deny" is new.** banda has no stored refusal today: an owner's Off is per tool, not per argument. A Deny is a
-  refusal stored on the recipient, checked in the same commit as the permission and before a draft would open, and
+- **"Deny" is new.** banda stores no rule that refuses today: an owner's Off is per tool, not per argument. A Deny is a
+  rule stored on the recipient, checked in the same commit as the permission and before a draft would open, and
   the tool answers in words ("the owner doesn't pay 0x9f…"), with no ask. It holds for every agent of the wallet
   (OD-1).
 - **"Recipient" is the word**, and it is already wanted: docs/connections.md's open item "Approved recipients" (no
   list of recipients the owner approved yet, for the `private` floor). The wallet's recipients are the first
   instance of that list, not a second one: a recipient is generic in its kind (address, x402 endpoint; later an
-  email or a channel) and its scope (the wallet; later a connection's account), with a label and a refusal. What was
+  email or a channel) and its scope (the wallet; later a connection's account), with a label and a rule. What was
   paid to it and when is computed from the payments at read time, never stored beside them.
 
 Law 4 (foreign content is data) still holds: a page that steers the agent can make it pay recipients the owner set
@@ -169,9 +169,11 @@ burst pause, not even as an opt-in (OD-12): identical open asks are deduplicated
   wallet's tools as `EffectTool`s through `options.effect`, as egress's `proposeSendTool` already does outside REST,
   and the wallet's `allowed` hook composes `allowedAs`, which is the enforcement here, not a courtesy (the
   banda-integration spike). An account is one wallet, its key its address. No new primitive.
-- **A `wallet` auth kind.** Its `Credentials` variant is a kind marker, not bound to the connection's URL (the RPC),
-  so changing the RPC never takes a wallet offline; `fits`, `credentialsOf`, `secrets` and `withCredentials` learn
-  it, and a `MIGRATIONS` step makes an older build refuse such a home plainly instead of crashing on it.
+- **A `wallet` auth kind.** Its `Credentials` variant names where the key is and what the key must prove (the
+  keychain account, the address and the network; never a secret, H-052). It is bound to no URL (the wallet
+  definition names none; the RPC is the network's), so changing the RPC never takes a wallet offline; `fits`,
+  `credentialsOf`, `secrets` and `withCredentials` learn it, and a `MIGRATIONS` step makes an older build refuse such
+  a home plainly instead of crashing on it.
 - **Several wallets per home, switched on per agent.** Wallets are made in Settings → Wallets (or from an agent's
   settings), each an account of the wallet connection; the owner switches each on for the agents it should serve,
   through the connection's existing per-agent account choice. Agents sharing a wallet share its balance, so they
@@ -179,9 +181,10 @@ burst pause, not even as an opt-in (OD-12): identical open asks are deduplicated
 - **The owner uses a wallet directly too**: Send, Receive (address and QR) and the transaction list in Settings →
   Wallets. The owner's own send is owner authority (DESIGN.md "Trust", law 1), not an agent's effect, but it shares
   the wallet's lane and nonce with the agents' payments.
-- **The key's record is the store's Wallet doc** (address, network, state, whether the key was confirmed saved). Its
-  credentials hold no second copy of those facts; the keychain item's name is derived from the home and the address.
-  A name is not access: which home may sign is the lease (below).
+- **The key's record is the store's Wallet doc** (address, network, state, whether the key was confirmed saved). The
+  address and network its credentials name are checked against the record at every read and every signing, and a
+  wallet whose two disagree is not read or signed for; the keychain item's name is derived from the home and the
+  address. A name is not access: which home may sign is the lease (below).
 - **The signer is a child process.** The daemon is a separate Node process (desktop/src/main.ts starts the bundled
   Node), so Electron's `safeStorage` is not available to it. Keychain access and signing run in a short-lived child
   started from `process.execPath`, one call at a time per home, killed at its deadline, offering two signing
@@ -215,8 +218,8 @@ A payment reaches the lane admitted (Always, or the owner's Pay). Then:
 2. **One start commit, the burn point (C4).** It re-checks the payment (still in line, not cancelled, not swept by a
    Deny), the wallet, the agent's access, the rule, the balance after reservations and the approval's freshness;
    takes nonce = ledger by compare-and-set; appends the signed version with its hash; and moves the payment to
-   Signed. It is **synced to disk** before anything leaves (C21): the store's `synchronous=NORMAL` keeps commits
-   through a crash but can lose the newest one on power loss.
+   Signed. It is **synced to disk** before anything leaves (C21): the store runs `synchronous=FULL`, where
+   pi-durable's `synchronous=NORMAL` keeps commits through a crash but can lose the newest one on power loss.
 3. **Broadcast the stored bytes**, every version of the in-flight nonce, newest first. The same bytes again are
    harmless, so a crash resends that transaction, never a second one.
 4. **Follow it** to a receipt and to `finalized` (C12): Confirmed, Failed or Cancelled only at `finalized`;
@@ -310,16 +313,20 @@ the incoming list cannot be built.
   from a keychain that cannot answer.
 - **What it protects against, stated plainly (TA-1).** On macOS the item trusts an executable, not a script, so any
   script run by the bundled Node reads every wallet's key without a prompt (the keychain spike); on Linux any process
-  of the user on the session bus reads an unlocked collection. So a host coding agent that runs commands without a
-  per-command ask takes wallets offline, as host mode does, until the signer helper ships (OD-11): a separately
-  signed executable with its own keychain access group, which the bundled Node cannot read through. It is designed
-  and spiked as its own step (Spikes, below). Every package the daemon loads is inside this boundary, so the supply-chain controls
+  of the user on the session bus reads an unlocked collection. So any connected coding agent takes wallets offline, as
+  host mode does, until the signer helper ships (OD-11): a separately signed executable with its own keychain access
+  group, which the bundled Node cannot read through. It is designed and spiked as its own step (Spikes, below). Every package the daemon loads is inside this boundary, so the supply-chain controls
   cover the daemon's whole tree, not the signing libraries alone ([`wallets/stack.md`](wallets/stack.md) section 5).
 - **Saving the key at creation (requirement 5).** The ready commit mints a one-time capability bound to the create
-  request, consumed within 10 minutes on that request's own connection (the desktop app, a loopback browser of
-  `banda serve`, the host TTY of `banda wallet create`), before the address is shown. A later reveal is not on the
+  request, spent within 10 minutes with a secret that only that creation's own answer carries (to the desktop app, a
+  loopback browser of `banda serve`, the host TTY of `banda wallet create`), before the address is shown; a repeat of
+  the creation carries none. A later reveal is not on the
   daemon's HTTP API: the desktop app's main process re-authenticates the owner, starts the signer child itself and
-  shows the key in a local window (OD-2, C16). The saved copy is confirmed by pasting it back.
+  shows the key in a local window (OD-2, C16). The re-authentication is Touch ID, asked only where macOS says it is
+  set up; elsewhere (Linux, Windows, a Mac without Touch ID) a later reveal, Restore key and Move signing are refused,
+  never run without it, and the key is shown at creation alone. The saved copy is confirmed by pasting it back. In a
+  loopback browser the creation's reveal is readable by the browser's extensions: a residual accepted (H-272, OOS-10),
+  so there the create and save screens say so and point to the desktop app or `banda wallet create`.
 
 ### Homes, forks and backups
 
@@ -327,7 +334,7 @@ the incoming list cannot be built.
   own. The home secret is a keychain item bound to the home's realpath and inode, outside the home directory, so a
   backup, a restore, a `home:fork` or a hand copy (`cp -a`, rsync) starts offline, and "move this wallet here" is an
   explicit host act (C16).
-- **`home:fork`** is watch-only: it reads balances and history and never signs. A development build run against a
+- **`home:fork`** signs nothing: it reads balances and history and never signs. A development build run against a
   fork is still code run as the owner (TA-1), so development uses a keychain service of its own, never the released
   app's.
 - **Tests** use an in-memory keystore and anvil; they never touch the real keychain. Keychain experiments use only
@@ -371,7 +378,7 @@ Each ran under [`wallets/spikes/`](wallets/spikes/); what is still open is liste
   on arm64 only)
 - [x] Signing library: `@noble/curves` + `@noble/hashes` + `micro-eth-signer`, pinned exactly, byte-identical to
   `ox` and `cast` (keys-and-signing; [`wallets/stack.md`](wallets/stack.md))
-- [x] Deny as a stored refusal on the recipient beside permissions, checked in the same commit (banda-integration,
+- [x] Deny as a rule stored on the recipient beside permissions, checked in the same commit (banda-integration,
   lane-model)
 - [x] The proxy observing a 402 over TLS (banda-integration, with banda's pinned mitmproxy), and the facilitator's settlement (x402-settlement)
 - [x] Nonce and replacement on anvil: a crash after broadcast, a dropped transaction, two processes (nonce-and-crash);
@@ -383,8 +390,19 @@ Each ran under [`wallets/spikes/`](wallets/spikes/); what is still open is liste
 - [ ] Which calls and typed-data shapes reach future deposits, tested as refusals
 - [ ] C19's anchored window against the reference facilitator with chain time 60 s behind and 10 s ahead of the wall
   clock, where the chain-time window was refused
+- [ ] Where a keyed RPC URL lives (H-195): `config.json`'s `wallets.rpc`, as "Chains, RPC and privacy" says, or a
+  secret beside the proxy credentials in `auth/`, as H-195 expects; either way it is shown masked
+- [ ] C7 and C12's second, independent RPC per network: which public endpoint banda ships beside the first (another
+  operator, serving `finalized`), and the `config.json` field under `wallets` where the owner sets it
 - [ ] `base-rpc.publicnode.com` as Base's default: its terms for sustained use, and the list's depth past its two
   months
-- [ ] `synchronous=FULL` for the wallet's commits on the shipped build (C21, spike I12)
-- [ ] macOS: a locked login keychain, a Deny on its prompt, a session with no GUI; Touch ID before a later reveal,
-  and how Linux re-authenticates the owner at all (OD-2)
+- [ ] macOS: a locked login keychain, a Deny on its prompt, a session with no GUI; the device password where Touch ID
+  is not set up (LocalAuthentication's owner authentication, which Electron does not offer), and how Linux and Windows
+  re-authenticate the owner at all (OD-2): until then a later reveal, Restore and Move are refused there
+- [ ] H-023's item labels: `@napi-rs/keyring` sets none, so Keychain Access shows an item by its service and account
+  alone; a label needs another API or the OD-11 helper
+- [ ] Linux: a listing of the Secret Service's items alone (`findCredentialsAsync` takes no store and may read the
+  kernel keyring), which the orphan sweep needs; until then the keystore refuses the listing on Linux
+- [x] UC-21 A1, "move the lease to this home": a move rewrites the home secret (C16)
+- [ ] The binding's stability on Linux (ext4, btrfs, with and without statx), across a remount there and across a
+  reboot on either platform: unproven; spikes/home-binding has the macOS run and the Linux script, not yet run

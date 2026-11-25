@@ -30,8 +30,11 @@ import {
 } from "../../core/provider-accounts.ts";
 import { FileCredentialStore } from "../../core/provider-credentials.ts";
 import { answersOf, PROVIDER_FORMS } from "../../core/provider-forms.ts";
+import { context } from "../../core/store.ts";
 import { PRESETS, presetOf } from "../../core/tiers.ts";
-import { deviceId } from "../../home.ts";
+import { installationId, readInstallationId } from "../../home.ts";
+import { Wallets } from "../../wallet/docs.ts";
+import { IDENTITY_LOST } from "../../wallet/home-id.ts";
 import type { ModelsListView } from "../api/custom-providers.ts";
 import { BadRequest } from "../http.ts";
 import type { AreaModule, Deps } from "./area.ts";
@@ -179,6 +182,20 @@ async function labelOf(deps: Deps, backend: string, value: unknown, adding: Addi
 	return label;
 }
 
+/**
+ * The installation id a sign-in sends. It is made here only for a home whose store holds no wallet and no lease: in one
+ * that does, the id names every wallet key, so a missing one is refused, never made again (H-261), and the sign-in
+ * waits until the owner puts it back.
+ */
+export async function providerInstallation(deps: Pick<Deps, "home" | "harness">): Promise<string> {
+	const kept = await readInstallationId(deps.home);
+	if (kept !== undefined) return kept;
+	const wallets = await deps.harness.snapshot(Wallets, context);
+	if (wallets !== undefined && (Object.keys(wallets.wallets).length > 0 || wallets.lease !== undefined))
+		throw new BadRequest(IDENTITY_LOST, 503, "identity");
+	return installationId(deps.home);
+}
+
 /** The label of another account of the same backend that holds `key` already, if any. */
 async function holding(deps: Deps, id: string, key: string): Promise<string | undefined> {
 	const backend = backendOf(id);
@@ -283,6 +300,8 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 				}
 				// connecting from Add a provider says nothing about using it: the owner picks Use after
 				const use = body.use !== false;
+				// the id it sends, read before anything starts: a home whose id is lost signs in to nothing (H-261)
+				const installation = await providerInstallation(deps);
 				// the latest attempt wins: the earlier one ends, and its callback server with it, before this one binds
 				await end(id, "a newer sign-in replaced this one");
 				let reveal!: (url: string) => void;
@@ -301,7 +320,6 @@ export function providersArea(options: { readonly timeoutMs?: number } = {}): Ar
 				);
 				// a timer never keeps the daemon alive on its own
 				timer.unref();
-				const installation = await deviceId(deps.home);
 				const prompt = (ask: AuthPrompt) => {
 					if (type === "api_key") {
 						// a form's chosen method answers the login's choice; its fields, in order, the rest

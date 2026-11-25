@@ -16,6 +16,7 @@ import { createHash } from "node:crypto";
 import { chmod, cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { RELEASE_MARKER } from "../src/wallet/keystore.ts";
 import { stageMicrovmBundle } from "./microvm-bundle.ts";
 import { stageNotices } from "./notices.ts";
 
@@ -130,7 +131,14 @@ async function stageApp(root: string, out: string, target: Target): Promise<void
 		if (path === "computer") await stageMicrovmBundle({ root, out, target });
 		else await cp(join(root, path), join(app, path), { recursive: true });
 	}
+	await writeReleaseMarker(root, app);
 	await stageDependencies(app, target);
+}
+
+/** What makes the staged app in `app` a release, which keeps its wallets under the released keychain service. */
+export async function writeReleaseMarker(root: string, app: string): Promise<void> {
+	const { version } = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as { version: string };
+	await writeFile(join(app, RELEASE_MARKER), `${JSON.stringify({ release: version })}\n`);
 }
 
 /** The runtime dependencies of the `package.json` and lockfile in `app`, with only what this target loads of them. */

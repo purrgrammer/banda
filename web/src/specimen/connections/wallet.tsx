@@ -1,32 +1,44 @@
 /**
- * Wallets (proposal, docs/wallets.md): every screen and every state the owner can meet. Settings → Wallets; making a
+ * Wallets (docs/wallets.md): every screen and every state the owner can meet. Settings → Wallets; making a
  * wallet and saving its key; a wallet with its balance, its notices and its four tabs; a payment opened; Receive and
  * Send; archive and remove; getting a wallet back online; and payments in the chat, asked and recorded. Each state is
  * named by the machine state it shows (docs/wallets/model/transitions.json), so a review can check one against the other.
  */
 import { CircleSlashIcon, ExternalLinkIcon, WalletIcon } from "lucide-react";
-import { type ReactNode, useContext } from "react";
+import { type ReactNode, useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import { shortAddress } from "../../../../src/wallet/label.ts";
+import { activityRows, incomingRows } from "../../app/wallets.ts";
+import { OFFERED_TABS } from "../../app/where.ts";
+import { Confirm } from "../../chat/Confirm.tsx";
 import { Line } from "../../chat/Line.tsx";
 import { PaymentCard, type PaymentCardProps, PaymentRecord } from "../../chat/PaymentCard.tsx";
 import { AppSettings, SettingsPage } from "../../chat/Settings.tsx";
 import {
+	type ActivityRowView,
 	AgentWallets,
+	ArchivedNotice,
+	archiveWords,
 	CreateWallet,
 	MoveSigning,
+	NoWallet,
 	OFFLINE,
 	OfflineNotice,
+	type OfflineReason,
 	PaymentDetail,
 	Receive,
 	RecipientDetail,
 	RecipientsList,
 	type RecipientView,
-	RemoveBlocked,
+	RemoveRefused,
+	RemovingNotice,
 	RestoreKey,
 	type RpcView,
+	removeWords,
 	SaveKey,
 	Send,
+	type ShownWallet,
 	TransactionList,
 	type TxRowView,
 	WalletAgents,
@@ -35,7 +47,7 @@ import {
 	WalletOptions,
 	WalletPage,
 	WalletsSettings,
-	type WalletView,
+	WhichWallet,
 } from "../../chat/Wallets.tsx";
 import { ATLAS, MARA, OCTO, SANCHO, SETTINGS } from "../fixtures.ts";
 import { Labelled, Section, StageContext } from "../stage.tsx";
@@ -48,7 +60,30 @@ const ANA_LOOKALIKE = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FC";
 const SHOP = "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb";
 const WEATHER_PAYS = "0x8617E340B3D01FA5F11F306F4090FD50E238070D";
 const STRANGER = "0x27b1fdb04752bbc536007a920d24acb045561c26";
-const CODER = "0x52908400098527886E0F7030069857D2E4169EE7";
+/**
+ * The wallets a list shows besides Travel, API credits and Playground, one address each so no two rows look alike:
+ * hashes of a word, which no key is known for.
+ */
+const MORE_WALLETS = [
+	"0xC5da17e956ab65A3e392e96247b70161D7C6783a",
+	"0x0ab927D042b486E5eA51fE904a7199adD6E391c3",
+	"0xcC4112AE56878F50A6E97f2ec048A69Db6A8Ac40",
+	"0xA15539F86A672e18F5a6e00f652AD8FddE30c8f6",
+	"0x6a163B3f21DB9C302aa30536aF3A104c5026C930",
+	"0x7f25F7514193a6be15D9dA1758AFea5c8bdEa28b",
+	"0x343FC36947CAC0Ff1Dca3520beF981380d9df955",
+	"0x380e87F8e85dEd4b43bA3C400F0C6F0e241F85A4",
+	"0xC2dc123abc552a4D3b7777B58eDBaa6f0A60c356",
+	"0x6Ec41BA3EAde3bE20eC731531FA43A8a49EC0846",
+	"0xD25C4e9981240Ba96A46A89F30ca432B8AB658cB",
+	"0xA6d07feF163be3EE7D263679656fB5649dc91D4C",
+	"0x893c552Be8Dd22e180D3a84EE5D4A1756C0C9634",
+	"0xaBeeAE88a1eD96bFbdF2f01b32Ac97474B024894",
+	"0x5d56CAe96a99f575ebF58C372eF64a3Fa46655CA",
+	"0x7E57a1b2C3D4E5f60718293a4B5C6d7E8F90A1b2",
+] as const;
+/** A key shown in the specimen: the one every Ethereum tutorial prints, which nobody's money is behind. */
+const SAMPLE_KEY = "0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318";
 
 /** banda's defaults, as the home's configuration holds them until the owner changes one. */
 const RPC: readonly RpcView[] = [
@@ -61,18 +96,19 @@ const RPC_NO_LOGS: readonly RpcView[] = [
 	{ network: "Base Sepolia", url: "https://sepolia.base.org", byDefault: true, logs: true },
 ];
 
-const TRAVEL: WalletView = {
+const TRAVEL: ShownWallet = {
 	name: "Travel",
 	network: "Base",
 	address: TRAVEL_ADDRESS,
 	usdc: "182.40",
 	eth: "0.0031",
-	fiat: "≈ €171.95 at 10:42",
 	read: "1 min ago, at block 23,145,880",
 	backup: "saved",
 	agents: [MARA, SANCHO],
 };
-const CREDITS: WalletView = {
+/** Travel with its balance in the owner's currency too: a later slice's, never this build's. */
+const TRAVEL_PRICED: ShownWallet = { ...TRAVEL, fiat: "≈ €171.95 at 10:42" };
+const CREDITS: ShownWallet = {
 	name: "API credits",
 	network: "Base",
 	address: CREDITS_ADDRESS,
@@ -82,9 +118,10 @@ const CREDITS: WalletView = {
 	backup: "skipped",
 	agents: [OCTO],
 };
-const TEST: WalletView = {
+const TEST: ShownWallet = {
 	name: "Playground",
 	network: "Base Sepolia",
+	testnet: true,
 	address: SHOP,
 	usdc: "1000.00",
 	eth: "0.5000",
@@ -92,12 +129,11 @@ const TEST: WalletView = {
 	backup: "saved",
 	agents: [ATLAS],
 };
-const NEW_WALLET: WalletView = {
+const NEW_WALLET: ShownWallet = {
 	...TRAVEL,
 	name: "Travel",
 	usdc: "0.00",
 	eth: "0.0000",
-	fiat: undefined,
 	backup: "unsaved",
 	agents: [],
 };
@@ -152,7 +188,7 @@ const ROWS: readonly TxRowView[] = [
 		id: "5",
 		day: "Today",
 		direction: "in",
-		counterpart: short(STRANGER),
+		counterpart: shortAddress(STRANGER),
 		amount: "100.00",
 		token: "USDC",
 		state: "received",
@@ -186,7 +222,7 @@ const ROWS: readonly TxRowView[] = [
 		day: "Yesterday",
 		direction: "out",
 		by: SANCHO,
-		counterpart: short(STRANGER),
+		counterpart: shortAddress(STRANGER),
 		amount: "300.00",
 		token: "USDC",
 		state: "refused",
@@ -231,13 +267,46 @@ const ROWS: readonly TxRowView[] = [
 		id: "12",
 		day: "2 Nov",
 		direction: "in",
-		counterpart: short(ANA),
+		counterpart: "another address",
 		amount: "0.0050",
 		token: "ETH",
 		state: "received",
 		time: "16:40",
 	},
 ];
+
+/** When the specimen's incoming rows are read. */
+const SPECIMEN_NOW = Date.UTC(2026, 10, 24, 11);
+
+/** Money that came in, as the daemon answers it (`IncomingView`): USDC by its logs, ETH by a balance. */
+const INCOMING = [
+	{
+		id: "0xaa:1",
+		asset: "usdc",
+		amount: "100000000",
+		from: STRANGER,
+		block: 23_145_870,
+		at: SPECIMEN_NOW - 2 * 60_000,
+		confirmed: false,
+	},
+	{
+		id: "native:23145100:x",
+		asset: "native",
+		amount: "5000000000000000",
+		block: 23_145_100,
+		at: SPECIMEN_NOW - 26 * 3_600_000,
+		confirmed: true,
+	},
+	{
+		id: "0xbb:4",
+		asset: "usdc",
+		amount: "82400000",
+		from: ANA,
+		block: 22_903_412,
+		at: Date.UTC(2026, 10, 2, 16, 40),
+		confirmed: true,
+	},
+] as const;
 
 /** Every state a row can show, one each, so the list's words and marks are reviewed together. */
 const EVERY_STATE: readonly TxRowView[] = (
@@ -290,7 +359,7 @@ const EVERY_STATE: readonly TxRowView[] = (
 			id: "i1",
 			day: "What the chain alone tells",
 			direction: "in",
-			counterpart: short(STRANGER),
+			counterpart: shortAddress(STRANGER),
 			amount: "100.00",
 			token: "USDC",
 			state: "received",
@@ -307,10 +376,6 @@ const EVERY_STATE: readonly TxRowView[] = (
 			time: "11:05",
 		},
 	]);
-
-function short(address: string) {
-	return `${address.slice(0, 6)}…${address.slice(-4)}`;
-}
 
 const RECIPIENTS: readonly RecipientView[] = [
 	{
@@ -352,6 +417,28 @@ const RECIPIENTS: readonly RecipientView[] = [
 			{ agent: SANCHO, rule: "deny" },
 		],
 	},
+];
+
+/** Each offline reason a Settings row can say, one wallet each, and a balance unread and one being read. */
+export const OFFLINE_ROWS: readonly ShownWallet[] = [
+	{ ...TRAVEL, offline: "locked" },
+	{ ...CREDITS, name: "API credits", offline: "key_missing" },
+	{ ...TEST, name: "Groceries", network: "Base", testnet: false, offline: "wrong_key" },
+	{ ...TRAVEL, name: "Household", address: MORE_WALLETS[0], offline: "other_home" },
+	{ ...CREDITS, name: "Side project", address: MORE_WALLETS[1], offline: "coding_agent" },
+	{ ...NEW_WALLET, name: "Gifts", address: MORE_WALLETS[2], offline: "creating" },
+	{ ...TRAVEL, name: "Old card", address: MORE_WALLETS[3], offline: "code" },
+	{ ...TRAVEL, name: "Rent", address: MORE_WALLETS[4], offline: "denied" },
+	{ ...CREDITS, name: "Bills", address: MORE_WALLETS[5], offline: "timeout" },
+	{ ...TRAVEL, name: "Books", address: MORE_WALLETS[6], offline: "ambiguous" },
+	{ ...CREDITS, name: "Music", address: MORE_WALLETS[7], offline: "no_keychain" },
+	{ ...TRAVEL, name: "Garden", address: MORE_WALLETS[8], offline: "keychain" },
+	{ ...CREDITS, name: "Lab", address: MORE_WALLETS[9], offline: "debugging" },
+	{ ...TEST, name: "Local", address: MORE_WALLETS[13], offline: "chain" },
+	{ ...CREDITS, name: "Taxes", address: MORE_WALLETS[14], offline: "identity" },
+	{ ...TRAVEL, name: "Savings", address: MORE_WALLETS[10], usdc: null, eth: null },
+	{ ...TRAVEL, name: "Just made", address: MORE_WALLETS[11], usdc: null, eth: null, reading: true },
+	{ ...TRAVEL, name: "Still making", address: MORE_WALLETS[15], usdc: null, eth: null, unmade: "creating" },
 ];
 
 /** A screen at a fixed height, as it fills the pane: the label above names its state. */
@@ -397,7 +484,7 @@ function WalletsSettingsSection() {
 	return (
 		<Section
 			id="wallets-settings"
-			note="Settings → Wallets: every wallet with its balance (read, dated, never zero when unknown), the agents it serves and its one mark: Not backed up, or why it can't pay. Archived wallets fold beneath; each network's RPC is a named choice."
+			note="Settings → Wallets: every wallet with its balance (read, dated, never zero when unknown), the agents it serves and its one mark: Not backed up, or why it can't pay; a test network's wallet is marked Testnet. A wallet whose key isn't saved reminds once, in a toast, when it first holds more than a little (H-273). Archived wallets fold beneath; each network's RPC is a named choice."
 		>
 			<div className="grid gap-6">
 				<Screen label="No wallet yet" tall>
@@ -408,33 +495,19 @@ function WalletsSettingsSection() {
 						wallets={
 							<WalletsSettings
 								wallets={[TRAVEL, CREDITS, TEST]}
-								archived={[{ ...TEST, name: "Old travel", address: ANA, usdc: "0.00", eth: "0.0000", agents: [] }]}
+								archived={[
+									{ ...TEST, name: "Old travel", address: MORE_WALLETS[12], usdc: "0.00", eth: "0.0000", agents: [] },
+								]}
 								rpc={RPC}
 							/>
 						}
 					/>
 				</Screen>
 				<Screen
-					label="Each offline reason, one per wallet (signing: locked, key_missing, wrong_key, other_home; a coding agent that doesn't ask, until the signer helper, OD-11; wallet: creating; C17: code); a balance the RPC didn't give"
+					label="Each offline reason, one per wallet (signing: locked, key_missing, wrong_key, other_home; a coding agent that doesn't ask, until the signer helper, OD-11; wallet: creating; C17: code; the signer's codes: denied, timeout, ambiguous, no_keychain, keychain, debugging; the network's RPC: chain, H-187); a balance the RPC didn't give, and one being read for the first time"
 					tall
 				>
-					<SettingsWallets
-						wallets={
-							<WalletsSettings
-								wallets={[
-									{ ...TRAVEL, offline: "locked" },
-									{ ...CREDITS, name: "API credits", offline: "key_missing" },
-									{ ...TEST, name: "Groceries", network: "Base", offline: "wrong_key" },
-									{ ...TRAVEL, name: "Household", address: SHOP, offline: "other_home" },
-									{ ...CREDITS, name: "Side project", address: CODER, offline: "coding_agent" },
-									{ ...NEW_WALLET, name: "Gifts", address: ANA, offline: "creating" },
-									{ ...TRAVEL, name: "Old card", address: STRANGER, offline: "code" },
-									{ ...TRAVEL, name: "Savings", address: WEATHER_PAYS, usdc: null, eth: null },
-								]}
-								rpc={RPC}
-							/>
-						}
-					/>
+					<SettingsWallets wallets={<WalletsSettings wallets={OFFLINE_ROWS} rpc={RPC} />} />
 				</Screen>
 				<Screen label="Host mode: every wallet offline (signing: offline_host_mode)">
 					<SettingsWallets
@@ -453,8 +526,90 @@ function WalletsSettingsSection() {
 				<Screen label="Base set to an RPC that serves no logs (the owner's choice, in the home's configuration)" tall>
 					<SettingsWallets wallets={<WalletsSettings wallets={[TRAVEL]} rpc={RPC_NO_LOGS} />} />
 				</Screen>
+				<Screen
+					label="Changing Base's RPC: typed fresh, the one set shown only masked; a refused one says why (H-195, H-196)"
+					tall
+				>
+					<SettingsWallets
+						wallets={
+							<WalletsSettings
+								wallets={[TRAVEL]}
+								rpc={RPC_NO_LOGS}
+								editing={{
+									network: "Base",
+									error: "That RPC is not taken: its host name resolves to a private address",
+								}}
+							/>
+						}
+					/>
+				</Screen>
+				<Screen label="A network with no RPC banda can use, and no USDC: ETH alone" tall>
+					<SettingsWallets
+						wallets={
+							<WalletsSettings
+								wallets={[{ ...TEST, name: "Local", network: "Local chain", usdc: undefined, eth: "10000" }]}
+								rpc={[
+									...RPC,
+									{
+										network: "Local chain",
+										url: "http://127.0.0.1:8545",
+										byDefault: false,
+										logs: true,
+										problem: "an RPC over plain http is taken only at localhost",
+									},
+								]}
+							/>
+						}
+					/>
+				</Screen>
 				<Screen label="No keychain this computer can reach (headless Linux)">
 					<SettingsWallets wallets={<WalletsSettings wallets={[]} keychain="none" rpc={RPC} />} />
+				</Screen>
+				<Screen
+					label="On the computer: keys without a wallet are looked for only when the owner asks (H-009, H-037)"
+					tall
+				>
+					<SettingsWallets wallets={<WalletsSettings wallets={[TRAVEL]} rpc={RPC} onFindOrphans={() => {}} />} />
+				</Screen>
+				<Screen label="Looked, and the keychain holds no key without a wallet" tall>
+					<SettingsWallets
+						wallets={<WalletsSettings wallets={[TRAVEL]} rpc={RPC} onFindOrphans={() => {}} orphanSearch="none" />}
+					/>
+				</Screen>
+				<Screen label="A key the keychain holds that no wallet names (H-045)" tall>
+					<SettingsWallets wallets={<WalletsSettings wallets={[TRAVEL]} rpc={RPC} orphans={[STRANGER]} />} />
+				</Screen>
+				<Screen label="A key without a wallet in the desktop app: Export, and Delete once confirmed (H-045)" tall>
+					<SettingsWallets
+						wallets={
+							<WalletsSettings
+								wallets={[TRAVEL]}
+								rpc={RPC}
+								orphans={[STRANGER]}
+								onExportOrphan={() => {}}
+								onDeleteOrphan={() => {}}
+							/>
+						}
+					/>
+				</Screen>
+				<Screen label="A network banda ships no RPC for: no way back to a default" tall>
+					<SettingsWallets
+						wallets={
+							<WalletsSettings
+								wallets={[TRAVEL]}
+								rpc={[
+									...RPC,
+									{
+										network: "Local chain",
+										url: "http://127.0.0.1:8545",
+										byDefault: false,
+										logs: true,
+										shipped: false,
+									},
+								]}
+							/>
+						}
+					/>
 				</Screen>
 			</div>
 		</Section>
@@ -474,6 +629,9 @@ function WalletCreateSection() {
 				<Screen label="The form (wallet: none)">
 					<CreateWallet name="" phone={phone} />
 				</Screen>
+				<Screen label="In a browser, not the desktop app: an extension can read the key shown next (H-272)">
+					<CreateWallet name="Travel" inBrowser phone={phone} />
+				</Screen>
 				<Screen label="From Mara's settings: Give Mara a wallet">
 					<CreateWallet name="Mara's travel" forAgent={MARA} phone={phone} />
 				</Screen>
@@ -483,11 +641,26 @@ function WalletCreateSection() {
 				<Screen label="The keychain doesn't answer: it waits, and resumes (wallet: creating, E1)">
 					<CreateWallet state="waiting" name="Travel" phone={phone} />
 				</Screen>
+				<Screen label="Made, but its ready commit not on disk yet: the same request again finishes it and opens its key (C21)">
+					<CreateWallet state="unsynced" name="Travel" phone={phone} />
+				</Screen>
 				<Screen label="An item already there, or a read-back that differs: nothing kept (wallet: dropped)">
 					<CreateWallet state="failed" name="Travel" phone={phone} />
 				</Screen>
 				<Screen label="No keychain">
 					<CreateWallet state="no_keychain" name="Travel" phone={phone} />
+				</Screen>
+				<Screen label="Refused: the keychain is locked, nothing made (no wallet: E1)">
+					<CreateWallet state="refused" reason="locked" name="Travel" phone={phone} />
+				</Screen>
+				<Screen label="Refused: another home signs for this home's wallets, Make waits for the move (UC-21 A1)">
+					<CreateWallet state="refused" reason="other_home" name="Travel" phone={phone} onMove={() => {}} />
+				</Screen>
+				<Screen label="Refused: another home signs, and the move is not here (a browser, a phone)">
+					<CreateWallet state="refused" reason="other_home" name="Travel" phone={phone} />
+				</Screen>
+				<Screen label="A name another wallet has: said, and allowed (H-041)">
+					<CreateWallet name="Travel" taken phone={phone} />
 				</Screen>
 			</div>
 		</Section>
@@ -499,17 +672,41 @@ function WalletKeySection() {
 	return (
 		<Section
 			id="wallet-key"
-			note="Saving the key right after the wallet is made, on this computer only: why, the key shown once and copied (the clipboard clears itself), then pasted back to check. Skipped, the wallet says Not backed up. Later, only the banda app on this computer shows it again, after the computer confirms it's you."
+			note="Saving the key right after the wallet is made, on this computer only: why, the key shown once and copied (the clipboard clears itself), then pasted back to check. Skipped, the wallet says Not backed up. Later, only the banda app on this computer shows it again, after the computer confirms it's you; a computer that can't (no Touch ID) shows it only as the wallet is made, and every step says so (H-266)."
 		>
 			<div className="grid gap-6">
-				<Screen label="Why it matters (wallet: ready_unsaved)">
-					<SaveKey step="intro" wallet={NEW_WALLET} phone={phone} />
+				<Screen label="Why it matters (wallet: ready_unsaved), in the desktop app that confirms it's you later">
+					<SaveKey step="intro" wallet={NEW_WALLET} phone={phone} laterKey="here" />
+				</Screen>
+				<Screen label="In the desktop app on a computer that can't confirm it's you: shown only now (H-266)">
+					<SaveKey step="intro" wallet={NEW_WALLET} phone={phone} laterKey="never" />
+				</Screen>
+				<Screen label="In a browser: its extensions can read the key, so it points to the desktop app (H-272)">
+					<SaveKey step="intro" wallet={NEW_WALLET} phone={phone} inBrowser />
 				</Screen>
 				<Screen label="Shown">
-					<SaveKey step="shown" wallet={NEW_WALLET} phone={phone} />
+					<SaveKey step="shown" wallet={NEW_WALLET} secret={SAMPLE_KEY} phone={phone} />
 				</Screen>
 				<Screen label="Copied, the clipboard counting down">
-					<SaveKey step="copied" wallet={NEW_WALLET} phone={phone} />
+					<SaveKey step="copied" wallet={NEW_WALLET} secret={SAMPLE_KEY} clears="0:52" phone={phone} />
+				</Screen>
+				<Screen label="Copied in a browser: the clear needs banda open">
+					<SaveKey step="copied" wallet={NEW_WALLET} secret={SAMPLE_KEY} clears="0:52" clearsWithPage phone={phone} />
+				</Screen>
+				<Screen label="Hidden again after 30 seconds (H-270)">
+					<SaveKey step="copied" wallet={NEW_WALLET} secret={SAMPLE_KEY} hidden clears="0:21" phone={phone} />
+				</Screen>
+				<Screen label="Switched away: the key left the screen (H-274)">
+					<SaveKey step="shown" wallet={NEW_WALLET} phone={phone} />
+				</Screen>
+				<Screen label="The key couldn't be shown right after the wallet was made (C16: another connection, the keychain)">
+					<SaveKey step="refused" wallet={NEW_WALLET} phone={phone} />
+				</Screen>
+				<Screen label="Back after a reload, not backed up: check a copy already saved, or skip for now">
+					<SaveKey step="app_only" wallet={NEW_WALLET} phone={phone} onCheckCopy={() => {}} onSkip={() => {}} />
+				</Screen>
+				<Screen label="On a test network: marked beside the address (H-040)">
+					<SaveKey step="intro" wallet={{ ...TEST, backup: "unsaved" }} phone={phone} />
 				</Screen>
 				<Screen label="Check the copy">
 					<SaveKey step="check" wallet={NEW_WALLET} phone={phone} />
@@ -523,10 +720,19 @@ function WalletKeySection() {
 				<Screen label="The 10 minutes passed">
 					<SaveKey step="closed" wallet={NEW_WALLET} phone={phone} />
 				</Screen>
+				<Screen label="Later, in a browser on this computer: the desktop app shows it, on a Mac with Touch ID">
+					<SaveKey step="app_only" wallet={TRAVEL} phone={phone} />
+				</Screen>
+				<Screen label="Later, in the desktop app on a computer that can't confirm it's you: never again (H-266)">
+					<SaveKey step="app_only" wallet={TRAVEL} phone={phone} laterKey="never" onCheckCopy={() => {}} />
+				</Screen>
+				<Screen label="The key couldn't be shown, on a computer that can't confirm it's you">
+					<SaveKey step="refused" wallet={NEW_WALLET} phone={phone} laterKey="never" />
+				</Screen>
 				<Screen label="Later, on this computer: confirm it's you first">
 					<SaveKey step="confirm_host" wallet={TRAVEL} phone={phone} />
 				</Screen>
-				<Screen label="On a phone or another browser: never">
+				<Screen label="On a phone or another device: never">
 					<SaveKey step="elsewhere" wallet={TRAVEL} phone={phone} />
 				</Screen>
 			</div>
@@ -536,35 +742,52 @@ function WalletKeySection() {
 
 // ── A wallet ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The money that came in, as the app's activity lists it in this slice (no payment goes out yet), with a note that the
+ * key was shown between them: built by the app's own `activityRows`, so ETH comes from "another address", never a
+ * sender a balance cannot tell.
+ */
+const INCOMING_ROWS: readonly ActivityRowView[] = activityRows(
+	INCOMING,
+	[{ at: SPECIMEN_NOW - 3 * 3_600_000, kind: "later" }],
+	SPECIMEN_NOW,
+	undefined,
+	false,
+);
+
+/** A wallet whose creation the keychain never finished: nothing is read for it yet. */
+const UNMADE: ShownWallet = { ...TRAVEL, name: "Savings", usdc: null, eth: null, unmade: "creating" };
+
 function WalletPageSection() {
 	const phone = usePhone();
 	return (
 		<Section
 			id="wallet-page"
-			note="A wallet, opened: its balance as the page's one figure, Send and Receive, then Activity, Recipients, Agents and Wallet. Each tab as it opens."
+			note="A wallet, opened, as this build has it: its balance as the page's one figure and Receive, then Activity (what came in), Agents and Wallet. Each tab as it opens."
 		>
 			<div className="grid gap-6">
 				<Screen label="Activity" tall>
-					<WalletPage wallet={TRAVEL} phone={phone} activity={<TransactionList rows={ROWS} more />} />
-				</Screen>
-				<Screen label="Recipients" tall>
 					<WalletPage
 						wallet={TRAVEL}
 						phone={phone}
-						tab="recipients"
-						recipients={<RecipientsList recipients={RECIPIENTS} />}
+						tabs={OFFERED_TABS}
+						sends={false}
+						activity={<TransactionList rows={INCOMING_ROWS} more />}
+						onCopyAddress={() => {}}
 					/>
 				</Screen>
 				<Screen label="Agents" tall>
 					<WalletPage
 						wallet={TRAVEL}
 						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
 						tab="agents"
 						agents={
 							<WalletAgents
 								agents={[
-									{ agent: MARA, on: true, detail: "Paid 4 times this week" },
-									{ agent: SANCHO, on: true, detail: "Paid once this week" },
+									{ agent: MARA, on: true },
+									{ agent: SANCHO, on: true },
 									{ agent: OCTO, on: false },
 									{ agent: ATLAS, on: false },
 								]}
@@ -576,16 +799,78 @@ function WalletPageSection() {
 					<WalletPage
 						wallet={TRAVEL}
 						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
 						tab="wallet"
 						options={<WalletOptions wallet={TRAVEL} rpc={RPC[0] as RpcView} />}
+					/>
+				</Screen>
+				<Screen label="On a test network: marked beside its address and its network (H-040)" tall>
+					<WalletPage
+						wallet={TEST}
+						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
+						tab="wallet"
+						options={<WalletOptions wallet={TEST} rpc={RPC[1] as RpcView} />}
+					/>
+				</Screen>
+				<Screen label="Still being made (its keychain didn't answer): nothing is read, nor archived or removed" tall>
+					<WalletPage
+						wallet={UNMADE}
+						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
+						activity={<TransactionList rows={[]} unmade="creating" />}
+						onCopyAddress={() => {}}
+					/>
+				</Screen>
+				<Screen label="Wallet, still being made" tall>
+					<WalletPage
+						wallet={UNMADE}
+						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
+						tab="wallet"
+						options={<WalletOptions wallet={UNMADE} rpc={RPC[0] as RpcView} />}
+					/>
+				</Screen>
+				<Screen label="Not in this home: removed, or another home's link">
+					<NoWallet phone={phone} parent={{ title: "Wallets", href: "#" }} />
+				</Screen>
+				<Screen label="A link two wallets answer: their addresses share their ends, so it asks which">
+					<WhichWallet
+						phone={phone}
+						parent={{ title: "Wallets", href: "#" }}
+						wallets={[
+							{ name: "Groceries", address: "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", network: "Base" },
+							{
+								name: "Travel fund for the long summer",
+								address: "0x5AaE00000000000000000000000000000000eAED",
+								network: "Base Sepolia",
+								testnet: true,
+							},
+						]}
 					/>
 				</Screen>
 				<Screen label="Wallet, not backed up, on a phone (no key here)" tall>
 					<WalletPage
 						wallet={CREDITS}
 						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
 						tab="wallet"
 						options={<WalletOptions wallet={CREDITS} host={false} rpc={RPC[0] as RpcView} />}
+					/>
+				</Screen>
+				<Screen label="Wallet, in the desktop app on a computer that can't confirm it's you: no Show key (H-266)" tall>
+					<WalletPage
+						wallet={TRAVEL}
+						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
+						tab="wallet"
+						options={<WalletOptions wallet={TRAVEL} shows={false} laterKey="never" rpc={RPC[0] as RpcView} />}
 					/>
 				</Screen>
 			</div>
@@ -593,9 +878,9 @@ function WalletPageSection() {
 	);
 }
 
-function WalletNoticesSection() {
+function WalletPagePaysSection() {
 	const phone = usePhone();
-	const page = (wallet: WalletView, notices: ReactNode, extra?: { canSend?: boolean; canReceive?: boolean }) => (
+	const page = (wallet: ShownWallet, notices: ReactNode, extra?: { canSend?: boolean }) => (
 		<WalletPage
 			wallet={wallet}
 			phone={phone}
@@ -606,30 +891,44 @@ function WalletNoticesSection() {
 	);
 	return (
 		<Section
-			id="wallet-notices"
-			note="What a wallet says about itself, at most one notice of each kind, each with its one fix. Offline, Send waits; with code at the address, Receive gives way to the warning."
+			id="wallet-page-pays"
+			note="A wallet that pays, as the slices that send and pay x402 will open it: Send beside Receive, its balance in the owner's currency, its payments in Activity in every state, Recipients with each one's rule per agent, and the notices only paying has."
 		>
 			<div className="grid gap-6">
-				<Screen label="Not backed up (wallet: ready_skipped)" tall>
-					{page(
-						CREDITS,
-						<WalletNotice
-							icon={OFFLINE.key_missing.icon}
-							title="Not backed up"
-							body="Now that it holds money: if this computer is lost, so is what's in this wallet."
-							action="Save your key"
-						/>,
-					)}
+				<Labelled label="Every state a row shows: a stored Queued reads In line, Signed reads May have sent; a payment that didn't leave is struck through">
+					<TransactionList rows={EVERY_STATE} />
+				</Labelled>
+				<Screen label="Activity, with payments" tall>
+					<WalletPage
+						wallet={TRAVEL_PRICED}
+						phone={phone}
+						activity={<TransactionList rows={ROWS} more />}
+						onCopyAddress={() => {}}
+					/>
 				</Screen>
-				{(["locked", "key_missing", "wrong_key", "other_home", "host_mode", "coding_agent", "code"] as const).map(
-					(reason) => (
-						<Screen key={reason} label={`Offline: ${OFFLINE[reason].title} (${reason})`} tall>
-							{page({ ...TRAVEL, offline: reason }, <OfflineNotice reason={reason} />)}
-						</Screen>
-					),
-				)}
-				<Screen label="The network isn't answering: unknown, never zero" tall>
-					{page({ ...TRAVEL, usdc: null, eth: null, last: "182.40 USDC at 09:12" }, undefined)}
+				<Screen label="Recipients" tall>
+					<WalletPage
+						wallet={TRAVEL_PRICED}
+						phone={phone}
+						tab="recipients"
+						recipients={<RecipientsList recipients={RECIPIENTS} />}
+					/>
+				</Screen>
+				<Screen label="Agents, with what each paid" tall>
+					<WalletPage
+						wallet={TRAVEL_PRICED}
+						phone={phone}
+						tab="agents"
+						agents={
+							<WalletAgents
+								agents={[
+									{ agent: MARA, on: true, detail: "Paid 4 times this week" },
+									{ agent: SANCHO, on: true, detail: "Paid once this week" },
+									{ agent: OCTO, on: false },
+								]}
+							/>
+						}
+					/>
 				</Screen>
 				<Screen label="USDC but no ETH for the network fee" tall>
 					{page(
@@ -664,16 +963,103 @@ function WalletNoticesSection() {
 						/>,
 					)}
 				</Screen>
-				<Screen label="Archived (wallet: archived)" tall>
+			</div>
+		</Section>
+	);
+}
+
+/**
+ * The offline reasons a wallet's page shows as its notice here, one screen each: every reason, since a wallet's page
+ * draws a notice, its body and its one fix, for each (WalletPages.tsx `Notices`), and a Settings row shows the title
+ * alone (H-317).
+ */
+export const NOTICE_REASONS = [
+	"creating",
+	"locked",
+	"denied",
+	"timeout",
+	"ambiguous",
+	"no_keychain",
+	"keychain",
+	"debugging",
+	"key_missing",
+	"wrong_key",
+	"other_home",
+	"host_mode",
+	"coding_agent",
+	"identity",
+	"chain",
+	"code",
+] as const satisfies readonly OfflineReason[];
+
+/** The reasons whose fix is made elsewhere, shown as a browser sees them, one screen each. */
+export const NOT_HERE_REASONS = [
+	"key_missing",
+	"wrong_key",
+	"other_home",
+	"chain",
+] as const satisfies readonly OfflineReason[];
+
+function WalletNoticesSection() {
+	const phone = usePhone();
+	const page = (wallet: ShownWallet, notices: ReactNode) => (
+		<WalletPage
+			wallet={wallet}
+			phone={phone}
+			tabs={OFFERED_TABS}
+			sends={false}
+			notices={notices}
+			activity={<TransactionList rows={INCOMING_ROWS} />}
+		/>
+	);
+	return (
+		<Section
+			id="wallet-notices"
+			note="What a wallet says about itself in this build, at most one notice of each kind, each with its one fix. With code at the address, Receive gives way to the warning. The notices only paying has are with A wallet that pays."
+		>
+			<div className="grid gap-6">
+				<Screen label="Not backed up (wallet: ready_skipped)" tall>
 					{page(
-						{ ...TRAVEL, archived: true },
+						CREDITS,
 						<WalletNotice
-							icon={OFFLINE.other_home.icon}
-							title="Archived"
-							body="Agents can't use it and it doesn't send. Money can still arrive."
-							action="Unarchive"
+							icon={OFFLINE.key_missing.icon}
+							title="Not backed up"
+							body="Now that it holds money: if this computer is lost, so is what's in this wallet."
+							action="Save your key"
 						/>,
 					)}
+				</Screen>
+				{NOTICE_REASONS.map((reason) => (
+					<Screen key={reason} label={`Offline: ${OFFLINE[reason].title} (${reason})`} tall>
+						{page({ ...TRAVEL, offline: reason }, <OfflineNotice reason={reason} />)}
+					</Screen>
+				))}
+				{NOT_HERE_REASONS.map((reason) => (
+					<Screen
+						key={reason}
+						label={`Offline, its fix not here: ${OFFLINE[reason].title} (${reason}, a browser)`}
+						tall
+					>
+						{page({ ...TRAVEL, offline: reason }, <OfflineNotice reason={reason} actionable={false} />)}
+					</Screen>
+				))}
+				{(["key_missing", "wrong_key"] as const).map((reason) => (
+					<Screen
+						key={reason}
+						label={`Offline, its key never saved: ${OFFLINE[reason].title} (${reason}, backup skipped): nothing sent there can be spent`}
+						tall
+					>
+						{page(
+							{ ...TRAVEL, offline: reason, backup: "skipped" },
+							<OfflineNotice reason={reason} unsaved actionable={reason === "key_missing"} />,
+						)}
+					</Screen>
+				))}
+				<Screen label="The network isn't answering: unknown, never zero" tall>
+					{page({ ...TRAVEL, usdc: null, eth: null, last: "182.40 USDC at 09:12" }, undefined)}
+				</Screen>
+				<Screen label="Archived (wallet: archived)" tall>
+					{page({ ...TRAVEL, archived: true }, <ArchivedNotice />)}
 				</Screen>
 			</div>
 		</Section>
@@ -685,26 +1071,80 @@ function WalletActivitySection() {
 	return (
 		<Section
 			id="wallet-activity"
-			note="Activity: every payment from the store in its state (a stored Queued reads In line; Signed reads May have sent), x402 payments, and what the chain alone tells: money in, and a nonce spent outside banda. A payment that didn't leave is struck through."
+			note="Activity as this build has it: the money that came in, read from the chain, saying what it may miss. Payments join it with sending (A wallet that pays)."
 		>
 			<div className="grid gap-6">
-				<Labelled label="Every state a row shows">
-					<TransactionList rows={EVERY_STATE} />
-				</Labelled>
 				<Screen label="Nothing yet">
-					<WalletPage wallet={NEW_WALLET} phone={phone} activity={<TransactionList rows={[]} />} canReceive />
+					<WalletPage
+						wallet={NEW_WALLET}
+						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
+						activity={<TransactionList rows={[]} />}
+						canReceive
+					/>
 				</Screen>
-				<Screen label="Reading">
-					<WalletPage wallet={TRAVEL} phone={phone} activity={<TransactionList rows={[]} loading />} />
-				</Screen>
-				<Screen label="Base set to an RPC that serves no logs: money in isn't listed" tall>
+				<Screen label="Before any send exists: the money that came in alone, one row still confirming (UC-14 A3)" tall>
 					<WalletPage
 						wallet={TRAVEL}
 						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
+						activity={<TransactionList rows={incomingRows(INCOMING, SPECIMEN_NOW)} />}
+					/>
+				</Screen>
+				<Screen label="Reading">
+					<WalletPage
+						wallet={TRAVEL}
+						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
+						activity={<TransactionList rows={[]} loading />}
+					/>
+				</Screen>
+				<Screen label="The activity couldn't be read">
+					<WalletPage
+						wallet={TRAVEL}
+						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
 						activity={
 							<TransactionList
-								rows={ROWS.filter((row) => row.direction === "out").slice(0, 5)}
-								incomplete="Money coming in isn't listed: mainnet.base.org refuses log queries. Choose another RPC in Settings → Wallets."
+								rows={[]}
+								failed="banda on this computer didn't answer. Check it's still running."
+								onRetry={() => {}}
+							/>
+						}
+					/>
+				</Screen>
+				<Screen label="The activity couldn't be read again: the last rows, maybe out of date" tall>
+					<WalletPage
+						wallet={TRAVEL}
+						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
+						activity={
+							<TransactionList
+								rows={incomingRows(INCOMING, SPECIMEN_NOW)}
+								failed="banda on this computer didn't answer. Check it's still running."
+								onRetry={() => {}}
+							/>
+						}
+					/>
+				</Screen>
+				<Screen label="Base set to an RPC that serves no logs: USDC in isn't listed, ETH still is" tall>
+					<WalletPage
+						wallet={TRAVEL}
+						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
+						activity={
+							<TransactionList
+								rows={incomingRows(
+									INCOMING.filter((one) => one.asset === "native"),
+									SPECIMEN_NOW,
+								)}
+								incomplete="USDC coming in isn't listed: mainnet.base.org refuses log queries. Choose another RPC in Settings → Wallets."
 							/>
 						}
 					/>
@@ -713,9 +1153,11 @@ function WalletActivitySection() {
 					<WalletPage
 						wallet={TRAVEL}
 						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
 						activity={
 							<TransactionList
-								rows={ROWS.slice(0, 6)}
+								rows={incomingRows(INCOMING, SPECIMEN_NOW)}
 								incomplete="Complete since 2 Nov. banda is still reading earlier blocks."
 							/>
 						}
@@ -1000,7 +1442,7 @@ function WalletRecipientsSection() {
 									{ agent: MARA, rule: "ask" },
 									{ agent: SANCHO, rule: "ask" },
 								],
-								lookalike: `It differs from Ana's address by its last character: ${short(ANA_LOOKALIKE)} here, ${short(ANA)} for Ana.`,
+								lookalike: `It differs from Ana's address by its last character: ${shortAddress(ANA_LOOKALIKE)} here, ${shortAddress(ANA)} for Ana.`,
 							}}
 						/>
 					</RecipientPage>
@@ -1026,14 +1468,14 @@ function WalletAgentsSection() {
 	return (
 		<Section
 			id="wallet-agents"
-			note="Who may spend from a wallet, from the wallet's side and from the agent's: switched on per agent, as any account of a connection. Agents sharing a wallet share its balance and its Deny rules; each keeps its own Always."
+			note="Who may read a wallet, from the wallet's side and from the agent's: switched on per agent, as any account of a connection. An agent it is on for sees its address and balance; agents sharing a wallet share its balance. Spending, with Deny rules the wallet's agents share and an Always each keeps, is in Recipients, a proposal."
 		>
 			<div className="@container w-full min-w-0">
 				<div className="grid gap-6 @2xl:grid-cols-2">
 					<Labelled label="The wallet's Agents tab, shared by two">
 						<WalletAgents
 							agents={[
-								{ agent: MARA, on: true, detail: "Paid 4 times this week" },
+								{ agent: MARA, on: true },
 								{ agent: SANCHO, on: true },
 								{ agent: OCTO, on: false },
 							]}
@@ -1054,11 +1496,58 @@ function WalletAgentsSection() {
 							wallets={[
 								{ wallet: TRAVEL, on: true },
 								{ wallet: { ...CREDITS, offline: "key_missing" }, on: false },
+								{ wallet: TEST, on: false },
 							]}
 						/>
 					</Labelled>
-					<Labelled label="Mara's panel, Access: none yet">
-						<AgentWallets agent="Mara" wallets={[]} />
+					<Labelled label="Mara's panel, Access: a wallet she can't use now says why, its switch still moving (H-317, UC-05)">
+						<AgentWallets
+							agent="Mara"
+							wallets={[
+								{ wallet: { ...TRAVEL, offline: "code" }, on: true },
+								{ wallet: { ...CREDITS, offline: "locked" }, on: true },
+							]}
+						/>
+					</Labelled>
+					<Labelled label="Mara's panel, Access: a balance unknown says since when, and its last reading (C22, H-208)">
+						<AgentWallets
+							agent="Mara"
+							wallets={[
+								{
+									wallet: {
+										...TRAVEL,
+										usdc: null,
+										eth: null,
+										unreachable: "14:02",
+										last: "182.40 USDC at 09:12",
+									},
+									on: true,
+								},
+								{ wallet: { ...TEST, usdc: null, eth: null, reading: true }, on: false },
+							]}
+						/>
+					</Labelled>
+					<Labelled label="Mara's panel, Access: an archived wallet she is on for, its switch still, and why">
+						<AgentWallets
+							agent="Mara"
+							wallets={[
+								{
+									wallet: { ...TRAVEL, archived: true },
+									on: true,
+									disabled: "Archived wallets serve no agent. Unarchive it first.",
+								},
+							]}
+						/>
+					</Labelled>
+					<Labelled label="Mara's panel, Access: none yet, at the panel's width">
+						<div className="w-[var(--panel-width)] max-w-full">
+							<AgentWallets agent="Mara" wallets={[]} />
+						</div>
+					</Labelled>
+					<Labelled label="A long name, at the panel's width">
+						<div className="w-[var(--panel-width)] max-w-full">
+							<AgentWallets agent="Bartholomew the Accountant" wallets={[]} />
+						</div>
 					</Labelled>
 				</div>
 			</div>
@@ -1076,14 +1565,50 @@ function WalletReceiveSection() {
 			note="Receive: the address in full and in groups, its QR (the plain address) and Copy, and the network, said plainly. Withheld until the key is saved or skipped; with code at the address, a warning instead."
 		>
 			<div className="grid gap-6">
+				<Screen label="Checking the address">
+					<Receive wallet={TRAVEL} state="checking" phone={phone} />
+				</Screen>
 				<Screen label="Ready" tall>
 					<Receive wallet={TRAVEL} phone={phone} />
+				</Screen>
+				<Screen label="Ready, on a test network: the caption marks it (H-040)" tall>
+					<Receive wallet={TEST} phone={phone} />
+				</Screen>
+				<Screen label="Ready, its key's saving skipped: no saved copy, and Save your key (H-005)" tall>
+					<Receive wallet={CREDITS} phone={phone} onSaveKey={() => {}} />
 				</Screen>
 				<Screen label="Before the key is saved or skipped">
 					<Receive wallet={NEW_WALLET} state="save_first" phone={phone} />
 				</Screen>
 				<Screen label="The address has code (C17)">
 					<Receive wallet={TRAVEL} state="code" phone={phone} />
+				</Screen>
+				<Screen label="The address has code, on the computer banda runs on: acknowledge it (H-157)">
+					<Receive wallet={TRAVEL} state="code" phone={phone} onAcknowledge={() => {}} />
+				</Screen>
+				<Screen label="The address has code, acknowledged: the warning stays">
+					<Receive wallet={TRAVEL} state="code" acknowledged phone={phone} />
+				</Screen>
+				<Screen label="The address couldn't be checked: never shown unchecked">
+					<Receive wallet={TRAVEL} state="unchecked" phone={phone} onRetry={() => {}} />
+				</Screen>
+				<Screen label="The daemon answered another address than the wallet's: none shown or copied (H-261)">
+					<Receive wallet={TRAVEL} state="mismatch" phone={phone} onRetry={() => {}} />
+				</Screen>
+				<Screen label="Archived: no address until it is unarchived, and nothing asked of banda">
+					<Receive wallet={TRAVEL} state="archived" phone={phone} onUnarchive={() => {}} />
+				</Screen>
+				<Screen label="Being removed: no address">
+					<Receive wallet={TRAVEL} state="removing" phone={phone} />
+				</Screen>
+				<Screen label="Still being made: no address yet">
+					<Receive wallet={NEW_WALLET} state="creating" phone={phone} />
+				</Screen>
+				<Screen label="Its key never saved, and not checked yet in this process: never shown unchecked (H-021, H-261)">
+					<Receive wallet={{ ...TRAVEL, backup: "skipped" }} state="key_unchecked" phone={phone} onRetry={() => {}} />
+				</Screen>
+				<Screen label="No key opens it and none was saved (key_missing or wrong_key, backup skipped): never shown">
+					<Receive wallet={{ ...TRAVEL, backup: "skipped", offline: "key_missing" }} state="unopenable" phone={phone} />
 				</Screen>
 			</div>
 		</Section>
@@ -1185,92 +1710,125 @@ function WalletSendSection() {
 
 // ── Archive, remove, back online ───────────────────────────────────────────────────────────────────────────────────
 
+/** A removal the daemon refused, as the app opens it from Remove: the real dialog, opened here by its button. */
+function Refused({ wallet, reason }: { wallet: string; reason: string }) {
+	const [open, setOpen] = useState(false);
+	return (
+		<>
+			<Button variant="destructive" size="sm" className="self-start" onClick={() => setOpen(true)}>
+				Remove
+			</Button>
+			<RemoveRefused wallet={wallet} reason={open ? reason : undefined} onClose={() => setOpen(false)} />
+		</>
+	);
+}
+
 function WalletRemoveSection() {
 	return (
 		<Section
 			id="wallet-remove"
-			note="Archive hides a wallet from agents and refuses what waits on it, keeping the key. Remove deletes the key, so it waits until nothing can be lost (C17): no payment in flight, no live authorization, nothing at safe, and a key that was saved if the address was ever shown."
+			note="Archive hides a wallet from agents and keeps the key; Unarchive asks nothing. Remove deletes the key, so the daemon refuses it until nothing can be lost (C17): no money at its address, no payment in flight, and a key that was saved if the address was ever shown. A refusal says the daemon's reason, and only Close. Each button opens the dialog the app opens."
 		>
 			<div className="grid gap-6">
-				<Over label="Archive">
-					<WalletDialog
-						title="Archive Travel?"
-						body="Mara and Sancho can't use it and it doesn't send. The payment waiting on you and the one in line are refused. The key stays in your keychain, and you can unarchive it."
-						actions={
-							<>
-								<Button variant="ghost">Cancel</Button>
-								<Button variant="destructive">Archive</Button>
-							</>
-						}
-					/>
-				</Over>
-				<Over label="Remove, refused: every reason at once">
-					<RemoveBlocked
+				<Labelled label="Archive">
+					<Confirm {...archiveWords("Travel")} action="Archive">
+						<Button variant="outline" size="sm" className="self-start">
+							Archive
+						</Button>
+					</Confirm>
+				</Labelled>
+				<Labelled label="Remove, its key saved">
+					<Confirm {...removeWords("Old travel", "saved")} action="Remove">
+						<Button variant="destructive" size="sm" className="self-start">
+							Remove
+						</Button>
+					</Confirm>
+				</Labelled>
+				<Labelled label="Remove, Not backed up: no copy was saved">
+					<Confirm {...removeWords("Old travel", "skipped")} action="Remove">
+						<Button variant="destructive" size="sm" className="self-start">
+							Remove
+						</Button>
+					</Confirm>
+				</Labelled>
+				<Labelled label="Remove, refused: the daemon's reason">
+					<Refused
 						wallet="Travel"
-						reasons={[
-							"182.40 USDC and 0.0031 ETH are still in it. Send them elsewhere first.",
-							"A payment to Ana isn't final yet.",
-							"An x402 payment can still be used until 10:42:30.",
-							"Its address was shown, and its key was never saved.",
-						]}
+						reason="The wallet still holds funds: move them out first, by importing its key into a wallet app such as MetaMask and sending them from there."
 					/>
-				</Over>
-				<Over label="Remove, allowed">
-					<WalletDialog
-						title="Remove Old travel?"
-						body="banda deletes its key from your keychain. Without the copy you saved, no one can open 0xdbF0…C6FB again. Its activity stays in banda."
-						actions={
-							<>
-								<Button variant="ghost">Cancel</Button>
-								<Button variant="destructive">Remove</Button>
-							</>
-						}
-					/>
-				</Over>
-				<Over label="Removing: the keychain doesn't answer (wallet: removing)">
-					<WalletDialog
-						title="Removing Old travel"
-						body="Waiting for your keychain to delete the key. Unlock it, or answer its prompt."
-						actions={
-							<Button variant="ghost" disabled>
-								Removing
-							</Button>
-						}
-					/>
-				</Over>
-				<Labelled label="Money arrived while removing: stopped, archived instead">
-					<WalletNotice
-						icon={OFFLINE.creating.icon}
-						title="Removal stopped"
-						body="50.00 USDC arrived while Old travel was being removed, so nothing was deleted. The wallet is archived."
-					/>
+				</Labelled>
+				<Labelled label="Refused, for a name of 64 characters with no space">
+					<Refused wallet={"x".repeat(64)} reason="The wallet's address was given out and its key was never saved." />
 				</Labelled>
 			</div>
 		</Section>
 	);
 }
 
-function WalletOnlineSection() {
+function WalletRemovingSection() {
 	const phone = usePhone();
 	return (
 		<Section
-			id="wallet-online"
-			note="Getting a wallet back online: restore the key from the copy saved (it must open the address), or move signing to this home (one signing home per wallet, on the computer banda runs on)."
+			id="wallet-removing"
+			note="A removal the keychain stops stays removing until it answers, the wallet serving no agent meanwhile; money that arrives first stops it, and the wallet is archived instead (C15)."
 		>
 			<div className="grid gap-6">
-				<Screen label="Restore key">
+				<Screen label="Removing: the keychain doesn't answer (wallet: removing)" tall>
+					<WalletPage
+						wallet={TRAVEL}
+						phone={phone}
+						tabs={OFFERED_TABS}
+						sends={false}
+						notices={<RemovingNotice />}
+						activity={<TransactionList rows={INCOMING_ROWS} />}
+					/>
+				</Screen>
+				<Labelled label="Money arrived while removing: archived instead">
+					<ArchivedNotice />
+				</Labelled>
+			</div>
+		</Section>
+	);
+}
+
+function WalletRestoreSection() {
+	const phone = usePhone();
+	return (
+		<Section
+			id="wallet-restore"
+			note="Restore key: the copy the owner saved, pasted in banda's desktop app on the computer banda runs on; it must open the address, and it goes to the signer, never to the daemon (C20)."
+		>
+			<div className="grid gap-6">
+				<Screen label="Restore key (signing: key_missing)">
 					<RestoreKey wallet={TRAVEL} phone={phone} />
 				</Screen>
 				<Screen label="A key that opens another address: nothing changes">
 					<RestoreKey wallet={TRAVEL} state="wrong" phone={phone} />
 				</Screen>
+				<Screen label="A copy that is no key's text (not_a_key): nothing changes">
+					<RestoreKey wallet={TRAVEL} state="not_a_key" phone={phone} />
+				</Screen>
 				<Screen label="Restored: payments in line go out">
 					<RestoreKey wallet={TRAVEL} state="restored" phone={phone} />
 				</Screen>
-				<Screen label="Move signing here (signing: other_home)">
-					<MoveSigning wallets={[TRAVEL, CREDITS]} phone={phone} />
+				<Screen label="In a browser or on a phone: only the desktop app takes a key">
+					<RestoreKey wallet={TRAVEL} state="elsewhere" phone={phone} />
 				</Screen>
 			</div>
+		</Section>
+	);
+}
+
+function WalletMoveSection() {
+	const phone = usePhone();
+	return (
+		<Section
+			id="wallet-move"
+			note="Move signing here: one signing home per wallet, moved on the computer banda runs on once each key proves it opens its wallet."
+		>
+			<Screen label="Move signing here (signing: other_home)">
+				<MoveSigning wallets={[TRAVEL, CREDITS]} phone={phone} />
+			</Screen>
 		</Section>
 	);
 }
@@ -1330,7 +1888,7 @@ function PaymentCardsSection() {
 								identity: ANA_LOOKALIKE,
 								network: "Base",
 								isNew: true,
-								lookalike: `It differs from Ana's address by its last character: ${short(ANA_LOOKALIKE)} here, ${short(ANA)} for Ana.`,
+								lookalike: `It differs from Ana's address by its last character: ${shortAddress(ANA_LOOKALIKE)} here, ${shortAddress(ANA)} for Ana.`,
 							}}
 						/>
 					</Labelled>
@@ -1479,6 +2037,7 @@ export function WalletSections() {
 			<WalletCreateSection />
 			<WalletKeySection />
 			<WalletPageSection />
+			<WalletPagePaysSection />
 			<WalletNoticesSection />
 			<WalletActivitySection />
 			<WalletPaymentSection />
@@ -1487,7 +2046,9 @@ export function WalletSections() {
 			<WalletReceiveSection />
 			<WalletSendSection />
 			<WalletRemoveSection />
-			<WalletOnlineSection />
+			<WalletRemovingSection />
+			<WalletRestoreSection />
+			<WalletMoveSection />
 			<PaymentCardsSection />
 			<PaymentRecordsSection />
 		</>

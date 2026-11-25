@@ -12,6 +12,7 @@ import { type HarnessSessionView as CardView, HarnessCard, HarnessMenu, HarnessT
 import type { HarnessAsk, HarnessSessionView } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
 import { chatAgents } from "../lib/navigation.ts";
+import { useNow } from "../lib/now.ts";
 import { useShell } from "../lib/shell.ts";
 import { askWords, shownAsks } from "./harness-activity.ts";
 
@@ -19,17 +20,6 @@ const clock = (ms: number) => {
 	const seconds = Math.max(0, Math.floor(ms / 1000));
 	return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 };
-
-/** Ticks once a second while `on`, so a running session's time moves. */
-function useNow(on: boolean): number {
-	const [now, setNow] = useState(() => Date.now());
-	useEffect(() => {
-		if (!on) return;
-		const timer = setInterval(() => setNow(Date.now()), 1000);
-		return () => clearInterval(timer);
-	}, [on]);
-	return now;
-}
 
 const viewOf = (session: HarnessSessionView, now: number, agent: string | undefined): CardView => ({
 	harness: session.service,
@@ -193,7 +183,7 @@ export function HarnessSessionPart({ chat, call }: { chat: number; call: string 
 	const agent =
 		companion === undefined ? undefined : chatAgents(agents, companion).find((one) => one.id === session?.agent)?.name;
 	const live = session !== undefined && session.ended === undefined;
-	const now = useNow(live);
+	const now = useNow(live ? 1000 : undefined);
 	const [open, setOpen] = useState(false);
 	const titleRef = useRef<HTMLHeadingElement>(null);
 	const opener = useRef<HTMLElement | null>(null);
@@ -254,7 +244,7 @@ export function useHarnessMenu(sessions: readonly HarnessSessionView[], waiting:
 	}, [sessions.length, open]);
 	const known = companion === undefined ? [] : chatAgents(agents, companion);
 	const session = harnesses?.sessions.find((one) => one.task === selected);
-	const now = useNow(open);
+	const now = useNow(open ? 1000 : undefined);
 	const nameOf = (one: HarnessSessionView) => known.find((agent) => agent.id === one.agent)?.name;
 	return {
 		menu:
@@ -312,7 +302,7 @@ export function HarnessActivitySheet({
 	returnFocus: () => void;
 }) {
 	const titleRef = useRef<HTMLHeadingElement>(null);
-	const now = useNow(session.ended === undefined);
+	const now = useNow(session.ended === undefined ? 1000 : undefined);
 	const view = viewOf(session, now, agent);
 	return (
 		<Sheet

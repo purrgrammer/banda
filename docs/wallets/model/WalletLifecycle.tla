@@ -7,13 +7,15 @@
 (* `creating` with the address; the keychain account named by the address  *)
 (* must be empty; the key is written, read back and its address derived    *)
 (* again; only then the store commits `ready`. The owner is offered the    *)
-(* key once at creation (requirement 5) through a one-time reveal          *)
-(* capability minted on the host after an OS re-authentication; the paste- *)
-(* back check marks it saved; Skip marks it not backed up. The address is  *)
-(* withheld from every channel until saved or skipped (Receive and its QR, *)
-(* the wallet's screens, an agent's wallet__address and wallet__balance,   *)
-(* any transaction from it), so no funds land on a key nobody saved        *)
-(* (H-005). Revealing the key and disclosing the address are two facts.    *)
+(* key once at creation (requirement 5), to the client that created it,    *)
+(* with a one-time secret only the creation's answer carries; a later      *)
+(* reveal is the host's desktop signer's, after an OS re-authentication.   *)
+(* The paste-back check marks it saved; Skip marks it not backed up. The   *)
+(* address is withheld from every channel until saved or skipped (Receive  *)
+(* and its QR, the wallet's screens, an agent's wallet__address and        *)
+(* wallet__balance, any transaction from it), so no funds land on a key    *)
+(* nobody saved (H-005). Revealing the key and disclosing the address are  *)
+(* two facts.                                                              *)
 (*                                                                         *)
 (* Availability: the keychain can lock, lose the item (reset, migration)   *)
 (* or have an item planted under a name. Signing needs the key to derive   *)
@@ -40,7 +42,8 @@ CONSTANTS
     HomeSecret,        \* C16: the lease holder is proven by a secret no backup copies
     HostOnlyReveal,    \* C16, OD-2: the reveal capability is minted on the host only
     SignerIsolated,    \* C20: the key never enters the daemon's durable state
-    RemovalRecheck     \* finding F-4: removal re-checks in the step that deletes the key
+    RemovalRecheck,    \* finding F-4: removal re-checks in the step that deletes the key
+    KeepForeignKey     \* H-045: a removal deletes only an item that derives the wallet's address
 
 Homes == {"H1", "H2"}        \* H1 the home; H2 a backup of it restored beside it (H-284)
 Places == {"signer", "client", "store", "box", "log"}
@@ -237,21 +240,28 @@ BeginRemove(a) ==
     /\ cap' = [cap EXCEPT ![a] = "none"]       \* a reveal is refused once removing committed (H-048)
     /\ UNCHANGED <<capDev, backup, kc, kcUp, step, keyAt, disclosed, funds, inflight, lost, epoch, holder, sEpoch, h2, signedBad, b>>
 
+\* Only the wallet's own key is deleted: an item that holds another (planted, or put back by hand) may hold a funded
+\* key whose address nothing checked (H-045), so it stays, an orphan the owner sees.
 DeleteItem(a) ==
-    /\ rec[a] = "removing" /\ kcUp /\ kc[a] # "empty"
+    /\ rec[a] = "removing" /\ kcUp /\ (IF KeepForeignKey THEN kc[a] = "ours" ELSE kc[a] # "empty")
     /\ (RemovalGuard /\ RemovalRecheck) => Removable(a)
     /\ kc' = [kc EXCEPT ![a] = "empty"]
     /\ UNCHANGED <<rec, backup, kcUp, step, keyAt, cap, capDev, disclosed, funds, inflight, lost, epoch, holder, sEpoch, h2,
                    signedBad, b>>
 
 CancelRemove(a) ==
-    /\ rec[a] = "removing" /\ kc[a] # "empty" /\ RemovalGuard /\ RemovalRecheck /\ ~Removable(a)
+    /\ rec[a] = "removing" /\ kcUp /\ kc[a] = "ours" /\ RemovalGuard /\ RemovalRecheck /\ ~Removable(a)
     /\ rec' = [rec EXCEPT ![a] = "archived"]
     /\ UNCHANGED <<backup, kc, kcUp, step, keyAt, cap, capDev, disclosed, funds, inflight, lost, epoch, holder, sEpoch, h2,
                    signedBad, b>>
 
+\* With no item of its own under the account, the wallet's key is gone already (deleted before a stop, or lost) and
+\* nothing is left to protect: the removal ends. A record kept instead would come back without its key (archived,
+\* then unarchived and funded).
 Removed(a) ==
-    /\ rec[a] = "removing" /\ kc[a] = "empty"
+    /\ rec[a] = "removing"
+    /\ \/ kc[a] = "empty"
+       \/ KeepForeignKey /\ kcUp /\ kc[a] = "planted"
     /\ rec' = [rec EXCEPT ![a] = "removed"]
     /\ UNCHANGED <<backup, kc, kcUp, step, keyAt, cap, capDev, disclosed, funds, inflight, lost, epoch, holder, sEpoch, h2,
                    signedBad, b>>
@@ -381,6 +391,8 @@ RevealOnlyOnHost == \A a \in Addrs : "client" \in keyAt[a] => capDev[a] = "host"
 
 \* A reveal happens only with a capability minted on the host, consumed once.
 ReadyOnlyWithKey == [][\A a \in Addrs : (rec[a] # "ready" /\ rec'[a] = "ready" /\ rec[a] # "archived") => kc[a] = "ours"]_vars
+\* An item that holds another key is never deleted, whoever planted it (H-045).
+ForeignKeyKept == [][\A a \in Addrs : kc[a] = "planted" => kc'[a] = "planted"]_vars
 RevealOnce == [][\A a \in Addrs : ("client" \notin keyAt[a] /\ "client" \in keyAt'[a]) => (cap[a] = "minted" /\ cap'[a] = "used")]_vars
 
 \* Liveness: a create always ends (ready or dropped); a removal ends once the

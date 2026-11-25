@@ -24,15 +24,24 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Context, createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { MAIN_THREAD } from "../src/core/gateway.ts";
+import { context } from "../src/core/store.ts";
 import { MESSAGE_USER } from "../src/core/toolsets.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { ChatRow, ControlView, Item, ItemPage, ShellEvent } from "../src/server/api.ts";
+import type { Deps } from "../src/server/routes/area.ts";
+import { INCOMING_ROWS, walletsArea } from "../src/server/routes/wallets.ts";
 import { PAGE, PAGE_MESSAGES, PAGE_SCAN } from "../src/server/transcript.ts";
+import { checksummed } from "../src/wallet/address.ts";
+import { Incoming, REVEALS_KEPT, Wallets } from "../src/wallet/docs.ts";
+import { emptyState, memoryKeystore } from "../src/wallet/keystore.ts";
+import { rpcClients } from "../src/wallet/rpc.ts";
+import { openConnected } from "./fixtures/connected.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { until } from "./helpers.ts";
+import { FauxChain } from "./helpers/faux-chain.ts";
+import { tempHome, until } from "./helpers.ts";
 
 /** The owner's messages in the lead's chat: more than a page holds, so its page is one of several. */
 const TURNS = 24;
@@ -60,6 +69,7 @@ const SHELL_CAPS: Record<string, number> = {
 	band: 70,
 	devices: 100,
 	capabilities: 9_450,
+	wallets: 450,
 };
 /**
  * Sent, and not capped: `harnesses` lists the coding agents this computer has installed and how to install the rest, so
@@ -286,5 +296,196 @@ describe("what the daemon sends a client", () => {
 		const { bytes: size, value } = fed as Sized<ItemPage>;
 		expect(value.next).toBeDefined();
 		expect(size).toBeLessThanOrEqual(PAGE_CAP);
+	});
+});
+
+/** The wallets a home holds in the measure below: each made and its key not yet seen, so its reveal is kept. */
+const WALLETS = 8;
+/**
+ * The most bytes the shell's `wallets` event may be with `WALLETS` wallets, each keeping its reveal, each its key shown
+ * as many times again as its record keeps (`REVEALS_KEPT`, each under the desktop's retry id), and each with its
+ * balance read (ETH and the pinned token, near their widest): what grows with a home's wallets (H-214). The cap above,
+ * `wallets` in `SHELL_CAPS`, is a home with none.
+ */
+const WALLETS_EVENT_CAP = 3_300;
+/**
+ * The most bytes a full first page of a wallet's incoming rows may be (`INCOMING_ROWS`, H-214), each row with its time,
+ * with every showing of its key the record keeps; and a page whose window holds spends outside banda among them.
+ */
+const INCOMING_PAGE_CAP = 12_800;
+
+describe("what the daemon sends a client about a home's wallets", () => {
+	it("the wallets event with several wallets, and a full page of incoming rows, stay under their caps", async () => {
+		vi.stubEnv("BANDA_TEST_KEYSTORE", "1");
+		const home = await tempHome();
+		const s = await openConnected({ home, respond: () => fauxAssistantMessage("Done.") });
+		// a faux chain that answers as a node does, on this machine: every wallet's balance is read, and every row's
+		// block has its time, so the event and the page are measured as an owner receives them, fields and all
+		const chain = new FauxChain(84532);
+		chain.head = 1_000_000 + 4 * INCOMING_ROWS;
+		chain.final = chain.head - 5;
+		const rpc = chain.fetch;
+		const area = walletsArea().start?.({
+			harness: s.harness,
+			home,
+			box: "container",
+			log: () => {},
+			changed: () => {},
+			connections: s.capabilities,
+			fetch: rpc,
+			// the RPC's bucket unbounded: what is measured is the bytes, and at the shipped 5 a second a page's fifty block
+			// times queue behind the indexer's and every balance's reads past the test's time
+			rpc: rpcClients({ fetch: rpc, rate: 1e6, burst: 1e6 }),
+		} as unknown as Deps);
+		try {
+			if (area?.route === undefined || area.shell === undefined) throw new Error("no wallets area");
+			const route = area.route;
+			const call = async (method: string, path: string, body: Record<string, unknown> = {}) => {
+				const reply = await route({
+					method,
+					path,
+					url: new URL(`http://local/api${path}`),
+					json: async () => body,
+					signal: new AbortController().signal,
+				});
+				if (reply === undefined || !("body" in reply)) throw new Error(`no JSON from ${path}`);
+				return reply.body as { wallet: { address: string } };
+			};
+			const made: string[] = [];
+			for (let n = 1; n <= WALLETS; n++) {
+				// long names, as an owner may give: the event's size is measured near its worst
+				const answered = await call("POST", "/wallets", {
+					request: `budget-${n}`,
+					name: `Household groceries and bills ${n}`,
+					network: "base-sepolia",
+				});
+				made.push(answered.wallet.address);
+			}
+			// balances near their widest: many digits of ETH, and of the pinned token
+			for (const each of made) {
+				chain.set(each, 0, 123_456n * 10n ** 18n + 789_012_345_678n);
+				chain.tokens.set(each.toLowerCase(), 987_654_321_012n);
+			}
+			const address = made[0] as string;
+			await s.harness.commit(async (tx) => {
+				const incoming = await tx.doc(Incoming);
+				incoming.rows = Object.fromEntries(
+					Array.from({ length: 2 * INCOMING_ROWS }, (_, at) => [
+						`native:${address}:${at}`,
+						{
+							wallet: checksummed(address),
+							asset: "native" as const,
+							amount: String(10n ** 18n + BigInt(at)),
+							from: checksummed(`0x${String(at).padStart(40, "7")}`),
+							block: 1_000_000 + at,
+						},
+					]),
+				);
+				incoming.cursors = { "base-sepolia": 1_000_000 + INCOMING_ROWS };
+				incoming.read = { [checksummed(address)]: 1_000_000 + 2 * INCOMING_ROWS };
+				// every wallet's key shown as many times as its record keeps, each under the desktop's retry id: what the
+				// view must not grow by (H-214)
+				const kept = await tx.doc(Wallets);
+				for (const record of Object.values(kept.wallets))
+					record.reveals = Array.from({ length: REVEALS_KEPT }, (_, at) => ({
+						at: 1_764_000_000_000 + at,
+						kind: "later" as const,
+						id: randomUUID(),
+					}));
+			}, context);
+			const shell = area.shell;
+			// measured once every wallet's balance was read, as the event an owner's screen is pushed
+			const wallets = await until(async () => {
+				const found = (await shell()).find((one) => one.type === "wallets") as
+					| { wallets: { wallets: { balance?: unknown; revealed?: number }[] } }
+					| undefined;
+				return found !== undefined &&
+					found.wallets.wallets.length === WALLETS &&
+					found.wallets.wallets.every((one) => one.balance !== undefined && one.revealed !== undefined)
+					? found
+					: undefined;
+			});
+			const event = bytes(JSON.stringify(wallets));
+			const read = async () => {
+				const pageBody = await route({
+					method: "GET",
+					path: `/wallets/${address}/incoming`,
+					url: new URL(`http://local/api/wallets/${address}/incoming?wake=false`),
+					json: async () => ({}),
+					signal: new AbortController().signal,
+				});
+				if (pageBody === undefined || !("body" in pageBody)) throw new Error("no incoming page");
+				return pageBody.body as {
+					rows: { at?: number }[];
+					outside?: { at?: number }[];
+					more?: string;
+					reveals?: unknown[];
+				};
+			};
+			// and once every row's block time was read, which a page carries as `at`
+			const page = await until(async () => {
+				const got = await read();
+				return got.rows.length > 0 && got.rows.every((row) => row.at !== undefined) ? got : undefined;
+			});
+			const size = bytes(JSON.stringify(page));
+			if (PRINT)
+				console.log(
+					JSON.stringify({
+						walletsEvent: event,
+						incomingPage: size,
+						rows: page.rows.length,
+						rowsWithAt: page.rows.filter((row) => row.at !== undefined).length,
+					}),
+				);
+			expect(page.rows).toHaveLength(INCOMING_ROWS);
+			expect(page.more).toBeDefined();
+			// the showings go with the wallet's own page, in their declared shape: no retry id in the event or the page
+			expect(page.reveals).toHaveLength(REVEALS_KEPT);
+			const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
+			expect(JSON.stringify(wallets)).not.toContain('"reveals"');
+			expect(JSON.stringify(wallets)).not.toMatch(UUID);
+			expect(JSON.stringify(page)).not.toMatch(UUID);
+			expect(
+				event,
+				"the wallets event grew past its cap: if on purpose, raise WALLETS_EVENT_CAP in test/stream-budget.test.ts",
+			).toBeLessThanOrEqual(WALLETS_EVENT_CAP);
+			expect(
+				size,
+				"a page of incoming rows grew past its cap: if on purpose, raise INCOMING_PAGE_CAP in test/stream-budget.test.ts",
+			).toBeLessThanOrEqual(INCOMING_PAGE_CAP);
+			// a key that spent outside banda many times: each spend a row of its own, paged with the payments in the same
+			// window, so a page stays under the cap however many there are (H-210, H-214)
+			await s.harness.commit(async (tx) => {
+				const incoming = await tx.doc(Incoming);
+				incoming.rows = Object.fromEntries(
+					Object.entries(incoming.rows).filter(([, row]) => row.block >= 1_000_000 + 2 * INCOMING_ROWS - 10),
+				);
+				incoming.gaps = {
+					[checksummed(address)]: Array.from({ length: 6 * INCOMING_ROWS }, (_, at) => ({
+						from: 999_000 + 2 * at,
+						to: 999_000 + 2 * at,
+						why: "unexplained" as const,
+					})),
+				};
+			}, context);
+			const spent = await until(async () => {
+				const got = await read();
+				const all = [...got.rows, ...(got.outside ?? [])];
+				return got.rows.length === 10 && all.every((row) => row.at !== undefined) ? got : undefined;
+			});
+			expect(spent.outside).toHaveLength(INCOMING_ROWS - 10);
+			expect(spent.more).toBeDefined();
+			const spentSize = bytes(JSON.stringify(spent));
+			if (PRINT) console.log(JSON.stringify({ incomingPageWithOutside: spentSize }));
+			expect(
+				spentSize,
+				"a page of incoming and outside rows grew past its cap: if on purpose, raise INCOMING_PAGE_CAP in test/stream-budget.test.ts",
+			).toBeLessThanOrEqual(INCOMING_PAGE_CAP);
+		} finally {
+			await area?.stop?.();
+			await s.close();
+			memoryKeystore().state = emptyState();
+			vi.unstubAllEnvs();
+		}
 	});
 });

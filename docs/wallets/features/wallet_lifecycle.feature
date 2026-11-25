@@ -79,7 +79,7 @@ Feature: A wallet's life: create, archive, unarchive, remove
     Then the wallet is "archived"
     When the owner unarchives the wallet
     Then the wallet is "ready_saved"
-    And banda never removes a wallet with funds or work in flight
+    And banda never destroys the only copy of a funded wallet's key
 
   @UC-17 @H-042
   Scenario Outline: Archive works from every ready state
@@ -142,7 +142,7 @@ Feature: A wallet's life: create, archive, unarchive, remove
   # Evidence: spikes/gaps/README.md §H: findCredentials after a delete no longer lists the item (macOS and Linux).
   @UC-18 @H-043 @best
   @t:wallet:ready_saved:begin_remove:version_current&removable
-  @t:wallet:removing:delete_item:kc_up&removable
+  @t:wallet:removing:delete_item:kc_up&item=ours&removable
   @t:wallet:removing:item_gone:T
   Scenario: An empty wallet with nothing in flight is removed and its keychain item deleted
     Given the wallet is "ready_saved"
@@ -152,13 +152,14 @@ Feature: A wallet's life: create, archive, unarchive, remove
     And the wallet's address has left banda
     And the owner confirmed the key saved
     And the keychain answers
+    And the keychain item derives the wallet's address
     When the owner removes the wallet
     Then the wallet is "removing"
     When the signer deletes the keychain item
     Then the wallet is "removing"
     When the keychain reports the item gone
     Then the wallet is "removed"
-    And banda never removes a wallet with funds or work in flight
+    And banda never destroys the only copy of a funded wallet's key
     And no keychain item is left without a record
 
   @UC-18 @H-043
@@ -199,7 +200,7 @@ Feature: A wallet's life: create, archive, unarchive, remove
     And <saved>
     When the owner removes the wallet
     Then the wallet is "<state>"
-    And banda never removes a wallet with funds or work in flight
+    And banda never destroys the only copy of a funded wallet's key
 
     @t:wallet:ready_unsaved:begin_remove:![version_current&removable]
     Examples: another device changed the wallet first
@@ -225,16 +226,49 @@ Feature: A wallet's life: create, archive, unarchive, remove
   # C17: the delete re-checks; funds that arrived after the removal began cancel it and archive the wallet.
   # Evidence: spikes/gaps/README.md §A: funds arriving are visible at safe N + 1 blocks after they were set.
   @UC-18 @H-046 @race
-  @t:wallet:removing:delete_item:kc_up&!removable
+  @t:wallet:removing:delete_item:kc_up&item=ours&!removable
   Scenario: Funds that arrive while removing cancel the removal and archive the wallet
     Given the wallet is "removing"
     And the keychain answers
+    And the keychain item derives the wallet's address
     And the wallet holds funds at safe
     And the wallet has nothing in flight
     And the wallet's address never left banda
     When the signer deletes the keychain item
     Then the wallet is "archived"
-    And banda never removes a wallet with funds or work in flight
+    And banda never destroys the only copy of a funded wallet's key
+
+  # H-045: the item under the wallet's account holds a key that does not derive its address (planted, or put back by
+  # hand). Its address was never checked for funds, so the item is never deleted. The wallet's own key is gone already,
+  # so the removal ends; the item stays, listed as a key without a wallet.
+  @UC-18 @H-045 @security
+  @t:wallet:removing:delete_item:kc_up&item=other
+  Scenario: The keychain item holds another key at the delete, and the removal ends with that key kept
+    Given the wallet is "removing"
+    And the keychain answers
+    And the keychain item holds another key
+    When the signer deletes the keychain item
+    Then the wallet is "removed"
+    And banda never deletes a key that does not open its wallet
+    And no keychain item is left without a record
+
+  # H-044: a stop after the delete leaves `removing` with no item. Nothing is left to delete or to protect, so the
+  # removal ends whatever reached the address since: its key was saved, or it was never disclosed (C17).
+  @UC-18 @H-044 @crash
+  @t:wallet:removing:delete_item:kc_up&item=empty
+  @t:wallet:removing:item_gone:T
+  Scenario: A removal stopped after its delete ends once the keychain answers, even with funds at the address
+    Given the wallet is "removing"
+    And the keychain answers
+    And the keychain holds no item for the address
+    And the owner confirmed the key saved
+    And the wallet holds funds at safe
+    When the signer deletes the keychain item
+    Then the wallet is "removing"
+    When the keychain reports the item gone
+    Then the wallet is "removed"
+    And banda never destroys the only copy of a funded wallet's key
+    And no keychain item is left without a record
 
   # Evidence: spikes/gaps/README.md §H: on Linux a locked collection makes findCredentials throw (IsLocked), so the
   # orphan check reports that it could not list, never 'no orphan'.
@@ -284,4 +318,4 @@ Feature: A wallet's life: create, archive, unarchive, remove
     And the owner confirmed the key saved
     When the owner removes the wallet
     Then the wallet is "archived"
-    And banda never removes a wallet with funds or work in flight
+    And banda never destroys the only copy of a funded wallet's key

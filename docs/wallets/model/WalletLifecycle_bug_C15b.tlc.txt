@@ -1,5 +1,5 @@
 TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
-Running breadth-first search Model-Checking with fp 71 and seed -2876424522634905734 with 1 worker on 14 cores with 1820MB heap and 64MB offheap memory [pid: 1] (Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64, Eclipse Adoptium 21.0.13 x86_64, MSBDiskFPSet, DiskStateQueue).
+Running breadth-first search Model-Checking with fp 44 and seed 4628457159487644057 with 1 worker on 14 cores with 1820MB heap and 64MB offheap memory [pid: 1] (Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64, Eclipse Adoptium 21.0.13 x86_64, MSBDiskFPSet, DiskStateQueue).
 Parsing file /m/MC_WalletLifecycle.tla
 Parsing file /m/WalletLifecycle.tla
 Parsing file /tmp/Integers.tla
@@ -14,9 +14,9 @@ Semantic processing of module FiniteSets
 Semantic processing of module TLC
 Semantic processing of module WalletLifecycle
 Semantic processing of module MC_WalletLifecycle
-Starting... (2026-11-23 18:02:13)
+Starting... (2026-11-24 03:54:53)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-11-23 18:02:13.
+Finished computing initial states: 1 distinct state generated at 2026-11-24 03:54:53.
 Error: Action property ReadyOnlyWithKey is violated.
 Error: The behavior up to this point is:
 State 1: <Initial predicate>
@@ -39,7 +39,7 @@ State 1: <Initial predicate>
 /\ backup = [A1 |-> "pending", A2 |-> "pending"]
 /\ kc = [A1 |-> "empty", A2 |-> "empty"]
 
-State 2: <Draw line 96, col 5 to line 100, col 125 of module WalletLifecycle>
+State 2: <Draw line 97, col 5 to line 101, col 125 of module WalletLifecycle>
 /\ epoch = [A1 |-> 1, A2 |-> 1]
 /\ b = [crash |-> 0, keyf |-> 1, plant |-> 0, lease |-> 0]
 /\ disclosed = [A1 |-> FALSE, A2 |-> FALSE]
@@ -59,7 +59,7 @@ State 2: <Draw line 96, col 5 to line 100, col 125 of module WalletLifecycle>
 /\ backup = [A1 |-> "pending", A2 |-> "pending"]
 /\ kc = [A1 |-> "empty", A2 |-> "empty"]
 
-State 3: <Write line 106, col 5 to line 117, col 118 of module WalletLifecycle>
+State 3: <Write line 107, col 5 to line 118, col 118 of module WalletLifecycle>
 /\ epoch = [A1 |-> 1, A2 |-> 1]
 /\ b = [crash |-> 0, keyf |-> 0, plant |-> 0, lease |-> 0]
 /\ disclosed = [A1 |-> FALSE, A2 |-> FALSE]
@@ -79,7 +79,7 @@ State 3: <Write line 106, col 5 to line 117, col 118 of module WalletLifecycle>
 /\ backup = [A1 |-> "pending", A2 |-> "pending"]
 /\ kc = [A1 |-> "empty", A2 |-> "empty"]
 
-State 4: <Ready line 122, col 5 to line 128, col 125 of module WalletLifecycle>
+State 4: <Ready line 123, col 5 to line 129, col 125 of module WalletLifecycle>
 /\ epoch = [A1 |-> 1, A2 |-> 1]
 /\ b = [crash |-> 0, keyf |-> 0, plant |-> 0, lease |-> 0]
 /\ disclosed = [A1 |-> FALSE, A2 |-> FALSE]
@@ -102,4 +102,4 @@ State 4: <Ready line 122, col 5 to line 128, col 125 of module WalletLifecycle>
 26 states generated, 17 distinct states found, 10 states left on queue.
 The depth of the complete state graph search is 4.
 The average outdegree of the complete state graph is 3 (minimum is 0, the maximum 5 and the 95th percentile is 5).
-Finished in 00s at (2026-11-23 18:02:13)
+Finished in 00s at (2026-11-24 03:54:53)

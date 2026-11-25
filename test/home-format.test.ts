@@ -4,8 +4,10 @@
  * so the steps here are the test-only ones of `fault/format-scenario.ts`; `home-format.faults.test.ts` kills the same
  * runs, and `home-upgrade.test.ts` opens homes that released builds made.
  */
+
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createRegistry } from "@earendil-works/pi-durable";
 import fc from "fast-check";
@@ -15,13 +17,16 @@ import {
 	backupBeforeUpgrade,
 	FORMAT_FLOOR,
 	HOME_FORMAT,
+	INSTALLATION_ID,
 	MIGRATIONS,
 	migrateHome,
 	NewerHome,
 	OldHome,
 } from "../src/core/format.ts";
 import { context, openStore } from "../src/core/store.ts";
+import { installationId } from "../src/home.ts";
 import { type Fault, Faults, InjectedFault } from "./fault/faults.ts";
+import { checkBuildSettled, migrateBuild, seedKept } from "./fault/format-build.ts";
 import {
 	backUp,
 	checkSettled,
@@ -224,5 +229,30 @@ describe("home format", () => {
 		await backupBeforeUpgrade(home, FORMAT_FLOOR);
 		expect(await readFile(join(kept, "manifest.json"), "utf8")).toBe(manifest);
 		await rm(`${home}-backups`, { recursive: true, force: true });
+	});
+
+	it("replaces an installation id an earlier build left damaged on its way to wallets, and keeps a whole one", async () => {
+		// a format-4 build wrote the id with no flush, and read anything else as none: a power cut could empty it
+		for (const [kept, replaced] of [
+			["", true],
+			["not an id\n", true],
+			[`${randomUUID()}\n`, false],
+		] as const) {
+			const home = await seedKept(await tempHome());
+			await mkdir(join(home, "auth"), { recursive: true });
+			await writeFile(join(home, "auth", "device-id"), kept);
+			await migrateBuild(home, () => {});
+			expect(await markOf(home)).toBe(`${HOME_FORMAT}\n`);
+			const id = await installationId(home);
+			if (replaced) expect(id).toMatch(INSTALLATION_ID);
+			else expect(id).toBe(kept.trim());
+			await checkBuildSettled(home);
+		}
+		// a home of the build's format refuses one: its wallet keys may be named by the id it lost
+		const home = await tempHome();
+		await migrateHome(home);
+		await mkdir(join(home, "auth"), { recursive: true });
+		await writeFile(join(home, "auth", "device-id"), "");
+		await expect(installationId(home)).rejects.toThrow(/makes no new one/);
 	});
 });

@@ -1,0 +1,185 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 101 and seed 8485489943313132020 with 1 worker on 14 cores with 1820MB heap and 64MB offheap memory [pid: 1] (Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64, Eclipse Adoptium 21.0.13 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /m/MC_WalletLifecycle.tla
+Parsing file /m/WalletLifecycle.tla
+Parsing file /tmp/Integers.tla
+Parsing file /tmp/FiniteSets.tla
+Parsing file /tmp/TLC.tla
+Parsing file /tmp/Naturals.tla
+Parsing file /tmp/Sequences.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module WalletLifecycle
+Semantic processing of module MC_WalletLifecycle
+Starting... (2026-11-24 03:54:53)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-24 03:54:53.
+Error: Action property ForeignKeyKept is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ epoch = [A1 |-> 1, A2 |-> 1]
+/\ b = [crash |-> 0, keyf |-> 1, plant |-> 1, lease |-> 0]
+/\ disclosed = [A1 |-> FALSE, A2 |-> FALSE]
+/\ sEpoch = [H1 |-> [A1 |-> 1, A2 |-> 1], H2 |-> [A1 |-> 1, A2 |-> 1]]
+/\ kcUp = TRUE
+/\ signedBad = FALSE
+/\ keyAt = [A1 |-> {}, A2 |-> {}]
+/\ rec = [A1 |-> "none", A2 |-> "none"]
+/\ holder = [A1 |-> "H1", A2 |-> "H1"]
+/\ inflight = [A1 |-> FALSE, A2 |-> FALSE]
+/\ cap = [A1 |-> "none", A2 |-> "none"]
+/\ h2 = FALSE
+/\ step = [A1 |-> "idle", A2 |-> "idle"]
+/\ capDev = [A1 |-> "none", A2 |-> "none"]
+/\ lost = [A1 |-> FALSE, A2 |-> FALSE]
+/\ funds = [A1 |-> FALSE, A2 |-> FALSE]
+/\ backup = [A1 |-> "pending", A2 |-> "pending"]
+/\ kc = [A1 |-> "empty", A2 |-> "empty"]
+
+State 2: <Draw line 97, col 5 to line 101, col 125 of module WalletLifecycle>
+/\ epoch = [A1 |-> 1, A2 |-> 1]
+/\ b = [crash |-> 0, keyf |-> 1, plant |-> 1, lease |-> 0]
+/\ disclosed = [A1 |-> FALSE, A2 |-> FALSE]
+/\ sEpoch = [H1 |-> [A1 |-> 1, A2 |-> 1], H2 |-> [A1 |-> 1, A2 |-> 1]]
+/\ kcUp = TRUE
+/\ signedBad = FALSE
+/\ keyAt = [A1 |-> {"signer"}, A2 |-> {}]
+/\ rec = [A1 |-> "creating", A2 |-> "none"]
+/\ holder = [A1 |-> "H1", A2 |-> "H1"]
+/\ inflight = [A1 |-> FALSE, A2 |-> FALSE]
+/\ cap = [A1 |-> "none", A2 |-> "none"]
+/\ h2 = FALSE
+/\ step = [A1 |-> "drawn", A2 |-> "idle"]
+/\ capDev = [A1 |-> "none", A2 |-> "none"]
+/\ lost = [A1 |-> FALSE, A2 |-> FALSE]
+/\ funds = [A1 |-> FALSE, A2 |-> FALSE]
+/\ backup = [A1 |-> "pending", A2 |-> "pending"]
+/\ kc = [A1 |-> "empty", A2 |-> "empty"]
+
+State 3: <Write line 107, col 5 to line 118, col 118 of module WalletLifecycle>
+/\ epoch = [A1 |-> 1, A2 |-> 1]
+/\ b = [crash |-> 0, keyf |-> 1, plant |-> 1, lease |-> 0]
+/\ disclosed = [A1 |-> FALSE, A2 |-> FALSE]
+/\ sEpoch = [H1 |-> [A1 |-> 1, A2 |-> 1], H2 |-> [A1 |-> 1, A2 |-> 1]]
+/\ kcUp = TRUE
+/\ signedBad = FALSE
+/\ keyAt = [A1 |-> {"signer"}, A2 |-> {}]
+/\ rec = [A1 |-> "creating", A2 |-> "none"]
+/\ holder = [A1 |-> "H1", A2 |-> "H1"]
+/\ inflight = [A1 |-> FALSE, A2 |-> FALSE]
+/\ cap = [A1 |-> "none", A2 |-> "none"]
+/\ h2 = FALSE
+/\ step = [A1 |-> "written", A2 |-> "idle"]
+/\ capDev = [A1 |-> "none", A2 |-> "none"]
+/\ lost = [A1 |-> FALSE, A2 |-> FALSE]
+/\ funds = [A1 |-> FALSE, A2 |-> FALSE]
+/\ backup = [A1 |-> "pending", A2 |-> "pending"]
+/\ kc = [A1 |-> "ours", A2 |-> "empty"]
+
+State 4: <Ready line 123, col 5 to line 129, col 125 of module WalletLifecycle>
+/\ epoch = [A1 |-> 1, A2 |-> 1]
+/\ b = [crash |-> 0, keyf |-> 1, plant |-> 1, lease |-> 0]
+/\ disclosed = [A1 |-> FALSE, A2 |-> FALSE]
+/\ sEpoch = [H1 |-> [A1 |-> 1, A2 |-> 1], H2 |-> [A1 |-> 1, A2 |-> 1]]
+/\ kcUp = TRUE
+/\ signedBad = FALSE
+/\ keyAt = [A1 |-> {}, A2 |-> {}]
+/\ rec = [A1 |-> "ready", A2 |-> "none"]
+/\ holder = [A1 |-> "H1", A2 |-> "H1"]
+/\ inflight = [A1 |-> FALSE, A2 |-> FALSE]
+/\ cap = [A1 |-> "none", A2 |-> "none"]
+/\ h2 = FALSE
+/\ step = [A1 |-> "idle", A2 |-> "idle"]
+/\ capDev = [A1 |-> "none", A2 |-> "none"]
+/\ lost = [A1 |-> FALSE, A2 |-> FALSE]
+/\ funds = [A1 |-> FALSE, A2 |-> FALSE]
+/\ backup = [A1 |-> "pending", A2 |-> "pending"]
+/\ kc = [A1 |-> "ours", A2 |-> "empty"]
+
+State 5: <BeginRemove line 235, col 5 to line 239, col 133 of module WalletLifecycle>
+/\ epoch = [A1 |-> 1, A2 |-> 1]
+/\ b = [crash |-> 0, keyf |-> 1, plant |-> 1, lease |-> 0]
+/\ disclosed = [A1 |-> FALSE, A2 |-> FALSE]
+/\ sEpoch = [H1 |-> [A1 |-> 1, A2 |-> 1], H2 |-> [A1 |-> 1, A2 |-> 1]]
+/\ kcUp = TRUE
+/\ signedBad = FALSE
+/\ keyAt = [A1 |-> {}, A2 |-> {}]
+/\ rec = [A1 |-> "removing", A2 |-> "none"]
+/\ holder = [A1 |-> "H1", A2 |-> "H1"]
+/\ inflight = [A1 |-> FALSE, A2 |-> FALSE]
+/\ cap = [A1 |-> "none", A2 |-> "none"]
+/\ h2 = FALSE
+/\ step = [A1 |-> "idle", A2 |-> "idle"]
+/\ capDev = [A1 |-> "none", A2 |-> "none"]
+/\ lost = [A1 |-> FALSE, A2 |-> FALSE]
+/\ funds = [A1 |-> FALSE, A2 |-> FALSE]
+/\ backup = [A1 |-> "pending", A2 |-> "pending"]
+/\ kc = [A1 |-> "ours", A2 |-> "empty"]
+
+State 6: <DeleteItem line 244, col 5 to line 248, col 33 of module WalletLifecycle>
+/\ epoch = [A1 |-> 1, A2 |-> 1]
+/\ b = [crash |-> 0, keyf |-> 1, plant |-> 1, lease |-> 0]
+/\ disclosed = [A1 |-> FALSE, A2 |-> FALSE]
+/\ sEpoch = [H1 |-> [A1 |-> 1, A2 |-> 1], H2 |-> [A1 |-> 1, A2 |-> 1]]
+/\ kcUp = TRUE
+/\ signedBad = FALSE
+/\ keyAt = [A1 |-> {}, A2 |-> {}]
+/\ rec = [A1 |-> "removing", A2 |-> "none"]
+/\ holder = [A1 |-> "H1", A2 |-> "H1"]
+/\ inflight = [A1 |-> FALSE, A2 |-> FALSE]
+/\ cap = [A1 |-> "none", A2 |-> "none"]
+/\ h2 = FALSE
+/\ step = [A1 |-> "idle", A2 |-> "idle"]
+/\ capDev = [A1 |-> "none", A2 |-> "none"]
+/\ lost = [A1 |-> FALSE, A2 |-> FALSE]
+/\ funds = [A1 |-> FALSE, A2 |-> FALSE]
+/\ backup = [A1 |-> "pending", A2 |-> "pending"]
+/\ kc = [A1 |-> "empty", A2 |-> "empty"]
+
+State 7: <Plant line 293, col 5 to line 297, col 30 of module WalletLifecycle>
+/\ epoch = [A1 |-> 1, A2 |-> 1]
+/\ b = [crash |-> 0, keyf |-> 1, plant |-> 0, lease |-> 0]
+/\ disclosed = [A1 |-> FALSE, A2 |-> FALSE]
+/\ sEpoch = [H1 |-> [A1 |-> 1, A2 |-> 1], H2 |-> [A1 |-> 1, A2 |-> 1]]
+/\ kcUp = TRUE
+/\ signedBad = FALSE
+/\ keyAt = [A1 |-> {}, A2 |-> {}]
+/\ rec = [A1 |-> "removing", A2 |-> "none"]
+/\ holder = [A1 |-> "H1", A2 |-> "H1"]
+/\ inflight = [A1 |-> FALSE, A2 |-> FALSE]
+/\ cap = [A1 |-> "none", A2 |-> "none"]
+/\ h2 = FALSE
+/\ step = [A1 |-> "idle", A2 |-> "idle"]
+/\ capDev = [A1 |-> "none", A2 |-> "none"]
+/\ lost = [A1 |-> FALSE, A2 |-> FALSE]
+/\ funds = [A1 |-> FALSE, A2 |-> FALSE]
+/\ backup = [A1 |-> "pending", A2 |-> "pending"]
+/\ kc = [A1 |-> "planted", A2 |-> "empty"]
+
+State 8: <DeleteItem line 244, col 5 to line 248, col 33 of module WalletLifecycle>
+/\ epoch = [A1 |-> 1, A2 |-> 1]
+/\ b = [crash |-> 0, keyf |-> 1, plant |-> 0, lease |-> 0]
+/\ disclosed = [A1 |-> FALSE, A2 |-> FALSE]
+/\ sEpoch = [H1 |-> [A1 |-> 1, A2 |-> 1], H2 |-> [A1 |-> 1, A2 |-> 1]]
+/\ kcUp = TRUE
+/\ signedBad = FALSE
+/\ keyAt = [A1 |-> {}, A2 |-> {}]
+/\ rec = [A1 |-> "removing", A2 |-> "none"]
+/\ holder = [A1 |-> "H1", A2 |-> "H1"]
+/\ inflight = [A1 |-> FALSE, A2 |-> FALSE]
+/\ cap = [A1 |-> "none", A2 |-> "none"]
+/\ h2 = FALSE
+/\ step = [A1 |-> "idle", A2 |-> "idle"]
+/\ capDev = [A1 |-> "none", A2 |-> "none"]
+/\ lost = [A1 |-> FALSE, A2 |-> FALSE]
+/\ funds = [A1 |-> FALSE, A2 |-> FALSE]
+/\ backup = [A1 |-> "pending", A2 |-> "pending"]
+/\ kc = [A1 |-> "empty", A2 |-> "empty"]
+
+2144 states generated, 884 distinct states found, 456 states left on queue.
+The depth of the complete state graph search is 8.
+The average outdegree of the complete state graph is 2 (minimum is 0, the maximum 10 and the 95th percentile is 6).
+Finished in 00s at (2026-11-24 03:54:53)

@@ -2,10 +2,13 @@
  * The home's format: the number in `<home>/format` names the shape of everything stored there, and a build brings an
  * earlier home to its own by running the migrations between them, in order, before anything reads the home.
  */
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { open, readFile, rename } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { INSTALLATION_ID } from "../home.ts";
 import { backupHome, MANIFEST } from "./backup.ts";
+import { writeDurably } from "./durable-file.ts";
 
 /** The earliest format a build still migrates from: 0.1.0-alpha.14's. A home below it is refused. */
 export const FORMAT_FLOOR = 3;
@@ -19,7 +22,8 @@ export const FORMAT_FLOOR = 3;
 export type Migration = {
 	/** What it changes, in a few words, for the error when it fails. */
 	readonly what: string;
-	readonly run: (home: string) => Promise<void>;
+	/** `hit` is told at the step's own effect boundaries, for fault injection. */
+	readonly run: (home: string, hit: (point: FormatPoint) => void) => Promise<void>;
 };
 
 /** Every step since the floor: the one at index `i` takes format `FORMAT_FLOOR + i` to the next. */
@@ -30,7 +34,42 @@ export const MIGRATIONS: readonly Migration[] = [
 		what: "a held request resolved as a repeat of one waiting on the owner",
 		run: async () => {},
 	},
+	{
+		// wallets, their payments and the `wallet` auth kind are new shapes, with nothing to convert. The format moves so
+		// that a build without wallets refuses the home at its start instead of failing on an account it cannot read. The
+		// installation id is now kept for good (it names the home's wallet keys), and a damaged one is refused rather
+		// than replaced; a home below this format never made a wallet, so one an earlier build left damaged (written
+		// without a flush, a power cut could leave it empty) is replaced here, as those builds would have.
+		what: "wallets: a build that knows wallets",
+		run: replaceDamagedId,
+	},
 ];
+
+/** An installation id as `installationId` writes it: kept in src/home.ts, which every command loads. */
+export { INSTALLATION_ID };
+
+/**
+ * Replaces `<home>/auth/device-id` with a new id where it holds none: only for a home no key can be named by its id
+ * yet. No file is left as it is (the id is made at its first use), and so is a whole id. Written whole and renamed, so
+ * it can run again from anywhere.
+ */
+async function replaceDamagedId(home: string, hit: (point: FormatPoint) => void): Promise<void> {
+	const path = join(home, "auth", "device-id");
+	let raw: string;
+	try {
+		raw = await readFile(path, "utf8");
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+		throw error;
+	}
+	if (INSTALLATION_ID.test(raw.trim())) return;
+	await writeDurably(path, `${randomUUID()}\n`, {
+		mode: 0o600,
+		temporary: `${path}.tmp`,
+		written: () => hit("format:id:written"),
+	});
+	hit("format:id:renamed");
+}
 
 /** The format this build reads and writes. */
 export const HOME_FORMAT = FORMAT_FLOOR + MIGRATIONS.length;
@@ -50,7 +89,11 @@ export type FormatPoint =
 	/** A step returned; the mark still names it. */
 	| "format:migrated"
 	/** The mark says the build's format alone. */
-	| "format:settled";
+	| "format:settled"
+	/** The 4 to 5 step wrote a new installation id to its temporary file, flushed, not yet renamed over the damaged one. */
+	| "format:id:written"
+	/** The new id is renamed into place; the mark still names the step. */
+	| "format:id:renamed";
 
 export type MigrateOptions = {
 	/** The steps since the floor; default the build's. Tests pass their own. */
@@ -102,7 +145,7 @@ export async function migrateHome(home: string, options: MigrateOptions = {}): P
 		hit("format:marked");
 		const step = migrations[at - FORMAT_FLOOR] as Migration;
 		try {
-			await step.run(home);
+			await step.run(home, hit);
 		} catch (error) {
 			throw new Error(
 				`${home} could not be brought from format ${at} to ${at + 1} (${step.what}): ${error instanceof Error ? error.message : String(error)}`,
@@ -119,23 +162,7 @@ export async function migrateHome(home: string, options: MigrateOptions = {}): P
 async function mark(home: string, text: string): Promise<void> {
 	const path = join(home, "format");
 	// one name, written over: the only writer is the process that holds the home, and a killed one leaves no litter
-	const temporary = `${path}.tmp`;
-	const file = await open(temporary, "w");
-	try {
-		await file.writeFile(`${text}\n`);
-		await file.sync();
-	} finally {
-		await file.close();
-	}
-	await rename(temporary, path);
-	// Windows does not expose directory fsync through Node; the file itself is flushed before the rename.
-	if (process.platform === "win32") return;
-	const directory = await open(home, "r");
-	try {
-		await directory.sync();
-	} finally {
-		await directory.close();
-	}
+	await writeDurably(path, `${text}\n`, { temporary: `${path}.tmp` });
 }
 
 /**

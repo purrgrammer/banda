@@ -5,7 +5,7 @@ skinparam stateFontStyle bold
 skinparam stateAttributeFontSize 10
 skinparam stateAttributeFontStyle plain
 skinparam ArrowFontSize 10
-title signing machine (WalletLifecycle.tla), generated from model/transitions.json: 28 rows, 6 states
+title signing machine (WalletLifecycle.tla), generated from model/transitions.json: 38 rows, 6 states
 
 legend top left
 Guard atoms and their domains
@@ -25,59 +25,79 @@ state "offline_host_mode" as signing_offline_host_mode
 
 [*] --> signing_online
 
-' row 56
+' row 68
 signing_online : unlock_check [derives and lease_mine and not host_mode] / CanSign (C16)
-' row 78
+' row 90
 signing_online : lease_moved [lease_mine] / LeaseKeychain (C15,C16)
-' row 77
+' row 58
+signing_locked : keychain_locks / Lock (C16)
+' row 66
+signing_key_missing : keychain_locks / Lock (C9,C16)
+' row 67
+signing_key_missing : item_lost / LoseItem (C16)
+' row 89
 signing_key_missing : restore_key [not derives] / RestoreKey (C16)
-' row 65
+' row 77
 signing_wrong_key : unlock_check [not derives] / CanSign (C16)
-' row 70
+' row 82
 signing_other_home : unlock_check [derives and not lease_mine] / CanSign (C16)
-' row 81
+' row 93
 signing_other_home : lease_moved [not lease_mine] / LeaseKeychain (C16)
-' row 75
+' row 87
 signing_offline_host_mode : unlock_check [derives and lease_mine and host_mode] / CanSign (-)
 
-' row 54
+' row 56
 signing_online --> signing_locked : keychain_locks / Lock (C4,C20)
-' row 55
-signing_online --> signing_key_missing : item_lost / LoseItem (C4,C16)
 ' row 57
-signing_online --> signing_wrong_key : unlock_check [not derives] / CanSign (C16)
-' row 58
-' row 80
-signing_online --> signing_other_home : unlock_check [derives and not lease_mine] / CanSign (C16)\nlease_moved [not lease_mine] / LeaseKeychain (C16)
+signing_online --> signing_key_missing : item_lost / LoseItem (C4,C16)
 ' row 59
-signing_online --> signing_offline_host_mode : unlock_check [derives and lease_mine and host_mode] / CanSign (-)
+signing_locked --> signing_key_missing : item_lost / LoseItem (C16)
 ' row 60
-signing_locked --> signing_online : unlock_check [derives and lease_mine and not host_mode] / Unlock (C16)
+signing_wrong_key --> signing_locked : keychain_locks / Lock (C16)
 ' row 61
-signing_locked --> signing_wrong_key : unlock_check [not derives] / CanSign (C16)
+signing_wrong_key --> signing_key_missing : item_lost / LoseItem (C16)
 ' row 62
-signing_locked --> signing_other_home : unlock_check [derives and not lease_mine] / CanSign (C16)
+signing_other_home --> signing_locked : keychain_locks / Lock (C16)
 ' row 63
-signing_locked --> signing_offline_host_mode : unlock_check [derives and lease_mine and host_mode] / CanSign (-)
+signing_other_home --> signing_key_missing : item_lost / LoseItem (C16)
 ' row 64
-signing_wrong_key --> signing_online : unlock_check [derives and lease_mine and not host_mode] / Unlock (C16)
-' row 66
-signing_wrong_key --> signing_other_home : unlock_check [derives and not lease_mine] / CanSign (C16)
-' row 67
-signing_wrong_key --> signing_offline_host_mode : unlock_check [derives and lease_mine and host_mode] / CanSign (-)
-' row 68
-' row 79
-signing_other_home --> signing_online : unlock_check [derives and lease_mine and not host_mode] / Unlock (C16)\nlease_moved [lease_mine] / LeaseKeychain (C15,C16)
+signing_offline_host_mode --> signing_locked : keychain_locks / Lock (C16)
+' row 65
+signing_offline_host_mode --> signing_key_missing : item_lost / LoseItem (C16)
 ' row 69
-signing_other_home --> signing_wrong_key : unlock_check [not derives] / CanSign (C16)
+signing_online --> signing_wrong_key : unlock_check [not derives] / CanSign (C16)
+' row 70
+' row 92
+signing_online --> signing_other_home : unlock_check [derives and not lease_mine] / CanSign (C16)\nlease_moved [not lease_mine] / LeaseKeychain (C16)
 ' row 71
-signing_other_home --> signing_offline_host_mode : unlock_check [derives and lease_mine and host_mode] / CanSign (-)
+signing_online --> signing_offline_host_mode : unlock_check [derives and lease_mine and host_mode] / CanSign (-)
 ' row 72
-signing_offline_host_mode --> signing_online : unlock_check [derives and lease_mine and not host_mode] / Unlock (C16)
+signing_locked --> signing_online : unlock_check [derives and lease_mine and not host_mode] / Unlock (C16)
 ' row 73
-signing_offline_host_mode --> signing_wrong_key : unlock_check [not derives] / CanSign (C16)
+signing_locked --> signing_wrong_key : unlock_check [not derives] / CanSign (C16)
 ' row 74
-signing_offline_host_mode --> signing_other_home : unlock_check [derives and not lease_mine] / CanSign (C16)
+signing_locked --> signing_other_home : unlock_check [derives and not lease_mine] / CanSign (C16)
+' row 75
+signing_locked --> signing_offline_host_mode : unlock_check [derives and lease_mine and host_mode] / CanSign (-)
 ' row 76
+signing_wrong_key --> signing_online : unlock_check [derives and lease_mine and not host_mode] / Unlock (C16)
+' row 78
+signing_wrong_key --> signing_other_home : unlock_check [derives and not lease_mine] / CanSign (C16)
+' row 79
+signing_wrong_key --> signing_offline_host_mode : unlock_check [derives and lease_mine and host_mode] / CanSign (-)
+' row 80
+' row 91
+signing_other_home --> signing_online : unlock_check [derives and lease_mine and not host_mode] / Unlock (C16)\nlease_moved [lease_mine] / LeaseKeychain (C15,C16)
+' row 81
+signing_other_home --> signing_wrong_key : unlock_check [not derives] / CanSign (C16)
+' row 83
+signing_other_home --> signing_offline_host_mode : unlock_check [derives and lease_mine and host_mode] / CanSign (-)
+' row 84
+signing_offline_host_mode --> signing_online : unlock_check [derives and lease_mine and not host_mode] / Unlock (C16)
+' row 85
+signing_offline_host_mode --> signing_wrong_key : unlock_check [not derives] / CanSign (C16)
+' row 86
+signing_offline_host_mode --> signing_other_home : unlock_check [derives and not lease_mine] / CanSign (C16)
+' row 88
 signing_key_missing --> signing_online : restore_key [derives] / RestoreKey (C9,C16)
 @enduml

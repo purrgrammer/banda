@@ -19,7 +19,7 @@ import { defineCore } from "../../src/core/turn.ts";
 import { revive } from "../../src/core/wait.ts";
 import { recoverAgentPublications } from "../../src/server/agent-publication.ts";
 import type { Workspace } from "../../src/server/agents.ts";
-import { type Capabilities, openCapabilities } from "../../src/server/capabilities.ts";
+import { type Capabilities, type CapabilityOptions, openCapabilities } from "../../src/server/capabilities.ts";
 import { hostBox } from "./host-box.ts";
 import { FAUX_MODEL } from "./models.ts";
 
@@ -45,6 +45,9 @@ export async function openConnected({
 	shipped,
 	fetch: fetcher,
 	retryDelays,
+	rpc,
+	host,
+	sync,
 	port = 9,
 	registry = createRegistry(),
 }: {
@@ -65,6 +68,12 @@ export async function openConnected({
 	fetch?: typeof fetch;
 	/** How long before a failed listing is tried again, when a test does not want to wait. */
 	retryDelays?: readonly number[];
+	/** The wallets' RPC clients, when a test does not want reads asked again. */
+	rpc?: CapabilityOptions["rpc"];
+	/** Serve as host mode does, agents' commands on this computer. */
+	host?: boolean;
+	/** The wallet reads' sync to disk, when a test fails it (C21). */
+	sync?: CapabilityOptions["sync"];
 }) {
 	const box = openBox(hostBox(home), () => {});
 	const faux = fauxProvider();
@@ -113,6 +122,9 @@ export async function openConnected({
 		...(shipped === undefined ? {} : { shipped }),
 		...(fetcher === undefined ? {} : { fetch: fetcher }),
 		...(retryDelays === undefined ? {} : { retryDelays }),
+		...(rpc === undefined ? {} : { rpc }),
+		...(host === undefined ? {} : { host }),
+		...(sync === undefined ? {} : { sync }),
 		agentChanged: core.agentChanged,
 	});
 	// as the daemon does on start: what was in effect is installed before anything resumes

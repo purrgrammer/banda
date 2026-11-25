@@ -64,9 +64,8 @@ answer:
 4. the arguments parse (decimal string in the token's units, a listed token, positive, within its decimals);
 5. the recipient's canonical identity: EIP-55 on the wallet's network; not the zero address, the token, the wallet
    itself or a precompile; contract and look-alike flags for the card;
-6. the wallet can sign now: lease held, keychain usable, not host mode and no host coding agent that runs commands
-   without a per-command ask (TA-1, H-065), chain id matches, the address has no code, the lane not blocked, parked
-   or frozen;
+6. the wallet can sign now: lease held, keychain usable, not host mode and no coding agent connected (TA-1, H-065),
+   chain id matches, the address has no code, the lane not blocked, parked or frozen;
 7. the rule: **Deny** (wallet, recipient) > **Always** (wallet, agent, identity) > **Ask** > the wallet's default for
    unknown recipients (Ask; Deny only as the owner's opt-in, OD-13);
 8. the available balance after reservations, fees included (C11);
@@ -206,7 +205,9 @@ H-235, H-238, H-252, H-253, H-262, H-268, H-269.
 ### C15 · Two stores, one order
 
 Create: commit `creating` with the address → keychain account `<home-id>/wallet/<address>` must read `null` → write →
-read back and derive → commit ready. Remove: commit `removing` → delete the item → commit removed. Lease move: the
+read back and derive → commit ready. Remove: commit `removing` → delete the item, only once it derives the address →
+commit removed; an item that holds another key is never deleted: the wallet's own key is gone already, so the removal
+ends and the item stays, listed as an orphan. Lease move: the
 keychain's epoch first, then the store's. No keychain item is deleted outside the owner's removal; an item without a
 record is listed as an orphan. Proven by: fault points on both sides of every keychain write and delete.
 
@@ -218,20 +219,31 @@ H-048, H-263, H-289, H-296.
 At every unlock the signer derives the address from the key and compares it with the record. A home signs only if the
 keychain's lease item `<home-id>/lease` (one per home, compare-and-set on its epoch) and the home-secret hash match its
 own. The home secret lives outside the home directory: a keychain item `<home-id>/home-secret` bound to the home's
-realpath and (dev, inode, birth time), so a backup, a restore, a fork or a hand copy (`cp -a`, rsync, a Time Machine
-restore to another folder) starts offline, and "move this wallet here" is an explicit host act. `src/core/backup.ts`
-and `scripts/fork-home.ts` never copy it, and a test checks both outputs. The keychain is the arbiter of the lease epoch
-only; the "no overwrite" rule of C15 exempts the lease and canary items, and slice 1's create flow makes the lease, so
-no wallet item exists without one. A restored home starts with a restore marker: a payment the backup held before its
+realpath, its folder's inode and birth time (no birth time on Linux; no device number, which a remount can change:
+spikes/home-binding), so a backup, a restore, a fork or a hand copy (`cp -a`, rsync, a Time Machine restore to another
+folder) starts offline, and "move this wallet here" is an explicit host act. `src/core/backup.ts` and
+`scripts/fork-home.ts` never copy it, and a test checks both outputs. The keychain is the arbiter of the lease epoch and
+the home secret; the "no overwrite" rule of C15 exempts the lease and canary items, and the home secret for the owner's
+move alone, which proves each key, then rewrites the home secret, then the lease. Slice 1's create flow makes the lease,
+so no wallet item exists without one. A restored home starts with a restore marker, which its binding takes in, so it is
+never the home it came from even at the same path and inode (spikes/home-binding): a payment the backup held before its
 burn point is Restored (closed, told to the chat, never resumed), one past it is tracked from its stored versions.
 
 A reveal is not on the daemon's HTTP API. A later reveal: Electron main runs the OS re-authentication
 (`systemPreferences.promptTouchID`), spawns the signer child itself over pipes it owns, and shows the key in a
 `BrowserWindow` that loads a bundled local file (sandboxed, context isolation, no network, a strict CSP, content
 protection) over preload IPC; the daemon is told only that a reveal happened. The creation reveal: the ready commit
-mints a capability bound to the create request id, consumed once within 10 min on that request's own connection
-(the desktop app, a loopback browser of `banda serve`, the host TTY of `banda wallet create`), before the address is
-shown. A request with the owner's token, and a script in the web UI's origin, cannot reveal.
+mints a capability bound to the create request id, consumed once within 10 min of that commit with a secret that only
+one answer to that request carries (to the desktop app, a loopback browser of `banda serve`, the host TTY of `banda
+wallet create`), before the address is shown: the first answer from this computer that finds the reveal unclaimed,
+which is the creation's own unless the creation waited on the keychain, a restart settled it, its ready commit could
+not be synced or its answer was lost, and then the next repeat's. The daemon keeps only its hash, on disk before the
+answer goes, and every repeat after it in the same process is answered none. A process killed between that commit and
+its answer leaves a claim no client may have heard: the first repeat after the restart claims again, its hash in place
+of the one before, so a secret that answer did carry stops spending and still one secret does. A request with the owner's token alone cannot reveal; with the
+creation's request id too, it claims a reveal not yet claimed, a residual accepted (H-268). In a loopback browser the creation's reveal
+is readable by the browser's extensions, which banda cannot see: a residual accepted (H-272, OOS-10), told on the create
+and save screens there.
 
 Resolves (28 cases, 11 critical): H-014, H-017, H-020, H-021, H-022, H-024, H-025, H-031, H-037, H-065, H-261, H-263,
 H-264, H-266, H-267, H-268, H-269, H-272, H-276, H-283, H-284, H-285, H-286, H-287, H-288, H-289, H-290, H-305.
@@ -288,10 +300,15 @@ H-162, H-187, H-224, H-244, H-250, H-265, H-302, H-306.
 Every commit whose result is acknowledged to the owner or a chat, or whose effect leaves the machine, must survive
 power loss before that happens: the start commit before its broadcast, every later version of a nonce (each fee bump,
 the owner's cancel replacement, a filler) before its broadcast, an observation before its 402 reaches the box, an
-authorization before its header leaves, and every commit whose refusal or result reaches the owner's devices. The store runs
-WAL with `synchronous=NORMAL`, which keeps commits through a process crash but can lose the newest on power loss, so
-these commits need a per-commit sync (spike I12 measures `synchronous=FULL` for the wallet's commits on the shipped
-build). At start, a chain count above the ledger that stored hashes do not explain freezes the lane. Proven by:
+authorization before its header leaves, and every commit whose refusal or result reaches the owner's devices, a
+wallet's own included (its creation, archive, unarchive, the save step, its removal, an agent switched on for it, a code
+acknowledged): one whose sync fails is answered as not yet safe, to be tried again, never as done. pi-durable opens
+the store with WAL and `synchronous=NORMAL`, which keeps commits through a process crash but can lose the newest on
+power loss; banda runs it with `synchronous=FULL`, so SQLite hands the log to the disk at every commit, and one
+barrier before each of those effects and acknowledgements flushes the log and the database past the drive's cache (on
+macOS a commit's own sync stops there, and a drive-level flush at every commit would slow every turn): the flush is
+paid where something leaves the daemon, never at every commit. A full checkpoint instead
+waits on every reader's snapshot (a backup, a fork of the home) with the event loop held, and then fails. At start, a chain count above the ledger that stored hashes do not explain freezes the lane. Proven by:
 PaymentLane models the store as a synced prefix (`Persist`, `Synced`, `PowerLoss` back to `dur`); `_bug_C21`,
 `_bug_C21bump` and `_bug_C21acked` (a sync left out at the start commit, at a bump, at an acknowledged refusal) each
 find a double payment or an undone refusal; NonceAlloc `_bug_C21` and `_bug_C21bump`, X402 `_bug_C21`.

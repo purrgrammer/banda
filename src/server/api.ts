@@ -32,6 +32,7 @@ export type * from "./api/harnesses.ts";
 export type * from "./api/permissions.ts";
 export type * from "./api/routines.ts";
 export type * from "./api/tiers.ts";
+export type * from "./api/wallets.ts";
 export type { OpenWait, Parked, State };
 
 import type { ArtifactsShellEvent } from "./api/artifacts.ts";
@@ -40,6 +41,7 @@ import type { DevicesShellEvent } from "./api/devices.ts";
 import type { GroupsShellEvent } from "./api/groups.ts";
 import type { HarnessesShellEvent } from "./api/harnesses.ts";
 import type { RoutineRun, RoutineState } from "./api/routines.ts";
+import type { WalletsShellEvent } from "./api/wallets.ts";
 
 /** A tool call in an answer: what the model asked to run, with its arguments. */
 export type ToolCall = {
@@ -556,7 +558,8 @@ export type ShellEvent =
 	| BandShellEvent
 	| DevicesShellEvent
 	| GroupsShellEvent
-	| HarnessesShellEvent;
+	| HarnessesShellEvent
+	| WalletsShellEvent;
 
 /**
  * A saved fact and its audience; no workspace path on consumer screens. `from` is the owner's metadata alone:
@@ -820,7 +823,7 @@ export type ConnectionSummary = {
 	readonly service: string;
 	readonly url: string;
 	readonly where: string;
-	readonly auth: "none" | "key" | "oauth";
+	readonly auth: "none" | "key" | "oauth" | "wallet";
 	readonly reads: readonly string[];
 	readonly floors: { readonly [tool: string]: Floor };
 	/** The scopes a new account asks for unless the owner chooses others, when the file names them. */

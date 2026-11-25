@@ -142,7 +142,9 @@ flowchart LR
     computer" (H-276, UC-26).
 - **Error flows:**
   - E1 The keychain does not answer at the write or the read-back (locked, prompt unanswered, no Secret Service): the
-    wallet stays `creating`, the owner is told why, and the create resumes when the keychain answers (C20, H-018).
+    wallet stays `creating` and the owner is told why. Once the keychain answers, banda reads the item again: the key
+    it kept makes the wallet ready, and an empty item or one holding another key drops the record, so nothing is made
+    (C20, H-018).
   - E2 An item already exists under the account (planted, or another key): the record is dropped and nothing is
     overwritten (C15, H-024).
   - E3 The read-back returns another key or nothing: the record is dropped; no address is ever shown whose key is not
@@ -169,29 +171,37 @@ flowchart LR
   or `banda wallet create` on the host's terminal).
 - **Main flow:**
   1. The owner taps Show. At creation the ready commit already minted a creation capability for the create request
-     id, consumable once within 10 min by the client that sent it, before the address is shown; no OS
-     re-authentication is needed, so requirement 5 holds on every platform (C16). A later reveal needs the host's
-     capability: the desktop shell asks for an OS re-authentication (Touch ID or password; none exists on Linux, so a
-     later reveal there is open) and mints a one-time capability bound to the wallet, valid 60 s.
-  2. The daemon consumes the capability in the reveal's commit and the signer reads the key; the app shows `0x` + 64
-     lowercase hex beside the address it opens (keys spike: raw key, imported by MetaMask and `cast`).
+     id, consumable once within 10 min with a secret only that request's own answer carries, before the address is
+     shown; no OS re-authentication is needed, so requirement 5 holds on every platform (C16). A later reveal is not on the
+     daemon's API: the desktop app on a Mac with Touch ID set up asks for Touch ID, its own signer exports the key and
+     shows it, and the daemon is told afterwards that a reveal happened. Everywhere else (Linux, Windows, a Mac without
+     Touch ID) the desktop app refuses a later reveal, Restore key and Move signing alike, and the key is shown at
+     creation alone.
+  2. At creation the signer proves the key, the daemon spends the capability in a commit of its own, and the signer
+     writes the key onto the reveal's connection, so the key never passes through the daemon (C20); the app shows
+     `0x` + 64 lowercase hex beside the address it opens (keys spike: raw key, imported by MetaMask and `cast`).
   3. The owner copies it (the clipboard is cleared after 60 s where the platform allows) and saves it elsewhere.
-  4. The owner pastes it back; the daemon derives the address and compares (R-8); on a match the wallet is backed up
-     (`ready_saved`).
+  4. The owner pastes it back; the app sends only its SHA-256 digest, which the signer compares with the stored key's
+     (R-8, C20); on a match the wallet is backed up (`ready_saved`).
 - **Alternative flows:**
   - A1 The owner skips: the wallet is marked Not backed up (`ready_skipped`); Receive opens; one quiet reminder when
     the balance first exceeds a small amount (H-273).
-  - A2 A later reveal (weeks after): the host's capability path, listed in the wallet's activity (H-266).
+  - A2 A later reveal (weeks after): the desktop app's alone, on a Mac where Touch ID is set up, after Touch ID; its
+    own signer exports the key, and the reveal is listed in the wallet's activity (H-266). On Linux, Windows or a Mac
+    without Touch ID it is refused, as are Restore key and Move signing (OD-2).
+  - A3 The wallet is made in a loopback browser (`banda serve`): the create screen, before Create, and the save
+    screen, before Show, say that an extension in this browser can read the key, and point to the desktop app or
+    `banda wallet create`; the owner may go on, and the reveal is the same (H-272, OOS-10).
 - **Error flows:**
-  - E1 The paste does not derive the address: the wallet stays Not backed up and the owner is told the copy is wrong,
-    while the key is still in the keychain (H-275).
+  - E1 The pasted copy's digest does not match the stored key's: the wallet stays Not backed up and the owner is told
+    the copy is wrong, while the key is still in the keychain (H-275).
   - E2 The reveal comes from a paired device, a browser device or a local process with the owner's token alone:
     refused, "open banda on your computer" (C16, H-264, H-267).
   - E3 The capability is replayed or expired: refused (C14, C16, H-268).
   - E4 The keychain does not answer or the item is not ours: no reveal (H-021).
   - E5 The daemon is killed during the reveal: the capability is spent; the owner asks again (H-269).
-- **Postconditions:** the key left the keychain only to the host's screen and clipboard; the store records that a
-  reveal happened, never the key.
+- **Postconditions:** the key left the keychain only to the host's screen and clipboard (in a loopback browser, also
+  to what its extensions can read: H-272); the store records that a reveal happened, never the key.
 - **Hazards:** H-008, H-263, H-266, H-267, H-268, H-269, H-270, H-271, H-273, H-274, H-275, H-281
 - **Rules:** C14, C15, C16
 - **Scenarios:** `key_export.feature`
@@ -246,7 +256,9 @@ flowchart LR
   **Machines:** `payment` (call with `wallet_usable`, cancel_or_switch_off)
 - **Preconditions:** the wallet exists and is not archived.
 - **Main flow:** in the agent's settings (or the wallet's), the owner switches the wallet on for the agent, as for any
-  account of a connection; the agent's tools now list that wallet, and only the wallets on for it (H-071).
+  account of a connection; the agent's tools now read that wallet. The tools' schema is the same for every agent and
+  names no wallet: `account` is optional, and when it is missing or ambiguous and the agent has several wallets, the
+  call is refused with the agent's own wallets only, each as its name and short address (H-057, H-071, H-072).
 - **Alternative flows:** A1 Two agents share a wallet: they share its balance (the cap) and its Deny rules; each keeps
   its own Always rules (OD-1, H-159). A2 An agent with two wallets names one in its call; an unnamed call to an agent
   with two wallets is refused with the list (H-057).
@@ -257,8 +269,9 @@ flowchart LR
 - **Hazards:** H-051, H-053, H-054, H-057, H-058, H-071, H-159
 - **Rules:** C3, C4, C17
 - **Scenarios:** `agent_access.feature`, `races.feature`
-- **V&V outside the scenarios:** H-057, H-058, H-071 (unit tests of the per-agent tool schema: the wallet enum names
-  only the agent's wallets, a label required; banda-integration spike found `multiAccount` listing every account);
+- **V&V outside the scenarios:** H-057, H-058, H-071 (unit tests of the tool schema and the refusal: two agents'
+  first-step schemas are equal and name no wallet, and the refusal that asks an agent to choose lists only its own
+  wallets; banda-integration spike found `multiAccount` listing every account);
   H-159 (copy test on the sharing notice).
 
 ### UC-06 · Agent reads its wallet
@@ -271,7 +284,9 @@ flowchart LR
   and rules, so the agent knows whom it may pay before trying.
 - **Alternative flows:** A1 The agent has no wallet: the tools are absent and the agent says it has none (H-056).
 - **Error flows:** E1 The balance is unknown: "unknown", never 0 (H-208).
-- **Postconditions:** nothing is written; long histories are paged (H-214).
+- **Postconditions:** each read is logged in the activity: the address read in the commit that marks the wallet
+  disclosed (C17), the balance once the chain was asked, read or not. Nothing else is stored, and long histories are
+  paged (H-214).
 - **Hazards:** H-056, H-070, H-072, H-206, H-209
 - **Rules:** C22
 - **Scenarios:** `transaction_list.feature`
@@ -474,7 +489,9 @@ flowchart LR
   with no stored effect (stack.md section 7, tx-history spike).
 - **Alternative flows:** A1 A reorg removes an incoming row: it is rebuilt from the chain (H-213). A2 A long history
   is paged (H-214). A3 Slice 1, before any send exists: the list holds the incoming rows alone (USDC from `Transfer`
-  logs, ETH by balance checkpoints), so a funded wallet shows its funds arriving (principle 9).
+  logs, ETH by balance checkpoints), so a funded wallet shows its funds arriving (principle 9). No scenario holds these
+  rows (`transaction_list.feature` is the outgoing ones'): `test/wallet-indexer.test.ts` and the incoming route's
+  tests in `test/wallets-routes.test.ts` are its V&V.
 - **Error flows:** E1 The RPC cannot serve logs (`mainnet.base.org` answered 429 to every `eth_getLogs`): Settings
   says so and the list says how far back it is complete (H-207). E2 Dust from a look-alike address: shown as incoming,
   never offered as a recipient (H-205).
@@ -535,9 +552,14 @@ flowchart LR
   the wallet (C17, H-046).
 - **Error flows:** E1 The keychain does not answer at the delete: `removing` holds and retries (H-044). E2 A reveal
   while removing: refused once `removing` committed (H-048). E3 Killed between the store and the keychain: the start
-  finishes the removal from `removing` (C15, H-044).
-- **Postconditions:** no item without a record; no wallet removed with funds or work in flight.
-- **Hazards:** H-043, H-044, H-046, H-048
+  finishes the removal from `removing` (C15, H-044). E4 The item holds a key that does not derive the wallet's address
+  at the delete: it is never deleted (its address was never checked for funds). The wallet's own key is gone already
+  (deleted before a stop, or lost), so the removal ends, and the item is listed as a key without a wallet (C15,
+  H-045).
+- **Postconditions:** no item without a record; no item deleted while the balance reads funds or work is in flight,
+  so a wallet removed with funds at its address had its key saved, never had its address leave banda, or lost its key
+  to the OS (C17); no item deleted that holds another key.
+- **Hazards:** H-043, H-044, H-045, H-046, H-048
 - **Rules:** C15, C17
 - **Scenarios:** `wallet_lifecycle.feature`
 
@@ -548,7 +570,7 @@ flowchart LR
 - **Preconditions:** a ready wallet.
 - **Main flow:** at every unlock the signer derives the address from the key and compares it with the record, and
   checks the lease (C16). The wallet's offline reason is one of: locked, key missing, wrong key, other home, host
-  mode. A missing key is told apart from a keychain that cannot answer by a canary account `<home-id>/probe` (H-037).
+  mode. A missing key is told apart from a keychain that cannot answer by a canary account `<home-id>/canary/<slot>`, one of a few the home overwrites, never found by listing the keychain (H-037).
 - **Alternative flows:** A1 The keychain unlocks: online again; the lane resumes in FIFO order (H-026). A2 Restore key:
   the owner pastes the exported key; it must derive the record's address (OD-6, H-014); the restore answers the lane's
   "key missing" Wait (C9, H-290).
@@ -557,7 +579,7 @@ flowchart LR
   crypto, H-018, H-032, H-034). E2 A late answer after the deadline is discarded (C14, H-035). E3 A release changes
   the Node binary: macOS asks once per wallet; the offline reason says what to click (H-017).
 - **Postconditions:** banda never signs with a key that does not derive the address.
-- **Hazards:** H-014, H-017, H-018, H-019, H-021, H-025, H-026, H-032, H-034, H-035, H-037, H-290
+- **Hazards:** H-014, H-017, H-018, H-019, H-021, H-025, H-026, H-032, H-034, H-035, H-037, H-290, H-317
 - **Rules:** C9, C14, C16, C20
 - **Scenarios:** `key_export.feature`, `keychain_signing.feature`, `lane_and_nonce.feature`, `races.feature`, `wallet_lifecycle.feature`
 - **V&V outside the scenarios:** H-017 (manual run on a signed release, keychain spike "Not run"); H-018, H-032,
@@ -742,8 +764,10 @@ flowchart LR
 - **Hazards:** H-009, H-010, H-011, H-012, H-015, H-016, H-030, H-031, H-033, H-038, H-150, H-151, H-152, H-153, H-154, H-155, H-161, H-162, H-244
 - **Rules:** C20
 - **Scenarios:** `crash_boundaries.feature`, `keychain_signing.feature`
-- **V&V outside the scenarios:** the golden vectors of the keys spike (EIP-155, EIP-712 `Mail`, the EIP-1559 transfer,
-  the EIP-3009 authorization) with `extraEntropy: false` (H-161, H-162); a test enumerating the signing module's
+- **V&V outside the scenarios:** golden vectors through the signing module with `extraEntropy: false`: EIP-1559
+  transfers on 31337, 84532 and 8453 and EIP-3009 authorizations within C19's window on 84532 and 8453 (the spike's
+  own authorization is past that window and is refused; its EIP-155 and `Mail` examples are shapes the module cannot
+  sign) (H-155, H-161, H-162); a test enumerating the signing module's
   exports and a lint rule forbidding other importers (H-150 to H-153, H-306); a key scan of the store, blobs, logs and
   heap snapshots after create, sign and restart (H-009 to H-011, H-015, H-016); a release build test that no test
   keystore is reachable (H-030); `ISOLATION.md`'s rule for the keychain in tests (H-031); H-038 (`security` CLI not
@@ -779,9 +803,12 @@ flowchart LR
 
 - **Slice:** 1 · **Actors:** Daemon (release build), CI · **Machines:** none
 - **Preconditions:** a release or a lockfile change.
-- **Main flow:** exact pins, committed integrity hashes, `npm ci --ignore-scripts` with an allowlist, a 14-day release
-  cooldown for the signing closure, `npm audit signatures`, OSV and `cargo audit bin` on the keychain module, the
-  dependency-set check (one `@noble/curves`, no `@x402/*` in production), golden vectors (stack.md section 5).
+- **Main flow:** exact pins, committed integrity hashes, `npm ci --ignore-scripts` for the root tree and an allowlist
+  npm enforces (`strict-allow-scripts`) for the desktop and phone trees, a 14-day release cooldown for the whole tree,
+  held on what each lockfile pins (`scripts/release-age.ts`), registry signatures and provenance subjects
+  (`scripts/registry-signatures.ts`), OSV and `cargo audit bin` on the keychain module, the dependency-set check (one
+  `@noble/curves`, no `@x402/*` in anything shipped: the production trees, `web/`'s bundle and the desktop shell),
+  golden vectors (stack.md section 5).
 - **Alternative flows:** A1 An upgrade of the signing path follows the upgrade ritual (stack.md).
 - **Error flows:** E1 A check fails: no release.
 - **Postconditions:** logs, activity and the public repo never carry keys, real addresses or amounts from a home
@@ -847,8 +874,9 @@ R-10: one in flight (C5); raise only with a measured need on Base Sepolia.
 
 The six cases `hazards.md` triages out of scope: freed memory, swap and crash dumps; wallet data leaving through the
 agent's other reads; the RPC learning the address and IP (said plainly in Settings); the payee running its handler
-once per duplicate copy (payee-side, costs the payer nothing more); browser extensions reading the reveal (the reveal
-is in the desktop app); the explorer learning which address the owner watches (an explicit link).
+once per duplicate copy (payee-side, costs the payer nothing more); browser extensions reading the creation's reveal
+when the wallet is made in a loopback browser (`banda serve`), where the page says so and points to the desktop app or
+`banda wallet create`; the explorer learning which address the owner watches (an explicit link).
 
 - **Hazards:** H-013, H-069, H-197, H-246, H-272, H-282
 
@@ -865,7 +893,7 @@ deduplicated, never counted (UC-07 E5).
 
 | Slice | Use cases | Feature files |
 |---|---|---|
-| 1. A wallet that reads | UC-01, UC-02, UC-03, UC-04, UC-05 (switch), UC-06, UC-14 (incoming rows), UC-19 (macOS), UC-28, UC-29, UC-30 | `wallet_lifecycle`, `key_export`, `keychain_signing`, `owner_send_receive` (Receive), `transaction_list` (incoming) |
+| 1. A wallet that reads | UC-01, UC-02, UC-03, UC-04, UC-05 (switch), UC-06, UC-14 (incoming rows), UC-19 (macOS), UC-28, UC-29, UC-30 | `wallet_lifecycle`, `key_export`, `keychain_signing`, `owner_send_receive` (Receive); UC-14 A3 by its V&V outside the scenarios |
 | 2. Send with recipients | UC-05, UC-07 to UC-15, UC-17, UC-18, UC-21, UC-22, UC-26, UC-27 | `payments`, `recipients`, `agent_access`, `lane_and_nonce`, `crash_boundaries`, `owner_send_receive`, `transaction_list`, `races` |
 | 3. x402 | UC-23, UC-24, UC-25 | `x402` |
 | 4. Linux Secret Service | UC-19 (Linux), UC-20 | `keychain_signing` (`@keychain` scenarios) |

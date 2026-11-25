@@ -190,9 +190,9 @@ export const Definition = Type.Object(
 	{
 		service: Type.String({ minLength: 1, maxLength: 100, description: "The service, as the owner calls it" }),
 		about: Type.String({ minLength: 1, maxLength: 120, description: "What it lets the band do, in a line" }),
-		url: Type.String({ maxLength: 2000 }),
+		url: Type.Optional(Type.String({ maxLength: 2000, description: "The server's address; a wallet names none" })),
 		api: Type.Optional(literals(Object.keys(REST_APIS) as (keyof typeof REST_APIS)[])),
-		auth: literals(["none", "key", "oauth"]),
+		auth: literals(["none", "key", "oauth", "wallet"]),
 		client: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
 		scopes: Type.Optional(Type.Array(Scope, { maxItems: 64, uniqueItems: true })),
 		access: Type.Optional(

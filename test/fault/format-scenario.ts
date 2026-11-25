@@ -1,7 +1,8 @@
 /**
- * Test-only migrations and what must hold around them. No build has a real step yet, so the runner
- * (`src/core/format.ts`) is proved on these: a home in the floor's format with a ledger file, each step adding its own
- * format to the ledger with a file written whole and renamed, and a `before` that copies the ledger as a backup would.
+ * Test-only migrations and what must hold around them. They prove the runner's ordering (`src/core/format.ts`) on steps
+ * that write: a home in the floor's format with a ledger file, each step adding its own format to the ledger with a
+ * file written whole and renamed, and a `before` that copies the ledger as a backup would. `format-build.ts` runs the
+ * build's own last step on a kept home.
  */
 import { open, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";

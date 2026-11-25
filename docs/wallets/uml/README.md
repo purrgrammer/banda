@@ -45,8 +45,8 @@ A row that keeps its state is a line inside the state. Terminal states are grey.
 
 | Diagram | What it shows |
 |---|---|
-| [state-wallet.puml](state-wallet.puml) ([svg](svg/state-wallet.svg)) | wallet (WalletLifecycle.tla): 54 rows, 9 states. Creating, saving or skipping the key, archive, remove. |
-| [state-signing.puml](state-signing.puml) ([svg](svg/state-signing.svg)) | signing (WalletLifecycle.tla): 28 rows, 6 states. Whether the key can sign now: online, locked, key_missing, wrong_key, other_home, offline_host_mode. |
+| [state-wallet.puml](state-wallet.puml) ([svg](svg/state-wallet.svg)) | wallet (WalletLifecycle.tla): 56 rows, 9 states. Creating, saving or skipping the key, archive, remove. |
+| [state-signing.puml](state-signing.puml) ([svg](svg/state-signing.svg)) | signing (WalletLifecycle.tla): 38 rows, 6 states. Whether the key can sign now: online, locked, key_missing, wrong_key, other_home, offline_host_mode. |
 | [state-recipient.puml](state-recipient.puml) ([svg](svg/state-recipient.svg)) | recipient (RecipientRule.tla): 49 rows, 3 states. A recipient of a wallet, for every agent (OD-1): unknown, ask, deny. |
 | [state-permission.puml](state-permission.puml) ([svg](svg/state-permission.svg)) | permission (RecipientRule.tla): 30 rows, 2 states. One agent's Always for a recipient of the wallet: none, always. Two refusal rows are proven unreachable (an Always exists only under an Ask recipient). |
 | [state-payment.puml](state-payment.puml) ([svg](svg/state-payment.svg)) | payment (PaymentLane.tla): 75 rows, 12 states. One payment from Idle to Confirmed, Refused, NotPaid, Failed, Cancelled or Restored. |
@@ -79,4 +79,4 @@ API, https://hub.docker.com/v2/repositories/plantuml/plantuml/tags (read 2026-11
 These points are drawn as open, because the design has not settled them:
 - **Signer error codes.** The codes in seq-11 are illustrative names for C20's fixed codes. The classification is by message prefix.
 - **Paid retry.** The pass that lets a paid retry of a held write through the proxy (seq-06).
-- **A signed signer helper (OD-11).** Until it ships, the signer is the daemon's child and a host coding agent without a per-command ask takes wallets offline (deployment, component).
+- **A signed signer helper (OD-11).** Until it ships, the signer is the daemon's child and any connected coding agent takes wallets offline (deployment, component).

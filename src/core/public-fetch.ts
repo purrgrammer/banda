@@ -1,66 +1,19 @@
 /**
  * A fetch that reaches only the public internet, for probing a server the companion named (DESIGN.md "Connections"):
- * https only, to an address that is no loopback, private, link-local, shared or multicast one, checked on the address
+ * https only, to an address that is public (src/core/addresses.ts `publicAddress`), checked on the address
  * it connects to (so a name that resolves elsewhere once checked cannot slip through), never following a redirect,
  * never sending a credential, and reading at most a bounded answer. What the companion names can only ever be asked
  * what anyone on the internet could ask it.
  */
 import { type LookupAddress, lookup } from "node:dns";
 import { Agent, request } from "node:https";
-import { BlockList, isIP } from "node:net";
+import { isIP } from "node:net";
 import { Readable } from "node:stream";
+import { publicAddress } from "./addresses.ts";
 
 /** What one probe's answer may weigh, and how long it may take, all of it. */
 const MAX_PROBE_BYTES = 1024 * 1024;
 const PROBE_MS = 10_000;
-
-const blocked = new BlockList();
-for (const [net, prefix] of [
-	["0.0.0.0", 8],
-	["10.0.0.0", 8],
-	["100.64.0.0", 10],
-	["127.0.0.0", 8],
-	["169.254.0.0", 16],
-	["172.16.0.0", 12],
-	["192.0.0.0", 24],
-	["192.0.2.0", 24],
-	["192.168.0.0", 16],
-	["198.18.0.0", 15],
-	["198.51.100.0", 24],
-	["203.0.113.0", 24],
-	["224.0.0.0", 4],
-	["240.0.0.0", 4],
-] as const)
-	blocked.addSubnet(net, prefix, "ipv4");
-for (const [net, prefix] of [
-	["::", 96],
-	["100::", 64],
-	["2001::", 32],
-	["2001:db8::", 32],
-	["2002::", 16],
-	["64:ff9b::", 96],
-	["64:ff9b:1::", 48],
-	["fc00::", 7],
-	["fe80::", 10],
-	["fec0::", 10],
-	["ff00::", 8],
-] as const)
-	blocked.addSubnet(net, prefix, "ipv6");
-
-/** Whether `address` is one the public internet would answer on. */
-export function publicAddress(address: string): boolean {
-	const family = isIP(address);
-	if (family === 0) return false;
-	if (family === 6) {
-		// an IPv4 address written as IPv6 is judged as the IPv4 one it is
-		// an IPv4 address written as IPv6 (mapped, compatible, translated, 6to4) is never public by itself here: those
-		// ranges are blocked whole, as is :: /96, so nothing reaches a private IPv4 address through them
-		const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address)?.[1];
-		if (mapped !== undefined) return publicAddress(mapped);
-		return !blocked.check(address, "ipv6");
-	}
-	return !blocked.check(address, "ipv4");
-}
 
 /** The resolver the connection uses: every address it would connect to must be public, or it does not connect. */
 function publicLookup(

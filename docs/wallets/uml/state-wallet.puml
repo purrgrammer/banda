@@ -5,7 +5,7 @@ skinparam stateFontStyle bold
 skinparam stateAttributeFontSize 10
 skinparam stateAttributeFontStyle plain
 skinparam ArrowFontSize 10
-title wallet machine (WalletLifecycle.tla), generated from model/transitions.json: 54 rows, 9 states
+title wallet machine (WalletLifecycle.tla), generated from model/transitions.json: 56 rows, 9 states
 
 legend top left
 Guard atoms and their domains
@@ -107,8 +107,10 @@ wallet_archived : unarchive [not version_current] / Unarchive (C8)
 ' row 49
 wallet_archived : begin_remove [not (version_current and removable)] / BeginRemove (C17)
 ' row 50
-wallet_removing : delete_item [kc_up and removable] / DeleteItem (C15)
-' row 52
+wallet_removing : delete_item [kc_up and item == 'ours' and removable] / DeleteItem (C15)
+' row 53
+wallet_removing : delete_item [kc_up and item == 'empty'] / Removed (C15)
+' row 54
 wallet_removing : delete_item [not kc_up] / DeleteItem (C15)
 
 ' row 0
@@ -143,7 +145,8 @@ wallet_ready_skipped --> wallet_removing : begin_remove [version_current and rem
 ' row 45
 wallet_archived --> wallet_removing : begin_remove [version_current and removable] / BeginRemove (C15,C17)
 ' row 51
-wallet_removing --> wallet_archived : delete_item [kc_up and not removable] / CancelRemove (C17)
-' row 53
-wallet_removing --> wallet_removed : item_gone / Removed (C15)
+wallet_removing --> wallet_archived : delete_item [kc_up and item == 'ours' and not removable] / CancelRemove (C17)
+' row 52
+' row 55
+wallet_removing --> wallet_removed : delete_item [kc_up and item == 'other'] / Removed (C15,C17)\nitem_gone / Removed (C15)
 @enduml

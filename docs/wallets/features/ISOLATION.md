@@ -58,21 +58,21 @@ python3 -I features/check_features.py --coverage                      # rows, ha
   atom read at a block) are an ordinary suite, not a box suite; when `anvil --version` is absent or not 1.9.0 the
   runner skips them with "anvil 1.9.0 not found (mise install)", as Docker suites skip, and CI's ordinary job runs
   `mise install` before them, so CI never skips them.
-- Each scenario starts its own `anvil` (Foundry 1.9.0, the version `../stack.md` pins). The runner binds port 0 on
-  127.0.0.1, reads the port the system assigned, closes it, starts anvil with `--port <that port> --host 127.0.0.1`,
-  and retries with a new port on `EADDRINUSE`. The port is never fixed and never a slot.
+- Each scenario starts its own `anvil` (Foundry 1.9.0, the version `../stack.md` pins), with `--port 0 --host
+  127.0.0.1`, and reads the port from its `Listening on 127.0.0.1:<port>` line, so the system assigns it at bind with no
+  race and no retry. The port is never fixed and never a slot.
 - The mnemonic is fixed at anvil's public development mnemonic,
   `test test test test test test test test test test test junk`. These keys are public and hold no real funds, and
   they are never used outside anvil.
 - The chain id is fixed:
-  - 31337 for transfer scenarios;
-  - 84532 for x402 scenarios. These run a plain anvil (no fork, no network) loaded with `--load-state` from a
-    committed state file. The file holds USDC's FiatTokenV2_2 code and storage at the pinned address. It is built
-    once from a fork with the prestate tracer, as `../spikes/gaps/x402-state/make-state.mjs` does. It holds the code
-    of every account the token's paths touch (the proxy, the implementation and the linked SignatureChecker
-    library) and every non-zero slot they read. A fork's `anvil_dumpState` is not the fixture: it drops the
-    implementation and the library (`../spikes/gaps/README.md` §B). The fixture was built from
-    `https://sepolia.base.org`; tests never fork it.
+  - 31337 for transfer scenarios, on the network `anvil`, which holds no token: they move ETH;
+  - 84532 for x402 scenarios and any that move USDC, on the network `anvil-usdc`. They run a plain anvil (no fork, no
+    network) loaded with `--load-state` from a committed state file. The file holds USDC's FiatTokenV2_2 code and
+    storage at the pinned address. It is built once from a fork with the prestate tracer, as
+    `../spikes/gaps/x402-state/make-state.mjs` does. It holds the code of every account the token's paths touch (the
+    proxy, the implementation and the linked SignatureChecker library) and every non-zero slot they read. A fork's
+    `anvil_dumpState` is not the fixture: it drops the implementation and the library (`../spikes/gaps/README.md` §B).
+    The fixture was built from `https://sepolia.base.org`; tests never fork it.
   - A loaded state keeps the dumped block's timestamp, so chain time starts as old as the fixture. Before the first
     step the runner sets the next block's timestamp to the wall clock (`evm_setNextBlockTimestamp`, then
     `evm_mine`; section 5 says why).
@@ -215,3 +215,49 @@ seeded subset twice in one process, and fails if any result differs.
 Scenarios, fixtures and recorded traces use only invented data: anvil's public dev accounts, generated wallet keys
 seeded per scenario, and invented names and amounts. Nothing read from an owner's home or a `home:fork` goes into a
 scenario, a fixture, a commit or a comment (AGENTS.md "Changes").
+
+## 11. Before the runner: which test realises each scenario
+
+No runner executes these files yet: until one does, a scenario of a slice that shipped is realised by a named test
+that drives the same steps through the code that ships and asserts the same outcome, and `check_features.py` alone
+holds the scenarios to the table. Slice 1 ("a wallet that reads"):
+
+| Scenario | Test |
+|---|---|
+| A wallet is created, its key written to the keychain and read back | `test/wallet-lifecycle.test.ts` "makes a ready wallet, not backed up, with its item read back and an account on for no agent" |
+| The keychain does not answer during creation, and the wallet waits in creating | `test/wallet-lifecycle.test.ts` "stays creating while the keychain cannot write…"; `test/wallets-routes.test.ts` "settles a creation the keychain left waiting once it answers again, with no restart" and "…settled by the next start, after the home's format" |
+| An item already under the wallet's account drops the record and overwrites nothing | `test/wallet-lifecycle.test.ts` "drops the record when an item is already there, and never overwrites it (E2, H-024)" |
+| A read-back that does not return the wallet's key drops the record | `test/wallet-lifecycle.test.ts` "drops the record when the read-back is not the key…" |
+| The owner archives a saved wallet…; Archive works from every ready state; An archive sent from a screen that is out of date changes nothing | `test/wallet-lifecycle.test.ts` "archives on the version the owner saw, refuses a stale one, and comes back backed up or not" |
+| Unarchiving a wallet whose key was never confirmed saved keeps it marked Not backed up; An unarchive from an out-of-date screen changes nothing | the same, and "brings an archived wallet back backed up when its key was saved" |
+| An empty wallet with nothing in flight is removed and its keychain item deleted; A removable wallet starts its removal from any state that allows it | `test/wallet-lifecycle.test.ts` "removes the item, then the wallet and its account", "removes an archived wallet straight from the archive" |
+| Removal is refused while the wallet holds funds or work, or its shown key was never saved | `test/wallet-lifecycle.test.ts` "refuses while it holds funds…", "refuses an address that left banda while its key was never saved" |
+| Funds that arrive while removing cancel the removal and archive the wallet | `test/wallet-lifecycle.test.ts` "rolls back to archived when funds arrive between the check and the delete" |
+| The keychain item holds another key at the delete, and the removal ends with that key kept | `test/wallet-lifecycle.test.ts` "never deletes an item that holds another key…", "an item swapped for another key between the proof and the delete is kept…" |
+| A removal stopped after its delete ends once the keychain answers, even with funds at the address | `test/wallet-lifecycle.test.ts` "a removal stopped after its delete ends at recovery even once funds reached the address (H-044)" |
+| The keychain does not answer at the delete, and removing holds until it does | `test/wallet-lifecycle.test.ts` "stays removing while the keychain cannot delete, and the next try finishes it" |
+| An agent reads its wallet's address only after the owner saved the key or skipped the step | `test/wallet-tools.test.ts` "an agent reads its address only after the key was saved or the step skipped" |
+| The keychain locks, the wallet shows one offline reason, and comes back online after the check | `test/wallet-lifecycle.test.ts` "says the key is missing, another key, or the keychain locked…", "says a home-wide reason for every wallet at once…"; `test/wallets.browser.test.ts` |
+| A keychain key that does not derive the address takes the wallet offline as wrong key | `test/wallet-lifecycle.test.ts` "keeps the signer's code beside the state, the most specific reason (H-317)" |
+| Another home holds the lease, and this one stays offline | `test/wallet-lifecycle.test.ts` "is other_home for a copy of the home…"; `test/wallet-home-id.test.ts` "backups, restores and forks (C16)" |
+| Host mode takes the wallet offline | `test/wallet-lifecycle.test.ts` "is online with the key and the lease, offline in host mode"; `test/wallet-tools.test.ts` "a wallet is offline for agents" |
+| The owner moves the lease to this home, and it signs again; The lease moves to another home, and this one stops signing | `test/wallet-home-id.test.ts` "is moved to a home whose binding is not the secret's…"; `test/desktop-wallets.test.ts` |
+| The signer signs only after it proved the key in this home | `test/wallet-signer.test.ts` "proving and signing" |
+| A check that proves the key and the lease, in a box, brings the wallet online | `test/wallet-lifecycle.test.ts` "is online with the key and the lease, offline in host mode" |
+| The keychain locks, or the item disappears, while the wallet is offline for another reason, and it shows that | `test/wallet-lifecycle.test.ts` "keeps the signer's code beside the state, the most specific reason (H-317)" |
+| The keychain item disappears and the owner restores the exported key; The keychain locks while the key is missing, and the wallet stays key missing until a restore | `test/wallet-lifecycle.test.ts` "tells the lane in a commit of its own when a missing key is back… (C9, H-290)", "leaves key_missing only by a restore… (C9, H-290)"; `test/desktop-wallets.test.ts` "takes a Restore only of a key in its shape…" |
+| Restore key with a key that opens another address leaves the wallet offline | `test/desktop-wallets.test.ts` "restores through the channel's act: a key that opens another address leaves it missing, its own brings it back" |
+| Funds arrive at an archived wallet, and it cannot be removed while they are there | `test/wallet-lifecycle.test.ts` "refuses while it holds funds…", "rolls back to archived when funds arrive between the check and the delete" |
+| The client that created the wallet reveals its key once at creation, with no OS re-authentication; The owner reveals the key on the host, pastes it back, and Receive opens | `test/wallets-routes.test.ts` "makes a wallet, reveals its key once with the creation's secret, and keeps it out of every file", "answers the creation's reveal on whichever connection its client sends it, once"; `test/wallet-lifecycle.test.ts` "skips saving, confirms a key that derives the address, and refuses one that does not" |
+| A later reveal on the host goes through the desktop's signer | `test/desktop-wallets.test.ts` "reveals a key only once the owner re-authenticated, at this home's lease, and tells the daemon after", "reveals, restores and moves later behind the OS's re-authentication alone, and fails closed without it (OD-2)", "shows the key in a bundled page…"; `test/wallets-routes.test.ts` "lists the desktop's word that the owner saw a ready wallet's key…" |
+| Every place that shows the key says it opens in other wallets as a private key (Import account → Private key), with no seed phrase (H-008) | the web save step in `web/src/chat/Wallets.tsx`; `test/desktop-wallets.test.ts` "shows the key in a bundled page…" (the desktop's reveal window); `test/cli-wallet.test.ts` "sends the same request again until the creation is finished…" (`wallet create`) |
+| A reveal asked from a paired device or with the token alone shows nothing; A wallet created from a paired phone stays Not backed up until the host shows its key | `test/wallets-routes.test.ts` "refuses a paired device a reveal, the save step, removal…", "refuses a reveal without the creation's secret, with another request, expired, or once the wallet is archived" |
+| A replayed or expired reveal capability shows nothing | `test/wallets-routes.test.ts` "grants a repeat of the creation no reveal…", "says the reveal is gone when it expired while the signer proved the key…", "shows a key to one of two reveals that race on the creation's connection" |
+| No reveal when the keychain cannot answer or holds another key | `test/wallets-routes.test.ts` "answers missing for a key gone from the keychain…", "answers wrong_key for an item holding another key…", "answers locked for a keychain that refuses, and timeout for one that does not answer", "answers other_home for a lease another home holds…" |
+| A pasted key that does not open the wallet leaves it Not backed up; The owner skips saving the key, and Receive opens with the wallet marked Not backed up; Receive asked while the save step is open shows the save step instead | `test/wallet-lifecycle.test.ts` "skips saving, confirms a key that derives the address, and refuses one that does not"; `test/wallets-routes.test.ts` "opens Receive after the save step…"; `test/wallets.browser.test.ts` |
+| A page that steers the agent to ask for the key gets nothing | `test/wallet-tools.test.ts` "answer no key, however an agent asks for one (H-265)" |
+| A reveal leaves no key in logs, activity or the store | `test/wallets-routes.test.ts` "makes a wallet, reveals its key once with the creation's secret, and keeps it out of every file" |
+| The owner opens Receive on a backed-up wallet; The address has code, so Receive warns instead of showing it, and only the host acknowledges it; An acknowledgement on a wallet whose key is not saved yet changes nothing | `test/wallets-routes.test.ts` "opens Receive after the save step…", "answers code for an address that runs code, and discloses nothing", "acknowledges the code at an address on this computer alone, kept by its hash, and Receive keeps its warning", "has the address marked disclosed in the database itself before Receive shows it…" |
+
+The scenarios of Send, payments, recipients, x402 and the Linux keyring belong to later slices and have no test yet;
+Restore key on macOS (UC-19 A2) is slice 1's and is tested above.

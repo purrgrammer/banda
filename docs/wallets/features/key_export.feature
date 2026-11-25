@@ -1,15 +1,17 @@
 # Machine: wallet (reveal, confirm_saved, skip_save, show_receive). Use cases UC-02, UC-03, UC-26, UC-29, UC-30.
 # Evidence: spikes/keys-and-signing/README.md (a raw 0x + 64 hex key, imported by MetaMask and cast; 2000 keys
-# round-trip), RFC resolution R-8 and OD-2 (the key is shown on the host only, behind OS re-authentication and a
-# one-time capability; "saved" is confirmed by pasting the key back).
-# spikes/gaps/README.md §G: on macOS the OS re-authentication is Electron's promptTouchID (Touch ID, or the password
-# where there is none; read from source and Apple's docs, not run); Electron has none for Linux (open).
+# round-trip), RFC resolution R-8 and OD-2 (the key is shown on the host only: at creation to the client that created
+# the wallet, with the secret only the creation's answer carries; later by the desktop's own signer behind an OS
+# re-authentication, the daemon only told it happened; "saved" is confirmed by pasting the key back).
+# spikes/gaps/README.md §G: on macOS the OS re-authentication is Electron's promptTouchID (read from source and Apple's
+# docs, not run); banda asks it only where Touch ID is set up. Electron has none for Linux or Windows, so there, and on
+# a Mac without Touch ID, a later reveal, Restore and Move are refused (OD-2).
 
 Feature: The owner saves the private key, and Receive opens after the save step
 
   # Evidence: spikes/gaps/README.md §G: Electron 45.2.3's systemPreferences.promptTouchID uses
-  # kSecAccessControlUserPresence (Touch ID, or the password where there is none), macOS only; there is no Electron
-  # API for Linux, so the host capability is open there.
+  # kSecAccessControlUserPresence, macOS only; banda asks it only where canPromptTouchID says Touch ID is set up, and
+  # elsewhere (Linux, Windows, a Mac without Touch ID) refuses a later reveal, Restore and Move (OD-2).
   @UC-02 @UC-03 @H-263 @H-258 @best
   @t:wallet:ready_unsaved:reveal:cap_host&cap_fresh&kc_up&item=ours
   @t:wallet:ready_unsaved:confirm_saved:pasted_derives
@@ -32,9 +34,10 @@ Feature: The owner saves the private key, and Receive opens after the save step
     And a reveal capability is used once
     And the address leaves banda only after the key was saved or the step skipped
 
-  # Evidence: spikes/gaps/README.md §G: the same macOS-only prompt; not run.
+  # Evidence: spikes/gaps/README.md §G: the same macOS-only prompt; not run. The desktop's own signer reads the key and
+  # shows it in a bundled page; the daemon never holds it, and is told after (C20).
   @UC-02 @H-266
-  Scenario Outline: A later reveal on the host follows the same capability path
+  Scenario Outline: A later reveal on the host goes through the desktop's signer
     Given the wallet is "<state>"
     And the reveal comes from the host's desktop shell
     And the reveal capability is fresh and unused
@@ -107,6 +110,31 @@ Feature: The owner saves the private key, and Receive opens after the save step
       | the keychain answers          | the keychain item holds another key             |
       | the keychain answers          | the keychain holds no item for the address      |
 
+  # H-266: the owner skipped at creation and wants the key weeks later. The later reveal ends in the same paste-back,
+  # and a matching copy makes the wallet backed up, so a disclosed wallet becomes removable once funds are gone.
+  @UC-02 @H-266 @H-263
+  @t:wallet:ready_skipped:reveal:cap_host&cap_fresh&kc_up&item=ours
+  @t:wallet:ready_skipped:confirm_saved:pasted_derives
+  Scenario: A wallet whose save was skipped is backed up by a later reveal and paste-back
+    Given the wallet is "ready_skipped"
+    And the reveal comes from the host's desktop shell
+    And the reveal capability is fresh and unused
+    And the keychain answers
+    And the keychain item derives the wallet's address
+    And the pasted key derives the wallet's address
+    When the owner asks to reveal the key
+    Then the wallet is "ready_skipped"
+    When the owner pastes the key back
+    Then the wallet is "ready_saved"
+
+  @UC-02 @H-275 @error
+  @t:wallet:ready_skipped:confirm_saved:!pasted_derives
+  Scenario: A wrong key pasted for a skipped wallet leaves it Not backed up
+    Given the wallet is "ready_skipped"
+    And the pasted key does not derive the wallet's address
+    When the owner pastes the key back
+    Then the wallet is "ready_skipped"
+
   @UC-02 @H-275 @error
   @t:wallet:ready_unsaved:confirm_saved:!pasted_derives
   Scenario: A pasted key that does not open the wallet leaves it Not backed up
@@ -173,7 +201,8 @@ Feature: The owner saves the private key, and Receive opens after the save step
   # Finding 31, C16: requirement 5 holds where no OS re-authentication exists (a Linux desktop, `banda serve` with a
   # loopback browser, `banda wallet create` on the host's terminal). The ready commit mints a creation capability
   # for the create request id, consumed once within 10 minutes by the client that sent it, before the address is
-  # shown; every later reveal needs the host's capability.
+  # shown; every later reveal needs the host's capability. In a loopback browser its extensions can read that reveal:
+# a residual accepted (H-272, OOS-10), told on the create and save screens there.
   @UC-02 @H-263 @H-266 @best
   @t:wallet:ready_unsaved:reveal:cap_host&cap_fresh&kc_up&item=ours
   @t:wallet:ready_unsaved:confirm_saved:pasted_derives

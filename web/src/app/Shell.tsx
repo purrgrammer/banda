@@ -57,9 +57,11 @@ import { SettingsCustomProviders } from "./SettingsCustomProviders.tsx";
 import { SettingsDevices } from "./SettingsDevices.tsx";
 import { SettingsProviders } from "./SettingsProviders.tsx";
 import { SettingsUsage } from "./SettingsUsage.tsx";
+import { SettingsWallets } from "./SettingsWallets.tsx";
 import { ShortcutsDialog, typing as typingIn } from "./Shortcuts.tsx";
 import { SkillsPage, useSkills, waitsOnOwner } from "./Skills.tsx";
 import { routineTitle } from "./titles.ts";
+import { NewWallet, useSaveStep, WalletRoute } from "./WalletPages.tsx";
 import { WatchDetail, watchActions, watchRows } from "./watches.tsx";
 import { hrefOf, lastOf, parse, type Where } from "./where.ts";
 
@@ -158,6 +160,8 @@ export function Shell() {
 
 function Main() {
 	const shell = useShell();
+	// on the computer, the save step of a wallet a paired device made, at the app's open (H-276)
+	useSaveStep();
 	const { list: skillViews } = useSkills();
 	const skillSummaries = skillViews.flatMap(({ accepted }) =>
 		accepted === undefined ? [] : [{ name: accepted.name, description: accepted.description }],
@@ -581,6 +585,7 @@ function Main() {
 							access={
 								<AccessTab
 									agent={{ id: where.id, name: who.name }}
+									everyone={[...agents, ...archived]}
 									capabilities={shell.capabilities}
 									control={shell.control}
 								/>
@@ -717,6 +722,8 @@ function Main() {
 			return (
 				<SettingsPage title="Settings" phone={phone} onBack={back}>
 					<AppSettings
+						tab={where.tab ?? "general"}
+						onTab={(tab) => location.replace(hrefOf({ name: "settings", tab }))}
 						bring={<BringSettings />}
 						memory={
 							<MemorySettings
@@ -809,6 +816,7 @@ function Main() {
 							/>
 						}
 						devices={<SettingsDevices />}
+						wallets={<SettingsWallets agents={[...agents, ...archived]} />}
 						// a paired device is refused them: a backup is taken and restored on the computer banda runs on
 						backups={runsOnDevice ? undefined : <SettingsBackups />}
 						onTheme={setTheme}
@@ -824,6 +832,21 @@ function Main() {
 					/>
 				</SettingsPage>
 			);
+		if (where.name === "wallet") {
+			if (where.address === undefined)
+				return <NewWallet key={where.agent ?? ""} agents={agents} agent={where.agent} phone={phone} />;
+			return (
+				<WalletRoute
+					key={where.address}
+					route={where.address}
+					page={where.page}
+					tab={where.tab}
+					agents={agents}
+					everyone={[...agents, ...archived]}
+					phone={phone}
+				/>
+			);
+		}
 		if (where.name === "connections") {
 			const capabilities = shell.capabilities;
 			const parent = { title: "Connections", href: hrefOf({ name: "connections" }) };

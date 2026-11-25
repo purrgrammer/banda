@@ -316,9 +316,9 @@ export function boxKind(
 	throw new Error(`--box is container, microvm or host, not ${value}`);
 }
 
-/** What host mode drops, in one line: said at start. */
+/** What host mode drops, in one line: said at start, the wallets agents lose included (H-064). */
 export const HOST_WARNING =
-	"no box: commands run on this computer, in the home's workspace, without banda's network guard, the credentials it sets or a browser";
+	"no box: commands run on this computer, in the home's workspace, without banda's network guard, the credentials it sets or a browser; wallets are offline for agents, since their commands run as you";
 
 /**
  * The container box; banda needs Docker Engine (`DOCKER_MIN` or later). Without one the box is offline, and says why,

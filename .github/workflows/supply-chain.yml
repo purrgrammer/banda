@@ -1,0 +1,38 @@
+# Every lockfile's packages, on every platform, against the registry's signatures and the subjects of their provenance
+# attestations (scripts/registry-signatures.ts); against the cooldown each tree's .npmrc sets (scripts/release-age.ts);
+# OSV's advisories for them; and the keychain's native modules against RustSec (docs/wallets/stack.md, section 5).
+# Called by ci (on each change and nightly) and by release (before publish). Each check runs even when one before it
+# failed. It installs nothing from the lockfiles: the scripts use node's own modules.
+name: supply-chain
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  supply-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: registry signatures and provenance
+        run: node scripts/registry-signatures.ts package-lock.json desktop/package-lock.json mobile/package-lock.json
+      - name: release-age cooldown
+        if: ${{ !cancelled() }}
+        run: node scripts/release-age.ts package-lock.json desktop/package-lock.json mobile/package-lock.json
+      - name: OSV advisories
+        if: ${{ !cancelled() }}
+        run: node scripts/osv-audit.ts package-lock.json desktop/package-lock.json mobile/package-lock.json
+      - name: RustSec advisories for the keychain's native modules
+        if: ${{ !cancelled() }}
+        run: |
+          cargo install cargo-audit --locked --version 0.22.2
+          node scripts/keychain-binaries.ts "$RUNNER_TEMP/keychain" > "$RUNNER_TEMP/keychain.list"
+          xargs cargo audit bin < "$RUNNER_TEMP/keychain.list"

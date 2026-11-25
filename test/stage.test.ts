@@ -1,6 +1,8 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
 import {
 	expectedSum,
@@ -13,7 +15,9 @@ import {
 	STAGED,
 	targetName,
 	WINDOWS_LAUNCHER,
+	writeReleaseMarker,
 } from "../scripts/stage.ts";
+import { keychainService, RELEASE_MARKER, ReleaseMarker } from "../src/wallet/keystore.ts";
 
 const SUM = "a".repeat(64);
 
@@ -159,5 +163,27 @@ describe("staging a release", () => {
 				STAGED.some((staged) => path === staged || path.startsWith(`${staged}/`) || staged.startsWith(path)),
 				`${path} is read at run time but not staged`,
 			).toBe(true);
+	});
+
+	it("marks the staged app a release, so its wallets live under the released keychain service (H-283)", async () => {
+		const root = await mkdtemp(join(tmpdir(), "banda-stage-"));
+		try {
+			const app = join(root, "release", "banda", "app");
+			await mkdir(join(app, "dist", "wallet"), { recursive: true });
+			await writeFile(join(root, "package.json"), JSON.stringify({ version: "9.9.9-test" }));
+			const built = pathToFileURL(join(app, "dist", "wallet", "keystore.js")).href;
+			expect(keychainService({}, built)).toBe("banda-dev");
+			await writeReleaseMarker(root, app);
+			const marker: unknown = JSON.parse(await readFile(join(app, RELEASE_MARKER), "utf8"));
+			expect(Value.Check(ReleaseMarker, marker)).toBe(true);
+			expect(marker).toEqual({ release: "9.9.9-test" });
+			expect(keychainService({}, built)).toBe("banda");
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+		const source = await readFile(join("scripts", "stage.ts"), "utf8");
+		const start = source.indexOf("async function stageApp(");
+		const stageApp = source.slice(start, source.indexOf("\n}\n", start));
+		expect(stageApp).toContain("await writeReleaseMarker(root, app);");
 	});
 });

@@ -39,7 +39,8 @@ pulled forward when required to make an earlier mechanism safe.
 [Memory](memory.md) and [Substrate](substrate.md) hold memory's provenance work and upstream gaps. [Behavioral
 evals](evals.md) proposes longitudinal agent quality experiments alongside, not in place of, the verification gates.
 [Scope](scope.md) keeps the support matrix and reproducible checks. [Slack](slack.md) is a design
-that belongs to [Connections](connections.md).
+that belongs to [Connections](connections.md). [Wallets](wallets.md) is an RFC, delivered in slices, for EVM
+wallets agents spend from: a wallet is an account of the shipped `wallet` connection.
 
 No section is complete merely because its checks exist: it must work through the running app, and the owner reviews
 each slice.

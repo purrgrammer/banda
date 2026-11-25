@@ -134,7 +134,8 @@ Feature: The owner sends from a wallet and receives into it
 
   # Finding 10, C17: when eth_getCode on the wallet's address returns code (an EIP-7702 delegation made elsewhere
   # with the exported key), Receive and its QR give way to a warning and the owner's Send waits for an
-  # acknowledgement on the host; a paired device cannot acknowledge it.
+  # acknowledgement on the host; a paired device cannot acknowledge it. The owner's token on this computer counts as the
+  # host for this act: a process holding it can already do every owner act (STEPS.md).
   @UC-03 @UC-07 @H-157 @security
   Scenario Outline: The address has code, so Receive warns instead of showing it, and only the host acknowledges it
     Given the wallet is "<state>"

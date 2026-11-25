@@ -308,7 +308,11 @@ export function handler(
 	return (req, res) => {
 		void serve(req, res).catch((error: unknown) => {
 			const message = error instanceof Error ? error.message : String(error);
-			if (!res.headersSent) reply(res, error instanceof BadRequest ? error.status : 500, { error: message });
+			if (!res.headersSent)
+				reply(res, error instanceof BadRequest ? error.status : 500, {
+					error: message,
+					...(error instanceof BadRequest && error.code !== undefined ? { code: error.code } : {}),
+				});
 			else res.destroy();
 		});
 	};
@@ -337,7 +341,8 @@ export function handler(
 					device,
 					signal: gone.signal,
 				});
-				if (answered === undefined || "file" in answered) return reply(res, 404, { error: "not found" });
+				if (answered === undefined || !("body" in answered) || "hand" in answered)
+					return reply(res, 404, { error: "not found" });
 				return reply(res, answered.status ?? 200, answered.body);
 			}
 			if (!(await remote.paired(device))) return reply(res, 403, { error: "this device is not paired" });
@@ -1006,8 +1011,16 @@ export function handler(
 				signal: gone.signal,
 			});
 			if (answered === undefined) continue;
-			if ("file" in answered) return download(res, answered.file, answered.file.bytes);
-			return reply(res, answered.status ?? 200, answered.body);
+			const given =
+				"hand" in answered
+					? device === undefined
+						? await answered.hand(req.socket)
+						: { status: 403, body: { error: "not over a paired device" } }
+					: answered;
+			if (given === undefined) return;
+			if ("hand" in given) throw new Error("a handed connection answers with a reply or nothing");
+			if ("file" in given) return download(res, given.file, given.file.bytes);
+			return reply(res, given.status ?? 200, given.body);
 		}
 		return reply(res, 404, { error: "not found" });
 	}
@@ -1156,9 +1169,12 @@ function reply(res: ServerResponse, code: number, body: unknown) {
 /** A request the daemon refuses, with why; `status` 400 unless said otherwise (413 for a body too large). */
 export class BadRequest extends Error {
 	readonly status: number;
-	constructor(message: string, status = 400) {
+	/** A fixed word for why, which a client branches on where the message is prose; answered beside it. */
+	readonly code: string | undefined;
+	constructor(message: string, status = 400, code?: string) {
 		super(message);
 		this.status = status;
+		this.code = code;
 	}
 }
 

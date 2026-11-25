@@ -13,6 +13,7 @@ import { Accepted, agentPath, shaOf } from "../src/core/agents.ts";
 import { BlobStore } from "../src/core/blobs.ts";
 import { type Gateway, type Origin, type Outbound, PermanentSendError } from "../src/core/gateway.ts";
 import { context } from "../src/core/store.ts";
+import { markTestHome } from "../src/wallet/home-id.ts";
 
 export { echoModels, FAUX_MODEL } from "./fixtures/models.ts";
 
@@ -77,9 +78,11 @@ export async function skipShippedSkills(port: number, token: string): Promise<vo
 	if (!response.ok) throw new Error(`skipping the skills step: ${response.status} ${await response.text()}`);
 }
 
+/** A home of the test's own, removed after it, and marked a test's: its wallets never open the OS keychain (H-031). */
 export async function tempHome(): Promise<string> {
 	const home = await mkdtemp(join(tmpdir(), "banda-test-"));
 	homes.push(home);
+	await markTestHome(home);
 	return home;
 }
 
