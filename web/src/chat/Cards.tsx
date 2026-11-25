@@ -2,7 +2,6 @@
  * Chat surfaces for artifacts, browser views, questions and sign-in handoffs.
  */
 import {
-	BookOpenIcon,
 	CheckIcon,
 	CircleSlashIcon,
 	ClockIcon,
@@ -301,11 +300,11 @@ export function SignInCard({ agent, site }: { agent: string; site: string }) {
 }
 
 /**
- * What a stretch of browsing opened (`Browsed`), or of reading the web read (`Read`), where it happened: the page
- * last, a link, and how many more.
+ * What a stretch of browsing opened, where it happened: the page last, a link, and how many more. A page an agent
+ * read with `web_fetch` draws no line (DESIGN.md "The chat"): the sources an answer rests on are in its words, and
+ * every read is in its activity.
  */
-export function Browsed({ pages, verb = "Browsed" }: { pages: readonly string[]; verb?: "Browsed" | "Read" }) {
-	const Icon = verb === "Read" ? BookOpenIcon : GlobeIcon;
+export function Browsed({ pages }: { pages: readonly string[] }) {
 	const [first, ...rest] = pages;
 	if (first === undefined) return null;
 	let shown = first;
@@ -316,8 +315,8 @@ export function Browsed({ pages, verb = "Browsed" }: { pages: readonly string[];
 	// short of room the path gives way in its middle: the host and the page itself stay
 	return (
 		<span className="flex max-w-full items-center gap-2 rounded-full border border-line-soft px-3 py-1.5 text-meta text-ink-2">
-			<Icon aria-hidden="true" className="size-3.5 shrink-0" />
-			<span className="shrink-0">{verb}</span>
+			<GlobeIcon aria-hidden="true" className="size-3.5 shrink-0" />
+			<span className="shrink-0">Browsed</span>
 			<a
 				href={first}
 				target="_blank"

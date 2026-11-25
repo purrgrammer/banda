@@ -164,7 +164,9 @@ one that gives them one more thing to manage stays out.
   step that did not happen. An agent that waits on the owner is off the line, as its ask says so; one at work beside
   an open ask it does not wait on stays. The line goes once no one is left on it. A tap opens their activity. The feed has no other
   working sign, never a tool row, never typing dots, and a reply carries
-  no face it did not have before. Any message can be copied. Every destructive action (forgetting a fact, removing a member,
+  no face it did not have before. A page an agent read (`web_fetch`) is no row either, however many it read: the
+  sources an answer rests on are in its words, as links, and every read, failed ones too, is in its activity; a reply
+  that failed says so as any reply does. Any message can be copied. Every destructive action (forgetting a fact, removing a member,
   taking back a permission, archiving an agent) asks first, in its own verb, with a way to keep things as they are. A reply that
   failed, a message that was not delivered, or an agent that did not answer, ends in one tap, "Try again", which sends
   the owner's "Try again." in their own words: what they asked stays where it was, and the agent answers it.
@@ -667,8 +669,11 @@ gives it, the open asks it covers, and an ask a permission covers by the time it
   routine in the shared `routines/` belongs to the agent the store recorded for it, else the lead. Its id,
   `<agent>/<name>` or a shared one's `<name>`, names it everywhere: the store, its task, its wakes, its card, the API,
   its history. Two agents' routines of one name, and a shared one of it, are separate routines; nothing resolves a
-  bare name to whichever exists. Writing the same name again changes the writer's own. A shared routine is never moved
-  into an agent's folder by guessing whose it is.
+  bare name to whichever exists: an action names its routine by id in its path and again in its body, and a bare name
+  without that is an older app's, refused with what to do (the daemon decides from the request, never from anything
+  the app would have to read). An action on a routine that is nowhere is an error, never a quiet success. Writing the
+  same name again changes the writer's own. A shared routine is never moved into an agent's folder by guessing whose
+  it is.
 - **A routine's card says what runs.** Whoever wrote the file, the card says who asks (the chat's agent) and whom it
   runs as (its folder's agent, or a shared one's), and whether it is that agent's own or shared; allowing it allows
   exactly that. Writing into another agent's folder is a request like any other change of a "before" file, the

@@ -157,7 +157,21 @@ green. A change that fits several kinds takes the strictest.
 - The commit message carries the why: what changed, the decisions taken and the caveats left (principle 8).
 - A pull request's proof is what its kind of change asks (Checks by change), attached to its description or a
   comment: before (`main`) and after (the branch). Record on a throwaway home with invented data, never a
-  `home:fork`: the repo is public.
+  `home:fork`: the repo is public. Media are never committed: `gh` 2.99.0 or later (`gh pr comment --help` lists
+  `--attach`) uploads them once the pull request exists. Put the images and the comment's text, `proof.md`, in one
+  temporary folder, `cd` into it, and pass an `--attach` for every file the text names, written as it names it: for
+  `![before, desktop](./before-1440.png)` and `![after, desktop](./after-1440.png)`, run
+  `gh pr comment <N> --body-file proof.md --attach ./before-1440.png --attach ./after-1440.png`. Each named file
+  becomes its uploaded URL; a reference without an `--attach` stays a broken local path and the command still
+  succeeds. Quote a name with a space. Images and GIFs up to 10 MB, 50 files a command. For the description,
+  `gh pr edit <N>` takes the same `--attach`: without a body flag it appends the media to the description as it is,
+  and `--body-file` replaces the whole description.
+- Uploads stop at the first that fails, and `gh` exits non-zero: with none uploaded no comment is posted, with some the
+  comment holds only those. Open the pull request before trying again, never post again blindly. If no comment was
+  posted, there is nothing to edit: fix the cause and run the command again. If one was, `--edit-last` (the same
+  command plus `--edit-last`) replaces it, but it edits your newest comment on that pull request: use it only after
+  you saw that this comment is the proof. With an older `gh` or without push access to the repo, post the words, say
+  the media are still to be attached, and commit them nowhere.
 - What a home holds stays on the machine: the repo is public, and so is everything written into it. A commit
   message, a pull request, an issue, a comment and a test never carry what was read from the owner's home or a
   `home:fork` of it: no routine's, chat's or agent's name, no id of a conversation, task or session, no time

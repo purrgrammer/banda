@@ -656,7 +656,7 @@ describe("routines through the API", () => {
 			await post("/routines/sancho/tea/run", { key: "click-1" });
 			await post("/routines/sancho/tea/run", { key: "click-1" });
 			await expect(post("/routines/sancho/tea/run", { key: "no spaces" })).rejects.toThrow(/400/);
-			await expect(post("/routines/nope/run", { key: "click-2" })).rejects.toThrow(/404/);
+			await expect(post("/routines/nope/run", { key: "click-2", id: "nope" })).rejects.toThrow(/404/);
 			const ran = await until(async () => {
 				const view = (await api<ControlView>("/control")).routines.find((routine) => routine.name === "tea");
 				return view?.last !== undefined && view.running !== true ? view : undefined;

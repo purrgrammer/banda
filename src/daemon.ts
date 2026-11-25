@@ -94,6 +94,7 @@ import {
 	control,
 	decline as declineRoutine,
 	remove as removeRoutine,
+	requested as requestedRoutine,
 } from "./server/routines.ts";
 import { seenBy } from "./server/seen.ts";
 import { acceptSkill, acceptSkills, chooseShippedSkills, saveSkill, shippedSkills, skills } from "./server/skills.ts";
@@ -939,9 +940,11 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						else await resume(open, core.reconcile, Date.now());
 						return control(open, workspace, Date.now());
 					},
-					routine: (name, act) =>
+					routine: (path, act) =>
 						changingWorkspace(async () => {
 							const now = Date.now();
+							// which routine: the path's id, named again in the body by an app of this build
+							const name = requestedRoutine(path, act.id);
 							if (act.action === "accept")
 								await acceptRoutine(
 									open,

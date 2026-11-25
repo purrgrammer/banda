@@ -4,8 +4,14 @@
  */
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { RoutineProposal } from "./Routine.tsx";
+import { describe, expect, it, vi } from "vitest";
+
+// the card's words for a refusal come from the app's request module, which reads the page's address as it loads
+vi.hoisted(() => {
+	Object.assign(globalThis, { location: { hash: "", pathname: "/", search: "" } });
+});
+
+import { problemWords, RoutineProposal } from "./Routine.tsx";
 
 const routine = {
 	agent: "Curro",
@@ -53,5 +59,30 @@ describe("a routine's card", () => {
 		);
 		// a removal stops one: nothing to warn of
 		expect(text({ routine: { ...routine, kind: "removed", twin: "shared" } })).not.toContain("both will run");
+	});
+});
+
+describe("an answer the daemon refused", () => {
+	it("is said on the card, in the daemon's words, and the buttons stay: the owner answers again or looks again", () => {
+		const problem = "Couldn't set it up. There is no routine curro/probe: it is gone from the box and the store";
+		const card = text({ routine, problem, onAllow: () => {}, onDecline: () => {} });
+		expect(card).toContain(problem);
+		expect(card).toContain("Set it up");
+		expect(card).toContain("Don't");
+		// settled, nothing is left to refuse
+		expect(text({ routine, problem, settled: "Set up · 9:12" })).not.toContain("Couldn't");
+	});
+
+	it("names what did not happen, then why: a routine gone reads apart from one changed since", async () => {
+		const { Refused } = await import("../lib/api.ts");
+		expect(problemWords("set it up", new Refused("there is no routine curro/probe: it is gone", 404))).toBe(
+			"Couldn't set it up. There is no routine curro/probe: it is gone",
+		);
+		expect(
+			problemWords("decline it", new Refused("agents/curro/routines/probe.md changed since you saw it", 409)),
+		).toBe("Couldn't decline it. Agents/curro/routines/probe.md changed since you saw it");
+		expect(problemWords("stop it", new TypeError("Failed to fetch"))).toBe(
+			"Couldn't stop it. banda on this computer didn't answer. Check it's still running.",
+		);
 	});
 });

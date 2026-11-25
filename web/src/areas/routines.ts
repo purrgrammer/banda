@@ -3,7 +3,7 @@
  * resume, remove, change when it runs, and run it now. Each answers with the control view, as it is after.
  */
 import type { RoutineRunsPage } from "../../../src/server/api.ts";
-import { api, type ControlView } from "../lib/api.ts";
+import { api, type ControlView, Refused } from "../lib/api.ts";
 import type { ShellHandlers } from "../lib/shell.ts";
 
 export const shell: ShellHandlers = {};
@@ -32,10 +32,24 @@ export type RoutineAct =
 	/** Run it once now; `key` names the click, so a click sent twice runs once. */
 	| { readonly action: "run"; readonly key: string };
 
-/** Do `act` to routine `name`; rejects with why when the daemon refuses. */
-export function actOnRoutine(name: string, act: RoutineAct): Promise<ControlView> {
+/** A routine's id as the daemon gives it: `<agent>/<name>`, or a shared one's `<name>`. */
+const ROUTINE_ID = /^(?:[a-z0-9-]+\/)?[a-z0-9-]+$/;
+
+/**
+ * Do `act` to routine `id`; rejects with why when the daemon refuses. The body names the routine again (`id`): that is
+ * how the daemon tells this app from one built when a routine's id was its name alone. A view with no id is from a
+ * daemon older than this app, whose routines this app cannot act on: refused here, before any request, with what to do.
+ */
+export function actOnRoutine(id: string, act: RoutineAct): Promise<ControlView> {
+	if (typeof id !== "string" || !ROUTINE_ID.test(id))
+		return Promise.reject(
+			new Refused(
+				"banda on this computer is older than this app and does not say which routine this is: update banda",
+				400,
+			),
+		);
 	const { action, ...body } = act;
-	return api<ControlView>(`/routines/${name}/${action}`, { method: "POST", body: JSON.stringify(body) });
+	return api<ControlView>(`/routines/${id}/${action}`, { method: "POST", body: JSON.stringify({ ...body, id }) });
 }
 
 /**

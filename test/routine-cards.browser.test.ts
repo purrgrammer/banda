@@ -145,7 +145,7 @@ for (const width of [390, 1440])
 				await mkdir(join(workspace, "routines"), { recursive: true });
 				await writeFile(join(workspace, "routines", `${NAME}.md`), SHARED);
 				await until(async () => (await routines()).find((each) => each.id === NAME)?.change !== undefined);
-				await api(`/routines/${NAME}/accept`, "POST", { sha: shaOf(SHARED) });
+				await api(`/routines/${NAME}/accept`, "POST", { sha: shaOf(SHARED), id: NAME });
 				await say("curro writes into sancho", "curro");
 				await say("sancho schedules", "sancho");
 				await until(

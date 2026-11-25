@@ -665,12 +665,12 @@ export function view(
 	];
 }
 
-/** What a run shows that is not the agent saying anything: its browsing and reading, and the working line. */
-const QUIET: ReadonlySet<string> = new Set(["browsed", "read", "working"]);
+/** What a run shows that is not the agent saying anything: its browsing, and the working line. */
+const QUIET: ReadonlySet<string> = new Set(["browsed", "working"]);
 
 /**
  * A routine's quiet runs leave no trace (DESIGN.md "Routines"): a wake whose run, up to the owner's next words or the
- * next wake, shows nothing but its browsing and reading draws neither its line nor those. A run that said something,
+ * next wake, shows nothing but its browsing draws neither its line nor that. A run that said something,
  * asked, or failed keeps its line; one that failed as a routine's trouble says so once, so the reply's own failure
  * line goes. The working line stays wherever it is.
  */

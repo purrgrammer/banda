@@ -604,7 +604,10 @@ export type RoutineFileView = {
 export type RoutineView = {
 	/**
 	 * Which routine: `<agent>/<name>` for one in its agent's folder (`agents/<agent>/routines/<name>.md`), `<name>` for
-	 * a shared one (`routines/<name>.md`). Every action on it, and its wakes, name it by this, never by its name alone.
+	 * a shared one (`routines/<name>.md`). Every action on it, and its wakes, name it by this, never by its name alone:
+	 * an action's body carries it again as `id`, which is how the daemon tells an app of this build from one that named
+	 * routines by name alone (whose bare name it refuses, 400, rather than guess which routine of that name it meant).
+	 * An action on a routine that is in neither the store nor the box is refused, 404, and does nothing.
 	 */
 	readonly id: string;
 	/** Its file's name, which two agents' routines, or an agent's and a shared one, may share. */
