@@ -135,8 +135,14 @@ A banda daemon may be running from another checkout, possibly the one you are ru
 - A PR's proof is posted as one comment once checks, typecheck and tests are green: before (origin/main)
   and after (the branch), at desktop and phone width. Screenshots for a visual change; a GIF (ffmpeg, under
   8 MB) for an interaction. Record on a throwaway home with invented data and the faux provider, never
-  a `home:fork`: the repo is public. Media go on the orphan branch `pr-proof` under `pr-<N>/` and are linked
-  as `https://raw.githubusercontent.com/purrgrammer/banda/pr-proof/pr-<N>/<file>`.
+  a `home:fork`: the repo is public. Media are never committed: `gh` 2.99.0 or later (`gh pr comment --help` lists
+  `--attach`) uploads them once the pull request exists. Keep them and the comment's text outside the checkout, the
+  text naming each by its path beside it (`![after, phone width](./after-390.png)`), then
+  `gh pr comment <N> --body-file proof.md --attach ./before-1440.png --attach ./after-1440.png` (one `--attach` a
+  file, quoted if its name has a space; images and GIFs up to 10 MB, 50 files a command, push access needed):
+  each reference is rewritten to its uploaded URL. A non-zero exit means a file did not upload and the comment
+  may hold only the others, or not exist: open it before saying it shows them. With an older `gh`, post the words
+  and say the media are still to be attached.
 - What a home holds stays on the machine: the repo is public, and so is everything written into it. A commit
   message, a pull request, an issue, a comment and a test never carry what was read from the owner's home or a
   `home:fork` of it: no routine's, chat's or agent's name, no id of a conversation, task or session, no time
