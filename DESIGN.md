@@ -164,7 +164,9 @@ one that gives them one more thing to manage stays out.
   step that did not happen. An agent that waits on the owner is off the line, as its ask says so; one at work beside
   an open ask it does not wait on stays. The line goes once no one is left on it. A tap opens their activity. The feed has no other
   working sign, never a tool row, never typing dots, and a reply carries
-  no face it did not have before. Any message can be copied. Every destructive action (forgetting a fact, removing a member,
+  no face it did not have before. A page an agent read (`web_fetch`) is no row either, however many it read: the
+  sources an answer rests on are in its words, as links, and every read, failed ones too, is in its activity; a reply
+  that failed says so as any reply does. Any message can be copied. Every destructive action (forgetting a fact, removing a member,
   taking back a permission, archiving an agent) asks first, in its own verb, with a way to keep things as they are. A reply that
   failed, a message that was not delivered, or an agent that did not answer, ends in one tap, "Try again", which sends
   the owner's "Try again." in their own words: what they asked stays where it was, and the agent answers it.
