@@ -4,13 +4,14 @@
  * with the control view. On start it finishes an owner's edit a restart cut short, so the box holds what the store
  * accepted. Its history (`GET /api/routines/:id/runs?before=`) reads the runs its record keeps, a page at a time; a
  * run's line in a chat names its run's conversation (`GET /api/chats/:chat/items/:entry/run`). A
- * routine's id is `<agent>/<name>` for one in its agent's folder, `<name>` for a shared one.
+ * routine's id is `<agent>/<name>` for one in its agent's folder, `<name>` for a shared one; an action's body names it
+ * again (`id`), which tells an app of this build from one that named routines by name alone (`requested`).
  */
 
 import { routineName } from "../../core/routines.ts";
 import { BadRequest } from "../http.ts";
 import { lineRun, routineRuns } from "../routine-runs.ts";
-import { changeRoutine, createRoutine, finishEdits, runNow } from "../routines.ts";
+import { changeRoutine, createRoutine, finishEdits, requested, runNow } from "../routines.ts";
 import type { AreaModule } from "./area.ts";
 
 const PATH = /^\/routines\/((?:[a-z0-9-]+\/)?[a-z0-9-]+)\/(when|edit|run)$/;
@@ -75,8 +76,12 @@ export const routines: AreaModule = {
 				const match = PATH.exec(request.path);
 				if (match === null) return undefined;
 				if (request.method !== "POST") return { status: 405, body: { error: "method not allowed" } };
-				const [, id = "", action] = match;
+				const [, path = "", action] = match;
 				const body = await request.json();
+				if (body.id !== undefined && typeof body.id !== "string")
+					throw new BadRequest("id is the routine's id, as the path names it");
+				// which routine: the path's id, named again in the body by an app of this build
+				const id = requested(path, body.id);
 				if (action === "when" || action === "edit") {
 					const { sha } = body;
 					if (typeof sha !== "string" || !SHA.test(sha)) throw new BadRequest("sha is the hash of the version you saw");

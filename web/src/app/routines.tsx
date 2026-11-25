@@ -12,9 +12,30 @@ import { actOnRoutine, clickKey, makeRoutine, routineRuns } from "../areas/routi
 import type { RoutineRowView } from "../chat/Panel.tsx";
 import { RoutineDetail } from "../chat/RoutineDetail.tsx";
 import { type RoutineDraft, RoutineEditor } from "../chat/RoutineEditor.tsx";
+import { attempt } from "../lib/attempt.ts";
 import { runRows } from "../lib/routine-runs.ts";
 import { showControl } from "../lib/shell.ts";
 import { nearTime, routineTitle } from "./titles.ts";
+
+/**
+ * The owner's one-click actions on a routine, from the panel's rows and its detail: run it now, pause or resume it,
+ * remove it. Each answers with the control view, which the shell shows; a refusal (a routine gone since, a run still
+ * going, an archived agent) is said as a note with Try again, and the rows stay as the daemon last pushed them, so no
+ * click goes quiet and nothing reads as done that was not.
+ */
+export const runRoutineNow = (id: string) =>
+	attempt("run it now", () => actOnRoutine(id, { action: "run", key: clickKey() }).then(showControl));
+export const pauseRoutine = (id: string, paused: boolean) =>
+	attempt(paused ? "pause it" : "resume it", () =>
+		actOnRoutine(id, { action: paused ? "pause" : "resume" }).then(showControl),
+	);
+export const removeRoutine = (id: string, done?: () => void) =>
+	attempt("remove it", () =>
+		actOnRoutine(id, { action: "remove" }).then((control) => {
+			showControl(control);
+			done?.();
+		}),
+	);
 
 /** A time near `now`, lowercase where a sentence goes on: "today 09:00", "Fri 09:00". */
 const near = (at: number, now: number) =>
@@ -59,12 +80,18 @@ export function routineRows(all: readonly RoutineView[], agent: string, now: num
 					? {}
 					: {
 							waiting,
+							// a refusal says why, as a note: the row has no place of its own for it
 							onAllow: () =>
-								void actOnRoutine(routine.id, {
-									action: "accept",
-									sha: change.kind === "removed" ? null : (change.sha ?? null),
-								}).then(showControl),
-							onDecline: () => void actOnRoutine(routine.id, { action: "decline" }).then(showControl),
+								void attempt(
+									change.kind === "removed" ? "stop it" : waiting === "change" ? "change it" : "set it up",
+									() =>
+										actOnRoutine(routine.id, {
+											action: "accept",
+											sha: change.kind === "removed" ? null : (change.sha ?? null),
+										}).then(showControl),
+								),
+							onDecline: () =>
+								void attempt("decline it", () => actOnRoutine(routine.id, { action: "decline" }).then(showControl)),
 						}),
 				...(routine.next === undefined ? {} : { next: near(routine.next, now) }),
 				...(last === undefined ? {} : { last }),
@@ -268,14 +295,9 @@ export function EditRoutine({
 			{...(routine === undefined
 				? {}
 				: {
-						onRunNow: () => actOnRoutine(routine.id, { action: "run", key: clickKey() }).then(showControl),
-						onPause: (paused: boolean) =>
-							actOnRoutine(routine.id, { action: paused ? "pause" : "resume" }).then(showControl),
-						onDelete: () =>
-							actOnRoutine(routine.id, { action: "remove" }).then((control) => {
-								showControl(control);
-								onDone();
-							}),
+						onRunNow: () => void runRoutineNow(routine.id),
+						onPause: (paused: boolean) => void pauseRoutine(routine.id, paused),
+						onDelete: () => void removeRoutine(routine.id, onDone),
 					})}
 		/>
 	);

@@ -13,7 +13,6 @@ import { DEFAULT_FACE } from "../../../src/core/choices.ts";
 import type { CompanionView, FactView } from "../../../src/server/api.ts";
 import { centreBand, pinRow, useBand } from "../areas/band.ts";
 import { archiveGroup, setGroupLimits } from "../areas/groups.ts";
-import { actOnRoutine, clickKey } from "../areas/routines.ts";
 import { changeModels, useTiers } from "../areas/tiers.ts";
 import { Band, BandNotice } from "../chat/Band.tsx";
 import { Catalogue } from "../chat/Catalogue.tsx";
@@ -50,7 +49,7 @@ import { useAskNotifications, useNotify } from "./notify.ts";
 import { FollowedObject } from "./Objects.tsx";
 import { Onboarding, SkillsOnboarding, useShippedSkills } from "./Onboarding.tsx";
 import { ownerEdits } from "./owner-edits.ts";
-import { EditRoutine, RoutineHistory, routineRows } from "./routines.tsx";
+import { EditRoutine, pauseRoutine, RoutineHistory, routineRows, runRoutineNow } from "./routines.tsx";
 import { SearchDialog } from "./SearchDialog.tsx";
 import { SettingsBackups } from "./SettingsBackups.tsx";
 import { SettingsCustomProviders } from "./SettingsCustomProviders.tsx";
@@ -553,10 +552,8 @@ function Main() {
 										onAdd={() => setEditing({ agent: where.id })}
 										onOpen={(id) => setEditing({ agent: where.id, routine: id })}
 										onEdit={(id) => setEditing({ agent: where.id, routine: id, edit: true })}
-										onRunNow={(id) => void actOnRoutine(id, { action: "run", key: clickKey() }).then(showControl)}
-										onPause={(id, paused) =>
-											void actOnRoutine(id, { action: paused ? "pause" : "resume" }).then(showControl)
-										}
+										onRunNow={(id) => void runRoutineNow(id)}
+										onPause={(id, paused) => void pauseRoutine(id, paused)}
 									/>
 									<Watching
 										agent={who.name}
