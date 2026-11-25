@@ -218,6 +218,17 @@ export type BrowserOptions = {
 };
 
 const READS = new Set(["GET", "HEAD", "OPTIONS"]);
+/** An address's origin as an Origin header names it, or undefined for one that has none. */
+const originOf = (address: string) => {
+	try {
+		const { origin } = new URL(address);
+		return origin === "null" ? undefined : origin;
+	} catch {
+		return undefined;
+	}
+};
+/** How long a paused request waits to hear from the renderer which document made it (`madeFrom`). */
+const HEARING_MS = 2_000;
 const VIEWPORT = { width: 1280, height: 800 };
 
 /** The hash the proxy matches a write by: method, host and port, path with its query, and the body's bytes. */
@@ -274,10 +285,15 @@ const KEYS: { [key: string]: number } = {
 type Held = Omit<PageWrite, "secret" | "cookies"> & {
 	readonly request: string;
 	readonly navigation: boolean;
+	/** The loader of the page's document that made it: it goes when that document does. */
+	readonly loader: string;
 	readonly network?: string;
 	readonly secret: Promise<boolean>;
 	readonly cookies: Promise<readonly string[] | null>;
 };
+
+/** A request's own word of the document that made it: its frame, that document's loader and address. */
+type Made = { readonly frame?: string; readonly loader?: string; readonly document?: string };
 
 type Session = {
 	readonly cdp: Cdp;
@@ -286,6 +302,21 @@ type Session = {
 	chat: number;
 	/** Requests in flight, by network id, for settling. */
 	readonly inflight: Set<string>;
+	/** Paused requests not decided yet, by interception id: the page is not settled while one waits. */
+	readonly deciding: Set<string>;
+	/**
+	 * The document each request was made from, by network id, in the request's own word (`Network.requestWillBeSent`):
+	 * its frame, its loader and its address, whenever that word arrives, kept for each hop of its redirects.
+	 */
+	readonly madeBy: Map<string, Made>;
+	/** The main frame's id, once a document committed in it. */
+	main?: string | undefined;
+	/** The loader of the document standing in each frame, by frame id; a frame of a page left behind is gone. */
+	readonly loaders: Map<string, string>;
+	/** Loaders of documents left behind: what they made is never the page's standing. */
+	readonly left: Set<string>;
+	/** Who waits on the renderer's news (`heard`): each looks again whenever some arrives. */
+	readonly waking: Set<() => void>;
 	loading: boolean;
 	/** The latest snapshot, its refs and keys. */
 	latest?: Rendered | undefined;
@@ -401,6 +432,62 @@ export function openBrowser(options: BrowserOptions): Browser {
 		setup.stamp === undefined ? {} : { headers: stamped(s, headers) };
 
 	/**
+	 * What `check` says once it says something (a value, or null for "never"), looked at again whenever the renderer's
+	 * news arrives, for `HEARING_MS` at most: undefined when it said never or not in time.
+	 */
+	const heard = <T>(s: Session, check: () => T | null | undefined) =>
+		new Promise<T | undefined>((resolve) => {
+			const done = (value: T | null | undefined) => {
+				clearTimeout(timer);
+				s.waking.delete(wake);
+				resolve(value ?? undefined);
+			};
+			const wake = () => {
+				const value = check();
+				if (value !== undefined) done(value);
+			};
+			const timer = setTimeout(() => done(undefined), HEARING_MS);
+			timer.unref?.();
+			s.waking.add(wake);
+			wake();
+		});
+	const wakeAll = (s: Session) => {
+		for (const wake of [...s.waking]) wake();
+	};
+
+	/**
+	 * The document that made request `p` (`writing`: one the page's write must come from), standing in the tab: by the
+	 * request's own word of its frame, loader and address (`madeBy`), never by the order the browser tells of it, so a
+	 * pause that overtook the renderer's news waits for it. A navigation names no document, only, in the Origin header
+	 * the browser sets, the origin that started it ("null" when the page hides it): it is the page standing's only while
+	 * that page is of that origin. Undefined, so the request fails, when its document was left behind, is not known in
+	 * time, or (writing) is a frame's inside the page.
+	 */
+	const madeFrom = (s: Session, p: Record<string, unknown>, writing: boolean) => {
+		const network = p.networkId as string | undefined;
+		const headers = (p.request as { headers?: Record<string, string> }).headers ?? {};
+		const started = Object.entries(headers).find(([name]) => name.toLowerCase() === "origin")?.[1];
+		return heard(s, (): { readonly document: string; readonly loader: string } | null | undefined => {
+			if (p.resourceType === "Document") {
+				if (s.main === undefined || p.frameId !== s.main || started === undefined || started === "null") return null;
+				const loader = s.loaders.get(s.main);
+				if (loader === undefined) return null;
+				// another origin's page stands: the one that sent it may yet be heard of as standing, or never
+				return originOf(s.url) === started ? { document: s.url, loader } : undefined;
+			}
+			if (network === undefined) return null;
+			const made = s.madeBy.get(network);
+			if (made === undefined) return undefined;
+			const { frame, loader, document } = made;
+			if (frame === undefined || !loader || document === undefined || s.left.has(loader)) return null;
+			if (writing && s.main !== undefined && frame !== s.main) return null;
+			// its document is not heard of as committed yet
+			if (s.loaders.get(frame) !== loader || (writing && s.main === undefined)) return undefined;
+			return { document, loader };
+		});
+	};
+
+	/**
 	 * Decide a request the agent's page made (DESIGN.md "The box", The browser): a page of a signed-in site it may not
 	 * open is stopped and told; another request there is stopped too unless its page is of an allowed signed-in site
 	 * (removing its Cookie header would not do: Chromium attaches cookies after this point); a read then goes on, a
@@ -412,6 +499,11 @@ export function openBrowser(options: BrowserOptions): Browser {
 		request: { method: string; url: string; headers: Record<string, string> },
 		id: string,
 	) => {
+		let making: ReturnType<typeof madeFrom> | undefined;
+		const by = () => {
+			making ??= madeFrom(s, p, !READS.has(request.method.toUpperCase()));
+			return making;
+		};
 		const document = p.resourceType === "Document";
 		const headers = Object.entries(request.headers);
 		const withCookies = headers.some(([name]) => name.toLowerCase() === "cookie");
@@ -429,7 +521,7 @@ export function openBrowser(options: BrowserOptions): Browser {
 			return;
 		}
 		if (target !== undefined && !document) {
-			const from = s.frames.get(p.frameId as string) ?? s.url;
+			const from = (await by())?.document ?? "";
 			const page = /^https?:/.test(from) ? await options.sessionAt?.(s.chat, from, []) : undefined;
 			if (!allowed || page === undefined || !(page.allowed || s.allowing === page.site)) {
 				const network = p.networkId as string | undefined;
@@ -448,7 +540,13 @@ export function openBrowser(options: BrowserOptions): Browser {
 		const entries = (p.request as { postDataEntries?: { bytes?: string }[] }).postDataEntries ?? [];
 		const body = Buffer.concat(entries.map((entry) => Buffer.from(entry.bytes ?? "", "base64")));
 		const network = p.networkId as string | undefined;
+		const made = await by();
 		if (network !== undefined) s.inflight.delete(network);
+		if (made === undefined || s.main === undefined || s.loaders.get(s.main) !== made.loader) {
+			// not the page standing's own, or not known to be: it never goes, and never waits
+			await s.cdp.send("Fetch.failRequest", { requestId: id, errorReason: "BlockedByClient" }, s.page);
+			return;
+		}
 		const write = {
 			id: `w${++s.nextWrite}`,
 			chat: s.chat,
@@ -457,10 +555,11 @@ export function openBrowser(options: BrowserOptions): Browser {
 			headers,
 			body: body.toString("base64"),
 			hash: writeHash(request.method, request.url, body),
-			page: s.url,
-			origin: s.frames.get(p.frameId as string) ?? s.url,
+			page: made.document,
+			origin: made.document,
 			request: id,
 			navigation,
+			loader: made.loader,
 			...(network === undefined ? {} : { network }),
 			secret: carries(s, body).catch(() => true),
 			cookies: cookiesAt(s, request.url),
@@ -501,11 +600,15 @@ export function openBrowser(options: BrowserOptions): Browser {
 						.catch(() => undefined);
 					return;
 				}
-				void guarded(s, p, request, id).catch(() => {
-					void s.cdp
-						.send("Fetch.failRequest", { requestId: id, errorReason: "BlockedByClient" }, s.page)
-						.catch(() => undefined);
-				});
+				// the page is not settled until it is decided: its write may yet be held
+				s.deciding.add(id);
+				void guarded(s, p, request, id)
+					.catch(() => {
+						void s.cdp
+							.send("Fetch.failRequest", { requestId: id, errorReason: "BlockedByClient" }, s.page)
+							.catch(() => undefined);
+					})
+					.finally(() => s.deciding.delete(id));
 				return;
 			}
 			case "Fetch.authRequired": {
@@ -525,13 +628,25 @@ export function openBrowser(options: BrowserOptions): Browser {
 					.catch(() => undefined);
 				return;
 			}
-			case "Network.requestWillBeSent":
-				if ([...s.writes.values()].some((write) => write.network === p.requestId)) return;
-				s.inflight.add(p.requestId as string);
+			case "Network.requestWillBeSent": {
+				const network = p.requestId as string;
+				if (p.type !== "Document") {
+					// the request's own word of its document, whenever it comes: not the tab's as it stands then
+					s.madeBy.set(network, {
+						...(typeof p.frameId === "string" ? { frame: p.frameId } : {}),
+						...(typeof p.loaderId === "string" ? { loader: p.loaderId } : {}),
+						...(typeof p.documentURL === "string" ? { document: p.documentURL } : {}),
+					});
+					wakeAll(s);
+				}
+				if ([...s.writes.values()].some((write) => write.network === network)) return;
+				s.inflight.add(network);
 				return;
+			}
 			case "Network.loadingFinished":
 			case "Network.loadingFailed":
 				s.inflight.delete(p.requestId as string);
+				s.madeBy.delete(p.requestId as string);
 				return;
 			case "Page.frameStartedLoading":
 				s.loading = true;
@@ -557,16 +672,39 @@ export function openBrowser(options: BrowserOptions): Browser {
 					.catch(() => undefined);
 				return;
 			case "Page.frameNavigated": {
-				const frame = p.frame as { id: string; parentId?: string; url: string };
+				const frame = p.frame as { id: string; parentId?: string; url: string; loaderId?: string };
 				s.frames.set(frame.id, frame.url);
+				const before = s.loaders.get(frame.id);
+				if (before !== undefined && before !== frame.loaderId) s.left.add(before);
+				if (frame.loaderId === undefined) s.loaders.delete(frame.id);
+				else {
+					s.loaders.set(frame.id, frame.loaderId);
+					s.left.delete(frame.loaderId);
+				}
 				if (frame.parentId === undefined) {
+					s.main = frame.id;
+					// the frames of the page left behind go with it
+					for (const [id, loader] of s.loaders)
+						if (id !== frame.id) {
+							s.left.add(loader);
+							s.loaders.delete(id);
+						}
 					s.url = frame.url;
 					s.title = "";
 					s.frame = undefined;
-					// a page left behind takes its writes with it
-					for (const [id, write] of s.writes) if (write.page !== frame.url) s.writes.delete(id);
+					// a document left behind takes its writes with it, out of the browser too: none stays paused there; one
+					// reloaded at the same address is another
+					for (const [id, write] of s.writes)
+						if (write.loader !== frame.loaderId) {
+							s.writes.delete(id);
+							if (!write.navigation)
+								void s.cdp
+									.send("Fetch.failRequest", { requestId: write.request, errorReason: "BlockedByClient" }, s.page)
+									.catch(() => undefined);
+						}
 					changed();
 				}
+				wakeAll(s);
 				return;
 			}
 			case "Page.javascriptDialogOpening":
@@ -705,6 +843,11 @@ export function openBrowser(options: BrowserOptions): Browser {
 				close,
 				chat,
 				inflight: new Set(),
+				deciding: new Set(),
+				madeBy: new Map(),
+				loaders: new Map(),
+				left: new Set(),
+				waking: new Set(),
 				loading: false,
 				writes: new Map(),
 				typed: new Set(),
@@ -832,7 +975,7 @@ export function openBrowser(options: BrowserOptions): Browser {
 		let quiet = 0;
 		while (Date.now() < until && s.cdp.closed === undefined) {
 			await sleep(100, signal);
-			quiet = s.inflight.size === 0 && !s.loading ? quiet + 1 : 0;
+			quiet = s.inflight.size === 0 && s.deciding.size === 0 && !s.loading ? quiet + 1 : 0;
 			if (quiet >= 4) break;
 		}
 		// the browser's own record of the page: a renderer busy with a navigation it waits on answers nothing
