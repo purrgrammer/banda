@@ -35,6 +35,16 @@ export const isMain = (origin: Origin) =>
 /** Whether `origin` is any permanent agent's main chat. */
 export const isAgentMain = (origin: Origin) => mainAgentOf(origin) !== undefined;
 
+/**
+ * The origin naming the chat `origin` writes to. An agent has one chat (DESIGN.md Bet 1), so the owner on the CLI,
+ * whose thread is an agent's, names the chat the app shows for that agent. Any other origin names its own chat.
+ */
+export const chatOrigin = (origin: Origin): Origin => {
+	if (origin.gateway !== "cli" || origin.peer !== OWNER) return origin;
+	const agent = mainAgentOf({ gateway: "web", peer: OWNER, thread: origin.thread ?? MAIN_THREAD });
+	return agent === undefined ? origin : { gateway: "web", peer: OWNER, thread: agentMainThread(agent) };
+};
+
 /** An image as the model takes it. */
 export type Image = { readonly data: string; readonly mimeType: string };
 

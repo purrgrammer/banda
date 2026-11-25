@@ -24,9 +24,12 @@ describe("daemon", () => {
 		try {
 			const cli = (...args: string[]) => run(process.execPath, ["src/cli/index.ts", ...args, "--home", home]);
 			expect((await cli("say", "hello", "there")).stdout).toBe("re: hello there\n");
-			expect((await cli("say", "--thread", "work", "again")).stdout).toBe("re: again\n");
+			expect((await cli("say", "--agent", "sancho", "again")).stdout).toBe("re: again\n");
+			// an agent is the only target: a thread is no option, and a name that is none starts no chat
+			await expect(cli("say", "--thread", "work", "again")).rejects.toThrow(/Unknown option '--thread'/);
+			await expect(cli("say", "--agent", "nobody", "again")).rejects.toThrow(/there is no agent named nobody/);
 			expect((await cli("status")).stdout).toMatch(
-				/^web: http:\/\/127\.0\.0\.1:\d+\/#token=[\w-]+\ncli\/owner {2}#\d+ {2}idle\ncli\/owner\/work {2}#\d+ {2}idle\n$/,
+				/^web: http:\/\/127\.0\.0\.1:\d+\/#token=[\w-]+\nweb\/owner\/main {2}#\d+ {2}idle\n$/,
 			);
 		} finally {
 			await daemon.close();
@@ -65,7 +68,7 @@ describe("daemon", () => {
 				const { stdout } = await cli("status");
 				return stdout.includes("ask ") && stdout;
 			});
-			expect(listed).toMatch(/^cli\/owner {2}#\d+ {2}waiting, 1 unanswered$/m);
+			expect(listed).toMatch(/^web\/owner\/main {2}#\d+ {2}waiting, 1 unanswered$/m);
 			const key = /^ask (\w+) in #\d+, until .+:$/m.exec(listed)?.[1];
 			expect(listed).toContain(`  Which port?\n    - port: a number (above 1024)\n  banda answer ${key} port=…\n`);
 			await expect(cli("answer", key!, "port=eighty")).rejects.toMatchObject({

@@ -1,7 +1,9 @@
 /**
  * An upgrade keeps the owner's home: every home under `fixtures/homes/` was left by a released build, and this build
  * opens each one, as a daemon would after the upgrade: it brings the home to its own format, lists the chats that were
- * there, goes on in one of them, and reads what was stored back through today's definitions.
+ * there, takes one more message, and reads what was stored back through today's definitions. A chat of the CLI's own
+ * (`cli/owner`, `cli/owner/<thread>`), from before the CLI wrote to an agent's one chat, is kept and listed with its
+ * history; the CLI writes to the first agent's chat, which such a home gets with that message.
  *
  * A fixture is made once, by the build it is named after, and never edited or made again: later builds change, the
  * home an owner already has does not. When one is due:
@@ -26,7 +28,7 @@ import { createRegistry } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
 import { Devices } from "../src/core/devices.ts";
 import { FORMAT_FLOOR, HOME_FORMAT } from "../src/core/format.ts";
-import { routeKey } from "../src/core/gateway.ts";
+import { MAIN_THREAD, OWNER, routeKey } from "../src/core/gateway.ts";
 import { Permissions } from "../src/core/permissions.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { Routes } from "../src/core/turn.ts";
@@ -73,12 +75,11 @@ describe("a home an earlier build left", () => {
 				(await promisify(execFile)(process.execPath, ["src/cli/index.ts", ...args, "--home", home])).stdout;
 			const status = await cli("status");
 			for (const thread of threads)
-				expect(status).toMatch(new RegExp(`^cli/owner${thread === "" ? "" : `/${thread}`} {2}#\\d+ {2}idle$`, "m"));
-			// the chat goes on where it was
-			const last = expected.said.at(-1)!;
-			const more = last.thread === "" ? ["once more"] : ["--thread", last.thread, "once more"];
-			expect(await cli("say", ...more)).toBe("Still here.\n");
-			expected.said.push({ thread: last.thread, text: "once more", reply: "Still here." });
+				expect(status).toMatch(
+					new RegExp(`^(cli/owner${thread === "" ? "|web/owner/main" : `/${thread}`}) {2}#\\d+ {2}idle$`, "m"),
+				);
+			// the first agent's chat takes the next message
+			expect(await cli("say", "once more")).toBe("Still here.\n");
 		} finally {
 			await daemon.close();
 		}
@@ -89,12 +90,21 @@ describe("a home an earlier build left", () => {
 			expect(await store.snapshot(Permissions, context)).toEqual(expected.permissions);
 			expect(await store.snapshot(Devices, context)).toEqual(expected.devices);
 			const { routes } = (await store.snapshot(Routes, context))!;
+			const transcriptOf = async (chat: number | undefined) =>
+				JSON.stringify(
+					(await (await store.conversation(chat as never, context))!.entries({}, 1000, undefined, context)).items,
+				);
+			const main = routes[routeKey({ gateway: "web", peer: OWNER, thread: MAIN_THREAD })]?.chat;
+			expect(main, "the first agent's chat").toBeDefined();
+			const latest = await transcriptOf(main);
+			expect(latest).toContain("once more");
+			expect(latest).toContain("Still here.");
 			for (const thread of threads) {
+				// a chat of the CLI's own where the home kept one, else the first agent's
 				const origin = { gateway: "cli", peer: "owner", ...(thread === "" ? {} : { thread }) };
-				const chat = routes[routeKey(origin)]?.chat;
+				const chat = routes[routeKey(origin)]?.chat ?? (thread === "" ? main : undefined);
 				expect(chat, `the chat of ${JSON.stringify(origin)}`).toBeDefined();
-				const page = await (await store.conversation(chat as never, context))!.entries({}, 1000, undefined, context);
-				const transcript = JSON.stringify(page.items);
+				const transcript = await transcriptOf(chat);
 				for (const said of expected.said.filter((said) => said.thread === thread)) {
 					expect(transcript).toContain(said.text);
 					expect(transcript).toContain(said.reply);

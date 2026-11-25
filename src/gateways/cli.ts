@@ -1,10 +1,21 @@
 /**
  * The CLI gateway: `banda say` talks to the daemon over loopback HTTP with the daemon's token (`bearer`), so every
- * message is the owner's. The messages and asks sent to its thread go to each `say` waiting there, until its Turn
- * ends; when no `say` waits (it was interrupted), they are still in the chat and the web.
+ * message is the owner's, written to an agent's one chat: the chat the app shows, never one of the CLI's own. The
+ * messages and asks sent back go to each `say` waiting on that agent, until its Turn ends; when no `say` waits (it
+ * was interrupted), they are still in the chat and the web.
  */
 import { randomUUID } from "node:crypto";
-import { type Gateway, type Origin, type Outbound, OWNER, type Receive, routeKey } from "../core/gateway.ts";
+import { LEAD } from "../core/agent-id.ts";
+import {
+	agentMainThread,
+	chatOrigin,
+	type Gateway,
+	type Origin,
+	type Outbound,
+	OWNER,
+	type Receive,
+	routeKey,
+} from "../core/gateway.ts";
 import type { Ask } from "../core/wait.ts";
 
 export type CliGatewayOptions = {
@@ -27,7 +38,7 @@ type Waiter = {
 export class CliGateway implements Gateway {
 	readonly name = "cli";
 	readonly strength = "bearer";
-	readonly can = { buttons: false, files: false, threads: true };
+	readonly can = { buttons: false, files: false, threads: false };
 	readonly #options: CliGatewayOptions;
 	#receive: Receive | undefined;
 	readonly #waiting = new Map<string, Waiter>();
@@ -46,22 +57,28 @@ export class CliGateway implements Gateway {
 	}
 
 	/**
-	 * Deliver `text` as a new owner message, telling `heard` of each message and ask sent to the thread until its Turn
-	 * ends, and resolve with how it ended. Text that answers an open question resolves at once.
+	 * Deliver `text` as a new owner message to `agent`'s chat (the first agent's when undefined), telling `heard` of
+	 * each message and ask sent back until its Turn ends, and resolve with how it ended. Text that answers an open
+	 * question resolves at once.
 	 */
 	async say(
 		text: string,
-		thread: string | undefined,
+		agent: string | undefined,
 		signal: AbortSignal,
 		heard: (heard: Heard) => void = () => undefined,
 	): Promise<string> {
 		if (this.#receive === undefined) throw new Error("the CLI gateway is not started");
 		const id = randomUUID();
-		const origin: Origin = { gateway: this.name, peer: OWNER, ...(thread === undefined ? {} : { thread }) };
+		// the thread is the agent's, so it names that agent's chat and a `say` hears only its own agent
+		const origin: Origin = { gateway: this.name, peer: OWNER, thread: agentMainThread(agent ?? LEAD) };
+		// no CLI input starts a chat the app does not show
+		if (chatOrigin(origin).gateway === this.name) throw new Error("agent is an agent's name");
 		const gone = new Promise<never>((_resolve, reject) => {
 			this.#waiting.set(id, { route: routeKey(origin), reject, heard });
 			signal.addEventListener("abort", () => reject(signal.reason), { once: true });
 		});
+		// a `say` that ends without waiting (refused, or an answer) still has its client go away afterwards
+		gone.catch(() => undefined);
 		try {
 			const received = await this.#receive({ id, origin, text });
 			if ("refused" in received) throw new Error(received.refused);
