@@ -163,6 +163,88 @@ describe("acp session capabilities", () => {
 		}
 	});
 
+	it("takes a v2 prompt's answer before the states read in the same chunk, in the agent's own order", async () => {
+		// one write: the answer, then the turn's running and idle, as a fast turn reaches the reader
+		const seen: string[] = [];
+		const connection = startAcp({
+			command: process.execPath,
+			args: [
+				"-e",
+				`process.stdin.once("data", () => {
+					const state = (state) => ({ method: "session/update", params: { sessionId: "s", update: { sessionUpdate: "state_update", state, background: [] } } });
+					process.stdout.write([{ jsonrpc: "2.0", id: 1, result: { messageId: "m1" } }, state("running"), state("idle")].map((m) => JSON.stringify(m)).join("\\n") + "\\n");
+				});`,
+			],
+			cwd: tmpdir(),
+			handlers: {
+				update: (_session, update) => seen.push(String(update.state)),
+				permission: async () => ({ outcome: "cancelled" }),
+			},
+		});
+		try {
+			const answer = await prompt(connection, "s", "hi", (taken) => {
+				seen.push(taken instanceof AcpError ? "error" : `taken ${taken.messageId}`);
+			});
+			expect(answer).toEqual({ messageId: "m1" });
+			expect(seen).toEqual(["taken m1", "running", "idle"]);
+		} finally {
+			await connection.close();
+		}
+	});
+
+	it("speaks v2 to an agent that answers 2: resume and close are its baseline, its mode a config option", async () => {
+		const calls: { method: string; params: unknown }[] = [];
+		const connection: AcpConnection = {
+			pid: undefined,
+			request: async <T>(method: string, params: unknown) => {
+				calls.push({ method, params });
+				if (method === "initialize") return { protocolVersion: 2, info: { name: "x" }, capabilities: {} } as T;
+				if (method === "session/resume")
+					return {
+						configOptions: [
+							{ configId: "approval", category: "mode", type: "select", options: [{ value: "workspace-write" }] },
+						],
+					} as T;
+				return {} as T;
+			},
+			notify: () => {},
+			close: async () => {},
+			exited: new Promise(() => {}),
+		};
+		const opened = await openSession(connection, { cwd: "/w", mode: "workspace-write", resume: "old-1" });
+		expect(opened).toEqual({ sessionId: "old-1", protocol: 2, loaded: true, canClose: true });
+		expect(calls.map((call) => call.method)).toEqual(["initialize", "session/resume", "session/set_config_option"]);
+		// v1's fields ride beside v2's, so a v1-only agent reads the same request as its own
+		expect(calls[0]?.params).toMatchObject({
+			protocolVersion: 2,
+			info: { name: "banda" },
+			clientCapabilities: { terminal: false },
+			clientInfo: { name: "banda" },
+		});
+		// no replayFrom: nothing replayed
+		expect(calls[1]?.params).not.toHaveProperty("replayFrom");
+		expect(calls[2]?.params).toEqual({
+			sessionId: "old-1",
+			configId: "approval",
+			type: "id",
+			value: "workspace-write",
+		});
+	});
+
+	it("refuses a v2 agent whose mode option does not offer the mode, before anything is sent", async () => {
+		const connection: AcpConnection = {
+			pid: undefined,
+			request: async <T>(method: string) =>
+				(method === "initialize" ? { protocolVersion: 2, info: { name: "x" } } : { sessionId: "n1" }) as T,
+			notify: () => {},
+			close: async () => {},
+			exited: new Promise(() => {}),
+		};
+		await expect(openSession(connection, { cwd: "/w", mode: "workspace-write" })).rejects.toThrow(
+			"does not offer the workspace-write mode",
+		);
+	});
+
 	it("refuses a harness that opens a session without naming it", async () => {
 		const connection = startAcp({
 			command: process.execPath,

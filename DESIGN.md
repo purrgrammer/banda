@@ -528,7 +528,8 @@ naming one that is not there answers with those that are.
   project?, session?)`), whose description says where it works and the projects there, rebuilt when that changes.
   A call starts a session at once and answers with its number. Given an earlier `session`, it follows up: a running
   one takes the prompt as a note after its current step; an ended one goes on in a new session that reopens the
-  harness's own (`session/load`, its replayed history left out), else starts fresh with a summary of what the earlier one did.
+  harness's own (`session/resume` with nothing replayed, else `session/load` with its replayed history left out), else
+  starts fresh with a summary of what the earlier one did.
   Both the owner and the agent see which happened. Each continuation checks the currently connected folder and agent
   access; changing either stops the affected work, including notes and approvals not yet sent.
   `harness__sessions` shows the agent its sessions (others' are not its to see), and `harness__stop` stops one, as
@@ -555,7 +556,7 @@ naming one that is not there answers with those that are.
   never with the command or the path: a folded line never shows a command in part, so a cut can never hide its middle;
   the command shows whole only on the ask's card and in the sheet's row once opened. The card names the harness and the
   project; the session's number and full path belong to the sheet's detail, not the card. Its state is said in words
-  ("Working 1:48", "Waiting on you", "Took 0:03", "Stopped", "Interrupted", "Failed") and announced to a screen
+  ("Working 1:48", "Working in background 2:05", "Waiting on you", "Took 0:03", "Stopped", "Interrupted", "Failed") and announced to a screen
   reader when it changes, never colour alone. The owner's notes live behind "Add a note" and show on the card with
   whether each was taken; Stop and the step line's own target (and "Steps", the touch target the line repeats) open
   what it does. Every step lives in a sheet, each folded to its one line until opened: it opens at the newest step and
@@ -567,10 +568,25 @@ naming one that is not there answers with those that are.
   waits on the owner; nothing is said beneath the chat's name, of a session's work or of its asks, so the name never
   moves as an ask opens and is answered. Stop answers them all, and before the ask was sent,
   stops it from being sent. The owner steers in their own words: a note is sent to the harness as a
-  prompt it takes after its current step. Stop cancels the turn, and a harness that has not ended it within seconds is
-  ended, with all it started. Stop acts at once, with no confirmation: a stopped
-  session keeps its record, and the agent can follow it up (native resume where the harness supports it, otherwise a
-  fresh session handed a summary of what happened), so stopping loses nothing the owner cannot take up again.
+  prompt it takes after its current step. Stop cancels the turn and each piece of work the harness lists running in
+  the background (its own cancel for a command, a tool call or a subagent; work with no cancel of its own ends the
+  session at once, by `session/close`), and a harness that has not ended them within seconds is ended, with all it started. Stop acts at once, with no
+  confirmation: a stopped session keeps its record, and the agent can follow it up (native resume where the harness
+  supports it, otherwise a fresh session handed a summary of what happened). A follow-up takes up the conversation,
+  not the work Stop ended: a background command or a subagent it stopped is not running again until the harness starts it again.
+- **Unless stopped, a session ends on what the harness says, never on a clock.** A turn's end is not the session's: Claude Code ends a
+  turn while a background command, a monitor or a subagent it started runs on. Over ACP v2 (spoken to an agent that
+  answers 2; v1 otherwise) a prompt is answered once the harness took it in, its foreground is reported as states, and
+  a harness that reports background work lists all of it on each: left out is "not reported", never "nothing runs".
+  A session is live while any prompt is not yet taken in or its run not over, an ask is open, its foreground is not
+  idle or its list names work; its card says "Working in background" once only the list holds it, and its agent hears
+  nothing until it ends. It ends done only when every prompt's run is over, no ask is open, its foreground is idle and
+  its list is reported empty. A harness that does not report the list (every v1 harness, and a v2 one that leaves it
+  out) ends closed when the rest holds: its turn is over, but whether all it started had finished is not known, so
+  banda stops whatever is left, says so on the card and in its agent's wake, and never calls it done. A list left out
+  after one that named work leaves that list standing (the work may still run, so it is not killed); after an empty
+  one it is unknown again. An ask the harness withdraws leaves the owner's view. A piece of work a list drops is ended
+  with the final status the harness sent first, or with none said, never taken for completed.
 - **Once, and then the agent hears.** The ask is sent at most once: a restart after it was sent ends the session
   interrupted, never sends it again, and a session whose task ended without ending it ends failed. Either way, and
   when the harness finishes, its agent wakes once with what was done, fenced as foreign data: how it ended, what it

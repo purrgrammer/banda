@@ -15,7 +15,7 @@ type Summary = {
 };
 
 let n = 0;
-const run = async (schedules: readonly (readonly Fault[])[], mode?: "continue" | "note") => {
+const run = async (schedules: readonly (readonly Fault[])[], mode?: "continue" | "note" | "v2" | "v2stop") => {
 	// a mark no other run shares, so a command that outlived its process is this run's
 	const mark = `banda-harness-fault-${process.pid}-${n++}`;
 	const { last, kills } = await runWorker(
@@ -28,14 +28,17 @@ const run = async (schedules: readonly (readonly Fault[])[], mode?: "continue" |
 
 /**
  * A harness session under kills: its ask reaches the harness at most once, and exactly once when it finished; it ends
- * once (done, interrupted past the ask, failed before it), waking its agent once; nothing its harness started outlives
- * the process that started it; nothing is parked.
+ * once (closed with its turn, as a v1 harness that reports no background work does; interrupted past the ask; failed
+ * before it), waking its agent once; never done, which only a harness that reports its background work can earn;
+ * nothing its harness started outlives the process that started it; nothing is parked.
  */
-function check(summary: Summary) {
-	expect(["done", "interrupted", "failed"]).toContain(summary.state);
+function check(summary: Summary, finished: "closed" | "done" | "stopped" = "closed") {
+	// v2stop: a fault that ends the turn before its background command starts leaves nothing to stop: done is right
+	const ends = finished === "stopped" ? ["stopped", "done"] : [finished];
+	expect([...ends, "interrupted", "failed"]).toContain(summary.state);
 	expect(summary.woke).toHaveLength(1);
 	expect(summary.prompts).toBeLessThanOrEqual(1);
-	if (summary.state === "done") expect(summary.prompts).toBe(1);
+	if (summary.state === "closed" || summary.state === "done") expect(summary.prompts).toBe(1);
 	expect(summary.orphans).toBe(0);
 	expect(summary.parked).toEqual([]);
 }
@@ -60,7 +63,7 @@ describe("a harness session under faults", () => {
 	it("sweep: one kill at every commit and at every harness boundary", async () => {
 		const clean = await run([]);
 		check(clean);
-		expect(clean.state).toBe("done");
+		expect(clean.state).toBe("closed");
 		await pool(
 			2,
 			sweep(clean.commits).map((fault) => async () => {
@@ -80,7 +83,7 @@ describe("a harness session under faults", () => {
 	it("sweep, following up on an ended session: it reopens that one, the follow-up sent alone, at most once", async () => {
 		const clean = await run([], "continue");
 		check(clean);
-		expect(clean.state).toBe("done");
+		expect(clean.state).toBe("closed");
 		expect(clean.loaded).toBe(1);
 		await pool(
 			2,
@@ -97,6 +100,36 @@ describe("a harness session under faults", () => {
 			}),
 		);
 	}, 600_000);
+	for (const [mode, finished] of [
+		["v2", "done"],
+		["v2stop", "stopped"],
+	] as const)
+		it(`sweep over ACP v2 (${mode}): a turn that ends while reported background work runs ends ${finished}, never earlier`, async () => {
+			const clean = await run([], mode);
+			check(clean, finished);
+			expect(clean.state).toBe(finished);
+			const points: Fault[] = [
+				...sweep(clean.commits),
+				...(mode === "v2stop"
+					? ([
+							{ point: "harness:cancel-item", hit: 1, kind: "kill" },
+							{ point: "harness:cancel-item", hit: 1, kind: "error" },
+						] as const)
+					: []),
+			];
+			await pool(
+				2,
+				points.map((fault) => async () => {
+					const killed = await run([[fault]], mode);
+					try {
+						if (fault.kind === "kill") expect(killed.kills).toBe(1);
+						check(killed, finished);
+					} catch (error) {
+						throw new Error(`${fault.kind} at ${fault.point} #${fault.hit}: ${(error as Error).message}`);
+					}
+				}),
+			);
+		}, 600_000);
 	it("sweep, a queued note: committed once, sent at most once, cancelled on restart", async () => {
 		const clean = await run([], "note");
 		check(clean);

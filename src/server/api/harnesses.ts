@@ -41,6 +41,8 @@ export type HarnessSessionView = {
 	readonly dropped: number;
 	/** The harness's asks open now, oldest first. */
 	readonly asks?: readonly HarnessAsk[];
+	/** Live with its turn over, how many pieces of work its agent reports running on in the background (ACP v2). */
+	readonly background?: number;
 };
 
 export type HarnessesView = {

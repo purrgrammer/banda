@@ -58,7 +58,8 @@ export type HarnessStep =
 	| { readonly kind: "decided"; readonly command: string; readonly allowed: boolean; readonly ask?: string }
 	| { readonly kind: "said"; readonly text: string };
 
-export type HarnessState = "working" | "waiting" | "done" | "stopped" | "interrupted" | "failed";
+/** `closed`: its turn ended, and its agent does not report what runs on, so banda stopped what was left. */
+export type HarnessState = "working" | "waiting" | "done" | "closed" | "stopped" | "interrupted" | "failed";
 
 export type HarnessSessionView = {
 	/** The harness by name: "Claude Code". */
@@ -87,6 +88,8 @@ export type HarnessSessionView = {
 	readonly continuation?: "native" | "summary" | undefined;
 	/** Its agent stopped it, not the owner. */
 	readonly stoppedBy?: "agent" | undefined;
+	/** Working with its turn over: how many pieces of work it reports running on in the background. */
+	readonly background?: number | undefined;
 };
 
 /**
@@ -272,13 +275,14 @@ export function headlineOf(
 }
 
 /** The session's state in words for the card's foot: the clock never runs loose, it belongs to a state. */
-export function stateWordsOf(state: HarnessState, elapsed: string): string {
+export function stateWordsOf(state: HarnessState, elapsed: string, background?: number): string {
 	switch (state) {
 		case "working":
-			return `Working ${elapsed}`;
+			return background === undefined ? `Working ${elapsed}` : `Working in background ${elapsed}`;
 		case "waiting":
 			return "Waiting on you";
 		case "done":
+		case "closed":
 			return `Took ${elapsed}`;
 		case "stopped":
 			return "Stopped";
@@ -298,6 +302,8 @@ export function announceOf(state: HarnessState, harness: string): string {
 			return `${harness} is waiting on you`;
 		case "done":
 			return `${harness} finished`;
+		case "closed":
+			return `${harness} ended its turn`;
 		case "failed":
 			return `${harness} failed`;
 		case "interrupted":
@@ -544,6 +550,9 @@ function outcomeWords(session: HarnessSessionView): string | undefined {
 	switch (session.state) {
 		case "done":
 			return session.outcome ?? "Finished";
+		case "closed":
+			// it never says what runs on: banda cannot tell whether all it started had finished, so it stopped the rest
+			return `${session.outcome ?? "Ended its turn"}. ${session.harness} doesn't report work left running, so banda stopped anything still running.`;
 		case "stopped":
 			return session.stoppedBy === "agent" ? `${session.agent ?? "Its agent"} stopped it` : "You stopped it";
 		case "interrupted":
@@ -572,7 +581,10 @@ export function HarnessCard({
 	const { verb, object, code } =
 		state === "waiting" && permissions !== undefined
 			? { verb: "Waiting on you", object: "", code: false }
-			: headlineOf(last, folder, session.root);
+			: // its turn is over and work it reports runs on: its last step is not what it is doing now
+				state === "working" && session.background !== undefined
+				? { verb: "Working in background", object: "", code: false }
+				: headlineOf(last, folder, session.root);
 	const outcome = outcomeWords(session);
 	const failed = state === "failed" || state === "interrupted";
 	const summary = (
@@ -612,7 +624,9 @@ export function HarnessCard({
 	return (
 		<Tile data-harness-card="" className="flex min-w-0 flex-col p-1">
 			<span role="status" aria-live="polite" className="sr-only">
-				{announceOf(state, harness)}
+				{state === "working" && session.background !== undefined
+					? `${harness} is working in the background`
+					: announceOf(state, harness)}
 			</span>
 			<div className="flex min-w-0 items-center gap-1">
 				{onOpen === undefined ? (
@@ -898,7 +912,7 @@ export function HarnessTranscript({
 				<span className="font-medium text-ink">{session.harness}</span>
 				<span className="min-w-0 truncate text-meta text-ink-2">{projectOf(session.folder)}</span>
 				<span className="ml-auto shrink-0 text-meta text-ink-2 tabular-nums">
-					{stateWordsOf(session.state, session.elapsed)}
+					{stateWordsOf(session.state, session.elapsed, session.background)}
 				</span>
 			</span>
 			<span className="min-w-0 truncate text-meta text-ink-2">

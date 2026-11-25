@@ -61,6 +61,14 @@ walkthroughs and fresh six-shard fault and Docker CI pass. Workspace refreshes c
 actions; startup and explicit reads reconcile missed changes. Concurrent native Mac homes have recovery evidence.
 Prolonged outages, broader recovery qualification, preflight latency and clean-machine distribution remain open.
 
+Harness sessions speak ACP v2 to a harness that answers 2, so a turn's end no longer kills what Claude Code left
+running past it: a session ends on what the harness says (its prompts taken in and run, no ask open, its foreground
+idle, its background list reported empty), Stop cancels the listed work too, and a harness that does not report the
+list ends closed, never done. Claude Code's own follow-up on finished background work still comes after the session
+ended, and is lost: how to keep it is an open decision. Pure lifecycle properties, the v2 translation and fake-agent sessions pass locally;
+fault sweeps run in CI. Real-model runs, the walkthrough at desktop and phone width and owner review remain open, with
+the decisions in [Connections](connections.md).
+
 banda is a chat: a band of agents in a sidebar, one conversation each, groups, a panel, and no other screen, as
 DESIGN.md says. The specimen and the wiring slices are in code; what remains of them is each section's open work.
 

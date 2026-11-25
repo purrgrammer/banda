@@ -61,6 +61,7 @@ const viewOf = (session: HarnessSessionView, now: number, agent: string | undefi
 				],
 	elapsed: clock((session.ended ?? now) - session.at),
 	...(session.outcome === undefined ? {} : { outcome: session.outcome }),
+	...(session.background === undefined ? {} : { background: session.background }),
 });
 
 /** False until `key` has held still a moment: a button that just appeared or moved takes no click meant for another. */

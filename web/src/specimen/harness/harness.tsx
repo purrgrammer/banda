@@ -345,6 +345,7 @@ const AT: Record<HarnessState, Step> = {
 	working: "working",
 	waiting: "waiting",
 	done: "done",
+	closed: "done",
 	stopped: "stopped",
 	interrupted: "stopped",
 	failed: "stopped",
@@ -601,6 +602,29 @@ export function HarnessSection() {
 					/>
 					<HarnessCard
 						session={{ ...sessionAt("stopped", []), agent: "Sancho", task: 43, stoppedBy: "agent" }}
+						onOpen={() => {}}
+					/>
+				</div>
+			</Section>
+			<Section
+				id="harness-background"
+				note="Its turn over, work it reports runs on (a background command, a monitor, a subagent): still live, and Stop stops that work too. One whose coding agent never reports such work ends with its turn, and says that banda stopped what was left."
+			>
+				<div className="flex max-w-md flex-col gap-3">
+					<HarnessCard
+						session={{ ...sessionAt("working", []), elapsed: "2:05", background: 2 }}
+						onStop={() => {}}
+						onOpen={() => {}}
+					/>
+					<HarnessTranscript session={{ ...sessionAt("working", []), elapsed: "2:05", background: 2 }} />
+					<HarnessCard
+						session={{
+							...sessionAt("done", []),
+							harness: "Codex",
+							provider: "openai",
+							logo: undefined,
+							state: "closed",
+						}}
 						onOpen={() => {}}
 					/>
 				</div>

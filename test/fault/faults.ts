@@ -163,7 +163,9 @@ export type FaultPoint =
 	| "harness:prompted"
 	| "harness:update"
 	| "harness:ask"
-	| "harness:note";
+	| "harness:note"
+	/** ACP v2: Stop's cancel of one piece of background work a list names. */
+	| "harness:cancel-item";
 export type Fault = { readonly point: FaultPoint; readonly hit: number; readonly kind: "kill" | "error" };
 
 export class InjectedFault extends Error {

@@ -577,6 +577,13 @@ export const SECTIONS: readonly Entry[] = [
 		status: "app",
 		sources: [HARNESS, PANEL],
 	},
+	{
+		id: "harness-background",
+		title: "Work running on past its turn",
+		group: "harness",
+		status: "app",
+		sources: [HARNESS],
+	},
 	{ id: "harness-sheet", title: "The steps sheet", group: "harness", status: "app", sources: [HARNESS] },
 	// States
 	{ id: "loading-app", title: "Opening the app", group: "states", status: "app", sources: [LOADING, BAND, PANEL] },
