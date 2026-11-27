@@ -7,7 +7,7 @@ import { Accepted, shaOf } from "../src/core/agents.ts";
 import { acceptedSkills } from "../src/core/skills.ts";
 import { context, openStore } from "../src/core/store.ts";
 import type { Workspace } from "../src/server/agents.ts";
-import { acceptSkill, acceptSkills, saveSkill, skills } from "../src/server/skills.ts";
+import { acceptSkill, acceptSkills, reconcileSkills, saveSkill, skills } from "../src/server/skills.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { echoModels, tempHome } from "./helpers.ts";
 
@@ -44,6 +44,44 @@ describe("skill acceptance boundary", () => {
 			await mkdir(join(box.workspace, "skills/bad"));
 			await writeFile(join(box.workspace, "skills/bad/SKILL.md"), "not a skill");
 			expect((await skills(harness, workspace)).find((skill) => skill.name === "bad")?.change?.errors).toBeDefined();
+		} finally {
+			await harness.close(context);
+			await box.close();
+		}
+	});
+
+	it("the owner's save of bytes a reconciliation already put in effect is saved, not refused as changed since", async () => {
+		const home = await tempHome();
+		const box = openBox(hostBox(home), () => {});
+		const harness = await openStore(home, { models: echoModels().models, registry: createRegistry() });
+		const workspace: Workspace = { env: () => box.env(), root: box.workspace, tools: () => [], known: () => true };
+		try {
+			await saveSkill(harness, workspace, "research", draft("Cite sources."), null);
+			const opened = shaOf(draft("Cite sources."));
+			// between the owner's look and their save, the box got these very bytes and the daemon put them in effect
+			await writeFile(join(box.workspace, "skills/research/SKILL.md"), draft("Cite every source."));
+			expect(await reconcileSkills(harness, workspace)).toEqual(["research"]);
+			await saveSkill(harness, workspace, "research", draft("Cite every source."), opened);
+			expect(acceptedSkills((await harness.snapshot(Accepted, context))!.files)[0]?.body).toContain(
+				"Cite every source.",
+			);
+			// the box holds the owner's bytes, not yet put in effect: the same bytes are no change since
+			await writeFile(join(box.workspace, "skills/research/SKILL.md"), draft("Cite the first source."));
+			await saveSkill(
+				harness,
+				workspace,
+				"research",
+				draft("Cite the first source."),
+				shaOf(draft("Cite every source.")),
+			);
+			expect(acceptedSkills((await harness.snapshot(Accepted, context))!.files)[0]?.body).toContain(
+				"Cite the first source.",
+			);
+			// other bytes over a stale base are still refused
+			await expect(saveSkill(harness, workspace, "research", draft("Something else."), opened)).rejects.toThrow(
+				"changed since",
+			);
+			expect((await skills(harness, workspace))[0]?.change).toBeUndefined();
 		} finally {
 			await harness.close(context);
 			await box.close();

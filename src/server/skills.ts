@@ -168,16 +168,22 @@ export async function saveSkill(
 ) {
 	const refused = skillRefusal(name, text);
 	if (refused !== undefined) throw new BadRequest(refused);
+	const sha = shaOf(text);
 	const accepted = (await harness.snapshot(Accepted, ctx))?.files[SKILL_FILE(name)];
 	const found = await candidate(workspace, name, ctx);
-	if ((accepted?.sha ?? null) !== base || (base !== null && found.sha !== base))
+	// these very bytes already in effect and in the box (a reconciliation put them there between the owner's look and
+	// their save): saved, with nothing to do
+	if (accepted?.sha === sha && found.sha === sha) return skills(harness, workspace, ctx);
+	if ((accepted?.sha ?? null) !== base || (base !== null && found.sha !== base && found.sha !== sha))
 		throw new BadRequest("skill changed since you opened it: copy your text and look again", 409);
 	// The owner's exact bytes are accepted, even if the box edits the file between the write and the store commit.
 	await write(workspace.env(), workspace, fileAt(workspace, name), text, ctx);
 	await harness.commit(async (tx) => {
 		const files = (await tx.doc(Accepted)).files;
-		if ((files[SKILL_FILE(name)]?.sha ?? null) !== base) throw new BadRequest("skill changed since you opened it", 409);
-		files[SKILL_FILE(name)] = { sha: shaOf(text), text, at: Date.now() };
+		const now = files[SKILL_FILE(name)]?.sha ?? null;
+		// a reconciliation that read the file just written put the same bytes in effect: not a change since
+		if (now !== base && now !== sha) throw new BadRequest("skill changed since you opened it", 409);
+		files[SKILL_FILE(name)] = { sha, text, at: Date.now() };
 	}, ctx);
 	return skills(harness, workspace, ctx);
 }
