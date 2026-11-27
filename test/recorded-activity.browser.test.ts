@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import type { RecordedActivity } from "../web/src/specimen/agent/recorded-types.ts";
+import { fixture } from "./fixtures/recorded-activity.ts";
 import { type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 import { chooseMessageAction } from "./smoke/message-actions.ts";
@@ -10,55 +10,6 @@ import { chooseMessageAction } from "./smoke/message-actions.ts";
 let server: WebServer;
 let home: string;
 let base: string;
-const fixture: RecordedActivity = {
-	agent: { name: "Sancho" },
-	capturedAt: 123,
-	runs: [
-		{
-			id: 1,
-			input: "Find an event",
-			at: 123,
-			kind: "user",
-			prompt: {
-				system: "Recorded system prompt, not regenerated.",
-				tools: Array.from({ length: 22 }, (_, i) => ({
-					name: i === 0 ? "web_fetch" : `available_tool_${i}`,
-					description: `Complete tool description ${i}`,
-					parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
-				})),
-			},
-			items: [
-				{ id: 1, role: "user", text: "Find an event", at: 123 },
-				{
-					id: 2,
-					role: "assistant",
-					text: "",
-					at: 124,
-					model: "faux/test",
-					usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
-					calls: [{ id: "fetch", name: "web_fetch", args: { url: "https://example.test/events" } }],
-				},
-				{ id: 3, role: "tool", call: "fetch", name: "web_fetch", text: "Page unavailable", error: true, at: 125 },
-				{
-					id: 4,
-					role: "assistant",
-					text: "",
-					at: 126,
-					model: "faux/test",
-					usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
-					calls: [
-						{
-							id: "reply",
-							name: "message_user",
-							args: { text: "The source is unavailable; I could not verify an event." },
-						},
-					],
-				},
-				{ id: 5, role: "tool", call: "reply", name: "message_user", text: "Sent.", error: false, at: 127 },
-			],
-		},
-	],
-};
 
 beforeAll(async () => {
 	if (!hasChrome()) return;
@@ -163,14 +114,3 @@ for (const width of [390, 1440])
 			});
 		},
 	);
-it.skipIf(!hasChrome())("private data is same-origin, no-store, and inaccessible to another origin", async () => {
-	const response = await fetch(`${base}/__specimen/activity`);
-	expect(response.status).toBe(200);
-	expect(response.headers.get("cache-control")).toBe("no-store");
-	expect(response.headers.get("cross-origin-resource-policy")).toBe("same-origin");
-	expect(((await response.json()) as RecordedActivity).runs[0]?.prompt.tools).toHaveLength(22);
-	expect((await fetch(`${base}/__specimen/activity`, { headers: { origin: "https://example.test" } })).status).toBe(
-		403,
-	);
-	expect((await fetch(`${base}/__specimen/activity`, { method: "POST" })).status).toBe(404);
-});
