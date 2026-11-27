@@ -1,17 +1,25 @@
 /**
  * Host mode (DESIGN.md "The box"): asked for by name, the daemon's commands run on its own machine in `<home>/workspace`,
  * with an allow-listed environment, and the app is told; not asked for, no Docker means an offline box, never host mode.
+ * The computer banda ships is never installed here, whatever this checkout prepared: its runtime is never started.
  */
 import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { boxKind, defaultBox } from "../src/box/box.ts";
 import { type Daemon, type DaemonOptions, startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { ComputerView } from "../src/server/api.ts";
 import { echoModels, tempHome, whenAsked } from "./helpers.ts";
+
+vi.mock("../src/box/microvm-assets.ts", async (original) => ({
+	...(await original<typeof import("../src/box/microvm-assets.ts")>()),
+	installedMicrovmAssets: async () => {
+		throw new Error("The bundled computer is missing. Reinstall banda, or prepare its development bundle.");
+	},
+}));
 
 const daemons: Daemon[] = [];
 afterEach(async () => {

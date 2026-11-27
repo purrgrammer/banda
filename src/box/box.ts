@@ -10,10 +10,10 @@ import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { Connection, RemoteExecutionEnv } from "@earendil-works/pi-env";
 import type { EgressControl } from "../core/egress.ts";
 import type { PreparedBrowser } from "./browser-preparation.ts";
-import { containerBox, dockerReady, sweepBoxes } from "./container.ts";
+import { containerBox, dockerReady } from "./container.ts";
 import type { Pushed } from "./egress-config.ts";
 import { hostBox } from "./host.ts";
-import { microvmBox, sweepMicrovmBoxes } from "./microvm.ts";
+import { microvmBox } from "./microvm.ts";
 import { microvmTarget } from "./microvm-assets.ts";
 
 /** What the daemon tells the egress proxy: whose logins it trusts, credentials, and what goes straight through. */
@@ -322,7 +322,10 @@ export const HOST_WARNING =
 
 /**
  * The container box; banda needs Docker Engine (`DOCKER_MIN` or later). Without one the box is offline, and says why,
- * until one answers: there is no box without its closed network. Host mode only when `kind` names it.
+ * until one answers: there is no box without its closed network. Host mode only when `kind` names it. Starting touches
+ * no box but this home's: what homes since deleted left behind stays until an explicit `npm run boxes:sweep`, since a
+ * home missing from this disk is no evidence it was this daemon's (another machine's on a shared engine, a disk not
+ * mounted now).
  */
 export async function chooseBox(
 	home: string,
@@ -330,28 +333,11 @@ export async function chooseBox(
 	kind: BoxKind = defaultBox(),
 ): Promise<BoxSetup> {
 	if (kind === "host") return hostBox(home);
-	// what computers of homes since deleted left running goes, in the background, as the container boxes below
-	if (kind === "microvm") {
-		void sweepMicrovmBoxes().then(
-			(swept) => {
-				if (swept > 0) log(`box: removed ${swept} left behind by homes that are gone`);
-			},
-			() => {},
-		);
-		return microvmBox(home);
-	}
+	if (kind === "microvm") return microvmBox(home);
 	const trouble = await dockerReady().then(
 		() => undefined,
 		(error: unknown) => (error instanceof Error ? error.message : String(error)),
 	);
 	if (trouble !== undefined) log(`box: banda needs Docker: ${trouble}`);
-	// what boxes of homes since deleted left behind goes, in the background: it holds the networks a new box needs
-	else
-		void sweepBoxes().then(
-			(swept) => {
-				if (swept.length > 0) log(`box: removed ${swept.length} left behind by homes that are gone`);
-			},
-			() => {},
-		);
 	return containerBox(home);
 }

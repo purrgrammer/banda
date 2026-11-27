@@ -63,12 +63,14 @@ refuses to open it the first time: open it as
 Privacy & Security, Open Anyway). banda does not update itself: to update, download the new release and install it
 over the old one. Your data in `~/.banda` stays; back it up first.
 
-To run from source you need [Node 26](https://nodejs.org) (`mise install` sets it up):
+To run from source you need [Node 26](https://nodejs.org) (`mise install` sets it up). A build from source runs on a
+throwaway home and a port of its own, never on the `~/.banda` an installed banda uses: a development build may change a
+home so that a release no longer opens it.
 
 ```sh
 npm ci
 npm run build
-node dist/cli/index.js serve
+BANDA_HOME=$(mktemp -d) node dist/cli/index.js serve --port 7788
 ```
 
 Open the link it prints, pick a model provider and sign in. Anthropic, OpenAI, GitHub Copilot, OpenRouter, xAI and
@@ -90,8 +92,14 @@ OLLAMA_CONTEXT_LENGTH=32768 ollama serve   # then: ollama pull qwen3:8b
 In LM Studio, load a model with a context length of 32,768 or more and start its local server. banda reads the models
 the server has; a model that can't call tools isn't offered.
 
-Your data lives in `~/.banda`. Ctrl-C stops banda; the agents' containers stay, and `npm run boxes:sweep` removes those
-of deleted homes. To start over, delete `~/.banda` and sweep.
+An installed banda keeps your data in `~/.banda`; a run from source, in the home `BANDA_HOME` names. Ctrl-C stops
+banda; the agents' computer stays. banda removes no other home's computer as it starts, so what a deleted home left
+behind (a computer's cache, or a container with its networks and volumes) stays until it is removed on purpose. It
+keeps holding what it holds: disk, a computer that may still run, and Docker networks with their address ranges, so
+enough of them can keep a new box from being made. banda has no command that removes one home's box alone, and
+`npm run boxes:sweep` removes those of every home it cannot find on this disk, on the Docker engine this shell
+reaches, whoever's they are: it is no step of running from source. To start over from source, use a new throwaway
+home (`BANDA_HOME=$(mktemp -d)`); deleting a home frees nothing its box holds.
 
 ## Contribute
 
@@ -100,8 +108,9 @@ npm run check && npm run typecheck && npm test
 ```
 
 Start with [DESIGN.md](DESIGN.md) (how banda works and why) and [AGENTS.md](AGENTS.md) (how to work on it, by hand or
-with an agent). [docs/](docs/README.md) holds the plan. Open an issue before a large change, and report security
-issues privately as [SECURITY.md](SECURITY.md) says.
+with an agent). [docs/](docs/README.md) holds the plan. [CONTRIBUTING.md](CONTRIBUTING.md) is the path from a fork to
+a pull request. Open an issue before a large change, and report security issues privately as
+[SECURITY.md](SECURITY.md) says.
 
 ## License
 

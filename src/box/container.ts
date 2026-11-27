@@ -20,6 +20,7 @@ import type { BoxSetup } from "./box.ts";
 import type { BrowserPreparation } from "./browser-preparation.ts";
 import { BROWSER_UID, browserStart } from "./browser-start.ts";
 import { guardedProxy, type ProxyTransport, proxyReady, TRUST_ENV } from "./guarded-proxy.ts";
+import { within } from "./within.ts";
 
 const DOCKERFILE = fileURLToPath(new URL("../../box/Dockerfile", import.meta.url));
 const PROXY = fileURLToPath(new URL("../../proxy/", import.meta.url));
@@ -464,9 +465,17 @@ function temporary(home: string): boolean {
  * Remove what boxes left behind: every container labelled with a home (`banda.home`) that is gone from disk, with its proxy, its networks and its volumes; with `idle`, also a throwaway
  * home under the temporary folders with no daemon running in it. A home whose daemon runs is never touched, nor one
  * outside the temporary folders that still exists. `idle` is for the owner's own sweep only: a test's box runs with no
- * daemon, so another run's sweep must never take it. Answers the homes swept.
+ * daemon, so another run's sweep must never take it. With `within`, only homes under those roots are candidates at
+ * all: a test run passes the folder it made, so a home it cannot find (another machine's on a shared engine, one on a
+ * disk not mounted now) is never its to remove. Answers the homes swept.
  */
-export async function sweepBoxes({ idle = false }: { idle?: boolean } = {}): Promise<string[]> {
+export async function sweepBoxes({
+	idle = false,
+	within: roots,
+}: {
+	idle?: boolean;
+	within?: readonly string[];
+} = {}): Promise<string[]> {
 	const listed = await docker(["ps", "--all", "--format", '{{.Names}}\t{{.Label "banda.home"}}'], 30_000).catch(
 		() => "",
 	);
@@ -478,6 +487,7 @@ export async function sweepBoxes({ idle = false }: { idle?: boolean } = {}): Pro
 	}
 	const swept: string[] = [];
 	for (const [home, names] of byHome) {
+		if (roots !== undefined && !within(home, roots)) continue;
 		if (existsSync(home) && (!idle || !temporary(home) || daemonAlive(home))) continue;
 		const bases = [...new Set(names.map((name) => name.replace(/-proxy$/, "")))];
 		await docker(["rm", "--force", ...names]).catch(() => undefined);

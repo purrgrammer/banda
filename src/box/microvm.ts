@@ -15,6 +15,7 @@ import { importDockerComputer } from "./docker-import.ts";
 import { guardedProxy, type ProxyTransport, proxyReady, TRUST, TRUST_ENV } from "./guarded-proxy.ts";
 import { installedMicrovmAssets, type MicrovmAssets, microvmTarget } from "./microvm-assets.ts";
 import { BrowserDownloadError, downloadMicrovmBrowser } from "./microvm-download.ts";
+import { within } from "./within.ts";
 
 const CacheHome = Type.Object({ home: Type.String() }, { additionalProperties: false });
 const Inspection = Type.Object({
@@ -865,8 +866,11 @@ export async function launchMicrovm(argv: readonly string[]): Promise<void> {
 	}
 }
 
-/** Only abandoned caches of this OS user, bound to their exact absent home, are swept. How many homes' it removed. */
-export async function sweepMicrovmBoxes(): Promise<number> {
+/**
+ * Only abandoned caches of this OS user, bound to their exact absent home, are swept; with `within`, only those whose
+ * home is under one of those roots (as `sweepBoxes`). How many homes' it removed.
+ */
+export async function sweepMicrovmBoxes({ within: roots }: { within?: readonly string[] } = {}): Promise<number> {
 	if (microvmTarget(process) === undefined) return 0;
 	const entries = await readdir(cacheRoot, { withFileTypes: true });
 	let assets: MicrovmAssets | undefined;
@@ -879,6 +883,7 @@ export async function sweepMicrovmBoxes(): Promise<number> {
 			if (stat.uid !== uid) continue;
 			const { home } = parse(CacheHome, await readFile(join(cache, "home.json"), "utf8"));
 			if (!isAbsolute(home) || cachePath(home) !== cache) continue;
+			if (roots !== undefined && !within(home, roots)) continue;
 			if (
 				await lstat(home).then(
 					() => true,
