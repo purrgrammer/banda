@@ -164,7 +164,8 @@ export function SkillsPage({
 				</>
 			) : accepted === undefined ? (
 				<p className="text-ui text-ink-2">
-					No accepted skill named /{name}. A proposed file needs review before it can load.
+					No skill named /{name} is in effect. A SKILL.md in the workspace is in effect as soon as it parses; one that
+					does not is below, with what is wrong.
 				</p>
 			) : (
 				<SkillDetail skill={accepted} showTitle={false} />
@@ -203,7 +204,7 @@ export function SkillsPage({
 	);
 }
 
-/** An agent's proposed version: shown, never loaded, until the owner accepts it. */
+/** A workspace version that is not in effect: one that does not read, says why; one that does, the owner may accept. */
 function ChangeReview({
 	isNew,
 	change,
@@ -374,7 +375,10 @@ export function Waiting({
 			<h2 className="text-ui font-semibold">
 				{waiting.length === 1 ? "1 skill is" : `${waiting.length} skills are`} waiting for your review
 			</h2>
-			<p className="text-meta text-ink-2">Agents can't load these until you accept them.</p>
+			<p className="text-meta text-ink-2">
+				Agents can't use these yet: a file that doesn't read needs fixing in the workspace; one that does is in effect
+				once you accept it.
+			</p>
 			<ul className="flex max-h-80 flex-col gap-1 overflow-auto">
 				{waiting.map(({ name, change }) => (
 					<li key={name} className="flex min-w-0 items-baseline gap-2">

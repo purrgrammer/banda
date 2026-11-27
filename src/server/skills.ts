@@ -1,8 +1,20 @@
-/** Shared skill catalogue: box files are proposals; accepted snapshots alone enter a prompt. */
+/**
+ * Shared skill catalogue: accepted snapshots alone enter a prompt, and a SKILL.md in the box is accepted as soon as the
+ * daemon sees it (at a tool's end, and here at start), when it parses and hides no character; a file that does not is
+ * shown to the owner with what is wrong.
+ */
 import type { Context } from "@earendil-works/chord";
 import type { Harness } from "@earendil-works/pi-durable";
 import { Accepted, shaOf } from "../core/agents.ts";
-import { acceptedSkills, MAX_SKILL_BYTES, parseSkill, SKILL_FILE, SKILL_NAME, type Skill } from "../core/skills.ts";
+import {
+	acceptedSkills,
+	MAX_SKILL_BYTES,
+	putSkill,
+	SKILL_FILE,
+	SKILL_NAME,
+	type Skill,
+	skillRefusal,
+} from "../core/skills.ts";
 import { context } from "../core/store.ts";
 import { readBytes, textOf, type Workspace, write } from "./agents.ts";
 import { BadRequest } from "./http.ts";
@@ -35,12 +47,9 @@ async function candidate(workspace: Workspace, name: string, ctx: Context) {
 	const decoded = textOf(result.bytes);
 	if ("unreadable" in decoded) return { errors: [decoded.unreadable] };
 	const sha = shaOf(decoded.text);
-	try {
-		parseSkill(name, decoded.text);
-		return { sha, text: decoded.text };
-	} catch (error) {
-		return { sha, text: decoded.text, errors: [(error as Error).message] };
-	}
+	// the one rule putSkill applies: a file it refuses is shown with why, never offered as acceptable
+	const refused = skillRefusal(name, decoded.text);
+	return refused === undefined ? { sha, text: decoded.text } : { sha, text: decoded.text, errors: [refused] };
 }
 
 export async function skills(harness: Harness, workspace: Workspace, ctx: Context = context): Promise<SkillView[]> {
@@ -78,6 +87,34 @@ export async function skills(harness: Harness, workspace: Workspace, ctx: Contex
 		});
 	}
 	return views;
+}
+
+/**
+ * Every SKILL.md in the box put in effect as it stands (`putSkill`), for what changed while no tool told the daemon: at
+ * start, and when the box comes up. The names put in effect; a file that cannot be is left for the Skills page to say.
+ */
+export async function reconcileSkills(
+	harness: Harness,
+	workspace: Workspace,
+	ctx: Context = context,
+): Promise<string[]> {
+	const listed = await workspace.env().listDir(directory(workspace), ctx);
+	if (!listed.ok) {
+		if (listed.error.code === "not_found") return [];
+		throw listed.error;
+	}
+	const accepted = (await harness.snapshot(Accepted, ctx))?.files ?? {};
+	const put: string[] = [];
+	for (const entry of listed.value) {
+		if (entry.kind !== "directory" || !SKILL_NAME.test(entry.name)) continue;
+		const found = await candidate(workspace, entry.name, ctx);
+		if (found.text === undefined || found.errors !== undefined || found.sha === accepted[SKILL_FILE(entry.name)]?.sha)
+			continue;
+		const text = found.text;
+		const result = await harness.commit((tx) => putSkill(tx, entry.name, text, Date.now()), ctx);
+		if ("change" in result && result.change !== "same") put.push(entry.name);
+	}
+	return put;
 }
 
 /** The most skills one acceptance takes: a pack the owner reviewed as one list. */
@@ -129,21 +166,24 @@ export async function saveSkill(
 	base: string | null,
 	ctx: Context = context,
 ) {
-	try {
-		parseSkill(name, text);
-	} catch (error) {
-		throw new BadRequest((error as Error).message);
-	}
+	const refused = skillRefusal(name, text);
+	if (refused !== undefined) throw new BadRequest(refused);
+	const sha = shaOf(text);
 	const accepted = (await harness.snapshot(Accepted, ctx))?.files[SKILL_FILE(name)];
 	const found = await candidate(workspace, name, ctx);
-	if ((accepted?.sha ?? null) !== base || (base !== null && found.sha !== base))
+	// these very bytes already in effect and in the box (a reconciliation put them there between the owner's look and
+	// their save): saved, with nothing to do
+	if (accepted?.sha === sha && found.sha === sha) return skills(harness, workspace, ctx);
+	if ((accepted?.sha ?? null) !== base || (base !== null && found.sha !== base && found.sha !== sha))
 		throw new BadRequest("skill changed since you opened it: copy your text and look again", 409);
 	// The owner's exact bytes are accepted, even if the box edits the file between the write and the store commit.
 	await write(workspace.env(), workspace, fileAt(workspace, name), text, ctx);
 	await harness.commit(async (tx) => {
 		const files = (await tx.doc(Accepted)).files;
-		if ((files[SKILL_FILE(name)]?.sha ?? null) !== base) throw new BadRequest("skill changed since you opened it", 409);
-		files[SKILL_FILE(name)] = { sha: shaOf(text), text, at: Date.now() };
+		const now = files[SKILL_FILE(name)]?.sha ?? null;
+		// a reconciliation that read the file just written put the same bytes in effect: not a change since
+		if (now !== base && now !== sha) throw new BadRequest("skill changed since you opened it", 409);
+		files[SKILL_FILE(name)] = { sha, text, at: Date.now() };
 	}, ctx);
 	return skills(harness, workspace, ctx);
 }

@@ -1,14 +1,18 @@
-/** Cut proposal creation and owner acceptance at commits; reopen and retry the same request to prove one result. */
+/**
+ * Cut the owner's acceptance of a group an earlier banda's agent proposed at commits; reopen and retry the same request
+ * to prove one result. No tool proposes a group now (`create_group` makes one at once), so the proposal is seeded as
+ * `propose_group` recorded it: a home may still hold one.
+ */
 import { join } from "node:path";
+import { createModels, fauxAssistantMessage, fauxProvider, type Context as ModelContext } from "@earendil-works/pi-ai";
 import {
-	createModels,
-	fauxAssistantMessage,
-	fauxProvider,
-	fauxToolCall,
-	type Context as ModelContext,
-} from "@earendil-works/pi-ai";
-import { type ConversationId, createRegistry, type Storage, type TaskId } from "@earendil-works/pi-durable";
-import { Accepted, agentPath, shaOf } from "../../src/core/agents.ts";
+	type ConversationId,
+	createRegistry,
+	type JsonObject,
+	type Storage,
+	type TaskId,
+} from "@earendil-works/pi-durable";
+import { Accepted, AgentChats, agentPath, shaOf } from "../../src/core/agents.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
 import type { Gateway } from "../../src/core/gateway.ts";
 import { OWNER } from "../../src/core/gateway.ts";
@@ -67,11 +71,7 @@ const respond = (request: ModelContext) => {
 	const words = last?.role === "user" ? last.content : "";
 	const input =
 		typeof words === "string" ? words : words.map((part) => (part.type === "text" ? part.text : "")).join("\n");
-	if (input.includes("propose a research group"))
-		return fauxAssistantMessage([fauxToolCall("propose_group", { name: "Research", members: ["sancho", "reader"] })], {
-			stopReason: "toolUse",
-		});
-	return fauxAssistantMessage("done");
+	return fauxAssistantMessage(input === "" ? "done" : "done");
 };
 faux.setResponses(Array.from({ length: 100 }, () => respond as never));
 const core = defineCore({
@@ -116,11 +116,31 @@ async function setup(): Promise<Running> {
 async function perform(current: Running) {
 	const started = await core.receive(current.harness, inbound);
 	if ("turn" in started) await current.harness.waitForTask(started.turn as TaskId<TurnResult>, context);
+	// the proposal as the earlier tool recorded it, once: its card's entry in the chat with it
+	await current.harness.commit(async (tx) => {
+		const doc = await tx.doc(Proposals);
+		if (doc.proposals.legacy !== undefined) return;
+		const chat = (await tx.doc(AgentChats)).chats;
+		const source = Number(Object.keys(chat).find((id) => chat[id] === "sancho"));
+		const seeded: Proposal = {
+			id: "legacy",
+			chat: source,
+			from: "sancho",
+			kind: "group",
+			name: "Research",
+			members: ["sancho", "reader"],
+			memberNames: ["Sancho", "Reader"],
+			at: 1,
+			state: "pending",
+		};
+		doc.proposals.legacy = seeded as unknown as JsonObject;
+		await tx.appendEntry(source as ConversationId, { kind: PROPOSAL_ENTRY, data: seeded as unknown as JsonObject });
+	}, context);
 	const doc = await current.harness.snapshot(Proposals, context);
 	const proposal = Object.values(doc?.proposals ?? {})
 		.map((value) => value as unknown as Proposal)
 		.find((value) => value.kind === "group");
-	if (proposal === undefined) throw new Error("the proposal tool did not create a group proposal");
+	if (proposal === undefined) throw new Error("the group proposal was not seeded");
 	await current.route({
 		method: "POST",
 		path: `/proposals/${encodeURIComponent(proposal.id)}`,

@@ -65,6 +65,7 @@ import {
 	type Sending,
 	type Speaking,
 } from "./ask.ts";
+import { type BandPublication, bandTools } from "./band-tools.ts";
 import { type Attachment, attachmentLine, type BlobStore, hold } from "./blobs.ts";
 import { DEFAULT_NAME } from "./choices.ts";
 import { nameOf } from "./companion.ts";
@@ -86,7 +87,7 @@ import {
 } from "./gateway.ts";
 import { defineGroups, Groups, groupSection } from "./groups.ts";
 import { agentOfChat, FLOOR_WORDS } from "./permissions.ts";
-import { decidedText, makeProposal, PROPOSAL_DECIDED, type Proposal, proposalTools } from "./proposals.ts";
+import { decidedText, PROPOSAL_DECIDED, type Proposal } from "./proposals.ts";
 import { defineReleases, RELEASED, stoppable } from "./release.ts";
 import { rosterSection } from "./roster.ts";
 import {
@@ -352,6 +353,13 @@ export type CoreOptions = {
 	};
 	/** Where each group member's chat gets the extension that names whom it may ask; none, and `ask` takes any words. */
 	readonly registry?: Registry;
+	/**
+	 * How what `create_agent`, `update_agent` and `create_group` put in effect reaches the box and the members' chats;
+	 * none, and the store alone holds it.
+	 */
+	readonly band?: BandPublication;
+	/** Whether a model `create_agent` or `update_agent` names exists on this daemon; unset, any well-formed one is taken. */
+	readonly knownModel?: (model: ModelRef) => boolean;
 };
 
 /** Where `chat` started: its home origin. */
@@ -1916,7 +1924,12 @@ export function defineCore(options: CoreOptions) {
 			proposeAvatarTool(speakingWith),
 			messageAgentTool(messageAgent),
 			readAgentChatTool(readAgentChat),
-			...proposalTools(makeProposal),
+			...bandTools({
+				publication: () => options.band,
+				...(options.knownModel === undefined ? {} : { knownModel: options.knownModel }),
+				agentChanged,
+				createGroup: (tx, made) => groups.createIn(tx, made),
+			}),
 
 			...routines.tools,
 			...watches.tools,

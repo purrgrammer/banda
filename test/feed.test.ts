@@ -168,6 +168,34 @@ describe("changes to before files", () => {
 		// a write that failed wrote nothing, whatever it noted
 		expect(lines(write("agents/x.md", { ...noted("agents/x.md"), error: true } as never), context)).toEqual([]);
 	});
+	it("a command that put a skill in effect still shows the file the owner must allow, after the skill's line", () => {
+		const notes = [
+			{
+				severity: "info" as const,
+				code: "skill-in-effect",
+				text: "skills/notes/SKILL.md is in effect: the skill /notes was added, and the owner sees it on the Skills page.",
+			},
+			...noted("agents/weather.md").notes,
+		];
+		const items = [
+			called(1, "b1", "bash", { command: "whatever the model ran" }),
+			answered(2, "b1", "bash", { notes }),
+		];
+		const shown = view(items, [], IDLE, {
+			agents: [{ name: "weather", change: { kind: "added" } } as never],
+			routines: [],
+		}).flatMap((segment) =>
+			segment.kind === "skillChange"
+				? [["skill", segment.name]]
+				: segment.kind === "change"
+					? [[segment.state, changeWords(segment)]]
+					: [],
+		);
+		expect(shown).toEqual([
+			["skill", "notes"],
+			["pending", "Allow this change? The agent weather"],
+		]);
+	});
 });
 
 describe("library documents", () => {

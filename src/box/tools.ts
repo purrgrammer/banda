@@ -28,6 +28,8 @@ import {
 import { Accepted, AGENT_NAME } from "../core/agents.ts";
 import { type HoldingEgress, intake, withIntake } from "../core/egress.ts";
 
+import { MAX_SKILL_BYTES, SKILL_FILE, SKILL_NAME } from "../core/skill-file.ts";
+import { putSkill } from "../core/skills.ts";
 import { context } from "../core/store.ts";
 import type { CoreOptions } from "../core/turn.ts";
 import { ansiStripper } from "./ansi.ts";
@@ -211,8 +213,11 @@ async function beforeFiles(
 	ctx: Context,
 ): Promise<Map<string, string> | undefined> {
 	const found = new Map<string, string>();
-	const look = async (path: string, info: { kind: string; size: number; mtimeMs: number }) => {
-		const relative = beforeFile(workspace, path);
+	const look = async (
+		path: string,
+		info: { kind: string; size: number; mtimeMs: number },
+		relative = beforeFile(workspace, path),
+	) => {
 		if (relative === undefined) return;
 		if (info.kind !== "file") return found.set(relative, info.kind);
 		if (info.size > HASHED) return found.set(relative, `${info.size}:${info.mtimeMs}`);
@@ -243,6 +248,14 @@ async function beforeFiles(
 			await look(`${workspace}/${folder}/${entry.name}`, entry);
 		}
 	}
+	// each skill's instructions: a command that changed one puts the new file in effect, and the model is told
+	const skills = await env.listDir(`${workspace}/skills`, ctx);
+	if (!skills.ok) return skills.error.code === "not_found" ? found : undefined;
+	for (const entry of skills.value) {
+		if (entry.kind !== "directory" || !SKILL_NAME.test(entry.name)) continue;
+		const file = await env.fileInfo(`${workspace}/${SKILL_FILE(entry.name)}`, ctx);
+		if (file.ok) await look(`${workspace}/${SKILL_FILE(entry.name)}`, file.value, SKILL_FILE(entry.name));
+	}
 	return found;
 }
 
@@ -269,17 +282,99 @@ function telling(tool: ToolRegistration, workspace: string | undefined): ToolReg
 			const changed = [...new Set([...before.keys(), ...after.keys()])].filter(
 				(path) => before.get(path) !== after.get(path) && after.get(path) !== accepted[path]?.sha,
 			);
-			for (const path of changed.sort()) api.diagnostic(awaiting(path));
+			for (const path of changed.sort()) {
+				const skill = skillNamed(path);
+				if (skill === undefined) api.diagnostic(awaiting(path));
+				// a SKILL.md the command removed: only a file in effect is here (a gone file that was not is no change),
+				// and removing a skill is the owner's (DESIGN.md "The workspace")
+				else if (!after.has(path)) api.diagnostic(skillRemoved(path, skill));
+				else {
+					const note = await putSkillAt(api, ctx, env, `${workspace}/${path}`, skill);
+					if (note !== undefined) api.diagnostic(note);
+				}
+			}
 			return result;
 		},
 	};
 }
 
+/** The skill whose instructions `path` (relative to the workspace) is: `skills/<name>/SKILL.md`. */
+function skillNamed(path: string): string | undefined {
+	const name = /^skills\/([^/]+)\/SKILL\.md$/.exec(path)?.[1];
+	return name !== undefined && SKILL_NAME.test(name) ? name : undefined;
+}
+
+/** What the model is told of a SKILL.md in the workspace that cannot be in effect, and why. */
+export const skillWaits = (path: string, why: string) => ({
+	severity: "warn" as const,
+	code: "skill-waits",
+	message:
+		`${path} is not in effect: ${why}. A SKILL.md in the workspace is in effect as soon as it parses (--- frontmatter ` +
+		"with name and description, then the body) and hides no character; until then the version in effect, if any, " +
+		"is what loads, and the Skills page shows the owner what is wrong.",
+});
+
+/** What the model is told of a SKILL.md a command removed: the skill stays in effect until the owner removes it. */
+export const skillRemoved = (path: string, name: string) => ({
+	severity: "info" as const,
+	code: "skill-removed",
+	message:
+		`${path} is gone from the workspace, but the skill /${name} stays in effect: removing a skill is the owner's, ` +
+		"and the Skills page shows them the file is gone. Tell them it waits for them, not that it is removed.",
+});
+
+/** What the model is told of a skill now in effect, with nothing for the owner to accept. */
+export const skillInEffect = (path: string, name: string, change: "added" | "changed") => ({
+	severity: "info" as const,
+	code: "skill-in-effect",
+	message:
+		`${path} is in effect: the skill /${name} was ${change}, and the owner sees it on the Skills page. ` +
+		"It gives no tool, connection or permission.",
+});
+
+/** The text of `path` in the box as it is now, read without following a link; undefined when it is not plain text. */
+async function textAt(env: ExecutionEnv, path: string, ctx: Context): Promise<string | undefined> {
+	const opened = await env.openBinaryReader(path, { noFollow: true }, ctx);
+	if (!opened.ok) return undefined;
+	try {
+		const info = await opened.value.info(ctx);
+		if (!info.ok || info.value.size > MAX_SKILL_BYTES) return undefined;
+		const bytes = await opened.value.read(0, info.value.size, ctx);
+		if (!bytes.ok) return undefined;
+		return new TextDecoder("utf-8", { fatal: true }).decode(bytes.value);
+	} catch {
+		return undefined;
+	} finally {
+		await opened.value.close(ctx);
+	}
+}
+
 /**
- * `tool` (write or edit), telling the model when a file it changed takes effect only once the owner accepts it: until
- * then the accepted version stays in effect, so the change is not done when the call is.
+ * Skill `name`'s SKILL.md at `at` (absolute, in the box) as it is now, in effect (`putSkill`), whichever tool left it
+ * there: the workspace's skills are the agents' own (DESIGN.md "The workspace"). The note for the model says what
+ * happened; none when the file already was the version in effect.
  */
-function accepting(tool: ToolRegistration, workspace: string | undefined): ToolRegistration {
+async function putSkillAt(
+	api: ToolExecutionApi,
+	ctx: Context,
+	env: ExecutionEnv,
+	at: string,
+	name: string,
+): Promise<ReturnType<typeof skillWaits> | ReturnType<typeof skillInEffect> | undefined> {
+	const path = SKILL_FILE(name);
+	const text = await textAt(env, at, ctx);
+	if (text === undefined) return skillWaits(path, "it could not be read back as text of at most 64 KB");
+	const put = await api.commit((tx) => putSkill(tx, name, text, api.now()), ctx);
+	if ("refused" in put) return skillWaits(path, put.refused);
+	return put.change === "same" ? undefined : skillInEffect(path, name, put.change);
+}
+
+/**
+ * `tool` (write or edit), telling the model when what it changed takes effect. An agent, routine or watch file waits
+ * for the owner: until then the accepted version stays in effect, so the change is not done when the call is. A
+ * skill's SKILL.md is in effect at once, as the file now stands (DESIGN.md "The workspace").
+ */
+export function accepting(tool: ToolRegistration, workspace: string | undefined): ToolRegistration {
 	if (workspace === undefined) return tool;
 	return {
 		...tool,
@@ -288,8 +383,13 @@ function accepting(tool: ToolRegistration, workspace: string | undefined): ToolR
 			const path = (args as { path?: unknown }).path;
 			const cwd = api.env?.cwd ?? workspace;
 			if (typeof path !== "string" || result.isError === true) return result;
-			const file = beforeFile(workspace, posix.resolve(cwd, path));
+			const at = posix.resolve(cwd, path);
+			const file = beforeFile(workspace, at);
 			if (file !== undefined) api.diagnostic(awaiting(file));
+			const skill = skillNamed(posix.relative(workspace, at));
+			if (skill === undefined || api.env === undefined) return result;
+			const note = await putSkillAt(api, ctx, api.env, at, skill);
+			if (note !== undefined) api.diagnostic(note);
 			return result;
 		},
 	};

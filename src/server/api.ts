@@ -91,7 +91,9 @@ export type Receipt =
 			readonly name: string;
 			readonly sha: string;
 			readonly change: "added" | "changed" | "same";
-	  };
+	  }
+	/** What `create_agent`, `update_agent` or `create_group` put in effect: the agent as it is after, or the group. */
+	| import("../core/band-tools.ts").BandReceipt;
 
 /** A remark the harness or the tool made about a call: its exit code, what was truncated, where the full output is. */
 export type ToolNote = { readonly severity: "info" | "warn" | "error"; readonly code: string; readonly text: string };

@@ -139,20 +139,31 @@ export function changeWords(segment: Pick<ChangeSegment, "state" | "folder" | "n
 
 const TOOLS = new Set(["write", "edit", "bash"]);
 
+/**
+ * One line per "before" file the call's result says it changed, under the call's key: the first takes the key itself
+ * unless `own` says it is taken (another line of the same call comes first).
+ */
+export function changeLines(
+	key: string,
+	result: Extract<Item, { role: "tool" }> | undefined,
+	own = true,
+): ChangeSegment[] {
+	return changedFiles(result).map(
+		(file, i): ChangeSegment => ({
+			kind: "change",
+			key: own && i === 0 ? key : `${key}:file:${i}`,
+			state: "working",
+			...file,
+			...(result?.at === undefined ? {} : { at: result.at }),
+		}),
+	);
+}
+
 export const changes: Segmenter = {
 	call: (call, key, at) => {
 		if (!TOOLS.has(call.name)) return undefined;
-		const files = changedFiles(at.result);
-		if (files.length === 0) return undefined;
-		const lines = files.map(
-			(file, i): ChangeSegment => ({
-				kind: "change",
-				key: i === 0 ? key : `${key}:file:${i}`,
-				state: "working",
-				...file,
-				...(at.result?.at === undefined ? {} : { at: at.result.at }),
-			}),
-		);
+		const lines = changeLines(key, at.result);
+		if (lines.length === 0) return undefined;
 		return [...lines, ...at.asks()];
 	},
 	after: (segments, input) => {

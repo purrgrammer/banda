@@ -3,8 +3,10 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { expect, it } from "vitest";
+import { LEAD } from "../src/core/agent-id.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
+import { hrefOf } from "../web/src/app/where.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
@@ -32,7 +34,7 @@ async function fill(page: Page, selector: string, value: string, type = "HTMLInp
 }
 
 for (const width of [390, 1440])
-	it.skipIf(!hasChrome())(`skill owner flow, Activity and pending box edits at ${width}px`, async () => {
+	it.skipIf(!hasChrome())(`skill owner flow, Activity and a box edit in effect at ${width}px`, async () => {
 		const home = await tempHome();
 		await writeFile(join(home, "config.json"), JSON.stringify({ model: { provider: "faux", modelId: "faux-1" } }));
 		const faux = fauxProvider();
@@ -59,6 +61,10 @@ for (const width of [390, 1440])
 		try {
 			await withPage(`${server.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
 				// first run has no skills step: the band opens, and a new home has no skills
+				// on a desktop, home opens the lead's chat; on a phone, home is the band alone and has no composer, so the
+				// lead's chat is opened by its route
+				await page.until(`document.querySelector('[aria-label="Your band"] button[aria-label]')`);
+				if (width === 390) await page.run(`location.hash = ${JSON.stringify(hrefOf({ name: "agent", id: LEAD }))}`);
 				await page.until(`document.querySelector('textarea[placeholder^="Message "]')`);
 				expect(await page.run(`document.body.textContent.includes('Skills to start with')`)).toBe(false);
 				await page.run(`location.hash='#/skills'`);
@@ -110,13 +116,11 @@ for (const width of [390, 1440])
 					join(home, "workspace/skills/research/SKILL.md"),
 					"---\nname: research\ndescription: Gather sources\n---\n\n# Research\nCheck every source.",
 				);
+				// the box's version is in effect as soon as the page reads it: nothing to accept
 				await page.run(`dispatchEvent(new Event('banda.skills-changed'))`);
-				await page.until(`document.body.textContent.includes('An agent changed this skill')`);
-				expect(
-					await page.run(`document.querySelector('[data-skill-detail]')?.textContent.includes('Cite your sources.')`),
-				).toBe(true);
-				await click(page, button("Accept this version"));
 				await page.until(`document.querySelector('[data-skill-detail]')?.textContent.includes('Check every source.')`);
+				expect(await page.run(`document.body.textContent.includes('An agent changed this skill')`)).toBe(false);
+				expect(await page.run(`!!${button("Accept this version")}`)).toBe(false);
 			});
 		} finally {
 			await server.close();
