@@ -75,9 +75,10 @@ for (const width of [390, 1440])
 		try {
 			await withPage(`${server.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
 				// first run has no skills step: the band opens with none
-				// on a phone, home is the band alone and has no composer: the lead's chat is opened by its route
+				// on a desktop, home opens the lead's chat; on a phone, home is the band alone and has no composer, so the
+				// lead's chat is opened by its route
 				await page.until(`document.querySelector('[aria-label="Your band"] button[aria-label]')`);
-				await page.run(`location.hash = ${JSON.stringify(hrefOf({ name: "agent", id: LEAD }))}`);
+				if (width === 390) await page.run(`location.hash = ${JSON.stringify(hrefOf({ name: "agent", id: LEAD }))}`);
 				await page.until(`document.querySelector('textarea[placeholder^="Message "]')`);
 				// accepted skills, as the owner would save them; catch-me-up is owner-only
 				const names = ["pdf", "xlsx", "deploy-staging", "invoices", "research", "standup", "translate", "summaries"];
