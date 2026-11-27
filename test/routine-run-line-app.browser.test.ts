@@ -13,7 +13,7 @@ import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { RoutineRunsPage } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, until, webServer } from "./helpers.ts";
+import { tempHome, until, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const SHOTS = process.env.BANDA_RUN_LINE_SHOTS;
@@ -71,7 +71,6 @@ for (const width of [390, 1440])
 				return response.json() as Promise<T>;
 			};
 			try {
-				await skipShippedSkills(daemon.port, token);
 				await api("/routines", "POST", {
 					agent: "sancho",
 					description: "Morning brief",

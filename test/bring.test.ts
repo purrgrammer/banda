@@ -124,8 +124,6 @@ describe("bringing from the other harnesses at first run", () => {
 			);
 			expect(view.chosen).toBe(true);
 			expect((await harness.snapshot(Companion, context))?.bringChosen).toBe(true);
-			// they brought their own: banda's skills are not offered after
-			expect((await harness.snapshot(Companion, context))?.skillsChosen).toBe(true);
 			const accepted = (await harness.snapshot(Accepted, context))?.files ?? {};
 			expect(acceptedSkills(accepted).map(({ name }) => name)).toEqual(["linked", "review", "shared"]);
 			const skills = join(box.workspace, "skills");
@@ -191,8 +189,6 @@ describe("bringing from the other harnesses at first run", () => {
 			await expect(stat(join(box.workspace, "skills", "review"))).rejects.toThrow();
 			expect((await harness.snapshot(Companion, context))?.bringChosen).toBeUndefined();
 			expect((await choose([])).chosen).toBe(true);
-			// nothing brought: banda's own skills come next
-			expect((await harness.snapshot(Companion, context))?.skillsChosen).toBeUndefined();
 		} finally {
 			await close();
 		}

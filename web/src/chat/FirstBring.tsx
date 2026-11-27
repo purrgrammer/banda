@@ -1,9 +1,8 @@
 /**
- * First run on the desktop (and Settings, any time), in place of banda's own skills when other harnesses are set up on this computer (Claude
+ * First run on the desktop (and Settings, any time), when other harnesses are set up on this computer (Claude
  * Code, Codex, pi): the owner picks the harnesses to bring from, and sees what that brings, every skill and agent, each
  * of which they may leave behind. A name two picked harnesses share comes from the first. Each harness says how the
- * band can hand it coding work: its ACP adapter to install, or that it is ready to connect. Starting fresh goes on to
- * banda's own skills.
+ * band can hand it coding work: its ACP adapter to install, or that it is ready to connect. Starting fresh brings nothing.
  */
 import { CheckIcon } from "lucide-react";
 import { CodeBlockCopyButton } from "@/components/ai-elements/code-block";
@@ -149,7 +148,7 @@ export function FirstBring({
 }: PickerProps & {
 	error?: string | undefined;
 	onBring?: () => void;
-	/** Bring nothing: banda's own skills come next. */
+	/** Bring nothing. */
 	onFresh?: () => void;
 }) {
 	const { harnesses, picked, left, busy = false } = picker;
@@ -190,7 +189,7 @@ export function FirstBring({
 			</div>
 			<p className="mt-4 max-w-md text-center text-meta text-ink-2">
 				{words === ""
-					? "Starting fresh, you pick from the skills banda comes with next."
+					? "Starting fresh brings nothing. You can bring skills and agents later, in Settings."
 					: "They become banda's own copies: change them later on the Skills page and in each agent."}
 			</p>
 		</div>

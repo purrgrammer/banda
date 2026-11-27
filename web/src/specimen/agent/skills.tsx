@@ -3,7 +3,7 @@ import { BookOpenIcon } from "lucide-react";
 import { type CSSProperties, useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { skillTokens } from "../../../../src/core/skill-tokens.ts";
-import { FromBanda, SkillForm, Waiting } from "../../app/Skills.tsx";
+import { SkillForm, Waiting } from "../../app/Skills.tsx";
 import { RawRow, RawValue } from "../../chat/ActivityDetail.tsx";
 import { Composer } from "../../chat/Composer.tsx";
 import { Bubble, Run } from "../../chat/Feed.tsx";
@@ -88,16 +88,6 @@ const WAITING = [
 			sha: "b2",
 			text: skillFile("invoices", "Check invoices", "Check the sums and the dates."),
 		},
-	},
-];
-
-const OFFERS = [
-	{ name: "pdf", about: "Read and fill PDF forms.", added: false },
-	{
-		name: "charts",
-		about: "Clear diagrams and charts, as pages.",
-		note: "Its pages load fonts from Google.",
-		added: false,
 	},
 ];
 
@@ -211,10 +201,6 @@ export function SkillsSection() {
 					<PageState label="Changes wait: the review block sits above the list">
 						<Waiting list={WAITING} onOpen={noop} reload={settle} />
 						<SkillList skills={PAGE_ROWS} hrefFor={skillHref} />
-					</PageState>
-					<PageState label="From banda: two left to add; with none left the section is gone">
-						<FromBanda offers={OFFERS} onAdd={noop} />
-						<FromBanda offers={[]} onAdd={noop} />
 					</PageState>
 				</div>
 			</Section>

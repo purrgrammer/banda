@@ -14,7 +14,7 @@ import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { BackupsView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { echoModels, skipShippedSkills, tempHome, until, webServer } from "./helpers.ts";
+import { echoModels, tempHome, until, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const text = `document.body.innerText`;
@@ -98,7 +98,6 @@ for (const [width, desktop] of [
 					`(location.hash.startsWith('#/settings') || (location.hash='#/settings', false)) && ${text}.includes('Backups')`,
 				);
 			};
-			await skipShippedSkills(daemon.port, token);
 			// the desktop app's first run offers what the other harnesses on this computer have: skipped, as the owner may
 			await fetch(`http://127.0.0.1:${daemon.port}/api/bring`, {
 				method: "POST",

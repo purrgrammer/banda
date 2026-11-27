@@ -15,7 +15,7 @@ import { shaOf } from "../src/core/agents.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, until, webServer } from "./helpers.ts";
+import { tempHome, until, webServer } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
 const Status = Type.Object({ chats: Type.Array(Type.Object({ state: Type.String() })) });
@@ -60,7 +60,6 @@ for (const width of [390, 1440])
 			},
 		});
 		try {
-			await skipShippedSkills(daemon.port, token);
 			await withPage(`${server.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
 				await page.until("!location.hash.includes('token=')");
 				await page.run("location.hash='#/a/sancho'");

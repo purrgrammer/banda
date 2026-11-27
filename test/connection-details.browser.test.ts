@@ -15,7 +15,7 @@ import { readDaemonFile } from "../src/home.ts";
 import type { CapabilitiesView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { startFakeMcp } from "./fixtures/mcp-server.ts";
-import { skipShippedSkills, tempHome, viteCacheDir } from "./helpers.ts";
+import { tempHome, viteCacheDir } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const permission = (tool: string) => `document.querySelector('[data-tool="${tool}"] [role="combobox"]')`;
@@ -74,7 +74,6 @@ for (const { width, delayed } of [
 			const daemon = await startDaemon({ home, port: 0, models, box: hostBox(home), log: () => {} });
 			const base = `http://127.0.0.1:${daemon.port}`;
 			const token = (await readDaemonFile(home))?.token as string;
-			await skipShippedSkills(daemon.port, token);
 			const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
 			const added = (await (
 				await fetch(`${base}/api/capabilities/mcp`, {
@@ -253,7 +252,6 @@ it.skipIf(!hasChrome())(
 		const daemon = await startDaemon({ home, port: 0, models, box: hostBox(home), shipped, log: () => {} });
 		const base = `http://127.0.0.1:${daemon.port}`;
 		const token = (await readDaemonFile(home))?.token as string;
-		await skipShippedSkills(daemon.port, token);
 		const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
 		await fetch(`${base}/api/capabilities/connections/cal/add`, { method: "POST", headers, body: "{}" });
 		for (const login of ["ana", "bob"]) {
@@ -387,7 +385,6 @@ for (const width of [390, 1440])
 			const daemon = await startDaemon({ home, port: 0, models, box: hostBox(home), shipped, log: () => {} });
 			const base = `http://127.0.0.1:${daemon.port}`;
 			const token = (await readDaemonFile(home))?.token as string;
-			await skipShippedSkills(daemon.port, token);
 			const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
 			await fetch(`${base}/api/capabilities/connections/cal/add`, { method: "POST", headers, body: "{}" });
 			fake.user = "ana";

@@ -14,7 +14,7 @@ import type { DevicesView } from "../src/server/api.ts";
 import { carriedLink } from "../web/src/lib/browser-shell.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { testDevice } from "./fixtures/iroh-client.ts";
-import { echoModels, skipShippedSkills, tempHome, webServer } from "./helpers.ts";
+import { echoModels, tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const labelled = (label: string) =>
@@ -57,7 +57,6 @@ for (const width of [390, 1280])
 			});
 			const base = `http://127.0.0.1:${daemon.port}`;
 			const token = (await readDaemonFile(home))!.token!;
-			await skipShippedSkills(daemon.port, token);
 			const devices = async () =>
 				(await (
 					await fetch(`${base}/api/devices`, { headers: { authorization: `Bearer ${token}` } })

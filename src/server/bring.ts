@@ -1,8 +1,8 @@
 /**
- * At first run on the desktop, in place of banda's own skills, what the owner's other harnesses on this computer have: Claude Code's, Codex's
+ * At first run on the desktop, what the owner's other harnesses on this computer have: Claude Code's, Codex's
  * and pi's skills, and Claude Code's subagents. The daemon reads them on the owner's computer, where it runs; nothing
  * is brought until the owner picks it, and what is picked is read again then, never taken from the request. A skill
- * is written into the workspace as it was found and accepted, as a shipped one is; an agent becomes a banda agent
+ * is written into the workspace as it was found and accepted; an agent becomes a banda agent
  * file (its name, description and instructions; its own tools and model are another harness's words) and is saved as
  * the owner's. Either way the step is not offered again.
  */
@@ -329,8 +329,7 @@ export async function bringable(
 /**
  * The owner's picks at first run, each read again from its harness's folder now: the skills written into the
  * workspace and accepted together, then each agent saved as the owner's. One already in the workspace by that name is
- * left as it is. Empty picks skip, and banda's own skills are offered next; anything brought, and they are not. Either
- * way the step is not offered again.
+ * left as it is. Empty picks skip. Either way the step is not offered again.
  */
 export async function chooseBring(
 	harness: Harness,
@@ -396,11 +395,7 @@ export async function chooseBring(
 			fault("bring:agent");
 		}
 	await harness.commit(async (tx) => {
-		const doc = await tx.doc(Companion);
-		doc.bringChosen = true;
-		// the owner brought their own (picked, though a cut attempt may already have written them all): banda's skills are
-		// not offered after
-		if (picks.skills.length + picks.agents.length > 0) doc.skillsChosen = true;
+		(await tx.doc(Companion)).bringChosen = true;
 	}, ctx);
 	return bringable(harness, workspace, { folders }, ctx);
 }

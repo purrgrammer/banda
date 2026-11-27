@@ -15,7 +15,7 @@ import { readDaemonFile } from "../src/home.ts";
 import type { CapabilitiesView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { type FakeTool, startFakeMcp } from "./fixtures/mcp-server.ts";
-import { skipShippedSkills, tempHome, viteCacheDir } from "./helpers.ts";
+import { tempHome, viteCacheDir } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const schema = {
@@ -89,7 +89,6 @@ it.skipIf(!hasChrome())(
 		const daemon = await startDaemon({ home, port: 0, models, box: hostBox(home), log: () => {} });
 		const base = `http://127.0.0.1:${daemon.port}`;
 		const token = (await readDaemonFile(home))?.token as string;
-		await skipShippedSkills(daemon.port, token);
 		const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
 		const added = (await (
 			await fetch(`${base}/api/capabilities/mcp`, {

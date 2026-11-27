@@ -49,7 +49,7 @@ import type { ObjectAsk, ObjectShown } from "./objects.ts";
 import { SERVED_POLICY } from "./policy.ts";
 import { endpointOf } from "./remote.ts";
 import type { Area, AreaReply, AreaRequest } from "./routes/area.ts";
-import type { ShippedSkillsView, SkillView } from "./skills.ts";
+import type { SkillView } from "./skills.ts";
 import type { PageQuery } from "./transcript.ts";
 
 export type Routes = {
@@ -115,10 +115,6 @@ export type Routes = {
 	/** Accept every listed proposal by the hash the owner saw, all or none. */
 	readonly acceptSkills: (wanted: readonly { name: string; sha: string }[]) => Promise<SkillView[]>;
 	readonly saveSkill: (name: string, text: string, base: string | null) => Promise<SkillView[]>;
-	/** The skills banda ships, and whether the owner chose from them at first run. */
-	readonly shippedSkills: () => Promise<ShippedSkillsView>;
-	/** Add the shipped skills picked, accepted; none skips. Either way they are not offered again. */
-	readonly chooseShippedSkills: (names: readonly string[]) => Promise<ShippedSkillsView>;
 	/** What the other harnesses on this computer have to import, and whether the owner chose at first run. */
 	readonly bringable: () => Promise<BringView>;
 	/** Import the skills and agents picked; none skips. Either way the step is not offered again. */
@@ -590,13 +586,6 @@ export function handler(
 				200,
 				await routes.acceptSkills(accept.map(({ name, sha }: { name: string; sha: string }) => ({ name, sha }))),
 			);
-		}
-		if (route === "GET /skills/shipped") return reply(res, 200, await routes.shippedSkills());
-		if (route === "POST /skills/shipped") {
-			const { add } = await json(req);
-			if (!Array.isArray(add) || !add.every((name) => typeof name === "string"))
-				return reply(res, 400, { error: "add is the names of the shipped skills picked; none skips" });
-			return reply(res, 200, await routes.chooseShippedSkills(add));
 		}
 		if (route === "GET /bring") return reply(res, 200, await routes.bringable());
 		if (route === "POST /bring") {

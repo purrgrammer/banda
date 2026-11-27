@@ -97,7 +97,7 @@ import {
 	requested as requestedRoutine,
 } from "./server/routines.ts";
 import { seenBy } from "./server/seen.ts";
-import { acceptSkill, acceptSkills, chooseShippedSkills, saveSkill, shippedSkills, skills } from "./server/skills.ts";
+import { acceptSkill, acceptSkills, saveSkill, skills } from "./server/skills.ts";
 import {
 	chatContext,
 	chatPrompt,
@@ -909,8 +909,6 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 					acceptSkill: (name, sha) => changingWorkspace(() => acceptSkill(open, workspace, name, sha)),
 					acceptSkills: (wanted) => changingWorkspace(() => acceptSkills(open, workspace, wanted)),
 					saveSkill: (name, text, base) => changingWorkspace(() => saveSkill(open, workspace, name, text, base)),
-					shippedSkills: () => shippedSkills(open, workspace),
-					chooseShippedSkills: (names) => changingWorkspace(() => chooseShippedSkills(open, workspace, names)),
 					bringable: () => bringable(open, workspace),
 					chooseBring: (picks) =>
 						changingWorkspace(async () => {

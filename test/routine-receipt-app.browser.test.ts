@@ -21,7 +21,7 @@ import { context, openStore } from "../src/core/store.ts";
 import { type Daemon, startDaemon } from "../src/daemon.ts";
 import { ownerToken } from "../src/home.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, until, webServer } from "./helpers.ts";
+import { tempHome, until, webServer } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
 const REPORT = "The retained request finished.";
@@ -77,7 +77,6 @@ for (const { width, action } of [390, 1440].flatMap((width) =>
 				});
 			const first = await start();
 			try {
-				await skipShippedSkills(first.port, token);
 				if (action === "archive")
 					await call(
 						first,

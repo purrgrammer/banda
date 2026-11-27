@@ -47,7 +47,7 @@ import { McpSetup } from "./McpSetup.tsx";
 import { NewSheet } from "./NewSheet.tsx";
 import { useAskNotifications, useNotify } from "./notify.ts";
 import { FollowedObject } from "./Objects.tsx";
-import { Onboarding, SkillsOnboarding, useShippedSkills } from "./Onboarding.tsx";
+import { Onboarding } from "./Onboarding.tsx";
 import { ownerEdits } from "./owner-edits.ts";
 import { EditRoutine, pauseRoutine, RoutineHistory, routineRows, runRoutineNow } from "./routines.tsx";
 import { SearchDialog } from "./SearchDialog.tsx";
@@ -119,7 +119,6 @@ const usePanelBeside = () => useMedia("(min-width: 62rem)");
 
 export function Shell() {
 	const tiers = useTiers();
-	const [shipped, setShipped] = useShippedSkills();
 	const [brought, setBrought] = useBring();
 	// first run until the band can think: a provider with a credential, and not one from outside banda that the owner
 	// never picked (a stale ANTHROPIC_API_KEY would otherwise skip this screen and fail every answer)
@@ -130,26 +129,16 @@ export function Shell() {
 				<Onboarding />
 			</div>
 		);
-	// right after the provider, once: in the desktop app, what the other harnesses on this computer have; when the owner
-	// brings nothing from them (or there are none), the skills banda ships
-	if (brought === undefined || shipped === undefined) return <div className="h-svh bg-paper" />;
+	// right after the provider, once, in the desktop app: what the other harnesses on this computer have
+	if (brought === undefined) return <div className="h-svh bg-paper" />;
 	if (!brought.view.chosen)
 		return (
 			<div className="h-svh bg-paper">
 				<BringOnboarding
 					view={brought.view}
 					harnesses={brought.harnesses}
-					onChosen={(next, brought) => {
-						if (brought) setShipped({ ...shipped, chosen: true });
-						setBrought({ view: next });
-					}}
+					onChosen={(next) => setBrought({ view: next })}
 				/>
-			</div>
-		);
-	if (!shipped.chosen)
-		return (
-			<div className="h-svh bg-paper">
-				<SkillsOnboarding view={shipped} onChosen={setShipped} />
 			</div>
 		);
 	return <Main />;

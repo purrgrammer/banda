@@ -24,7 +24,7 @@ import { readDaemonFile } from "../src/home.ts";
 import type { CustomProvidersView, TiersView } from "../src/server/api.ts";
 import { compatServer } from "./fixtures/compat-server.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, webServer } from "./helpers.ts";
+import { tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const SHOTS = process.env.BANDA_CUSTOM_PROVIDER_SHOTS;
@@ -141,7 +141,6 @@ for (const width of [390, 1440])
 				const started = await daemonOn(home);
 				daemon = started.daemon;
 				const { base, token, api } = started;
-				await skipShippedSkills(daemon.port, token);
 				const server = await webServer({
 					server: { proxy: { "/api": { target: base, changeOrigin: true, headers: { origin: base } } } },
 				});

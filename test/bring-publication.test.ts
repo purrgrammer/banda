@@ -14,7 +14,7 @@ const run = promisify(execFile);
 const Summary = Type.Object({
 	agent: Type.String(),
 	box: Type.Object({ agent: Type.Optional(Type.String()) }),
-	chosen: Type.Object({ bring: Type.Boolean(), skills: Type.Boolean() }),
+	chosen: Type.Object({ bring: Type.Boolean() }),
 });
 
 it("a bring worker reopened with accepted publication intent finishes its workspace file", async () => {
@@ -39,5 +39,5 @@ it("a bring worker reopened with accepted publication intent finishes its worksp
 	if (!Value.Check(Summary, result)) throw new Error("The clean bring worker returned no summary.");
 	expect(result.agent).toBe(shaOf(found.text));
 	expect(result.box.agent).toBe(found.text);
-	expect(result.chosen).toEqual({ bring: true, skills: true });
+	expect(result.chosen).toEqual({ bring: true });
 });

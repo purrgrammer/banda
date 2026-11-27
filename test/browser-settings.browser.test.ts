@@ -5,7 +5,7 @@ import type { BrowserPreparation, PreparedBrowser } from "../src/box/browser-pre
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { echoModels, skipShippedSkills, tempHome, type WebServer, webServer } from "./helpers.ts";
+import { echoModels, tempHome, type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const text = "document.body.innerText";
@@ -57,7 +57,6 @@ for (const width of [390, 1440]) {
 		try {
 			const token = (await readDaemonFile(home))?.token;
 			if (token === undefined) throw new Error("The test daemon did not publish its token");
-			await skipShippedSkills(daemon.port, token);
 			const base = `http://127.0.0.1:${daemon.port}`;
 			web = await webServer({
 				server: { proxy: { "/api": { target: base, changeOrigin: true, headers: { origin: base } } } },

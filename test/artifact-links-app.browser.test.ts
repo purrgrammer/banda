@@ -15,7 +15,7 @@ import { startDaemon } from "../src/daemon.ts";
 import { ownerToken } from "../src/home.ts";
 import type { ChatRow, GroupView, Item } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, until, webServer } from "./helpers.ts";
+import { tempHome, until, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 type Said = { role: string; content: unknown };
@@ -79,7 +79,6 @@ it.skipIf(!hasChrome())(
 			return (await response.json()) as T;
 		};
 		try {
-			await skipShippedSkills(daemon.port, token);
 			const box = (path: string) => join(home, "workspace", path);
 			await mkdir(join(home, "workspace"), { recursive: true });
 			await writeFile(box("plan.md"), "# Lisbon\n\nFriday: the 09:10 train.\n");
@@ -245,7 +244,6 @@ it.skipIf(!hasChrome())(
 			return (await response.json()) as T;
 		};
 		try {
-			await skipShippedSkills(daemon.port, token);
 			await mkdir(join(home, "workspace"), { recursive: true });
 			await writeFile(join(home, "workspace", "same.md"), "# Same run\n");
 			const { chat } = await api<{ chat: number }>("/messages", {
@@ -338,7 +336,6 @@ it.skipIf(!hasChrome())(
 			return (await response.json()) as T;
 		};
 		try {
-			await skipShippedSkills(daemon.port, token);
 			await until(async () => existsSync(join(home, "workspace", "agents", "sancho.md")));
 			for (const [id, name] of [
 				["researcher", "Researcher"],

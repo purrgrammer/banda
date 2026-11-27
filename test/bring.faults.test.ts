@@ -10,7 +10,7 @@ type State = {
 	agent?: string;
 	box: { review?: string; plan?: string; checklist?: string; agent?: string };
 	expected: { review: string; plan: string };
-	chosen: { bring: boolean; skills: boolean };
+	chosen: { bring: boolean };
 	commits: number;
 	points: Record<AgentPublicationPoint, number>;
 };
@@ -32,7 +32,7 @@ function invariant(state: State) {
 	expect(state.box.checklist).toBe("- bugs\n");
 	expect(state.agent).toBeDefined();
 	expect(shaOf(state.box.agent ?? "")).toBe(state.agent);
-	expect(state.chosen).toEqual({ bring: true, skills: true });
+	expect(state.chosen).toEqual({ bring: true });
 }
 
 describe("bringing from the other harnesses, cut at its boundaries", () => {

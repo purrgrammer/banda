@@ -6,7 +6,7 @@ import { expect, it } from "vitest";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { echoModels, skipShippedSkills, tempHome, until, webServer } from "./helpers.ts";
+import { echoModels, tempHome, until, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const ORIGINAL = "---\nname: Mira\ndescription: Plans trips\n---\nOriginal personality.\n";
@@ -102,7 +102,6 @@ for (const [width, height] of [
 				server: { proxy: { "/api": { target: base, changeOrigin: true, headers: { origin: base } } } },
 			});
 			try {
-				await skipShippedSkills(daemon.port, token);
 				const created = await api(Agents, "/agents/mira", "PUT", { text: ORIGINAL, base: null });
 				const original = created.find((agent) => agent.name === "mira")?.accepted;
 				if (original === undefined) throw new Error("Mira was not accepted.");
