@@ -1,6 +1,7 @@
 /**
- * Cut `create_agent` and `create_group` at their commits and at the box publication's boundaries; reopen and let the
- * same owner message finish, to prove one agent, one group, one receipt each, and a box file equal to what is in effect.
+ * Cut `create_agent`, `update_agent`, a skill's `write` and `create_group` at their commits and at the box
+ * publication's boundaries; reopen and let the same owner message finish, to prove one agent with its update in
+ * effect, one group, one receipt each, one skill in effect, and box files equal to what is in effect.
  */
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -20,6 +21,7 @@ import {
 	ToolResultEntry,
 } from "@earendil-works/pi-durable";
 import { type Box, openBox } from "../../src/box/box.ts";
+import { boxEnv, boxTools } from "../../src/box/tools.ts";
 import { Accepted, agentPath } from "../../src/core/agents.ts";
 import { BandCalls } from "../../src/core/band-tools.ts";
 import { BlobStore } from "../../src/core/blobs.ts";
@@ -36,6 +38,7 @@ import {
 	recoverAgentPublications,
 } from "../../src/server/agent-publication.ts";
 import type { Workspace } from "../../src/server/agents.ts";
+import { reconcileSkills } from "../../src/server/skills.ts";
 import { hostBox } from "../fixtures/host-box.ts";
 import { FAUX_MODEL } from "../fixtures/models.ts";
 import { type Fault, Faults, InjectedFault } from "./faults.ts";
@@ -71,6 +74,8 @@ const gateway: Gateway = {
 		return "sent";
 	},
 };
+/** The skill the agent writes: in effect at the end of the call that wrote it, by one commit. */
+const SKILL = "---\nname: notes\ndescription: How the owner likes notes.\n---\nKeep notes short.\n";
 const faux = fauxProvider();
 const models = createModels();
 models.setProvider(faux.provider);
@@ -88,6 +93,8 @@ const respond = (request: ModelContext) => {
 					description: "Writes drafts",
 					instructions: "Write.",
 				}),
+				fauxToolCall("update_agent", { agent: "writer", description: "Writes and edits drafts" }),
+				fauxToolCall("write", { path: "skills/notes/SKILL.md", content: SKILL }),
 				fauxToolCall("create_group", { name: "Writing room", members: ["sancho", "writer"] }),
 			],
 			{ stopReason: "toolUse" },
@@ -135,9 +142,12 @@ async function setup(): Promise<Running> {
 		},
 	});
 	registry.install(core.extension);
-	harness = await openStore(home!, { models, registry, wrapStorage });
+	registry.install(boxTools({ box }));
+	harness = await openStore(home!, { models, registry, wrapStorage, env: boxEnv(box) });
 	opened.harness = harness;
 	await recoverAgentPublications(harness, workspace);
+	// as the daemon does at start: a SKILL.md written while no tool told the store is in effect
+	await reconcileSkills(harness, workspace);
 	harness.resume();
 	const started = await core.receive(harness, inbound);
 	if ("turn" in started) await harness.waitForTask(started.turn as TaskId<TurnResult>, context);
@@ -160,7 +170,10 @@ try {
 	current = await setup();
 }
 armed = false;
-const accepted = (await current.harness.snapshot(Accepted, context))?.files[agentPath("writer")];
+const files = (await current.harness.snapshot(Accepted, context))?.files ?? {};
+const accepted = files[agentPath("writer")];
+const skill = files["skills/notes/SKILL.md"];
+const skillBox = await readFile(join(current.box.workspace, "skills", "notes", "SKILL.md"), "utf8").catch(() => "");
 const groups = await current.harness.snapshot(Groups, context);
 const calls = Object.values((await current.harness.snapshot(BandCalls, context))?.calls ?? {});
 const boxText = await readFile(join(current.box.workspace, "agents", "writer.md"), "utf8").catch(() => "");
@@ -190,6 +203,8 @@ console.log(
 	JSON.stringify({
 		accepted: accepted?.text ?? "",
 		box: boxText,
+		skill: skill?.text ?? "",
+		skillBox,
 		rooms: Object.keys(groups?.groups ?? {}).length,
 		receipts: calls.map((call) => (call as { kind: string }).kind).sort(),
 		results,

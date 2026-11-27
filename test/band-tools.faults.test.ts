@@ -8,6 +8,8 @@ const worker = "test/fault/band-tools-worker.ts";
 type State = {
 	accepted: string;
 	box: string;
+	skill: string;
+	skillBox: string;
 	rooms: number;
 	receipts: string[];
 	results: { tool: string; error: boolean; receipt: boolean; text?: string }[];
@@ -18,20 +20,30 @@ const run = async (faults: readonly Fault[]) => {
 	const { last, kills } = await runWorker(worker, [await tempHome()], [faults]);
 	return { state: last as State, kills };
 };
-/** One agent in effect, its box file the same bytes, one group, one receipt each, and each call answered once. */
+const BAND = new Set(["create_agent", "update_agent", "create_group"]);
+/**
+ * One agent in effect with its update, its box file the same bytes, one skill in effect with its box file the same
+ * bytes, one group, one receipt each, and each call answered once.
+ */
 const expectMadeOnce = ({ state }: Awaited<ReturnType<typeof run>>) => {
 	expect(state.accepted).toContain("name: Writer");
+	expect(state.accepted).toContain("description: Writes and edits drafts");
 	expect(state.box).toBe(state.accepted);
+	expect(state.skill).toContain("Keep notes short.");
+	expect(state.skillBox).toBe(state.skill);
 	expect(state.rooms).toBe(1);
-	expect(state.receipts).toEqual(["agent", "group"]);
-	const band = state.results.filter((result) => result.tool === "create_agent" || result.tool === "create_group");
+	expect(state.receipts).toEqual(["agent", "agent", "group"]);
+	const band = state.results.filter((result) => BAND.has(result.tool));
 	expect(band, JSON.stringify(band)).toEqual([
 		{ tool: "create_agent", error: false, receipt: true },
+		{ tool: "update_agent", error: false, receipt: true },
 		{ tool: "create_group", error: false, receipt: true },
 	]);
+	const written = state.results.filter((result) => result.tool === "write");
+	expect(written, JSON.stringify(written)).toEqual([{ tool: "write", error: false, receipt: false }]);
 };
 
-describe("create_agent and create_group across store and box faults", () => {
+describe("create_agent, update_agent, a skill's write and create_group across store and box faults", () => {
 	it("control: the agent, its box file, the group and the receipts converge", async () => {
 		const clean = await run([]);
 		expectMadeOnce(clean);
@@ -40,7 +52,7 @@ describe("create_agent and create_group across store and box faults", () => {
 	});
 
 	for (const kind of ["error", "kill"] as const) {
-		it(`${kind}: every commit and publication boundary recovers as one agent and one group`, async () => {
+		it(`${kind}: every commit and publication boundary recovers as one agent, one skill and one group`, async () => {
 			const clean = await run([]);
 			const faults: Fault[] = [];
 			for (const point of AGENT_PUBLICATION_POINTS)
