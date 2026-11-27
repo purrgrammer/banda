@@ -108,8 +108,9 @@ export function checkTurnInvariants(
 }
 
 /**
- * The pairing invariants (DESIGN.md "Clients"), whatever was killed: an endpoint is a device only by an invite it claimed
- * and the owner approved; an invite is claimed by one endpoint and spent at most once, by the owner's answer; a waiting
+ * The pairing invariants (DESIGN.md "Clients"), whatever was killed: a device was paired by at most one approved invite,
+ * spent when it was paired (the invite is pruned once it expires: which invite paired a device is the property's model
+ * to check, not the doc); an invite is claimed by one endpoint and spent at most once, by the owner's answer; a waiting
  * request holds the live, unspent invite its endpoint claimed; and no endpoint is a device and waiting at once.
  */
 export function checkDeviceInvariants(doc: DevicesValue | undefined, now: number): void {
@@ -117,8 +118,11 @@ export function checkDeviceInvariants(doc: DevicesValue | undefined, now: number
 	for (const [id, device] of Object.entries(devices)) {
 		expect(id, "a device's id").toMatch(ENDPOINT_ID);
 		expect(requests[id], `${id} paired and waiting`).toBeUndefined();
+		expect(device.paired, `${id} paired in the future`).toBeLessThanOrEqual(now);
 		const by = Object.values(invites).filter((invite) => invite.claimed?.by === id && invite.spent?.approved === true);
-		expect(by.length, `the approved invites that paired ${id}`).toBeGreaterThanOrEqual(1);
+		expect(by.length, `the approved invites that paired ${id}`).toBeLessThanOrEqual(1);
+		// the invite it spent was live when it was paired, so only a commit after that pruned it
+		if (by.length === 0) expect(device.paired, `${id} paired by no invite`).toBeLessThan(now);
 		for (const invite of by) expect(invite.spent?.at, `${id} paired when approved`).toBe(device.paired);
 		if (device.revoked !== undefined) expect(device.revoked).toBeGreaterThanOrEqual(device.paired);
 	}

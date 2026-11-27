@@ -19,6 +19,7 @@ import {
 } from "../src/core/devices.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { openDevices } from "../src/server/devices.ts";
+import { checkDeviceInvariants } from "./fault/invariants.ts";
 import { tempHome } from "./helpers.ts";
 
 const PHONE = "a".repeat(64);
@@ -116,6 +117,34 @@ describe("pairing a device", () => {
 			/removed/,
 		);
 		await expect(harness.commit((tx) => renameDevice(tx, OTHER, "x"), context)).rejects.toThrow(Refused);
+	});
+
+	// fast-check seed 552357726 found it: the approved invite is pruned once it expires, and the device stays paired
+	it("keeps a device paired, and revocable, after the invite that paired it expired and was pruned", async () => {
+		const harness = await store();
+		let now = 1_000_000;
+		await harness.commit((tx) => makeInvite(tx, hashOf("s7"), now), context);
+		await harness.commit((tx) => requestPairing(tx, PHONE, "s7", "Pixel", now), context);
+		await harness.commit((tx) => answerRequest(tx, PHONE, true, now), context);
+		now += 245_232;
+		now += 354_768;
+		expect(now).toBe(1_000_000 + INVITE_MS);
+		await harness.commit((tx) => makeInvite(tx, hashOf("s8"), now), context);
+		const pruned = await doc(harness);
+		expect(Object.keys(pruned?.invites ?? {})).toEqual([hashOf("s8")]);
+		expect(pruned?.devices[PHONE]).toEqual({ name: "Pixel", paired: 1_000_000 });
+		expect(isPaired(pruned, PHONE)).toBe(true);
+		expect(pairingState(pruned, PHONE, now)).toBe("paired");
+		checkDeviceInvariants(pruned, now);
+		// the revoke reads the device, not the invite
+		await harness.commit((tx) => revokeDevice(tx, PHONE, now), context);
+		const revoked = await doc(harness);
+		expect(isPaired(revoked, PHONE)).toBe(false);
+		expect(pairingState(revoked, PHONE, now)).toBe("revoked");
+		checkDeviceInvariants(revoked, now);
+		await expect(harness.commit((tx) => requestPairing(tx, PHONE, "s8", "Pixel", now), context)).rejects.toThrow(
+			/removed/,
+		);
 	});
 
 	it("logs which device made a request, by its name and short id, with the method and path", async () => {

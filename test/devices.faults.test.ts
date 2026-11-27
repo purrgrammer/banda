@@ -145,12 +145,19 @@ describe("pairing devices under faults", () => {
 					return routes(call(method, path));
 				};
 				const secrets: string[] = [];
-				/** Who the owner ever asked to approve, and who they revoked and saw it answered. */
-				const approvedAsked = new Set<string>();
+				/**
+				 * The history the doc does not keep, since it prunes an invite once it expires: the steps after which the doc
+				 * held an unspent invite each endpoint claimed, the steps and times at which the owner asked to approve it,
+				 * and who they revoked and saw it answered.
+				 */
+				const claims = new Map<string, number[]>();
+				const approvals = new Map<string, { step: number; at: number }[]>();
 				const revoked = new Set<string>();
+				const record = <T>(history: Map<string, T[]>, id: string, entry: T) =>
+					history.set(id, [...(history.get(id) ?? []), entry]);
 				await reopen();
 				try {
-					for (const step of steps) {
+					for (const [index, step] of steps.entries()) {
 						if (step.act === "tick") now += step.ms;
 						else if (step.act === "invite")
 							await once(async () =>
@@ -166,7 +173,7 @@ describe("pairing devices under faults", () => {
 							);
 						} else {
 							const id = ENDPOINTS[step.who] as string;
-							if (step.act === "approve") approvedAsked.add(id);
+							if (step.act === "approve") record(approvals, id, { step: index, at: now });
 							const path = step.act === "revoke" ? `/devices/${id}/revoke` : `/devices/requests/${id}/${step.act}`;
 							await once(async () => {
 								await route("POST", path);
@@ -175,10 +182,21 @@ describe("pairing devices under faults", () => {
 						}
 						const doc = await read(() => (harness as Harness).snapshot(Devices, context));
 						checkDeviceInvariants(doc as DevicesValue | undefined, now);
+						const { devices = {}, invites = {} } = (doc as DevicesValue | undefined) ?? {};
+						for (const invite of Object.values(invites))
+							if (invite.claimed !== undefined && invite.spent === undefined) record(claims, invite.claimed.by, index);
+						// every device was paired by an approval the owner asked for when it was paired, after the doc held its
+						// claim on an invite: the model holds that, whatever the doc pruned
+						for (const [id, device] of Object.entries(devices)) {
+							const pairing = (approvals.get(id) ?? []).filter(
+								(approval) => approval.at === device.paired && (claims.get(id) ?? []).some((at) => at < approval.step),
+							);
+							expect(pairing.length, `the approval that paired ${id}`).toBeGreaterThanOrEqual(1);
+						}
 						for (const id of ENDPOINTS) {
 							const paired = await read(() => (desk as NonNullable<typeof desk>).gate.paired(id));
 							// only the owner's approval pairs, and a revoke the owner saw answered holds for good
-							if (paired) expect(approvedAsked.has(id), `${id} paired unasked`).toBe(true);
+							if (paired) expect(approvals.has(id), `${id} paired unasked`).toBe(true);
 							if (revoked.has(id)) expect(paired, `${id} paired after its revoke`).toBe(false);
 						}
 					}
