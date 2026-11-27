@@ -1,7 +1,9 @@
 /**
  * Cut `create_agent`, `update_agent`, a skill's `write` and `create_group` at their commits and at the box
- * publication's boundaries; reopen and let the same owner message finish, to prove one agent with its update in
- * effect, one group, one receipt each, one skill in effect, and box files equal to what is in effect.
+ * publication's boundaries; reopen and let the same owner message finish, recover what the daemon recovers at start,
+ * then ask once more ("try again"), as an owner would after a call that did not happen. The fake model asks again only
+ * for a call whose last answer was an error, so the run proves durable success: one agent with its update in effect,
+ * one group, one receipt each, one skill in effect, and box files equal to what is in effect.
  */
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -79,11 +81,36 @@ const SKILL = "---\nname: notes\ndescription: How the owner likes notes.\n---\nK
 const faux = fauxProvider();
 const models = createModels();
 models.setProvider(faux.provider);
+/** The calls the owner's "try again" asks for: the two whose error a cut may honestly leave (the test says which). */
+const RETRIED = new Set(["update_agent", "write"]);
+/** Each retried tool's call again, with its own arguments, when its last answer in the chat was an error. */
+function again(request: ModelContext) {
+	const calls = new Map<string, { name: string; args: Record<string, unknown> }>();
+	const last = new Map<string, { args: Record<string, unknown>; error: boolean }>();
+	for (const message of request.messages) {
+		if (message.role === "assistant")
+			for (const part of message.content)
+				if (part.type === "toolCall") calls.set(part.id, { name: part.name, args: part.arguments });
+		if (message.role === "toolResult") {
+			const call = calls.get(message.toolCallId);
+			if (call !== undefined && RETRIED.has(call.name))
+				last.set(call.name, { args: call.args, error: message.isError });
+		}
+	}
+	return [...last].flatMap(([name, { args, error }]) =>
+		// an id of its own: a new call, never one the memo would answer from an earlier receipt
+		error ? [fauxToolCall(name, args as Parameters<typeof fauxToolCall>[1], { id: `retry-${name}` })] : [],
+	);
+}
 const respond = (request: ModelContext) => {
 	const last = request.messages.at(-1);
 	const words = last?.role === "user" ? last.content : "";
 	const input =
 		typeof words === "string" ? words : words.map((part) => (part.type === "text" ? part.text : "")).join("\n");
+	if (input === "try again") {
+		const calls = again(request);
+		return calls.length === 0 ? fauxAssistantMessage("done") : fauxAssistantMessage(calls, { stopReason: "toolUse" });
+	}
 	if (input === "hire a writer and team up")
 		return fauxAssistantMessage(
 			[
@@ -108,6 +135,8 @@ const inbound = {
 	text: "hire a writer and team up",
 	agent: "sancho",
 } as const;
+/** The owner's second message, after recovery: its own id, so a rerun of the worker sends it once. */
+const retry = { ...inbound, id: "owner-band-2", text: "try again" } as const;
 
 type Running = { box: Box; harness: Awaited<ReturnType<typeof openStore>> };
 /** What a failed setup opened, to close before the next: a box left open keeps the process alive. */
@@ -155,6 +184,11 @@ async function setup(): Promise<Running> {
 	// as the daemon does at start, when the box comes up and when the owner opens the band: a write the box refused
 	// while the call ran is finished now
 	await recoverAgentPublications(harness, workspace);
+	// the owner asks again: a call a cut left undone is made now, against what recovery finished
+	const second = await core.receive(harness, retry);
+	if ("turn" in second) await harness.waitForTask(second.turn as TaskId<TurnResult>, context);
+	else if ("refused" in second) throw new Error(second.refused);
+	await recoverAgentPublications(harness, workspace);
 	return { box, harness };
 }
 
@@ -178,7 +212,7 @@ const groups = await current.harness.snapshot(Groups, context);
 const calls = Object.values((await current.harness.snapshot(BandCalls, context))?.calls ?? {});
 const boxText = await readFile(join(current.box.workspace, "agents", "writer.md"), "utf8").catch(() => "");
 const chats = await current.harness.commit((tx) => tx.scanConversations({}, 10), context);
-const results: { tool: string; error: boolean; receipt: boolean; text?: string }[] = [];
+const results: { tool: string; error: boolean; receipt: boolean; text: string }[] = [];
 for (const chat of chats.items) {
 	const page = await current.harness.commit(
 		(tx) => tx.scanEntries({ conversationId: chat.id as ConversationId, order: "ascending" }, 200),
@@ -192,10 +226,8 @@ for (const chat of chats.items) {
 			tool: result.toolName,
 			error: result.isError,
 			receipt: receipt !== undefined,
-			// an error's words, so a failing sweep says why
-			...(result.isError
-				? { text: result.content.map((part) => (part.type === "text" ? part.text : "")).join("") }
-				: {}),
+			// every answer's words: the sweep checks no injected fault reaches one, and a failure says why
+			text: result.content.map((part) => (part.type === "text" ? part.text : "")).join(""),
 		});
 	}
 }
