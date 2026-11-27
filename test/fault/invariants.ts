@@ -121,6 +121,8 @@ export function checkDeviceInvariants(doc: DevicesValue | undefined, now: number
 		expect(device.paired, `${id} paired in the future`).toBeLessThanOrEqual(now);
 		const by = Object.values(invites).filter((invite) => invite.claimed?.by === id && invite.spent?.approved === true);
 		expect(by.length, `the approved invites that paired ${id}`).toBeLessThanOrEqual(1);
+		// the invite it spent was live when it was paired, so only a commit after that pruned it
+		if (by.length === 0) expect(device.paired, `${id} paired by no invite`).toBeLessThan(now);
 		for (const invite of by) expect(invite.spent?.at, `${id} paired when approved`).toBe(device.paired);
 		if (device.revoked !== undefined) expect(device.revoked).toBeGreaterThanOrEqual(device.paired);
 	}

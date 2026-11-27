@@ -146,11 +146,11 @@ describe("pairing devices under faults", () => {
 				};
 				const secrets: string[] = [];
 				/**
-				 * The history the doc does not keep, since it prunes an invite once it expires: the steps at which each
-				 * endpoint presented a secret the owner made, the steps and times at which the owner asked to approve it,
+				 * The history the doc does not keep, since it prunes an invite once it expires: the steps after which the doc
+				 * held an unspent invite each endpoint claimed, the steps and times at which the owner asked to approve it,
 				 * and who they revoked and saw it answered.
 				 */
-				const presented = new Map<string, number[]>();
+				const claims = new Map<string, number[]>();
 				const approvals = new Map<string, { step: number; at: number }[]>();
 				const revoked = new Set<string>();
 				const record = <T>(history: Map<string, T[]>, id: string, entry: T) =>
@@ -165,7 +165,6 @@ describe("pairing devices under faults", () => {
 							);
 						else if (step.act === "pair") {
 							const secret = secrets[step.invite] ?? "never-made";
-							if (secrets[step.invite] !== undefined) record(presented, ENDPOINTS[step.who] as string, index);
 							await once(() =>
 								(desk as NonNullable<typeof desk>).gate.pair(
 									ENDPOINTS[step.who] as string,
@@ -183,12 +182,14 @@ describe("pairing devices under faults", () => {
 						}
 						const doc = await read(() => (harness as Harness).snapshot(Devices, context));
 						checkDeviceInvariants(doc as DevicesValue | undefined, now);
-						// every device was paired by an approval the owner asked for when it was paired, after it presented a
-						// secret the owner made: the model holds that, whatever the doc pruned
-						for (const [id, device] of Object.entries((doc as DevicesValue | undefined)?.devices ?? {})) {
+						const { devices = {}, invites = {} } = (doc as DevicesValue | undefined) ?? {};
+						for (const invite of Object.values(invites))
+							if (invite.claimed !== undefined && invite.spent === undefined) record(claims, invite.claimed.by, index);
+						// every device was paired by an approval the owner asked for when it was paired, after the doc held its
+						// claim on an invite: the model holds that, whatever the doc pruned
+						for (const [id, device] of Object.entries(devices)) {
 							const pairing = (approvals.get(id) ?? []).filter(
-								(approval) =>
-									approval.at === device.paired && (presented.get(id) ?? []).some((at) => at < approval.step),
+								(approval) => approval.at === device.paired && (claims.get(id) ?? []).some((at) => at < approval.step),
 							);
 							expect(pairing.length, `the approval that paired ${id}`).toBeGreaterThanOrEqual(1);
 						}

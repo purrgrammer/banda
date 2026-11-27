@@ -142,6 +142,9 @@ describe("pairing a device", () => {
 		expect(isPaired(revoked, PHONE)).toBe(false);
 		expect(pairingState(revoked, PHONE, now)).toBe("revoked");
 		checkDeviceInvariants(revoked, now);
+		await expect(harness.commit((tx) => requestPairing(tx, PHONE, "s8", "Pixel", now), context)).rejects.toThrow(
+			/removed/,
+		);
 	});
 
 	it("logs which device made a request, by its name and short id, with the method and path", async () => {
