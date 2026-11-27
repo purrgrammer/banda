@@ -341,6 +341,39 @@ describe("create_agent", () => {
 		}
 	});
 
+	it("a later call under an id the provider used before, with other arguments, is its own call, not a replay", async () => {
+		const first: Call = [
+			"create_agent",
+			{ id: "scribe", name: "Scribe", description: "Takes notes", instructions: "Note." },
+			"call-id-reused",
+		];
+		const second: Call = [
+			"create_agent",
+			{ id: "editor", name: "Editor", description: "Edits drafts", instructions: "Edit." },
+			"call-id-reused",
+		];
+		const { harness, say, results } = await start((said) =>
+			said === "Hire." ? [first] : said === "Hire another." ? [second] : [],
+		);
+		try {
+			const chat = await say("Hire.");
+			await say("Hire another.");
+			const made = (await results(chat)).filter((result) => result.name === "create_agent");
+			expect(made.map((result) => [result.error, result.receipt?.kind === "agent" && result.receipt.id])).toEqual([
+				[false, "scribe"],
+				[false, "editor"],
+			]);
+			const accepted = (await harness.snapshot(Accepted, context))?.files ?? {};
+			expect([agentPath("scribe"), agentPath("editor")].map((path) => accepted[path] !== undefined)).toEqual([
+				true,
+				true,
+			]);
+			expect(Object.keys((await harness.snapshot(BandCalls, context))?.calls ?? {})).toHaveLength(2);
+		} finally {
+			await harness.close(context);
+		}
+	});
+
 	it("answers a call run again with what it did, and writes the accepted file to the box", async () => {
 		const home = await tempHome();
 		const box = openBox(hostBox(home), () => {});

@@ -298,16 +298,19 @@ export async function leftOf(tx: Tx, id: string): Promise<string[]> {
 
 /**
  * Run `apply` once for this call, in one commit: from a direct agent chat only, and a call run again answers with the
- * receipt it already has. `after` runs outside the commit, each time, and may fail without undoing what is in effect.
+ * receipt it already has. The call is its chat, its id and its arguments: a provider that gives a later call an id it
+ * gave before, with other arguments, has made another call, not run this one again. `after` runs outside the commit,
+ * each time, and may fail without undoing what is in effect.
  */
 async function once(
 	api: ToolExecutionApi,
 	ctx: Context,
+	args: unknown,
 	not: string,
 	apply: (tx: Tx, author: string) => Promise<BandReceipt>,
 	after: (receipt: BandReceipt) => Promise<void>,
 ): Promise<ToolExecutionResult> {
-	const id = `${api.conversationId}:${api.callId}`;
+	const id = `${api.conversationId}:${api.callId}:${shaOf(JSON.stringify(args ?? null))}`;
 	let receipt: BandReceipt;
 	try {
 		receipt = await api.commit(async (tx) => {
@@ -405,6 +408,7 @@ export function bandTools(deps: BandDeps): readonly ToolRegistration[] {
 				return once(
 					api,
 					ctx,
+					value,
 					"Not created",
 					async (tx) => {
 						if (!AGENT_NAME.test(value.id)) throw new Refused("use a lowercase agent id with words joined by dashes");
@@ -490,6 +494,7 @@ export function bandTools(deps: BandDeps): readonly ToolRegistration[] {
 				return once(
 					api,
 					ctx,
+					value,
 					"Not updated",
 					async (tx, author) => {
 						const agent = await acceptedAgent(tx, value.agent ?? author);
@@ -569,6 +574,7 @@ export function bandTools(deps: BandDeps): readonly ToolRegistration[] {
 				once(
 					api,
 					ctx,
+					value,
 					"Not created",
 					async (tx) => {
 						const ids = [...new Set(value.members)];
