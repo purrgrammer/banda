@@ -34,8 +34,23 @@ const TOOLS = ["create_agent", "update_agent", "write", "create_group"] as const
 const PENDING =
 	"Not updated: agents/writer.md in the workspace is not the version in effect: a change to it waits for the owner, or is still being written.";
 const INTERRUPTED = /^Tool write was interrupted (by a restart )?and may have partially run$/;
-/** An injected fault's own words (test/fault/faults.ts): none may reach an answer. */
+/** An injected fault's own words (test/fault/faults.ts): none may reach an answer, but for the one note below. */
 const LEAKED = /InjectedFault|\b(commit|agent):[a-z:]+ #\d+/;
+/**
+ * The one place a fault's words reach an answer truthfully: a thrown fault at an `agent:*` box publication point is
+ * the reason `once` gives in a successful create_agent or update_agent answer that its file is not written yet
+ * (src/core/band-tools.ts), word for word, with the fault's own point and hit (test/fault/faults.ts).
+ */
+const NOT_WRITTEN = "Not written to the workspace yet";
+const unwritten = (fault: Fault) =>
+	` ${NOT_WRITTEN} (${fault.point} #${fault.hit}): the file follows when the computer can be written.`;
+/** An answer's words with that note set aside, only where it is the note for this fault on a success that may carry it. */
+function withoutNote(result: State["results"][number], fault: Fault | undefined): string {
+	if (fault?.kind !== "error" || !fault.point.startsWith("agent:")) return result.text;
+	if (result.error || (result.tool !== "create_agent" && result.tool !== "update_agent")) return result.text;
+	const note = unwritten(fault);
+	return result.text.endsWith(note) ? result.text.slice(0, -note.length) : result.text;
+}
 const allowed = (result: State["results"][number], fault: Fault | undefined) =>
 	(result.tool === "update_agent" && result.text === PENDING && fault?.point.startsWith("agent:") === true) ||
 	(result.tool === "write" && INTERRUPTED.test(result.text));
@@ -56,7 +71,14 @@ const expectConverged = ({ state }: Awaited<ReturnType<typeof run>>, fault?: Fau
 	expect(state.receipts, why).toEqual(["agent", "agent", "group"]);
 	for (const tool of TOOLS)
 		expect(state.results.filter((result) => result.tool === tool && !result.error).length, `${tool}: ${why}`).toBe(1);
-	for (const result of state.results) expect(LEAKED.test(result.text), why).toBe(false);
+	// the note is set aside only where it is exactly this fault's, at most once; anything else is a leak, and so is the
+	// note anywhere else. It is not required: a fault that fired in recovery, outside any call, leaves no answer to carry it.
+	const words = state.results.map((result) => withoutNote(result, fault));
+	expect(words.filter((text, i) => text !== state.results[i]?.text).length, why).toBeLessThanOrEqual(1);
+	for (const text of words) {
+		expect(LEAKED.test(text), why).toBe(false);
+		expect(text.includes(NOT_WRITTEN), why).toBe(false);
+	}
 	const errors = state.results.filter((result) => result.error);
 	if (fault === undefined) expect(errors, why).toEqual([]);
 	else for (const result of errors) expect(allowed(result, fault), why).toBe(true);
