@@ -1,0 +1,28 @@
+# Zapstore listing for banda's phone app (app.banda). Read by zsp
+# (https://github.com/zapstore/zsp, v2.x) and by Zapstore's indexer, which
+# picks up each new GitHub release of this repository on its own. Nothing here
+# is a key: the NIP-C1 proof links the APK certificate to the publisher's npub.
+
+repository: https://github.com/purrgrammer/banda
+
+# Signed release APKs only; a manual run's unsigned build is named
+# banda-<version>-android-arm64-unsigned.apk and never matches.
+match: 'banda-.*-android-arm64\.apk$'
+
+name: banda
+summary: A band of agents that work with you
+description: |
+  banda's phone app. It pairs with the banda daemon on your computer and
+  reaches it over Iroh, so you can talk to your agents from anywhere.
+
+  Sancho is your first agent, and you can add more. They have a computer of
+  their own, apart from yours, to browse, write and run routines in. Reading is
+  free; anything that sends, posts or can't be undone waits for your OK.
+license: AGPL-3.0-only
+website: https://banda.rocks
+tags: [ai, agents, productivity]
+
+icon: ./web/public/icon-512.png
+
+# Everything the listing needs is in this file.
+metadata_sources: []
