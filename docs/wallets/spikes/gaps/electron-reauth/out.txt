@@ -1,0 +1,9 @@
+15051:    canPromptTouchID(): boolean;
+15174:     * and only fetch it if `promptTouchID()` resolves.
+15178:    promptTouchID(reason: string): Promise<void>;
+466:  LAPolicy auth_policy = LAPolicyDeviceOwnerAuthenticationWithBiometricsOrWatch;
+469:  return [context biometryType] == LABiometryTypeTouchID;
+494:              kSecAccessControlPrivateKeyUsage | kSecAccessControlUserPresence,
+509:      evaluateAccessControl:access_control.get()
+510:                  operation:LAAccessControlOperationUseKeySign
+0

@@ -1,0 +1,52 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 41 and seed 7913974602909608429 with 1 worker on 14 cores with 1820MB heap and 64MB offheap memory [pid: 1] (Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64, Eclipse Adoptium 21.0.13 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /m/MC_RecipientRule.tla
+Parsing file /m/RecipientRule.tla
+Parsing file /tmp/Integers.tla
+Parsing file /tmp/FiniteSets.tla
+Parsing file /tmp/TLC.tla
+Parsing file /tmp/Naturals.tla
+Parsing file /tmp/Sequences.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module RecipientRule
+Semantic processing of module MC_RecipientRule
+Starting... (2026-11-23 18:02:30)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-23 18:02:30.
+Error: Invariant DenyExcludesAlways is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ acts = 3
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ view = [desk |-> [r1 |-> 0, r2 |-> 0], phone |-> [r1 |-> 0, r2 |-> 0]]
+/\ ver = [r1 |-> 0, r2 |-> 0]
+/\ lastSeen = [r1 |-> 0, r2 |-> 0]
+/\ label = [r1 |-> "none", r2 |-> "none"]
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+
+State 2: <CardNever line 91, col 30 to line 91, col 75 of module RecipientRule>
+/\ acts = 2
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ view = [desk |-> [r1 |-> 1, r2 |-> 0], phone |-> [r1 |-> 0, r2 |-> 0]]
+/\ ver = [r1 |-> 1, r2 |-> 0]
+/\ lastSeen = [r1 |-> 0, r2 |-> 0]
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ deny = [r1 |-> TRUE, r2 |-> FALSE]
+
+State 3: <CardAlways line 88, col 30 to line 89, col 85 of module RecipientRule>
+/\ acts = 1
+/\ always = [r1 |-> {"a1"}, r2 |-> {}]
+/\ view = [desk |-> [r1 |-> 2, r2 |-> 0], phone |-> [r1 |-> 0, r2 |-> 0]]
+/\ ver = [r1 |-> 2, r2 |-> 0]
+/\ lastSeen = [r1 |-> 1, r2 |-> 0]
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ deny = [r1 |-> TRUE, r2 |-> FALSE]
+
+128 states generated, 59 distinct states found, 55 states left on queue.
+The depth of the complete state graph search is 3.
+The average outdegree of the complete state graph is 28 (minimum is 24, the maximum 31 and the 95th percentile is 31).
+Finished in 00s at (2026-11-23 18:02:30)

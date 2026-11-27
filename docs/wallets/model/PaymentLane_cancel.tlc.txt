@@ -1,0 +1,31 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 87 and seed -6942123685411848365 with 3 workers on 14 cores with 6372MB heap and 64MB offheap memory [pid: 1] (Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64, Eclipse Adoptium 21.0.13 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /m/MC_PaymentLane.tla
+Parsing file /m/PaymentLane.tla
+Parsing file /tmp/Integers.tla
+Parsing file /tmp/Sequences.tla
+Parsing file /tmp/FiniteSets.tla
+Parsing file /tmp/TLC.tla
+Parsing file /tmp/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module PaymentLane
+Semantic processing of module MC_PaymentLane
+Starting... (2026-11-23 17:29:28)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-23 17:29:28.
+Progress(15) at 2026-11-23 17:29:31: 555,108 states generated (555,108 s/min), 115,012 distinct states found (115,012 ds/min), 47,347 states left on queue.
+Progress(24) at 2026-11-23 17:30:32: 12,233,986 states generated (11,678,878 s/min), 2,083,294 distinct states found (1,968,282 ds/min), 348,776 states left on queue.
+Progress(29) at 2026-11-23 17:31:32: 21,552,586 states generated (9,318,600 s/min), 3,560,773 distinct states found (1,477,479 ds/min), 318,175 states left on queue.
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 6.3E-6
+  based on the actual fingerprints:  val = 6.0E-7
+29434577 states generated, 4712896 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 38.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 11 and the 95th percentile is 4).
+Finished in 03min 03s at (2026-11-23 17:32:31)

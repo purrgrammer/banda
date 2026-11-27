@@ -1,0 +1,121 @@
+@startuml seq-01-create-wallet
+!include style.iuml
+title Wallet creation with the key exported at creation\nwallet: none → creating → ready_unsaved → ready_saved | ready_skipped (C14, C15, C16, C20; H-001, H-005, H-024, H-263)
+autonumber "<b>0."
+
+actor Owner
+participant "Web app\nSettings → Wallets" as Web
+participant "Desktop shell\n(host only)" as Shell
+participant "Daemon\nwallet core" as D
+database "Store\n(pi-durable)" as Store
+participant "Signer child\n(process.execPath)" as S
+participant "OS keychain" as KC
+
+== Create (two stores, one order: C15) ==
+Owner -> Web : Create wallet (name "Mara's wallet", network Base Sepolia)
+Web -> D : POST create {name, network, clientRequestId}
+note right of D
+  The client request id dedupes a double tap (C14, H-007).
+  One keychain call at a time per home (C20).
+end note
+D -> S ** : spawn, deadline armed
+S -> S : randomSecretKey() over crypto.getRandomValues\n(never Math.random, H-002), derive address A
+S --> D : address A (never the key)
+D -> Store : commit wallet A: creating {address, network, label}
+note right of Store : row: wallet none · create → creating (Draw)
+D -> S : proceed with A
+S -> KC : get(service, "<home-id>/wallet/A")
+alt the account is empty
+  KC --> S : null
+  S -> KC : set(secret = 0x + 64 hex)
+  S -> KC : get (read back)
+  KC --> S : secret
+  S -> S : derive(secret) == A
+  S --> D : ok A
+  destroy S
+  D -> Store : commit wallet A: ready_unsaved (on for no agent)
+  note right of Store
+    rows: creating · keychain_write [kc_up and item == 'empty'] → creating;
+    creating · read_back [kc_up and item == 'ours'] → ready_unsaved (Ready)
+  end note
+  D --> Web : ready, Not backed up; Receive withheld until saved or skipped (H-005)
+else the account already holds an item (planted or older, H-024)
+  KC --> S : a secret
+  S --> D : refused: item exists (never overwrite)
+  D -> Store : commit wallet A: dropped
+  note right of Store : row: creating · keychain_write [kc_up and item != 'empty'] → dropped
+  D --> Web : "banda could not make this wallet" (nothing was funded)
+else the keychain cannot answer (prompt, locked, no Secret Service)
+  D -> S !! : SIGKILL at the deadline (AbortSignal is ignored)
+  note right of D
+    row: creating · keychain_write [not kc_up] → creating (AbortCreate).
+    At restart: creating · restart → ready_unsaved or dropped,
+    by what the keychain holds under A (Reconcile).
+  end note
+  D --> Web : offline reason shown, Try again
+end
+
+== Save your key at creation (requirement 5; the creating client, C16) ==
+note over D, Store
+  The ready commit above also minted a creation capability bound to the create
+  request id: consumed once, within 10 min, on that request's own connection, before
+  the address is shown. No OS re-authentication is needed, so this works on a Linux
+  desktop, in a loopback browser of `banda serve` and on the host TTY of
+  `banda wallet create`. No daemon route reveals a key to a token alone.
+end note
+Owner -> Web : Save your key → Show (same client, same create request)
+Web -> D : reveal on the create request's connection (creation capability)
+D -> Store : commit: consume the capability (wallet ready, not removing: H-048, H-268)
+D -> S ** : spawn
+S -> KC : get A
+KC --> S : secret
+S -> S : derive == A (key proof, C16)
+S --> D : key
+destroy S
+D --> Web : key on that connection only, Cache-Control: no-store, never logged (H-274)
+Web -> Owner : 0x + 64 hex beside the address\n(hidden after 30 s)
+
+== A later reveal (OD-2): not on the daemon's HTTP API (C16, INV-S8) ==
+Owner -> Shell : Show key (weeks later)
+Shell -> Owner : OS re-authentication (Touch ID or password; none on Linux)
+Owner --> Shell : authenticated
+Shell -> S ** : Electron main spawns the signer itself, over pipes it owns
+S -> KC : get A
+KC --> S : secret
+S -> S : derive == A (key proof, C16)
+S --> Shell : key
+destroy S
+Shell -> D : record "a reveal happened" (no key)
+note right of Shell
+  The key is shown in a BrowserWindow that loads a bundled local file (sandboxed,
+  context isolation, no network, strict CSP, content protection) over preload IPC,
+  never the daemon's origin: a script in the web UI or a request with the owner's
+  token cannot reveal (H-264, H-267).
+end note
+Shell -> Owner : 0x + 64 hex beside the address\n(hidden after 30 s, content protection on: H-270)
+Owner -> Owner : saves it (password manager, paper)
+Owner -> Web : paste the key back
+Web -> D : confirm(A, pasted key)
+D -> S ** : derive(pasted key)
+S --> D : address A'
+destroy S
+alt A' == A
+  D -> Store : commit wallet A: ready_saved (backed up)
+  note right of Store : row: ready_unsaved · confirm_saved [pasted_derives] → ready_saved
+  D --> Web : Receive shows the address and QR
+else A' != A
+  D --> Web : "that key does not open this wallet"
+  note right of D : row: ready_unsaved · confirm_saved [not pasted_derives] → ready_unsaved
+end
+
+opt the owner skips
+  Owner -> Web : Skip for now
+  Web -> D : skip(A)
+  D -> Store : commit wallet A: ready_skipped (Not backed up mark stays)
+  note right of Store : row: ready_unsaved · skip_save → ready_skipped
+end
+note over Owner, KC
+  Created from a paired phone: allowed, the wallet stays Not backed up and the phone says
+  "see the key on your computer" (H-276). The agent never gets a key tool (H-265).
+end note
+@enduml

@@ -15,11 +15,13 @@ import {
 	type JsonObject,
 } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
+import type { ToolAuthority } from "../src/core/connections.ts";
 import { type Inbound, type Origin, OWNER, type Received } from "../src/core/gateway.ts";
 import { openWaits, status } from "../src/core/status.ts";
 import { context, openStore } from "../src/core/store.ts";
 import { defineCore, fresh, stop } from "../src/core/turn.ts";
 import {
+	type Approving,
 	type Ask,
 	answer,
 	cancelledEnd,
@@ -52,12 +54,17 @@ function setup() {
 	const runs: { tool: string; target: string; key: string }[] = [];
 	/** While set, a run blocks until the Harness closes under it. */
 	let hold: (() => void) | undefined;
+	/** `why`: every effect is refused in these words. `authority`: the next open lists the effects under one. */
+	const changed: { why?: string; authority?: ToolAuthority } = {};
 	const effect = (name: string, kind: "idempotent" | "unsafe") =>
 		core.effect({
 			name,
 			description: `${name} a target`,
 			parameters: Type.Object({ target: Type.String() }),
 			effect: kind,
+			...(kind === "idempotent" ? { permission: { args: ["target"] } } : {}),
+			...(changed.authority === undefined ? {} : { authority: changed.authority }),
+			allowed: async () => changed.why,
 			run: async (args, { key }, ctx: Context) => {
 				runs.push({ tool: name, target: args.target, key });
 				if (hold !== undefined) {
@@ -86,7 +93,7 @@ function setup() {
 		fauxAssistantMessage([fauxToolCall(tool, args, { id })], { stopReason: "toolUse" });
 	const holding = () => new Promise<void>((resolve) => (hold = resolve));
 	const release = () => (hold = undefined);
-	return { gateway, core, open, script, call, runs, reports, clock, holding, release };
+	return { gateway, core, open, script, call, runs, reports, clock, holding, release, changed };
 }
 
 const msg = (id: string, text: string, origin = owner, extra: Partial<Inbound> = {}): Inbound => ({
@@ -417,6 +424,75 @@ describe("Wait", () => {
 		expect(s.runs.map((r) => r.target)).toEqual(["blog", "blog"]);
 		expect(s.runs[1]?.key).toBe(s.runs[0]?.key);
 		await harness.close(context);
+	});
+
+	/** `tool` is approved and interrupted mid-run by a crash; `between` changes what may run before the restart. */
+	const interrupted = async (
+		tool: "deploy" | "publish",
+		approving: Approving,
+		between: (s: ReturnType<typeof setup>) => void,
+	) => {
+		const s = setup();
+		const home = await tempHome();
+		let harness = await s.open(home);
+		s.script(s.call(tool, { target: "prod" }), fauxAssistantMessage("Noted."));
+		const { turn: id, chat } = turn(await s.core.receive(harness, msg("m1", "ship it")));
+		const [wait] = await asked(harness);
+		const running = s.holding();
+		await answer(harness, wait!.key, "approve", { gateway: "web", peer: OWNER }, "bearer", { approving });
+		await running;
+		await harness.close(context);
+		s.release();
+		between(s);
+		harness = await s.open(home);
+		return { s, harness, id, chat };
+	};
+	const results = async ({ s, harness, id, chat }: Awaited<ReturnType<typeof interrupted>>) => {
+		await harness.waitForTask(id as never, context);
+		const said = { runs: s.runs.length, results: await toolResults(harness, chat) };
+		await harness.close(context);
+		return said;
+	};
+	const switchedOff = (s: ReturnType<typeof setup>) => {
+		s.changed.why = "the owner switched it off";
+	};
+
+	it("an idempotent effect interrupted, then refused, says it may have run: approved once", async () => {
+		expect(await results(await interrupted("publish", {}, switchedOff))).toEqual({
+			runs: 1,
+			results: ["publish was interrupted and may have partly run; not run again: the owner switched it off."],
+		});
+	});
+
+	it("an idempotent effect interrupted, then refused, says it may have run: within a permission", async () => {
+		expect(await results(await interrupted("publish", { permission: { scope: "task" } }, switchedOff))).toEqual({
+			runs: 1,
+			results: ["publish was interrupted and may have partly run; not run again: the owner switched it off."],
+		});
+	});
+
+	it("an idempotent effect interrupted, then listed under another connection tool, says it may have run", async () => {
+		const changedTool = (s: ReturnType<typeof setup>) => {
+			s.changed.authority = { connection: "other", tool: "publish", version: "1", listing: 0 };
+		};
+		expect(await results(await interrupted("publish", {}, changedTool))).toEqual({
+			runs: 1,
+			results: ["publish was interrupted and may have partly run; not run again: the connection tool changed."],
+		});
+	});
+
+	it("an unsafe effect interrupted, approved again, then refused at its start, says it may have run", async () => {
+		const run = await interrupted("deploy", {}, () => {});
+		const [again] = await until(async () => {
+			const waits = await openWaits(run.harness);
+			return waits.some((w) => w.ask.type === "approval" && w.ask.interrupted) ? waits : undefined;
+		});
+		switchedOff(run.s);
+		await answer(run.harness, again!.key, "approve", { gateway: "web", peer: OWNER }, "bearer");
+		expect(await results(run)).toEqual({
+			runs: 1,
+			results: ["deploy was interrupted and may have partly run; not run again: the owner switched it off."],
+		});
 	});
 
 	it("an approval binds its tool call, never its call id: the same id in a later call asks again", async () => {

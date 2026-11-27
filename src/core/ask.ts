@@ -837,18 +837,24 @@ export function effectRun<P extends TSchema, A extends EffectApi>(
 		}, ctx);
 	return async (called, key, api, ctx) => {
 		const notAllowed = (why: string) => text(`${spoken} did not run: ${why}.`, true);
-		const before = await api.commit(async (tx): Promise<Run | { refused: string }> => {
-			if (!(await validToolAuthority(tx, tool.name, tool.authority))) return { refused: "the connection tool changed" };
+		// an attempt that started may have reached the outside world: a refusal now must not say it never ran
+		const notAgain = (why: string) =>
+			text(`${spoken} was interrupted and may have partly run; not run again: ${why}.`, true);
+		const before = await api.commit(async (tx): Promise<Run | { refused: string; started: boolean }> => {
 			const stored = await tx.doc(EffectRun, api.taskId);
+			const started = Object.keys(stored.started).length > 0;
+			if (!(await validToolAuthority(tx, tool.name, tool.authority)))
+				return { refused: "the connection tool changed", started };
 			if (stored.authority === undefined && tool.authority !== undefined) {
-				if (Object.keys(stored.started).length > 0 || Object.keys((await tx.doc(TasksOf, api.taskId)).tasks).length > 0)
-					return { refused: "the original connection tool authority is missing" };
+				if (started || Object.keys((await tx.doc(TasksOf, api.taskId)).tasks).length > 0)
+					return { refused: "the original connection tool authority is missing", started };
 				stored.authority = { ...tool.authority };
 			}
-			if (!sameToolAuthority(stored.authority, tool.authority)) return { refused: "the connection tool changed" };
+			if (!sameToolAuthority(stored.authority, tool.authority))
+				return { refused: "the connection tool changed", started };
 			return JSON.parse(JSON.stringify(stored)) as Run;
 		}, ctx);
-		if ("refused" in before) return notAllowed(before.refused);
+		if ("refused" in before) return (before.started ? notAgain : notAllowed)(before.refused);
 		const run = (draft: JsonObject) => tool.run(draft as Static<P>, { key, api }, ctx);
 		const args = tool.expand === undefined ? (called as JsonObject) : await tool.expand(called as Static<P>, api, ctx);
 		if (typeof args === "string") return text(`${spoken} did not run: ${args}.`, true);
@@ -883,19 +889,18 @@ export function effectRun<P extends TSchema, A extends EffectApi>(
 					if (!(await validToolAuthority(tx, tool.name, tool.authority))) return "the connection tool changed";
 					return tool.allowed?.(tx, stored, Number(api.conversationId));
 				}, ctx);
-				return refused === undefined ? withEdits(await run(stored), draft.args, stored) : notAllowed(refused);
+				return refused === undefined ? withEdits(await run(stored), draft.args, stored) : notAgain(refused);
 			}
 			const permitted = await withinPermission(api, last, shown, ctx);
-			if (typeof permitted === "object") return notAllowed(permitted.refused);
+			if (typeof permitted === "object") return notAgain(permitted.refused);
 			if (permitted !== undefined) return withEdits(await run(stored), draft.args, stored);
 		}
 		const { permission: _permission, host: _host, ...again } = shown;
 		const answer = await approved(api, `interrupted:${last}`, again, ctx);
-		if (typeof answer === "string")
-			return text(`${spoken} was interrupted and may have partly run; not run again: ${answer}.`, true);
+		if (typeof answer === "string") return notAgain(answer);
 		await inTurn(api, ctx);
 		const refused = await start(api, last + 1, { wait: answer.wait }, stored, ctx);
-		if (refused !== undefined) return notAllowed(refused);
+		if (refused !== undefined) return notAgain(refused);
 		return withEdits(await run(stored), draft.args, stored);
 	};
 }

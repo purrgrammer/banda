@@ -12,7 +12,7 @@ import { withPersonality } from "../src/core/choices.ts";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { echoModels, skipShippedSkills, tempHome, until, webServer } from "./helpers.ts";
+import { echoModels, tempHome, until, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const ROLE = "You are the owner's lead agent: you talk with them, and do the work or hand it on.";
@@ -89,7 +89,6 @@ for (const [width, height] of [
 				server: { proxy: { "/api": { target: base, changeOrigin: true, headers: { origin: base } } } },
 			});
 			try {
-				await skipShippedSkills(daemon.port, token);
 				// the daemon's own lead file has no section: one body, the role first
 				const initial = await lead();
 				expect(initial.text).not.toContain("## Personality");

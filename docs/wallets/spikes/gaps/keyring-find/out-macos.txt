@@ -1,0 +1,10 @@
+platform darwin-arm64, node v24.22.1, service banda-spike-<16 hex>
+  findCredentials(service) took 8.1 ms
+  findCredentials(service): 2 credential(s) ["00a1","00b2"]; each carries the secret: true; expected 2
+  findCredentialsAsync(service): 2 credential(s) ["00a1","00b2"]; each carries the secret: true; expected 2
+  findCredentials(service + "-other"): 1 credential(s) ["00c3"]; each carries the secret: true; expected 1
+  findCredentials(a prefix of the service): 0 credential(s) []; each carries the secret: -; expected 0 if the match is exact
+  findCredentials(a service never written): 0 credential(s) []; each carries the secret: -; expected 0
+  after overwriting one item: 2 credential(s) ["00b2","00a1"]; each carries the secret: true; expected 2, the new secret
+  after deleting one item: 1 credential(s) ["00b2"]; each carries the secret: true; expected 1
+cleanup: 0 item(s) left under the spike's services

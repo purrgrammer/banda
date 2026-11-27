@@ -1,0 +1,32 @@
+baseline: pass
+evaluator: agrees with Python eval on every valuation (sha256 833894278b3cae25)
+caught T1: two guards of a group overlap
+caught T1: a group's guards leave a gap
+caught T1: a guard can never hold
+caught T1: a guard names an undeclared atom
+caught T2: a row names an undeclared state
+caught T2: a terminal state changes
+caught S1: a step matches no phrase (typo)
+caught S1: an event written as Given
+caught S1: a state value outside the machine
+caught S2: an event not enabled in the current state
+caught S3: an event left undetermined
+caught S4: a Then contradicts the table
+caught S5: an @t tag names no row
+caught S5: an @t tag the scenario does not exercise
+caught S5: an exercised row without its @t tag
+caught S6: two scenarios assert different outcomes at the same row
+caught S7: an invariant phrase names an undefined TLA+ definition
+caught S7: a phrase defined twice
+caught S8: an @H tag not in hazards.md
+caught S8: an @H tag not listed under the scenario's use cases
+caught S8: a scenario without a use case
+caught S8: an unknown tag
+caught S8: a duplicate scenario name
+caught S8: a Gherkin parse error
+caught S8: a Background
+caught S10: a scenario whose machines contradict each other (a denied recipient, its payment read as Always)
+caught S11: a hazard left with no scenario and no V&V-outside entry
+caught S12: a reachable row claimed unreachable
+caught S9: an event with no Then after it
+OK: baseline passes, evaluator agrees, 29 of 29 mutations caught

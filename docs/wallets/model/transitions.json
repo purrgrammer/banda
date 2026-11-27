@@ -1,0 +1,5917 @@
+{
+ "about": "Canonical deterministic transition table of the wallet's machines (docs/wallets/model). Guards are Python boolean expressions over each machine's atoms; for every (machine, from, event) the guards are mutually exclusive and exhaustive over the atoms' domains (check_transitions.py proves it by enumeration). 'to' equal to 'from' answers the event without a state change. 'tla' names the action of the TLA+ module that models the row.",
+ "date": "2026-11-23",
+ "machines": {
+  "wallet": {
+   "tla": "WalletLifecycle",
+   "states": [
+    "none",
+    "creating",
+    "ready_unsaved",
+    "ready_saved",
+    "ready_skipped",
+    "archived",
+    "removing",
+    "removed",
+    "dropped"
+   ],
+   "initial": "none",
+   "terminal": [
+    "removed",
+    "dropped"
+   ],
+   "atoms": {
+    "kc_up": [
+     false,
+     true
+    ],
+    "item": [
+     "empty",
+     "ours",
+     "other"
+    ],
+    "cap_host": [
+     false,
+     true
+    ],
+    "cap_fresh": [
+     false,
+     true
+    ],
+    "pasted_derives": [
+     false,
+     true
+    ],
+    "funds": [
+     false,
+     true
+    ],
+    "inflight": [
+     false,
+     true
+    ],
+    "address_disclosed": [
+     false,
+     true
+    ],
+    "has_code": [
+     false,
+     true
+    ],
+    "saved": [
+     false,
+     true
+    ],
+    "version_current": [
+     false,
+     true
+    ]
+   },
+   "defs": {
+    "removable": "(not funds) and (not inflight) and (saved or not address_disclosed)"
+   }
+  },
+  "signing": {
+   "tla": "WalletLifecycle",
+   "states": [
+    "online",
+    "locked",
+    "key_missing",
+    "wrong_key",
+    "other_home",
+    "offline_host_mode"
+   ],
+   "initial": "online",
+   "terminal": [],
+   "atoms": {
+    "derives": [
+     false,
+     true
+    ],
+    "lease_mine": [
+     false,
+     true
+    ],
+    "host_mode": [
+     false,
+     true
+    ]
+   },
+   "defs": {}
+  },
+  "recipient": {
+   "tla": "RecipientRule",
+   "states": [
+    "unknown",
+    "ask",
+    "deny"
+   ],
+   "initial": "unknown",
+   "terminal": [],
+   "atoms": {
+    "version_current": [
+     false,
+     true
+    ]
+   },
+   "defs": {}
+  },
+  "permission": {
+   "tla": "RecipientRule",
+   "states": [
+    "none",
+    "always"
+   ],
+   "initial": "none",
+   "terminal": [],
+   "atoms": {
+    "rcpt": [
+     "unknown",
+     "ask",
+     "deny"
+    ],
+    "version_current": [
+     false,
+     true
+    ]
+   },
+   "defs": {}
+  },
+  "payment": {
+   "tla": "PaymentLane",
+   "states": [
+    "Idle",
+    "Waiting",
+    "Queued",
+    "Signed",
+    "Sent",
+    "Included",
+    "Confirmed",
+    "Refused",
+    "NotPaid",
+    "Failed",
+    "Cancelled",
+    "Restored"
+   ],
+   "initial": "Idle",
+   "terminal": [
+    "Confirmed",
+    "Refused",
+    "NotPaid",
+    "Failed",
+    "Cancelled",
+    "Restored"
+   ],
+   "atoms": {
+    "payer": [
+     "agent",
+     "owner"
+    ],
+    "rule": [
+     "deny",
+     "always",
+     "ask",
+     "unknown"
+    ],
+    "default_deny": [
+     false,
+     true
+    ],
+    "fits": [
+     false,
+     true
+    ],
+    "approved": [
+     false,
+     true
+    ],
+    "host_ok": [
+     false,
+     true
+    ],
+    "wallet_usable": [
+     false,
+     true
+    ],
+    "ledger_moved": [
+     false,
+     true
+    ],
+    "blk": [
+     "own",
+     "own_cancel",
+     "foreign",
+     "none"
+    ],
+    "verified": [
+     false,
+     true
+    ],
+    "blk_fin": [
+     false,
+     true
+    ],
+    "blk_ok": [
+     false,
+     true
+    ]
+   },
+   "defs": {
+    "eff": "('deny' if rule == 'deny' or (rule == 'unknown' and default_deny) else 'always' if rule == 'always' else 'ask')",
+    "start_ok": "payer == 'owner' or (eff != 'deny' and (eff == 'always' or approved))"
+   }
+  },
+  "nonce": {
+   "tla": "NonceAlloc",
+   "states": [
+    "free",
+    "signing",
+    "in_flight",
+    "blocked"
+   ],
+   "initial": "free",
+   "terminal": [],
+   "atoms": {
+    "queued": [
+     false,
+     true
+    ],
+    "can_sign": [
+     false,
+     true
+    ],
+    "chain_ahead": [
+     false,
+     true
+    ],
+    "ledger_moved": [
+     false,
+     true
+    ],
+    "recheck_ok": [
+     false,
+     true
+    ],
+    "above_final": [
+     false,
+     true
+    ],
+    "more_in_flight": [
+     false,
+     true
+    ],
+    "verified": [
+     false,
+     true
+    ]
+   },
+   "defs": {}
+  },
+  "x402": {
+   "tla": "X402",
+   "states": [
+    "none",
+    "observed",
+    "waiting",
+    "authorizing",
+    "authorized",
+    "handed",
+    "settled",
+    "expired",
+    "refused",
+    "notpaid",
+    "cancelled"
+   ],
+   "initial": "none",
+   "terminal": [
+    "settled",
+    "expired",
+    "refused",
+    "notpaid",
+    "cancelled"
+   ],
+   "atoms": {
+    "same_chat": [
+     false,
+     true
+    ],
+    "verified": [
+     false,
+     true
+    ],
+    "rule": [
+     "deny",
+     "always",
+     "ask",
+     "unknown"
+    ],
+    "default_deny": [
+     false,
+     true
+    ],
+    "approved": [
+     false,
+     true
+    ],
+    "host_ok": [
+     false,
+     true
+    ],
+    "fits": [
+     false,
+     true
+    ],
+    "window_left": [
+     false,
+     true
+    ],
+    "synced": [
+     false,
+     true
+    ],
+    "event": [
+     "used",
+     "cancelled",
+     "none"
+    ],
+    "event_fin": [
+     false,
+     true
+    ],
+    "vb_passed_fin": [
+     false,
+     true
+    ]
+   },
+   "defs": {
+    "eff": "('deny' if rule == 'deny' or (rule == 'unknown' and default_deny) else 'always' if rule == 'always' else 'ask')"
+   }
+  }
+ },
+ "links": [
+  {
+   "if": {
+    "payment.rule": [
+     "deny"
+    ]
+   },
+   "then": {
+    "recipient": [
+     "deny"
+    ],
+    "permission": [
+     "none"
+    ]
+   },
+   "why": "Deny is the recipient's, for every agent of the wallet (OD-1)"
+  },
+  {
+   "if": {
+    "recipient": [
+     "deny"
+    ]
+   },
+   "then": {
+    "payment.rule": [
+     "deny"
+    ]
+   },
+   "why": "a payment meets the recipient's Deny (C3 step 7)"
+  },
+  {
+   "if": {
+    "payment.rule": [
+     "unknown"
+    ]
+   },
+   "then": {
+    "recipient": [
+     "unknown"
+    ],
+    "permission": [
+     "none"
+    ]
+   },
+   "why": "an unknown recipient has no entry and no permission"
+  },
+  {
+   "if": {
+    "recipient": [
+     "unknown"
+    ]
+   },
+   "then": {
+    "payment.rule": [
+     "unknown"
+    ]
+   },
+   "why": "the same, the other way"
+  },
+  {
+   "if": {
+    "payment.rule": [
+     "always"
+    ]
+   },
+   "then": {
+    "recipient": [
+     "ask"
+    ],
+    "permission": [
+     "always"
+    ]
+   },
+   "why": "Always is this agent's permission on a known, not denied recipient"
+  },
+  {
+   "if": {
+    "payment.rule": [
+     "ask"
+    ]
+   },
+   "then": {
+    "recipient": [
+     "ask"
+    ],
+    "permission": [
+     "none"
+    ]
+   },
+   "why": "Ask: known, not denied, no permission for this agent"
+  },
+  {
+   "if": {
+    "permission": [
+     "always"
+    ]
+   },
+   "then": {
+    "recipient": [
+     "ask"
+    ],
+    "permission.rcpt": [
+     "ask"
+    ]
+   },
+   "why": "a permission lives only under a known recipient that is not denied (PermissionUnderRecipient)"
+  },
+  {
+   "if": {
+    "wallet": [
+     "none",
+     "creating",
+     "archived",
+     "removing",
+     "removed",
+     "dropped"
+    ]
+   },
+   "then": {
+    "payment.wallet_usable": [
+     false
+    ],
+    "nonce.can_sign": [
+     false
+    ]
+   },
+   "why": "a wallet that is not ready pays nothing (C3 step 1, C17)"
+  },
+  {
+   "if": {
+    "signing": [
+     "locked",
+     "key_missing",
+     "wrong_key",
+     "other_home",
+     "offline_host_mode"
+    ]
+   },
+   "then": {
+    "payment.wallet_usable": [
+     false
+    ],
+    "nonce.can_sign": [
+     false
+    ]
+   },
+   "why": "an offline signer signs nothing (C3 step 6, C16)"
+  },
+  {
+   "if": {
+    "wallet.has_code": [
+     true
+    ]
+   },
+   "then": {
+    "payment.wallet_usable": [
+     false
+    ]
+   },
+   "why": "an address with code pays nothing until the owner acknowledged it (H-157)"
+  }
+ ],
+ "transitions": [
+  {
+   "machine": "wallet",
+   "from": "none",
+   "event": "create",
+   "guard": "True",
+   "to": "creating",
+   "effects": [
+    "signer draws 32 bytes (randomSecretKey over crypto.getRandomValues)",
+    "commit creating with the address",
+    "client request id dedupes a double tap (C14)"
+   ],
+   "hazards": [
+    "H-001",
+    "H-002",
+    "H-007"
+   ],
+   "rules": [
+    "C14",
+    "C15"
+   ],
+   "tla": "Draw"
+  },
+  {
+   "machine": "wallet",
+   "from": "creating",
+   "event": "keychain_write",
+   "guard": "kc_up and item == 'empty'",
+   "to": "creating",
+   "effects": [
+    "write the key under <home-id>/wallet/<address>"
+   ],
+   "hazards": [
+    "H-001",
+    "H-036"
+   ],
+   "rules": [
+    "C15",
+    "C20"
+   ],
+   "tla": "Write"
+  },
+  {
+   "machine": "wallet",
+   "from": "creating",
+   "event": "keychain_write",
+   "guard": "kc_up and item != 'empty'",
+   "to": "dropped",
+   "effects": [
+    "refuse: an item already exists under that account",
+    "list the item as an orphan, never adopt it"
+   ],
+   "hazards": [
+    "H-024",
+    "H-045"
+   ],
+   "rules": [
+    "C15"
+   ],
+   "tla": "Write"
+  },
+  {
+   "machine": "wallet",
+   "from": "creating",
+   "event": "keychain_write",
+   "guard": "not kc_up",
+   "to": "creating",
+   "effects": [
+    "signer killed at its deadline (C20)",
+    "nothing committed; reconcile when the keychain answers"
+   ],
+   "hazards": [
+    "H-018",
+    "H-032",
+    "H-035"
+   ],
+   "rules": [
+    "C20"
+   ],
+   "tla": "AbortCreate"
+  },
+  {
+   "machine": "wallet",
+   "from": "creating",
+   "event": "read_back",
+   "guard": "kc_up and item == 'ours'",
+   "to": "ready_unsaved",
+   "effects": [
+    "derive the address again and compare",
+    "commit ready",
+    "offer Save your key"
+   ],
+   "hazards": [
+    "H-001",
+    "H-006"
+   ],
+   "rules": [
+    "C15"
+   ],
+   "tla": "Ready"
+  },
+  {
+   "machine": "wallet",
+   "from": "creating",
+   "event": "read_back",
+   "guard": "kc_up and item != 'ours'",
+   "to": "dropped",
+   "effects": [
+    "creation fails in words; no address is ever shown"
+   ],
+   "hazards": [
+    "H-006"
+   ],
+   "rules": [
+    "C15"
+   ],
+   "tla": "Ready"
+  },
+  {
+   "machine": "wallet",
+   "from": "creating",
+   "event": "read_back",
+   "guard": "not kc_up",
+   "to": "creating",
+   "effects": [
+    "wait for the keychain; the signer is killed at its deadline"
+   ],
+   "hazards": [
+    "H-018"
+   ],
+   "rules": [
+    "C20"
+   ],
+   "tla": "AbortCreate"
+  },
+  {
+   "machine": "wallet",
+   "from": "creating",
+   "event": "restart",
+   "guard": "kc_up and item == 'ours'",
+   "to": "ready_unsaved",
+   "effects": [
+    "reconcile: the key is durable; offer Save your key again"
+   ],
+   "hazards": [
+    "H-005"
+   ],
+   "rules": [
+    "C15"
+   ],
+   "tla": "Reconcile"
+  },
+  {
+   "machine": "wallet",
+   "from": "creating",
+   "event": "restart",
+   "guard": "kc_up and item != 'ours'",
+   "to": "dropped",
+   "effects": [
+    "reconcile: drop the record; an item of another key stays an orphan"
+   ],
+   "hazards": [
+    "H-005",
+    "H-045"
+   ],
+   "rules": [
+    "C15"
+   ],
+   "tla": "Reconcile"
+  },
+  {
+   "machine": "wallet",
+   "from": "creating",
+   "event": "restart",
+   "guard": "not kc_up",
+   "to": "creating",
+   "effects": [
+    "stay creating until the keychain answers"
+   ],
+   "hazards": [
+    "H-037"
+   ],
+   "rules": [
+    "C15",
+    "C20"
+   ],
+   "tla": "Reconcile"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_unsaved",
+   "event": "reveal",
+   "guard": "cap_host and cap_fresh and kc_up and item == 'ours'",
+   "to": "ready_unsaved",
+   "effects": [
+    "consume the capability in the commit",
+    "show 0x + 64 hex beside the address, on the host only",
+    "list 'key shown on this computer' in the wallet's activity"
+   ],
+   "hazards": [
+    "H-263",
+    "H-266",
+    "H-268"
+   ],
+   "rules": [
+    "C14",
+    "C16"
+   ],
+   "tla": "Reveal"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_saved",
+   "event": "reveal",
+   "guard": "cap_host and cap_fresh and kc_up and item == 'ours'",
+   "to": "ready_saved",
+   "effects": [
+    "consume the capability in the commit",
+    "show 0x + 64 hex beside the address, on the host only",
+    "list 'key shown on this computer' in the wallet's activity"
+   ],
+   "hazards": [
+    "H-263",
+    "H-266",
+    "H-268"
+   ],
+   "rules": [
+    "C14",
+    "C16"
+   ],
+   "tla": "Reveal"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_skipped",
+   "event": "reveal",
+   "guard": "cap_host and cap_fresh and kc_up and item == 'ours'",
+   "to": "ready_skipped",
+   "effects": [
+    "consume the capability in the commit",
+    "show 0x + 64 hex beside the address, on the host only",
+    "list 'key shown on this computer' in the wallet's activity"
+   ],
+   "hazards": [
+    "H-263",
+    "H-266",
+    "H-268"
+   ],
+   "rules": [
+    "C14",
+    "C16"
+   ],
+   "tla": "Reveal"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_unsaved",
+   "event": "reveal",
+   "guard": "not (cap_host and cap_fresh) or not kc_up or item != 'ours'",
+   "to": "ready_unsaved",
+   "effects": [
+    "refuse: a device token, a replayed or expired capability, or the key unreadable",
+    "phone: 'open banda on your computer to see the key'"
+   ],
+   "hazards": [
+    "H-264",
+    "H-267",
+    "H-268",
+    "H-021"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "MintCap"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_saved",
+   "event": "reveal",
+   "guard": "not (cap_host and cap_fresh) or not kc_up or item != 'ours'",
+   "to": "ready_saved",
+   "effects": [
+    "refuse: a device token, a replayed or expired capability, or the key unreadable",
+    "phone: 'open banda on your computer to see the key'"
+   ],
+   "hazards": [
+    "H-264",
+    "H-267",
+    "H-268",
+    "H-021"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "MintCap"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_skipped",
+   "event": "reveal",
+   "guard": "not (cap_host and cap_fresh) or not kc_up or item != 'ours'",
+   "to": "ready_skipped",
+   "effects": [
+    "refuse: a device token, a replayed or expired capability, or the key unreadable",
+    "phone: 'open banda on your computer to see the key'"
+   ],
+   "hazards": [
+    "H-264",
+    "H-267",
+    "H-268",
+    "H-021"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "MintCap"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_unsaved",
+   "event": "confirm_saved",
+   "guard": "pasted_derives",
+   "to": "ready_saved",
+   "effects": [
+    "mark backed up"
+   ],
+   "hazards": [
+    "H-263",
+    "H-275"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "ConfirmSaved"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_unsaved",
+   "event": "confirm_saved",
+   "guard": "not pasted_derives",
+   "to": "ready_unsaved",
+   "effects": [
+    "say the pasted key does not open this wallet"
+   ],
+   "hazards": [
+    "H-263"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "ConfirmSaved"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_unsaved",
+   "event": "skip_save",
+   "guard": "True",
+   "to": "ready_skipped",
+   "effects": [
+    "mark Not backed up"
+   ],
+   "hazards": [
+    "H-273"
+   ],
+   "rules": [],
+   "tla": "Skip"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_unsaved",
+   "event": "show_receive",
+   "guard": "True",
+   "to": "ready_unsaved",
+   "effects": [
+    "withhold: save or skip the key first"
+   ],
+   "hazards": [
+    "H-005"
+   ],
+   "rules": [
+    "C15"
+   ],
+   "tla": "Disclose"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_saved",
+   "event": "show_receive",
+   "guard": "not has_code",
+   "to": "ready_saved",
+   "effects": [
+    "show the EIP-55 address and its QR",
+    "the address is disclosed from now on"
+   ],
+   "hazards": [
+    "H-258",
+    "H-261"
+   ],
+   "rules": [],
+   "tla": "Disclose"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_skipped",
+   "event": "show_receive",
+   "guard": "not has_code",
+   "to": "ready_skipped",
+   "effects": [
+    "show the EIP-55 address and its QR",
+    "the address is disclosed from now on"
+   ],
+   "hazards": [
+    "H-258",
+    "H-261"
+   ],
+   "rules": [],
+   "tla": "Disclose"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_saved",
+   "event": "show_receive",
+   "guard": "has_code",
+   "to": "ready_saved",
+   "effects": [
+    "withhold the address and QR: 'this address has code another key set; do not fund it'",
+    "owner Send waits for an acknowledgement on the host"
+   ],
+   "hazards": [
+    "H-157"
+   ],
+   "rules": [
+    "C3",
+    "C17"
+   ],
+   "tla": ""
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_skipped",
+   "event": "show_receive",
+   "guard": "has_code",
+   "to": "ready_skipped",
+   "effects": [
+    "withhold the address and QR: 'this address has code another key set; do not fund it'",
+    "owner Send waits for an acknowledgement on the host"
+   ],
+   "hazards": [
+    "H-157"
+   ],
+   "rules": [
+    "C3",
+    "C17"
+   ],
+   "tla": ""
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_unsaved",
+   "event": "agent_reads_address",
+   "guard": "True",
+   "to": "ready_unsaved",
+   "effects": [
+    "wallet__address and wallet__balance answer 'not ready: the owner has not saved the key yet' (H-005)"
+   ],
+   "hazards": [
+    "H-005"
+   ],
+   "rules": [
+    "C15"
+   ],
+   "tla": "Disclose"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_saved",
+   "event": "agent_reads_address",
+   "guard": "True",
+   "to": "ready_saved",
+   "effects": [
+    "answer the address; it is disclosed from now on"
+   ],
+   "hazards": [
+    "H-005",
+    "H-046"
+   ],
+   "rules": [
+    "C17"
+   ],
+   "tla": "Disclose"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_skipped",
+   "event": "agent_reads_address",
+   "guard": "True",
+   "to": "ready_skipped",
+   "effects": [
+    "answer the address; it is disclosed from now on"
+   ],
+   "hazards": [
+    "H-005",
+    "H-046"
+   ],
+   "rules": [
+    "C17"
+   ],
+   "tla": "Disclose"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_unsaved",
+   "event": "acknowledge_code",
+   "guard": "has_code and cap_host",
+   "to": "ready_unsaved",
+   "effects": [
+    "the owner acknowledged the address's code on the host: owner Send is allowed again; Receive keeps the warning"
+   ],
+   "hazards": [
+    "H-157"
+   ],
+   "rules": [
+    "C17"
+   ],
+   "tla": ""
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_saved",
+   "event": "acknowledge_code",
+   "guard": "has_code and cap_host",
+   "to": "ready_saved",
+   "effects": [
+    "the owner acknowledged the address's code on the host: owner Send is allowed again; Receive keeps the warning"
+   ],
+   "hazards": [
+    "H-157"
+   ],
+   "rules": [
+    "C17"
+   ],
+   "tla": ""
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_skipped",
+   "event": "acknowledge_code",
+   "guard": "has_code and cap_host",
+   "to": "ready_skipped",
+   "effects": [
+    "the owner acknowledged the address's code on the host: owner Send is allowed again; Receive keeps the warning"
+   ],
+   "hazards": [
+    "H-157"
+   ],
+   "rules": [
+    "C17"
+   ],
+   "tla": ""
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_unsaved",
+   "event": "acknowledge_code",
+   "guard": "not (has_code and cap_host)",
+   "to": "ready_unsaved",
+   "effects": [
+    "refuse: nothing to acknowledge, or not on the host"
+   ],
+   "hazards": [
+    "H-157",
+    "H-277"
+   ],
+   "rules": [
+    "C17"
+   ],
+   "tla": ""
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_saved",
+   "event": "acknowledge_code",
+   "guard": "not (has_code and cap_host)",
+   "to": "ready_saved",
+   "effects": [
+    "refuse: nothing to acknowledge, or not on the host"
+   ],
+   "hazards": [
+    "H-157",
+    "H-277"
+   ],
+   "rules": [
+    "C17"
+   ],
+   "tla": ""
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_skipped",
+   "event": "acknowledge_code",
+   "guard": "not (has_code and cap_host)",
+   "to": "ready_skipped",
+   "effects": [
+    "refuse: nothing to acknowledge, or not on the host"
+   ],
+   "hazards": [
+    "H-157",
+    "H-277"
+   ],
+   "rules": [
+    "C17"
+   ],
+   "tla": ""
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_unsaved",
+   "event": "archive",
+   "guard": "version_current",
+   "to": "archived",
+   "effects": [
+    "refuse the wallet's open asks and queued payments in this commit"
+   ],
+   "hazards": [
+    "H-042",
+    "H-047"
+   ],
+   "rules": [
+    "C8",
+    "C17"
+   ],
+   "tla": "Archive"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_saved",
+   "event": "archive",
+   "guard": "version_current",
+   "to": "archived",
+   "effects": [
+    "refuse the wallet's open asks and queued payments in this commit"
+   ],
+   "hazards": [
+    "H-042",
+    "H-047"
+   ],
+   "rules": [
+    "C8",
+    "C17"
+   ],
+   "tla": "Archive"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_skipped",
+   "event": "archive",
+   "guard": "version_current",
+   "to": "archived",
+   "effects": [
+    "refuse the wallet's open asks and queued payments in this commit"
+   ],
+   "hazards": [
+    "H-042",
+    "H-047"
+   ],
+   "rules": [
+    "C8",
+    "C17"
+   ],
+   "tla": "Archive"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_unsaved",
+   "event": "archive",
+   "guard": "not version_current",
+   "to": "ready_unsaved",
+   "effects": [
+    "refuse; the screen redraws"
+   ],
+   "hazards": [
+    "H-050"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "Archive"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_saved",
+   "event": "archive",
+   "guard": "not version_current",
+   "to": "ready_saved",
+   "effects": [
+    "refuse; the screen redraws"
+   ],
+   "hazards": [
+    "H-050"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "Archive"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_skipped",
+   "event": "archive",
+   "guard": "not version_current",
+   "to": "ready_skipped",
+   "effects": [
+    "refuse; the screen redraws"
+   ],
+   "hazards": [
+    "H-050"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "Archive"
+  },
+  {
+   "machine": "wallet",
+   "from": "archived",
+   "event": "unarchive",
+   "guard": "version_current and saved",
+   "to": "ready_saved",
+   "effects": [
+    "back to ready, backed up"
+   ],
+   "hazards": [
+    "H-042"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "Unarchive"
+  },
+  {
+   "machine": "wallet",
+   "from": "archived",
+   "event": "unarchive",
+   "guard": "version_current and not saved",
+   "to": "ready_skipped",
+   "effects": [
+    "back to ready, 'Not backed up' (an unsaved wallet comes back as skipped)"
+   ],
+   "hazards": [
+    "H-042",
+    "H-273"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "Unarchive"
+  },
+  {
+   "machine": "wallet",
+   "from": "archived",
+   "event": "unarchive",
+   "guard": "not version_current",
+   "to": "archived",
+   "effects": [
+    "refuse; the screen redraws"
+   ],
+   "hazards": [
+    "H-050"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "Unarchive"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_unsaved",
+   "event": "begin_remove",
+   "guard": "version_current and removable",
+   "to": "removing",
+   "effects": [
+    "commit removing",
+    "refuse any reveal from now on"
+   ],
+   "hazards": [
+    "H-043",
+    "H-048"
+   ],
+   "rules": [
+    "C15",
+    "C17"
+   ],
+   "tla": "BeginRemove"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_saved",
+   "event": "begin_remove",
+   "guard": "version_current and removable",
+   "to": "removing",
+   "effects": [
+    "commit removing",
+    "refuse any reveal from now on"
+   ],
+   "hazards": [
+    "H-043",
+    "H-048"
+   ],
+   "rules": [
+    "C15",
+    "C17"
+   ],
+   "tla": "BeginRemove"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_skipped",
+   "event": "begin_remove",
+   "guard": "version_current and removable",
+   "to": "removing",
+   "effects": [
+    "commit removing",
+    "refuse any reveal from now on"
+   ],
+   "hazards": [
+    "H-043",
+    "H-048"
+   ],
+   "rules": [
+    "C15",
+    "C17"
+   ],
+   "tla": "BeginRemove"
+  },
+  {
+   "machine": "wallet",
+   "from": "archived",
+   "event": "begin_remove",
+   "guard": "version_current and removable",
+   "to": "removing",
+   "effects": [
+    "commit removing",
+    "refuse any reveal from now on"
+   ],
+   "hazards": [
+    "H-043",
+    "H-048"
+   ],
+   "rules": [
+    "C15",
+    "C17"
+   ],
+   "tla": "BeginRemove"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_unsaved",
+   "event": "begin_remove",
+   "guard": "not (version_current and removable)",
+   "to": "ready_unsaved",
+   "effects": [
+    "refuse in words: funds, a payment in flight, or a key never saved for an address that left banda"
+   ],
+   "hazards": [
+    "H-043",
+    "H-046",
+    "H-050"
+   ],
+   "rules": [
+    "C17"
+   ],
+   "tla": "BeginRemove"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_saved",
+   "event": "begin_remove",
+   "guard": "not (version_current and removable)",
+   "to": "ready_saved",
+   "effects": [
+    "refuse in words: funds, a payment in flight, or a key never saved for an address that left banda"
+   ],
+   "hazards": [
+    "H-043",
+    "H-046",
+    "H-050"
+   ],
+   "rules": [
+    "C17"
+   ],
+   "tla": "BeginRemove"
+  },
+  {
+   "machine": "wallet",
+   "from": "ready_skipped",
+   "event": "begin_remove",
+   "guard": "not (version_current and removable)",
+   "to": "ready_skipped",
+   "effects": [
+    "refuse in words: funds, a payment in flight, or a key never saved for an address that left banda"
+   ],
+   "hazards": [
+    "H-043",
+    "H-046",
+    "H-050"
+   ],
+   "rules": [
+    "C17"
+   ],
+   "tla": "BeginRemove"
+  },
+  {
+   "machine": "wallet",
+   "from": "archived",
+   "event": "begin_remove",
+   "guard": "not (version_current and removable)",
+   "to": "archived",
+   "effects": [
+    "refuse in words: funds, a payment in flight, or a key never saved for an address that left banda"
+   ],
+   "hazards": [
+    "H-043",
+    "H-046",
+    "H-050"
+   ],
+   "rules": [
+    "C17"
+   ],
+   "tla": "BeginRemove"
+  },
+  {
+   "machine": "wallet",
+   "from": "removing",
+   "event": "delete_item",
+   "guard": "kc_up and removable",
+   "to": "removing",
+   "effects": [
+    "delete the keychain item"
+   ],
+   "hazards": [
+    "H-044"
+   ],
+   "rules": [
+    "C15"
+   ],
+   "tla": "DeleteItem"
+  },
+  {
+   "machine": "wallet",
+   "from": "removing",
+   "event": "delete_item",
+   "guard": "kc_up and not removable",
+   "to": "archived",
+   "effects": [
+    "funds or a payment arrived since removal began: roll back (C17)"
+   ],
+   "hazards": [
+    "H-046"
+   ],
+   "rules": [
+    "C17"
+   ],
+   "tla": "CancelRemove"
+  },
+  {
+   "machine": "wallet",
+   "from": "removing",
+   "event": "delete_item",
+   "guard": "not kc_up",
+   "to": "removing",
+   "effects": [
+    "retry when the keychain answers"
+   ],
+   "hazards": [
+    "H-044"
+   ],
+   "rules": [
+    "C15"
+   ],
+   "tla": "DeleteItem"
+  },
+  {
+   "machine": "wallet",
+   "from": "removing",
+   "event": "item_gone",
+   "guard": "True",
+   "to": "removed",
+   "effects": [
+    "commit removed"
+   ],
+   "hazards": [
+    "H-044"
+   ],
+   "rules": [
+    "C15"
+   ],
+   "tla": "Removed"
+  },
+  {
+   "machine": "signing",
+   "from": "online",
+   "event": "keychain_locks",
+   "guard": "True",
+   "to": "locked",
+   "effects": [
+    "one owner Wait 'unlock the keychain to pay' per lane",
+    "nothing is burnt: queued payments stay queued and age out (C10)"
+   ],
+   "hazards": [
+    "H-026",
+    "H-027"
+   ],
+   "rules": [
+    "C4",
+    "C20"
+   ],
+   "tla": "Lock"
+  },
+  {
+   "machine": "signing",
+   "from": "online",
+   "event": "item_lost",
+   "guard": "True",
+   "to": "key_missing",
+   "effects": [
+    "'Key missing from this computer'; reads keep working",
+    "payments past the burn point keep tracking (they need no key)"
+   ],
+   "hazards": [
+    "H-021"
+   ],
+   "rules": [
+    "C4",
+    "C16"
+   ],
+   "tla": "LoseItem"
+  },
+  {
+   "machine": "signing",
+   "from": "online",
+   "event": "unlock_check",
+   "guard": "derives and lease_mine and not host_mode",
+   "to": "online",
+   "effects": [
+    "sign"
+   ],
+   "hazards": [
+    "H-009"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "online",
+   "event": "unlock_check",
+   "guard": "not derives",
+   "to": "wrong_key",
+   "effects": [
+    "offline: the key in the keychain does not open the wallet"
+   ],
+   "hazards": [
+    "H-025"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "online",
+   "event": "unlock_check",
+   "guard": "derives and not lease_mine",
+   "to": "other_home",
+   "effects": [
+    "offline: 'this wallet is used by another banda home'"
+   ],
+   "hazards": [
+    "H-020",
+    "H-284",
+    "H-283"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "online",
+   "event": "unlock_check",
+   "guard": "derives and lease_mine and host_mode",
+   "to": "offline_host_mode",
+   "effects": [
+    "offline: host mode gives every command the owner's keychain"
+   ],
+   "hazards": [
+    "H-064"
+   ],
+   "rules": [],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "locked",
+   "event": "unlock_check",
+   "guard": "derives and lease_mine and not host_mode",
+   "to": "online",
+   "effects": [
+    "sign again"
+   ],
+   "hazards": [
+    "H-026"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "Unlock"
+  },
+  {
+   "machine": "signing",
+   "from": "locked",
+   "event": "unlock_check",
+   "guard": "not derives",
+   "to": "wrong_key",
+   "effects": [],
+   "hazards": [
+    "H-025"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "locked",
+   "event": "unlock_check",
+   "guard": "derives and not lease_mine",
+   "to": "other_home",
+   "effects": [],
+   "hazards": [
+    "H-020"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "locked",
+   "event": "unlock_check",
+   "guard": "derives and lease_mine and host_mode",
+   "to": "offline_host_mode",
+   "effects": [],
+   "hazards": [
+    "H-064"
+   ],
+   "rules": [],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "wrong_key",
+   "event": "unlock_check",
+   "guard": "derives and lease_mine and not host_mode",
+   "to": "online",
+   "effects": [
+    "sign again"
+   ],
+   "hazards": [
+    "H-026"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "Unlock"
+  },
+  {
+   "machine": "signing",
+   "from": "wrong_key",
+   "event": "unlock_check",
+   "guard": "not derives",
+   "to": "wrong_key",
+   "effects": [],
+   "hazards": [
+    "H-025"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "wrong_key",
+   "event": "unlock_check",
+   "guard": "derives and not lease_mine",
+   "to": "other_home",
+   "effects": [],
+   "hazards": [
+    "H-020"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "wrong_key",
+   "event": "unlock_check",
+   "guard": "derives and lease_mine and host_mode",
+   "to": "offline_host_mode",
+   "effects": [],
+   "hazards": [
+    "H-064"
+   ],
+   "rules": [],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "other_home",
+   "event": "unlock_check",
+   "guard": "derives and lease_mine and not host_mode",
+   "to": "online",
+   "effects": [
+    "sign again"
+   ],
+   "hazards": [
+    "H-026"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "Unlock"
+  },
+  {
+   "machine": "signing",
+   "from": "other_home",
+   "event": "unlock_check",
+   "guard": "not derives",
+   "to": "wrong_key",
+   "effects": [],
+   "hazards": [
+    "H-025"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "other_home",
+   "event": "unlock_check",
+   "guard": "derives and not lease_mine",
+   "to": "other_home",
+   "effects": [],
+   "hazards": [
+    "H-020"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "other_home",
+   "event": "unlock_check",
+   "guard": "derives and lease_mine and host_mode",
+   "to": "offline_host_mode",
+   "effects": [],
+   "hazards": [
+    "H-064"
+   ],
+   "rules": [],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "offline_host_mode",
+   "event": "unlock_check",
+   "guard": "derives and lease_mine and not host_mode",
+   "to": "online",
+   "effects": [
+    "sign again"
+   ],
+   "hazards": [
+    "H-026"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "Unlock"
+  },
+  {
+   "machine": "signing",
+   "from": "offline_host_mode",
+   "event": "unlock_check",
+   "guard": "not derives",
+   "to": "wrong_key",
+   "effects": [],
+   "hazards": [
+    "H-025"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "offline_host_mode",
+   "event": "unlock_check",
+   "guard": "derives and not lease_mine",
+   "to": "other_home",
+   "effects": [],
+   "hazards": [
+    "H-020"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "offline_host_mode",
+   "event": "unlock_check",
+   "guard": "derives and lease_mine and host_mode",
+   "to": "offline_host_mode",
+   "effects": [],
+   "hazards": [
+    "H-064"
+   ],
+   "rules": [],
+   "tla": "CanSign"
+  },
+  {
+   "machine": "signing",
+   "from": "key_missing",
+   "event": "restore_key",
+   "guard": "derives",
+   "to": "online",
+   "effects": [
+    "accept the key (it derives this address)",
+    "answer the lane's 'key missing' Wait (C9)"
+   ],
+   "hazards": [
+    "H-014",
+    "H-290"
+   ],
+   "rules": [
+    "C9",
+    "C16"
+   ],
+   "tla": "RestoreKey"
+  },
+  {
+   "machine": "signing",
+   "from": "key_missing",
+   "event": "restore_key",
+   "guard": "not derives",
+   "to": "key_missing",
+   "effects": [
+    "refuse: that key opens another address"
+   ],
+   "hazards": [
+    "H-014"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "RestoreKey"
+  },
+  {
+   "machine": "signing",
+   "from": "online",
+   "event": "lease_moved",
+   "guard": "lease_mine",
+   "to": "online",
+   "effects": [
+    "keychain epoch first, then the store (C15)"
+   ],
+   "hazards": [
+    "H-289"
+   ],
+   "rules": [
+    "C15",
+    "C16"
+   ],
+   "tla": "LeaseKeychain"
+  },
+  {
+   "machine": "signing",
+   "from": "other_home",
+   "event": "lease_moved",
+   "guard": "lease_mine",
+   "to": "online",
+   "effects": [
+    "keychain epoch first, then the store (C15)"
+   ],
+   "hazards": [
+    "H-289"
+   ],
+   "rules": [
+    "C15",
+    "C16"
+   ],
+   "tla": "LeaseKeychain"
+  },
+  {
+   "machine": "signing",
+   "from": "online",
+   "event": "lease_moved",
+   "guard": "not lease_mine",
+   "to": "other_home",
+   "effects": [
+    "this home stops signing"
+   ],
+   "hazards": [
+    "H-289",
+    "H-020"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "LeaseKeychain"
+  },
+  {
+   "machine": "signing",
+   "from": "other_home",
+   "event": "lease_moved",
+   "guard": "not lease_mine",
+   "to": "other_home",
+   "effects": [
+    "this home stops signing"
+   ],
+   "hazards": [
+    "H-289",
+    "H-020"
+   ],
+   "rules": [
+    "C16"
+   ],
+   "tla": "LeaseKeychain"
+  },
+  {
+   "machine": "recipient",
+   "from": "unknown",
+   "event": "card_pay",
+   "guard": "version_current",
+   "to": "ask",
+   "effects": [
+    "name the recipient if unknown (label only)",
+    "pay this once"
+   ],
+   "hazards": [
+    "H-073",
+    "H-075"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "CardPay"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "card_pay",
+   "guard": "version_current",
+   "to": "ask",
+   "effects": [
+    "name the recipient if unknown (label only)",
+    "pay this once"
+   ],
+   "hazards": [
+    "H-073",
+    "H-075"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "CardPay"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "card_pay",
+   "guard": "version_current",
+   "to": "deny",
+   "effects": [
+    "no card is open under Deny: the Deny answered it already (C9)"
+   ],
+   "hazards": [
+    "H-084"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "CardPay"
+  },
+  {
+   "machine": "recipient",
+   "from": "unknown",
+   "event": "card_pay",
+   "guard": "not version_current",
+   "to": "unknown",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardPay"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "card_pay",
+   "guard": "not version_current",
+   "to": "ask",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardPay"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "card_pay",
+   "guard": "not version_current",
+   "to": "deny",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardPay"
+  },
+  {
+   "machine": "recipient",
+   "from": "unknown",
+   "event": "card_always",
+   "guard": "version_current",
+   "to": "ask",
+   "effects": [
+    "name the recipient if unknown (label only)",
+    "and grant this agent Always"
+   ],
+   "hazards": [
+    "H-073",
+    "H-075"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "CardAlways"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "card_always",
+   "guard": "version_current",
+   "to": "ask",
+   "effects": [
+    "name the recipient if unknown (label only)",
+    "and grant this agent Always"
+   ],
+   "hazards": [
+    "H-073",
+    "H-075"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "CardAlways"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "card_always",
+   "guard": "version_current",
+   "to": "deny",
+   "effects": [
+    "no card is open under Deny: the Deny answered it already (C9)"
+   ],
+   "hazards": [
+    "H-084"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "CardAlways"
+  },
+  {
+   "machine": "recipient",
+   "from": "unknown",
+   "event": "card_always",
+   "guard": "not version_current",
+   "to": "unknown",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardAlways"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "card_always",
+   "guard": "not version_current",
+   "to": "ask",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardAlways"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "card_always",
+   "guard": "not version_current",
+   "to": "deny",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardAlways"
+  },
+  {
+   "machine": "recipient",
+   "from": "unknown",
+   "event": "card_dont_pay",
+   "guard": "version_current",
+   "to": "ask",
+   "effects": [
+    "name the recipient if unknown (label only)",
+    "refuse this one"
+   ],
+   "hazards": [
+    "H-073",
+    "H-075"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "CardDontPay"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "card_dont_pay",
+   "guard": "version_current",
+   "to": "ask",
+   "effects": [
+    "name the recipient if unknown (label only)",
+    "refuse this one"
+   ],
+   "hazards": [
+    "H-073",
+    "H-075"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "CardDontPay"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "card_dont_pay",
+   "guard": "version_current",
+   "to": "deny",
+   "effects": [
+    "no card is open under Deny: the Deny answered it already (C9)"
+   ],
+   "hazards": [
+    "H-084"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "CardDontPay"
+  },
+  {
+   "machine": "recipient",
+   "from": "unknown",
+   "event": "card_dont_pay",
+   "guard": "not version_current",
+   "to": "unknown",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardDontPay"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "card_dont_pay",
+   "guard": "not version_current",
+   "to": "ask",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardDontPay"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "card_dont_pay",
+   "guard": "not version_current",
+   "to": "deny",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardDontPay"
+  },
+  {
+   "machine": "recipient",
+   "from": "unknown",
+   "event": "card_never",
+   "guard": "version_current",
+   "to": "deny",
+   "effects": [
+    "Deny per wallet, for every agent",
+    "refuse every open ask and queued payment to it in this commit (C9)"
+   ],
+   "hazards": [
+    "H-073",
+    "H-084"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "CardNever"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "card_never",
+   "guard": "version_current",
+   "to": "deny",
+   "effects": [
+    "Deny per wallet, for every agent",
+    "refuse every open ask and queued payment to it in this commit (C9)"
+   ],
+   "hazards": [
+    "H-073",
+    "H-084"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "CardNever"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "card_never",
+   "guard": "version_current",
+   "to": "deny",
+   "effects": [
+    "no card is open under Deny"
+   ],
+   "hazards": [
+    "H-084"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "CardNever"
+  },
+  {
+   "machine": "recipient",
+   "from": "unknown",
+   "event": "card_never",
+   "guard": "not version_current",
+   "to": "unknown",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardNever"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "card_never",
+   "guard": "not version_current",
+   "to": "ask",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardNever"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "card_never",
+   "guard": "not version_current",
+   "to": "deny",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardNever"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "list_set_ask",
+   "guard": "version_current",
+   "to": "ask",
+   "effects": [
+    "lift the Deny; every agent's Always goes too (C4 re-checks queued payments)"
+   ],
+   "hazards": [
+    "H-081",
+    "H-087"
+   ],
+   "rules": [
+    "C4",
+    "C8"
+   ],
+   "tla": "SetAsk"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "list_set_ask",
+   "guard": "version_current",
+   "to": "ask",
+   "effects": [
+    "lift the Deny; every agent's Always goes too (C4 re-checks queued payments)"
+   ],
+   "hazards": [
+    "H-081",
+    "H-087"
+   ],
+   "rules": [
+    "C4",
+    "C8"
+   ],
+   "tla": "SetAsk"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "list_set_always",
+   "guard": "version_current",
+   "to": "ask",
+   "effects": [
+    "the recipient's own rule does not change (the permission does)"
+   ],
+   "hazards": [
+    "H-081",
+    "H-110"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "SetAlways"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "list_set_always",
+   "guard": "version_current",
+   "to": "deny",
+   "effects": [
+    "the recipient's own rule does not change (the permission does)"
+   ],
+   "hazards": [
+    "H-081",
+    "H-110"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "SetAlways"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "list_set_deny",
+   "guard": "version_current",
+   "to": "deny",
+   "effects": [
+    "sweep: refuse open asks and queued payments to it (C9)"
+   ],
+   "hazards": [
+    "H-081",
+    "H-084",
+    "H-086"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "list_set_deny",
+   "guard": "version_current",
+   "to": "deny",
+   "effects": [
+    "sweep: refuse open asks and queued payments to it (C9)"
+   ],
+   "hazards": [
+    "H-081",
+    "H-084",
+    "H-086"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "rename",
+   "guard": "version_current",
+   "to": "ask",
+   "effects": [
+    "change the label only; every card redraws; the rule stays"
+   ],
+   "hazards": [
+    "H-080",
+    "H-077",
+    "H-079"
+   ],
+   "rules": [
+    "C8",
+    "C18"
+   ],
+   "tla": "Rename"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "rename",
+   "guard": "version_current",
+   "to": "deny",
+   "effects": [
+    "change the label only; every card redraws; the rule stays"
+   ],
+   "hazards": [
+    "H-080",
+    "H-077",
+    "H-079"
+   ],
+   "rules": [
+    "C8",
+    "C18"
+   ],
+   "tla": "Rename"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "forget",
+   "guard": "version_current",
+   "to": "unknown",
+   "effects": [
+    "queued payments meet the default at their start commit (C4)"
+   ],
+   "hazards": [
+    "H-088",
+    "H-089"
+   ],
+   "rules": [
+    "C4",
+    "C8"
+   ],
+   "tla": "Forget"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "forget",
+   "guard": "version_current",
+   "to": "unknown",
+   "effects": [
+    "queued payments meet the default at their start commit (C4)"
+   ],
+   "hazards": [
+    "H-088",
+    "H-089"
+   ],
+   "rules": [
+    "C4",
+    "C8"
+   ],
+   "tla": "Forget"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "list_set_ask",
+   "guard": "not version_current",
+   "to": "ask",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "SetAsk"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "list_set_ask",
+   "guard": "not version_current",
+   "to": "deny",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "SetAsk"
+  },
+  {
+   "machine": "recipient",
+   "from": "unknown",
+   "event": "list_set_ask",
+   "guard": "True",
+   "to": "unknown",
+   "effects": [
+    "an unknown recipient is not in the list"
+   ],
+   "hazards": [],
+   "rules": [],
+   "tla": "SetAsk"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "list_set_always",
+   "guard": "not version_current",
+   "to": "ask",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "SetAlways"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "list_set_always",
+   "guard": "not version_current",
+   "to": "deny",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "SetAlways"
+  },
+  {
+   "machine": "recipient",
+   "from": "unknown",
+   "event": "list_set_always",
+   "guard": "True",
+   "to": "unknown",
+   "effects": [
+    "an unknown recipient is not in the list"
+   ],
+   "hazards": [],
+   "rules": [],
+   "tla": "SetAlways"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "list_set_deny",
+   "guard": "not version_current",
+   "to": "ask",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "list_set_deny",
+   "guard": "not version_current",
+   "to": "deny",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "recipient",
+   "from": "unknown",
+   "event": "list_set_deny",
+   "guard": "True",
+   "to": "unknown",
+   "effects": [
+    "an unknown recipient is not in the list"
+   ],
+   "hazards": [],
+   "rules": [],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "rename",
+   "guard": "not version_current",
+   "to": "ask",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "Rename"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "rename",
+   "guard": "not version_current",
+   "to": "deny",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "Rename"
+  },
+  {
+   "machine": "recipient",
+   "from": "unknown",
+   "event": "rename",
+   "guard": "True",
+   "to": "unknown",
+   "effects": [
+    "an unknown recipient is not in the list"
+   ],
+   "hazards": [],
+   "rules": [],
+   "tla": "Rename"
+  },
+  {
+   "machine": "recipient",
+   "from": "ask",
+   "event": "forget",
+   "guard": "not version_current",
+   "to": "ask",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "Forget"
+  },
+  {
+   "machine": "recipient",
+   "from": "deny",
+   "event": "forget",
+   "guard": "not version_current",
+   "to": "deny",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "Forget"
+  },
+  {
+   "machine": "recipient",
+   "from": "unknown",
+   "event": "forget",
+   "guard": "True",
+   "to": "unknown",
+   "effects": [
+    "an unknown recipient is not in the list"
+   ],
+   "hazards": [],
+   "rules": [],
+   "tla": "Forget"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "card_always",
+   "guard": "version_current and rcpt != 'deny'",
+   "to": "always",
+   "effects": [
+    "Always for (wallet, this agent, recipient), worded 'up to what's in the wallet'",
+    "answer that agent's open asks (C9)"
+   ],
+   "hazards": [
+    "H-073",
+    "H-083",
+    "H-091"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "CardAlways"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "card_always",
+   "guard": "version_current and rcpt != 'deny'",
+   "to": "always",
+   "effects": [
+    "Always for (wallet, this agent, recipient), worded 'up to what's in the wallet'",
+    "answer that agent's open asks (C9)"
+   ],
+   "hazards": [
+    "H-073",
+    "H-083",
+    "H-091"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "CardAlways"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "card_always",
+   "guard": "version_current and not (rcpt != 'deny')",
+   "to": "none",
+   "effects": [
+    "refused: never granted over a Deny, nor on a recipient the list does not hold"
+   ],
+   "hazards": [
+    "H-084",
+    "H-099"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "CardAlways"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "card_always",
+   "guard": "version_current and not (rcpt != 'deny')",
+   "to": "always",
+   "effects": [
+    "refused: never granted over a Deny, nor on a recipient the list does not hold"
+   ],
+   "hazards": [
+    "H-084",
+    "H-099"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "CardAlways",
+   "unreachable": "a permission is Always only under an Ask recipient (link: PermissionUnderRecipient)"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "card_always",
+   "guard": "not version_current",
+   "to": "none",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardAlways"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "card_always",
+   "guard": "not version_current",
+   "to": "always",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardAlways"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "list_set_always",
+   "guard": "version_current and rcpt == 'ask'",
+   "to": "always",
+   "effects": [
+    "Always for (wallet, this agent, recipient), worded 'up to what's in the wallet'",
+    "answer that agent's open asks (C9)"
+   ],
+   "hazards": [
+    "H-073",
+    "H-083",
+    "H-091"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "SetAlways"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "list_set_always",
+   "guard": "version_current and rcpt == 'ask'",
+   "to": "always",
+   "effects": [
+    "Always for (wallet, this agent, recipient), worded 'up to what's in the wallet'",
+    "answer that agent's open asks (C9)"
+   ],
+   "hazards": [
+    "H-073",
+    "H-083",
+    "H-091"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "SetAlways"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "list_set_always",
+   "guard": "version_current and not (rcpt == 'ask')",
+   "to": "none",
+   "effects": [
+    "refused: never granted over a Deny, nor on a recipient the list does not hold"
+   ],
+   "hazards": [
+    "H-084",
+    "H-099"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "SetAlways"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "list_set_always",
+   "guard": "version_current and not (rcpt == 'ask')",
+   "to": "always",
+   "effects": [
+    "refused: never granted over a Deny, nor on a recipient the list does not hold"
+   ],
+   "hazards": [
+    "H-084",
+    "H-099"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "SetAlways",
+   "unreachable": "a permission is Always only under an Ask recipient (link: PermissionUnderRecipient)"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "list_set_always",
+   "guard": "not version_current",
+   "to": "none",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "SetAlways"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "list_set_always",
+   "guard": "not version_current",
+   "to": "always",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-141"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "SetAlways"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "card_never",
+   "guard": "version_current",
+   "to": "none",
+   "effects": [
+    "every agent's Always for the recipient goes in the same commit"
+   ],
+   "hazards": [
+    "H-084",
+    "H-088"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "CardNever"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "card_never",
+   "guard": "version_current",
+   "to": "none",
+   "effects": [
+    "every agent's Always for the recipient goes in the same commit"
+   ],
+   "hazards": [
+    "H-084",
+    "H-088"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "CardNever"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "card_never",
+   "guard": "not version_current",
+   "to": "none",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardNever"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "card_never",
+   "guard": "not version_current",
+   "to": "always",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "CardNever"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "list_set_deny",
+   "guard": "version_current",
+   "to": "none",
+   "effects": [
+    "every agent's Always for the recipient goes in the same commit"
+   ],
+   "hazards": [
+    "H-084",
+    "H-088"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "list_set_deny",
+   "guard": "version_current",
+   "to": "none",
+   "effects": [
+    "every agent's Always for the recipient goes in the same commit"
+   ],
+   "hazards": [
+    "H-084",
+    "H-088"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "list_set_deny",
+   "guard": "not version_current",
+   "to": "none",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "list_set_deny",
+   "guard": "not version_current",
+   "to": "always",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "list_set_ask",
+   "guard": "version_current",
+   "to": "none",
+   "effects": [
+    "every agent's Always for the recipient goes in the same commit"
+   ],
+   "hazards": [
+    "H-084",
+    "H-088"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "SetAsk"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "list_set_ask",
+   "guard": "version_current",
+   "to": "none",
+   "effects": [
+    "every agent's Always for the recipient goes in the same commit"
+   ],
+   "hazards": [
+    "H-084",
+    "H-088"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "SetAsk"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "list_set_ask",
+   "guard": "not version_current",
+   "to": "none",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "SetAsk"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "list_set_ask",
+   "guard": "not version_current",
+   "to": "always",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "SetAsk"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "forget",
+   "guard": "version_current",
+   "to": "none",
+   "effects": [
+    "every agent's Always for the recipient goes in the same commit"
+   ],
+   "hazards": [
+    "H-084",
+    "H-088"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "Forget"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "forget",
+   "guard": "version_current",
+   "to": "none",
+   "effects": [
+    "every agent's Always for the recipient goes in the same commit"
+   ],
+   "hazards": [
+    "H-084",
+    "H-088"
+   ],
+   "rules": [
+    "C8",
+    "C9"
+   ],
+   "tla": "Forget"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "forget",
+   "guard": "not version_current",
+   "to": "none",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "Forget"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "forget",
+   "guard": "not version_current",
+   "to": "always",
+   "effects": [
+    "refuse the act; the screen redraws with the current rule (C8)"
+   ],
+   "hazards": [
+    "H-109"
+   ],
+   "rules": [
+    "C8"
+   ],
+   "tla": "Forget"
+  },
+  {
+   "machine": "permission",
+   "from": "none",
+   "event": "rename",
+   "guard": "True",
+   "to": "none",
+   "effects": [
+    "a label change keeps every permission (identity, not label)"
+   ],
+   "hazards": [
+    "H-077",
+    "H-080"
+   ],
+   "rules": [
+    "C18"
+   ],
+   "tla": "Rename"
+  },
+  {
+   "machine": "permission",
+   "from": "always",
+   "event": "rename",
+   "guard": "True",
+   "to": "always",
+   "effects": [
+    "a label change keeps every permission (identity, not label)"
+   ],
+   "hazards": [
+    "H-077",
+    "H-080"
+   ],
+   "rules": [
+    "C18"
+   ],
+   "tla": "Rename"
+  },
+  {
+   "machine": "payment",
+   "from": "Idle",
+   "event": "call",
+   "guard": "not wallet_usable",
+   "to": "Refused",
+   "effects": [
+    "answer the first C3 check that fails, in words"
+   ],
+   "hazards": [
+    "H-051",
+    "H-053",
+    "H-071",
+    "H-137",
+    "H-138"
+   ],
+   "rules": [
+    "C3"
+   ],
+   "tla": "Call"
+  },
+  {
+   "machine": "payment",
+   "from": "Idle",
+   "event": "call",
+   "guard": "wallet_usable and payer == 'agent' and eff == 'deny'",
+   "to": "Refused",
+   "effects": [
+    "'the owner doesn't pay <address>'; no card"
+   ],
+   "hazards": [
+    "H-076"
+   ],
+   "rules": [
+    "C3"
+   ],
+   "tla": "Call"
+  },
+  {
+   "machine": "payment",
+   "from": "Idle",
+   "event": "call",
+   "guard": "wallet_usable and payer == 'agent' and eff != 'deny' and not fits",
+   "to": "Refused",
+   "effects": [
+    "refused with the available amount; no card (OD-8)"
+   ],
+   "hazards": [
+    "H-132",
+    "H-134"
+   ],
+   "rules": [
+    "C3",
+    "C11"
+   ],
+   "tla": "Call"
+  },
+  {
+   "machine": "payment",
+   "from": "Idle",
+   "event": "call",
+   "guard": "wallet_usable and payer == 'agent' and eff == 'always' and fits",
+   "to": "Queued",
+   "effects": [
+    "reserve the amount (C11)",
+    "append to the wallet's lane (C2)",
+    "show a card in the chat, not asking"
+   ],
+   "hazards": [
+    "H-074",
+    "H-112"
+   ],
+   "rules": [
+    "C2",
+    "C3",
+    "C11"
+   ],
+   "tla": "Call"
+  },
+  {
+   "machine": "payment",
+   "from": "Idle",
+   "event": "call",
+   "guard": "wallet_usable and payer == 'agent' and eff == 'ask' and fits",
+   "to": "Waiting",
+   "effects": [
+    "reserve the amount (C11)",
+    "open the payment card (an owner Wait, 24 h deadline)"
+   ],
+   "hazards": [
+    "H-073",
+    "H-075"
+   ],
+   "rules": [
+    "C3",
+    "C10",
+    "C11"
+   ],
+   "tla": "Call"
+  },
+  {
+   "machine": "payment",
+   "from": "Idle",
+   "event": "call",
+   "guard": "wallet_usable and payer == 'owner' and fits",
+   "to": "Queued",
+   "effects": [
+    "owner authority (law 1); the client request id dedupes (C14)",
+    "append to the lane (C2)"
+   ],
+   "hazards": [
+    "H-252",
+    "H-253",
+    "H-254"
+   ],
+   "rules": [
+    "C2",
+    "C14"
+   ],
+   "tla": "Call"
+  },
+  {
+   "machine": "payment",
+   "from": "Idle",
+   "event": "call",
+   "guard": "wallet_usable and payer == 'owner' and not fits",
+   "to": "Refused",
+   "effects": [
+    "refused with the available amount"
+   ],
+   "hazards": [
+    "H-134"
+   ],
+   "rules": [
+    "C11"
+   ],
+   "tla": "Call"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "card_pay",
+   "guard": "payer == 'agent' and rule == 'deny'",
+   "to": "Refused",
+   "effects": [
+    "Deny won meanwhile; the card says so"
+   ],
+   "hazards": [
+    "H-082"
+   ],
+   "rules": [
+    "C1",
+    "C8"
+   ],
+   "tla": "Pay"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "card_pay",
+   "guard": "not (payer == 'agent' and rule == 'deny') and not host_ok",
+   "to": "Waiting",
+   "effects": [
+    "a paired device's Pay to a recipient the host never confirmed: the card stays a host Wait",
+    "'confirm this new recipient on your computer'"
+   ],
+   "hazards": [
+    "H-277",
+    "H-278",
+    "H-280"
+   ],
+   "rules": [
+    "C9",
+    "C16"
+   ],
+   "tla": "Pay"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "card_pay",
+   "guard": "not (payer == 'agent' and rule == 'deny') and host_ok",
+   "to": "Queued",
+   "effects": [
+    "approve this one; the answer names an unknown recipient, so the default no longer applies to it",
+    "append to the lane"
+   ],
+   "hazards": [
+    "H-073",
+    "H-075",
+    "H-141"
+   ],
+   "rules": [
+    "C2",
+    "C8",
+    "C9"
+   ],
+   "tla": "Pay"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "card_always",
+   "guard": "payer == 'agent' and not host_ok",
+   "to": "Waiting",
+   "effects": [
+    "Always from a paired device on a recipient the host never confirmed: a host Wait"
+   ],
+   "hazards": [
+    "H-277",
+    "H-280"
+   ],
+   "rules": [
+    "C9",
+    "C16"
+   ],
+   "tla": "AlwaysPay"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "card_always",
+   "guard": "payer == 'agent' and host_ok",
+   "to": "Queued",
+   "effects": [
+    "set Always for (wallet, agent, recipient)",
+    "approve every open ask of that agent to it (C9)"
+   ],
+   "hazards": [
+    "H-073",
+    "H-083",
+    "H-311"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "AlwaysPay"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "card_always",
+   "guard": "payer == 'owner'",
+   "to": "Waiting",
+   "effects": [
+    "not offered on the owner's own Send"
+   ],
+   "hazards": [
+    "H-107"
+   ],
+   "rules": [],
+   "tla": "AlwaysPay"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "card_dont_pay",
+   "guard": "True",
+   "to": "Refused",
+   "effects": [
+    "refuse this one; the rule stays"
+   ],
+   "hazards": [
+    "H-073"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "DontPay"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "card_never",
+   "guard": "payer == 'agent'",
+   "to": "Refused",
+   "effects": [
+    "set Deny per wallet and sweep (C9)"
+   ],
+   "hazards": [
+    "H-073",
+    "H-084"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "NeverPay"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "card_never",
+   "guard": "payer == 'owner'",
+   "to": "Waiting",
+   "effects": [
+    "not offered on the owner's own Send"
+   ],
+   "hazards": [
+    "H-106"
+   ],
+   "rules": [],
+   "tla": "NeverPay"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "deny_committed",
+   "guard": "payer == 'agent'",
+   "to": "Refused",
+   "effects": [
+    "refused in the Deny's commit (sweep)"
+   ],
+   "hazards": [
+    "H-084",
+    "H-086"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "payment",
+   "from": "Queued",
+   "event": "deny_committed",
+   "guard": "payer == 'agent'",
+   "to": "Refused",
+   "effects": [
+    "refused in the Deny's commit (sweep)"
+   ],
+   "hazards": [
+    "H-084",
+    "H-086"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "deny_committed",
+   "guard": "payer == 'owner'",
+   "to": "Waiting",
+   "effects": [
+    "the owner's own Send is not swept"
+   ],
+   "hazards": [
+    "H-106"
+   ],
+   "rules": [],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "payment",
+   "from": "Queued",
+   "event": "deny_committed",
+   "guard": "payer == 'owner'",
+   "to": "Queued",
+   "effects": [
+    "the owner's own Send is not swept"
+   ],
+   "hazards": [
+    "H-106"
+   ],
+   "rules": [],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "payment",
+   "from": "Signed",
+   "event": "deny_committed",
+   "guard": "True",
+   "to": "Signed",
+   "effects": [
+    "past the burn point: this one finishes and is reported; Deny applies from the next (C13)"
+   ],
+   "hazards": [
+    "H-085"
+   ],
+   "rules": [
+    "C13"
+   ],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "payment",
+   "from": "Sent",
+   "event": "deny_committed",
+   "guard": "True",
+   "to": "Sent",
+   "effects": [
+    "past the burn point: this one finishes and is reported; Deny applies from the next (C13)"
+   ],
+   "hazards": [
+    "H-085"
+   ],
+   "rules": [
+    "C13"
+   ],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "payment",
+   "from": "Included",
+   "event": "deny_committed",
+   "guard": "True",
+   "to": "Included",
+   "effects": [
+    "past the burn point: this one finishes and is reported; Deny applies from the next (C13)"
+   ],
+   "hazards": [
+    "H-085"
+   ],
+   "rules": [
+    "C13"
+   ],
+   "tla": "SetDeny"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "always_committed",
+   "guard": "payer == 'agent'",
+   "to": "Queued",
+   "effects": [
+    "covered by the new Always: approved (C9)"
+   ],
+   "hazards": [
+    "H-083",
+    "H-311"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "GrantAlways"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "always_committed",
+   "guard": "payer == 'owner'",
+   "to": "Waiting",
+   "effects": [],
+   "hazards": [],
+   "rules": [],
+   "tla": "GrantAlways"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "cancel_or_switch_off",
+   "guard": "True",
+   "to": "Refused",
+   "effects": [
+    "cancel of the chat's run, switch-off, archive, agent deleted: refused in that commit (C17)"
+   ],
+   "hazards": [
+    "H-054",
+    "H-055",
+    "H-124",
+    "H-047"
+   ],
+   "rules": [
+    "C13",
+    "C17"
+   ],
+   "tla": "Cancel"
+  },
+  {
+   "machine": "payment",
+   "from": "Queued",
+   "event": "cancel_or_switch_off",
+   "guard": "True",
+   "to": "Refused",
+   "effects": [
+    "cancel of the chat's run, switch-off, archive, agent deleted: refused in that commit (C17)"
+   ],
+   "hazards": [
+    "H-054",
+    "H-055",
+    "H-124",
+    "H-047"
+   ],
+   "rules": [
+    "C13",
+    "C17"
+   ],
+   "tla": "Cancel"
+  },
+  {
+   "machine": "payment",
+   "from": "Signed",
+   "event": "cancel_or_switch_off",
+   "guard": "True",
+   "to": "Signed",
+   "effects": [
+    "the lane owns the outcome: the tool returns 'may have sent' until a receipt decides"
+   ],
+   "hazards": [
+    "H-124",
+    "H-126",
+    "H-085"
+   ],
+   "rules": [
+    "C13"
+   ],
+   "tla": "Cancel"
+  },
+  {
+   "machine": "payment",
+   "from": "Sent",
+   "event": "cancel_or_switch_off",
+   "guard": "True",
+   "to": "Sent",
+   "effects": [
+    "the lane owns the outcome: the tool returns 'may have sent' until a receipt decides"
+   ],
+   "hazards": [
+    "H-124",
+    "H-126",
+    "H-085"
+   ],
+   "rules": [
+    "C13"
+   ],
+   "tla": "Cancel"
+  },
+  {
+   "machine": "payment",
+   "from": "Included",
+   "event": "cancel_or_switch_off",
+   "guard": "True",
+   "to": "Included",
+   "effects": [
+    "the lane owns the outcome: the tool returns 'may have sent' until a receipt decides"
+   ],
+   "hazards": [
+    "H-124",
+    "H-126",
+    "H-085"
+   ],
+   "rules": [
+    "C13"
+   ],
+   "tla": "Cancel"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "deadline",
+   "guard": "True",
+   "to": "NotPaid",
+   "effects": [
+    "24 h with no answer, or queued and never started (keychain locked, lease lost): 'Not paid' (C10)"
+   ],
+   "hazards": [
+    "H-142",
+    "H-310",
+    "H-026",
+    "H-144"
+   ],
+   "rules": [
+    "C10"
+   ],
+   "tla": "Deadline"
+  },
+  {
+   "machine": "payment",
+   "from": "Queued",
+   "event": "deadline",
+   "guard": "True",
+   "to": "NotPaid",
+   "effects": [
+    "24 h with no answer, or queued and never started (keychain locked, lease lost): 'Not paid' (C10)"
+   ],
+   "hazards": [
+    "H-142",
+    "H-310",
+    "H-026",
+    "H-144"
+   ],
+   "rules": [
+    "C10"
+   ],
+   "tla": "Deadline"
+  },
+  {
+   "machine": "payment",
+   "from": "Queued",
+   "event": "sign",
+   "guard": "True",
+   "to": "Queued",
+   "effects": [
+    "the signer reads and proves the key and signs in its own memory; nothing committed"
+   ],
+   "hazards": [
+    "H-116",
+    "H-117",
+    "H-027"
+   ],
+   "rules": [
+    "C4",
+    "C20"
+   ],
+   "tla": "Sign"
+  },
+  {
+   "machine": "payment",
+   "from": "Queued",
+   "event": "start_commit",
+   "guard": "ledger_moved",
+   "to": "Queued",
+   "effects": [
+    "drop the bytes; the lane signs again at the new ledger (C4)"
+   ],
+   "hazards": [
+    "H-171"
+   ],
+   "rules": [
+    "C4",
+    "C5"
+   ],
+   "tla": "StartCommit"
+  },
+  {
+   "machine": "payment",
+   "from": "Queued",
+   "event": "start_commit",
+   "guard": "not ledger_moved and not wallet_usable",
+   "to": "Refused",
+   "effects": [
+    "switched off for the agent, archived, or the tool turned off meanwhile: drop the bytes (C17)"
+   ],
+   "hazards": [
+    "H-054",
+    "H-047",
+    "H-118"
+   ],
+   "rules": [
+    "C4",
+    "C17"
+   ],
+   "tla": "StartCommit"
+  },
+  {
+   "machine": "payment",
+   "from": "Queued",
+   "event": "start_commit",
+   "guard": "not ledger_moved and wallet_usable and payer == 'agent' and eff == 'deny'",
+   "to": "Refused",
+   "effects": [
+    "a Deny (or a forget under the default Deny) committed meanwhile: drop the bytes"
+   ],
+   "hazards": [
+    "H-086",
+    "H-118"
+   ],
+   "rules": [
+    "C4"
+   ],
+   "tla": "StartCommit"
+  },
+  {
+   "machine": "payment",
+   "from": "Queued",
+   "event": "start_commit",
+   "guard": "not ledger_moved and wallet_usable and not (payer == 'agent' and eff == 'deny') and not start_ok",
+   "to": "Waiting",
+   "effects": [
+    "Always revoked or forgotten meanwhile: ask again"
+   ],
+   "hazards": [
+    "H-087",
+    "H-088"
+   ],
+   "rules": [
+    "C4",
+    "C10"
+   ],
+   "tla": "StartCommit"
+  },
+  {
+   "machine": "payment",
+   "from": "Queued",
+   "event": "start_commit",
+   "guard": "not ledger_moved and wallet_usable and start_ok and not fits",
+   "to": "Refused",
+   "effects": [
+    "the balance at the block read dropped meanwhile (C11)"
+   ],
+   "hazards": [
+    "H-133"
+   ],
+   "rules": [
+    "C4",
+    "C11"
+   ],
+   "tla": "StartCommit"
+  },
+  {
+   "machine": "payment",
+   "from": "Queued",
+   "event": "start_commit",
+   "guard": "not ledger_moved and wallet_usable and start_ok and fits",
+   "to": "Signed",
+   "effects": [
+    "take nonce = ledger; ledger + 1",
+    "append the signed version with its hash (C6)",
+    "sync before any byte leaves (C21)",
+    "burn point: the lane owns the outcome (C13)"
+   ],
+   "hazards": [
+    "H-112",
+    "H-119",
+    "H-129",
+    "H-164",
+    "H-165"
+   ],
+   "rules": [
+    "C4",
+    "C5",
+    "C6",
+    "C13",
+    "C21"
+   ],
+   "tla": "StartCommit"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "start_commit",
+   "guard": "True",
+   "to": "Waiting",
+   "effects": [
+    "the payment left Queued while the signer held its bytes: drop them"
+   ],
+   "hazards": [
+    "H-118"
+   ],
+   "rules": [
+    "C4"
+   ],
+   "tla": "StartCommit"
+  },
+  {
+   "machine": "payment",
+   "from": "Refused",
+   "event": "start_commit",
+   "guard": "True",
+   "to": "Refused",
+   "effects": [
+    "the payment left Queued while the signer held its bytes: drop them"
+   ],
+   "hazards": [
+    "H-118"
+   ],
+   "rules": [
+    "C4"
+   ],
+   "tla": "StartCommit"
+  },
+  {
+   "machine": "payment",
+   "from": "NotPaid",
+   "event": "start_commit",
+   "guard": "True",
+   "to": "NotPaid",
+   "effects": [
+    "the payment left Queued while the signer held its bytes: drop them"
+   ],
+   "hazards": [
+    "H-118"
+   ],
+   "rules": [
+    "C4"
+   ],
+   "tla": "StartCommit"
+  },
+  {
+   "machine": "payment",
+   "from": "Signed",
+   "event": "broadcast",
+   "guard": "True",
+   "to": "Sent",
+   "effects": [
+    "send every committed version of the nonce, newest first; a timeout is not a failure"
+   ],
+   "hazards": [
+    "H-113",
+    "H-119",
+    "H-184"
+   ],
+   "rules": [
+    "C6",
+    "C12"
+   ],
+   "tla": "Broadcast"
+  },
+  {
+   "machine": "payment",
+   "from": "Sent",
+   "event": "broadcast",
+   "guard": "True",
+   "to": "Sent",
+   "effects": [
+    "send every committed version of the nonce, newest first; a timeout is not a failure"
+   ],
+   "hazards": [
+    "H-113",
+    "H-119",
+    "H-184"
+   ],
+   "rules": [
+    "C6",
+    "C12"
+   ],
+   "tla": "Broadcast"
+  },
+  {
+   "machine": "payment",
+   "from": "Sent",
+   "event": "bump",
+   "guard": "True",
+   "to": "Sent",
+   "effects": [
+    "the signer signs a version with both fees raised >= 12.5% (it needs the key and the fee reserve)",
+    "commit the version and sync before any byte leaves (C21)",
+    "then send it"
+   ],
+   "hazards": [
+    "H-122",
+    "H-172",
+    "H-173"
+   ],
+   "rules": [
+    "C6",
+    "C21"
+   ],
+   "tla": "Bump"
+  },
+  {
+   "machine": "payment",
+   "from": "Sent",
+   "event": "cancel_replace",
+   "guard": "True",
+   "to": "Sent",
+   "effects": [
+    "the owner's cancel: a zero-value transfer to the wallet itself at the same nonce, fees raised",
+    "commit the version and sync before any byte leaves (C21)",
+    "if it is mined the payment ends Cancelled, never Confirmed"
+   ],
+   "hazards": [
+    "H-122",
+    "H-124"
+   ],
+   "rules": [
+    "C6",
+    "C13",
+    "C21"
+   ],
+   "tla": "CancelReplace"
+  },
+  {
+   "machine": "payment",
+   "from": "Sent",
+   "event": "receipt",
+   "guard": "blk == 'own' or blk == 'own_cancel'",
+   "to": "Included",
+   "effects": [
+    "a committed version's receipt (paying or cancel) holds the nonce; its kind decides at finality"
+   ],
+   "hazards": [
+    "H-175",
+    "H-112"
+   ],
+   "rules": [
+    "C6",
+    "C12"
+   ],
+   "tla": "Track"
+  },
+  {
+   "machine": "payment",
+   "from": "Sent",
+   "event": "receipt",
+   "guard": "blk == 'foreign' and blk_fin and verified",
+   "to": "Waiting",
+   "effects": [
+    "a finalized foreign transaction, signed by the wallet's key and agreed by the second RPC, took the nonce:",
+    "ask the owner again, saying what happened (C7)"
+   ],
+   "hazards": [
+    "H-167",
+    "H-168"
+   ],
+   "rules": [
+    "C7"
+   ],
+   "tla": "Track"
+  },
+  {
+   "machine": "payment",
+   "from": "Sent",
+   "event": "receipt",
+   "guard": "blk == 'foreign' and blk_fin and not verified",
+   "to": "Sent",
+   "effects": [
+    "the lane stays frozen: 'the RPC's claim cannot be verified'; never re-sign on one source's word"
+   ],
+   "hazards": [
+    "H-168",
+    "H-186"
+   ],
+   "rules": [
+    "C7"
+   ],
+   "tla": "LieForeign"
+  },
+  {
+   "machine": "payment",
+   "from": "Sent",
+   "event": "receipt",
+   "guard": "blk == 'foreign' and not blk_fin",
+   "to": "Sent",
+   "effects": [
+    "wait for finalized; never re-sign at latest"
+   ],
+   "hazards": [
+    "H-167"
+   ],
+   "rules": [
+    "C7"
+   ],
+   "tla": "Track"
+  },
+  {
+   "machine": "payment",
+   "from": "Sent",
+   "event": "receipt",
+   "guard": "blk == 'none'",
+   "to": "Sent",
+   "effects": [
+    "keep rebroadcasting; absence of a receipt never ends it"
+   ],
+   "hazards": [
+    "H-179",
+    "H-180"
+   ],
+   "rules": [
+    "C12"
+   ],
+   "tla": "Track"
+  },
+  {
+   "machine": "payment",
+   "from": "Included",
+   "event": "reorg",
+   "guard": "True",
+   "to": "Sent",
+   "effects": [
+    "back to Sent; rebroadcast in nonce order"
+   ],
+   "hazards": [
+    "H-176",
+    "H-181"
+   ],
+   "rules": [
+    "C5",
+    "C12"
+   ],
+   "tla": "Reorg"
+  },
+  {
+   "machine": "payment",
+   "from": "Included",
+   "event": "finality",
+   "guard": "blk_fin and blk == 'own_cancel'",
+   "to": "Cancelled",
+   "effects": [
+    "the owner's cancel replacement is final: 'Not paid: cancelled' (the fee is spent)"
+   ],
+   "hazards": [
+    "H-124"
+   ],
+   "rules": [
+    "C12",
+    "C13"
+   ],
+   "tla": "Settle"
+  },
+  {
+   "machine": "payment",
+   "from": "Included",
+   "event": "finality",
+   "guard": "blk_fin and blk != 'own_cancel' and blk_ok",
+   "to": "Confirmed",
+   "effects": [
+    "the paying version is final: tell the chat it is confirmed (Confirmed only at finalized, C12)"
+   ],
+   "hazards": [
+    "H-112",
+    "H-201"
+   ],
+   "rules": [
+    "C12"
+   ],
+   "tla": "Settle"
+  },
+  {
+   "machine": "payment",
+   "from": "Included",
+   "event": "finality",
+   "guard": "blk_fin and blk != 'own_cancel' and not blk_ok and verified",
+   "to": "Failed",
+   "effects": [
+    "status 0, final and agreed by the second RPC: tell the chat it failed (C12)"
+   ],
+   "hazards": [
+    "H-147",
+    "H-189"
+   ],
+   "rules": [
+    "C12"
+   ],
+   "tla": "Settle"
+  },
+  {
+   "machine": "payment",
+   "from": "Included",
+   "event": "finality",
+   "guard": "blk_fin and blk != 'own_cancel' and not blk_ok and not verified",
+   "to": "Included",
+   "effects": [
+    "a status 0 one source reports is not an outcome: stay Included and say the claim cannot be verified"
+   ],
+   "hazards": [
+    "H-189"
+   ],
+   "rules": [
+    "C12"
+   ],
+   "tla": "LieStatus0"
+  },
+  {
+   "machine": "payment",
+   "from": "Included",
+   "event": "finality",
+   "guard": "not blk_fin",
+   "to": "Included",
+   "effects": [
+    "shown as Included until final"
+   ],
+   "hazards": [
+    "H-181"
+   ],
+   "rules": [
+    "C12"
+   ],
+   "tla": "Settle"
+  },
+  {
+   "machine": "payment",
+   "from": "Idle",
+   "event": "crash",
+   "guard": "True",
+   "to": "Idle",
+   "effects": [
+    "resume from the last commit: the signer's bytes are lost before the start commit, kept after it"
+   ],
+   "hazards": [
+    "H-114",
+    "H-115",
+    "H-116",
+    "H-117",
+    "H-119",
+    "H-120",
+    "H-121"
+   ],
+   "rules": [
+    "C4",
+    "C6",
+    "C13"
+   ],
+   "tla": "Crash"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "crash",
+   "guard": "True",
+   "to": "Waiting",
+   "effects": [
+    "resume from the last commit: the signer's bytes are lost before the start commit, kept after it"
+   ],
+   "hazards": [
+    "H-114",
+    "H-115",
+    "H-116",
+    "H-117",
+    "H-119",
+    "H-120",
+    "H-121"
+   ],
+   "rules": [
+    "C4",
+    "C6",
+    "C13"
+   ],
+   "tla": "Crash"
+  },
+  {
+   "machine": "payment",
+   "from": "Queued",
+   "event": "crash",
+   "guard": "True",
+   "to": "Queued",
+   "effects": [
+    "resume from the last commit: the signer's bytes are lost before the start commit, kept after it"
+   ],
+   "hazards": [
+    "H-114",
+    "H-115",
+    "H-116",
+    "H-117",
+    "H-119",
+    "H-120",
+    "H-121"
+   ],
+   "rules": [
+    "C4",
+    "C6",
+    "C13"
+   ],
+   "tla": "Crash"
+  },
+  {
+   "machine": "payment",
+   "from": "Signed",
+   "event": "crash",
+   "guard": "True",
+   "to": "Signed",
+   "effects": [
+    "resume from the last commit: the signer's bytes are lost before the start commit, kept after it"
+   ],
+   "hazards": [
+    "H-114",
+    "H-115",
+    "H-116",
+    "H-117",
+    "H-119",
+    "H-120",
+    "H-121"
+   ],
+   "rules": [
+    "C4",
+    "C6",
+    "C13"
+   ],
+   "tla": "Crash"
+  },
+  {
+   "machine": "payment",
+   "from": "Sent",
+   "event": "crash",
+   "guard": "True",
+   "to": "Sent",
+   "effects": [
+    "resume from the last commit: the signer's bytes are lost before the start commit, kept after it"
+   ],
+   "hazards": [
+    "H-114",
+    "H-115",
+    "H-116",
+    "H-117",
+    "H-119",
+    "H-120",
+    "H-121"
+   ],
+   "rules": [
+    "C4",
+    "C6",
+    "C13"
+   ],
+   "tla": "Crash"
+  },
+  {
+   "machine": "payment",
+   "from": "Included",
+   "event": "crash",
+   "guard": "True",
+   "to": "Included",
+   "effects": [
+    "resume from the last commit: the signer's bytes are lost before the start commit, kept after it"
+   ],
+   "hazards": [
+    "H-114",
+    "H-115",
+    "H-116",
+    "H-117",
+    "H-119",
+    "H-120",
+    "H-121"
+   ],
+   "rules": [
+    "C4",
+    "C6",
+    "C13"
+   ],
+   "tla": "Crash"
+  },
+  {
+   "machine": "payment",
+   "from": "Idle",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "Idle",
+   "effects": [
+    "every wallet commit is synced before its result is acknowledged or leaves the machine (C21): power loss rolls the",
+    "store back to the last synced commit, which is the last state anyone was told"
+   ],
+   "hazards": [
+    "H-119",
+    "H-120"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "Waiting",
+   "effects": [
+    "every wallet commit is synced before its result is acknowledged or leaves the machine (C21): power loss rolls the",
+    "store back to the last synced commit, which is the last state anyone was told"
+   ],
+   "hazards": [
+    "H-119",
+    "H-120"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  },
+  {
+   "machine": "payment",
+   "from": "Queued",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "Queued",
+   "effects": [
+    "every wallet commit is synced before its result is acknowledged or leaves the machine (C21): power loss rolls the",
+    "store back to the last synced commit, which is the last state anyone was told"
+   ],
+   "hazards": [
+    "H-119",
+    "H-120"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  },
+  {
+   "machine": "payment",
+   "from": "Signed",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "Signed",
+   "effects": [
+    "every wallet commit is synced before its result is acknowledged or leaves the machine (C21): power loss rolls the",
+    "store back to the last synced commit, which is the last state anyone was told"
+   ],
+   "hazards": [
+    "H-119",
+    "H-120"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  },
+  {
+   "machine": "payment",
+   "from": "Sent",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "Sent",
+   "effects": [
+    "every wallet commit is synced before its result is acknowledged or leaves the machine (C21): power loss rolls the",
+    "store back to the last synced commit, which is the last state anyone was told"
+   ],
+   "hazards": [
+    "H-119",
+    "H-120"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  },
+  {
+   "machine": "payment",
+   "from": "Included",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "Included",
+   "effects": [
+    "every wallet commit is synced before its result is acknowledged or leaves the machine (C21): power loss rolls the",
+    "store back to the last synced commit, which is the last state anyone was told"
+   ],
+   "hazards": [
+    "H-119",
+    "H-120"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  },
+  {
+   "machine": "payment",
+   "from": "Waiting",
+   "event": "restore_backup",
+   "guard": "True",
+   "to": "Restored",
+   "effects": [
+    "the backup held it before its burn point: it may have been paid since, so it is never resumed",
+    "'Not paid: restored from a backup; ask the agent again'; the lane is frozen until the owner reviews (C16)"
+   ],
+   "hazards": [
+    "H-285"
+   ],
+   "rules": [
+    "C5",
+    "C16"
+   ],
+   "tla": "Restore"
+  },
+  {
+   "machine": "payment",
+   "from": "Queued",
+   "event": "restore_backup",
+   "guard": "True",
+   "to": "Restored",
+   "effects": [
+    "the backup held it before its burn point: it may have been paid since, so it is never resumed",
+    "'Not paid: restored from a backup; ask the agent again'; the lane is frozen until the owner reviews (C16)"
+   ],
+   "hazards": [
+    "H-285"
+   ],
+   "rules": [
+    "C5",
+    "C16"
+   ],
+   "tla": "Restore"
+  },
+  {
+   "machine": "payment",
+   "from": "Idle",
+   "event": "restore_backup",
+   "guard": "True",
+   "to": "Idle",
+   "effects": [
+    "past the burn point in the backup: its stored versions are tracked again against the chain"
+   ],
+   "hazards": [
+    "H-285"
+   ],
+   "rules": [
+    "C6",
+    "C16"
+   ],
+   "tla": "Restore"
+  },
+  {
+   "machine": "payment",
+   "from": "Signed",
+   "event": "restore_backup",
+   "guard": "True",
+   "to": "Signed",
+   "effects": [
+    "past the burn point in the backup: its stored versions are tracked again against the chain"
+   ],
+   "hazards": [
+    "H-285"
+   ],
+   "rules": [
+    "C6",
+    "C16"
+   ],
+   "tla": "Restore"
+  },
+  {
+   "machine": "payment",
+   "from": "Sent",
+   "event": "restore_backup",
+   "guard": "True",
+   "to": "Sent",
+   "effects": [
+    "past the burn point in the backup: its stored versions are tracked again against the chain"
+   ],
+   "hazards": [
+    "H-285"
+   ],
+   "rules": [
+    "C6",
+    "C16"
+   ],
+   "tla": "Restore"
+  },
+  {
+   "machine": "payment",
+   "from": "Included",
+   "event": "restore_backup",
+   "guard": "True",
+   "to": "Sent",
+   "effects": [
+    "tracked again from Sent: the chain decides"
+   ],
+   "hazards": [
+    "H-285"
+   ],
+   "rules": [
+    "C12",
+    "C16"
+   ],
+   "tla": "Restore"
+  },
+  {
+   "machine": "nonce",
+   "from": "free",
+   "event": "lane_turn",
+   "guard": "queued and can_sign and not chain_ahead",
+   "to": "signing",
+   "effects": [
+    "sign the head of the FIFO at the ledger"
+   ],
+   "hazards": [
+    "H-164",
+    "H-254"
+   ],
+   "rules": [
+    "C2",
+    "C4"
+   ],
+   "tla": "Sign"
+  },
+  {
+   "machine": "nonce",
+   "from": "free",
+   "event": "lane_turn",
+   "guard": "queued and not can_sign and not chain_ahead",
+   "to": "free",
+   "effects": [
+    "one owner Wait for the lane (unlock, restore, lease); nothing burnt"
+   ],
+   "hazards": [
+    "H-026",
+    "H-027"
+   ],
+   "rules": [
+    "C4",
+    "C16"
+   ],
+   "tla": "Sign"
+  },
+  {
+   "machine": "nonce",
+   "from": "free",
+   "event": "lane_turn",
+   "guard": "not queued and not chain_ahead",
+   "to": "free",
+   "effects": [],
+   "hazards": [
+    "H-202"
+   ],
+   "rules": [],
+   "tla": "Sign"
+  },
+  {
+   "machine": "nonce",
+   "from": "free",
+   "event": "lane_turn",
+   "guard": "chain_ahead",
+   "to": "blocked",
+   "effects": [
+    "an unexplained count above the ledger: block new starts"
+   ],
+   "hazards": [
+    "H-166",
+    "H-171"
+   ],
+   "rules": [
+    "C5",
+    "C21"
+   ],
+   "tla": "Sign"
+  },
+  {
+   "machine": "nonce",
+   "from": "signing",
+   "event": "start_commit",
+   "guard": "not ledger_moved and recheck_ok",
+   "to": "in_flight",
+   "effects": [
+    "nonce = ledger; ledger + 1 in the same commit"
+   ],
+   "hazards": [
+    "H-112",
+    "H-165"
+   ],
+   "rules": [
+    "C4",
+    "C5"
+   ],
+   "tla": "StartCommit"
+  },
+  {
+   "machine": "nonce",
+   "from": "signing",
+   "event": "start_commit",
+   "guard": "ledger_moved or not recheck_ok",
+   "to": "free",
+   "effects": [
+    "drop the bytes; nothing burnt"
+   ],
+   "hazards": [
+    "H-118",
+    "H-171"
+   ],
+   "rules": [
+    "C4"
+   ],
+   "tla": "Redo"
+  },
+  {
+   "machine": "nonce",
+   "from": "signing",
+   "event": "crash",
+   "guard": "True",
+   "to": "free",
+   "effects": [
+    "the bytes in the signer's memory are lost; nothing was committed"
+   ],
+   "hazards": [
+    "H-117"
+   ],
+   "rules": [
+    "C4"
+   ],
+   "tla": "Crash"
+  },
+  {
+   "machine": "nonce",
+   "from": "in_flight",
+   "event": "included_latest",
+   "guard": "not more_in_flight",
+   "to": "free",
+   "effects": [
+    "the next effect may start (one in flight)"
+   ],
+   "hazards": [
+    "H-112"
+   ],
+   "rules": [
+    "C5"
+   ],
+   "tla": "Track"
+  },
+  {
+   "machine": "nonce",
+   "from": "in_flight",
+   "event": "included_latest",
+   "guard": "more_in_flight",
+   "to": "in_flight",
+   "effects": [
+    "after a reorg: the next stored nonce is still in flight"
+   ],
+   "hazards": [
+    "H-176"
+   ],
+   "rules": [
+    "C5"
+   ],
+   "tla": "Track"
+  },
+  {
+   "machine": "nonce",
+   "from": "in_flight",
+   "event": "foreign_at_nonce",
+   "guard": "above_final and verified",
+   "to": "free",
+   "effects": [
+    "release the effect to the owner (C7); the ledger stays above it"
+   ],
+   "hazards": [
+    "H-167"
+   ],
+   "rules": [
+    "C7"
+   ],
+   "tla": "Track"
+  },
+  {
+   "machine": "nonce",
+   "from": "in_flight",
+   "event": "foreign_at_nonce",
+   "guard": "above_final and not verified",
+   "to": "in_flight",
+   "effects": [
+    "frozen: the foreign transaction is not proven by its signature and a second RPC (TA-4)"
+   ],
+   "hazards": [
+    "H-168"
+   ],
+   "rules": [
+    "C7"
+   ],
+   "tla": "Track"
+  },
+  {
+   "machine": "nonce",
+   "from": "in_flight",
+   "event": "foreign_at_nonce",
+   "guard": "not above_final",
+   "to": "in_flight",
+   "effects": [
+    "wait for finalized"
+   ],
+   "hazards": [
+    "H-167"
+   ],
+   "rules": [
+    "C7"
+   ],
+   "tla": "Track"
+  },
+  {
+   "machine": "nonce",
+   "from": "in_flight",
+   "event": "reorg_undoes_inclusion",
+   "guard": "True",
+   "to": "in_flight",
+   "effects": [
+    "the effect is Sent again; rebroadcast consecutive nonces in order"
+   ],
+   "hazards": [
+    "H-176",
+    "H-181"
+   ],
+   "rules": [
+    "C5",
+    "C12"
+   ],
+   "tla": "Reorg"
+  },
+  {
+   "machine": "nonce",
+   "from": "free",
+   "event": "reorg_undoes_inclusion",
+   "guard": "True",
+   "to": "in_flight",
+   "effects": [
+    "the effect is Sent again; rebroadcast consecutive nonces in order"
+   ],
+   "hazards": [
+    "H-176",
+    "H-181"
+   ],
+   "rules": [
+    "C5",
+    "C12"
+   ],
+   "tla": "Reorg"
+  },
+  {
+   "machine": "nonce",
+   "from": "in_flight",
+   "event": "crash",
+   "guard": "True",
+   "to": "in_flight",
+   "effects": [
+    "rebroadcast the committed bytes; no new nonce"
+   ],
+   "hazards": [
+    "H-113",
+    "H-119"
+   ],
+   "rules": [
+    "C6"
+   ],
+   "tla": "Crash"
+  },
+  {
+   "machine": "nonce",
+   "from": "signing",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "free",
+   "effects": [
+    "the signer's bytes are lost; nothing was committed"
+   ],
+   "hazards": [
+    "H-117"
+   ],
+   "rules": [
+    "C4",
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  },
+  {
+   "machine": "nonce",
+   "from": "free",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "free",
+   "effects": [
+    "the start commit was synced before its bytes left (C21): the ledger and the stored versions survive"
+   ],
+   "hazards": [
+    "H-119",
+    "H-165"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  },
+  {
+   "machine": "nonce",
+   "from": "in_flight",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "in_flight",
+   "effects": [
+    "the start commit was synced before its bytes left (C21): the ledger and the stored versions survive"
+   ],
+   "hazards": [
+    "H-119",
+    "H-165"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  },
+  {
+   "machine": "nonce",
+   "from": "blocked",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "blocked",
+   "effects": [
+    "the start commit was synced before its bytes left (C21): the ledger and the stored versions survive"
+   ],
+   "hazards": [
+    "H-119",
+    "H-165"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  },
+  {
+   "machine": "nonce",
+   "from": "blocked",
+   "event": "finality",
+   "guard": "above_final",
+   "to": "free",
+   "effects": [
+    "raise the ledger to the chain's count (never lower)"
+   ],
+   "hazards": [
+    "H-166",
+    "H-171"
+   ],
+   "rules": [
+    "C5"
+   ],
+   "tla": "RaiseLedger"
+  },
+  {
+   "machine": "nonce",
+   "from": "blocked",
+   "event": "finality",
+   "guard": "not above_final",
+   "to": "blocked",
+   "effects": [
+    "wait; a reorg may still remove the foreign transaction"
+   ],
+   "hazards": [
+    "H-171"
+   ],
+   "rules": [
+    "C5"
+   ],
+   "tla": "RaiseLedger"
+  },
+  {
+   "machine": "x402",
+   "from": "none",
+   "event": "proxy_sees_402",
+   "guard": "verified",
+   "to": "observed",
+   "effects": [
+    "record the observation (chat, URL as reached over TLS, requirement as received)",
+    "sync before the 402 reaches the box (C21)"
+   ],
+   "hazards": [
+    "H-216",
+    "H-229",
+    "H-231"
+   ],
+   "rules": [
+    "C18",
+    "C21"
+   ],
+   "tla": "Observe"
+  },
+  {
+   "machine": "x402",
+   "from": "none",
+   "event": "proxy_sees_402",
+   "guard": "not verified",
+   "to": "none",
+   "effects": [
+    "no observation: unknown asset, scheme, network or domain"
+   ],
+   "hazards": [
+    "H-224",
+    "H-231",
+    "H-232"
+   ],
+   "rules": [
+    "C18"
+   ],
+   "tla": "Observe"
+  },
+  {
+   "machine": "x402",
+   "from": "observed",
+   "event": "call",
+   "guard": "not same_chat",
+   "to": "observed",
+   "effects": [
+    "refuse: another chat's observation (C18)"
+   ],
+   "hazards": [
+    "H-218",
+    "H-221"
+   ],
+   "rules": [
+    "C18"
+   ],
+   "tla": "Call"
+  },
+  {
+   "machine": "x402",
+   "from": "observed",
+   "event": "call",
+   "guard": "same_chat and eff == 'deny'",
+   "to": "refused",
+   "effects": [
+    "'the owner doesn't pay this endpoint'"
+   ],
+   "hazards": [
+    "H-076"
+   ],
+   "rules": [
+    "C3",
+    "C18"
+   ],
+   "tla": "Call"
+  },
+  {
+   "machine": "x402",
+   "from": "observed",
+   "event": "call",
+   "guard": "same_chat and eff != 'deny' and not fits",
+   "to": "refused",
+   "effects": [
+    "refused with the available amount"
+   ],
+   "hazards": [
+    "H-240"
+   ],
+   "rules": [
+    "C11"
+   ],
+   "tla": "Call"
+  },
+  {
+   "machine": "x402",
+   "from": "observed",
+   "event": "call",
+   "guard": "same_chat and eff == 'always' and fits",
+   "to": "authorizing",
+   "effects": [
+    "reserve (C11)"
+   ],
+   "hazards": [
+    "H-216",
+    "H-238"
+   ],
+   "rules": [
+    "C11",
+    "C18"
+   ],
+   "tla": "Call"
+  },
+  {
+   "machine": "x402",
+   "from": "observed",
+   "event": "call",
+   "guard": "same_chat and eff == 'ask' and fits",
+   "to": "waiting",
+   "effects": [
+    "open the card: endpoint, payTo, amount"
+   ],
+   "hazards": [
+    "H-216",
+    "H-223"
+   ],
+   "rules": [
+    "C18"
+   ],
+   "tla": "Call"
+  },
+  {
+   "machine": "x402",
+   "from": "waiting",
+   "event": "card_pay",
+   "guard": "window_left and not host_ok",
+   "to": "waiting",
+   "effects": [
+    "a paired device's Pay to an endpoint the host never confirmed: the card stays a host Wait"
+   ],
+   "hazards": [
+    "H-277",
+    "H-280"
+   ],
+   "rules": [
+    "C9",
+    "C16"
+   ],
+   "tla": "Pay"
+  },
+  {
+   "machine": "x402",
+   "from": "waiting",
+   "event": "card_pay",
+   "guard": "window_left and host_ok",
+   "to": "authorizing",
+   "effects": [
+    "approve this one (R-9: sign now with a fresh window)"
+   ],
+   "hazards": [
+    "H-241"
+   ],
+   "rules": [
+    "C10",
+    "C19"
+   ],
+   "tla": "Pay"
+  },
+  {
+   "machine": "x402",
+   "from": "waiting",
+   "event": "card_pay",
+   "guard": "not window_left",
+   "to": "notpaid",
+   "effects": [
+    "'Not paid: the request expired'"
+   ],
+   "hazards": [
+    "H-241"
+   ],
+   "rules": [
+    "C10"
+   ],
+   "tla": "Pay"
+  },
+  {
+   "machine": "x402",
+   "from": "waiting",
+   "event": "card_always",
+   "guard": "window_left and not host_ok",
+   "to": "waiting",
+   "effects": [
+    "Always from a paired device on an endpoint the host never confirmed: a host Wait"
+   ],
+   "hazards": [
+    "H-277",
+    "H-280"
+   ],
+   "rules": [
+    "C9",
+    "C16"
+   ],
+   "tla": "AlwaysPay"
+  },
+  {
+   "machine": "x402",
+   "from": "waiting",
+   "event": "card_always",
+   "guard": "window_left and host_ok",
+   "to": "authorizing",
+   "effects": [
+    "Always for (agent, endpoint, payTo, asset, network)"
+   ],
+   "hazards": [
+    "H-216",
+    "H-223"
+   ],
+   "rules": [
+    "C9",
+    "C18"
+   ],
+   "tla": "AlwaysPay"
+  },
+  {
+   "machine": "x402",
+   "from": "waiting",
+   "event": "card_always",
+   "guard": "not window_left",
+   "to": "notpaid",
+   "effects": [
+    "set Always; this one expired"
+   ],
+   "hazards": [
+    "H-241"
+   ],
+   "rules": [
+    "C10"
+   ],
+   "tla": "AlwaysPay"
+  },
+  {
+   "machine": "x402",
+   "from": "waiting",
+   "event": "card_never",
+   "guard": "True",
+   "to": "refused",
+   "effects": [
+    "Deny for the key; sweep its open asks"
+   ],
+   "hazards": [
+    "H-084"
+   ],
+   "rules": [
+    "C9"
+   ],
+   "tla": "NeverPay"
+  },
+  {
+   "machine": "x402",
+   "from": "waiting",
+   "event": "card_dont_pay",
+   "guard": "True",
+   "to": "refused",
+   "effects": [],
+   "hazards": [],
+   "rules": [
+    "C9"
+   ],
+   "tla": "DontPay"
+  },
+  {
+   "machine": "x402",
+   "from": "waiting",
+   "event": "deadline",
+   "guard": "True",
+   "to": "notpaid",
+   "effects": [
+    "24 h with no answer or no start"
+   ],
+   "hazards": [
+    "H-241",
+    "H-310"
+   ],
+   "rules": [
+    "C10"
+   ],
+   "tla": "Deadline"
+  },
+  {
+   "machine": "x402",
+   "from": "authorizing",
+   "event": "deadline",
+   "guard": "True",
+   "to": "notpaid",
+   "effects": [
+    "24 h with no answer or no start"
+   ],
+   "hazards": [
+    "H-241",
+    "H-310"
+   ],
+   "rules": [
+    "C10"
+   ],
+   "tla": "Deadline"
+  },
+  {
+   "machine": "x402",
+   "from": "authorizing",
+   "event": "authorization_commit",
+   "guard": "eff == 'deny'",
+   "to": "refused",
+   "effects": [
+    "a Deny committed meanwhile"
+   ],
+   "hazards": [
+    "H-086"
+   ],
+   "rules": [
+    "C4"
+   ],
+   "tla": "Authorize"
+  },
+  {
+   "machine": "x402",
+   "from": "authorizing",
+   "event": "authorization_commit",
+   "guard": "eff != 'deny' and eff != 'always' and not approved",
+   "to": "waiting",
+   "effects": [
+    "Always revoked meanwhile: ask again"
+   ],
+   "hazards": [
+    "H-087"
+   ],
+   "rules": [
+    "C4"
+   ],
+   "tla": "Authorize"
+  },
+  {
+   "machine": "x402",
+   "from": "authorizing",
+   "event": "authorization_commit",
+   "guard": "eff != 'deny' and (eff == 'always' or approved) and not fits",
+   "to": "refused",
+   "effects": [
+    "the balance dropped (C11)"
+   ],
+   "hazards": [
+    "H-239",
+    "H-240"
+   ],
+   "rules": [
+    "C11"
+   ],
+   "tla": "Authorize"
+  },
+  {
+   "machine": "x402",
+   "from": "authorizing",
+   "event": "authorization_commit",
+   "guard": "eff != 'deny' and (eff == 'always' or approved) and fits",
+   "to": "authorized",
+   "effects": [
+    "nonce = keccak256('banda/x402' || wallet || observation id) (R-5)",
+    "validAfter = min(c, w) - 5 s, validBefore = max(c, w) + min(maxTimeoutSeconds, 60 s), c the latest block's time, w the wall clock (C19)",
+    "domain from banda's chain definition (H-224)",
+    "commit message and nonce before any signature exists"
+   ],
+   "hazards": [
+    "H-216",
+    "H-225",
+    "H-227",
+    "H-250"
+   ],
+   "rules": [
+    "C14",
+    "C19",
+    "C21"
+   ],
+   "tla": "Authorize"
+  },
+  {
+   "machine": "x402",
+   "from": "authorized",
+   "event": "hand_header",
+   "guard": "synced",
+   "to": "handed",
+   "effects": [
+    "the signer signs the stored message in its memory (SignAuth)",
+    "give the box PAYMENT-SIGNATURE (Give)",
+    "commit handed (CommitHanded); a crash between them re-signs the same message: same derived nonce"
+   ],
+   "hazards": [
+    "H-226",
+    "H-234"
+   ],
+   "rules": [
+    "C20",
+    "C21"
+   ],
+   "tla": "Give"
+  },
+  {
+   "machine": "x402",
+   "from": "authorized",
+   "event": "hand_header",
+   "guard": "not synced",
+   "to": "authorized",
+   "effects": [
+    "wait for the sync (C21)"
+   ],
+   "hazards": [
+    "H-235"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "SignAuth"
+  },
+  {
+   "machine": "x402",
+   "from": "authorized",
+   "event": "agent_pays_again",
+   "guard": "True",
+   "to": "authorized",
+   "effects": [
+    "return the stored authorization: same derived nonce (C14)"
+   ],
+   "hazards": [
+    "H-227",
+    "H-228"
+   ],
+   "rules": [
+    "C14"
+   ],
+   "tla": "Call"
+  },
+  {
+   "machine": "x402",
+   "from": "handed",
+   "event": "agent_pays_again",
+   "guard": "True",
+   "to": "handed",
+   "effects": [
+    "return the stored authorization: same derived nonce (C14)"
+   ],
+   "hazards": [
+    "H-227",
+    "H-228"
+   ],
+   "rules": [
+    "C14"
+   ],
+   "tla": "Call"
+  },
+  {
+   "machine": "x402",
+   "from": "handed",
+   "event": "follow",
+   "guard": "event == 'used' and event_fin",
+   "to": "settled",
+   "effects": [
+    "record the settlement; release the reservation"
+   ],
+   "hazards": [
+    "H-245",
+    "H-249"
+   ],
+   "rules": [
+    "C12"
+   ],
+   "tla": "Track"
+  },
+  {
+   "machine": "x402",
+   "from": "handed",
+   "event": "follow",
+   "guard": "event == 'cancelled' and event_fin",
+   "to": "cancelled",
+   "effects": [
+    "the owner's cancelAuthorization landed first"
+   ],
+   "hazards": [
+    "H-242",
+    "H-251"
+   ],
+   "rules": [
+    "C12"
+   ],
+   "tla": "Track"
+  },
+  {
+   "machine": "x402",
+   "from": "handed",
+   "event": "follow",
+   "guard": "event != 'none' and not event_fin",
+   "to": "handed",
+   "effects": [
+    "shown as reported until final"
+   ],
+   "hazards": [
+    "H-236",
+    "H-245"
+   ],
+   "rules": [
+    "C12"
+   ],
+   "tla": "Track"
+  },
+  {
+   "machine": "x402",
+   "from": "handed",
+   "event": "follow",
+   "guard": "event == 'none' and vb_passed_fin",
+   "to": "expired",
+   "effects": [
+    "no settlement can appear any more: Expired, release the reservation (C19)"
+   ],
+   "hazards": [
+    "H-237"
+   ],
+   "rules": [
+    "C11",
+    "C19"
+   ],
+   "tla": "Track"
+  },
+  {
+   "machine": "x402",
+   "from": "handed",
+   "event": "follow",
+   "guard": "event == 'none' and not vb_passed_fin",
+   "to": "handed",
+   "effects": [
+    "keep the reservation"
+   ],
+   "hazards": [
+    "H-239"
+   ],
+   "rules": [
+    "C11"
+   ],
+   "tla": "Track"
+  },
+  {
+   "machine": "x402",
+   "from": "observed",
+   "event": "crash",
+   "guard": "True",
+   "to": "observed",
+   "effects": [
+    "resume from the last commit; a re-sign yields the same derived nonce"
+   ],
+   "hazards": [
+    "H-234",
+    "H-235",
+    "H-248"
+   ],
+   "rules": [
+    "C14",
+    "C21"
+   ],
+   "tla": "Crash"
+  },
+  {
+   "machine": "x402",
+   "from": "waiting",
+   "event": "crash",
+   "guard": "True",
+   "to": "waiting",
+   "effects": [
+    "resume from the last commit; a re-sign yields the same derived nonce"
+   ],
+   "hazards": [
+    "H-234",
+    "H-235",
+    "H-248"
+   ],
+   "rules": [
+    "C14",
+    "C21"
+   ],
+   "tla": "Crash"
+  },
+  {
+   "machine": "x402",
+   "from": "authorizing",
+   "event": "crash",
+   "guard": "True",
+   "to": "authorizing",
+   "effects": [
+    "resume from the last commit; a re-sign yields the same derived nonce"
+   ],
+   "hazards": [
+    "H-234",
+    "H-235",
+    "H-248"
+   ],
+   "rules": [
+    "C14",
+    "C21"
+   ],
+   "tla": "Crash"
+  },
+  {
+   "machine": "x402",
+   "from": "authorized",
+   "event": "crash",
+   "guard": "True",
+   "to": "authorized",
+   "effects": [
+    "resume from the last commit; a re-sign yields the same derived nonce"
+   ],
+   "hazards": [
+    "H-234",
+    "H-235",
+    "H-248"
+   ],
+   "rules": [
+    "C14",
+    "C21"
+   ],
+   "tla": "Crash"
+  },
+  {
+   "machine": "x402",
+   "from": "handed",
+   "event": "crash",
+   "guard": "True",
+   "to": "handed",
+   "effects": [
+    "resume from the last commit; a re-sign yields the same derived nonce"
+   ],
+   "hazards": [
+    "H-234",
+    "H-235",
+    "H-248"
+   ],
+   "rules": [
+    "C14",
+    "C21"
+   ],
+   "tla": "Crash"
+  },
+  {
+   "machine": "x402",
+   "from": "observed",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "observed",
+   "effects": [
+    "every x402 commit is synced before its result reaches the box or the owner (C21)"
+   ],
+   "hazards": [
+    "H-235"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  },
+  {
+   "machine": "x402",
+   "from": "waiting",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "waiting",
+   "effects": [
+    "every x402 commit is synced before its result reaches the box or the owner (C21)"
+   ],
+   "hazards": [
+    "H-235"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  },
+  {
+   "machine": "x402",
+   "from": "authorizing",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "authorizing",
+   "effects": [
+    "every x402 commit is synced before its result reaches the box or the owner (C21)"
+   ],
+   "hazards": [
+    "H-235"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  },
+  {
+   "machine": "x402",
+   "from": "authorized",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "authorized",
+   "effects": [
+    "every x402 commit is synced before its result reaches the box or the owner (C21)"
+   ],
+   "hazards": [
+    "H-235"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  },
+  {
+   "machine": "x402",
+   "from": "handed",
+   "event": "power_loss",
+   "guard": "True",
+   "to": "handed",
+   "effects": [
+    "every x402 commit is synced before its result reaches the box or the owner (C21)"
+   ],
+   "hazards": [
+    "H-235"
+   ],
+   "rules": [
+    "C21"
+   ],
+   "tla": "PowerLoss"
+  }
+ ]
+}

@@ -378,7 +378,6 @@ try {
 		mine: el.hasAttribute('data-mine'), text: el.textContent
 	}))`;
 	let historyBeforeRestart: Static<typeof History> = [];
-	await api("/skills/shipped", { add: [] });
 	await api("/companion", { name: "Sancho", personality: "Brief." }, "PUT");
 	for (const width of [1440, 390]) {
 		await withPage(`${origin}/#token=${published.token}`, { width, height: 900 }, async (page) => {

@@ -14,7 +14,7 @@ import { type Daemon, startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { ChatRow, GroupView, Posted } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, until, type WebServer, webServer } from "./helpers.ts";
+import { tempHome, until, type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 let daemon: Daemon;
@@ -99,7 +99,6 @@ beforeAll(async () => {
 	);
 	daemon = await startDaemon({ home, port: 0, models, box: hostBox(home), log: () => {} });
 	token = (await readDaemonFile(home))!.token!;
-	await skipShippedSkills(daemon.port, token);
 	api = async <T>(path: string, body?: unknown, method?: string): Promise<T> => {
 		const res = await fetch(`http://127.0.0.1:${daemon.port}/api${path}`, {
 			method: method ?? (body === undefined ? "GET" : "POST"),

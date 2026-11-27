@@ -1,0 +1,129 @@
+optimism/auto        split kill after-reserve    s0 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill after-reserve    s1 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill after-reserve    s2 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill after-sign       s0 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill after-sign       s1 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill after-sign       s2 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill after-checkpoint s0 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill after-checkpoint s1 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill after-checkpoint s2 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill mid-broadcast    s0 | first=SIGKILL at-kill mined=1 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill mid-broadcast    s1 | first=SIGKILL at-kill mined=2 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill mid-broadcast    s2 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill after-broadcast  s0 | first=SIGKILL at-kill mined=2 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill after-broadcast  s1 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill after-broadcast  s2 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill after-receipt    s0 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill after-receipt    s1 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        split kill after-receipt    s2 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        fused kill after-commit     s0 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        fused kill after-commit     s1 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        fused kill after-commit     s2 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        fused kill mid-broadcast    s0 | first=SIGKILL at-kill mined=1 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        fused kill mid-broadcast    s1 | first=SIGKILL at-kill mined=2 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        fused kill mid-broadcast    s2 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        fused kill after-broadcast  s0 | first=SIGKILL at-kill mined=2 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        fused kill after-broadcast  s1 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        fused kill after-broadcast  s2 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        fused kill after-receipt    s0 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        fused kill after-receipt    s1 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/auto        fused kill after-receipt    s2 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-reserve    s0 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-reserve    s1 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-reserve    s2 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-sign       s0 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-sign       s1 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-sign       s2 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-checkpoint s0 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-checkpoint s1 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok,known,known,known,known,known,known,nonce-low] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-checkpoint s2 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill mid-broadcast    s0 | first=SIGKILL at-kill mined=0 pool=1+0q | resume=0 victim-broadcast=[known,known,known,known,known,known,known,nonce-low] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill mid-broadcast    s1 | first=SIGKILL at-kill mined=0 pool=2+0q | resume=0 victim-broadcast=[known,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill mid-broadcast    s2 | first=SIGKILL at-kill mined=0 pool=3+0q | resume=0 victim-broadcast=[known,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-broadcast  s0 | first=SIGKILL at-kill mined=0 pool=3+0q | resume=0 victim-broadcast=[known,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-broadcast  s1 | first=SIGKILL at-kill mined=0 pool=3+0q | resume=0 victim-broadcast=[known,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-broadcast  s2 | first=SIGKILL at-kill mined=0 pool=3+0q | resume=0 victim-broadcast=[known,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-receipt    s0 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-receipt    s1 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  split kill after-receipt    s2 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  fused kill after-commit     s0 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  fused kill after-commit     s1 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok,known,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  fused kill after-commit     s2 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  fused kill mid-broadcast    s0 | first=SIGKILL at-kill mined=0 pool=1+0q | resume=0 victim-broadcast=[known,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  fused kill mid-broadcast    s1 | first=SIGKILL at-kill mined=0 pool=2+0q | resume=0 victim-broadcast=[known,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  fused kill mid-broadcast    s2 | first=SIGKILL at-kill mined=0 pool=3+0q | resume=0 victim-broadcast=[known,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  fused kill after-broadcast  s0 | first=SIGKILL at-kill mined=0 pool=3+0q | resume=0 victim-broadcast=[known,known,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  fused kill after-broadcast  s1 | first=SIGKILL at-kill mined=0 pool=3+0q | resume=0 victim-broadcast=[known,known,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  fused kill after-broadcast  s2 | first=SIGKILL at-kill mined=0 pool=3+0q | resume=0 victim-broadcast=[known,known,known,known,known,known,known] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  fused kill after-receipt    s0 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  fused kill after-receipt    s1 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+optimism/interval1s  fused kill after-receipt    s2 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-reserve    s0 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-reserve    s1 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-reserve    s2 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-sign       s0 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-sign       s1 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-sign       s2 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-checkpoint s0 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-checkpoint s1 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-checkpoint s2 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill mid-broadcast    s0 | first=SIGKILL at-kill mined=1 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill mid-broadcast    s1 | first=SIGKILL at-kill mined=2 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill mid-broadcast    s2 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-broadcast  s0 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-broadcast  s1 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-broadcast  s2 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-receipt    s0 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-receipt    s1 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            split kill after-receipt    s2 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            fused kill after-commit     s0 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            fused kill after-commit     s1 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            fused kill after-commit     s2 | first=SIGKILL at-kill mined=0 pool=0+0q | resume=0 victim-broadcast=[ok] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            fused kill mid-broadcast    s0 | first=SIGKILL at-kill mined=1 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            fused kill mid-broadcast    s1 | first=SIGKILL at-kill mined=2 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            fused kill mid-broadcast    s2 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            fused kill after-broadcast  s0 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            fused kill after-broadcast  s1 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            fused kill after-broadcast  s2 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            fused kill after-receipt    s0 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            fused kill after-receipt    s1 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+base/auto            fused kill after-receipt    s2 | first=SIGKILL at-kill mined=3 pool=0+0q | resume=0 victim-broadcast=[] attempts={"s0":1,"s1":1,"s2":1} | OK
+random split run  0 kills=2 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random split run  1 kills=2 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random split run  2 kills=2 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random split run  3 kills=2 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random split run  4 kills=2 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random split run  5 kills=4 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random split run  6 kills=2 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random split run  7 kills=1 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random split run  8 kills=2 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random split run  9 kills=2 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random split run 10 kills=3 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random split run 11 kills=3 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random fused run  0 kills=1 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random fused run  1 kills=2 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random fused run  2 kills=2 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random fused run  3 kills=2 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random fused run  4 kills=1 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random fused run  5 kills=2 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random fused run  6 kills=3 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random fused run  7 kills=2 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random fused run  8 kills=2 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random fused run  9 kills=3 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random fused run 10 kills=1 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+random fused run 11 kills=1 exit=0 attempts={"s0":1,"s1":1,"s2":1,"s3":1,"s4":1} | OK
+bump kill after-bump-sign        kills=1 exit=0 attempts=2 landed=attempt 1 | OK
+bump kill after-bump-checkpoint  kills=1 exit=0 attempts=2 landed=attempt 1 | OK
+bump kill mid-broadcast-bump     kills=1 exit=0 attempts=2 landed=attempt 1 | OK
+bump kill after-broadcast-bump   kills=1 exit=0 attempts=2 landed=attempt 1 | OK
+bump kill after-receipt          kills=1 exit=0 attempts=2 landed=attempt 1 | OK
+bump kill random                 kills=1 exit=0 attempts=2 landed=attempt 1 | OK
+bump kill random                 kills=1 exit=0 attempts=2 landed=attempt 1 | OK
+bump kill random                 kills=0 exit=0 attempts=2 landed=attempt 1 | OK
+bump kill random                 kills=1 exit=0 attempts=2 landed=attempt 1 | OK
+bump kill random                 kills=0 exit=0 attempts=2 landed=attempt 1 | OK
+bump kill random                 kills=0 exit=0 attempts=2 landed=attempt 1 | OK
+bump kill random                 kills=1 exit=0 attempts=2 landed=attempt 1 | OK
+bump kill random                 kills=0 exit=0 attempts=2 landed=attempt 1 | OK
+
+127/127 runs held the invariants (one tx per send on chain, nonces contiguous, store confirmed, ledger == chain nonce)

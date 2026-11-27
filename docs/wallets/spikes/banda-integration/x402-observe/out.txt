@@ -1,0 +1,8 @@
+== upstream CA trusted by the proxy
+{"status": 402, "x-banda-challenge": "c0ae729226c3de765af4cdfe", "payment-required": "eyJ4NDAyVmVyc2lvbiI6IDIsICJyZXNvdXJjZSI6\u2026", "body": "{\"error\":\"payment required\"}"}
+-- observations:
+{"id": "c0ae729226c3de765af4cdfe", "scheme": "https", "host": "pay.test", "port": 8443, "sni": "pay.test", "server_address": ["192.168.97.2", 8443], "server_sni": "pay.test", "path": "/v1/forecast?city=lisbon&units=c", "method": "GET", "payment_required": "eyJ4NDAyVmVyc2lvbiI6IDIsICJyZXNvdXJjZSI6IHsidXJsIjogImh0dHBzOi8vcGF5LnRlc3Q6ODQ0My92MS9mb3JlY2FzdCJ9LCAiYWNjZXB0cyI6IFt7InNjaGVtZSI6ICJleGFjdCIsICJuZXR3b3JrIjogImVpcDE1NTo4NDUzMiIsICJhbW91bnQiOiAiMTAwMDAiLCAiYXNzZXQiOiAiMHgwMzZDYkQ1Mzg0MmM1NDI2NjM0ZTc5Mjk1NDFlQzIzMThmM2RDRjdlIiwgInBheVRvIjogIjB4MTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMSIsICJtYXhUaW1lb3V0U2Vjb25kcyI6IDYwLCAiZXh0cmEiOiB7Im5hbWUiOiAiVVNEQyIsICJ2ZXJzaW9uIjogIjIifX1dfQ=="}
+== upstream CA not trusted (mitmproxy defaults: certifi)
+{"status": 502, "x-banda-challenge": null, "payment-required": "\u2026", "body": "<html>\n<head>\n    <title>502 Bad Gateway</title>\n</head>\n<body>\n    <h1>502 Bad Gateway</h1>\n    <p>Certificate verify failed: unable to get local issuer certif"}
+-- observations:
+(none)

@@ -1,0 +1,88 @@
+@startuml uc-owner
+!include style.iuml
+title Use cases (1 of 2): the owner's wallets, access and recipients (requirements 1, 3 to 7)
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Owner\n(app on the computer\nbanda runs on)" as Owner
+actor "Owner on a paired device\n(phone app, browser device)" as Device
+
+rectangle "banda: Settings → Wallets, agent settings, chat cards" {
+  package "Lifecycle (req. 1, 5)" {
+    usecase "Create wallet\n(name, one network)" as UC_Create
+    usecase "Save the key at creation\n(Show on the host, copy)" as UC_Save
+    usecase "Confirm the saved key\n(paste back, derive, compare)" as UC_Confirm
+    usecase "Skip saving\n(marked Not backed up)" as UC_Skip
+    usecase "Show private key later\n(host, OS re-authentication)" as UC_Reveal
+    usecase "Restore key\n(existing record only, OD-6)" as UC_Restore
+    usecase "Archive / unarchive" as UC_Archive
+    usecase "Remove wallet\n(empty, nothing in flight)" as UC_Remove
+    usecase "Choose the RPC endpoint" as UC_RPC
+  }
+  package "Wallet app (req. 7)" {
+    usecase "Receive\n(address and QR)" as UC_Receive
+    usecase "Send\n(review, client request id)" as UC_Send
+    usecase "See the transaction list" as UC_TxList
+    usecase "Cancel or speed up\na sent payment" as UC_Bump
+  }
+  package "Access (req. 6)" {
+    usecase "Switch a wallet on or off\nfor an agent" as UC_Assign
+  }
+  package "Recipients and rules (req. 3, 4)" {
+    usecase "Answer a payment card\nPay · Always pay · Don't pay · Never pay" as UC_Card
+    usecase "Set a recipient's rule\nAlways · Ask · Deny" as UC_Rule
+    usecase "Rename a recipient\n(label only, never identity)" as UC_Rename
+    usecase "Forget a recipient" as UC_Forget
+    usecase "Set the default for unknown\nrecipients (Ask or Deny)" as UC_Default
+  }
+}
+
+actor "OS keychain" as KC <<system>>
+actor "RPC and chain" as Chain <<system>>
+
+Owner --> UC_Create
+Owner --> UC_Save
+Owner --> UC_Confirm
+Owner --> UC_Skip
+Owner --> UC_Reveal
+Owner --> UC_Restore
+Owner --> UC_Archive
+Owner --> UC_Remove
+Owner --> UC_RPC
+Owner --> UC_Receive
+Owner --> UC_Send
+Owner --> UC_TxList
+Owner --> UC_Bump
+Owner --> UC_Assign
+Owner --> UC_Card
+Owner --> UC_Rule
+Owner --> UC_Rename
+Owner --> UC_Forget
+Owner --> UC_Default
+
+Device --> UC_Create
+Device --> UC_Receive
+Device --> UC_Send
+Device --> UC_TxList
+Device --> UC_Card
+Device --> UC_Rule
+Device --> UC_Rename
+
+UC_Save .> UC_Create : <<extend>>
+UC_Skip .> UC_Create : <<extend>>
+UC_Confirm .> UC_Save : <<extend>>
+UC_Card ..> UC_Rule : <<extend>>\nAlways pay / Never pay
+
+UC_Create -- KC
+UC_Reveal -- KC
+UC_Restore -- KC
+UC_Send -- Chain
+UC_TxList -- Chain
+UC_Receive -- Chain
+
+note right of Device
+  A paired device creates (Not backed up, H-276),
+  sends only to recipients the wallet knows (OD-3),
+  never reveals a key (H-264, OD-2).
+end note
+@enduml

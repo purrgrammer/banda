@@ -310,8 +310,8 @@ export function noticesIndex(facts: {
 		...item(`The ${facts.npm} npm packages in app/node_modules`, "app/licenses/npm-packages.txt"),
 		...item(
 			"Material copied into banda's own source",
-			"app/THIRD_PARTY_NOTICES.md, and the texts it names:",
-			"app/licenses/open-bot-avatar-MIT.txt, app/shipped/skills/*/LICENSE*",
+			"app/THIRD_PARTY_NOTICES.md, and the text it names:",
+			"app/licenses/open-bot-avatar-MIT.txt",
 		),
 		...item(`Node.js ${facts.node}, which runs it`, "node/LICENSE"),
 		...computer,

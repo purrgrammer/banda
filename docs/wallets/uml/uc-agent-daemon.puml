@@ -1,0 +1,65 @@
+@startuml uc-agent-daemon
+!include style.iuml
+title Use cases (2 of 2): agents' tools and the daemon's duties (requirements 2, 3)
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Agent\n(model in a chat,\na group or a routine)" as Agent
+actor "Agent's code\nin the box" as BoxCode
+actor "Owner" as Owner
+
+rectangle "banda daemon" {
+  package "Agent tools (req. 2)" {
+    usecase "Read address, balance,\nhistory, recipients" as UC_Read
+    usecase "Pay an address\n(wallet~__send)" as UC_Pay
+    usecase "Pay an observed x402\nchallenge (wallet~__pay_x402)" as UC_X402
+  }
+  package "Daemon duties" {
+    usecase "Admit by rule in one commit\nDeny > Always > Ask > default" as UC_Admit
+    usecase "Answer a payment card" as UC_Card
+    usecase "Sign, burn the nonce,\nbroadcast stored bytes" as UC_Lane
+    usecase "Follow to Confirmed,\nFailed or Expired" as UC_Follow
+    usecase "Replace a stuck\ntransaction (fee bump)" as UC_Replace
+    usecase "Index incoming transfers" as UC_Index
+    usecase "Resume after a crash" as UC_Resume
+    usecase "Observe a 402 over\nverified TLS (proxy)" as UC_Observe
+  }
+}
+
+actor "OS keychain" as KC <<system>>
+actor "RPC and chain\n(Base, Base Sepolia)" as Chain <<system>>
+actor "x402 server\nand facilitator" as X402 <<system>>
+actor "Outside sender" as Sender
+actor "System\n(crash, restart, timers)" as Sys <<system>>
+
+Agent --> UC_Read
+Agent --> UC_Pay
+Agent --> UC_X402
+BoxCode --> UC_Observe
+Owner --> UC_Card
+
+UC_Pay ..> UC_Admit : <<include>>
+UC_X402 ..> UC_Admit : <<include>>
+UC_X402 ..> UC_Observe : <<include>>\nnames an observation
+UC_Card .> UC_Admit : <<extend>>\nrule Ask
+UC_Admit ..> UC_Lane : <<include>>
+UC_Lane ..> UC_Follow : <<include>>
+UC_Replace .> UC_Follow : <<extend>>\nno receipt
+
+UC_Lane -- KC
+UC_Lane -- Chain
+UC_Follow -- Chain
+UC_Index -- Chain
+UC_Observe -- X402
+UC_X402 -- X402
+Sender -- UC_Index
+Sys -- UC_Resume
+Sys -- UC_Follow
+Sys -- UC_Replace
+
+note right of Agent
+  No tool imports, derives or returns a key
+  (H-004, H-265). Calls name addresses and
+  observations, never labels (C18).
+end note
+@enduml

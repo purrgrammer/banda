@@ -1,0 +1,61 @@
+### geth (ethereum/client-go:v1.17.10), blocks every 600 s, chain id 1337
+  base fee 875000000 wei; sender nonce 0
+  A: value 1, cap 10 gwei, tip 1 gwei                        -> ok 0xc6398a8d5187d5f8…
+  A again, same bytes (pending)                              -> -32000 "already known"
+  other payload, same fees                                   -> -32000 "replacement transaction underpriced"
+  other payload, cap and tip +9 %                            -> -32000 "replacement transaction underpriced"
+  B: other payload, cap and tip +10 % exactly                -> ok 0xc96c9e5c98d3084f…
+  tip only +100 % over B, same cap                           -> -32000 "replacement transaction underpriced"
+  cap only +100 % over B, same tip                           -> -32000 "replacement transaction underpriced"
+  C: cap and tip +12.5 % over B                              -> ok 0x0b6b151cc408de77…
+  A's bytes again, after two bumps                           -> -32000 "replacement transaction underpriced"
+  pool holds at nonce 0: 1 tx, C
+  eth_getTransactionByHash(A): null
+  nonce gap: nonce + 2, cap 10 gwei                          -> ok 0x7a1124e4a51e15d4…
+  txpool_status: {"pending":"0x1","queued":"0x1"}
+  fee cap 1 wei below the base fee (nonce + 1)               -> ok 0xd16f100258b779d9…
+  fee cap base fee - 1 (874999999 wei), tip 0, nonce + 1     -> -32000 "transaction gas price below minimum: gas tip cap 0, minimum needed 1"
+  a key with no ETH                                          -> -32000 "insufficient funds for gas * price + value: balance 0, tx cost 210000000000001, overshot 210000000000001"
+  wrong chain id (1)                                         -> -32000 "invalid sender: invalid chain id for signer: have 1 want 1337"
+
+### geth, mining on demand, chain id 1337
+  A sent: ok 0x1acd106a8268ca4d…
+  A mined: status 0x1 in block 2
+  A's bytes again, after it was mined -> -32000 "nonce too low: next nonce 1, tx nonce 0"
+  other bytes at the mined nonce, +100 % fees -> -32000 "nonce too low: next nonce 1, tx nonce 0"
+  value = the whole balance, so gas is not covered -> -32000 "insufficient funds for gas * price + value: balance 999962913494592999, tx cost 1000172913494592999, overshot 210000000000000"
+  fee cap 1 wei -> -32000 "transaction gas price below minimum: gas tip cap 0, minimum needed 1"
+  fee cap base fee - 1 (766024066 wei) at the next nonce -> -32000 "transaction gas price below minimum: gas tip cap 0, minimum needed 1"
+
+### reth (ghcr.io/paradigmxyz/reth:v2.10.1), blocks every 600 s, chain id 1337
+  base fee 1000000000 wei; sender nonce 0
+  A: value 1, cap 10 gwei, tip 1 gwei                        -> ok 0x7b14ad46d5e4ee56…
+  A again, same bytes (pending)                              -> -32000 "already known"
+  other payload, same fees                                   -> -32000 "replacement transaction underpriced"
+  other payload, cap and tip +9 %                            -> -32000 "replacement transaction underpriced"
+  B: other payload, cap and tip +10 % exactly                -> ok 0xc6fd720e00d200c0…
+  tip only +100 % over B, same cap                           -> -32000 "replacement transaction underpriced"
+  cap only +100 % over B, same tip                           -> -32000 "replacement transaction underpriced"
+  C: cap and tip +12.5 % over B                              -> ok 0xd1de51d5dd0978b1…
+  A's bytes again, after two bumps                           -> -32000 "replacement transaction underpriced"
+  pool holds at nonce 0: 1 tx, C
+  eth_getTransactionByHash(A): null
+  nonce gap: nonce + 2, cap 10 gwei                          -> ok 0x15c4364bc67f435f…
+  txpool_status: {"pending":"0x1","queued":"0x1"}
+  fee cap 1 wei below the base fee (nonce + 1)               -> -32000 "transaction underpriced"
+  fee cap base fee - 1 (999999999 wei), tip 0, nonce + 1     -> ok 0xde52a87ddda3d75a…
+  a key with no ETH                                          -> -32003 "insufficient funds for gas * price + value: have 0 want 210000000000001"
+  wrong chain id (1)                                         -> -32000 "invalid chain ID"
+
+### reth, mining on demand, chain id 1337
+  A sent: ok 0x89428bf090815cff…
+  A mined: status 0x1 in block 1
+  A's bytes again, after it was mined -> -32000 "nonce too low: next nonce 1, tx nonce 0"
+  other bytes at the mined nonce, +100 % fees -> -32000 "nonce too low: next nonce 1, tx nonce 0"
+  value = the whole balance, so gas is not covered -> -32003 "insufficient funds for gas * price + value: have 999999999960624999999999 want 1000000000170624999999999"
+  fee cap 1 wei -> -32000 "transaction underpriced"
+  fee cap base fee - 1 (874999999 wei) at the next nonce -> ok 0x39a07d5fd2e559ed…
+    after 6 s: receipt status 0x1; txpool_status {"pending":"0x0","queued":"0x0"}; by hash known
+    then the same nonce with cap 10 gwei, tip 1 gwei -> -32000 "nonce too low: next nonce 2, tx nonce 1"; receipt none
+
+containers left: none

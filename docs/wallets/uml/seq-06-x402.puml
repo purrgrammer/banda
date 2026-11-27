@@ -1,0 +1,93 @@
+@startuml seq-06-x402
+!include style.iuml
+title x402 from the box: the daemon pays only what the proxy observed\nx402: none → observed → authorizing (or waiting) → authorized → handed → settled | expired | cancelled (C11, C14, C18, C19, C21)
+autonumber "<b>0."
+
+participant "Agent's code\nin the box" as Box
+participant "Egress proxy\n(addon.py)" as Proxy
+participant "x402 server\napi.weather.test" as Srv
+participant "Facilitator" as Fac
+participant "Agent Mara\n(model)" as Agent
+participant "wallet~__pay_x402\n(EffectTool, daemon)" as Tool
+database "Store" as Store
+participant "Signer" as Signer
+participant "RPC / Base" as Chain
+
+Box -> Proxy : GET api.weather.test/v1/forecast?city=lisbon\n(login of chat C)
+Proxy -> Srv : TLS; upstream certificate verified (ssl_insecure false)
+Srv --> Proxy : 402, PAYMENT-REQUIRED (base64 JSON, x402Version 2)
+Proxy -> Proxy : record observation O {chat C, origin, path, method,\nrequirements as received}
+note right of Proxy
+  Durable before the box sees it (C21). An unverified upstream
+  gives 502 and no observation (banda-integration answer 7).
+  row: x402 none · proxy_sees_402 [verified] → observed
+end note
+Proxy --> Box : 402 + x-banda-challenge: O
+Box --> Agent : command output names challenge O
+Agent -> Tool : wallet~__pay_x402 {challenge: O}
+Tool -> Store : intake first: commit the Challenges doc (H-219)
+Tool -> Store : admission commit
+note right of Store
+  O belongs to the calling chat (C18), https, unexpired, unpaid.
+  x402Version 2, scheme exact, network = the wallet's; asset = pinned USDC;
+  extra.name / version = the per-network table; EIP-3009 only, no signing
+  extensions (Permit2, approvals); payTo not zero, the token or the wallet.
+  Rule key: (wallet, Mara, origin and path, payTo, asset, network).
+  Every term comes from O, none from the agent.
+end note
+alt rule Deny
+  Store --> Tool : refused
+  note right of Store : row: observed · call [same_chat and rule == 'deny'] → refused
+else rule Ask
+  Store --> Tool : Waiting: card "Pay Weather API 0.01 USDC?"
+  note right of Store
+    observed · call [same_chat and rule == 'ask' and fits] → waiting.
+    An approval within 24 h signs with a window from chain time at approval (R-9):
+    waiting · card_pay [window_left] → authorizing
+  end note
+else rule Always and it fits
+  note right of Store : row: observed · call [same_chat and rule == 'always' and fits] → authorizing
+else another chat names O
+  Store --> Tool : refused: not this chat's observation
+  note right of Store : row: observed · call [not same_chat] → observed (PaidByObservingChat)
+end
+
+Tool -> Chain : latest block timestamp c
+Tool -> Store : authorization commit
+note right of Store
+  nonce = keccak256("banda/x402" | wallet | O), committed before any signature (R-5, C14);
+  validAfter = min(c, wall) − 5 s; validBefore = max(c, wall) + min(maxTimeoutSeconds, 60 s) (C19);
+  reservation until validBefore passes or an event is seen (C11).
+  row: authorizing · authorization_commit [rule != 'deny' and (rule == 'always' or approved) and fits] → authorized
+end note
+Tool -> Signer : signTransferWithAuthorization(message, domain from the table)
+Signer --> Tool : signature (deterministic: a crash re-derives the same one)
+Tool -> Store : store the signature; hand the header
+Tool --> Box : PAYMENT-SIGNATURE header (only the signature enters the box)
+note right of Tool : row: authorized · hand_header [synced] → handed
+
+Box -> Proxy : retry GET with PAYMENT-SIGNATURE
+Proxy -> Srv : (a paid retry of a held write needs a pass: open)
+Srv -> Fac : verify, settle
+Fac -> Chain : transferWithAuthorization (the facilitator pays the gas)
+Srv --> Box : 200 + PAYMENT-RESPONSE (a claim, not the outcome)
+
+loop follower, until a final event or validBefore passes at finalized
+  Tool -> Chain : eth_getLogs AuthorizationUsed / AuthorizationCanceled;\nauthorizationState(wallet, nonce)
+end
+alt AuthorizationUsed, finalized
+  Tool -> Store : settled; reservation released
+  note right of Store : row: handed · follow [event == 'used' and event_fin] → settled
+else AuthorizationCanceled, finalized
+  Tool -> Store : cancelled
+  note right of Store : row: handed · follow [event == 'cancelled' and event_fin] → cancelled
+else no event and validBefore passed, finalized
+  Tool -> Store : expired; reservation released (a retry is a new payment)
+  note right of Store : row: handed · follow [event == 'none' and vb_passed_fin] → expired (F-5)
+end
+note over Box, Chain
+  Two calls for one observation give one authorization: the derived nonce, which the token accepts once (C14, H-227);
+  rows: authorized · agent_pays_again → authorized, handed · agent_pays_again → handed. An endpoint whose payTo changed
+  since its rule was set asks again. The x402 SDK is never on the payer path (R-6).
+end note
+@enduml

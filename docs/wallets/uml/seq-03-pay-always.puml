@@ -1,0 +1,71 @@
+@startuml seq-03-pay-always
+!include style.iuml
+title An agent pays a recipient set to Always\npayment: Idle → Queued → Signed → Sent → Included → Confirmed (C2, C3, C4, C5, C6, C11, C12, C21)
+autonumber "<b>0."
+
+participant "Agent Mara\n(model)" as Agent
+participant "wallet~__send\n(EffectTool, daemon)" as Tool
+database "Store" as Store
+participant "Wallet lane\n(durable task, FIFO)" as Lane
+participant "Signer\nsupervisor + child" as Signer
+participant "OS keychain" as KC
+participant "RPC / Base" as Chain
+participant "Receipt follower" as Follower
+participant "Chat\n(card)" as Chat
+
+Agent -> Tool : wallet~__send {to: "0x12ab…9f04", amount: "5", token: "USDC"}
+Tool -> Tool : expand: parse "5" in USDC's 6 decimals,\ncanonicalize to EIP-55 on the wallet's network (C3 steps 4, 5)
+Tool -> Store : admission commit (effectRun, withinPermission)
+note right of Store
+  One commit, C3 order: wallet ready; Mara on for it; tool on (allowedAs);
+  arguments; identity; wallet can sign now; rule: no Deny(wallet, Ana),
+  Always(Mara, wallet, 0x12ab…) covers it, amount not bound;
+  available = balance at block b − reservations − fee reserve ≥ 5 (C11).
+  row: Idle · call [wallet_usable and payer == 'agent' and eff == 'always' and fits] → Queued
+end note
+Store --> Tool : payment I queued in lane L (id from the tool task id, C14), reservation 5 USDC + fees
+Tool -> Chat : card "Paying Ana 5 USDC" (a card shows even when nobody was asked)
+Tool --> Agent : queued; outcome follows in the chat
+
+Lane -> Store : read the head of the FIFO: I
+Lane -> Chain : latest block, base fee, priority fee, L1 fee upper bound
+Lane -> Signer : signTransfer(I, nonce = ledger.next, chainId 84532), request id
+Signer -> KC : get "<home-id>/wallet/<address>"
+KC --> Signer : secret
+Signer -> Signer : derive == record's address (C16);\nEIP-1559 transfer(address,uint256), extraEntropy false
+Signer --> Lane : raw bytes (the key stays in the child)
+Lane -> Store : fused start commit (the burn point, C4)
+note right of Store
+  Re-checks: I still Queued, not refused by a cancel or a Deny sweep;
+  C3 steps 1, 2, 6, 7, 8 against the rules as they are now;
+  ledger unchanged since signing (compare-and-set, F-3).
+  Takes nonce n = ledger.next, appends version {raw, keccak256(raw)},
+  I → Signed. Synced per commit before any broadcast (C21).
+  row: Queued · start_commit [not ledger_moved and start_ok and fits] → Signed
+end note
+Lane -> Chain : eth_sendRawTransaction(stored raw)
+Chain --> Lane : hash (or "already known": the same bytes are harmless)
+Lane -> Store : I → Sent
+note right of Store : row: Signed · broadcast → Sent
+
+loop poll 2 s while awaited (a logs subscription where offered)
+  Follower -> Chain : eth_getTransactionReceipt(hash of each version)
+  Chain --> Follower : null
+end
+Chain --> Follower : receipt, status 1, at latest
+Follower -> Store : I → Included; the nonce lease is released (one in flight, C5)
+note right of Store : row: Sent · receipt [blk == 'own'] → Included
+Follower -> Store : shown as "Included (safe)" once the block is at safe (about 2 min on Base; a display, R-4)
+Follower -> Chain : is that block finalized? (about 20 min on Base)
+Chain --> Follower : yes
+Follower -> Store : I → Confirmed; reservation released
+note right of Store : row: Included · finality [blk_fin and blk_ok] → Confirmed (Settle)
+Follower -> Chat : "Paid Ana 5 USDC · Confirmed" (balance after)
+Chat --> Agent : the outcome, as data
+
+note over Agent, Chat
+  Always pays its recipient whatever amount, up to what is in the wallet: the balance is the cap (requirement 2).
+  A status-0 receipt, proven from two sources (C7), gives Failed at finalized (Included · finality [blk_fin and not blk_ok] → Failed); a reorg gives
+  Included · reorg → Sent and the stored bytes are rebroadcast (C12). The absence of a receipt never ends a payment.
+end note
+@enduml

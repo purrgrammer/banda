@@ -1,0 +1,89 @@
+@startuml seq-11-keychain-unavailable
+!include style.iuml
+title The keychain is unavailable: the wallet goes offline with a reason, nothing burns, no file fallback\nsigning: online → locked | key_missing | wrong_key | other_home | offline_host_mode (C3 step 6, C9, C14, C16, C20; keychain spike)
+autonumber "<b>0."
+
+participant "Agent Mara\n(model)" as Agent
+participant "Wallet lane" as Lane
+participant "Signer supervisor\n(daemon)" as Sup
+participant "Signer child\n(process.execPath)" as S
+participant "OS keychain" as KC
+database "Store" as Store
+participant "Web app" as Web
+actor Owner
+
+Lane -> Sup : sign(I), request id (one keychain call at a time per home)
+Sup -> S ** : spawn; arm deadline T
+note right of Sup : the error codes below are illustrative names for C20's fixed codes; the classification is by message prefix (keychain spike)
+S -> KC : AsyncEntry.getPassword("<home-id>/wallet/<address>")\n(Linux store pinned to secret-service: never keyutils, H-029)
+alt a prompt nobody answers (macOS ACL after an update of an ad hoc signed Node; a Linux unlock prompt)
+  ... deadline T passes ...
+  Sup -> S !! : SIGKILL (the AbortSignal is ignored; the process could not exit by itself)
+  Sup -> Store : signing state "needs the owner": what to click on the computer; lane parked
+  note right of Sup : a late answer is discarded by request id (C14, H-035)
+else Linux locked: "Couldn't access platform storage: Secret Service: unlock prompt was dismissed"
+  KC --> S : error
+  S --> Sup : code KEYCHAIN_LOCKED
+  Sup -> Store : signing locked
+  note right of Store : signing online · keychain_locks → locked
+else no Secret Service, or no session bus ("Platform failure: DBus error: ...")
+  KC --> S : error
+  S --> Sup : code NO_KEYCHAIN
+  Sup -> Store : offline: "no keychain on this computer" (no file fallback: it would put the key in backups)
+else null
+  KC --> S : null
+  S -> KC : canary: set, get, delete "<home-id>/probe" (H-037)
+  alt the canary works
+    S --> Sup : code KEY_MISSING
+    Sup -> Store : signing key_missing; the lane opens a Wait "Restore key"
+    note right of Store : signing online · item_lost → key_missing
+  else the canary fails
+    S --> Sup : the canary's error (one of the states above)
+  end
+else a secret that derives another address
+  KC --> S : secret
+  S -> S : derive != the record's address
+  S --> Sup : code WRONG_KEY (never signs with it, C16)
+  note right of Sup : signing · unlock_check [not derives] → wrong_key
+else the lease is another home's (a restored backup or a fork beside this home)
+  S -> KC : read lease: epoch, home-secret hash
+  S --> Sup : code OTHER_HOME
+  note right of Sup : signing · unlock_check [derives and not lease_mine] → other_home
+end
+Store --> Web : Settings → Wallets and the chat card: "Main is offline: <reason> · <fix>"
+
+== What happens to payments meanwhile ==
+note over Lane, Store
+  Before the burn point nothing is lost: queued payments wait in the lane (payment Queued · sign → Queued),
+  open asks keep their 24 h deadline (Waiting · deadline → NotPaid). Signed or Sent payments need no key:
+  their stored bytes are rebroadcast and followed.
+end note
+Agent -> Store : wallet~__send {...} (a new call)
+Store --> Agent : refused at admission, C3 step 6: "Main can't sign now: the keychain is locked"
+note right of Store : payment Idle · call [not wallet_usable] → Refused
+
+== Recovery ==
+alt the owner unlocks the keychain or answers the prompt
+  Lane -> Sup : sign(I) again
+  Sup -> S ** : spawn
+  S -> KC : get
+  KC --> S : secret; derive == address; lease mine
+  note right of Store : signing locked · unlock_check [derives and lease_mine and not host_mode] → online
+  Lane -> Store : start commit, then as in seq-03
+else the owner restores the key (host only, OD-6)
+  Owner -> Web : Restore key → paste the saved key
+  Web -> Sup : restore(Main, pasted key)
+  Sup -> S ** : derive(pasted key)
+  alt derives the record's address
+    S -> KC : get must be null, set, read back, derive
+    Sup -> Store : commit: signing online; the restore answers the lane's "key missing" Wait (C9)
+    note right of Store : signing key_missing · restore_key [derives] → online
+  else another address
+    Sup --> Web : "that key does not open Main" (key_missing · restore_key [not derives] → key_missing)
+  end
+end
+note over Agent, Owner
+  Host mode (serve --box host) takes wallets offline on purpose: commands would run beside the key (TA-1);
+  signing · unlock_check [derives and lease_mine and host_mode] → offline_host_mode.
+end note
+@enduml

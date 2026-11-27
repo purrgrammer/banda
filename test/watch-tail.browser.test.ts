@@ -18,7 +18,7 @@ import { readDaemonFile } from "../src/home.ts";
 import type { CapabilitiesView, WatchView } from "../src/server/api.ts";
 import { githubObjectDefinition, startGithubObjects } from "./fixtures/github-objects.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { echoModels, skipShippedSkills, tempHome, webServer } from "./helpers.ts";
+import { echoModels, tempHome, webServer } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
 const SHOTS = process.env.BANDA_WATCHES_SHOTS;
@@ -150,7 +150,6 @@ for (const width of [390, 1440])
 			const pages = (at: number, method: string) =>
 				asked.filter((each) => each.step === at && each.method === method).map((each) => each.page);
 			try {
-				await skipShippedSkills(daemon.port, token);
 				await api("/agents/mara", "PUT", {
 					base: null,
 					text: "---\nname: Mara\ndescription: Follows things\nconnections: [github]\n---\nFollow things for the owner.\n",

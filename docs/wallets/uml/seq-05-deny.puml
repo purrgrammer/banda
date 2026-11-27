@@ -1,0 +1,75 @@
+@startuml seq-05-deny
+!include style.iuml
+title Deny: refused without asking, and the races Deny can be in\n(Deny > Always > Ask > default; C1, C3, C4, C9, C13; H-082, H-085, H-086, H-118, H-126)
+autonumber "<b>0."
+
+participant "Agent Mara\n(model)" as Agent
+participant "wallet~__send\n(EffectTool)" as Tool
+database "Store" as Store
+participant "Web app" as Web
+actor Owner
+participant "Wallet lane" as Lane
+participant "Signer" as Signer
+participant "RPC / Base" as Chain
+
+group A. Deny set ahead refuses in words, with no Wait
+  Agent -> Tool : wallet~__send {to: Bob, amount: "3"}
+  Tool -> Store : admission commit: the allowed hook reads the Recipients doc:\nDeny(wallet, Bob), checked before covering looks for Always
+  note right of Store
+    row: payment Idle · call [wallet_usable and payer == 'agent' and eff == 'deny'] → Refused.
+    Deny beats an open Always (banda-integration rules check).
+  end note
+  Tool --> Agent : "wallet~__send did not run: the owner doesn't pay Bob."
+end
+
+group B. "Never pay" on a card sets Deny and sweeps
+  Owner -> Web : card for 0x77e0…: name "Spam", Never pay
+  Web -> Store : answer {wait, refuse, never, label "Spam", version v}
+  note right of Store
+    fill commit: Deny(wallet, 0x77e0…) in the Recipients doc;
+    this payment Refused; every other open ask and queued payment
+    it covers refused in the same commit (C9)
+    rows: recipient · card_never [version_current] → deny;
+    payment Waiting · card_never [payer == 'agent'] → Refused
+  end note
+end
+
+group C. Deny committed while a payment is queued (the race with the lane)
+  Lane -> Signer : sign I (to Carol), nonce = ledger.next
+  Owner -> Web : Recipients → Carol → Deny
+  Web -> Store : set rule {Carol, deny, version v}
+  alt the Deny commit lands first (commit order decides, C1)
+    note right of Store
+      Deny commit: payment Queued · deny_committed [payer == 'agent'] → Refused
+      (Deny's sweep, C9); recipient · list_set_deny [version_current] → deny
+    end note
+    Signer --> Lane : raw bytes
+    Lane -> Store : start commit: I is no longer Queued
+    note right of Store : the bytes are dropped; no nonce burnt; nothing signed after the Deny counts (C4, H-118)
+    Store --> Agent : "Not paid: the owner doesn't pay Carol"
+  else the start commit lands first
+    Signer --> Lane : raw bytes
+    Lane -> Store : start commit: I → Signed (burn point)
+    Store -> Store : Deny commit: Signed · deny_committed → Signed (C13)
+    Lane -> Chain : broadcast stored bytes
+    note right of Store
+      Past the burn point the payment finishes and is reported;
+      the Deny applies from the next payment (H-085).
+    end note
+    Store --> Agent : "may have sent" until a receipt decides, then "Paid Carol 4 USDC"
+  end
+end
+
+group D. A crash, then a Deny, then the tool's rerun (H-126)
+  Lane -> Chain : broadcast stored bytes of I
+  note over Lane : the daemon is killed here
+  Owner -> Web : Deny Carol (after the restart, before the rerun)
+  Tool -> Store : idempotent rerun under the same key
+  note right of Store
+    Stored bytes exist for the key: the rerun reaches run, which only
+    rebroadcasts and reports the lane's outcome; never "did not run"
+    (C13; banda-integration "killed after-broadcast-deny").
+  end note
+  Tool --> Agent : the lane's outcome: "Paid Carol" once a receipt decides
+end
+@enduml

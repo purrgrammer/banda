@@ -1,0 +1,24 @@
+--- unlocked collection
+platform linux-arm64, node v24.22.3, service banda-spike-<16 hex>
+  findCredentials(service) took 5.0 ms
+  findCredentials(service): 2 credential(s) ["00a1","00b2"]; each carries the secret: true; expected 2
+  findCredentialsAsync(service): 2 credential(s) ["00a1","00b2"]; each carries the secret: true; expected 2
+  findCredentials(service + "-other"): 1 credential(s) ["00c3"]; each carries the secret: true; expected 1
+  findCredentials(a prefix of the service): 0 credential(s) []; each carries the secret: -; expected 0 if the match is exact
+  findCredentials(a service never written): 0 credential(s) []; each carries the secret: -; expected 0
+  after overwriting one item: 2 credential(s) ["00a1","00b2"]; each carries the secret: true; expected 2, the new secret
+  after deleting one item: 1 credential(s) ["00b2"]; each carries the secret: true; expected 1
+cleanup: 0 item(s) left under the spike's services
+--- the attributes an Entry writes (secret-tool, attributes only)
+[/4]
+label = keyring:home-test/wallet/0xa1@<service>
+created = 2026-11-23 16:01:09
+modified = 2026-11-23 16:01:09
+attribute.service = <service>
+attribute.username = home-test/wallet/0xa1
+--- findCredentials with the login collection locked (killed at 20 s)
+lock exit 0
+threw in 4.3 ms: zbus error: org.freedesktop.Secret.Error.IsLocked: Cannot get secret of a locked object
+exit 0
+dbus-run-session: ignoring unknown child process 12
+after unlock and delete: 0 left

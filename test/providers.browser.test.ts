@@ -8,7 +8,7 @@ import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { TiersView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, webServer } from "./helpers.ts";
+import { tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const ANTHROPIC = presetOf("anthropic")!;
@@ -80,7 +80,6 @@ for (const width of [390, 1440])
 			const daemon = await startDaemon({ home, port: 0, models: models(), box: hostBox(home), log: () => {} });
 			const base = `http://127.0.0.1:${daemon.port}`;
 			const token = (await readDaemonFile(home))!.token!;
-			await skipShippedSkills(daemon.port, token);
 			const tiers = async () =>
 				(await (
 					await fetch(`${base}/api/tiers`, { headers: { authorization: `Bearer ${token}` } })

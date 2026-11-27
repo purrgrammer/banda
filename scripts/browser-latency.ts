@@ -200,7 +200,6 @@ try {
 		).catch(reject);
 	});
 	console.log("computer up");
-	await api("/skills/shipped", { add: [] });
 	await api("/companion", { name: "Sancho", personality: "Brief." }, "PUT");
 	const posted = await api("/messages", { id: randomUUID(), thread: "main", text: "Open the form." });
 	const chat = posted.chat as number;

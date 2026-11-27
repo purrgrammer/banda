@@ -1,0 +1,16 @@
+{
+  "name": "wallet-gap-spikes",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@napi-rs/keyring": "2.1.2",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
+    "@x402/core": "2.32.0",
+    "@x402/evm": "2.32.0",
+    "@x402/express": "2.32.0",
+    "express": "5.3.0",
+    "micro-eth-signer": "0.20.1",
+    "viem": "2.58.4"
+  }
+}

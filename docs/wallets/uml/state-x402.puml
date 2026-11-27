@@ -1,0 +1,124 @@
+@startuml state-x402
+!include style.iuml
+hide empty description
+skinparam stateFontStyle bold
+skinparam stateAttributeFontSize 10
+skinparam stateAttributeFontStyle plain
+skinparam ArrowFontSize 10
+title x402 machine (X402.tla), generated from model/transitions.json: 40 rows, 11 states
+
+legend top left
+Guard atoms and their domains
+  same_chat in {False, True}
+  verified in {False, True}
+  rule in {"deny", "always", "ask", "unknown"}
+  default_deny in {False, True}
+  approved in {False, True}
+  host_ok in {False, True}
+  fits in {False, True}
+  window_left in {False, True}
+  synced in {False, True}
+  event in {"used", "cancelled", "none"}
+  event_fin in {False, True}
+  vb_passed_fin in {False, True}
+Definitions
+  eff = ('deny' if rule == 'deny' or (rule == 'unknown' and default_deny) else 'always' if rule == 'always' else 'ask')
+Label: event [guard] / TLA+ action (conflicts.md rules)
+Lines inside a state answer the event without a state change.
+endlegend
+
+state "none" as x402_none
+state "observed" as x402_observed
+state "waiting" as x402_waiting
+state "authorizing" as x402_authorizing
+state "authorized" as x402_authorized
+state "handed" as x402_handed
+state "settled" as x402_settled <<terminal>>
+state "expired" as x402_expired <<terminal>>
+state "refused" as x402_refused <<terminal>>
+state "notpaid" as x402_notpaid <<terminal>>
+state "cancelled" as x402_cancelled <<terminal>>
+
+[*] --> x402_none
+x402_settled --> [*]
+x402_expired --> [*]
+x402_refused --> [*]
+x402_notpaid --> [*]
+x402_cancelled --> [*]
+
+' row 258
+x402_none : proxy_sees_402 [not verified] / Observe (C18)
+' row 259
+x402_observed : call [not same_chat] / Call (C18)
+' row 287
+x402_observed : crash / Crash (C14,C21)
+' row 292
+x402_observed : power_loss / PowerLoss (C21)
+' row 264
+x402_waiting : card_pay [window_left and not host_ok] / Pay (C9,C16)
+' row 267
+x402_waiting : card_always [window_left and not host_ok] / AlwaysPay (C9,C16)
+' row 288
+x402_waiting : crash / Crash (C14,C21)
+' row 293
+x402_waiting : power_loss / PowerLoss (C21)
+' row 289
+x402_authorizing : crash / Crash (C14,C21)
+' row 294
+x402_authorizing : power_loss / PowerLoss (C21)
+' row 279
+x402_authorized : hand_header [not synced] / SignAuth (C21)
+' row 280
+x402_authorized : agent_pays_again / Call (C14)
+' row 290
+x402_authorized : crash / Crash (C14,C21)
+' row 295
+x402_authorized : power_loss / PowerLoss (C21)
+' row 281
+x402_handed : agent_pays_again / Call (C14)
+' row 284
+x402_handed : follow [event != 'none' and not event_fin] / Track (C12)
+' row 286
+x402_handed : follow [event == 'none' and not vb_passed_fin] / Track (C11)
+' row 291
+x402_handed : crash / Crash (C14,C21)
+' row 296
+x402_handed : power_loss / PowerLoss (C21)
+
+' row 257
+x402_none --> x402_observed : proxy_sees_402 [verified] / Observe (C18,C21)
+' row 260
+' row 261
+x402_observed --> x402_refused : call [same_chat and eff == 'deny'] / Call (C3,C18)\ncall [same_chat and eff != 'deny' and not fits] / Call (C11)
+' row 262
+x402_observed --> x402_authorizing : call [same_chat and eff == 'always' and fits] / Call (C11,C18)
+' row 263
+x402_observed --> x402_waiting : call [same_chat and eff == 'ask' and fits] / Call (C18)
+' row 265
+' row 268
+x402_waiting --> x402_authorizing : card_pay [window_left and host_ok] / Pay (C10,C19)\ncard_always [window_left and host_ok] / AlwaysPay (C9,C18)
+' row 266
+' row 269
+' row 272
+x402_waiting --> x402_notpaid : card_pay [not window_left] / Pay (C10)\ncard_always [not window_left] / AlwaysPay (C10)\ndeadline / Deadline (C10)
+' row 270
+' row 271
+x402_waiting --> x402_refused : card_never / NeverPay (C9)\ncard_dont_pay / DontPay (C9)
+' row 273
+x402_authorizing --> x402_notpaid : deadline / Deadline (C10)
+' row 274
+' row 276
+x402_authorizing --> x402_refused : authorization_commit [eff == 'deny'] / Authorize (C4)\nauthorization_commit [eff != 'deny' and (eff == 'always' or approved) and not fits] / Authorize (C11)
+' row 275
+x402_authorizing --> x402_waiting : authorization_commit [eff != 'deny' and eff != 'always' and not approved] / Authorize (C4)
+' row 277
+x402_authorizing --> x402_authorized : authorization_commit [eff != 'deny' and (eff == 'always' or approved) and fits] / Authorize (C14,C19,C21)
+' row 278
+x402_authorized --> x402_handed : hand_header [synced] / Give (C20,C21)
+' row 282
+x402_handed --> x402_settled : follow [event == 'used' and event_fin] / Track (C12)
+' row 283
+x402_handed --> x402_cancelled : follow [event == 'cancelled' and event_fin] / Track (C12)
+' row 285
+x402_handed --> x402_expired : follow [event == 'none' and vb_passed_fin] / Track (C11,C19)
+@enduml

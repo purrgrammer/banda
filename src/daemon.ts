@@ -99,17 +99,10 @@ import {
 	control,
 	decline as declineRoutine,
 	remove as removeRoutine,
+	requested as requestedRoutine,
 } from "./server/routines.ts";
 import { seenBy } from "./server/seen.ts";
-import {
-	acceptSkill,
-	acceptSkills,
-	chooseShippedSkills,
-	reconcileSkills,
-	saveSkill,
-	shippedSkills,
-	skills,
-} from "./server/skills.ts";
+import { acceptSkill, acceptSkills, reconcileSkills, saveSkill, skills } from "./server/skills.ts";
 import {
 	chatContext,
 	chatPrompt,
@@ -944,8 +937,6 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 					acceptSkill: (name, sha) => changingWorkspace(() => acceptSkill(open, workspace, name, sha)),
 					acceptSkills: (wanted) => changingWorkspace(() => acceptSkills(open, workspace, wanted)),
 					saveSkill: (name, text, base) => changingWorkspace(() => saveSkill(open, workspace, name, text, base)),
-					shippedSkills: () => shippedSkills(open, workspace),
-					chooseShippedSkills: (names) => changingWorkspace(() => chooseShippedSkills(open, workspace, names)),
 					bringable: () => bringable(open, workspace),
 					chooseBring: (picks) =>
 						changingWorkspace(async () => {
@@ -975,9 +966,11 @@ export async function startDaemon(options: DaemonOptions): Promise<Daemon> {
 						else await resume(open, core.reconcile, Date.now());
 						return control(open, workspace, Date.now());
 					},
-					routine: (name, act) =>
+					routine: (path, act) =>
 						changingWorkspace(async () => {
 							const now = Date.now();
+							// which routine: the path's id, named again in the body by an app of this build
+							const name = requestedRoutine(path, act.id);
 							if (act.action === "accept")
 								await acceptRoutine(
 									open,

@@ -1,0 +1,12 @@
+@cucumber/gherkin 43.0.0; 12 feature files, 162 scenarios, 315 pickles (outline rows counted)
+table: 297 rows in 163 groups; 1158618 valuations checked for overlap and gaps (selection sha256 833894278b3cae25)
+steps: 231 phrases (231 used); 406 events replayed, 0 without a Then
+rows exercised: 295 of 297; 2 proven unreachable by a link (S12)
+cross-scenario: 744 pairs of asserted events at the same (machine, from, event) compared
+use cases with scenarios: 29 of 29 in scope
+hazards (317): 145 tagged on a scenario, 20 named only by an exercised row, 146 under "V&V outside the scenarios", 6 accepted out of scope, 0 not covered
+use-case hazard gaps: 0 (a hazard a use case lists that none of its scenarios, exercised rows or V&V-outside notes cover)
+  hazards row: H-002, H-007, H-032, H-035, H-036, H-037, H-048, H-071, H-079, H-099, H-110, H-137, H-138, H-173, H-186, H-229, H-242, H-248, H-250, H-253
+  hazards outside: H-003, H-004, H-008, H-010, H-011, H-012, H-015, H-016, H-017, H-019, H-022, H-023, H-030, H-031, H-034, H-038, H-039, H-040, H-041, H-049, H-052, H-056, H-057, H-058, H-059, H-061, H-062, H-063, H-066, H-067, H-068, H-070, H-072, H-078, H-092, H-093, H-094, H-095, H-098, H-100, H-101, H-102, H-103, H-104, H-105, H-108, H-111, H-123, H-125, H-127, H-128, H-130, H-131, H-135, H-136, H-139, H-140, H-145, H-146, H-148, H-149, H-150, H-151, H-152, H-153, H-154, H-155, H-156, H-158, H-159, H-160, H-161, H-162, H-163, H-169, H-170, H-174, H-177, H-178, H-182, H-183, H-185, H-187, H-190, H-191, H-192, H-193, H-194, H-195, H-196, H-198, H-199, H-200, H-203, H-204, H-205, H-207, H-208, H-209, H-211, H-212, H-213, H-214, H-215, H-217, H-219, H-220, H-222, H-230, H-233, H-243, H-244, H-247, H-255, H-256, H-259, H-260, H-262, H-269, H-270, H-271, H-274, H-279, H-281, H-286, H-288, H-292, H-293, H-294, H-295, H-296, H-298, H-299, H-301, H-302, H-303, H-304, H-305, H-306, H-307, H-308, H-309, H-313, H-314, H-315, H-316
+  hazards oos: H-013, H-069, H-197, H-246, H-272, H-282
+OK: guards exclusive and exhaustive; every step maps; every event enabled and determined; every Then is the table's; every @t tag exercised; no two scenarios conflict; every link holds; no hazard or use-case gap

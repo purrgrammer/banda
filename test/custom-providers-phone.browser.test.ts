@@ -23,7 +23,7 @@ import { streamSocket } from "../src/server/remote.ts";
 import { compatServer } from "./fixtures/compat-server.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { testDevice } from "./fixtures/iroh-client.ts";
-import { skipShippedSkills, tempHome, webServer } from "./helpers.ts";
+import { tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const SHOTS = process.env.BANDA_CUSTOM_PROVIDER_SHOTS;
@@ -146,7 +146,6 @@ it.skipIf(!hasChrome())(
 		let bridge: http.Server | undefined;
 		let server: Awaited<ReturnType<typeof webServer>> | undefined;
 		try {
-			await skipShippedSkills(daemon.port, token);
 			// the owner pairs the phone, as Settings → Devices does
 			const invite = await owner<InviteView>("/devices/invites", "POST");
 			const connection = await phone.dial(invite.ticket);

@@ -1,0 +1,8 @@
+## Base Sepolia, read 2026-11-23T16:03:10.984Z
+  dev account 0: EIP-7702 delegation to d6cedd…; nonce above 0
+  dev account 1: no code; nonce above 0
+  dev account 2: EIP-7702 delegation to d6cedd…; nonce above 0
+## Base mainnet, read 2026-11-23T16:03:11.943Z
+  dev account 0: EIP-7702 delegation to 8a67b5…; nonce above 0
+  dev account 1: EIP-7702 delegation to 8a67b5…; nonce above 0
+  dev account 2: EIP-7702 delegation to 8a67b5…; nonce above 0

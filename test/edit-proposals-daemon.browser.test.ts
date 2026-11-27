@@ -21,7 +21,7 @@ import { readDaemonFile } from "../src/home.ts";
 import type { ControlView, Item, ShownWait } from "../src/server/api.ts";
 import { githubObjectDefinition, startGithubObjects } from "./fixtures/github-objects.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, until as untilEver, webServer } from "./helpers.ts";
+import { tempHome, until as untilEver, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 /** `untilEver`, bounded: a state that never comes fails naming what it waited on, well before the test's own timeout. */
@@ -175,7 +175,6 @@ for (const [width, height, delivery] of [
 			const daemon = await startDaemon({ home, port: 0, models, box: hostBox(home), shipped, log: () => {} });
 			const base = `http://127.0.0.1:${daemon.port}`;
 			const token = (await readDaemonFile(home))?.token as string;
-			await skipShippedSkills(daemon.port, token);
 			const call = async (path: string, init: RequestInit = {}) =>
 				fetch(`${base}/api${path}`, {
 					...init,

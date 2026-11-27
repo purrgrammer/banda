@@ -1,0 +1,19 @@
+## 1. the official facilitator's verify of C19's window (validAfter t-5, validBefore t+60) at each skew
+  fresh fixture, as loaded               chain time - wall =      -382 s -> verify {"isValid":false,"invalidReason":"invalid_exact_evm_payload_authorization_valid_before"}
+  fixture 30 days old, as loaded         chain time - wall =  -2592382 s -> verify {"isValid":false,"invalidReason":"invalid_exact_evm_payload_authorization_valid_before"}
+  skew 0 s                               chain time - wall =         0 s -> verify {"isValid":true}
+  skew -50 s                             chain time - wall =       -50 s -> verify {"isValid":true}
+  skew -60 s                             chain time - wall =       -60 s -> verify {"isValid":false,"invalidReason":"invalid_exact_evm_payload_authorization_valid_before"}
+  skew -119 s (under the 120 s pause)    chain time - wall =      -119 s -> verify {"isValid":false,"invalidReason":"invalid_exact_evm_payload_authorization_valid_before"}
+  skew +4 s                              chain time - wall =         4 s -> verify {"isValid":true}
+  skew +10 s                             chain time - wall =        10 s -> verify {"isValid":false,"invalidReason":"invalid_exact_evm_payload_authorization_valid_after"}
+  skew +119 s (under the 120 s pause)    chain time - wall =       119 s -> verify {"isValid":false,"invalidReason":"invalid_exact_evm_payload_authorization_valid_after"}
+
+## 2. settlement_pending seen by the payer (anvil --no-mining; the facilitator waits 1.5 s for a receipt)
+  paid request: HTTP 402 after 3016 ms, handler ran 1x, body "{}"
+    PAYMENT-RESPONSE: {"success":false,"errorReason":"settlement_pending","errorMessage":"timed out waiting for the receipt","transaction":"0xa7fa61863eee961fc4a995bac7080ce3e07d3d5081112fd36784c61cddf6b054","network":"eip155:84532","payer":"0x70dF9961D548e90DD8a0A6beed13f6043E0F6Fb7"}
+  chain now: pool {"pending":"0x1","queued":"0x0"}, authorizationState false
+  the same header again before any block: HTTP 402, handler ran 2x in all, PAYMENT-RESPONSE {"success":false,"errorReason":"settlement_pending","transaction":"0xa7fa61863eee961fc4a995bac7080ce3e07d3d5081112fd36784c61cddf6b054","sameTx":true}, pool {"pending":"0x1","queued":"0x0"}
+  after one block: authorizationState true, payTo USDC 10000
+  the same header sent again: HTTP 402, handler ran 2x in all, PAYMENT-RESPONSE null, payTo USDC 10000
+    PAYMENT-REQUIRED error: "invalid_exact_evm_nonce_already_used"

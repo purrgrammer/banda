@@ -1,0 +1,97 @@
+
+## determinism
+  micro-eth-signer signBy(key) twice, same hash: false
+  micro-eth-signer signBy(key, false) twice, same hash: true
+  viem signTransaction twice, same bytes: true
+  viem bytes == micro-eth-signer deterministic bytes: true
+
+## rebroadcast
+  no-mining, first send: ok 0x98d6043e72c56f63…
+  no-mining, same bytes while pending: error -32003 "transaction already imported"
+  same bytes after mined: error -32003 "nonce too low"
+  receipt still there, status: 0x1
+  automine, first send: ok 0xb9d769ed1c01c41f…
+  automine, same bytes again: error -32003 "nonce too low"
+
+## feeBump
+  attempt 1 (fee F): ok 0x931036acbb0f5eb9…
+  other payload, same nonce, same fee: error -32003 "replacement transaction underpriced"
+  fresh pool: same payment re-signed +1% (fee cap and tip): ok 0xa159f6f644ae1dba…
+    then +50% tip only, same fee cap: error -32003 "replacement transaction underpriced"
+  fresh pool: same payment re-signed +5% (fee cap and tip): ok 0xa3339772e408c956…
+    then +50% tip only, same fee cap: error -32003 "replacement transaction underpriced"
+  fresh pool: same payment re-signed +9% (fee cap and tip): ok 0x23469af2f19e3c03…
+    then +50% tip only, same fee cap: error -32003 "replacement transaction underpriced"
+  attempt 2: same payment, +13% fee cap and tip: ok 0x144523fc1131c85a…
+  pool holds at nonce 0: attempt 2
+  attempt 1 by hash after replacement: null (evicted)
+  attempt 1 bytes again (now lower than pool): error -32003 "replacement transaction underpriced"
+  after mining: receipt(attempt 1): null
+  after mining: receipt(attempt 2) status: 0x1
+  attempt 1 bytes after attempt 2 mined: error -32003 "nonce too low"
+  fee cap 1 wei (below base fee): error -32003 "max fee per gas less than block base fee"
+
+## drop
+  two pending: pending=2 queued=0
+  anvil_dropTransaction(nonce 0): ok 0x060d8ed4632c5ef0…
+  after drop: tx by hash nonce 0 / nonce 1 (not dropped by us): null / null
+  after drop: pool: pending=0 queued=0
+  after drop: count latest / pending: 0 / 0
+  mine with nonce 0 missing: wallet txs mined: 0
+  rebroadcast stored bytes of nonce 0: ok 0x060d8ed4632c5ef0…
+  pool: pending=1 queued=0
+  after mine: receipts nonce0/nonce1: 0x1 / null
+  rebroadcast stored bytes of nonce 1 too: ok 0xfe5047cd705cc43d…
+  after mine: receipt nonce1: 0x1
+
+## reorg
+  mined: block / head: 1 / 3
+  tags latest/safe/finalized: 3 / 0 / 0
+  anvil_reorg(3, []) (removes the block with the tx): ok null…
+  after reorg: head: 3
+  after reorg: receipt: null
+  after reorg: tx by hash: null
+  after reorg: pool: pending=0 queued=0
+  after reorg: count latest: 0
+  rebroadcast stored bytes: ok 0x25e7f297b2846439…
+  after re-mine: receipt block, same hash as before?: 4, tx hash same=true, block hash same=false
+  anvil_reorg(1, [[raw, 0]]) (re-includes it): ok null…
+  receipt after re-inclusion: block number same, block hash same: true, true
+  after 100 more blocks: latest / safe / finalized: 105 / 73 / 41
+
+## nonceHole
+  nonce 0 needs more than the balance: error -32003 "Insufficient funds for gas * price + value"
+  nonce 1 (small) after the hole: ok 0x6ad639f0a35fc3a3…
+  pool: pending=0 queued=1
+  after mining 2 blocks: nonce 1 receipt: null (stuck behind the hole)
+  fill nonce 0 with a 0-value self-send: ok 0xad20dd869cc09df6…
+  after mine: filler / nonce 1: 0x1 / 0x1
+
+## pendingTag
+  anvil count latest / pending with one tx in pool: 0 / 1
+
+## external
+  [idle external, reconcile=false] external tx at nonce 0: ok 0x97cd8d6239eff258…
+    pipeline steps: reserved 0 | checkpointed 0x572a9d41b4dc59fb752d110013c987f3a5188d0068c4e1aeab54f4ead5 | nonce taken by foreign tx, re-reserving | reserved 1 | checkpointed 0x6a5539dba57cadb99e25b4efc6444f5efe74141493e886892c667d4ca5 | broadcast 0x6a5539dba57cadb99e25b4efc6444f5efe74141493e886892c667d4ca5 ok  | confirmed 0x6a5539dba57cadb99e25b4efc6444f5efe74141493e886892c667d4ca5 block 2
+    payment nonce, on chain count: 1, 1
+  [idle external, reconcile=true] external tx at nonce 0: ok 0xa00c96701d7f5d6d…
+    pipeline steps: reserved 1 | checkpointed 0x89c760b7cc77b87e075f25d75576d4cb2679036274f5359bfa95ee6d78 | broadcast 0x89c760b7cc77b87e075f25d75576d4cb2679036274f5359bfa95ee6d78 ok  | confirmed 0x89c760b7cc77b87e075f25d75576d4cb2679036274f5359bfa95ee6d78 block 2
+    payment nonce, on chain count: 1, 1
+  [racing, external +50% fee] external send at banda's pending nonce 0: ok 0xd9b893651a8b7d44…
+    pool now: pending=1 queued=0
+    pipeline steps: reserved 0 | checkpointed 0xf626dcc99879ef0504dbf3aeea4b721242f8b8aa4dfc80cc7870f3d2ebeafa65 | broadcast 0xf626dcc99879ef0504dbf3aeea4b721242f8b8aa4dfc80cc7870f3d2ebeafa65 ok  | broadcast 0xf626dcc99879ef0504dbf3aeea4b721242f8b8aa4dfc80cc7870f3d2ebeafa65 underpriced {"code":-32003,"message":"replacement transaction underpriced"} | nonce taken by foreign tx, re-reserving | reserved 1 | checkpointed 0x4613e3e4377012b9bb48338c6f3a6c7f990876a53461f1910b8389fdc635e96c | broadcast 0x4613e3e4377012b9bb48338c6f3a6c7f990876a53461f1910b8389fdc635e96c ok  | broadcast 0x4613e3e4377012b9bb48338c6f3a6c7f990876a53461f1910b8389fdc635e96c known {"code":-32003,"message":"transaction already imported"} | confirmed 0x4613e3e4377012b9bb48338c6f3a6c7f990876a53461f1910b8389fdc635e96c block 2
+    payment confirmed at nonce, on-chain count of the payment, external landed: 1, 1, 1
+  [external pending first, fee -50% vs banda] external at nonce 0: ok 0x56ae0cedea30b7c5…
+    pipeline steps: reserved 0 | checkpointed 0x865fc8bce344eb7584d421af963dc0bf783101ce9c9ee11b2a3d644832192122 | broadcast 0x865fc8bce344eb7584d421af963dc0bf783101ce9c9ee11b2a3d644832192122 ok  | broadcast 0x865fc8bce344eb7584d421af963dc0bf783101ce9c9ee11b2a3d644832192122 known {"code":-32003,"message":"transaction already imported"} | confirmed 0x865fc8bce344eb7584d421af963dc0bf783101ce9c9ee11b2a3d644832192122 block 1
+    payment nonce, on-chain count of the payment, external landed: 0, 1, 0
+  [external pending first, fee +0% vs banda] external at nonce 0: ok 0xea7a327ce7bdb41c…
+    pipeline steps: reserved 0 | checkpointed 0xcf16ded6a7fb4b45a2dbced77b7d37e3c841ee4cdac844bd2e29427517fe2818 | broadcast 0xcf16ded6a7fb4b45a2dbced77b7d37e3c841ee4cdac844bd2e29427517fe2818 underpriced {"code":-32003,"message":"replacement transaction underpriced"} | nonce taken by foreign tx, re-reserving | reserved 1 | checkpointed 0x0f4db629a8ee6b094d328c676d7a56f0758a1381b750ea430ae8398fe0b94225 | broadcast 0x0f4db629a8ee6b094d328c676d7a56f0758a1381b750ea430ae8398fe0b94225 ok  | broadcast 0x0f4db629a8ee6b094d328c676d7a56f0758a1381b750ea430ae8398fe0b94225 known {"code":-32003,"message":"transaction already imported"} | confirmed 0x0f4db629a8ee6b094d328c676d7a56f0758a1381b750ea430ae8398fe0b94225 block 2
+    payment nonce, on-chain count of the payment, external landed: 1, 1, 1
+
+## reorgAfterNonceTaken
+  [latest] payment moved to nonce 1 and confirmed; now a reorg of 2 blocks puts attempt 0 and the new attempt on chain: ok null…
+  [latest] pipeline: reserved 0 | checkpointed 0x0b16ac0859 | broadcast 0x0b16ac0859 | nonce taken  | reserved 1 | checkpointed 0x181ff67265 | broadcast 0x181ff67265 | confirmed 0x181ff67265
+  [latest] times the payment landed on chain: 2
+  [finalized] reorg replaces the foreign tx with attempt 0: ok null…
+  [finalized] pipeline: reserved 0 | checkpointed 0x5a09f26ada | broadcast 0x5a09f26ada | confirmed 0x5a09f26ada
+  [finalized] times the payment landed on chain: 1

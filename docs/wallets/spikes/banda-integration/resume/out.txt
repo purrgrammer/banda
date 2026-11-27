@@ -1,0 +1,5 @@
+PASS killed after-checkpoint: first exit signal=SIGKILL; after resume {"asksAfterKill":0,"nonceNext":1,"signings":1,"broadcasts":["0x02f8…(ana,1,nonce=0,ad24a0)"],"result":"[{\"type\":\"text\",\"text\":\"broadcast 0x02f8…(ana,1,nonce=0,ad24a0)\"}]"}
+PASS killed after-broadcast: first exit signal=SIGKILL; after resume {"asksAfterKill":0,"nonceNext":1,"signings":1,"broadcasts":["0x02f8…(ana,1,nonce=0,f272c3)","0x02f8…(ana,1,nonce=0,f272c3)"],"result":"[{\"type\":\"text\",\"text\":\"broadcast 0x02f8…(ana,1,nonce=0,f272c3)\"}]"}
+PASS killed after-broadcast-deny: first exit signal=SIGKILL; after resume {"asksAfterKill":0,"nonceNext":1,"signings":1,"broadcasts":["0x02f8…(ana,1,nonce=0,9903fd)"],"result":"[{\"type\":\"text\",\"text\":\"wallet__send did not run: the owner doesn't pay ana.\"}]"}
+ALL PASS
+exit 0

@@ -1,0 +1,14 @@
+## L1 fee on anvil 1.9.0
+  plain anvil: chain 31337, status 0x1, spent - (value + gasUsed x effectiveGasPrice) = 0 wei; receipt fee fields []
+  --optimism: chain 31337, status 0x1, spent - (value + gasUsed x effectiveGasPrice) = 0 wei; receipt fee fields []
+  -n base: chain 31337, status 0x1, spent - (value + gasUsed x effectiveGasPrice) = 1600000000000 wei; receipt fee fields []
+  fork of Base Sepolia: chain 84532, status 0x1, spent - (value + gasUsed x effectiveGasPrice) = 163 wei; receipt fee fields []; GasPriceOracle.getL1FeeUpperBound(110) on the fork = 195
+  fork of Base Sepolia, -n base: chain 84532, status 0x1, spent - (value + gasUsed x effectiveGasPrice) = 163 wei; receipt fee fields []; GasPriceOracle.getL1FeeUpperBound(110) on the fork = 195
+
+## sepolia.base.org: eth_getLogs ranges and the finalized tag from call to call
+  six reads of finalized in a row: 0, 0, 0, 0, 0, 0 (relative to the first)
+  eth_getLogs USDC fromBlock finalized-100 toBlock finalized-0: 27 logs
+  eth_getLogs USDC fromBlock finalized-199 toBlock finalized-0: 73 logs
+  eth_getLogs USDC fromBlock finalized-200 toBlock finalized-0: 73 logs
+  eth_getLogs USDC fromBlock finalized-100 toBlock finalized: -32602 "invalid block range params"
+  eth_getLogs USDC fromBlock finalized-100 toBlock safe: -32614 "eth_getLogs is limited to a 200 range"

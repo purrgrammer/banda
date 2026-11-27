@@ -49,7 +49,7 @@ import type { ObjectAsk, ObjectShown } from "./objects.ts";
 import { SERVED_POLICY } from "./policy.ts";
 import { endpointOf } from "./remote.ts";
 import type { Area, AreaReply, AreaRequest } from "./routes/area.ts";
-import type { ShippedSkillsView, SkillView } from "./skills.ts";
+import type { SkillView } from "./skills.ts";
 import type { PageQuery } from "./transcript.ts";
 
 export type Routes = {
@@ -115,10 +115,6 @@ export type Routes = {
 	/** Accept every listed proposal by the hash the owner saw, all or none. */
 	readonly acceptSkills: (wanted: readonly { name: string; sha: string }[]) => Promise<SkillView[]>;
 	readonly saveSkill: (name: string, text: string, base: string | null) => Promise<SkillView[]>;
-	/** The skills banda ships, and whether the owner chose from them at first run. */
-	readonly shippedSkills: () => Promise<ShippedSkillsView>;
-	/** Add the shipped skills picked, accepted; none skips. Either way they are not offered again. */
-	readonly chooseShippedSkills: (names: readonly string[]) => Promise<ShippedSkillsView>;
 	/** What the other harnesses on this computer have to import, and whether the owner chose at first run. */
 	readonly bringable: () => Promise<BringView>;
 	/** Import the skills and agents picked; none skips. Either way the step is not offered again. */
@@ -241,15 +237,19 @@ export type FactAction =
 	| { readonly action: "edit"; readonly id: string; readonly text: unknown }
 	| { readonly action: "delete"; readonly id: string };
 
-/** What the owner does to a routine from the app. */
-export type RoutineAction =
+/**
+ * What the owner does to a routine from the app. `id` is the routine's id as the body gives it, when it does: an app
+ * of this build names the routine in the body as in the path (`requested` in server/routines.ts).
+ */
+export type RoutineAction = { readonly id?: string } & (
 	| {
 			readonly action: "accept";
 			readonly sha: string | null;
 			/** The owner's edit of what the agent wrote, made before allowing it (`RoutineChange`). */
 			readonly change?: { readonly when?: string; readonly description?: string; readonly ask?: string };
 	  }
-	| { readonly action: "decline" | "pause" | "resume" | "remove" };
+	| { readonly action: "decline" | "pause" | "resume" | "remove" }
+);
 
 /** The built web UI (`npm run build:web`); the same path from `src/server` and `dist/server`. */
 /** A connection's version as the app sends it back: a definition's hash or a record's counter, with its overlay's. */
@@ -587,13 +587,6 @@ export function handler(
 				await routes.acceptSkills(accept.map(({ name, sha }: { name: string; sha: string }) => ({ name, sha }))),
 			);
 		}
-		if (route === "GET /skills/shipped") return reply(res, 200, await routes.shippedSkills());
-		if (route === "POST /skills/shipped") {
-			const { add } = await json(req);
-			if (!Array.isArray(add) || !add.every((name) => typeof name === "string"))
-				return reply(res, 400, { error: "add is the names of the shipped skills picked; none skips" });
-			return reply(res, 200, await routes.chooseShippedSkills(add));
-		}
 		if (route === "GET /bring") return reply(res, 200, await routes.bringable());
 		if (route === "POST /bring") {
 			const { skills, agents } = await json(req);
@@ -687,11 +680,15 @@ export function handler(
 		const routine = /^\/routines\/((?:[a-z0-9-]+\/)?[a-z0-9-]+)\/(accept|decline|pause|resume|remove)$/.exec(path);
 		if (routine !== null && req.method === "POST") {
 			const [, name = "", action] = routine;
+			const body = await json(req, JSON_BODY, action !== "accept");
+			// the routine named again, as an app of this build does; an older app's body has none
+			if (body.id !== undefined && typeof body.id !== "string")
+				return reply(res, 400, { error: "id is the routine's id, as the path names it" });
+			const named = body.id === undefined ? {} : { id: body.id };
 			if (action === "accept") {
-				const body = await json(req);
 				const { sha, when, description, ask } = body;
 				// what the owner may edit of what an agent wrote is its text, never its limits or its name
-				const unknown = Object.keys(body).find((key) => !["sha", "when", "description", "ask"].includes(key));
+				const unknown = Object.keys(body).find((key) => !["id", "sha", "when", "description", "ask"].includes(key));
 				if (unknown !== undefined) return reply(res, 400, { error: `${unknown} cannot be edited` });
 				if (sha !== null && (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)))
 					return reply(res, 400, { error: "sha is the hash of the text shown, or null for a removal" });
@@ -705,13 +702,13 @@ export function handler(
 					...(description === undefined ? {} : { description }),
 					...(ask === undefined ? {} : { ask }),
 				};
-				return reply(res, 200, await routes.routine(name, { action, sha, change }));
+				return reply(res, 200, await routes.routine(name, { ...named, action, sha, change }));
 			}
 
 			return reply(
 				res,
 				200,
-				await routes.routine(name, { action: action as "decline" | "pause" | "resume" | "remove" }),
+				await routes.routine(name, { ...named, action: action as "decline" | "pause" | "resume" | "remove" }),
 			);
 		}
 		if (route === "GET /memory") return reply(res, 200, await routes.memory());
@@ -1249,10 +1246,12 @@ function permissionOf(value: unknown): PermissionScope | undefined | null {
 }
 
 /** A request's body as a JSON object, refused (413) past `limit` as an upload is. */
-async function json(req: IncomingMessage, limit = JSON_BODY): Promise<Record<string, unknown>> {
+async function json(req: IncomingMessage, limit = JSON_BODY, orEmpty = false): Promise<Record<string, unknown>> {
 	const text = (await uploaded(req, "the body", limit, () => `the body may be ${sizeOf(limit)} at most`)).toString(
 		"utf8",
 	);
+	// an action that needs nothing said may be sent with no body at all
+	if (orEmpty && text.trim() === "") return {};
 	let body: unknown;
 	try {
 		body = JSON.parse(text);

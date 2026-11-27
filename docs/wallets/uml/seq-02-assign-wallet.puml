@@ -1,0 +1,59 @@
+@startuml seq-02-assign-wallet
+!include style.iuml
+title Assigning a wallet to agents, and switching it off (requirement 6; C3 step 2, C8, C13, C17; banda-integration answer 1)
+autonumber "<b>0."
+
+actor Owner
+participant "Web app\nSettings → Wallets\n(or the agent's settings)" as Web
+participant "Daemon API" as D
+database "Store" as Store
+participant "capabilities.ts\ninstall loop" as Builder
+participant "Agent Mara\n(next turn)" as Mara
+participant "Agent Sancho" as Sancho
+
+== Switch on ==
+Owner -> Web : wallet "Main" → Agents → Mara: on
+Web -> D : PUT access {wallet Main, agent Mara, on, version v}
+alt version v is current (C8)
+  D -> Store : commit Connected.on[Mara].wallet += Main (generation g)
+else another device changed it first
+  D --> Web : refused, the screen redraws with the current state (C8)
+end
+note right of Store
+  Mara's agent file must also name the connection
+  (connections: ["wallet"], mayUse). Several wallets
+  may be on for one agent; the account argument then
+  lists only Mara's own wallets, by label.
+end note
+Store --> Builder : access changed
+Builder -> Builder : build Mara's wallet tools as EffectTools\nwallet~__address, wallet~__balance, wallet~__history,\nwallet~__recipients, wallet~__send, wallet~__pay_x402
+Mara -> D : wallet~__balance()
+D --> Mara : Main on Base Sepolia: 25 USDC, 0.002 ETH (read at block b)
+
+== Two agents share one wallet ==
+Owner -> Web : Main → Agents → Sancho: on
+Web -> D : PUT access {Main, Sancho, on, version v+1}
+D -> Store : commit Connected.on[Sancho].wallet += Main
+note over Mara, Sancho
+  They share the balance, so they share the cap. Recipients, labels and Deny are the
+  wallet's; Always binds (wallet, agent, recipient): Sancho's first payment to Ana asks,
+  and its card offers "Always pay Ana for Sancho too" (R-7, OD-1).
+end note
+
+== Switch off (C17) ==
+Owner -> Web : Main → Agents → Mara: off
+Web -> D : PUT access {Main, Mara, off, version v+2}
+D -> Store : one commit: remove the access;\nrefuse Mara's open asks and queued payments on Main
+note right of Store
+  rows: payment Waiting · cancel_or_switch_off → Refused;
+  Queued · cancel_or_switch_off → Refused.
+  Signed, Sent and Included are unchanged: past the burn point
+  the lane finishes and reports (C13).
+end note
+Store --> Builder : access changed
+Builder -> Builder : Mara's wallet tools no longer list Main
+Mara -> D : wallet~__send {account: Main, ...} (a stale call)
+D -> Store : admission commit: allowedAs re-checks the account\nis on for Mara at generation g (C3 step 2)
+D --> Mara : "Mara may not use Main" (did not run)
+note right of D : row: payment Idle · call [not wallet_usable] → Refused (Call)
+@enduml

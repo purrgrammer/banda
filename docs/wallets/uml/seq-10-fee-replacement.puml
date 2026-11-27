@@ -1,0 +1,82 @@
+@startuml seq-10-fee-replacement
+!include style.iuml
+title Fee replacement: a new version of the same nonce, committed before it is broadcast\npayment: Sent · bump → Sent, Sent · cancel_replace → Sent (C2, C6, C7, C11, C13, C21; H-124, H-175, H-199; nonce-and-crash spike sections 6 and 7)
+autonumber "<b>0."
+
+actor Owner
+participant "Web app" as Web
+database "Store" as Store
+participant "Wallet lane" as Lane
+participant "Signer" as Signer
+participant "RPC / Base" as Chain
+participant "Receipt follower" as Follower
+
+note over Store : payment I is Sent: version v1 {nonce n, maxFee f1, tip p1, raw1, hash1}
+loop no receipt for any stored version
+  Follower -> Chain : eth_getTransactionReceipt(hash1)
+  Chain --> Follower : null
+end
+alt no receipt after k polls, or maxFee f1 below the current base fee
+  Lane -> Chain : base fee, priority fee; GasPriceOracle getL1FeeUpperBound
+  Lane -> Lane : f2 = max(1.125 × f1, current), p2 = max(1.125 × p1, current)\n(+12.5% covers geth's 10% PriceBump and reth)
+  alt f2 within the fee reserve held for I (C11)
+    Lane -> Signer : sign the same transfer, nonce n, fees (f2, p2)
+    Signer --> Lane : raw2
+    Lane -> Store : commit and sync: append version v2 {raw2, hash2 = keccak256(raw2)}
+    note right of Store
+      before any broadcast of raw2 (C6), synced to disk (C21): a kill or a power loss
+      here leaves v2 stored or never sent; PaymentLane_bug_C21bump finds a double
+      payment when this sync is left out
+    end note
+    Lane -> Chain : eth_sendRawTransaction(raw2), then raw1 (every version, newest first)
+    Chain --> Lane : v2 accepted; raw1: "replacement transaction underpriced" (expected)
+  else the reserve would be exceeded
+    Lane -> Store : stop bumping; keep rebroadcasting; tell the owner the fee is above the reserve
+  end
+end
+Follower -> Chain : receipts of v1 and v2
+alt v2 mined
+  Follower -> Store : I Included with v2; v1 marked replaced
+else v1 mined before it was evicted
+  Follower -> Store : I Included with v1; v2 marked replaced
+end
+note right of Store : any version's receipt settles the payment (C6); row: Sent · receipt [blk == 'own'] → Included
+
+== The owner cancels a sent payment ==
+Owner -> Web : Cancel this payment
+Web -> Store : command into the lane {payment I, cancel, version} (C2)
+Lane -> Signer : sign a zero-value transfer to the wallet itself at nonce n, fee above every stored version
+Signer --> Lane : raw3
+Lane -> Store : commit and sync: append version v3 {kind cancel} (owner-authorized, C21)
+note right of Store : row: Sent · cancel_replace → Sent (CancelReplace)
+Lane -> Chain : broadcast v3, v2, v1
+alt v3 mined
+  Follower -> Store : I Included with the cancel version
+  note right of Store : row: Sent · receipt [blk == 'own' or blk == 'own_cancel'] → Included
+  Follower -> Store : at finalized: I Cancelled, "not paid" (its fee was spent)
+  note right of Store : row: Included · finality [blk_fin and blk == 'own_cancel'] → Cancelled (Settle)
+else v1 or v2 mined first
+  Follower -> Store : I Included, then Confirmed at finalized: "paid; the cancel came too late" (H-177)
+  note right of Store : row: Included · finality [blk_fin and blk != 'own_cancel' and blk_ok] → Confirmed
+end
+note over Owner, Follower
+  Past the burn point a cancel can only race; it never reports "did not run" (C13, H-199):
+  payment Sent · cancel_or_switch_off → Sent. A mined cancel is never Confirmed, and a mined
+  paying version never Cancelled (PaymentLane ReportedIsTrue; races.feature).
+end note
+
+== A foreign transaction takes nonce n (the exported key used elsewhere) ==
+Follower -> Chain : nonce n consumed, no stored hash has a receipt
+Follower -> Store : wait until that block is finalized (about 20 min; R-4)
+note right of Store : Sent · receipt [blk == 'foreign' and not blk_fin] → Sent
+Follower -> Chain : fetch the foreign transaction; recover its signer;\nask a second, independent RPC for the finalized block (C7)
+alt proven: signer == wallet, nonce == n, hash not stored, both RPCs agree
+  Follower -> Store : I → Waiting with a card that says what happened
+  note right of Store : Sent · receipt [blk == 'foreign' and blk_fin and verified] → Waiting
+else one RPC's word only
+  Follower -> Store : I stays Sent; the owner is told the RPCs disagree
+  note right of Store : Sent · receipt [blk == 'foreign' and blk_fin and not verified] → Sent (LieForeign)
+end
+Owner -> Web : approves again
+Web -> Store : Pay; I re-enters the lane and takes a new nonce at its start commit
+@enduml

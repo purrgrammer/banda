@@ -23,7 +23,7 @@ import { ownerToken } from "../src/home.ts";
 import { connectionDefinition } from "./fixtures/connected.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { startFakeMcp } from "./fixtures/mcp-server.ts";
-import { skipShippedSkills, tempHome, until, webServer } from "./helpers.ts";
+import { tempHome, until, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const Account = Type.Object({ key: Type.String(), generation: Type.String() });
@@ -78,7 +78,6 @@ async function fixture(respond: FauxResponseFactory, connection?: string) {
 		assert.ok(Value.Check(schema, result), `Invalid response from ${path}`);
 		return result satisfies Static<T>;
 	};
-	await skipShippedSkills(daemon.port, token);
 	const server = await webServer({
 		server: { proxy: { "/api": { target: base, changeOrigin: true, headers: { origin: base } } } },
 	});

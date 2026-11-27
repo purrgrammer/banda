@@ -119,14 +119,15 @@ describe("the companion's picks", () => {
 			fc.property(fc.string(), words, words, (body, first, second) => {
 				const text = `---\ndescription: d\n---\n${body}`;
 				const once = withPersonality(text, first);
-				expect(once).toBe(`---\ndescription: d\n---\n${first}\n`);
+				// a body that is the words already stays byte for byte, as the next test says
+				expect(once).toBe(body.trim() === first ? text : `---\ndescription: d\n---\n${first}\n`);
 				expect(personalityOf(once)).toBe(first);
 				const twice = withPersonality(once, second);
 				expect(personalityOf(twice)).toBe(second);
 				// writing the same one again changes nothing
 				expect(withPersonality(twice, second)).toBe(twice);
 			}),
-			{ numRuns: pbtRuns(100) },
+			{ numRuns: pbtRuns(100), examples: [["ref", "ref", "!"]] },
 		);
 		// the lead starts with its role and the default words, one body with no section of its own
 		expect(personalityOf(LEAD_TEXT)).toBe(lead.trim());

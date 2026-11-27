@@ -1,0 +1,11 @@
+## two senders, one wallet
+  store, two processes, 10 sends each, auto: exits 0/0, wallet txs on chain 20, nonces contiguous true, sends not landed exactly once 0, all confirmed true, ledger.next 20, sends with >1 attempt 0, non-ok broadcast replies {}
+  store, two processes, 10 sends each, interval: exits 0/0, wallet txs on chain 20, nonces contiguous true, sends not landed exactly once 0, all confirmed true, ledger.next 20, sends with >1 attempt 0, non-ok broadcast replies {"known":140}
+  store, two drivers on the SAME 20 sends, auto: exits 0/0, wallet txs on chain 20, nonces contiguous true, sends not landed exactly once 0, all confirmed true, ledger.next 20, sends with >1 attempt 12, non-ok broadcast replies {"nonce-low":8}
+  store, two drivers on the SAME 20 sends, interval: exits 0/0, wallet txs on chain 20, nonces contiguous true, sends not landed exactly once 0, all confirmed true, ledger.next 20, sends with >1 attempt 20, non-ok broadcast replies {"underpriced":260,"nonce-low":34}
+  viem nonceManager, 1 process(es) x 20 concurrent sends, automine: ok 20/20, landed 20/20, reported ok but not on chain 0, errors {}
+  viem nonceManager, 2 process(es) x 10 concurrent sends, automine: ok 10/20, landed 10/20, reported ok but not on chain 0, errors {"nonce too low":10}
+
+## a restart with viem's nonce manager, Base 'pending' vs anvil 'pending'
+  restart, pending=anvil's own (includes pool): run A 3 sends ok=3; after restart run B (same fee) -> ok; run C (2x fee) -> ok; pool nonce 0 holds value 7000; after mining, landed: A0=true A1=true A2=true B=true C=true
+  restart, pending='latest' (Base): run A 3 sends ok=3; after restart run B (same fee) -> replacement transaction underpriced; run C (2x fee) -> ok; pool nonce 0 holds value 7200; after mining, landed: A0=false A1=true A2=true B=false C=true

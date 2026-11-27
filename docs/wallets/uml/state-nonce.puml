@@ -1,0 +1,71 @@
+@startuml state-nonce
+!include style.iuml
+hide empty description
+skinparam stateFontStyle bold
+skinparam stateAttributeFontSize 10
+skinparam stateAttributeFontStyle plain
+skinparam ArrowFontSize 10
+title nonce machine (NonceAlloc.tla), generated from model/transitions.json: 21 rows, 4 states
+
+legend top left
+Guard atoms and their domains
+  queued in {False, True}
+  can_sign in {False, True}
+  chain_ahead in {False, True}
+  ledger_moved in {False, True}
+  recheck_ok in {False, True}
+  above_final in {False, True}
+  more_in_flight in {False, True}
+  verified in {False, True}
+Label: event [guard] / TLA+ action (conflicts.md rules)
+Lines inside a state answer the event without a state change.
+endlegend
+
+state "free" as nonce_free
+state "signing" as nonce_signing
+state "in_flight" as nonce_in_flight
+state "blocked" as nonce_blocked
+
+[*] --> nonce_free
+
+' row 237
+nonce_free : lane_turn [queued and not can_sign and not chain_ahead] / Sign (C4,C16)
+' row 238
+nonce_free : lane_turn [not queued and not chain_ahead] / Sign (-)
+' row 252
+nonce_free : power_loss / PowerLoss (C21)
+' row 244
+nonce_in_flight : included_latest [more_in_flight] / Track (C5)
+' row 246
+nonce_in_flight : foreign_at_nonce [above_final and not verified] / Track (C7)
+' row 247
+nonce_in_flight : foreign_at_nonce [not above_final] / Track (C7)
+' row 248
+nonce_in_flight : reorg_undoes_inclusion / Reorg (C5,C12)
+' row 250
+nonce_in_flight : crash / Crash (C6)
+' row 253
+nonce_in_flight : power_loss / PowerLoss (C21)
+' row 254
+nonce_blocked : power_loss / PowerLoss (C21)
+' row 256
+nonce_blocked : finality [not above_final] / RaiseLedger (C5)
+
+' row 236
+nonce_free --> nonce_signing : lane_turn [queued and can_sign and not chain_ahead] / Sign (C2,C4)
+' row 239
+nonce_free --> nonce_blocked : lane_turn [chain_ahead] / Sign (C5,C21)
+' row 240
+nonce_signing --> nonce_in_flight : start_commit [not ledger_moved and recheck_ok] / StartCommit (C4,C5)
+' row 241
+' row 242
+' row 251
+nonce_signing --> nonce_free : start_commit [ledger_moved or not recheck_ok] / Redo (C4)\ncrash / Crash (C4)\npower_loss / PowerLoss (C4,C21)
+' row 243
+' row 245
+nonce_in_flight --> nonce_free : included_latest [not more_in_flight] / Track (C5)\nforeign_at_nonce [above_final and verified] / Track (C7)
+' row 249
+nonce_free --> nonce_in_flight : reorg_undoes_inclusion / Reorg (C5,C12)
+' row 255
+nonce_blocked --> nonce_free : finality [above_final] / RaiseLedger (C5)
+@enduml

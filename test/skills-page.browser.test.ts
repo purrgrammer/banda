@@ -1,7 +1,7 @@
 /**
  * The Skills page against a throwaway daemon, as the owner would use it: a skill the box wrote in effect at once, the
- * one file that does not read waiting first with what is wrong, the list flat and filterable, shipped skills added any
- * time, the form refusing bad and taken names in words, a fixed file clearing
+ * one file that does not read waiting first with what is wrong, the list flat and filterable, no skills offered by
+ * banda, the form refusing bad and taken names in words, a fixed file clearing
  * the menu's dot; with an axe pass over the page and a detail. Both widths.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -72,16 +72,19 @@ for (const width of [390, 1440])
 		});
 		try {
 			await withPage(`${server.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
-				// first run: take the six defaults (catch-me-up among them is owner-only)
-				await page.until(`document.body.textContent.includes('Skills to start with')`);
-				await click(page, button("Add 6 skills"));
-				await page.until(`!document.body.textContent.includes('Skills to start with')`);
-				// more accepted skills, as the owner would save them
-				for (const name of ["pdf", "xlsx", "deploy-staging", "invoices"])
+				// first run has no skills step: the band opens with none
+				await page.until(`document.querySelector('textarea[placeholder^="Message "]')`);
+				// accepted skills, as the owner would save them; catch-me-up is owner-only
+				const names = ["pdf", "xlsx", "deploy-staging", "invoices", "research", "standup", "translate", "summaries"];
+				for (const name of names)
 					await api(`/skills/${name}`, {
 						method: "PUT",
 						body: JSON.stringify({ text: file(name, `Work with ${name} files`, "Read it first."), base: null }),
 					});
+				await api("/skills/catch-me-up", {
+					method: "PUT",
+					body: JSON.stringify({ text: file("catch-me-up", "What happened since", "Say it short.", true), base: null }),
+				});
 				// the box changes one accepted skill, drafts two new ones, and leaves one that does not read
 				await writeFile(
 					join(home, "workspace/skills/pdf/SKILL.md"),
@@ -130,10 +133,8 @@ for (const width of [390, 1440])
 				await page.until(`document.querySelectorAll('[data-skill-list] a').length >= 11`);
 				// the axe pass over the full page
 				expect(await axeFindings(page)).toEqual([]);
-				// From banda: the one left at first run joins with one tap, accepted, and the section empties away
-				await click(page, `document.querySelector('button[aria-label="Add /diagram-design"]')`);
-				await page.until(`document.querySelector('[data-skill-list] a[href="#/skills/diagram-design"]')`);
-				await page.until(`!document.querySelector('section[aria-label="Skills from banda"]')`);
+				// banda offers no skills of its own
+				expect(await page.run(`!!document.querySelector('section[aria-label="Skills from banda"]')`)).toBe(false);
 				// the changed skill's detail: the box's version, in effect, with nothing to accept
 				await click(page, `document.querySelector('[data-skill-list] a[href="#/skills/pdf"]')`);
 				await page.until(`document.querySelector('[data-skill-detail]')?.textContent.includes('Flatten the form')`);

@@ -1,0 +1,61 @@
+@startuml seq-07-owner-send-concurrent
+!include style.iuml
+title The owner's Send from Settings, concurrent with an agent's payment from the same wallet\none lane, queue-commit order, one nonce in flight (C1, C2, C5, C11, C14; H-132, H-164, H-254; NonceAlloc)
+autonumber "<b>0."
+
+actor Owner
+participant "Web app\nSettings → Wallets → Send" as Web
+participant "Agent Mara\n(model)" as Agent
+participant "Daemon\n(API, wallet~__send)" as D
+database "Store" as Store
+participant "Wallet lane W" as Lane
+participant "Signer" as Signer
+participant "RPC / Base" as Chain
+
+par
+  Owner -> Web : Send 10 USDC to Ana (the review opened with clientRequestId r)
+  Web -> D : POST send {to, amount, token, r, version}
+  D -> Store : queue commit q1: owner payment O (payer owner: owner authority, no rule),\nreservation 10 USDC + fees
+  note right of Store : row: payment Idle · call [wallet_usable and payer == 'owner' and fits] → Queued
+else
+  Agent -> D : wallet~__send {to: Bob, amount: "4"} (Bob is Always for Mara)
+  D -> Store : admission commit q2: agent payment A, reservation 4 USDC + fees;\nthe available balance already counts O's reservation (C11)
+  note right of Store : row: payment Idle · call [... eff == 'always' and fits] → Queued
+end
+note over D, Store
+  The store has one commit line: q1 and q2 are ordered, and the later sees the earlier (C1).
+  Say q1 < q2. Had the balance been under 14 USDC plus fees, the later one would be refused at
+  the call with the available amount, no draft (OD-8; Idle · call [... not fits] → Refused).
+end note
+
+opt the owner taps Send twice
+  Web -> D : POST send {..., r}
+  D --> Web : the same payment O (C14: the client request id is the key)
+end
+
+Lane -> Store : head of the FIFO: O (the Send never jumps the queue, nor is jumped: C2)
+note right of Lane : nonce · lane_turn [queued and can_sign and not chain_ahead] → signing
+Lane -> Signer : sign O at nonce n
+Signer --> Lane : raw O
+Lane -> Store : start commit O: nonce n burnt, Signed
+note right of Store : nonce · start_commit [not ledger_moved and recheck_ok] → in_flight
+Lane -> Chain : broadcast O's stored bytes
+note over Lane
+  One in flight (C5, R-10): A waits until O is Included at latest.
+  nonce · included_latest [more_in_flight] → in_flight stays, else → free.
+end note
+Chain --> Lane : receipt O at latest
+Lane -> Store : O Included; nonce lease released
+note right of Store : nonce · included_latest [not more_in_flight] → free
+Lane -> Signer : sign A at nonce n+1
+Signer --> Lane : raw A
+Lane -> Store : start commit A: re-check Always(Mara, W, Bob), balance; nonce n+1, Signed
+Lane -> Chain : broadcast A's stored bytes
+Chain --> Lane : receipt A at latest
+Lane -> Store : A Included
+note over Owner, Chain
+  From a paired phone the owner sends only to recipients the wallet knows; a new address is confirmed on the host (OD-3).
+  An owner's cancel or speed-up of a payment already in the lane enters it as a command, so the lane stays the only writer
+  of the wallet's nonces (C2). An archive committed before q1 refuses the Send (H-047, C17).
+end note
+@enduml

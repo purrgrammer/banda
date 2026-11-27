@@ -1,0 +1,190 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 0 and seed -8189948092562308183 with 1 worker on 14 cores with 1820MB heap and 64MB offheap memory [pid: 1] (Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64, Eclipse Adoptium 21.0.13 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /m/MC_NonceAlloc.tla
+Parsing file /m/NonceAlloc.tla
+Parsing file /tmp/Integers.tla
+Parsing file /tmp/Sequences.tla
+Parsing file /tmp/FiniteSets.tla
+Parsing file /tmp/TLC.tla
+Parsing file /tmp/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module NonceAlloc
+Semantic processing of module MC_NonceAlloc
+Starting... (2026-11-23 18:01:38)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-23 18:01:39.
+Error: Action property LedgerMonotone is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 2, reorg |-> 2, foreign |-> 2, bump |-> 1, readmit |-> 3, pl |-> 1]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<>>
+/\ pool = {}
+/\ chain = <<>>
+/\ st = <<"Idle", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<>>
+/\ seen = {}
+
+State 2: <Enqueue line 71, col 5 to line 76, col 73 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 2, reorg |-> 2, foreign |-> 2, bump |-> 1, readmit |-> 3, pl |-> 1]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<>>
+/\ st = <<"Queued", "Idle", "Idle">>
+/\ queue = <<1>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<>>
+/\ seen = {}
+
+State 3: <Sign line 81, col 5 to line 84, col 93 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 2, reorg |-> 2, foreign |-> 2, bump |-> 1, readmit |-> 3, pl |-> 1]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<>>
+/\ st = <<"Queued", "Idle", "Idle">>
+/\ queue = <<1>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<1, 0>>
+/\ seen = {}
+
+State 4: <ForeignSpend line 198, col 5 to line 203, col 83 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 2, reorg |-> 2, foreign |-> 1, bump |-> 1, readmit |-> 3, pl |-> 1]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {<<0, 0, 2>>}
+/\ chain = <<>>
+/\ st = <<"Queued", "Idle", "Idle">>
+/\ queue = <<1>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<1, 0>>
+/\ seen = {<<0, 0, 2>>}
+
+State 5: <Mine line 172, col 5 to line 177, col 83 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 2, reorg |-> 2, foreign |-> 1, bump |-> 1, readmit |-> 3, pl |-> 1]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<[tag |-> 0, ver |-> 2, fin |-> FALSE]>>
+/\ st = <<"Queued", "Idle", "Idle">>
+/\ queue = <<1>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<1, 0>>
+/\ seen = {<<0, 0, 2>>}
+
+State 6: <Finalize line 180, col 5 to line 183, col 91 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 2, reorg |-> 2, foreign |-> 1, bump |-> 1, readmit |-> 3, pl |-> 1]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<[tag |-> 0, ver |-> 2, fin |-> TRUE]>>
+/\ st = <<"Queued", "Idle", "Idle">>
+/\ queue = <<1>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<1, 0>>
+/\ seen = {<<0, 0, 2>>}
+
+State 7: <ForeignSpend line 198, col 5 to line 203, col 83 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 2, reorg |-> 2, foreign |-> 0, bump |-> 1, readmit |-> 3, pl |-> 1]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {<<1, 0, 1>>}
+/\ chain = <<[tag |-> 0, ver |-> 2, fin |-> TRUE]>>
+/\ st = <<"Queued", "Idle", "Idle">>
+/\ queue = <<1>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<1, 0>>
+/\ seen = {<<0, 0, 2>>, <<1, 0, 1>>}
+
+State 8: <Mine line 172, col 5 to line 177, col 83 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 2, reorg |-> 2, foreign |-> 0, bump |-> 1, readmit |-> 3, pl |-> 1]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<[tag |-> 0, ver |-> 2, fin |-> TRUE], [tag |-> 0, ver |-> 1, fin |-> FALSE]>>
+/\ st = <<"Queued", "Idle", "Idle">>
+/\ queue = <<1>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<1, 0>>
+/\ seen = {<<0, 0, 2>>, <<1, 0, 1>>}
+
+State 9: <Finalize line 180, col 5 to line 183, col 91 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 2, reorg |-> 2, foreign |-> 0, bump |-> 1, readmit |-> 3, pl |-> 1]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<[tag |-> 0, ver |-> 2, fin |-> TRUE], [tag |-> 0, ver |-> 1, fin |-> TRUE]>>
+/\ st = <<"Queued", "Idle", "Idle">>
+/\ queue = <<1>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<1, 0>>
+/\ seen = {<<0, 0, 2>>, <<1, 0, 1>>}
+
+State 10: <RaiseLedger line 161, col 5 to line 165, col 85 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 2, reorg |-> 2, foreign |-> 0, bump |-> 1, readmit |-> 3, pl |-> 1]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<[tag |-> 0, ver |-> 2, fin |-> TRUE], [tag |-> 0, ver |-> 1, fin |-> TRUE]>>
+/\ st = <<"Queued", "Idle", "Idle">>
+/\ queue = <<1>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 2
+/\ mem = <<1, 0>>
+/\ seen = {<<0, 0, 2>>, <<1, 0, 1>>}
+
+State 11: <StartCommit line 87, col 5 to line 99, col 55 of module NonceAlloc>
+/\ nonce = <<0, -1, -1>>
+/\ b = [crash |-> 2, reorg |-> 2, foreign |-> 0, bump |-> 1, readmit |-> 3, pl |-> 1]
+/\ nvers = <<1, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<[tag |-> 0, ver |-> 2, fin |-> TRUE], [tag |-> 0, ver |-> 1, fin |-> TRUE]>>
+/\ st = <<"Signed", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 1
+/\ mem = <<>>
+/\ seen = {<<0, 0, 2>>, <<1, 0, 1>>}
+
+44559 states generated, 13881 distinct states found, 6224 states left on queue.
+The depth of the complete state graph search is 11.
+The average outdegree of the complete state graph is 2 (minimum is 0, the maximum 6 and the 95th percentile is 5).
+Finished in 01s at (2026-11-23 18:01:39)

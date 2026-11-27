@@ -1,0 +1,272 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 14 and seed -5294152414815289370 with 1 worker on 14 cores with 1820MB heap and 64MB offheap memory [pid: 1] (Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64, Eclipse Adoptium 21.0.13 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /m/MC_X402.tla
+Parsing file /m/X402.tla
+Parsing file /tmp/Integers.tla
+Parsing file /tmp/Sequences.tla
+Parsing file /tmp/FiniteSets.tla
+Parsing file /tmp/TLC.tla
+Parsing file /tmp/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module X402
+Semantic processing of module MC_X402
+Starting... (2026-11-23 18:01:45)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-23 18:01:46.
+Error: Action property NoUnderfundedAuth is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ ost = <<"none", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<FALSE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = <<>>
+/\ known = {}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"none", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<>>, <<>>, <<>>>>
+
+State 2: <Observe line 128, col 5 to line 131, col 112 of module X402>
+/\ ost = <<"observed", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<FALSE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = <<>>
+/\ known = {}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"none", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<>>, <<>>, <<>>>>
+
+State 3: <Observe line 128, col 5 to line 131, col 112 of module X402>
+/\ ost = <<"observed", "observed", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<FALSE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = <<>>
+/\ known = {}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"none", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<>>, <<>>, <<>>>>
+
+State 4: <Observe line 128, col 5 to line 131, col 112 of module X402>
+/\ ost = <<"observed", "observed", "observed">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<FALSE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = <<>>
+/\ known = {}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"none", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<>>, <<>>, <<>>>>
+
+State 5: <Call line 136, col 5 to line 149, col 105 of module X402>
+/\ ost = <<"waiting", "observed", "observed">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<FALSE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = <<>>
+/\ known = {}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 6: <Pay line 154, col 5 to line 160, col 99 of module X402>
+/\ ost = <<"authorizing", "observed", "observed">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 7: <Authorize line 222, col 5 to line 231, col 96 of module X402>
+/\ ost = <<"authorized", "observed", "observed">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<1, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 8: <Call line 136, col 5 to line 149, col 105 of module X402>
+/\ ost = <<"authorized", "waiting", "observed">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<1, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "c1", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<"e1p2", 1>>, <<>>>>
+
+State 9: <Pay line 154, col 5 to line 160, col 99 of module X402>
+/\ ost = <<"authorized", "authorizing", "observed">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<1, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1", "e1p2"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "c1", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<"e1p2", 1>>, <<>>>>
+
+State 10: <Authorize line 222, col 5 to line 231, col 96 of module X402>
+/\ ost = <<"authorized", "authorized", "observed">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<1, 2, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1", "e1p2"}
+/\ vb = <<2, 2, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "c1", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<"e1p2", 1>>, <<>>>>
+
+State 11: <Call line 136, col 5 to line 149, col 105 of module X402>
+/\ ost = <<"authorized", "authorized", "waiting">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<1, 2, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1", "e1p2"}
+/\ vb = <<2, 2, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "c1", "c2">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<"e1p2", 1>>, <<"e1p1", 1>>>>
+
+State 12: <Pay line 154, col 5 to line 160, col 99 of module X402>
+/\ ost = <<"authorized", "authorized", "authorizing">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, TRUE, TRUE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<1, 2, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1", "e1p2"}
+/\ vb = <<2, 2, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "c1", "c2">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<"e1p2", 1>>, <<"e1p1", 1>>>>
+
+State 13: <Authorize line 222, col 5 to line 231, col 96 of module X402>
+/\ ost = <<"authorized", "authorized", "authorized">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, TRUE, TRUE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<1, 2, 3>>
+/\ dur = <<>>
+/\ known = {"e1p1", "e1p2"}
+/\ vb = <<2, 2, 2>>
+/\ nextN = 100
+/\ caller = <<"c1", "c1", "c2">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<"e1p2", 1>>, <<"e1p1", 1>>>>
+
+33826 states generated, 9144 distinct states found, 3702 states left on queue.
+The depth of the complete state graph search is 13.
+The average outdegree of the complete state graph is 2 (minimum is 0, the maximum 6 and the 95th percentile is 4).
+Finished in 01s at (2026-11-23 18:01:47)

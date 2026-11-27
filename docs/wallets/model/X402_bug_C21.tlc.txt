@@ -1,0 +1,335 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 9 and seed 8142641825687337053 with 1 worker on 14 cores with 1820MB heap and 64MB offheap memory [pid: 1] (Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64, Eclipse Adoptium 21.0.13 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /m/MC_X402.tla
+Parsing file /m/X402.tla
+Parsing file /tmp/Integers.tla
+Parsing file /tmp/Sequences.tla
+Parsing file /tmp/FiniteSets.tla
+Parsing file /tmp/TLC.tla
+Parsing file /tmp/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module X402
+Semantic processing of module MC_X402
+Starting... (2026-11-23 18:01:55)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-23 18:01:56.
+Progress(11) at 2026-11-23 18:01:59: 276,218 states generated (276,218 s/min), 77,328 distinct states found (77,328 ds/min), 45,736 states left on queue.
+Error: Invariant ReportedIsTrue is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ ost = <<"none", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 1, pl |-> 1, reorg |-> 1, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<FALSE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = <<>>
+/\ known = {}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"none", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<>>, <<>>, <<>>>>
+
+State 2: <Observe line 128, col 5 to line 131, col 112 of module X402>
+/\ ost = <<"observed", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 1, pl |-> 1, reorg |-> 1, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<FALSE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = [ ost |-> <<"none", "none", "none">>,
+  onc |-> <<0, 0, 0>>,
+  vb |-> <<0, 0, 0>>,
+  appr |-> <<FALSE, FALSE, FALSE>>,
+  terms |-> <<<<>>, <<>>, <<>>>>,
+  always |-> {},
+  deny |-> {},
+  known |-> {},
+  dflt |-> "Ask",
+  caller |-> <<"none", "none", "none">> ]
+/\ known = {}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"none", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<>>, <<>>, <<>>>>
+
+State 3: <Call line 136, col 5 to line 149, col 105 of module X402>
+/\ ost = <<"waiting", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 1, pl |-> 1, reorg |-> 1, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<FALSE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = [ ost |-> <<"none", "none", "none">>,
+  onc |-> <<0, 0, 0>>,
+  vb |-> <<0, 0, 0>>,
+  appr |-> <<FALSE, FALSE, FALSE>>,
+  terms |-> <<<<>>, <<>>, <<>>>>,
+  always |-> {},
+  deny |-> {},
+  known |-> {},
+  dflt |-> "Ask",
+  caller |-> <<"none", "none", "none">> ]
+/\ known = {}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 4: <Pay line 154, col 5 to line 160, col 99 of module X402>
+/\ ost = <<"authorizing", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 1, pl |-> 1, reorg |-> 1, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = [ ost |-> <<"none", "none", "none">>,
+  onc |-> <<0, 0, 0>>,
+  vb |-> <<0, 0, 0>>,
+  appr |-> <<FALSE, FALSE, FALSE>>,
+  terms |-> <<<<>>, <<>>, <<>>>>,
+  always |-> {},
+  deny |-> {},
+  known |-> {},
+  dflt |-> "Ask",
+  caller |-> <<"none", "none", "none">> ]
+/\ known = {"e1p1"}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 5: <Flush line 336, col 5 to line 337, col 117 of module X402>
+/\ ost = <<"authorizing", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 1, pl |-> 1, reorg |-> 1, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 6: <Authorize line 222, col 5 to line 231, col 96 of module X402>
+/\ ost = <<"authorized", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 1, pl |-> 1, reorg |-> 1, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<1, 0, 0>>
+/\ dur = [ ost |-> <<"authorizing", "none", "none">>,
+  onc |-> <<0, 0, 0>>,
+  vb |-> <<0, 0, 0>>,
+  appr |-> <<TRUE, FALSE, FALSE>>,
+  terms |-> <<<<"e1p1", 1>>, <<>>, <<>>>>,
+  always |-> {},
+  deny |-> {},
+  known |-> {"e1p1"},
+  dflt |-> "Ask",
+  caller |-> <<"c1", "none", "none">> ]
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 7: <SignAuth line 235, col 5 to line 237, col 117 of module X402>
+/\ ost = <<"authorized", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 1, pl |-> 1, reorg |-> 1, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {1}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<1, 0, 0>>
+/\ dur = [ ost |-> <<"authorizing", "none", "none">>,
+  onc |-> <<0, 0, 0>>,
+  vb |-> <<0, 0, 0>>,
+  appr |-> <<TRUE, FALSE, FALSE>>,
+  terms |-> <<<<"e1p1", 1>>, <<>>, <<>>>>,
+  always |-> {},
+  deny |-> {},
+  known |-> {"e1p1"},
+  dflt |-> "Ask",
+  caller |-> <<"c1", "none", "none">> ]
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 8: <Give line 242, col 5 to line 245, col 112 of module X402>
+/\ ost = <<"authorized", "none", "none">>
+/\ always = {}
+/\ box = {<<1, 1, 2, <<"e1p1", 1>>>>}
+/\ b = [crash |-> 1, pl |-> 1, reorg |-> 1, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<1, 0, 0>>
+/\ dur = [ ost |-> <<"authorizing", "none", "none">>,
+  onc |-> <<0, 0, 0>>,
+  vb |-> <<0, 0, 0>>,
+  appr |-> <<TRUE, FALSE, FALSE>>,
+  terms |-> <<<<"e1p1", 1>>, <<>>, <<>>>>,
+  always |-> {},
+  deny |-> {},
+  known |-> {"e1p1"},
+  dflt |-> "Ask",
+  caller |-> <<"c1", "none", "none">> ]
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 9: <Next line 348, col 8 to line 348, col 31 of module X402>
+/\ ost = <<"authorized", "none", "none">>
+/\ always = {}
+/\ box = {<<1, 1, 2, <<"e1p1", 1>>>>}
+/\ b = [crash |-> 1, pl |-> 1, reorg |-> 1, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {<<"pay", 1, 1, 2, 1>>}
+/\ chain = <<>>
+/\ onc = <<1, 0, 0>>
+/\ dur = [ ost |-> <<"authorizing", "none", "none">>,
+  onc |-> <<0, 0, 0>>,
+  vb |-> <<0, 0, 0>>,
+  appr |-> <<TRUE, FALSE, FALSE>>,
+  terms |-> <<<<"e1p1", 1>>, <<>>, <<>>>>,
+  always |-> {},
+  deny |-> {},
+  known |-> {"e1p1"},
+  dflt |-> "Ask",
+  caller |-> <<"c1", "none", "none">> ]
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 10: <Mine line 276, col 5 to line 282, col 106 of module X402>
+/\ ost = <<"authorized", "none", "none">>
+/\ always = {}
+/\ box = {<<1, 1, 2, <<"e1p1", 1>>>>}
+/\ b = [crash |-> 1, pl |-> 1, reorg |-> 1, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<[ev |-> <<"pay", 1, 1, 2, 1>>, fin |-> FALSE]>>
+/\ onc = <<1, 0, 0>>
+/\ dur = [ ost |-> <<"authorizing", "none", "none">>,
+  onc |-> <<0, 0, 0>>,
+  vb |-> <<0, 0, 0>>,
+  appr |-> <<TRUE, FALSE, FALSE>>,
+  terms |-> <<<<"e1p1", 1>>, <<>>, <<>>>>,
+  always |-> {},
+  deny |-> {},
+  known |-> {"e1p1"},
+  dflt |-> "Ask",
+  caller |-> <<"c1", "none", "none">> ]
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 11: <PowerLoss line 326, col 5 to line 333, col 47 of module X402>
+/\ ost = <<"authorizing", "none", "none">>
+/\ always = {}
+/\ box = {<<1, 1, 2, <<"e1p1", 1>>>>}
+/\ b = [crash |-> 1, pl |-> 0, reorg |-> 1, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<[ev |-> <<"pay", 1, 1, 2, 1>>, fin |-> FALSE]>>
+/\ onc = <<0, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 12: <Deadline line 215, col 5 to line 217, col 112 of module X402>
+/\ ost = <<"notpaid", "none", "none">>
+/\ always = {}
+/\ box = {<<1, 1, 2, <<"e1p1", 1>>>>}
+/\ b = [crash |-> 1, pl |-> 0, reorg |-> 1, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<[ev |-> <<"pay", 1, 1, 2, 1>>, fin |-> FALSE]>>
+/\ onc = <<0, 0, 0>>
+/\ dur = [ ost |-> <<"authorizing", "none", "none">>,
+  onc |-> <<0, 0, 0>>,
+  vb |-> <<0, 0, 0>>,
+  appr |-> <<TRUE, FALSE, FALSE>>,
+  terms |-> <<<<"e1p1", 1>>, <<>>, <<>>>>,
+  always |-> {},
+  deny |-> {},
+  known |-> {"e1p1"},
+  dflt |-> "Ask",
+  caller |-> <<"c1", "none", "none">> ]
+/\ known = {"e1p1"}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+867508 states generated, 224345 distinct states found, 124640 states left on queue.
+The depth of the complete state graph search is 12.
+The average outdegree of the complete state graph is 2 (minimum is 0, the maximum 12 and the 95th percentile is 5).
+Finished in 09s at (2026-11-23 18:02:04)

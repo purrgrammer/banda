@@ -8,7 +8,7 @@ import { readDaemonFile } from "../src/home.ts";
 import type { CapabilitiesView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { startFakeMcp } from "./fixtures/mcp-server.ts";
-import { skipShippedSkills, tempHome, webServer } from "./helpers.ts";
+import { tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const button = (text: string) =>
@@ -74,7 +74,6 @@ for (const width of [390, 1440])
 			let daemon = await startDaemon({ home, port: 0, models, box: hostBox(home), log: () => {} });
 			const base = `http://127.0.0.1:${daemon.port}`;
 			const token = (await readDaemonFile(home))!.token!;
-			await skipShippedSkills(daemon.port, token);
 			const view = async () =>
 				(await (
 					await fetch(`${base}/api/capabilities`, { headers: { authorization: `Bearer ${token}` } })

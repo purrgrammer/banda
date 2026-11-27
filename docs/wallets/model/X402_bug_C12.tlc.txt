@@ -1,0 +1,310 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 81 and seed 3915053635944946646 with 1 worker on 14 cores with 1820MB heap and 64MB offheap memory [pid: 1] (Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64, Eclipse Adoptium 21.0.13 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /m/MC_X402.tla
+Parsing file /m/X402.tla
+Parsing file /tmp/Integers.tla
+Parsing file /tmp/Sequences.tla
+Parsing file /tmp/FiniteSets.tla
+Parsing file /tmp/TLC.tla
+Parsing file /tmp/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module X402
+Semantic processing of module MC_X402
+Starting... (2026-11-23 18:01:48)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-23 18:01:49.
+Error: Invariant ReportedIsTrue is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ ost = <<"none", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 2, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<FALSE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = <<>>
+/\ known = {}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"none", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<>>, <<>>, <<>>>>
+
+State 2: <Observe line 128, col 5 to line 131, col 112 of module X402>
+/\ ost = <<"observed", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 2, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<FALSE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = <<>>
+/\ known = {}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"none", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<>>, <<>>, <<>>>>
+
+State 3: <Call line 136, col 5 to line 149, col 105 of module X402>
+/\ ost = <<"waiting", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 2, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<FALSE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = <<>>
+/\ known = {}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 4: <Pay line 154, col 5 to line 160, col 99 of module X402>
+/\ ost = <<"authorizing", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 2, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<0, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<0, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 5: <Authorize line 222, col 5 to line 231, col 96 of module X402>
+/\ ost = <<"authorized", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 2, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<1, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 6: <SignAuth line 235, col 5 to line 237, col 117 of module X402>
+/\ ost = <<"authorized", "none", "none">>
+/\ always = {}
+/\ box = {}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 2, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {1}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<1, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 7: <Give line 242, col 5 to line 245, col 112 of module X402>
+/\ ost = <<"authorized", "none", "none">>
+/\ always = {}
+/\ box = {<<1, 1, 2, <<"e1p1", 1>>>>}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 2, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<1, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 8: <CommitHanded line 249, col 5 to line 252, col 112 of module X402>
+/\ ost = <<"handed", "none", "none">>
+/\ always = {}
+/\ box = {<<1, 1, 2, <<"e1p1", 1>>>>}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 2, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<>>
+/\ onc = <<1, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 9: <Next line 348, col 8 to line 348, col 31 of module X402>
+/\ ost = <<"handed", "none", "none">>
+/\ always = {}
+/\ box = {<<1, 1, 2, <<"e1p1", 1>>>>}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 2, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {<<"pay", 1, 1, 2, 1>>}
+/\ chain = <<>>
+/\ onc = <<1, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 10: <Mine line 276, col 5 to line 282, col 106 of module X402>
+/\ ost = <<"handed", "none", "none">>
+/\ always = {}
+/\ box = {<<1, 1, 2, <<"e1p1", 1>>>>}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 2, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {<<"pay", 1, 1, 2, 1>>}
+/\ chain = <<[ev |-> <<>>, fin |-> FALSE]>>
+/\ onc = <<1, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 11: <Mine line 276, col 5 to line 282, col 106 of module X402>
+/\ ost = <<"handed", "none", "none">>
+/\ always = {}
+/\ box = {<<1, 1, 2, <<"e1p1", 1>>>>}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 2, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {<<"pay", 1, 1, 2, 1>>}
+/\ chain = <<[ev |-> <<>>, fin |-> FALSE], [ev |-> <<>>, fin |-> FALSE]>>
+/\ onc = <<1, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 12: <Track line 305, col 5 to line 315, col 112 of module X402>
+/\ ost = <<"expired", "none", "none">>
+/\ always = {}
+/\ box = {<<1, 1, 2, <<"e1p1", 1>>>>}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 2, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {<<"pay", 1, 1, 2, 1>>}
+/\ chain = <<[ev |-> <<>>, fin |-> FALSE], [ev |-> <<>>, fin |-> FALSE]>>
+/\ onc = <<1, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 13: <Reorg line 292, col 5 to line 297, col 103 of module X402>
+/\ ost = <<"expired", "none", "none">>
+/\ always = {}
+/\ box = {<<1, 1, 2, <<"e1p1", 1>>>>}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 1, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {<<"pay", 1, 1, 2, 1>>}
+/\ chain = <<[ev |-> <<>>, fin |-> FALSE]>>
+/\ onc = <<1, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 14: <Reorg line 292, col 5 to line 297, col 103 of module X402>
+/\ ost = <<"expired", "none", "none">>
+/\ always = {}
+/\ box = {<<1, 1, 2, <<"e1p1", 1>>>>}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {<<"pay", 1, 1, 2, 1>>}
+/\ chain = <<>>
+/\ onc = <<1, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+State 15: <Mine line 276, col 5 to line 282, col 106 of module X402>
+/\ ost = <<"expired", "none", "none">>
+/\ always = {}
+/\ box = {<<1, 1, 2, <<"e1p1", 1>>>>}
+/\ b = [crash |-> 0, pl |-> 0, reorg |-> 0, rule |-> 0, cancel |-> 0]
+/\ dflt = "Ask"
+/\ sig = {}
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ pending = {}
+/\ chain = <<[ev |-> <<"pay", 1, 1, 2, 1>>, fin |-> FALSE]>>
+/\ onc = <<1, 0, 0>>
+/\ dur = <<>>
+/\ known = {"e1p1"}
+/\ vb = <<2, 0, 0>>
+/\ nextN = 100
+/\ caller = <<"c1", "none", "none">>
+/\ deny = {}
+/\ terms = <<<<"e1p1", 1>>, <<>>, <<>>>>
+
+243225 states generated, 57404 distinct states found, 22479 states left on queue.
+The depth of the complete state graph search is 15.
+The average outdegree of the complete state graph is 2 (minimum is 0, the maximum 8 and the 95th percentile is 4).
+Finished in 03s at (2026-11-23 18:01:51)

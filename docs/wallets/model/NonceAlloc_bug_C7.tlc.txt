@@ -1,0 +1,250 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 77 and seed -664239506175509908 with 1 worker on 14 cores with 1820MB heap and 64MB offheap memory [pid: 1] (Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64, Eclipse Adoptium 21.0.13 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /m/MC_NonceAlloc.tla
+Parsing file /m/NonceAlloc.tla
+Parsing file /tmp/Integers.tla
+Parsing file /tmp/Sequences.tla
+Parsing file /tmp/FiniteSets.tla
+Parsing file /tmp/TLC.tla
+Parsing file /tmp/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module NonceAlloc
+Semantic processing of module MC_NonceAlloc
+Starting... (2026-11-23 18:01:43)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-23 18:01:43.
+Error: Invariant AtMostOnce is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 1, bump |-> 0, readmit |-> 1, pl |-> 0]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<>>
+/\ pool = {}
+/\ chain = <<>>
+/\ st = <<"Idle", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<>>
+/\ seen = {}
+
+State 2: <Enqueue line 71, col 5 to line 76, col 73 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 1, bump |-> 0, readmit |-> 1, pl |-> 0]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<>>
+/\ st = <<"Queued", "Idle", "Idle">>
+/\ queue = <<1>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<>>
+/\ seen = {}
+
+State 3: <Sign line 81, col 5 to line 84, col 93 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 1, bump |-> 0, readmit |-> 1, pl |-> 0]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<>>
+/\ st = <<"Queued", "Idle", "Idle">>
+/\ queue = <<1>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<1, 0>>
+/\ seen = {}
+
+State 4: <StartCommit line 87, col 5 to line 99, col 55 of module NonceAlloc>
+/\ nonce = <<0, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 1, bump |-> 0, readmit |-> 1, pl |-> 0]
+/\ nvers = <<1, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<>>
+/\ st = <<"Signed", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 1
+/\ mem = <<>>
+/\ seen = {}
+
+State 5: <Broadcast line 122, col 5 to line 128, col 82 of module NonceAlloc>
+/\ nonce = <<0, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 1, bump |-> 0, readmit |-> 1, pl |-> 0]
+/\ nvers = <<1, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {<<0, 1, 1>>}
+/\ chain = <<>>
+/\ st = <<"Sent", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 1
+/\ mem = <<>>
+/\ seen = {<<0, 1, 1>>}
+
+State 6: <ForeignSpend line 198, col 5 to line 203, col 83 of module NonceAlloc>
+/\ nonce = <<0, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 0, bump |-> 0, readmit |-> 1, pl |-> 0]
+/\ nvers = <<1, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {<<0, 0, 1>>, <<0, 1, 1>>}
+/\ chain = <<>>
+/\ st = <<"Sent", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 1
+/\ mem = <<>>
+/\ seen = {<<0, 0, 1>>, <<0, 1, 1>>}
+
+State 7: <Mine line 172, col 5 to line 177, col 83 of module NonceAlloc>
+/\ nonce = <<0, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 0, bump |-> 0, readmit |-> 1, pl |-> 0]
+/\ nvers = <<1, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<[tag |-> 0, ver |-> 1, fin |-> FALSE]>>
+/\ st = <<"Sent", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 1
+/\ mem = <<>>
+/\ seen = {<<0, 0, 1>>, <<0, 1, 1>>}
+
+State 8: <Track line 143, col 5 to line 150, col 82 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 0, bump |-> 0, readmit |-> 1, pl |-> 0]
+/\ nvers = <<1, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<[tag |-> 0, ver |-> 1, fin |-> FALSE]>>
+/\ st = <<"Released", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 1
+/\ mem = <<>>
+/\ seen = {<<0, 0, 1>>, <<0, 1, 1>>}
+
+State 9: <Readmit line 111, col 5 to line 118, col 63 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 0, bump |-> 0, readmit |-> 0, pl |-> 0]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<[tag |-> 0, ver |-> 1, fin |-> FALSE]>>
+/\ st = <<"Queued", "Idle", "Idle">>
+/\ queue = <<1>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 1
+/\ mem = <<>>
+/\ seen = {<<0, 0, 1>>, <<0, 1, 1>>}
+
+State 10: <Sign line 81, col 5 to line 84, col 93 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 0, bump |-> 0, readmit |-> 0, pl |-> 0]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<[tag |-> 0, ver |-> 1, fin |-> FALSE]>>
+/\ st = <<"Queued", "Idle", "Idle">>
+/\ queue = <<1>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 1
+/\ mem = <<1, 1>>
+/\ seen = {<<0, 0, 1>>, <<0, 1, 1>>}
+
+State 11: <StartCommit line 87, col 5 to line 99, col 55 of module NonceAlloc>
+/\ nonce = <<1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 0, bump |-> 0, readmit |-> 0, pl |-> 0]
+/\ nvers = <<1, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<[tag |-> 0, ver |-> 1, fin |-> FALSE]>>
+/\ st = <<"Signed", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 2
+/\ mem = <<>>
+/\ seen = {<<0, 0, 1>>, <<0, 1, 1>>}
+
+State 12: <Broadcast line 122, col 5 to line 128, col 82 of module NonceAlloc>
+/\ nonce = <<1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 0, bump |-> 0, readmit |-> 0, pl |-> 0]
+/\ nvers = <<1, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {<<1, 1, 1>>}
+/\ chain = <<[tag |-> 0, ver |-> 1, fin |-> FALSE]>>
+/\ st = <<"Sent", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 2
+/\ mem = <<>>
+/\ seen = {<<0, 0, 1>>, <<0, 1, 1>>, <<1, 1, 1>>}
+
+State 13: <Reorg line 186, col 5 to line 194, col 73 of module NonceAlloc>
+/\ nonce = <<1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 0, foreign |-> 0, bump |-> 0, readmit |-> 0, pl |-> 0]
+/\ nvers = <<1, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {<<0, 1, 1>>, <<1, 1, 1>>}
+/\ chain = <<>>
+/\ st = <<"Sent", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 2
+/\ mem = <<>>
+/\ seen = {<<0, 0, 1>>, <<0, 1, 1>>, <<1, 1, 1>>}
+
+State 14: <Mine line 172, col 5 to line 177, col 83 of module NonceAlloc>
+/\ nonce = <<1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 0, foreign |-> 0, bump |-> 0, readmit |-> 0, pl |-> 0]
+/\ nvers = <<1, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {<<1, 1, 1>>}
+/\ chain = <<[tag |-> 1, ver |-> 1, fin |-> FALSE]>>
+/\ st = <<"Sent", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 2
+/\ mem = <<>>
+/\ seen = {<<0, 0, 1>>, <<0, 1, 1>>, <<1, 1, 1>>}
+
+State 15: <Mine line 172, col 5 to line 177, col 83 of module NonceAlloc>
+/\ nonce = <<1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 0, foreign |-> 0, bump |-> 0, readmit |-> 0, pl |-> 0]
+/\ nvers = <<1, 0, 0>>
+/\ arrival = <<1>>
+/\ pool = {}
+/\ chain = <<[tag |-> 1, ver |-> 1, fin |-> FALSE], [tag |-> 1, ver |-> 1, fin |-> FALSE]>>
+/\ st = <<"Sent", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 2
+/\ mem = <<>>
+/\ seen = {<<0, 0, 1>>, <<0, 1, 1>>, <<1, 1, 1>>}
+
+11755 states generated, 4435 distinct states found, 1024 states left on queue.
+The depth of the complete state graph search is 15.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 6 and the 95th percentile is 4).
+Finished in 01s at (2026-11-23 18:01:44)

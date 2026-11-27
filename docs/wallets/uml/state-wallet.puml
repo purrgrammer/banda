@@ -1,0 +1,149 @@
+@startuml state-wallet
+!include style.iuml
+hide empty description
+skinparam stateFontStyle bold
+skinparam stateAttributeFontSize 10
+skinparam stateAttributeFontStyle plain
+skinparam ArrowFontSize 10
+title wallet machine (WalletLifecycle.tla), generated from model/transitions.json: 54 rows, 9 states
+
+legend top left
+Guard atoms and their domains
+  kc_up in {False, True}
+  item in {"empty", "ours", "other"}
+  cap_host in {False, True}
+  cap_fresh in {False, True}
+  pasted_derives in {False, True}
+  funds in {False, True}
+  inflight in {False, True}
+  address_disclosed in {False, True}
+  has_code in {False, True}
+  saved in {False, True}
+  version_current in {False, True}
+Definitions
+  removable = (not funds) and (not inflight) and (saved or not address_disclosed)
+Label: event [guard] / TLA+ action (conflicts.md rules)
+Lines inside a state answer the event without a state change.
+endlegend
+
+state "none" as wallet_none
+state "creating" as wallet_creating
+state "ready_unsaved" as wallet_ready_unsaved
+state "ready_saved" as wallet_ready_saved
+state "ready_skipped" as wallet_ready_skipped
+state "archived" as wallet_archived
+state "removing" as wallet_removing
+state "removed" as wallet_removed <<terminal>>
+state "dropped" as wallet_dropped <<terminal>>
+
+[*] --> wallet_none
+wallet_removed --> [*]
+wallet_dropped --> [*]
+
+' row 1
+wallet_creating : keychain_write [kc_up and item == 'empty'] / Write (C15,C20)
+' row 3
+wallet_creating : keychain_write [not kc_up] / AbortCreate (C20)
+' row 6
+wallet_creating : read_back [not kc_up] / AbortCreate (C20)
+' row 9
+wallet_creating : restart [not kc_up] / Reconcile (C15,C20)
+' row 10
+wallet_ready_unsaved : reveal [cap_host and cap_fresh and kc_up and item == 'ours'] / Reveal (C14,C16)
+' row 13
+wallet_ready_unsaved : reveal [not (cap_host and cap_fresh) or not kc_up or item != 'ours'] / MintCap (C16)
+' row 17
+wallet_ready_unsaved : confirm_saved [not pasted_derives] / ConfirmSaved (C16)
+' row 19
+wallet_ready_unsaved : show_receive / Disclose (C15)
+' row 24
+wallet_ready_unsaved : agent_reads_address / Disclose (C15)
+' row 27
+wallet_ready_unsaved : acknowledge_code [has_code and cap_host] /  (C17)
+' row 30
+wallet_ready_unsaved : acknowledge_code [not (has_code and cap_host)] /  (C17)
+' row 36
+wallet_ready_unsaved : archive [not version_current] / Archive (C8)
+' row 46
+wallet_ready_unsaved : begin_remove [not (version_current and removable)] / BeginRemove (C17)
+' row 11
+wallet_ready_saved : reveal [cap_host and cap_fresh and kc_up and item == 'ours'] / Reveal (C14,C16)
+' row 14
+wallet_ready_saved : reveal [not (cap_host and cap_fresh) or not kc_up or item != 'ours'] / MintCap (C16)
+' row 20
+wallet_ready_saved : show_receive [not has_code] / Disclose (-)
+' row 22
+wallet_ready_saved : show_receive [has_code] /  (C3,C17)
+' row 25
+wallet_ready_saved : agent_reads_address / Disclose (C17)
+' row 28
+wallet_ready_saved : acknowledge_code [has_code and cap_host] /  (C17)
+' row 31
+wallet_ready_saved : acknowledge_code [not (has_code and cap_host)] /  (C17)
+' row 37
+wallet_ready_saved : archive [not version_current] / Archive (C8)
+' row 47
+wallet_ready_saved : begin_remove [not (version_current and removable)] / BeginRemove (C17)
+' row 12
+wallet_ready_skipped : reveal [cap_host and cap_fresh and kc_up and item == 'ours'] / Reveal (C14,C16)
+' row 15
+wallet_ready_skipped : reveal [not (cap_host and cap_fresh) or not kc_up or item != 'ours'] / MintCap (C16)
+' row 21
+wallet_ready_skipped : show_receive [not has_code] / Disclose (-)
+' row 23
+wallet_ready_skipped : show_receive [has_code] /  (C3,C17)
+' row 26
+wallet_ready_skipped : agent_reads_address / Disclose (C17)
+' row 29
+wallet_ready_skipped : acknowledge_code [has_code and cap_host] /  (C17)
+' row 32
+wallet_ready_skipped : acknowledge_code [not (has_code and cap_host)] /  (C17)
+' row 38
+wallet_ready_skipped : archive [not version_current] / Archive (C8)
+' row 48
+wallet_ready_skipped : begin_remove [not (version_current and removable)] / BeginRemove (C17)
+' row 41
+wallet_archived : unarchive [not version_current] / Unarchive (C8)
+' row 49
+wallet_archived : begin_remove [not (version_current and removable)] / BeginRemove (C17)
+' row 50
+wallet_removing : delete_item [kc_up and removable] / DeleteItem (C15)
+' row 52
+wallet_removing : delete_item [not kc_up] / DeleteItem (C15)
+
+' row 0
+wallet_none --> wallet_creating : create / Draw (C14,C15)
+' row 2
+' row 5
+' row 8
+wallet_creating --> wallet_dropped : keychain_write [kc_up and item != 'empty'] / Write (C15)\nread_back [kc_up and item != 'ours'] / Ready (C15)\nrestart [kc_up and item != 'ours'] / Reconcile (C15)
+' row 4
+' row 7
+wallet_creating --> wallet_ready_unsaved : read_back [kc_up and item == 'ours'] / Ready (C15)\nrestart [kc_up and item == 'ours'] / Reconcile (C15)
+' row 16
+wallet_ready_unsaved --> wallet_ready_saved : confirm_saved [pasted_derives] / ConfirmSaved (C16)
+' row 18
+wallet_ready_unsaved --> wallet_ready_skipped : skip_save / Skip (-)
+' row 33
+wallet_ready_unsaved --> wallet_archived : archive [version_current] / Archive (C8,C17)
+' row 34
+wallet_ready_saved --> wallet_archived : archive [version_current] / Archive (C8,C17)
+' row 35
+wallet_ready_skipped --> wallet_archived : archive [version_current] / Archive (C8,C17)
+' row 39
+wallet_archived --> wallet_ready_saved : unarchive [version_current and saved] / Unarchive (C8)
+' row 40
+wallet_archived --> wallet_ready_skipped : unarchive [version_current and not saved] / Unarchive (C8)
+' row 42
+wallet_ready_unsaved --> wallet_removing : begin_remove [version_current and removable] / BeginRemove (C15,C17)
+' row 43
+wallet_ready_saved --> wallet_removing : begin_remove [version_current and removable] / BeginRemove (C15,C17)
+' row 44
+wallet_ready_skipped --> wallet_removing : begin_remove [version_current and removable] / BeginRemove (C15,C17)
+' row 45
+wallet_archived --> wallet_removing : begin_remove [version_current and removable] / BeginRemove (C15,C17)
+' row 51
+wallet_removing --> wallet_archived : delete_item [kc_up and not removable] / CancelRemove (C17)
+' row 53
+wallet_removing --> wallet_removed : item_gone / Removed (C15)
+@enduml

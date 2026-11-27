@@ -1,0 +1,22 @@
+PASS draftOf binds account+chain+to, not amount/token: {"chain":"eip155:84532","to":"0x12aB34cD56eF7890aBcDeF1234567890AbCdEf12","account":{"key":"0xwallet-a","generation":"g1"}}
+PASS Always covers the same recipient, any amount and token: covered
+PASS Always does not cover another recipient: not covered
+PASS Always does not cover another agent on the same wallet: not covered: a permission binds one agent
+PASS Always does not cover the wallet re-created (new generation): not covered
+PASS same address in lowercase is NOT covered (canonical JSON compare): expand must canonicalize: checksummed 0x12aB34cD56eF7890aBcDeF1234567890AbCdEf12 vs 0x12ab34cd56ef7890abcdef1234567890abcdef12
+PASS lasts:[always] offers only Always: [{"scope":"always","words":"Pay 0x12aB34cD56eF7890aBcDeF1234567890AbCdEf12, up to what is in the wallet without asking until you take it back in Permissions"}]
+PASS an interrupted run offers no scope: []
+PASS a draft on the money floor offers no scope: []
+PASS a task scope not offered is refused: that was not offered
+PASS money floor refuses Always: this is never allowed ahead: it asks every time, as it moves money
+PASS a built-in `api: wallet` with auth key is refused by connectionOf: ["a built-in API is one of \"gmail\" at https://gmail.googleapis.com/gmail/v1/users/me, \"calendar\" at https://www.googleapis.com/calendar/v3, \"contacts\" at https://people.googleapis.com/v1, \"drive\" at https://www.googleapis.com/drive/v3, \"slack\" at https://slack.com/api"]
+PASS auth key without api parses (a plain remote MCP server): parsed
+PASS a key reference fits while the URL is the same: fits
+PASS a key reference stops fitting when the RPC URL changes: does not fit: wallet offline
+PASS a reference that only contains the address leaves the bare address visible (scrub matches the whole key): paid from 0x12aB34cD56eF7890aBcDeF1234567890AbCdEf12 to Ana
+PASS a reference that IS the address hides the address in every output: paid from [a credential, hidden] to Ana
+PASS a new credentials shape (neither key nor oauth) crashes secrets() as the code stands: Cannot read properties of undefined (reading 'tokens')
+PASS an address account key is the lowercase address: 0x12ab34cd56ef7890abcdef1234567890abcdef12
+PASS an unlabeled wallet reads as @0x… to the owner and model: @0x12aB34cD56eF7890aBcDeF1234567890AbCdEf12
+PASS tool names: ["wallet__send","wallet__pay_x402"]
+ALL PASS

@@ -1,0 +1,24 @@
+loaded usdc-84532.state.json: chain id 84532, latest block 1, its timestamp - wall clock = -20 s
+first evm_mine after load: timestamp - wall clock = -19 s
+  name() = USDC
+  version() = 2
+  decimals() = 6
+  paused() = false
+  DOMAIN_SEPARATOR() = 0x71f17a3b2ff373b803d70a5a07c046c1a2bc8e89c09ef722fcb047abe94c9818
+  DOMAIN_SEPARATOR equals the fork's 0x71f17a3b…c9818: true
+  payer USDC 1000000, payer ETH 0
+settle: status 0x1, gasUsed 103232, logs 2 (Transfer true, AuthorizationUsed true), payee 10000, payer ETH still 0
+  authorizationState right after: latest true safe false finalized false
+  +1 block: latest true safe true finalized false
+  +2 blocks: latest true safe true finalized true
+  eth_getLogs(AuthorizationUsed, toBlock: finalized): 1 log(s)
+replay (eth_call): execution reverted: FiatTokenV2: authorization is used or canceled
+replay (mined, fixed gas): status 0x0; payee 10000
+same signature, another to (fresh nonce): execution reverted: FiatTokenV2: invalid signature
+block time = validBefore - 1: ok
+block time = validBefore:     execution reverted: FiatTokenV2: authorization is expired
+  mined anyway (fixed gas): status 0x0; authorizationState false (the expired nonce is never burnt)
+cancel: status 0x1, AuthorizationCanceled log true; authorizationState true
+settle after cancel: execution reverted: FiatTokenV2: authorization is used or canceled
+fixture shifted 30 days back: loaded latest ts - wall = -2592020 s; next mined block ts - wall = -2592019 s
+  evm_setNextBlockTimestamp(wall clock) -> null; then ts - wall = 0 s

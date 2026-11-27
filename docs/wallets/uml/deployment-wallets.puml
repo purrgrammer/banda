@@ -1,0 +1,80 @@
+@startuml deployment-wallets
+!include style.iuml
+title Wallets: deployment (what runs where, what each link carries)
+
+node "Owner's computer\n«macOS on Apple silicon, or Linux»" as Host {
+  node "Desktop app\n«Electron shell»" as ElectronN {
+    artifact "window: web app" as WinA
+    artifact "reveal capability minting\n(after OS re-authentication)" as CapA
+  }
+  node "Daemon\n«bundled Node, one per home»" as DaemonN {
+    artifact "src/core + src/server\n(wallet slice, lanes, follower,\nindexer, RPC client)" as DaemonA
+    artifact "web app static files" as WebA
+  }
+  node "Signer child\n«same Node binary (process.execPath),\nshort-lived, one at a time per home»" as SignerN {
+    artifact "signer module\n@noble/curves 2.4.0, @noble/hashes 2.4.0,\nmicro-eth-signer 0.20.1, @napi-rs/keyring 2.1.2" as SignerA
+  }
+  database "Home (.banda in the user's home folder,\nor a throwaway home)\n«filesystem»" as HomeN {
+    artifact "store (pi-durable, WAL;\nwallet commits synced per commit, C21)" as StoreA
+    artifact "auth/ (backed up): token, device-id,\nconnections/wallet/<address>/credentials.json\n(a kind marker only: the Wallet doc holds the facts)" as AuthA
+    artifact "blobs/" as BlobsA
+  }
+  node "OS keychain service\n«Security.framework (macOS)\n/ Secret Service over D-Bus (Linux)»" as KCN {
+    artifact "item per wallet: service banda's,\naccount <home-id>/wallet/<address>,\nsecret 0x + 64 hex" as ItemA
+    artifact "lease <home-id>/lease: epoch (compare-and-set)\n+ home-secret hash (C16)" as LeaseA
+    artifact "canary <home-id>/probe (H-037)" as CanaryA
+    artifact "home secret <home-id>/home-secret,\nbound to the home's realpath and inode\n(outside the home directory: no backup,\nrestore, fork or hand copy carries it)" as SecretA
+  }
+  node "Box\n«microVM: Hypervisor.framework or KVM;\nor a Docker container (serve ~--box container)»" as BoxN {
+    artifact "pi-env daemon, agent's code,\nbrowsers; /workspace /work /tools" as BoxA
+  }
+  node "Egress proxy\n«mitmproxy 12.2.3, digest pinned\nin proxy/Dockerfile»" as ProxyN {
+    artifact "proxy/addon.py\n+ 402 observation" as ProxyA
+  }
+}
+
+node "Phone\n«Android, Capacitor»" as PhoneN {
+  artifact "banda app\n(built web app + Banda plugin)" as PhoneA
+}
+cloud "n0 relays and discovery" as Relays
+
+node "RPC provider\n«HTTPS JSON-RPC; learns address and IP»" as RPCN
+node "Base (8453) / Base Sepolia (84532)\n«OP Stack L2; latest ~200 ms,\nsafe ~2 min, finalized ~20 min»" as ChainN {
+  artifact "USDC (FiatTokenV2, EIP-3009)" as UsdcA
+  artifact "GasPriceOracle 0x42..0F\n(getL1FeeUpperBound)" as GpoA
+}
+node "x402 resource server\n«HTTPS»" as X402N
+node "x402 facilitator\n«HTTPS; submits and pays gas»" as FacN
+
+ElectronN -- DaemonN : loopback HTTP + owner token;\nreveal route needs the shell's capability
+DaemonN -- SignerN : stdin/stdout pipe;\ndeadline, SIGKILL
+SignerN -- KCN : keyring API\n(never on the daemon's libuv threads)
+DaemonN -- HomeN : one writer per home (pi-durable lock)
+DaemonN -- SecretA : read at start (lease proof)
+DaemonN -- BoxN : runtime exec channel (pi-env)
+DaemonN -- ProxyN : runtime exec channel\n(allowed hosts, intake of observations)
+BoxN -- ProxyN : one socket, the box's only way out\n(login per chat)
+ProxyN -- X402N : TLS, upstream certificate verified
+PhoneN -- Relays : Iroh (QUIC)
+Relays -- DaemonN : Iroh endpoint id authenticates the device
+DaemonN -- RPCN : HTTPS JSON-RPC\n(token bucket per RPC, H-198)
+RPCN -- ChainN
+X402N -- FacN : verify, settle
+FacN -- ChainN : transferWithAuthorization
+
+note right of KCN
+  macOS: the item's ACL trusts the executable that wrote it
+  (ad hoc signed bundled Node: one prompt per wallet after
+  an update that changes the binary). Linux: any process of
+  the user on the session bus reads an unlocked collection.
+  No file fallback when it cannot answer (TA-1).
+end note
+note bottom of BoxN
+  No auth/, no store, no key, no keychain:
+  only data crosses back (law 4, principle 5).
+end note
+note bottom of PhoneN
+  Acts as the owner: answers cards, sends to known
+  recipients (OD-3), never reveals a key (OD-2).
+end note
+@enduml

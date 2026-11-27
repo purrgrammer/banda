@@ -1,0 +1,223 @@
+@startuml class-domain
+!include style.iuml
+title Wallets: domain model and where each fact is stored
+hide empty methods
+skinparam classAttributeFontSize 11
+skinparam packageStyle folder
+
+package "OS keychain  <<never in the store, a backup or the box>>" as KCP #FBEFEF {
+  class KeychainItem <<keychain>> {
+    service : banda's
+    account : "<home-id>/wallet/<address>"
+    {field} secret : 0x + 64 hex (the private key)
+  }
+  class KeychainLease <<keychain>> {
+    account : "<home-id>/lease" (one per home)
+    epoch : int (compare-and-set; the only item ever rewritten)
+    homeSecretHash : bytes32
+  }
+  class Canary <<keychain>> {
+    account : "<home-id>/probe"
+  }
+}
+
+package "Outside the home directory (no backup, restore, fork or copy carries it)" as OUTP #F4F4F4 {
+  class HomeSecret <<keychain>> {
+    account : "<home-id>/home-secret"
+    {field} secret : bytes
+    {field} boundTo : home realpath + (dev, inode, birth time)
+  }
+}
+
+package "Signer child memory, only while signing" as MEMP #F4F4F4 {
+  class PrivateKey <<memory>> {
+    scalar : [1, n-1]
+    --
+    derive() : address
+  }
+}
+
+package "auth/  <<backed up>>" as AUTHP #EEF6EE {
+  class WalletCredentials <<auth file>> {
+    path : auth/connections/wallet/<address>/credentials.json
+    kind : "wallet" (a marker only)
+    --
+    no address, network or keychain reference:
+    the Wallet doc holds them, and the keychain
+    account is derived "<home-id>/wallet/<address>" at use
+    (principle 1)
+  }
+}
+
+package "Workspace files" as WSP #EEF6EE {
+  class AgentFile <<workspace file>> {
+    connections : ["wallet", ...]
+  }
+}
+
+package "pi-durable store  <<one commit line, C1>>" as STOREP #EEF3FA {
+  class Wallet <<store>> {
+    {field} address : EIP-55 (account key)
+    label : required
+    {field} network : one, fixed at creation (OD-9)
+    state : wallet machine
+    signing : signing machine
+    backup : unsaved | saved | skipped
+    defaultForUnknown : Ask | Deny
+    rpc : named endpoint
+    generation : string
+    version : int
+  }
+  class AgentAccess <<store>> {
+    Connected.on[agent].wallet
+    agent : id
+    generation : string
+    version : int
+  }
+  abstract class RecipientIdentity <<store>> {
+    network : CAIP-2
+  }
+  class TransferIdentity <<store>> {
+    address : EIP-55
+  }
+  class X402Identity <<store>> {
+    originAndPath : as observed, no query
+    payTo : EIP-55
+    asset : pinned USDC
+  }
+  class Recipient <<store>> {
+    {field} kind : address | x402 endpoint (later: email, channel)
+    {field} scope : the wallet (later: a connection's account)
+    {field} label : owner's words (never matched)
+    refusal : recipient machine (none | Deny)
+    version : int
+    --
+    the first instance of connections.md's "Approved recipients"
+    list, not a second one; paid totals and the last-paid time
+    are computed from the ledger at read time
+  }
+  class DenyRule <<store>> {
+    {field} the Recipient's refusal (fails closed)
+    wallet + identity, every agent (OD-1)
+  }
+  class AlwaysPermission <<store>> {
+    Permissions doc
+    agent : id
+    account : {key, generation}
+    match : {chain, to} | {endpoint, payTo, asset, network}
+    {field} exactly these keys, non-empty, canonical (else refused)
+    scope : always
+    --
+    binds no amount
+  }
+  class AskWait <<store>> {
+    {field} Wait entry (draft card)
+    {field} deadline : 24 h (C10)
+    approvedAt : time
+    answer : pay | always | dont_pay | never
+    label? : owner's name
+  }
+  class Payment <<store>> {
+    the payment effect
+    {field} id : f(tool task id) | client request id (C14)
+    payer : agent | owner
+    agent?, chat?
+    token : ETH | USDC
+    amount : atomic units
+    state : payment machine
+    outcome : words shown in the chat
+  }
+  class SignedVersion <<store>> {
+    {field} append-only (C6)
+    nonce : int
+    {field} raw : bytes (committed before broadcast)
+    {field} hash : keccak256(raw), once
+    maxFeePerGas, maxPriorityFeePerGas
+  }
+  class NonceLedger <<store>> {
+    {field} per wallet (one network)
+    {field} next : int, never lowered (C5)
+    state : nonce machine
+    frozen, pausedUntil
+  }
+  class NonceLease <<store>> {
+    nonce : int
+    {field} from start commit (burn point)
+    to Included at latest
+  }
+  class Reservation <<store>> {
+    amount + fee reserve
+    until : final, or validBefore
+  }
+  class Observation <<store>> {
+    {field} Challenges doc (egress intake)
+    id : x-banda-challenge
+    chat, agent
+    origin, path, method
+    paymentRequired : as received
+    tlsVerified : true
+    at, paid
+  }
+  class X402Authorization <<store>> {
+    {field} nonce : keccak256("banda/x402" | wallet | observation id)
+    from, to, value
+    {field} validAfter : min(chain, wall) - 5 s
+    {field} validBefore : max(chain, wall) + min(maxTimeout, 60 s)
+    signature
+    state : x402 machine
+  }
+  class RevealCapability <<store>> {
+    wallet
+    expiresAt : 60 s
+    {field} consumed : once (C14)
+  }
+  class RestoreMarker <<store>> {
+    {field} pre-burn payments become owner Waits (C16)
+  }
+}
+
+package "Derived, rebuildable (C22)" as DERP #FFF8E8 {
+  class TransactionRecord <<derived>> {
+    {field} key : (hash, logIndex)
+    direction : in | out | outside banda
+    counterparty, amount, token
+    block, state
+    source : store | logs | bisection
+  }
+  class BalanceReading <<derived>> {
+    wallet, block
+    native, usdc
+  }
+  class IndexCursor <<derived>> {
+    network, block
+  }
+}
+
+WalletCredentials "1" -- "1" Wallet : record of
+WalletCredentials "1" ..> "1" KeychainItem : names (reference only)
+KeychainItem "1" ..> "1" PrivateKey : loaded into
+KeychainLease ..> HomeSecret : hash of
+Wallet "1" *-- "1" NonceLedger
+Wallet "1" *-- "0..*" Recipient
+Wallet "1" o-- "0..*" AgentAccess : on for
+AgentFile ..> AgentAccess : names the connection (mayUse)
+Recipient "1" *-- "1" RecipientIdentity
+RecipientIdentity <|-- TransferIdentity
+RecipientIdentity <|-- X402Identity
+Recipient "1" -- "0..1" DenyRule : per wallet
+Recipient "1" -- "0..*" AlwaysPermission : per agent (OD-1)
+Wallet "1" *-- "0..*" Payment : lane, FIFO (C2)
+Payment "0..*" --> "1" RecipientIdentity : pays
+Payment "1" -- "0..1" AskWait : rule Ask
+Payment "1" *-- "0..*" SignedVersion : versions of one nonce
+Payment "1" -- "0..1" Reservation
+NonceLedger "1" -- "0..1" NonceLease : one in flight (C5)
+NonceLease "0..1" -- "1" Payment : held by
+Observation "1" -- "0..1" X402Authorization : at most one (C14)
+X402Authorization "1" -- "1" Reservation
+X402Authorization --> X402Identity : rule key
+Wallet "1" -- "0..1" RevealCapability
+TransactionRecord ..> Payment : outgoing rows come\nfrom the store
+TransactionRecord ..> Wallet
+BalanceReading ..> Wallet
+@enduml

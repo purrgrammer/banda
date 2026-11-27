@@ -1,0 +1,15 @@
+fork of https://sepolia.base.org at block 62634289, chain id 84532
+USDC proxy 0x036CbD53842c5426634e7929541eC2318f3dCF7e, implementation 0xd74cc5d436923b8ba2c179b4bCA2841D8A52C5B5 (zos implementation slot)
+  name() = USDC
+  version() = 2
+  symbol() = USDC
+  decimals() = 6
+  paused() = false
+  DOMAIN_SEPARATOR() = 0x71f17a3b2ff373b803d70a5a07c046c1a2bc8e89c09ef722fcb047abe94c9818
+  settle: status 0x1
+  replay: status 0x0
+  cancel: status 0x1
+anvil_dumpState on the fork: 16 accounts; USDC proxy present with 8 slots; implementation ABSENT
+prestate tracer: 0x0000000000000000000000000000000000000000 0 slots, 0x036cbd53842c5426634e7929541ec2318f3dcf7e 11 slots, 0x4200000000000000000000000000000000000019 0 slots, 0x420000000000000000000000000000000000001a 0 slots, 0x420000000000000000000000000000000000001b 0 slots, 0xd74cc5d436923b8ba2c179b4bca2841d8a52c5b5 0 slots, 0x0000000000000000000000000000000000000001 0 slots, 0x70997970c51812dc3a010c7d01b50e0d17dc79c8 0 slots, 0xba3b60c21e28c41df4babd90f228e1d368627da6 0 slots, 0xc495b8e54e47f823eebeb93def1e475a4358c004 0 slots
+accounts with code to copy: 0x036cbd53842c5426634e7929541ec2318f3dcf7e (1798 B), 0xd74cc5d436923b8ba2c179b4bca2841d8a52c5b5 (23464 B), 0xba3b60c21e28c41df4babd90f228e1d368627da6 (1741 B)
+wrote usdc-84532.state.json: 64647 bytes, 6 non-zero slots; block env timestamp 1795448738 (2026-11-23T15:45:38.000Z)

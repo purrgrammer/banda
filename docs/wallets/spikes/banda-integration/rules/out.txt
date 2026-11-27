@@ -1,0 +1,8 @@
+PASS first payment to an unknown recipient asks: asks=1
+PASS Always stored as a permission binding `to` only: [{"match":{"to":"ana"},"scope":"always","agent":"sancho"}]
+PASS Always pays the same recipient another amount unasked: asks=0
+PASS Deny refuses without asking (no Wait): {"text":"[{\"type\":\"text\",\"text\":\"wallet__send did not run: the owner doesn't pay bob.\"}]","waits":0}
+PASS Deny set while a draft waits refuses the approved run at start: [{"type":"text","text":"wallet__send did not run: the owner doesn't pay carol."}]
+PASS Deny overrides an open Always permission: [{"type":"text","text":"wallet__send did not run: the owner doesn't pay ana."}]
+PASS one signing per run, distinct sequential nonces: {"signings":2,"nonces":[0,1]}
+ALL PASS

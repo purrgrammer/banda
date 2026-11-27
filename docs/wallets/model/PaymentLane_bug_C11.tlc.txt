@@ -1,0 +1,840 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 22 and seed 3023238092431708749 with 3 workers on 14 cores with 6372MB heap and 64MB offheap memory [pid: 1] (Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64, Eclipse Adoptium 21.0.13 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /m/MC_PaymentLane.tla
+Parsing file /m/PaymentLane.tla
+Parsing file /tmp/Integers.tla
+Parsing file /tmp/Sequences.tla
+Parsing file /tmp/FiniteSets.tla
+Parsing file /tmp/TLC.tla
+Parsing file /tmp/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module PaymentLane
+Semantic processing of module MC_PaymentLane
+Starting... (2026-11-23 17:28:52)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-23 17:28:52.
+Error: Action property UnderfundedNeverStarts is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ label = [r1 |-> "none", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<0, 0, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = <<>>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 0
+/\ dflt = "Ask"
+/\ seen = {}
+/\ frozen = FALSE
+/\ appr = <<FALSE, FALSE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<>>
+/\ st = <<"Idle", "Idle", "Idle">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<-1, -1, -1>>
+/\ toldDeny = {}
+
+State 2: <Call line 203, col 5 to line 216, col 76 of module PaymentLane>
+/\ label = [r1 |-> "none", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<0, 0, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = <<>>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 0
+/\ dflt = "Ask"
+/\ seen = {}
+/\ frozen = FALSE
+/\ appr = <<FALSE, FALSE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<>>
+/\ st = <<"Idle", "Waiting", "Idle">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<-1, -1, -1>>
+/\ toldDeny = {}
+
+State 3: <Call line 203, col 5 to line 216, col 76 of module PaymentLane>
+/\ label = [r1 |-> "none", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<0, 0, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = <<>>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 0
+/\ dflt = "Ask"
+/\ seen = {}
+/\ frozen = FALSE
+/\ appr = <<FALSE, FALSE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<>>
+/\ st = <<"Waiting", "Waiting", "Idle">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<-1, -1, -1>>
+/\ toldDeny = {}
+
+State 4: <Pay line 225, col 5 to line 235, col 65 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<0, 0, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = <<>>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 0
+/\ dflt = "Ask"
+/\ seen = {}
+/\ frozen = FALSE
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<1>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<>>
+/\ st = <<"Queued", "Waiting", "Idle">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<-1, -1, -1>>
+/\ toldDeny = {}
+
+State 5: <Sign line 436, col 5 to line 443, col 93 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<0, 0, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = <<>>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 0
+/\ dflt = "Ask"
+/\ seen = {}
+/\ frozen = FALSE
+/\ appr = <<TRUE, FALSE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<1>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<1, 0>>
+/\ st = <<"Queued", "Waiting", "Idle">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<-1, -1, -1>>
+/\ toldDeny = {}
+
+State 6: <Pay line 225, col 5 to line 235, col 65 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<0, 0, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = <<>>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 0
+/\ dflt = "Ask"
+/\ seen = {}
+/\ frozen = FALSE
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<1, 2>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<1, 0>>
+/\ st = <<"Queued", "Queued", "Idle">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<-1, -1, -1>>
+/\ toldDeny = {}
+
+State 7: <StartCommit line 469, col 5 to line 487, col 52 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<1, 0, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = <<>>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 1
+/\ dflt = "Ask"
+/\ seen = {}
+/\ frozen = FALSE
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<2>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<>>
+/\ st = <<"Signed", "Queued", "Idle">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<0, -1, -1>>
+/\ toldDeny = {}
+
+State 8: <Broadcast line 493, col 5 to line 501, col 76 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<1, 0, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = <<>>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 1
+/\ dflt = "Ask"
+/\ seen = {<<0, 1, 1, "pay">>}
+/\ frozen = FALSE
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<2>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<>>
+/\ st = <<"Sent", "Queued", "Idle">>
+/\ bak = <<>>
+/\ pool = {<<0, 1, 1, "pay">>}
+/\ nonce = <<0, -1, -1>>
+/\ toldDeny = {}
+
+State 9: <Mine line 606, col 5 to line 614, col 82 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<1, 0, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = <<[kind |-> "pay", tag |-> 1, ok |-> TRUE, fin |-> FALSE, ver |-> 1]>>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 1
+/\ dflt = "Ask"
+/\ seen = {<<0, 1, 1, "pay">>}
+/\ frozen = FALSE
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<2>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<>>
+/\ st = <<"Sent", "Queued", "Idle">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<0, -1, -1>>
+/\ toldDeny = {}
+
+State 10: <Track line 538, col 5 to line 549, col 66 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<1, 0, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = <<[kind |-> "pay", tag |-> 1, ok |-> TRUE, fin |-> FALSE, ver |-> 1]>>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 1
+/\ dflt = "Ask"
+/\ seen = {<<0, 1, 1, "pay">>}
+/\ frozen = FALSE
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<2>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<>>
+/\ st = <<"Included", "Queued", "Idle">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<0, -1, -1>>
+/\ toldDeny = {}
+
+State 11: <Sign line 436, col 5 to line 443, col 93 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<1, 0, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = <<[kind |-> "pay", tag |-> 1, ok |-> TRUE, fin |-> FALSE, ver |-> 1]>>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 1
+/\ dflt = "Ask"
+/\ seen = {<<0, 1, 1, "pay">>}
+/\ frozen = FALSE
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<2>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<2, 1>>
+/\ st = <<"Included", "Queued", "Idle">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<0, -1, -1>>
+/\ toldDeny = {}
+
+State 12: <StartCommit line 469, col 5 to line 487, col 52 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<1, 1, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = <<[kind |-> "pay", tag |-> 1, ok |-> TRUE, fin |-> FALSE, ver |-> 1]>>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 2
+/\ dflt = "Ask"
+/\ seen = {<<0, 1, 1, "pay">>}
+/\ frozen = FALSE
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<>>
+/\ st = <<"Included", "Signed", "Idle">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<0, 1, -1>>
+/\ toldDeny = {}
+
+State 13: <Broadcast line 493, col 5 to line 501, col 76 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<1, 1, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = <<[kind |-> "pay", tag |-> 1, ok |-> TRUE, fin |-> FALSE, ver |-> 1]>>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 2
+/\ dflt = "Ask"
+/\ seen = {<<0, 1, 1, "pay">>, <<1, 2, 1, "pay">>}
+/\ frozen = FALSE
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<>>
+/\ st = <<"Included", "Sent", "Idle">>
+/\ bak = <<>>
+/\ pool = {<<1, 2, 1, "pay">>}
+/\ nonce = <<0, 1, -1>>
+/\ toldDeny = {}
+
+State 14: <Mine line 606, col 5 to line 614, col 82 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<1, 1, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = << [kind |-> "pay", tag |-> 1, ok |-> TRUE, fin |-> FALSE, ver |-> 1],
+   [kind |-> "pay", tag |-> 2, ok |-> TRUE, fin |-> FALSE, ver |-> 1] >>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 2
+/\ dflt = "Ask"
+/\ seen = {<<0, 1, 1, "pay">>, <<1, 2, 1, "pay">>}
+/\ frozen = FALSE
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<>>
+/\ st = <<"Included", "Sent", "Idle">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<0, 1, -1>>
+/\ toldDeny = {}
+
+State 15: <Track line 538, col 5 to line 549, col 66 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<1, 1, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = << [kind |-> "pay", tag |-> 1, ok |-> TRUE, fin |-> FALSE, ver |-> 1],
+   [kind |-> "pay", tag |-> 2, ok |-> TRUE, fin |-> FALSE, ver |-> 1] >>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 2
+/\ dflt = "Ask"
+/\ seen = {<<0, 1, 1, "pay">>, <<1, 2, 1, "pay">>}
+/\ frozen = FALSE
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<>>
+/\ st = <<"Included", "Included", "Idle">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<0, 1, -1>>
+/\ toldDeny = {}
+
+State 16: <Call line 203, col 5 to line 216, col 76 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<1, 1, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = << [kind |-> "pay", tag |-> 1, ok |-> TRUE, fin |-> FALSE, ver |-> 1],
+   [kind |-> "pay", tag |-> 2, ok |-> TRUE, fin |-> FALSE, ver |-> 1] >>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 2
+/\ dflt = "Ask"
+/\ seen = {<<0, 1, 1, "pay">>, <<1, 2, 1, "pay">>}
+/\ frozen = FALSE
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<3>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<>>
+/\ st = <<"Included", "Included", "Queued">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<0, 1, -1>>
+/\ toldDeny = {}
+
+State 17: <Sign line 436, col 5 to line 443, col 93 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<1, 1, 0>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = << [kind |-> "pay", tag |-> 1, ok |-> TRUE, fin |-> FALSE, ver |-> 1],
+   [kind |-> "pay", tag |-> 2, ok |-> TRUE, fin |-> FALSE, ver |-> 1] >>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 2
+/\ dflt = "Ask"
+/\ seen = {<<0, 1, 1, "pay">>, <<1, 2, 1, "pay">>}
+/\ frozen = FALSE
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<3>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<3, 2>>
+/\ st = <<"Included", "Included", "Queued">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<0, 1, -1>>
+/\ toldDeny = {}
+
+State 18: <StartCommit line 469, col 5 to line 487, col 52 of module PaymentLane>
+/\ label = [r1 |-> "L1", r2 |-> "none"]
+/\ told = {}
+/\ b = [ base |-> 0,
+  crash |-> 1,
+  pl |-> 1,
+  reorg |-> 0,
+  foreign |-> 0,
+  bump |-> 0,
+  rule |-> 0,
+  outage |-> 0,
+  keyf |-> 0,
+  cancel |-> 0,
+  fund |-> 0,
+  revert |-> 0,
+  lie |-> 1,
+  cancelr |-> 0,
+  restore |-> 0,
+  access |-> 0 ]
+/\ nvers = <<1, 1, 1>>
+/\ cx = <<0, 0, 0>>
+/\ dur = <<>>
+/\ chain = << [kind |-> "pay", tag |-> 1, ok |-> TRUE, fin |-> FALSE, ver |-> 1],
+   [kind |-> "pay", tag |-> 2, ok |-> TRUE, fin |-> FALSE, ver |-> 1] >>
+/\ rin = {}
+/\ deny = [r1 |-> FALSE, r2 |-> FALSE]
+/\ funded = 2
+/\ key = "ok"
+/\ ledger = 3
+/\ dflt = "Ask"
+/\ seen = {<<0, 1, 1, "pay">>, <<1, 2, 1, "pay">>}
+/\ frozen = FALSE
+/\ appr = <<TRUE, TRUE, FALSE>>
+/\ always = [r1 |-> {}, r2 |-> {}]
+/\ archived = FALSE
+/\ queue = <<>>
+/\ on = [a1 |-> TRUE, a2 |-> TRUE]
+/\ rpcUp = TRUE
+/\ base = 1
+/\ mem = <<>>
+/\ st = <<"Included", "Included", "Signed">>
+/\ bak = <<>>
+/\ pool = {}
+/\ nonce = <<0, 1, 2>>
+/\ toldDeny = {}
+
+23032 states generated, 6002 distinct states found, 481 states left on queue.
+The depth of the complete state graph search is 18.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 9 and the 95th percentile is 3).
+Finished in 00s at (2026-11-23 17:28:52)

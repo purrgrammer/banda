@@ -10,6 +10,7 @@ import { CheckIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { parseSchedule, whenWords } from "../../../src/core/schedule.ts";
+import { failureWords } from "../lib/attempt.ts";
 import { Facts } from "./Approval.tsx";
 import { Tile } from "./Cards.tsx";
 import { EditableText } from "./EditableText.tsx";
@@ -52,10 +53,15 @@ type Props = {
 	routine: RoutineProposalView;
 	/** Answered: the result in words ("Set up · 9:12") in place of the buttons. */
 	settled?: string | undefined;
-	/** Allow it, with the owner's edit when they made one. */
-	onAllow?: (edit?: RoutineEdit) => void;
-	onDecline?: () => void;
+	/** Allow it, with the owner's edit when they made one; a promise that rejects is the daemon's refusal, said on the card. */
+	onAllow?: (edit?: RoutineEdit) => unknown;
+	onDecline?: () => unknown;
+	/** Why the last answer did not happen, in words, when known from outside (the specimen's). */
+	problem?: string | undefined;
 };
+
+/** What an answer that did not happen says on the card: what did not happen, and the daemon's words for why. */
+export const problemWords = (what: string, error: unknown): string => `Couldn't ${what}. ${failureWords(error)}`;
 
 /**
  * The owner's edit is of the words they were shown: when the agent writes the routine again while the card is open, the
@@ -65,7 +71,7 @@ export function RoutineProposal(props: Props) {
 	return <Proposed key={`${props.routine.schedule ?? ""}\n${props.routine.ask}`} {...props} />;
 }
 
-function Proposed({ routine, onAllow, onDecline, settled }: Props) {
+function Proposed({ routine, onAllow, onDecline, settled, problem }: Props) {
 	const { kind } = routine;
 	const runsAs = routine.runsAs ?? routine.agent;
 	const elsewhere = runsAs !== routine.agent;
@@ -75,6 +81,24 @@ function Proposed({ routine, onAllow, onDecline, settled }: Props) {
 	const scope = routine.shared === true ? `Shared routine · runs as ${runsAs}` : `${runsAs}'s own routine`;
 	const [when, setWhen] = useState(routine.schedule ?? "");
 	const [ask, setAsk] = useState(routine.ask);
+	// an answer under way, and why the last one did not happen: the card stays as it was, its buttons with it, so the
+	// owner reads what the daemon said and answers again, or looks again
+	const [busy, setBusy] = useState(false);
+	const [failed, setFailed] = useState<string | undefined>(undefined);
+	const answer = (did: string, run: (() => unknown) | undefined) => {
+		setFailed(undefined);
+		const result = run?.();
+		if (!(result instanceof Promise)) return;
+		setBusy(true);
+		result.then(
+			() => setBusy(false),
+			(error: unknown) => {
+				setBusy(false);
+				setFailed(problemWords(did, error));
+			},
+		);
+	};
+	const shown = problem ?? failed;
 	const editable = settled === undefined && onAllow !== undefined && kind !== "removed";
 	const parsed = when === routine.schedule ? undefined : parseSchedule(when, routine.zone);
 	const whenEdited = routine.schedule !== undefined && when !== routine.schedule;
@@ -137,6 +161,11 @@ function Proposed({ routine, onAllow, onDecline, settled }: Props) {
 						? `It wakes ${runsAs} on its own, with ${runsAs}'s instructions and access; what it finds lands in ${runsAs}'s chat, not here.`
 						: `It wakes ${runsAs} on its own; what it finds lands here, and it stays quiet when nothing does.`}
 			</p>
+			{shown === undefined || settled !== undefined ? null : (
+				<p role="alert" className="text-meta text-danger" data-routine-problem>
+					{shown}
+				</p>
+			)}
 			{settled !== undefined ? (
 				<span className="flex min-h-9 items-center gap-1.5 text-ui text-ink-2">
 					<CheckIcon className="size-4 text-alive" />
@@ -146,12 +175,20 @@ function Proposed({ routine, onAllow, onDecline, settled }: Props) {
 				<span className="flex items-center gap-2">
 					<Button
 						variant={kind === "removed" ? "destructive" : "default"}
-						disabled={badWhen !== undefined || badAsk !== undefined}
-						onClick={() => onAllow?.(Object.keys(edit).length === 0 ? undefined : edit)}
+						disabled={busy || badWhen !== undefined || badAsk !== undefined}
+						onClick={() =>
+							answer(kind === "removed" ? "stop it" : kind === "changed" ? "change it" : "set it up", () =>
+								onAllow?.(Object.keys(edit).length === 0 ? undefined : edit),
+							)
+						}
 					>
 						{kind === "removed" ? "Stop it" : kind === "changed" ? "Change it" : "Set it up"}
 					</Button>
-					<Button variant="ghost" onClick={onDecline}>
+					<Button
+						variant="ghost"
+						disabled={busy}
+						onClick={() => answer(kind === "removed" ? "keep it" : "decline it", onDecline)}
+					>
 						{kind === "removed" ? "Keep it" : "Don't"}
 					</Button>
 				</span>

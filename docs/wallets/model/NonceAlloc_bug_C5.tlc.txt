@@ -1,0 +1,100 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 24 and seed 8304152112490313872 with 1 worker on 14 cores with 1820MB heap and 64MB offheap memory [pid: 1] (Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64, Eclipse Adoptium 21.0.13 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /m/MC_NonceAlloc.tla
+Parsing file /m/NonceAlloc.tla
+Parsing file /tmp/Integers.tla
+Parsing file /tmp/Sequences.tla
+Parsing file /tmp/FiniteSets.tla
+Parsing file /tmp/TLC.tla
+Parsing file /tmp/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module NonceAlloc
+Semantic processing of module MC_NonceAlloc
+Starting... (2026-11-23 18:01:41)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-23 18:01:41.
+Error: Invariant NoGap is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 1, bump |-> 0, readmit |-> 1, pl |-> 0]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<>>
+/\ pool = {}
+/\ chain = <<>>
+/\ st = <<"Idle", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<>>
+/\ seen = {}
+
+State 2: <ForeignSpend line 198, col 5 to line 203, col 83 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 0, bump |-> 0, readmit |-> 1, pl |-> 0]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<>>
+/\ pool = {<<0, 0, 1>>}
+/\ chain = <<>>
+/\ st = <<"Idle", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<>>
+/\ seen = {<<0, 0, 1>>}
+
+State 3: <Mine line 172, col 5 to line 177, col 83 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 0, bump |-> 0, readmit |-> 1, pl |-> 0]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<>>
+/\ pool = {}
+/\ chain = <<[tag |-> 0, ver |-> 1, fin |-> FALSE]>>
+/\ st = <<"Idle", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 0
+/\ mem = <<>>
+/\ seen = {<<0, 0, 1>>}
+
+State 4: <RaiseLedger line 161, col 5 to line 165, col 85 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 1, foreign |-> 0, bump |-> 0, readmit |-> 1, pl |-> 0]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<>>
+/\ pool = {}
+/\ chain = <<[tag |-> 0, ver |-> 1, fin |-> FALSE]>>
+/\ st = <<"Idle", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 1
+/\ mem = <<>>
+/\ seen = {<<0, 0, 1>>}
+
+State 5: <Reorg line 186, col 5 to line 194, col 73 of module NonceAlloc>
+/\ nonce = <<-1, -1, -1>>
+/\ b = [crash |-> 0, reorg |-> 0, foreign |-> 0, bump |-> 0, readmit |-> 1, pl |-> 0]
+/\ nvers = <<0, 0, 0>>
+/\ arrival = <<>>
+/\ pool = {}
+/\ chain = <<>>
+/\ st = <<"Idle", "Idle", "Idle">>
+/\ queue = <<>>
+/\ dur = <<>>
+/\ rin = {}
+/\ ledger = 1
+/\ mem = <<>>
+/\ seen = {<<0, 0, 1>>}
+
+168 states generated, 102 distinct states found, 55 states left on queue.
+The depth of the complete state graph search is 5.
+The average outdegree of the complete state graph is 2 (minimum is 1, the maximum 4 and the 95th percentile is 4).
+Finished in 00s at (2026-11-23 18:01:41)

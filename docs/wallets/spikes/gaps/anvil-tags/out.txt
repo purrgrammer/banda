@@ -1,0 +1,43 @@
+## 1. safe and finalized against --slots-in-an-epoch (--no-mining, anvil_mine)
+  default (no flag)                  latest/safe/finalized: 0/0/0  1/0/0  2/0/0  4/0/0  5/0/0  8/0/0  9/0/0  64/32/0  65/33/1  100/68/36
+  --slots-in-an-epoch 1              latest/safe/finalized: 0/0/0  1/0/0  2/1/0  4/3/2  5/4/3  8/7/6  9/8/7  64/63/62  65/64/63  100/99/98
+  --slots-in-an-epoch 4              latest/safe/finalized: 0/0/0  1/0/0  2/0/0  4/0/0  5/1/0  8/4/0  9/5/1  64/60/56  65/61/57  100/96/92
+  --slots-in-an-epoch 32             latest/safe/finalized: 0/0/0  1/0/0  2/0/0  4/0/0  5/0/0  8/0/0  9/0/0  64/32/0  65/33/1  100/68/36
+  --optimism --slots-in-an-epoch 2   latest/safe/finalized: 0/0/0  1/0/0  2/0/0  4/2/0  5/3/1  8/6/4  9/7/5  64/62/60  65/63/61  100/98/96
+  -n base --slots-in-an-epoch 2      latest/safe/finalized: 0/0/0  1/0/0  2/0/0  4/2/0  5/3/1  8/6/4  9/7/5  64/62/60  65/63/61  100/98/96
+
+## 2. state seen at each tag (--no-mining --slots-in-an-epoch 2)
+  before setBalance                    {"latest":"0","safe":"0","finalized":"0"}
+  after setBalance, no block mined     {"latest":"1000000000000000000","safe":"0","finalized":"0"}
+  +1 block                             {"latest":"1000000000000000000","safe":"0","finalized":"0"}
+  +3 blocks (past safe = latest-2)     {"latest":"1000000000000000000","safe":"1000000000000000000","finalized":"0"}
+  +5 blocks (past finalized = latest-4) {"latest":"1000000000000000000","safe":"1000000000000000000","finalized":"1000000000000000000"}
+  sent nonce 0: accepted; before mining: latest=0 pending=1 safe=0 finalized=0
+    mined: latest=1 pending=1 safe=0 finalized=0
+  sent nonce 1: accepted; before mining: latest=1 pending=2 safe=0 finalized=0
+    mined: latest=2 pending=2 safe=0 finalized=0
+  sent nonce 2: accepted; before mining: latest=2 pending=3 safe=0 finalized=0
+    mined: latest=3 pending=3 safe=1 finalized=0
+    +1 empty block: latest=3 pending=3 safe=2 finalized=0
+    +1 empty block: latest=3 pending=3 safe=3 finalized=1
+    +1 empty block: latest=3 pending=3 safe=3 finalized=2
+    +1 empty block: latest=3 pending=3 safe=3 finalized=3
+
+## 3. anvil_reorg under --no-mining (--slots-in-an-epoch 1: safe = latest-1, finalized = latest-2)
+  before: A@1 B@8 C@10; heads {"latest":10,"safe":9,"finalized":8}
+  anvil_reorg(1, []) -> null; A@1 B@8 C@null; heads {"latest":10,"safe":9,"finalized":8}; pool {"pending":"0x0","queued":"0x0"}
+  anvil_reorg(3, []), reaching block 8 = the finalized head -> null; A@1 B@null C@null; heads {"latest":10,"safe":9,"finalized":8}
+  anvil_reorg(10, []), reaching block 1 -> null; A@null B@null C@null; heads {"latest":10,"safe":9,"finalized":8}
+    after: by hash A null; pool {"pending":"0x0","queued":"0x0"}; count latest 0
+  rebroadcast stored bytes -> "same hash"
+  rebroadcast stored bytes -> "same hash"
+  rebroadcast stored bytes -> "same hash"
+  mined: A@11 B@11 C@11
+  anvil_reorg(2, [[C.raw, 0]]) -> null; A@null B@null C@null; heads {"latest":11,"safe":10,"finalized":9}
+
+## 4. block timestamps under --no-mining
+  latest ts - wall clock after one evm_mine: 1 s
+  evm_setNextBlockTimestamp(wall+3600) -> null; next block ts - target = 0
+  following evm_mine: ts - previous = 1 s (chain time stays ahead of the wall clock)
+  evm_setNextBlockTimestamp(earlier than latest) -> {"code":-32602,"message":"Timestamp error: 1795451947 is lower than previous block's timestamp"}
+  evm_mine({timestamp}) -> "0x0"; ts - target = 5000

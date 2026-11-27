@@ -91,7 +91,6 @@ for (const width of [1440, 390]) {
 		return response.json();
 	};
 	try {
-		await api("/skills/shipped", "POST", { add: [] });
 		for (const name of ["mara", "atlas"])
 			await api(`/agents/${name}`, "PUT", {
 				base: null,

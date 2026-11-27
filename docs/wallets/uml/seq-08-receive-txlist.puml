@@ -1,0 +1,55 @@
+@startuml seq-08-receive-txlist
+!include style.iuml
+title Receive and the transaction list: outgoing rows from the store, incoming rows derived from the chain\n(C14, C22; stack.md section 7; tx-history spike; H-205, H-207, H-212)
+autonumber "<b>0."
+
+actor Owner
+participant "Web app\nSettings → Wallets → Main" as Web
+participant "Daemon API" as D
+database "Store\n(ledger doc, derived rows,\ncursor)" as Store
+participant "Indexer\n(one per network,\nevery wallet)" as Idx
+participant "RPC" as RPC
+actor "Outside sender" as Sender
+
+Owner -> Web : Receive
+Web -> D : GET wallet Main
+D --> Web : EIP-55 address and network; QR = the plain checksummed address (OD-7)
+note right of Web
+  Shown only once the key was saved or skipped (H-005):
+  wallet ready_saved | ready_skipped · show_receive.
+  The words say which network to send on.
+end note
+Sender -> RPC : USDC transfer to Main (or an ETH transfer)
+
+loop 2 s while a wallet screen is open or a payment awaited; 40 s when idle; or a logs subscription
+  Idx -> RPC : eth_blockNumber
+  Idx -> RPC : eth_getLogs(Transfer, topic to ∈ the home's wallets,\npinned USDC address, blocks cursor+1 .. head in the RPC's probed range)
+  RPC --> Idx : logs
+  Idx -> Store : upsert one row per (txHash, logIndex); then move the cursor after the rows
+  note right of Store
+    Idempotent across restarts (C14). Zero-value transfers are dropped and
+    no incoming row ever becomes a recipient (H-205). Transfer(from = wallet)
+    logs are never read: outgoing comes from the store.
+  end note
+  Idx -> RPC : eth_getBalance(Main), eth_getTransactionCount(Main) at head (checkpoints)
+  alt the native balance moved and the store explains no part of it
+    Idx -> RPC : bisect eth_getBalance between the two checkpoints
+    Idx -> Store : row "ETH received" at the block found
+  end
+  alt the nonce moved with no payment in the store
+    Idx -> Store : row "sent outside banda" (exported key used elsewhere)
+    note right of Store : feeds C7: a foreign nonce waits for finalized and the owner
+  end
+end
+Store --> D : changed
+D --> Web : SSE push: balance and a new incoming row
+
+Owner -> Web : Transactions
+Web -> D : GET transactions for Main (paged)
+D -> Store : merge: payments and their versions (outgoing, owner and agents),\nx402 authorizations, derived incoming rows
+D --> Web : rows with states: Waiting, In line (Queued), Sent, Included (safe shown as such),\nConfirmed, Failed, Cancelled (at finalized), Restored, Replaced, Not paid, Expired; incoming as Received; outside banda as such
+note over Owner, RPC
+  Balances, rows and cursors are derived and rebuildable; they enter a decision only as a dated reading through C11 (C22).
+  mainnet.base.org answered 429 to every eth_getLogs, so Settings says the list cannot fill when the owner picks it (H-207).
+end note
+@enduml

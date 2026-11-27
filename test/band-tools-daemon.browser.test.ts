@@ -19,7 +19,7 @@ import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { AgentView, Item } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, until as untilEver, webServer } from "./helpers.ts";
+import { tempHome, until as untilEver, webServer } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
 async function until<T>(read: () => Promise<T | undefined | false | null>, what = read.toString()): Promise<T> {
@@ -87,7 +87,6 @@ for (const [width, height] of [
 			const daemon = await startDaemon({ home, port: 0, models, box: hostBox(home), log: () => {} });
 			const base = `http://127.0.0.1:${daemon.port}`;
 			const token = (await readDaemonFile(home))?.token as string;
-			await skipShippedSkills(daemon.port, token);
 			const api = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
 				const response = await fetch(`${base}/api${path}`, {
 					...init,

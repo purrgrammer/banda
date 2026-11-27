@@ -6,19 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SettingsPage } from "../chat/Settings.tsx";
 import { SkillDetail, SkillList } from "../chat/Skill.tsx";
-import {
-	acceptSkill,
-	acceptSkills,
-	chooseShippedSkills,
-	runsOnDevice,
-	type ShippedSkillView,
-	type SkillView,
-	saveSkill,
-	shippedSkills,
-	skills,
-} from "../lib/api.ts";
+import { acceptSkill, acceptSkills, runsOnDevice, type SkillView, saveSkill, skills } from "../lib/api.ts";
 import { attempt } from "../lib/attempt.ts";
-import { NAME_RULE, offersLeft, skillFormState } from "../lib/skill-page.ts";
+import { NAME_RULE, skillFormState } from "../lib/skill-page.ts";
 
 const CHANGED = "banda.skills-changed";
 
@@ -114,15 +104,8 @@ export function SkillsPage({
 	useEffect(() => {
 		setEditing(false);
 	}, [name]);
-	const [shipped, setShipped] = useState<readonly ShippedSkillView[]>();
-	useEffect(() => {
-		void shippedSkills()
-			.then((view) => setShipped(view.skills))
-			.catch(() => {});
-	}, []);
 	const selected = list.find((item) => item.name === name);
 	const accepted = selected?.accepted;
-	const present = new Set(list.map((item) => item.name));
 	const existing = list.flatMap((item) => (item.accepted === undefined ? [] : [item.name]));
 	const save = (target: string, text: string, base: string | null) =>
 		attempt("save the skill", async () => {
@@ -164,18 +147,6 @@ export function SkillsPage({
 							hrefFor={(value) => `#/skills/${value}`}
 						/>
 					</section>
-					{shipped === undefined ? null : (
-						<FromBanda
-							offers={offersLeft(shipped).filter(({ name: offer }) => !present.has(offer))}
-							onAdd={(offer) =>
-								void attempt("add the skill", async () => {
-									setShipped((await chooseShippedSkills([offer])).skills);
-									await reload();
-									changed();
-								})
-							}
-						/>
-					)}
 					{!editing ? (
 						<div>
 							<Button variant="outline" onClick={() => setEditing(true)}>
@@ -269,47 +240,6 @@ function ChangeReview({
 					) : null}
 				</>
 			)}
-		</section>
-	);
-}
-
-/** The skills banda ships and the workspace lacks: one tap writes and accepts one, as at first run. */
-export function FromBanda({
-	offers,
-	busy,
-	onAdd,
-}: {
-	offers: readonly { readonly name: string; readonly about: string; readonly note?: string }[];
-	busy?: string;
-	onAdd: (name: string) => void;
-}) {
-	if (offers.length === 0) return null;
-	return (
-		<section aria-label="Skills from banda" className="flex flex-col gap-3">
-			<header className="flex flex-col gap-0.5">
-				<h2 className="text-ui font-semibold text-ink">From banda</h2>
-				<p className="text-meta text-ink-2">Ready-made skills. Add one and agents can use it right away.</p>
-			</header>
-			<ul className="flex min-w-0 flex-col divide-y divide-line-soft rounded-tile border border-line-soft">
-				{offers.map((offer) => (
-					<li key={offer.name} className="flex min-w-0 items-center gap-3 px-3 py-2.5">
-						<span className="flex min-w-0 flex-1 flex-col">
-							<span className="truncate font-mono text-ui font-medium text-ink">/{offer.name}</span>
-							<span className="text-meta text-ink-2">{offer.about}</span>
-							{offer.note === undefined ? null : <span className="text-meta text-ink-2">{offer.note}</span>}
-						</span>
-						<Button
-							variant="outline"
-							size="sm"
-							disabled={busy !== undefined}
-							aria-label={`Add /${offer.name}`}
-							onClick={() => onAdd(offer.name)}
-						>
-							{busy === offer.name ? "Adding…" : "Add"}
-						</Button>
-					</li>
-				))}
-			</ul>
 		</section>
 	);
 }

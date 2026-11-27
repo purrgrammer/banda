@@ -874,7 +874,7 @@ export function ArchivedAgents({
  * tiers use), Usage (model spend and caching), Connections (every account), Agents (the limits on groups; the archived agents and groups, to restore),
  * Devices (the phones paired, and pairing one).
  */
-export type SettingsTab = "general" | "memory" | "model" | "usage" | "connections" | "agents" | "devices";
+export type SettingsTab = "general" | "memory" | "model" | "usage" | "connections" | "agents" | "wallets" | "devices";
 
 export function AppSettings({
 	data,
@@ -884,6 +884,7 @@ export function AppSettings({
 	usage,
 	tierModels,
 	devices,
+	wallets,
 	backups,
 	bring,
 	...act
@@ -897,6 +898,8 @@ export function AppSettings({
 	bring?: ReactNode;
 	/** The phones paired, and pairing one (`DevicesSettings`). */
 	devices?: ReactNode;
+	/** The home's wallets: each one's balance, its agents and its offline reason, and making one (`WalletsSettings`). */
+	wallets?: ReactNode;
 	/** Every provider the band may think with, to connect, use or sign out of (`ModelProviders`). */
 	providers?: ReactNode;
 	usage?: ReactNode;
@@ -915,6 +918,7 @@ export function AppSettings({
 				{usage === undefined ? null : <TabsTrigger value="usage">Usage</TabsTrigger>}
 				<TabsTrigger value="connections">Connections</TabsTrigger>
 				<TabsTrigger value="agents">Agents</TabsTrigger>
+				{wallets === undefined ? null : <TabsTrigger value="wallets">Wallets</TabsTrigger>}
 				{devices === undefined ? null : <TabsTrigger value="devices">Devices</TabsTrigger>}
 			</TabsList>
 			<TabsContent value="general" className="flex flex-col gap-8">
@@ -1052,6 +1056,11 @@ export function AppSettings({
 				<ArchivedAgents archived={data.archived} onRestore={act.onRestore} />
 				<ArchivedGroups groups={data.archivedGroups ?? []} onRestore={act.onRestoreGroup} />
 			</TabsContent>
+			{wallets === undefined ? null : (
+				<TabsContent value="wallets" className="flex flex-col gap-8">
+					{wallets}
+				</TabsContent>
+			)}
 			{devices === undefined ? null : (
 				<TabsContent value="devices" className="flex flex-col gap-4">
 					{devices}

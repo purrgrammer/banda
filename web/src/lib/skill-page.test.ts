@@ -1,7 +1,7 @@
-/** The Skills page model: what the filter matches, what the form refuses and in which words, which offers remain. */
+/** The Skills page model: what the filter matches, what the form refuses and in which words. */
 import { describe, expect, it } from "vitest";
 import { parseSkill } from "../../../src/core/skill-file.ts";
-import { filterSkills, NAME_RULE, offersLeft, skillFormState } from "./skill-page.ts";
+import { filterSkills, NAME_RULE, skillFormState } from "./skill-page.ts";
 
 const file = (name: string, description = "Fill tables fast", body = "Read the sheet first.") =>
 	`---\nname: ${name}\ndescription: ${description}\n---\n\n${body}`;
@@ -91,17 +91,5 @@ describe("the form's verdicts", () => {
 	it("size counts bytes, not characters", () => {
 		const state = skillFormState({ name: "pdf", text: file("pdf", "Fill tables", "é".repeat(33_000)) });
 		expect(state.overSize).toBe(true);
-	});
-});
-
-describe("the From banda rows", () => {
-	it("keeps only what is not in the workspace, and none hides the section", () => {
-		const offers = [
-			{ name: "pdf", added: true },
-			{ name: "xlsx", added: false },
-			{ name: "deploy-staging", added: false },
-		];
-		expect(offersLeft(offers).map(({ name }) => name)).toEqual(["xlsx", "deploy-staging"]);
-		expect(offersLeft(offers.map((offer) => ({ ...offer, added: true })))).toEqual([]);
 	});
 });

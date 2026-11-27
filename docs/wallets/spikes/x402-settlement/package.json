@@ -1,0 +1,17 @@
+{
+  "name": "spike-x402-settlement",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "eip3009": "node eip3009.mjs",
+    "roundtrip": "node roundtrip.mjs",
+    "sdk-trust": "node sdk-trust.mjs"
+  },
+  "dependencies": {
+    "@x402/core": "2.32.0",
+    "@x402/evm": "2.32.0",
+    "@x402/express": "2.32.0",
+    "express": "5.3.0",
+    "viem": "2.58.4"
+  }
+}

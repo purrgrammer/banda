@@ -23,7 +23,7 @@ import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { ControlView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, until, webServer } from "./helpers.ts";
+import { tempHome, until, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const SHOTS = process.env.BANDA_SHOTS;
@@ -138,14 +138,13 @@ for (const width of [390, 1440])
 				api("/messages", "POST", { id: randomUUID(), thread: `agent:${agent}`, agent, text });
 			const workspace = join(home, "workspace");
 			try {
-				await skipShippedSkills(daemon.port, token);
 				await until(async () => existsSync(join(workspace, "agents", "sancho.md")));
 				await api("/agents/curro", "PUT", { text: CURRO, base: null });
 				// a shared routine of the name, allowed: it runs as the lead, Sancho
 				await mkdir(join(workspace, "routines"), { recursive: true });
 				await writeFile(join(workspace, "routines", `${NAME}.md`), SHARED);
 				await until(async () => (await routines()).find((each) => each.id === NAME)?.change !== undefined);
-				await api(`/routines/${NAME}/accept`, "POST", { sha: shaOf(SHARED) });
+				await api(`/routines/${NAME}/accept`, "POST", { sha: shaOf(SHARED), id: NAME });
 				await say("curro writes into sancho", "curro");
 				await say("sancho schedules", "sancho");
 				await until(

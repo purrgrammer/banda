@@ -1,0 +1,65 @@
+@startuml seq-04-pay-ask-first
+!include style.iuml
+title An agent's first payment to an unknown recipient asks; the owner's answer sets the rule\nrecipient: unknown → always | ask | deny; payment: Idle → Waiting → Queued | Refused | NotPaid (C3, C8, C9, C10, C11)
+autonumber "<b>0."
+
+participant "Agent Mara\n(model)" as Agent
+participant "wallet~__send\n(EffectTool)" as Tool
+database "Store" as Store
+participant "Web app\n(chat card)" as Web
+actor Owner
+participant "Phone\n(paired device)" as Phone
+participant "Wallet lane" as Lane
+
+Agent -> Tool : wallet~__send {to: "0x9f3c…77a1", amount: "2", token: "USDC"}
+Tool -> Store : admission commit
+note right of Store
+  No Deny, no Always for (Mara, wallet, 0x9f3c…): rule unknown,
+  the wallet's default for unknown recipients is Ask.
+  Fits the available balance; limits hold (one open ask per
+  (wallet, agent, recipient, amount, asset), at most 5 per agent).
+  Opens a Wait (the draft) with a 24 h deadline; reserves 2 USDC.
+  row: payment Idle · call [... eff == 'ask' and fits] → Waiting
+end note
+Store --> Web : card: 2 USDC (value in the owner's currency, as of now),\n0x9f3c…77a1 on Base Sepolia, wallet and balance after,\nMara's reason; Pay · Always pay · Don't pay · Never pay; name field
+Tool --> Agent : "Asked the owner to approve paying 0x9f3c…77a1"
+
+Owner -> Web : names it "Ana", taps "Always pay Ana, up to what's in the wallet"
+Web -> Store : answer {wait, approve, scope always, label "Ana", version v}
+note right of Store
+  fill commit, first answer wins (C9):
+  - Always permission {agent Mara, account, chain, to: 0x9f3c…}, scope always, no amount
+  - recipient label "Ana" (the identity is unchanged; a label never matches, C18)
+  - every other open ask it covers is answered in the same commit (answerCovered)
+  rows: recipient unknown · card_always [version_current] → always;
+  payment Waiting · card_always [payer == 'agent'] → Queued
+end note
+opt the same card answered again on the phone
+  Phone -> Store : answer {wait, pay once, version v}
+  Store --> Phone : refused: "already answered on your computer" (C8, C9)
+end
+
+Lane -> Store : start commit re-checks the rule, the approval's freshness\n(at most 1 h old, C10) and the balance; takes the nonce
+note right of Lane : then as in seq-03: sign, broadcast stored bytes, follow to Confirmed
+
+== Later: the next payment to Ana ==
+Agent -> Tool : wallet~__send {to: "0x9f3c…77a1", amount: "7", token: "USDC"}
+Tool -> Store : admission commit: covering finds Always(Mara, wallet, 0x9f3c…)
+Store --> Tool : Queued, no card asked (a card still shows the payment)
+note right of Store : row: Idle · call [... eff == 'always' and fits] → Queued
+
+== The other answers ==
+alt Pay (this once)
+  Owner -> Web : Pay
+  note right of Web : recipient unknown · card_pay → ask (named, rule Ask); payment Waiting · card_pay → Queued
+else Don't pay (this once)
+  Owner -> Web : Don't pay
+  note right of Web : recipient unknown · card_dont_pay → ask; payment Waiting · card_dont_pay → Refused
+else Never pay Ana
+  Owner -> Web : Never pay
+  note right of Web : recipient · card_never → deny; payment Waiting · card_never [payer == 'agent'] → Refused (see seq-05)
+else nobody answers within 24 h (OD-10)
+  Store -> Store : the Wait's deadline fires (store timer, not wall clock)
+  note right of Store : payment Waiting · deadline → NotPaid: "Not paid: no answer" (C10)
+end
+@enduml

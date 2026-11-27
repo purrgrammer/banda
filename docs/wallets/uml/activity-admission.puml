@@ -1,0 +1,151 @@
+@startuml activity-admission
+!include style.iuml
+title The admission decision: C3's fixed order in the admitting commit, then C4's re-check in the fused start commit\n(the first check that fails answers, so the same inputs and store always give the same answer)
+
+start
+:A payment arrives:
+wallet~__send, wallet~__pay_x402 (an agent),
+or Send (the owner, with a client request id);
+
+partition "Admission commit (one pi-durable commit, C1, C3)" {
+  if (owner Send with a client request id already seen?) then (yes)
+    :Return that payment (C14);
+    stop
+  else (no)
+  endif
+  if (1. the wallet exists, not archived, not being removed?) then (no)
+    :Refused, in words; <<#FBEFEF>>
+    note right: payment Idle · call [not wallet_usable] → Refused
+    stop
+  else (yes)
+  endif
+  if (payer is the owner?) then (yes)
+    if (6. the wallet can sign now?) then (no)
+      :Refused, in words (the offline reason); <<#FBEFEF>>
+      stop
+    else (yes)
+    endif
+    if (8. available ≥ amount + fee reserve?) then (no)
+      :Refused, with the available amount; <<#FBEFEF>>
+      note right: Idle · call [wallet_usable and payer == 'owner' and not fits] → Refused
+      stop
+    else (yes)
+      :Queued in the wallet's lane; <<#EEF6EE>>
+      note right: owner authority (law 1): no rule applies; FIFO with the agents (C2)
+    endif
+  else (agent)
+  if (2. the agent is on for this wallet (among its own wallets only)?) then (no)
+    :Refused: "Mara may not use Main"; <<#FBEFEF>>
+    stop
+  else (yes)
+  endif
+  if (3. the wallet tool is on: tool in effect, definition version, account generation (allowedAs)?) then (no)
+    :Refused, in words; <<#FBEFEF>>
+    stop
+  else (yes)
+  endif
+  if (4. the arguments parse: decimal string, listed token, positive, within decimals?) then (no)
+    :Refused, in words; <<#FBEFEF>>
+    stop
+  else (yes)
+  endif
+  if (x402?) then (yes)
+    if (5x. an observation of this chat, verified TLS, https, unexpired, unpaid;
+    v2, scheme exact, wallet's network, pinned asset and domain,
+    EIP-3009 only, no signing extensions?) then (no)
+      :Refused (C18); <<#FBEFEF>>
+      stop
+    else (yes)
+      :identity = (wallet, agent, origin and path, payTo, asset, network);
+    endif
+  else (transfer)
+    if (5. canonical identity: EIP-55 on the wallet's network; not zero, the token,
+    the wallet itself or a precompile?) then (no)
+      :Refused (contract and look-alike flags go on the card); <<#FBEFEF>>
+      stop
+    else (yes)
+      :identity = (wallet, EIP-55 address, network);
+    endif
+  endif
+  if (6. the wallet can sign now: lease held, keychain usable, not host mode,
+  chain id matches, no code at the address, lane not blocked, parked or frozen?) then (no)
+    :Refused: "Main can't sign now: <reason>"; <<#FBEFEF>>
+    note right: Idle · call [not wallet_usable] → Refused
+    stop
+  else (yes)
+  endif
+  :7. the rule, by identity, never by label (C18);
+  if (Deny(wallet, identity)?) then (yes)
+    :Refused: "the owner doesn't pay <name>", no Wait; <<#FBEFEF>>
+    note right: Idle · call [... eff == 'deny'] → Refused
+    stop
+  elseif (Always(wallet, agent, identity)?) then (yes)
+    :eff = always;
+  elseif (rule Ask, or unknown with the default Ask?) then (yes)
+    :eff = ask;
+  else (unknown with the default Deny)
+    :Refused: "this agent only pays the recipients the owner set up"; <<#FBEFEF>>
+    stop
+  endif
+  if (8. available = balance at block b − reservations − fee reserves ≥ amount?) then (no)
+    :Refused, with the available amount, no draft (OD-8, C11); <<#FBEFEF>>
+    note right: Idle · call [... eff != 'deny' and not fits] → Refused
+    stop
+  else (yes)
+  endif
+  if (eff = ask?) then (yes)
+    if (9. one open ask per (wallet, agent, recipient, amount, asset); at most 5 per agent?) then (no)
+      :Refused: an ask is already open; <<#FBEFEF>>
+      stop
+    else (yes)
+      :Waiting: the card, deadline 24 h, reservation; <<#FFF8DC>>
+      note right: Idle · call [... eff == 'ask' and fits] → Waiting
+      detach
+    endif
+  else (always)
+    if (9. burst: more than 10 payments in an hour to this Always recipient?) then (yes)
+      :the system drops the rule to Ask (versioned act, C8);
+      :Waiting: the card; <<#FFF8DC>>
+      note right: recipient always · burst_pause [version_current and not other_agents_always] → ask
+      detach
+    else (no)
+      :Queued in the wallet's lane, reservation; <<#EEF6EE>>
+      note right: Idle · call [... eff == 'always' and fits] → Queued
+    endif
+  endif
+  endif
+}
+
+partition "Fused start commit, when the lane reaches the payment (C4: the burn point)" {
+  :The signer reads and proves the key and signs in its own memory;
+  if (the ledger moved since signing (compare-and-set)?) then (yes)
+    :drop the bytes, sign again;
+    note right: Queued · start_commit [ledger_moved] → Queued
+    detach
+  else (no)
+  endif
+  if (the payment is still Queued (no cancel, no Deny sweep)?) then (no)
+    :drop the bytes; nothing burnt; <<#FBEFEF>>
+    stop
+  else (yes)
+  endif
+  if (agent payer and eff is deny now?) then (yes)
+    :Refused; <<#FBEFEF>>
+    note right: Queued · start_commit [not ledger_moved and payer == 'agent' and eff == 'deny'] → Refused
+    stop
+  elseif (start_ok: owner payer, or Always now, or an approval at most 1 h old?) then (no)
+    :back to Waiting (ask again, C10); <<#FFF8DC>>
+    note right: Queued · start_commit [... not start_ok] → Waiting
+    detach
+  elseif (fits the balance at the latest block?) then (no)
+    :Refused (C11); <<#FBEFEF>>
+    stop
+  else (yes)
+    :Signed: nonce = ledger, version appended,
+    synced before any broadcast (C5, C6, C21); <<#EEF6EE>>
+    note right: Queued · start_commit [not ledger_moved and start_ok and fits] → Signed
+  endif
+}
+:Broadcast the stored bytes; the lane owns the outcome from here (C13);
+stop
+@enduml

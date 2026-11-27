@@ -390,20 +390,6 @@ export function Parts() {
 							]}
 						/>
 					</Group>
-					<Group label="Reading the web: the pages a stretch of reads read, the same quiet line">
-						<Browsed verb="Read" pages={["https://docs.python.org/3/library/asyncio.html"]} />
-						<Browsed
-							verb="Read"
-							pages={["https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/text-overflow"]}
-						/>
-						<Browsed
-							verb="Read"
-							pages={[
-								"https://www.visitportugal.com/en/content/lisbon-card",
-								"https://en.wikipedia.org/wiki/Lisbon_Metro",
-							]}
-						/>
-					</Group>
 					<QuestionCard
 						question="Which flight should I book?"
 						choices={["TP 1351 at 9:15", "IB 3105 at 11:05", "Neither"]}
@@ -787,6 +773,27 @@ export function Parts() {
 							next: ["Tomorrow 09:30"],
 							ask: "Draft the weekly summary.",
 						}}
+						onAllow={() => {}}
+						onDecline={() => {}}
+					/>
+					{/* the daemon refused the answer: the card says why and keeps its buttons; stale and gone read apart */}
+					<RoutineProposal
+						routine={{
+							agent: "Atlas",
+							title: "Morning brief",
+							kind: "new",
+							when: "Weekdays at 08:00",
+							next: ["Thu 08:00", "Fri 08:00", "Mon 08:00"],
+							ask: "Tell me what is on my plate today.",
+							schedule: "cron 0 8 * * 1-5",
+						}}
+						problem="Couldn't set it up. Agents/atlas/routines/morning-brief.md changed since you saw it: look again"
+						onAllow={() => {}}
+						onDecline={() => {}}
+					/>
+					<RoutineProposal
+						routine={{ agent: "Sancho", title: "Portugal fun fact", kind: "removed", when: "", next: [], ask: "" }}
+						problem="Couldn't stop it. There is no routine sancho/portugal-fun-fact: it is gone from the box and the store"
 						onAllow={() => {}}
 						onDecline={() => {}}
 					/>

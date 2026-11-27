@@ -1,0 +1,83 @@
+@startuml seq-09-crash-resume
+!include style.iuml
+title Crash and resume at each boundary of the payment pipeline\n(fault points for test/fault/; C4, C5, C6, C13, C21, C23; nonce-and-crash spike: 127 of 127 kill runs paid once)
+autonumber "<b>0."
+
+participant "Tool task\n(wallet~__send)" as Tool
+participant "Daemon\n(start-up)" as D
+database "Store" as Store
+participant "Wallet lane" as Lane
+participant "Signer" as Signer
+participant "RPC / Base" as Chain
+participant "Receipt follower" as Follower
+
+note over Tool, Follower
+  |= kill point |= the store holds |= what the restart does |
+  | K1 after the admission commit (wallet:queued) | payment Queued, reservation | sign again; nothing was burnt |
+  | K2 after signing, before the start commit (wallet:signed) | payment Queued; bytes only in the dead signer | sign again (same bytes: extraEntropy false); nothing burnt |
+  | K3 after the start commit, before broadcast (wallet:stored) | Signed, version {raw, hash}, nonce n burnt | broadcast the stored bytes |
+  | K4 mid-broadcast or after it, Sent not recorded (wallet:broadcast) | Signed | rebroadcast: "already known" or "nonce too low", then the receipt |
+  | K5 after a receipt was read, before its commit (wallet:receipt) | Sent | read the receipt again |
+  | K6 inside a fee bump (wallet:replace) | Sent; versions 1..k | append-only: rebroadcast every stored version, newest first |
+  | K7 power loss after broadcast | the start commit must have survived | per-commit sync before the effect (C21); else the lane freezes |
+end note
+
+== Restart ==
+D -> Store : format check; every MIGRATIONS step committed (C23)
+D -> Lane : start each wallet's lane only if absent (id from the wallet id, C2)
+D -> Follower : start: every stored, unconfirmed entry
+Lane -> Chain : eth_getTransactionCount(wallet) at latest and at finalized
+Lane -> Store : compare with the ledger and the stored hashes
+alt chain count == ledger, or the difference is explained by stored hashes
+  Lane -> Lane : continue from the last commit
+else unexplained count above the ledger at latest
+  Lane -> Store : freeze the lane until finalized decides (C5, C21); the owner is told
+  note right of Store : nonce · lane_turn [chain_ahead] → blocked; blocked · finality [above_final] → free
+end
+
+== Resume, by what the last commit holds ==
+alt K1 or K2: payment Queued
+  note right of Store : payment Queued · crash → Queued; nonce signing · crash → free
+  Lane -> Signer : sign I at ledger.next
+  Signer --> Lane : raw
+  Lane -> Store : start commit (re-checks everything as now: a Deny set meanwhile refuses here)
+else K3 or K4: payment Signed
+  note right of Store : payment Signed · crash → Signed
+  Lane -> Chain : eth_sendRawTransaction(stored raw)
+  alt not seen before
+    Chain --> Lane : hash
+  else already in the pool
+    Chain --> Lane : "already known" / "transaction already imported"
+  else already mined
+    Chain --> Lane : "nonce too low"; the receipt of the stored hash exists
+  end
+  Lane -> Store : Sent
+  note right of Store : Signed · broadcast → Sent; Sent · broadcast → Sent
+else K5 or K6: payment Sent
+  note right of Store : payment Sent · crash → Sent; nonce in_flight · crash → in_flight
+  Follower -> Chain : receipts of every stored version
+  alt a version has a receipt
+    Follower -> Store : Included (that version); the others "replaced"
+  else the nonce was used by a transaction the store does not hold
+    Follower -> Store : wait for finalized, then Waiting with a card that says what happened (C7)
+    note right of Store : Sent · receipt [blk == 'foreign' and blk_fin] → Waiting
+  else no receipt yet
+    Lane -> Chain : rebroadcast every stored version, newest first
+  end
+end
+
+== The tool task's rerun ==
+Tool -> Store : idempotent rerun under the same key (no second ask)
+alt no stored bytes for the key
+  Tool -> Tool : the allowed hook re-checks; a refusal is "did not run" (true: nothing left the machine)
+else stored bytes exist
+  Tool -> Store : read the lane's outcome
+  Tool --> Tool : "may have sent" until a receipt decides; never "did not run" (C13)
+end
+note over Tool, Follower
+  x402 boundaries: after the authorization commit and before signing, re-signing gives the same authorization (derived nonce);
+  after signing and before the header reaches the box, the stored header is handed (authorized · crash → authorized).
+  Shared invariants after every kill: at most one signed transaction per (wallet, nonce) banda chose; no stored bytes without
+  a ledger entry; no entry left Signed without the follower; nothing reported "did not run" while its bytes are stored.
+end note
+@enduml

@@ -1,0 +1,59 @@
+## Base Sepolia (https://sepolia.base.org), read 2026-11-23T15:57:08.368Z
+  chain id 84532
+  sample 1: latest - safe = 833 blocks / 166 s; latest - finalized = 5315 blocks / 1063 s; wall clock - latest timestamp = 0.9 s
+  sample 2: latest - safe = 847 blocks / 169 s; latest - finalized = 5329 blocks / 1066 s; wall clock - latest timestamp = 0.5 s
+  sample 3: latest - safe = 860 blocks / 172 s; latest - finalized = 5342 blocks / 1069 s; wall clock - latest timestamp = 0.2 s
+  eth_getTransactionCount(safe): accepted
+  eth_getBalance(safe): accepted
+  eth_call authorizationState(safe): accepted (false)
+  eth_getTransactionCount(finalized): accepted
+  eth_getBalance(finalized): accepted
+  eth_call authorizationState(finalized): accepted (false)
+  eth_getLogs AuthorizationUsed, 100 blocks to finalized: -32602 invalid block range params
+  eth_getLogs AuthorizationUsed, 1000 blocks to finalized: -32614 eth_getLogs is limited to a 200 range
+  eth_getLogs AuthorizationUsed, 10000 blocks to finalized: -32614 eth_getLogs is limited to a 200 range
+  GasPriceOracle:
+    isEcotone() = true
+    isFjord() = true
+    isIsthmus() = true
+    isJovian() = true
+    decimals() = 6
+    l1BaseFee() = 20
+    blobBaseFee() = 2
+    baseFeeScalar() = 1101
+    blobBaseFeeScalar() = 659851
+    getL1FeeUpperBound(110) = 200
+    getOperatorFee(21000) = 0
+  receipts: fee fields seen ["blobGasUsed","daFootprintGasScalar","l1BaseFeeScalar","l1BlobBaseFee","l1BlobBaseFeeScalar","l1Fee","l1GasPrice","l1GasUsed"]; 12 of 12 carry l1Fee
+  balance check: 11 of 12 senders fell by exactly value + gasUsed x effectiveGasPrice + l1Fee + operator fee
+    one differs by -1218264300000000 wei (status 0x1; internal transfers or calls that move ETH explain it)
+
+## Base mainnet (https://mainnet.base.org), read 2026-11-23T15:57:25.350Z
+  chain id 8453
+  sample 1: latest - safe = 207 blocks / 41 s; latest - finalized = 5868 blocks / 1173 s; wall clock - latest timestamp = 0.7 s
+  sample 2: latest - safe = 73 blocks / 15 s; latest - finalized = 5881 blocks / 1176 s; wall clock - latest timestamp = 0.4 s
+  sample 3: latest - safe = 86 blocks / 17 s; latest - finalized = 5894 blocks / 1178 s; wall clock - latest timestamp = 1.0 s
+  eth_getTransactionCount(safe): accepted
+  eth_getBalance(safe): accepted
+  eth_call authorizationState(safe): accepted (false)
+  eth_getTransactionCount(finalized): accepted
+  eth_getBalance(finalized): accepted
+  eth_call authorizationState(finalized): accepted (false)
+  eth_getLogs AuthorizationUsed, 100 blocks to finalized: -32011 request limit reached
+  eth_getLogs AuthorizationUsed, 1000 blocks to finalized: -32011 request limit reached
+  eth_getLogs AuthorizationUsed, 10000 blocks to finalized: -32011 request limit reached
+  GasPriceOracle:
+    isEcotone() = true
+    isFjord() = true
+    isIsthmus() = true
+    isJovian() = true
+    decimals() = 6
+    l1BaseFee() = 1106099290
+    blobBaseFee() = 61553615
+    baseFeeScalar() = 2269
+    blobBaseFeeScalar() = 1055762
+    getL1FeeUpperBound(110) = 12584989365
+    getOperatorFee(21000) = 0
+  receipts: fee fields seen ["blobGasUsed","daFootprintGasScalar","l1BaseFeeScalar","l1BlobBaseFee","l1BlobBaseFeeScalar","l1Fee","l1GasPrice","l1GasUsed"]; 12 of 12 carry l1Fee
+  balance check: 12 of 12 senders fell by exactly value + gasUsed x effectiveGasPrice + l1Fee + operator fee
+

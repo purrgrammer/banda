@@ -96,7 +96,7 @@ rem banda: the bundled Node.js runs the bundled CLI.\r
 
 /**
  * What of the checkout a release runs: the build, the box's and proxy's sources it builds images from, what banda ships
- * (connections, skills), the licenses.
+ * (connections, harnesses), the licenses.
  */
 export const STAGED = [
 	"dist",

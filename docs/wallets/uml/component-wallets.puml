@@ -1,0 +1,126 @@
+@startuml component-wallets
+!include style.iuml
+title Wallets: components, interfaces and who may call what (code layout as of 1b15d71)
+skinparam componentStyle uml2
+left to right direction
+
+package "web/ (served by the daemon; desktop window, PWA, phone shell)" as WEB {
+  component "Settings → Wallets\nlist · Send · Receive (QR)\ntx list · Recipients · agent access\nSave your key step" as WebWallets
+  component "Chat payment card\nPay · Always pay · Don't pay · Never pay\n(name field)" as WebCard
+}
+
+component "Desktop shell\ndesktop/src/main.ts (Electron)\nOS re-authentication; spawns the signer\nitself for a later reveal; shows the key in\na local-file window, never the daemon origin" as Shell
+
+component "Phone app\nmobile/ (Capacitor, Banda plugin)" as Phone
+
+package "Daemon (bundled Node process)" as DAEMON {
+  package "src/server" {
+    component "HTTP API + SSE\n(loopback, owner token,\nHost/Origin checked)" as API
+    component "Iroh endpoint\n(paired devices act as the owner)" as Iroh
+    component "capabilities.ts install loop\n+ wallet EffectTool builder\n(lasts: [always])" as Builder
+  }
+  package "src/core (wallet slice)" {
+    component "Agent loop\n(turns, model calls through pi-ai,\ntool results as data)" as Loop
+    component "Wallet connection\nshipped/connections/wallet.json\naccounts, Connected.on, auth kind wallet" as Conn
+    component "Admission\neffectRun + allowed hook:\nallowedAs → Deny → C3 order" as Admit
+    component "Permissions\nAlways = scope always,\nbinds {account, chain, to}" as Perms
+    component "Waits\nAsk card, fill, answerCovered\n(+ refuse / label on Approving)" as Waits
+    component "Recipients\nidentity, label, Deny,\ndefault for unknown" as Recips
+    component "Wallet lane\ndurable task per wallet, FIFO\n(C2)" as Lane
+    component "Ledger\nnonce ledger, signed versions,\nreservations (C5, C6, C11)" as Ledger
+    component "Receipt follower\n(C12, C13)" as Follower
+    component "Read side (C22)\nbalances, incoming logs,\ncursors, offline reasons" as Indexer
+    component "RPC client\n+ error classifier" as RPCc
+    component "Per-network table\nchain id, USDC, EIP-712 domain,\nfee ceilings, finality tags" as NetTable
+    component "x402 payload builder\nEIP-3009 only, derived nonce,\nchain-time window (C19)" as X402B
+    component "Egress intake\nChallenges doc beside Tickets\n(src/core/egress.ts)" as Intake
+    component "Signer supervisor\none call per home, deadline,\nSIGKILL (C20)" as Sup
+  }
+  database "pi-durable store\none commit line (C1)" as Store
+}
+
+component "Signer child\n(process.execPath, short-lived)\n@noble/curves 2.4.0 · micro-eth-signer 0.20.1\n@napi-rs/keyring 2.1.2" as Signer
+interface "create · probe · reveal · derive\nsignTransfer\nsignTransferWithAuthorization" as ISigner
+Signer -up- ISigner
+
+component "OS keychain\nmacOS Keychain / Secret Service\n(store pinned to secret-service)" as KC
+
+package "Box (VM or container)" as BOX {
+  component "Agent's code and tools\n(pi-env)" as BoxCode
+}
+component "Egress proxy\nproxy/addon.py (mitmproxy)\n+ 402 observation" as Proxy
+
+cloud "Internet" as NET {
+  component "RPC endpoint\n(the owner's named choice)" as RPC
+  component "Base / Base Sepolia" as Chain
+  component "x402 resource server" as X402S
+  component "x402 facilitator" as Fac
+}
+
+interface "owner API" as IOwner
+API -up- IOwner
+interface "JSON-RPC" as IRPC
+RPC -up- IRPC
+
+WebWallets --> IOwner : wallet routes
+WebCard --> IOwner : answer a Wait (version)
+Shell --> API : "a reveal happened" (no key;\nno reveal route on the daemon API, C16)
+Phone --> Iroh : same API over Iroh
+Iroh --> API
+
+API --> Conn : create, access, archive
+API --> Waits : answers
+API --> Recips : rename, rule, forget
+API --> Lane : owner Send (client request id)
+API --> Indexer : tx list, balance
+Builder --> Conn : accounts on for the agent
+Builder --> Admit : wallet~__send, wallet~__pay_x402
+Admit --> Recips : Deny, default
+Admit --> Perms : covering
+Admit --> Waits : open the card
+Admit --> Ledger : reserve (C11)
+Admit --> Lane : enqueue
+Admit --> Intake : intake first (H-219)
+Lane --> Sup : sign request (request id)
+Lane --> Ledger : fused start commit (C4)
+Lane --> RPCc : broadcast stored bytes
+Lane --> X402B : x402 message
+X402B --> NetTable
+Follower --> RPCc : receipts, events
+Follower --> Ledger : state moves
+Indexer --> RPCc : logs, balances, nonces
+RPCc --> IRPC
+RPCc --> NetTable
+Sup --> ISigner : stdin/stdout pipe
+Shell --> ISigner : later reveal: spawned by Electron main,\nover pipes it owns (C16)
+Signer --> KC : one operation at a time
+Conn ..> Store
+Admit ..> Store
+Perms ..> Store
+Waits ..> Store
+Recips ..> Store
+Lane ..> Store
+Ledger ..> Store
+Follower ..> Store
+Indexer ..> Store : derived, rebuildable
+Intake ..> Store
+
+BoxCode --> Proxy : the box's only way out
+Proxy --> X402S : verified TLS
+Proxy ..> Intake : observation over the exec channel
+Loop --> Builder : the model calls wallet tools
+Loop --> BoxCode : commands over pi-env
+RPC --> Chain
+X402S --> Fac : verify, settle
+Fac --> Chain : transferWithAuthorization
+
+note bottom of Signer
+  The key never enters the daemon, the store or the box
+  (KeyNeverInStoreOrBox). Two signing operations and no
+  others; extraEntropy false; chainId always explicit.
+end note
+note bottom of Proxy
+  The box gets only x-banda-challenge: <id>
+  and later the PAYMENT-SIGNATURE header.
+end note
+@enduml

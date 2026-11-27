@@ -1,0 +1,46 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 119 and seed 5671300656996270230 with 1 worker on 14 cores with 1820MB heap and 64MB offheap memory [pid: 1] (Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64, Eclipse Adoptium 21.0.13 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /m/MC_SharedBalance.tla
+Parsing file /m/SharedBalance.tla
+Parsing file /tmp/Integers.tla
+Parsing file /tmp/TLC.tla
+Parsing file /tmp/Naturals.tla
+Parsing file /tmp/Sequences.tla
+Parsing file /tmp/FiniteSets.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module SharedBalance
+Semantic processing of module MC_SharedBalance
+Starting... (2026-11-23 18:02:42)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-23 18:02:43.
+Error: Invariant CommittedWithinBalance is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ funded = 1
+/\ spent = 0
+/\ auth = "idle"
+/\ b = 1
+/\ pay = "idle"
+
+State 2: <PayAdmit line 27, col 13 to line 28, col 51 of module SharedBalance>
+/\ funded = 1
+/\ spent = 0
+/\ auth = "idle"
+/\ b = 1
+/\ pay = "queued"
+
+State 3: <AuthCommit line 34, col 15 to line 35, col 52 of module SharedBalance>
+/\ funded = 1
+/\ spent = 0
+/\ auth = "authorized"
+/\ b = 1
+/\ pay = "queued"
+
+6 states generated, 6 distinct states found, 3 states left on queue.
+The depth of the complete state graph search is 3.
+The average outdegree of the complete state graph is 3 (minimum is 3, the maximum 3 and the 95th percentile is 3).
+Finished in 00s at (2026-11-23 18:02:43)
