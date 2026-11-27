@@ -98,8 +98,15 @@ for (const width of [390, 1440])
 							`${card} !== null && ${card}.id !== 'routine-items' && ${card}.querySelectorAll('[aria-label="Edit when"]').length === 1`,
 						),
 					).toBe(true);
+					// the specimen draws the section once per scheme (stage.tsx: a light and a dark frame, each `data-scheme`), so
+					// each of #154's two cards with a problem is there twice. The edit is made in the light frame's first card;
+					// the dark frame is only counted.
+					expect(await page.run(`document.querySelectorAll('#routine-items [data-scheme]').length`)).toBe(2);
+					expect(await page.run(`${card}.closest('[data-scheme]')?.dataset.scheme`)).toBe("light");
 					const problems = `document.querySelectorAll('#routine-items [data-routine-problem]').length`;
-					expect(await page.run(problems)).toBe(2);
+					const ownProblems = `${card}.closest('[data-scheme]').querySelectorAll('[data-routine-problem]').length`;
+					expect(await page.run(ownProblems)).toBe(2);
+					expect(await page.run(problems)).toBe(4);
 					const setUp = `[...${card}.querySelectorAll('button')].find((b) => b.innerText === 'Set it up')`;
 					await page.run(`${card}.querySelector('[aria-label="Edit when"]').click()`);
 					const field = `${card}.querySelector('input')`;
@@ -114,8 +121,9 @@ for (const width of [390, 1440])
 					await page.until(`!${field}`);
 					expect(await page.run(`${card}.innerText.includes('09:30')`)).toBe(true);
 					expect(await page.run(`${card}.innerText.includes('Edited by you')`)).toBe(true);
-					// the other cards' problems are theirs, untouched by this edit
-					expect(await page.run(problems)).toBe(2);
+					// the other cards' problems are theirs, untouched by this edit, in its frame and in the other
+					expect(await page.run(ownProblems)).toBe(2);
+					expect(await page.run(problems)).toBe(4);
 					expect(await page.run(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
 					if (shots !== undefined) {
 						await mkdir(shots, { recursive: true });
