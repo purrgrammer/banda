@@ -285,6 +285,9 @@ function telling(tool: ToolRegistration, workspace: string | undefined): ToolReg
 			for (const path of changed.sort()) {
 				const skill = skillNamed(path);
 				if (skill === undefined) api.diagnostic(awaiting(path));
+				// a SKILL.md the command removed: only a file in effect is here (a gone file that was not is no change),
+				// and removing a skill is the owner's (DESIGN.md "The workspace")
+				else if (!after.has(path)) api.diagnostic(skillRemoved(path, skill));
 				else {
 					const note = await putSkillAt(api, ctx, env, `${workspace}/${path}`, skill);
 					if (note !== undefined) api.diagnostic(note);
@@ -309,6 +312,15 @@ export const skillWaits = (path: string, why: string) => ({
 		`${path} is not in effect: ${why}. A SKILL.md in the workspace is in effect as soon as it parses (--- frontmatter ` +
 		"with name and description, then the body) and hides no character; until then the version in effect, if any, " +
 		"is what loads, and the Skills page shows the owner what is wrong.",
+});
+
+/** What the model is told of a SKILL.md a command removed: the skill stays in effect until the owner removes it. */
+export const skillRemoved = (path: string, name: string) => ({
+	severity: "info" as const,
+	code: "skill-removed",
+	message:
+		`${path} is gone from the workspace, but the skill /${name} stays in effect: removing a skill is the owner's, ` +
+		"and the Skills page shows them the file is gone. Tell them it waits for them, not that it is removed.",
 });
 
 /** What the model is told of a skill now in effect, with nothing for the owner to accept. */

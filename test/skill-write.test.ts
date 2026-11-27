@@ -59,6 +59,9 @@ it("puts a skill in effect whether written, edited or left by a command, and tel
 		}),
 		// 7 an agent file still waits for the owner
 		call("write", { path: "agents/writer.md", content: "---\nname: Writer\ndescription: Writes.\n---\nWrite.\n" }),
+		// 8 a command removes a skill's file: the skill stays in effect, and the model is told so, not that it could
+		// not be read; a file that never was in effect leaves no note
+		call("bash", { command: "rm skills/notes/SKILL.md skills/broken/SKILL.md" }),
 		fauxAssistantMessage("Done."),
 	]);
 	try {
@@ -94,6 +97,11 @@ it("puts a skill in effect whether written, edited or left by a command, and tel
 				),
 			],
 			[expect.stringMatching(/^awaits-acceptance: agents\/writer\.md takes effect only once the owner accepts it/)],
+			[
+				expect.stringMatching(
+					/^skill-removed: skills\/notes\/SKILL\.md is gone from the workspace, but the skill \/notes stays in effect/,
+				),
+			],
 		]);
 		const accepted = (await harness.snapshot(Accepted, context))?.files ?? {};
 		expect(accepted["skills/notes/SKILL.md"]).toMatchObject({ text: third, sha: shaOf(third) });
