@@ -9,11 +9,11 @@ import { Accepted, shaOf } from "../core/agents.ts";
 import {
 	acceptedSkills,
 	MAX_SKILL_BYTES,
-	parseSkill,
 	putSkill,
 	SKILL_FILE,
 	SKILL_NAME,
 	type Skill,
+	skillRefusal,
 } from "../core/skills.ts";
 import { context } from "../core/store.ts";
 import { readBytes, textOf, type Workspace, write } from "./agents.ts";
@@ -47,12 +47,9 @@ async function candidate(workspace: Workspace, name: string, ctx: Context) {
 	const decoded = textOf(result.bytes);
 	if ("unreadable" in decoded) return { errors: [decoded.unreadable] };
 	const sha = shaOf(decoded.text);
-	try {
-		parseSkill(name, decoded.text);
-		return { sha, text: decoded.text };
-	} catch (error) {
-		return { sha, text: decoded.text, errors: [(error as Error).message] };
-	}
+	// the one rule putSkill applies: a file it refuses is shown with why, never offered as acceptable
+	const refused = skillRefusal(name, decoded.text);
+	return refused === undefined ? { sha, text: decoded.text } : { sha, text: decoded.text, errors: [refused] };
 }
 
 export async function skills(harness: Harness, workspace: Workspace, ctx: Context = context): Promise<SkillView[]> {
@@ -169,11 +166,8 @@ export async function saveSkill(
 	base: string | null,
 	ctx: Context = context,
 ) {
-	try {
-		parseSkill(name, text);
-	} catch (error) {
-		throw new BadRequest((error as Error).message);
-	}
+	const refused = skillRefusal(name, text);
+	if (refused !== undefined) throw new BadRequest(refused);
 	const accepted = (await harness.snapshot(Accepted, ctx))?.files[SKILL_FILE(name)];
 	const found = await candidate(workspace, name, ctx);
 	if ((accepted?.sha ?? null) !== base || (base !== null && found.sha !== base))

@@ -23,6 +23,20 @@ import { hiddenError } from "./visible.ts";
 export { MAX_SKILL_BYTES, parseSkill, SKILL_FILE, SKILL_NAME, type Skill, skillHeader } from "./skill-file.ts";
 
 /**
+ * Why `text` cannot be skill `name`'s instructions, if it cannot: it does not parse as a SKILL.md, or it hides a
+ * character, since nobody reviews it. One rule, wherever a skill file is judged: put in effect, shown to the owner, or
+ * saved by them.
+ */
+export function skillRefusal(name: string, text: string): string | undefined {
+	try {
+		parseSkill(name, text);
+	} catch (error) {
+		return (error as Error).message;
+	}
+	return hiddenError(text, { lines: true });
+}
+
+/**
  * In `tx`: skill `name`'s instructions `text`, as the workspace holds them, in effect (DESIGN.md "The workspace"):
  * checked as any SKILL.md is, and for characters nobody sees, since nobody reviews it. What changed, or why not.
  */
@@ -32,13 +46,8 @@ export async function putSkill(
 	text: string,
 	at: number,
 ): Promise<{ change: "same" | "added" | "changed" } | { refused: string }> {
-	try {
-		parseSkill(name, text);
-	} catch (error) {
-		return { refused: (error as Error).message };
-	}
-	const hidden = hiddenError(text, { lines: true });
-	if (hidden !== undefined) return { refused: hidden };
+	const refused = skillRefusal(name, text);
+	if (refused !== undefined) return { refused };
 	const files = (await tx.doc(Accepted)).files;
 	const path = SKILL_FILE(name);
 	const sha = shaOf(text);

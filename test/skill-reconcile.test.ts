@@ -3,17 +3,17 @@
  * dropped in) is in effect at the next start: `reconcileSkills` puts every parseable, visible one in effect and leaves
  * the rest for the Skills page to explain. The owner's accept route is then only for what cannot be put in effect.
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createModels, fauxProvider } from "@earendil-works/pi-ai";
 import { createRegistry } from "@earendil-works/pi-durable";
 import { expect, it } from "vitest";
 import { openBox } from "../src/box/box.ts";
-import { Accepted } from "../src/core/agents.ts";
+import { Accepted, shaOf } from "../src/core/agents.ts";
 import { acceptedSkills } from "../src/core/skills.ts";
 import { context, openStore } from "../src/core/store.ts";
 import type { Workspace } from "../src/server/agents.ts";
-import { reconcileSkills, skills } from "../src/server/skills.ts";
+import { acceptSkills, reconcileSkills, skills } from "../src/server/skills.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { tempHome } from "./helpers.ts";
 
@@ -49,9 +49,18 @@ it("puts the workspace's parseable skills in effect at start and shows the owner
 			kind: "added",
 			errors: [expect.stringContaining("frontmatter")],
 		});
-		// a hidden character parses, so the page shows the file as a change; it is not in effect
-		expect(page.find((view) => view.name === "sneaky")?.change).toMatchObject({ kind: "added" });
+		// a hidden character parses, but is refused as putSkill refuses it: the page says so, with nothing to accept
+		expect(page.find((view) => view.name === "sneaky")?.change).toMatchObject({
+			kind: "added",
+			errors: [expect.stringContaining("a character nobody sees (U+200B)")],
+		});
 		expect(accepted["skills/sneaky/SKILL.md"]).toBeUndefined();
+		await expect(
+			acceptSkills(harness, workspace, [
+				{ name: "sneaky", sha: shaOf(await readFile(join(dir("sneaky"), "SKILL.md"), "utf8")) },
+			]),
+		).rejects.toThrow("a character nobody sees");
+		expect((await harness.snapshot(Accepted, context))?.files["skills/sneaky/SKILL.md"]).toBeUndefined();
 	} finally {
 		await harness.close(context);
 		await box.close();
