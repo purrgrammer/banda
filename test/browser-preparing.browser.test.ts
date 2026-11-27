@@ -6,7 +6,7 @@ import { expect, it } from "vitest";
 import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, type WebServer, webServer } from "./helpers.ts";
+import { tempHome, type WebServer, webServer } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
 for (const width of [390, 1440]) {
@@ -66,7 +66,6 @@ for (const width of [390, 1440]) {
 		try {
 			const token = (await readDaemonFile(home))?.token;
 			if (token === undefined) throw new Error("The test daemon did not publish its token");
-			await skipShippedSkills(daemon.port, token);
 			const named = await fetch(`http://127.0.0.1:${daemon.port}/api/companion`, {
 				method: "PUT",
 				headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },

@@ -20,7 +20,7 @@ import { startDaemon } from "../src/daemon.ts";
 import { readDaemonFile } from "../src/home.ts";
 import type { ControlView, RoutineRunsPage } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, until, webServer } from "./helpers.ts";
+import { tempHome, until, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const SHOTS = process.env.BANDA_ROUTINE_SHOTS;
@@ -120,7 +120,6 @@ for (const width of [390, 1440])
 					return page.runs.length >= count && page.runs.every((run) => !["waiting", "running"].includes(run.state));
 				}, 30_000);
 			try {
-				await skipShippedSkills(daemon.port, token);
 				// the owner's own routines, in effect at once; each run now, one after the other in Sancho's chat
 				const make = (description: string, ask: string) =>
 					api<{ name: string }>("/routines", "POST", { agent: "sancho", description, when: "cron 0 8 * * 1-5", ask });

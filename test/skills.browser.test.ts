@@ -58,25 +58,12 @@ for (const width of [390, 1440])
 		});
 		try {
 			await withPage(`${server.origin}/#token=${token}`, { width, height: 900 }, async (page) => {
-				// first run offers the skills banda ships, once: the owner turns one off and adds the rest
-				await page.until(`document.body.textContent.includes('Skills to start with')`);
-				await click(page, `document.querySelector('#first-skill-unslop')`);
-				expect(await page.run(`document.querySelector('#first-skill-eggbot')?.getAttribute('aria-checked')`)).toBe(
-					"true",
-				);
-				await click(page, button("Add 5 skills"));
-				await page.until(`!document.body.textContent.includes('Skills to start with')`);
-				await page.run(`location.hash='#/skills'`);
-				// the list is flat and visible: no disclosure to open
-				await page.until(`document.querySelector('[data-skill-list]')?.textContent.includes('/catch-me-up')`);
-				expect(await page.run(`document.querySelector('[data-skill-list]')?.textContent.includes('/unslop')`)).toBe(
-					false,
-				);
-				// the one left off at first run is offered again, from banda
-				await page.until(`document.querySelector('[aria-label="Skills from banda"]')?.textContent.includes('/unslop')`);
-				await page.run(`location.hash='#/a/sancho'`);
+				// first run has no skills step: the band opens, and a new home has no skills
 				await page.until(`document.querySelector('textarea[placeholder^="Message "]')`);
+				expect(await page.run(`document.body.textContent.includes('Skills to start with')`)).toBe(false);
 				await page.run(`location.hash='#/skills'`);
+				await page.until(`document.querySelector('[data-skill-list]')?.textContent.includes('No skills yet.')`);
+				expect(await page.run(`!!document.querySelector('[aria-label="Skills from banda"]')`)).toBe(false);
 				await click(page, button("Create a skill"));
 				await fill(page, `document.querySelector('input[aria-label="Skill name"]')`, "research");
 				await fill(
@@ -130,16 +117,6 @@ for (const width of [390, 1440])
 				).toBe(true);
 				await click(page, button("Accept this version"));
 				await page.until(`document.querySelector('[data-skill-detail]')?.textContent.includes('Check every source.')`);
-				// a shipped skill the owner chose at first run works like any other
-				await page.run(`location.hash='#/a/sancho'`);
-				await fill(
-					page,
-					`document.querySelector('textarea[placeholder^="Message "]')`,
-					"/eggbot",
-					"HTMLTextAreaElement",
-				);
-				await click(page, `document.querySelector('button[aria-label="Send"]')`);
-				await page.until(`document.body.textContent.includes('Loaded /eggbot')`);
 			});
 		} finally {
 			await server.close();

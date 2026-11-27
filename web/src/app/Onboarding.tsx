@@ -4,16 +4,15 @@
  * not blocked) and this screen waits for it, takes the code its page shows when the page never comes back, or cancels
  * it; picked again, it starts over. One without a sign-in takes a key. A provider set from outside banda (an
  * ANTHROPIC_API_KEY around the daemon) is named by its source, and a tap uses it as the owner's pick; it never counts
- * as picked before. Then the skills banda ships, once; then the band opens.
+ * as picked before. Then the band opens.
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { SERVER_KINDS, type ServerKind } from "../../../src/core/custom-providers.ts";
 import { useProviderConnect, wayLabel } from "../areas/tiers.ts";
 import { AddProvider, type Step, setupWords } from "../chat/AddProvider.tsx";
 import { FirstRun } from "../chat/FirstRun.tsx";
-import { FirstSkills } from "../chat/FirstSkills.tsx";
 import { ProviderMark, ServerMark } from "../chat/ProviderMark.tsx";
-import { chooseShippedSkills, runsOnDevice, type ShippedSkillsView, shippedSkills } from "../lib/api.ts";
+import { runsOnDevice } from "../lib/api.ts";
 import { useAddProviderActions } from "./SettingsProviders.tsx";
 
 /** Providers whose own sign-in comes first; the rest follow in the daemon's order. */
@@ -112,70 +111,6 @@ export function Onboarding() {
 					/>
 				</>
 			}
-		/>
-	);
-}
-
-/**
- * The skills banda ships, as the daemon offers them: undefined while read, and `chosen` once the owner chose or
- * skipped (or the daemon could not say, so the app is never held on this step).
- */
-export function useShippedSkills() {
-	const [view, setView] = useState<ShippedSkillsView>();
-	useEffect(() => {
-		let gone = false;
-		shippedSkills().then(
-			(next) => {
-				if (!gone) setView(next);
-			},
-			() => {
-				if (!gone) setView({ chosen: true, skills: [] });
-			},
-		);
-		return () => {
-			gone = true;
-		};
-	}, []);
-	return [view, setView] as const;
-}
-
-/** The skills step: those banda suggests start on; the owner's choice is saved, accepted, in one tap. */
-export function SkillsOnboarding({
-	view,
-	onChosen,
-}: {
-	view: ShippedSkillsView;
-	onChosen: (next: ShippedSkillsView) => void;
-}) {
-	const [picked, setPicked] = useState(
-		() => new Set(view.skills.flatMap((skill) => (skill.byDefault && !skill.added ? [skill.name] : []))),
-	);
-	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState<string>();
-	const choose = (names: readonly string[]) => {
-		setBusy(true);
-		setError(undefined);
-		chooseShippedSkills(names).then(onChosen, (reason: unknown) => {
-			setBusy(false);
-			setError(`Couldn't add the skills: ${reason instanceof Error ? reason.message : String(reason)}. Try again.`);
-		});
-	};
-	return (
-		<FirstSkills
-			skills={view.skills}
-			picked={picked}
-			busy={busy}
-			error={error}
-			onToggle={(name, on) =>
-				setPicked((before) => {
-					const next = new Set(before);
-					if (on) next.add(name);
-					else next.delete(name);
-					return next;
-				})
-			}
-			onAdd={() => choose(view.skills.flatMap((skill) => (!skill.added && picked.has(skill.name) ? [skill.name] : [])))}
-			onSkip={() => choose([])}
 		/>
 	);
 }

@@ -120,7 +120,7 @@ console.log(
 			agent: await inBox("agents/code-reviewer.md"),
 		},
 		expected: { review: shaOf(skill("review")), plan: shaOf(skill("plan")) },
-		chosen: { bring: companion?.bringChosen === true, skills: companion?.skillsChosen === true },
+		chosen: { bring: companion?.bringChosen === true },
 		commits: faults.hits("commit:after"),
 		points: Object.fromEntries(AGENT_PUBLICATION_POINTS.map((point) => [point, faults.hits(point)])),
 	}),

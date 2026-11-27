@@ -1,5 +1,5 @@
 /**
- * The Skills page's model: filtering the list, the form's live verdicts and the "From banda" rows. The verdicts come
+ * The Skills page's model: filtering the list and the form's live verdicts. The verdicts come
  * from the same rules the daemon enforces (src/core/skill-file.ts), said in the owner's words before a save is tried.
  */
 import { MAX_SKILL_BYTES, parseSkill, SKILL_NAME, skillBytes, skillHeader } from "../../../src/core/skill-file.ts";
@@ -105,7 +105,3 @@ export function skillFormState({
 		valid: name !== "" && problems.length === 0,
 	};
 }
-
-/** The shipped skills still worth a row: the ones not in the workspace. The section hides when none are left. */
-export const offersLeft = <T extends { readonly added: boolean }>(skills: readonly T[]): readonly T[] =>
-	skills.filter(({ added }) => !added);

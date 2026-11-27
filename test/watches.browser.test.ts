@@ -13,7 +13,7 @@ import type { CapabilitiesView } from "../src/server/api.ts";
 import { world } from "./fault/watch-scenario.ts";
 import { githubObjectDefinition, startGithubObjects } from "./fixtures/github-objects.ts";
 import { hostBox } from "./fixtures/host-box.ts";
-import { skipShippedSkills, tempHome, webServer } from "./helpers.ts";
+import { tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const SHOTS = process.env.BANDA_WATCHES_SHOTS;
@@ -105,7 +105,6 @@ for (const width of [390, 1440])
 			const connection = async () =>
 				(await api<CapabilitiesView>("/capabilities")).connections.find((each) => each.name === "github");
 			try {
-				await skipShippedSkills(daemon.port, token);
 				await api("/agents/mara", "PUT", {
 					base: null,
 					text: "---\nname: Mara\ndescription: Follows things\nconnections: [github]\n---\nFollow things for the owner.\n",

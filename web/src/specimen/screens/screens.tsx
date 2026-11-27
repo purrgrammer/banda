@@ -12,7 +12,6 @@ import { Bubble, DaySeparator, Mention, Run, UnreadDivider } from "../../chat/Fe
 import { ImageFile } from "../../chat/Files.tsx";
 import { BringBlock, type BringHarness, FirstBring, pickKey } from "../../chat/FirstBring.tsx";
 import { FirstRun, Starters } from "../../chat/FirstRun.tsx";
-import { FirstSkills } from "../../chat/FirstSkills.tsx";
 import { Header } from "../../chat/Header.tsx";
 import { Line } from "../../chat/Line.tsx";
 import { PullRequestCard } from "../../chat/Object.tsx";
@@ -21,21 +20,7 @@ import { ProviderMark, ServerMark } from "../../chat/ProviderMark.tsx";
 import { RowActions, type RowView, type Who } from "../../chat/Row.tsx";
 import { VoiceMessage } from "../../chat/Voice.tsx";
 import { WorkingLine } from "../../chat/WorkingLine.tsx";
-import {
-	ATLAS,
-	MARA,
-	OCTO,
-	OTTO,
-	PAGE,
-	PHOTO,
-	PR,
-	PROVIDERS,
-	ROWS,
-	SANCHO,
-	SIGN_IN_WAYS,
-	SKILL_OFFERS,
-	VOICE,
-} from "../fixtures.ts";
+import { ATLAS, MARA, OCTO, OTTO, PAGE, PHOTO, PR, PROVIDERS, ROWS, SANCHO, SIGN_IN_WAYS, VOICE } from "../fixtures.ts";
 import { Section, StageContext } from "../stage.tsx";
 
 /** A chat: its header, its timeline, its composer. */
@@ -428,17 +413,8 @@ export function Screens() {
 				</div>
 			</Section>
 			<Section
-				id="first-skills"
-				note="Right after the provider, once: the skills banda ships, each with a switch."
-				bleed
-			>
-				<div className="flex-1">
-					<FirstSkills skills={SKILL_OFFERS} picked={new Set(["bro", "catch-me-up"])} />
-				</div>
-			</Section>
-			<Section
 				id="first-bring"
-				note="In the desktop app, when other harnesses are here: pick what to bring along, or start fresh with banda's skills."
+				note="In the desktop app, when other harnesses are here: pick what to bring along, or start fresh."
 				bleed
 			>
 				<div className="flex-1">

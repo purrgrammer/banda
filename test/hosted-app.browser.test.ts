@@ -23,7 +23,7 @@ import { streamSocket } from "../src/server/remote.ts";
 import { fingerprint, NOTES } from "../web/src/lib/pairing.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { type Device, testDevice } from "./fixtures/iroh-client.ts";
-import { echoModels, skipShippedSkills, tempHome, webServer } from "./helpers.ts";
+import { echoModels, tempHome, webServer } from "./helpers.ts";
 import { hasChrome, withPage } from "./smoke/chrome.ts";
 
 const SHOTS = process.env.BANDA_HOSTED_SHOTS;
@@ -152,7 +152,6 @@ async function start() {
 		remote: { reach: "loopback" },
 	});
 	const token = (await readDaemonFile(home))!.token!;
-	await skipShippedSkills(daemon.port, token);
 	const owner = async <T>(path: string, method = "GET", body?: object): Promise<T> => {
 		const response = await fetch(`http://127.0.0.1:${daemon.port}/api${path}`, {
 			method,

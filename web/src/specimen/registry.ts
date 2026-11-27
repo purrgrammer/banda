@@ -213,13 +213,6 @@ export const SECTIONS: readonly Entry[] = [
 	{ id: "first-run", title: "First run", group: "screens", status: "app", sources: [FIRST_RUN] },
 	{ id: "first-run-signing-in", title: "First run, signing in", group: "screens", status: "app", sources: [FIRST_RUN] },
 	{
-		id: "first-skills",
-		title: "First run: skills",
-		group: "screens",
-		status: "app",
-		sources: ["web/src/chat/FirstSkills.tsx"],
-	},
-	{
 		id: "first-bring",
 		title: "First run: bring your own",
 		group: "screens",

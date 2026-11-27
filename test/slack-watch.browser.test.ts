@@ -15,7 +15,7 @@ import { readDaemonFile } from "../src/home.ts";
 import type { CapabilitiesView, WatchView } from "../src/server/api.ts";
 import { hostBox } from "./fixtures/host-box.ts";
 import { fakeSlack } from "./fixtures/slack.ts";
-import { skipShippedSkills, tempHome, webServer } from "./helpers.ts";
+import { tempHome, webServer } from "./helpers.ts";
 import { hasChrome, type Page, withPage } from "./smoke/chrome.ts";
 
 const SHOTS = process.env.BANDA_SLACK_SHOTS;
@@ -111,7 +111,6 @@ for (const width of [390, 1440])
 			const post = (ts: string, user: string, text: string) =>
 				slack.history.C0GENERAL?.unshift({ type: "message", ts, user, team: "T0ACME", text });
 			try {
-				await skipShippedSkills(daemon.port, token);
 				await api("/agents/mara", "PUT", {
 					base: null,
 					text: "---\nname: Mara\ndescription: Works in Slack\nconnections: [slack]\n---\nHelp the owner in Slack.\n",

@@ -1,6 +1,6 @@
 /**
  * Bringing skills and agents from the other harnesses on this computer (Claude Code, Codex, pi), in the desktop app
- * only: at first run in place of banda's own skills, and in Settings any time. A harness with nothing that could come
+ * only: at first run, and in Settings any time. A harness with nothing that could come
  * along is not offered. Each harness says how the band can hand it coding work (the harnesses view).
  */
 import { useEffect, useState } from "react";
@@ -131,7 +131,7 @@ function usePicker(view: BringView, harnesses: HarnessesView | undefined) {
 	};
 }
 
-/** At first run, in place of banda's own skills: `brought` says whether anything came; if not, they come next. */
+/** At first run: the owner brings what they picked, or starts fresh; either way the band opens. */
 export function BringOnboarding({
 	view,
 	harnesses,
@@ -139,14 +139,14 @@ export function BringOnboarding({
 }: {
 	view: BringView;
 	harnesses?: HarnessesView | undefined;
-	onChosen: (next: BringView, brought: boolean) => void;
+	onChosen: (next: BringView) => void;
 }) {
 	const { props, rows, bring } = usePicker(view, harnesses);
 	return (
 		<FirstBring
 			{...props}
-			onBring={() => bring(rows(), (next, words) => onChosen(next, words !== ""))}
-			onFresh={() => bring([], (next) => onChosen(next, false))}
+			onBring={() => bring(rows(), (next) => onChosen(next))}
+			onFresh={() => bring([], (next) => onChosen(next))}
 		/>
 	);
 }

@@ -1066,22 +1066,19 @@ A skill is one shared prompt file, not an agent's private copy. Agents may load 
 one recorded tool call and result; an earlier running request must not see the load without the owner's message. The
 chat names only what loaded; Activity holds the exact result. Other files in a skill's folder remain box data, never
 instructions the daemon loads from an unaccepted change. A skill may be owner-only (`disable-model-invocation: true`):
-only the owner's /name loads it, agents never see it, and the app says so wherever the skill shows. banda ships a few
-skills; first run offers them once, right after the provider, and the ones the owner keeps are written into the
-workspace and accepted in that step, since banda wrote them and the owner chose them. The Skills page offers the
-shipped skills the workspace lacks the same way, any time: adding one is the same choice, accepted by the hash of the
-bytes banda wrote. A skill of that name already accepted is never replaced. The Skills page puts what waits on the
-owner first, then every accepted skill in one flat list, marked where owner-only or where a change waits; nothing the
-page is for hides behind a disclosure.
+only the owner's /name loads it, agents never see it, and the app says so wherever the skill shows. banda ships no
+skills of its own: a home starts with none, and has the ones the owner writes, brings or accepts from an agent. The
+Skills page puts what waits on the owner first, then every accepted skill in one flat list, marked where owner-only
+or where a change waits; nothing the page is for hides behind a disclosure.
 
 **Bringing your own.** An owner who already works with another harness on this computer (Claude Code, Codex, pi) has
-skills and agents there. In the desktop app, first run offers those in place of banda's own: the owner picks harnesses,
-sees everything they bring, and leaves any of it behind; bringing nothing goes on to banda's skills, bringing anything
-means they are not offered. Settings offers the same any time. The daemon reads the harnesses' own folders on the
-owner's computer, the only host files it reads for this, and only names and descriptions until a pick; a pick is read
-again then, never taken from the request. A skill comes as its folder's text files (hidden files, links and files that
-are not text stay behind) and its SKILL.md is accepted by the hash of the bytes written, as a shipped one is: the owner
-chose it from their own computer. Since they saw its name and description, not every character, a SKILL.md with
+skills and agents there. In the desktop app, first run offers those, right after the provider: the owner picks
+harnesses, sees everything they bring, and leaves any of it behind, or starts fresh with none. Settings offers the same
+any time. The daemon reads the harnesses' own folders on the owner's computer, the only host files it reads for this,
+and only names and descriptions until a pick; a pick is read again then, never taken from the request. A skill comes
+as its folder's text files (hidden files, links and files that are not text stay behind) and its SKILL.md is accepted
+by the hash of the bytes written: the owner chose it from their own computer. Since they saw its name and
+description, not every character, a SKILL.md with
 characters nobody sees is refused, as an agent file is. An agent comes as a banda agent file with its name, description and instructions;
 its own tools and model are another harness's words and stay behind. A skill or agent of that name already accepted is
 left as it is; one the box wrote and nobody accepted is superseded, so a bring cut part way is finished by bringing
