@@ -67,7 +67,14 @@ const cutEnds = (section: string) => `[...${section}.querySelectorAll('[data-kee
 }).map((line) => line.title)`;
 
 const SECTIONS: Record<string, readonly string[]> = {
-	cards: ["You answered in the chat", "No answer in time", "Stopped before an answer", "text-overflow", "opaque-ref-"],
+	// a settled answer that is one long URL, and a choice that is one long token: neither leaves its card (spills below)
+	cards: [
+		"You answered in the chat",
+		"No answer in time",
+		"Stopped before an answer",
+		"economy-discount-classic-plus-lisbon-porto-2026",
+		"opaque-ref-",
+	],
 	approvals: [
 		"No answer in time; it did not run",
 		"Stopped before your answer was used",
