@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AGENT_PUBLICATION_POINTS, type AgentPublicationPoint } from "../src/server/agent-publication.ts";
+import { allowed, LEAKED, NOT_WRITTEN, withoutNote } from "./fault/band-tools-answers.ts";
 import type { Fault } from "./fault/faults.ts";
 import { pool, runWorker } from "./fault/kill.ts";
 import { tempHome } from "./helpers.ts";
@@ -25,36 +26,6 @@ const run = async (faults: readonly Fault[]) => {
 };
 /** Each tool the owner's message calls; every one answers with success exactly once, however it was cut. */
 const TOOLS = ["create_agent", "update_agent", "write", "create_group"] as const;
-/**
- * The only errors a cut may honestly leave before the owner's "try again", each made good by it:
- * - `update_agent`'s fail-closed refusal while the new agent's box file is still being written, only when the fault
- *   cut that publication (src/core/band-tools.ts);
- * - the box's `write` reported interrupted, which is never run again (src/box/tools.ts; pi-durable's tool.js words).
- */
-const PENDING =
-	"Not updated: agents/writer.md in the workspace is not the version in effect: a change to it waits for the owner, or is still being written.";
-const INTERRUPTED = /^Tool write was interrupted (by a restart )?and may have partially run$/;
-/** An injected fault's own words (test/fault/faults.ts): none may reach an answer, but for the one note below. */
-const LEAKED = /InjectedFault|\b(commit|agent):[a-z:]+ #\d+/;
-/**
- * The one place a fault's words reach an answer truthfully: a thrown fault at an `agent:*` box publication point is
- * the reason `once` gives in a successful create_agent or update_agent answer that its file is not written yet
- * (src/core/band-tools.ts), word for word, with the fault's own point and hit (test/fault/faults.ts).
- */
-const NOT_WRITTEN = "Not written to the workspace yet";
-const unwritten = (fault: Fault) =>
-	` ${NOT_WRITTEN} (${fault.point} #${fault.hit}): the file follows when the computer can be written.`;
-/** An answer's words with that note set aside, only where it is the note for this fault on a success that may carry it. */
-function withoutNote(result: State["results"][number], fault: Fault | undefined): string {
-	if (fault?.kind !== "error" || !fault.point.startsWith("agent:")) return result.text;
-	if (result.error || (result.tool !== "create_agent" && result.tool !== "update_agent")) return result.text;
-	const note = unwritten(fault);
-	return result.text.endsWith(note) ? result.text.slice(0, -note.length) : result.text;
-}
-const allowed = (result: State["results"][number], fault: Fault | undefined) =>
-	(result.tool === "update_agent" && result.text === PENDING && fault?.point.startsWith("agent:") === true) ||
-	(result.tool === "write" && INTERRUPTED.test(result.text));
-
 /**
  * The run converged: the agent in effect with its update and its box file the same bytes, the skill in effect with
  * its box file the same bytes, one group, the receipts agent, agent, group, every tool answered with success exactly
