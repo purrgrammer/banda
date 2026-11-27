@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { skillInEffect } from "../src/box/tools.ts";
 import { AGENT_PUBLICATION_POINTS, type AgentPublicationPoint } from "../src/server/agent-publication.ts";
-import { allowed, LEAKED, NOT_WRITTEN, withoutNote } from "./fault/band-tools-answers.ts";
+import { allowed, LEAKED, NOT_WRITTEN, SKILL_ADDED, withoutNote } from "./fault/band-tools-answers.ts";
 import type { Fault } from "./fault/faults.ts";
 import { pool, runWorker } from "./fault/kill.ts";
 import { tempHome } from "./helpers.ts";
@@ -56,6 +57,10 @@ const expectConverged = ({ state }: Awaited<ReturnType<typeof run>>, fault?: Fau
 };
 
 describe("create_agent, update_agent, a skill's write and create_group across store and box faults", () => {
+	it("the one note a cut write may carry is the product's own words", () => {
+		expect(SKILL_ADDED).toBe(`[info] ${skillInEffect("skills/notes/SKILL.md", "notes", "added").message}`);
+	});
+
 	it("control: one answer each, all successes, and the agent, its box file, the skill and the group converge", async () => {
 		const clean = await run([]);
 		expectConverged(clean);

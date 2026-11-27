@@ -4,7 +4,15 @@
  * not pass.
  */
 import { describe, expect, it } from "vitest";
-import { allowed, INTERRUPTED, LEAKED, PENDING, unwritten, withoutNote } from "./fault/band-tools-answers.ts";
+import {
+	allowed,
+	isInterruptedWrite,
+	LEAKED,
+	PENDING,
+	SKILL_ADDED,
+	unwritten,
+	withoutNote,
+} from "./fault/band-tools-answers.ts";
 import type { Fault } from "./fault/faults.ts";
 
 /** As printed by faults 1/6 of run 45987599523 (c9cbc27), at commit:after #27. */
@@ -15,8 +23,23 @@ const publication: Fault = { point: "agent:directory:before", hit: 1, kind: "err
 
 describe("the band sweep's answer rules", () => {
 	it("allows the interrupted write exactly as the model reads it, and nothing near it", () => {
-		expect(INTERRUPTED.test(INTERRUPTED_SEEN)).toBe(true);
-		expect(INTERRUPTED.test(RESTARTED)).toBe(true);
+		expect(isInterruptedWrite(INTERRUPTED_SEEN)).toBe(true);
+		expect(isInterruptedWrite(RESTARTED)).toBe(true);
+		// cut after the skill note's progress commit: the note the slot held, then the error, one line each
+		const held = INTERRUPTED_SEEN.replace("<harness>\n", `<harness>\n${SKILL_ADDED}\n`);
+		expect(isInterruptedWrite(held)).toBe(true);
+		expect(isInterruptedWrite(RESTARTED.replace("<harness>\n", `<harness>\n${SKILL_ADDED}\n`))).toBe(true);
+		expect(allowed({ tool: "write", error: true, text: held }, commit)).toBe(true);
+		// any other note, the same note changed, twice, or after the error: not allowed
+		for (const text of [
+			INTERRUPTED_SEEN.replace("<harness>\n", "<harness>\n[info] something else\n"),
+			held.replace("was added", "was changed"),
+			held.replace("[info]", "[warn]"),
+			held.replace(`${SKILL_ADDED}\n`, `${SKILL_ADDED}\n${SKILL_ADDED}\n`),
+			INTERRUPTED_SEEN.replace("\n</harness>", `\n${SKILL_ADDED}\n</harness>`),
+			held.replace("[error] Tool write", "[error] Tool bash"),
+		])
+			expect(isInterruptedWrite(text), text).toBe(false);
 		expect(allowed({ tool: "write", error: true, text: INTERRUPTED_SEEN }, commit)).toBe(true);
 		for (const text of [
 			"Tool write was interrupted and may have partially run",
@@ -26,7 +49,7 @@ describe("the band sweep's answer rules", () => {
 			INTERRUPTED_SEEN.replace("Tool write", "Tool bash"),
 			INTERRUPTED_SEEN.replace("</harness>", "\n[error] commit:after #27\n</harness>"),
 		])
-			expect(INTERRUPTED.test(text), text).toBe(false);
+			expect(isInterruptedWrite(text), text).toBe(false);
 		// another tool's interruption is never allowed, whatever its words
 		expect(allowed({ tool: "create_group", error: true, text: INTERRUPTED_SEEN }, commit)).toBe(false);
 	});
