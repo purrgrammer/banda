@@ -89,7 +89,8 @@ for (const width of [390, 1440])
 					// own Set it up. Since #154 the section also holds cards whose last answer did not happen, each saying why
 					// in an alert of its own, so the edited card's alert is looked for in that card alone.
 					await page.run(
-						`window.__edited = (() => { let el = document.querySelector('#routine-items [aria-label="Edit when"]'); while (el && el.id !== 'routine-items' && ![...el.querySelectorAll('button')].some((b) => b.innerText === 'Set it up')) el = el.parentElement; return el; })()`,
+						// `true` only so the evaluation returns a value Chrome can serialize; the next check says what was found
+						`(window.__edited = (() => { let el = document.querySelector('#routine-items [aria-label="Edit when"]'); while (el && el.id !== 'routine-items' && ![...el.querySelectorAll('button')].some((b) => b.innerText === 'Set it up')) el = el.parentElement; return el; })(), true)`,
 					);
 					const card = "window.__edited";
 					expect(
